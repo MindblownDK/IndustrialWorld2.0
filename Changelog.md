@@ -1,9 +1,26 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.6.1-dev`
+**Current Version:** `7.7.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.7.0-dev] Vacuum Starfield Ambiance & Compact Gravity LCD
+
+**Type:** MINOR — new save-compatible procedural space ambiance, plus gravity-display refinement.
+
+#### ✦ Sparse vacuum starfield
+- Added a lightweight deterministic starfield that fades in through the existing upper-atmosphere-to-vacuum transition.
+- Stars are camera-relative, depth-aware, and rendered as a distant shell so planets, ships, and other celestial visuals remain in front of the sky.
+- The field is intentionally sparse and static rather than noisy: a practical deep-space backdrop with a few warmer/cooler navigation stars.
+- The renderer is created automatically by the Cosmos bootstrap; no scene, asset, or manual setup work is required.
+
+#### 📟 Compact field monitor
+- Reduced the on-foot gravity instrument footprint substantially while keeping the LCD readout and all essential labels readable.
+- The surface-reference display now uses eight compact discrete LCD segments, preserving the physical meter feeling in the smaller format.
+- Cockpit readability remains full-size; its dedicated LCD gravity module is unchanged in function.
+
+---
 
 ### [7.6.1-dev] Instrument LCD Gravity Readout
 

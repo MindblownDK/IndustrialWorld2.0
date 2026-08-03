@@ -147,11 +147,14 @@ namespace VoxelEngine.Cosmos
             // support). We deliberately do NOT assign VoxelTerrain here — VoxelTerrain is a custom
             // Shader Graph that doesn't support alpha fade and renders purple at planet scale.
 
-            // ── Distant planet renderer (see other planets in the sky) ──
+            // ── Distant bodies + sparse vacuum starfield ────────────────
             // Needs a CosmicRegistry in the scene to know where the other bodies are.
             EnsureCosmicRegistry();
             var spaceGO = new GameObject("SpaceRenderer");
             spaceGO.AddComponent<SpaceBodyRenderer>();
+            // Sparse camera-relative stars fade in through the same atmosphere-to-vacuum
+            // blend as the backdrop, so deep space reads as a real destination.
+            spaceGO.AddComponent<SpaceStarfieldRenderer>();
 
             // ── Live quality preset applier (Phase 7) ──
             var qpaGO = new GameObject("QualityPresetApplier");

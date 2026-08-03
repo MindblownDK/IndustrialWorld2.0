@@ -15,7 +15,7 @@ namespace VoxelEngine.UI
 {
     public static class GravityPullHud
     {
-        private const int SurfaceSegmentCount = 10;
+        private const int SurfaceSegmentCount = 8;
 
         // Muted phosphor palette: old practical instrumentation, not a neon hologram.
         private static readonly Color LcdGlass = new(0.105f, 0.125f, 0.075f, 0.98f);
@@ -53,11 +53,11 @@ namespace VoxelEngine.UI
             _card.style.position = Position.Absolute;
             _card.style.left = 18;
             _card.style.bottom = 18;
-            _card.style.width = 282;
-            _card.style.paddingLeft = 10;
-            _card.style.paddingRight = 10;
-            _card.style.paddingTop = 9;
-            _card.style.paddingBottom = 10;
+            _card.style.width = 236;
+            _card.style.paddingLeft = 8;
+            _card.style.paddingRight = 8;
+            _card.style.paddingTop = 7;
+            _card.style.paddingBottom = 8;
             _card.style.backgroundColor = new StyleColor(new Color(0.035f, 0.042f, 0.052f, 0.96f));
             _card.style.opacity = 0f;
             _card.style.display = DisplayStyle.None;
@@ -79,21 +79,21 @@ namespace VoxelEngine.UI
             var row = new VisualElement { name = "GravityInstrumentHeader" };
             row.style.flexDirection = FlexDirection.Row;
             row.style.alignItems = Align.Center;
-            row.style.marginBottom = 7;
+            row.style.marginBottom = 5;
             row.pickingMode = PickingMode.Ignore;
             _card.Add(row);
 
             var title = new Label("GRAVITY FIELD");
             title.style.flexGrow = 1;
-            title.style.fontSize = 9;
-            title.style.letterSpacing = 1.45f;
+            title.style.fontSize = 8;
+            title.style.letterSpacing = 1.15f;
             title.style.unityFontStyleAndWeight = FontStyle.Bold;
             title.style.color = new StyleColor(T.TextSecondary);
             title.pickingMode = PickingMode.Ignore;
             row.Add(title);
 
             var module = new Label("MON-01");
-            module.style.fontSize = 8;
+            module.style.fontSize = 7;
             module.style.letterSpacing = 0.8f;
             module.style.unityFontStyleAndWeight = FontStyle.Bold;
             module.style.color = new StyleColor(T.TextMuted);
@@ -116,12 +116,12 @@ namespace VoxelEngine.UI
         private static void BuildLcd(VisualElement parent)
         {
             _lcdBorder = new VisualElement { name = "GravityLcdBezel" };
-            _lcdBorder.style.width = 128;
-            _lcdBorder.style.height = 76;
-            _lcdBorder.style.paddingLeft = 7;
-            _lcdBorder.style.paddingRight = 7;
-            _lcdBorder.style.paddingTop = 6;
-            _lcdBorder.style.paddingBottom = 5;
+            _lcdBorder.style.width = 100;
+            _lcdBorder.style.height = 64;
+            _lcdBorder.style.paddingLeft = 5;
+            _lcdBorder.style.paddingRight = 5;
+            _lcdBorder.style.paddingTop = 4;
+            _lcdBorder.style.paddingBottom = 4;
             _lcdBorder.style.backgroundColor = new StyleColor(new Color(0.018f, 0.022f, 0.019f, 0.98f));
             _lcdBorder.pickingMode = PickingMode.Ignore;
             T.Radius(_lcdBorder, 2f);
@@ -138,13 +138,13 @@ namespace VoxelEngine.UI
 
             // Subtle horizontal scan lines make this look like a physical LCD without
             // relying on an external texture or a generic glow effect.
-            for (int i = 0; i < 5; i++)
+            for (int i = 0; i < 4; i++)
             {
                 var line = new VisualElement();
                 line.style.position = Position.Absolute;
                 line.style.left = 2;
                 line.style.right = 2;
-                line.style.top = 7 + i * 12;
+                line.style.top = 6 + i * 10;
                 line.style.height = 1;
                 line.style.backgroundColor = new StyleColor(new Color(0.77f, 0.88f, 0.48f, 0.055f));
                 line.pickingMode = PickingMode.Ignore;
@@ -152,9 +152,9 @@ namespace VoxelEngine.UI
             }
 
             var caption = new Label("LOCAL PULL");
-            caption.style.marginLeft = 5;
-            caption.style.marginTop = 4;
-            caption.style.fontSize = 7;
+            caption.style.marginLeft = 4;
+            caption.style.marginTop = 3;
+            caption.style.fontSize = 6;
             caption.style.letterSpacing = 1.1f;
             caption.style.unityFontStyleAndWeight = FontStyle.Bold;
             caption.style.color = new StyleColor(new Color(LcdInk.r, LcdInk.g, LcdInk.b, 0.72f));
@@ -162,19 +162,19 @@ namespace VoxelEngine.UI
             _lcdScreen.Add(caption);
 
             _lcdGLabel = new Label("1.00G");
-            _lcdGLabel.style.marginLeft = 5;
+            _lcdGLabel.style.marginLeft = 4;
             _lcdGLabel.style.marginTop = -2;
-            _lcdGLabel.style.fontSize = 27;
-            _lcdGLabel.style.letterSpacing = 1.0f;
+            _lcdGLabel.style.fontSize = 22;
+            _lcdGLabel.style.letterSpacing = 0.7f;
             _lcdGLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
             _lcdGLabel.style.color = new StyleColor(LcdInk);
             _lcdGLabel.pickingMode = PickingMode.Ignore;
             _lcdScreen.Add(_lcdGLabel);
 
             _lcdAccelerationLabel = new Label("09.81 m/s²");
-            _lcdAccelerationLabel.style.marginLeft = 6;
+            _lcdAccelerationLabel.style.marginLeft = 4;
             _lcdAccelerationLabel.style.marginTop = -3;
-            _lcdAccelerationLabel.style.fontSize = 9;
+            _lcdAccelerationLabel.style.fontSize = 8;
             _lcdAccelerationLabel.style.letterSpacing = 0.6f;
             _lcdAccelerationLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
             _lcdAccelerationLabel.style.color = new StyleColor(new Color(LcdInk.r, LcdInk.g, LcdInk.b, 0.82f));
@@ -186,7 +186,7 @@ namespace VoxelEngine.UI
         {
             var column = new VisualElement { name = "GravityReferenceColumn" };
             column.style.flexGrow = 1;
-            column.style.marginLeft = 10;
+            column.style.marginLeft = 7;
             column.pickingMode = PickingMode.Ignore;
             parent.Add(column);
 
@@ -194,7 +194,7 @@ namespace VoxelEngine.UI
             column.Add(bodyCaption);
 
             _bodyLabel = new Label("LOCAL FIELD");
-            _bodyLabel.style.fontSize = 12;
+            _bodyLabel.style.fontSize = 10;
             _bodyLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
             _bodyLabel.style.color = new StyleColor(T.TextPrimary);
             _bodyLabel.style.marginTop = 1;
@@ -205,11 +205,11 @@ namespace VoxelEngine.UI
             column.Add(_bodyLabel);
 
             var vectorCaption = SmallCaption("VECTOR");
-            vectorCaption.style.marginTop = 5;
+            vectorCaption.style.marginTop = 3;
             column.Add(vectorCaption);
 
             _vectorLabel = new Label("COREWARD");
-            _vectorLabel.style.fontSize = 10;
+            _vectorLabel.style.fontSize = 9;
             _vectorLabel.style.letterSpacing = 0.7f;
             _vectorLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
             _vectorLabel.style.color = new StyleColor(T.TextSecondary);
@@ -219,7 +219,7 @@ namespace VoxelEngine.UI
             var surfaceRow = new VisualElement { name = "GravitySurfaceReference" };
             surfaceRow.style.flexDirection = FlexDirection.Row;
             surfaceRow.style.alignItems = Align.Center;
-            surfaceRow.style.marginTop = 6;
+            surfaceRow.style.marginTop = 4;
             surfaceRow.pickingMode = PickingMode.Ignore;
             column.Add(surfaceRow);
 
@@ -228,7 +228,7 @@ namespace VoxelEngine.UI
             surfaceRow.Add(surfaceCaption);
 
             _surfaceValueLabel = new Label("100%");
-            _surfaceValueLabel.style.fontSize = 12;
+            _surfaceValueLabel.style.fontSize = 10;
             _surfaceValueLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
             _surfaceValueLabel.style.color = new StyleColor(LcdInk);
             _surfaceValueLabel.pickingMode = PickingMode.Ignore;
@@ -236,12 +236,12 @@ namespace VoxelEngine.UI
 
             var segmentTrack = new VisualElement { name = "GravitySurfaceSegments" };
             segmentTrack.style.flexDirection = FlexDirection.Row;
-            segmentTrack.style.height = 12;
+            segmentTrack.style.height = 10;
             segmentTrack.style.marginTop = 3;
-            segmentTrack.style.paddingLeft = 2;
-            segmentTrack.style.paddingRight = 2;
-            segmentTrack.style.paddingTop = 2;
-            segmentTrack.style.paddingBottom = 2;
+            segmentTrack.style.paddingLeft = 1;
+            segmentTrack.style.paddingRight = 1;
+            segmentTrack.style.paddingTop = 1;
+            segmentTrack.style.paddingBottom = 1;
             segmentTrack.style.backgroundColor = new StyleColor(new Color(0.018f, 0.022f, 0.019f, 0.98f));
             segmentTrack.pickingMode = PickingMode.Ignore;
             T.Radius(segmentTrack, 1f);
@@ -262,8 +262,8 @@ namespace VoxelEngine.UI
             }
 
             _surfaceStateLabel = new Label("AT SURFACE REFERENCE");
-            _surfaceStateLabel.style.marginTop = 4;
-            _surfaceStateLabel.style.fontSize = 7;
+            _surfaceStateLabel.style.marginTop = 3;
+            _surfaceStateLabel.style.fontSize = 6;
             _surfaceStateLabel.style.letterSpacing = 0.65f;
             _surfaceStateLabel.style.color = new StyleColor(T.TextMuted);
             _surfaceStateLabel.pickingMode = PickingMode.Ignore;
