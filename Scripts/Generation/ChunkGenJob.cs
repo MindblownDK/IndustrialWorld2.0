@@ -111,7 +111,8 @@ namespace VoxelEngine.Generation
                     }
                 }
 
-                densityByte = (sbyte)math.clamp(density, 1f, 127f);
+                int scaledDensity = (int)math.round(density * 32f);
+                densityByte = (sbyte)math.clamp(scaledDensity, 1, 127);
             }
             else
             {
@@ -127,7 +128,8 @@ namespace VoxelEngine.Generation
                 else
                 {
                     material = (byte)MaterialId.Air;
-                    densityByte = (sbyte)math.clamp(density, -127f, -1f);
+                    int scaledDensity = (int)math.round(density * 32f);
+                    densityByte = (sbyte)math.clamp(scaledDensity, -127, -1);
                 }
             }
 

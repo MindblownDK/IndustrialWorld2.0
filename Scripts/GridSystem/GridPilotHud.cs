@@ -176,6 +176,7 @@ namespace VoxelEngine.GridSystem
             _container.style.display = DisplayStyle.None;
             LcdHudTheme.ApplyChassis(_container, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.96f), 3f);
             uiRoot.Add(_container);
+            LcdHudTheme.AnimateScreenBoot(_container);
 
             var titleRow = LcdHudTheme.CreateDisplayHeader("GRID NAVIGATION", "FLIGHT COMPUTER", "FC-01", "LIVE");
             titleRow.name = "FlightComputerHeader";
@@ -276,6 +277,7 @@ namespace VoxelEngine.GridSystem
             screen.style.paddingBottom = 5;
             screen.pickingMode = PickingMode.Ignore;
             LcdHudTheme.ApplyScreen(screen, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.90f), 1f);
+            LcdHudTheme.AddScanlines(screen, 3, top: 7f, spacing: 14f);
 
             var powerRow = BuildLcdResourceRow(screen, "BUS", LcdHudTheme.Phosphor);
             _powerLabel = powerRow.label;
@@ -356,6 +358,7 @@ namespace VoxelEngine.GridSystem
             screen.style.alignItems = Align.Center;
             screen.pickingMode = PickingMode.Ignore;
             LcdHudTheme.ApplyScreen(screen, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.90f), 1f);
+            LcdHudTheme.AddScanlines(screen, 2, top: 6f, spacing: 10f);
 
             var caption = LcdHudTheme.CaptionLabel("INERTIAL");
             caption.style.width = 58;

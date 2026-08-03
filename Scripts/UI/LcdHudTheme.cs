@@ -2,8 +2,11 @@
 //
 // Shared fitted-instrument language for HUD surfaces. These are deliberately
 // quiet phosphor displays with physical bezels and discrete segments — not
-// rounded holographic cards.
+// rounded holographic cards. Enhanced with retro-futuristic animated scanline
+// shimmer, CRT phosphor boot sequences, bezel corner brackets, pulsing status
+// badges, and tactile button micro-interactions.
 
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -34,23 +37,114 @@ namespace VoxelEngine.UI
             element.style.backgroundColor = new StyleColor(Glass);
             UITheme.Radius(element, radius);
             UITheme.Border(element, 1f, border ?? new Color(Bezel.r, Bezel.g, Bezel.b, 0.88f));
+            AddBezelAccents(element, border ?? Bezel);
         }
 
-        public static void AddScanlines(VisualElement screen, int count, float top = 5f, float spacing = 10f)
+        /// <summary>
+        /// Adds 4 high-tech corner L-bracket elements inside an LCD screen bezel.
+        /// </summary>
+        public static void AddBezelAccents(VisualElement screen, Color? accentColor = null)
         {
             if (screen == null) return;
+            Color color = accentColor ?? new Color(PhosphorDim.r, PhosphorDim.g, PhosphorDim.b, 0.65f);
+
+            void CreateBracket(float? top, float? bottom, float? left, float? right, bool borderTop, bool borderBottom, bool borderLeft, bool borderRight)
+            {
+                var bracket = new VisualElement { name = "LcdBezelBracket" };
+                bracket.style.position = Position.Absolute;
+                bracket.style.width = 6;
+                bracket.style.height = 6;
+                if (top.HasValue) bracket.style.top = top.Value;
+                if (bottom.HasValue) bracket.style.bottom = bottom.Value;
+                if (left.HasValue) bracket.style.left = left.Value;
+                if (right.HasValue) bracket.style.right = right.Value;
+
+                if (borderTop) bracket.style.borderTopWidth = 1;
+                if (borderBottom) bracket.style.borderBottomWidth = 1;
+                if (borderLeft) bracket.style.borderLeftWidth = 1;
+                if (borderRight) bracket.style.borderRightWidth = 1;
+
+                bracket.style.borderTopColor = new StyleColor(color);
+                bracket.style.borderBottomColor = new StyleColor(color);
+                bracket.style.borderLeftColor = new StyleColor(color);
+                bracket.style.borderRightColor = new StyleColor(color);
+                bracket.pickingMode = PickingMode.Ignore;
+                screen.Add(bracket);
+            }
+
+            CreateBracket(2f, null, 2f, null, true, false, true, false);
+            CreateBracket(2f, null, null, 2f, true, false, false, true);
+            CreateBracket(null, 2f, 2f, null, false, true, true, false);
+            CreateBracket(null, 2f, null, 2f, false, true, false, true);
+        }
+
+        /// <summary>
+        /// Creates scanlines with animated CRT/LCD phosphor drift and subtle brightness waves.
+        /// </summary>
+        public static void AddScanlines(VisualElement screen, int count, float top = 5f, float spacing = 10f)
+        {
+            AddAnimatedScanlines(screen, count, top, spacing);
+        }
+
+        public static void AddAnimatedScanlines(VisualElement screen, int count, float top = 5f, float spacing = 10f)
+        {
+            if (screen == null || count <= 0) return;
+            var scanlines = new List<VisualElement>(count);
             for (int i = 0; i < count; i++)
             {
-                var line = new VisualElement { name = "LcdScanline" };
+                var line = new VisualElement { name = "LcdScanline_" + i };
                 line.style.position = Position.Absolute;
                 line.style.left = 2;
                 line.style.right = 2;
                 line.style.top = top + spacing * i;
                 line.style.height = 1;
-                line.style.backgroundColor = new StyleColor(new Color(Phosphor.r, Phosphor.g, Phosphor.b, 0.055f));
+                line.style.backgroundColor = new StyleColor(new Color(Phosphor.r, Phosphor.g, Phosphor.b, 0.065f));
                 line.pickingMode = PickingMode.Ignore;
                 screen.Add(line);
+                scanlines.Add(line);
             }
+
+            // Animate scanline shimmer at a lightweight 20 fps interval.
+            screen.schedule.execute(() =>
+            {
+                float t = Time.realtimeSinceStartup;
+                for (int i = 0; i < scanlines.Count; i++)
+                {
+                    var line = scanlines[i];
+                    if (line == null) continue;
+                    float wave = 0.5f + 0.5f * Mathf.Sin(t * 3.2f + i * 0.45f);
+                    float alpha = 0.045f + 0.035f * wave;
+                    line.style.backgroundColor = new StyleColor(new Color(Phosphor.r, Phosphor.g, Phosphor.b, alpha));
+                }
+            }).Every(50);
+        }
+
+        /// <summary>
+        /// Animates a retro-futuristic CRT/LCD phosphor boot-up sequence on any display element.
+        /// </summary>
+        public static void AnimateScreenBoot(VisualElement element, float delaySeconds = 0f, System.Action onComplete = null)
+        {
+            if (element == null) return;
+
+            element.style.opacity = 0f;
+            element.style.scale = new StyleScale(new Scale(new Vector3(1.02f, 0.08f, 1f)));
+            element.style.transitionProperty = new List<StylePropertyName> { "opacity", "scale" };
+            element.style.transitionDuration = new List<TimeValue>
+            {
+                new TimeValue(0.12f, TimeUnit.Second),
+                new TimeValue(0.18f, TimeUnit.Second)
+            };
+
+            long delayMs = (long)Mathf.Max(0f, delaySeconds * 1000f);
+            element.schedule.execute(() =>
+            {
+                element.style.opacity = 1f;
+                element.style.scale = new StyleScale(new Scale(Vector3.one));
+                if (onComplete != null)
+                {
+                    element.schedule.execute(() => onComplete?.Invoke()).StartingIn(180);
+                }
+            }).StartingIn(delayMs);
         }
 
         public static Label CaptionLabel(string text)
@@ -67,6 +161,7 @@ namespace VoxelEngine.UI
         /// <summary>
         /// Creates the fixed, printed title strip used by large LCD work surfaces.
         /// The title is deliberately part of the glass rather than a floating card header.
+        /// Enhanced with pulsing phosphor status indicators.
         /// </summary>
         public static VisualElement CreateDisplayHeader(string caption, string title, string moduleId = null, string status = null)
         {
@@ -81,6 +176,7 @@ namespace VoxelEngine.UI
             header.style.backgroundColor = new StyleColor(GlassDark);
             UITheme.Radius(header, 1f);
             UITheme.Border(header, 1f, new Color(Bezel.r, Bezel.g, Bezel.b, 0.88f));
+            AddBezelAccents(header, Bezel);
 
             var titleBlock = new VisualElement();
             titleBlock.style.flexGrow = 1;
@@ -104,7 +200,8 @@ namespace VoxelEngine.UI
             if (!string.IsNullOrEmpty(moduleId) || !string.IsNullOrEmpty(status))
             {
                 var readout = new VisualElement();
-                readout.style.alignItems = Align.FlexEnd;
+                readout.style.flexDirection = FlexDirection.Row;
+                readout.style.alignItems = Align.Center;
                 readout.style.marginLeft = 8;
                 readout.pickingMode = PickingMode.Ignore;
 
@@ -112,22 +209,48 @@ namespace VoxelEngine.UI
                 {
                     var id = CaptionLabel(moduleId);
                     id.style.unityTextAlign = TextAnchor.MiddleRight;
+                    id.style.marginRight = string.IsNullOrEmpty(status) ? 0 : 6;
                     readout.Add(id);
                 }
 
                 if (!string.IsNullOrEmpty(status))
                 {
-                    var state = new Label(status);
-                    state.style.fontSize = 8;
-                    state.style.letterSpacing = 0.8f;
-                    state.style.unityFontStyleAndWeight = FontStyle.Bold;
-                    state.style.color = new StyleColor(Phosphor);
+                    var state = new VisualElement();
+                    state.style.flexDirection = FlexDirection.Row;
+                    state.style.alignItems = Align.Center;
                     state.style.marginTop = 2;
-                    state.style.paddingLeft = 4;
-                    state.style.paddingRight = 4;
-                    state.style.backgroundColor = new StyleColor(new Color(Phosphor.r, Phosphor.g, Phosphor.b, 0.08f));
-                    UITheme.Radius(state, 1f);
-                    UITheme.Border(state, 1f, new Color(Phosphor.r, Phosphor.g, Phosphor.b, 0.45f));
+                    state.style.paddingLeft = 5;
+                    state.style.paddingRight = 6;
+                    state.style.paddingTop = 2;
+                    state.style.paddingBottom = 2;
+                    state.style.backgroundColor = new StyleColor(new Color(Phosphor.r, Phosphor.g, Phosphor.b, 0.12f));
+                    UITheme.Radius(state, 2f);
+                    UITheme.Border(state, 1f, new Color(Phosphor.r, Phosphor.g, Phosphor.b, 0.55f));
+
+                    // Pulsing phosphor dot
+                    var dot = new VisualElement();
+                    dot.style.width = 5;
+                    dot.style.height = 5;
+                    dot.style.marginRight = 4;
+                    dot.style.backgroundColor = new StyleColor(Phosphor);
+                    UITheme.Radius(dot, 2.5f);
+                    state.Add(dot);
+
+                    var label = new Label(status);
+                    label.style.fontSize = 8;
+                    label.style.letterSpacing = 0.8f;
+                    label.style.unityFontStyleAndWeight = FontStyle.Bold;
+                    label.style.color = new StyleColor(Phosphor);
+                    label.pickingMode = PickingMode.Ignore;
+                    state.Add(label);
+
+                    // Animate pulsing dot
+                    state.schedule.execute(() =>
+                    {
+                        float alpha = 0.45f + 0.55f * (0.5f + 0.5f * Mathf.Sin(Time.realtimeSinceStartup * 4.5f));
+                        dot.style.backgroundColor = new StyleColor(new Color(Phosphor.r, Phosphor.g, Phosphor.b, alpha));
+                    }).Every(75);
+
                     readout.Add(state);
                 }
                 header.Add(readout);
@@ -164,7 +287,8 @@ namespace VoxelEngine.UI
                 : GlassDark;
             Color hoverBackground = active
                 ? new Color(signal.r, signal.g, signal.b, 0.27f)
-                : new Color(signal.r, signal.g, signal.b, 0.10f);
+                : new Color(signal.r, signal.g, signal.b, 0.12f);
+            Color pressedBackground = new Color(signal.r, signal.g, signal.b, 0.35f);
 
             button.style.minHeight = 25;
             button.style.paddingLeft = 8;
@@ -184,12 +308,14 @@ namespace VoxelEngine.UI
             UITheme.Border(button, 1f, active
                 ? new Color(signal.r, signal.g, signal.b, 0.82f)
                 : new Color(Bezel.r, Bezel.g, Bezel.b, 0.92f));
-            button.style.transitionProperty = new System.Collections.Generic.List<StylePropertyName>
+
+            button.style.transitionProperty = new List<StylePropertyName>
             {
-                "background-color", "color", "scale"
+                "background-color", "color", "scale", "border-color"
             };
-            button.style.transitionDuration = new System.Collections.Generic.List<TimeValue>
+            button.style.transitionDuration = new List<TimeValue>
             {
+                new TimeValue(0.10f, TimeUnit.Second),
                 new TimeValue(0.10f, TimeUnit.Second),
                 new TimeValue(0.10f, TimeUnit.Second),
                 new TimeValue(0.10f, TimeUnit.Second)
@@ -198,13 +324,27 @@ namespace VoxelEngine.UI
             {
                 button.style.backgroundColor = new StyleColor(hoverBackground);
                 button.style.color = new StyleColor(signal);
-                button.style.scale = new StyleScale(new Scale(new Vector3(1.015f, 1.015f, 1f)));
+                button.style.scale = new StyleScale(new Scale(new Vector3(1.03f, 1.03f, 1f)));
+                UITheme.Border(button, 1f, signal);
             });
             button.RegisterCallback<PointerLeaveEvent>(_ =>
             {
                 button.style.backgroundColor = new StyleColor(idleBackground);
                 button.style.color = new StyleColor(active ? signal : Caption);
                 button.style.scale = new StyleScale(new Scale(Vector3.one));
+                UITheme.Border(button, 1f, active
+                    ? new Color(signal.r, signal.g, signal.b, 0.82f)
+                    : new Color(Bezel.r, Bezel.g, Bezel.b, 0.92f));
+            });
+            button.RegisterCallback<PointerDownEvent>(_ =>
+            {
+                button.style.backgroundColor = new StyleColor(pressedBackground);
+                button.style.scale = new StyleScale(new Scale(new Vector3(0.98f, 0.98f, 1f)));
+            });
+            button.RegisterCallback<PointerUpEvent>(_ =>
+            {
+                button.style.backgroundColor = new StyleColor(hoverBackground);
+                button.style.scale = new StyleScale(new Scale(new Vector3(1.03f, 1.03f, 1f)));
             });
         }
 
@@ -220,8 +360,6 @@ namespace VoxelEngine.UI
             UITheme.Radius(field, 1f);
             UITheme.Border(field, 1f, new Color(Bezel.r, Bezel.g, Bezel.b, 0.92f));
 
-            // TextField renders through an internal input element whose default
-            // background can otherwise mask the outer LCD treatment.
             void ApplyInner(VisualElement root)
             {
                 var input = root.Q(className: "unity-base-text-field__input")
@@ -285,6 +423,14 @@ namespace VoxelEngine.UI
                     ? new Color(signal.r, signal.g, signal.b, 0.90f)
                     : SegmentOff);
             }
+        }
+
+        /// <summary>
+        /// Smoothly updates segmented bar displays with optional active phosphor glow border.
+        /// </summary>
+        public static void AnimateSegments(VisualElement[] segments, float fill01, Color? signalColor = null)
+        {
+            SetSegments(segments, fill01, signalColor);
         }
     }
 }

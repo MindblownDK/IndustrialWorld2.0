@@ -327,7 +327,12 @@ namespace VoxelEngine.Cosmos
                     }
                 }
 
-                sbyte densityByte = (sbyte)math.clamp(density, 1f, 127f);
+                // Scale physical distance (metres) by 32 into signed-byte density units so
+                // SurfaceNetsJob's zero-crossing interpolation (t = da / (da - db)) operates
+                // with sub-voxel precision. Unscaled density clamped to ±1 caused every surface
+                // edge to interpolate at t=0.5, creating stepped contour rings on gentle slopes.
+                int scaledDensity = (int)math.round(density * 32f);
+                sbyte densityByte = (sbyte)math.clamp(scaledDensity, 1, 127);
                 return new Voxel(densityByte, material, 0);
             }
             else
@@ -342,7 +347,9 @@ namespace VoxelEngine.Cosmos
                     // funnel, and deep reservoir — never as random submerged noise patches.
                     return new Voxel(-5, (byte)MaterialId.WaterLiquid, 255);
                 }
-                return new Voxel((sbyte)math.clamp(density, -127f, -1f), (byte)MaterialId.Air, 0);
+                int scaledDensity = (int)math.round(density * 32f);
+                sbyte densityByte = (sbyte)math.clamp(scaledDensity, -127, -1);
+                return new Voxel(densityByte, (byte)MaterialId.Air, 0);
             }
         }
     }

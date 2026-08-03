@@ -48,6 +48,7 @@ namespace VoxelEngine.UI
             _container.pickingMode = PickingMode.Ignore;
             LcdHudTheme.ApplyChassis(_container, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.94f), 3f);
             uiRoot.Add(_container);
+            LcdHudTheme.AnimateScreenBoot(_container);
 
             BuildHeader();
             var hpRow = AddVitalRow("HP", T.AccentRed);
@@ -142,6 +143,7 @@ namespace VoxelEngine.UI
             row.pickingMode = PickingMode.Ignore;
             LcdHudTheme.ApplyScreen(row, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.85f), 1f);
             _container.Add(row);
+            LcdHudTheme.AddAnimatedScanlines(row, 2, 4f, 10f);
 
             var codeLabel = new Label(code);
             codeLabel.style.width = 27;

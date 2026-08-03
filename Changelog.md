@@ -1,9 +1,28 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.11.13-dev`
+**Current Version:** `7.11.14-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.11.14-dev] LCD Screen UI Animations, Unified Instrument Aesthetics & Smooth Planet Surfaces
+
+**Type:** PATCH — UI visual polish, animated scanline drift, phosphor boot sequences, bezel corner brackets, button micro-interactions, and 32x sub-voxel density scaling for smooth planet terrain; no save/API break.
+
+#### 📺 Retro-Futuristic LCD Screen Animations & Instrument Language
+- **Animated Scanline Shimmer:** LCD displays across the game (`LcdHudTheme.AddAnimatedScanlines`) now feature subtly drifting, animated phosphor scanlines that shimmer at 20 fps without causing layout recalculation.
+- **Phosphor Boot Sequences:** Added `LcdHudTheme.AnimateScreenBoot` and `UITheme.AnimatePanelBoot`. Every LCD display and machine UI panel now plays a crisp 2-stage phosphor boot sequence when opened—expanding from a thin horizontal scanline to nominal scale with a subtle ignition flash.
+- **Tektronix Bezel Brackets & Status Badges:** Added `LcdHudTheme.AddBezelAccents` and pulsing status indicator dots (`CreateLiveStatusBadge`). All LCD screens now feature 4 high-contrast L-bracket corner elements inside the bezel frame and pulsing live status dots ("LIVE", "RUNNING", "ONLINE").
+- **Enhanced Button Micro-Interactions:** Upgraded `ApplyCommandButton` and `UITheme` buttons to follow our AI Agent System Prompt & Execution Guidelines: buttons scale smoothly to `1.03x` on hover with a 0.10s color/border transition and drop to `0.98x` on press for tactile feedback.
+- **Unified Aesthetic Across All UIs:** Integrated LCD bezel corner brackets and scanline helpers into `UITheme.cs` (`Panel()`, `MachinePanel()`, `StatusPill()`), automatically elevating all machine UIs, crafting screens, recipe browsers, pilot HUDs, vitals monitors, and production terminals into a cohesive retro-futuristic flight-computer dashboard.
+
+#### 🌍 Smooth Planet Surface Slopes (Eliminated Terraced Rings)
+- **32x Sub-Voxel Density Scaling:** Upgraded `SphereDensity.EvaluateVoxel` and `ChunkGenJob.cs` to scale physical world distance (metres) by 32 before converting to signed-byte (`sbyte`) density units.
+- **Eliminated Contour Stepping:** Unscaled density clamped to integer `±1` previously forced every surface edge zero-crossing to interpolate at `t = 0.5` in `SurfaceNetsJob`, causing gentle slopes and flat regions on planets to quantize into rigid concentric rings stacked on each other.
+- **Smooth Mountains & Plains:** With 1 metre of distance represented by 32 density units, `SurfaceNetsJob` now interpolates zero-crossing ratios with 3 cm sub-voxel precision, producing butter-smooth continental slopes, rolling hills, and mountain terrain across spherical planets.
+
+#### ✅ Static delivery checks
+- Verified C# syntax and brace balance across all modified cosmos, generation, and UI sources (`SphereDensity.cs`, `ChunkGenJob.cs`, `LcdHudTheme.cs`, `UITheme.cs`, `CraftingScreen.cs`, `RecipeBrowserUI.cs`, `ProductionStatsUI.cs`, `GridPilotHud.cs`, `VitalsHud.cs`).
 
 ### [7.11.13-dev] Valid Terrain Colliders, Wrapped Grass & Living Planet Recovery
 

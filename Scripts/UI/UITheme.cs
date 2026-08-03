@@ -79,6 +79,7 @@ namespace VoxelEngine.UI
             Color accent = UIThemeManager.Accent;
             float glow = UIThemeManager.AccentGlow;
             Border(v, 1, new Color(accent.r, accent.g, accent.b, 0.35f + glow * 0.4f));
+            LcdHudTheme.AddBezelAccents(v, new Color(accent.r, accent.g, accent.b, 0.42f));
             v.AddToClassList("themed-panel");
             return v;
         }
@@ -95,6 +96,8 @@ namespace VoxelEngine.UI
             p.style.minWidth = 260;
             p.style.maxWidth = new StyleLength(new Length(46f, LengthUnit.Percent));
             p.style.overflow = Overflow.Hidden;
+            LcdHudTheme.AnimateScreenBoot(p);
+            AddScanlines(p, 6, 25f, 45f);
             return p;
         }
 
@@ -238,7 +241,30 @@ namespace VoxelEngine.UI
             l.style.flexShrink              = 0;
             l.pickingMode = PickingMode.Ignore;
             pill.Add(l);
+
+            pill.schedule.execute(() =>
+            {
+                float alpha = 0.45f + 0.55f * (0.5f + 0.5f * Mathf.Sin(Time.realtimeSinceStartup * 4.2f));
+                dot.style.backgroundColor = new StyleColor(new Color(bg.r, bg.g, bg.b, alpha));
+            }).Every(75);
+
             return (pill, l);
+        }
+
+        /// <summary>
+        /// Triggers a retro-futuristic phosphor LCD boot-up animation on a panel or screen.
+        /// </summary>
+        public static void AnimatePanelBoot(VisualElement panel, float delaySeconds = 0f, System.Action onComplete = null)
+        {
+            LcdHudTheme.AnimateScreenBoot(panel, delaySeconds, onComplete);
+        }
+
+        /// <summary>
+        /// Attaches subtle animated scanlines to any themed panel or display area.
+        /// </summary>
+        public static void AddScanlines(VisualElement panel, int count = 4, float top = 10f, float spacing = 15f)
+        {
+            LcdHudTheme.AddAnimatedScanlines(panel, count, top, spacing);
         }
 
         /// <summary>

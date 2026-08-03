@@ -99,6 +99,7 @@ namespace VoxelEngine.UI
             display.style.overflow = Overflow.Hidden;
             LcdHudTheme.ApplyScreen(display, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.92f), 1f);
             panel.Add(display);
+            LcdHudTheme.AnimateScreenBoot(display);
 
             EnsureSettingsLoaded();
             var entries = BuildEntries(registry);
