@@ -1,9 +1,32 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.11.9-dev`
+**Current Version:** `7.11.10-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.11.10-dev] Seamless Surface Spawn & Streaming Performance Recovery
+
+**Type:** PATCH — runtime scheduling, vegetation/grass budgets, visual LOD budget, and deterministic spherical spawn recovery; no save/API break.
+
+#### ⚡ Restored frame budget
+- Reduced the local editable chunk bubble to a bounded **3 / 4 / 5 / 6** chunk radius across Low → Ultra. This is collision/edit detail only; the whole-planet terrain and ocean LOD remain visible outside it.
+- Capped runtime planet and ocean proxy resolution at **10,242** vertices, restored verified back-face culling for the terrain proxy, and removed the 40k-vertex high-quality startup spike.
+- Throttled native water mesh work to the live generation budget instead of rebuilding four liquid chunks every frame during spawn.
+- Deferred scatter now processes only the nearest visible surface chunk per frame by default. Empty interior chunks retire without a scatter scan.
+- Tree/rock scatter now uses a 2 m candidate lattice, cheap outward rejection before exact radial tests, and allocation-free overlap checks.
+- Reworked GPU grass from a 145-voxel radial search per sample into a direct spherical density-column query, with a 1,600-sample cap, smaller local field, and less frequent rebuilds.
+
+#### 🧭 One stable spherical spawn
+- `SphereWorld` now exposes a deterministic density-field dry-land finder.
+- Fresh spherical spawns choose a valid land surface **before** terrain colliders stream, then wait and snap at that one location.
+- Wet-spawn recovery now makes at most one analytical spherical relocation. Fully oceanic/custom bodies hold the player safely above the selected water column rather than visibly hopping through many candidates.
+
+#### ✅ Static delivery checks
+- Parsed the updated performance/spawn/world-generation C# sources with Tree-sitter and ran targeted source, padded-coordinate, version, and sparse-workspace assertions.
+- Unity compilation and Play Mode validation remain pending from Thomas; no runtime confirmation is claimed.
+
+---
 
 ### [7.11.9-dev] Spherical World Generation Integrity & Celestial Visibility
 

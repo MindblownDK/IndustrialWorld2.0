@@ -72,6 +72,8 @@ namespace VoxelEngine.Cosmos
         public bool generateColliders = true;
         [Tooltip("Spawn trees/rocks from biome scatter lists.")]
         public bool enableScatter = true;
+        [Tooltip("Maximum generated chunks whose scatter may be populated in one frame. A low budget prevents vegetation creation from stalling terrain streaming.")]
+        [Range(1, 4)] public int maxScatterChunksPerFrame = 1;
 
         [Tooltip("Biome registry for terrain biomes + scatter. If null, a single default biome is used.")]
         public BiomeRegistry biomeRegistry;
@@ -290,8 +292,9 @@ namespace VoxelEngine.Cosmos
             CompleteFinishedJobs();
             VoxelEngine.Generation.OilReservoirDecorator.Tick(this);
             
-            // Re-enabled WaterMeshBuilder for Spheres
-            VoxelEngine.WaterSim.WaterMeshBuilder.Pump(4);
+            // Native water meshes are local detail only; throttle their main-thread rebuilds so
+            // initial terrain streaming remains responsive while the full ocean LOD covers afar.
+            VoxelEngine.WaterSim.WaterMeshBuilder.Pump(Mathf.Clamp(maxJobsPerFrame / 2, 1, 3));
             
             ProcessDeferredScatter();
 
@@ -633,20 +636,41 @@ namespace VoxelEngine.Cosmos
         private void ProcessDeferredScatter()
         {
             if (!enableScatter || body == null) return;
-            // Resolve a biome registry once (body.allowedBiomes' owning registry, if any).
             if (_biomeRegistry == null) _biomeRegistry = ResolveBiomeRegistry();
-            if (_biomeRegistry == null) return;
+            if (_biomeRegistry == null || viewer == null) return;
 
-            foreach (var kv in _chunks)
+            // Populating one chunk used to evaluate every solid voxel for every newly-generated
+            // chunk in the same frame. During spawn this could mean hundreds of terrain scans and
+            // tree instantiations at once. Retire empty interior chunks cheaply, then process a
+            // tiny nearest-first surface budget so streaming always wins over decoration.
+            Vector3 viewerLocal = body.transform.InverseTransformPoint(viewer.position);
+            int budget = Mathf.Max(1, maxScatterChunksPerFrame);
+            for (int processed = 0; processed < budget; processed++)
             {
-                var c = kv.Value;
-                if (!c.isGenerated || c.isScattered) continue;
-                if (c.meshFilter == null || c.meshFilter.sharedMesh == null) continue;
-                // Scatter itself validates the true radial exterior surface. A global +Y
-                // prerequisite is incorrect around a sphere and used to delay/skip trees on
-                // most latitudes while chunks streamed in.
-                ChunkScatter.Populate(this, c, _biomeRegistry, body.genParams.seed);
-                c.isScattered = true;
+                Chunk nearestSurface = null;
+                float nearestDistanceSq = float.PositiveInfinity;
+                foreach (var pair in _chunks)
+                {
+                    Chunk chunk = pair.Value;
+                    if (chunk == null || !chunk.isGenerated || chunk.isScattered) continue;
+                    Mesh mesh = chunk.meshFilter != null ? chunk.meshFilter.sharedMesh : null;
+                    if (mesh == null) continue;
+                    if (mesh.vertexCount == 0)
+                    {
+                        chunk.isScattered = true;
+                        continue;
+                    }
+
+                    Vector3 center = chunk.WorldOrigin + Vector3.one * (VoxelConstants.CHUNK_SIZE * 0.5f);
+                    float distanceSq = (center - viewerLocal).sqrMagnitude;
+                    if (distanceSq >= nearestDistanceSq) continue;
+                    nearestDistanceSq = distanceSq;
+                    nearestSurface = chunk;
+                }
+
+                if (nearestSurface == null) break;
+                ChunkScatter.Populate(this, nearestSurface, _biomeRegistry, body.genParams.seed);
+                nearestSurface.isScattered = true;
             }
         }
 
@@ -881,6 +905,82 @@ namespace VoxelEngine.Cosmos
             // half a voxel inside its collider/mesh.
             localSurface += radialUp * 0.06f;
             return true;
+        }
+
+        /// <summary>
+        /// Fast radial surface sample for dense visual systems such as grass. It evaluates one
+        /// density column and probes only the handful of voxel cells around that exact surface,
+        /// avoiding the former 145-cell radial scan per blade candidate.
+        /// </summary>
+        public bool TrySampleExteriorSurface(Vector3 radialDirection, out Vector3Int localVoxel,
+            out Vector3 localSurface, out Vector3 radialUp, out byte surfaceMaterial)
+        {
+            localVoxel = default;
+            localSurface = Vector3.zero;
+            radialUp = radialDirection.sqrMagnitude > 0.0001f ? radialDirection.normalized : Vector3.up;
+            surfaceMaterial = (byte)MaterialId.Air;
+            if (body == null || !_biomes.IsCreated) return false;
+
+            SphereDensity.EvaluateColumn(body.genParams, _biomes, (float3)radialUp, out float surfaceRadius, out _);
+            // Probe from exterior toward the crust so the first solid result is the true outer
+            // terrain material rather than a deeper subsurface layer.
+            for (int offset = 2; offset >= -3; offset--)
+            {
+                Vector3 point = radialUp * (surfaceRadius + offset * VoxelConstants.VOXEL_SIZE);
+                Vector3Int probe = new(
+                    Mathf.FloorToInt(point.x / VoxelConstants.VOXEL_SIZE),
+                    Mathf.FloorToInt(point.y / VoxelConstants.VOXEL_SIZE),
+                    Mathf.FloorToInt(point.z / VoxelConstants.VOXEL_SIZE));
+                if (!TryGetGeneratedVoxel(probe, out Voxel voxel) || !voxel.IsSolid ||
+                    VoxelEngine.WaterSim.FluidMaterialUtility.IsFluid(voxel))
+                    continue;
+
+                localVoxel = probe;
+                surfaceMaterial = voxel.material;
+                localSurface = radialUp * surfaceRadius + radialUp * 0.06f;
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Finds a deterministic land point from the authored density field before any collider
+        /// is available. PlayerSpawner uses this to choose one dry spherical target up front,
+        /// rather than visibly teleporting through repeated streamed candidates while looking for
+        /// land after spawn.
+        /// </summary>
+        public bool TryFindDrySpawnPoint(int sampleCount, out Vector3 worldGroundPoint)
+        {
+            worldGroundPoint = Vector3.zero;
+            if (body == null || !_biomes.IsCreated) return false;
+
+            int count = Mathf.Clamp(sampleCount, 8, 96);
+            float bestScore = float.PositiveInfinity;
+            bool found = false;
+            float phase = Mathf.Repeat(body.genParams.seed * 0.0000137f, 1f) * Mathf.PI * 2f;
+            const float goldenAngle = 2.39996323f;
+            for (int i = 0; i < count; i++)
+            {
+                // Keep initial candidates in habitable mid-latitudes while still sampling both
+                // hemispheres. The golden-angle progression is deterministic and evenly spaced.
+                float latitude = Mathf.Lerp(-0.52f, 0.52f, Mathf.Repeat(i * 0.61803399f + 0.5f, 1f));
+                float planar = Mathf.Sqrt(Mathf.Max(0f, 1f - latitude * latitude));
+                float angle = phase + i * goldenAngle;
+                float3 direction = new float3(Mathf.Cos(angle) * planar, latitude, Mathf.Sin(angle) * planar);
+                SphereDensity.EvaluateColumn(body.genParams, _biomes, direction, out float surfaceRadius, out _);
+                float landHeight = surfaceRadius - body.SeaRadius;
+                if (landHeight <= 3f) continue;
+
+                // Prefer a low, gently representative land surface rather than an arbitrary
+                // peak, while retaining a deterministic fallback if this body has little land.
+                float score = Mathf.Abs(landHeight - 14f) + Mathf.Abs(latitude) * 4f;
+                if (score >= bestScore) continue;
+                bestScore = score;
+                Vector3 localPoint = (Vector3)direction * surfaceRadius;
+                worldGroundPoint = body.transform.TransformPoint(localPoint);
+                found = true;
+            }
+            return found;
         }
 
         private bool TryGetGeneratedVoxel(Vector3Int localVoxel, out Voxel voxel)

@@ -17,8 +17,9 @@ Shader "VoxelEngine/PlanetSurfaceLodURP"
             Tags { "LightMode"="UniversalForward" }
             Blend SrcAlpha OneMinusSrcAlpha
             ZWrite Off
-            // The full spherical proxy must survive every radial winding edge.
-            Cull Off
+            // The icosphere has verified outward winding; back-face culling avoids rendering
+            // the far side through the transparent proxy and halves full-screen overdraw.
+            Cull Back
 
             HLSLPROGRAM
             #pragma vertex vert

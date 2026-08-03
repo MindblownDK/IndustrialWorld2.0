@@ -37,10 +37,13 @@ namespace VoxelEngine.Cosmos
         /// <summary>Sphere streaming view distance (chunk radius) per tier.</summary>
         public static int ViewDistance => Current switch
         {
-            GraphicsTier.Low  => 4,
-            GraphicsTier.Mid  => 6,
-            GraphicsTier.High => 8,
-            _                 => 10,
+            // This is the editable collider/chunk bubble, not visual draw distance: the
+            // continuous planet LOD covers everything beyond it. Keep it bounded so Ultra does
+            // not allocate thousands of 3D voxel chunks at spawn.
+            GraphicsTier.Low  => 3,
+            GraphicsTier.Mid  => 4,
+            GraphicsTier.High => 5,
+            _                 => 6,
         };
 
         /// <summary>Grass density multiplier (0 = off) per tier.</summary>
@@ -55,13 +58,13 @@ namespace VoxelEngine.Cosmos
         /// <summary>LOD icosphere resolution per tier (higher = smoother from space).</summary>
         public static int LodResolution => Current switch
         {
-            // The terrain shell is the continuous non-streamed planet, not an optional
-            // cosmetic. Keep even Low above the old coarse hexasphere budget, then give
-            // High/Ultra the near-surface density needed to hide chunk-streaming squares.
-            GraphicsTier.Low  => 2562,
-            GraphicsTier.Mid  => 10242,
-            GraphicsTier.High => 40962,
-            _                 => 40962,
+            // The full surface is always present; local voxel chunks own close detail. Keep
+            // the runtime proxy within a stable frame budget rather than rebuilding a 40k-vertex
+            // shell/ocean pair on every high-quality spawn.
+            GraphicsTier.Low  => 642,
+            GraphicsTier.Mid  => 2562,
+            GraphicsTier.High => 10242,
+            _                 => 10242,
         };
 
         /// <summary>Waterfall scan range (metres) per tier.</summary>

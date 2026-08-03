@@ -119,44 +119,42 @@ namespace VoxelEngine.Player
                 var body = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
                 if (body != null)
                 {
-                    // Scan around temperate latitude to find a valid land surface above sea level (not water).
-                    Vector3 equator = new Vector3(1f, 0f, 0f);
+                    // Choose one land target analytically before colliders exist. The old
+                    // Physics-only scan ran before chunks had streamed, then the wet-spawn
+                    // fallback visibly moved the player through many candidate locations.
                     bool foundLand = false;
                     Vector3 bestSpawn = body.transform.position + body.transform.up * (body.SurfaceRadius + 30f);
-
-                    int initialSamples = Mathf.Max(16, drySpawnSearchAttempts);
-                    for (int i = 0; i < initialSamples; i++)
+                    if (VoxelEngine.Core.ActiveWorld.Current is VoxelEngine.Cosmos.SphereWorld sphereWorld &&
+                        sphereWorld.TryFindDrySpawnPoint(drySpawnSearchAttempts, out Vector3 analyticGround))
                     {
-                        float angle = i * (360f / initialSamples);
-                        Vector3 sampleDir = Quaternion.AngleAxis(angle, body.transform.up) * (equator + body.transform.up * 0.55f);
-                        sampleDir = math.normalizesafe(sampleDir, body.transform.up);
+                        bestSpawn = analyticGround + body.UpAt(analyticGround) * SpawnGroundClearance;
+                        foundLand = true;
+                    }
 
-                        Vector3 rayFrom = body.transform.position + sampleDir * (body.SurfaceRadius + 250f);
-                        Vector3 rayDir = -sampleDir;
-                        if (Physics.Raycast(rayFrom, rayDir, out var hit, 400f, ~0, QueryTriggerInteraction.Ignore))
+                    // Keep a small collider fallback for malformed/custom density assets, but
+                    // only after the deterministic path declined to provide land.
+                    if (!foundLand)
+                    {
+                        Vector3 equator = new Vector3(1f, 0f, 0f);
+                        int initialSamples = Mathf.Min(8, Mathf.Max(4, drySpawnSearchAttempts));
+                        for (int i = 0; i < initialSamples; i++)
                         {
-                            float hitRadius = Vector3.Distance(hit.point, body.transform.position);
-                            float seaRadius = body.SeaRadius;
-                            if (hitRadius > seaRadius + 3f)
-                            {
-                                Vector3 candidate = hit.point + sampleDir * SpawnGroundClearance;
-                                if (!IsSpawnInWater(candidate))
-                                {
-                                    bestSpawn = candidate;
-                                    foundLand = true;
-                                    break;
-                                }
-                            }
+                            float angle = i * (360f / initialSamples);
+                            Vector3 sampleDir = Quaternion.AngleAxis(angle, body.transform.up) * (equator + body.transform.up * 0.55f);
+                            sampleDir = math.normalizesafe(sampleDir, body.transform.up);
+                            Vector3 rayFrom = body.transform.position + sampleDir * (body.SurfaceRadius + 250f);
+                            if (!Physics.Raycast(rayFrom, -sampleDir, out var hit, 400f, ~0, QueryTriggerInteraction.Ignore)) continue;
+                            if (Vector3.Distance(hit.point, body.transform.position) <= body.SeaRadius + 3f) continue;
+                            Vector3 candidate = hit.point + sampleDir * SpawnGroundClearance;
+                            if (IsSpawnInWater(candidate)) continue;
+                            bestSpawn = candidate;
+                            foundLand = true;
+                            break;
                         }
                     }
 
-                    if (!foundLand)
-                    {
-                        Vector3 surfDir = math.normalizesafe(equator + body.transform.up * 0.55f, body.transform.up);
-                        bestSpawn = body.transform.position + surfDir * (body.SurfaceRadius + 25f);
-                    }
                     target = bestSpawn;
-                    Debug.Log("[PlayerSpawner] Fresh SPHERE world — spawning on land surface at " + target);
+                    Debug.Log("[PlayerSpawner] Fresh SPHERE world — selected one dry surface target at " + target);
                 }
                 else
                 {
@@ -472,6 +470,32 @@ namespace VoxelEngine.Player
         private IEnumerator EnsureDrySpawn(Vector3 preferred)
         {
             if (!IsSpawnInWater(transform.position)) yield break;
+
+            var body = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
+            if (body != null && VoxelEngine.Core.ActiveWorld.Current is VoxelEngine.Cosmos.SphereWorld sphereWorld &&
+                sphereWorld.TryFindDrySpawnPoint(drySpawnSearchAttempts, out Vector3 analyticGround))
+            {
+                // One deterministic relocation replaces the old visible sequence of trial
+                // teleports. Keep the controller disabled while this single target streams.
+                Vector3 analyticSpawn = analyticGround + body.UpAt(analyticGround) * SpawnGroundClearance;
+                SetPosition(GetSpawnParkingPosition(analyticSpawn));
+                yield return WaitForChunkAt(VoxelCoordOf(analyticSpawn), 3f);
+                if (TryFindDryGround(analyticSpawn, out Vector3 dryGround)) analyticSpawn = dryGround;
+                SetPosition(analyticSpawn);
+                PersistDrySpawnRelocation(preferred, analyticSpawn);
+                Debug.Log("[PlayerSpawner] Replaced wet spawn with one deterministic dry surface target at " + analyticSpawn);
+                yield break;
+            }
+            if (body != null)
+            {
+                // A fully oceanic/custom body has no density-confirmed dry land. Do not make
+                // the player watch a long sequence of trial teleports; hold one safe point
+                // above the selected water column and report the authoring issue once.
+                Vector3 up = body.UpAt(preferred);
+                SetPosition(preferred + (up.sqrMagnitude > 0.0001f ? up.normalized : Vector3.up) * 4f);
+                Debug.LogError("[PlayerSpawner] No dry spherical spawn was found in the authored density field; held player above the selected water column without relocation hopping.");
+                yield break;
+            }
 
             int attempts = Mathf.Max(8, drySpawnSearchAttempts);
             Debug.LogWarning("[PlayerSpawner] Selected spawn is wet; searching nearby dry ground.");

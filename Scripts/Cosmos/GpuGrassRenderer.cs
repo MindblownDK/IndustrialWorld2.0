@@ -33,12 +33,14 @@ namespace VoxelEngine.Cosmos
 
         [Header("Placement")]
         [Tooltip("Radius around the viewer to fill with grass (metres).")]
-        public float range = 60f;
+        public float range = 45f;
         [Tooltip("Rebuild the field when the viewer moves more than this (metres).")]
-        public float rebuildThreshold = 8f;
+        public float rebuildThreshold = 12f;
 
         [Header("Density (per square metre, before quality scaling)")]
         [Range(0f, 4f)] public float baseDensity = 1.2f;
+        [Tooltip("Maximum radial terrain samples used when rebuilding one grass field.")]
+        [Range(256, 4096)] public int maxSurfaceSamples = 1600;
 
         [Header("Blade")]
         [Range(0.1f, 2f)] public float bladeHeight = 0.45f;
@@ -110,8 +112,12 @@ namespace VoxelEngine.Cosmos
             GetTangentBasis(localUp, out Vector3 tangentA, out Vector3 tangentB);
 
             int voxelRange = Mathf.CeilToInt(range);
-            int step = density > 1.5f ? 1 : 2;
-            var candidates = new List<Matrix4x4>(2048);
+            int densityStep = density > 1.5f ? 1 : 2;
+            int sampleBudget = Mathf.Max(256, maxSurfaceSamples);
+            int budgetStep = Mathf.Max(1, Mathf.CeilToInt(Mathf.Sqrt(
+                Mathf.PI * range * range / sampleBudget)));
+            int step = Mathf.Max(densityStep, budgetStep);
+            var candidates = new List<Matrix4x4>(sampleBudget);
 
             // Every candidate begins on a tangent plane around the viewer, then is projected
             // along the radial direction onto the true spherical voxel surface. This avoids
@@ -123,12 +129,10 @@ namespace VoxelEngine.Cosmos
 
                 Vector3 probeLocal = viewerLocal + tangentA * u + tangentB * v;
                 Vector3 radial = probeLocal.sqrMagnitude > 0.0001f ? probeLocal.normalized : localUp;
-                if (!TryFindRadialGrassSurface(world, radial, out Vector3Int surfaceVoxel, out byte surfaceMaterial))
+                if (!TryFindRadialGrassSurface(world, radial, out Vector3Int surfaceVoxel,
+                        out Vector3 surfaceLocal, out Vector3 radialUpLocal, out byte surfaceMaterial))
                     continue;
                 if (surfaceMaterial != (byte)MaterialId.Grass) continue;
-
-                Vector3 surfaceLocal = ((Vector3)surfaceVoxel + Vector3.one * 0.5f) * VoxelConstants.VOXEL_SIZE;
-                Vector3 radialUpLocal = surfaceLocal.sqrMagnitude > 0.0001f ? surfaceLocal.normalized : radial;
                 Vector3Int outward = surfaceVoxel + Vector3Int.RoundToInt(radialUpLocal);
                 var above = world.GetVoxelWorld(outward);
                 if (above.IsSolid || above.waterLevel > 0) continue;
@@ -151,7 +155,7 @@ namespace VoxelEngine.Cosmos
                     candidates.Add(Matrix4x4.TRS(worldPosition, rotation, new Vector3(bladeWidth, height, 1f)));
                 }
 
-                if (candidates.Count > 60000) goto done;
+                if (candidates.Count >= sampleBudget * 3) goto done;
             }
 
         done:
@@ -162,27 +166,33 @@ namespace VoxelEngine.Cosmos
             for (int i = 0; i < _instanceCount; i++) _matrices[i] = candidates[i];
         }
 
-        private bool TryFindRadialGrassSurface(IVoxelWorld world, Vector3 radial, out Vector3Int surfaceVoxel, out byte surfaceMaterial)
+        private bool TryFindRadialGrassSurface(IVoxelWorld world, Vector3 radial,
+            out Vector3Int surfaceVoxel, out Vector3 surfaceLocal, out Vector3 radialUp, out byte surfaceMaterial)
         {
             surfaceVoxel = default;
+            surfaceLocal = Vector3.zero;
+            radialUp = radial.sqrMagnitude > 0.0001f ? radial.normalized : Vector3.up;
             surfaceMaterial = 0;
+
+            // SphereWorld resolves the generated column directly. This replaces the old
+            // 145-voxel outward-to-inward scan for every grass sample.
+            if (world is SphereWorld sphere)
+                return sphere.TrySampleExteriorSurface(radial, out surfaceVoxel, out surfaceLocal, out radialUp, out surfaceMaterial);
+
+            // Legacy compatibility only; new planet generation never takes this path.
             float estimate = body.SurfaceRadius / VoxelConstants.VOXEL_SIZE;
-            // Terrain variation is compact; search outwards first so the first valid boundary
-            // is the exposed radial surface rather than a cave wall below it.
             for (int offset = 48; offset >= -96; offset--)
             {
-                Vector3Int voxel = Vector3Int.RoundToInt(radial * (estimate + offset));
+                Vector3Int voxel = Vector3Int.RoundToInt(radialUp * (estimate + offset));
                 Voxel value = world.GetVoxelWorld(voxel);
                 if (!value.IsSolid) continue;
-                // Use the same radial exterior proof as tree/rock scatter. This prevents a
-                // grass field from selecting a cave wall when a local chunk edge is still
-                // streaming and keeps all vegetation attached to the planet's real surface.
-                if (world is SphereWorld sphere && !sphere.TryGetExteriorSurface(voxel, out _, out _)) continue;
-                Vector3Int outward = voxel + Vector3Int.RoundToInt(radial);
+                Vector3Int outward = voxel + Vector3Int.RoundToInt(radialUp);
                 Voxel above = world.GetVoxelWorld(outward);
                 if (above.IsSolid || above.waterLevel > 0) continue;
                 surfaceVoxel = voxel;
                 surfaceMaterial = value.material;
+                surfaceLocal = ((Vector3)voxel + Vector3.one * 0.5f) * VoxelConstants.VOXEL_SIZE;
+                radialUp = surfaceLocal.sqrMagnitude > 0.0001f ? surfaceLocal.normalized : radialUp;
                 return true;
             }
             return false;

@@ -28,6 +28,7 @@ namespace VoxelEngine.Scattering
         }
 
         private static readonly Dictionary<IChunkScatterWorld, List<Reservation>> s_reservations = new();
+        private static readonly Collider[] s_overlapBuffer = new Collider[32];
 
         /// <summary>Release cached runtime reservations when a streamed world is destroyed.</summary>
         public static void ForgetWorld(IChunkScatterWorld world)
@@ -50,6 +51,10 @@ namespace VoxelEngine.Scattering
             }
 
             const int S = VoxelConstants.CHUNK_SIZE;
+            // Scatter is intentionally sampled on a 2 m lattice. Trees receive explicit
+            // canopy separation below, so evaluating every one-metre solid voxel only creates
+            // redundant rejected candidates and large streaming hitches.
+            const int CandidateStride = 2;
             var holder = new GameObject("__scatter");
             // Chunk placement is complete before deferred scatter runs. Keep the holder at the
             // chunk origin so its children remain body-relative if the planet transform moves.
@@ -63,9 +68,9 @@ namespace VoxelEngine.Scattering
             var sphere = world as SphereWorld;
             bool isSphere = sphere != null;
 
-            for (int x = 0; x < S; x++)
-            for (int y = 0; y < S; y++)
-            for (int z = 0; z < S; z++)
+            for (int x = 0; x < S; x += CandidateStride)
+            for (int y = 0; y < S; y += CandidateStride)
+            for (int z = 0; z < S; z += CandidateStride)
             {
                 Voxel voxel = chunk.GetVoxelLocal(x, y, z);
                 if (!voxel.IsSolid || IsLiquid(voxel)) continue;
@@ -79,9 +84,12 @@ namespace VoxelEngine.Scattering
                 Vector3 upDir;
                 if (isSphere)
                 {
-                    // This is the key exterior test: it compares this voxel with the same
-                    // radial density column that generated the planet. Cave walls and deep
-                    // terrain cannot pass it, regardless of local mesh/collider timing.
+                    // Cheaply reject deep solid cells before invoking the exact density-column
+                    // test. This turns a whole-chunk scan into a small exposed-surface scan
+                    // instead of evaluating procedural terrain for every underground voxel.
+                    if (!HasPotentialRadialExposure(world, chunk, x, y, z, localVoxel)) continue;
+                    // This is the authoritative exterior test: cave walls and deep terrain
+                    // cannot pass it, regardless of local mesh/collider timing.
                     if (!sphere.TryGetExteriorSurface(localVoxel, out localSurface, out upDir)) continue;
                 }
                 else
@@ -149,6 +157,39 @@ namespace VoxelEngine.Scattering
             }
         }
 
+        private static bool HasPotentialRadialExposure(IChunkScatterWorld world, Chunk chunk, int x, int y, int z, Vector3Int localVoxel)
+        {
+            const int S = VoxelConstants.CHUNK_SIZE;
+            Vector3 radial = ((Vector3)localVoxel + Vector3.one * 0.5f).normalized;
+            Vector3Int outward = DominantAxis(radial);
+            int nx = x + outward.x;
+            int ny = y + outward.y;
+            int nz = z + outward.z;
+            if (nx >= 0 && nx < S && ny >= 0 && ny < S && nz >= 0 && nz < S)
+                return !chunk.GetVoxelLocal(nx, ny, nz).IsSolid;
+
+            Vector3Int neighbourCoord = chunk.coord + new Vector3Int(
+                nx < 0 ? -1 : nx >= S ? 1 : 0,
+                ny < 0 ? -1 : ny >= S ? 1 : 0,
+                nz < 0 ? -1 : nz >= S ? 1 : 0);
+            if (!world.TryGetChunk(neighbourCoord, out Chunk neighbour) || neighbour == null || !neighbour.isGenerated)
+                return true;
+            int wrappedX = (nx % S + S) % S;
+            int wrappedY = (ny % S + S) % S;
+            int wrappedZ = (nz % S + S) % S;
+            return !neighbour.GetVoxelLocal(wrappedX, wrappedY, wrappedZ).IsSolid;
+        }
+
+        private static Vector3Int DominantAxis(Vector3 direction)
+        {
+            Vector3 absolute = new Vector3(Mathf.Abs(direction.x), Mathf.Abs(direction.y), Mathf.Abs(direction.z));
+            if (absolute.x >= absolute.y && absolute.x >= absolute.z)
+                return new Vector3Int(direction.x >= 0f ? 1 : -1, 0, 0);
+            if (absolute.y >= absolute.z)
+                return new Vector3Int(0, direction.y >= 0f ? 1 : -1, 0);
+            return new Vector3Int(0, 0, direction.z >= 0f ? 1 : -1);
+        }
+
         private static bool TryFindFlatSurface(IChunkScatterWorld world, Chunk chunk, int x, int y, int z,
             out Vector3 localSurface, out Vector3 upDir)
         {
@@ -199,9 +240,11 @@ namespace VoxelEngine.Scattering
 
             // The reservation test is authoritative for scatter-vs-scatter. Physics additionally
             // protects player structures and legacy loaded tree instances that predate it.
-            Collider[] hits = Physics.OverlapSphere(worldPos + worldUp * 0.5f, clearRadius, ~0, QueryTriggerInteraction.Ignore);
-            foreach (Collider hit in hits)
+            int hitCount = Physics.OverlapSphereNonAlloc(
+                worldPos + worldUp * 0.5f, clearRadius, s_overlapBuffer, ~0, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < hitCount; i++)
             {
+                Collider hit = s_overlapBuffer[i];
                 if (hit == null) continue;
                 if (holder != null && hit.transform.IsChildOf(holder)) continue;
                 if (hit.GetComponentInParent<VoxelEngine.Trees.Tree>() != null ||
