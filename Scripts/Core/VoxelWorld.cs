@@ -514,6 +514,7 @@ namespace VoxelEngine.Core
                 materialColors   = _materialColors,
                 vertexAttributes = _vertexAttributes,
                 isSphere         = false,
+                enableVertexAo   = true,
                 chunkOrigin      = new float3(chunk.coord.x, chunk.coord.y, chunk.coord.z) * VoxelConstants.CHUNK_SIZE
             };
             pending.handle = job.Schedule();

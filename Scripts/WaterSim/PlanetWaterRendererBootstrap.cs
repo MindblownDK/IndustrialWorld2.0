@@ -16,7 +16,7 @@ namespace VoxelEngine.WaterSim
 
         [Header("Native Surface Budget")]
         [Tooltip("How many queued voxel-liquid chunks may rebuild their detailed meshes per frame.")]
-        [Range(1, 24)] public int meshBuildBudgetPerFrame = 4;
+        [Range(1, 24)] public int meshBuildBudgetPerFrame = 1;
         [Tooltip("Render detailed voxel liquid surfaces for lakes, rivers, buckets, and oil pools.")]
         public bool renderVoxelLiquidSurfaces = true;
         [Tooltip("Legacy compatibility only. Real ocean water now renders exclusively from generated voxel ocean basins; the old wrapped shell is disabled.")]
@@ -25,9 +25,9 @@ namespace VoxelEngine.WaterSim
         [Range(4f, 32f)] public float nativeOceanTileSize = 12f;
 
         [Tooltip("Schedules nearby generated liquid chunks in case a scene was previously saved with liquid surfaces disabled.")]
-        public bool rescheduleVisibleLiquidSurfaces = true;
-        [Range(1, 8)] public int liquidRescheduleChunkRadius = 3;
-        [Range(0.25f, 5f)] public float liquidRescheduleInterval = 1.0f;
+        public bool rescheduleVisibleLiquidSurfaces = false;
+        [Range(1, 8)] public int liquidRescheduleChunkRadius = 1;
+        [Range(0.25f, 5f)] public float liquidRescheduleInterval = 2.0f;
 
         [Header("Native Materials")]
         [Tooltip("Optional setup-authored water material using VoxelEngine/VoxelWaterURP.")]
@@ -41,6 +41,13 @@ namespace VoxelEngine.WaterSim
 
         private void Awake()
         {
+            // Safe migration for the previous runtime defaults. Exact-value checks leave any
+            // intentional custom water budget untouched while preventing old scenes from
+            // repeatedly rebuilding ocean chunks after this performance update.
+            if (meshBuildBudgetPerFrame == 4) meshBuildBudgetPerFrame = 1;
+            if (rescheduleVisibleLiquidSurfaces && liquidRescheduleChunkRadius >= 3 && liquidRescheduleInterval <= 1.01f)
+                rescheduleVisibleLiquidSurfaces = false;
+
             FluidManager.EnsureInstance();
             NativeWaterWakeSystem.EnsureInstance();
             ApplyMaterialOverrides();
@@ -59,7 +66,10 @@ namespace VoxelEngine.WaterSim
             if (renderVoxelLiquidSurfaces)
             {
                 ScheduleNearbyLiquidChunks();
-                WaterMeshBuilder.Pump(Mathf.Max(1, meshBuildBudgetPerFrame));
+                // SphereWorld owns the bounded local liquid queue. Pumping it here as well
+                // doubled main-thread water mesh work every frame during terrain streaming.
+                if (ActiveWorld.Current is not SphereWorld)
+                    WaterMeshBuilder.Pump(Mathf.Max(1, meshBuildBudgetPerFrame));
             }
             ApplyProfile();
         }
@@ -106,8 +116,9 @@ namespace VoxelEngine.WaterSim
                 var coord = center + new Vector3Int(x, y, z);
                 if (!world.TryGetChunk(coord, out var chunk) || chunk == null || !chunk.isGenerated) continue;
 
-                world.CompleteGenJobForChunk(chunk);
-                world.CompleteMeshJobForChunk(chunk);
+                // Do not force-complete terrain jobs from this periodic visual recovery scan.
+                // Generated chunks are safe to inspect; in-flight work stays on SphereWorld's
+                // bounded queue instead of causing a multi-chunk hitch once per interval.
                 if (ChunkHasVisibleLiquid(chunk)) WaterMeshBuilder.Schedule(chunk);
             }
         }

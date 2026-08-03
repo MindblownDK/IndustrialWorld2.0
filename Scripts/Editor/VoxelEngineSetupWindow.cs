@@ -3270,7 +3270,16 @@ namespace VoxelEngine.EditorTools
             }
             bootstrap.renderVoxelLiquidSurfaces = true;
             bootstrap.renderNativeSphericalOceanPatch = false;
-            bootstrap.meshBuildBudgetPerFrame = Mathf.Clamp(bootstrap.meshBuildBudgetPerFrame, 4, 12);
+            // Migrate only the known old default (4) to the bounded local-water budget;
+            // any other designer-authored number remains untouched.
+            if (bootstrap.meshBuildBudgetPerFrame == 4) bootstrap.meshBuildBudgetPerFrame = 1;
+            else if (bootstrap.meshBuildBudgetPerFrame <= 0) bootstrap.meshBuildBudgetPerFrame = 1;
+            // The old recovery scan repeatedly rebuilt every nearby ocean surface. SphereWorld
+            // now schedules real liquid changes directly, so disable only the recognizable old
+            // default configuration while preserving intentional custom recovery tuning.
+            if (bootstrap.rescheduleVisibleLiquidSurfaces &&
+                bootstrap.liquidRescheduleChunkRadius >= 3 && bootstrap.liquidRescheduleInterval <= 1.01f)
+                bootstrap.rescheduleVisibleLiquidSurfaces = false;
             bootstrap.nativeOceanSearchRadius = Mathf.Clamp(bootstrap.nativeOceanSearchRadius, 192f, 512f);
             bootstrap.nativeOceanTileSize = Mathf.Clamp(bootstrap.nativeOceanTileSize, 8f, 16f);
             bootstrap.waterMaterialOverride = water;
@@ -3284,6 +3293,11 @@ namespace VoxelEngine.EditorTools
             if (performance == null) performance = bootstrap.gameObject.AddComponent<VoxelEngine.WaterSim.FluidPerformanceBootstrap>();
             performance.renderNativeWater = true;
             performance.useNativeVolumetricAssist = false;
+            if (Mathf.Approximately(performance.tickRate, 8f) && performance.maxChunksPerTick == 6)
+            {
+                performance.tickRate = 4f;
+                performance.maxChunksPerTick = 2;
+            }
 
             if (Object.FindAnyObjectByType<VoxelEngine.WaterSim.NativeWaterWakeSystem>(FindObjectsInactive.Include) == null)
                 new GameObject("NativeWaterWakeSystem").AddComponent<VoxelEngine.WaterSim.NativeWaterWakeSystem>();

@@ -24,7 +24,7 @@ namespace VoxelEngine.Generation
         private const int MaxSurfaceProbeSteps = 192;
         private const int ExteriorAirProbeSteps = 12;
         private const int PendingRetryBudgetPerChunk = 2;
-        private const int MaxNewSitesPerChunk = 4;
+        private const int MaxNewSitesPerChunk = 1;
         private const int PendingRetryDelayFrames = 12;
         private const int MaxInvalidPendingAttempts = 3;
 
@@ -117,22 +117,27 @@ namespace VoxelEngine.Generation
 
             // Chunks are small (32³); scanning their interior once on generation is cheaper and
             // more reliable than waiting for a particular underground ore-pixel to be selected.
-            for (int z = 1; z < size - 1; z++)
-            for (int y = 1; y < size - 1; y++)
-            for (int x = 1; x < size - 1; x++)
+            // Geological cells are 96 m wide, while a streamed chunk is 32 m. A two-metre
+            // candidate lattice is more than enough to find an exposed local surface but avoids
+            // evaluating costly radial terrain columns for every one of 27k solid voxels.
+            const int CandidateStride = 2;
+            for (int z = 1; z < size - 1; z += CandidateStride)
+            for (int y = 1; y < size - 1; y += CandidateStride)
+            for (int x = 1; x < size - 1; x += CandidateStride)
             {
                 Voxel voxel = chunk.GetVoxelLocal(x, y, z);
                 if (!voxel.IsSolid) continue;
 
                 Vector3Int anchor = new(baseX + x, baseY + y, baseZ + z);
-                // Never let a cave wall or deep interior voxel nominate an oil site. The same
-                // sampled radial surface used by terrain/scatter must own the candidate.
-                if (!world.IsNearSampledTerrainSurface(anchor, 3f)) continue;
-
                 Vector3 up = GetUpDir(anchor);
                 Vector3Int outer = anchor + Vector3Int.RoundToInt(up);
                 bool outerLoaded = TryGetLoadedVoxel(world, outer, out Voxel outerVoxel);
+                // Most candidates are deep interior and can be rejected with one cheap voxel
+                // lookup before the exact sampled-surface test.
                 if (outerLoaded && outerVoxel.IsSolid) continue;
+                // Never let a cave wall or deep interior voxel nominate an oil site. The same
+                // sampled radial surface used by terrain/scatter must own the candidate.
+                if (!world.IsNearSampledTerrainSurface(anchor, 3f)) continue;
                 // A surface chunk can finish one frame before the adjacent air chunk. Queue
                 // only anchors close to the expected spherical surface in that case; otherwise
                 // deep interior chunks would claim unrelated radial cells before they can see

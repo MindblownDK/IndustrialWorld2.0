@@ -18,12 +18,28 @@ namespace VoxelEngine.WaterSim
         public bool useNativeVolumetricAssist;
 
         [Header("Tuning")]
-        [Range(4f, 12f)] public float tickRate = 8f;
-        [Range(2, 12)] public int maxChunksPerTick = 6;
+        [Range(2f, 12f)] public float tickRate = 4f;
+        [Range(1, 12)] public int maxChunksPerTick = 2;
         public int computeFrameSkip = 2;
 
-        private void Awake() => Apply();
+        private void Awake()
+        {
+            MigrateLegacyBudget();
+            Apply();
+        }
+
         private void OnEnable() => Apply();
+
+        private void MigrateLegacyBudget()
+        {
+            // Preserve authored tuning; migrate only the exact old defaults that made every
+            // active fluid chunk simulate at 8 Hz / six chunks per tick during streaming.
+            if (Mathf.Approximately(tickRate, 8f) && maxChunksPerTick == 6)
+            {
+                tickRate = 4f;
+                maxChunksPerTick = 2;
+            }
+        }
 
         [ContextMenu("Apply Native Water Defaults")]
         public void Apply()

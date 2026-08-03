@@ -71,11 +71,8 @@ namespace VoxelEngine.Cosmos
         private int ResolveRuntimeResolution(CelestialBody resolved)
         {
             int highest = Mathf.Clamp(resolution, 642, 10242);
-            if (viewer == null || resolved == null) return highest;
-            float altitude = Mathf.Max(0f, resolved.AltitudeAt(viewer.position));
-            float radius = Mathf.Max(1f, resolved.SurfaceRadius);
-            if (altitude >= radius * 4f) return Mathf.Min(highest, 642);
-            if (altitude >= radius * 1.2f) return Mathf.Min(highest, 2562);
+            // The capped 10k proxy is inexpensive enough to retain its authored detail in
+            // orbit. Lower quality tiers still use their own lower ceiling via GraphicsPreset.
             return highest;
         }
 

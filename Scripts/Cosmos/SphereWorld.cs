@@ -70,6 +70,8 @@ namespace VoxelEngine.Cosmos
         [Range(1, 16)] public int viewDistance = VoxelConstants.DEFAULT_VIEW_DISTANCE;
         [Range(1, 16)] public int maxJobsPerFrame = 4;
         public bool generateColliders = true;
+        [Tooltip("Only the nearby gameplay bubble needs expensive mesh colliders; distant local chunks remain visual until approached.")]
+        [Range(1, 4)] public int colliderChunkRadius = 2;
         [Tooltip("Spawn trees/rocks from biome scatter lists.")]
         public bool enableScatter = true;
         [Tooltip("Maximum generated chunks whose scatter may be populated in one frame. A low budget prevents vegetation creation from stalling terrain streaming.")]
@@ -287,9 +289,11 @@ namespace VoxelEngine.Cosmos
             if (viewer == null || body == null) return;
             PublishTerrainShaderContext();
             UpdateStreaming();
+            QueueNearbyDetailMeshes();
             DispatchGenerationJobs();
             DispatchMeshingJobs();
             CompleteFinishedJobs();
+            RefreshColliderWindow();
             VoxelEngine.Generation.OilReservoirDecorator.Tick(this);
             
             // Native water meshes are local detail only; throttle their main-thread rebuilds so
@@ -353,6 +357,13 @@ namespace VoxelEngine.Cosmos
         private readonly List<(Vector3Int coord, int distSq)> _loadCandidates = new();
         private readonly List<Vector3Int> _evictList = new();
 
+        // Bound queued/in-flight work as well as per-frame dispatch. Without these limits a
+        // fast camera move could enqueue hundreds of expensive radial density/mesh jobs and
+        // saturate every worker thread long after the player had moved on.
+        private int MaxOutstandingChunkRequests => Mathf.Clamp(maxJobsPerFrame * 3, 6, 16);
+        private int GenerationConcurrencyLimit => Mathf.Clamp((maxJobsPerFrame + 1) / 2, 1, 3);
+        private int MeshConcurrencyLimit => Mathf.Clamp((maxJobsPerFrame + 3) / 4, 1, 2);
+
         private bool IsCurrentChunk(Chunk chunk, int epoch)
         {
             if (chunk == null || chunk.go == null || !chunk.go.activeSelf || chunk.streamEpoch != epoch)
@@ -410,8 +421,12 @@ namespace VoxelEngine.Cosmos
             }
             _loadCandidates.Sort((a, b) => a.distSq.CompareTo(b.distSq));
 
+            int outstanding = 0;
+            foreach (var pair in _chunks)
+                if (pair.Value != null && !pair.Value.isGenerated) outstanding++;
+            int admissionBudget = Mathf.Max(0, MaxOutstandingChunkRequests - outstanding);
             int spawned = 0;
-            for (int i = 0; i < _loadCandidates.Count && spawned < maxJobsPerFrame * 2; i++)
+            for (int i = 0; i < _loadCandidates.Count && spawned < admissionBudget; i++)
             {
                 var c = _loadCandidates[i].coord;
                 var chunk = _pool.Rent(c);
@@ -447,7 +462,8 @@ namespace VoxelEngine.Cosmos
         // ---- Generation jobs (radial density) ----
         private void DispatchGenerationJobs()
         {
-            int budget = maxJobsPerFrame;
+            int budget = Mathf.Min(maxJobsPerFrame,
+                Mathf.Max(0, GenerationConcurrencyLimit - _pendingGen.Count));
             while (budget-- > 0 && _genQueue.Count > 0)
             {
                 QueuedChunk queued = _genQueue.Dequeue();
@@ -463,9 +479,15 @@ namespace VoxelEngine.Cosmos
                     chunk.isModified = false;
                     chunk.isScattered = false;
                     // Re-evaluate deterministic oil-rich-body seeps after loading old chunks too.
-                    VoxelEngine.Generation.OilReservoirDecorator.Decorate(chunk, this);
-                    VoxelEngine.WaterSim.WaterMeshBuilder.Schedule(chunk);
+                    bool loadedSurfaceChunk = ShouldBuildInitialTerrainMesh(chunk);
+                    if (loadedSurfaceChunk)
+                        VoxelEngine.Generation.OilReservoirDecorator.Decorate(chunk, this);
+                    if (ChunkHasGeneratedLiquid(chunk))
+                        VoxelEngine.WaterSim.WaterMeshBuilder.Schedule(chunk);
+                    // Saved chunks can contain intentional player mines/building edits below the
+                    // exterior band, so preserve their full mesh restore path.
                     QueueMesh(chunk);
+                    if (!loadedSurfaceChunk) chunk.isScattered = true;
                     continue;
                 }
 
@@ -497,7 +519,8 @@ namespace VoxelEngine.Cosmos
         // ---- Mesh jobs ----
         private void DispatchMeshingJobs()
         {
-            int budget = maxJobsPerFrame;
+            int budget = Mathf.Min(maxJobsPerFrame,
+                Mathf.Max(0, MeshConcurrencyLimit - _pendingMesh.Count));
             while (budget-- > 0 && _meshQueue.Count > 0)
             {
                 QueuedChunk queued = _meshQueue.Dequeue();
@@ -553,6 +576,7 @@ namespace VoxelEngine.Cosmos
                 cellVertexIndex = pending.cellLut, materialColors = _materialColors,
                 vertexAttributes = _vertexAttributes,
                 isSphere = true,
+                enableVertexAo = false,
                 chunkOrigin = new float3(chunk.coord.x, chunk.coord.y, chunk.coord.z) * VoxelConstants.CHUNK_SIZE
             };
             pending.handle = job.Schedule();
@@ -603,8 +627,7 @@ namespace VoxelEngine.Cosmos
                         MeshUpdateFlags.DontRecalculateBounds | MeshUpdateFlags.DontValidateIndices);
                     mesh.bounds = p.bounds[0];
                     p.chunk.meshFilter.sharedMesh = mesh;
-                    if (generateColliders && p.counts[1] > 0) p.chunk.meshCollider.sharedMesh = mesh;
-                    else if (p.counts[1] == 0) p.chunk.meshCollider.sharedMesh = null;
+                    ApplyColliderState(p.chunk, mesh, p.counts[1] > 0);
                 }
                 else
                 {
@@ -626,11 +649,122 @@ namespace VoxelEngine.Cosmos
             p.chunk.genCompletedTime = Time.time;
             p.chunk.isScattered = false;
 
-            VoxelEngine.Generation.OilReservoirDecorator.Decorate(p.chunk, this);
+            bool initialSurfaceChunk = ShouldBuildInitialTerrainMesh(p.chunk);
+            // Oil site discovery is surface-only. Skipping it for interior/air chunks prevents
+            // geological scanning from competing with terrain streaming as the player moves.
+            if (initialSurfaceChunk)
+                VoxelEngine.Generation.OilReservoirDecorator.Decorate(p.chunk, this);
 
-            // Wake fluid sim and schedule real voxel water/oil meshing.
-            VoxelEngine.WaterSim.WaterMeshBuilder.Schedule(p.chunk);
-            QueueMesh(p.chunk);
+            // Only chunks that actually contain generated liquid enter the expensive native
+            // water mesh queue. The full ocean LOD covers distant basins, so dry terrain chunks
+            // must never allocate a LiquidSurface object just because they streamed in.
+            if (ChunkHasGeneratedLiquid(p.chunk))
+                VoxelEngine.WaterSim.WaterMeshBuilder.Schedule(p.chunk);
+
+            if (initialSurfaceChunk)
+            {
+                QueueMesh(p.chunk);
+            }
+            else
+            {
+                // A fully air/interior chunk has no exposed terrain surface. It becomes meshable
+                // on demand after a player edit, but does not consume a SurfaceNets job now.
+                p.chunk.isScattered = true;
+                if (p.chunk.meshCollider != null) p.chunk.meshCollider.sharedMesh = null;
+            }
+        }
+
+        private bool ShouldBuildInitialTerrainMesh(Chunk chunk)
+        {
+            if (chunk == null || body == null || !_biomes.IsCreated) return true;
+            if (IsWithinGameplayDetail(chunk)) return true;
+            Vector3 center = chunk.WorldOrigin + Vector3.one * (VoxelConstants.CHUNK_SIZE * 0.5f);
+            if (center.sqrMagnitude < 0.001f) return false;
+            float3 direction = math.normalizesafe((float3)center, new float3(0f, 1f, 0f));
+            SphereDensity.EvaluateColumn(body.genParams, _biomes, direction, out float surfaceRadius, out _);
+            float radialDistance = center.magnitude;
+            // Half a chunk diagonal plus terrain/noise margin. This includes every exterior
+            // surface cell while skipping deep solid and empty-air chunks in the local 3D ball.
+            const float radialReach = 52f;
+            return Mathf.Abs(radialDistance - surfaceRadius) <= radialReach;
+        }
+
+        private static bool ChunkHasGeneratedLiquid(Chunk chunk)
+        {
+            if (chunk == null || !chunk.isGenerated) return false;
+            const int S = VoxelConstants.CHUNK_SIZE;
+            // Generated oceans occupy many cells, so a sparse probe is enough here. Explicit
+            // player/oil writes schedule their exact chunk separately and never rely on this.
+            for (int z = 0; z < S; z += 2)
+            for (int y = 0; y < S; y += 2)
+            for (int x = 0; x < S; x += 2)
+            {
+                Voxel voxel = chunk.GetVoxelLocal(x, y, z);
+                if (VoxelEngine.WaterSim.FluidMaterialUtility.IsFluid(voxel)) return true;
+            }
+            return false;
+        }
+
+        private bool IsWithinGameplayDetail(Chunk chunk, float radiusChunks = 2.15f)
+        {
+            if (chunk == null || viewer == null || body == null) return false;
+            Vector3 viewerLocal = body.transform.InverseTransformPoint(viewer.position);
+            Vector3 center = chunk.WorldOrigin + Vector3.one * (VoxelConstants.CHUNK_SIZE * 0.5f);
+            float radius = Mathf.Max(1f, radiusChunks) * VoxelConstants.CHUNK_SIZE;
+            return (center - viewerLocal).sqrMagnitude <= radius * radius;
+        }
+
+        private bool ShouldHaveCollider(Chunk chunk)
+        {
+            if (!generateColliders) return false;
+            float radius = Mathf.Clamp(colliderChunkRadius, 1, 4) + 0.85f;
+            return IsWithinGameplayDetail(chunk, radius);
+        }
+
+        private void QueueNearbyDetailMeshes()
+        {
+            // Surface LOD covers visual distance; only one newly-near interior chunk needs a
+            // real mesh per frame for mining/collision continuity while descending underground.
+            Chunk nearest = null;
+            float bestDistanceSq = float.PositiveInfinity;
+            if (viewer == null || body == null) return;
+            Vector3 viewerLocal = body.transform.InverseTransformPoint(viewer.position);
+            foreach (var pair in _chunks)
+            {
+                Chunk chunk = pair.Value;
+                if (chunk == null || !chunk.isGenerated || chunk.meshFilter == null ||
+                    chunk.meshFilter.sharedMesh != null || !IsWithinGameplayDetail(chunk)) continue;
+                Vector3 center = chunk.WorldOrigin + Vector3.one * (VoxelConstants.CHUNK_SIZE * 0.5f);
+                float distanceSq = (center - viewerLocal).sqrMagnitude;
+                if (distanceSq >= bestDistanceSq) continue;
+                bestDistanceSq = distanceSq;
+                nearest = chunk;
+            }
+            if (nearest != null) QueueMesh(nearest);
+        }
+
+        private void ApplyColliderState(Chunk chunk, Mesh mesh, bool hasIndices)
+        {
+            if (chunk == null || chunk.meshCollider == null) return;
+            if (hasIndices && ShouldHaveCollider(chunk))
+            {
+                if (chunk.meshCollider.sharedMesh != mesh) chunk.meshCollider.sharedMesh = mesh;
+            }
+            else if (chunk.meshCollider.sharedMesh != null)
+            {
+                chunk.meshCollider.sharedMesh = null;
+            }
+        }
+
+        private void RefreshColliderWindow()
+        {
+            foreach (var pair in _chunks)
+            {
+                Chunk chunk = pair.Value;
+                if (chunk == null || chunk.meshCollider == null || chunk.meshFilter == null) continue;
+                Mesh mesh = chunk.meshFilter.sharedMesh;
+                ApplyColliderState(chunk, mesh, mesh != null && mesh.vertexCount > 0);
+            }
         }
 
         private void ProcessDeferredScatter()
@@ -765,8 +899,10 @@ namespace VoxelEngine.Cosmos
                 p.chunk.isScattered = false;
                 if (finalizeContent)
                 {
-                    VoxelEngine.Generation.OilReservoirDecorator.Decorate(p.chunk, this);
-                    VoxelEngine.WaterSim.WaterMeshBuilder.Schedule(p.chunk);
+                    if (ShouldBuildInitialTerrainMesh(p.chunk))
+                        VoxelEngine.Generation.OilReservoirDecorator.Decorate(p.chunk, this);
+                    if (ChunkHasGeneratedLiquid(p.chunk))
+                        VoxelEngine.WaterSim.WaterMeshBuilder.Schedule(p.chunk);
                 }
                 QueueMesh(p.chunk);
                 return;
@@ -787,8 +923,7 @@ namespace VoxelEngine.Cosmos
                         MeshUpdateFlags.DontRecalculateBounds | MeshUpdateFlags.DontValidateIndices);
                     mesh.bounds = p.bounds[0];
                     p.chunk.meshFilter.sharedMesh = mesh;
-                    if (generateColliders && p.counts[1] > 0) p.chunk.meshCollider.sharedMesh = mesh;
-                    else if (p.counts[1] == 0) p.chunk.meshCollider.sharedMesh = null;
+                    ApplyColliderState(p.chunk, mesh, p.counts[1] > 0);
                 }
                 else
                 {

@@ -1,9 +1,36 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.11.11-dev`
+**Current Version:** `7.11.12-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.11.12-dev] Bounded Voxel Streaming, Low-Cost Water & Detailed Space Surface
+
+**Type:** PATCH — spherical streaming/meshing throughput, native-water budgeting, and full-planet space presentation; no save/API break.
+
+#### ⚙️ Generation no longer monopolizes the frame
+- Added hard outstanding-work and in-flight-job ceilings to `SphereWorld`: new chunk admission, radial generation, and mesh jobs are bounded instead of accumulating hundreds of expensive work items while moving.
+- Surface-only initial meshing now skips unneeded deep-solid/empty-air chunks, while nearby underground chunks are promoted one at a time as the player approaches or mines into them.
+- Added a near-player collider window: only gameplay-near terrain owns costly `MeshCollider` data; approaching chunks receive collision before the player reaches them.
+- Replaced the per-vertex 256-material histogram in `SurfaceNetsJob` with an eight-corner vote and disabled the 26-neighbour vertex-AO pass for streamed spherical chunks. Static-world AO remains enabled.
+- Oil-site discovery now uses an exposed two-metre candidate lattice and runs only on surface chunks, avoiding deep geological scans during ordinary terrain streaming.
+
+#### 🌊 Native voxel water: gameplay-local, ocean-visual at distance
+- Natural oceans remain static voxel source data with the full planet ocean LOD for distant visuals; only local pools, placed liquid, pumps, and changed liquid chunks enter detailed water meshing/simulation.
+- Removed duplicate water queue pumping between `SphereWorld` and the native-water bootstrap.
+- Existing default scenes migrate from 4 water mesh builds/frame and 8 Hz / 6-chunk fluid ticks to a bounded 1 build/frame and 4 Hz / 2-chunk local simulation budget, preserving deliberate custom values.
+- Periodic liquid recovery no longer force-completes nearby terrain meshes or repeatedly rebuilds visible ocean chunks.
+
+#### 🪐 Detailed surface from space without dense voxel streaming
+- Kept the capped 10,242-vertex terrain/ocean proxy at High/Ultra in orbit rather than dropping to a coarse far hexasphere.
+- Added body-relative procedural macro/fine surface variation to the planet LOD shader, giving continents readable texture from space without spawning extra terrain chunks.
+
+#### ✅ Static delivery checks
+- Parsed the modified streaming, meshing, water, terrain-LOD, scatter, player-spawn, and setup C# sources with Tree-sitter.
+- Ran targeted throughput/version/sparse-workspace assertions. Unity compilation and Play Mode validation remain pending from Thomas.
+
+---
 
 ### [7.11.11-dev] Spawn Scope Compile Recovery
 

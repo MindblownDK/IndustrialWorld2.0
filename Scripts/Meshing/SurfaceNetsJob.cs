@@ -48,6 +48,9 @@ namespace VoxelEngine.Meshing
         [ReadOnly] public NativeArray<VertexAttributeDescriptor> vertexAttributes;
 
         public bool isSphere;
+        // Vertex AO is attractive on static worlds but costs 26 voxel reads per output vertex.
+        // Spherical streaming disables it and relies on radial normals/shader lighting instead.
+        public bool enableVertexAo;
         public float3 chunkOrigin;
 
         // Fluid material IDs — these are treated as EMPTY for terrain mesh generation
@@ -67,8 +70,9 @@ namespace VoxelEngine.Meshing
             float3 bbMin = new float3(float.MaxValue);
             float3 bbMax = new float3(float.MinValue);
 
-            // Local material vote buffer (stack allocated, no GC)
-            int* matVotes = stackalloc int[256];
+            // At most eight corners contribute to a surface cell. Keep a tiny local candidate
+            // list instead of clearing/scanning a 256-entry material histogram per vertex.
+            byte* materialCandidates = stackalloc byte[8];
 
             // ---- Pass 1: place one vertex per cell whose 8 corners straddle iso ----
             for (int cz = 0; cz < S + 1; cz++)
@@ -142,21 +146,31 @@ namespace VoxelEngine.Meshing
 
                 if (n == 0) continue;
 
-                // Dominant material vote — skip ALL fluid materials so the terrain
-                // mesh never gets painted with water/oil colors. Only non-fluid
-                // solid materials (Stone, Sand, etc.) participate in the vote.
-                for (int m = 0; m < 256; m++) matVotes[m] = 0;
-                if ((mask & 1)   != 0) { byte mt = voxels[i000].material; if (!IsFluidMat(mt)) matVotes[mt]++; }
-                if ((mask & 2)   != 0) { byte mt = voxels[i100].material; if (!IsFluidMat(mt)) matVotes[mt]++; }
-                if ((mask & 4)   != 0) { byte mt = voxels[i010].material; if (!IsFluidMat(mt)) matVotes[mt]++; }
-                if ((mask & 8)   != 0) { byte mt = voxels[i110].material; if (!IsFluidMat(mt)) matVotes[mt]++; }
-                if ((mask & 16)  != 0) { byte mt = voxels[i001].material; if (!IsFluidMat(mt)) matVotes[mt]++; }
-                if ((mask & 32)  != 0) { byte mt = voxels[i101].material; if (!IsFluidMat(mt)) matVotes[mt]++; }
-                if ((mask & 64)  != 0) { byte mt = voxels[i011].material; if (!IsFluidMat(mt)) matVotes[mt]++; }
-                if ((mask & 128) != 0) { byte mt = voxels[i111].material; if (!IsFluidMat(mt)) matVotes[mt]++; }
+                // Dominant material vote — skip fluids so terrain never inherits water/oil
+                // colour. There are only eight possible contributors, so an 8×8 comparison is
+                // dramatically cheaper than the former 256-entry clear + scan for every vertex.
+                int materialCandidateCount = 0;
+                if ((mask & 1)   != 0) { byte mt = voxels[i000].material; if (!IsFluidMat(mt)) materialCandidates[materialCandidateCount++] = mt; }
+                if ((mask & 2)   != 0) { byte mt = voxels[i100].material; if (!IsFluidMat(mt)) materialCandidates[materialCandidateCount++] = mt; }
+                if ((mask & 4)   != 0) { byte mt = voxels[i010].material; if (!IsFluidMat(mt)) materialCandidates[materialCandidateCount++] = mt; }
+                if ((mask & 8)   != 0) { byte mt = voxels[i110].material; if (!IsFluidMat(mt)) materialCandidates[materialCandidateCount++] = mt; }
+                if ((mask & 16)  != 0) { byte mt = voxels[i001].material; if (!IsFluidMat(mt)) materialCandidates[materialCandidateCount++] = mt; }
+                if ((mask & 32)  != 0) { byte mt = voxels[i101].material; if (!IsFluidMat(mt)) materialCandidates[materialCandidateCount++] = mt; }
+                if ((mask & 64)  != 0) { byte mt = voxels[i011].material; if (!IsFluidMat(mt)) materialCandidates[materialCandidateCount++] = mt; }
+                if ((mask & 128) != 0) { byte mt = voxels[i111].material; if (!IsFluidMat(mt)) materialCandidates[materialCandidateCount++] = mt; }
                 int dominantMat = 0, dominantCount = 0;
-                for (int m = 1; m < 256; m++)
-                    if (matVotes[m] > dominantCount) { dominantCount = matVotes[m]; dominantMat = m; }
+                for (int a = 0; a < materialCandidateCount; a++)
+                {
+                    int votes = 0;
+                    byte candidate = materialCandidates[a];
+                    for (int b = 0; b < materialCandidateCount; b++)
+                        if (materialCandidates[b] == candidate) votes++;
+                    if (votes > dominantCount)
+                    {
+                        dominantCount = votes;
+                        dominantMat = candidate;
+                    }
+                }
 
                 float3 local = sum / n + new float3(cx - 1, cy - 1, cz - 1);
                 vertexScratch[vertexCount] = local;
@@ -332,25 +346,29 @@ namespace VoxelEngine.Meshing
             g *= slopeShade;
             b *= slopeShade;
 
-            // 3. Vertex AO: estimate occlusion by sampling neighbor cell densities.
-            // Vertices surrounded by more solid voxels = more occluded = darker.
-            int solidCount = 0;
-            int checked_ = 0;
-            for (int dz = -1; dz <= 1; dz++)
-            for (int dy = -1; dy <= 1; dy++)
-            for (int dx = -1; dx <= 1; dx++)
+            // 3. Vertex AO is optional. It is kept for the legacy static world, but a
+            // streamed spherical chunk would otherwise perform 26 extra voxel reads for every
+            // vertex while the player moves. Radial lighting already provides the needed relief.
+            if (enableVertexAo)
             {
-                if (dx == 0 && dy == 0 && dz == 0) continue;
-                int nx = cx + dx, ny = cy + dy, nz = cz + dz;
-                if (nx < 0 || ny < 0 || nz < 0 || nx > VoxelConstants.CHUNK_SIZE || ny > VoxelConstants.CHUNK_SIZE || nz > VoxelConstants.CHUNK_SIZE) continue;
-                var nv = voxels[Idx(nx, ny, nz)];
-                if (IsTerrainSolid(nv)) solidCount++;
-                checked_++;
+                int solidCount = 0;
+                int checked_ = 0;
+                for (int dz = -1; dz <= 1; dz++)
+                for (int dy = -1; dy <= 1; dy++)
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    if (dx == 0 && dy == 0 && dz == 0) continue;
+                    int nx = cx + dx, ny = cy + dy, nz = cz + dz;
+                    if (nx < 0 || ny < 0 || nz < 0 || nx > VoxelConstants.CHUNK_SIZE || ny > VoxelConstants.CHUNK_SIZE || nz > VoxelConstants.CHUNK_SIZE) continue;
+                    var nv = voxels[Idx(nx, ny, nz)];
+                    if (IsTerrainSolid(nv)) solidCount++;
+                    checked_++;
+                }
+                float ao = checked_ > 0 ? math.lerp(1.0f, 0.65f, (float)solidCount / checked_) : 1f;
+                r *= ao;
+                g *= ao;
+                b *= ao;
             }
-            float ao = checked_ > 0 ? math.lerp(1.0f, 0.65f, (float)solidCount / checked_) : 1f;
-            r *= ao;
-            g *= ao;
-            b *= ao;
 
             return new Color32(
                 (byte)math.clamp(r * 255f, 0, 255),

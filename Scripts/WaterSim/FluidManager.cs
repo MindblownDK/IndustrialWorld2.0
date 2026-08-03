@@ -22,9 +22,9 @@ namespace VoxelEngine.WaterSim
 
         [Header("Simulation")]
         [Tooltip("Ticks per second for chunk sleep tracking.")]
-        public float tickRate = 8f;
+        public float tickRate = 4f;
         [Tooltip("Max chunks to process CPU sync per tick.")]
-        public int maxChunksPerTick = 6;
+        public int maxChunksPerTick = 2;
         [Tooltip("Chunks within this radius of the player are active.")]
         public int activeRadius = 4;
         [Tooltip("Compute solver iterations dispatched per rendered frame.")]

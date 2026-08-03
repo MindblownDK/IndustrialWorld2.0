@@ -97,14 +97,8 @@ namespace VoxelEngine.Cosmos
         private int ResolveRuntimeResolution(CelestialBody resolvedBody)
         {
             int highest = Mathf.Clamp(resolution, 642, 10242);
-            if (viewer == null || resolvedBody == null) return highest;
-
-            float altitude = Mathf.Max(0f, resolvedBody.AltitudeAt(viewer.position));
-            float radius = Mathf.Max(1f, resolvedBody.SurfaceRadius);
-            // The body remains a full mesh at every distance, but its sampling budget steps
-            // down in orbit. This is a genuine far/mid/near planet LOD rather than chunk loading.
-            if (altitude >= radius * 4f) return Mathf.Min(highest, 642);
-            if (altitude >= radius * 1.2f) return Mathf.Min(highest, 2562);
+            // The capped 10k proxy is inexpensive enough to retain its authored detail in
+            // orbit. Lower quality tiers still use their own lower ceiling via GraphicsPreset.
             return highest;
         }
 
