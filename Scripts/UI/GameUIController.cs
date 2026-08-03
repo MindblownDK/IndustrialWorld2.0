@@ -282,7 +282,8 @@ namespace VoxelEngine.UI
 
             // Keyboard capture state — suppress player movement/jetpack keys while typing.
             VoxelEngine.UI.UIState.TextInputActive = _searchHasFocus || RecipeBrowserUI.IsSearchFocused
-                || VoxelEngine.Research.ResearchUI.IsSearchFocused;
+                || VoxelEngine.Research.ResearchUI.IsSearchFocused
+                || VoxelEngine.Maritime.MaritimeBlockUI.IsNumericInputFocused;
 
             // Live-update the open furnace panel in-place every frame (no rebuild needed).
             TickFurnaceLiveUI();
@@ -318,7 +319,8 @@ namespace VoxelEngine.UI
             // cursor is over an interactive control (Button), defer the destructive refresh until
             // the pointer moves off it — hover + clicks then work first time.
             if (_machineRefreshAccum >= 0.25f && !PortConfigHud.IsAnyDropdownOpen && liveMachineOpen
-                && !_dragSource.active && !PointerOverInteractiveUI())
+                && !_dragSource.active && !PointerOverInteractiveUI()
+                && !VoxelEngine.Maritime.MaritimeBlockUI.IsNumericInputFocused)
             { _machineRefreshAccum = 0f; Refresh(); }
             ResearchHud.Tick();
             TickUpgradePrompt();
@@ -389,6 +391,9 @@ namespace VoxelEngine.UI
                 else if (next >= Inventory.HOTBAR_SIZE) next = 0;
                 inventory.SetActiveHotbar(next);
             }
+            // Tick after both hotbar keys and wheel selection so the readout responds
+            // on the same input frame rather than one frame later.
+            HotbarItemNameHud.Tick(inventory);
 
             // Item Ports owns Escape before the underlying inventory and pause menu.
             // This remains available even while a port dropdown/filter has focus.
@@ -409,7 +414,9 @@ namespace VoxelEngine.UI
             // While the search field has keyboard focus, don't react to hotkey-style keys
             // — the player is typing into the search box.
             bool typing = _searchHasFocus || RecipeBrowserUI.IsSearchFocused
-                || VoxelEngine.Research.ResearchUI.IsSearchFocused || PortConfigHud.IsAnyDropdownOpen;
+                || VoxelEngine.Research.ResearchUI.IsSearchFocused
+                || VoxelEngine.Maritime.MaritimeBlockUI.IsNumericInputFocused
+                || PortConfigHud.IsAnyDropdownOpen;
 
             // Toggle inventory / ship terminal — but NOT while typing in a search/name field.
             bool weAreOpen = _inventoryOpen || _rightContainer != null || _openGridTerminal != null;
@@ -1107,6 +1114,7 @@ namespace VoxelEngine.UI
             VoxelEngine.GridSystem.UI.ShipToolHud.EnsureMounted(_hudLayer);
             VitalsHud.EnsureMounted(_hudLayer);
             InteractionHud.EnsureMounted(_hudLayer);
+            HotbarItemNameHud.EnsureMounted(_hudLayer);
             WorldInspectionHud.EnsureMounted(_hudLayer);
             BuildFeedbackHud.EnsureMounted(_hudLayer);
             VoxelEngine.Weather.WeatherHud.EnsureMounted(_hudLayer);

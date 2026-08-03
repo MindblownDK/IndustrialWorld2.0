@@ -939,13 +939,18 @@ namespace VoxelEngine.Maritime
                 RadiatorCoolingActive = RadiatorWaterFill01 > 0.5f;
             }
 
-            bool loadActive = IsRunning && requestedThrottle > 0.01f;
+            // Mechanical resistance matters even at low helm throttle / idle. Use the
+            // larger of pilot demand and resolved drivetrain load so a 93% generator
+            // bank cannot remain thermally invisible merely because the engine is
+            // holding a low throttle command.
+            float mechanicalHeatAuthority = Mathf.Max(requestedThrottle, MechanicalLoad01);
+            bool loadActive = IsRunning && mechanicalHeatAuthority > 0.01f;
 
             // Heat generation rises continuously with real mechanical stress, not
             // only after an arbitrary warning threshold. A loaded generator bank now
             // has a visible thermal consequence even before the protective trip.
             float heatGen = loadActive
-                ? baseHeatRate * requestedThrottle * (1f + Mathf.Max(0f, _moduleHeatBonus))
+                ? baseHeatRate * mechanicalHeatAuthority * (1f + Mathf.Max(0f, _moduleHeatBonus))
                 : 0f;
             float stressHeatMultiplier = 1f
                 + Stress01 * 0.55f

@@ -38,6 +38,9 @@ namespace VoxelEngine.Maritime
 {
     public static class MaritimeBlockUI
     {
+        /// <summary>True while a maritime numeric field owns keyboard input.</summary>
+        public static bool IsNumericInputFocused { get; private set; }
+
         /// <summary>Entry point — called by GridBlockUI.BuildPanel for maritime blocks.</summary>
         public static VisualElement BuildPanel(GridBlock block, MachineUIs.SlotBuilder slot = null)
         {
@@ -186,7 +189,7 @@ namespace VoxelEngine.Maritime
             p.Add(T.StatRow("🔄", "Torque", $"{eng.CurrentTorque:0} N·m", T.AccentGold));
             p.Add(T.StatRow("⚙", "Speed", $"{eng.CurrentRPM:0} RPM", T.AccentTeal));
             p.Add(T.StatRow("⛓", "Mechanical Load", $"{eng.MechanicalLoadRatio * 100f:0}%", eng.MechanicalLoadRatio > 1f ? T.AccentRed : T.AccentTeal));
-            p.Add(T.Muted("Torque curve: available torque sags as RPM climbs. Generator banks, propellers, and gearbox ratios now feed real mechanical load back into engine stress."));
+            p.Add(T.Muted("Torque is the twisting force currently delivered (N·m). Mechanical Load is the downstream demand as a percentage of available torque. Generator banks, propellers, and gearbox ratios feed that demand back into stress and heat."));
 
             // Stress bar.
             Color stressColor = eng.IsOverstressed ? T.AccentRed
@@ -491,11 +494,30 @@ namespace VoxelEngine.Maritime
                     (r > 1f ? "   (high gear — speed build)" : r < 1f ? "   (low gear — heavy loads)" : "   (1:1 direct drive)");
             }
 
+            // Do not write back into the slider while its text field is being edited:
+            // that used to replace a partially typed value every 4 Hz panel refresh.
             slider.RegisterValueChangedCallback(evt =>
             {
                 gb.SetRatio(evt.newValue);   // applies live through the propulsion job
+                UpdateSummary();
+            });
+
+            var numberField = slider.Q<TextField>();
+            if (numberField != null)
+            {
+                numberField.RegisterCallback<FocusInEvent>(_ => IsNumericInputFocused = true);
+                numberField.RegisterCallback<FocusOutEvent>(_ => IsNumericInputFocused = false);
+            }
+            slider.RegisterCallback<DetachFromPanelEvent>(_ => IsNumericInputFocused = false);
+            slider.RegisterCallback<WheelEvent>(evt =>
+            {
+                if (Mathf.Abs(evt.delta.y) < 0.001f) return;
+                // Fine 0.05× adjustments by wheel; Shift accelerates to 0.25×.
+                float step = evt.shiftKey ? 0.25f : 0.05f;
+                gb.SetRatio(gb.EffectiveRatio + Mathf.Sign(-evt.delta.y) * step);
                 slider.SetValueWithoutNotify(gb.EffectiveRatio);
                 UpdateSummary();
+                evt.StopPropagation();
             });
             UpdateSummary();
 

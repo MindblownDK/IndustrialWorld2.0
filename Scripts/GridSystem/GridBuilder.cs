@@ -1430,6 +1430,14 @@ namespace VoxelEngine.GridSystem
                 placedPortLocalOutward,
                 desiredPlacedOutward,
                 grid.transform.up);
+
+            // A mechanical mate fixes the port direction, not the machine's roll.
+            // Let every existing build-rotation gesture twist the snapped block around
+            // the shared shaft axis so a gearbox/engine can be turned right-side-up
+            // without breaking the port-to-port seal.
+            int twistSteps = (_rotSteps.x + _rotSteps.y + _rotSteps.z) & 3;
+            if (twistSteps != 0)
+                rotation = Quaternion.AngleAxis(twistSteps * 90f, desiredPlacedOutward) * rotation;
             worldPos = targetPort.WorldPosition - rotation * placedPortLocalPosition;
 
             Vector3Int outwardAxis = MaritimeMechanicalPorts.SnapToCardinalAxis(

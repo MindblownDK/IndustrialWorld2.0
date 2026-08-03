@@ -1,9 +1,42 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.3.1-dev`
+**Current Version:** `7.3.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.3.2-dev] Wrapped Belts, Snap Roll, Editable Gears & Ground Hold
+
+**Type:** PATCH — placement, UI-input, thermal, and restored-grid reliability fixes; save-compatible.
+
+#### 🟨 Wrapped belt geometry
+- Added curved half-wrap segments around the outboard side of both pulleys, so the belt visibly rests on and wraps around each rim rather than only crossing a straight tangent line.
+- Smoothed the open pulley rim from 12 to 20 segments for a less cage-like silhouette.
+- Belt aim surfaces now cover the full tangent/wrap envelope.
+
+#### 🔄 Mechanical snap roll
+- Port snapping still locks the mating shaft direction, but build-rotation gestures now twist the snapped block around that shaft axis in 90° increments.
+- Gearboxes, engines, generators, propellers, and shaft housings can now be turned right-side-up after snapping without breaking their mechanical mate.
+
+#### 🔢 Gear ratio input and wheel control
+- Fixed the ratio input field being overwritten while typing by periodic machine-panel refreshes.
+- Numeric focus now suspends destructive live-panel rebuilds and player hotkeys.
+- Added mouse-wheel ratio adjustment over the slider: **0.05×** per notch, or **0.25×** with Shift.
+
+#### 🎒 Held-item hotbar readout
+- Added a centered, premium held-item name card above the hotbar.
+- It appears briefly whenever a hotbar key, mouse wheel, or active-slot item change selects a new held item, making scroll selection readable without opening inventory.
+
+#### ⛔ Honest overload recovery and heat
+- Protective engine trips now clear immediately after a drivetrain topology change and retry automatically after a short safety delay when a load is disabled.
+- A 93% mechanical load now contributes full thermal authority even at low helm throttle; it can no longer remain thermally invisible.
+- Stock engines remain capped at 89°C without performance hardware; upgraded/turbocharged engines retain the high-risk thermal envelope.
+
+#### 🛬 Restored-grid terrain hold
+- Expanded restore clearance from a one-off probe into a short post-load hold across multiple fixed ticks.
+- The system now samples all relevant block colliders, corrects using the live Rigidbody pose, and cancels residual downward velocity after a lift—covering unanchored grids with no landing gear or connector.
+
+---
 
 ### [7.3.1-dev] Tangent Belts, Recovering Overstress & Stock Thermal Governor
 

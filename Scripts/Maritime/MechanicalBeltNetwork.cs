@@ -619,11 +619,47 @@ namespace VoxelEngine.Maritime
             CreateVisualCube("Belt_Run_B", center - side * runGap, rotation,
                 new Vector3(radialThickness, axialBeltWidth, length), BeltMaterial);
 
+            // Add the half-wrap at each pulley end. Straight runs alone only touch
+            // tangent points; these curved sections make the belt visibly rest on and
+            // travel around the outside of the pulley instead of passing through it.
+            CreateBeltWrapArc("Belt_Wrap_Start", start, shaftAxis, direction, side, false,
+                runGap, radialThickness, axialBeltWidth);
+            CreateBeltWrapArc("Belt_Wrap_End", end, shaftAxis, direction, side, true,
+                runGap, radialThickness, axialBeltWidth);
+
             // Keep the travel marker on a real belt run instead of across the pulley
             // centres, so it cannot visually cut through the shaft axle.
             CreateVisualCube("Belt_TravelMarker", center + side * runGap, rotation,
                 new Vector3(radialThickness * 0.70f, axialBeltWidth * 0.72f, Mathf.Min(length * 0.26f, cellSize * 0.55f)), IndicatorMaterial);
             CreatePlacementSurface(center, rotation, length, cellSize, ownerLink);
+        }
+
+        private void CreateBeltWrapArc(string name, Vector3 pulleyCenter, Vector3 shaftAxis,
+            Vector3 runDirection, Vector3 side, bool endPulley, float radius,
+            float radialThickness, float axialBeltWidth)
+        {
+            // At the start pulley the belt wraps around the outward (-run) side; at
+            // the end pulley it wraps around the outward (+run) side. Both connect
+            // exactly from the upper tangent to the lower tangent.
+            Vector3 outside = endPulley ? runDirection : -runDirection;
+            Vector3 previous = pulleyCenter + side * radius;
+            const int segments = 12;
+            for (int i = 1; i <= segments; i++)
+            {
+                float angle = Mathf.PI * i / segments;
+                Vector3 current = pulleyCenter
+                    + side * (Mathf.Cos(angle) * radius)
+                    + outside * (Mathf.Sin(angle) * radius);
+                Vector3 delta = current - previous;
+                float length = delta.magnitude;
+                if (length > 0.0001f)
+                {
+                    Quaternion rotation = Quaternion.LookRotation(delta / length, shaftAxis);
+                    CreateVisualCube(name, (previous + current) * 0.5f, rotation,
+                        new Vector3(radialThickness, axialBeltWidth, length + 0.012f), BeltMaterial);
+                }
+                previous = current;
+            }
         }
 
         private void CreatePlacementSurface(Vector3 localPosition, Quaternion rotation, float length,
@@ -674,7 +710,9 @@ namespace VoxelEngine.Maritime
             float radius = Mathf.Max(0.16f, cellSize * 0.19f);
             float rimThickness = Mathf.Max(0.030f, cellSize * 0.035f);
             float axialWidth = Mathf.Max(0.22f, cellSize * 0.30f);
-            const int segments = 12;
+            const int segments = 20;
+            float rimSegmentLength = Mathf.Max(rimThickness * 1.8f,
+                2f * Mathf.PI * radius / segments * 1.12f);
 
             for (int i = 0; i < segments; i++)
             {
@@ -687,8 +725,7 @@ namespace VoxelEngine.Maritime
                 rim.transform.SetParent(pulley.transform, false);
                 rim.transform.localPosition = radial * radius;
                 rim.transform.localRotation = Quaternion.LookRotation(tangent, axis);
-                rim.transform.localScale = new Vector3(rimThickness, axialWidth,
-                    Mathf.Max(rimThickness * 1.8f, radius * 0.62f));
+                rim.transform.localScale = new Vector3(rimThickness, axialWidth, rimSegmentLength);
                 DisableCollider(rim);
                 var renderer = rim.GetComponent<MeshRenderer>();
                 if (renderer != null) renderer.sharedMaterial = PulleyMaterial;
