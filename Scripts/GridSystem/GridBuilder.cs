@@ -296,12 +296,19 @@ namespace VoxelEngine.GridSystem
             }
             CancelLedStretch(false);
 
+            // Ground-clearance is only a ROOT-grid operation. Once a block joins an
+            // existing structural grid, its position must remain the exact lattice cell;
+            // lifting it against a tall landing-gear/visual collider makes that first block
+            // sit a few centimetres above every later neighbour.
+            bool keepExactAttachmentPose = portSnapped || placingTurbo;
             if (targetGrid == null)
+            {
                 LiftPoseOutOfGround(gbi, hit, ref worldPos, rotation);
-            else if (!portSnapped && !placingTurbo
-                     && targetedBlock != null && !targetedBlock.IsPrecisionAttachment
-                     && Mathf.Abs(Vector3.Dot(hit.normal.normalized, targetGrid.transform.up)) > 0.75f)
-                LiftPoseOutOfGround(gbi, hit, ref worldPos, rotation);
+            }
+            else if (!keepExactAttachmentPose)
+            {
+                worldPos = targetGrid.GridToWorld(gridPos);
+            }
 
             bool placementObstructed = PlacementObstructed(gbi, targetGrid, worldPos, rotation);
             if (placementObstructed && GameSettings.WasPressed(InputAction.Build))
@@ -332,7 +339,7 @@ namespace VoxelEngine.GridSystem
             ShowGhost(gbi, worldPos, rotation, valid: !placementObstructed);
 
             if (GameSettings.WasPressed(InputAction.Build) && !placementObstructed
-                && TryPlaceBlock(gbi, targetGrid, gridPos, worldPos, rotation))
+                && TryPlaceBlock(gbi, targetGrid, gridPos, worldPos, rotation, keepExactAttachmentPose))
             {
                 inventory.container.Remove(gbi, 1);
             }
@@ -972,7 +979,8 @@ namespace VoxelEngine.GridSystem
         }
 
         // ── Remaining helpers (unchanged) ──────────────────────────
-        private bool TryPlaceBlock(GridBlockItem item, GridEntity grid, Vector3Int gridPos, Vector3 worldPos, Quaternion rotation)
+        private bool TryPlaceBlock(GridBlockItem item, GridEntity grid, Vector3Int gridPos, Vector3 worldPos,
+            Quaternion rotation, bool keepExactAttachmentPose)
         {
             if (grid != null && IsCellReservedByLedStrip(grid, gridPos))
             {
@@ -1039,7 +1047,12 @@ namespace VoxelEngine.GridSystem
             else
             {
                 grid.AddBlock(gridPos, block);
-                block.transform.position = worldPos;
+                // Normal structural placement is always cell-centred. Only explicitly
+                // port-snapped machinery/turbo attachments may retain a non-lattice root
+                // pose, because their authored port offsets are authoritative.
+                block.transform.position = keepExactAttachmentPose
+                    ? worldPos
+                    : grid.GridToWorld(gridPos);
                 block.transform.rotation = rotation;
             }
 

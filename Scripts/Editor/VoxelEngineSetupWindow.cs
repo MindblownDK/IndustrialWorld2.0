@@ -458,6 +458,14 @@ namespace VoxelEngine.EditorTools
                 "Re-runnable. Idempotent.");
             AddWizardButton(scroll, "48. Build Armor Stations + Timed Upgrades (Non-Destructive)", BuildArmorStationsAndUpgrades, 72);
 
+            AddInfo(scroll,
+                "Step 49 initializes profile-driven ATMOSPHERE + SPACE data on every existing planet/moon (non-destructive):\n" +
+                "  • Total gas density is separate from breathable oxygen, so thin/toxic/airless worlds behave honestly\n" +
+                "  • Radius-relative atmosphere tops work on both the small test planet and full-size worlds\n" +
+                "  • Existing initialized profile values are preserved unchanged\n" +
+                "Re-runnable. Run after Step 21 when themed celestial worlds are present.");
+            AddWizardButton(scroll, "49. Initialize Atmosphere + Space Profiles (Non-Destructive)", BuildAtmosphereSpaceProfiles, 56);
+
             AddSpacer(scroll, 20);
         }
 
@@ -14497,6 +14505,133 @@ AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
                 "6. Stellar Archon Plate (62%)\n\n" +
                 "Armor recipes are now reserved for the Armor Station. Run Step 48 to generate or repair both armor stations, upgrade modules, research links, and timed anvil installation.\n" +
                 "Equip: put armor in your hotbar, select it, and press RMB. Old armor returns to your inventory with installed upgrades intact.",
+                "OK");
+        }
+
+
+        // ============================================================
+        //   STEP 49 - ATMOSPHERE + SPACE PROFILES
+        //   Initializes only bodies that do not yet carry a profile. The
+        //   runtime has a legacy fallback, but this authors the intended
+        //   thin/toxic/airless distinctions through the setup workflow.
+        // ============================================================
+        private void BuildAtmosphereSpaceProfiles()
+        {
+            const int ProfileVersion = 1;
+            int initialized = 0;
+            int preserved = 0;
+
+            void Initialize(BodySettings body, UnityEngine.Object owner)
+            {
+                if (body == null || owner == null) return;
+
+                // A prior setup run or a hand-authored non-zero profile owns these values.
+                bool hasExplicitValues = body.surfaceAtmosphereDensity > 0.0001f
+                    || body.atmosphereHeightRadiusFraction > 0.0001f
+                    || body.atmosphereScaleHeightRadiusFraction > 0.0001f;
+                if (body.atmosphereProfileVersion >= ProfileVersion || hasExplicitValues)
+                {
+                    if (body.atmosphereProfileVersion < ProfileVersion)
+                    {
+                        body.atmosphereProfileVersion = ProfileVersion;
+                        EditorUtility.SetDirty(owner);
+                    }
+                    preserved++;
+                    return;
+                }
+
+                string name = (body.bodyName ?? string.Empty).ToLowerInvariant();
+                float density;
+                float heightFraction;
+                float scaleFraction;
+
+                if (name.Contains("moon") || name.Contains("lunar"))
+                {
+                    density = 0f;
+                    heightFraction = 0f;
+                    scaleFraction = 0f;
+                }
+                else if (name.Contains("venus"))
+                {
+                    // Dense but non-breathable pressure atmosphere.
+                    density = 2.40f;
+                    heightFraction = 0.90f;
+                    scaleFraction = 0.22f;
+                }
+                else if (name.Contains("mars"))
+                {
+                    density = 0.025f;
+                    heightFraction = 0.48f;
+                    scaleFraction = 0.09f;
+                }
+                else if (name.Contains("volcan"))
+                {
+                    density = 1.10f;
+                    heightFraction = 0.70f;
+                    scaleFraction = 0.16f;
+                }
+                else if (name.Contains("acid"))
+                {
+                    density = 0.55f;
+                    heightFraction = 0.66f;
+                    scaleFraction = 0.14f;
+                }
+                else if (name.Contains("ice") || name.Contains("frozen"))
+                {
+                    density = 0.18f;
+                    heightFraction = 0.56f;
+                    scaleFraction = 0.11f;
+                }
+                else if (name.Contains("desolate"))
+                {
+                    density = 0.06f;
+                    heightFraction = 0.38f;
+                    scaleFraction = 0.07f;
+                }
+                else if (name.Contains("crystal"))
+                {
+                    density = 0.35f;
+                    heightFraction = 0.58f;
+                    scaleFraction = 0.12f;
+                }
+                else
+                {
+                    // Earth-like and other existing oxygen worlds retain their previous
+                    // practical density through a profile that scales with runtime radius.
+                    density = body.HasOxygen ? 1.225f * Mathf.Clamp01(body.oxygenLevel) : 0f;
+                    heightFraction = density > 0.0001f ? 0.62f : 0f;
+                    scaleFraction = density > 0.0001f ? 0.15f : 0f;
+                }
+
+                body.surfaceAtmosphereDensity = density;
+                body.atmosphereHeightRadiusFraction = heightFraction;
+                body.atmosphereScaleHeightRadiusFraction = scaleFraction;
+                body.atmosphereProfileVersion = ProfileVersion;
+                EditorUtility.SetDirty(owner);
+                initialized++;
+            }
+
+            foreach (string guid in AssetDatabase.FindAssets("t:PlanetTemplate"))
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                var planet = AssetDatabase.LoadAssetAtPath<PlanetTemplate>(path);
+                if (planet != null) Initialize(planet.body, planet);
+            }
+            foreach (string guid in AssetDatabase.FindAssets("t:MoonTemplate"))
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                var moon = AssetDatabase.LoadAssetAtPath<MoonTemplate>(path);
+                if (moon != null) Initialize(moon.body, moon);
+            }
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            EditorUtility.DisplayDialog("Voxel Engine — Atmosphere + Space Profiles",
+                "Atmosphere profiles initialized:\n\n" +
+                "• " + initialized + " bodies initialized\n" +
+                "• " + preserved + " existing profiles preserved\n\n" +
+                "Atmospheric thrust, aerodynamic drag, jetpack environment checks, life support, and cockpit altitude now share one profile-driven transition.\n\n" +
+                "Run this step again after adding celestial templates; initialized profile values remain untouched.",
                 "OK");
         }
 

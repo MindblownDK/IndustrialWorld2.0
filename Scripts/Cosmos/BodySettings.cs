@@ -38,6 +38,61 @@ namespace VoxelEngine.Cosmos
         /// <summary>True when there is enough oxygen to breathe without gear.</summary>
         public bool HasOxygen => oxygenLevel > 0.05f;
 
+        // ── Atmosphere profile ─────────────────────────────────────
+        // These values describe TOTAL air mass, independently from oxygenLevel. That lets
+        // an airless moon, a thin non-breathable world, and a dense toxic atmosphere use
+        // the same flight model without pretending every atmosphere is safe to breathe.
+        [Header("Atmosphere Profile")]
+        [Tooltip("Sea-level air density in kg/m³. 0 on an initialized profile means intentional vacuum.")]
+        [Range(0f, 4f)] public float surfaceAtmosphereDensity = 0f;
+
+        [Tooltip("Atmosphere-top height as a fraction of the runtime body radius. 0 uses the safe legacy fallback.")]
+        [Range(0f, 2f)] public float atmosphereHeightRadiusFraction = 0f;
+
+        [Tooltip("Exponential density scale height as a fraction of the runtime body radius. 0 uses the safe legacy fallback.")]
+        [Range(0f, 1f)] public float atmosphereScaleHeightRadiusFraction = 0f;
+
+        // Set only by the Voxel Engine Setup atmosphere step. It distinguishes a deliberately
+        // authored zero-density vacuum profile from pre-7.5 assets whose new fields deserialize
+        // as zero and therefore need the legacy oxygen-derived fallback at runtime.
+        [HideInInspector] public int atmosphereProfileVersion = 0;
+
+        /// <summary>Total sea-level air density, with a save-compatible fallback for pre-profile assets.</summary>
+        public float ResolveSurfaceAtmosphereDensity()
+        {
+            if (atmosphereProfileVersion > 0)
+                return Mathf.Max(0f, surfaceAtmosphereDensity);
+            if (surfaceAtmosphereDensity > 0.0001f)
+                return surfaceAtmosphereDensity;
+            return HasOxygen ? 1.225f * Mathf.Clamp01(oxygenLevel) : 0f;
+        }
+
+        /// <summary>Atmosphere ceiling at a runtime radius. Uses fractions so the test planet and full planet agree.</summary>
+        public float ResolveAtmosphereHeight(float runtimeSurfaceRadius)
+        {
+            if (ResolveSurfaceAtmosphereDensity() <= 0.0001f) return 0f;
+            float fraction = atmosphereHeightRadiusFraction > 0.0001f
+                ? atmosphereHeightRadiusFraction
+                : 0.62f;
+            return Mathf.Max(1f, runtimeSurfaceRadius * Mathf.Clamp(fraction, 0.01f, 2f));
+        }
+
+        /// <summary>Exponential density scale height at a runtime radius.</summary>
+        public float ResolveAtmosphereScaleHeight(float runtimeSurfaceRadius)
+        {
+            float top = ResolveAtmosphereHeight(runtimeSurfaceRadius);
+            if (top <= 0f) return 0f;
+            float fraction = atmosphereScaleHeightRadiusFraction > 0.0001f
+                ? atmosphereScaleHeightRadiusFraction
+                : 0.15f;
+            float scale = Mathf.Max(1f, runtimeSurfaceRadius * Mathf.Clamp(fraction, 0.005f, 1f));
+            // Never allow an invalid profile to have a scale height above its atmosphere top.
+            return Mathf.Min(scale, top * 0.75f);
+        }
+
+        /// <summary>True when this body has any gas for atmospheric propulsion or drag.</summary>
+        public bool HasAtmosphere => ResolveSurfaceAtmosphereDensity() > 0.0001f;
+
         // ── Climate ───────────────────────────────────────────────
         [Header("Climate")]
         [Range(-80f, 80f)]

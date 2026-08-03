@@ -17,7 +17,12 @@ MonoBehaviour:
     seed: 0
     gravity: 1
     oxygenLevel: 1
+    surfaceAtmosphereDensity: 1.225
+    atmosphereHeightRadiusFraction: 0.62
+    atmosphereScaleHeightRadiusFraction: 0.15
+    atmosphereProfileVersion: 1
     temperature: 15
+    radiationLevel: 0
     windStrength: 1
     windGustiness: 0.4
     waterLevel: 96
@@ -131,6 +136,7 @@ MonoBehaviour:
       maxDepth: 12
       abundance: 1
   solarSystem: {fileID: 0}
+  distanceFromSun: 0
   orbitalDistanceKm: {x: 2500, y: 4000}
   orbitSpeed: 0.6
   orbitPhaseDegrees: 0

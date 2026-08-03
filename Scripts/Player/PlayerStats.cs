@@ -179,9 +179,9 @@ namespace VoxelEngine.Player
 
             var body = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
             if (body == null || body.settings == null) return OxygenEnvironment.Breathable;
-            float density = VoxelEngine.GridSystem.AtmosphereManager.GetAirDensity(transform.position);
+            var atmosphere = VoxelEngine.GridSystem.AtmosphereManager.Sample(transform.position);
             bool breathable = body.settings.HasOxygen
-                && density >= PlayerEquipment.AtmosphereDensityThreshold;
+                && atmosphere.AirDensity >= PlayerEquipment.AtmosphereDensityThreshold;
             return breathable ? OxygenEnvironment.Breathable : OxygenEnvironment.Vacuum;
         }
 

@@ -34,6 +34,11 @@ namespace VoxelEngine.GridSystem
         /// the ship along its local +forward.</summary>
         public Vector3 PushDirection => transform.forward;
 
+        /// <summary>0..1 thrust authority left for atmospheric engines at the current pressure.</summary>
+        public float AtmosphericEfficiency => Grid != null
+            ? AtmosphereManager.GetDensity01(Grid.transform.position)
+            : 0f;
+
         /// <summary>Is this thruster operational right now?</summary>
         public bool IsOperational
         {
@@ -43,6 +48,9 @@ namespace VoxelEngine.GridSystem
                 switch (thrusterType)
                 {
                     case ThrusterType.Atmospheric:
+                        // Atmospheric engines must stop reporting fake hover/braking authority
+                        // after the profile reaches vacuum. Hydrogen and ion remain vacuum-capable.
+                        return Grid.HasPower && AtmosphericEfficiency > 0.001f;
                     case ThrusterType.Ion:
                         return Grid.HasPower;
                     case ThrusterType.Hydrogen:
@@ -78,8 +86,7 @@ namespace VoxelEngine.GridSystem
 
             if (thrusterType == ThrusterType.Atmospheric && grid != null)
             {
-                float density = AtmosphereManager.GetAirDensity(grid.transform.position);
-                thrust *= Mathf.Clamp01(density / 1.225f);
+                thrust *= AtmosphereManager.GetDensity01(grid.transform.position);
             }
             if (thrusterType == ThrusterType.Hydrogen && grid != null)
             {
@@ -102,8 +109,7 @@ namespace VoxelEngine.GridSystem
             // Atmospheric efficiency (Atmospheric thrusters lose power in thin air / space)
             if (thrusterType == ThrusterType.Atmospheric && grid != null)
             {
-                float density = AtmosphereManager.GetAirDensity(grid.transform.position);
-                thrust *= Mathf.Clamp01(density / 1.225f);
+                thrust *= AtmosphereManager.GetDensity01(grid.transform.position);
             }
 
             // Consume resources.
@@ -147,6 +153,10 @@ namespace VoxelEngine.GridSystem
             if (_thrustFX == null) return;
 
             float fraction = IsOperational ? ThrustFraction : 0f;
+            // Atmospheric plume/audio authority fades with pressure as well as command;
+            // hydrogen and ion retain their full vacuum visual response.
+            if (thrusterType == ThrusterType.Atmospheric)
+                fraction *= AtmosphericEfficiency;
             // Apply a slight delay curve so the plume "spools" with the engine.
             fraction = Mathf.Pow(fraction, 1.5f);
 

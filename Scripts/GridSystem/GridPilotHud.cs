@@ -16,10 +16,10 @@ namespace VoxelEngine.GridSystem
         private static VisualElement _container;
         private static GridCockpit _cachedCockpit;
         private static float _cockpitSearchTimer;
-        private static Label _speedLabel, _altLabel, _powerLabel, _h2Label, _dampLabel, _batteryValueLabel, _offlineLabel;
+        private static Label _speedLabel, _altLabel, _environmentLabel, _powerLabel, _h2Label, _dampLabel, _batteryValueLabel, _offlineLabel;
         private static VisualElement _powerFill, _h2Fill, _batteryGaugeFill;
         private static float _smoothSpeed, _smoothAlt, _smoothPower;
-        private const int LayoutRevision = 6;
+        private const int LayoutRevision = 7;
         private static int _mountedRevision;
         
         // Compass. The strip is three full 360° cycles wide so heading wrap-around never
@@ -186,6 +186,14 @@ namespace VoxelEngine.GridSystem
             _altLabel = T.StatLabel("0 m", T.TextSecondary);
             _container.Add(T.StatRow("", "Altitude", ""));
             _container.Add(_altLabel);
+
+            _environmentLabel = T.StatLabel("ATMOSPHERE", T.AccentCyan);
+            _environmentLabel.style.fontSize = 9;
+            _environmentLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _environmentLabel.style.letterSpacing = 0.8f;
+            _environmentLabel.style.unityTextAlign = TextAnchor.MiddleCenter;
+            _environmentLabel.style.marginTop = 4;
+            _container.Add(_environmentLabel);
             _container.Add(T.Spacer(10));
 
             _powerLabel = T.StatLabel("Power", T.AccentGold);
@@ -350,11 +358,22 @@ namespace VoxelEngine.GridSystem
             // Smooth Updates
             float targetSpeed = grid.Body != null ? grid.Body.linearVelocity.magnitude : 0;
             _smoothSpeed = Mathf.Lerp(_smoothSpeed, targetSpeed, dt * 5f);
-            float targetAlt = grid.transform.position.y;
-            _smoothAlt = Mathf.Lerp(_smoothAlt, targetAlt, dt * 5f);
-            
+            AtmosphereSample environment = grid.CurrentAtmosphere;
+            _smoothAlt = Mathf.Lerp(_smoothAlt, environment.Altitude, dt * 5f);
+
             _speedLabel.text = $"{_smoothSpeed:0.0} m/s";
             _altLabel.text = $"{_smoothAlt:0} m";
+            if (_environmentLabel != null)
+            {
+                Color environmentColor = environment.Band switch
+                {
+                    AtmosphereBand.DenseAir => T.AccentCyan,
+                    AtmosphereBand.UpperAtmosphere => T.AccentAmber,
+                    _ => new Color(0.70f, 0.52f, 1.00f),
+                };
+                _environmentLabel.text = $"{environment.Label} · {environment.Density01 * 100f:0}% AIR";
+                _environmentLabel.style.color = new StyleColor(environmentColor);
+            }
 
             float powerBal = grid.PowerBalance;
             float powerLoad = grid.PowerGenerated > 0.1f ? grid.PowerConsumed / grid.PowerGenerated : (grid.PowerConsumed > 0 ? 1f : 0f);

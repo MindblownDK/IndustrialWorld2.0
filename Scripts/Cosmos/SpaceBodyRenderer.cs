@@ -92,6 +92,7 @@ namespace VoxelEngine.Cosmos
             }
 
             // Render planets + moons.
+            Vector3 viewerPosition = GetViewerPosition();
             int bodyCount = registry.Bodies.Count;
             EnsureCount(_bodyVisuals, bodyCount, "SpaceBody");
 
@@ -100,18 +101,41 @@ namespace VoxelEngine.Cosmos
                 var b = registry.Bodies[i];
                 if (b == null || b.settings == null) continue;
 
+                // The active body already has a physical PlanetLodImpostor around its
+                // real core. Do not draw a second compressed sky proxy for it.
+                if (activeBody != null && b.settings == activeBody.settings)
+                {
+                    if (_bodyVisuals[i].go != null) _bodyVisuals[i].go.SetActive(false);
+                    continue;
+                }
+                if (_bodyVisuals[i].go != null && !_bodyVisuals[i].go.activeSelf)
+                    _bodyVisuals[i].go.SetActive(true);
+
                 // Direction from viewer to this body (cosmic space).
                 Vector3 dir = b.positionKm - viewerKm;
                 float distKm = dir.magnitude;
-                if (distKm < 1f) dir = Random.onUnitSphere;  // we're ON this body — pick a sky direction
+                if (distKm < 1f)
+                {
+                    // The registry is body-centric, so a player above the active home body
+                    // has the same cosmic coordinates as that body. Keep its visual locked
+                    // toward the real planet core instead of picking a new random sky point
+                    // every frame during ascent/orbit.
+                    Vector3 towardHomeCore = activeBody != null
+                        ? activeBody.transform.position - viewerPosition
+                        : Vector3.down;
+                    dir = towardHomeCore.sqrMagnitude > 0.0001f
+                        ? towardHomeCore.normalized
+                        : Vector3.down;
+                }
                 else dir /= distKm;
 
                 // Compress cosmic distance to visual range.
                 // Use a logarithmic compression so very distant planets are still visible but smaller.
                 float compressedDist = Mathf.Lerp(visualRange * 0.3f, visualRange, Mathf.Clamp01(distKm / 5000f));
 
-                // Visual position: direction × compressed distance (relative to the viewer).
-                Vector3 visualPos = transform.position + dir * compressedDist;
+                // Visual position is camera-relative so celestial bodies remain in the sky
+                // during high-altitude travel instead of being left behind at the bootstrap origin.
+                Vector3 visualPos = viewerPosition + dir * compressedDist;
 
                 // Visual size: based on body radius (km), scaled down.
                 float radiusKm = b.settings.radiusKm;

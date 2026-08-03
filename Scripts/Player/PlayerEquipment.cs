@@ -152,8 +152,8 @@ namespace VoxelEngine.Player
         public bool EnvironmentOk(JetpackItem pack)
         {
             if (pack == null) return false;
-            float density = VoxelEngine.GridSystem.AtmosphereManager.GetAirDensity(transform.position);
-            bool inAtmosphere = density >= AtmosphereDensityThreshold;
+            var atmosphere = VoxelEngine.GridSystem.AtmosphereManager.Sample(transform.position);
+            bool inAtmosphere = atmosphere.AirDensity >= AtmosphereDensityThreshold;
             return inAtmosphere ? pack.supportsAtmosphere : pack.supportsVacuum;
         }
 

@@ -54,6 +54,14 @@ namespace VoxelEngine.Cosmos
 
         private GameObject _bodyGO;
 
+        // Camera handoff is intentionally kept here with the body bootstrap: it owns the
+        // active celestial profile and can restore the scene's original camera state cleanly.
+        private Camera _spaceTransitionCamera;
+        private CameraClearFlags _spaceTransitionBaseClearFlags;
+        private Color _spaceTransitionBaseBackground;
+        private float _spaceTransitionBaseFarClip;
+        private bool _spaceTransitionCaptured;
+
         private void Awake()
         {
             ResolvePlanetTemplate();
@@ -375,8 +383,86 @@ namespace VoxelEngine.Cosmos
             return t;
         }
 
+        private void Update()
+        {
+            UpdateAtmosphereSpaceCamera();
+        }
+
+        /// <summary>
+        /// Gives the player an actual visual handoff from sky to deep space without replacing
+        /// the scene skybox asset: upper air fades to a dark backdrop, existing cosmic meshes
+        /// remain visible, and the camera far clip expands with orbital altitude.
+        /// </summary>
+        private void UpdateAtmosphereSpaceCamera()
+        {
+            var body = GravityProvider.ActiveBody;
+            if (body == null || viewer == null)
+            {
+                RestoreAtmosphereSpaceCamera();
+                return;
+            }
+
+            Camera camera = Camera.main;
+            if (camera == null) camera = viewer.GetComponentInChildren<Camera>(true);
+            if (camera != _spaceTransitionCamera)
+            {
+                RestoreAtmosphereSpaceCamera();
+                _spaceTransitionCamera = camera;
+            }
+            if (_spaceTransitionCamera == null) return;
+
+            var underwater = _spaceTransitionCamera.GetComponent<VoxelEngine.Player.UnderwaterEffect>();
+            if (underwater != null && underwater.IsUnderwater)
+            {
+                RestoreAtmosphereSpaceCamera();
+                return;
+            }
+
+            var atmosphere = VoxelEngine.GridSystem.AtmosphereManager.Sample(viewer.position);
+            float spaceBlend = atmosphere.HasAtmosphere
+                ? Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.20f, 0.02f, atmosphere.Density01))
+                : 1f;
+            Shader.SetGlobalFloat("_VoxelAtmosphereDensity01", atmosphere.Density01);
+            Shader.SetGlobalFloat("_VoxelSpaceBlend", spaceBlend);
+
+            if (spaceBlend <= 0.001f)
+            {
+                RestoreAtmosphereSpaceCamera();
+                return;
+            }
+
+            if (!_spaceTransitionCaptured)
+            {
+                _spaceTransitionBaseClearFlags = _spaceTransitionCamera.clearFlags;
+                _spaceTransitionBaseBackground = _spaceTransitionCamera.backgroundColor;
+                _spaceTransitionBaseFarClip = _spaceTransitionCamera.farClipPlane;
+                _spaceTransitionCaptured = true;
+            }
+
+            _spaceTransitionCamera.clearFlags = CameraClearFlags.SolidColor;
+            Color upperAir = new Color(0.075f, 0.145f, 0.245f, 1f);
+            Color deepSpace = new Color(0.002f, 0.004f, 0.012f, 1f);
+            _spaceTransitionCamera.backgroundColor = Color.Lerp(upperAir, deepSpace, spaceBlend);
+
+            float bodyDistance = Vector3.Distance(_spaceTransitionCamera.transform.position, body.transform.position);
+            float requiredFarClip = bodyDistance + body.SurfaceRadius * 1.25f + 2500f;
+            _spaceTransitionCamera.farClipPlane = Mathf.Max(_spaceTransitionBaseFarClip, requiredFarClip);
+        }
+
+        private void RestoreAtmosphereSpaceCamera()
+        {
+            if (!_spaceTransitionCaptured || _spaceTransitionCamera == null) return;
+            _spaceTransitionCamera.clearFlags = _spaceTransitionBaseClearFlags;
+            _spaceTransitionCamera.backgroundColor = _spaceTransitionBaseBackground;
+            _spaceTransitionCamera.farClipPlane = _spaceTransitionBaseFarClip;
+            _spaceTransitionCaptured = false;
+        }
+
         private void OnDestroy()
         {
+            RestoreAtmosphereSpaceCamera();
+            Shader.SetGlobalFloat("_VoxelAtmosphereDensity01", 1f);
+            Shader.SetGlobalFloat("_VoxelSpaceBlend", 0f);
             if (GravityProvider.ActiveBody != null &&
                 GravityProvider.ActiveBody == (_bodyGO != null ? _bodyGO.GetComponent<CelestialBody>() : null))
                 GravityProvider.ActiveBody = null;

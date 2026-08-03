@@ -1,9 +1,37 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.4.1-dev`
+**Current Version:** `7.5.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.5.0-dev] Atmosphere-to-Space Flight Foundation
+
+**Type:** MINOR — save-compatible profile-driven atmosphere/space flight foundation and placement correction.
+
+#### 🧱 Exact grid lattice placement
+- Fixed the reported landing-gear build offset: ordinary structural blocks joining an existing grid now remain exactly at their addressed lattice cell.
+- Ground-clearance lifting is now restricted to creation of a new root grid; it can no longer raise the first block placed against a tall landing-gear collider above its neighbours.
+- Explicit mechanical-port and turbo attachments retain their authored exact-offset placement path.
+
+#### 🌤️ One atmosphere model from surface to vacuum
+- Added body-owned total-air profiles: sea-level density, radius-relative atmosphere top, and exponential scale height are now independent of breathable oxygen.
+- Airless moons, thin worlds, and dense non-breathable atmospheres can therefore share one honest flight model; legacy saves safely fall back to their existing oxygen-derived behavior until initialized.
+- `AtmosphereManager` now exposes one allocation-free local sample used by life support, jetpacks, grid thrusters, cockpit telemetry, and future environmental systems.
+- Space state now agrees with actual density/profile ceiling instead of a separate radius-only cutoff.
+
+#### 🚀 High-altitude flight behavior
+- Atmospheric thrusters now report no fake hover/braking authority in vacuum and continuously lose thrust with local pressure; hydrogen and ion thrusters remain vacuum-capable.
+- Added modest mass-correct aerodynamic drag with wind-relative airflow, which fades naturally to zero in vacuum.
+- Corrected radial maritime gravity so it no longer applies inverse-square falloff twice at altitude.
+- Grid cockpit altitude now measures radial height above the active world's sea level and reports **ATMOSPHERE / UPPER ATMOSPHERE / VACUUM** with live air percentage.
+
+#### 🌌 Visual handoff and authoring
+- Cosmos camera now transitions from upper air to a dark space backdrop, expands far clipping with altitude, and publishes atmosphere/space shader globals for future sky polish.
+- Distant body visuals now follow the viewer during ascent; the active home body uses its real LOD sphere rather than a duplicated compressed sky proxy.
+- Added **Tools → Voxel Engine → Voxel Engine Setup → Step 49: Initialize Atmosphere + Space Profiles**. It initializes only unprofiled planet/moon assets and preserves any initialized custom values on subsequent runs.
+
+---
 
 ### [7.4.1-dev] Autonomous Space Dampers & Grid Battery Persistence
 

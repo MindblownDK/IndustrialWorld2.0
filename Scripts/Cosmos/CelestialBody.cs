@@ -90,20 +90,36 @@ namespace VoxelEngine.Cosmos
         public float AltitudeAt(Vector3 worldPosition)
             => (worldPosition - transform.position).magnitude - SeaRadius;
 
-        /// <summary>Atmospheric density (kg/m³) at altitude — exponential falloff to vacuum.</summary>
+        /// <summary>Total sea-level gas density (kg/m³), independent from whether the gas is breathable.</summary>
+        public float SurfaceAirDensity => settings != null ? settings.ResolveSurfaceAtmosphereDensity() : 0f;
+
+        /// <summary>Altitude at which this body's atmosphere reaches vacuum.</summary>
+        public float AtmosphereHeight => settings != null ? settings.ResolveAtmosphereHeight(SurfaceRadius) : 0f;
+
+        /// <summary>Exponential falloff height for this body's total atmosphere.</summary>
+        public float AtmosphereScaleHeight => settings != null ? settings.ResolveAtmosphereScaleHeight(SurfaceRadius) : 0f;
+
+        /// <summary>True when this body has any atmospheric gas (breathable or otherwise).</summary>
+        public bool HasAtmosphere => SurfaceAirDensity > 0.0001f && AtmosphereHeight > 0f;
+
+        /// <summary>Atmospheric density (kg/m³) at altitude — exponential falloff to a real vacuum ceiling.</summary>
         public float AirDensityAt(Vector3 worldPosition)
         {
-            if (!settings.HasOxygen) return 0f;
-            float alt = AltitudeAt(worldPosition);
-            if (alt < 0f) alt = 0f;
-            // Scale height ~8.5 km. Bodies with thin oxygen decay faster (handled via oxygenLevel).
-            float scaleHeight = Mathf.Lerp(4000f, 9000f, settings.oxygenLevel);
-            return Mathf.Exp(-alt / scaleHeight) * 1.225f * settings.oxygenLevel;
+            if (!HasAtmosphere) return 0f;
+            float altitude = Mathf.Max(0f, AltitudeAt(worldPosition));
+            float atmosphereHeight = AtmosphereHeight;
+            if (altitude >= atmosphereHeight) return 0f;
+
+            float scaleHeight = Mathf.Max(1f, AtmosphereScaleHeight);
+            return SurfaceAirDensity * Mathf.Exp(-altitude / scaleHeight);
         }
 
-        /// <summary>True if the position is above the Karman-ish line (space).</summary>
+        /// <summary>True when the local profile has reached vacuum. This agrees with density, life support, and thruster logic.</summary>
         public bool IsInSpace(Vector3 worldPosition)
-            => AltitudeAt(worldPosition) > SurfaceRadius * 0.35f || AirDensityAt(worldPosition) < 0.08f;
+        {
+            if (!HasAtmosphere) return true;
+            return AltitudeAt(worldPosition) >= AtmosphereHeight || AirDensityAt(worldPosition) < 0.02f;
+        }
 
         // ── Biome / climate filtering ─────────────────────────────
         /// <summary>

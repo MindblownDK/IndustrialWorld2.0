@@ -97,6 +97,8 @@ namespace VoxelEngine.GridSystem
         public bool    DampenersOn { get; set; } = true;
         /// <summary>True while an unpiloted, unlocked grid is autonomously cancelling drift.</summary>
         public bool AutonomousDampenersActive { get; private set; }
+        /// <summary>Current local atmosphere/space state for HUDs and future flight systems.</summary>
+        public AtmosphereSample CurrentAtmosphere => AtmosphereManager.Sample(transform.position);
 
         // ── Thrust feel ────────────────────────────────────────────
         // Thrust doesn't hit instantly; it spools up/down so heavy ships feel weighty.
@@ -114,14 +116,18 @@ namespace VoxelEngine.GridSystem
             foreach (var block in AllBlocks)
             {
                 if (!(block is GridThruster t)) continue;
-                // Thruster pushes the ship along its local forward.
+                // Thruster pushes the ship along its local forward. Atmospheric engines
+                // report their actual pressure-limited authority instead of full vacuum thrust.
                 Vector3 d = transform.InverseTransformDirection(t.transform.forward);
-                if (d.z >  0.5f) fwd   += t.maxThrustN;
-                if (d.z < -0.5f) back  += t.maxThrustN;
-                if (d.x >  0.5f) right += t.maxThrustN;
-                if (d.x < -0.5f) left  += t.maxThrustN;
-                if (d.y >  0.5f) up    += t.maxThrustN;
-                if (d.y < -0.5f) down  += t.maxThrustN;
+                float available = t.maxThrustN * (t.thrusterType == ThrusterType.Atmospheric
+                    ? t.AtmosphericEfficiency
+                    : 1f);
+                if (d.z >  0.5f) fwd   += available;
+                if (d.z < -0.5f) back  += available;
+                if (d.x >  0.5f) right += available;
+                if (d.x < -0.5f) left  += available;
+                if (d.y >  0.5f) up    += available;
+                if (d.y < -0.5f) down  += available;
             }
             return (fwd,back,right,left,up,down);
         }
@@ -275,6 +281,7 @@ namespace VoxelEngine.GridSystem
             _touchingIce = DetectIceContact();
             if (_touchingIce) _lastIceContactTime = Time.time;
             UpdateThrust();
+            ApplyAtmosphericDrag();
             UpdateDampeners();
             UpdateWheels();
             ApplyGravity();
@@ -321,6 +328,35 @@ namespace VoxelEngine.GridSystem
             return Physics.gravity * AtmosphereManager.GetGravityMultiplier(transform.position) * Mathf.Max(0f, gravityScale);
         }
 
+        /// <summary>
+        /// Applies a light, mass-correct aerodynamic drag force only while atmospheric gas exists.
+        /// This makes high-altitude coast behaviour naturally transition from air resistance to
+        /// inertial vacuum drift without changing the deliberate dampener model.
+        /// </summary>
+        private void ApplyAtmosphericDrag()
+        {
+            if (_rb == null || _rb.isKinematic) return;
+
+            AtmosphereSample atmosphere = CurrentAtmosphere;
+            if (!atmosphere.HasAtmosphere || atmosphere.AirDensity <= 0.0001f) return;
+
+            Vector3 windVelocity = WindField.Instance != null
+                ? WindField.Instance.Current * atmosphere.Density01
+                : Vector3.zero;
+            Vector3 relativeVelocity = _rb.linearVelocity - windVelocity;
+            float speedSq = relativeVelocity.sqrMagnitude;
+            if (speedSq <= 0.0025f) return;
+
+            // A compact block-count area estimate gives every hull a stable drag profile without
+            // expensive per-collider projections. ForceMode.Force correctly makes mass matter.
+            float cellSize = gridSize.CellSize();
+            float baseArea = Mathf.Max(1f, cellSize * cellSize * 0.55f);
+            float frontalArea = baseArea * Mathf.Max(1f, BlockCount * 0.32f);
+            const float DragCoefficient = 0.85f;
+            float dragForce = 0.5f * atmosphere.AirDensity * speedSq * DragCoefficient * frontalArea;
+            _rb.AddForce(-relativeVelocity.normalized * dragForce, ForceMode.Force);
+        }
+
         private bool HasManualThrustInput()
         {
             return IsControlled && ThrustInput.sqrMagnitude > 0.01f;
@@ -359,18 +395,26 @@ namespace VoxelEngine.GridSystem
         private bool HasHoverAuthority()
         {
             Vector3 gravity = CurrentGravityAcceleration();
-            if (gravity.sqrMagnitude < 0.0001f) return false;
+            if (gravity.sqrMagnitude < 0.0001f || _rb == null) return false;
 
             Vector3 antiGravity = -gravity.normalized;
+            float availableLift = 0f;
             foreach (var block in AllBlocks)
             {
-                if (!(block is GridThruster thruster)) continue;
-                if (!thruster.Enabled || !thruster.IsOperational) continue;
-                if (Vector3.Dot(thruster.PushDirection.normalized, antiGravity) > 0.35f)
-                    return true;
+                if (block is not GridThruster thruster || !thruster.Enabled || !thruster.IsOperational) continue;
+                float alignment = Vector3.Dot(thruster.PushDirection.normalized, antiGravity);
+                if (alignment <= 0.35f) continue;
+
+                float environmentalAuthority = thruster.thrusterType == ThrusterType.Atmospheric
+                    ? thruster.AtmosphericEfficiency
+                    : 1f;
+                availableLift += thruster.maxThrustN * environmentalAuthority * alignment;
             }
 
-            return false;
+            // Do not let a barely-operating atmospheric engine claim magical hover at
+            // high altitude. A small reserve prevents an exact-force threshold from jittering.
+            float requiredLift = _rb.mass * gravity.magnitude * 1.03f;
+            return availableLift >= requiredLift;
         }
 
         /// <summary>True if a landing gear or docking port already owns a hard stationary lock.</summary>

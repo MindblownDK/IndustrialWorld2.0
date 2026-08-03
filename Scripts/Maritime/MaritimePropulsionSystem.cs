@@ -692,9 +692,16 @@ namespace VoxelEngine.Maritime
         private float CurrentGravityMagnitude()
         {
             float scale = _grid != null ? _grid.gravityScale : 1f;
-            float mult = AtmosphereManager.GetGravityMultiplier(transform.position);
             float g = VoxelEngine.Cosmos.GravityProvider.GetGravity(transform.position).magnitude;
             if (g <= 0.001f) g = Physics.gravity.magnitude;
+
+            // Radial gravity is already inverse-square at this point. Applying the legacy
+            // AtmosphereManager ratio again squared the high-altitude falloff and made
+            // maritime/grid buoyancy disagree with the main GridEntity physics.
+            if (VoxelEngine.Cosmos.GravityProvider.IsRadial)
+                return g * Mathf.Max(0f, scale);
+
+            float mult = AtmosphereManager.GetGravityMultiplier(transform.position);
             return g * Mathf.Max(0f, scale) * Mathf.Max(0f, mult);
         }
 
