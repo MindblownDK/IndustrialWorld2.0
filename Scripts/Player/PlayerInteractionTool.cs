@@ -195,7 +195,14 @@ namespace VoxelEngine.Player
 
             if (!mineHeld && !buildHeld && !buildDown) return;
 
-            // RMB on a rideable horse mounts it (takes priority over building/placing).
+            // Placement owns RMB whenever a placeable block is selected. This gate is
+            // deliberately before every UI/seat interaction so aiming at a machine,
+            // terminal, battery, turret, or screen never opens its UI underneath a
+            // build attempt. GridBuilder handles GridBlockItem placement in parallel.
+            if (buildDown && hasHit && TryHandleHeldBlockPlacement(hit, ray)) return;
+
+            // RMB on a rideable horse mounts it (takes priority only when the player
+            // is not trying to build on that surface).
             if (buildDown && hasHit)
             {
                 var rmbHorse = hit.collider.GetComponentInParent<VoxelEngine.Fauna.RideableAnimal>();
@@ -509,39 +516,6 @@ namespace VoxelEngine.Player
                     return; // HighVoltageWireTool owns manual wire clicks.
             }
 
-            // If holding a placeable block (cable, pipe, etc), RMB places it directly.
-            if (buildDown && !heldForPlace.IsEmpty && heldForPlace.item is BlockItem heldBlock)
-            {
-                bool aimingUnifiedPipeAtGrid = IsUnifiedPipeItem(heldBlock)
-                    && hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridEntity>() != null;
-                // ONE placement path for unified pipes: BuildSystem.TryPlace routes
-                // them through the maritime port-snap (ghost ≡ placed). The old
-                // static fork bypassed the snap and dropped pipes at the raw ray hit.
-                if (Time.time >= _nextHit && BuildSystem.Instance != null && BuildSystem.Instance.TryPlace(heldBlock, hit, ray.direction))
-                {
-                    int taken = inventory.container.Remove(heldBlock, 1);
-                    if (taken == 0) TryNetworkConsume(heldBlock, 1);
-                    VoxelEngine.UI.BuildFeedbackHud.ShowBlockPlaced(heldBlock.displayName, heldBlock, 1);
-                    _nextHit = Time.time + 0.2f;
-                }
-                else if (Time.time >= _nextHit && aimingUnifiedPipeAtGrid)
-                {
-                    VoxelEngine.UI.BuildFeedbackHud.Show("Detail Pipe Blocked", "Choose an empty 0.5 m lattice cell", heldBlock.icon, Color.red);
-                    _nextHit = Time.time + 0.15f;
-                }
-                else if (Time.time >= _nextHit && BuildSystem.Instance != null && BuildSystem.Instance.TryPlace(heldBlock, hit, ray.direction))
-                {
-                    // Consume from inventory first; if empty AND the player has
-                    // researched "Wireless Build Sync" with an active transmitter,
-                    // pull the replacement from the storage network.
-                    int taken = inventory.container.Remove(heldBlock, 1);
-                    if (taken == 0) TryNetworkConsume(heldBlock, 1);
-                    VoxelEngine.UI.BuildFeedbackHud.ShowBlockPlaced(heldBlock.displayName, heldBlock, 1);
-                    _nextHit = Time.time + 0.2f;
-                }
-                return; // DONE — don't open any machine UI
-            }
-
             if (buildDown)
             {
                 // 0) Water Bucket placement.
@@ -791,6 +765,56 @@ namespace VoxelEngine.Player
                     if (gridGas != null) { UI.GameUIController.Instance?.OpenMachine(gridGas); return; }
                 }
 
+                // Grid Battery: direct field charging mirrors world batteries. Holding a
+                // rechargeable device consumes the interaction; Shift fills it as far as
+                // the grid's stored energy permits instead of opening the battery panel.
+                var gridBattery = hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridBattery>();
+                var activePowerStack = inventory != null ? inventory.ActiveStack : null;
+                bool holdingRechargeable = activePowerStack != null && !activePowerStack.IsEmpty
+                    && VoxelEngine.GridSystem.GridBattery.IsRechargeablePlayerItem(activePowerStack.item);
+                bool holdingPlaceableForBattery = activePowerStack != null && !activePowerStack.IsEmpty
+                    && (activePowerStack.item is BlockItem || activePowerStack.item is VoxelEngine.GridSystem.GridBlockItem);
+                if (gridBattery != null)
+                {
+                    if (holdingRechargeable)
+                    {
+                        bool charged = gridBattery.TryChargeHandheld(activePowerStack, IsShiftHeld(),
+                            out int added, out int stored, out int capacity);
+                        if (charged)
+                        {
+                            inventory.container.SetSlot(inventory.activeHotbarIndex, activePowerStack);
+                            inventory.container.RaiseChanged();
+                            string current = stored >= 1000 ? $"{stored / 1000f:0.0} kWh" : $"{stored} Wh";
+                            string max = capacity >= 1000 ? $"{capacity / 1000f:0.0} kWh" : $"{capacity} Wh";
+                            VoxelEngine.UI.BuildFeedbackHud.Show(
+                                activePowerStack.item.displayName,
+                                $"⚡ +{added} Wh  ·  {current} / {max}",
+                                activePowerStack.item.icon,
+                                new Color(0.45f, 0.9f, 0.6f));
+                        }
+                        else
+                        {
+                            string detail = gridBattery.storedWh < 1f
+                                ? "Grid battery has no stored energy"
+                                : "Device is already full";
+                            VoxelEngine.UI.BuildFeedbackHud.Show(
+                                activePowerStack.item.displayName,
+                                detail,
+                                activePowerStack.item.icon,
+                                Color.yellow);
+                        }
+                        return;
+                    }
+
+                    // A held placeable block belongs to the build path; never open a
+                    // battery UI underneath a placement attempt.
+                    if (!holdingPlaceableForBattery)
+                    {
+                        UI.GameUIController.Instance?.OpenMachine(gridBattery);
+                        return;
+                    }
+                }
+
                 // Portable Battery / power jetpack — fill from world Battery block (PowerBattery).
                 var powerBattery = hit.collider.GetComponentInParent<VoxelEngine.Power.PowerBattery>();
                 var activeBattery = inventory != null ? inventory.ActiveStack : null;
@@ -1002,6 +1026,42 @@ namespace VoxelEngine.Player
             }
         }
 
+
+        private bool TryHandleHeldBlockPlacement(RaycastHit hit, Ray ray)
+        {
+            if (inventory == null || hit.collider == null) return false;
+            var stack = inventory.ActiveStack;
+            if (stack == null || stack.IsEmpty || stack.item == null) return false;
+
+            // GridBuilder has its own ghost/precision-lattice placement path. Returning
+            // true here only suppresses PlayerInteractionTool UI dispatch; it does not
+            // consume the input or prevent GridBuilder.Update from committing the block.
+            if (stack.item is VoxelEngine.GridSystem.GridBlockItem) return true;
+            if (stack.item is not BlockItem block) return false;
+
+            string heldId = block.itemId ?? string.Empty;
+            if (heldId == "hv_wire" || heldId.EndsWith("_lv_wire", System.StringComparison.OrdinalIgnoreCase))
+                return false; // HighVoltageWireTool owns its dedicated manual routing path.
+
+            bool aimingUnifiedPipeAtGrid = IsUnifiedPipeItem(block)
+                && hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridEntity>() != null;
+            if (Time.time >= _nextHit && BuildSystem.Instance != null
+                && BuildSystem.Instance.TryPlace(block, hit, ray.direction))
+            {
+                int taken = inventory.container.Remove(block, 1);
+                if (taken == 0) TryNetworkConsume(block, 1);
+                VoxelEngine.UI.BuildFeedbackHud.ShowBlockPlaced(block.displayName, block, 1);
+                _nextHit = Time.time + 0.2f;
+            }
+            else if (Time.time >= _nextHit && aimingUnifiedPipeAtGrid)
+            {
+                VoxelEngine.UI.BuildFeedbackHud.Show("DETAIL PIPE BLOCKED", "CHOOSE AN EMPTY 0.5 m LATTICE CELL", block.icon, Color.red);
+                _nextHit = Time.time + 0.15f;
+            }
+            // Whether the pose was valid or not, a selected block owns the click.
+            // This prevents an interaction panel from opening behind an attempted build.
+            return true;
+        }
 
         private bool TryRaycastIgnoringSelf(Ray ray, out RaycastHit hit, float maxDistance)
         {

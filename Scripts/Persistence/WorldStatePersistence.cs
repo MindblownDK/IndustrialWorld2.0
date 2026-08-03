@@ -914,8 +914,16 @@ namespace VoxelEngine.Persistence
                 return sc;
             }
 
-            // World battery block — persist the device-charger dock contents.
-            // Bulk charge lives on SavedPlacedBlock (batteryCharge fields).
+            // Grid batteries and world batteries both persist their one-item charger
+            // dock through the existing container snapshot; bulk charge remains in
+            // their dedicated saved state fields.
+            var gridBattery = go.GetComponentInChildren<VoxelEngine.GridSystem.GridBattery>(true);
+            if (gridBattery != null)
+            {
+                gridBattery.EnsureContainers();
+                return SerializeContainer(gridBattery.ChargeSlot);
+            }
+
             var powerBattery = go.GetComponentInChildren<VoxelEngine.Power.PowerBattery>();
             if (powerBattery != null)
             {
@@ -1921,6 +1929,14 @@ namespace VoxelEngine.Persistence
             {
                 gasTank.EnsureContainers();
                 DeserializeInto(gasTank.PortableSlot, sc);
+                return;
+            }
+
+            var gridBattery = go.GetComponentInChildren<VoxelEngine.GridSystem.GridBattery>(true);
+            if (gridBattery != null)
+            {
+                gridBattery.EnsureContainers();
+                DeserializeInto(gridBattery.ChargeSlot, sc);
                 return;
             }
 

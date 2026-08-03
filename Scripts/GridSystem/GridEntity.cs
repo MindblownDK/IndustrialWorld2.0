@@ -383,6 +383,16 @@ namespace VoxelEngine.GridSystem
             return Time.time - _lastIceContactTime <= IceContactGravityGrace;
         }
 
+        /// <summary>
+        /// An occupied cockpit's dampeners are an explicit station-keeping command:
+        /// no translation input means cancel the entire velocity vector, even on a
+        /// planet. This is intentionally separate from unpiloted/hover authority.
+        /// </summary>
+        private bool ShouldPilotDampenerHold()
+        {
+            return DampenersOn && IsControlled && !HasManualThrustInput();
+        }
+
         private bool ShouldDampenerHoldHover()
         {
             // A grid that has just skidded/tilted off ice must keep falling back
@@ -466,9 +476,9 @@ namespace VoxelEngine.GridSystem
         {
             if (_rb == null) return;
 
-            // Dampeners are a true hover-hold assist: when the pilot is not asking for
-            // translation, the ship should not continue falling through atmosphere gravity.
-            if (ShouldDampenerHoldHover()) return;
+            // A seated pilot's dampeners explicitly hold station: no translation input
+            // means no gravity-axis drift on planets and no residual drift in space.
+            if (ShouldPilotDampenerHold() || ShouldDampenerHoldHover()) return;
 
             Vector3 gravity = CurrentGravityAcceleration();
             if (IsRecoveringFromIceContact() && !IsControlled)
@@ -522,12 +532,13 @@ namespace VoxelEngine.GridSystem
             GetComponent<VoxelEngine.Maritime.MechanicalBeltNetwork>()?.NotifyGridTopologyChanged();
             // Tell pipe visuals the topology changed so they rebuild their arms
             // (event-driven — no continuous polling).
-            VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged();
+            VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged(block.transform.position);
         }
 
         public void RemoveBlock(Vector3Int gridPos)
         {
             if (!_blocks.TryGetValue(gridPos, out var block)) return;
+            Vector3 formerPosition = block != null ? block.transform.position : GridToWorld(gridPos);
             _blocks.Remove(gridPos);
             block.OnRemoved();
             Destroy(block.gameObject);
@@ -537,7 +548,7 @@ namespace VoxelEngine.GridSystem
             // Remove belt links whose pulley was just dismantled and refresh any
             // remaining belt take-offs before the next drivetrain graph rebuild.
             GetComponent<VoxelEngine.Maritime.MechanicalBeltNetwork>()?.NotifyGridTopologyChanged();
-            VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged();
+            VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged(formerPosition);
 
             if (_blocks.Count == 0 && (PrecisionAttachments == null || PrecisionAttachments.Count == 0))
                 Destroy(gameObject);
@@ -1176,81 +1187,64 @@ namespace VoxelEngine.GridSystem
         // ── Inertia Dampeners ──────────────────────────────────────
         private void UpdateDampeners()
         {
-            if (!DampenersOn) return;
+            PilotDampenerHoldActive = false;
+            if (!DampenersOn || _rb == null) return;
 
             // An unpiloted grid only receives damping authority when it has stored
-            // power/hydrogen or live generation. This prevents an abandoned, empty
-            // hull from magically stopping while a powered ship holds station.
+            // power/hydrogen or live generation. A seated pilot deliberately commands
+            // station keeping, so pilot hold is reliable both over a planet and in vacuum.
             bool autonomous = !IsControlled;
             if (autonomous && !AutonomousDampenersActive) return;
 
-            // Only dampen when the pilot isn't actively asking for thrust.
             bool isThrusting = HasManualThrustInput();
+            bool pilotHold = IsControlled && !isThrusting;
+            PilotDampenerHoldActive = pilotHold;
 
             Vector3 vel = _rb.linearVelocity;
             if (!isThrusting && vel.sqrMagnitude > 0.0001f)
             {
-                // Mass-aware braking: heavier ships take longer to cancel drift, so the
-                // dampeners feel like they're wrestling real inertia.
                 float massFactor = 10000f / Mathf.Max(10000f, _rb.mass);
-                // Autonomous space hold needs to arrest saved/login drift decisively.
-                // Installed reverse thrusters provide the visible/resource-consuming
-                // force above; this controller settles the remaining velocity.
-                float brake = autonomous ? 12f : 2.5f * massFactor;
+                // Piloted hold is intentionally decisive: it must actually settle at
+                // velocity zero rather than preserving the vertical gravity component.
+                float brake = pilotHold ? 30f : autonomous ? 12f : 2.5f * massFactor;
                 bool iceRecovery = IsRecoveringFromIceContact();
-                if (iceRecovery) brake *= IceGridBrakeMultiplier;
+                if (iceRecovery && !pilotHold) brake *= IceGridBrakeMultiplier;
 
-                // --- FIX: grids fell as if low-gravity because dampeners braked vertical fall ---
-                // When NOT in hover-hold mode, dampeners should only cancel HORIZONTAL drift
-                // (tangent to gravity), letting gravity cause natural fall. Previously they
-                // braked full velocity including vertical, so grids fell in slow-mo.
                 Vector3 gravity = CurrentGravityAcceleration();
                 Vector3 dampedVelocity = vel;
                 bool hasGravity = gravity.sqrMagnitude > 0.0001f;
-                bool isHoverHold = ShouldDampenerHoldHover();
+                bool hoverHold = ShouldDampenerHoldHover();
+                bool fullStop = pilotHold || hoverHold;
 
-                if (hasGravity && (iceRecovery || !isHoverHold))
-                {
-                    // Brake only tangent drift, preserve gravity-axis motion
+                // Preserve a natural gravity-axis fall only for unattended/non-hover
+                // grids. The cockpit hold requested by the pilot cancels all axes.
+                if (hasGravity && !fullStop && (iceRecovery || !hoverHold))
                     dampedVelocity = Vector3.ProjectOnPlane(vel, gravity.normalized);
-                }
 
-                // Soften the brake at very low speeds so the ship coasts gently to a stop
-                // instead of slamming on the brakes.
                 float speed = dampedVelocity.magnitude;
-                float settle = Mathf.Clamp01(speed / 0.5f);
+                float settle = pilotHold ? 1f : Mathf.Clamp01(speed / 0.5f);
                 if (speed > 0.0001f)
                     _rb.AddForce(-dampedVelocity * brake * settle, ForceMode.Acceleration);
 
-                // Hard snap only when almost stopped. For non-hover, only zero the
-                // tangent component so vertical fall isn't cancelled.
-                if (speed < 0.03f)
+                // Snap the final residual so the held craft genuinely reads 0.0 m/s.
+                float snapThreshold = pilotHold ? 0.08f : 0.03f;
+                if (speed < snapThreshold)
                 {
-                    if (isHoverHold || iceRecovery)
-                    {
-                        // In hover hold we want full stop; during ice recovery never zero vertical
-                        if (!iceRecovery)
-                            _rb.linearVelocity = Vector3.zero;
-                    }
-                    else if (hasGravity)
-                    {
-                        // Keep gravity component, zero horizontal drift
-                        Vector3 vertical = Vector3.Project(vel, gravity.normalized);
-                        _rb.linearVelocity = vertical;
-                    }
-                    else
-                    {
+                    if (fullStop && !iceRecovery)
                         _rb.linearVelocity = Vector3.zero;
-                    }
+                    else if (hasGravity)
+                        _rb.linearVelocity = Vector3.Project(vel, gravity.normalized);
+                    else
+                        _rb.linearVelocity = Vector3.zero;
                 }
             }
 
-            Vector3 angVel = _rb.angularVelocity;
-            if (!isThrusting && angVel.sqrMagnitude > 0.0001f)
+            Vector3 angularVelocity = _rb.angularVelocity;
+            if (!isThrusting && angularVelocity.sqrMagnitude > 0.0001f)
             {
-                float angularBrake = _touchingIce ? 0.75f : autonomous ? 10f : 4f;
-                _rb.angularVelocity = Vector3.Lerp(angVel, Vector3.zero, angularBrake * Time.fixedDeltaTime);
-                if (autonomous && _rb.angularVelocity.sqrMagnitude < 0.0004f)
+                float angularBrake = _touchingIce && !pilotHold ? 0.75f : pilotHold ? 18f : autonomous ? 10f : 4f;
+                _rb.angularVelocity = Vector3.Lerp(angularVelocity, Vector3.zero, angularBrake * Time.fixedDeltaTime);
+                if ((pilotHold || autonomous) && _rb.angularVelocity.sqrMagnitude < 0.0004f)
                     _rb.angularVelocity = Vector3.zero;
             }
         }

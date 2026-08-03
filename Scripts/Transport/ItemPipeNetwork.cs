@@ -25,6 +25,8 @@ namespace VoxelEngine.Transport
         private readonly List<ItemPipe> _pipes = new();
         private bool _dirty;
         private float _dirtyAt = -1f;
+        private readonly List<Vector3> _dirtyPositions = new(4);
+        private bool _globalVisualRefresh;
         private const float RebuildSettleDelay = 0.12f;
 
         private void Awake()
@@ -43,19 +45,20 @@ namespace VoxelEngine.Transport
             if (pipe != null && !_pipes.Contains(pipe))
             {
                 _pipes.Add(pipe);
-                MarkDirty();
+                MarkDirty(pipe.transform.position);
             }
         }
 
         public void Unregister(ItemPipe pipe)
         {
             if (pipe == null) return;
+            Vector3 formerPosition = pipe.transform.position;
             if (_pipes.Remove(pipe))
             {
                 for (int i = 0; i < _pipes.Count; i++)
                     if (_pipes[i] != null) _pipes[i].neighbours.Remove(pipe);
                 pipe.neighbours.Clear();
-                VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged();
+                MarkDirty(formerPosition);
             }
         }
 
@@ -65,13 +68,70 @@ namespace VoxelEngine.Transport
             if (Time.unscaledTime - _dirtyAt < RebuildSettleDelay) return;
             _dirty = false;
             Rebuild();
-            VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged();
+            RefreshAffectedVisuals();
         }
 
-        private void MarkDirty()
+        private void MarkDirty(Vector3? position = null)
         {
             if (!_dirty) _dirtyAt = Time.unscaledTime;
             _dirty = true;
+            if (!position.HasValue)
+            {
+                _globalVisualRefresh = true;
+                return;
+            }
+
+            Vector3 p = position.Value;
+            for (int i = 0; i < _dirtyPositions.Count; i++)
+                if ((_dirtyPositions[i] - p).sqrMagnitude < 0.01f) return;
+            _dirtyPositions.Add(p);
+        }
+
+        private void RefreshAffectedVisuals()
+        {
+            if (_globalVisualRefresh || _dirtyPositions.Count == 0)
+            {
+                for (int i = 0; i < _pipes.Count; i++)
+                    if (_pipes[i] != null) _pipes[i].ForceEndpointRescan();
+                VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged();
+            }
+            else
+            {
+                for (int d = 0; d < _dirtyPositions.Count; d++)
+                {
+                    Vector3 changed = _dirtyPositions[d];
+                    ItemPipe changedPipe = FindPipeAt(changed);
+                    float localRadius = changedPipe != null
+                        ? GridStep(changedPipe, changedPipe) * 5.15f + 0.25f
+                        : 0f;
+
+                    // Only the newly registered pipe needs an immediate expensive
+                    // container-corridor scan. Nearby pipes already retain their endpoint
+                    // cache; their pipe-to-pipe arms update from the rebuilt neighbour graph.
+                    if (changedPipe != null) changedPipe.ForceEndpointRescan();
+                    VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged(changed, localRadius);
+                }
+            }
+
+            _dirtyPositions.Clear();
+            _globalVisualRefresh = false;
+        }
+
+        private ItemPipe FindPipeAt(Vector3 position)
+        {
+            const float ExactRegistrationDistanceSqr = 0.04f;
+            ItemPipe nearest = null;
+            float nearestSqr = ExactRegistrationDistanceSqr;
+            for (int i = 0; i < _pipes.Count; i++)
+            {
+                var pipe = _pipes[i];
+                if (pipe == null) continue;
+                float distance = (pipe.transform.position - position).sqrMagnitude;
+                if (distance > nearestSqr) continue;
+                nearestSqr = distance;
+                nearest = pipe;
+            }
+            return nearest;
         }
 
         private void Rebuild()
@@ -81,7 +141,7 @@ namespace VoxelEngine.Transport
 
             _pipes.RemoveAll(p => p == null);
             int n = _pipes.Count;
-            if (n < 2) goto EndpointRescan;
+            if (n < 2) return;
 
             // Five-cell same-plane links fit inside this cell or its immediate
             // neighbours; coplanar validation below prevents off-plane joins.
@@ -139,13 +199,6 @@ namespace VoxelEngine.Transport
                 }
             }
 
-        EndpointRescan:
-            // Refresh each pipe's endpoint (chest/machine) connections too.
-            for (int i = 0; i < _pipes.Count; i++)
-            {
-                var p = _pipes[i];
-                if (p != null) p.ForceEndpointRescan();
-            }
         }
 
         private static float GridStep(ItemPipe a, ItemPipe b)
@@ -164,5 +217,6 @@ namespace VoxelEngine.Transport
         }
 
         public void SetDirty() => MarkDirty();
+        public void SetDirty(Vector3 changedPosition) => MarkDirty(changedPosition);
     }
 }

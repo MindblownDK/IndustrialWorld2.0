@@ -111,7 +111,7 @@ namespace VoxelEngine.GridSystem
 
             block.OnPlaced();
             grid.RecalculateMass();
-            VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged();
+            VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged(block.transform.position, CellSize * 5.15f + 0.25f);
             return true;
         }
 
@@ -119,6 +119,8 @@ namespace VoxelEngine.GridSystem
         {
             if (!_blocks.TryGetValue(precisionPos, out var block)) return;
             _blocks.Remove(precisionPos);
+            Vector3 formerPosition = block != null ? block.transform.position
+                : (Grid != null ? Grid.transform.TransformPoint((Vector3)precisionPos * CellSize) : Vector3.zero);
             if (block != null)
             {
                 block.OnRemoved();
@@ -126,7 +128,7 @@ namespace VoxelEngine.GridSystem
             }
             var grid = Grid;
             grid?.RecalculateMass();
-            VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged();
+            VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged(formerPosition, CellSize * 5.15f + 0.25f);
             if (_blocks.Count == 0 && grid != null && grid.BlockCount == 0)
                 Destroy(grid.gameObject);
         }

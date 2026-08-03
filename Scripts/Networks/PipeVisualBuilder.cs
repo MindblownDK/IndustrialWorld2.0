@@ -57,24 +57,60 @@ namespace VoxelEngine.Networks
                  "event-driven (fired when a block is placed/removed via " +
                  "NotifyTopologyChanged); this is only a slow fallback so nothing " +
                  "stays permanently stale.")]
-        public float rebuildInterval = 2.0f;
+        public float rebuildInterval = 4.0f;
 
         // ── Topology-change signal ─────────────────────────────────────
         // A topology change may affect many pipes. We therefore enqueue each builder
         // and let a small shared per-frame budget process visual rebuilds over several
         // frames instead of destroying/recreating every pipe mesh in one 5-FPS spike.
         public static int TopologyVersion { get; private set; }
-        private const int MaxQueuedRebuildsPerFrame = 2;
+        // Rebuilding a copper pipe can create many flange/bolt primitives. One real
+        // rebuild per frame is intentionally conservative; local topology dispatch
+        // below means a normal edit only queues the few pipes that can actually link.
+        private const int MaxQueuedRebuildsPerFrame = 1;
+        private const float DefaultTopologyInfluenceRadius = 6.5f;
         private static int s_rebuildBudgetFrame = -1;
         private static int s_rebuildBudgetUsed;
         private static readonly List<PipeVisualBuilder> s_builderScratch = new(64);
 
+        /// <summary>
+        /// Compatibility fallback for rare topology events without a location. Normal
+        /// placement/network callers use the positioned overload so a long pipe run
+        /// never rebuilds globally after one edit.
+        /// </summary>
         public static void NotifyTopologyChanged()
         {
             TopologyVersion++;
             s_builderScratch.Clear();
             foreach (var pair in _AllBuilders)
                 if (pair.Key != null) s_builderScratch.Add(pair.Key);
+            for (int i = 0; i < s_builderScratch.Count; i++)
+                s_builderScratch[i].RequestTopologyRefresh();
+        }
+
+        /// <summary>
+        /// Queues only pipes within the largest legal five-cell linking corridor of
+        /// a changed position. This keeps a 20+ pipe farm from tearing down every
+        /// visual hierarchy when one pipe or endpoint is edited.
+        /// </summary>
+        public static void NotifyTopologyChanged(Vector3 changedPosition, float influenceRadius = 0f)
+        {
+            TopologyVersion++;
+            s_builderScratch.Clear();
+            foreach (var pair in _AllBuilders)
+            {
+                var builder = pair.Key;
+                if (builder == null) continue;
+                float cellSize = Mathf.Max(0.5f, builder.gridSize);
+                // A caller-supplied radius is authoritative: network managers know
+                // the exact changed pipe lattice. The default remains generous only
+                // for generic non-pipe endpoint edits.
+                float reach = influenceRadius > 0f
+                    ? influenceRadius
+                    : Mathf.Max(DefaultTopologyInfluenceRadius, cellSize * 5.6f + 0.75f);
+                if ((builder.transform.position - changedPosition).sqrMagnitude <= reach * reach)
+                    s_builderScratch.Add(builder);
+            }
             for (int i = 0; i < s_builderScratch.Count; i++)
                 s_builderScratch[i].RequestTopologyRefresh();
         }
@@ -262,7 +298,7 @@ namespace VoxelEngine.Networks
             // Slow safety net for topology signals from legacy content. It uses the
             // same budget and hash gate, so dense pipe runs stay smooth.
             _scanTimer += Time.deltaTime;
-            if (_scanTimer < Mathf.Max(rebuildInterval, 1.5f)) return;
+            if (_scanTimer < Mathf.Max(rebuildInterval, 3f)) return;
             if (!TryConsumeRebuildBudget()) return;
             _scanTimer = 0f;
             _seenVersion = TopologyVersion;
@@ -300,7 +336,11 @@ namespace VoxelEngine.Networks
         public void ForceRebuild()
         {
             PopulateScratch();
-            RebuildFromScratch(HashPositions(_scratch));
+            int hash = HashPositions(_scratch);
+            // Several placement paths can request the just-created pipe in the same
+            // frame. Do not destroy/recreate an identical hierarchy twice.
+            if (_hasBuilt && hash == _lastHash) return;
+            RebuildFromScratch(hash);
         }
 
         private void PopulateScratch()

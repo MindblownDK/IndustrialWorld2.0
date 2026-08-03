@@ -24,6 +24,8 @@ namespace VoxelEngine.Gas
         private readonly List<GasPipe> _pipes = new();
         private bool _dirty;
         private float _dirtyAt = -1f;
+        private readonly List<Vector3> _dirtyPositions = new(4);
+        private bool _globalVisualRefresh;
 
         // Coalesce rapid register/unregister bursts (e.g. placing pipes in a row)
         // into a single rebuild so we don't do O(N) work every frame the player
@@ -39,28 +41,36 @@ namespace VoxelEngine.Gas
         public void Register(GasPipe p)
         {
             if (p == null) return;
-            if (!_pipes.Contains(p)) { _pipes.Add(p); MarkDirty(); }
+            if (!_pipes.Contains(p)) { _pipes.Add(p); MarkDirty(p.transform.position); }
         }
 
         public void Unregister(GasPipe p)
         {
             if (p == null) return;
+            Vector3 formerPosition = p.transform.position;
             if (_pipes.Remove(p))
             {
                 for (int i = 0; i < _pipes.Count; i++)
-                    _pipes[i].neighbours.Remove(p);
+                    if (_pipes[i] != null) _pipes[i].neighbours.Remove(p);
                 p.neighbours.Clear();
-                // A removal is topology-changing — bump version so visuals
-                // refresh once. Additions wait for the rebuild so they fire
-                // exactly once after links settle.
-                VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged();
+                MarkDirty(formerPosition);
             }
         }
 
-        private void MarkDirty()
+        private void MarkDirty(Vector3? position = null)
         {
             if (!_dirty) _dirtyAt = Time.unscaledTime;
             _dirty = true;
+            if (!position.HasValue)
+            {
+                _globalVisualRefresh = true;
+                return;
+            }
+
+            Vector3 p = position.Value;
+            for (int i = 0; i < _dirtyPositions.Count; i++)
+                if ((_dirtyPositions[i] - p).sqrMagnitude < 0.01f) return;
+            _dirtyPositions.Add(p);
         }
 
         private void LateUpdate()
@@ -69,7 +79,41 @@ namespace VoxelEngine.Gas
             if (Time.unscaledTime - _dirtyAt < RebuildSettleDelay) return;
             _dirty = false;
             Rebuild();
-            VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged();
+            RefreshAffectedVisuals();
+        }
+
+        private void RefreshAffectedVisuals()
+        {
+            if (_globalVisualRefresh || _dirtyPositions.Count == 0)
+            {
+                VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged();
+            }
+            else
+            {
+                for (int i = 0; i < _dirtyPositions.Count; i++)
+                {
+                    Vector3 changed = _dirtyPositions[i];
+                    VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged(changed, ResolveChangedPipeRadius(changed));
+                }
+            }
+            _dirtyPositions.Clear();
+            _globalVisualRefresh = false;
+        }
+
+        private float ResolveChangedPipeRadius(Vector3 changedPosition)
+        {
+            float nearestSqr = 0.04f; // register path reports the pipe's exact transform position
+            GasPipe nearest = null;
+            for (int i = 0; i < _pipes.Count; i++)
+            {
+                var pipe = _pipes[i];
+                if (pipe == null) continue;
+                float distance = (pipe.transform.position - changedPosition).sqrMagnitude;
+                if (distance > nearestSqr) continue;
+                nearestSqr = distance;
+                nearest = pipe;
+            }
+            return nearest != null ? GridStep(nearest, nearest) * 5.15f + 0.25f : 0f;
         }
 
         private void Rebuild()
@@ -296,6 +340,7 @@ namespace VoxelEngine.Gas
         }
 
         public void SetDirty() => MarkDirty();
+        public void SetDirty(Vector3 changedPosition) => MarkDirty(changedPosition);
         private void OnDestroy() { if (Instance == this) Instance = null; _tankQueryCache.Clear(); }
     }
 }

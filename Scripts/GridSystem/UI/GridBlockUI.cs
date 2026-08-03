@@ -31,7 +31,7 @@ namespace VoxelEngine.GridSystem.UI
                 case GridLiquidTank lt:     return LiquidTankPanel(lt);
                 case GridGasTank gt:        return GasTankPanel(gt, slot);
                 case GridH2O2Generator h2:  return H2O2Panel(h2, slot);
-                case GridBattery bat:       return BatteryPanel(bat);
+                case GridBattery bat:       return BatteryPanel(bat, slot);
                 case GridCargoContainer cc: return CargoPanel(cc, slot);
                 case GridWeapon gw:         return WeaponPanel(gw, slot);
                 case GridRefinery rf:       return ProcessorPanel("⚗ Ship Refinery", rf.Current, rf.Progress01, rf.PowerDraw, rf.knownRecipes, rf.Grid, rf.selectedRecipe, r => rf.selectedRecipe = r);
@@ -246,7 +246,7 @@ namespace VoxelEngine.GridSystem.UI
         }
 
         // ── BATTERY ────────────────────────────────────────────────────────────
-        private static VisualElement BatteryPanel(GridBattery bat)
+        private static VisualElement BatteryPanel(GridBattery bat, MachineUIs.SlotBuilder slot)
         {
             var p = T.MachinePanel();
             Color initialStateColor = BatteryStateColor(bat);
@@ -276,6 +276,29 @@ namespace VoxelEngine.GridSystem.UI
             Label modeReadout = AddLiveBatteryStat(p, "⚙", "Mode", T.TextSecondary);
             Label gridBalance = bat.Grid != null ? AddLiveBatteryStat(p, "⚖", "Grid Balance", T.AccentGreen) : null;
 
+            // The ship battery owns the same one-item rechargeable dock as the
+            // world battery. It is deliberately part of this in-place panel so the
+            // player can drag a portable battery / power jetpack in without flicker.
+            bat.EnsureContainers();
+            p.Add(T.Divider());
+            p.Add(GridUIHelpers.SectionTitle("Device Charger"));
+            var chargerGrid = T.SlotGrid(1);
+            chargerGrid.Add(slot(bat.ChargeSlot, 0, bat.ChargeSlot.GetSlot(0), false, true));
+            p.Add(chargerGrid);
+            var chargerReadout = new Label("NO DEVICE DOCKED");
+            chargerReadout.style.fontSize = 10;
+            chargerReadout.style.color = new StyleColor(T.TextMuted);
+            chargerReadout.style.marginTop = 4;
+            chargerReadout.pickingMode = PickingMode.Ignore;
+            p.Add(chargerReadout);
+            var chargerFlow = new Label("HOLD A DEVICE + RMB  //  SHIFT + RMB = FULL");
+            chargerFlow.style.fontSize = 8;
+            chargerFlow.style.letterSpacing = 0.55f;
+            chargerFlow.style.color = new StyleColor(T.TextMuted);
+            chargerFlow.style.marginTop = 2;
+            chargerFlow.pickingMode = PickingMode.Ignore;
+            p.Add(chargerFlow);
+
             void RefreshLiveValues()
             {
                 if (bat == null) return;
@@ -303,6 +326,29 @@ namespace VoxelEngine.GridSystem.UI
                     float balance = bat.Grid.PowerBalance;
                     gridBalance.text = PowerFormat.Watts(balance);
                     gridBalance.style.color = new StyleColor(balance >= 0f ? T.AccentGreen : T.AccentRed);
+                }
+                if (chargerReadout != null)
+                {
+                    bat.GetDockedItemCharge(out int itemStored, out int itemCapacity);
+                    var docked = bat.ChargeSlot != null ? bat.ChargeSlot.GetSlot(0) : null;
+                    if (docked == null || docked.IsEmpty || itemCapacity <= 0)
+                    {
+                        chargerReadout.text = "NO DEVICE DOCKED";
+                        chargerReadout.style.color = new StyleColor(T.TextMuted);
+                    }
+                    else
+                    {
+                        float fill = Mathf.Clamp01(itemStored / (float)itemCapacity);
+                        chargerReadout.text = $"{docked.item.displayName}  ·  {itemStored} / {itemCapacity} Wh  ({fill * 100f:0}%)";
+                        chargerReadout.style.color = new StyleColor(bat.IsChargingItem ? T.AccentGreen : T.TextSecondary);
+                    }
+                }
+                if (chargerFlow != null)
+                {
+                    chargerFlow.text = bat.IsChargingItem
+                        ? $"DEVICE CHARGING  ·  {PowerFormat.Watts(bat.CurrentDeviceChargeWatts)}"
+                        : "HOLD A DEVICE + RMB  //  SHIFT + RMB = FULL";
+                    chargerFlow.style.color = new StyleColor(bat.IsChargingItem ? T.AccentGreen : T.TextMuted);
                 }
             }
 

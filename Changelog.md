@@ -1,9 +1,39 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.9.1-dev`
+**Current Version:** `7.9.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.9.2-dev] Cockpit Hold, Grid Battery Charging & Ship Control LCD
+
+**Type:** PATCH — interaction, performance, cockpit-control, and visual fixes; existing saves and public APIs remain compatible.
+
+#### 🔋 Grid Battery field charging restored
+- Added the Grid Battery’s one-item **Device Charger** dock for Portable Batteries and power-fed jetpacks, including live dock telemetry in both the direct battery panel and Ship Control Center.
+- Restored direct field charging: hold a rechargeable item and RMB a Grid Battery for a normal charge; **Shift + RMB** fills it as far as stored grid energy allows.
+- The dock uses the existing container-save path, so a docked rechargeable item survives grid save/load without a save-schema break.
+
+#### 🚀 Controlled-flight correction
+- Cockpit dampeners now actively hold a seated craft at full **0 velocity** when there is no translation input, including the gravity axis on a planet and drift in space.
+- Flight Computer altitude now samples the rigidbody’s physical centre directly rather than smoothing an old transform sample; it adds a readable km/m formatter plus signed vertical-speed telemetry.
+- Third-person Alt orbit now remains at the released view. Double-press Alt to return to the home chase position; Alt still moves the view without steering the ship.
+- Refined the Flight Computer with a fitted header, battery screen, vertical-speed readout, and explicit dampener `HOLDING` state.
+
+#### ⚙ Placement and pipe-cost hardening
+- A selected placeable block now owns RMB before any world/grid UI interaction, so trying to build onto a battery, machine, screen, terminal, or other UI block places (or cleanly refuses) the block instead of opening the UI behind it.
+- Replaced broad pipe visual invalidation with exact changed-corridor dispatch, a one-rebuild frame budget, hash-gated forced rebuilds, and targeted ItemPipe endpoint scans. Dense runs no longer rescan/rebuild every pipe after each edit.
+
+#### 📟 Inventory and Ship Control follow-up
+- Kept Armor, Jetpack Bay, and Life Support open together in the inventory’s attached equipment console; its content scrolls instead of requiring tab swaps.
+- Reduced the inventory command key to a single fitting `CRAFTING` label.
+- Rebuilt the Ship Control Center as an inventory-style LCD console: chassis, inset display, grid-operations header, command keys, status cells, phosphor list matrix, and matching detail readout.
+- Hardened the held-item readout cleanup across the entire UI document and removed its prefixed hotbar-slot number.
+
+#### ✅ Static delivery checks
+- Revised source parses cleanly and targeted structural/regression checks pass locally. Unity/Play Mode validation remains pending from Thomas; no runtime validation is claimed here.
+
+---
 
 ### [7.9.1-dev] Inventory Terminal & Premium LCD Workstations
 

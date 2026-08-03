@@ -100,15 +100,6 @@ namespace VoxelEngine.UI
         private bool _productionStatsOpen;
         private bool _recipeBrowserOpen;
 
-        // Equipment is intentionally a single attached module, not three competing
-        // cards. The selected tab is runtime-only UI state and never touches saves.
-        private enum EquipmentAddonTab
-        {
-            Armor,
-            Jetpack,
-            LifeSupport
-        }
-        private EquipmentAddonTab _equipmentAddonTab = EquipmentAddonTab.Armor;
         // Containers whose OnChanged should call Refresh; cleared on each panel switch.
         private System.Collections.Generic.List<ItemContainer> _watchedContainers = new();
 
@@ -860,6 +851,7 @@ namespace VoxelEngine.UI
                     else if (gb is VoxelEngine.GridSystem.GridDrill gdr) { if (gdr.buffer == null) gdr.OnPlaced(); WatchContainer(gdr.buffer); }
                     else if (gb is VoxelEngine.GridSystem.GridElectricFurnace gef) { if (gef.inputC == null) gef.OnPlaced(); WatchContainer(gef.inputC); WatchContainer(gef.outputC); }
                     else if (gb is VoxelEngine.GridSystem.GridGasTank ggt) { ggt.EnsureContainers(); WatchContainer(ggt.PortableSlot); }
+                    else if (gb is VoxelEngine.GridSystem.GridBattery gridBattery) { gridBattery.EnsureContainers(); WatchContainer(gridBattery.ChargeSlot); }
                     break;
                 case VoxelEngine.Storage.StorageTerminal st2: _openStorageTerminal = st2; break;
                 case VoxelEngine.Storage.PatternTerminal pt2: _openPatternTerminal = pt2; break;
@@ -919,6 +911,14 @@ namespace VoxelEngine.UI
             _openGridTerminal = grid; _terminalTab = -1;
             _inventoryOpen = true;
             UnwatchAllContainers();
+            foreach (var block in grid.AllBlocks)
+            {
+                if (block is VoxelEngine.GridSystem.GridBattery gridBattery)
+                {
+                    gridBattery.EnsureContainers();
+                    WatchContainer(gridBattery.ChargeSlot);
+                }
+            }
             UnlockCursor();
             Refresh();
         }
@@ -2407,8 +2407,8 @@ namespace VoxelEngine.UI
         }
 
         // The equipment console is a physical extension of the inventory terminal.
-        // Only one module is expanded at once; tabs preserve a clean inventory silhouette
-        // while keeping every equipment slot reachable on demand.
+        // All three modules stay open together in one scroll-safe add-on, so every
+        // equipment slot remains visible and reachable without a tab swap.
         private VisualElement BuildEquipmentPanel()
         {
             _jbStatusPill = null;
@@ -2422,7 +2422,7 @@ namespace VoxelEngine.UI
             _jbPackPwr = null;
 
             var addon = new VisualElement { name = "InventoryEquipmentAddon" };
-            addon.style.width = 216;
+            addon.style.width = 230;
             addon.style.height = new StyleLength(new Length(100f, LengthUnit.Percent));
             addon.style.flexShrink = 0;
             addon.style.paddingTop = 6;
@@ -2444,20 +2444,20 @@ namespace VoxelEngine.UI
             LcdHudTheme.ApplyScreen(screen, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.90f), 1f);
             addon.Add(screen);
 
-            screen.Add(LcdHudTheme.CreateDisplayHeader("PERSONAL SYSTEMS", "EQUIPMENT", "AUX-01", "LINKED"));
+            screen.Add(LcdHudTheme.CreateDisplayHeader("PERSONAL SYSTEMS", "EQUIPMENT", "AUX-01", "3 MODULES"));
 
-            var tabRail = new VisualElement { name = "EquipmentAddonTabs" };
-            tabRail.style.flexDirection = FlexDirection.Row;
-            tabRail.style.marginBottom = 5;
-            tabRail.style.flexShrink = 0;
-            tabRail.Add(BuildEquipmentTabButton("ARMOR", EquipmentAddonTab.Armor));
-            tabRail.Add(BuildEquipmentTabButton("JETPACK", EquipmentAddonTab.Jetpack));
-            tabRail.Add(BuildEquipmentTabButton("LIFE", EquipmentAddonTab.LifeSupport));
-            screen.Add(tabRail);
+            var allModules = LcdHudTheme.CaptionLabel("ARMOR  //  JETPACK  //  LIFE SUPPORT");
+            allModules.style.marginLeft = 3;
+            allModules.style.marginBottom = 4;
+            screen.Add(allModules);
 
+            // Thomas asked for the add-on to stay open as one connected console.
+            // A scroll-safe stack keeps every real equipment slot visible without
+            // forcing a tab swap or hiding a drag/drop destination.
             var content = new ScrollView(ScrollViewMode.Vertical) { name = "EquipmentAddonContent" };
             content.style.flexGrow = 1;
             content.style.minHeight = 0;
+            content.style.paddingRight = 2;
             UITheme.StyleScroller(content, LcdHudTheme.Phosphor);
             screen.Add(content);
 
@@ -2481,36 +2481,17 @@ namespace VoxelEngine.UI
             }
             else
             {
-                switch (_equipmentAddonTab)
-                {
-                    case EquipmentAddonTab.Jetpack:
-                        content.Add(BuildJetpackSlotsPanel(equipment));
-                        break;
-                    case EquipmentAddonTab.LifeSupport:
-                        content.Add(BuildLifeSupportSlotsPanel(equipment));
-                        break;
-                    default:
-                        content.Add(BuildArmorAddon(equipment));
-                        break;
-                }
+                content.Add(BuildArmorAddon(equipment));
+                content.Add(BuildJetpackSlotsPanel(equipment));
+                content.Add(BuildLifeSupportSlotsPanel(equipment));
             }
 
             LcdHudTheme.AddScanlines(screen, 8, 48f, 58f);
             return addon;
         }
 
-        private Button BuildEquipmentTabButton(string label, EquipmentAddonTab tab)
-        {
-            bool active = _equipmentAddonTab == tab;
-            var button = LcdHudTheme.CommandButton(label, () =>
-            {
-                _equipmentAddonTab = tab;
-                Refresh();
-            }, LcdHudTheme.Phosphor, active);
-            button.style.flexGrow = 1;
-            button.style.minWidth = 0;
-            return button;
-        }
+
+
 
         private VisualElement BuildArmorAddon(VoxelEngine.Player.PlayerEquipment equipment)
         {

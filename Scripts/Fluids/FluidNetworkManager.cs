@@ -18,6 +18,8 @@ namespace VoxelEngine.Fluids
         private readonly List<FluidNetwork> _networks = new();
         private bool _topologyDirty;
         private float _topologyDirtyAt = -1f;
+        private readonly List<Vector3> _dirtyPositions = new(4);
+        private bool _globalVisualRefresh;
         private const float RebuildSettleDelay = 0.12f;
 
         public static void EnsureInstance()
@@ -34,25 +36,41 @@ namespace VoxelEngine.Fluids
             Instance = this;
         }
 
-        public void Register(FluidNode n)   { if (n != null && _all.Add(n)) MarkDirty(); }
+        public void Register(FluidNode n)
+        {
+            if (n != null && _all.Add(n)) MarkDirty(n.transform.position);
+        }
+
         public void Unregister(FluidNode n)
         {
             if (n == null) return;
+            Vector3 formerPosition = n.transform.position;
             if (_all.Remove(n))
             {
-                n.network = null; n.neighbours?.Clear();
-                MarkDirty();
-                VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged();
+                n.network = null;
+                n.neighbours?.Clear();
+                MarkDirty(formerPosition);
             }
         }
 
         /// <summary>Force a topology rebuild — used by the wrench after blacklist edits.</summary>
         public void SetDirty() => MarkDirty();
+        public void SetDirty(Vector3 changedPosition) => MarkDirty(changedPosition);
 
-        private void MarkDirty()
+        private void MarkDirty(Vector3? position = null)
         {
             if (!_topologyDirty) _topologyDirtyAt = Time.unscaledTime;
             _topologyDirty = true;
+            if (!position.HasValue)
+            {
+                _globalVisualRefresh = true;
+                return;
+            }
+
+            Vector3 p = position.Value;
+            for (int i = 0; i < _dirtyPositions.Count; i++)
+                if ((_dirtyPositions[i] - p).sqrMagnitude < 0.01f) return;
+            _dirtyPositions.Add(p);
         }
 
         private void Update()
@@ -61,7 +79,36 @@ namespace VoxelEngine.Fluids
             if (Time.unscaledTime - _topologyDirtyAt < RebuildSettleDelay) return;
             _topologyDirty = false;
             Rebuild();
-            VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged();
+            if (_globalVisualRefresh || _dirtyPositions.Count == 0)
+                VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged();
+            else
+                for (int i = 0; i < _dirtyPositions.Count; i++)
+                {
+                    Vector3 changed = _dirtyPositions[i];
+                    VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged(changed, ResolveChangedPipeRadius(changed));
+                }
+            _dirtyPositions.Clear();
+            _globalVisualRefresh = false;
+        }
+
+        private float ResolveChangedPipeRadius(Vector3 changedPosition)
+        {
+            float nearestSqr = 0.04f;
+            WaterPipe nearest = null;
+            foreach (var node in _all)
+            {
+                if (node is not WaterPipe pipe) continue;
+                float distance = (pipe.transform.position - changedPosition).sqrMagnitude;
+                if (distance > nearestSqr) continue;
+                nearestSqr = distance;
+                nearest = pipe;
+            }
+            if (nearest == null) return 0f;
+            var block = nearest.GetComponentInParent<GridBlock>();
+            float step = block != null && block.Grid != null
+                ? GridSizeExt.CellSize(GridSize.Small)
+                : VoxelEngine.Networks.PipeAdjacency.DefaultGridSize;
+            return step * 5.15f + 0.25f;
         }
 
         private void Rebuild()
