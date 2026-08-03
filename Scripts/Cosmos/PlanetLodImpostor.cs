@@ -114,6 +114,10 @@ namespace VoxelEngine.Cosmos
             if (meshRenderer == null) meshRenderer = GetComponent<MeshRenderer>();
             if (meshFilter == null)  meshFilter  = gameObject.AddComponent<MeshFilter>();
             if (meshRenderer == null) meshRenderer = gameObject.AddComponent<MeshRenderer>();
+            // LOD is visual only. Remove stale colliders from earlier experimental shells so
+            // a player can never collide with, mine, or become trapped by the far surface.
+            foreach (var collider in GetComponents<Collider>())
+                if (Application.isPlaying) Destroy(collider); else DestroyImmediate(collider);
         }
 
         /// <summary>

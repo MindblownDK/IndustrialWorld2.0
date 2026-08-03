@@ -1,9 +1,57 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.11.3-dev`
+**Current Version:** `7.11.6-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.11.6-dev] Authored Planet Scale & Surface Spawn Repair
+
+**Type:** PATCH — removes the test-radius override and restores authored spherical planet scale; no save/API break.
+
+#### 🌍 Real authored planet radius
+- Removed `CosmosBootstrap.testRadiusKm`; it no longer shrinks every selected planet to a 0.5 km test sphere.
+- Celestial bodies now preserve their authored `PlanetTemplate.body.radiusKm` at runtime. Session seeds use a dedicated runtime override rather than mutating shared template assets or being reset by later bootstrap calls.
+- Added default viewer-to-surface anchoring for real-size planets, keeping the player just above the initial radial surface instead of spawning inside a 6–8 km solid planet.
+- Camera far-clip sizing and bootstrap diagnostics now use the actual generated body centre/radius.
+
+#### ✅ Static delivery checks
+- Source parsing and targeted planet-scale/LOD/water/HUD regression assertions are run locally. Unity compilation and Play Mode validation remain pending from Thomas.
+
+---
+
+### [7.11.5-dev] LOD Interaction Guard & HUD Cleanup
+
+**Type:** PATCH — visual-only LOD hardening and HUD stale-text/inspection cleanup; no save/API break.
+
+#### 🪐 LOD cannot block play
+- `PlanetLodImpostor` and `PlanetOceanLodRenderer` strip stale colliders. The full terrain/ocean LODs are now strictly visual: they cannot be mined, ray-hit as terrain, or trap the player after local voxel terrain is excavated.
+
+#### 🖥 HUD cleanup
+- World inspection now ignores bootstrap, LOD, ocean-LOD, and native-water helper colliders, so the top-left readout never reports `Bootstrap Controller` instead of a real block or voxel.
+- Raised the held-item HUD layout revision and added a document-wide raw-item-id scrub. Legacy labels such as `dirt_item` are removed both on initial mount and selection changes, leaving only the intended **Dirt** display label.
+
+#### ✅ Static delivery checks
+- Source parsing and targeted LOD/HUD/real-water regression assertions are run locally. Unity compilation and Play Mode validation remain pending from Thomas.
+
+---
+
+### [7.11.4-dev] Real Ocean LOD & Seamless Planet Surface
+
+**Type:** PATCH — actual-ocean LOD, wrapped-water removal, and full-surface continuity repair; no save/API break.
+
+#### 🌊 Actual ocean geometry with no gaps
+- Added `PlanetOceanLodRenderer`: a whole-planet ocean mesh sampled from `SphereDensity` that emits triangles **only** above real terrain-defined ocean basins. It is not a global water sphere and cannot appear beneath dry land or inside a mined cave.
+- Ocean LOD uses the same 642 / 2,562 / 10,242 distance budgets as terrain, sits slightly beneath local streamed water, and fills visual seams between water chunks rather than leaving large blue gaps.
+- Disabled every retained procedural wrapped-water patch at runtime and through Step 16 setup. Generated voxel water remains the local gameplay authority for buckets, pumps, swimming, buoyancy, and mining.
+
+#### 🪐 Continuous surface hierarchy
+- The inset terrain LOD now fills every unstreamed region at ground, flight, and orbit while real voxel chunks naturally occlude it near the player. Terrain and ocean therefore share a continuous full-planet LOD hierarchy instead of a square loaded island.
+
+#### ✅ Static delivery checks
+- Source parsing and targeted ocean/terrain LOD, real-water, dirt, mining, oil, and regression assertions are run locally. Unity compilation and Play Mode validation remain pending from Thomas.
+
+---
 
 ### [7.11.3-dev] Real Ocean Basins, Dirt Drops & Surface Continuity
 

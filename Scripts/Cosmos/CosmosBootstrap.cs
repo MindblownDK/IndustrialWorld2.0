@@ -31,13 +31,16 @@ namespace VoxelEngine.Cosmos
                  "If null, auto-loads System_Sol from the project.")]
         public SolarSystemTemplate solarSystemTemplate;
 
-        [Tooltip("Where to place the body's core in world space. Keep it within the camera's far " +
-                 "clip plane so it's visible/reachable. (0,700,400) puts it high above the flat " +
-                 "terrain ceiling (~256m) and in front of the spawn — look up and fly to it.)")]
+        [Tooltip("Fallback body-core position when surface anchoring is disabled.")]
         public Vector3 bodyOrigin = new Vector3(0f, 700f, 400f);
 
         [Tooltip("Player/camera transform that the sphere streams around and gravity follows.")]
         public Transform viewer;
+
+        [Header("Initial Surface Placement")]
+        [Tooltip("Places the viewer just above the authored planet surface at startup. Keep enabled for full-size planets; it replaces the old tiny test-radius workflow.")]
+        public bool placeViewerOnPlanetSurface = true;
+        [Range(0.25f, 5f)] public float initialSurfaceClearance = 1.15f;
 
         [Tooltip("Optional biome registry for accurate biomes + scatter.")]
         public BiomeRegistry biomeRegistry;
@@ -48,9 +51,8 @@ namespace VoxelEngine.Cosmos
         [Tooltip("Terrain material (auto-resolved if null).")]
         public Material terrainMaterial;
 
-        [Header("Tuning (overrides template for fast iteration)")]
-        [Range(0.2f, 6f)] public float testRadiusKm = 0.5f;   // small enough to fly to quickly
-        [Range(3, 16)] public int viewDistance = 8;   // 3D-ball streaming: 5 = ~520 chunks (~62MB), keep modest
+        [Header("Streaming")]
+        [Range(3, 16)] public int viewDistance = 8;   // local editable voxel detail radius; full planet uses LOD outside it
 
         private GameObject _bodyGO;
 
@@ -100,9 +102,17 @@ namespace VoxelEngine.Cosmos
             int spawnIdx = session != null ? Mathf.Clamp(session.spawnPlanetIndex, 0, 99) : 0;
             if (session != null && session.seedState != null)
                 seed = session.seedState.GetSeed(spawnIdx, seed);
-            body.settings.seed = seed;
-            body.settings.radiusKm = testRadiusKm;
+            body.SetRuntimeSeedOverride(seed);
+            // Keep the authored PlanetTemplate radius exactly. Test-radius overrides made the
+            // LOD, ocean basins, gravity, and streaming disagree about the planet's size.
             body.ApplySettings();
+            if (placeViewerOnPlanetSurface && viewer != null)
+            {
+                // A real 6–8 km planet cannot use the old 0.5 km test-core placement.
+                // Anchor the player to the top radial surface instead of spawning them
+                // inside the solid body or using a misleading tiny test radius.
+                _bodyGO.transform.position = viewer.position - Vector3.up * (body.SurfaceRadius + initialSurfaceClearance);
+            }
 
             // ── SphereWorld streamer ── (fields set BEFORE Awake thanks to inactive GO)
             var world = _bodyGO.AddComponent<SphereWorld>();
@@ -144,9 +154,15 @@ namespace VoxelEngine.Cosmos
             lod.body = body;
             lod.viewer = viewer;
             lod.biomeRegistry = biomeRegistry;
-            // The LOD creates its OWN material internally (URP/Unlit with vertex-colour + alpha
-            // support). We deliberately do NOT assign VoxelTerrain here — VoxelTerrain is a custom
-            // Shader Graph that doesn't support alpha fade and renders purple at planet scale.
+
+            // Ocean LOD is a separate mesh generated only over real ocean basins. It fills
+            // distant water without creating a wrapped water sphere in dry caves or on land.
+            var oceanLodGO = new GameObject("OceanLOD");
+            oceanLodGO.transform.SetParent(_bodyGO.transform, false);
+            var oceanLod = oceanLodGO.AddComponent<PlanetOceanLodRenderer>();
+            oceanLod.body = body;
+            oceanLod.viewer = viewer;
+            oceanLod.biomeRegistry = biomeRegistry;
 
             // ── Distant bodies + sparse vacuum starfield ────────────────
             // Needs a CosmicRegistry in the scene to know where the other bodies are.
@@ -197,6 +213,7 @@ namespace VoxelEngine.Cosmos
             world.viewDistance = GraphicsPreset.ViewDistance;
             grass.qualityDensityMul = new float[] { 0f, GraphicsPreset.GrassDensityMul * 0.5f, GraphicsPreset.GrassDensityMul, GraphicsPreset.GrassDensityMul * 1.5f };
             if (lod != null) lod.resolution = GraphicsPreset.LodResolution;
+            if (oceanLod != null) oceanLod.resolution = GraphicsPreset.LodResolution;
             waterfalls.scanRange = GraphicsPreset.WaterfallRange;
             world.maxJobsPerFrame = GraphicsPreset.JobsPerFrame;
 
@@ -228,8 +245,8 @@ namespace VoxelEngine.Cosmos
             // We raise the far clip to comfortably cover bodyOrigin + planet radius + margin.
             EnsureCameraFarClip();
 
-            Debug.Log($"[CosmosBootstrap] Spawned '{body.DisplayName}' at {bodyOrigin}, " +
-                      $"seed {seed}, radius {testRadiusKm} km, radial gravity ACTIVE. " +
+            Debug.Log($"[CosmosBootstrap] Spawned '{body.DisplayName}' at {_bodyGO.transform.position}, " +
+                      $"seed {seed}, radius {body.settings.radiusKm:0.##} km, radial gravity ACTIVE. " +
                       $"Camera far clip raised — look up toward the body and fly to it!");
         }
 
@@ -247,9 +264,11 @@ namespace VoxelEngine.Cosmos
                 cam = FindAnyObjectByType<Camera>();
             }
             if (cam == null) return;
-            float bodyRadiusM = testRadiusKm * 1000f;
+            var body = _bodyGO != null ? _bodyGO.GetComponent<CelestialBody>() : null;
+            float bodyRadiusM = body != null ? body.SurfaceRadius : 1000f;
             // Distance from camera to the far side of the body, plus a generous margin.
-            float needed = Vector3.Distance(cam.transform.position, bodyOrigin) + bodyRadiusM * 2f + 5000f;
+            Vector3 bodyCenter = body != null ? body.transform.position : bodyOrigin;
+            float needed = Vector3.Distance(cam.transform.position, bodyCenter) + bodyRadiusM * 2f + 5000f;
             if (cam.farClipPlane < needed)
             {
                 cam.farClipPlane = needed;

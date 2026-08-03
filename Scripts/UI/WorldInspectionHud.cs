@@ -238,6 +238,7 @@ namespace VoxelEngine.UI
                 if (candidate.collider == null) continue;
                 if (playerRoot != null && candidate.collider.transform.IsChildOf(playerRoot)) continue;
                 if (localPlayer != null && VoxelEngine.Player.PlayerRaycastFilter.IsOwnPlayerCollider(candidate.collider, localPlayer.transform)) continue;
+                if (IsRuntimeSystemCollider(candidate.collider)) continue;
                 // Skip transient rigs: build ghosts, viewmodels, held items.
                 string rootName = candidate.collider.transform.root.name;
                 if (IsTransientRigName(rootName)) continue;
@@ -246,6 +247,20 @@ namespace VoxelEngine.UI
             }
             info = default;
             return false;
+        }
+
+        /// <summary>Never present bootstrap/LOD/helper colliders as inspectable world blocks.</summary>
+        private static bool IsRuntimeSystemCollider(Collider collider)
+        {
+            if (collider == null) return true;
+            string ownName = collider.gameObject.name;
+            string rootName = collider.transform.root != null ? collider.transform.root.name : string.Empty;
+            return ownName.IndexOf("Bootstrap", System.StringComparison.OrdinalIgnoreCase) >= 0
+                || (collider.transform == collider.transform.root
+                    && rootName.IndexOf("Bootstrap", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                || ownName.IndexOf("OceanLOD", System.StringComparison.OrdinalIgnoreCase) >= 0
+                || ownName.IndexOf("PlanetLOD", System.StringComparison.OrdinalIgnoreCase) >= 0
+                || ownName.IndexOf("NativeSphericalWater", System.StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private static bool IsTransientRigName(string rootName)

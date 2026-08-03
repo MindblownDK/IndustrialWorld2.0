@@ -76,6 +76,10 @@ namespace VoxelEngine.Cosmos
                 lod.resolution = GraphicsPreset.LodResolution;
             }
 
+            // Whole-planet ocean LOD uses the same distance budget as terrain LOD.
+            var oceanLod = FindAnyObjectByType<PlanetOceanLodRenderer>();
+            if (oceanLod != null) oceanLod.resolution = GraphicsPreset.LodResolution;
+
             // Waterfall range.
             var waterfalls = FindAnyObjectByType<WaterfallSystem>();
             if (waterfalls != null)

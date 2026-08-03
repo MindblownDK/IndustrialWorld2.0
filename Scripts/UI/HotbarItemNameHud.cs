@@ -14,7 +14,7 @@ namespace VoxelEngine.UI
     {
         private const float ShowSeconds = 2.15f;
         private const float FadeSeconds = 0.38f;
-        private const int LayoutRevision = 3;
+        private const int LayoutRevision = 4;
 
         private static VisualElement _root;
         private static VisualElement _card;
@@ -143,6 +143,7 @@ namespace VoxelEngine.UI
                 _observed = true;
                 _lastIndex = index;
                 _lastItem = item;
+                if (item != null) RemoveLegacyItemIdLabels(item);
             }
             else if (index != _lastIndex || item != _lastItem)
             {
@@ -151,6 +152,7 @@ namespace VoxelEngine.UI
                 if (item != null)
                 {
                     _name.text = item.displayName;
+                    RemoveLegacyItemIdLabels(item);
                     _shownAt = Time.unscaledTime;
                     _card.style.display = DisplayStyle.Flex;
                     _card.style.opacity = 0f;
@@ -175,6 +177,31 @@ namespace VoxelEngine.UI
                     ? 1f - Mathf.Clamp01((age - (ShowSeconds - FadeSeconds)) / FadeSeconds)
                     : 1f;
             _card.style.opacity = opacity;
+        }
+
+        /// <summary>
+        /// Pre-LCD HUD passes sometimes retained an unnamed raw asset-id label across a
+        /// no-domain-reload Play session (for example "dirt_item") behind the display name.
+        /// Remove only raw identifiers for the currently held item; slot counts/keys remain.
+        /// </summary>
+        private static void RemoveLegacyItemIdLabels(ItemDefinition item)
+        {
+            if (item == null || _root == null) return;
+            var documentRoot = _root;
+            while (documentRoot.parent != null) documentRoot = documentRoot.parent;
+            string itemId = item.itemId ?? string.Empty;
+            string assetName = item.name ?? string.Empty;
+            var labels = new System.Collections.Generic.List<Label>();
+            documentRoot.Query<Label>().ForEach(label => labels.Add(label));
+            foreach (var label in labels)
+            {
+                if (label == null || label == _name) continue;
+                string text = label.text ?? string.Empty;
+                bool rawId = (!string.IsNullOrEmpty(itemId) && text.Equals(itemId, System.StringComparison.OrdinalIgnoreCase))
+                    || (!string.IsNullOrEmpty(assetName) && text.Equals(assetName, System.StringComparison.OrdinalIgnoreCase))
+                    || (!string.IsNullOrEmpty(itemId) && text.Equals(itemId + "_item", System.StringComparison.OrdinalIgnoreCase));
+                if (rawId) label.RemoveFromHierarchy();
+            }
         }
 
         private static void Hide()

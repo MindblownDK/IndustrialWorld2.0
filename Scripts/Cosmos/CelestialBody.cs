@@ -36,6 +36,17 @@ namespace VoxelEngine.Cosmos
         /// <summary>Display name of this body (from its settings).</summary>
         public string DisplayName => settings != null ? settings.bodyName : "Body";
 
+        // Session seed is runtime-only. It must never mutate the shared PlanetTemplate asset,
+        // and it must survive repeated ApplySettings calls during bootstrap/streamer startup.
+        [System.NonSerialized] private bool _hasRuntimeSeedOverride;
+        [System.NonSerialized] private int _runtimeSeedOverride;
+
+        public void SetRuntimeSeedOverride(int seed)
+        {
+            _runtimeSeedOverride = seed;
+            _hasRuntimeSeedOverride = true;
+        }
+
         private void Awake()
         {
             ApplySettings();
@@ -48,7 +59,7 @@ namespace VoxelEngine.Cosmos
 
             // Convert designer-facing km radius → world metres. 1000 m/km.
             float radiusM = Mathf.Max(50f, settings.radiusKm * 1000f);
-            genParams.seed                = settings.seed;
+            genParams.seed                = _hasRuntimeSeedOverride ? _runtimeSeedOverride : settings.seed;
             genParams.radiusWorld         = radiusM;
             // Terrain height vs sea level: mean terrain should be SLIGHTLY above sea level so
             // we get a good mix of land (~60%) and ocean (~40%). Too high (+12) = no water;
