@@ -25,8 +25,7 @@ namespace VoxelEngine.Player
             {
                 float seaRadius = world.SeaLevel * VoxelConstants.VOXEL_SIZE;
                 WaterSurfaceY = seaRadius;
-                float playerRadius = transform.position.magnitude;
-                float submerged = seaRadius - playerRadius;
+                float submerged = Mathf.Max(0f, -PlanetWaterUtility.SignedDistanceToSea(transform.position));
 
                 Vector3 up = PlanetWaterUtility.WorldUp(transform.position);
                 var pFeetVoxel  = world.GetVoxelWorld(world.WorldToVoxel(transform.position));

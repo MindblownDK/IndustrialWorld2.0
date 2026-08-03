@@ -44,6 +44,8 @@ namespace VoxelEngine.GridSystem
         private float _orbitYaw;
         private float _orbitPitch;
         private bool  _freeOrbiting;
+        private float _lastAltPressAt = -999f;
+        private const float AltDoublePressSeconds = 0.32f;
         private const float THIRD_PERSON_THRESHOLD = 0.35f;
 
         /// <summary>The cockpit the local player is currently seated in (null if on foot).</summary>
@@ -116,6 +118,10 @@ namespace VoxelEngine.GridSystem
             // Z toggles inertia dampeners (auto-brake to a stop when not thrusting).
             if (GridInput.ZPressed) Grid.DampenersOn = !Grid.DampenersOn;
 
+            // Third-person Alt orbit is persistent. A quick second Alt press returns
+            // the camera to the home/chase position without changing ship controls.
+            HandleThirdPersonOrbitResetShortcut();
+
             // P toggles ALL landing gear on the grid (lock ⇆ unlock).
             if (GridInput.PPressed) ToggleAllLandingGear();
 
@@ -135,17 +141,26 @@ namespace VoxelEngine.GridSystem
             }
             _cameraDistance = Mathf.MoveTowards(_cameraDistance, _targetCameraDistance, zoomSmooth * Time.deltaTime);
 
-            // Camera orbit is only active while Alt is held. When Alt is released, smoothly
-            // return the orbit offset to zero so the camera follows the ship from its default
-            // position while the mouse controls the gyros.
-            if (!GridInput.Alt)
-            {
-                const float ORBIT_RETURN_SPEED = 120f; // degrees per second
-                _orbitYaw   = Mathf.MoveTowardsAngle(_orbitYaw,   0f, ORBIT_RETURN_SPEED * Time.deltaTime);
-                _orbitPitch = Mathf.MoveTowardsAngle(_orbitPitch, 0f, ORBIT_RETURN_SPEED * Time.deltaTime);
-            }
-
+            // Alt is only required while changing the orbit. Once released, retain
+            // the chosen exterior view until the pilot moves it again or double-presses
+            // Alt to return home.
             ApplyCameraMode();
+        }
+
+        private void HandleThirdPersonOrbitResetShortcut()
+        {
+            if (!IsThirdPerson || !GridInput.AltPressed) return;
+            float now = Time.unscaledTime;
+            if (now - _lastAltPressAt <= AltDoublePressSeconds)
+            {
+                _orbitYaw = 0f;
+                _orbitPitch = 0f;
+                _freeOrbiting = false;
+                _lastAltPressAt = -999f;
+                ApplyCameraMode();
+                return;
+            }
+            _lastAltPressAt = now;
         }
 
         private void ReadFlightInput()
@@ -325,6 +340,7 @@ namespace VoxelEngine.GridSystem
             _freeLooking = false;
             _lookYaw = 0f;
             _lookPitch = 0f;
+            _lastAltPressAt = -999f;
         }
 
         private void CaptureDefaultCameraPose(Player.PlayerController player)
@@ -400,6 +416,7 @@ namespace VoxelEngine.GridSystem
             _orbitYaw = 0f;
             _orbitPitch = 0f;
             _freeOrbiting = false;
+            _lastAltPressAt = -999f;
             ApplyCameraMode();
             player.enabled = false;
             // The player uses a CharacterController (not a Rigidbody) — disable it
@@ -487,6 +504,7 @@ namespace VoxelEngine.GridSystem
             _orbitPitch = 0f;
             _freeOrbiting = false;
             _freeLooking = false;
+            _lastAltPressAt = -999f;
             ApplyCameraMode();
 
             // Unparent the player from the grid and drop them beside the cockpit.

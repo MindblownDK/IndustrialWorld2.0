@@ -999,12 +999,16 @@ namespace VoxelEngine.Building
                 pipeVisual.gridSize = GridSize.Small.CellSize();
                 pipeVisual.ForceRebuild();
             }
-            VoxelEngine.Transport.ItemPipeNetwork.Instance?.SetDirty();
-            VoxelEngine.Gas.GasNetwork.Instance?.SetDirty();
-            VoxelEngine.Fluids.FluidNetworkManager.Instance?.SetDirty();
+            Vector3 topologyPosition = block.transform.position;
+            float topologyRadius = pipeVisual != null
+                ? Mathf.Max(0.5f, pipeVisual.gridSize) * 5.15f + 0.25f
+                : 3f;
+            VoxelEngine.Transport.ItemPipeNetwork.Instance?.SetDirty(topologyPosition);
+            VoxelEngine.Gas.GasNetwork.Instance?.SetDirty(topologyPosition);
+            VoxelEngine.Fluids.FluidNetworkManager.Instance?.SetDirty(topologyPosition);
             VoxelEngine.GridSystem.GridLiquidNetwork.Instance?.SetDirty();
             VoxelEngine.GridSystem.GridGasNetwork.Instance?.SetDirty();
-            VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged();
+            VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged(topologyPosition, topologyRadius);
             return block;
         }
 

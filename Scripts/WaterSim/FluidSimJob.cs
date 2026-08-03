@@ -6,11 +6,11 @@
 //
 // Liquids:
 //   • Water (WaterLiquid) — fast, low viscosity, high throughput
-//   • Crude Oil (CrudeOil) — viscous, slow fall, slow spread, sinks through water
+//   • Crude Oil (CrudeOil) — viscous, slow fall, slow spread, floats over water
 //
 // Rules:
 //  1. Gravity: liquid falls down; oil capped at 64/tick vs water 255
-//  2. Oil-water swap: heavy oil sinks through lighter water, one cell per tick
+//  2. Oil remains above water so authored surface puddles stay visible
 //  3. Pressure equalization: horizontal flow from high to low pressure
 //     Viscosity limits transfer step per tick (oil 10, water 48)
 //  4. Micro-cleanup: tiny floating drops (< 3 level) with air below just fall
@@ -102,25 +102,12 @@ namespace VoxelEngine.WaterSim
                 int maxFall = isOil ? OilMaxFall : WaterMaxFall;
                 int hStep   = isOil ? OilHorizontalStep : WaterHorizontalStep;
 
-                // --- Oil sinks through water (density swap) ---
+                // Oil is less dense than water. Do not swap it downward through a
+                // water cell: a reservoir seep must remain a readable surface puddle.
                 int belowI = Pad(x + downX, y + downY, z + downZ, SP);
                 var below = voxels[belowI];
-                if (isOil && IsWater(below) && !below.IsSolid && v.waterLevel > 6)
-                {
-                    byte oilLevel   = v.waterLevel;
-                    byte waterLevel = below.waterLevel;
-                    below.material   = OilMat;
-                    below.waterLevel = oilLevel;
-                    v.material       = WaterMat;
-                    v.waterLevel     = waterLevel;
-                    voxels[belowI]   = below;
-                    voxels[i]        = v;
-                    any = true;
-                    continue;
-                }
 
                 // --- Rule 1: gravity — vertical down-flow ---
-                below = voxels[belowI];
                 if (!below.IsSolid && CanShareCell(below, liquidMat))
                 {
                     int space = 255 - below.waterLevel;

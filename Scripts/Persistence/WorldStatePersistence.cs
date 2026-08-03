@@ -851,6 +851,15 @@ namespace VoxelEngine.Persistence
                 return sc;
             }
 
+            var jackPump = go.GetComponentInChildren<VoxelEngine.Crafting.Pumpjack>();
+            if (jackPump != null)
+            {
+                jackPump.EnsureContainers();
+                var sc = SerializeMulti(jackPump.inputC, jackPump.outputC);
+                AttachPortSnapshot(go, sc);
+                return sc;
+            }
+
             var crusher = go.GetComponentInChildren<VoxelEngine.Simulation.Crusher>();
             if (crusher != null)
                 return SerializeMulti(crusher.inputC, crusher.outputC, crusher.upgradeC);
@@ -914,8 +923,16 @@ namespace VoxelEngine.Persistence
                 return sc;
             }
 
-            // World battery block — persist the device-charger dock contents.
-            // Bulk charge lives on SavedPlacedBlock (batteryCharge fields).
+            // Grid batteries and world batteries both persist their one-item charger
+            // dock through the existing container snapshot; bulk charge remains in
+            // their dedicated saved state fields.
+            var gridBattery = go.GetComponentInChildren<VoxelEngine.GridSystem.GridBattery>(true);
+            if (gridBattery != null)
+            {
+                gridBattery.EnsureContainers();
+                return SerializeContainer(gridBattery.ChargeSlot);
+            }
+
             var powerBattery = go.GetComponentInChildren<VoxelEngine.Power.PowerBattery>();
             if (powerBattery != null)
             {
@@ -1924,6 +1941,14 @@ namespace VoxelEngine.Persistence
                 return;
             }
 
+            var gridBattery = go.GetComponentInChildren<VoxelEngine.GridSystem.GridBattery>(true);
+            if (gridBattery != null)
+            {
+                gridBattery.EnsureContainers();
+                DeserializeInto(gridBattery.ChargeSlot, sc);
+                return;
+            }
+
             var powerBattery = go.GetComponentInChildren<VoxelEngine.Power.PowerBattery>();
             if (powerBattery != null)
             {
@@ -1971,6 +1996,15 @@ namespace VoxelEngine.Persistence
             {
                 efurn.EnsureContainers();
                 DeserializeMulti(sc, efurn.inputC, efurn.outputC, efurn.upgradeC);
+                RestorePortSnapshot(go, sc);
+                return;
+            }
+
+            var jackPump = go.GetComponentInChildren<VoxelEngine.Crafting.Pumpjack>();
+            if (jackPump != null)
+            {
+                jackPump.EnsureContainers();
+                DeserializeMulti(sc, jackPump.inputC, jackPump.outputC);
                 RestorePortSnapshot(go, sc);
                 return;
             }

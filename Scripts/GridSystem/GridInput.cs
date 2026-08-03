@@ -76,6 +76,16 @@ namespace VoxelEngine.GridSystem
 #endif
         }
 
+        /// <summary>True only on the frame either Alt key is pressed.</summary>
+        public static bool AltPressed
+        {
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
+            get => Keyboard.current != null && (Keyboard.current.leftAltKey.wasPressedThisFrame || Keyboard.current.rightAltKey.wasPressedThisFrame);
+#else
+            get => Input.GetKeyDown(KeyCode.LeftAlt) || Input.GetKeyDown(KeyCode.RightAlt);
+#endif
+        }
+
         public static bool Q
         {
 #if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM

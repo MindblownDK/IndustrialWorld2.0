@@ -883,6 +883,52 @@ namespace VoxelEngine.UI
         // ════════════════════════════════════════════════════════════
         //                      BIOFARM (11.5)
         // ════════════════════════════════════════════════════════════
+        public static VisualElement JackPumpPanel(VoxelEngine.Crafting.Pumpjack jackPump, SlotBuilder slot)
+        {
+            if (jackPump == null) return T.MachinePanel();
+            jackPump.EnsureContainers();
+            string status = !jackPump.IsOnline ? "NO POWER"
+                : !jackPump.HasReservoir ? "NO PIRATE NODE"
+                : jackPump.IsPumping ? "PUMPING" : "READY";
+            Color statusColor = !jackPump.IsOnline || !jackPump.HasReservoir ? T.AccentRed
+                : jackPump.IsPumping ? T.AccentGreen : T.AccentAmber;
+
+            var panel = T.MachinePanel();
+            panel.Add(BuildHeader("⚙", "Jack Pump", status, statusColor, T.AccentAmber));
+            panel.Add(T.AccentDivider(T.AccentAmber));
+            panel.Add(T.StatRow("◉", "Node", jackPump.HasReservoir ? "INFINITE PIRATE OIL" : "Place on rare Pirate oil node", jackPump.HasReservoir ? T.AccentGreen : T.TextMuted));
+            panel.Add(T.StatRow("⚡", "Power Draw", PowerFormat.Watts(jackPump.CurrentWattage), T.AccentAmber));
+            panel.Add(T.StatRow("◷", "Cycle", $"{jackPump.secondsPerCycle:0}s / barrel", T.AccentCyan));
+            panel.Add(T.Spacer(5));
+
+            var row = new VisualElement();
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.FlexStart;
+            row.style.justifyContent = Justify.SpaceAround;
+            panel.Add(row);
+
+            var input = new VisualElement();
+            input.style.alignItems = Align.Center;
+            input.Add(T.Subtitle("Empty Barrel"));
+            var inputGrid = T.SlotGrid(1);
+            inputGrid.Add(slot(jackPump.inputC, 0, jackPump.inputC.GetSlot(0), false, true));
+            input.Add(inputGrid);
+            row.Add(input);
+
+            var output = new VisualElement();
+            output.style.alignItems = Align.Center;
+            output.Add(T.Subtitle("Crude Oil Output"));
+            var outputGrid = T.SlotGrid(2);
+            for (int i = 0; i < jackPump.outputC.Size; i++)
+                outputGrid.Add(slot(jackPump.outputC, i, jackPump.outputC.GetSlot(i), false, true));
+            output.Add(outputGrid);
+            row.Add(output);
+
+            panel.Add(T.Spacer(6));
+            panel.Add(T.Muted("Requires Pirate Oil Recovery research and a Jack Pump Head recovered only from Pirate ruins. The rare node never depletes, but the pump draws heavy power."));
+            return panel;
+        }
+
         public static VisualElement BiofarmPanel(VoxelEngine.Building.Biofarm bf, SlotBuilder slot)
         {
             bf.EnsureContainers();

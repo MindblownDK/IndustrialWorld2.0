@@ -1,25 +1,15 @@
 // Assets/Scripts/VoxelEngine/Crafting/Pumpjack.cs
 //
-// Powered surface-mounted oil extractor.
-//
-// Behaviour:
-//   * Scans the FluidGrid below itself (in a small column) for CrudeOil voxels.
-//   * Every cycle, "lifts" one voxel of oil and produces a Crude Oil Barrel
-//     item into its output slot, consuming one Empty Barrel from its input.
-//   * Stops cycling when there is no nearby crude-oil voxel left, no Empty
-//     Barrel input, or the output slot is full.
-//   * Pulls baseWattsPerSecond while pumping, idleWattsPerSecond otherwise.
-//
-// Designed to be lightweight: no fluid pipes required for crude oil — the
-// Refinery consumes Crude Oil BARRELS, so item pipes / chests / manual
-// shuttling are the only logistics needed in early-mid game.
+// Pirate World Jack Pump. It can only run over a rare, infinite oil node
+// generated on the Pirate spherical planet. The node is not depleted: the
+// expensive pump turns Empty Barrels into Crude Oil Barrels while drawing heavy power.
 
 using System.Collections.Generic;
 using UnityEngine;
 using VoxelEngine.Building;
 using VoxelEngine.Core;
+using VoxelEngine.Cosmos;
 using VoxelEngine.Items;
-using VoxelEngine.Materials;
 using VoxelEngine.Power;
 using VoxelEngine.Transport;
 
@@ -36,43 +26,92 @@ namespace VoxelEngine.Crafting
         [Tooltip("Crude Oil Barrel item produced each cycle.")]
         public ItemDefinition crudeOilBarrel;
 
-        [Header("Tuning")]
-        [Tooltip("Seconds per pump cycle at 1x speed.")]
-        public float secondsPerCycle = 8f;
-        [Tooltip("Watts/s drawn while pumping.")]
-        public float baseWattsPerSecond = 250f;
-        [Tooltip("Watts/s drawn while idle.")]
-        public float idleWattsPerSecond = 10f;
-        [Tooltip("How far down to scan for crude-oil voxels.")]
-        public int   scanDepth = 24;
-        [Tooltip("Horizontal scan radius (in voxels).")]
-        public int   scanRadius = 2;
+        [Header("Infinite Pirate Oil Node")]
+        [Tooltip("Seconds per barrel from a rare Pirate World oil node.")]
+        public float secondsPerCycle = 14f;
+        [Tooltip("Heavy active draw in watts while lifting infinite node oil.")]
+        public float baseWattsPerSecond = 4000f;
+        [Tooltip("Standby draw in watts while connected but not pumping.")]
+        public float idleWattsPerSecond = 120f;
+        [Header("Legacy Compatibility")]
+        [Tooltip("Retained for existing prefab/save compatibility. Infinite eligibility now uses the explicit Pirate oil-node marker.")]
+        public int scanDepth = 120;
+        [Tooltip("Retained for existing prefab/save compatibility. Infinite eligibility now uses the explicit Pirate oil-node marker.")]
+        public int scanRadius = 3;
 
         [Header("Containers (auto-created)")]
-        public ItemContainer inputC;  // 1 slot — Empty Barrel
-        public ItemContainer outputC; // 1 slot — Crude Oil Barrel
+        public ItemContainer inputC;
+        public ItemContainer outputC;
 
-        // Runtime
         private PowerConsumer _power;
         private float _progress;
+        private Transform _walkingBeam;
+        private Transform _crankWheel;
+        private Transform _polishedRod;
+        private Quaternion _beamRestRotation;
+        private Vector3 _rodRestPosition;
+        private float _mechanismPhase;
 
-        public float Progress01     => Mathf.Clamp01(_progress / Mathf.Max(0.1f, secondsPerCycle));
-        public bool  IsOnline       => _power != null && _power.IsPowered;
-        public bool  HasReservoir   { get; private set; }
+        public float Progress01 => Mathf.Clamp01(_progress / Mathf.Max(0.1f, secondsPerCycle));
+        public bool IsOnline => _power != null && _power.IsPowered;
+        public bool HasReservoir { get; private set; }
         public float CurrentWattage { get; private set; }
+        public bool IsPumping => IsOnline && HasReservoir && _progress > 0f;
 
         private void Awake()
         {
+            // Repair the original low-cost Pumpjack defaults on already placed
+            // legacy instances while leaving any deliberately custom tuning intact.
+            if (Mathf.Approximately(secondsPerCycle, 8f)
+                && Mathf.Approximately(baseWattsPerSecond, 250f)
+                && Mathf.Approximately(idleWattsPerSecond, 10f))
+            {
+                secondsPerCycle = 14f;
+                baseWattsPerSecond = 4000f;
+                idleWattsPerSecond = 120f;
+                scanDepth = Mathf.Max(scanDepth, 120);
+                scanRadius = Mathf.Max(scanRadius, 3);
+            }
+
             EnsureContainers();
             _power = GetComponent<PowerConsumer>();
             if (_power == null) _power = gameObject.AddComponent<PowerConsumer>();
-            _power.connectRadius = 1.8f;
+            _power.connectRadius = 2.2f;
+            CacheMechanism();
         }
 
         public void EnsureContainers()
         {
-            if (inputC  == null) inputC  = new ItemContainer("Empty Barrels",     1); else inputC.Resize(1);
-            if (outputC == null) outputC = new ItemContainer("Crude Oil Barrels", 1); else outputC.Resize(1);
+            if (inputC == null) inputC = new ItemContainer("Empty Barrels", 1); else inputC.Resize(1);
+            if (outputC == null) outputC = new ItemContainer("Crude Oil Output", 2); else outputC.Resize(2);
+        }
+
+        private void CacheMechanism()
+        {
+            _walkingBeam = transform.Find("JackPumpVisuals/WalkingBeam");
+            _crankWheel = transform.Find("JackPumpVisuals/CrankWheel");
+            _polishedRod = transform.Find("JackPumpVisuals/PolishedRod");
+            if (_walkingBeam != null) _beamRestRotation = _walkingBeam.localRotation;
+            if (_polishedRod != null) _rodRestPosition = _polishedRod.localPosition;
+        }
+
+        private void AnimateMechanism(bool pumping)
+        {
+            if (!pumping)
+            {
+                if (_walkingBeam != null) _walkingBeam.localRotation = Quaternion.Slerp(_walkingBeam.localRotation, _beamRestRotation, Time.deltaTime * 3f);
+                if (_polishedRod != null) _polishedRod.localPosition = Vector3.Lerp(_polishedRod.localPosition, _rodRestPosition, Time.deltaTime * 3f);
+                return;
+            }
+
+            _mechanismPhase += Time.deltaTime * Mathf.PI * 2f / Mathf.Max(0.6f, secondsPerCycle * 0.18f);
+            float stroke = Mathf.Sin(_mechanismPhase);
+            if (_walkingBeam != null)
+                _walkingBeam.localRotation = _beamRestRotation * Quaternion.Euler(0f, 0f, stroke * 10f);
+            if (_crankWheel != null)
+                _crankWheel.localRotation = Quaternion.Euler(0f, _mechanismPhase * Mathf.Rad2Deg, 90f);
+            if (_polishedRod != null)
+                _polishedRod.localPosition = _rodRestPosition + Vector3.down * ((stroke + 1f) * 0.20f);
         }
 
         // ── IItemPortHost ───────────────────────────────────────────────────
@@ -97,15 +136,14 @@ namespace VoxelEngine.Crafting
         {
             EnsureContainers();
             _portContainers ??= new ItemPortContainer[2];
-            _portContainers[0] = new ItemPortContainer("Empty Barrels",     inputC,  canInput: true,  canOutput: false);
-            _portContainers[1] = new ItemPortContainer("Crude Oil Barrels", outputC, canInput: false, canOutput: true);
+            _portContainers[0] = new ItemPortContainer("Empty Barrels", inputC, canInput: true, canOutput: false);
+            _portContainers[1] = new ItemPortContainer("Crude Oil Output", outputC, canInput: false, canOutput: true);
             return _portContainers;
         }
 
         private void Update()
         {
             EnsureContainers();
-
             bool active = CanRun();
             CurrentWattage = active ? baseWattsPerSecond : idleWattsPerSecond;
             if (_power != null) _power.wattsPerSecond = CurrentWattage;
@@ -113,10 +151,12 @@ namespace VoxelEngine.Crafting
             if (!IsOnline || !active)
             {
                 _progress = 0f;
+                AnimateMechanism(false);
                 return;
             }
 
             _progress += Time.deltaTime;
+            AnimateMechanism(true);
             if (_progress >= secondsPerCycle)
             {
                 _progress = 0f;
@@ -126,55 +166,38 @@ namespace VoxelEngine.Crafting
 
         private bool CanRun()
         {
+            // Resolve the node first so the UI can distinguish "no node" from
+            // "node present but no empty barrels / output space".
+            HasReservoir = FindInfinitePirateOil(out _);
+            if (!HasReservoir) return false;
             if (emptyBarrel == null || crudeOilBarrel == null) return false;
             if (inputC.CountOf(emptyBarrel) <= 0) return false;
             if (!outputC.HasSpace(crudeOilBarrel, 1)) return false;
-            HasReservoir = FindOilVoxel(out _);
-            return HasReservoir;
+            return true;
         }
 
-        private bool FindOilVoxel(out Vector3Int worldPos)
+        private bool FindInfinitePirateOil(out Vector3Int oilVoxel)
         {
-            worldPos = default;
-            var world = VoxelEngine.Core.ActiveWorld.Current;
-            if (world == null) return false;
+            oilVoxel = default;
+            if (ActiveWorld.Current is not SphereWorld sphere || sphere.body == null || sphere.body.settings == null
+                || !sphere.body.settings.CanGenerateInfiniteJackPumpNodes) return false;
 
-            Vector3Int origin = Vector3Int.FloorToInt(transform.position);
-            for (int dy = 1; dy <= scanDepth; dy++)
-            for (int dx = -scanRadius; dx <= scanRadius; dx++)
-            for (int dz = -scanRadius; dz <= scanRadius; dz++)
-            {
-                var p = new Vector3Int(origin.x + dx, origin.y - dy, origin.z + dz);
-                var v = world.GetVoxelWorld(p);
-                if (v.material == (byte)MaterialId.CrudeOil)
-                {
-                    worldPos = p;
-                    return true;
-                }
-            }
-            return false;
+            // A visible crude puddle alone is a finite seep. The Jack Pump must require the
+            // explicit rare-node identity, otherwise it could turn every ordinary oil site
+            // into an unintended infinite source.
+            if (!VoxelEngine.Generation.PirateOilNode.IsPumpableNear(sphere, transform.position))
+                return false;
+
+            oilVoxel = sphere.WorldToVoxel(transform.position);
+            return true;
         }
 
         private void PumpOneBarrel()
         {
-            if (!FindOilVoxel(out var oilPos)) return;
-
-            // Replace the voxel with air so the reservoir actually depletes.
-            var world = VoxelEngine.Core.ActiveWorld.Current;
-            if (world != null)
-            {
-                try
-                {
-                    var v = world.GetVoxelWorld(oilPos);
-                    v.material   = (byte)MaterialId.Air;
-                    v.density    = -127;     // mark as empty so meshing skips it
-                    v.waterLevel = 0;
-                    world.SetVoxelWorld(oilPos, v, remesh: true);
-                }
-                catch { /* best-effort drain — never break the pump on exceptions */ }
-            }
-
-            inputC.Remove(emptyBarrel, 1);
+            // Infinite node: never drain the crude voxel. The rare site, head-gated
+            // construction cost, slow cycle, and 4 kW draw are the balance levers.
+            if (!FindInfinitePirateOil(out _)) return;
+            if (inputC.Remove(emptyBarrel, 1) <= 0) return;
             outputC.Insert(new ItemStack(crudeOilBarrel, 1));
         }
     }

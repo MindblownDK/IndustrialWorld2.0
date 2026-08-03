@@ -129,6 +129,16 @@ namespace VoxelEngine.Fluids
 
             var world = VoxelEngine.Core.ActiveWorld.Current;
             if (world == null) return;
+
+            // Finite crude seeps on any oil-rich body remain normal liquid-pump sources.
+            // A rare marked Pirate node is deliberately exclusive to the head-gated Jack Pump;
+            // do not let generic pool-size inference bypass that progression gate.
+            if (liquidType == LiquidType.CrudeOil && world is VoxelEngine.Cosmos.SphereWorld sphere
+                && sphere.body != null && sphere.body.settings != null
+                && sphere.body.settings.CanGenerateInfiniteJackPumpNodes
+                && VoxelEngine.Generation.PirateOilNode.IsPumpableNear(sphere, transform.position, Mathf.Max(1f, reach)))
+                return;
+
             FluidManager.EnsureInstance();
 
             Vector3Int origin = world.WorldToVoxel(transform.position + Vector3.down * 0.5f);

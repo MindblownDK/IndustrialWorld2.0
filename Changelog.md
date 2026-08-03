@@ -1,9 +1,151 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.9.1-dev`
+**Current Version:** `7.10.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.10.2-dev] Oil-Rich Seep Distribution & Pirate-Only Infinite Nodes
+
+**Type:** PATCH — resource-distribution correction and strict infinite-node scoping; no save/API break.
+
+#### 🛢 Finite crude where planetary geology supports it
+- Split ordinary finite crude-oil seep generation from rare infinite Jack Pump nodes. Finite sites now use setup-authored per-world permissions rather than inheriting Pirate World’s restriction.
+- Setup configures finite, drainable seep fields on **Earth** (8%), **Ocean World** (10%), **Acid World** (6%), **Desolate World** (5%), and **Pirate World** (12%). Each remains the visible puddle → bore → reservoir feature and can be collected with normal liquid handling.
+- Worlds outside that intentional oil-rich list continue to filter crude markers and receive no finite seep sites, preserving their own resource identity.
+
+#### ⚙ Infinite extraction locked to Planet_Pirate
+- Hardened the infinite-node authorization path: after setup migration, only the canonical `Planet_Pirate` asset receives the internal infinite-node identity, even if another world shares a similar display name or a copied serialized flag.
+- `PirateOilNode`, Jack Pump eligibility, and generic-pump protection all now enforce that same canonical Pirate-only gate. Every non-Pirate oil seep is finite.
+
+#### 🛠 Setup-owned migration
+- Step 10 — **Build Industrial Content** and Step 21 — **Build Celestial Worlds** now author/repair the full finite-oil distribution and the Pirate-only infinite flag non-destructively.
+- The first migration applies intended default rates while later setup runs preserve deliberate custom finite-seep rates on custom worlds.
+
+#### ✅ Static delivery checks
+- Source parsing and targeted regression assertions are run locally. Unity compilation and Play Mode validation remain pending from Thomas.
+
+---
+
+### [7.10.1-dev] Pirate Crude Site Discovery Repair
+
+**Type:** PATCH — generation reliability, migration, and progression-gate correction; no save/API break.
+
+#### 🛢 Discoverable Pirate crude oil
+- Reworked Pirate oil-site placement to be deterministic from real spherical surface cells instead of relying on one randomly encountered underground crude marker. Pirate World now produces visible **finite** crude seeps reliably: a dark surface puddle, radial bore, and compact reservoir.
+- Kept rare infinite sites as the much lower-frequency **0.3% per geological cell** subset (migrating the previous 2.5% default). They retain the larger puddle → bore → deep-reservoir read and register the infinite runtime identity required by a Jack Pump.
+- Existing streamed/saved spherical chunks are now checked safely as they load, so the repair can populate compatible Pirate terrain without requiring a fresh save. Deferred site construction waits for the needed streamed terrain instead of giving up while surface chunks are unavailable.
+
+#### 🔒 Pirate-only and progression-safe
+- Added a setup-owned finite-seep chance, strict exact **Pirate World** identity check, and a legacy configuration bridge. Old `Planet_Pirate` assets no longer silently lose crude oil just because their newly added serialized flag has not yet been written; all non-Pirate planets remain blocked.
+- Jack Pumps now require the explicit rare-node marker rather than any visible crude fluid, so ordinary finite seeps cannot become accidental infinite sources.
+- Generic liquid pumps decline marked infinite-node crude, preserving the relic-gated Jack Pump as the only infinite extraction route.
+
+#### 🛠 Setup and diagnostics
+- Step 10 — **Build Industrial Content** repairs/serializes Pirate World oil settings non-destructively; Step 21 also preserves that configuration when celestial templates are rebuilt.
+- Added concise runtime diagnostics for Pirate oil configuration and the first created sites to make Unity feedback actionable.
+
+#### ✅ Static delivery checks
+- Source parsing and targeted regression assertions are run locally. Unity compilation and Play Mode validation remain pending from Thomas.
+
+---
+
+### [7.10.0-dev] Pirate Infinite Oil Nodes & Jack Pump Industry
+
+**Type:** MINOR — new save-compatible Pirate World resource system, relic-gated industrial block, recipe, and research progression.
+
+#### 🛢 Pirate World infinite oil nodes
+- Added `BodySettings.enableInfiniteOilNodes` and a low node-chance setting. Setup configures **Pirate World** as the sole owner; all other spherical bodies filter crude-oil markers from their generated ore layers.
+- Pirate oil sites are very rare, deterministic geological nodes: visible puddle, radial bore, deep reservoir, and an infinite runtime node identity.
+- The node remains pumpable even when visible crude fluid has been disturbed, while the site itself remains geographically rare and Pirate-only.
+
+#### ⚙ Jack Pump block and high-power production
+- Upgraded the existing Pumpjack content into the **Jack Pump**: a realistic walking-beam prefab with motor, gearbox, crank wheel, counterweight, derrick, polished rod, wellhead, manifold, and animated pumping motion.
+- Jack Pumps consume Empty Barrels and emit Crude Oil Barrels from a two-slot output; they only run over a rare Pirate infinite-oil node.
+- Active draw is **4 kW**, standby draw is **120 W**, and each barrel takes **14 seconds**, making node extraction a serious industrial power commitment.
+- Added a dedicated Jack Pump UI, live node/power/cycle readout, item-port containers, player interaction opening, and save/restore for input/output inventories.
+
+#### ☠ Pirate relic progression
+- Added the uncraftable **Pirate Jack Pump Head** component. It is added only to the rare-loot roll of Pirate ruin chests (18% per chest roll), never to any crafting recipe or other world loot table.
+- Added the expensive 90-second Assembler recipe: 30 Steel Plates, 20 Iron Gears, 12 Copper Plates, 8 Electronic Circuits, 4 Advanced Circuits, and 1 Pirate Jack Pump Head.
+- Added **Pirate Oil Recovery** research (Tier 4), which unlocks the Jack Pump recipe after Oil Logistics and Advanced Manufacturing. Standard Oil Logistics now unlocks barrels only.
+
+#### 🛠 Setup-owned authoring
+- Step 10 of **Tools > Voxel Engine > Voxel Engine Setup** now creates/repairs the Jack Pump item/prefab/recipe/research, configures Pirate World, and patches existing Pirate ruin prefab loot non-destructively.
+- Step 20 also writes the rare head into newly rebuilt Pirate ruins.
+
+#### ✅ Static delivery checks
+- Revised source parses cleanly locally. Unity compilation and Play Mode validation remain pending from Thomas.
+
+---
+
+### [7.9.4-dev] Spherical Oil Sites & Correct Planet Water FX
+
+**Type:** PATCH — spherical-world generation and water-state corrections; no save schema or public API break.
+
+#### 🛢 Spherical oil generation only
+- Bound `OilReservoirDecorator` to `SphereWorld`; the inactive flat-world generation path no longer owns oil-site decoration.
+- Removed the additional reservoir rarity gate and scans every real solid crude-oil marker, restoring actual site creation instead of leaving planets without oil.
+- Oil sites now remain structured as a visible surface puddle, narrow radial bore, and deep reservoir. Crude oil now stays above water rather than swapping downward through it, so a surface puddle remains readable.
+
+#### 🌊 No false underwater effect around a planet
+- Corrected spherical water distance calculations to use the active celestial body’s local frame instead of raw scene-origin magnitude.
+- Underwater camera FX now requires a real liquid voxel at the camera/head; it no longer activates merely because a player is inside a mathematical sea-radius shell on a mountain, dry coast, or far side of an offset planet.
+- Corrected related player swim depth, water LOD, depth sampling, and oil visual anchor calculations to use world-to-body-local conversion.
+
+#### ✅ Static delivery checks
+- Revised source parses cleanly locally. Unity compilation and Play Mode validation remain pending from Thomas.
+
+---
+
+### [7.9.3-dev] Oil Reservoir Generation & Cockpit Compile Recovery
+
+**Type:** PATCH — compile recovery and world-generation correction; no save schema or public API break.
+
+#### 🛢 Purpose-built oil sites
+- Removed the spherical-world underwater crude-noise branch that created random oil patches throughout water volume.
+- Rebuilt `OilReservoirDecorator` around one coherent site: a shallow exposed oil puddle, a narrow radial/vertical bore, and a deep filled reservoir sourced from real crude-oil ore markers.
+- Surface probing now follows ocean water to the true water/air boundary instead of mistaking the sea floor or an unloaded chunk boundary for the surface.
+- Added bounded deferred retries for deep marker chunks that finish before their streamed surface chunks, plus targeted fluid/terrain remesh scheduling for the completed feature.
+
+#### 🧰 Immediate compile correction
+- Restored the missing public `GridEntity.PilotDampenerHoldActive` state consumed by the revised dampener controller and Flight Computer HUD.
+- This resolves the reported `CS0103` / `CS1061` errors in `GridEntity` and `GridPilotHud`.
+
+#### ✅ Static delivery checks
+- Revised C# source parses cleanly locally. Unity compilation and Play Mode validation remain pending from Thomas.
+
+---
+
+### [7.9.2-dev] Cockpit Hold, Grid Battery Charging & Ship Control LCD
+
+**Type:** PATCH — interaction, performance, cockpit-control, and visual fixes; existing saves and public APIs remain compatible.
+
+#### 🔋 Grid Battery field charging restored
+- Added the Grid Battery’s one-item **Device Charger** dock for Portable Batteries and power-fed jetpacks, including live dock telemetry in both the direct battery panel and Ship Control Center.
+- Restored direct field charging: hold a rechargeable item and RMB a Grid Battery for a normal charge; **Shift + RMB** fills it as far as stored grid energy allows.
+- The dock uses the existing container-save path, so a docked rechargeable item survives grid save/load without a save-schema break.
+
+#### 🚀 Controlled-flight correction
+- Cockpit dampeners now actively hold a seated craft at full **0 velocity** when there is no translation input, including the gravity axis on a planet and drift in space.
+- Flight Computer altitude now samples the rigidbody’s physical centre directly rather than smoothing an old transform sample; it adds a readable km/m formatter plus signed vertical-speed telemetry.
+- Third-person Alt orbit now remains at the released view. Double-press Alt to return to the home chase position; Alt still moves the view without steering the ship.
+- Refined the Flight Computer with a fitted header, battery screen, vertical-speed readout, and explicit dampener `HOLDING` state.
+
+#### ⚙ Placement and pipe-cost hardening
+- A selected placeable block now owns RMB before any world/grid UI interaction, so trying to build onto a battery, machine, screen, terminal, or other UI block places (or cleanly refuses) the block instead of opening the UI behind it.
+- Replaced broad pipe visual invalidation with exact changed-corridor dispatch, a one-rebuild frame budget, hash-gated forced rebuilds, and targeted ItemPipe endpoint scans. Dense runs no longer rescan/rebuild every pipe after each edit.
+
+#### 📟 Inventory and Ship Control follow-up
+- Kept Armor, Jetpack Bay, and Life Support open together in the inventory’s attached equipment console; its content scrolls instead of requiring tab swaps.
+- Reduced the inventory command key to a single fitting `CRAFTING` label.
+- Rebuilt the Ship Control Center as an inventory-style LCD console: chassis, inset display, grid-operations header, command keys, status cells, phosphor list matrix, and matching detail readout.
+- Hardened the held-item readout cleanup across the entire UI document and removed its prefixed hotbar-slot number.
+
+#### ✅ Static delivery checks
+- Revised source parses cleanly and targeted structural/regression checks pass locally. Unity/Play Mode validation remains pending from Thomas; no runtime validation is claimed here.
+
+---
 
 ### [7.9.1-dev] Inventory Terminal & Premium LCD Workstations
 

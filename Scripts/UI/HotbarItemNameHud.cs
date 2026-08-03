@@ -14,13 +14,12 @@ namespace VoxelEngine.UI
     {
         private const float ShowSeconds = 2.15f;
         private const float FadeSeconds = 0.38f;
-        private const int LayoutRevision = 2;
+        private const int LayoutRevision = 3;
 
         private static VisualElement _root;
         private static VisualElement _card;
         private static VisualElement _bezel;
         private static Label _name;
-        private static Label _slot;
         private static int _lastIndex = -1;
         private static ItemDefinition _lastItem;
         private static bool _observed;
@@ -35,12 +34,10 @@ namespace VoxelEngine.UI
 
             _root = uiRoot;
             if (_card != null) _card.RemoveFromHierarchy();
-            // Domain-reload-disabled play sessions can retain the prior HUD hierarchy
-            // while static fields are recreated. Clear every legacy card by name so the
-            // old plain item text can never sit behind the new LCD readout.
-            VisualElement stale;
-            while ((stale = uiRoot.Q<VisualElement>("HotbarItemNameHud")) != null)
-                stale.RemoveFromHierarchy();
+            // Domain-reload-disabled play sessions may retain an older readout under
+            // a previous UI layer. Scrub the complete document tree, not only the
+            // current HUD layer, before mounting our one authoritative readout.
+            RemoveStaleReadouts(uiRoot);
             _mountedRevision = LayoutRevision;
 
             _card = new VisualElement { name = "HotbarItemNameHud" };
@@ -66,24 +63,9 @@ namespace VoxelEngine.UI
             LcdHudTheme.ApplyChassis(_bezel, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.95f), 2f);
             _card.Add(_bezel);
 
-            _slot = new Label("1");
-            _slot.style.width = 25;
-            _slot.style.height = 30;
-            _slot.style.marginRight = 5;
-            _slot.style.fontSize = 11;
-            _slot.style.letterSpacing = 0.5f;
-            _slot.style.unityTextAlign = TextAnchor.MiddleCenter;
-            _slot.style.unityFontStyleAndWeight = FontStyle.Bold;
-            _slot.style.color = new StyleColor(LcdHudTheme.Phosphor);
-            _slot.style.backgroundColor = new StyleColor(LcdHudTheme.GlassDark);
-            _slot.pickingMode = PickingMode.Ignore;
-            UITheme.Radius(_slot, 1f);
-            UITheme.Border(_slot, 1f, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.9f));
-            _bezel.Add(_slot);
-
             var screen = new VisualElement { name = "HeldItemLcdScreen" };
-            screen.style.minWidth = 190;
-            screen.style.maxWidth = 420;
+            screen.style.minWidth = 220;
+            screen.style.maxWidth = 440;
             screen.style.height = 30;
             screen.style.paddingLeft = 8;
             screen.style.paddingRight = 8;
@@ -99,7 +81,7 @@ namespace VoxelEngine.UI
             caption.style.top = 3;
             screen.Add(caption);
 
-            _name = new Label();
+            _name = new Label { name = "HeldItemLcdName" };
             _name.style.position = Position.Absolute;
             _name.style.left = 8;
             _name.style.right = 8;
@@ -113,6 +95,33 @@ namespace VoxelEngine.UI
             _name.style.textOverflow = TextOverflow.Ellipsis;
             _name.pickingMode = PickingMode.Ignore;
             screen.Add(_name);
+        }
+
+        private static void RemoveStaleReadouts(VisualElement uiRoot)
+        {
+            if (uiRoot == null) return;
+            var documentRoot = uiRoot;
+            while (documentRoot.parent != null) documentRoot = documentRoot.parent;
+
+            // Names used by the old plain readout and the first LCD pass. Removing
+            // their parent cards guarantees a legacy label cannot sit behind the new
+            // name even when a UI document survives a no-domain-reload Play session.
+            string[] staleNames =
+            {
+                "HotbarItemNameHud",
+                "HotbarItemName",
+                "HotbarItemReadout",
+                "HotbarItemNameReadout",
+                "HeldItemNameHud",
+                "HeldItemReadout",
+                "HeldItemLcdBezel"
+            };
+            for (int i = 0; i < staleNames.Length; i++)
+            {
+                VisualElement stale;
+                while ((stale = documentRoot.Q<VisualElement>(staleNames[i])) != null)
+                    stale.RemoveFromHierarchy();
+            }
         }
 
         public static void Tick(Inventory inventory)
@@ -141,7 +150,6 @@ namespace VoxelEngine.UI
                 _lastItem = item;
                 if (item != null)
                 {
-                    _slot.text = index == 9 ? "0" : (index + 1).ToString();
                     _name.text = item.displayName;
                     _shownAt = Time.unscaledTime;
                     _card.style.display = DisplayStyle.Flex;

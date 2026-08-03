@@ -312,13 +312,10 @@ namespace VoxelEngine.Cosmos
             {
                 if (radius <= prm.seaRadius)
                 {
-                    float oilNoise = noise.snoise(worldPos * 0.02f + SeedOffset(prm.seed, 4));
-                    if (oilNoise > 0.65f && radius < prm.seaRadius - 10f)
-                    {
-                        return new Voxel(-5, (byte)MaterialId.CrudeOil, 255);
-                    }
-                    var v = new Voxel(-5, (byte)MaterialId.WaterLiquid, 255);
-                    return v;
+                    // Ocean volume is always water. Crude oil is authored by
+                    // OilReservoirDecorator as one coherent surface puddle + bore +
+                    // underground reservoir, never as random submerged noise patches.
+                    return new Voxel(-5, (byte)MaterialId.WaterLiquid, 255);
                 }
                 return new Voxel((sbyte)math.clamp(density, -127f, -1f), (byte)MaterialId.Air, 0);
             }

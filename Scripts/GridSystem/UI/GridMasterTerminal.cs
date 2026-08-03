@@ -81,57 +81,69 @@ namespace VoxelEngine.GridSystem.UI
             var blocks = GetSortedTerminalBlocks(grid);
             CleanState(state, blocks);
 
-            var win = new VisualElement();
+            var win = new VisualElement { name = "ShipControlCenterChassis" };
             win.style.flexGrow = 1;
             win.style.height = new StyleLength(new Length(100, LengthUnit.Percent));
             win.style.flexDirection = FlexDirection.Column;
-            win.style.backgroundColor = new StyleColor(new Color(0.06f, 0.07f, 0.10f, 1f));
-            T.Border(win, 1, T.BorderDim);
-            T.Radius(win, 8);
-            win.style.paddingTop = 12;
-            win.style.paddingBottom = 12;
-            win.style.paddingLeft = 14;
-            win.style.paddingRight = 14;
+            win.style.paddingTop = 6;
+            win.style.paddingBottom = 6;
+            win.style.paddingLeft = 6;
+            win.style.paddingRight = 6;
+            win.style.overflow = Overflow.Hidden;
+            LcdHudTheme.ApplyChassis(win, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.98f), 2f);
 
             // Right-side terminal. Keeps a readable width on big screens and hugs the right edge.
             win.style.maxWidth = 1280;
             win.style.alignSelf = Align.FlexEnd;
             win.style.width = new StyleLength(new Length(100, LengthUnit.Percent));
 
-            var title = new VisualElement();
-            title.style.flexDirection = FlexDirection.Row;
-            title.style.alignItems = Align.Center;
-            title.style.flexShrink = 0;
-            title.style.marginBottom = 6;
-            var t = T.Title("SHIP CONTROL TERMINAL");
-            t.style.flexGrow = 1;
-            title.Add(t);
-            title.Add(T.SmallButton("All ON", () => SetAllEnabled(grid, true), T.AccentGreen));
-            title.Add(T.SmallButton("All OFF", () => SetAllEnabled(grid, false), T.AccentAmber));
-            title.Add(T.SmallButton("Close", () => onClose?.Invoke(), T.AccentRed));
-            win.Add(title);
+            var display = new VisualElement { name = "ShipControlCenterDisplay" };
+            display.style.flexDirection = FlexDirection.Column;
+            display.style.flexGrow = 1;
+            display.style.minHeight = 0;
+            display.style.paddingTop = 6;
+            display.style.paddingBottom = 6;
+            display.style.paddingLeft = 6;
+            display.style.paddingRight = 6;
+            display.style.overflow = Overflow.Hidden;
+            LcdHudTheme.ApplyScreen(display, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.92f), 1f);
+            win.Add(display);
 
-            var div = T.AccentDivider(T.AccentCyan);
-            div.style.flexShrink = 0;
-            win.Add(div);
+            display.Add(LcdHudTheme.CreateDisplayHeader("GRID OPERATIONS", "SHIP CONTROL", "SCC-01", "ONLINE"));
+
+            var commands = new VisualElement { name = "ShipControlCommands" };
+            commands.style.flexDirection = FlexDirection.Row;
+            commands.style.flexWrap = Wrap.Wrap;
+            commands.style.marginBottom = 5;
+            commands.style.paddingTop = 4;
+            commands.style.paddingBottom = 2;
+            commands.style.paddingLeft = 4;
+            commands.style.paddingRight = 4;
+            LcdHudTheme.ApplyDataCard(commands, LcdHudTheme.Bezel);
+            commands.Add(LcdHudTheme.CommandButton("ALL ON", () => SetAllEnabled(grid, true), LcdHudTheme.Phosphor));
+            commands.Add(LcdHudTheme.CommandButton("ALL OFF", () => SetAllEnabled(grid, false), T.AccentAmber));
+            commands.Add(LcdHudTheme.CommandButton("CLOSE", () => onClose?.Invoke(), T.AccentRed));
+            display.Add(commands);
 
             if (grid != null)
-                win.Add(BuildStatusStrip(grid, state));
+                display.Add(BuildStatusStrip(grid, state));
 
-            var body = new VisualElement();
+            var body = new VisualElement { name = "ShipControlWorkArea" };
             body.style.flexDirection = FlexDirection.Row;
             body.style.flexGrow = 1;
             body.style.minHeight = 0;
+            display.Add(body);
 
             body.Add(BuildBlockList(state, blocks, tab, onSelectTab));
             body.Add(BuildContent(grid, state, blocks, tab, slot));
-            win.Add(body);
 
             if (grid != null && state.showPowerUsage)
-                win.Add(BuildPowerUsagePopup(grid, state));
+                display.Add(BuildPowerUsagePopup(grid, state));
 
+            LcdHudTheme.AddScanlines(display, 10, 50f, 58f);
             return win;
         }
+
 
         private static List<GridBlock> GetSortedTerminalBlocks(GridEntity grid)
         {
@@ -172,12 +184,16 @@ namespace VoxelEngine.GridSystem.UI
         {
             int blockCount = grid.BlockCount;
             float speed = grid.Body != null ? grid.Body.linearVelocity.magnitude : 0f;
-            var strip = new VisualElement();
+            var strip = new VisualElement { name = "ShipControlStatusStrip" };
             strip.style.flexDirection = FlexDirection.Row;
             strip.style.flexWrap = Wrap.Wrap;
             strip.style.flexShrink = 0;
-            strip.style.marginTop = 6;
             strip.style.marginBottom = 6;
+            strip.style.paddingTop = 4;
+            strip.style.paddingBottom = 4;
+            strip.style.paddingLeft = 5;
+            strip.style.paddingRight = 5;
+            LcdHudTheme.ApplyDataCard(strip, LcdHudTheme.Bezel);
             strip.Add(Stat("MASS", MassFormat.Format(grid.TotalMass), T.AccentCyan));
             strip.Add(Stat("POWER", PowerFormat.Watts(grid.PowerBalance), grid.PowerBalance >= 0 ? T.AccentGreen : T.AccentRed));
             strip.Add(Stat("GEN", PowerFormat.Watts(grid.PowerGenerated), T.AccentGreen));
@@ -196,14 +212,13 @@ namespace VoxelEngine.GridSystem.UI
         private static VisualElement BuildPowerUsagePopup(GridEntity grid, TerminalState state)
         {
             var pop = T.Card();
+            LcdHudTheme.ApplyDataCard(pop, T.AccentAmber);
             pop.style.position = Position.Absolute;
             pop.style.top = 78;
             pop.style.right = 24;
             pop.style.width = 430;
             pop.style.maxHeight = new StyleLength(new Length(60, LengthUnit.Percent));
-            pop.style.backgroundColor = new StyleColor(new Color(0.045f, 0.05f, 0.075f, 0.98f));
             pop.style.flexShrink = 0;
-            T.Border(pop, 1, T.AccentAmber);
 
             var header = new VisualElement();
             header.style.flexDirection = FlexDirection.Row;
@@ -211,7 +226,7 @@ namespace VoxelEngine.GridSystem.UI
             var title = T.Subtitle("CURRENT POWER USAGE");
             title.style.flexGrow = 1;
             header.Add(title);
-            header.Add(T.SmallButton("Close", () => { state.showPowerUsage = false; RefreshTerminal(); }, T.AccentRed));
+            header.Add(TerminalButton("Close", () => { state.showPowerUsage = false; RefreshTerminal(); }, T.AccentRed));
             pop.Add(header);
             pop.Add(T.AccentDivider(T.AccentAmber));
 
@@ -265,10 +280,9 @@ namespace VoxelEngine.GridSystem.UI
             var col = new VisualElement();
             col.style.width = 340;
             col.style.flexShrink = 0;
-            col.style.marginRight = 10;
-            col.style.backgroundColor = new StyleColor(new Color(0.09f, 0.10f, 0.14f, 1f));
-            T.Border(col, 1, T.BorderDim);
-            T.Radius(col, 6);
+            col.style.marginRight = 6;
+            col.style.minHeight = 0;
+            LcdHudTheme.ApplyScreen(col, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.86f), 1f);
             col.style.paddingTop = 6;
             col.style.paddingBottom = 6;
             col.style.paddingLeft = 6;
@@ -278,18 +292,19 @@ namespace VoxelEngine.GridSystem.UI
             header.style.flexDirection = FlexDirection.Row;
             header.style.alignItems = Align.Center;
             header.style.marginBottom = 4;
-            var lbl = new Label($"BLOCKS ({blocks.Count})");
-            lbl.style.fontSize = 10;
+            var lbl = new Label($"BLOCK INDEX  //  {blocks.Count:00}");
+            lbl.style.fontSize = 9;
+            lbl.style.letterSpacing = 0.75f;
             lbl.style.unityFontStyleAndWeight = FontStyle.Bold;
-            lbl.style.color = new StyleColor(new Color(0.55f, 0.6f, 0.68f));
+            lbl.style.color = new StyleColor(LcdHudTheme.Phosphor);
             lbl.style.flexGrow = 1;
             header.Add(lbl);
-            header.Add(T.SmallButton(state.showDataTypes ? "Hide Types" : "Show Types", () =>
+            header.Add(TerminalButton(state.showDataTypes ? "Hide Types" : "Show Types", () =>
             {
                 state.showDataTypes = !state.showDataTypes;
                 RefreshTerminal();
             }, state.showDataTypes ? T.AccentCyan : T.AccentDim));
-            header.Add(T.SmallButton(state.showHidden ? "Hide Hidden" : "Show Hidden", () =>
+            header.Add(TerminalButton(state.showHidden ? "Hide Hidden" : "Show Hidden", () =>
             {
                 state.showHidden = !state.showHidden;
                 RefreshTerminal();
@@ -297,8 +312,8 @@ namespace VoxelEngine.GridSystem.UI
             col.Add(header);
 
             var search = new TextField { value = state.searchQuery ?? string.Empty };
-            search.style.minHeight = 26;
             search.style.marginBottom = 6;
+            LcdHudTheme.ApplySearchField(search);
             search.tooltip = "Search by block name, type, status, or category.";
             search.RegisterValueChangedCallback(e =>
             {
@@ -313,7 +328,7 @@ namespace VoxelEngine.GridSystem.UI
                 col.Add(BuildSelectionTools(state));
 
             var list = new ScrollView();
-            VoxelEngine.UI.UITheme.StyleScroller(list);   // themed slim scrollbar
+            VoxelEngine.UI.UITheme.StyleScroller(list, LcdHudTheme.Phosphor);   // phosphor slim scrollbar
             list.style.flexGrow = 1;
             list.style.minHeight = 0;
             PersistScroll(list, "blocklist");
@@ -396,8 +411,8 @@ namespace VoxelEngine.GridSystem.UI
                 label.style.color = new StyleColor(hiddenFromScreenConfig ? T.AccentAmber : T.TextSecondary);
                 row.Add(label);
 
-                row.Add(T.SmallButton("Show", () => SetCategorySourceVisible(state, category, true), hiddenFromScreenConfig ? T.BgSlot : T.AccentGreen));
-                row.Add(T.SmallButton("Hide", () => SetCategorySourceVisible(state, category, false), hiddenFromScreenConfig ? T.AccentAmber : T.BgSlot));
+                row.Add(TerminalButton("Show", () => SetCategorySourceVisible(state, category, true), hiddenFromScreenConfig ? T.BgSlot : T.AccentGreen));
+                row.Add(TerminalButton("Hide", () => SetCategorySourceVisible(state, category, false), hiddenFromScreenConfig ? T.AccentAmber : T.BgSlot));
                 box.Add(row);
             }
 
@@ -446,10 +461,10 @@ namespace VoxelEngine.GridSystem.UI
             var row1 = new VisualElement();
             row1.style.flexDirection = FlexDirection.Row;
             row1.style.flexWrap = Wrap.Wrap;
-            row1.Add(T.SmallButton("Create Group", () => CreateGroup(state), T.AccentGreen));
-            row1.Add(T.SmallButton("Hide Selected", () => HideSelected(state), T.AccentAmber));
-            row1.Add(T.SmallButton("Unhide Selected", () => UnhideSelected(state), T.AccentCyan));
-            row1.Add(T.SmallButton("Clear", () => { state.selected.Clear(); RefreshTerminal(); }, T.AccentDim));
+            row1.Add(TerminalButton("Create Group", () => CreateGroup(state), T.AccentGreen));
+            row1.Add(TerminalButton("Hide Selected", () => HideSelected(state), T.AccentAmber));
+            row1.Add(TerminalButton("Unhide Selected", () => UnhideSelected(state), T.AccentCyan));
+            row1.Add(TerminalButton("Clear", () => { state.selected.Clear(); RefreshTerminal(); }, T.AccentDim));
             box.Add(row1);
 
             var hint = T.Muted("Click = select/open. Shift-click selects a range. Ctrl-click adds/removes one block.");
@@ -499,18 +514,18 @@ namespace VoxelEngine.GridSystem.UI
             T.Border(open, 0, Color.clear);
             row.Add(open);
 
-            row.Add(T.SmallButton("Select", () =>
+            row.Add(TerminalButton("Select", () =>
             {
                 state.selected.Clear();
                 foreach (var b in group.blocks) state.selected.Add(b);
                 RefreshTerminal();
             }, T.AccentCyan));
-            row.Add(T.SmallButton(group.hidden ? "Show" : "Hide", () =>
+            row.Add(TerminalButton(group.hidden ? "Show" : "Hide", () =>
             {
                 group.hidden = !group.hidden;
                 RefreshTerminal();
             }, group.hidden ? T.AccentGreen : T.AccentAmber));
-            row.Add(T.SmallButton("Delete", () =>
+            row.Add(TerminalButton("Delete", () =>
             {
                 state.groups.Remove(group);
                 RefreshTerminal();
@@ -550,19 +565,19 @@ namespace VoxelEngine.GridSystem.UI
             button.style.textOverflow = TextOverflow.Ellipsis;
             button.style.overflow = Overflow.Hidden;
             button.style.backgroundColor = new StyleColor(active
-                ? new Color(0.18f, 0.72f, 0.88f, 0.30f)
+                ? new Color(LcdHudTheme.Phosphor.r, LcdHudTheme.Phosphor.g, LcdHudTheme.Phosphor.b, 0.16f)
                 : selected
-                    ? new Color(0.18f, 0.42f, 0.48f, 0.45f)
+                    ? LcdHudTheme.Glass
                     : hidden
-                        ? new Color(0.12f, 0.11f, 0.09f, 1f)
-                        : new Color(0.13f, 0.15f, 0.20f, 1f));
-            button.style.color = new StyleColor(active
-                ? T.AccentCyan
-                : selected
-                    ? Color.white
-                    : hidden
-                        ? T.AccentAmber
-                        : off ? new Color(0.5f, 0.5f, 0.55f) : new Color(0.84f, 0.88f, 0.93f));
+                        ? new Color(T.AccentAmber.r, T.AccentAmber.g, T.AccentAmber.b, 0.08f)
+                        : LcdHudTheme.GlassDark);
+            button.style.color = new StyleColor(active || selected
+                ? LcdHudTheme.Phosphor
+                : hidden
+                    ? T.AccentAmber
+                    : off ? LcdHudTheme.PhosphorDim : LcdHudTheme.Caption);
+            T.Radius(button, 1f);
+            T.Border(button, 1f, active ? LcdHudTheme.Phosphor : LcdHudTheme.Bezel);
             return button;
         }
 
@@ -581,9 +596,11 @@ namespace VoxelEngine.GridSystem.UI
             b.style.textOverflow = TextOverflow.Ellipsis;
             b.style.overflow = Overflow.Hidden;
             b.style.backgroundColor = new StyleColor(active
-                ? new Color(0.18f, 0.72f, 0.88f, 0.30f)
-                : new Color(0.13f, 0.15f, 0.20f, 1f));
-            b.style.color = new StyleColor(active ? T.AccentCyan : (textColor ?? new Color(0.84f, 0.88f, 0.93f)));
+                ? new Color(LcdHudTheme.Phosphor.r, LcdHudTheme.Phosphor.g, LcdHudTheme.Phosphor.b, 0.16f)
+                : LcdHudTheme.GlassDark);
+            b.style.color = new StyleColor(active ? LcdHudTheme.Phosphor : (textColor ?? LcdHudTheme.Caption));
+            T.Radius(b, 1f);
+            T.Border(b, 1f, active ? LcdHudTheme.Phosphor : LcdHudTheme.Bezel);
             return b;
         }
 
@@ -681,11 +698,16 @@ namespace VoxelEngine.GridSystem.UI
         private static VisualElement BuildContent(GridEntity grid, TerminalState state, List<GridBlock> blocks,
             int tab, MachineUIs.SlotBuilder slot)
         {
-            var wrap = new ScrollView(ScrollViewMode.Vertical);
-            VoxelEngine.UI.UITheme.StyleScroller(wrap);   // themed slim scrollbar
+            var wrap = new ScrollView(ScrollViewMode.Vertical) { name = "ShipControlReadout" };
+            VoxelEngine.UI.UITheme.StyleScroller(wrap, LcdHudTheme.Phosphor);   // phosphor slim scrollbar
             wrap.style.flexGrow = 1;
             wrap.style.minHeight = 0;
             wrap.style.minWidth = 0;
+            wrap.style.paddingTop = 6;
+            wrap.style.paddingBottom = 6;
+            wrap.style.paddingLeft = 6;
+            wrap.style.paddingRight = 6;
+            LcdHudTheme.ApplyScreen(wrap, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.86f), 1f);
             PersistScroll(wrap, "content_" + tab);
 
             if (IsGroupTab(tab))
@@ -709,7 +731,7 @@ namespace VoxelEngine.GridSystem.UI
                     bar.style.flexDirection = FlexDirection.Row;
                     bar.style.alignItems = Align.Center;
                     bar.style.marginBottom = 6;
-                    var toggleBtn = T.SmallButton(block.Enabled ? "Turn OFF" : "Turn ON", () =>
+                    var toggleBtn = TerminalButton(block.Enabled ? "Turn OFF" : "Turn ON", () =>
                     {
                         block.Enabled = !block.Enabled;
                         RefreshTerminal();
@@ -740,8 +762,8 @@ namespace VoxelEngine.GridSystem.UI
                     typeLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
                     typeLabel.style.color = new StyleColor(typeHidden ? T.AccentAmber : T.TextSecondary);
                     typeBar.Add(typeLabel);
-                    typeBar.Add(T.SmallButton("TYPE SHOW", () => SetCategorySourceVisible(state, dataType, true), typeHidden ? T.BgSlot : T.AccentGreen));
-                    typeBar.Add(T.SmallButton("TYPE HIDE", () => SetCategorySourceVisible(state, dataType, false), typeHidden ? T.AccentAmber : T.BgSlot));
+                    typeBar.Add(TerminalButton("TYPE SHOW", () => SetCategorySourceVisible(state, dataType, true), typeHidden ? T.BgSlot : T.AccentGreen));
+                    typeBar.Add(TerminalButton("TYPE HIDE", () => SetCategorySourceVisible(state, dataType, false), typeHidden ? T.AccentAmber : T.BgSlot));
                     wrap.Add(typeBar);
                 }
 
@@ -753,7 +775,7 @@ namespace VoxelEngine.GridSystem.UI
                     screenBar.style.alignItems = Align.Center;
                     screenBar.style.marginBottom = 8;
 
-                    var configBtn = T.SmallButton("CONFIGURE SCREEN", () =>
+                    var configBtn = TerminalButton("CONFIGURE SCREEN", () =>
                     {
                         VoxelEngine.GridSystem.UI.GridScreenConfigUI.Instance?.OpenForScreen(screenBlock);
                     }, T.AccentCyan);
@@ -784,10 +806,12 @@ namespace VoxelEngine.GridSystem.UI
         private static VisualElement BuildBlockHeader(GridBlock block)
         {
             var box = T.Card();
+            LcdHudTheme.ApplyDataCard(box, LcdHudTheme.Bezel);
             box.style.maxWidth = 760;
             box.style.marginBottom = 8;
             box.Add(T.Subtitle("BLOCK NAME"));
             var name = new TextField { value = block.blockName };
+            LcdHudTheme.ApplySearchField(name);
             name.tooltip = "Rename this block in the terminal list and groups.";
             name.RegisterValueChangedCallback(e =>
             {
@@ -809,6 +833,7 @@ namespace VoxelEngine.GridSystem.UI
             panel.style.maxWidth = maxWidth;
             panel.style.flexGrow = 0;
             panel.style.alignSelf = Align.FlexStart;
+            LcdHudTheme.ApplyScreen(panel, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.86f), 1f);
         }
 
         private static VisualElement BuildGroupPage(TerminalState state, BlockGroup group)
@@ -837,12 +862,12 @@ namespace VoxelEngine.GridSystem.UI
             var groupActions = new VisualElement();
             groupActions.style.flexDirection = FlexDirection.Row;
             groupActions.style.flexWrap = Wrap.Wrap;
-            groupActions.Add(T.SmallButton(group.hidden ? "Show Group" : "Hide Group", () =>
+            groupActions.Add(TerminalButton(group.hidden ? "Show Group" : "Hide Group", () =>
             {
                 group.hidden = !group.hidden;
                 RefreshTerminal();
             }, group.hidden ? T.AccentGreen : T.AccentAmber));
-            groupActions.Add(T.SmallButton("Delete Group", () =>
+            groupActions.Add(TerminalButton("Delete Group", () =>
             {
                 state.groups.Remove(group);
                 RefreshTerminal();
@@ -888,28 +913,28 @@ namespace VoxelEngine.GridSystem.UI
             foreach (var b in blocks) if (HasToggle(b)) { togglable = true; break; }
             if (togglable)
             {
-                row.Add(T.SmallButton("All ON", () => { foreach (var b in blocks) if (HasToggle(b)) b.Enabled = true; RefreshTerminal(); }, T.AccentGreen));
-                row.Add(T.SmallButton("All OFF", () => { foreach (var b in blocks) if (HasToggle(b)) b.Enabled = false; RefreshTerminal(); }, T.AccentRed));
+                row.Add(TerminalButton("All ON", () => { foreach (var b in blocks) if (HasToggle(b)) b.Enabled = true; RefreshTerminal(); }, T.AccentGreen));
+                row.Add(TerminalButton("All OFF", () => { foreach (var b in blocks) if (HasToggle(b)) b.Enabled = false; RefreshTerminal(); }, T.AccentRed));
             }
 
             if (blocks[0] is GridBattery)
             {
-                row.Add(T.SmallButton("Auto", () => SetBatteryMode(blocks, GridBatteryMode.Auto), T.AccentGreen));
-                row.Add(T.SmallButton("Recharge", () => SetBatteryMode(blocks, GridBatteryMode.Recharge), T.AccentCyan));
-                row.Add(T.SmallButton("Discharge", () => SetBatteryMode(blocks, GridBatteryMode.Discharge), T.AccentAmber));
+                row.Add(TerminalButton("Auto", () => SetBatteryMode(blocks, GridBatteryMode.Auto), T.AccentGreen));
+                row.Add(TerminalButton("Recharge", () => SetBatteryMode(blocks, GridBatteryMode.Recharge), T.AccentCyan));
+                row.Add(TerminalButton("Discharge", () => SetBatteryMode(blocks, GridBatteryMode.Discharge), T.AccentAmber));
             }
             else if (blocks[0] is GridLiquidTank || blocks[0] is GridGasTank)
             {
-                row.Add(T.SmallButton("Auto", () => SetTankMode(blocks, GridTankMode.Auto), T.AccentGreen));
-                row.Add(T.SmallButton("Stockpile", () => SetTankMode(blocks, GridTankMode.Stockpile), T.AccentAmber));
+                row.Add(TerminalButton("Auto", () => SetTankMode(blocks, GridTankMode.Auto), T.AccentGreen));
+                row.Add(TerminalButton("Stockpile", () => SetTankMode(blocks, GridTankMode.Stockpile), T.AccentAmber));
             }
 
             if (HasLedStrips(blocks))
             {
-                row.Add(T.SmallButton("Sync FX", () => SyncLedEffects(blocks), T.AccentCyan));
-                row.Add(T.SmallButton("Chase", () => SetLedMode(blocks, VoxelEngine.Simulation.LEDMode.Chase), T.AccentTeal));
-                row.Add(T.SmallButton("Pulse", () => SetLedMode(blocks, VoxelEngine.Simulation.LEDMode.Pulse), T.AccentCyan));
-                row.Add(T.SmallButton("Static", () => SetLedMode(blocks, VoxelEngine.Simulation.LEDMode.Static), T.AccentGreen));
+                row.Add(TerminalButton("Sync FX", () => SyncLedEffects(blocks), T.AccentCyan));
+                row.Add(TerminalButton("Chase", () => SetLedMode(blocks, VoxelEngine.Simulation.LEDMode.Chase), T.AccentTeal));
+                row.Add(TerminalButton("Pulse", () => SetLedMode(blocks, VoxelEngine.Simulation.LEDMode.Pulse), T.AccentCyan));
+                row.Add(TerminalButton("Static", () => SetLedMode(blocks, VoxelEngine.Simulation.LEDMode.Static), T.AccentGreen));
             }
 
             return row;
@@ -1182,6 +1207,11 @@ namespace VoxelEngine.GridSystem.UI
                 && value.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
+        private static Button TerminalButton(string text, Action onClick, Color signal, bool active = false)
+        {
+            return LcdHudTheme.CommandButton(text, onClick, signal, active);
+        }
+
         private static void SetAllEnabled(GridEntity grid, bool on)
         {
             if (grid == null) return;
@@ -1194,20 +1224,24 @@ namespace VoxelEngine.GridSystem.UI
         {
             var box = onClick == null ? new VisualElement() : new Button(() => onClick());
             box.style.flexDirection = FlexDirection.Column;
-            box.style.marginRight = 16;
-            box.style.minWidth = 70;
+            box.style.marginRight = 4;
+            box.style.marginBottom = 2;
+            box.style.minWidth = 72;
+            box.style.paddingTop = 3;
+            box.style.paddingBottom = 3;
+            box.style.paddingLeft = 5;
+            box.style.paddingRight = 5;
+            LcdHudTheme.ApplyDataCard(box, c);
             if (onClick != null)
             {
-                box.style.paddingLeft = 0;
-                box.style.paddingRight = 0;
-                box.style.backgroundColor = new StyleColor(new Color(0, 0, 0, 0));
-                T.Border(box, 0, Color.clear);
+                box.style.paddingLeft = 5;
+                box.style.paddingRight = 5;
             }
             var l = new Label(label);
             l.style.fontSize = 8;
             l.style.letterSpacing = 1f;
             l.style.unityFontStyleAndWeight = FontStyle.Bold;
-            l.style.color = new StyleColor(new Color(0.5f, 0.55f, 0.62f));
+            l.style.color = new StyleColor(LcdHudTheme.Caption);
             box.Add(l);
             var v = new Label(value);
             v.style.fontSize = 14;

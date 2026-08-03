@@ -197,7 +197,20 @@ namespace VoxelEngine.Cosmos
             // Ore + biome data come straight from the body (two-tier ores + climate filtering).
             var oreArr = body.BuildOreLayers();
             _ores = new NativeArray<OreLayer>(oreArr.Length, Allocator.Persistent);
-            for (int i = 0; i < oreArr.Length; i++) _ores[i] = oreArr[i];
+            int crudeOilLayers = 0;
+            for (int i = 0; i < oreArr.Length; i++)
+            {
+                _ores[i] = oreArr[i];
+                if (oreArr[i].material == MaterialId.CrudeOil) crudeOilLayers++;
+            }
+            if (body.settings != null && body.settings.CanGenerateFiniteCrudeOilSeeps)
+            {
+                string infiniteStatus = body.settings.CanGenerateInfiniteJackPumpNodes
+                    ? $"rare Jack Pump chance {body.settings.ResolveInfiniteOilNodeChance():P1} per geological cell"
+                    : "no infinite Jack Pump nodes";
+                Debug.Log($"[SphereWorld] Crude oil ready on '{body.DisplayName}': {crudeOilLayers} crude layer(s), " +
+                          $"finite seep chance {body.settings.ResolveCrudeOilSiteChance():P0}, {infiniteStatus}.");
+            }
 
             var biomeArr = body.BuildBiomeData(biomeRegistry);
             _biomes = new NativeArray<BiomeData>(biomeArr.Length, Allocator.Persistent);
@@ -214,6 +227,7 @@ namespace VoxelEngine.Cosmos
 
         private void OnDestroy()
         {
+            VoxelEngine.Generation.OilReservoirDecorator.ForgetWorld(this);
             foreach (var p in _pendingGen) p.handle.Complete();
             foreach (var p in _pendingMesh) DisposePendingMesh(p, complete: true);
             _pendingGen.Clear(); _pendingMesh.Clear();
@@ -247,6 +261,7 @@ namespace VoxelEngine.Cosmos
             DispatchGenerationJobs();
             DispatchMeshingJobs();
             CompleteFinishedJobs();
+            VoxelEngine.Generation.OilReservoirDecorator.Tick(this);
             
             // Re-enabled WaterMeshBuilder for Spheres
             VoxelEngine.WaterSim.WaterMeshBuilder.Pump(4);
@@ -378,8 +393,12 @@ namespace VoxelEngine.Cosmos
                 if (_storage != null && _storage.TryLoadChunk(chunk.coord, chunk))
                 {
                     chunk.isGenerated = true; chunk.isModified = false; chunk.isScattered = false;
+                    // Re-evaluate deterministic oil-rich-body seeps after loading old chunks too.
+                    // This safely retrofits worlds saved before the 7.10 oil-site fields existed.
+                    VoxelEngine.Generation.OilReservoirDecorator.Decorate(chunk, this);
+                    VoxelEngine.WaterSim.WaterMeshBuilder.Schedule(chunk);
                     // No stitching — save data includes the full padded array.
-                    _meshQueue.Enqueue(chunk);
+                    if (!_meshQueue.Contains(chunk)) _meshQueue.Enqueue(chunk);
                     continue;
                 }
 

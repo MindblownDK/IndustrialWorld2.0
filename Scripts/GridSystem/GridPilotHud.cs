@@ -18,11 +18,11 @@ namespace VoxelEngine.GridSystem
         private static VisualElement _container;
         private static GridCockpit _cachedCockpit;
         private static float _cockpitSearchTimer;
-        private static Label _speedLabel, _altLabel, _environmentLabel, _gravityGLabel, _gravityDetailLabel, _gravityReferenceLabel, _trajectoryStatusLabel, _trajectorySpeedLabel, _trajectoryApsisLabel, _powerLabel, _h2Label, _dampLabel, _batteryValueLabel, _offlineLabel;
+        private static Label _speedLabel, _altLabel, _verticalSpeedLabel, _environmentLabel, _gravityGLabel, _gravityDetailLabel, _gravityReferenceLabel, _trajectoryStatusLabel, _trajectorySpeedLabel, _trajectoryApsisLabel, _powerLabel, _h2Label, _dampLabel, _batteryValueLabel, _offlineLabel;
         private static VisualElement _gravityModule, _gravityLcdBezel, _trajectoryModule, _trajectoryLcdBezel, _powerFill, _h2Fill, _batteryGaugeFill;
         private static VisualElement[] _gravitySegments;
         private static float _smoothSpeed, _smoothAlt, _smoothPower;
-        private const int LayoutRevision = 10;
+        private const int LayoutRevision = 11;
         private const int GravitySegmentCount = 8;
         private static readonly Color GravityLcdGlass = new(0.105f, 0.125f, 0.075f, 0.98f);
         private static readonly Color GravityLcdFrame = new(0.31f, 0.37f, 0.21f, 0.88f);
@@ -167,7 +167,7 @@ namespace VoxelEngine.GridSystem
             _container.style.position = Position.Absolute;
             _container.style.left = 18;
             _container.style.bottom = 18;
-            _container.style.width = 278;
+            _container.style.width = 302;
             _container.style.paddingTop = 8;
             _container.style.paddingBottom = 8;
             _container.style.paddingLeft = 8;
@@ -177,34 +177,16 @@ namespace VoxelEngine.GridSystem
             LcdHudTheme.ApplyChassis(_container, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.96f), 3f);
             uiRoot.Add(_container);
 
-            var titleRow = new VisualElement { name = "FlightComputerHeader" };
-            titleRow.style.flexDirection = FlexDirection.Row;
-            titleRow.style.alignItems = Align.Center;
+            var titleRow = LcdHudTheme.CreateDisplayHeader("GRID NAVIGATION", "FLIGHT COMPUTER", "FC-01", "LIVE");
+            titleRow.name = "FlightComputerHeader";
             titleRow.style.marginBottom = 5;
-            titleRow.pickingMode = PickingMode.Ignore;
             _container.Add(titleRow);
-
-            var title = new Label("FLIGHT COMPUTER");
-            title.style.flexGrow = 1;
-            title.style.fontSize = 9;
-            title.style.letterSpacing = 1.25f;
-            title.style.unityFontStyleAndWeight = FontStyle.Bold;
-            title.style.color = new StyleColor(T.TextSecondary);
-            title.pickingMode = PickingMode.Ignore;
-            titleRow.Add(title);
-
-            var unit = new Label("FC-01");
-            unit.style.fontSize = 7;
-            unit.style.letterSpacing = 0.7f;
-            unit.style.unityFontStyleAndWeight = FontStyle.Bold;
-            unit.style.color = new StyleColor(T.TextMuted);
-            unit.pickingMode = PickingMode.Ignore;
-            titleRow.Add(unit);
 
             _container.Add(BuildPrimaryFlightScreen());
             _container.Add(BuildGravityModule());
             _container.Add(BuildTrajectoryModule());
             _container.Add(BuildResourceScreen());
+            _container.Add(BuildBatteryGauge());
             _container.Add(BuildDampenerScreen());
         }
 
@@ -250,10 +232,10 @@ namespace VoxelEngine.GridSystem
             values.Add(divider);
 
             var altitudeColumn = new VisualElement();
-            altitudeColumn.style.width = 86;
+            altitudeColumn.style.width = 112;
             altitudeColumn.pickingMode = PickingMode.Ignore;
             values.Add(altitudeColumn);
-            var altitudeCaption = LcdHudTheme.CaptionLabel("ALTITUDE");
+            var altitudeCaption = LcdHudTheme.CaptionLabel("ALTITUDE / V-S");
             altitudeColumn.Add(altitudeCaption);
             _altLabel = new Label("0 m");
             _altLabel.style.fontSize = 16;
@@ -262,6 +244,14 @@ namespace VoxelEngine.GridSystem
             _altLabel.style.color = new StyleColor(LcdHudTheme.Phosphor);
             _altLabel.pickingMode = PickingMode.Ignore;
             altitudeColumn.Add(_altLabel);
+            _verticalSpeedLabel = new Label("V/S 0.0 m/s");
+            _verticalSpeedLabel.style.marginTop = 1;
+            _verticalSpeedLabel.style.fontSize = 8;
+            _verticalSpeedLabel.style.letterSpacing = 0.35f;
+            _verticalSpeedLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _verticalSpeedLabel.style.color = new StyleColor(LcdHudTheme.PhosphorDim);
+            _verticalSpeedLabel.pickingMode = PickingMode.Ignore;
+            altitudeColumn.Add(_verticalSpeedLabel);
 
             _environmentLabel = new Label("ATMOSPHERE");
             _environmentLabel.style.marginTop = 4;
@@ -741,14 +731,29 @@ namespace VoxelEngine.GridSystem
 
             UpdateCompass(grid.transform.eulerAngles.y);
 
-            // Smooth Updates
-            float targetSpeed = grid.Body != null ? grid.Body.linearVelocity.magnitude : 0;
-            _smoothSpeed = Mathf.Lerp(_smoothSpeed, targetSpeed, dt * 5f);
-            AtmosphereSample environment = grid.CurrentAtmosphere;
-            _smoothAlt = Mathf.Lerp(_smoothAlt, environment.Altitude, dt * 5f);
+            // Use the rigidbody's physical centre for every flight value. The old
+            // smoothed transform sample could keep climbing after a craft had stopped
+            // in vacuum; altitude is now a direct, stable body-relative measurement.
+            Vector3 telemetryPosition = grid.Body != null ? grid.Body.worldCenterOfMass : grid.transform.position;
+            Vector3 telemetryVelocity = grid.Body != null ? grid.Body.linearVelocity : Vector3.zero;
+            float targetSpeed = telemetryVelocity.magnitude;
+            _smoothSpeed = Mathf.Lerp(_smoothSpeed, targetSpeed, Mathf.Clamp01(dt * 5f));
+            AtmosphereSample environment = AtmosphereManager.Sample(telemetryPosition);
+            _smoothAlt = Mathf.Max(0f, environment.Altitude);
 
             _speedLabel.text = $"{_smoothSpeed:0.0} m/s";
-            _altLabel.text = $"{_smoothAlt:0} m";
+            _altLabel.text = FormatFlightAltitude(_smoothAlt);
+            if (_verticalSpeedLabel != null)
+            {
+                Vector3 radialUp = GravityProvider.GetUp(telemetryPosition);
+                float verticalSpeed = radialUp.sqrMagnitude > 0.0001f
+                    ? Vector3.Dot(telemetryVelocity, radialUp.normalized)
+                    : telemetryVelocity.y;
+                _verticalSpeedLabel.text = $"V/S {verticalSpeed:+0.0;-0.0;0.0} m/s";
+                _verticalSpeedLabel.style.color = new StyleColor(
+                    Mathf.Abs(verticalSpeed) < 0.05f ? LcdHudTheme.PhosphorDim
+                    : verticalSpeed > 0f ? LcdHudTheme.Phosphor : T.AccentAmber);
+            }
             if (_environmentLabel != null)
             {
                 Color environmentColor = environment.Band switch
@@ -779,8 +784,13 @@ namespace VoxelEngine.GridSystem
 
             UpdateBatteryGauge(grid);
 
-            _dampLabel.text = grid.DampenersOn ? "DAMPENERS · ACTIVE" : "DAMPENERS · OFFLINE";
-            _dampLabel.style.color = new StyleColor(grid.DampenersOn ? LcdHudTheme.Phosphor : T.AccentRed);
+            _dampLabel.text = !grid.DampenersOn
+                ? "DAMPENERS · OFFLINE"
+                : grid.PilotDampenerHoldActive
+                    ? "DAMPENERS · HOLDING"
+                    : "DAMPENERS · ARMED";
+            _dampLabel.style.color = new StyleColor(!grid.DampenersOn ? T.AccentRed
+                : grid.PilotDampenerHoldActive ? LcdHudTheme.Phosphor : LcdHudTheme.PhosphorDim);
         }
 
         private static void UpdateGravityReadout(GridEntity grid)
@@ -828,7 +838,8 @@ namespace VoxelEngine.GridSystem
                 || _trajectoryApsisLabel == null || grid == null) return;
 
             Vector3 velocity = grid.Body != null ? grid.Body.linearVelocity : Vector3.zero;
-            OrbitalTelemetrySample trajectory = OrbitalTelemetry.Sample(grid.transform.position, velocity, grid.gravityScale);
+            Vector3 telemetryPosition = grid.Body != null ? grid.Body.worldCenterOfMass : grid.transform.position;
+            OrbitalTelemetrySample trajectory = OrbitalTelemetry.Sample(telemetryPosition, velocity, grid.gravityScale);
             var body = GravityProvider.ActiveBody;
             float displayAltitude = body != null
                 ? Mathf.Max(25f, body.AtmosphereHeight * 0.35f)
@@ -872,6 +883,14 @@ namespace VoxelEngine.GridSystem
             T.Border(_trajectoryModule, 1f, new Color(statusColor.r, statusColor.g, statusColor.b, 0.38f));
             if (_trajectoryLcdBezel != null)
                 T.Border(_trajectoryLcdBezel, 1f, new Color(ink.r, ink.g, ink.b, 0.70f));
+        }
+
+        private static string FormatFlightAltitude(float altitude)
+        {
+            float safeAltitude = Mathf.Max(0f, altitude);
+            return safeAltitude >= 1000f
+                ? $"{safeAltitude / 1000f:0.0} km"
+                : $"{safeAltitude:0} m";
         }
 
         private static string FormatTrajectoryDistance(float altitude)

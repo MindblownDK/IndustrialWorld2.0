@@ -198,7 +198,15 @@ namespace VoxelEngine.Cosmos
 
         /// <summary>Prebuilt ore layers for this body (common + rare + specials).</summary>
         public OreLayer[] BuildOreLayers()
-            => settings != null ? settings.BuildOreLayers().ToArray() : System.Array.Empty<OreLayer>();
+        {
+            if (settings == null) return System.Array.Empty<OreLayer>();
+            var layers = settings.BuildOreLayers();
+            // Raw crude markers support finite surface seeps on setup-authorized oil-rich
+            // bodies. Infinite Jack Pump identity is checked separately and remains Pirate-only.
+            if (!settings.CanGenerateFiniteCrudeOilSeeps)
+                layers.RemoveAll(layer => layer.material == VoxelEngine.Materials.MaterialId.CrudeOil);
+            return layers.ToArray();
+        }
 
         /// <summary>
         /// Phase 3: remap biome surface materials by IDENTITY so the planet looks realistic.

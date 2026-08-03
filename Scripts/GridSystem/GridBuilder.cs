@@ -528,9 +528,11 @@ namespace VoxelEngine.GridSystem
                         block.transform.localPosition = cAnchor;
                         var pv = block.GetComponentInChildren<VoxelEngine.Networks.PipeVisualBuilder>(true);
                         if (pv != null) { pv.gridSize = GridSize.Small.CellSize(); pv.ForceRebuild(); }
+                        Vector3 topologyPosition = block.transform.position;
                         GridLiquidNetwork.Instance?.SetDirty();
                         GridGasNetwork.Instance?.SetDirty();
-                        VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged();
+                        VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged(
+                            topologyPosition, GridSize.Small.CellSize() * 5.15f + 0.25f);
                         inventory.container.Remove(item, 1);
                         VoxelEngine.UI.BuildFeedbackHud.Show("Pipe Attached", commitFeedback ?? $"{item.displayName} · {GridTankVariablePorts.LabelFor(cFamily)}", item.icon, item.iconTint);
                     }
@@ -616,9 +618,11 @@ namespace VoxelEngine.GridSystem
                             // Refresh pipe visuals + networks
                             var pv = block.GetComponentInChildren<VoxelEngine.Networks.PipeVisualBuilder>(true);
                             if (pv != null) { pv.gridSize = GridSize.Small.CellSize(); pv.ForceRebuild(); }
+                            Vector3 topologyPosition = block.transform.position;
                             GridLiquidNetwork.Instance?.SetDirty();
                             GridGasNetwork.Instance?.SetDirty();
-                            VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged();
+                            VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged(
+                            topologyPosition, GridSize.Small.CellSize() * 5.15f + 0.25f);
                             inventory.container.Remove(item, 1);
                             VoxelEngine.UI.BuildFeedbackHud.Show("Pipe Attached", commitFeedback ?? $"{item.displayName} · {MaritimeVariablePorts.LabelFor((PortService)cService)}", item.icon, item.iconTint);
                         }

@@ -83,7 +83,7 @@ namespace VoxelEngine.UI
         //  TOGGLE BUTTON — drop this into the inventory panel header.
         // ───────────────────────────────────────────────────────────────────
         /// <summary>
-        /// Builds the compact fabrication command key inside the inventory display.
+        /// Builds the compact crafting command key inside the inventory display.
         /// Calls <paramref name="onToggled"/> after flipping state so
         /// the host can re-render.
         /// </summary>
@@ -94,32 +94,27 @@ namespace VoxelEngine.UI
             button.style.flexDirection = FlexDirection.Row;
             button.style.alignItems = Align.Center;
             button.style.justifyContent = Justify.SpaceBetween;
-            button.style.height = 29;
+            button.style.height = 27;
             button.style.paddingLeft = 8;
-            button.style.paddingRight = 8;
+            button.style.paddingRight = 7;
             button.style.backgroundColor = new StyleColor(open
                 ? new Color(LcdHudTheme.Phosphor.r, LcdHudTheme.Phosphor.g, LcdHudTheme.Phosphor.b, 0.16f)
                 : LcdHudTheme.GlassDark);
             T.Radius(button, 1f);
             T.Border(button, 1, open ? LcdHudTheme.Phosphor : LcdHudTheme.Bezel);
 
-            var title = new VisualElement();
-            title.style.flexGrow = 1;
-            title.pickingMode = PickingMode.Ignore;
-            var caption = LcdHudTheme.CaptionLabel("FABRICATION");
-            caption.style.marginBottom = 1;
-            title.Add(caption);
             var label = new Label("CRAFTING");
+            label.style.flexGrow = 1;
             label.style.fontSize = 9;
             label.style.letterSpacing = 1.05f;
             label.style.unityFontStyleAndWeight = FontStyle.Bold;
             label.style.color = new StyleColor(open ? LcdHudTheme.Phosphor : LcdHudTheme.Caption);
-            title.Add(label);
-            button.Add(title);
+            label.pickingMode = PickingMode.Ignore;
+            button.Add(label);
 
-            var state = new Label(open ? "ACTIVE" : "OPEN");
-            state.style.fontSize = 8;
-            state.style.letterSpacing = 0.8f;
+            var state = new Label(open ? "ON" : "OPEN");
+            state.style.fontSize = 7;
+            state.style.letterSpacing = 0.55f;
             state.style.unityFontStyleAndWeight = FontStyle.Bold;
             state.style.color = new StyleColor(open ? LcdHudTheme.Phosphor : LcdHudTheme.PhosphorDim);
             state.style.paddingLeft = 4;

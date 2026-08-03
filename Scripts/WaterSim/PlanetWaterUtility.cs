@@ -33,12 +33,28 @@ namespace VoxelEngine.WaterSim
             return gravity.sqrMagnitude > 0.0001f ? -gravity.normalized : Vector3.up;
         }
 
-        public static float SignedDistanceToSea(Vector3 localPosition)
+        /// <summary>Converts a scene/world point into the active spherical body's local frame.</summary>
+        public static Vector3 WorldToBodyLocal(Vector3 worldPosition)
+        {
+            if (ActiveWorld.Current is SphereWorld sphere && sphere.body != null)
+                return sphere.body.transform.InverseTransformPoint(worldPosition);
+            return worldPosition;
+        }
+
+        /// <summary>Distance from the active body's core, measured in world metres.</summary>
+        public static float WorldRadius(Vector3 worldPosition) => WorldToBodyLocal(worldPosition).magnitude;
+
+        /// <summary>
+        /// Positive above the ocean shell, negative below it. The input is always a
+        /// scene/world point; subtracting the celestial body's origin prevents a player
+        /// travelling around an offset planet from being mistaken for underwater.
+        /// </summary>
+        public static float SignedDistanceToSea(Vector3 worldPosition)
         {
             var world = ActiveWorld.Current;
-            if (world is not SphereWorld) return localPosition.y - (world != null ? world.SeaLevel : 0);
+            if (world is not SphereWorld) return worldPosition.y - (world != null ? world.SeaLevel : 0);
             float seaRadius = world.SeaLevel * VoxelConstants.VOXEL_SIZE;
-            return localPosition.magnitude - seaRadius;
+            return WorldRadius(worldPosition) - seaRadius;
         }
 
         public static float TidalPhase(Vector3 localPosition)
