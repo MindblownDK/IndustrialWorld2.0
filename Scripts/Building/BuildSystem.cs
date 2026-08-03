@@ -709,8 +709,8 @@ namespace VoxelEngine.Building
                 Vector3 alignmentDelta = grid != null
                     ? grid.transform.InverseTransformVector(worldDelta)
                     : worldDelta;
-                if (!VoxelEngine.Networks.PipeAdjacency.IsDirectPipeLinkDelta(
-                        alignmentDelta, cellSize, cellSize * 0.18f)) return;
+                if (!VoxelEngine.Networks.PipeAdjacency.IsCoplanarPipeLinkDelta(
+                        alignmentDelta, cellSize, 5f, cellSize * 0.18f)) return;
                 float distance = worldDelta.sqrMagnitude;
                 if (distance >= bestDistance) return;
                 bestDistance = distance;
@@ -729,7 +729,7 @@ namespace VoxelEngine.Building
             }
             else
             {
-                int hitCount = Physics.OverlapSphereNonAlloc(ghostPosition, cellSize * 1.35f,
+                int hitCount = Physics.OverlapSphereNonAlloc(ghostPosition, cellSize * 5f + cellSize * 0.4f,
                     s_pipeGhostProbe, ~0, QueryTriggerInteraction.Collide);
                 for (int i = 0; i < hitCount; i++)
                 {
@@ -1611,16 +1611,22 @@ namespace VoxelEngine.Building
             bool withinHeight = pos.y > feet.y - 0.4f && pos.y < feet.y + 2.05f;
             if (insideColumn && withinHeight) return false;
 
-            // For cables/pipes use a very tight box (they chain end-to-end).
-            // For solid blocks use a half-block check.
-            bool isThin = block.allowStacking;
+            // Only actual conduits use the tight placement volume/terrain exception.
+            // allowStacking is a broader content flag (many ordinary foundations use it),
+            // so treating every stackable item as a thin pipe let structural blocks bury
+            // existing pipes inside their volume.
+            bool isThin = IsThinConduitPlacement(block);
             float checkSize = isThin ? 0.18f : 0.42f;
 
             var overlaps = Physics.OverlapBox(pos, Vector3.one * checkSize, Quaternion.identity);
             foreach (var col in overlaps)
             {
                 if (col.isTrigger) continue; // pickup spheres, etc.
-                // Placed blocks: stacking blocks can share space with other placed blocks.
+                // A structural block may never engulf a placed pipe/cable even when
+                // the structural item itself allows normal block stacking.
+                if (IsConduitCollider(col) && !isThin) return false;
+                // Placed blocks: legacy stackable structures retain their established
+                // placement behavior after the explicit conduit-volume guard above.
                 if (col.GetComponentInParent<PlacedBlock>() != null)
                 {
                     if (!block.allowStacking) return false;
@@ -1639,6 +1645,27 @@ namespace VoxelEngine.Building
                 if (col.attachedRigidbody == null) return false;
             }
             return true;
+        }
+
+        private static bool IsThinConduitPlacement(BlockItem block)
+        {
+            if (block == null || block.placedPrefab == null) return false;
+            var prefab = block.placedPrefab;
+            return prefab.GetComponentInChildren<VoxelEngine.Transport.ItemPipe>(true) != null
+                || prefab.GetComponentInChildren<VoxelEngine.Gas.GasPipe>(true) != null
+                || prefab.GetComponentInChildren<VoxelEngine.Fluids.WaterPipe>(true) != null
+                || prefab.GetComponentInChildren<VoxelEngine.Power.PowerCable>(true) != null
+                || prefab.GetComponentInChildren<VoxelEngine.Networks.DataCable>(true) != null;
+        }
+
+        private static bool IsConduitCollider(Collider collider)
+        {
+            if (collider == null) return false;
+            return collider.GetComponentInParent<VoxelEngine.Transport.ItemPipe>() != null
+                || collider.GetComponentInParent<VoxelEngine.Gas.GasPipe>() != null
+                || collider.GetComponentInParent<VoxelEngine.Fluids.WaterPipe>() != null
+                || collider.GetComponentInParent<VoxelEngine.Power.PowerCable>() != null
+                || collider.GetComponentInParent<VoxelEngine.Networks.DataCable>() != null;
         }
 
         // ---------- Ghost material helpers ----------

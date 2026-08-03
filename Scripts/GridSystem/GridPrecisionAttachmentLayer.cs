@@ -37,6 +37,28 @@ namespace VoxelEngine.GridSystem
             return block;
         }
 
+        /// <summary>
+        /// True when a structural large-cell placement would envelop any detail block
+        /// (pipes, ports, lights, or authored detail). Face-touching detail remains
+        /// allowed; only actual shared volume is rejected.
+        /// </summary>
+        public bool HasStructuralVolumeConflict(Vector3Int largePos)
+        {
+            Vector3 center = (Vector3)largePos * GridSize.Large.CellSize();
+            const float combinedHalfExtent = 1.5f; // 1.25 m structural + 0.25 m detail
+            const float overlapEpsilon = 0.002f;
+            foreach (var block in _blocks.Values)
+            {
+                if (block == null) continue;
+                Vector3 delta = block.transform.localPosition - center;
+                if (Mathf.Abs(delta.x) < combinedHalfExtent - overlapEpsilon
+                    && Mathf.Abs(delta.y) < combinedHalfExtent - overlapEpsilon
+                    && Mathf.Abs(delta.z) < combinedHalfExtent - overlapEpsilon)
+                    return true;
+            }
+            return false;
+        }
+
         public bool CanPlaceStructuralBlock(Vector3Int largePos)
         {
             Vector3 center = (Vector3)largePos * GridSize.Large.CellSize();

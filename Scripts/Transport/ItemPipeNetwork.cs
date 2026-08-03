@@ -83,9 +83,9 @@ namespace VoxelEngine.Transport
             int n = _pipes.Count;
             if (n < 2) goto EndpointRescan;
 
-            // Direct pipe links are one lattice step, so a compact hash sharply
-            // reduces pair checks in dense ground/grid pipe runs.
-            const float CELL = 2f;
+            // Five-cell same-plane links fit inside this cell or its immediate
+            // neighbours; coplanar validation below prevents off-plane joins.
+            const float CELL = 5f;
             const float CELL_INV = 1f / CELL;
             var hash = new Dictionary<Vector3Int, List<ItemPipe>>(n * 2);
             Vector3Int Cell(Vector3 p) => new Vector3Int(
@@ -125,11 +125,11 @@ namespace VoxelEngine.Transport
 
                         Vector3 pb = b.transform.position;
                         float step = GridStep(a, b);
-                        float range = step * 1.35f;
+                        float range = step * 5.1f;
                         if ((pa - pb).sqrMagnitude > range * range) continue;
 
                         Vector3 connectionDelta = VoxelEngine.Networks.PipeAdjacency.ConnectionDelta(a, b);
-                        if (!VoxelEngine.Networks.PipeAdjacency.IsDirectPipeLinkDelta(connectionDelta, step, step * 0.18f)) continue;
+                        if (!VoxelEngine.Networks.PipeAdjacency.IsCoplanarPipeLinkDelta(connectionDelta, step, 5f, step * 0.18f)) continue;
 
                         if (VoxelEngine.Networks.WrenchBlacklist.IsBlocked(a, b)) continue;
 

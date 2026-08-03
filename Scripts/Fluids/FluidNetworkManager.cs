@@ -144,7 +144,7 @@ namespace VoxelEngine.Fluids
                         }
                         else if (nIsPipe && bIsPipe)
                         {
-                            range = step * 1.35f;
+                            range = step * 5.1f;
                         }
                         else
                         {
@@ -155,7 +155,7 @@ namespace VoxelEngine.Fluids
 
                         Vector3 connectionDelta = VoxelEngine.Networks.PipeAdjacency.ConnectionDelta(n, b);
                         bool ok = nIsPipe && bIsPipe
-                            ? VoxelEngine.Networks.PipeAdjacency.IsDirectPipeLinkDelta(connectionDelta, step, step * 0.18f)
+                            ? VoxelEngine.Networks.PipeAdjacency.IsCoplanarPipeLinkDelta(connectionDelta, step, 5f, step * 0.18f)
                             : involvesPipe
                                 ? VoxelEngine.Networks.PipeAdjacency.IsCardinalLinkDelta(connectionDelta, step, 5f, step * 0.45f)
                                 : VoxelEngine.Networks.PipeAdjacency.IsAxisAlignedWithinDelta(connectionDelta, step, 2.5f, step * 0.45f);

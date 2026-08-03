@@ -105,6 +105,39 @@ namespace VoxelEngine.Networks
                                              float tolerance = 0f)
             => IsDirectPipeLinkDelta(b - a, gridSize, tolerance);
 
+        /// <summary>
+        /// Strict same-plane pipe rule with a bounded multi-cell reach. Pipes can span
+        /// up to five small lattice cells along ONE axis, but never use the broad
+        /// vertical terrain slack that caused diagonal/off-plane pipe joins.
+        /// </summary>
+        public static bool IsCoplanarPipeLinkDelta(Vector3 delta,
+                                                    float gridSize = DefaultGridSize,
+                                                    float maxCells = 5f,
+                                                    float tolerance = 0f)
+        {
+            float gs = gridSize > 0f ? gridSize : DefaultGridSize;
+            float tol = tolerance > 0f ? tolerance : Mathf.Max(0.06f, gs * 0.18f);
+            float dx = Mathf.Abs(delta.x), dy = Mathf.Abs(delta.y), dz = Mathf.Abs(delta.z);
+            float along = Mathf.Max(dx, Mathf.Max(dy, dz));
+            float steps = along / gs;
+            float nearestStep = Mathf.Round(steps);
+            if (nearestStep < 1f || nearestStep > Mathf.Max(1f, maxCells)) return false;
+            // A same-plane run must land on an actual lattice step, not merely be
+            // somewhere within the old broad corridor radius.
+            if (Mathf.Abs(steps - nearestStep) > Mathf.Max(0.12f, tol / gs)) return false;
+
+            int dominant = (dx >= dy && dx >= dz) ? 0 : (dy >= dx && dy >= dz) ? 1 : 2;
+            float other1 = dominant == 0 ? dy : dx;
+            float other2 = dominant == 2 ? dy : dz;
+            return Mathf.Sqrt(other1 * other1 + other2 * other2) <= tol;
+        }
+
+        public static bool IsCoplanarPipeLink(Vector3 a, Vector3 b,
+                                               float gridSize = DefaultGridSize,
+                                               float maxCells = 5f,
+                                               float tolerance = 0f)
+            => IsCoplanarPipeLinkDelta(b - a, gridSize, maxCells, tolerance);
+
         public static Vector3 ConnectionDelta(Component a, Component b)
         {
             if (a == null || b == null) return Vector3.zero;

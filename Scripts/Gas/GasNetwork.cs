@@ -88,9 +88,9 @@ namespace VoxelEngine.Gas
             // cell size is chosen so any valid pipe↔pipe link (≤ 5 lattice
             // cells in a cardinal line) lives inside this cell or one of the
             // immediate 3×3×3 neighbours.
-            // Pipe-to-pipe links are direct lattice neighbours; a smaller hash keeps
-            // dense runs from comparing unrelated five-cell corridor candidates.
-            const float CELL = 2f;
+            // Five-cell same-plane links fit inside this cell or its immediate
+            // neighbours; coplanar validation below rejects off-plane candidates.
+            const float CELL = 5f;
             const float CELL_INV = 1f / CELL;
             var hash = new Dictionary<Vector3Int, List<GasPipe>>(n * 2);
             Vector3Int Cell(Vector3 p) => new Vector3Int(
@@ -132,13 +132,13 @@ namespace VoxelEngine.Gas
                         Vector3 pb = b.transform.position;
                         float step = GridStep(a, b, ga);
 
-                        // Pipe↔pipe links are physical one-cell joins. Long cardinal
-                        // reach is reserved for explicitly authored tank/port corridors.
-                        float range = step * 1.35f;
+                        // Pipe↔pipe runs may span five cells on their shared plane.
+                        // The strict coplanar predicate below rejects diagonal/off-plane joins.
+                        float range = step * 5.1f;
                         if ((pa - pb).sqrMagnitude > range * range) continue;
 
                         Vector3 connectionDelta = VoxelEngine.Networks.PipeAdjacency.ConnectionDelta(a, b);
-                        if (!VoxelEngine.Networks.PipeAdjacency.IsDirectPipeLinkDelta(connectionDelta, step, step * 0.18f)) continue;
+                        if (!VoxelEngine.Networks.PipeAdjacency.IsCoplanarPipeLinkDelta(connectionDelta, step, 5f, step * 0.18f)) continue;
 
                         if (VoxelEngine.Networks.WrenchBlacklist.IsBlocked(a, b)) continue;
 

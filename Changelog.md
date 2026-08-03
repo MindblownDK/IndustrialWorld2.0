@@ -1,9 +1,29 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.8.1-dev`
+**Current Version:** `7.9.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.9.0-dev] Unified LCD Flight, Survival & Hotbar HUD
+
+**Type:** MINOR — new save-compatible shared LCD HUD presentation layer and pipe-placement hardening.
+
+#### 📟 One fitted LCD language
+- Added `LcdHudTheme`, a shared chassis, bezel, glass, scanline, phosphor, and discrete-segment language used across live player/ship HUDs.
+- Rebuilt the cockpit as a practical **FLIGHT COMPUTER**: rectangular instrument chassis, phosphor compass, primary speed/altitude screen, LCD bus/H₂/battery/dampener readouts, plus the existing gravity and coast-path instruments.
+- Rebuilt player vitals into a compact **SUIT STATUS** monitor with rectangular LCD rows and segment gauges for HP, H₂, hunger, O₂, and carried power.
+
+#### 🎒 Instrumented hotbar
+- Rebuilt the held-item notification as a fitted LCD `HELD ITEM` screen.
+- Rebuilt the hotbar into a physical instrument rack with compact phosphor key labels, scan lines, selected-slot screen glass, and non-generic bezel treatment.
+
+#### ━ Pipe follow-up hardening
+- Restored pipe runs of up to five small lattice cells on an exact shared plane, while retaining the new strict rejection of diagonal/off-plane links.
+- Structural grid blocks now reject any occupied precision-detail volume, preventing them from engulfing grid pipes even when aimed through a neighbouring hull block.
+- Static normal blocks now reject placed conduit/cable volumes instead of burying pipes inside themselves.
+
+---
 
 ### [7.8.1-dev] Pipe Topology Performance & Stable Grid Battery UI
 
@@ -21,9 +41,8 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 - Ground pipe ghosts now cache a stationary target and use allocation-free overlap probes, eliminating repeated broad physics allocations while aiming a pipe.
 
 #### ━ Exact pipe joins
-- Pipe-to-pipe links are now strict one-cell, one-axis physical joins. They no longer use the old five-cell corridor or vertical-slack rule that permitted off-plane/diagonal connections.
-- The longer cardinal reach remains only for explicitly authored tank/port corridor discovery, so existing service-port workflows retain their intended range.
-- Grid and ground Item, Gas, and Liquid pipe networks now share the same strict direct-link rule.
+- Pipe-to-pipe links again support runs of up to five small lattice cells on one exact shared plane, while diagonal/off-plane joins and broad vertical slack remain rejected.
+- The same strict coplanar rule is shared by grid and ground Item, Gas, and Liquid pipes; tank/service-port corridors retain their authored behavior.
 
 ---
 

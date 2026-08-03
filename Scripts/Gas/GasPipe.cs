@@ -165,7 +165,7 @@ namespace VoxelEngine.Gas
                     {
                         float detail = VoxelEngine.GridSystem.GridSizeExt.CellSize(VoxelEngine.GridSystem.GridSize.Small);
                         Vector3 localDelta = grid.transform.InverseTransformVector(block.transform.position - transform.position);
-                        if (!VoxelEngine.Networks.PipeAdjacency.IsDirectPipeLinkDelta(localDelta, detail, detail * 0.18f))
+                        if (!VoxelEngine.Networks.PipeAdjacency.IsCoplanarPipeLinkDelta(localDelta, detail, 5f, detail * 0.18f))
                             continue;
                         _neighbourPosBuf.Add(Vector3.Lerp(transform.position, block.transform.position, 0.5f));
                         continue;
@@ -195,9 +195,9 @@ namespace VoxelEngine.Gas
                     var wPipe = col.GetComponentInParent<GasPipe>();
                     if (wPipe != null && wPipe != this)
                     {
-                        if (VoxelEngine.Networks.PipeAdjacency.IsDirectPipeLink(
+                        if (VoxelEngine.Networks.PipeAdjacency.IsCoplanarPipeLink(
                                 transform.position, wPipe.transform.position,
-                                VoxelEngine.Networks.PipeAdjacency.DefaultGridSize))
+                                VoxelEngine.Networks.PipeAdjacency.DefaultGridSize, 5f))
                             _neighbourPosBuf.Add(Vector3.Lerp(transform.position, wPipe.transform.position, 0.5f));
                         continue;
                     }
@@ -213,8 +213,9 @@ namespace VoxelEngine.Gas
             }
             else
             {
-                // Free-placed (non-grid) gas pipe — draw arms to nearby world tanks/pipes.
-                float reach = VoxelEngine.Networks.PipeAdjacency.DefaultGridSize * 1.35f;
+                // Free-placed pipe runs retain five-cell same-plane reach. The
+                // strict coplanar predicate below keeps this from linking off-plane.
+                float reach = VoxelEngine.Networks.PipeAdjacency.DefaultGridSize * 5.4f;
                 int hitCount = Physics.OverlapSphereNonAlloc(transform.position, reach,
                     s_worldProbe, ~0, QueryTriggerInteraction.Collide);
                 for (int i = 0; i < hitCount; i++)
@@ -224,8 +225,9 @@ namespace VoxelEngine.Gas
                     var other = col.GetComponentInParent<GasPipe>();
                     if (other != null && other != this)
                     {
-                        if (VoxelEngine.Networks.PipeAdjacency.IsDirectPipeLink(
-                                transform.position, other.transform.position))
+                        if (VoxelEngine.Networks.PipeAdjacency.IsCoplanarPipeLink(
+                                transform.position, other.transform.position,
+                                VoxelEngine.Networks.PipeAdjacency.DefaultGridSize, 5f))
                             _neighbourPosBuf.Add(Vector3.Lerp(transform.position, other.transform.position, 0.5f));
                         continue;
                     }
@@ -245,7 +247,7 @@ namespace VoxelEngine.Gas
         }
 
         private readonly System.Collections.Generic.List<VoxelEngine.GridSystem.GridBlock> _armCandidates = new(8);
-        private static readonly Collider[] s_worldProbe = new Collider[16];
+        private static readonly Collider[] s_worldProbe = new Collider[64];
 
         private static bool IsExhaustTapPort(Transform port)
             => port != null && port.name.StartsWith("Port_ExhaustGasIO", System.StringComparison.Ordinal);

@@ -7,6 +7,7 @@ using UnityEngine;
 using UnityEngine.UIElements;
 using VoxelEngine.Cosmos;
 using VoxelEngine.Items;
+using VoxelEngine.UI;
 using T = VoxelEngine.UI.UITheme;
 
 namespace VoxelEngine.GridSystem
@@ -78,11 +79,11 @@ namespace VoxelEngine.GridSystem
             _compassBar.style.translate = new StyleTranslate(new Translate(new Length(-50, LengthUnit.Percent), 0));
             _compassBar.style.width = COMPASS_WIDTH;
             _compassBar.style.height = 60;
-            _compassBar.style.backgroundColor = new StyleColor(new Color(0.04f, 0.05f, 0.07f, 0.78f));
+            _compassBar.style.backgroundColor = new StyleColor(LcdHudTheme.Chassis);
             _compassBar.style.overflow = Overflow.Hidden;
             _compassBar.pickingMode = PickingMode.Ignore;
-            T.Radius(_compassBar, 8);
-            T.Border(_compassBar, 1, new Color(T.AccentCyan.r, T.AccentCyan.g, T.AccentCyan.b, 0.32f));
+            T.Radius(_compassBar, 2);
+            T.Border(_compassBar, 1, LcdHudTheme.Bezel);
             uiRoot.Add(_compassBar);
 
             _compassMarkers = new VisualElement { name = "GridCompassMarkers" };
@@ -109,8 +110,9 @@ namespace VoxelEngine.GridSystem
                 tick.style.width = cardinal ? 2 : 1;
                 tick.style.height = cardinal ? 16 : (medium ? 12 : 8);
                 tick.style.backgroundColor = new StyleColor(cardinal
-                    ? Color.white
-                    : (medium ? new Color(0.62f, 0.70f, 0.78f, 0.82f) : new Color(0.42f, 0.48f, 0.55f, 0.58f)));
+                    ? LcdHudTheme.Phosphor
+                    : (medium ? new Color(LcdHudTheme.Phosphor.r, LcdHudTheme.Phosphor.g, LcdHudTheme.Phosphor.b, 0.65f)
+                        : new Color(LcdHudTheme.PhosphorDim.r, LcdHudTheme.PhosphorDim.g, LcdHudTheme.PhosphorDim.b, 0.55f)));
                 tick.pickingMode = PickingMode.Ignore;
                 _compassMarkers.Add(tick);
 
@@ -124,8 +126,9 @@ namespace VoxelEngine.GridSystem
                 label.style.fontSize = cardinal ? 13 : (major ? 10 : 9);
                 label.style.unityFontStyleAndWeight = cardinal || major ? FontStyle.Bold : FontStyle.Normal;
                 label.style.color = new StyleColor(cardinal
-                    ? Color.white
-                    : (major ? new Color(0.78f, 0.86f, 0.94f, 0.96f) : new Color(0.58f, 0.65f, 0.74f, 0.82f)));
+                    ? LcdHudTheme.Phosphor
+                    : (major ? new Color(LcdHudTheme.Phosphor.r, LcdHudTheme.Phosphor.g, LcdHudTheme.Phosphor.b, 0.88f)
+                        : new Color(LcdHudTheme.PhosphorDim.r, LcdHudTheme.PhosphorDim.g, LcdHudTheme.PhosphorDim.b, 0.82f)));
                 label.pickingMode = PickingMode.Ignore;
                 _compassMarkers.Add(label);
             }
@@ -136,7 +139,7 @@ namespace VoxelEngine.GridSystem
             notch.style.left = COMPASS_WIDTH / 2f - 1f;
             notch.style.width = 2;
             notch.style.height = 12;
-            notch.style.backgroundColor = new StyleColor(T.AccentCyan);
+            notch.style.backgroundColor = new StyleColor(LcdHudTheme.Phosphor);
             notch.pickingMode = PickingMode.Ignore;
             _compassBar.Add(notch);
 
@@ -150,9 +153,10 @@ namespace VoxelEngine.GridSystem
             _compassCenter.style.unityTextAlign = TextAnchor.MiddleCenter;
             _compassCenter.style.fontSize = 12;
             _compassCenter.style.unityFontStyleAndWeight = FontStyle.Bold;
-            _compassCenter.style.color = new StyleColor(T.AccentCyan);
-            _compassCenter.style.backgroundColor = new StyleColor(new Color(0.02f, 0.025f, 0.035f, 0.78f));
-            T.Radius(_compassCenter, 8);
+            _compassCenter.style.color = new StyleColor(LcdHudTheme.Phosphor);
+            _compassCenter.style.backgroundColor = new StyleColor(LcdHudTheme.Glass);
+            T.Radius(_compassCenter, 1);
+            T.Border(_compassCenter, 1, LcdHudTheme.Bezel);
             _compassCenter.pickingMode = PickingMode.Ignore;
             _compassBar.Add(_compassCenter);
         }
@@ -161,77 +165,221 @@ namespace VoxelEngine.GridSystem
         {
             _container = new VisualElement { name = "GridPilotHud" };
             _container.style.position = Position.Absolute;
-            _container.style.left = 24;
-            _container.style.bottom = 24;
-            _container.style.width = 240;
-            _container.style.backgroundColor = new StyleColor(new Color(0.04f, 0.05f, 0.07f, 0.85f));
-            _container.style.paddingTop = 14;
-            _container.style.paddingBottom = 14;
-            _container.style.paddingLeft = 16;
-            _container.style.paddingRight = 16;
-            T.Radius(_container, 12);
-            T.Border(_container, 1, T.BorderBright);
+            _container.style.left = 18;
+            _container.style.bottom = 18;
+            _container.style.width = 278;
+            _container.style.paddingTop = 8;
+            _container.style.paddingBottom = 8;
+            _container.style.paddingLeft = 8;
+            _container.style.paddingRight = 8;
             _container.pickingMode = PickingMode.Ignore;
             _container.style.display = DisplayStyle.None;
+            LcdHudTheme.ApplyChassis(_container, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.96f), 3f);
             uiRoot.Add(_container);
 
-            var titleRow = new VisualElement();
+            var titleRow = new VisualElement { name = "FlightComputerHeader" };
             titleRow.style.flexDirection = FlexDirection.Row;
             titleRow.style.alignItems = Align.Center;
-            titleRow.style.marginBottom = 8;
-            var title = T.Subtitle("SHIP SYSTEMS");
-            title.style.flexGrow = 1;
-            titleRow.Add(title);
+            titleRow.style.marginBottom = 5;
+            titleRow.pickingMode = PickingMode.Ignore;
             _container.Add(titleRow);
 
-            _speedLabel = T.StatLabel("0.0 m/s", T.TextPrimary);
-            _speedLabel.style.fontSize = 20;
-            _container.Add(T.StatRow("", "Velocity", ""));
-            _container.Add(_speedLabel);
-            _container.Add(T.Spacer(8));
+            var title = new Label("FLIGHT COMPUTER");
+            title.style.flexGrow = 1;
+            title.style.fontSize = 9;
+            title.style.letterSpacing = 1.25f;
+            title.style.unityFontStyleAndWeight = FontStyle.Bold;
+            title.style.color = new StyleColor(T.TextSecondary);
+            title.pickingMode = PickingMode.Ignore;
+            titleRow.Add(title);
 
-            _altLabel = T.StatLabel("0 m", T.TextSecondary);
-            _container.Add(T.StatRow("", "Altitude", ""));
-            _container.Add(_altLabel);
+            var unit = new Label("FC-01");
+            unit.style.fontSize = 7;
+            unit.style.letterSpacing = 0.7f;
+            unit.style.unityFontStyleAndWeight = FontStyle.Bold;
+            unit.style.color = new StyleColor(T.TextMuted);
+            unit.pickingMode = PickingMode.Ignore;
+            titleRow.Add(unit);
 
-            _environmentLabel = T.StatLabel("ATMOSPHERE", T.AccentCyan);
-            _environmentLabel.style.fontSize = 9;
-            _environmentLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
-            _environmentLabel.style.letterSpacing = 0.8f;
-            _environmentLabel.style.unityTextAlign = TextAnchor.MiddleCenter;
-            _environmentLabel.style.marginTop = 4;
-            _container.Add(_environmentLabel);
-            _container.Add(T.Spacer(8));
+            _container.Add(BuildPrimaryFlightScreen());
             _container.Add(BuildGravityModule());
             _container.Add(BuildTrajectoryModule());
+            _container.Add(BuildResourceScreen());
+            _container.Add(BuildDampenerScreen());
+        }
 
-            _powerLabel = T.StatLabel("Power", T.AccentGold);
-            _container.Add(_powerLabel);
-            var (pb, pf) = T.ProgressBar(1f, T.AccentGold, 6, true);
-            _powerFill = pf;
-            _container.Add(pb);
-            _container.Add(T.Spacer(8));
+        private static VisualElement BuildPrimaryFlightScreen()
+        {
+            var screen = new VisualElement { name = "FlightPrimaryLcd" };
+            screen.style.marginBottom = 7;
+            screen.style.paddingLeft = 7;
+            screen.style.paddingRight = 7;
+            screen.style.paddingTop = 5;
+            screen.style.paddingBottom = 5;
+            screen.style.overflow = Overflow.Hidden;
+            screen.pickingMode = PickingMode.Ignore;
+            LcdHudTheme.ApplyScreen(screen, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.90f), 1f);
+            LcdHudTheme.AddScanlines(screen, 3, top: 9f, spacing: 15f);
 
-            _h2Label = T.StatLabel("Hydrogen", T.AccentCyan);
-            _container.Add(_h2Label);
-            var (hb, hf) = T.ProgressBar(0f, T.AccentCyan, 6, true);
-            _h2Fill = hf;
-            _container.Add(hb);
-            _container.Add(T.Spacer(10));
+            var values = new VisualElement();
+            values.style.flexDirection = FlexDirection.Row;
+            values.style.alignItems = Align.Stretch;
+            values.pickingMode = PickingMode.Ignore;
+            screen.Add(values);
 
-            var batteryRow = new VisualElement();
-            batteryRow.style.justifyContent = Justify.Center;
-            batteryRow.style.alignItems = Align.Center;
-            batteryRow.Add(BuildBatteryGauge());
-            _container.Add(batteryRow);
-            _container.Add(T.Spacer(12));
+            var speedColumn = new VisualElement();
+            speedColumn.style.flexGrow = 1;
+            speedColumn.pickingMode = PickingMode.Ignore;
+            values.Add(speedColumn);
+            var speedCaption = LcdHudTheme.CaptionLabel("VELOCITY");
+            speedColumn.Add(speedCaption);
+            _speedLabel = new Label("0.0 m/s");
+            _speedLabel.style.fontSize = 19;
+            _speedLabel.style.letterSpacing = 0.45f;
+            _speedLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _speedLabel.style.color = new StyleColor(LcdHudTheme.Phosphor);
+            _speedLabel.pickingMode = PickingMode.Ignore;
+            speedColumn.Add(_speedLabel);
 
-            _dampLabel = T.StatLabel("DAMPENERS", T.AccentGreen);
-            _dampLabel.style.unityTextAlign = TextAnchor.MiddleCenter;
-            _dampLabel.style.backgroundColor = new StyleColor(new Color(T.AccentGreen.r, T.AccentGreen.g, T.AccentGreen.b, 0.15f));
-            T.Radius(_dampLabel, 4);
-            T.Border(_dampLabel, 1, new Color(T.AccentGreen.r, T.AccentGreen.g, T.AccentGreen.b, 0.3f));
-            _container.Add(_dampLabel);
+            var divider = new VisualElement();
+            divider.style.width = 1;
+            divider.style.marginLeft = 8;
+            divider.style.marginRight = 8;
+            divider.style.backgroundColor = new StyleColor(new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.75f));
+            divider.pickingMode = PickingMode.Ignore;
+            values.Add(divider);
+
+            var altitudeColumn = new VisualElement();
+            altitudeColumn.style.width = 86;
+            altitudeColumn.pickingMode = PickingMode.Ignore;
+            values.Add(altitudeColumn);
+            var altitudeCaption = LcdHudTheme.CaptionLabel("ALTITUDE");
+            altitudeColumn.Add(altitudeCaption);
+            _altLabel = new Label("0 m");
+            _altLabel.style.fontSize = 16;
+            _altLabel.style.letterSpacing = 0.35f;
+            _altLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _altLabel.style.color = new StyleColor(LcdHudTheme.Phosphor);
+            _altLabel.pickingMode = PickingMode.Ignore;
+            altitudeColumn.Add(_altLabel);
+
+            _environmentLabel = new Label("ATMOSPHERE");
+            _environmentLabel.style.marginTop = 4;
+            _environmentLabel.style.fontSize = 8;
+            _environmentLabel.style.letterSpacing = 0.8f;
+            _environmentLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _environmentLabel.style.unityTextAlign = TextAnchor.MiddleCenter;
+            _environmentLabel.style.color = new StyleColor(LcdHudTheme.PhosphorDim);
+            _environmentLabel.pickingMode = PickingMode.Ignore;
+            screen.Add(_environmentLabel);
+            return screen;
+        }
+
+        private static VisualElement BuildResourceScreen()
+        {
+            var screen = new VisualElement { name = "FlightResourceLcd" };
+            screen.style.marginTop = 8;
+            screen.style.marginBottom = 7;
+            screen.style.paddingLeft = 7;
+            screen.style.paddingRight = 7;
+            screen.style.paddingTop = 5;
+            screen.style.paddingBottom = 5;
+            screen.pickingMode = PickingMode.Ignore;
+            LcdHudTheme.ApplyScreen(screen, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.90f), 1f);
+
+            var powerRow = BuildLcdResourceRow(screen, "BUS", LcdHudTheme.Phosphor);
+            _powerLabel = powerRow.label;
+            _powerFill = powerRow.fill;
+            AddResourceGap(screen);
+            var h2Row = BuildLcdResourceRow(screen, "H₂", new Color(0.44f, 0.78f, 0.72f));
+            _h2Label = h2Row.label;
+            _h2Fill = h2Row.fill;
+            return screen;
+        }
+
+        private static (Label label, VisualElement fill) BuildLcdResourceRow(VisualElement parent, string code, Color color)
+        {
+            var row = new VisualElement();
+            row.style.height = 19;
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
+            row.pickingMode = PickingMode.Ignore;
+            parent.Add(row);
+
+            var caption = new Label(code);
+            caption.style.width = 27;
+            caption.style.fontSize = 8;
+            caption.style.letterSpacing = 0.8f;
+            caption.style.unityFontStyleAndWeight = FontStyle.Bold;
+            caption.style.color = new StyleColor(color);
+            caption.pickingMode = PickingMode.Ignore;
+            row.Add(caption);
+
+            var track = new VisualElement();
+            track.style.flexGrow = 1;
+            track.style.height = 8;
+            track.style.marginRight = 6;
+            track.style.backgroundColor = new StyleColor(LcdHudTheme.GlassDark);
+            track.style.overflow = Overflow.Hidden;
+            track.pickingMode = PickingMode.Ignore;
+            T.Radius(track, 1f);
+            T.Border(track, 1f, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.82f));
+            row.Add(track);
+
+            var fill = new VisualElement();
+            fill.style.position = Position.Absolute;
+            fill.style.left = 0;
+            fill.style.top = 0;
+            fill.style.bottom = 0;
+            fill.style.width = new StyleLength(new Length(0f, LengthUnit.Percent));
+            fill.style.backgroundColor = new StyleColor(color);
+            fill.pickingMode = PickingMode.Ignore;
+            track.Add(fill);
+
+            var label = new Label("—");
+            label.style.width = 122;
+            label.style.fontSize = 8;
+            label.style.letterSpacing = 0.25f;
+            label.style.unityFontStyleAndWeight = FontStyle.Bold;
+            label.style.unityTextAlign = TextAnchor.MiddleRight;
+            label.style.color = new StyleColor(color);
+            label.pickingMode = PickingMode.Ignore;
+            row.Add(label);
+            return (label, fill);
+        }
+
+        private static void AddResourceGap(VisualElement parent)
+        {
+            var gap = new VisualElement();
+            gap.style.height = 3;
+            gap.pickingMode = PickingMode.Ignore;
+            parent.Add(gap);
+        }
+
+        private static VisualElement BuildDampenerScreen()
+        {
+            var screen = new VisualElement { name = "DampenerLcd" };
+            screen.style.height = 22;
+            screen.style.paddingLeft = 7;
+            screen.style.paddingRight = 7;
+            screen.style.flexDirection = FlexDirection.Row;
+            screen.style.alignItems = Align.Center;
+            screen.pickingMode = PickingMode.Ignore;
+            LcdHudTheme.ApplyScreen(screen, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.90f), 1f);
+
+            var caption = LcdHudTheme.CaptionLabel("INERTIAL");
+            caption.style.width = 58;
+            screen.Add(caption);
+            _dampLabel = new Label("DAMPENERS · ACTIVE");
+            _dampLabel.style.flexGrow = 1;
+            _dampLabel.style.fontSize = 8;
+            _dampLabel.style.letterSpacing = 0.75f;
+            _dampLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _dampLabel.style.unityTextAlign = TextAnchor.MiddleRight;
+            _dampLabel.style.color = new StyleColor(LcdHudTheme.Phosphor);
+            _dampLabel.pickingMode = PickingMode.Ignore;
+            screen.Add(_dampLabel);
+            return screen;
         }
 
         private static VisualElement BuildGravityModule()
@@ -499,62 +647,52 @@ namespace VoxelEngine.GridSystem
 
         private static VisualElement BuildBatteryGauge()
         {
-            var col = new VisualElement();
-            col.style.alignItems = Align.Center;
-            col.style.width = 72;
-            col.pickingMode = PickingMode.Ignore;
+            var screen = new VisualElement { name = "FlightBatteryLcd" };
+            screen.style.marginTop = 8;
+            screen.style.marginBottom = 7;
+            screen.style.paddingLeft = 7;
+            screen.style.paddingRight = 7;
+            screen.style.paddingTop = 5;
+            screen.style.paddingBottom = 5;
+            screen.pickingMode = PickingMode.Ignore;
+            LcdHudTheme.ApplyScreen(screen, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.90f), 1f);
 
-            var lbl = new Label("BATTERY");
-            lbl.style.color = new StyleColor(T.TextMuted);
-            lbl.style.fontSize = 8;
-            lbl.style.unityFontStyleAndWeight = FontStyle.Bold;
-            lbl.style.letterSpacing = 1.5f;
-            lbl.style.marginBottom = 4;
-            lbl.pickingMode = PickingMode.Ignore;
-            col.Add(lbl);
+            var header = new VisualElement();
+            header.style.flexDirection = FlexDirection.Row;
+            header.style.alignItems = Align.Center;
+            header.pickingMode = PickingMode.Ignore;
+            screen.Add(header);
+            var caption = LcdHudTheme.CaptionLabel("GRID BATTERY");
+            caption.style.flexGrow = 1;
+            header.Add(caption);
+            _batteryValueLabel = new Label("NO BATTERY");
+            _batteryValueLabel.style.fontSize = 8;
+            _batteryValueLabel.style.letterSpacing = 0.55f;
+            _batteryValueLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _batteryValueLabel.style.color = new StyleColor(LcdHudTheme.PhosphorDim);
+            _batteryValueLabel.pickingMode = PickingMode.Ignore;
+            header.Add(_batteryValueLabel);
 
-            var tube = new VisualElement();
-            tube.style.width = 56;
-            tube.style.height = 72;
-            tube.style.backgroundColor = new StyleColor(new Color(0.04f, 0.045f, 0.065f));
-            tube.style.overflow = Overflow.Hidden;
-            tube.pickingMode = PickingMode.Ignore;
-            T.Radius(tube, 5);
-            T.Border(tube, 1, T.BorderDim);
+            var track = new VisualElement();
+            track.style.height = 11;
+            track.style.marginTop = 4;
+            track.style.backgroundColor = new StyleColor(LcdHudTheme.GlassDark);
+            track.style.overflow = Overflow.Hidden;
+            track.pickingMode = PickingMode.Ignore;
+            T.Radius(track, 1f);
+            T.Border(track, 1f, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.82f));
+            screen.Add(track);
 
             _batteryGaugeFill = new VisualElement();
             _batteryGaugeFill.style.position = Position.Absolute;
             _batteryGaugeFill.style.left = 0;
-            _batteryGaugeFill.style.right = 0;
+            _batteryGaugeFill.style.top = 0;
             _batteryGaugeFill.style.bottom = 0;
-            _batteryGaugeFill.style.height = new StyleLength(new Length(0, LengthUnit.Percent));
-            _batteryGaugeFill.style.backgroundColor = new StyleColor(new Color(0.3f, 0.85f, 0.4f, 0.65f));
+            _batteryGaugeFill.style.width = new StyleLength(new Length(0f, LengthUnit.Percent));
+            _batteryGaugeFill.style.backgroundColor = new StyleColor(LcdHudTheme.Phosphor);
             _batteryGaugeFill.pickingMode = PickingMode.Ignore;
-            tube.Add(_batteryGaugeFill);
-
-            var sheen = new VisualElement();
-            sheen.style.position = Position.Absolute;
-            sheen.style.top = 1;
-            sheen.style.left = 2;
-            sheen.style.right = 2;
-            sheen.style.height = 2;
-            sheen.style.backgroundColor = new StyleColor(new Color(1f, 1f, 1f, 0.06f));
-            sheen.pickingMode = PickingMode.Ignore;
-            T.Radius(sheen, 1);
-            tube.Add(sheen);
-
-            col.Add(tube);
-
-            _batteryValueLabel = new Label("0% CHARGED");
-            _batteryValueLabel.style.color = new StyleColor(T.TextPrimary);
-            _batteryValueLabel.style.fontSize = 9;
-            _batteryValueLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
-            _batteryValueLabel.style.marginTop = 4;
-            _batteryValueLabel.style.unityTextAlign = TextAnchor.MiddleCenter;
-            _batteryValueLabel.pickingMode = PickingMode.Ignore;
-            col.Add(_batteryValueLabel);
-
-            return col;
+            track.Add(_batteryGaugeFill);
+            return screen;
         }
 
         public static void Tick()
@@ -629,23 +767,20 @@ namespace VoxelEngine.GridSystem
             float powerLoad = grid.PowerGenerated > 0.1f ? grid.PowerConsumed / grid.PowerGenerated : (grid.PowerConsumed > 0 ? 1f : 0f);
             _smoothPower = Mathf.Lerp(_smoothPower, powerLoad, dt * 5f);
             
-            _powerLabel.text = $"Power: {PowerFormat.Watts(grid.PowerConsumed)} / {PowerFormat.Watts(grid.PowerGenerated)}";
-            _powerLabel.style.color = new StyleColor(powerBal >= 0 ? T.AccentGreen : T.AccentRed);
+            Color busColor = powerBal >= 0 ? LcdHudTheme.Phosphor : T.AccentRed;
+            _powerLabel.text = $"{PowerFormat.Watts(grid.PowerConsumed)} / {PowerFormat.Watts(grid.PowerGenerated)}";
+            _powerLabel.style.color = new StyleColor(busColor);
             _powerFill.style.width = new StyleLength(new Length(Mathf.Clamp01(_smoothPower) * 100, LengthUnit.Percent));
-            _powerFill.style.backgroundColor = new StyleColor(powerBal >= 0 ? T.AccentGold : T.AccentRed);
+            _powerFill.style.backgroundColor = new StyleColor(busColor);
 
             float h2Fill = grid.HydrogenCapacity > 0 ? grid.HydrogenStored / grid.HydrogenCapacity : 0;
-            _h2Label.text = $"Hydrogen: {grid.HydrogenStored:0} / {grid.HydrogenCapacity:0}";
+            _h2Label.text = $"{grid.HydrogenStored:0} / {grid.HydrogenCapacity:0}";
             _h2Fill.style.width = new StyleLength(new Length(Mathf.Clamp01(h2Fill) * 100, LengthUnit.Percent));
 
             UpdateBatteryGauge(grid);
 
-            _dampLabel.text = grid.DampenersOn ? "DAMPENERS: ACTIVE" : "DAMPENERS: DISABLED";
-            _dampLabel.style.color = new StyleColor(grid.DampenersOn ? T.AccentGreen : T.AccentRed);
-            _dampLabel.style.backgroundColor = new StyleColor(grid.DampenersOn
-                ? new Color(T.AccentGreen.r, T.AccentGreen.g, T.AccentGreen.b, 0.15f)
-                : new Color(T.AccentRed.r, T.AccentRed.g, T.AccentRed.b, 0.12f));
-            T.Border(_dampLabel, 1, grid.DampenersOn ? T.AccentGreen : T.AccentRed);
+            _dampLabel.text = grid.DampenersOn ? "DAMPENERS · ACTIVE" : "DAMPENERS · OFFLINE";
+            _dampLabel.style.color = new StyleColor(grid.DampenersOn ? LcdHudTheme.Phosphor : T.AccentRed);
         }
 
         private static void UpdateGravityReadout(GridEntity grid)
@@ -763,14 +898,11 @@ namespace VoxelEngine.GridSystem
             }
 
             float fill = capacity > 0.01f ? Mathf.Clamp01(stored / capacity) : 0f;
-            _batteryGaugeFill.style.height = new StyleLength(new Length(fill * 100f, LengthUnit.Percent));
-            _batteryGaugeFill.style.backgroundColor = new StyleColor(fill > 0.2f
-                ? new Color(0.3f, 0.85f, 0.4f, 0.65f)
-                : new Color(T.AccentAmber.r, T.AccentAmber.g, T.AccentAmber.b, 0.72f));
-            _batteryValueLabel.text = capacity > 0.01f ? $"{fill * 100f:0}% CHARGED" : "NO BATTERY";
-            _batteryValueLabel.style.color = new StyleColor(capacity > 0.01f
-                ? (fill > 0.2f ? T.TextPrimary : T.AccentAmber)
-                : T.TextMuted);
+            _batteryGaugeFill.style.width = new StyleLength(new Length(fill * 100f, LengthUnit.Percent));
+            Color batteryColor = fill > 0.2f ? LcdHudTheme.Phosphor : T.AccentAmber;
+            _batteryGaugeFill.style.backgroundColor = new StyleColor(batteryColor);
+            _batteryValueLabel.text = capacity > 0.01f ? $"{fill * 100f:0}%" : "NO BATTERY";
+            _batteryValueLabel.style.color = new StyleColor(capacity > 0.01f ? batteryColor : T.TextMuted);
         }
 
         private static void UpdateCompass(float yaw)

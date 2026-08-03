@@ -1954,19 +1954,30 @@ namespace VoxelEngine.UI
 
             var bar = new VisualElement();
             bar.style.position = Position.Absolute;
-            bar.style.bottom = 12;
+            bar.style.bottom = 10;
             bar.style.left = 0; bar.style.right = 0;
-            bar.style.height = 64;
+            bar.style.height = 70;
             bar.style.flexDirection = FlexDirection.Row;
             bar.style.justifyContent = Justify.Center;
             bar.style.alignItems = Align.Center;
             bar.pickingMode = _inventoryOpen ? PickingMode.Position : PickingMode.Ignore;
             root.Add(bar);
 
+            var rack = new VisualElement { name = "HotbarInstrumentRack" };
+            rack.style.flexDirection = FlexDirection.Row;
+            rack.style.alignItems = Align.Center;
+            rack.style.paddingLeft = 5;
+            rack.style.paddingRight = 5;
+            rack.style.paddingTop = 5;
+            rack.style.paddingBottom = 5;
+            rack.pickingMode = bar.pickingMode;
+            LcdHudTheme.ApplyChassis(rack, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.94f), 2f);
+            bar.Add(rack);
+
             for (int i = 0; i < Inventory.HOTBAR_SIZE; i++)
             {
                 var slot = inventory.container.GetSlot(i);
-                bar.Add(BuildSlot(inventory.container, i, slot,
+                rack.Add(BuildSlot(inventory.container, i, slot,
                     hotbarHighlight: i == inventory.activeHotbarIndex,
                     interactive: _inventoryOpen));
             }
@@ -3706,20 +3717,57 @@ namespace VoxelEngine.UI
         // ============================================================
         private VisualElement BuildSlot(IItemContainer container, int index, ItemStack stack, bool hotbarHighlight, bool interactive = true)
         {
+            bool isHotbarSlot = inventory != null && container == inventory.container
+                && index >= 0 && index < Inventory.HOTBAR_SIZE;
             var slot = new VisualElement();
-            slot.style.width = 56; slot.style.height = 56;
-            slot.style.marginRight = 4; slot.style.marginBottom = 4;
-            slot.style.backgroundColor = new StyleColor(new Color(0.13f, 0.15f, 0.19f, 0.95f));
-            SetBorderRadius(slot, 4);
-            slot.style.borderTopWidth = slot.style.borderBottomWidth =
-            slot.style.borderLeftWidth = slot.style.borderRightWidth = 2;
-            var bColor = hotbarHighlight
-                ? new StyleColor(new Color(0.95f, 0.85f, 0.20f))
-                : new StyleColor(new Color(0.25f, 0.27f, 0.32f));
-            slot.style.borderTopColor = slot.style.borderBottomColor =
-            slot.style.borderLeftColor = slot.style.borderRightColor = bColor;
+            slot.style.width = isHotbarSlot ? 52 : 56;
+            slot.style.height = isHotbarSlot ? 52 : 56;
+            slot.style.marginRight = isHotbarSlot ? 2 : 4;
+            slot.style.marginBottom = 4;
             slot.style.alignItems = Align.Center;
             slot.style.justifyContent = Justify.Center;
+            if (isHotbarSlot)
+            {
+                slot.style.backgroundColor = new StyleColor(hotbarHighlight ? LcdHudTheme.Glass : LcdHudTheme.GlassDark);
+                SetBorderRadius(slot, 1);
+                slot.style.borderTopWidth = slot.style.borderBottomWidth =
+                slot.style.borderLeftWidth = slot.style.borderRightWidth = hotbarHighlight ? 2 : 1;
+                var lcdBorder = hotbarHighlight
+                    ? new StyleColor(LcdHudTheme.Phosphor)
+                    : new StyleColor(new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.95f));
+                slot.style.borderTopColor = slot.style.borderBottomColor =
+                slot.style.borderLeftColor = slot.style.borderRightColor = lcdBorder;
+
+                var scan = new VisualElement();
+                scan.style.position = Position.Absolute;
+                scan.style.left = 2; scan.style.right = 2;
+                scan.style.top = 14; scan.style.height = 1;
+                scan.style.backgroundColor = new StyleColor(new Color(LcdHudTheme.Phosphor.r, LcdHudTheme.Phosphor.g, LcdHudTheme.Phosphor.b, 0.08f));
+                scan.pickingMode = PickingMode.Ignore;
+                slot.Add(scan);
+
+                var key = new Label(index == 9 ? "0" : (index + 1).ToString()) { name = "HotbarKey" };
+                key.style.position = Position.Absolute;
+                key.style.top = 2; key.style.right = 3;
+                key.style.fontSize = 7;
+                key.style.letterSpacing = 0.4f;
+                key.style.unityFontStyleAndWeight = FontStyle.Bold;
+                key.style.color = new StyleColor(hotbarHighlight ? LcdHudTheme.Phosphor : LcdHudTheme.PhosphorDim);
+                key.pickingMode = PickingMode.Ignore;
+                slot.Add(key);
+            }
+            else
+            {
+                slot.style.backgroundColor = new StyleColor(new Color(0.13f, 0.15f, 0.19f, 0.95f));
+                SetBorderRadius(slot, 4);
+                slot.style.borderTopWidth = slot.style.borderBottomWidth =
+                slot.style.borderLeftWidth = slot.style.borderRightWidth = 2;
+                var bColor = hotbarHighlight
+                    ? new StyleColor(LcdHudTheme.Phosphor)
+                    : new StyleColor(new Color(0.25f, 0.27f, 0.32f));
+                slot.style.borderTopColor = slot.style.borderBottomColor =
+                slot.style.borderLeftColor = slot.style.borderRightColor = bColor;
+            }
 
             if (!stack.IsEmpty)
             {
@@ -3731,7 +3779,8 @@ namespace VoxelEngine.UI
                     // larger image reads instantly even at a glance. ScaleToFit keeps
                     // aspect for any legacy non-square sprite.
                     img.scaleMode = ScaleMode.ScaleToFit;
-                    img.style.width = 51; img.style.height = 51;
+                    img.style.width = isHotbarSlot ? 46 : 51;
+                    img.style.height = isHotbarSlot ? 46 : 51;
                     img.pickingMode = PickingMode.Ignore;   // children must not steal events
                     slot.Add(img);
                 }
@@ -3892,6 +3941,10 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                 // slots in the corner of the screen would pop tooltips constantly).
                 if (interactive) Tooltip.Bind(slot, stack);
             }
+
+            // Icons are added after the screen decorations; bring the tiny key label
+            // back above them so every hotbar slot remains readable at a glance.
+            if (isHotbarSlot) slot.Q<Label>("HotbarKey")?.BringToFront();
 
             if (interactive)
             {

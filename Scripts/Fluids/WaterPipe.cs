@@ -98,7 +98,7 @@ namespace VoxelEngine.Fluids
                     {
                         float detail = VoxelEngine.GridSystem.GridSizeExt.CellSize(VoxelEngine.GridSystem.GridSize.Small);
                         Vector3 localDelta = grid.transform.InverseTransformVector(block.transform.position - transform.position);
-                        if (!VoxelEngine.Networks.PipeAdjacency.IsDirectPipeLinkDelta(localDelta, detail, detail * 0.18f)) return;
+                        if (!VoxelEngine.Networks.PipeAdjacency.IsCoplanarPipeLinkDelta(localDelta, detail, 5f, detail * 0.18f)) return;
                         _neighbourPosBuf.Add(Vector3.Lerp(transform.position, block.transform.position, 0.5f));
                         return;
                     }
@@ -142,9 +142,9 @@ namespace VoxelEngine.Fluids
                     if (worldPipe != null && worldPipe != this)
                     {
                         Vector3 d = worldPipe.transform.position - transform.position;
-                        if (VoxelEngine.Networks.PipeAdjacency.IsDirectPipeLink(
+                        if (VoxelEngine.Networks.PipeAdjacency.IsCoplanarPipeLink(
                                 transform.position, worldPipe.transform.position,
-                                VoxelEngine.Networks.PipeAdjacency.DefaultGridSize))
+                                VoxelEngine.Networks.PipeAdjacency.DefaultGridSize, 5f))
                         {
                             _neighbourPosBuf.Add(Vector3.Lerp(transform.position, worldPipe.transform.position, 0.5f));
                         }
@@ -179,9 +179,9 @@ namespace VoxelEngine.Fluids
             }
             else
             {
-                // Free-placed (non-grid) pipe: draw arms to adjacent world
-                // tanks/pumps/pipes within the tight 0.5–1m face-touch range.
-                float reach = VoxelEngine.Networks.PipeAdjacency.DefaultGridSize * 1.35f;
+                // Free-placed pipe runs retain five-cell same-plane reach. The
+                // strict coplanar predicate below prevents diagonal/off-plane joins.
+                float reach = VoxelEngine.Networks.PipeAdjacency.DefaultGridSize * 5.4f;
                 int hitCount = Physics.OverlapSphereNonAlloc(transform.position, reach,
                     s_armProbe, ~0, QueryTriggerInteraction.Collide);
                 for (int i = 0; i < hitCount; i++)
@@ -191,8 +191,9 @@ namespace VoxelEngine.Fluids
                     var otherPipe = col.GetComponentInParent<WaterPipe>();
                     if (otherPipe != null && otherPipe != this)
                     {
-                        if (VoxelEngine.Networks.PipeAdjacency.IsDirectPipeLink(
-                                transform.position, otherPipe.transform.position))
+                        if (VoxelEngine.Networks.PipeAdjacency.IsCoplanarPipeLink(
+                                transform.position, otherPipe.transform.position,
+                                VoxelEngine.Networks.PipeAdjacency.DefaultGridSize, 5f))
                             _neighbourPosBuf.Add(Vector3.Lerp(transform.position, otherPipe.transform.position, 0.5f));
                         continue;
                     }
@@ -212,6 +213,6 @@ namespace VoxelEngine.Fluids
             return _neighbourPosBuf;
         }
 
-        private static readonly Collider[] s_armProbe = new Collider[24];
+        private static readonly Collider[] s_armProbe = new Collider[64];
     }
 }

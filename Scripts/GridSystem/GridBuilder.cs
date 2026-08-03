@@ -256,6 +256,28 @@ namespace VoxelEngine.GridSystem
                 }
             }
 
+            // Structural blocks may not engulf a detail attachment that happens to
+            // sit in the target large cell. This catches grid pipes even when the
+            // player aims at a neighbouring hull block rather than directly at the pipe.
+            if (gbi.gridSize == GridSize.Large && targetGrid != null && !portSnapped && !placingTurbo)
+            {
+                var precision = targetGrid.PrecisionAttachments;
+                if (precision != null && precision.HasStructuralVolumeConflict(gridPos))
+                {
+                    HideGhost();
+                    HideGhostPortRing();
+                    if (GameSettings.WasPressed(InputAction.Build))
+                    {
+                        VoxelEngine.UI.BuildFeedbackHud.Show(
+                            "Detail Volume Occupied",
+                            "Remove or reroute the pipe/detail block before placing structure here",
+                            gbi.icon,
+                            Color.red);
+                    }
+                    return;
+                }
+            }
+
             if (placingTurbo)
             {
                 if (!TryFindTurboAttachment(targetGrid, gridPos, turboTier, out var engine))
@@ -982,6 +1004,13 @@ namespace VoxelEngine.GridSystem
         private bool TryPlaceBlock(GridBlockItem item, GridEntity grid, Vector3Int gridPos, Vector3 worldPos,
             Quaternion rotation, bool keepExactAttachmentPose)
         {
+            if (grid != null && item != null && item.gridSize == GridSize.Large && !keepExactAttachmentPose
+                && grid.PrecisionAttachments != null && grid.PrecisionAttachments.HasStructuralVolumeConflict(gridPos))
+            {
+                VoxelEngine.UI.BuildFeedbackHud.Show("Detail Volume Occupied", "Clear the pipe/detail block before placing structure here", item.icon, Color.red);
+                return false;
+            }
+
             if (grid != null && IsCellReservedByLedStrip(grid, gridPos))
             {
                 VoxelEngine.UI.BuildFeedbackHud.Show("Placement Blocked", "LED strip path reserves this cell", item != null ? item.icon : null, Color.red);

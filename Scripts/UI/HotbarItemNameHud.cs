@@ -1,13 +1,12 @@
 // Assets/Scripts/VoxelEngine/UI/HotbarItemNameHud.cs
 //
-// Premium Minecraft-style held-item readout. It appears briefly above the hotbar
-// whenever the active slot/item changes, making scroll-wheel selection legible
-// without opening the inventory.
+// Brief held-item identification readout. Styled as a compact fitted LCD label
+// so scrolling the hotbar feels like reading a tool belt/field console, not a
+// floating generic notification.
 
 using UnityEngine;
 using UnityEngine.UIElements;
 using VoxelEngine.Items;
-using T = VoxelEngine.UI.UITheme;
 
 namespace VoxelEngine.UI
 {
@@ -18,6 +17,7 @@ namespace VoxelEngine.UI
 
         private static VisualElement _root;
         private static VisualElement _card;
+        private static VisualElement _bezel;
         private static Label _name;
         private static Label _slot;
         private static int _lastIndex = -1;
@@ -37,7 +37,7 @@ namespace VoxelEngine.UI
             _card.style.position = Position.Absolute;
             _card.style.left = Length.Percent(0);
             _card.style.right = Length.Percent(0);
-            _card.style.bottom = 86;
+            _card.style.bottom = 88;
             _card.style.alignItems = Align.Center;
             _card.style.justifyContent = Justify.Center;
             _card.style.opacity = 0f;
@@ -45,42 +45,64 @@ namespace VoxelEngine.UI
             _card.pickingMode = PickingMode.Ignore;
             uiRoot.Add(_card);
 
-            var plate = new VisualElement();
-            plate.style.flexDirection = FlexDirection.Row;
-            plate.style.alignItems = Align.Center;
-            plate.style.backgroundColor = new StyleColor(new Color(0.025f, 0.032f, 0.05f, 0.92f));
-            plate.style.paddingLeft = 12;
-            plate.style.paddingRight = 14;
-            plate.style.paddingTop = 7;
-            plate.style.paddingBottom = 7;
-            T.Radius(plate, 7f);
-            T.Border(plate, 1f, new Color(T.BorderBright.r, T.BorderBright.g, T.BorderBright.b, 0.72f));
-            plate.pickingMode = PickingMode.Ignore;
-            _card.Add(plate);
+            _bezel = new VisualElement { name = "HeldItemLcdBezel" };
+            _bezel.style.flexDirection = FlexDirection.Row;
+            _bezel.style.alignItems = Align.Center;
+            _bezel.style.paddingLeft = 5;
+            _bezel.style.paddingRight = 5;
+            _bezel.style.paddingTop = 5;
+            _bezel.style.paddingBottom = 5;
+            _bezel.pickingMode = PickingMode.Ignore;
+            LcdHudTheme.ApplyChassis(_bezel, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.95f), 2f);
+            _card.Add(_bezel);
 
             _slot = new Label("1");
-            _slot.style.minWidth = 17;
-            _slot.style.height = 17;
-            _slot.style.marginRight = 8;
-            _slot.style.fontSize = 9;
+            _slot.style.width = 25;
+            _slot.style.height = 30;
+            _slot.style.marginRight = 5;
+            _slot.style.fontSize = 11;
+            _slot.style.letterSpacing = 0.5f;
             _slot.style.unityTextAlign = TextAnchor.MiddleCenter;
             _slot.style.unityFontStyleAndWeight = FontStyle.Bold;
-            _slot.style.color = new StyleColor(T.BgPanel);
-            _slot.style.backgroundColor = new StyleColor(T.AccentAmber);
-            T.Radius(_slot, 4f);
+            _slot.style.color = new StyleColor(LcdHudTheme.Phosphor);
+            _slot.style.backgroundColor = new StyleColor(LcdHudTheme.GlassDark);
             _slot.pickingMode = PickingMode.Ignore;
-            plate.Add(_slot);
+            UITheme.Radius(_slot, 1f);
+            UITheme.Border(_slot, 1f, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.9f));
+            _bezel.Add(_slot);
+
+            var screen = new VisualElement { name = "HeldItemLcdScreen" };
+            screen.style.minWidth = 190;
+            screen.style.maxWidth = 420;
+            screen.style.height = 30;
+            screen.style.paddingLeft = 8;
+            screen.style.paddingRight = 8;
+            screen.style.overflow = Overflow.Hidden;
+            screen.pickingMode = PickingMode.Ignore;
+            LcdHudTheme.ApplyScreen(screen, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.88f), 1f);
+            LcdHudTheme.AddScanlines(screen, 2, top: 8f, spacing: 12f);
+            _bezel.Add(screen);
+
+            var caption = LcdHudTheme.CaptionLabel("HELD ITEM");
+            caption.style.position = Position.Absolute;
+            caption.style.left = 8;
+            caption.style.top = 3;
+            screen.Add(caption);
 
             _name = new Label();
-            _name.style.fontSize = 14;
+            _name.style.position = Position.Absolute;
+            _name.style.left = 8;
+            _name.style.right = 8;
+            _name.style.bottom = 2;
+            _name.style.fontSize = 12;
+            _name.style.letterSpacing = 0.45f;
             _name.style.unityFontStyleAndWeight = FontStyle.Bold;
-            _name.style.color = new StyleColor(T.TextPrimary);
-            _name.style.maxWidth = 460;
+            _name.style.color = new StyleColor(LcdHudTheme.Phosphor);
             _name.style.whiteSpace = WhiteSpace.NoWrap;
             _name.style.overflow = Overflow.Hidden;
             _name.style.textOverflow = TextOverflow.Ellipsis;
             _name.pickingMode = PickingMode.Ignore;
-            plate.Add(_name);
+            screen.Add(_name);
         }
 
         public static void Tick(Inventory inventory)
