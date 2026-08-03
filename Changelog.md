@@ -1,9 +1,18 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.11.6-dev`
+**Current Version:** `7.11.7-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.11.7-dev] Ocean LOD Compile Recovery & Craft Queue Serialization Guard
+
+**Type:** PATCH — Unity compiler/analyzer recovery; no save/API break.
+
+- Replaced the unsupported target-typed `new(float, float, float)` expression in `PlanetOceanLodRenderer` with explicit `new Vector3(...)`, resolving reported `CS8754`.
+- Marked `CraftQueue.Entry` serializable and its runtime-only interface destination/queue fields `[NonSerialized]`, resolving the reported `UAC1001` serialization warning without changing live crafting behaviour.
+
+---
 
 ### [7.11.6-dev] Authored Planet Scale & Surface Spawn Repair
 

@@ -204,7 +204,7 @@ namespace VoxelEngine.Cosmos
             4,9,5, 2,4,11, 6,2,10, 8,6,7, 9,8,1
         };
 
-        private static Vector3 N(float x, float y, float z) => new(x, y, z).normalized;
+        private static Vector3 N(float x, float y, float z) => new Vector3(x, y, z).normalized;
 
         private static void Subdivide(List<Vector3> vertices, List<int> triangles)
         {
