@@ -165,6 +165,9 @@ namespace VoxelEngine.Cosmos
             foreach (var def in src)
             {
                 if (def == null) continue;
+                string bName = settings != null ? settings.bodyName ?? string.Empty : string.Empty;
+                bool hasAtmosphere = settings != null && settings.HasAtmosphere;
+                if (!IsBiomeCompatibleWithPlanet(def, bName, temperature, hasAtmosphere)) continue;
                 // Exclude biomes whose temperature window is incompatible with the body's climate.
                 if (temperature < -5f && def.minTemperature > 0.55f) continue;   // cold body, hot biome
                 if (temperature > 35f && def.maxTemperature < 0.45f) continue;   // hot body, cold biome
@@ -207,6 +210,85 @@ namespace VoxelEngine.Cosmos
             }
             Debug.Log(sb.ToString());
             return result;
+        }
+
+        private bool IsBiomeCompatibleWithPlanet(BiomeDefinition def, string bodyName, float temperature, bool hasAtmosphere)
+        {
+            if (def == null) return false;
+            string bName = def.biomeName ?? string.Empty;
+
+            // 1. Check planet identity / keywords
+            bool isMoon = bodyName.IndexOf("Moon", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                          bodyName.IndexOf("Lunar", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                          !hasAtmosphere;
+            bool isIce = bodyName.IndexOf("Ice", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                         bodyName.IndexOf("Europa", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                         bodyName.IndexOf("Frost", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                         temperature < -15f;
+            bool isDesert = bodyName.IndexOf("Desert", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                            bodyName.IndexOf("Mars", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                            bodyName.IndexOf("Arid", System.StringComparison.OrdinalIgnoreCase) >= 0;
+            bool isVolcanic = bodyName.IndexOf("Volcan", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                              bodyName.IndexOf("Lava", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                              bodyName.IndexOf("Io", System.StringComparison.OrdinalIgnoreCase) >= 0;
+            bool isAcid = bodyName.IndexOf("Acid", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                          bodyName.IndexOf("Toxic", System.StringComparison.OrdinalIgnoreCase) >= 0;
+            bool isPirate = bodyName.IndexOf("Pirate", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                            bodyName.IndexOf("Scrap", System.StringComparison.OrdinalIgnoreCase) >= 0;
+
+            // Strict exclusion rules so biomes never cross-contaminate planets
+            if (isMoon)
+            {
+                return bName.IndexOf("Moon", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       bName.IndexOf("Lunar", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       bName.IndexOf("Barren", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       bName.IndexOf("Crater", System.StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+            if (isIce)
+            {
+                return bName.IndexOf("Ice", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       bName.IndexOf("Snow", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       bName.IndexOf("Tundra", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       bName.IndexOf("Glacier", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       bName.IndexOf("Frozen", System.StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+            if (isDesert)
+            {
+                return bName.IndexOf("Desert", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       bName.IndexOf("Sand", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       bName.IndexOf("Dune", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       bName.IndexOf("Canyon", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       bName.IndexOf("Arid", System.StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+            if (isVolcanic)
+            {
+                return bName.IndexOf("Volcan", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       bName.IndexOf("Lava", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       bName.IndexOf("Basalt", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       bName.IndexOf("Obsidian", System.StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+            if (isAcid)
+            {
+                return bName.IndexOf("Acid", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       bName.IndexOf("Toxic", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       bName.IndexOf("Corrod", System.StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+            if (isPirate)
+            {
+                return bName.IndexOf("Pirate", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       bName.IndexOf("Wasteland", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       bName.IndexOf("Scrap", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       bName.IndexOf("Rust", System.StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+
+            // Earthlike / Home planet: exclude specialized moon/volcanic/acid/pirate biomes
+            if (bName.IndexOf("Moon", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                bName.IndexOf("Volcan", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                bName.IndexOf("Acid", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                bName.IndexOf("Pirate", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                return false;
+
+            return true;
         }
 
         /// <summary>Prebuilt ore layers for this body (common + rare + specials).</summary>

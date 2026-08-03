@@ -58,16 +58,15 @@ namespace VoxelEngine.UI
 
             _card = new VisualElement { name = "WorldInspectionHud" };
             _card.style.position = Position.Absolute;
-            _card.style.left = 16;
+            _card.style.right = 16;
             _card.style.top = 18;
             _card.style.width = 310;
             _card.style.paddingLeft = 14;
             _card.style.paddingRight = 14;
             _card.style.paddingTop = 11;
             _card.style.paddingBottom = 11;
-            _card.style.backgroundColor = new StyleColor(new Color(0.025f, 0.035f, 0.055f, 0.94f));
             _card.style.opacity = 0f;
-            _card.style.translate = new StyleTranslate(new Translate(new Length(-10f, LengthUnit.Pixel), new Length(0f, LengthUnit.Pixel), 0f));
+            _card.style.translate = new StyleTranslate(new Translate(new Length(10f, LengthUnit.Pixel), new Length(0f, LengthUnit.Pixel), 0f));
             _card.style.transitionProperty = new System.Collections.Generic.List<StylePropertyName> { "opacity", "translate" };
             _card.style.transitionDuration = new System.Collections.Generic.List<TimeValue>
             {
@@ -75,8 +74,8 @@ namespace VoxelEngine.UI
                 new(0.13f, TimeUnit.Second)
             };
             _card.pickingMode = PickingMode.Ignore;
-            T.Radius(_card, 8f);
-            T.Border(_card, 1f, new Color(T.BorderBright.r, T.BorderBright.g, T.BorderBright.b, 0.78f));
+            LcdHudTheme.ApplyChassis(_card, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.96f), 3f);
+            LcdHudTheme.AddAnimatedScanlines(_card, 3, 6f, 18f);
             uiRoot.Add(_card);
 
             var headingRow = new VisualElement();
@@ -103,7 +102,7 @@ namespace VoxelEngine.UI
             _title.style.fontSize = 13;
             _title.style.unityFontStyleAndWeight = FontStyle.Bold;
             _title.style.letterSpacing = 0.5f;
-            _title.style.color = new StyleColor(T.TextPrimary);
+            _title.style.color = new StyleColor(LcdHudTheme.Phosphor);
             _title.pickingMode = PickingMode.Ignore;
             textColumn.Add(_title);
 
@@ -111,14 +110,14 @@ namespace VoxelEngine.UI
             _detail.style.fontSize = 9;
             _detail.style.marginTop = 2;
             _detail.style.letterSpacing = 0.6f;
-            _detail.style.color = new StyleColor(T.TextMuted);
+            _detail.style.color = new StyleColor(LcdHudTheme.Caption);
             _detail.pickingMode = PickingMode.Ignore;
             textColumn.Add(_detail);
 
             _status = new Label();
             _status.style.fontSize = 10;
             _status.style.marginTop = 8;
-            _status.style.color = new StyleColor(T.TextSecondary);
+            _status.style.color = new StyleColor(LcdHudTheme.Phosphor);
             _status.style.whiteSpace = WhiteSpace.Normal;
             _status.pickingMode = PickingMode.Ignore;
             _card.Add(_status);
@@ -278,6 +277,36 @@ namespace VoxelEngine.UI
             info = default;
             if (hit.collider == null) return false;
 
+            var tree = hit.collider.GetComponentInParent<VoxelEngine.Trees.Tree>();
+            if (tree != null)
+            {
+                string treeName = hit.collider.name.Replace("(Clone)", string.Empty).Trim();
+                if (treeName.StartsWith("Tree_", System.StringComparison.OrdinalIgnoreCase))
+                    treeName = treeName.Substring(5) + " Tree";
+                else if (string.IsNullOrEmpty(treeName) || treeName == "__scatter")
+                    treeName = "Tree";
+
+                info.title = treeName.ToUpperInvariant();
+                info.detail = "VEGETATION · HARVESTABLE";
+                info.status = "Harvestable with Axe or Hands for Wood Logs";
+                info.showHealth = tree.maxHp > 0;
+                info.health01 = tree.maxHp > 0 ? Mathf.Clamp01(tree.hp / (float)tree.maxHp) : 0f;
+                info.healthText = $"{Mathf.Max(0, tree.hp)}/{tree.maxHp}";
+                return true;
+            }
+
+            var brokenPump = hit.collider.GetComponentInParent<VoxelEngine.Generation.BrokenJackPump>();
+            if (brokenPump != null)
+            {
+                info.title = "RUINED JACK PUMP";
+                info.detail = "PIRATE RELIC SITE · HARVESTABLE";
+                info.status = "Break down for Iron Plates · Marks an Infinite Crude Oil Node";
+                info.showHealth = true;
+                info.health01 = Mathf.Clamp01(1f);
+                info.healthText = "SALVAGEABLE";
+                return true;
+            }
+
             // Automated defense network — ammo, filter, auto/manual, HP.
             var defense = hit.collider.GetComponentInParent<Damageable>();
             if (defense != null && DefenseStatus.TryDescribe(defense, out var dInfo))
@@ -410,8 +439,12 @@ namespace VoxelEngine.UI
             var world = ActiveWorld.Current;
             if (world != null)
             {
-                Vector3 samplePoint = hit.point - hit.normal.normalized * 0.15f;
-                if (TryDescribeVoxel(world, world.WorldToVoxel(samplePoint), out info)) return true;
+                Vector3 samplePoint1 = hit.point - hit.normal.normalized * 0.55f;
+                if (TryDescribeVoxel(world, world.WorldToVoxel(samplePoint1), out info)) return true;
+                Vector3 samplePoint2 = hit.point - hit.normal.normalized * 0.25f;
+                if (TryDescribeVoxel(world, world.WorldToVoxel(samplePoint2), out info)) return true;
+                Vector3 samplePoint3 = hit.point - hit.normal.normalized * 0.85f;
+                if (TryDescribeVoxel(world, world.WorldToVoxel(samplePoint3), out info)) return true;
             }
 
             // A terrain chunk without a resolved voxel should not become a meaningless root
@@ -437,7 +470,7 @@ namespace VoxelEngine.UI
             // A collider can be deferred for a newly streamed chunk while its voxel data is
             // already valid. Marching the short inspection reach keeps the top-left title alive
             // during that hand-off instead of flashing blank/no-object.
-            for (float distance = 0.35f; distance <= ProbeDistance; distance += 0.5f)
+            for (float distance = 0.20f; distance <= ProbeDistance; distance += 0.25f)
             {
                 Vector3Int voxelPosition = world.WorldToVoxel(ray.GetPoint(distance));
                 if (voxelPosition == lastVoxel) continue;

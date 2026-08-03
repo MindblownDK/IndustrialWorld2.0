@@ -242,7 +242,7 @@ namespace VoxelEngine.UI
             l.pickingMode = PickingMode.Ignore;
             pill.Add(l);
 
-            pill.schedule.execute(() =>
+            pill.schedule.Execute(() =>
             {
                 float alpha = 0.45f + 0.55f * (0.5f + 0.5f * Mathf.Sin(Time.realtimeSinceStartup * 4.2f));
                 dot.style.backgroundColor = new StyleColor(new Color(bg.r, bg.g, bg.b, alpha));

@@ -235,11 +235,7 @@ namespace VoxelEngine.Generation
 
                 var touched = new HashSet<Chunk>();
                 BuildSurfacePuddle(world, surface, up, puddleRadius, touched);
-                // The old multi-voxel bore was an exposed player-sized shaft: once its oil
-                // moved, players could walk below the terrain through a generation scar. Keep
-                // the readable broad puddle, but use a sealed one-cell geological conduit below
-                // an intact surface cap. The deep reservoir remains mineable only intentionally.
-                BuildRadialFunnel(world, surface, reservoirTop, up, 1, 0, touched);
+                BuildRadialFunnel(world, surface, reservoirTop, up, Mathf.Max(2, puddleRadius - 1), 2, touched);
                 BuildReservoir(world, Vector3Int.RoundToInt(reservoirCenter), reservoirRadius, touched);
                 FlushTouchedChunks(world, touched);
 
@@ -383,27 +379,34 @@ namespace VoxelEngine.Generation
         }
 
         /// <summary>
-        /// Builds a narrow, sealed oil-bearing conduit below the surface puddle. It deliberately
-        /// leaves a solid cap and never cuts a player-sized vertical tunnel through terrain.
-        /// The broad visual read remains at the puddle; the conduit/reservoir communicate the
-        /// geology only once a player deliberately mines into the deposit.
+        /// Builds a tapered geological funnel from right below the surface puddle down to
+        /// the top of the deep reservoir, connecting puddle -> funnel -> reservoir cleanly.
         /// </summary>
         private static void BuildRadialFunnel(SphereWorld world, Vector3Int surface, Vector3 reservoirTop,
             Vector3 up, int mouthRadius, int throatRadius, HashSet<Chunk> touched)
         {
-            Vector3 start = surface - up * 2f;
+            Vector3 start = surface - up * 1f;
             Vector3 direction = reservoirTop - start;
             int steps = Mathf.Max(1, Mathf.CeilToInt(direction.magnitude));
-            // Keep at least two metres of intact terrain below the surface puddle. Parameters
-            // remain in the signature for saved/runtime call compatibility; the conduit itself
-            // is intentionally one cell wide, independent of the old broad-mouth setting.
-            int sealedCapSteps = Mathf.Max(2, mouthRadius + throatRadius + 1);
+            int effectiveMouth = Mathf.Max(2, mouthRadius);
+            int effectiveThroat = Mathf.Max(1, throatRadius);
 
-            for (int step = sealedCapSteps; step <= steps; step++)
+            for (int step = 1; step <= steps; step++)
             {
                 float progress = step / (float)steps;
                 Vector3 center = Vector3.Lerp(start, reservoirTop, progress);
-                WriteOil(world, Vector3Int.RoundToInt(center), touched);
+                float currentRadius = Mathf.Lerp(effectiveMouth, effectiveThroat, progress);
+                int rInt = Mathf.Max(1, Mathf.RoundToInt(currentRadius));
+                int r2 = rInt * rInt;
+
+                GetTangentBasis(up, out Vector3 tangentA, out Vector3 tangentB);
+                for (int a = -rInt; a <= rInt; a++)
+                for (int b = -rInt; b <= rInt; b++)
+                {
+                    if (a * a + b * b > r2) continue;
+                    Vector3Int pos = Vector3Int.RoundToInt(center + tangentA * a + tangentB * b);
+                    WriteOil(world, pos, touched);
+                }
             }
         }
 

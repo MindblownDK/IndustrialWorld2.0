@@ -36,7 +36,7 @@ namespace VoxelEngine.Trees
         {
             if (hp <= 0) return 0;
             int dealt = damage;
-            if (usedTool != preferredTool) dealt = Mathf.Max(1, damage / 3);
+            if (usedTool != preferredTool) dealt = Mathf.Max(4, damage / 2);
             hp -= dealt;
             if (hp <= 0)
             {

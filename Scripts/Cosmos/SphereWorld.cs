@@ -280,6 +280,32 @@ namespace VoxelEngine.Cosmos
             }
         }
 
+        /// <summary>
+        /// Instantly unloads and reclaims all live chunks when transitioning to another celestial body.
+        /// </summary>
+        public void ResetAllChunks()
+        {
+            if (_storage != null)
+            {
+                foreach (var kv in _chunks) if (kv.Value.isModified) _storage.EnqueueSave(kv.Value);
+            }
+            _pool?.DisposeAll(_chunks.Values);
+            _chunks.Clear();
+            _genQueue.Clear();
+            _meshQueue.Clear();
+            _queuedForGeneration.Clear();
+            _queuedForMeshing.Clear();
+            _pendingGen.Clear();
+            _pendingMesh.Clear();
+            if (body != null && _biomeRegistry != null)
+            {
+                if (_biomes.IsCreated) _biomes.Dispose();
+                var biomeArr = body.BuildBiomeData(_biomeRegistry);
+                _biomes = new Unity.Collections.NativeArray<BiomeData>(biomeArr.Length, Unity.Collections.Allocator.Persistent);
+                for (int i = 0; i < biomeArr.Length; i++) _biomes[i] = biomeArr[i];
+            }
+        }
+
         private float _diagTimer;
         private int   _diagGenerated;
         private int   _diagMeshed;

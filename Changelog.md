@@ -1,9 +1,37 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.11.14-dev`
+**Current Version:** `7.11.15-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.11.15-dev] Interplanetary Flight, Correct Planet Biomes, Full-Sphere LODs, Oil Seep Reservoirs & LCD Inspection HUD
+
+**Type:** PATCH — interplanetary travel, biome filtering, full-planet LOD clipping, oil seep geology, tree harvesting, and LCD inspection HUD polish; no save/API break.
+
+#### 🚀 Interplanetary Space Flight & Transition System
+- **Active Solar System Navigation:** Added `CosmosBootstrap.Instance.TransitionToPlanet(PlanetTemplate)` and high-orbit flight telemetry in `CosmosBootstrap` and `PlayerInteractionTool`.
+- **Warp & Orbital Arrival:** Players flying in high orbit (`> 1400m` altitude) aiming towards a distant planet in `CosmicRegistry.Instance` can press `F / WARP` (or fly directly towards it above `1800m`) to transition seamlessly to that planet's orbit.
+- **Clean Voxel Re-Bootstrap:** Transitioning invokes `SphereWorld.ResetAllChunks()` to instantly reclaim old planet meshes and generate the target celestial body's unique terrain, atmosphere, gravity, and biomes without leaking memory.
+
+#### 🌍 Correct Biomes per Planet & Full-Sphere Distance LODs
+- **Strict Planet-to-Biome Filtering:** Upgraded `CelestialBody.BuildBiomeData` with `IsBiomeCompatibleWithPlanet` keywords (`bodyName`, `temperature`, `hasAtmosphere`). Moon worlds only receive barren/crater biomes, ice worlds only frozen tundra/glaciers, desert worlds only arid dunes/canyons, volcanic worlds only basalt/lava, and pirate worlds only rust/scrap. Alien biomes no longer cross-contaminate Earthlike worlds.
+- **Near-Camera LOD Clipping:** Added `clip(distToCamera - 240.0)` and smoothstep alpha fade (`240m..320m`) to `PlanetSurfaceLodURP.shader`. When close to the planet, low-poly impostor triangles inside local streamed terrain are hidden so they never clip through ground or caves, while the full planet surface remains 100% visible at any distance.
+
+#### 🛢️ Oil Seep Reservoirs & Ruined Pirate Jack Pump Landmarks
+- **Puddle-to-Reservoir Geological Funnel:** Reworked `OilReservoirDecorator.BuildRadialFunnel` to generate a continuous tapering conduit from `mouthRadius = puddleRadius - 1` right below the surface puddle down to `throatRadius = 2` at the deep reservoir, connecting puddle -> bore -> reservoir cleanly.
+- **Ruined Jack Pump Relics:** `PirateOilNode.Ensure` now spawns a weathered industrial `BrokenJackPump` (`IDamageable`, 120 HP) right on top of infinite Pirate World oil nodes. Breaking down the ruined pump awards 4 Iron Plates (`"Item_IronPlate"`) and leaves the infinite oil node marked for operational Jack Pump placement.
+
+#### 📺 Top-Right LCD World Inspection HUD & Bare-Hand Tree Mining
+- **Top-Right LCD Terminal Display:** Relocated `WorldInspectionHud` to the top right (`right = 16`, `top = 18`) and restyled it with our signature phosphor LCD instrument chassis, scanlines, and bezel brackets.
+- **3-Depth Voxel & Vegetation Resolution:** Upgraded `TryDescribeVoxel` and `TryResolve` with 3 surface-normal sample depths (`0.55m`, `0.25m`, `0.85m`) and a finer `0.25m` ray step so aiming at dirt, grass, stone, or trees reliably displays material hardness, mining tier, and harvestability.
+- **Bare-Hand Tree Harvesting:** `ChunkScatter` now automatically ensures scatter trees have a capsule collider and the `VoxelEngine.Trees.Tree` component. Upgraded `Tree.Hit` so punching with empty hands (`ToolType.Other`) deals `Mathf.Max(4, damage / 2)` damage, breaking trees down in ~16 punches for Wood Logs.
+
+#### 🐛 Compiler Fixes
+- Fixed lowercase `.execute(` -> capital `.Execute(` across `UITheme.cs` and `LcdHudTheme.cs` to conform to Unity 6.4 UI Toolkit's `IVisualElementScheduler` API.
+
+#### ✅ Static delivery checks
+- Verified C# syntax and brace balance across all 19 modified player, UI, cosmos, generation, scattering, and shader sources.
 
 ### [7.11.14-dev] LCD Screen UI Animations, Unified Instrument Aesthetics & Smooth Planet Surfaces
 

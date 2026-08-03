@@ -105,7 +105,7 @@ namespace VoxelEngine.UI
             }
 
             // Animate scanline shimmer at a lightweight 20 fps interval.
-            screen.schedule.execute(() =>
+            screen.schedule.Execute(() =>
             {
                 float t = Time.realtimeSinceStartup;
                 for (int i = 0; i < scanlines.Count; i++)
@@ -136,13 +136,13 @@ namespace VoxelEngine.UI
             };
 
             long delayMs = (long)Mathf.Max(0f, delaySeconds * 1000f);
-            element.schedule.execute(() =>
+            element.schedule.Execute(() =>
             {
                 element.style.opacity = 1f;
                 element.style.scale = new StyleScale(new Scale(Vector3.one));
                 if (onComplete != null)
                 {
-                    element.schedule.execute(() => onComplete?.Invoke()).StartingIn(180);
+                    element.schedule.Execute(() => onComplete?.Invoke()).StartingIn(180);
                 }
             }).StartingIn(delayMs);
         }
@@ -245,7 +245,7 @@ namespace VoxelEngine.UI
                     state.Add(label);
 
                     // Animate pulsing dot
-                    state.schedule.execute(() =>
+                    state.schedule.Execute(() =>
                     {
                         float alpha = 0.45f + 0.55f * (0.5f + 0.5f * Mathf.Sin(Time.realtimeSinceStartup * 4.5f));
                         dot.style.backgroundColor = new StyleColor(new Color(Phosphor.r, Phosphor.g, Phosphor.b, alpha));

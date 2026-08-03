@@ -100,7 +100,16 @@ Shader "VoxelEngine/PlanetSurfaceLodURP"
                 color *= 1.0 + detail;
                 color += _AtmosphereRim.rgb * rim;
                 color = MixFog(color, input.fogCoord);
-                return half4(color, input.color.a * _Tint.a);
+                float distToCamera = length(_WorldSpaceCameraPos - input.positionWS);
+                // Inset full-planet LOD is occluded by nearby detailed voxel chunks.
+                // Clip any LOD triangles within 240m of camera so low-poly LOD never
+                // clips through real terrain or cave interiors. Beyond 320m, the entire
+                // planet surface remains visible from any distance.
+                clip(distToCamera - 240.0);
+                float nearFade = smoothstep(240.0, 320.0, distToCamera);
+                float alpha = input.color.a * _Tint.a * nearFade;
+                if (alpha < 0.01) discard;
+                return half4(color, alpha);
             }
             ENDHLSL
         }

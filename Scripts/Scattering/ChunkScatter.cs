@@ -151,6 +151,21 @@ namespace VoxelEngine.Scattering
 
                     GameObject instance = Object.Instantiate(entry.prefab, worldPos, worldRot, holder.transform);
                     instance.transform.localScale = Vector3.one * scale;
+                    if (isTree && instance.GetComponentInChildren<VoxelEngine.Trees.Tree>() == null)
+                    {
+                        var t = instance.AddComponent<VoxelEngine.Trees.Tree>();
+                        t.maxHp = 80;
+                        t.hp = 80;
+                        t.minLogs = 2;
+                        t.maxLogs = 4;
+                    }
+                    if (instance.GetComponentInChildren<Collider>() == null)
+                    {
+                        var col = instance.AddComponent<CapsuleCollider>();
+                        col.height = 4f;
+                        col.radius = 0.6f;
+                        col.center = new Vector3(0, 2f, 0);
+                    }
                     Register(world, instance, worldPos, clearRadius);
                     break; // one authored scatter choice per validated surface point
                 }

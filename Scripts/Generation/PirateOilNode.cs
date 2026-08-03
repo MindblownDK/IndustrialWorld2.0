@@ -5,8 +5,10 @@
 
 using System.Collections.Generic;
 using UnityEngine;
+using VoxelEngine.Combat;
 using VoxelEngine.Core;
 using VoxelEngine.Cosmos;
+using VoxelEngine.Items;
 
 namespace VoxelEngine.Generation
 {
@@ -51,7 +53,44 @@ namespace VoxelEngine.Generation
             created.SurfaceVoxel = surfaceVoxel;
             created.ReservoirVoxel = reservoirVoxel;
             created.PumpRadius = 4.5f;
+            created.SpawnRuinedPumpVisual();
             return created;
+        }
+
+        private void SpawnRuinedPumpVisual()
+        {
+            var ruined = new GameObject("Ruined Jack Pump");
+            ruined.transform.SetParent(transform, false);
+            ruined.transform.localPosition = Vector3.zero;
+
+            // Add collider so player can aim at and break it
+            var col = ruined.AddComponent<BoxCollider>();
+            col.size = new Vector3(3f, 3.5f, 3f);
+            col.center = new Vector3(0f, 1.75f, 0f);
+
+            var brokenPump = ruined.AddComponent<BrokenJackPump>();
+            brokenPump.node = this;
+
+            // Industrial rust/weathered primitives
+            var mat = new Material(Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard"));
+            mat.color = new Color(0.38f, 0.22f, 0.15f);
+
+            var baseBox = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            baseBox.name = "BaseFrame";
+            baseBox.transform.SetParent(ruined.transform, false);
+            baseBox.transform.localPosition = new Vector3(0f, 0.6f, 0f);
+            baseBox.transform.localScale = new Vector3(2.4f, 1.2f, 2.4f);
+            Object.Destroy(baseBox.GetComponent<Collider>());
+            if (baseBox.TryGetComponent<Renderer>(out var r1)) r1.sharedMaterial = mat;
+
+            var tower = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            tower.name = "Tower";
+            tower.transform.SetParent(ruined.transform, false);
+            tower.transform.localPosition = new Vector3(0f, 2.2f, 0f);
+            tower.transform.localScale = new Vector3(0.8f, 2.4f, 0.8f);
+            tower.transform.localRotation = Quaternion.Euler(0f, 0f, 15f);
+            Object.Destroy(tower.GetComponent<Collider>());
+            if (tower.TryGetComponent<Renderer>(out var r2)) r2.sharedMaterial = mat;
         }
 
         public static bool IsPumpableNear(SphereWorld world, Vector3 pumpWorldPosition, float extraReach = 0.75f)
@@ -68,6 +107,43 @@ namespace VoxelEngine.Generation
                     return true;
             }
             return false;
+        }
+    }
+
+    [DisallowMultipleComponent]
+    public sealed class BrokenJackPump : MonoBehaviour, IDamageable
+    {
+        public PirateOilNode node;
+        private int _hp = 120;
+
+        public bool IsAlive => _hp > 0;
+
+        public void TakeDamage(DamageEvent e)
+        {
+            if (!IsAlive) return;
+            _hp -= Mathf.Max(1, Mathf.RoundToInt(e.amount));
+            if (_hp <= 0)
+            {
+                var inv = Object.FindAnyObjectByType<Inventory>();
+                if (inv != null)
+                {
+                    ItemDefinition ironPlate = null;
+                    foreach (var it in Resources.LoadAll<ItemDefinition>(""))
+                    {
+                        if (it != null && (it.name == "Item_IronPlate" || it.displayName == "Iron Plate"))
+                        {
+                            ironPlate = it;
+                            break;
+                        }
+                    }
+                    if (ironPlate != null)
+                    {
+                        inv.Add(ironPlate, 4);
+                        VoxelEngine.UI.BuildFeedbackHud.Show("Salvage", "Ruined Jack Pump: +4 Iron Plates", null, new Color(0.78f, 0.80f, 0.85f));
+                    }
+                }
+                Destroy(gameObject);
+            }
         }
     }
 }

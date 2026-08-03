@@ -70,8 +70,11 @@ namespace VoxelEngine.Cosmos
         private float _spaceTransitionBaseFarClip;
         private bool _spaceTransitionCaptured;
 
+        public static CosmosBootstrap Instance { get; private set; }
+
         private void Awake()
         {
+            if (Instance == null) Instance = this;
             ResolvePlanetTemplate();
             ResolveAssets();
             ResolveViewerReference();
@@ -563,6 +566,93 @@ namespace VoxelEngine.Cosmos
         {
             if (viewer == null || _awaitingViewerSurfacePlacement) TryResolveViewerAndAnchor();
             UpdateAtmosphereSpaceCamera();
+            CheckInterplanetaryFlight();
+        }
+
+        public void TransitionToPlanet(PlanetTemplate newPlanet)
+        {
+            if (newPlanet == null || newPlanet == planetTemplate || _sphereWorld == null) return;
+            Debug.Log($"[CosmosBootstrap] Transitioning interplanetary flight to {newPlanet.name}...");
+
+            _sphereWorld.ResetAllChunks();
+            planetTemplate = newPlanet;
+
+            var body = _bodyGO != null ? _bodyGO.GetComponent<CelestialBody>() : null;
+            if (body != null)
+            {
+                if (newPlanet.body == null) newPlanet.body = BodySettings.CreateEarthlike();
+                body.settings = newPlanet.body;
+                int perPlanetSeed = 1337 ^ (newPlanet.body.bodyName.GetHashCode() * 397);
+                var session = VoxelEngine.Menu.WorldSession.Instance;
+                if (session != null && session.seedState != null)
+                    perPlanetSeed = session.seedState.GetSeed(0, newPlanet.body.seed);
+                body.SetRuntimeSeedOverride(perPlanetSeed);
+                body.ApplySettings();
+
+                _sphereWorld.body = body;
+
+                if (_terrainLod != null) _terrainLod.body = body;
+                if (_oceanLod != null) _oceanLod.body = body;
+                if (_grass != null) _grass.body = body;
+                if (_waterfalls != null) _waterfalls.body = body;
+
+                GravityProvider.ActiveBody = body;
+
+                if (viewer != null)
+                {
+                    Vector3 orbitEntrance = body.transform.position + new Vector3(0f, body.settings.radiusKm * 1000f + 850f, 0f);
+                    viewer.position = orbitEntrance;
+                    var rb = viewer.GetComponentInParent<Rigidbody>();
+                    if (rb != null) rb.linearVelocity = Vector3.down * 15f;
+                    VoxelEngine.UI.BuildFeedbackHud.Show("Space Travel", $"Arrived in Orbit: {body.settings.bodyName}", null, new Color(0.18f, 0.72f, 0.88f));
+                }
+            }
+        }
+
+        private float _nextInterplanetaryCheck;
+        private void CheckInterplanetaryFlight()
+        {
+            if (Time.unscaledTime < _nextInterplanetaryCheck || viewer == null || _bodyGO == null) return;
+            _nextInterplanetaryCheck = Time.unscaledTime + 0.3f;
+
+            var activeBody = GravityProvider.ActiveBody;
+            if (activeBody == null || activeBody.settings == null) return;
+
+            float altitude = (viewer.position - _bodyGO.transform.position).magnitude - activeBody.settings.radiusKm * 1000f;
+            if (altitude < 1400f) return;
+
+            var registry = CosmicRegistry.Instance;
+            if (registry == null || !registry.IsReady) return;
+
+            var rb = viewer.GetComponentInParent<Rigidbody>();
+            Vector3 vel = rb != null ? rb.linearVelocity : viewer.forward * 50f;
+            if (vel.magnitude < 15f) return;
+
+            Vector3 flyDir = vel.normalized;
+            Vector3 viewerKm = Vector3.zero;
+            for (int i = 0; i < registry.Bodies.Count; i++)
+            {
+                if (registry.Bodies[i].settings == activeBody.settings)
+                {
+                    viewerKm = registry.Bodies[i].positionKm;
+                    break;
+                }
+            }
+
+            for (int i = 0; i < registry.Bodies.Count; i++)
+            {
+                var target = registry.Bodies[i];
+                if (target == null || target.settings == activeBody.settings || target.planetTemplate == null) continue;
+                Vector3 toTargetKm = target.positionKm - viewerKm;
+                if (toTargetKm.sqrMagnitude < 1f) continue;
+
+                Vector3 dirToTarget = toTargetKm.normalized;
+                if (Vector3.Dot(flyDir, dirToTarget) > 0.94f && altitude > 1800f)
+                {
+                    TransitionToPlanet(target.planetTemplate);
+                    break;
+                }
+            }
         }
 
         /// <summary>
