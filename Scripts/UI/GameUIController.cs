@@ -299,6 +299,7 @@ namespace VoxelEngine.UI
             CryobedConfigHud.Tick();
             InteractionHud.Tick();
             WorldInspectionHud.Tick();
+            GravityPullHud.Tick();
             VoxelEngine.GridSystem.GridPilotHud.Tick();
             GrinderHud.Tick();
             BuildCostHud.Tick();
@@ -1118,6 +1119,7 @@ namespace VoxelEngine.UI
             WorldInspectionHud.EnsureMounted(_hudLayer);
             BuildFeedbackHud.EnsureMounted(_hudLayer);
             VoxelEngine.Weather.WeatherHud.EnsureMounted(_hudLayer);
+            GravityPullHud.EnsureMounted(_hudLayer);
             VoxelEngine.GridSystem.GridPilotHud.EnsureMounted(_hudLayer);
             GrinderHud.EnsureMounted(_hudLayer);
             BuildCostHud.EnsureMounted(_hudLayer);

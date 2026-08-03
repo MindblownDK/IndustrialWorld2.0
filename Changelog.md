@@ -1,9 +1,28 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.5.0-dev`
+**Current Version:** `7.6.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.6.0-dev] Premium Gravity Pull Telemetry
+
+**Type:** MINOR — new save-compatible gravity telemetry HUD for on-foot and cockpit play.
+
+#### 🪐 Shared, honest gravity telemetry
+- Added an allocation-free `GravityFieldSample` at the gravity-provider layer, exposing real local acceleration, Earth-relative G force, surface-pull fraction, and radial/flat direction.
+- Player and cockpit read from this same source, while cockpit telemetry includes the grid’s actual gravity scale.
+
+#### 📡 Bottom-left exploration card
+- Added a premium **GRAVITY PULL** card for on-foot play: large live G readout, exact m/s² acceleration, body name, coreward/downward pull state, animated field pulse, and surface-strength meter.
+- Accent treatment communicates the field at a glance: purple near normal pull, cyan/blue as pull fades at altitude, and amber for high-G fields.
+- The card is informational only, never captures input, hides behind blocking UI, and yields its anchor while piloting.
+
+#### 🚀 Cockpit gravity module
+- The ship systems panel now contains a matching compact **GRAVITY PULL** module with live G, m/s², direction, pulse, and surface-strength bar.
+- This gives pilots a clear reading of the construct’s effective gravity pull during ascent, spaceflight, and return.
+
+---
 
 ### [7.5.0-dev] Atmosphere-to-Space Flight Foundation
 

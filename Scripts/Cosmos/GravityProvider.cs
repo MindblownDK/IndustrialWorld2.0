@@ -13,6 +13,31 @@ using UnityEngine;
 
 namespace VoxelEngine.Cosmos
 {
+    /// <summary>
+    /// Allocation-free local gravity telemetry shared by player and cockpit HUDs.
+    /// Magnitude is the actual acceleration after an optional construct scale;
+    /// SurfaceFraction reads 1.0 at the active body's surface and falls with altitude.
+    /// </summary>
+    public readonly struct GravityFieldSample
+    {
+        public readonly Vector3 Acceleration;
+        public readonly float Magnitude;
+        public readonly float Gees;
+        public readonly float SurfaceFraction;
+        public readonly bool IsRadial;
+
+        internal GravityFieldSample(Vector3 acceleration, float surfaceMagnitude, bool isRadial)
+        {
+            Acceleration = acceleration;
+            Magnitude = acceleration.magnitude;
+            Gees = Magnitude / 9.81f;
+            SurfaceFraction = surfaceMagnitude > 0.0001f
+                ? Mathf.Clamp01(Magnitude / surfaceMagnitude)
+                : 0f;
+            IsRadial = isRadial;
+        }
+    }
+
     [DefaultExecutionOrder(-55)]
     public class GravityProvider : MonoBehaviour
     {
@@ -64,6 +89,21 @@ namespace VoxelEngine.Cosmos
 
         /// <summary>Flat-world gravity magnitude (for code that only cares about the scalar).</summary>
         public static float FlatMagnitude => Instance != null ? Instance.flatGravity : 22f;
+
+        /// <summary>
+        /// Samples the real local pull at a position. Pass a construct's gravity scale for
+        /// cockpit telemetry; leave the default for player/world telemetry.
+        /// </summary>
+        public static GravityFieldSample Sample(Vector3 worldPosition, float gravityScale = 1f)
+        {
+            float scale = Mathf.Max(0f, gravityScale);
+            Vector3 acceleration = GetGravity(worldPosition) * scale;
+            bool radial = ActiveBody != null;
+            float surfaceMagnitude = radial
+                ? ActiveBody.SurfaceGravity * scale
+                : FlatMagnitude * scale;
+            return new GravityFieldSample(acceleration, surfaceMagnitude, radial);
+        }
 
         // ── Surface-aligned orientation helper ────────────────────────
         /// <summary>
