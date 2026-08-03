@@ -66,6 +66,7 @@ namespace VoxelEngine.Transport
         private readonly HashSet<Collider> _endpointColliderSet = new();
         private static readonly Collider[] s_endpointProbe = new Collider[24];
         private float _nextEndpointGatherAt;
+        private const float EndpointSafetyScanSeconds = 2f;
 
         /// <summary>Fill <see cref="_endpointColliders"/> with every collider the pipe
         /// should consider an endpoint candidate: anything in touch range, plus the
@@ -74,9 +75,10 @@ namespace VoxelEngine.Transport
         {
             // Memoize the 5-cell corridor sweep per pipe: it runs inside both the
             // visual scan and the push tick, and 31 OverlapSphere probes per call add
-            // up fast with long pipe runs — endpoints rarely change within 0.5 s.
+            // up fast with long pipe runs — topology signals refresh immediately, so
+            // this is only a slow safety fallback rather than a per-pipe 0.5 s tax.
             if (Time.time < _nextEndpointGatherAt && _endpointColliders.Count > 0) return;
-            _nextEndpointGatherAt = Time.time + 0.5f;
+            _nextEndpointGatherAt = Time.time + EndpointSafetyScanSeconds;
 
             _endpointColliders.Clear();
             _endpointColliderSet.Clear();
@@ -118,10 +120,11 @@ namespace VoxelEngine.Transport
         private Vector3 _pendingEntryDir;
         private float   _pendingEntryUntil;
 
-        // Cache of nearby container endpoints (chests/machines) refreshed each
-        // tick — used both to draw connecting arms AND to drive flow direction.
+        // Cache of nearby container endpoints (chests/machines), refreshed by topology
+        // changes plus a slow safety scan — used for visual arms and item flow direction.
         private readonly List<Vector3> _endpointPositions = new(6);
         private float _endpointScanTimer;
+        private int _endpointVisualHash;
 
         /// <summary>Read-only view of the items currently in transit inside this pipe.</summary>
         public IReadOnlyList<ItemStack> Buffer
@@ -175,7 +178,7 @@ namespace VoxelEngine.Transport
             // Keep the endpoint (chest/machine) cache fresh so arms appear/vanish
             // when the player places or removes a container next to the pipe.
             _endpointScanTimer += Time.deltaTime;
-            if (_endpointScanTimer >= 0.5f)
+            if (_endpointScanTimer >= EndpointSafetyScanSeconds)
             {
                 _endpointScanTimer = 0f;
                 ScanEndpoints();
@@ -298,18 +301,38 @@ namespace VoxelEngine.Transport
                 if (!_endpointPositions.Contains(endpoint))
                     _endpointPositions.Add(endpoint);
             }
+
+            unchecked
+            {
+                int hash = 17;
+                for (int i = 0; i < _endpointPositions.Count; i++)
+                {
+                    Vector3 p = _endpointPositions[i];
+                    hash = hash * 31 + Mathf.RoundToInt(p.x * 100f);
+                    hash = hash * 31 + Mathf.RoundToInt(p.y * 100f);
+                    hash = hash * 31 + Mathf.RoundToInt(p.z * 100f);
+                }
+                if (hash != _endpointVisualHash)
+                {
+                    _endpointVisualHash = hash;
+                    _visuals?.RequestTopologyRefresh();
+                }
+            }
         }
 
         /// <summary>
-        /// Force an immediate endpoint rescan + visual rebuild. Called by the
-        /// network when a port config changes so connections update instantly
-        /// instead of waiting for the next 0.5 s poll.
+        /// Force an immediate endpoint rescan and queue a hash-gated visual refresh.
+        /// Called by the network when a port config changes; the shared visual budget
+        /// keeps a long pipe run from rebuilding all meshes in the same frame.
         /// </summary>
         public void ForceEndpointRescan()
         {
             _nextEndpointGatherAt = 0f; // bypass the memo — config changed just now
             ScanEndpoints();
-            if (_visuals != null) _visuals.ForceRebuild();
+            // Endpoint scans can arrive in a burst after a pipe topology change.
+            // Queue the hash-gated visual update so a long run does not destroy and
+            // recreate every pipe mesh in the same frame.
+            if (_visuals != null) _visuals.RequestTopologyRefresh();
         }
 
         private static Vector3 NearestCardinal(Vector3 v)

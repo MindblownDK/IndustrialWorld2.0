@@ -165,7 +165,7 @@ namespace VoxelEngine.Gas
                     {
                         float detail = VoxelEngine.GridSystem.GridSizeExt.CellSize(VoxelEngine.GridSystem.GridSize.Small);
                         Vector3 localDelta = grid.transform.InverseTransformVector(block.transform.position - transform.position);
-                        if (!VoxelEngine.Networks.PipeAdjacency.IsCardinalLinkDelta(localDelta, detail, 5f, detail * 0.12f))
+                        if (!VoxelEngine.Networks.PipeAdjacency.IsDirectPipeLinkDelta(localDelta, detail, detail * 0.18f))
                             continue;
                         _neighbourPosBuf.Add(Vector3.Lerp(transform.position, block.transform.position, 0.5f));
                         continue;
@@ -195,7 +195,7 @@ namespace VoxelEngine.Gas
                     var wPipe = col.GetComponentInParent<GasPipe>();
                     if (wPipe != null && wPipe != this)
                     {
-                        if (VoxelEngine.Networks.PipeAdjacency.IsCardinalNeighbour(
+                        if (VoxelEngine.Networks.PipeAdjacency.IsDirectPipeLink(
                                 transform.position, wPipe.transform.position,
                                 VoxelEngine.Networks.PipeAdjacency.DefaultGridSize))
                             _neighbourPosBuf.Add(Vector3.Lerp(transform.position, wPipe.transform.position, 0.5f));
@@ -224,7 +224,7 @@ namespace VoxelEngine.Gas
                     var other = col.GetComponentInParent<GasPipe>();
                     if (other != null && other != this)
                     {
-                        if (VoxelEngine.Networks.PipeAdjacency.IsCardinalNeighbour(
+                        if (VoxelEngine.Networks.PipeAdjacency.IsDirectPipeLink(
                                 transform.position, other.transform.position))
                             _neighbourPosBuf.Add(Vector3.Lerp(transform.position, other.transform.position, 0.5f));
                         continue;

@@ -98,7 +98,7 @@ namespace VoxelEngine.Fluids
                     {
                         float detail = VoxelEngine.GridSystem.GridSizeExt.CellSize(VoxelEngine.GridSystem.GridSize.Small);
                         Vector3 localDelta = grid.transform.InverseTransformVector(block.transform.position - transform.position);
-                        if (!VoxelEngine.Networks.PipeAdjacency.IsCardinalLinkDelta(localDelta, detail, 5f, detail * 0.12f)) return;
+                        if (!VoxelEngine.Networks.PipeAdjacency.IsDirectPipeLinkDelta(localDelta, detail, detail * 0.18f)) return;
                         _neighbourPosBuf.Add(Vector3.Lerp(transform.position, block.transform.position, 0.5f));
                         return;
                     }
@@ -142,7 +142,7 @@ namespace VoxelEngine.Fluids
                     if (worldPipe != null && worldPipe != this)
                     {
                         Vector3 d = worldPipe.transform.position - transform.position;
-                        if (VoxelEngine.Networks.PipeAdjacency.IsCardinalNeighbour(
+                        if (VoxelEngine.Networks.PipeAdjacency.IsDirectPipeLink(
                                 transform.position, worldPipe.transform.position,
                                 VoxelEngine.Networks.PipeAdjacency.DefaultGridSize))
                         {
@@ -191,7 +191,7 @@ namespace VoxelEngine.Fluids
                     var otherPipe = col.GetComponentInParent<WaterPipe>();
                     if (otherPipe != null && otherPipe != this)
                     {
-                        if (VoxelEngine.Networks.PipeAdjacency.IsCardinalNeighbour(
+                        if (VoxelEngine.Networks.PipeAdjacency.IsDirectPipeLink(
                                 transform.position, otherPipe.transform.position))
                             _neighbourPosBuf.Add(Vector3.Lerp(transform.position, otherPipe.transform.position, 0.5f));
                         continue;

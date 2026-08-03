@@ -88,7 +88,9 @@ namespace VoxelEngine.Gas
             // cell size is chosen so any valid pipe↔pipe link (≤ 5 lattice
             // cells in a cardinal line) lives inside this cell or one of the
             // immediate 3×3×3 neighbours.
-            const float CELL = 5f;
+            // Pipe-to-pipe links are direct lattice neighbours; a smaller hash keeps
+            // dense runs from comparing unrelated five-cell corridor candidates.
+            const float CELL = 2f;
             const float CELL_INV = 1f / CELL;
             var hash = new Dictionary<Vector3Int, List<GasPipe>>(n * 2);
             Vector3Int Cell(Vector3 p) => new Vector3Int(
@@ -113,7 +115,6 @@ namespace VoxelEngine.Gas
                 if (a == null) continue;
                 Vector3 pa = a.transform.position;
                 var c0 = Cell(pa);
-                float rA = a.connectRadius;
                 var ga = a.GetComponentInParent<GridBlock>();
 
                 for (int dz = -1; dz <= 1; dz++)
@@ -131,17 +132,13 @@ namespace VoxelEngine.Gas
                         Vector3 pb = b.transform.position;
                         float step = GridStep(a, b, ga);
 
-                        // Pipe↔pipe range honours the FIVE-cell cardinal rule.
-                        // Capped so pipes can't magically reach across gaps.
-                        float range = step * 5.1f;
-                        float rB = b.connectRadius;
-                        float radiusCap = Mathf.Max(rA, rB);
-                        if (radiusCap > range) range = Mathf.Min(radiusCap, 5f);
-
+                        // Pipe↔pipe links are physical one-cell joins. Long cardinal
+                        // reach is reserved for explicitly authored tank/port corridors.
+                        float range = step * 1.35f;
                         if ((pa - pb).sqrMagnitude > range * range) continue;
 
                         Vector3 connectionDelta = VoxelEngine.Networks.PipeAdjacency.ConnectionDelta(a, b);
-                        if (!VoxelEngine.Networks.PipeAdjacency.IsCardinalLinkDelta(connectionDelta, step, 5f, step * 0.35f)) continue;
+                        if (!VoxelEngine.Networks.PipeAdjacency.IsDirectPipeLinkDelta(connectionDelta, step, step * 0.18f)) continue;
 
                         if (VoxelEngine.Networks.WrenchBlacklist.IsBlocked(a, b)) continue;
 

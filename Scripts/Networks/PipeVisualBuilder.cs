@@ -60,13 +60,24 @@ namespace VoxelEngine.Networks
         public float rebuildInterval = 2.0f;
 
         // ── Topology-change signal ─────────────────────────────────────
-        // Bumped by the grid whenever a block is added/removed. Each builder
-        // remembers the last version it processed and only re-scans its
-        // neighbours when the version changes — so pipes no longer poll every
-        // 0.4 s (which lagged when many pipes sat close together); they rebuild
-        // exactly when something nearby is placed or removed.
+        // A topology change may affect many pipes. We therefore enqueue each builder
+        // and let a small shared per-frame budget process visual rebuilds over several
+        // frames instead of destroying/recreating every pipe mesh in one 5-FPS spike.
         public static int TopologyVersion { get; private set; }
-        public static void NotifyTopologyChanged() => TopologyVersion++;
+        private const int MaxQueuedRebuildsPerFrame = 2;
+        private static int s_rebuildBudgetFrame = -1;
+        private static int s_rebuildBudgetUsed;
+        private static readonly List<PipeVisualBuilder> s_builderScratch = new(64);
+
+        public static void NotifyTopologyChanged()
+        {
+            TopologyVersion++;
+            s_builderScratch.Clear();
+            foreach (var pair in _AllBuilders)
+                if (pair.Key != null) s_builderScratch.Add(pair.Key);
+            for (int i = 0; i < s_builderScratch.Count; i++)
+                s_builderScratch[i].RequestTopologyRefresh();
+        }
 
         // ── Legacy compat / visual toggles ───────────────────────────
         // These fields were used by the old cube-primitive renderer before
@@ -119,6 +130,8 @@ namespace VoxelEngine.Networks
         private int   _lastHash;
         private float _scanTimer;
         private int   _seenVersion = -1;
+        private bool  _topologyRefreshQueued;
+        private bool  _hasBuilt;
 
         private void Awake()
         {
@@ -165,6 +178,9 @@ namespace VoxelEngine.Networks
         private void OnEnable()
         {
             _lastHash = 0;
+            _hasBuilt = false;
+            _topologyRefreshQueued = false;
+            _seenVersion = TopologyVersion;
             if (VoxelEngine.Building.BuildSystem.IsCreatingGhost) return;
             _AllBuilders[this] = isGlass;
             // Defer one frame so the parent pipe component's Awake/OnEnable
@@ -191,6 +207,10 @@ namespace VoxelEngine.Networks
                 _builderLoggedOnce = true;
                 Debug.Log($"[IndustrialWorld] PipeVisualBuilder v4 loaded — style={style}, isGlass={isGlass}, shellTint={shellTint}");
             }
+            // An immediate placement may already have built this pipe. Force one
+            // post-Awake rebuild anyway because style/tint assignment can happen after
+            // the builder's Awake, but record the resulting hash to prevent a second
+            // redundant topology rebuild on the following frame.
             ForceRebuild();
         }
 
@@ -228,31 +248,74 @@ namespace VoxelEngine.Networks
 
         private void Update()
         {
-            // Event-driven rebuild: re-scan neighbours only when the grid topology
-            // changed (a block placed/removed bumped TopologyVersion) since our last
-            // pass. A slow safety-net poll guards against any signal we might miss, so
-            // nothing stays permanently stale. The safety net is FLOORED to 1.5 s so
-            // older prefabs that serialized the legacy 0.4 s rebuildInterval don't
-            // resurrect the per-pipe continuous scanning that lagged with many pipes.
-            bool topologyChanged = _seenVersion != TopologyVersion;
-            if (!topologyChanged)
+            // Event-driven work is queued by NotifyTopologyChanged. The shared budget
+            // prevents one newly placed pipe from forcing every existing pipe to rebuild
+            // its primitive hierarchy in the same frame.
+            if (_topologyRefreshQueued)
             {
-                _scanTimer += Time.deltaTime;
-                if (_scanTimer < Mathf.Max(rebuildInterval, 1.5f)) return;
+                if (!TryConsumeRebuildBudget()) return;
+                _topologyRefreshQueued = false;
+                RefreshIfNeighbourHashChanged();
+                return;
             }
+
+            // Slow safety net for topology signals from legacy content. It uses the
+            // same budget and hash gate, so dense pipe runs stay smooth.
+            _scanTimer += Time.deltaTime;
+            if (_scanTimer < Mathf.Max(rebuildInterval, 1.5f)) return;
+            if (!TryConsumeRebuildBudget()) return;
             _scanTimer = 0f;
             _seenVersion = TopologyVersion;
-
-            int h = ComputeNeighbourHash();
-            if (h == _lastHash) return;
-            _lastHash = h;
-            ForceRebuild();
+            RefreshIfNeighbourHashChanged();
         }
 
-        /// <summary>Manual rebuild — network managers call this after wrench edits.</summary>
+        /// <summary>Queues a hash-gated visual refresh without rebuilding immediately.</summary>
+        public void RequestTopologyRefresh()
+        {
+            _seenVersion = TopologyVersion;
+            _topologyRefreshQueued = true;
+        }
+
+        private static bool TryConsumeRebuildBudget()
+        {
+            if (s_rebuildBudgetFrame != Time.frameCount)
+            {
+                s_rebuildBudgetFrame = Time.frameCount;
+                s_rebuildBudgetUsed = 0;
+            }
+            if (s_rebuildBudgetUsed >= MaxQueuedRebuildsPerFrame) return false;
+            s_rebuildBudgetUsed++;
+            return true;
+        }
+
+        private void RefreshIfNeighbourHashChanged()
+        {
+            PopulateScratch();
+            int hash = HashPositions(_scratch);
+            if (_hasBuilt && hash == _lastHash) return;
+            RebuildFromScratch(hash);
+        }
+
+        /// <summary>Manual immediate rebuild for the just-placed pipe/ghost only.</summary>
         public void ForceRebuild()
         {
+            PopulateScratch();
+            RebuildFromScratch(HashPositions(_scratch));
+        }
+
+        private void PopulateScratch()
+        {
+            _scratch.Clear();
+            if (neighbourPositionsProvider == null) return;
+            var list = neighbourPositionsProvider();
+            if (list != null) _scratch.AddRange(list);
+        }
+
+        private void RebuildFromScratch(int hash)
+        {
             EnsureVisualRoot();
+            _lastHash = hash;
+            _hasBuilt = true;
 
             // Hide ourselves entirely if a solid version of the same pipe sits
             // at this same cell — prevents the Z-fighting flash when solid +
@@ -265,13 +328,6 @@ namespace VoxelEngine.Networks
             }
 
             EnsureMaterials();
-            _scratch.Clear();
-            if (neighbourPositionsProvider != null)
-            {
-                var list = neighbourPositionsProvider();
-                if (list != null) _scratch.AddRange(list);
-            }
-
             IndustrialPipeMesh.Rebuild(
                 _visualRoot,
                 transform.position,
@@ -315,22 +371,29 @@ namespace VoxelEngine.Networks
             }
         }
 
-        private int ComputeNeighbourHash()
+        private static int HashPositions(IReadOnlyList<Vector3> list)
         {
-            if (neighbourPositionsProvider == null) return 0;
-            var list = neighbourPositionsProvider();
-            if (list == null) return 0;
+            if (list == null || list.Count == 0) return 0;
             unchecked
             {
-                int h = 17;
+                // Physics overlap order is not stable. An order-sensitive hash made an
+                // unchanged pipe occasionally tear down/rebuild just because Unity
+                // returned the same neighbours in a different order.
+                int sum = 0;
+                int xor = 0;
                 for (int i = 0; i < list.Count; i++)
                 {
                     var p = list[i];
-                    h = h * 31 + Mathf.RoundToInt(p.x * 100f);
-                    h = h * 31 + Mathf.RoundToInt(p.y * 100f);
-                    h = h * 31 + Mathf.RoundToInt(p.z * 100f);
+                    int x = Mathf.RoundToInt(p.x * 100f);
+                    int y = Mathf.RoundToInt(p.y * 100f);
+                    int z = Mathf.RoundToInt(p.z * 100f);
+                    int key = x * 73856093 ^ y * 19349663 ^ z * 83492791;
+                    sum += key;
+                    int shift = key & 7;
+                    int rotated = shift == 0 ? key : (key << shift) | (int)((uint)key >> (32 - shift));
+                    xor ^= rotated;
                 }
-                return h;
+                return list.Count * 486187739 ^ sum ^ xor;
             }
         }
     }

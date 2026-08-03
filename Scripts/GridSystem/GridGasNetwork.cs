@@ -286,9 +286,12 @@ namespace VoxelEngine.GridSystem
         {
             s_gasProximityResult.Clear();
             if (grid == null || origin == null) yield break;
+            // Pipe-to-pipe links are now direct one-cell joins; searching a 3.25 m
+            // sphere around every detail pipe was pure wasted work and admitted many
+            // off-plane candidates before the final predicate rejected them.
             float radius = origin.IsPrecisionAttachment
-                ? Mathf.Max(GridSize.Large.CellSize() * 1.5f, 3.25f)
-                : Mathf.Max(origin.EffectiveCellSize, GridSize.Small.CellSize()) * 2.0f;
+                ? Mathf.Max(GridSize.Small.CellSize() * 1.35f, 0.85f)
+                : Mathf.Max(origin.EffectiveCellSize, GridSize.Small.CellSize()) * 1.35f;
             int hitCount = Physics.OverlapSphereNonAlloc(origin.transform.position, radius, s_gasProbe, ~0, QueryTriggerInteraction.Collide);
             for (int i = 0; i < hitCount; i++)
             {
@@ -357,7 +360,7 @@ namespace VoxelEngine.GridSystem
             if (grid == null || a == null || b == null) return false;
             float detail = GridSize.Small.CellSize();
             Vector3 localDelta = grid.transform.InverseTransformVector(b.transform.position - a.transform.position);
-            return PipeAdjacency.IsCardinalLinkDelta(localDelta, detail, 5f, detail * 0.12f);
+            return PipeAdjacency.IsDirectPipeLinkDelta(localDelta, detail, detail * 0.18f);
         }
 
         private static IEnumerable<GridCryobed> ConnectedCryobeds(GridBlock endpoint)

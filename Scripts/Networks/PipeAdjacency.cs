@@ -76,6 +76,35 @@ namespace VoxelEngine.Networks
             return otherDist <= effectiveTol;
         }
 
+        /// <summary>
+        /// Strict physical pipe-to-pipe rule: one lattice step on exactly one axis.
+        /// Unlike broad endpoint/corridor probes this deliberately does not apply the
+        /// vertical terrain slack, because that slack let vertical detail pipes connect
+        /// diagonally through a neighbouring plane.
+        /// </summary>
+        public static bool IsDirectPipeLinkDelta(Vector3 delta,
+                                                  float gridSize = DefaultGridSize,
+                                                  float tolerance = 0f)
+        {
+            float gs = gridSize > 0f ? gridSize : DefaultGridSize;
+            float tol = tolerance > 0f ? tolerance : Mathf.Max(0.06f, gs * 0.18f);
+            float dx = Mathf.Abs(delta.x), dy = Mathf.Abs(delta.y), dz = Mathf.Abs(delta.z);
+            float along = Mathf.Max(dx, Mathf.Max(dy, dz));
+            // Pipes live at cell centres: accept a small placement tolerance around
+            // one direct neighbour, never the old multi-cell corridor range.
+            if (along < gs * 0.70f || along > gs * 1.30f) return false;
+
+            int dominant = (dx >= dy && dx >= dz) ? 0 : (dy >= dx && dy >= dz) ? 1 : 2;
+            float other1 = dominant == 0 ? dy : dx;
+            float other2 = dominant == 2 ? dy : dz;
+            return Mathf.Sqrt(other1 * other1 + other2 * other2) <= tol;
+        }
+
+        public static bool IsDirectPipeLink(Vector3 a, Vector3 b,
+                                             float gridSize = DefaultGridSize,
+                                             float tolerance = 0f)
+            => IsDirectPipeLinkDelta(b - a, gridSize, tolerance);
+
         public static Vector3 ConnectionDelta(Component a, Component b)
         {
             if (a == null || b == null) return Vector3.zero;

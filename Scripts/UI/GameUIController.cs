@@ -319,7 +319,15 @@ namespace VoxelEngine.UI
             // which caused the terminal buttons to flash and "eat" the first click. So while the
             // cursor is over an interactive control (Button), defer the destructive refresh until
             // the pointer moves off it — hover + clicks then work first time.
-            if (_machineRefreshAccum >= 0.25f && !PortConfigHud.IsAnyDropdownOpen && liveMachineOpen
+            // GridBattery owns an in-place live panel now; rebuilding it on every power tick
+            // was the source of the Auto / Recharge / Discharge button flashing report.
+            bool liveGridBatteryPanel = _openGridBlock is VoxelEngine.GridSystem.GridBattery;
+            // Master terminal controls are also interactive and must not be rebuilt under
+            // battery mode buttons. Explicit terminal actions already refresh immediately.
+            bool gridTerminalControlOpen = _openGridTerminal != null;
+            if (liveGridBatteryPanel || gridTerminalControlOpen) _machineRefreshAccum = 0f;
+            if (_machineRefreshAccum >= 0.25f && !liveGridBatteryPanel && !gridTerminalControlOpen
+                && !PortConfigHud.IsAnyDropdownOpen && liveMachineOpen
                 && !_dragSource.active && !PointerOverInteractiveUI()
                 && !VoxelEngine.Maritime.MaritimeBlockUI.IsNumericInputFocused)
             { _machineRefreshAccum = 0f; Refresh(); }

@@ -398,9 +398,15 @@ namespace VoxelEngine.GridSystem
             if (grid == null || origin == null) yield break;
             float originCell = origin.EffectiveCellSize;
             bool isDetail = origin.IsPrecisionAttachment;
-            float radius = isDetail
-                ? Mathf.Max(GridSize.Large.CellSize() * 1.5f, 3.25f)
-                : Mathf.Max(originCell, GridSize.Small.CellSize()) * 2.0f;
+            // liquidOnly means this is a pipe↔pipe search. Keep that probe at one
+            // direct lattice join; endpoint/tank discovery retains its wider port range.
+            float radius = liquidOnly
+                ? (isDetail
+                    ? Mathf.Max(GridSize.Small.CellSize() * 1.35f, 0.85f)
+                    : Mathf.Max(originCell, GridSize.Small.CellSize()) * 1.35f)
+                : (isDetail
+                    ? Mathf.Max(GridSize.Large.CellSize() * 1.5f, 3.25f)
+                    : Mathf.Max(originCell, GridSize.Small.CellSize()) * 2.0f);
             int hitCount = Physics.OverlapSphereNonAlloc(origin.transform.position, radius, s_liquidProbe, ~0, QueryTriggerInteraction.Collide);
             for (int i = 0; i < hitCount; i++)
             {
@@ -447,7 +453,7 @@ namespace VoxelEngine.GridSystem
             if (grid == null || a == null || b == null) return false;
             float detail = GridSize.Small.CellSize();
             Vector3 localDelta = grid.transform.InverseTransformVector(b.transform.position - a.transform.position);
-            return PipeAdjacency.IsCardinalLinkDelta(localDelta, detail, 5f, detail * 0.12f);
+            return PipeAdjacency.IsDirectPipeLinkDelta(localDelta, detail, detail * 0.18f);
         }
 
         private static bool IsTankPortWithinDetailLink(GridEntity grid, GridBlock pipe, GridBlock tank,

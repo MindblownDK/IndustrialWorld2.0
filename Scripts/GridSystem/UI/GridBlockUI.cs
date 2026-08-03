@@ -249,22 +249,22 @@ namespace VoxelEngine.GridSystem.UI
         private static VisualElement BatteryPanel(GridBattery bat)
         {
             var p = T.MachinePanel();
-            string state = bat.TransferState;
-            Color sc = bat.IsCharging ? T.AccentGreen
-                     : bat.IsDischarging ? T.AccentAmber : T.AccentCyan;
-            var (hdr, _, _, _) = T.HeaderRow("🔋 Battery", state, sc);
+            Color initialStateColor = BatteryStateColor(bat);
+            var (hdr, _, statePill, stateLabel) = T.HeaderRow("🔋 Battery", bat.TransferState, initialStateColor);
             p.Add(hdr);
             p.Add(T.AccentDivider(T.AccentGreen));
 
-            // Premium segmented charge gauge — same look as the world battery panel:
-            // eased power-on sweep on open, color-coded %, live tracking.
+            // Premium segmented charge gauge runs in place. The surrounding labels below
+            // are also refreshed in place, so mode buttons never disappear/recreate on
+            // every GridEntity power tick.
             p.Add(BuildBatterySegmentGauge(bat));
             p.Add(T.Spacer(6));
             p.Add(T.StatRow("⚡", "Max Charge", PowerFormat.Watts(bat.maxChargeRate), T.AccentCyan));
             p.Add(T.StatRow("🔌", "Max Discharge", PowerFormat.Watts(bat.maxDischargeRate), T.AccentAmber));
-            p.Add(T.StatRow("↘", "Charging Now", PowerFormat.Watts(bat.CurrentChargeWatts), T.AccentGreen));
-            p.Add(T.StatRow("↗", "Discharging Now", PowerFormat.Watts(bat.CurrentDischargeWatts), T.AccentAmber));
+            Label chargingNow = AddLiveBatteryStat(p, "↘", "Charging Now", T.AccentGreen);
+            Label dischargingNow = AddLiveBatteryStat(p, "↗", "Discharging Now", T.AccentAmber);
             p.Add(T.Spacer(4));
+
             var modeRow = Row();
             modeRow.Add(T.SmallButton("Auto", () => { bat.mode = GridBatteryMode.Auto; VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel(); },
                 bat.mode == GridBatteryMode.Auto ? T.AccentGreen : T.BgSlot));
@@ -273,11 +273,57 @@ namespace VoxelEngine.GridSystem.UI
             modeRow.Add(T.SmallButton("Discharge", () => { bat.mode = GridBatteryMode.Discharge; VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel(); },
                 bat.mode == GridBatteryMode.Discharge ? T.AccentAmber : T.BgSlot));
             p.Add(modeRow);
-            p.Add(T.StatRow("⚙", "Mode", bat.mode.ToString(), T.TextSecondary));
-            if (bat.Grid != null)
-                p.Add(T.StatRow("⚖", "Grid Balance", PowerFormat.Watts(bat.Grid.PowerBalance),
-                    bat.Grid.PowerBalance >= 0 ? T.AccentGreen : T.AccentRed));
+            Label modeReadout = AddLiveBatteryStat(p, "⚙", "Mode", T.TextSecondary);
+            Label gridBalance = bat.Grid != null ? AddLiveBatteryStat(p, "⚖", "Grid Balance", T.AccentGreen) : null;
+
+            void RefreshLiveValues()
+            {
+                if (bat == null) return;
+                Color stateColor = BatteryStateColor(bat);
+                if (stateLabel != null)
+                {
+                    stateLabel.text = bat.TransferState;
+                    stateLabel.style.color = new StyleColor(stateColor);
+                }
+                if (statePill != null)
+                {
+                    statePill.style.backgroundColor = new StyleColor(new Color(stateColor.r, stateColor.g, stateColor.b, 0.22f));
+                    T.Border(statePill, 1f, new Color(stateColor.r, stateColor.g, stateColor.b, 0.55f));
+                    if (statePill.childCount > 0 && statePill[0] is VisualElement dot)
+                        dot.style.backgroundColor = new StyleColor(stateColor);
+                }
+                if (chargingNow != null)
+                    chargingNow.text = PowerFormat.Watts(bat.CurrentChargeWatts);
+                if (dischargingNow != null)
+                    dischargingNow.text = PowerFormat.Watts(bat.CurrentDischargeWatts);
+                if (modeReadout != null)
+                    modeReadout.text = bat.mode.ToString();
+                if (gridBalance != null && bat.Grid != null)
+                {
+                    float balance = bat.Grid.PowerBalance;
+                    gridBalance.text = PowerFormat.Watts(balance);
+                    gridBalance.style.color = new StyleColor(balance >= 0f ? T.AccentGreen : T.AccentRed);
+                }
+            }
+
+            RefreshLiveValues();
+            p.schedule.Execute(RefreshLiveValues).Every(100);
             return p;
+        }
+
+        private static Color BatteryStateColor(GridBattery battery)
+        {
+            if (battery == null) return T.TextMuted;
+            return battery.IsCharging ? T.AccentGreen
+                 : battery.IsDischarging ? T.AccentAmber
+                 : T.AccentCyan;
+        }
+
+        private static Label AddLiveBatteryStat(VisualElement parent, string icon, string label, Color valueColor)
+        {
+            var row = T.StatRow(icon, label, "—", valueColor);
+            parent.Add(row);
+            return row.childCount > 0 ? row[row.childCount - 1] as Label : null;
         }
 
         /// <summary>

@@ -49,6 +49,8 @@ namespace VoxelEngine.Building
         private VoxelEngine.Networks.PipeVisualBuilder _pipeGhostVisual;
         private EntityId _pipeGhostTargetId;
         private Vector3 _pipeGhostLastPosition = new(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
+        private int _pipeGhostSeenTopologyVersion = -1;
+        private static readonly Collider[] s_pipeGhostProbe = new Collider[32];
 
         /// <summary>Set while a port snap is rejected because the engine's service
         /// port of that type is already at capacity. The ghost tints red and placement
@@ -689,6 +691,14 @@ namespace VoxelEngine.Building
             bool itemPipe = block.placedPrefab.GetComponentInChildren<VoxelEngine.Transport.ItemPipe>(true) != null;
             bool gasPipe = block.placedPrefab.GetComponentInChildren<VoxelEngine.Gas.GasPipe>(true) != null;
             bool liquidPipe = block.placedPrefab.GetComponentInChildren<VoxelEngine.Fluids.WaterPipe>(true) != null;
+            // A snapped ghost is stationary for most rendered frames. Reuse the last
+            // target until its cell or pipe topology actually changes instead of
+            // scanning every grid block / physics collider at display frame rate.
+            if (visual == _pipeGhostVisual
+                && (ghostPosition - _pipeGhostLastPosition).sqrMagnitude <= 0.0001f
+                && _pipeGhostSeenTopologyVersion == VoxelEngine.Networks.PipeVisualBuilder.TopologyVersion)
+                return;
+
             MonoBehaviour best = null;
             float bestDistance = float.MaxValue;
 
@@ -699,8 +709,8 @@ namespace VoxelEngine.Building
                 Vector3 alignmentDelta = grid != null
                     ? grid.transform.InverseTransformVector(worldDelta)
                     : worldDelta;
-                if (!VoxelEngine.Networks.PipeAdjacency.IsCardinalLinkDelta(
-                        alignmentDelta, cellSize, 5f, cellSize * 0.35f)) return;
+                if (!VoxelEngine.Networks.PipeAdjacency.IsDirectPipeLinkDelta(
+                        alignmentDelta, cellSize, cellSize * 0.18f)) return;
                 float distance = worldDelta.sqrMagnitude;
                 if (distance >= bestDistance) return;
                 bestDistance = distance;
@@ -719,15 +729,20 @@ namespace VoxelEngine.Building
             }
             else
             {
-                var hits = Physics.OverlapSphere(ghostPosition, cellSize * 5f + cellSize * 0.4f);
-                var seen = new System.Collections.Generic.HashSet<EntityId>();
-                foreach (var hit in hits)
+                int hitCount = Physics.OverlapSphereNonAlloc(ghostPosition, cellSize * 1.35f,
+                    s_pipeGhostProbe, ~0, QueryTriggerInteraction.Collide);
+                for (int i = 0; i < hitCount; i++)
                 {
+                    var hit = s_pipeGhostProbe[i];
+                    s_pipeGhostProbe[i] = null;
+                    if (hit == null) continue;
                     MonoBehaviour candidate = null;
                     if (itemPipe) candidate = hit.GetComponentInParent<VoxelEngine.Transport.ItemPipe>();
                     else if (gasPipe) candidate = hit.GetComponentInParent<VoxelEngine.Gas.GasPipe>();
                     else if (liquidPipe) candidate = hit.GetComponentInParent<VoxelEngine.Fluids.WaterPipe>();
-                    if (candidate != null && seen.Add(candidate.GetEntityId())) Consider(candidate);
+                    // Duplicate colliders from a single pipe are harmless here: Consider
+                    // keeps only the nearest valid direct neighbour without allocating a set.
+                    if (candidate != null) Consider(candidate);
                 }
             }
 
@@ -741,6 +756,7 @@ namespace VoxelEngine.Building
             _pipeGhostVisual = visual;
             _pipeGhostTargetId = targetId;
             _pipeGhostLastPosition = ghostPosition;
+            _pipeGhostSeenTopologyVersion = VoxelEngine.Networks.PipeVisualBuilder.TopologyVersion;
             _pipeGhostLinks.Clear();
             if (best != null) _pipeGhostLinks.Add(targetPosition);
             visual.gridSize = cellSize;

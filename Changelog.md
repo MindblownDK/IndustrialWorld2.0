@@ -1,9 +1,31 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.8.0-dev`
+**Current Version:** `7.8.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.8.1-dev] Pipe Topology Performance & Stable Grid Battery UI
+
+**Type:** PATCH — performance, snapping, and live-panel reliability fixes; no save or API break.
+
+#### 🔋 Stable Grid Battery controls
+- Grid Battery panels now update their charge, transfer state, live watts, mode text, balance, and segmented indicator **in place**.
+- Auto / Recharge / Discharge buttons are no longer destroyed and recreated every power tick, eliminating the reported flashing and missed-click behavior.
+- Master Terminal controls are likewise protected from periodic destructive refreshes; explicit player actions still refresh immediately.
+
+#### ⚙️ Pipe performance hardening
+- Reworked `PipeVisualBuilder` topology handling into a shared, budgeted rebuild queue: at most two pipe visual rebuilds execute in a frame after a topology change.
+- Neighbour hashes are now order-independent, preventing needless mesh teardown when physics returns the same neighbours in a different order.
+- Item-pipe endpoint scans now use a slow safety fallback plus topology signals instead of repeatedly forcing visual rebuilds.
+- Ground pipe ghosts now cache a stationary target and use allocation-free overlap probes, eliminating repeated broad physics allocations while aiming a pipe.
+
+#### ━ Exact pipe joins
+- Pipe-to-pipe links are now strict one-cell, one-axis physical joins. They no longer use the old five-cell corridor or vertical-slack rule that permitted off-plane/diagonal connections.
+- The longer cardinal reach remains only for explicitly authored tank/port corridor discovery, so existing service-port workflows retain their intended range.
+- Grid and ground Item, Gas, and Liquid pipe networks now share the same strict direct-link rule.
+
+---
 
 ### [7.8.0-dev] Orbital Coast-Path Flight Computer
 

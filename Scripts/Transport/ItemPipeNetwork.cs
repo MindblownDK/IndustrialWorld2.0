@@ -83,7 +83,9 @@ namespace VoxelEngine.Transport
             int n = _pipes.Count;
             if (n < 2) goto EndpointRescan;
 
-            const float CELL = 5f;
+            // Direct pipe links are one lattice step, so a compact hash sharply
+            // reduces pair checks in dense ground/grid pipe runs.
+            const float CELL = 2f;
             const float CELL_INV = 1f / CELL;
             var hash = new Dictionary<Vector3Int, List<ItemPipe>>(n * 2);
             Vector3Int Cell(Vector3 p) => new Vector3Int(
@@ -110,8 +112,6 @@ namespace VoxelEngine.Transport
                 if (a == null) continue;
                 Vector3 pa = a.transform.position;
                 var c0 = Cell(pa);
-                float rA = a.connectRadius;
-
                 for (int dz = -1; dz <= 1; dz++)
                 for (int dy = -1; dy <= 1; dy++)
                 for (int dx = -1; dx <= 1; dx++)
@@ -125,14 +125,11 @@ namespace VoxelEngine.Transport
 
                         Vector3 pb = b.transform.position;
                         float step = GridStep(a, b);
-                        float range = step * 5.1f;
-                        float radiusCap = Mathf.Max(rA, b.connectRadius);
-                        if (radiusCap > range) range = Mathf.Min(radiusCap, 5f);
-
+                        float range = step * 1.35f;
                         if ((pa - pb).sqrMagnitude > range * range) continue;
 
                         Vector3 connectionDelta = VoxelEngine.Networks.PipeAdjacency.ConnectionDelta(a, b);
-                        if (!VoxelEngine.Networks.PipeAdjacency.IsCardinalLinkDelta(connectionDelta, step, 5f, step * 0.35f)) continue;
+                        if (!VoxelEngine.Networks.PipeAdjacency.IsDirectPipeLinkDelta(connectionDelta, step, step * 0.18f)) continue;
 
                         if (VoxelEngine.Networks.WrenchBlacklist.IsBlocked(a, b)) continue;
 
