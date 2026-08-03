@@ -66,14 +66,18 @@ namespace VoxelEngine.UI
         public static VisualElement BuildPanel(RecipeRegistry registry, Inventory inventory = null)
         {
             var panel = T.MachinePanel();
-            LcdHudTheme.ApplyChassis(panel, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.96f), 3f);
+            LcdHudTheme.ApplyChassis(panel, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.98f), 2f);
             panel.style.left = new StyleLength(new Length(34f, LengthUnit.Percent));
             panel.style.right = 12;
             panel.style.width = new StyleLength(new Length(54f, LengthUnit.Percent));
             panel.style.maxWidth = new StyleLength(new Length(62f, LengthUnit.Percent));
             panel.style.minWidth = 320;
+            panel.style.paddingTop = 6;
+            panel.style.paddingBottom = 6;
+            panel.style.paddingLeft = 6;
+            panel.style.paddingRight = 6;
             panel.AddToClassList("themed-panel");
-            // Premium entrance pop — matches ProductionStats
+            // Premium entrance pop — only construction changes, never recipe state.
             panel.style.opacity = 0f;
             panel.style.scale = new StyleScale(new Scale(new Vector3(0.985f, 0.985f, 1f)));
             panel.schedule.Execute(() =>
@@ -84,24 +88,36 @@ namespace VoxelEngine.UI
                 panel.style.scale = new StyleScale(new Scale(Vector3.one));
             }).ExecuteLater(20);
 
+            var display = new VisualElement { name = "RecipeArchiveLcdDisplay" };
+            display.style.flexDirection = FlexDirection.Column;
+            display.style.flexGrow = 1;
+            display.style.minHeight = 0;
+            display.style.paddingTop = 6;
+            display.style.paddingBottom = 6;
+            display.style.paddingLeft = 6;
+            display.style.paddingRight = 6;
+            display.style.overflow = Overflow.Hidden;
+            LcdHudTheme.ApplyScreen(display, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.92f), 1f);
+            panel.Add(display);
+
             EnsureSettingsLoaded();
             var entries = BuildEntries(registry);
             if (string.IsNullOrEmpty(_selectedOutputKey) && entries.Count > 0) _selectedOutputKey = OutputKey(entries[0].Output);
 
-            panel.Add(Header());
-            panel.Add(T.AccentDivider(LcdHudTheme.Phosphor));
+            display.Add(Header());
 
-            var body = new VisualElement();
+            var body = new VisualElement { name = "RecipeArchiveBody" };
             body.style.flexDirection = FlexDirection.Row;
             body.style.flexGrow = 1;
-            body.style.marginTop = 8;
-            // Responsive: wrap on narrow screens (720p) so left list stays readable
+            body.style.minHeight = 0;
+            body.style.marginTop = 2;
             body.style.flexWrap = Wrap.Wrap;
-            panel.Add(body);
+            display.Add(body);
 
-            var detailsHost = new VisualElement();
+            var detailsHost = new VisualElement { name = "RecipeArchiveDetailsHost" };
             detailsHost.style.flexGrow = 1;
             detailsHost.style.minWidth = 280;
+            detailsHost.style.minHeight = 0;
             void RefreshDetails()
             {
                 detailsHost.Clear();
@@ -112,8 +128,10 @@ namespace VoxelEngine.UI
             body.Add(BuildRecipeList(entries, inventory, RefreshDetails));
             body.Add(detailsHost);
             RefreshDetails();
+            LcdHudTheme.AddScanlines(display, 9, 48f, 57f);
             return panel;
         }
+
 
         private static void EnsureSettingsLoaded()
         {
@@ -151,37 +169,47 @@ namespace VoxelEngine.UI
 
         private static VisualElement Header()
         {
-            var row = new VisualElement();
-            row.style.flexDirection = FlexDirection.Row;
-            row.style.alignItems = Align.Center;
-            row.style.flexWrap = Wrap.Wrap;
-            row.style.marginBottom = 8;
-            row.Add(T.IconBadge("◫", ProductionPanelThemeState.Accent));
-            var title = T.Title("Recipe Browser");
-            title.style.flexGrow = 1;
-            title.style.color = new StyleColor(LcdHudTheme.Phosphor);
-            title.AddToClassList("themed-title");
-            row.Add(title);
-            row.Add(T.SmallButton($"Theme: {ProductionPanelThemeState.Label}", () =>
+            var host = new VisualElement { name = "RecipeArchiveHeader" };
+            host.style.marginBottom = 5;
+            host.Add(LcdHudTheme.CreateDisplayHeader("PROCESS REFERENCE", "RECIPE ARCHIVE", "RCP-01", "INDEXED"));
+
+            var commands = new VisualElement();
+            commands.style.flexDirection = FlexDirection.Row;
+            commands.style.flexWrap = Wrap.Wrap;
+            commands.style.paddingTop = 4;
+            commands.style.paddingBottom = 2;
+            commands.style.paddingLeft = 4;
+            commands.style.paddingRight = 4;
+            LcdHudTheme.ApplyDataCard(commands, LcdHudTheme.Bezel);
+            commands.Add(LcdButton($"THEME {ProductionPanelThemeState.Label.ToUpperInvariant()}", () =>
             {
                 ProductionPanelThemeState.Next();
                 GameUIController.Instance?.RequestRefresh();
-            }, ProductionPanelThemeState.Accent));
-            var (pill, _) = T.StatusPill("LIVE GRAPH", ProductionPanelThemeState.Accent);
-            pill.style.marginLeft = 6;
-            row.Add(pill);
-            return row;
+            }, LcdHudTheme.Phosphor));
+            host.Add(commands);
+            return host;
         }
+
 
         private static VisualElement BuildRecipeList(List<RecipeEntry> entries, Inventory inventory, System.Action refreshDetails)
         {
-            var left = new VisualElement();
+            var left = new VisualElement { name = "RecipeArchiveIndex" };
             left.style.width = new StyleLength(new Length(38f, LengthUnit.Percent));
             left.style.minWidth = 220;
-            left.style.marginRight = 10;
+            left.style.minHeight = 0;
+            left.style.marginRight = 6;
+            left.style.paddingTop = 6;
+            left.style.paddingBottom = 6;
+            left.style.paddingLeft = 6;
+            left.style.paddingRight = 6;
+            LcdHudTheme.ApplyScreen(left, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.84f), 1f);
+            var indexCaption = LcdHudTheme.CaptionLabel("OUTPUT INDEX");
+            indexCaption.style.marginBottom = 4;
+            left.Add(indexCaption);
 
             var search = new TextField { value = _search ?? string.Empty };
-            search.style.marginBottom = 8;
+            search.style.marginBottom = 7;
+            LcdHudTheme.ApplySearchField(search);
             search.RegisterCallback<FocusInEvent>(_ => IsSearchFocused = true);
             search.RegisterCallback<FocusOutEvent>(_ => IsSearchFocused = false);
             left.Add(search);
@@ -193,14 +221,14 @@ namespace VoxelEngine.UI
             left.Add(filterBar);
 
             var resultLabel = new Label();
-            resultLabel.style.color = new StyleColor(T.TextMuted);
+            resultLabel.style.color = new StyleColor(LcdHudTheme.Caption);
             resultLabel.style.fontSize = 9;
             resultLabel.style.marginBottom = 5;
             left.Add(resultLabel);
 
             var scroll = new ScrollView(ScrollViewMode.Vertical);
             scroll.style.flexGrow = 1;
-            T.StyleScroller(scroll);
+            T.StyleScroller(scroll, LcdHudTheme.Phosphor);
             left.Add(scroll);
 
             void RefreshFilterBar()
@@ -211,20 +239,20 @@ namespace VoxelEngine.UI
                 AddFilterButton(filterBar, RecipeListFilter.Station, "Station", PopulateList);
                 AddFilterButton(filterBar, RecipeListFilter.AIAssembler, "AI", PopulateList);
                 AddFilterButton(filterBar, RecipeListFilter.Smelting, "Smelt", PopulateList);
-                filterBar.Add(T.SmallButton(_onlyCraftableNow ? "Have Mats ✓" : "Have Mats", () =>
+                filterBar.Add(LcdButton(_onlyCraftableNow ? "Have Mats ✓" : "Have Mats", () =>
                 {
                     _onlyCraftableNow = !_onlyCraftableNow;
                     SaveSettings();
                     PopulateList();
                 }, _onlyCraftableNow ? T.AccentGreen : T.TextMuted));
-                filterBar.Add(T.SmallButton(_sortMode == RecipeSortMode.Name ? "Sort: Name" : "Sort: Methods", () =>
+                filterBar.Add(LcdButton(_sortMode == RecipeSortMode.Name ? "Sort: Name" : "Sort: Methods", () =>
                 {
                     _sortMode = _sortMode == RecipeSortMode.Name ? RecipeSortMode.MethodCount : RecipeSortMode.Name;
                     SaveSettings();
                     PopulateList();
-                }, T.AccentCyan));
+                }, LcdHudTheme.Phosphor));
                 if (!string.IsNullOrEmpty(_search))
-                    filterBar.Add(T.SmallButton("Clear", () => { _search = string.Empty; search.value = string.Empty; PopulateList(); }, T.TextMuted));
+                    filterBar.Add(LcdButton("Clear", () => { _search = string.Empty; search.value = string.Empty; PopulateList(); }, T.TextMuted));
             }
 
             void PopulateList()
@@ -287,7 +315,7 @@ namespace VoxelEngine.UI
         private static void AddFilterButton(VisualElement parent, RecipeListFilter filter, string label, System.Action refresh)
         {
             bool selected = _listFilter == filter;
-            parent.Add(T.SmallButton(label, () =>
+            parent.Add(LcdButton(label, () =>
             {
                 _listFilter = filter;
                 SaveSettings();
@@ -310,20 +338,20 @@ namespace VoxelEngine.UI
         private static VisualElement RecipeButton(string outputKey, ItemDefinition output, int recipeCount, string kinds, System.Action refreshDetails)
         {
             bool selected = !string.IsNullOrEmpty(outputKey) && outputKey == _selectedOutputKey;
-            var card = T.Card();
+            var card = LcdCard();
             card.style.marginBottom = 5;
             card.style.paddingTop = 8;
             card.style.paddingBottom = 8;
-            card.style.borderLeftWidth = 3;
-            card.style.borderLeftColor = new StyleColor(selected ? ProductionPanelThemeState.Accent : T.BorderDim);
+            card.style.borderLeftWidth = 2;
+            card.style.borderLeftColor = new StyleColor(selected ? LcdHudTheme.Phosphor : LcdHudTheme.Bezel);
             card.AddToClassList("themed-panel");
             // Micro-interaction: hover scale + bg shift, transition matches theme speed
             card.style.transitionProperty = new List<StylePropertyName> { "scale", "background-color", "border-left-color" };
             card.style.transitionDuration = new List<TimeValue> { new TimeValue(0.10f * UIThemeManager.AnimationSpeed, TimeUnit.Second), new TimeValue(0.10f, TimeUnit.Second), new TimeValue(0.10f, TimeUnit.Second) };
-            Color baseBg = T.BgCard;
+            Color baseBg = LcdHudTheme.GlassDark;
             card.RegisterCallback<PointerEnterEvent>(_ =>
             {
-                if (!selected) card.style.backgroundColor = new StyleColor(T.BgHover);
+                if (!selected) card.style.backgroundColor = new StyleColor(new Color(LcdHudTheme.Phosphor.r, LcdHudTheme.Phosphor.g, LcdHudTheme.Phosphor.b, 0.10f));
                 card.style.scale = new StyleScale(new Scale(new Vector3(1.02f, 1.02f, 1f)));
             });
             card.RegisterCallback<PointerLeaveEvent>(_ =>
@@ -333,7 +361,7 @@ namespace VoxelEngine.UI
             });
 
             var name = new Label(output != null ? output.displayName : "Unknown Output");
-            name.style.color = new StyleColor(selected ? ProductionPanelThemeState.Accent : UIThemeManager.TextColor);
+            name.style.color = new StyleColor(selected ? LcdHudTheme.Phosphor : LcdHudTheme.Caption);
             name.style.fontSize = 12;
             name.style.unityFontStyleAndWeight = FontStyle.Bold;
             card.Add(name);
@@ -355,9 +383,15 @@ namespace VoxelEngine.UI
 
         private static VisualElement BuildDetails(List<RecipeEntry> entries, Inventory inventory)
         {
-            var right = new ScrollView(ScrollViewMode.Vertical);
+            var right = new ScrollView(ScrollViewMode.Vertical) { name = "RecipeArchiveReadout" };
             right.style.flexGrow = 1;
-            T.StyleScroller(right);
+            right.style.minHeight = 0;
+            right.style.paddingTop = 6;
+            right.style.paddingBottom = 6;
+            right.style.paddingLeft = 6;
+            right.style.paddingRight = 6;
+            LcdHudTheme.ApplyScreen(right, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.84f), 1f);
+            T.StyleScroller(right, LcdHudTheme.Phosphor);
 
             if (string.IsNullOrEmpty(_selectedOutputKey))
             {
@@ -401,7 +435,7 @@ namespace VoxelEngine.UI
 
             var usedBy = entries.Where(entry => entry.Inputs.Any(input => OutputKey(input.item) == _selectedOutputKey)).ToList();
             right.Add(T.Spacer(8));
-            right.Add(SectionTitle("Used By", T.AccentCyan));
+            right.Add(SectionTitle("Used By", LcdHudTheme.Phosphor));
             if (usedBy.Count == 0) right.Add(T.Muted("No known recipe consumes this item."));
             foreach (var use in usedBy)
                 right.Add(RecipeDetailCard(use, compact: true));
@@ -423,7 +457,7 @@ namespace VoxelEngine.UI
 
         private static VisualElement BuildMethodComparison(List<RecipeEntry> makers)
         {
-            var card = T.Card();
+            var card = LcdCard();
             card.style.marginBottom = 6;
             card.style.paddingTop = 8;
             card.style.paddingBottom = 8;
@@ -454,7 +488,7 @@ namespace VoxelEngine.UI
             row.style.paddingLeft = 6;
             row.style.paddingRight = 6;
             row.style.backgroundColor = new StyleColor(new Color(1f, 1f, 1f, 0.035f));
-            T.Radius(row, 6);
+            LcdHudTheme.ApplyDataCard(row, LcdHudTheme.Bezel);
 
             var method = new Label(maker.Kind);
             method.style.width = 118;
@@ -476,7 +510,7 @@ namespace VoxelEngine.UI
             bool active = prefer.HasValue && _chainPreference == prefer.Value;
             if (prefer.HasValue)
             {
-                row.Add(T.SmallButton(active ? "Preferred" : "Prefer", () =>
+                row.Add(LcdButton(active ? "Preferred" : "Prefer", () =>
                 {
                     _chainPreference = prefer.Value;
                     SaveSettings();
@@ -505,7 +539,7 @@ namespace VoxelEngine.UI
 
         private static VisualElement RecipeDetailCard(RecipeEntry entry, bool compact = false)
         {
-            var card = T.Card();
+            var card = LcdCard();
             card.style.marginBottom = 5;
             card.style.paddingTop = compact ? 7 : 10;
             card.style.paddingBottom = compact ? 7 : 10;
@@ -601,7 +635,7 @@ namespace VoxelEngine.UI
 
         private static VisualElement BuildMaterialSummary(string outputKey, List<RecipeEntry> entries, Inventory inventory)
         {
-            var card = T.Card();
+            var card = LcdCard();
             card.style.marginBottom = 6;
             card.style.paddingTop = 10;
             card.style.paddingBottom = 10;
@@ -678,43 +712,43 @@ namespace VoxelEngine.UI
                     summaryBody.Add(MaterialLine(need));
             }
 
-            header.Add(T.SmallButton("−", () =>
+            header.Add(LcdButton("−", () =>
             {
                 _planBatches = Mathf.Max(1, _planBatches - 1);
                 SaveSettings();
                 RefreshSummaryOnly();
             }, T.TextMuted));
-            batchButton = T.SmallButton($"{_planBatches} batch{(_planBatches == 1 ? "" : "es")}", () =>
+            batchButton = LcdButton($"{_planBatches} batch{(_planBatches == 1 ? "" : "es")}", () =>
             {
                 _planBatches = 1;
                 SaveSettings();
                 RefreshSummaryOnly();
             }, T.AccentGold);
             header.Add(batchButton);
-            header.Add(T.SmallButton("+", () =>
+            header.Add(LcdButton("+", () =>
             {
                 _planBatches = Mathf.Min(999, _planBatches + 1);
                 SaveSettings();
                 RefreshSummaryOnly();
             }, T.TextMuted));
-            header.Add(T.SmallButton("Copy Plan", () =>
+            header.Add(LcdButton("Copy Plan", () =>
             {
                 var summary = BuildSummary();
                 ApplyInventoryCoverage(summary, inventory);
                 GUIUtility.systemCopyBuffer = BuildPlanText(outputKey, entries, summary);
             }, T.AccentGreen));
-            header.Add(T.SmallButton("Copy Missing", () =>
+            header.Add(LcdButton("Copy Missing", () =>
             {
                 var summary = BuildSummary();
                 ApplyInventoryCoverage(summary, inventory);
                 GUIUtility.systemCopyBuffer = BuildMissingText(outputKey, entries, summary);
             }, T.AccentOrange));
-            header.Add(T.SmallButton("Copy CSV", () =>
+            header.Add(LcdButton("Copy CSV", () =>
             {
                 var summary = BuildSummary();
                 ApplyInventoryCoverage(summary, inventory);
                 GUIUtility.systemCopyBuffer = BuildMaterialsCsv(summary);
-            }, T.AccentCyan));
+            }, LcdHudTheme.Phosphor));
 
             var targetRow = new VisualElement();
             targetRow.style.flexDirection = FlexDirection.Row;
@@ -726,7 +760,7 @@ namespace VoxelEngine.UI
             targetLabel.style.color = new StyleColor(T.TextSecondary);
             targetRow.Add(targetLabel);
             Button missingToggle = null;
-            missingToggle = T.SmallButton(_showOnlyMissingMaterials ? "Show All" : "Missing Only", () =>
+            missingToggle = LcdButton(_showOnlyMissingMaterials ? "Show All" : "Missing Only", () =>
             {
                 _showOnlyMissingMaterials = !_showOnlyMissingMaterials;
                 SaveSettings();
@@ -734,19 +768,19 @@ namespace VoxelEngine.UI
                 RefreshSummaryOnly();
             }, _showOnlyMissingMaterials ? T.AccentGreen : T.TextMuted);
             targetRow.Add(missingToggle);
-            targetRow.Add(T.SmallButton("Reset", () =>
+            targetRow.Add(LcdButton("Reset", () =>
             {
                 _targetPerMinute = 60;
                 SaveSettings();
                 RefreshSummaryOnly();
             }, T.AccentPurple));
-            targetRow.Add(T.SmallButton("−", () =>
+            targetRow.Add(LcdButton("−", () =>
             {
                 _targetPerMinute = Mathf.Max(1, _targetPerMinute - 10);
                 SaveSettings();
                 RefreshSummaryOnly();
             }, T.TextMuted));
-            targetRow.Add(T.SmallButton("+", () =>
+            targetRow.Add(LcdButton("+", () =>
             {
                 _targetPerMinute = Mathf.Min(9999, _targetPerMinute + 10);
                 SaveSettings();
@@ -770,12 +804,12 @@ namespace VoxelEngine.UI
 
             float perMachinePerMinute = recipe.OutputCount * 60f / Mathf.Max(0.01f, recipe.Seconds);
             int machines = Mathf.Max(1, Mathf.CeilToInt(_targetPerMinute / perMachinePerMinute));
-            var card = T.Card();
+            var card = LcdCard();
             card.style.marginBottom = 8;
             card.style.paddingTop = 7;
             card.style.paddingBottom = 7;
             card.style.borderLeftWidth = 3;
-            card.style.borderLeftColor = new StyleColor(T.AccentCyan);
+            card.style.borderLeftColor = new StyleColor(LcdHudTheme.Phosphor);
 
             var label = new Label($"Planner: {machines} × {recipe.Kind} for ~{_targetPerMinute}/min  ({perMachinePerMinute:0.#}/min each)");
             label.style.color = new StyleColor(T.TextPrimary);
@@ -848,7 +882,7 @@ namespace VoxelEngine.UI
             tag.style.width = 44;
             tag.style.fontSize = 8;
             tag.style.unityFontStyleAndWeight = FontStyle.Bold;
-            tag.style.color = new StyleColor(need.Raw ? T.TextMuted : T.AccentCyan);
+            tag.style.color = new StyleColor(need.Raw ? T.TextMuted : LcdHudTheme.Phosphor);
             row.Add(tag);
 
             var swatch = new VisualElement();
@@ -942,7 +976,7 @@ namespace VoxelEngine.UI
 
         private static VisualElement BuildDependencyTree(string outputKey, List<RecipeEntry> entries)
         {
-            var card = T.Card();
+            var card = LcdCard();
             card.style.marginBottom = 6;
             card.style.paddingTop = 10;
             card.style.paddingBottom = 10;
@@ -957,7 +991,7 @@ namespace VoxelEngine.UI
             title.style.fontSize = 13;
             title.style.unityFontStyleAndWeight = FontStyle.Bold;
             header.Add(title);
-            header.Add(T.SmallButton("Copy Chain", () =>
+            header.Add(LcdButton("Copy Chain", () =>
             {
                 GUIUtility.systemCopyBuffer = BuildChainText(outputKey, entries);
             }, T.AccentGreen));
@@ -979,7 +1013,7 @@ namespace VoxelEngine.UI
                 if (depthButton != null) depthButton.text = $"Depth {_chainDepth}";
             }
 
-            rawButton = T.SmallButton(_showRawInputs ? "Hide Raw" : "Show Raw", () =>
+            rawButton = LcdButton(_showRawInputs ? "Hide Raw" : "Show Raw", () =>
             {
                 _showRawInputs = !_showRawInputs;
                 SaveSettings();
@@ -994,7 +1028,7 @@ namespace VoxelEngine.UI
                 ChainPreference.AssemblerStation => "Prefer Station",
                 _ => "Auto"
             };
-            preferenceButton = T.SmallButton(PreferenceLabel(), () =>
+            preferenceButton = LcdButton(PreferenceLabel(), () =>
             {
                 _chainPreference = _chainPreference switch
                 {
@@ -1007,14 +1041,14 @@ namespace VoxelEngine.UI
                 RefreshTreeOnly();
             }, T.AccentGold);
             header.Add(preferenceButton);
-            header.Add(T.SmallButton("−", () =>
+            header.Add(LcdButton("−", () =>
             {
                 _chainDepth = Mathf.Max(1, _chainDepth - 1);
                 SaveSettings();
                 RefreshControls();
                 RefreshTreeOnly();
             }, T.TextMuted));
-            depthButton = T.SmallButton($"Depth {_chainDepth}", () =>
+            depthButton = LcdButton($"Depth {_chainDepth}", () =>
             {
                 _chainDepth = 4;
                 SaveSettings();
@@ -1022,7 +1056,7 @@ namespace VoxelEngine.UI
                 RefreshTreeOnly();
             }, T.AccentPurple);
             header.Add(depthButton);
-            header.Add(T.SmallButton("+", () =>
+            header.Add(LcdButton("+", () =>
             {
                 _chainDepth = Mathf.Min(8, _chainDepth + 1);
                 SaveSettings();
@@ -1063,14 +1097,16 @@ namespace VoxelEngine.UI
             }
 
             string key = OutputKey(recipe.Output);
-            var node = T.Card();
+            var node = LcdCard();
             node.style.marginLeft = depth * 16;
             node.style.marginBottom = 6;
             node.style.paddingTop = 8;
             node.style.paddingBottom = 8;
             node.style.borderLeftWidth = 4;
-            node.style.borderLeftColor = new StyleColor(depth == 0 ? T.AccentPurple : T.AccentCyan);
-            node.style.backgroundColor = new StyleColor(depth == 0 ? new Color(0.08f, 0.09f, 0.13f, 0.98f) : T.BgCard);
+            node.style.borderLeftColor = new StyleColor(depth == 0 ? LcdHudTheme.Phosphor : LcdHudTheme.PhosphorDim);
+            node.style.backgroundColor = new StyleColor(depth == 0
+                ? new Color(LcdHudTheme.Phosphor.r, LcdHudTheme.Phosphor.g, LcdHudTheme.Phosphor.b, 0.10f)
+                : LcdHudTheme.GlassDark);
 
             var top = new VisualElement();
             top.style.flexDirection = FlexDirection.Row;
@@ -1086,8 +1122,9 @@ namespace VoxelEngine.UI
                 iconSlot.style.marginRight = 8;
                 iconSlot.style.alignItems = Align.Center;
                 iconSlot.style.justifyContent = Justify.Center;
-                iconSlot.style.backgroundColor = new StyleColor(T.BgSlot);
-                T.Radius(iconSlot, 5);
+                iconSlot.style.backgroundColor = new StyleColor(LcdHudTheme.GlassDark);
+                T.Radius(iconSlot, 1);
+                T.Border(iconSlot, 1, LcdHudTheme.Bezel);
                 iconSlot.pickingMode = PickingMode.Ignore;
                 var iconImg = new Image { sprite = recipe.Output.icon };
                 iconImg.scaleMode = ScaleMode.ScaleToFit;
@@ -1103,7 +1140,7 @@ namespace VoxelEngine.UI
                 iconDot.style.width = 10;
                 iconDot.style.height = 10;
                 iconDot.style.marginRight = 8;
-                iconDot.style.backgroundColor = new StyleColor(recipe.Output != null ? recipe.Output.iconTint : T.AccentCyan);
+                iconDot.style.backgroundColor = new StyleColor(recipe.Output != null ? recipe.Output.iconTint : LcdHudTheme.Phosphor);
                 T.Radius(iconDot, 5);
                 top.Add(iconDot);
             }
@@ -1164,7 +1201,7 @@ namespace VoxelEngine.UI
 
         private static VisualElement RawNode(string outputKey, int depth)
         {
-            var row = T.Card();
+            var row = LcdCard();
             row.style.marginLeft = depth * 16;
             row.style.marginBottom = 5;
             row.style.paddingTop = 6;
@@ -1180,7 +1217,7 @@ namespace VoxelEngine.UI
 
         private static VisualElement RawInputNode(ItemDefinition item, int count, int depth)
         {
-            var row = T.Card();
+            var row = LcdCard();
             row.style.marginLeft = depth * 16;
             row.style.marginBottom = 5;
             row.style.paddingTop = 6;
@@ -1228,7 +1265,7 @@ namespace VoxelEngine.UI
         {
             string key = OutputKey(entry.Output);
             bool pinned = RecipePinHud.IsPinned(key);
-            return T.SmallButton(pinned ? "Unpin Recipe" : "Pin Recipe", () =>
+            return LcdButton(pinned ? "Unpin Recipe" : "Pin Recipe", () =>
             {
                 var pin = new RecipePinHud.Pin
                 {
@@ -1385,5 +1422,18 @@ namespace VoxelEngine.UI
                 .Select(input => $"{OutputKey(input.item)}:{input.count}"));
             return $"{entry.Kind}|{entry.Name}|{OutputKey(entry.Output)}|{entry.OutputCount}|{inputs}";
         }
+
+        private static VisualElement LcdCard(Color? signalColor = null)
+        {
+            var card = T.Card();
+            LcdHudTheme.ApplyDataCard(card, signalColor ?? LcdHudTheme.Bezel);
+            return card;
+        }
+
+        private static Button LcdButton(string text, System.Action onClick, Color? signalColor = null)
+        {
+            return LcdHudTheme.CommandButton(text, onClick, signalColor ?? LcdHudTheme.Phosphor);
+        }
+
     }
 }

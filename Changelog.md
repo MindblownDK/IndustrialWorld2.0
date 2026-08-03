@@ -1,9 +1,33 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.9.0-dev`
+**Current Version:** `7.9.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.9.1-dev] Inventory Terminal & Premium LCD Workstations
+
+**Type:** PATCH — visual/interaction polish only; no save data, gameplay balance, item, recipe, or public API change.
+
+#### ▣ Inventory as a single fitted display
+- Replaced the first inventory pass with one recessed **INVENTORY** LCD terminal: the title is printed on the display, the cargo grid is a labelled `CARGO MATRIX`, and every carried-item cell is a square numbered LCD cell rather than a generic blue tile.
+- Rebuilt cargo load as a discrete ten-segment monitor and moved sort, crafting, production, recipe, and wireless controls into matching terminal command bays.
+- Removed the experimental helmet and cross header marks entirely.
+
+#### ⧉ Click-selected equipment add-on
+- Replaced the detached stacked Armor / Jetpack Bay / Life Support cards with one physically coupled **EQUIPMENT** add-on at the inventory edge.
+- Armor, Jetpack, and Life Support are now clean LCD tabs: click the module you want to inspect or use, while its real drag/drop equipment slots, life-support state, fuel readouts, and armor upgrades remain unchanged.
+- Added the small bridge/coupler treatment and scroll-safe module content so the extension reads as part of the same terminal rather than a second unrelated panel.
+
+#### ▤ Fabrication, production, and recipe displays
+- Rebuilt Crafting as a fitted **FABRICATION TERMINAL** with LCD search glass, a category rail, a `BLUEPRINT MATRIX`, a scroll-safe assembly readout, square recipe cells, and physical command keys.
+- Rebuilt Production Statistics into an inset **OPERATIONS MONITOR** with data cells, LCD commands, discrete metric panes, and phosphor scan-line treatment.
+- Rebuilt Recipe Browser into a two-screen **RECIPE ARCHIVE**: output index, filters, recipes, dependency tree, material plan, and method cards now share the same recessed LCD language.
+
+#### ✅ Static delivery checks
+- C# syntax and targeted structural assertions pass locally. Unity/Play Mode visual validation remains pending from Thomas; no runtime validation is claimed here.
+
+---
 
 ### [7.9.0-dev] Unified LCD Flight, Survival & Hotbar HUD
 

@@ -99,6 +99,16 @@ namespace VoxelEngine.UI
         private IVoltageStation _openVoltageStation;
         private bool _productionStatsOpen;
         private bool _recipeBrowserOpen;
+
+        // Equipment is intentionally a single attached module, not three competing
+        // cards. The selected tab is runtime-only UI state and never touches saves.
+        private enum EquipmentAddonTab
+        {
+            Armor,
+            Jetpack,
+            LifeSupport
+        }
+        private EquipmentAddonTab _equipmentAddonTab = EquipmentAddonTab.Armor;
         // Containers whose OnChanged should call Refresh; cleared on each panel switch.
         private System.Collections.Generic.List<ItemContainer> _watchedContainers = new();
 
@@ -1299,45 +1309,85 @@ namespace VoxelEngine.UI
         /// <summary>Creates a sort button + slot grid for any ItemContainer.</summary>
         private VisualElement BuildSortableSlotGrid(IItemContainer container, int startIdx = 0, int endIdx = -1, bool showSort = true)
         {
-            var wrapper = new VisualElement();
+            bool cargoMatrix = IsPlayerCargoContainer(container, startIdx);
+            var wrapper = new VisualElement { name = cargoMatrix ? "InventoryCargoMatrix" : "LcdSlotMatrix" };
+            wrapper.style.marginBottom = 5;
 
-            // Sort button row
-            var sortRow = new VisualElement();
-            sortRow.style.flexDirection = FlexDirection.Row;
-            sortRow.style.justifyContent = Justify.FlexEnd;
-            sortRow.style.marginBottom = 4;
-
-            if (showSort && container is ItemContainer ic)
+            if (showSort)
             {
-                var sortBtn = new Button(() => { if (startIdx > 0) ic.SortRange(startIdx, endIdx < 0 ? ic.Size : endIdx); else ic.Sort(); Refresh(); }) { text = "⇅ Sort" };
-                sortBtn.style.minHeight = 22; sortBtn.style.minWidth = 60;
-                sortBtn.style.fontSize = 10;
-                sortBtn.style.color = Color.white;
-                sortBtn.style.unityFontStyleAndWeight = FontStyle.Bold;
-                sortBtn.style.backgroundColor = new StyleColor(new Color(0.15f, 0.40f, 0.65f));
-                SetBorderRadius(sortBtn, 4);
-                ZeroBorder(sortBtn);
-                sortRow.Add(sortBtn);
-            }
-            if (showSort) wrapper.Add(sortRow);
+                var controls = new VisualElement();
+                controls.style.flexDirection = FlexDirection.Row;
+                controls.style.alignItems = Align.Center;
+                controls.style.marginBottom = 4;
 
-            // Slot grid
-            var grid = new VisualElement { name = "InventoryLcdSlotGrid" };
+                if (cargoMatrix)
+                {
+                    var caption = LcdHudTheme.CaptionLabel("CARGO MATRIX");
+                    caption.style.flexGrow = 1;
+                    controls.Add(caption);
+
+                    int end = endIdx < 0 ? container.Slots.Count : endIdx;
+                    var cells = LcdHudTheme.CaptionLabel($"{Mathf.Max(0, end - startIdx):00} CELLS");
+                    cells.style.marginRight = 5;
+                    controls.Add(cells);
+                }
+                else
+                {
+                    var caption = LcdHudTheme.CaptionLabel("SLOT MATRIX");
+                    caption.style.flexGrow = 1;
+                    controls.Add(caption);
+                }
+
+                if (container is ItemContainer itemContainer)
+                {
+                    var sortButton = LcdHudTheme.CommandButton("SORT", () =>
+                    {
+                        if (startIdx > 0) itemContainer.SortRange(startIdx, endIdx < 0 ? itemContainer.Size : endIdx);
+                        else itemContainer.Sort();
+                        Refresh();
+                    }, LcdHudTheme.Phosphor);
+                    sortButton.style.minWidth = 54;
+                    controls.Add(sortButton);
+                }
+                wrapper.Add(controls);
+            }
+
+            var grid = new VisualElement { name = cargoMatrix ? "InventoryLcdSlotGrid" : "LcdSlotGrid" };
             grid.style.flexDirection = FlexDirection.Row;
             grid.style.flexWrap = Wrap.Wrap;
-            grid.style.paddingLeft = 4;
-            grid.style.paddingRight = 4;
-            grid.style.paddingTop = 4;
-            grid.style.paddingBottom = 4;
-            LcdHudTheme.ApplyScreen(grid, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.82f), 1f);
+            grid.style.paddingLeft = 5;
+            grid.style.paddingRight = 5;
+            grid.style.paddingTop = 5;
+            grid.style.paddingBottom = 3;
+            LcdHudTheme.ApplyScreen(grid, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.86f), 1f);
 
-            int end = endIdx < 0 ? container.Slots.Count : endIdx;
-            for (int i = startIdx; i < end; i++)
+            int slotEnd = endIdx < 0 ? container.Slots.Count : endIdx;
+            for (int i = startIdx; i < slotEnd; i++)
                 grid.Add(BuildSlot(container, i, container.GetSlot(i), false));
-            wrapper.Add(grid);
 
+            if (cargoMatrix)
+                LcdHudTheme.AddScanlines(grid, 7, 11f, 53f);
+
+            wrapper.Add(grid);
             return wrapper;
         }
+
+        private bool IsPlayerCargoContainer(IItemContainer container, int startIndex)
+        {
+            return inventory != null && container == inventory.container && startIndex >= Inventory.HOTBAR_SIZE;
+        }
+
+        private bool IsEquipmentContainer(IItemContainer container)
+        {
+            if (inventory == null || container == null) return false;
+            var equipment = inventory.GetComponent<VoxelEngine.Player.PlayerEquipment>();
+            if (equipment == null) return false;
+            return object.ReferenceEquals(container, equipment.ArmorSlots)
+                || object.ReferenceEquals(container, equipment.JetpackSlots)
+                || object.ReferenceEquals(container, equipment.HelmetSlots)
+                || object.ReferenceEquals(container, equipment.OxygenTankSlots);
+        }
+
 
         private VisualElement BuildJetpackSlotsPanel(VoxelEngine.Player.PlayerEquipment equipment)
         {
@@ -1421,15 +1471,12 @@ namespace VoxelEngine.UI
                 chip.style.marginBottom = 3;
                 chip.style.paddingLeft = 6; chip.style.paddingRight = 6;
                 chip.style.paddingTop = 3;  chip.style.paddingBottom = 3;
-                chip.style.backgroundColor = new StyleColor(new Color(0.05f, 0.06f, 0.085f, 0.85f));
-                SetBorderRadius(chip, 6);
-                chip.style.borderLeftWidth = 2;
-                chip.style.borderLeftColor = new StyleColor(GetJetpackFamilyColor(jp.family));
+                LcdHudTheme.ApplyDataCard(chip, GetJetpackFamilyColor(jp.family));
                 chip.pickingMode = PickingMode.Ignore;
 
                 var name = new Label(jp.displayName);
                 name.style.fontSize = 9;
-                name.style.color = new StyleColor(UITheme.TextSecondary);
+                name.style.color = new StyleColor(LcdHudTheme.Caption);
                 name.style.flexGrow = 1;
                 name.style.overflow = Overflow.Hidden;
                 name.style.whiteSpace = WhiteSpace.NoWrap;
@@ -1861,9 +1908,11 @@ namespace VoxelEngine.UI
             var box = new VisualElement();
             box.style.marginTop = 2;
             box.style.marginBottom = 10;
+            box.style.paddingTop = 6;
+            box.style.paddingBottom = 6;
             box.style.paddingLeft = 6;
             box.style.paddingRight = 6;
-            LcdHudTheme.ApplyScreen(box, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.84f), 1f);
+            LcdHudTheme.ApplyDataCard(box, LcdHudTheme.Phosphor);
 
             var header = new VisualElement();
             header.style.flexDirection = FlexDirection.Row;
@@ -1911,52 +1960,44 @@ namespace VoxelEngine.UI
 
         private VisualElement BuildInventoryWeightReadout()
         {
-            var box = new VisualElement();
-            box.style.marginTop = 2;
-            box.style.marginBottom = 8;
-            box.style.paddingTop = 7;
-            box.style.paddingBottom = 7;
-            box.style.paddingLeft = 9;
-            box.style.paddingRight = 9;
-            box.style.backgroundColor = new StyleColor(LcdHudTheme.Glass);
-            LcdHudTheme.ApplyScreen(box, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.90f), 1f);
+            var box = new VisualElement { name = "InventoryCargoLoadReadout" };
+            box.style.marginTop = 1;
+            box.style.marginBottom = 7;
+            box.style.paddingTop = 6;
+            box.style.paddingBottom = 6;
+            box.style.paddingLeft = 8;
+            box.style.paddingRight = 8;
 
             float current = inventory != null ? inventory.CurrentWeightKg : 0f;
             float max = inventory != null ? inventory.MaxWeightKg : VoxelEngine.Menu.WorldSession.DefaultPlayerInventoryWeightKg;
             float fill = max > 0f ? Mathf.Clamp01(current / max) : 0f;
-            Color accent = fill >= 0.95f ? UITheme.AccentRed : fill >= 0.80f ? UITheme.AccentAmber : UITheme.AccentCyan;
+            Color signal = fill >= 0.95f ? UITheme.AccentRed : fill >= 0.80f ? UITheme.AccentAmber : LcdHudTheme.Phosphor;
+            LcdHudTheme.ApplyDataCard(box, signal);
 
             var row = new VisualElement();
             row.style.flexDirection = FlexDirection.Row;
             row.style.alignItems = Align.Center;
-            var label = new Label("MATTER WEIGHT");
+
+            var label = LcdHudTheme.CaptionLabel("CARGO LOAD");
             label.style.flexGrow = 1;
-            label.style.fontSize = 9;
-            label.style.letterSpacing = 1f;
-            label.style.unityFontStyleAndWeight = FontStyle.Bold;
-            label.style.color = new StyleColor(UITheme.TextMuted);
             row.Add(label);
+
             var value = new Label($"{MassFormat.Format(current)} / {MassFormat.Format(max)}");
             value.style.fontSize = 10;
+            value.style.letterSpacing = 0.45f;
             value.style.unityFontStyleAndWeight = FontStyle.Bold;
-            value.style.color = new StyleColor(accent);
+            value.style.color = new StyleColor(signal);
+            value.pickingMode = PickingMode.Ignore;
             row.Add(value);
             box.Add(row);
 
-            var bar = new VisualElement();
-            bar.style.height = 5;
-            bar.style.marginTop = 5;
-            bar.style.backgroundColor = new StyleColor(new Color(0f, 0f, 0f, 0.35f));
-            SetBorderRadius(bar, 3);
-            var fillBar = new VisualElement();
-            fillBar.style.height = 5;
-            fillBar.style.width = new StyleLength(new Length(fill * 100f, LengthUnit.Percent));
-            fillBar.style.backgroundColor = new StyleColor(accent);
-            SetBorderRadius(fillBar, 3);
-            bar.Add(fillBar);
-            box.Add(bar);
+            var track = LcdHudTheme.CreateSegmentTrack(10, out var segments, 9f);
+            track.style.marginTop = 5;
+            LcdHudTheme.SetSegments(segments, fill, signal);
+            box.Add(track);
             return box;
         }
+
 
         // ----- HOTBAR -----
         private void BuildHotbar(VisualElement root)
@@ -2336,13 +2377,9 @@ namespace VoxelEngine.UI
 
             BuildLeftPanel(row);   // inventory (flex child — fills the row height)
 
-            // Keep the equipment bays visible with every inventory-backed panel.
-            // They are active drop targets, so hiding them while a chest/station is
-            // open makes equipment routing inconsistent with the plain inventory.
-            var gap = new VisualElement();
-            gap.style.width = 8;
-            gap.style.flexShrink = 0;
-            row.Add(gap);
+            // The selected equipment module remains a reachable drop target, but now
+            // reads as a mechanically coupled extension of the inventory terminal.
+            row.Add(BuildInventoryAddonCoupler());
             row.Add(BuildEquipmentPanel());
         }
 
@@ -2369,328 +2406,437 @@ namespace VoxelEngine.UI
                    _openArmorUpgradeStation != null || _openVoltageStation != null || _openDefense != null;
         }
 
-        // Premium equipment panel docked to the right of the inventory: ARMOR +
-        // JETPACK BAY + LIFE SUPPORT, grouped in one card. It remains visible with
-        // chest, station, and machine panels so each equipment slot stays a reliable
-        // drag/drop target. The armor slot syncs PlayerStats.equippedArmor automatically.
+        // The equipment console is a physical extension of the inventory terminal.
+        // Only one module is expanded at once; tabs preserve a clean inventory silhouette
+        // while keeping every equipment slot reachable on demand.
         private VisualElement BuildEquipmentPanel()
         {
+            _jbStatusPill = null;
+            _jbStatus = null;
+            _jbH2Row = _jbH2Fill = null;
+            _jbH2Label = null;
+            _jbPRow = _jbPFill = null;
+            _jbPLabel = null;
+            _jbPackRows = null;
+            _jbPackH2 = null;
+            _jbPackPwr = null;
+
+            var addon = new VisualElement { name = "InventoryEquipmentAddon" };
+            addon.style.width = 216;
+            addon.style.height = new StyleLength(new Length(100f, LengthUnit.Percent));
+            addon.style.flexShrink = 0;
+            addon.style.paddingTop = 6;
+            addon.style.paddingBottom = 6;
+            addon.style.paddingLeft = 6;
+            addon.style.paddingRight = 6;
+            addon.style.overflow = Overflow.Hidden;
+            LcdHudTheme.ApplyChassis(addon, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.98f), 2f);
+
+            var screen = new VisualElement { name = "EquipmentAddonLcdScreen" };
+            screen.style.flexDirection = FlexDirection.Column;
+            screen.style.flexGrow = 1;
+            screen.style.minHeight = 0;
+            screen.style.paddingTop = 6;
+            screen.style.paddingBottom = 6;
+            screen.style.paddingLeft = 6;
+            screen.style.paddingRight = 6;
+            screen.style.overflow = Overflow.Hidden;
+            LcdHudTheme.ApplyScreen(screen, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.90f), 1f);
+            addon.Add(screen);
+
+            screen.Add(LcdHudTheme.CreateDisplayHeader("PERSONAL SYSTEMS", "EQUIPMENT", "AUX-01", "LINKED"));
+
+            var tabRail = new VisualElement { name = "EquipmentAddonTabs" };
+            tabRail.style.flexDirection = FlexDirection.Row;
+            tabRail.style.marginBottom = 5;
+            tabRail.style.flexShrink = 0;
+            tabRail.Add(BuildEquipmentTabButton("ARMOR", EquipmentAddonTab.Armor));
+            tabRail.Add(BuildEquipmentTabButton("JETPACK", EquipmentAddonTab.Jetpack));
+            tabRail.Add(BuildEquipmentTabButton("LIFE", EquipmentAddonTab.LifeSupport));
+            screen.Add(tabRail);
+
+            var content = new ScrollView(ScrollViewMode.Vertical) { name = "EquipmentAddonContent" };
+            content.style.flexGrow = 1;
+            content.style.minHeight = 0;
+            UITheme.StyleScroller(content, LcdHudTheme.Phosphor);
+            screen.Add(content);
+
             var equipment = inventory != null ? inventory.GetComponent<VoxelEngine.Player.PlayerEquipment>() : null;
-
-            var card = MakePanel();
-            LcdHudTheme.ApplyChassis(card, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.96f), 3f);
-            card.style.width = 184;
-            card.style.flexShrink = 0;
-            card.style.paddingTop = 11; card.style.paddingBottom = 12;
-            card.style.paddingLeft = 11; card.style.paddingRight = 11;
-
-            // ── ARMOR ───────────────────────────────────────────
-            var armorTitle = new Label("ARMOR");
-            armorTitle.style.fontSize = 11;
-            armorTitle.style.unityFontStyleAndWeight = FontStyle.Bold;
-            armorTitle.style.letterSpacing = 1.6f;
-            armorTitle.style.color = UITheme.AccentGold;
-            armorTitle.style.marginBottom = 7;
-            card.Add(armorTitle);
-
-            if (equipment != null)
+            if (equipment == null)
             {
-                var armorSlots = equipment.ArmorSlots;
-
-                var slotHost = new VisualElement();
-                slotHost.style.flexDirection = FlexDirection.Row;
-                slotHost.style.justifyContent = Justify.Center;
-                slotHost.style.marginBottom = 7;
-                slotHost.Add(BuildSlot(armorSlots, 0, armorSlots.GetSlot(0), false));
-                card.Add(slotHost);
-
-                var armor = equipment.EquippedArmor;
-                if (armor != null)
-                {
-                    var readout = new VisualElement();
-                    readout.style.backgroundColor = new StyleColor(LcdHudTheme.Glass);
-                    LcdHudTheme.ApplyScreen(readout, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.86f), 1f);
-                    readout.style.paddingTop = 6; readout.style.paddingBottom = 6;
-                    readout.style.paddingLeft = 9; readout.style.paddingRight = 9;
-                    readout.style.marginBottom = 10;
-                    readout.style.flexDirection = FlexDirection.Row;
-                    readout.style.justifyContent = Justify.Center;
-
-                    var stat = new Label($"Tier {armor.tier}   -{armor.damageReduction * 100f:0}% damage");
-                    stat.style.fontSize = 10;
-                    stat.style.unityFontStyleAndWeight = FontStyle.Bold;
-                    stat.style.color = new Color(0.34f, 0.92f, 0.55f);
-                    stat.style.whiteSpace = WhiteSpace.Normal;
-                    readout.Add(stat);
-                    card.Add(readout);
-
-                    var installed = new Label(
-                        $"Heat T{equipment.GetArmorUpgradeTier(VoxelEngine.Combat.ArmorUpgradeKind.HeatTolerance)} · " +
-                        $"Rad T{equipment.GetArmorUpgradeTier(VoxelEngine.Combat.ArmorUpgradeKind.RadiationShielding)}\n" +
-                        $"O₂ T{equipment.GetArmorUpgradeTier(VoxelEngine.Combat.ArmorUpgradeKind.OxygenEfficiency)} · " +
-                        $"Impact T{equipment.GetArmorUpgradeTier(VoxelEngine.Combat.ArmorUpgradeKind.FallImpact)}\n" +
-                        $"Mobility T{equipment.GetArmorUpgradeTier(VoxelEngine.Combat.ArmorUpgradeKind.Mobility)}" +
-                        (equipment.HasHazmatProtection ? " · HAZMAT" : string.Empty));
-                    installed.style.fontSize = 8;
-                    installed.style.whiteSpace = WhiteSpace.Normal;
-                    installed.style.color = new StyleColor(UITheme.TextSecondary);
-                    installed.style.marginTop = -5;
-                    installed.style.marginBottom = 10;
-                    card.Add(installed);
-                }
-                else
-                {
-                    var air = new VisualElement();
-                    air.style.height = 6;
-                    card.Add(air);
-                }
-
-                // ── JETPACK BAY ─────────────────────────────────
-                card.Add(BuildJetpackSlotsPanel(equipment));
-
-                // ── LIFE SUPPORT ────────────────────────────────
-                card.Add(BuildLifeSupportSlotsPanel(equipment));
+                var unavailable = new VisualElement();
+                unavailable.style.paddingTop = 10;
+                unavailable.style.paddingBottom = 10;
+                unavailable.style.paddingLeft = 8;
+                unavailable.style.paddingRight = 8;
+                LcdHudTheme.ApplyDataCard(unavailable, LcdHudTheme.Bezel);
+                unavailable.Add(LcdHudTheme.CaptionLabel("SYSTEM STATUS"));
+                var message = new Label("EQUIPMENT BUS OFFLINE");
+                message.style.fontSize = 10;
+                message.style.letterSpacing = 0.8f;
+                message.style.unityFontStyleAndWeight = FontStyle.Bold;
+                message.style.color = new StyleColor(UITheme.AccentAmber);
+                unavailable.Add(message);
+                content.Add(unavailable);
             }
             else
             {
-                card.Add(MakeMutedLabel("(no equipment component)"));
+                switch (_equipmentAddonTab)
+                {
+                    case EquipmentAddonTab.Jetpack:
+                        content.Add(BuildJetpackSlotsPanel(equipment));
+                        break;
+                    case EquipmentAddonTab.LifeSupport:
+                        content.Add(BuildLifeSupportSlotsPanel(equipment));
+                        break;
+                    default:
+                        content.Add(BuildArmorAddon(equipment));
+                        break;
+                }
             }
 
-            return card;
+            LcdHudTheme.AddScanlines(screen, 8, 48f, 58f);
+            return addon;
         }
 
-        private VisualElement BuildCrusaderInventoryHeader()
+        private Button BuildEquipmentTabButton(string label, EquipmentAddonTab tab)
         {
-            var row = new VisualElement { name = "CrusaderInventoryHeader" };
+            bool active = _equipmentAddonTab == tab;
+            var button = LcdHudTheme.CommandButton(label, () =>
+            {
+                _equipmentAddonTab = tab;
+                Refresh();
+            }, LcdHudTheme.Phosphor, active);
+            button.style.flexGrow = 1;
+            button.style.minWidth = 0;
+            return button;
+        }
+
+        private VisualElement BuildArmorAddon(VoxelEngine.Player.PlayerEquipment equipment)
+        {
+            var module = new VisualElement { name = "ArmorAddonModule" };
+            module.style.paddingTop = 7;
+            module.style.paddingBottom = 7;
+            module.style.paddingLeft = 7;
+            module.style.paddingRight = 7;
+            LcdHudTheme.ApplyDataCard(module, LcdHudTheme.Phosphor);
+
+            var moduleTitle = LcdHudTheme.CaptionLabel("ARMOR SHELL / SLOT 01");
+            moduleTitle.style.marginBottom = 5;
+            module.Add(moduleTitle);
+
+            var slotHost = new VisualElement();
+            slotHost.style.flexDirection = FlexDirection.Row;
+            slotHost.style.justifyContent = Justify.Center;
+            slotHost.style.marginBottom = 7;
+            slotHost.Add(BuildSlot(equipment.ArmorSlots, 0, equipment.ArmorSlots.GetSlot(0), false));
+            module.Add(slotHost);
+
+            var armor = equipment.EquippedArmor;
+            if (armor == null)
+            {
+                var empty = new Label("NO ARMOR MODULE INSTALLED");
+                empty.style.fontSize = 9;
+                empty.style.letterSpacing = 0.8f;
+                empty.style.unityFontStyleAndWeight = FontStyle.Bold;
+                empty.style.color = new StyleColor(LcdHudTheme.PhosphorDim);
+                empty.style.unityTextAlign = TextAnchor.MiddleCenter;
+                empty.style.marginTop = 4;
+                module.Add(empty);
+                return module;
+            }
+
+            var status = new VisualElement();
+            status.style.paddingTop = 5;
+            status.style.paddingBottom = 5;
+            status.style.paddingLeft = 6;
+            status.style.paddingRight = 6;
+            status.style.marginBottom = 6;
+            LcdHudTheme.ApplyScreen(status, new Color(LcdHudTheme.Phosphor.r, LcdHudTheme.Phosphor.g, LcdHudTheme.Phosphor.b, 0.62f), 1f);
+
+            var shell = new Label($"TIER {armor.tier}  //  {armor.damageReduction * 100f:0}% DAMAGE REDUCTION");
+            shell.style.fontSize = 9;
+            shell.style.letterSpacing = 0.45f;
+            shell.style.unityFontStyleAndWeight = FontStyle.Bold;
+            shell.style.color = new StyleColor(LcdHudTheme.Phosphor);
+            shell.style.whiteSpace = WhiteSpace.Normal;
+            status.Add(shell);
+            module.Add(status);
+
+            var upgrades = new VisualElement();
+            upgrades.style.paddingTop = 5;
+            upgrades.style.paddingBottom = 5;
+            upgrades.style.paddingLeft = 6;
+            upgrades.style.paddingRight = 6;
+            LcdHudTheme.ApplyScreen(upgrades, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.82f), 1f);
+            upgrades.Add(BuildAddonReadoutLine("HEAT", $"T{equipment.GetArmorUpgradeTier(VoxelEngine.Combat.ArmorUpgradeKind.HeatTolerance)}"));
+            upgrades.Add(BuildAddonReadoutLine("RADIATION", $"T{equipment.GetArmorUpgradeTier(VoxelEngine.Combat.ArmorUpgradeKind.RadiationShielding)}"));
+            upgrades.Add(BuildAddonReadoutLine("OXYGEN", $"T{equipment.GetArmorUpgradeTier(VoxelEngine.Combat.ArmorUpgradeKind.OxygenEfficiency)}"));
+            upgrades.Add(BuildAddonReadoutLine("IMPACT", $"T{equipment.GetArmorUpgradeTier(VoxelEngine.Combat.ArmorUpgradeKind.FallImpact)}"));
+            upgrades.Add(BuildAddonReadoutLine("MOBILITY", $"T{equipment.GetArmorUpgradeTier(VoxelEngine.Combat.ArmorUpgradeKind.Mobility)}"));
+            if (equipment.HasHazmatProtection)
+                upgrades.Add(BuildAddonReadoutLine("SEAL", "HAZMAT"));
+            module.Add(upgrades);
+            return module;
+        }
+
+        private static VisualElement BuildAddonReadoutLine(string labelText, string valueText)
+        {
+            var row = new VisualElement();
             row.style.flexDirection = FlexDirection.Row;
             row.style.alignItems = Align.Center;
-            row.style.marginBottom = 7;
-            row.pickingMode = PickingMode.Ignore;
+            row.style.paddingTop = 2;
+            row.style.paddingBottom = 2;
 
-            row.Add(BuildCrusaderHelmetMark());
-            var title = new Label("INVENTORY");
-            title.style.flexGrow = 1;
-            title.style.fontSize = 15;
-            title.style.letterSpacing = 1.45f;
-            title.style.unityFontStyleAndWeight = FontStyle.Bold;
-            title.style.color = new StyleColor(LcdHudTheme.Phosphor);
-            title.pickingMode = PickingMode.Ignore;
-            row.Add(title);
-            row.Add(BuildCrusaderEmblem());
+            var label = LcdHudTheme.CaptionLabel(labelText);
+            label.style.flexGrow = 1;
+            row.Add(label);
+
+            var value = new Label(valueText);
+            value.style.fontSize = 8;
+            value.style.letterSpacing = 0.75f;
+            value.style.unityFontStyleAndWeight = FontStyle.Bold;
+            value.style.color = new StyleColor(LcdHudTheme.Phosphor);
+            value.pickingMode = PickingMode.Ignore;
+            row.Add(value);
             return row;
         }
 
-        private static VisualElement BuildCrusaderHelmetMark()
+        private static VisualElement BuildInventoryAddonCoupler()
         {
-            var mark = new VisualElement { name = "CrusaderHelmetMark" };
-            mark.style.width = 24;
-            mark.style.height = 22;
-            mark.style.marginRight = 8;
-            mark.style.backgroundColor = new StyleColor(LcdHudTheme.GlassDark);
-            mark.pickingMode = PickingMode.Ignore;
-            LcdHudTheme.ApplyScreen(mark, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.92f), 1f);
+            var coupler = new VisualElement { name = "InventoryAddonCoupler" };
+            coupler.style.width = 12;
+            coupler.style.height = new StyleLength(new Length(100f, LengthUnit.Percent));
+            coupler.style.flexShrink = 0;
+            coupler.pickingMode = PickingMode.Ignore;
 
-            var dome = new VisualElement();
-            dome.style.position = Position.Absolute;
-            dome.style.left = 5; dome.style.right = 5;
-            dome.style.top = 3; dome.style.height = 10;
-            dome.style.backgroundColor = new StyleColor(LcdHudTheme.Phosphor);
-            dome.pickingMode = PickingMode.Ignore;
-            SetBorderRadius(dome, 5);
-            mark.Add(dome);
-
-            var visor = new VisualElement();
-            visor.style.position = Position.Absolute;
-            visor.style.left = 6; visor.style.right = 6;
-            visor.style.top = 10; visor.style.height = 4;
-            visor.style.backgroundColor = new StyleColor(LcdHudTheme.GlassDark);
-            visor.pickingMode = PickingMode.Ignore;
-            mark.Add(visor);
-
-            var neck = new VisualElement();
-            neck.style.position = Position.Absolute;
-            neck.style.left = 8; neck.style.right = 8;
-            neck.style.top = 14; neck.style.height = 4;
-            neck.style.backgroundColor = new StyleColor(new Color(LcdHudTheme.Phosphor.r, LcdHudTheme.Phosphor.g, LcdHudTheme.Phosphor.b, 0.72f));
-            neck.pickingMode = PickingMode.Ignore;
-            mark.Add(neck);
-            return mark;
-        }
-
-        private static VisualElement BuildCrusaderEmblem()
-        {
-            var crest = new VisualElement { name = "CrusaderEmblem" };
-            crest.style.width = 27;
-            crest.style.height = 27;
-            crest.style.marginLeft = 7;
-            crest.style.backgroundColor = new StyleColor(LcdHudTheme.GlassDark);
-            crest.pickingMode = PickingMode.Ignore;
-            LcdHudTheme.ApplyScreen(crest, new Color(UITheme.AccentGold.r, UITheme.AccentGold.g, UITheme.AccentGold.b, 0.82f), 1f);
-
-            var vertical = new VisualElement();
-            vertical.style.position = Position.Absolute;
-            vertical.style.width = 4; vertical.style.height = 18;
-            vertical.style.left = 11; vertical.style.top = 4;
-            vertical.style.backgroundColor = new StyleColor(UITheme.AccentGold);
-            vertical.pickingMode = PickingMode.Ignore;
-            crest.Add(vertical);
-
-            var horizontal = new VisualElement();
-            horizontal.style.position = Position.Absolute;
-            horizontal.style.width = 16; horizontal.style.height = 4;
-            horizontal.style.left = 5; horizontal.style.top = 10;
-            horizontal.style.backgroundColor = new StyleColor(UITheme.AccentGold);
-            horizontal.pickingMode = PickingMode.Ignore;
-            crest.Add(horizontal);
-            return crest;
+            for (int i = 0; i < 2; i++)
+            {
+                var bridge = new VisualElement();
+                bridge.style.position = Position.Absolute;
+                bridge.style.left = 0;
+                bridge.style.right = 0;
+                bridge.style.top = new StyleLength(new Length(i == 0 ? 43f : 55f, LengthUnit.Percent));
+                bridge.style.height = 4;
+                bridge.style.backgroundColor = new StyleColor(LcdHudTheme.Bezel);
+                UITheme.Radius(bridge, 1f);
+                coupler.Add(bridge);
+            }
+            return coupler;
         }
 
         private void BuildLeftPanel(VisualElement parent)
         {
             var panel = MakePanel();
-            LcdHudTheme.ApplyChassis(panel, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.96f), 3f);
-            // Laid out as a flex child of the left-area row so the ARMOR panel can dock
-            // to its right. Stretches to the row height (the row is top:12 / bottom:72).
+            panel.name = "InventoryConsoleChassis";
+            LcdHudTheme.ApplyChassis(panel, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.98f), 2f);
+            // This is the primary screen half of an inventory terminal. The equipment
+            // module attaches through a short physical coupler in BuildLeftArea.
             panel.style.flexShrink = 1;
-            panel.style.flexGrow   = 0;
-            panel.style.width      = new StyleLength(new Length(32f, LengthUnit.Percent));
-            panel.style.minWidth   = 240;
-            panel.style.maxWidth   = new StyleLength(new Length(42f, LengthUnit.Percent));
-            panel.style.height     = new StyleLength(new Length(100, LengthUnit.Percent));
+            panel.style.flexGrow = 0;
+            panel.style.width = new StyleLength(new Length(32f, LengthUnit.Percent));
+            panel.style.minWidth = 252;
+            panel.style.maxWidth = new StyleLength(new Length(42f, LengthUnit.Percent));
+            panel.style.height = new StyleLength(new Length(100f, LengthUnit.Percent));
+            panel.style.paddingTop = 6;
+            panel.style.paddingBottom = 6;
+            panel.style.paddingLeft = 6;
+            panel.style.paddingRight = 6;
+            panel.style.overflow = Overflow.Hidden;
             parent.Add(panel);
 
-            panel.Add(BuildCrusaderInventoryHeader());
-            panel.Add(BuildInventoryWeightReadout());
+            var display = new VisualElement { name = "InventoryLcdDisplay" };
+            display.style.flexDirection = FlexDirection.Column;
+            display.style.flexGrow = 1;
+            display.style.minHeight = 0;
+            display.style.paddingTop = 6;
+            display.style.paddingBottom = 6;
+            display.style.paddingLeft = 6;
+            display.style.paddingRight = 6;
+            display.style.overflow = Overflow.Hidden;
+            LcdHudTheme.ApplyScreen(display, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.92f), 1f);
+            panel.Add(display);
 
-            // Backpack grid with sort button
-            panel.Add(BuildSortableSlotGrid(inventory.container, Inventory.HOTBAR_SIZE, Inventory.TOTAL_SIZE));
+            // The word INVENTORY lives on the display itself; no decorative heraldry
+            // or detached title treatment remains around the console.
+            display.Add(LcdHudTheme.CreateDisplayHeader("PERSONAL STORAGE", "INVENTORY", "INV-01", "ONLINE"));
 
-            // ── Wireless transmitter selector ────────────────────────
-            // Drop-down appears once any transmitter is online so the player can
-            // pick which network to route shift-clicks / drag-drops / crafting
-            // ingredients through. Selection is remembered across sessions.
-            BuildWirelessTransmitterSelector(panel);
+            var scroll = new ScrollView(ScrollViewMode.Vertical) { name = "InventoryLcdScroll" };
+            scroll.style.flexGrow = 1;
+            scroll.style.minHeight = 0;
+            scroll.style.paddingRight = 2;
+            UITheme.StyleScroller(scroll, LcdHudTheme.Phosphor);
+            display.Add(scroll);
 
-            // ── Crafting screen toggle (crafting show / hide) ──────
-            // The full crafting surface lives in its own center panel (built in
-            // Refresh()). Here we only render the toggle pill; its open/closed
-            // state persists across sessions via CraftingScreen.Visible.
-            panel.Add(CraftingScreen.ToggleButton(Refresh));
+            scroll.Add(BuildInventoryWeightReadout());
+            scroll.Add(BuildSortableSlotGrid(inventory.container, Inventory.HOTBAR_SIZE, Inventory.TOTAL_SIZE));
 
-            var statsBtn = new Button(() =>
+            // Network routing stays inside the same display, immediately below the
+            // cargo matrix, rather than forming an unrelated floating card.
+            BuildWirelessTransmitterSelector(scroll);
+            scroll.Add(BuildInventoryCommandBay());
+            BuildWirelessStorageReadout(scroll);
+
+            LcdHudTheme.AddScanlines(display, 9, 44f, 55f);
+        }
+
+        private VisualElement BuildInventoryCommandBay()
+        {
+            var bay = new VisualElement { name = "InventoryCommandBay" };
+            bay.style.marginTop = 8;
+            bay.style.paddingTop = 6;
+            bay.style.paddingBottom = 5;
+            bay.style.paddingLeft = 6;
+            bay.style.paddingRight = 6;
+            LcdHudTheme.ApplyDataCard(bay, LcdHudTheme.Bezel);
+
+            var caption = LcdHudTheme.CaptionLabel("TERMINAL COMMANDS");
+            caption.style.marginBottom = 4;
+            bay.Add(caption);
+
+            var commands = new VisualElement();
+            commands.style.flexDirection = FlexDirection.Row;
+            commands.style.flexWrap = Wrap.Wrap;
+            bay.Add(commands);
+
+            var crafting = CraftingScreen.ToggleButton(Refresh);
+            crafting.style.flexGrow = 1;
+            crafting.style.minWidth = 104;
+            crafting.style.marginTop = 0;
+            crafting.style.marginRight = 3;
+            commands.Add(crafting);
+
+            var statsButton = LcdHudTheme.CommandButton(_productionStatsOpen ? "STATS / CLOSE" : "PRODUCTION", () =>
             {
                 _productionStatsOpen = !_productionStatsOpen;
                 if (_productionStatsOpen) _recipeBrowserOpen = false;
                 Refresh();
-            })
-            { text = _productionStatsOpen ? "📈 Hide Production Stats" : "📈 Production Stats" };
-            statsBtn.style.minHeight = 28;
-            statsBtn.style.fontSize = 11;
-            statsBtn.style.color = Color.white;
-            statsBtn.style.unityFontStyleAndWeight = FontStyle.Bold;
-            statsBtn.style.backgroundColor = new StyleColor(_productionStatsOpen ? UITheme.AccentCyan : new Color(0.12f, 0.18f, 0.24f));
-            SetBorderRadius(statsBtn, 4); ZeroBorder(statsBtn);
-            panel.Add(statsBtn);
+            }, LcdHudTheme.Phosphor, _productionStatsOpen);
+            statsButton.style.flexGrow = 1;
+            statsButton.style.minWidth = 104;
+            commands.Add(statsButton);
 
-            var recipeBrowserBtn = new Button(() =>
+            var recipesButton = LcdHudTheme.CommandButton(_recipeBrowserOpen ? "RECIPES / CLOSE" : "RECIPE ARCHIVE", () =>
             {
                 _recipeBrowserOpen = !_recipeBrowserOpen;
                 if (_recipeBrowserOpen) _productionStatsOpen = false;
                 Refresh();
-            })
-            { text = _recipeBrowserOpen ? "Hide Recipe Browser" : "Recipe Browser" };
-            recipeBrowserBtn.style.minHeight = 28;
-            recipeBrowserBtn.style.fontSize = 11;
-            recipeBrowserBtn.style.color = Color.white;
-            recipeBrowserBtn.style.unityFontStyleAndWeight = FontStyle.Bold;
-            recipeBrowserBtn.style.backgroundColor = new StyleColor(_recipeBrowserOpen ? UITheme.AccentGold : new Color(0.14f, 0.14f, 0.20f));
-            SetBorderRadius(recipeBrowserBtn, 4); ZeroBorder(recipeBrowserBtn);
-            panel.Add(recipeBrowserBtn);
+            }, LcdHudTheme.Phosphor, _recipeBrowserOpen);
+            recipesButton.style.flexGrow = 1;
+            recipesButton.style.minWidth = 104;
+            commands.Add(recipesButton);
+            return bay;
+        }
 
-            // ── Wireless Storage Network (if unlocked) ──
+        private void BuildWirelessStorageReadout(VisualElement parent)
+        {
             var transmitters = VoxelEngine.Storage.WirelessTransmitter.GetAllOnline();
-            if (transmitters.Length > 0)
+            if (transmitters == null || transmitters.Length == 0) return;
+
+            var module = new VisualElement { name = "InventoryWirelessReadout" };
+            module.style.marginTop = 8;
+            module.style.paddingTop = 6;
+            module.style.paddingBottom = 6;
+            module.style.paddingLeft = 6;
+            module.style.paddingRight = 6;
+            LcdHudTheme.ApplyDataCard(module, LcdHudTheme.Bezel);
+            parent.Add(module);
+
+            var header = new VisualElement();
+            header.style.flexDirection = FlexDirection.Row;
+            header.style.alignItems = Align.Center;
+            module.Add(header);
+            var label = LcdHudTheme.CaptionLabel("WIRELESS STORAGE BUS");
+            label.style.flexGrow = 1;
+            header.Add(label);
+            var toggle = LcdHudTheme.CommandButton(_showWirelessStorage ? "COLLAPSE" : "EXPAND", () =>
             {
-                panel.Add(Spacer(8));
-                panel.Add(MakeDivider());
+                _showWirelessStorage = !_showWirelessStorage;
+                Refresh();
+            }, LcdHudTheme.Phosphor, _showWirelessStorage);
+            header.Add(toggle);
 
-                var wirelessBtn = new Button(() => { _showWirelessStorage = !_showWirelessStorage; Refresh(); })
-                { text = _showWirelessStorage ? "▼ Hide Storage Network" : "▶ Show Storage Network" };
-                wirelessBtn.style.minHeight = 26; wirelessBtn.style.fontSize = 11;
-                wirelessBtn.style.color = Color.white;
-                wirelessBtn.style.unityFontStyleAndWeight = FontStyle.Bold;
-                wirelessBtn.style.backgroundColor = new StyleColor(new Color(0.15f, 0.40f, 0.65f));
-                SetBorderRadius(wirelessBtn, 4); ZeroBorder(wirelessBtn);
-                panel.Add(wirelessBtn);
+            if (!_showWirelessStorage) return;
 
-                if (_showWirelessStorage)
+            foreach (var transmitter in transmitters)
+            {
+                if (transmitter == null || transmitter.ConnectedRack == null) continue;
+                var rack = transmitter.ConnectedRack;
+                var title = new Label(string.IsNullOrEmpty(transmitter.transmitterName)
+                    ? "NETWORK NODE"
+                    : transmitter.transmitterName.ToUpperInvariant());
+                title.style.fontSize = 9;
+                title.style.letterSpacing = 0.8f;
+                title.style.unityFontStyleAndWeight = FontStyle.Bold;
+                title.style.color = new StyleColor(LcdHudTheme.Phosphor);
+                title.style.marginTop = 6;
+                module.Add(title);
+
+                var items = rack.GetAllItems();
+                if (items.Count == 0)
                 {
-                    foreach (var tx in transmitters)
+                    var empty = LcdHudTheme.CaptionLabel("NO STORED MATERIAL");
+                    empty.style.marginTop = 3;
+                    module.Add(empty);
+                    continue;
+                }
+
+                var categories = new Dictionary<string, List<VoxelEngine.Storage.StoredItemEntry>>();
+                foreach (var entry in items)
+                {
+                    string category = "MISC";
+                    var definitions = Resources.FindObjectsOfTypeAll<VoxelEngine.Items.ItemDefinition>();
+                    foreach (var definition in definitions)
                     {
-                        if (tx.ConnectedRack == null) continue;
-                        var rack = tx.ConnectedRack;
-                        panel.Add(Spacer(4));
-
-                        var netTitle = MakeSubtitle($"📡 {tx.transmitterName}");
-                        panel.Add(netTitle);
-
-                        // Categorized items.
-                        var items = rack.GetAllItems();
-                        if (items.Count == 0)
+                        if (definition.itemId == entry.itemId)
                         {
-                            panel.Add(MakeMutedLabel("  (empty)"));
-                            continue;
+                            category = string.IsNullOrEmpty(definition.category) ? "MISC" : definition.category.ToUpperInvariant();
+                            break;
                         }
+                    }
+                    if (!categories.TryGetValue(category, out var bucket))
+                    {
+                        bucket = new List<VoxelEngine.Storage.StoredItemEntry>();
+                        categories[category] = bucket;
+                    }
+                    bucket.Add(entry);
+                }
 
-                        // Group by category.
-                        var cats = new System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<VoxelEngine.Storage.StoredItemEntry>>();
-                        foreach (var entry in items)
-                        {
-                            // Try to find the item's category.
-                            string cat = "Misc";
-                            var allItemDefs = Resources.FindObjectsOfTypeAll<VoxelEngine.Items.ItemDefinition>();
-                            foreach (var def in allItemDefs)
-                            {
-                                if (def.itemId == entry.itemId)
-                                { cat = string.IsNullOrEmpty(def.category) ? "Misc" : def.category; break; }
-                            }
-                            if (!cats.ContainsKey(cat)) cats[cat] = new();
-                            cats[cat].Add(entry);
-                        }
+                foreach (var category in categories)
+                {
+                    var categoryTitle = LcdHudTheme.CaptionLabel(category.Key);
+                    categoryTitle.style.marginTop = 4;
+                    module.Add(categoryTitle);
+                    foreach (var entry in category.Value)
+                    {
+                        var row = new VisualElement();
+                        row.style.flexDirection = FlexDirection.Row;
+                        row.style.paddingTop = 2;
+                        row.style.paddingBottom = 2;
+                        row.style.paddingLeft = 4;
+                        row.style.paddingRight = 4;
+                        LcdHudTheme.ApplyScreen(row, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.72f), 1f);
 
-                        foreach (var kv in cats)
-                        {
-                            var catLabel = new Label($"  {kv.Key}");
-                            catLabel.style.color = new StyleColor(new Color(0.65f, 0.70f, 0.78f));
-                            catLabel.style.fontSize = 10;
-                            catLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
-                            catLabel.style.marginTop = 2;
-                            panel.Add(catLabel);
+                        var name = new Label(entry.displayName);
+                        name.style.flexGrow = 1;
+                        name.style.fontSize = 9;
+                        name.style.color = new StyleColor(LcdHudTheme.Caption);
+                        name.style.overflow = Overflow.Hidden;
+                        name.style.textOverflow = TextOverflow.Ellipsis;
+                        name.style.whiteSpace = WhiteSpace.NoWrap;
+                        row.Add(name);
 
-                            foreach (var entry in kv.Value)
-                            {
-                                var row = new VisualElement();
-                                row.style.flexDirection = FlexDirection.Row;
-                                row.style.marginLeft = 12; row.style.marginBottom = 1;
-
-                                var n = new Label(entry.displayName);
-                                n.style.color = new StyleColor(new Color(0.85f, 0.87f, 0.92f));
-                                n.style.fontSize = 10; n.style.flexGrow = 1;
-                                row.Add(n);
-
-                                var cnt = new Label($"×{entry.count:N0}");
-                                cnt.style.color = new StyleColor(new Color(0.30f, 0.75f, 0.90f));
-                                cnt.style.fontSize = 10; cnt.style.minWidth = 50;
-                                cnt.style.unityTextAlign = TextAnchor.MiddleRight;
-                                row.Add(cnt);
-
-                                panel.Add(row);
-                            }
-                        }
+                        var count = new Label($"×{entry.count:N0}");
+                        count.style.fontSize = 9;
+                        count.style.unityFontStyleAndWeight = FontStyle.Bold;
+                        count.style.color = new StyleColor(LcdHudTheme.Phosphor);
+                        row.Add(count);
+                        module.Add(row);
                     }
                 }
             }
         }
+
 
         // ----------------------------------------------------------------
         //  CENTER CRAFTING PANEL — the crafting surface.
@@ -2842,26 +2988,20 @@ namespace VoxelEngine.UI
             var all = VoxelEngine.Storage.WirelessTransmitter.GetAllOnline();
             if (all == null || all.Length == 0) return;
 
-            parent.Add(Spacer(10));
-            var row = new VisualElement();
-            row.style.flexDirection  = FlexDirection.Row;
-            row.style.alignItems     = Align.Center;
-            row.style.marginBottom   = 4;
-            row.style.paddingTop     = 6;
-            row.style.paddingBottom  = 6;
-            row.style.paddingLeft    = 10;
-            row.style.paddingRight   = 10;
-            row.style.backgroundColor = new StyleColor(UITheme.BgCard);
-            SetBorderRadius(row, UITheme.CardRadius);
-            UITheme.Border(row, 1, UITheme.BorderDim);
+            parent.Add(Spacer(8));
+            var row = new VisualElement { name = "InventoryNetworkRoute" };
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
+            row.style.marginBottom = 4;
+            row.style.paddingTop = 5;
+            row.style.paddingBottom = 5;
+            row.style.paddingLeft = 7;
+            row.style.paddingRight = 7;
+            LcdHudTheme.ApplyDataCard(row, LcdHudTheme.Bezel);
             parent.Add(row);
 
-            var lbl = new Label("\ud83d\udce1 Network:");
-            lbl.style.color    = new StyleColor(UITheme.TextSecondary);
-            lbl.style.fontSize = 11;
-            lbl.style.unityFontStyleAndWeight = FontStyle.Bold;
-            lbl.style.marginRight = 8;
-            lbl.pickingMode = PickingMode.Ignore;
+            var lbl = LcdHudTheme.CaptionLabel("NETWORK ROUTE");
+            lbl.style.marginRight = 7;
             row.Add(lbl);
 
             // Build the list of "Auto" + every online transmitter's name.
@@ -2874,8 +3014,12 @@ namespace VoxelEngine.UI
             }
 
             var dd = new DropdownField(names, 0);
-            dd.style.flexGrow  = 1;
+            dd.style.flexGrow = 1;
             dd.style.minHeight = 26;
+            dd.style.backgroundColor = new StyleColor(LcdHudTheme.GlassDark);
+            dd.style.color = new StyleColor(LcdHudTheme.Phosphor);
+            UITheme.Radius(dd, 1f);
+            UITheme.Border(dd, 1f, LcdHudTheme.Bezel);
 
             // Reflect current selection.
             string current = string.IsNullOrEmpty(_selectedTransmitterName) ? "Auto (nearest)" : _selectedTransmitterName;
@@ -2895,8 +3039,9 @@ namespace VoxelEngine.UI
                 ? $"  \u2713 online ({rack.TotalStored:N0}/{rack.TotalCapacity:N0} GB)"
                 : "  \u26A0 offline";
             var status = new Label(statusTxt);
-            status.style.color    = new StyleColor(rack != null && rack.IsOnline ? UITheme.AccentGreen : UITheme.AccentRed);
-            status.style.fontSize = 10;
+            status.style.color = new StyleColor(rack != null && rack.IsOnline ? LcdHudTheme.Phosphor : UITheme.AccentRed);
+            status.style.fontSize = 8;
+            status.style.letterSpacing = 0.45f;
             status.style.marginLeft = 6;
             status.pickingMode = PickingMode.Ignore;
             row.Add(status);
@@ -3820,13 +3965,21 @@ namespace VoxelEngine.UI
         {
             bool isHotbarSlot = inventory != null && container == inventory.container
                 && index >= 0 && index < Inventory.HOTBAR_SIZE;
-            var slot = new VisualElement();
-            slot.style.width = isHotbarSlot ? 52 : 56;
-            slot.style.height = isHotbarSlot ? 52 : 56;
-            slot.style.marginRight = isHotbarSlot ? 2 : 4;
+            bool isCargoSlot = inventory != null && container == inventory.container && index >= Inventory.HOTBAR_SIZE;
+            bool isEquipmentSlot = IsEquipmentContainer(container);
+            bool lcdMatrixSlot = isCargoSlot || isEquipmentSlot;
+
+            var slot = new VisualElement
+            {
+                name = isCargoSlot ? "InventoryLcdSlot" : isEquipmentSlot ? "EquipmentLcdSlot" : "ItemSlot"
+            };
+            slot.style.width = isHotbarSlot ? 52 : lcdMatrixSlot ? 48 : 56;
+            slot.style.height = isHotbarSlot ? 52 : lcdMatrixSlot ? 48 : 56;
+            slot.style.marginRight = isHotbarSlot ? 2 : lcdMatrixSlot ? 3 : 4;
             slot.style.marginBottom = 4;
             slot.style.alignItems = Align.Center;
             slot.style.justifyContent = Justify.Center;
+
             if (isHotbarSlot)
             {
                 slot.style.backgroundColor = new StyleColor(hotbarHighlight ? LcdHudTheme.Glass : LcdHudTheme.GlassDark);
@@ -3857,6 +4010,40 @@ namespace VoxelEngine.UI
                 key.pickingMode = PickingMode.Ignore;
                 slot.Add(key);
             }
+            else if (lcdMatrixSlot)
+            {
+                slot.style.backgroundColor = new StyleColor(LcdHudTheme.GlassDark);
+                SetBorderRadius(slot, 1);
+                slot.style.borderTopWidth = slot.style.borderBottomWidth =
+                slot.style.borderLeftWidth = slot.style.borderRightWidth = 1;
+                var matrixBorder = isEquipmentSlot
+                    ? new Color(LcdHudTheme.Phosphor.r, LcdHudTheme.Phosphor.g, LcdHudTheme.Phosphor.b, 0.62f)
+                    : new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.96f);
+                var border = new StyleColor(matrixBorder);
+                slot.style.borderTopColor = slot.style.borderBottomColor =
+                slot.style.borderLeftColor = slot.style.borderRightColor = border;
+
+                var cell = new Label(isCargoSlot ? $"{index - Inventory.HOTBAR_SIZE + 1:00}" : "EQ") { name = "LcdSlotIndex" };
+                cell.style.position = Position.Absolute;
+                cell.style.left = 3;
+                cell.style.top = 2;
+                cell.style.fontSize = 6;
+                cell.style.letterSpacing = 0.55f;
+                cell.style.unityFontStyleAndWeight = FontStyle.Bold;
+                cell.style.color = new StyleColor(isEquipmentSlot ? LcdHudTheme.PhosphorDim : LcdHudTheme.Caption);
+                cell.pickingMode = PickingMode.Ignore;
+                slot.Add(cell);
+
+                var divider = new VisualElement();
+                divider.style.position = Position.Absolute;
+                divider.style.left = 3;
+                divider.style.right = 3;
+                divider.style.top = 12;
+                divider.style.height = 1;
+                divider.style.backgroundColor = new StyleColor(new Color(LcdHudTheme.Phosphor.r, LcdHudTheme.Phosphor.g, LcdHudTheme.Phosphor.b, 0.08f));
+                divider.pickingMode = PickingMode.Ignore;
+                slot.Add(divider);
+            }
             else
             {
                 slot.style.backgroundColor = new StyleColor(new Color(0.13f, 0.15f, 0.19f, 0.95f));
@@ -3880,8 +4067,8 @@ namespace VoxelEngine.UI
                     // larger image reads instantly even at a glance. ScaleToFit keeps
                     // aspect for any legacy non-square sprite.
                     img.scaleMode = ScaleMode.ScaleToFit;
-                    img.style.width = isHotbarSlot ? 46 : 51;
-                    img.style.height = isHotbarSlot ? 46 : 51;
+                    img.style.width = isHotbarSlot ? 46 : lcdMatrixSlot ? 40 : 51;
+                    img.style.height = isHotbarSlot ? 46 : lcdMatrixSlot ? 40 : 51;
                     img.pickingMode = PickingMode.Ignore;   // children must not steal events
                     slot.Add(img);
                 }
@@ -3955,13 +4142,13 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                     var count = new Label(stack.count.ToString());
                     count.style.position = Position.Absolute;
                     count.style.bottom = 2; count.style.right = 4;
-                    count.style.color = Color.white;
-                    count.style.fontSize = 12;
+                    count.style.color = lcdMatrixSlot ? LcdHudTheme.Phosphor : Color.white;
+                    count.style.fontSize = lcdMatrixSlot ? 10 : 12;
                     count.style.unityFontStyleAndWeight = FontStyle.Bold;
                     // Subtle dark backdrop so the number is readable on bright icons.
                     count.style.paddingLeft = 3; count.style.paddingRight = 3;
-                    count.style.backgroundColor = new StyleColor(new Color(0,0,0,0.55f));
-                    SetBorderRadius(count, 3);
+                    count.style.backgroundColor = new StyleColor(lcdMatrixSlot ? LcdHudTheme.GlassDark : new Color(0,0,0,0.55f));
+                    SetBorderRadius(count, lcdMatrixSlot ? 1 : 3);
                     count.pickingMode = PickingMode.Ignore;
                     slot.Add(count);
                 }

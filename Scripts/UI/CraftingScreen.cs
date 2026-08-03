@@ -1,11 +1,10 @@
 // Assets/Scripts/VoxelEngine/UI/CraftingScreen.cs
 //
 // ╔══════════════════════════════════════════════════════════════════╗
-// ║          INDUSTRIAL WORLD — RUST-STYLE CRAFTING SCREEN         ║
+// ║         INDUSTRIAL WORLD — LCD CRAFTING TERMINAL              ║
 // ║                                                                  ║
-// ║  A premium, self-contained crafting surface inspired by Rust's  ║
-// ║  blueprint menu but rebuilt to our sleek dark-steel design       ║
-// ║  language:                                                       ║
+// ║  A premium, self-contained fabrication surface built as a       ║
+// ║  fitted phosphor work display with a clear blueprint matrix.    ║
 // ║                                                                  ║
 // ║   ┌────────┬──────────────────────┬──────────────────────┐     ║
 // ║   │ CATS   │  RECIPE TILE GRID     │  DETAIL + QUEUE       │     ║
@@ -84,78 +83,79 @@ namespace VoxelEngine.UI
         //  TOGGLE BUTTON — drop this into the inventory panel header.
         // ───────────────────────────────────────────────────────────────────
         /// <summary>
-        /// Builds the "show / hide crafting" pill the player clicks inside the
-        /// inventory. Calls <paramref name="onToggled"/> after flipping state so
+        /// Builds the compact fabrication command key inside the inventory display.
+        /// Calls <paramref name="onToggled"/> after flipping state so
         /// the host can re-render.
         /// </summary>
         public static VisualElement ToggleButton(Action onToggled)
         {
             bool open = Visible;
+            var button = new VisualElement { name = "CraftingCommandKey" };
+            button.style.flexDirection = FlexDirection.Row;
+            button.style.alignItems = Align.Center;
+            button.style.justifyContent = Justify.SpaceBetween;
+            button.style.height = 29;
+            button.style.paddingLeft = 8;
+            button.style.paddingRight = 8;
+            button.style.backgroundColor = new StyleColor(open
+                ? new Color(LcdHudTheme.Phosphor.r, LcdHudTheme.Phosphor.g, LcdHudTheme.Phosphor.b, 0.16f)
+                : LcdHudTheme.GlassDark);
+            T.Radius(button, 1f);
+            T.Border(button, 1, open ? LcdHudTheme.Phosphor : LcdHudTheme.Bezel);
 
-            var btn = new VisualElement();
-            btn.style.flexDirection  = FlexDirection.Row;
-            btn.style.alignItems     = Align.Center;
-            btn.style.justifyContent = Justify.SpaceBetween;
-            btn.style.height         = 34;
-            btn.style.paddingLeft    = 12;
-            btn.style.paddingRight   = 12;
-            btn.style.marginTop      = 10;
-            Color baseBg = open ? LcdHudTheme.Glass : LcdHudTheme.GlassDark;
-            btn.style.backgroundColor = new StyleColor(baseBg);
-            T.Radius(btn, 1f);
-            T.Border(btn, 1, open ? LcdHudTheme.Phosphor : LcdHudTheme.Bezel);
-
-            var left = new VisualElement();
-            left.style.flexDirection = FlexDirection.Row;
-            left.style.alignItems    = Align.Center;
-            left.pickingMode         = PickingMode.Ignore;
-
-            var icon = new Label("\u2692"); // ⚒ hammer & pick
-            icon.style.fontSize   = 15;
-            icon.style.color      = new StyleColor(open ? LcdHudTheme.Phosphor : LcdHudTheme.PhosphorDim);
-            icon.style.marginRight = 8;
-            icon.pickingMode      = PickingMode.Ignore;
-            left.Add(icon);
-
+            var title = new VisualElement();
+            title.style.flexGrow = 1;
+            title.pickingMode = PickingMode.Ignore;
+            var caption = LcdHudTheme.CaptionLabel("FABRICATION");
+            caption.style.marginBottom = 1;
+            title.Add(caption);
             var label = new Label("CRAFTING");
-            label.style.fontSize              = 11;
-            label.style.letterSpacing         = 1.6f;
+            label.style.fontSize = 9;
+            label.style.letterSpacing = 1.05f;
             label.style.unityFontStyleAndWeight = FontStyle.Bold;
-            label.style.color                 = new StyleColor(open ? LcdHudTheme.Phosphor : T.TextSecondary);
-            label.pickingMode                 = PickingMode.Ignore;
-            left.Add(label);
-            btn.Add(left);
+            label.style.color = new StyleColor(open ? LcdHudTheme.Phosphor : LcdHudTheme.Caption);
+            title.Add(label);
+            button.Add(title);
 
-            var chev = new Label(open ? "\u25BC" : "\u25B6"); // ▼ / ▶
-            chev.style.fontSize = 10;
-            chev.style.color    = new StyleColor(open ? LcdHudTheme.Phosphor : T.TextMuted);
-            chev.pickingMode    = PickingMode.Ignore;
-            btn.Add(chev);
+            var state = new Label(open ? "ACTIVE" : "OPEN");
+            state.style.fontSize = 8;
+            state.style.letterSpacing = 0.8f;
+            state.style.unityFontStyleAndWeight = FontStyle.Bold;
+            state.style.color = new StyleColor(open ? LcdHudTheme.Phosphor : LcdHudTheme.PhosphorDim);
+            state.style.paddingLeft = 4;
+            state.style.paddingRight = 4;
+            state.style.backgroundColor = new StyleColor(LcdHudTheme.GlassDark);
+            T.Radius(state, 1f);
+            T.Border(state, 1, open ? new Color(LcdHudTheme.Phosphor.r, LcdHudTheme.Phosphor.g, LcdHudTheme.Phosphor.b, 0.55f) : LcdHudTheme.Bezel);
+            state.pickingMode = PickingMode.Ignore;
+            button.Add(state);
 
-            // Micro-interaction: hover sheen + subtle scale.
-            btn.style.transitionProperty = new List<StylePropertyName> { "scale", "background-color" };
-            btn.style.transitionDuration = new List<TimeValue> { new TimeValue(0.10f, TimeUnit.Second), new TimeValue(0.10f, TimeUnit.Second) };
-            btn.RegisterCallback<MouseEnterEvent>(_ =>
+            button.style.transitionProperty = new List<StylePropertyName> { "scale", "background-color" };
+            button.style.transitionDuration = new List<TimeValue>
             {
-                btn.style.scale = new StyleScale(new Scale(new Vector3(1.015f, 1.015f, 1f)));
-                btn.style.backgroundColor = new StyleColor(open
-                    ? new Color(LcdHudTheme.Phosphor.r, LcdHudTheme.Phosphor.g, LcdHudTheme.Phosphor.b, 0.20f)
-                    : new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.85f));
-            });
-            btn.RegisterCallback<MouseLeaveEvent>(_ =>
+                new TimeValue(0.10f, TimeUnit.Second), new TimeValue(0.10f, TimeUnit.Second)
+            };
+            button.RegisterCallback<MouseEnterEvent>(_ =>
             {
-                btn.style.scale = new StyleScale(new Scale(Vector3.one));
-                btn.style.backgroundColor = new StyleColor(baseBg);
+                button.style.scale = new StyleScale(new Scale(new Vector3(1.015f, 1.015f, 1f)));
+                button.style.backgroundColor = new StyleColor(new Color(LcdHudTheme.Phosphor.r, LcdHudTheme.Phosphor.g, LcdHudTheme.Phosphor.b, 0.22f));
             });
-            VoxelEngine.FX.UiAudio.MarkClickable(btn);
-            btn.RegisterCallback<ClickEvent>(_ =>
+            button.RegisterCallback<MouseLeaveEvent>(_ =>
+            {
+                button.style.scale = new StyleScale(new Scale(Vector3.one));
+                button.style.backgroundColor = new StyleColor(open
+                    ? new Color(LcdHudTheme.Phosphor.r, LcdHudTheme.Phosphor.g, LcdHudTheme.Phosphor.b, 0.16f)
+                    : LcdHudTheme.GlassDark);
+            });
+            VoxelEngine.FX.UiAudio.MarkClickable(button);
+            button.RegisterCallback<ClickEvent>(_ =>
             {
                 Visible = !Visible;
                 onToggled?.Invoke();
             });
-
-            return btn;
+            return button;
         }
+
 
         // ───────────────────────────────────────────────────────────────────
         //  MAIN RENDER — fills a host panel with the full crafting surface.
@@ -182,33 +182,65 @@ namespace VoxelEngine.UI
             string panelId)
         {
             recipes ??= new List<RecipeDefinition>();
-            LcdHudTheme.ApplyChassis(panel, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.96f), 3f);
+            LcdHudTheme.ApplyChassis(panel, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.98f), 2f);
+            panel.style.paddingTop = 6;
+            panel.style.paddingBottom = 6;
+            panel.style.paddingLeft = 6;
+            panel.style.paddingRight = 6;
 
-            // ── Header: badge + title + search ──────────────────────────────
-            var header = new VisualElement();
+            // The full crafting application lives behind one inset display, rather
+            // than a collection of unrelated floating cards.
+            var display = new VisualElement { name = "CraftingLcdDisplay" };
+            display.style.flexDirection = FlexDirection.Column;
+            display.style.flexGrow = 1;
+            display.style.minHeight = 0;
+            display.style.paddingTop = 6;
+            display.style.paddingBottom = 6;
+            display.style.paddingLeft = 6;
+            display.style.paddingRight = 6;
+            display.style.overflow = Overflow.Hidden;
+            LcdHudTheme.ApplyScreen(display, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.92f), 1f);
+            panel.Add(display);
+
+            // ── Header: printed terminal title + search ─────────────────────
+            var header = new VisualElement { name = "CraftingDisplayHeader" };
             header.style.flexDirection = FlexDirection.Row;
-            header.style.alignItems    = Align.Center;
-            header.style.marginBottom  = 6;
+            header.style.alignItems = Align.Center;
+            header.style.marginBottom = 6;
+            header.style.paddingTop = 5;
+            header.style.paddingBottom = 5;
+            header.style.paddingLeft = 8;
+            header.style.paddingRight = 8;
+            LcdHudTheme.ApplyDataCard(header, LcdHudTheme.Bezel);
 
-            header.Add(T.IconBadge("\u2692", LcdHudTheme.Phosphor));
-            var title = T.Title("CRAFTING");
-            title.style.flexGrow = 1;
+            var titleBlock = new VisualElement();
+            titleBlock.style.flexGrow = 1;
+            titleBlock.pickingMode = PickingMode.Ignore;
+            var caption = LcdHudTheme.CaptionLabel("FABRICATION TERMINAL");
+            caption.style.marginBottom = 1;
+            titleBlock.Add(caption);
+            var title = new Label("CRAFTING");
+            title.style.fontSize = 14;
+            title.style.letterSpacing = 1.25f;
+            title.style.unityFontStyleAndWeight = FontStyle.Bold;
             title.style.color = new StyleColor(LcdHudTheme.Phosphor);
-            header.Add(title);
+            titleBlock.Add(title);
+            header.Add(titleBlock);
 
             var search = new TextField { value = GetSearch(panelId) };
-            search.style.width      = 150;
-            search.style.minHeight  = 26;
-            search.style.alignSelf  = Align.Center;
+            search.style.width = 150;
+            search.style.alignSelf = Align.Center;
+            LcdHudTheme.ApplySearchField(search);
             header.Add(search);
-            panel.Add(header);
-            panel.Add(T.AccentDivider(LcdHudTheme.Phosphor));
+            display.Add(header);
 
-            // ── Body: 3 columns ─────────────────────────────────────────────
+            // ── Body: category rail, blueprint matrix, assembly readout ──────
             var body = new VisualElement();
             body.style.flexDirection = FlexDirection.Row;
-            body.style.flexGrow      = 1;
-            panel.Add(body);
+            body.style.flexGrow = 1;
+            body.style.minHeight = 0;
+            display.Add(body);
+            LcdHudTheme.AddScanlines(display, 8, 44f, 57f);
 
             // Empty-state shortcut.
             if (recipes.Count == 0)
@@ -229,35 +261,62 @@ namespace VoxelEngine.UI
             cats.AddRange(catSet);
 
             // ── Column 1: category rail ─────────────────────────────────────
+            var railFrame = new VisualElement { name = "CraftingCategoryRail" };
+            railFrame.style.width = RAIL_W;
+            railFrame.style.flexShrink = 0;
+            railFrame.style.minHeight = 0;
+            railFrame.style.marginRight = 6;
+            railFrame.style.paddingTop = 5;
+            railFrame.style.paddingBottom = 5;
+            railFrame.style.paddingLeft = 4;
+            railFrame.style.paddingRight = 4;
+            LcdHudTheme.ApplyScreen(railFrame, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.82f), 1f);
+            var railCaption = LcdHudTheme.CaptionLabel("GROUPS");
+            railCaption.style.marginLeft = 3;
+            railCaption.style.marginBottom = 4;
+            railFrame.Add(railCaption);
             var rail = new ScrollView(ScrollViewMode.Vertical);
-            VoxelEngine.UI.UITheme.StyleScroller(rail);   // themed slim scrollbar
-            rail.style.width      = RAIL_W;
-            rail.style.flexShrink = 0;
-            rail.style.marginRight = 8;
-            body.Add(rail);
+            rail.style.flexGrow = 1;
+            rail.style.minHeight = 0;
+            UITheme.StyleScroller(rail, LcdHudTheme.Phosphor);
+            railFrame.Add(rail);
+            body.Add(railFrame);
 
-            // ── Column 2: tile grid ─────────────────────────────────────────
+            // ── Column 2: blueprint tile matrix ──────────────────────────────
+            var matrix = new VisualElement { name = "CraftingBlueprintMatrix" };
+            matrix.style.flexGrow = 1;
+            matrix.style.minWidth = 0;
+            matrix.style.marginRight = 6;
+            matrix.style.paddingTop = 5;
+            matrix.style.paddingBottom = 5;
+            matrix.style.paddingLeft = 5;
+            matrix.style.paddingRight = 5;
+            LcdHudTheme.ApplyScreen(matrix, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.82f), 1f);
+            var matrixCaption = LcdHudTheme.CaptionLabel("BLUEPRINT MATRIX");
+            matrixCaption.style.marginBottom = 4;
+            matrix.Add(matrixCaption);
             var gridScroll = new ScrollView(ScrollViewMode.Vertical);
-            VoxelEngine.UI.UITheme.StyleScroller(gridScroll);   // themed slim scrollbar
             gridScroll.style.flexGrow = 1;
+            gridScroll.style.minHeight = 0;
+            UITheme.StyleScroller(gridScroll, LcdHudTheme.Phosphor);
             var grid = new VisualElement();
             grid.style.flexDirection = FlexDirection.Row;
-            grid.style.flexWrap      = Wrap.Wrap;
+            grid.style.flexWrap = Wrap.Wrap;
             gridScroll.Add(grid);
-            body.Add(gridScroll);
+            matrix.Add(gridScroll);
+            body.Add(matrix);
 
-            // ── Column 3: detail + queue ────────────────────────────────────
-            var detail = new VisualElement();
-            detail.style.width      = DETAIL_W;
+            // ── Column 3: assembly readout + queue ───────────────────────────
+            var detail = new ScrollView(ScrollViewMode.Vertical) { name = "CraftingAssemblyReadout" };
+            detail.style.width = DETAIL_W;
             detail.style.flexShrink = 0;
-            detail.style.marginLeft = 8;
-            detail.style.paddingLeft   = 12;
-            detail.style.paddingRight  = 12;
-            detail.style.paddingTop    = 12;
-            detail.style.paddingBottom = 12;
-            detail.style.backgroundColor = new StyleColor(T.BgCard);
-            T.Radius(detail, T.CardRadius);
-            T.Border(detail, 1, T.BorderDim);
+            detail.style.minHeight = 0;
+            detail.style.paddingLeft = 8;
+            detail.style.paddingRight = 8;
+            detail.style.paddingTop = 8;
+            detail.style.paddingBottom = 8;
+            LcdHudTheme.ApplyScreen(detail, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.88f), 1f);
+            UITheme.StyleScroller(detail, LcdHudTheme.Phosphor);
             body.Add(detail);
 
             // ── Local re-render helpers (avoid full Refresh → keeps focus) ───
@@ -274,16 +333,18 @@ namespace VoxelEngine.UI
                     pill.style.paddingLeft   = 9;
                     pill.style.justifyContent = Justify.Center;
                     pill.style.backgroundColor = new StyleColor(isActive
-                        ? new Color(T.AccentCyan.r, T.AccentCyan.g, T.AccentCyan.b, 0.18f)
-                        : T.BgSlot);
-                    T.Radius(pill, 5);
-                    T.Border(pill, 1, isActive ? T.BorderBright : T.BorderSubtle);
+                        ? new Color(LcdHudTheme.Phosphor.r, LcdHudTheme.Phosphor.g, LcdHudTheme.Phosphor.b, 0.16f)
+                        : LcdHudTheme.GlassDark);
+                    T.Radius(pill, 1);
+                    T.Border(pill, 1, isActive
+                        ? new Color(LcdHudTheme.Phosphor.r, LcdHudTheme.Phosphor.g, LcdHudTheme.Phosphor.b, 0.82f)
+                        : LcdHudTheme.Bezel);
 
                     var l = new Label(c);
                     l.style.fontSize = 10;
                     l.style.unityFontStyleAndWeight = FontStyle.Bold;
                     l.style.letterSpacing = 0.6f;
-                    l.style.color = new StyleColor(isActive ? T.AccentCyan : T.TextSecondary);
+                    l.style.color = new StyleColor(isActive ? LcdHudTheme.Phosphor : LcdHudTheme.Caption);
                     l.style.overflow = Overflow.Hidden;
                     l.style.textOverflow = TextOverflow.Ellipsis;
                     l.style.whiteSpace = WhiteSpace.NoWrap;
@@ -291,8 +352,15 @@ namespace VoxelEngine.UI
                     pill.Add(l);
 
                     string cap = c;
-                    pill.RegisterCallback<MouseEnterEvent>(_ => { if (!IsCat(panelId, cap)) pill.style.backgroundColor = new StyleColor(T.BgHover); });
-                    pill.RegisterCallback<MouseLeaveEvent>(_ => { if (!IsCat(panelId, cap)) pill.style.backgroundColor = new StyleColor(T.BgSlot); });
+                    pill.RegisterCallback<MouseEnterEvent>(_ =>
+                    {
+                        if (!IsCat(panelId, cap))
+                            pill.style.backgroundColor = new StyleColor(new Color(LcdHudTheme.Phosphor.r, LcdHudTheme.Phosphor.g, LcdHudTheme.Phosphor.b, 0.09f));
+                    });
+                    pill.RegisterCallback<MouseLeaveEvent>(_ =>
+                    {
+                        if (!IsCat(panelId, cap)) pill.style.backgroundColor = new StyleColor(LcdHudTheme.GlassDark);
+                    });
                     VoxelEngine.FX.UiAudio.MarkClickable(pill);
                     pill.RegisterCallback<ClickEvent>(_ =>
                     {
@@ -398,9 +466,11 @@ namespace VoxelEngine.UI
             tile.style.marginRight = 5; tile.style.marginBottom = 5;
             tile.style.alignItems     = Align.Center;
             tile.style.justifyContent = Justify.Center;
-            tile.style.backgroundColor = new StyleColor(selected ? T.BgActive : T.BgSlot);
-            T.Radius(tile, 6);
-            T.Border(tile, selected ? 2 : 1, selected ? T.AccentCyan : T.BorderDim);
+            tile.style.backgroundColor = new StyleColor(selected
+                ? new Color(LcdHudTheme.Phosphor.r, LcdHudTheme.Phosphor.g, LcdHudTheme.Phosphor.b, 0.15f)
+                : LcdHudTheme.GlassDark);
+            T.Radius(tile, 1);
+            T.Border(tile, selected ? 2 : 1, selected ? LcdHudTheme.Phosphor : LcdHudTheme.Bezel);
             tile.style.opacity = craftable ? 1f : 0.45f;
 
             // Icon
@@ -462,12 +532,16 @@ namespace VoxelEngine.UI
             tile.RegisterCallback<MouseEnterEvent>(_ =>
             {
                 tile.style.scale = new StyleScale(new Scale(new Vector3(1.07f, 1.07f, 1f)));
-                if (!selected) { tile.style.backgroundColor = new StyleColor(T.BgHover); T.Border(tile, 1, T.BorderBright); }
+                if (!selected)
+                {
+                    tile.style.backgroundColor = new StyleColor(new Color(LcdHudTheme.Phosphor.r, LcdHudTheme.Phosphor.g, LcdHudTheme.Phosphor.b, 0.10f));
+                    T.Border(tile, 1, LcdHudTheme.PhosphorDim);
+                }
             });
             tile.RegisterCallback<MouseLeaveEvent>(_ =>
             {
                 tile.style.scale = new StyleScale(new Scale(Vector3.one));
-                if (!selected) { tile.style.backgroundColor = new StyleColor(T.BgSlot); T.Border(tile, 1, T.BorderDim); }
+                if (!selected) { tile.style.backgroundColor = new StyleColor(LcdHudTheme.GlassDark); T.Border(tile, 1, LcdHudTheme.Bezel); }
             });
             VoxelEngine.FX.UiAudio.MarkClickable(tile);
             tile.RegisterCallback<ClickEvent>(_ => onClick?.Invoke());
@@ -495,8 +569,8 @@ namespace VoxelEngine.UI
             iconWrap.style.width = 48; iconWrap.style.height = 48;
             iconWrap.style.marginRight = 10;
             iconWrap.style.alignItems = Align.Center; iconWrap.style.justifyContent = Justify.Center;
-            iconWrap.style.backgroundColor = new StyleColor(T.BgSlot);
-            T.Radius(iconWrap, 6); T.Border(iconWrap, 1, T.BorderDim);
+            iconWrap.style.backgroundColor = new StyleColor(LcdHudTheme.GlassDark);
+            T.Radius(iconWrap, 1); T.Border(iconWrap, 1, LcdHudTheme.Bezel);
             var sprite = recipe.GetIcon();
             if (sprite != null)
             {
@@ -534,7 +608,7 @@ namespace VoxelEngine.UI
                 detail.Add(desc);
             }
 
-            detail.Add(T.AccentDivider());
+            detail.Add(T.AccentDivider(LcdHudTheme.Phosphor));
 
             // Ingredients.
             detail.Add(T.Subtitle("Required"));
@@ -614,9 +688,7 @@ namespace VoxelEngine.UI
                 b.style.width = 28; b.style.height = 28;
                 b.style.fontSize = 14;
                 b.style.unityFontStyleAndWeight = FontStyle.Bold;
-                b.style.color = Color.white;
-                b.style.backgroundColor = new StyleColor(T.BgHover);
-                T.Radius(b, 4); T.Border(b, 0, Color.clear);
+                LcdHudTheme.ApplyCommandButton(b, LcdHudTheme.Phosphor);
                 return b;
             }
 
@@ -628,10 +700,9 @@ namespace VoxelEngine.UI
             amtBox.style.unityTextAlign = TextAnchor.MiddleCenter;
             amtBox.style.fontSize = 14;
             amtBox.style.unityFontStyleAndWeight = FontStyle.Bold;
-            amtBox.style.color = new StyleColor(T.TextPrimary);
+            amtBox.style.color = new StyleColor(LcdHudTheme.Phosphor);
             amtBox.style.marginLeft = 4; amtBox.style.marginRight = 4;
-            amtBox.style.backgroundColor = new StyleColor(T.BgSlot);
-            T.Radius(amtBox, 4);
+            LcdHudTheme.ApplyDataCard(amtBox, LcdHudTheme.Bezel);
             amtBox.pickingMode = PickingMode.Ignore;
             stepperRow.Add(amtBox);
 
@@ -641,9 +712,7 @@ namespace VoxelEngine.UI
             maxBtn.style.height = 28; maxBtn.style.marginLeft = 6;
             maxBtn.style.fontSize = 9; maxBtn.style.paddingLeft = 8; maxBtn.style.paddingRight = 8;
             maxBtn.style.unityFontStyleAndWeight = FontStyle.Bold;
-            maxBtn.style.color = Color.white;
-            maxBtn.style.backgroundColor = new StyleColor(T.BgHover);
-            T.Radius(maxBtn, 4); T.Border(maxBtn, 0, Color.clear);
+            LcdHudTheme.ApplyCommandButton(maxBtn, LcdHudTheme.Phosphor);
             stepperRow.Add(maxBtn);
             detail.Add(stepperRow);
 
@@ -664,30 +733,12 @@ namespace VoxelEngine.UI
             })
             { text = canCraft ? (toCraft > 1 ? $"CRAFT  ×{toCraft}" : "CRAFT") : (queueRoom < 1 ? "QUEUE FULL" : "MISSING ITEMS") };
             craftBtn.style.height = 38;
-            craftBtn.style.fontSize = 13;
+            craftBtn.style.fontSize = 12;
             craftBtn.style.letterSpacing = 1.2f;
             craftBtn.style.unityFontStyleAndWeight = FontStyle.Bold;
-            craftBtn.style.color = Color.white;
-            craftBtn.style.backgroundColor = new StyleColor(canCraft
-                ? new Color(T.AccentGreen.r, T.AccentGreen.g, T.AccentGreen.b, 0.92f)
-                : new Color(0.30f, 0.30f, 0.34f));
-            T.Radius(craftBtn, T.ButtonRadius); T.Border(craftBtn, 0, Color.clear);
+            LcdHudTheme.ApplyCommandButton(craftBtn, canCraft ? LcdHudTheme.Phosphor : UITheme.AccentRed, canCraft);
+            craftBtn.style.height = 38;
             craftBtn.SetEnabled(canCraft);
-            if (canCraft)
-            {
-                craftBtn.style.transitionProperty = new List<StylePropertyName> { "scale", "background-color" };
-                craftBtn.style.transitionDuration = new List<TimeValue> { new TimeValue(0.10f, TimeUnit.Second), new TimeValue(0.10f, TimeUnit.Second) };
-                craftBtn.RegisterCallback<MouseEnterEvent>(_ =>
-                {
-                    craftBtn.style.scale = new StyleScale(new Scale(new Vector3(1.02f, 1.02f, 1f)));
-                    craftBtn.style.backgroundColor = new StyleColor(T.AccentGreen);
-                });
-                craftBtn.RegisterCallback<MouseLeaveEvent>(_ =>
-                {
-                    craftBtn.style.scale = new StyleScale(new Scale(Vector3.one));
-                    craftBtn.style.backgroundColor = new StyleColor(new Color(T.AccentGreen.r, T.AccentGreen.g, T.AccentGreen.b, 0.92f));
-                });
-            }
             detail.Add(craftBtn);
 
             // Active queue for this station.
@@ -722,16 +773,14 @@ namespace VoxelEngine.UI
                     qrow.Add(qn);
 
                     float pct = e.recipe.craftSeconds > 0 ? Mathf.Clamp01(e.progressSeconds / e.recipe.craftSeconds) : 1f;
-                    var (bar, _) = T.ProgressBar(pct, T.AccentCyan, 6, flexGrow: false);
+                    var (bar, _) = T.ProgressBar(pct, LcdHudTheme.Phosphor, 6, flexGrow: false);
                     bar.style.width = 58; bar.style.marginRight = 6;
                     qrow.Add(bar);
 
                     var cancel = new Button(() => { queue.Cancel(idx); refresh?.Invoke(); }) { text = "\u2715" };
                     cancel.style.width = 22; cancel.style.height = 22;
                     cancel.style.fontSize = 11;
-                    cancel.style.color = Color.white;
-                    cancel.style.backgroundColor = new StyleColor(new Color(T.AccentRed.r, T.AccentRed.g, T.AccentRed.b, 0.85f));
-                    T.Radius(cancel, 4); T.Border(cancel, 0, Color.clear);
+                    LcdHudTheme.ApplyCommandButton(cancel, UITheme.AccentRed);
                     qrow.Add(cancel);
 
                     qscroll.Add(qrow);

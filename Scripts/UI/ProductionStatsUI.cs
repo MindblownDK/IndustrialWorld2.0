@@ -67,43 +67,56 @@ namespace VoxelEngine.UI
         {
             LoadPrefs();
             var panel = T.MachinePanel();
-            LcdHudTheme.ApplyChassis(panel, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.96f), 3f);
+            LcdHudTheme.ApplyChassis(panel, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.98f), 2f);
             panel.style.left = new StyleLength(new Length(34f, LengthUnit.Percent));
             panel.style.right = 12;
             panel.style.width = new StyleLength(new Length(54f, LengthUnit.Percent));
             panel.style.maxWidth = new StyleLength(new Length(62f, LengthUnit.Percent));
             panel.style.minWidth = 300;
-            // Premium entrance pop
-            panel.style.opacity = 0f;
-            panel.style.scale = new StyleScale(new Scale(new Vector3(0.985f, 0.985f, 1f)));
-            panel.schedule.Execute(() =>
-            {
-                panel.style.transitionProperty = new List<StylePropertyName> { "opacity", "scale" };
-                panel.style.transitionDuration = new List<TimeValue> { new TimeValue(0.18f, TimeUnit.Second), new TimeValue(0.18f, TimeUnit.Second) };
-                panel.style.opacity = 1f;
-                panel.style.scale = new StyleScale(new Scale(Vector3.one));
-            }).ExecuteLater(20);
+            panel.style.paddingTop = 6;
+            panel.style.paddingBottom = 6;
+            panel.style.paddingLeft = 6;
+            panel.style.paddingRight = 6;
+
+            var display = new VisualElement { name = "ProductionLcdDisplay" };
+            display.style.flexDirection = FlexDirection.Column;
+            display.style.flexGrow = 1;
+            display.style.minHeight = 0;
+            display.style.paddingTop = 6;
+            display.style.paddingBottom = 6;
+            display.style.paddingLeft = 6;
+            display.style.paddingRight = 6;
+            display.style.overflow = Overflow.Hidden;
+            LcdHudTheme.ApplyScreen(display, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.92f), 1f);
+            panel.Add(display);
 
             var snapshot = ProductionStatsTracker.Instance.GetSnapshot();
-            panel.Add(Header(snapshot));
-            panel.Add(T.AccentDivider(LcdHudTheme.Phosphor));
+            display.Add(Header(snapshot));
 
-            var scroll = new ScrollView(ScrollViewMode.Vertical);
+            var scroll = new ScrollView(ScrollViewMode.Vertical) { name = "ProductionDataScroll" };
             scroll.style.flexGrow = 1;
-            scroll.style.marginTop = 8;
-            T.StyleScroller(scroll, ProductionPanelThemeState.Accent);
-            panel.Add(scroll);
+            scroll.style.minHeight = 0;
+            scroll.style.marginTop = 2;
+            T.StyleScroller(scroll, LcdHudTheme.Phosphor);
+            display.Add(scroll);
 
             if (snapshot.Count == 0)
             {
-                var empty = T.Card();
-                empty.style.marginTop = 12;
-                empty.style.borderLeftWidth = 3;
-                empty.style.borderLeftColor = new StyleColor(T.TextMuted);
-                empty.Add(T.Muted("No production recorded yet. Run a Crusher, Assembler, or Electric Furnace to populate."));
-                empty.Add(T.Spacer(8));
-                empty.Add(T.Muted("Tip: Open Recipe Browser to plan lines before building."));
+                var empty = LcdCard(LcdHudTheme.Bezel);
+                empty.style.marginTop = 4;
+                empty.Add(LcdHudTheme.CaptionLabel("NO TELEMETRY"));
+                var message = new Label("NO PRODUCTION RECORDED");
+                message.style.fontSize = 11;
+                message.style.letterSpacing = 0.9f;
+                message.style.unityFontStyleAndWeight = FontStyle.Bold;
+                message.style.color = new StyleColor(LcdHudTheme.Phosphor);
+                empty.Add(message);
+                var hint = LcdHudTheme.CaptionLabel("RUN A PROCESSOR OR ASSEMBLER TO POPULATE THIS MONITOR.");
+                hint.style.whiteSpace = WhiteSpace.Normal;
+                hint.style.marginTop = 5;
+                empty.Add(hint);
                 scroll.Add(empty);
+                LcdHudTheme.AddScanlines(display, 9, 48f, 57f);
                 return panel;
             }
 
@@ -111,64 +124,72 @@ namespace VoxelEngine.UI
             topRow.style.flexDirection = FlexDirection.Row;
             topRow.style.alignItems = Align.Center;
             topRow.style.marginBottom = 6;
-            topRow.Add(T.StatRow("↕", "Tracked Items", snapshot.Count.ToString(), T.AccentCyan));
-            topRow.style.flexWrap = Wrap.Wrap;
+            topRow.style.paddingTop = 5;
+            topRow.style.paddingBottom = 5;
+            topRow.style.paddingLeft = 7;
+            topRow.style.paddingRight = 7;
+            LcdHudTheme.ApplyDataCard(topRow, LcdHudTheme.Bezel);
+            var tracked = LcdHudTheme.CaptionLabel("TRACKED MATERIAL FLOWS");
+            tracked.style.flexGrow = 1;
+            topRow.Add(tracked);
+            var trackedValue = new Label(snapshot.Count.ToString("00"));
+            trackedValue.style.fontSize = 12;
+            trackedValue.style.letterSpacing = 0.8f;
+            trackedValue.style.unityFontStyleAndWeight = FontStyle.Bold;
+            trackedValue.style.color = new StyleColor(LcdHudTheme.Phosphor);
+            topRow.Add(trackedValue);
             scroll.Add(topRow);
 
             scroll.Add(BuildBottleneckHints(snapshot));
-            scroll.Add(T.Spacer(8));
+            scroll.Add(T.Spacer(6));
 
             foreach (var stat in snapshot.OrderByDescending(s => Mathf.Abs(s.NetPerMinute)).ThenBy(s => s.Item != null ? s.Item.displayName : ""))
                 scroll.Add(Row(stat));
 
-            scroll.Add(T.Spacer(8));
-            scroll.Add(T.Muted("Per-minute uses last 60s window. Totals reset per session. Uses theme tokens — no hard-coded colors. Responsive at 1280×720 → ultrawide."));
+            scroll.Add(T.Spacer(5));
+            var footnote = LcdHudTheme.CaptionLabel("RATE WINDOW: 60 SECONDS  //  TOTALS RESET PER SESSION");
+            footnote.style.whiteSpace = WhiteSpace.Normal;
+            scroll.Add(footnote);
+            LcdHudTheme.AddScanlines(display, 9, 48f, 57f);
             return panel;
         }
 
+
         private static VisualElement Header(IReadOnlyList<ProductionStatsTracker.ItemStats> snapshot)
         {
-            var row = new VisualElement();
-            row.style.flexDirection = FlexDirection.Row;
-            row.style.alignItems = Align.Center;
-            row.style.flexWrap = Wrap.Wrap;
-            row.style.marginBottom = 8;
+            var host = new VisualElement { name = "ProductionDisplayHeader" };
+            host.style.marginBottom = 5;
+            host.Add(LcdHudTheme.CreateDisplayHeader("OPERATIONS MONITOR", "PRODUCTION", "PRD-01", "LIVE"));
 
-            row.Add(T.IconBadge("◧", ProductionPanelThemeState.Accent));
-            var title = T.Title("Production Statistics");
-            title.style.flexGrow = 1;
-            title.style.color = new StyleColor(LcdHudTheme.Phosphor);
-            title.AddToClassList("themed-title");
-            row.Add(title);
+            var commands = new VisualElement();
+            commands.style.flexDirection = FlexDirection.Row;
+            commands.style.flexWrap = Wrap.Wrap;
+            commands.style.paddingTop = 4;
+            commands.style.paddingBottom = 2;
+            commands.style.paddingLeft = 4;
+            commands.style.paddingRight = 4;
+            LcdHudTheme.ApplyDataCard(commands, LcdHudTheme.Bezel);
 
-            var btnRow = new VisualElement();
-            btnRow.style.flexDirection = FlexDirection.Row;
-            btnRow.style.flexWrap = Wrap.Wrap;
-            btnRow.style.marginTop = 4;
-
-            btnRow.Add(T.SmallButton($"Theme: {ProductionPanelThemeState.Label}", () =>
+            commands.Add(LcdButton($"THEME {ProductionPanelThemeState.Label.ToUpperInvariant()}", () =>
             {
                 ProductionPanelThemeState.Next();
                 GameUIController.Instance?.RequestRefresh();
-            }, ProductionPanelThemeState.Accent));
-            btnRow.Add(T.SmallButton("Copy Stats", () => GUIUtility.systemCopyBuffer = BuildStatsText(snapshot), T.AccentGreen));
-            btnRow.Add(T.SmallButton("Copy CSV", () => GUIUtility.systemCopyBuffer = BuildCsvText(snapshot), T.AccentCyan));
-            btnRow.Add(T.SmallButton("Reset", () =>
+            }, LcdHudTheme.Phosphor));
+            commands.Add(LcdButton("COPY STATS", () => GUIUtility.systemCopyBuffer = BuildStatsText(snapshot), LcdHudTheme.Phosphor));
+            commands.Add(LcdButton("COPY CSV", () => GUIUtility.systemCopyBuffer = BuildCsvText(snapshot), LcdHudTheme.Phosphor));
+            commands.Add(LcdButton("RESET", () =>
             {
                 ProductionStatsTracker.Instance.Clear();
                 GameUIController.Instance?.RequestRefresh();
-            }, T.AccentRed));
-            row.Add(btnRow);
-
-            var (pill, _) = T.StatusPill("LIVE", T.AccentGreen);
-            pill.style.marginLeft = 8;
-            row.Add(pill);
-            return row;
+            }, UITheme.AccentRed));
+            host.Add(commands);
+            return host;
         }
+
 
         private static VisualElement BuildBottleneckHints(IReadOnlyList<ProductionStatsTracker.ItemStats> snapshot)
         {
-            var card = T.Card();
+            var card = LcdCard();
             card.style.marginBottom = 8;
             card.style.borderLeftWidth = 3;
             card.style.borderLeftColor = new StyleColor(_hintsHidden ? T.TextMuted : ProductionPanelThemeState.Accent);
@@ -183,13 +204,13 @@ namespace VoxelEngine.UI
             header.style.alignItems = Align.Center;
             header.style.flexWrap = Wrap.Wrap;
             var title = new Label(_hintsHidden ? "BOTTLENECK HINTS HIDDEN" : "BOTTLENECK HINTS");
-            title.style.color = new StyleColor(_hintsHidden ? T.TextMuted : T.AccentCyan);
+            title.style.color = new StyleColor(_hintsHidden ? LcdHudTheme.PhosphorDim : LcdHudTheme.Phosphor);
             title.style.fontSize = 11;
             title.style.unityFontStyleAndWeight = FontStyle.Bold;
             title.style.letterSpacing = 1.2f;
             title.style.flexGrow = 1;
             header.Add(title);
-            header.Add(T.SmallButton(_hintsHidden ? "Show" : "Hide All", () => { _hintsHidden = !_hintsHidden; SavePrefs(); GameUIController.Instance?.RequestRefresh(); }, _hintsHidden ? T.AccentGreen : T.TextMuted));
+            header.Add(LcdButton(_hintsHidden ? "Show" : "Hide All", () => { _hintsHidden = !_hintsHidden; SavePrefs(); GameUIController.Instance?.RequestRefresh(); }, _hintsHidden ? T.AccentGreen : T.TextMuted));
             card.Add(header);
 
             if (_hintsHidden)
@@ -244,7 +265,7 @@ namespace VoxelEngine.UI
                 restore.style.flexDirection = FlexDirection.Row;
                 restore.style.flexWrap = Wrap.Wrap;
                 restore.style.marginTop = 8;
-                restore.Add(T.SmallButton("Unhide All Items", () => { HiddenHintItems.Clear(); SavePrefs(); GameUIController.Instance?.RequestRefresh(); }, T.AccentGreen));
+                restore.Add(LcdButton("Unhide All Items", () => { HiddenHintItems.Clear(); SavePrefs(); GameUIController.Instance?.RequestRefresh(); }, T.AccentGreen));
                 card.Add(restore);
             }
 
@@ -266,7 +287,7 @@ namespace VoxelEngine.UI
             row.style.paddingLeft = 6;
             row.style.paddingRight = 6;
             row.style.backgroundColor = new StyleColor(new Color(accent.r, accent.g, accent.b, 0.06f));
-            T.Radius(row, 4);
+            LcdHudTheme.ApplyDataCard(row, accent);
             row.style.transitionProperty = new List<StylePropertyName> { "background-color", "scale" };
             row.style.transitionDuration = new List<TimeValue> { new TimeValue(0.10f, TimeUnit.Second), new TimeValue(0.10f, TimeUnit.Second) };
             row.RegisterCallback<PointerEnterEvent>(_ => { row.style.backgroundColor = new StyleColor(new Color(accent.r, accent.g, accent.b, 0.10f)); row.style.scale = new StyleScale(new Scale(new Vector3(1.01f, 1.01f, 1f))); });
@@ -288,15 +309,15 @@ namespace VoxelEngine.UI
 
             if (stat.Item != null)
             {
-                row.Add(T.SmallButton("View", () => GameUIController.Instance?.OpenRecipeBrowserFor(stat.Item), T.AccentCyan));
-                row.Add(T.SmallButton("Hide", () => { HiddenHintItems.Add(ItemKey(stat.Item)); SavePrefs(); GameUIController.Instance?.RequestRefresh(); }, T.TextMuted));
+                row.Add(LcdButton("VIEW", () => GameUIController.Instance?.OpenRecipeBrowserFor(stat.Item), LcdHudTheme.Phosphor));
+                row.Add(LcdButton("Hide", () => { HiddenHintItems.Add(ItemKey(stat.Item)); SavePrefs(); GameUIController.Instance?.RequestRefresh(); }, T.TextMuted));
             }
             return row;
         }
 
         private static VisualElement Row(ProductionStatsTracker.ItemStats stat)
         {
-            var card = T.Card();
+            var card = LcdCard();
             card.style.marginBottom = 6;
             card.style.paddingTop = 8;
             card.style.paddingBottom = 8;
@@ -307,8 +328,8 @@ namespace VoxelEngine.UI
             // Micro-interaction: hover scale + highlight
             card.style.transitionProperty = new List<StylePropertyName> { "scale", "background-color" };
             card.style.transitionDuration = new List<TimeValue> { new TimeValue(0.10f, TimeUnit.Second), new TimeValue(0.10f, TimeUnit.Second) };
-            Color baseBg = T.BgCard;
-            card.RegisterCallback<PointerEnterEvent>(_ => { card.style.backgroundColor = new StyleColor(T.BgHover); card.style.scale = new StyleScale(new Scale(new Vector3(1.02f, 1.02f, 1f))); });
+            Color baseBg = LcdHudTheme.GlassDark;
+            card.RegisterCallback<PointerEnterEvent>(_ => { card.style.backgroundColor = new StyleColor(new Color(LcdHudTheme.Phosphor.r, LcdHudTheme.Phosphor.g, LcdHudTheme.Phosphor.b, 0.10f)); card.style.scale = new StyleScale(new Scale(new Vector3(1.02f, 1.02f, 1f))); });
             card.RegisterCallback<PointerLeaveEvent>(_ => { card.style.backgroundColor = new StyleColor(baseBg); card.style.scale = new StyleScale(new Scale(Vector3.one)); });
 
             var tint = stat.Item != null ? stat.Item.iconTint : T.TextMuted;
@@ -324,7 +345,7 @@ namespace VoxelEngine.UI
             nameCol.style.flexGrow = 1;
             nameCol.style.minWidth = 120;
             var name = new Label(stat.Item != null ? stat.Item.displayName : "Unknown Item");
-            name.style.color = new StyleColor(UIThemeManager.TextColor);
+            name.style.color = new StyleColor(LcdHudTheme.Phosphor);
             name.style.fontSize = 12;
             name.style.unityFontStyleAndWeight = FontStyle.Bold;
             nameCol.Add(name);
@@ -346,6 +367,11 @@ namespace VoxelEngine.UI
             col.style.minWidth = 80;
             col.style.alignItems = Align.FlexEnd;
             col.style.marginLeft = 6;
+            col.style.paddingTop = 3;
+            col.style.paddingBottom = 3;
+            col.style.paddingLeft = 5;
+            col.style.paddingRight = 5;
+            LcdHudTheme.ApplyDataCard(col, accent);
             var value = new Label($"{perMinute:0}/min");
             value.style.color = new StyleColor(accent);
             value.style.fontSize = 11;
@@ -356,6 +382,18 @@ namespace VoxelEngine.UI
             sub.style.fontSize = 8;
             col.Add(sub);
             return col;
+        }
+
+        private static VisualElement LcdCard(Color? signalColor = null)
+        {
+            var card = T.Card();
+            LcdHudTheme.ApplyDataCard(card, signalColor ?? LcdHudTheme.Bezel);
+            return card;
+        }
+
+        private static Button LcdButton(string text, System.Action onClick, Color? signalColor = null)
+        {
+            return LcdHudTheme.CommandButton(text, onClick, signalColor ?? LcdHudTheme.Phosphor);
         }
     }
 }
