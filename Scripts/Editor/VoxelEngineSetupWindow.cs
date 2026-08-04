@@ -465,6 +465,7 @@ namespace VoxelEngine.EditorTools
                 "  • Existing initialized profile values are preserved unchanged\n" +
                 "Re-runnable. Run after Step 21 when themed celestial worlds are present.");
             AddWizardButton(scroll, "49. Initialize Atmosphere + Space Profiles (Non-Destructive)", BuildAtmosphereSpaceProfiles, 56);
+            AddWizardButton(scroll, "50. Build Warp Drive (Item, Prefab, Recipe, Research — Non-Destructive)", BuildWarpDriveContent, 56);
 
             AddSpacer(scroll, 20);
         }
@@ -15386,6 +15387,163 @@ AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
                 "• " + preserved + " existing profiles preserved\n\n" +
                 "Atmospheric thrust, aerodynamic drag, jetpack environment checks, life support, and cockpit altitude now share one profile-driven transition.\n\n" +
                 "Run this step again after adding celestial templates; initialized profile values remain untouched.",
+                "OK");
+        }
+
+        // ============================================================
+        //   STEP 50 - WARP DRIVE (real-space travel)
+        //   Item + prefab + recipe + research, fully non-destructive.
+        //   The Warp Drive is the ONLY warp in the game: an expensive,
+        //   chargeable grid block gated behind research.
+        // ============================================================
+        private void BuildWarpDriveContent()
+        {
+            const string GRID_ROOT = ASSET_ROOT + "/GridSystem";
+            const string ITEMS     = GRID_ROOT + "/Items";
+            const string PREFABS   = GRID_ROOT + "/Prefabs";
+            const string RECIPES   = GRID_ROOT + "/Recipes";
+            const string NODES     = ASSET_ROOT + "/Research/Nodes";
+            foreach (var f in new[] { GRID_ROOT, ITEMS, PREFABS, RECIPES }) EnsureFolder(f);
+
+            // ── Dependencies (existing setup-owned assets, never recreated) ──
+            string craftItems = ASSET_ROOT + "/Items";
+            string indItems   = ASSET_ROOT + "/Industrial/Items";
+            var steelPlate  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{indItems}/Item_SteelPlate.asset");
+            var advCircuit  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{indItems}/Item_AdvCircuit.asset");
+            var uraniumOre  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{craftItems}/Item_Uranium.asset");
+            var lithium     = EnsureLithiumResource();
+            var sciT2       = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{craftItems}/Item_ScienceT2.asset");
+            var sciT3       = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{craftItems}/Item_ScienceT3.asset");
+
+            // ── Prefab (non-destructive: existing drive tuning is preserved) ──
+            string prefabPath = $"{PREFABS}/WarpDrive_Large.prefab";
+            var warpPrefab = GetOrCreatePrefab(prefabPath, "WarpDrive_Large", (root) =>
+            {
+                var drive = root.GetComponent<VoxelEngine.GridSystem.GridWarpDrive>();
+                if (drive == null) drive = root.AddComponent<VoxelEngine.GridSystem.GridWarpDrive>();
+
+                // Connect identity fields ALWAYS; only tune numbers when they are at their
+                // script defaults so designer balance tweaks survive re-runs.
+                drive.blockName = "Warp Drive";
+                if (drive.chargeSeconds <= 0f) drive.chargeSeconds = 45f;
+                if (drive.powerDrawWatts <= 0f) drive.powerDrawWatts = 45000f;
+                if (drive.cooldownSeconds <= 0f) drive.cooldownSeconds = 180f;
+                if (drive.jumpRangeKm <= 0f) drive.jumpRangeKm = 2500f;
+                if (drive.arrivalAltitudeKm <= 0f) drive.arrivalAltitudeKm = 90f;
+
+                // Visual: industrial drive housing + glowing core. Rebuilt ONLY when the
+                // prefab has no visual yet — designer-customised visuals survive re-runs.
+                if (root.transform.childCount == 0 && root.GetComponent<MeshFilter>() == null)
+                {
+                    var core = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    core.name = "Core";
+                    core.transform.SetParent(root.transform, false);
+                    core.transform.localScale = new Vector3(0.55f, 0.55f, 0.55f);
+                    UnityEngine.Object.DestroyImmediate(core.GetComponent<Collider>());
+                    var coreMat = MakeColoredMat(PREFABS + "/Mats", "Mat_WarpDriveCore", new Color(0.30f, 0.55f, 0.95f, 1f));
+                    core.GetComponent<Renderer>().sharedMaterial = coreMat;
+
+                    var ring = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                    ring.name = "Coil";
+                    ring.transform.SetParent(root.transform, false);
+                    ring.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+                    ring.transform.localScale = new Vector3(0.9f, 0.12f, 0.9f);
+                    UnityEngine.Object.DestroyImmediate(ring.GetComponent<Collider>());
+                    ring.GetComponent<Renderer>().sharedMaterial =
+                        MakeColoredMat(PREFABS + "/Mats", "Mat_WarpDriveCoil", new Color(0.75f, 0.78f, 0.85f, 1f));
+                }
+
+                var bcol = root.GetComponent<BoxCollider>();
+                if (bcol == null) bcol = root.AddComponent<BoxCollider>();
+                bcol.size = Vector3.one * VoxelEngine.GridSystem.GridSizeExt.CellSize(VoxelEngine.GridSystem.GridSize.Large);
+            });
+
+            // ── Item (non-destructive) ──
+            string itemPath = $"{ITEMS}/GItem_WarpDrive.asset";
+            var item = AssetDatabase.LoadAssetAtPath<VoxelEngine.GridSystem.GridBlockItem>(itemPath);
+            if (item == null)
+            {
+                item = ScriptableObject.CreateInstance<VoxelEngine.GridSystem.GridBlockItem>();
+                AssetDatabase.CreateAsset(item, itemPath);
+            }
+            item.itemId = "gitem_warpdrive";
+            item.displayName = "Warp Drive";
+            item.description = "The ONLY warp in the game. Charges over 45 seconds under a heavy power load, then jumps the ship to the aimed planet's orbit (or a fixed 2500 km ahead). Requires vacuum, a pilot, and Warp Drive research. Build real rockets for honest interplanetary flight — this is the expensive shortcut.";
+            item.iconTint = new Color(0.30f, 0.55f, 0.95f);
+            item.maxStack = 20;
+            item.gridSize = VoxelEngine.GridSystem.GridSize.Large;
+            item.blockPrefab = warpPrefab;
+            item.blockMass = 2600f;
+            item.blockHP = 2600f;
+            item.category = "Grid Blocks";
+            EditorUtility.SetDirty(item);
+
+            // ── Recipe (non-destructive append) ──
+            string recipePath = $"{RECIPES}/Recipe_GWarpDrive.asset";
+            var recipe = GetOrCreateAsset<VoxelEngine.Crafting.RecipeDefinition>(recipePath);
+            recipe.displayName = "Warp Drive";
+            recipe.outputItem = item;
+            recipe.outputCount = 1;
+            recipe.requiredStation = VoxelEngine.Crafting.StationTier.Assembler;
+            recipe.craftSeconds = 30f;
+            recipe.unlockedByDefault = false;
+            var inputs = new System.Collections.Generic.List<VoxelEngine.Crafting.RecipeIngredient>();
+            if (steelPlate != null) inputs.Add(new VoxelEngine.Crafting.RecipeIngredient { item = steelPlate, count = 40 });
+            if (advCircuit != null) inputs.Add(new VoxelEngine.Crafting.RecipeIngredient { item = advCircuit, count = 12 });
+            if (uraniumOre != null) inputs.Add(new VoxelEngine.Crafting.RecipeIngredient { item = uraniumOre, count = 8 });
+            if (lithium != null)    inputs.Add(new VoxelEngine.Crafting.RecipeIngredient { item = lithium, count = 6 });
+            recipe.inputs = inputs.ToArray();
+            EditorUtility.SetDirty(recipe);
+
+            var recipeRegistry = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeRegistry>($"{ASSET_ROOT}/RecipeRegistry.asset");
+            if (recipeRegistry != null && !recipeRegistry.recipes.Contains(recipe))
+            {
+                recipeRegistry.recipes.Add(recipe);
+                EditorUtility.SetDirty(recipeRegistry);
+            }
+
+            // ── Research (non-destructive: only creates the node if missing) ──
+            var tree = AssetDatabase.LoadAssetAtPath<VoxelEngine.Research.ResearchTree>($"{ASSET_ROOT}/Research/ResearchTree.asset");
+            if (tree != null)
+            {
+                var node = FindNodeByName(tree, "res_warpdrive");
+                if (node == null)
+                {
+                    node = ScriptableObject.CreateInstance<VoxelEngine.Research.ResearchNode>();
+                    node.nodeId = "res_warpdrive";
+                    node.displayName = "Warp Drive";
+                    node.description = "Unlocks the Warp Drive grid block — the only warp in the game. Charges under heavy power, then jumps the ship to the aimed planet's orbit. Expensive, gated, and never free.";
+                    node.category = VoxelEngine.Research.ResearchCategory.Environment;
+                    node.subCategory = VoxelEngine.Research.ResearchSubCategory.Building;
+                    node.tier = 7;
+                    node.column = 6;
+                    node.iconTint = new Color(0.30f, 0.55f, 0.95f);
+                    node.researchSeconds = 900f;
+                    node.cost = new[]
+                    {
+                        new VoxelEngine.Research.ResearchNode.ScienceCost { pack = sciT2 as VoxelEngine.Items.ScienceItem, count = 120 },
+                        new VoxelEngine.Research.ResearchNode.ScienceCost { pack = sciT3 as VoxelEngine.Items.ScienceItem, count = 60 },
+                    };
+                    var shipbuilding = FindNodeByName(tree, "res_shipbuilding");
+                    if (shipbuilding != null) node.prerequisites = new[] { shipbuilding };
+                    AssetDatabase.CreateAsset(node, $"{NODES}/res_warpdrive.asset");
+                    tree.nodes.Add(node);
+                }
+                node.unlocksRecipes = new VoxelEngine.Crafting.RecipeDefinition[] { recipe };
+                EditorUtility.SetDirty(node);
+                EditorUtility.SetDirty(tree);
+                VoxelEngine.Research.ResearchRecipeLinker.Register("res_warpdrive", recipe);
+            }
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            EditorUtility.DisplayDialog("Voxel Engine — Warp Drive",
+                "Warp Drive wired (non-destructive):\n\n" +
+                "• Prefab: " + prefabPath + "\n" +
+                "• Item: GItem_WarpDrive (Grid Blocks)\n" +
+                "• Recipe: 40 Steel Plate + 12 Advanced Circuit + 8 Uranium Ore + 6 Lithium @ Assembler\n" +
+                "• Research: Warp Drive (tier 7) after Shipbuilding\n\n" +
+                "In-game: place it on a ship, fly to space, press [N] in the cockpit to charge (45 s, 45 kW), then press [N] again to jump to the aimed planet — or 2500 km straight ahead. It is the ONLY warp in the game; everything else is real flight.",
                 "OK");
         }
 

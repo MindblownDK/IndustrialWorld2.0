@@ -24,7 +24,8 @@ namespace VoxelEngine.Settings
         ToolCycle,
         Hotbar1, Hotbar2, Hotbar3, Hotbar4, Hotbar5,
         Hotbar6, Hotbar7, Hotbar8, Hotbar9, Hotbar0,
-        EnterCockpit, ExitCockpit
+        EnterCockpit, ExitCockpit,
+        WarpDrive
     }
 
     public static class GameSettings
@@ -51,7 +52,7 @@ namespace VoxelEngine.Settings
 
         // Bump this when default keybinds change to force a one-time migration
         // that fills in missing or invalid bindings on old saves.
-        private const int    CURRENT_VERSION = 12;
+        private const int    CURRENT_VERSION = 13;
 
         // ----- defaults -----
         public const float DEFAULT_FOV       = 75f;
@@ -156,6 +157,7 @@ namespace VoxelEngine.Settings
             InputAction.Hotbar0         => "Digit0",
             InputAction.EnterCockpit    => "H",
             InputAction.ExitCockpit     => "F",
+            InputAction.WarpDrive       => "N",
             _ => "None"
         };
 

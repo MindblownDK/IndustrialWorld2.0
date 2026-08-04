@@ -745,7 +745,7 @@ namespace VoxelEngine.GridSystem
             _smoothAlt = Mathf.Max(0f, environment.Altitude);
 
             _speedLabel.text = $"{_smoothSpeed:0.0} m/s";
-            _altLabel.text = FormatFlightAltitude(_smoothAlt);
+            _altLabel.text = float.IsFinite(_smoothAlt) ? FormatFlightAltitude(_smoothAlt) : "DEEP SPACE";
             if (_verticalSpeedLabel != null)
             {
                 Vector3 radialUp = GravityProvider.GetUp(telemetryPosition);
@@ -759,13 +759,18 @@ namespace VoxelEngine.GridSystem
             }
             if (_environmentLabel != null)
             {
-                Color environmentColor = environment.Band switch
-                {
-                    AtmosphereBand.DenseAir => T.AccentCyan,
-                    AtmosphereBand.UpperAtmosphere => T.AccentAmber,
-                    _ => new Color(0.70f, 0.52f, 1.00f),
-                };
-                _environmentLabel.text = $"{environment.Label} · {environment.Density01 * 100f:0}% AIR";
+                bool deepSpace = GravityProvider.IsDeepSpace;
+                Color environmentColor = deepSpace
+                    ? new Color(0.70f, 0.52f, 1.00f)
+                    : environment.Band switch
+                    {
+                        AtmosphereBand.DenseAir => T.AccentCyan,
+                        AtmosphereBand.UpperAtmosphere => T.AccentAmber,
+                        _ => new Color(0.70f, 0.52f, 1.00f),
+                    };
+                _environmentLabel.text = deepSpace
+                    ? "DEEP SPACE · 0% AIR"
+                    : $"{environment.Label} · {environment.Density01 * 100f:0}% AIR";
                 _environmentLabel.style.color = new StyleColor(environmentColor);
             }
             UpdateGravityReadout(grid);
@@ -849,6 +854,7 @@ namespace VoxelEngine.GridSystem
                 : float.PositiveInfinity;
             bool show = trajectory.IsAvailable && (trajectory.State == OrbitalFlightState.Orbiting
                 || trajectory.State == OrbitalFlightState.Escape
+                || trajectory.State == OrbitalFlightState.DeepSpace
                 || trajectory.Altitude >= displayAltitude);
             _trajectoryModule.style.display = show ? DisplayStyle.Flex : DisplayStyle.None;
             if (!show) return;
@@ -856,16 +862,43 @@ namespace VoxelEngine.GridSystem
             Color statusColor = trajectory.State switch
             {
                 OrbitalFlightState.Orbiting => T.AccentGreen,
+                OrbitalFlightState.DeepSpace => new Color(0.70f, 0.52f, 1.00f),
                 OrbitalFlightState.Escape => new Color(0.70f, 0.52f, 1.00f),
                 OrbitalFlightState.Suborbital => T.AccentAmber,
                 OrbitalFlightState.Atmospheric => T.AccentAmber,
                 _ => T.TextMuted,
             };
             Color ink = trajectory.State == OrbitalFlightState.Orbiting ? new Color(0.72f, 0.84f, 0.42f)
+                : trajectory.State == OrbitalFlightState.DeepSpace ? new Color(0.70f, 0.58f, 1.00f)
                 : trajectory.State == OrbitalFlightState.Escape ? new Color(0.70f, 0.58f, 1.00f)
                 : new Color(0.98f, 0.71f, 0.24f);
             string motion = Mathf.Abs(trajectory.RadialSpeed) < 0.5f ? "COAST"
                 : trajectory.RadialSpeed > 0f ? "RISING" : "FALLING";
+
+            if (trajectory.State == OrbitalFlightState.DeepSpace)
+            {
+                // Real-space coast: show frame + nearest body instead of a two-body solution.
+                string nearest = "—";
+                var reg = VoxelEngine.Cosmos.CosmicRegistry.Instance;
+                var origin = VoxelEngine.Cosmos.SpaceOrigin.Instance;
+                if (reg != null && origin != null)
+                {
+                    var near = reg.FindNearestBodyKm(origin.GetCosmicKm(telemetryPosition));
+                    if (near != null) nearest = near.DisplayName;
+                }
+                string coast = Mathf.Abs(trajectory.TangentialSpeed) < 0.5f ? "DRIFTING" : "COASTING";
+                _trajectoryStatusLabel.text = "DEEP SPACE · " + coast;
+                _trajectoryStatusLabel.style.color = new StyleColor(statusColor);
+                _trajectorySpeedLabel.text = $"SPD {trajectory.TangentialSpeed:0.0} m/s · SOL FRAME";
+                _trajectoryApsisLabel.text = $"NEAREST BODY · {nearest}";
+                _trajectorySpeedLabel.style.color = new StyleColor(ink);
+                _trajectoryApsisLabel.style.color = new StyleColor(new Color(ink.r, ink.g, ink.b, 0.82f));
+                T.Border(_trajectoryModule, 1f, new Color(statusColor.r, statusColor.g, statusColor.b, 0.38f));
+                if (_trajectoryLcdBezel != null)
+                    T.Border(_trajectoryLcdBezel, 1f, new Color(ink.r, ink.g, ink.b, 0.70f));
+                return;
+            }
+
             string state = trajectory.State switch
             {
                 OrbitalFlightState.Orbiting => "ORBITAL",

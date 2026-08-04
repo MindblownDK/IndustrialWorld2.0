@@ -1,7 +1,49 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.12.1-dev`
+**Current Version:** `7.13.0-dev`
+
+All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.13.0-dev] REAL SPACE — Infinite Keplerian Universe, Floating Origin, Deep-Space Asteroids & The Only Warp (Warp Drive Block)
+
+**Type:** MINOR — a complete real-space simulation layer (save-compatible): real elliptical Keplerian orbits, continuous infinite flight between planets with zero warps (except the new expensive Warp Drive grid block), N-body gravity, deep-space procedural asteroids, and floating-origin precision. Old saves load fine.
+
+#### 🚀 REAL ORBITS — Keplerian Mechanics (not lazy circles)
+- **Real elliptical orbits for every body:** `CosmicRegistry` now propagates planets, moons and sub-moons with classical orbital elements (semi-major axis a, eccentricity e, inclination i, RAAN Ω, argument of periapsis ω, mean anomaly M0) solved through Kepler's equation — the same math real astrodynamics uses. Periods follow T = 2π√(a³/μ) and velocities follow the vis-viva equation.
+- **New `OrbitMath.cs`:** double-precision Kepler solver + perifocal→reference rotation, shared by every body.
+- **Physically consistent masses:** each body's gravitational parameter is derived from its authored surface gravity and radius (μ = g·r²); the star's μ (default 180 km³/s², authorable on `SunSettings`) drives every planet orbit.
+- **Authorable eccentricity:** `PlanetTemplate.orbitEccentricity` / `MoonTemplate.orbitEccentricity` (0 = seeded small value).
+- **All positions double-precision (km)** via `positionKmD`/`velocityKmS`; legacy `positionKm` fields remain for sky renderers.
+
+#### 🌌 INFINITE SPACE — Floating Origin & Reference Frames (real-flight level)
+- **New `SpaceOrigin.cs`:** the floating-origin + reference-frame engine. The whole solar system is real geometry around you; the scene re-bases itself (32 km threshold) so float precision stays millimetre-fine no matter how far you fly. Physically invisible — every object shifts together.
+- **Real reference frames:** the scene co-moves with the dominant body (planet/moon gravity well), and switches frames KSP-style when you leave a well or enter another — scene velocities are re-expressed by the frame-velocity delta so cosmic (inertial) velocity is always conserved. Entering a planet's frame makes it stand still; deep space is the star frame where every planet visibly orbits.
+- **N-body gravity:** `GravityProvider` now sums the inverse-square pull of the star + every body (m/s²). Near a planet it is exactly the old radial gravity; in deep space it is genuine zero-g (dampeners hold, ships coast).
+- **Continuous planet switching — no warp:** `SphereWorld.SetBody()` re-targets the voxel streamer to whatever body's frame you enter (per-body chunk persistence keys keep saves separate), grass/waterfalls/ocean LOD follow, and the sampled-surface LOD upgrades as you approach. Leaving a planet into deep space suspends streaming cleanly.
+- **All bodies are real scene geometry:** every planet/moon in the system gets a real `CelestialBody` + sampled-surface LOD; close bodies render at true scale/position, far bodies use the compressed sky projection (200 km crossover).
+- **Deep-space atmosphere fix:** `AtmosphereManager` reports true vacuum (not the old flat-world fallback) and `GravityProvider.Sample` reports 0.00 g in deep space.
+- **REMOVED the lazy warp:** `CosmosBootstrap.CheckInterplanetaryFlight` + `TransitionToPlanet` are deleted — looking at/flying toward another planet never teleports you. The ONLY warp left is the Warp Drive block (below).
+- **Save/load:** the player's cosmic position + reference frame are persisted; logging out in deep space or high orbit restores exactly where you were (legacy saves unaffected).
+
+#### ☄️ DEEP-SPACE ASTEROIDS (outside planet/moon orbits)
+- **New `SpaceAsteroidField.cs`:** while the player is in the solar frame (outside every planet/moon gravity well), procedural minable asteroids spawn around you — seeded per cosmic region with per-attempt nonces, despawned when you leave or when you enter a planet's well.
+- **New `SpaceAsteroid.cs`:** noise-displaced icosphere rocks with MeshCollider, ore-tinted vertex colours, slow tumble, HP scaled by size, and ore drops (Iron/Nickel/Silicon/Cobalt/Gold/Platinum/Ice) — mineable with any tool via the damage pipeline (pickaxe hook added to `PlayerInteractionTool`).
+- The authored visual belt (`AsteroidFieldRenderer`) keeps rendering the distant main belt in the sky.
+
+#### ⚡ THE ONLY WARP — Warp Drive Block (expensive, researched, chargeable)
+- **New `GridWarpDrive.cs`:** charges over 45 s under a heavy 45 kW power load; when charged, the pilot presses [N] (`InputAction.WarpDrive`, rebindable) to jump the ship to the aimed planet's orbit (90 km altitude, co-moving with the planet) or 2,500 km straight ahead. Requires vacuum, has a 3-minute cooldown, and refuses to short-hop.
+- **Cockpit integration:** [N] begins charging, shows charge %, and fires when ready (`GridCockpit.HandleWarpDriveInput`).
+- **Setup-owned content (non-destructive):** new **Step 50 — Build Warp Drive** in Tools ▸ Voxel Engine ▸ Voxel Engine Setup creates the prefab, `GItem_WarpDrive`, the Assembler recipe (40 Steel Plate + 12 Advanced Circuit + 8 Uranium Ore + 6 Lithium), and the `res_warpdrive` research node (tier 7, gated after Shipbuilding) — existing tuning is preserved on re-runs.
+
+#### 📟 HUD & FEEDBACK
+- `GridPilotHud`: deep space shows **DEEP SPACE · 0% AIR**, altitude reads DEEP SPACE, and the trajectory module becomes a solar-frame coast readout (SPD + nearest body).
+- `OrbitalTelemetry` gains the `DeepSpace` state for the flight computer.
+- Frame switches toast via console + HUD (frame name + Δv).
+
+#### ✅ Static delivery checks
+- All 25 modified/new sources pass the C# grammar validation (tree-sitter) — brace/paren balance and parse-tree clean.
+
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
 

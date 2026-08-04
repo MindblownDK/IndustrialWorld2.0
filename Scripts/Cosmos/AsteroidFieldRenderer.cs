@@ -134,6 +134,11 @@ namespace VoxelEngine.Cosmos
 
         private static Vector3 ResolveViewerCosmicPosition(CosmicRegistry registry)
         {
+            // Real space: the viewer's actual cosmic position (works in deep space too).
+            var origin = SpaceOrigin.Instance;
+            if (origin != null && origin.viewer != null)
+                return (Vector3)(float3)origin.GetCosmicKm(origin.viewer.position);
+
             var active = GravityProvider.ActiveBody;
             if (active == null) return Vector3.zero;
             for (int i = 0; i < registry.Bodies.Count; i++)

@@ -10,6 +10,7 @@
 // at the correct direction + apparent size. The km-scale cosmic positions are compressed to a
 // manageable visual range so you can actually SEE the other planets without floating-origin.
 using System.Collections.Generic;
+using Unity.Mathematics;
 using UnityEngine;
 
 namespace VoxelEngine.Cosmos
@@ -41,6 +42,10 @@ namespace VoxelEngine.Cosmos
         [Tooltip("Rebuild body positions every N frames (lower = smoother orbits, higher = cheaper).")]
         public int updateEveryNFrames = 3;
 
+        [Tooltip("Bodies closer than this (metres, true scene distance) render their real LOD " +
+                 "instead of the compressed sky proxy. Farther bodies use the sky projection.")]
+        public float trueLodDistanceMeters = 200000f;
+
         private struct BodyVisual
         {
             public GameObject go;
@@ -61,10 +66,16 @@ namespace VoxelEngine.Cosmos
             var registry = CosmicRegistry.Instance;
             if (registry == null || !registry.IsReady) return;
 
-            // Player position in cosmic space (approximate: use the active body's position).
+            // Player position in cosmic space (real space: the true viewer cosmic position;
+            // legacy fallback: the active body's position).
             Vector3 viewerKm = Vector3.zero;
             var activeBody = GravityProvider.ActiveBody;
-            if (activeBody != null)
+            var spaceOrigin = SpaceOrigin.Instance;
+            if (spaceOrigin != null && spaceOrigin.viewer != null)
+            {
+                viewerKm = (Vector3)(float3)spaceOrigin.GetCosmicKm(spaceOrigin.viewer.position);
+            }
+            else if (activeBody != null)
             {
                 // Find this body in the registry to get its cosmic position.
                 for (int i = 0; i < registry.Bodies.Count; i++)
@@ -108,6 +119,22 @@ namespace VoxelEngine.Cosmos
                     if (_bodyVisuals[i].go != null) _bodyVisuals[i].go.SetActive(false);
                     continue;
                 }
+
+                // REAL SPACE: bodies close enough to render their true LOD (real scene
+                // geometry, placed by SpaceOrigin) skip the compressed sky proxy.
+                if (spaceOrigin != null && spaceOrigin.viewer != null
+                    && SpaceOrigin.Instance != null)
+                {
+                    double3 bodyAbs = registry.CosmicPositionOf(b);
+                    double3 viewerCosmic = spaceOrigin.GetCosmicKm(spaceOrigin.viewer.position);
+                    double distM = math.length(bodyAbs - viewerCosmic) * 1000d;
+                    if (distM < trueLodDistanceMeters)
+                    {
+                        if (_bodyVisuals[i].go != null) _bodyVisuals[i].go.SetActive(false);
+                        continue;
+                    }
+                }
+
                 if (_bodyVisuals[i].go != null && !_bodyVisuals[i].go.activeSelf)
                     _bodyVisuals[i].go.SetActive(true);
 

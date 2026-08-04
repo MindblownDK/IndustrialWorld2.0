@@ -244,7 +244,74 @@ namespace VoxelEngine.Cosmos
             _vertexAttributes[2] = new VertexAttributeDescriptor(VertexAttribute.Color,    VertexAttributeFormat.UNorm8,  4, 0);
 
             if (enablePersistence)
-                _storage = new ChunkStorage(string.IsNullOrEmpty(worldName) ? "DefaultSphereWorld" : worldName);
+                _storage = new ChunkStorage(ResolveStorageKey(worldName, body));
+        }
+
+        /// <summary>
+        /// Per-body persistence key. The HOME body keeps the legacy flat key (old saves
+        /// keep loading), while every other body gets its own sub-key so chunks mined on
+        /// different planets can never collide in one folder.
+        /// </summary>
+        private static string ResolveStorageKey(string baseName, CelestialBody forBody)
+        {
+            string root = string.IsNullOrEmpty(baseName) ? "DefaultSphereWorld" : baseName;
+            if (forBody == null || forBody.settings == null) return root;
+            string bodyKey = forBody.settings.bodyName;
+            // The canonical home planet keeps the legacy key; others are namespaced.
+            if (bodyKey == "Earth" || bodyKey == "Home") return root;
+            return root + "_" + bodyKey.Replace(" ", "");
+        }
+
+        /// <summary>
+        /// Re-target the streamer at a different celestial body (real interplanetary
+        /// flight), or null to leave the streaming world entirely (deep space).
+        /// The player's position is continuous — only the streamed terrain changes.
+        /// </summary>
+        public void SetBody(CelestialBody newBody)
+        {
+            if (newBody == body) return;
+
+            // Settle and flush everything currently streamed.
+            ResetAllChunks();
+
+            if (_storage != null)
+            {
+                _storage.WaitForIdle();
+                _storage.Shutdown();
+                _storage = null;
+            }
+
+            body = newBody;
+
+            if (body != null)
+            {
+                body.ApplySettings();
+                if (enablePersistence)
+                    _storage = new ChunkStorage(ResolveStorageKey(worldName, body));
+
+                // Rebuild the per-body ore + biome arrays.
+                if (_ores.IsCreated) _ores.Dispose();
+                var oreArr = body.BuildOreLayers();
+                _ores = new NativeArray<OreLayer>(oreArr.Length, Allocator.Persistent);
+                for (int i = 0; i < oreArr.Length; i++) _ores[i] = oreArr[i];
+
+                if (_biomes.IsCreated) _biomes.Dispose();
+                var biomeArr = body.BuildBiomeData(_biomeRegistry != null ? _biomeRegistry : biomeRegistry);
+                _biomes = new NativeArray<BiomeData>(biomeArr.Length, Allocator.Persistent);
+                for (int i = 0; i < biomeArr.Length; i++) _biomes[i] = biomeArr[i];
+
+                // Chunk pool re-parents under the new body.
+                if (_pool != null) _pool.DisposeAll(System.Array.Empty<Chunk>());
+                _pool = new ChunkPool(body.transform, terrainMaterial);
+
+                Debug.Log($"[SphereWorld] Streaming re-targeted to '{body.DisplayName}' (seed {body.genParams.seed}).");
+            }
+            else
+            {
+                if (_pool != null) _pool.DisposeAll(System.Array.Empty<Chunk>());
+                _pool = null;
+                Debug.Log("[SphereWorld] Deep space — voxel streaming suspended.");
+            }
         }
 
         private void OnDestroy()
@@ -289,14 +356,18 @@ namespace VoxelEngine.Cosmos
             {
                 foreach (var kv in _chunks) if (kv.Value.isModified) _storage.EnqueueSave(kv.Value);
             }
+            // Settle in-flight jobs BEFORE reclaiming chunk memory (body switches and the
+            // deep-space suspension reuse this path constantly in real space).
+            foreach (var p in _pendingGen) p.handle.Complete();
+            foreach (var p in _pendingMesh) DisposePendingMesh(p, complete: true);
+            _pendingGen.Clear();
+            _pendingMesh.Clear();
             _pool?.DisposeAll(_chunks.Values);
             _chunks.Clear();
             _genQueue.Clear();
             _meshQueue.Clear();
             _queuedForGeneration.Clear();
             _queuedForMeshing.Clear();
-            _pendingGen.Clear();
-            _pendingMesh.Clear();
             if (body != null && _biomeRegistry != null)
             {
                 if (_biomes.IsCreated) _biomes.Dispose();

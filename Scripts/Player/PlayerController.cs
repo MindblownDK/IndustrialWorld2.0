@@ -741,9 +741,26 @@ namespace VoxelEngine.Player
         // player reorients to stand upright on the sphere — gravity, jump and horizontal
         // movement all operate on the local ground plane (perpendicular to `up`).
         private Vector3 UpVec => GravityProvider.GetUp(transform.position);
-        private Vector3 GravVec => GravityProvider.IsRadial
-            ? GravityProvider.GetGravity(transform.position)
-            : (Vector3.up * gravity);   // gravity is negative → Vector3.up * gravity points down
+
+        // Real-space N-body gravity: inverse-square pulls from the star + every body.
+        // On a planet it behaves exactly like the old radial gravity; in deep space it
+        // is ~0 so the player floats (the jetpack / a ship is required to move out there).
+        private Vector3 GravVec => GravityProvider.GetGravity(transform.position);
+
+        /// <summary>
+        /// Re-express this controller's velocity when the scene reference frame changes
+        /// (leaving/entering a body's gravity well). Cosmic velocity is conserved.
+        /// </summary>
+        public void AddFrameVelocityDelta(Vector3 deltaMps)
+        {
+            _velocity += deltaMps;
+        }
+
+        /// <summary>Bring the controller to rest (warp arrival, respawn, …).</summary>
+        public void ResetVelocity()
+        {
+            _velocity = Vector3.zero;
+        }
 
         /// <summary>The vertical (along-up) component of velocity, as a signed scalar.</summary>
         private float VerticalSpeed(Vector3 up) => Vector3.Dot(_velocity, up);

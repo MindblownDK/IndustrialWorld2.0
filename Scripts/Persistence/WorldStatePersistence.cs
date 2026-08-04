@@ -245,11 +245,16 @@ namespace VoxelEngine.Persistence
         {
             var inv = FindPlayerInventory();
             if (inv == null || !IsSafePlayerSavePosition(inv.transform.position)) return false;
+            var origin = VoxelEngine.Cosmos.SpaceOrigin.Instance;
             var equipment = inv.GetComponent<VoxelEngine.Player.PlayerEquipment>();
             save.player = new SavedPlayer
             {
                 pos = inv.transform.position,
                 rotY = inv.transform.eulerAngles.y,
+                cosmicPosX = origin != null ? origin.GetCosmicKm(inv.transform.position).x : 0d,
+                cosmicPosY = origin != null ? origin.GetCosmicKm(inv.transform.position).y : 0d,
+                cosmicPosZ = origin != null ? origin.GetCosmicKm(inv.transform.position).z : 0d,
+                frameBody = origin != null && origin.FrameBody != null ? origin.FrameBody.DisplayName : null,
                 container = SerializeContainer(inv.container),
                 jetpackSlots = equipment != null ? SerializeContainer(equipment.JetpackSlots) : null,
                 helmetSlots = equipment != null ? SerializeContainer(equipment.HelmetSlots) : null,
@@ -273,7 +278,12 @@ namespace VoxelEngine.Persistence
             if (float.IsNaN(pos.x) || float.IsNaN(pos.y) || float.IsNaN(pos.z)
                 || float.IsInfinity(pos.x) || float.IsInfinity(pos.y) || float.IsInfinity(pos.z)) return false;
             var body = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
-            if (body == null) return Mathf.Abs(pos.x) < 100000f && Mathf.Abs(pos.y) < 100000f && Mathf.Abs(pos.z) < 100000f;
+            if (body == null)
+            {
+                // Deep space is a perfectly valid disconnect position (real-space flight).
+                if (VoxelEngine.Cosmos.GravityProvider.IsDeepSpace) return true;
+                return Mathf.Abs(pos.x) < 100000f && Mathf.Abs(pos.y) < 100000f && Mathf.Abs(pos.z) < 100000f;
+            }
             // Space and high-atmosphere locations are valid disconnect positions.
             // Reject only locations buried deep inside the active planetary body.
             return Vector3.Distance(pos, body.transform.position) >= body.SurfaceRadius * 0.70f;
@@ -1447,6 +1457,33 @@ namespace VoxelEngine.Persistence
             inv.transform.position = restorePosition;
             inv.transform.eulerAngles = new Vector3(0, restoreRotY, 0);
             if (cc != null) cc.enabled = true;
+            // Real-space restore: re-anchor the floating origin + reference frame at the
+            // saved cosmic position (deep-space/orbital logouts). Scene position above is
+            // then automatically consistent because the anchor is derived from it.
+            // Legacy saves omit the cosmic fields (deserialize as 0,0,0 = the star's
+            // location, which no player can legitimately occupy) — only restore when the
+            // saved cosmic position is actually non-zero.
+            bool hasCosmic = IsFinite((float)save.player.cosmicPosX) && IsFinite((float)save.player.cosmicPosY)
+                          && IsFinite((float)save.player.cosmicPosZ)
+                          && (Mathf.Abs((float)save.player.cosmicPosX)
+                            + Mathf.Abs((float)save.player.cosmicPosY)
+                            + Mathf.Abs((float)save.player.cosmicPosZ)) > 0.001f;
+            if (hasCosmic && VoxelEngine.Cosmos.CosmicRegistry.Instance != null
+                          && VoxelEngine.Cosmos.CosmicRegistry.Instance.IsReady)
+            {
+                var bootstrap = VoxelEngine.Cosmos.CosmosBootstrap.Instance;
+                if (bootstrap != null)
+                {
+                    bootstrap.RestoreCosmicState(
+                        new Vector3((float)save.player.cosmicPosX, (float)save.player.cosmicPosY, (float)save.player.cosmicPosZ),
+                        save.player.frameBody);
+                    // Re-apply the scene position AFTER the anchor settled so the
+                    // CharacterController sits exactly on the saved pose.
+                    inv.transform.position = restorePosition;
+                    inv.transform.eulerAngles = new Vector3(0, restoreRotY, 0);
+                }
+            }
+
             // Inventory + equipment.
             if (save.player.container != null) DeserializeInto(inv.container, save.player.container);
             var equipment = inv.GetComponent<VoxelEngine.Player.PlayerEquipment>();
@@ -2311,6 +2348,11 @@ namespace VoxelEngine.Persistence
         [Serializable] private class SavedPlayer
         {
             public Vector3 pos; public float rotY;
+            // Real-space (7.13.0): cosmic position + reference frame so logging out in
+            // deep space / high orbit restores exactly where the player was. Legacy saves
+            // omit these (0 + null) and restore through the old scene-anchored path.
+            public double cosmicPosX; public double cosmicPosY; public double cosmicPosZ;
+            public string frameBody;
             public SavedContainer container;
             // Additive in 6.22.1: two dedicated jetpack equipment slots.
             // Legacy saves leave this null and restore with empty slots.

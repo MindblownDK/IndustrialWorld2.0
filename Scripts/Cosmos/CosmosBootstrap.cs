@@ -1,14 +1,23 @@
 // Assets/Scripts/VoxelEngine/Cosmos/CosmosBootstrap.cs
 //
-// Wires the Phase-2 spherical world into a scene from the Cosmos templates + the WorldSession
-// seed table. Add ONE GameObject with this component to the Game scene to get a live, minable,
-// radial-gravity planet you can fly to and walk on.
+// Wires the spherical world into a scene from the Cosmos templates + the WorldSession
+// seed table. Add ONE GameObject with this component to the Game scene to get a live,
+// minable, radial-gravity planet you can fly to and walk on.
 //
 // CRITICAL INIT ORDER: Unity calls Awake()/OnEnable() the moment you AddComponent on an ACTIVE
 // GameObject — BEFORE the caller can assign any public field. That caused NPEs in SphereWorld
 // (materialRegistry null) and PlanetLodImpostor (body null). We defeat this by creating the
 // body hierarchy INACTIVE, wiring every field, then activating it last so Awake sees a fully
 // configured component graph.
+//
+// REAL SPACE (7.13.0): this bootstrap is the scene-side owner of the continuous solar
+// system. CosmicRegistry runs the real Keplerian orbits; SpaceOrigin runs the floating
+// origin + reference frames; THIS class owns the ACTIVE streaming body — which body the
+// voxel streamer, grass, waterfalls and ocean LOD follow. When the player leaves a body's
+// gravity well the streamer suspends (deep space); when another body takes over the frame,
+// the streamer re-targets it — a continuous flight with NO warp (except the Warp Drive
+// block, which is a deliberate, expensive grid system).
+using Unity.Mathematics;
 using UnityEngine;
 #if UNITY_EDITOR
 using UnityEditor;
@@ -55,12 +64,19 @@ namespace VoxelEngine.Cosmos
         [Range(3, 16)] public int viewDistance = 8;   // local editable voxel detail radius; full planet uses LOD outside it
 
         private GameObject _bodyGO;
+        private CelestialBody _body;
         private SphereWorld _sphereWorld;
         private PlanetLodImpostor _terrainLod;
         private PlanetOceanLodRenderer _oceanLod;
         private GpuGrassRenderer _grass;
         private WaterfallSystem _waterfalls;
+        private SpaceOrigin _spaceOrigin;
+        private SpaceAsteroidField _asteroidField;
+        private WindField _wind;
         private bool _awaitingViewerSurfacePlacement;
+
+        /// <summary>The body the streaming systems currently follow (null = deep space).</summary>
+        private CelestialBody _streamingBody;
 
         // Camera handoff is intentionally kept here with the body bootstrap: it owns the
         // active celestial profile and can restore the scene's original camera state cleanly.
@@ -81,6 +97,24 @@ namespace VoxelEngine.Cosmos
 
             EnsureGravityProvider();
 
+            // ── Cosmic layout FIRST (real Keplerian orbits) + floating origin ──
+            EnsureCosmicRegistry();
+            var registry = CosmicRegistry.Instance;
+
+            // The home body instance (matched by settings) anchors the scene origin.
+            BodyInstance homeInstance = null;
+            if (planetTemplate != null && planetTemplate.body != null && registry.Bodies != null)
+            {
+                foreach (var b in registry.Bodies)
+                {
+                    if (b != null && b.settings == planetTemplate.body) { homeInstance = b; break; }
+                }
+            }
+
+            // ── SpaceOrigin: floating origin + reference frames ──
+            EnsureSpaceOrigin(registry, homeInstance);
+
+            // ── Home body (the planet the player starts on) ──
             // Build the body GameObject INACTIVE so we can configure components before their
             // Awake/OnEnable fire (the fix for the SphereWorld / PlanetLodImpostor NPEs).
             _bodyGO = new GameObject("CelestialBody_" +
@@ -89,9 +123,6 @@ namespace VoxelEngine.Cosmos
             _bodyGO.transform.position = bodyOrigin;
             _bodyGO.SetActive(false);
 
-            // ── CelestialBody ──
-            // Guarantee a non-null body: a PlanetTemplate created via the menu but never filled
-            // in has body == null. Fall back to a full Earth-like body so the planet always generates.
             if (planetTemplate.body == null)
             {
                 Debug.LogWarning("[CosmosBootstrap] PlanetTemplate.body is null — using a built-in " +
@@ -99,17 +130,14 @@ namespace VoxelEngine.Cosmos
                 planetTemplate.body = BodySettings.CreateEarthlike();
             }
             var body = _bodyGO.AddComponent<CelestialBody>();
+            _body = body;
             body.settings = planetTemplate.body;
-            // Apply this world's per-planet seed. Use the SPAWN PLANET INDEX (player-chosen)
-            // so the player spawns on the planet they selected in the menu.
             var session = VoxelEngine.Menu.WorldSession.Instance;
             int seed = body.settings.seed;
             int spawnIdx = session != null ? Mathf.Clamp(session.spawnPlanetIndex, 0, 99) : 0;
             if (session != null && session.seedState != null)
                 seed = session.seedState.GetSeed(spawnIdx, seed);
             body.SetRuntimeSeedOverride(seed);
-            // Keep the authored PlanetTemplate radius exactly. Test-radius overrides made the
-            // LOD, ocean basins, gravity, and streaming disagree about the planet's size.
             body.ApplySettings();
             _awaitingViewerSurfacePlacement = placeViewerOnPlanetSurface;
             if (_awaitingViewerSurfacePlacement && viewer != null)
@@ -119,8 +147,6 @@ namespace VoxelEngine.Cosmos
             var world = _bodyGO.AddComponent<SphereWorld>();
             _sphereWorld = world;
             world.body = body;
-            // Override the terrain material with the enhanced shader (procedural detail +
-            // slope shading). Falls back to the resolved material if the shader is missing.
             var enhancedShader = Shader.Find("VoxelEngine/VoxelTerrainEnhanced");
             if (enhancedShader != null && terrainMaterial != null)
             {
@@ -144,7 +170,7 @@ namespace VoxelEngine.Cosmos
             world.terrainMaterial = terrainMaterial;
             world.viewer = viewer;
             world.viewDistance = viewDistance;
-            world.enableScatter = true;  // Safe now — flat world is disabled, sphere is sole world.
+            world.enableScatter = true;
             world.biomeRegistry = biomeRegistry;
             world.worldName = session != null ? session.worldName : "SphereTest";
 
@@ -178,13 +204,8 @@ namespace VoxelEngine.Cosmos
             oceanLod.biomeRegistry = biomeRegistry;
 
             // ── Distant bodies + sparse vacuum starfield ────────────────
-            // Needs a CosmicRegistry in the scene to know where the other bodies are.
-            EnsureCosmicRegistry();
-            var activeSolarSystem = solarSystemTemplate;
             var spaceGO = new GameObject("SpaceRenderer");
             spaceGO.AddComponent<SpaceBodyRenderer>();
-            // Sparse camera-relative stars fade in through the same atmosphere-to-vacuum
-            // blend as the backdrop, so deep space reads as a real destination.
             spaceGO.AddComponent<SpaceStarfieldRenderer>();
 
             // ── Live quality preset applier (Phase 7) ──
@@ -198,15 +219,13 @@ namespace VoxelEngine.Cosmos
             // ── Background quasar (Phase 5) ──
             var quasarGO = new GameObject("Quasar");
             var quasar = quasarGO.AddComponent<QuasarRenderer>();
-            // Use the system template's quasar settings if available.
+            var activeSolarSystem = ResolveSolarSystemTemplate();
             if (activeSolarSystem != null)
                 quasar.settings = activeSolarSystem.quasar;
 
-            // ── Asteroid field (Phase 5) ──
+            // ── Asteroid field (Phase 5 visual belt) ──
             var asteroidGO = new GameObject("AsteroidField");
             var asteroids = asteroidGO.AddComponent<AsteroidFieldRenderer>();
-            // A real authored belt wins; otherwise a deterministic runtime fallback keeps
-            // the automatically bootstrapped solar system visually alive.
             asteroids.settings = ResolveAsteroidVisualSettings(activeSolarSystem);
 
             // ── GPU grass renderer (Phase 4) ──
@@ -233,14 +252,30 @@ namespace VoxelEngine.Cosmos
             waterfalls.scanRange = GraphicsPreset.WaterfallRange;
             world.maxJobsPerFrame = GraphicsPreset.JobsPerFrame;
 
+            // Register the home body with the cosmic scene graph.
+            homeInstance = FindInstanceFor(body);
+            if (homeInstance != null)
+            {
+                registry.SceneBodies[homeInstance] = body;
+                _spaceOrigin.RegisterRoot(_bodyGO.transform);
+            }
+
+            // ── Real space: spawn every OTHER body of the system as real geometry ──
+            EnsureAllBodiesInScene(registry);
+
+            // ── Deep-space procedural asteroid spawner ──
+            var fieldGO = new GameObject("SpaceAsteroidField");
+            _asteroidField = fieldGO.AddComponent<SpaceAsteroidField>();
+
             // Activate radial gravity for the whole game + wind personality.
+            _streamingBody = body;
             GravityProvider.ActiveBody = body;
             // Route mining/building tools to THIS world (not the flat VoxelWorld).
             VoxelEngine.Core.ActiveWorld.Current = world;
 
             // CRITICAL: disable the flat VoxelWorld so ONLY the sphere streams chunks + uses the
             // shared FluidManager/WaterMeshBuilder. Running BOTH worlds simultaneously causes them
-            // to fight over the same singletons and generate chunks at each other's positions →
+            // to fight over the same singletons and generate chunks at each other's positions → 
             // job-safety violations + scatter crashes. We disable the component (not destroy it)
             // so its inspector-assigned assets stay available for the sphere to borrow.
             var flatWorld = FindAnyObjectByType<VoxelEngine.Core.VoxelWorld>(FindObjectsInactive.Include);
@@ -252,21 +287,32 @@ namespace VoxelEngine.Cosmos
 
             // ── Activate LAST: now every Awake/OnEnable sees a fully-wired component graph. ──
             _bodyGO.SetActive(true);
-            // A scene may spawn its Player after this bootstrap's Awake. Propagate a late
-            // viewer immediately when it already exists, otherwise Start/Update retry safely.
             TryResolveViewerAndAnchor();
 
-            var wind = FindAnyObjectByType<WindField>();
-            if (wind != null) wind.ApplyBody(body.settings);
+            _wind = FindAnyObjectByType<WindField>();
+            if (_wind != null) _wind.ApplyBody(body.settings);
+
+            // Real-space frame events: switching bodies must re-target the streamer.
+            SpaceOrigin.OnFrameChanged += HandleFrameChange;
 
             // Ensure the main camera can actually SEE the body. Default far-clip planes (~1000m)
             // cull a planet placed thousands of units away — that's the "planet is invisible" bug.
-            // We raise the far clip to comfortably cover bodyOrigin + planet radius + margin.
             EnsureCameraFarClip();
 
             Debug.Log($"[CosmosBootstrap] Spawned '{body.DisplayName}' at {_bodyGO.transform.position}, " +
                       $"seed {seed}, radius {body.settings.radiusKm:0.##} km, radial gravity ACTIVE. " +
-                      $"Full-planet LOD and local editable terrain stream are ready.");
+                      $"Real Keplerian orbits: {registry.Bodies.Count} bodies, {registry.Asteroids.Count} belt rocks.");
+        }
+
+        private void OnDestroy()
+        {
+            SpaceOrigin.OnFrameChanged -= HandleFrameChange;
+            RestoreAtmosphereSpaceCamera();
+            Shader.SetGlobalFloat("_VoxelAtmosphereDensity01", 1f);
+            Shader.SetGlobalFloat("_VoxelSpaceBlend", 0f);
+            if (GravityProvider.ActiveBody != null &&
+                GravityProvider.ActiveBody == (_bodyGO != null ? _bodyGO.GetComponent<CelestialBody>() : null))
+                GravityProvider.ActiveBody = null;
         }
 
         /// <summary>
@@ -284,10 +330,12 @@ namespace VoxelEngine.Cosmos
         private void AnchorViewerToAuthoredSurface(CelestialBody body)
         {
             if (body == null || viewer == null) return;
-            // Keep the initial local frame simple and stable: viewer sits at the north radial
-            // surface, while all later movement/streaming is fully body-relative.
             body.transform.position = viewer.position
                 - Vector3.up * (body.SurfaceRadius + initialSurfaceClearance);
+            // Keep the floating origin consistent with this authored placement so the
+            // body stays put in the scene and the viewer stays on its surface.
+            if (_spaceOrigin != null)
+                _spaceOrigin.AlignAnchorToBodyScenePosition(body);
             _awaitingViewerSurfacePlacement = false;
         }
 
@@ -305,6 +353,7 @@ namespace VoxelEngine.Cosmos
             ResolveViewerReference();
             if (viewer == null) return;
             PropagateViewer();
+            if (_spaceOrigin != null) _spaceOrigin.RegisterRoot(viewer);
 
             if (_awaitingViewerSurfacePlacement)
             {
@@ -321,35 +370,261 @@ namespace VoxelEngine.Cosmos
         /// <summary>
         /// Raise the main camera's far clip plane so the (possibly distant) planet is rendered.
         /// Computes the distance from the camera to the far edge of the body + margin, and only
-        /// ever INCREASES the far clip (never shrinks it below its existing value).
+        /// ever INCREASES the far clip (never shrinks it below its existing value). Capped so
+        /// depth precision stays usable; farther bodies use the compressed sky renderer.
         /// </summary>
         private void EnsureCameraFarClip()
         {
             var cam = Camera.main;
             if (cam == null)
             {
-                // Camera.main can be null right after scene load; fall back to any camera.
                 cam = FindAnyObjectByType<Camera>();
             }
             if (cam == null) return;
-            var body = _bodyGO != null ? _bodyGO.GetComponent<CelestialBody>() : null;
+            var body = GravityProvider.ActiveBody != null
+                ? GravityProvider.ActiveBody
+                : (_bodyGO != null ? _bodyGO.GetComponent<CelestialBody>() : null);
             float bodyRadiusM = body != null ? body.SurfaceRadius : 1000f;
-            // Distance from camera to the far side of the body, plus a generous margin.
             Vector3 bodyCenter = body != null ? body.transform.position : bodyOrigin;
             float needed = Vector3.Distance(cam.transform.position, bodyCenter) + bodyRadiusM * 2f + 5000f;
+            // Real space: also cover the closest non-active bodies whose true LODs render.
+            var registry = CosmicRegistry.Instance;
+            if (registry != null && registry.SceneBodies != null && _spaceOrigin != null)
+            {
+                double3 camCosmic = _spaceOrigin.GetCosmicKm(cam.transform.position);
+                for (int i = 0; i < registry.Bodies.Count; i++)
+                {
+                    var b = registry.Bodies[i];
+                    if (b == null) continue;
+                    if (b.settings != null && body != null && b.settings == body.settings) continue;
+                    double distM = math.length(registry.CosmicPositionOf(b) - camCosmic) * 1000d;
+                    if (distM < 400000d) // only within the true-LOD window
+                        needed = Mathf.Max(needed, (float)distM + (float)(b.settings != null ? b.settings.radiusKm * 1000f : 6000f) + 5000f);
+                }
+            }
             if (cam.farClipPlane < needed)
             {
-                cam.farClipPlane = needed;
-                Debug.Log($"[CosmosBootstrap] Camera far clip plane raised to {needed:0} so the body is visible.");
+                cam.farClipPlane = Mathf.Min(needed, 900000f);
+                Debug.Log($"[CosmosBootstrap] Camera far clip plane raised to {cam.farClipPlane:0} so celestial bodies are visible.");
             }
         }
+
+        // ── Real-space infrastructure ──────────────────────────────
+
+        private void EnsureSpaceOrigin(CosmicRegistry registry, BodyInstance homeInstance)
+        {
+            if (SpaceOrigin.Instance != null)
+            {
+                _spaceOrigin = SpaceOrigin.Instance;
+                return;
+            }
+            var go = new GameObject("SpaceOrigin");
+            _spaceOrigin = go.AddComponent<SpaceOrigin>();
+
+            // Anchor the scene so the HOME body sits at bodyOrigin.
+            double3 homeCosmic = homeInstance != null ? registry.CosmicPositionOf(homeInstance) : double3.zero;
+            double3 anchor = homeCosmic - (double3)bodyOrigin / 1000d;
+
+            _spaceOrigin.Initialize(viewer != null ? viewer : transform, anchor);
+            _spaceOrigin.RegisterRoot(go.transform);
+            Debug.Log($"[CosmosBootstrap] SpaceOrigin anchored at {anchor} km (home '{planetTemplate?.body?.bodyName}').");
+        }
+
+        private BodyInstance FindInstanceFor(CelestialBody body)
+        {
+            var registry = CosmicRegistry.Instance;
+            if (registry == null || body == null) return null;
+            foreach (var kv in registry.SceneBodies)
+                if (kv.Value == body) return kv.Key;
+            // Match by settings reference (the home body isn't in the map yet).
+            foreach (var b in registry.Bodies)
+            {
+                if (b == null) continue;
+                if (b.settings == body.settings) return b;
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Spawn real CelestialBody GameObjects for every body in the registry (except the
+        /// home, which already exists), each with its own sampled-surface LOD. SpaceOrigin
+        /// positions them every frame from their real Keplerian positions.
+        /// </summary>
+        private void EnsureAllBodiesInScene(CosmicRegistry registry)
+        {
+            if (registry == null || !registry.IsReady) return;
+
+            for (int i = 0; i < registry.Bodies.Count; i++)
+            {
+                var instance = registry.Bodies[i];
+                if (instance == null || instance.settings == null) continue;
+                if (registry.SceneBodies.ContainsKey(instance)) continue;
+                if (instance.settings == _body.settings) continue;
+
+                var go = new GameObject("CelestialBody_" + instance.DisplayName);
+                go.transform.SetParent(transform, false);
+                go.SetActive(false);
+
+                var cb = go.AddComponent<CelestialBody>();
+                cb.settings = instance.settings;
+                int perBodySeed = instance.settings.seed;
+                var session = VoxelEngine.Menu.WorldSession.Instance;
+                if (session != null && session.seedState != null && instance.planetTemplate != null)
+                {
+                    // The seed table is index-aligned with the system template's planet order.
+                    int planetIndex = 0;
+                    if (registry.systemTemplate != null && registry.systemTemplate.planets != null)
+                    {
+                        for (int k = 0; k < registry.systemTemplate.planets.Length; k++)
+                        {
+                            if (registry.systemTemplate.planets[k] == instance.planetTemplate)
+                            {
+                                planetIndex = k;
+                                break;
+                            }
+                        }
+                    }
+                    perBodySeed = session.seedState.GetSeed(planetIndex, instance.settings.seed);
+                }
+                cb.SetRuntimeSeedOverride(perBodySeed);
+                cb.ApplySettings();
+
+                var lodGO = new GameObject("LOD");
+                lodGO.transform.SetParent(go.transform, false);
+                var lod = lodGO.AddComponent<PlanetLodImpostor>();
+                lod.body = cb;
+                lod.viewer = viewer;
+                lod.biomeRegistry = biomeRegistry;
+                // Distant bodies get the cheap proxy; the active body is upgraded on entry.
+                lod.resolution = Mathf.Min(GraphicsPreset.LodResolution, 642);
+
+                registry.SceneBodies[instance] = cb;
+                _spaceOrigin.RegisterRoot(go.transform);
+                go.SetActive(true);
+            }
+        }
+
+        /// <summary>
+        /// Re-target all active-body systems when the scene reference frame changes:
+        /// null = deep space (streaming suspended), body = fly into that body's well.
+        /// The player's position is continuous — nothing teleports.
+        /// </summary>
+        private void HandleFrameChange(CelestialBody newBody)
+        {
+            if (newBody == _streamingBody) return;
+            CelestialBody previousBody = _streamingBody;
+            _streamingBody = newBody;
+
+            if (newBody == null)
+            {
+                // ── Deep space: suspend voxel streaming + planet-side effects. ──
+                if (previousBody != null)
+                {
+                    // Downgrade the previous body's LOD back to the cheap proxy.
+                    var oldLod = previousBody.GetComponentInChildren<PlanetLodImpostor>(true);
+                    if (oldLod != null) oldLod.resolution = Mathf.Min(GraphicsPreset.LodResolution, 642);
+                }
+                _sphereWorld.SetBody(null);
+                SetAuxSystemsEnabled(false);
+                GravityProvider.ActiveBody = null;
+                Debug.Log("[CosmosBootstrap] Deep space — voxel streaming suspended, zero-g active.");
+            }
+            else
+            {
+                // ── Entering another body's frame: re-target the streamer. ──
+                var newLod = newBody.GetComponentInChildren<PlanetLodImpostor>(true);
+                if (newLod != null) newLod.resolution = GraphicsPreset.LodResolution;
+                _sphereWorld.SetBody(newBody);
+                MoveAuxSystemsUnder(newBody);
+                // Belt worlds are zero-g rock fields — no grass, waterfalls or oceans.
+                bool isBelt = newBody.settings != null &&
+                              (newBody.settings.bodyName.IndexOf("Asteroid", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                               newBody.settings.bodyName.IndexOf("Belt", System.StringComparison.OrdinalIgnoreCase) >= 0);
+                SetAuxSystemsEnabled(!isBelt);
+                GravityProvider.ActiveBody = newBody;
+                if (_wind != null) _wind.ApplyBody(newBody.settings);
+                Debug.Log($"[CosmosBootstrap] Entered '{newBody.DisplayName}' — streaming re-targeted.");
+            }
+
+            // Propagate the new body into every celestial renderer.
+            var registry = CosmicRegistry.Instance;
+            if (registry != null && _spaceOrigin != null)
+                EnsureCameraFarClip();
+        }
+
+        private void SetAuxSystemsEnabled(bool enabled)
+        {
+            if (_grass != null) _grass.gameObject.SetActive(enabled);
+            if (_waterfalls != null) _waterfalls.gameObject.SetActive(enabled);
+            if (_oceanLod != null) _oceanLod.gameObject.SetActive(enabled);
+        }
+
+        private void MoveAuxSystemsUnder(CelestialBody targetBody)
+        {
+            if (targetBody == null) return;
+            if (_grass != null) _grass.body = targetBody;
+            if (_waterfalls != null) _waterfalls.body = targetBody;
+            if (_oceanLod != null) _oceanLod.body = targetBody;
+
+            if (_grass != null) _grass.transform.SetParent(targetBody.transform, true);
+            if (_waterfalls != null) _waterfalls.transform.SetParent(targetBody.transform, true);
+            if (_oceanLod != null) _oceanLod.transform.SetParent(targetBody.transform, true);
+        }
+
+        /// <summary>
+        /// Restore a saved deep-space/orbital state: re-anchor the origin at the saved cosmic
+        /// position and re-enter the saved frame body (or deep space). Called by the save
+        /// system after it restores the player position.
+        /// </summary>
+        public void RestoreCosmicState(Vector3 savedCosmicKm, string frameBodyName)
+        {
+            var registry = CosmicRegistry.Instance;
+            if (registry == null || _spaceOrigin == null) return;
+
+            _spaceOrigin.TeleportCosmic((double3)savedCosmicKm);
+
+            CelestialBody frame = null;
+            if (!string.IsNullOrEmpty(frameBodyName))
+            {
+                foreach (var kv in registry.SceneBodies)
+                {
+                    if (kv.Key == null || kv.Key.settings == null) continue;
+                    if (string.Equals(kv.Key.settings.bodyName, frameBodyName, System.StringComparison.OrdinalIgnoreCase))
+                    {
+                        frame = kv.Value;
+                        break;
+                    }
+                }
+            }
+
+            if (frame != null && frame != _streamingBody)
+            {
+                _spaceOrigin.SetFrame(frame);
+                HandleFrameChange(frame);
+            }
+            else if (frame == null && _streamingBody != null)
+            {
+                _spaceOrigin.SetFrame(null);
+                HandleFrameChange(null);
+            }
+
+            TryResolveViewerAndAnchor();
+            EnsureCameraFarClip();
+            Debug.Log($"[CosmosBootstrap] Space state restored at {savedCosmicKm} km, frame '{(frame != null ? frame.DisplayName : "SOL")}'.");
+        }
+
+        /// <summary>Current scene frame body (null = deep space).</summary>
+        public CelestialBody CurrentFrameBody => _spaceOrigin != null ? _spaceOrigin.FrameBody : _body;
+
+        /// <summary>True when the player is in deep space (outside every body's gravity well).</summary>
+        public bool IsDeepSpace => _spaceOrigin != null && _spaceOrigin.IsDeepSpace;
+
+        // ── Legacy asset resolution (unchanged behaviour) ──────────
 
         private SolarSystemTemplate ResolveSolarSystemTemplate()
         {
             if (solarSystemTemplate != null) return solarSystemTemplate;
 
-            // The setup-owned Resources library is the build-safe path. Direct AssetDatabase
-            // lookup below remains an editor recovery path only; builds never depend on it.
             var library = CosmosTemplateLibrary.Load();
             if (library != null && library.systems != null)
             {
@@ -375,50 +650,6 @@ namespace VoxelEngine.Cosmos
             return solarSystemTemplate;
         }
 
-        private SolarSystemTemplate CreateRuntimeSolarFallback()
-        {
-            // Last-resort visual/runtime safety net for a scene that predates Step 21. It is not
-            // an authored asset and is never saved; Step 21 remains the canonical way to create
-            // System_Sol, its library entry, and its real asteroid-belt asset.
-            var system = ScriptableObject.CreateInstance<SolarSystemTemplate>();
-            system.name = "System_Sol_RuntimeFallback";
-            system.hideFlags = HideFlags.DontSave;
-            system.systemName = "Sol System";
-            system.sun = new SunSettings
-            {
-                displayName = "Sol",
-                sunCount = 1,
-                intensity = 1.3f,
-                glowColor = new Color(1f, 0.95f, 0.78f, 1f)
-            };
-            system.minPlanetSeparationKm = 500f;
-            system.maxPlanetSeparationKm = 10000f;
-
-            var planets = new System.Collections.Generic.List<PlanetTemplate>();
-            if (planetTemplate != null) planets.Add(planetTemplate);
-
-            PlanetTemplate Proxy(string name, float radiusKm, Color color, float orbit)
-            {
-                var template = ScriptableObject.CreateInstance<PlanetTemplate>();
-                template.name = "Runtime_" + name;
-                template.hideFlags = HideFlags.DontSave;
-                template.body = BodySettings.CreateEarthlike();
-                template.body.bodyName = name;
-                template.body.radiusKm = radiusKm;
-                template.body.displayColor = color;
-                template.distanceFromSun = orbit;
-                template.orbitSpeed = 0.8f;
-                return template;
-            }
-
-            planets.Add(Proxy("Amber World", 6f, new Color(0.85f, 0.52f, 0.20f, 1f), 3400f));
-            planets.Add(Proxy("Azure World", 7f, new Color(0.18f, 0.45f, 0.82f, 1f), 5600f));
-            planets.Add(Proxy("Verdant World", 6f, new Color(0.30f, 0.70f, 0.40f, 1f), 7900f));
-            planets.Add(Proxy("Violet World", 5f, new Color(0.55f, 0.36f, 0.82f, 1f), 10500f));
-            system.planets = planets.ToArray();
-            return system;
-        }
-
         private static AsteroidFieldSettings ResolveAsteroidVisualSettings(SolarSystemTemplate system)
         {
             if (system != null && system.asteroidFields != null)
@@ -427,7 +658,6 @@ namespace VoxelEngine.Cosmos
                     if (field != null && field.settings != null) return field.settings;
             }
 
-            // Visual fallback until Setup writes the shared belt asset into System_Sol.
             return new AsteroidFieldSettings
             {
                 density = 1f,
@@ -476,7 +706,7 @@ namespace VoxelEngine.Cosmos
             {
                 registry.GenerateLayout(system, seed);
                 Debug.Log("[CosmosBootstrap] System_Sol assigned automatically: " + registry.Bodies.Count +
-                          " bodies and " + registry.Asteroids.Count + " asteroids are ready for sky rendering.");
+                          " bodies and " + registry.Asteroids.Count + " asteroids are ready for real Keplerian flight.");
             }
         }
 
@@ -524,6 +754,50 @@ namespace VoxelEngine.Cosmos
             }
         }
 
+        private SolarSystemTemplate CreateRuntimeSolarFallback()
+        {
+            // Last-resort visual/runtime safety net for a scene that predates Step 21. It is not
+            // an authored asset and is never saved; Step 21 remains the canonical way to create
+            // System_Sol, its library entry, and its real asteroid-belt asset.
+            var system = ScriptableObject.CreateInstance<SolarSystemTemplate>();
+            system.name = "System_Sol_RuntimeFallback";
+            system.hideFlags = HideFlags.DontSave;
+            system.systemName = "Sol System";
+            system.sun = new SunSettings
+            {
+                displayName = "Sol",
+                sunCount = 1,
+                intensity = 1.3f,
+                glowColor = new Color(1f, 0.95f, 0.78f, 1f)
+            };
+            system.minPlanetSeparationKm = 500f;
+            system.maxPlanetSeparationKm = 10000f;
+
+            var planets = new System.Collections.Generic.List<PlanetTemplate>();
+            if (planetTemplate != null) planets.Add(planetTemplate);
+
+            PlanetTemplate Proxy(string name, float radiusKm, Color color, float orbit)
+            {
+                var template = ScriptableObject.CreateInstance<PlanetTemplate>();
+                template.name = "Runtime_" + name;
+                template.hideFlags = HideFlags.DontSave;
+                template.body = BodySettings.CreateEarthlike();
+                template.body.bodyName = name;
+                template.body.radiusKm = radiusKm;
+                template.body.displayColor = color;
+                template.distanceFromSun = orbit;
+                template.orbitSpeed = 0.8f;
+                return template;
+            }
+
+            planets.Add(Proxy("Amber World", 6f, new Color(0.85f, 0.52f, 0.20f, 1f), 3400f));
+            planets.Add(Proxy("Azure World", 7f, new Color(0.18f, 0.45f, 0.82f, 1f), 5600f));
+            planets.Add(Proxy("Verdant World", 6f, new Color(0.30f, 0.70f, 0.40f, 1f), 7900f));
+            planets.Add(Proxy("Violet World", 5f, new Color(0.55f, 0.36f, 0.82f, 1f), 10500f));
+            system.planets = planets.ToArray();
+            return system;
+        }
+
         /// <summary>
         /// Resolve materialRegistry + terrainMaterial. Priority: inspector → scene's flat
         /// VoxelWorld (which has them assigned) → Resources → Editor asset path. Never null.
@@ -534,16 +808,12 @@ namespace VoxelEngine.Cosmos
             if (terrainMaterial == null)  terrainMaterial  = Resources.Load<Material>("Mat_Terrain");
 
 #if UNITY_EDITOR
-            // In the editor the authored assets live under VoxelEngineAssets, not Resources.
-            // Resolve them by path so play-mode planets do not fall back to empty registries
-            // and white URP materials.
             if (materialRegistry == null)
                 materialRegistry = AssetDatabase.LoadAssetAtPath<MaterialRegistry>("Assets/VoxelEngineAssets/MaterialRegistry.asset");
             if (terrainMaterial == null)
                 terrainMaterial = AssetDatabase.LoadAssetAtPath<Material>("Assets/VoxelEngineAssets/VoxelTerrain.mat");
 #endif
 
-            // Pull the exact working material + registry from the flat VoxelWorld if present.
             if (materialRegistry == null || terrainMaterial == null)
             {
                 var flat = FindAnyObjectByType<VoxelEngine.Core.VoxelWorld>(FindObjectsInactive.Include);
@@ -575,93 +845,10 @@ namespace VoxelEngine.Cosmos
         {
             if (viewer == null || _awaitingViewerSurfacePlacement) TryResolveViewerAndAnchor();
             UpdateAtmosphereSpaceCamera();
-            CheckInterplanetaryFlight();
-        }
 
-        public void TransitionToPlanet(PlanetTemplate newPlanet)
-        {
-            if (newPlanet == null || newPlanet == planetTemplate || _sphereWorld == null) return;
-            Debug.Log($"[CosmosBootstrap] Transitioning interplanetary flight to {newPlanet.name}...");
-
-            _sphereWorld.ResetAllChunks();
-            planetTemplate = newPlanet;
-
-            var body = _bodyGO != null ? _bodyGO.GetComponent<CelestialBody>() : null;
-            if (body != null)
-            {
-                if (newPlanet.body == null) newPlanet.body = BodySettings.CreateEarthlike();
-                body.settings = newPlanet.body;
-                int perPlanetSeed = 1337 ^ (newPlanet.body.bodyName.GetHashCode() * 397);
-                var session = VoxelEngine.Menu.WorldSession.Instance;
-                if (session != null && session.seedState != null)
-                    perPlanetSeed = session.seedState.GetSeed(0, newPlanet.body.seed);
-                body.SetRuntimeSeedOverride(perPlanetSeed);
-                body.ApplySettings();
-
-                _sphereWorld.body = body;
-
-                if (_terrainLod != null) _terrainLod.body = body;
-                if (_oceanLod != null) _oceanLod.body = body;
-                if (_grass != null) _grass.body = body;
-                if (_waterfalls != null) _waterfalls.body = body;
-
-                GravityProvider.ActiveBody = body;
-
-                if (viewer != null)
-                {
-                    Vector3 orbitEntrance = body.transform.position + new Vector3(0f, body.settings.radiusKm * 1000f + 850f, 0f);
-                    viewer.position = orbitEntrance;
-                    var rb = viewer.GetComponentInParent<Rigidbody>();
-                    if (rb != null) rb.linearVelocity = Vector3.down * 15f;
-                    VoxelEngine.UI.BuildFeedbackHud.Show("Space Travel", $"Arrived in Orbit: {body.settings.bodyName}", null, new Color(0.18f, 0.72f, 0.88f));
-                }
-            }
-        }
-
-        private float _nextInterplanetaryCheck;
-        private void CheckInterplanetaryFlight()
-        {
-            if (Time.unscaledTime < _nextInterplanetaryCheck || viewer == null || _bodyGO == null) return;
-            _nextInterplanetaryCheck = Time.unscaledTime + 0.3f;
-
-            var activeBody = GravityProvider.ActiveBody;
-            if (activeBody == null || activeBody.settings == null) return;
-
-            float altitude = (viewer.position - _bodyGO.transform.position).magnitude - activeBody.settings.radiusKm * 1000f;
-            if (altitude < 1400f) return;
-
-            var registry = CosmicRegistry.Instance;
-            if (registry == null || !registry.IsReady) return;
-
-            var rb = viewer.GetComponentInParent<Rigidbody>();
-            Vector3 vel = rb != null ? rb.linearVelocity : viewer.forward * 50f;
-            if (vel.magnitude < 15f) return;
-
-            Vector3 flyDir = vel.normalized;
-            Vector3 viewerKm = Vector3.zero;
-            for (int i = 0; i < registry.Bodies.Count; i++)
-            {
-                if (registry.Bodies[i].settings == activeBody.settings)
-                {
-                    viewerKm = registry.Bodies[i].positionKm;
-                    break;
-                }
-            }
-
-            for (int i = 0; i < registry.Bodies.Count; i++)
-            {
-                var target = registry.Bodies[i];
-                if (target == null || target.settings == activeBody.settings || target.planetTemplate == null) continue;
-                Vector3 toTargetKm = target.positionKm - viewerKm;
-                if (toTargetKm.sqrMagnitude < 1f) continue;
-
-                Vector3 dirToTarget = toTargetKm.normalized;
-                if (Vector3.Dot(flyDir, dirToTarget) > 0.94f && altitude > 1800f)
-                {
-                    TransitionToPlanet(target.planetTemplate);
-                    break;
-                }
-            }
+            // Frame changes can also arrive via polling (robust against missed events).
+            if (_spaceOrigin != null && _streamingBody != _spaceOrigin.FrameBody)
+                HandleFrameChange(_spaceOrigin.FrameBody);
         }
 
         /// <summary>
@@ -732,16 +919,6 @@ namespace VoxelEngine.Cosmos
             _spaceTransitionCamera.backgroundColor = _spaceTransitionBaseBackground;
             _spaceTransitionCamera.farClipPlane = _spaceTransitionBaseFarClip;
             _spaceTransitionCaptured = false;
-        }
-
-        private void OnDestroy()
-        {
-            RestoreAtmosphereSpaceCamera();
-            Shader.SetGlobalFloat("_VoxelAtmosphereDensity01", 1f);
-            Shader.SetGlobalFloat("_VoxelSpaceBlend", 0f);
-            if (GravityProvider.ActiveBody != null &&
-                GravityProvider.ActiveBody == (_bodyGO != null ? _bodyGO.GetComponent<CelestialBody>() : null))
-                GravityProvider.ActiveBody = null;
         }
     }
 }

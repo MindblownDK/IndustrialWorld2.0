@@ -28,8 +28,13 @@ namespace VoxelEngine.Cosmos
         public Vector2 orbitalDistanceKm = new Vector2(1500f, 6000f);
 
         [Range(0f, 5f)]
-        [Tooltip("Orbital speed multiplier.")]
+        [Tooltip("Orbital speed multiplier (scales the body's time along its Keplerian orbit).")]
         public float orbitSpeed = 1f;
+
+        [Range(0f, 0.75f)]
+        [Tooltip("Orbital eccentricity (0 = perfectly circular, 0.5 = noticeably elliptical). " +
+                 "Leave 0 to let the world generator roll a small deterministic eccentricity per world.")]
+        public float orbitEccentricity = 0f;
 
         [Range(0f, 360f)]
         [Tooltip("Starting orbital phase (deg). Ignored if the generator auto-distributes phases.")]

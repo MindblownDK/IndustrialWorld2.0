@@ -478,6 +478,21 @@ namespace VoxelEngine.Player
                 var tree = hit.collider.GetComponentInParent<Tree>();
                 if (tree != null) { HitTree(tree); return; }
 
+                // 1b) Space asteroid? (real-space procedural rocks — Damageable with ore drops)
+                var asteroid = hit.collider.GetComponentInParent<VoxelEngine.Cosmos.SpaceAsteroid>();
+                if (asteroid != null)
+                {
+                    int astDmg = (int)handStrength;
+                    if (!inventory.ActiveStack.IsEmpty && inventory.ActiveStack.item is ToolItem astTool)
+                        astDmg = (int)astTool.strength;
+                    asteroid.TakeDamage(new VoxelEngine.Combat.DamageEvent
+                    {
+                        amount = astDmg, point = hit.point, direction = ray.direction
+                    });
+                    _nextHit = Time.time + 0.12f;
+                    return;
+                }
+
                 var ruinedPump = hit.collider.GetComponentInParent<VoxelEngine.Generation.BrokenJackPump>();
                 if (ruinedPump != null)
                 {

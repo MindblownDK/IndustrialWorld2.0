@@ -175,10 +175,12 @@ namespace VoxelEngine.Player
             SetPosition(new Vector3(target.x, parkY, target.z));
 
             // A saved high-altitude/space location has no terrain column to wait for.
-            // Waiting there would unnecessarily freeze control before an orbital logout.
+            // Waiting there would unnecessarily freeze control before an orbital logout
+            // — this includes REAL-SPACE deep-space logouts (no active body at all).
             var activeBody = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
-            bool savedInSpace = hasSavedPos && activeBody != null
-                && Vector3.Distance(target, activeBody.transform.position) > activeBody.SurfaceRadius + 80f;
+            bool savedInSpace = hasSavedPos && (VoxelEngine.Cosmos.GravityProvider.IsDeepSpace
+                || (activeBody != null
+                    && Vector3.Distance(target, activeBody.transform.position) > activeBody.SurfaceRadius + 80f));
             if (!savedInSpace)
                 yield return WaitForChunkAt(VoxelCoordOf(target), maxWaitSeconds);
 
