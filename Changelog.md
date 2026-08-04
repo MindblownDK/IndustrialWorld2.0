@@ -1,9 +1,19 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.13.3-dev`
+**Current Version:** `7.13.4-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.13.4-dev] Boot Sweep Scheduler Compile Recovery (CS0426)
+
+**Type:** PATCH — compile recovery for the 7.13.3-dev boot-sweep animation; no behaviour change, no save/API break.
+
+#### 🛠️ Compiler Fix
+- **`IVisualElementSchedulerItem` (CS0426):** the nested scheduler-item type does not exist in Unity 6.4's UI Toolkit API. `LcdHudTheme.AnimateBootSweep` no longer names the type — it chains the scheduler item's `Until(() => done)` stop-condition instead, so the repeating wipe automatically stops itself when finished (no type reference, no leak, no runaway timer).
+
+#### ✅ Static delivery checks
+- Verified the modified source parses cleanly (tree-sitter grammar validation).
 
 ### [7.13.3-dev] Premium LCD Feel — HUD Declutter, Panel Overlap Fix & Slot Fit Recovery
 

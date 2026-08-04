@@ -399,16 +399,13 @@ namespace VoxelEngine.UI
             const float duration = 0.95f;
             float start = Time.realtimeSinceStartup;
             float last = -1f;
+            bool done = false;
             // Unity 6 UI Toolkit: schedule.Execute takes an Action (no Func<bool>
-            // overload) — the item pauses itself when the wipe is finished.
-            IVisualElementScheduler.IVisualElementSchedulerItem item = null;
-            item = screen.schedule.Execute(() =>
+            // overload). We never name the scheduler-item type — chaining Until(...)
+            // stops the item automatically once the wipe finishes.
+            screen.schedule.Execute(() =>
             {
-                if (sweep == null || sweep.parent == null)
-                {
-                    item?.Pause();
-                    return;
-                }
+                if (done || sweep == null || sweep.parent == null) return;
                 float t = Mathf.Clamp01((Time.realtimeSinceStartup - start) / duration);
                 float h = Mathf.Max(160f, screen.resolvedStyle.height);
                 // Smoothstep travel top → bottom.
@@ -419,12 +416,12 @@ namespace VoxelEngine.UI
                 sweep.style.backgroundColor = new StyleColor(new Color(baseColor.r, baseColor.g, baseColor.b, alpha));
                 if (t >= 1f && Mathf.Abs(t - last) < 0.0001f)
                 {
+                    done = true;
                     sweep.RemoveFromHierarchy();
-                    item?.Pause();
                     return;
                 }
                 last = t;
-            }).Every(16);
+            }).Every(16).Until(() => done);
         }
 
         /// <summary>
