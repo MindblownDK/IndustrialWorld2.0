@@ -260,6 +260,15 @@ namespace VoxelEngine.Cosmos
                 _spaceOrigin.RegisterRoot(_bodyGO.transform);
             }
 
+            // CRITICAL — spawn-stability: pin the scene reference frame to the HOME body
+            // immediately. Without this the frame starts as the solar (star) frame, so the
+            // planet visibly races away at its orbital speed while the freshly-spawned
+            // player stands still — and when the frame then switches to the planet, the
+            // frame-velocity delta hurls the player into space at hundreds of m/s. Pinning
+            // the frame up front means the planet is at rest in the scene from frame one
+            // and the player is born standing on it (no kick, ever).
+            _spaceOrigin.SetFrame(body);
+
             // ── Real space: spawn every OTHER body of the system as real geometry ──
             EnsureAllBodiesInScene(registry);
 
@@ -353,16 +362,28 @@ namespace VoxelEngine.Cosmos
             ResolveViewerReference();
             if (viewer == null) return;
             PropagateViewer();
-            if (_spaceOrigin != null) _spaceOrigin.RegisterRoot(viewer);
+            if (_spaceOrigin != null)
+            {
+                _spaceOrigin.RegisterRoot(viewer);
+                // The floating origin must track the REAL player — never a placeholder.
+                _spaceOrigin.viewer = viewer;
+            }
 
             if (_awaitingViewerSurfacePlacement)
             {
                 var body = _bodyGO != null ? _bodyGO.GetComponent<CelestialBody>() : null;
                 if (body != null)
                 {
-                    AnchorViewerToAuthoredSurface(body);
+                    // LATE resolution (player appeared after bootstrap): DO NOT move the
+                    // body under the viewer — the spawner computes its surface point from
+                    // the body's CURRENT position, so moving it later would strand the
+                    // player inside/off the planet. Keep the body where it is, align the
+                    // floating origin to it, and let PlayerSpawner place the player.
+                    if (_spaceOrigin != null)
+                        _spaceOrigin.AlignAnchorToBodyScenePosition(body);
+                    _awaitingViewerSurfacePlacement = false;
                     EnsureCameraFarClip();
-                    Debug.Log("[CosmosBootstrap] Late viewer resolved; anchored to the authored spherical surface.");
+                    Debug.Log("[CosmosBootstrap] Late viewer resolved; origin aligned to the authored spherical body.");
                 }
             }
         }

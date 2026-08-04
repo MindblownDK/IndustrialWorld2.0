@@ -35,6 +35,7 @@ namespace VoxelEngine.Menu
         private enum Page  { Pause, Settings }
         private enum STab  { Display, Camera, Interface, Audio, Saving, Keybinds }
         private Page _page = Page.Pause;
+        private Page _lastBuiltPage = (Page)(-1);
         private STab _tab  = STab.Camera;
         private float _savedScrollY = 0f;
         private bool _hasSavedScroll = false;
@@ -107,6 +108,22 @@ namespace VoxelEngine.Menu
 
         // ── UI Root ────────────────────────────────────────────────
         private void BuildUI()
+        {
+            // Rebuilding the same page must not replay the LCD boot.
+            bool samePage = _lastBuiltPage == _page;
+            _lastBuiltPage = _page;
+            if (samePage) LcdHudTheme.BootsMuted = true;
+            try
+            {
+                BuildUIBody();
+            }
+            finally
+            {
+                LcdHudTheme.BootsMuted = false;
+            }
+        }
+
+        private void BuildUIBody()
         {
             // Preserve scroll for settings tab
             if (_root != null)

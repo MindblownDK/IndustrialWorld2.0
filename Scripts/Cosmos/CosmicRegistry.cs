@@ -387,12 +387,18 @@ namespace VoxelEngine.Cosmos
                 double d2 = math.lengthsq(toB);
                 if (d2 < 1e-12) continue;
 
-                // Clamp the distance so the acceleration never explodes inside the crust.
+                // Distance to the core; below the surface the pull falls off LINEARLY
+                // toward zero at the core (physically correct for a solid sphere). This
+                // is critical: a player who ever clips into the terrain can no longer be
+                // accelerated through the core to escape velocity — the old surface-clamp
+                // made any terrain clip a one-way launch through the planet.
                 double rSurfaceKm = Mathd.Max(0.05d, b.settings != null ? b.settings.radiusKm : 1d);
-                double dClamped = math.sqrt(d2);
-                if (dClamped < rSurfaceKm) dClamped = rSurfaceKm;
+                double dActual = math.sqrt(d2);
+                double dClamped = dActual < rSurfaceKm ? rSurfaceKm : dActual;
 
                 double a = b.gravitationalParamKm3S2 * 1000d / (dClamped * dClamped);
+                if (dActual < rSurfaceKm)
+                    a *= dActual / rSurfaceKm;   // linear interior falloff (g·d/R)
                 g += toB / dClamped * a;
             }
             return g;

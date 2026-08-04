@@ -120,11 +120,27 @@ namespace VoxelEngine.UI
         }
 
         /// <summary>
+        /// While true, boot animations are skipped (elements appear instantly at full
+        /// opacity). Set by the UI layer around REBUILDS of an already-open surface
+        /// (inventory refresh, terminal refresh, settings toggle) so the LCD boot only
+        /// plays on genuine opens — never on every refresh.
+        /// </summary>
+        public static bool BootsMuted { get; set; }
+
+        /// <summary>
         /// Animates a retro-futuristic CRT/LCD phosphor boot-up sequence on any display element.
         /// </summary>
         public static void AnimateScreenBoot(VisualElement element, float delaySeconds = 0f, System.Action onComplete = null)
         {
             if (element == null) return;
+
+            if (BootsMuted)
+            {
+                element.style.opacity = 1f;
+                element.style.scale = new StyleScale(new Scale(Vector3.one));
+                onComplete?.Invoke();
+                return;
+            }
 
             element.style.opacity = 0f;
             element.style.scale = new StyleScale(new Scale(new Vector3(1.02f, 0.08f, 1f)));
@@ -383,7 +399,7 @@ namespace VoxelEngine.UI
         /// </summary>
         public static void AnimateBootSweep(VisualElement screen, Color? sweepColor = null)
         {
-            if (screen == null) return;
+            if (screen == null || BootsMuted) return;
             Color baseColor = sweepColor ?? new Color(Phosphor.r, Phosphor.g, Phosphor.b, 0.55f);
 
             var sweep = new VisualElement { name = "LcdBootSweep" };

@@ -34,6 +34,7 @@ namespace VoxelEngine.Menu
 
         private enum Page { Main, Saves, NewWorld, EditWorld, Settings }
         private Page _page = Page.Main;
+        private Page _lastBuiltPage = (Page)(-1);
 
         // New-world form values.
         private string _newName            = "MyWorld";
@@ -113,6 +114,23 @@ namespace VoxelEngine.Menu
 
         // ── UI Root ────────────────────────────────────────────────
         private void BuildUI()
+        {
+            // Rebuilding the SAME page (settings toggle, tab refresh) must not replay
+            // the LCD boot — only real page changes get the full boot animation.
+            bool samePage = _lastBuiltPage == _page;
+            _lastBuiltPage = _page;
+            if (samePage) LcdHudTheme.BootsMuted = true;
+            try
+            {
+                BuildUIBody();
+            }
+            finally
+            {
+                LcdHudTheme.BootsMuted = false;
+            }
+        }
+
+        private void BuildUIBody()
         {
             // Preserve scroll Y if we are rebuilding settings and a ScrollView exists
             if (_root != null)

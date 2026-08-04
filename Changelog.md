@@ -1,9 +1,56 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.13.4-dev`
+**Current Version:** `7.13.6-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.13.6-dev] Spawn Launch Elimination — Interior Gravity Falloff, Fall-Speed Cap, Poisoned-Save Rejection & Spawn Grace
+
+**Type:** PATCH — eliminates the spawn-time launch through the planet from every angle; no save/API break.
+
+#### 🚀 Why the player was launched (root cause)
+The real-space N-body gravity clamped a body's pull to FULL SURFACE STRENGTH everywhere inside the crust. Any player who clipped the terrain — a bad spawn point, a save written mid-launch, a terrain-collider timing gap — was then accelerated toward the core at ~9.8 m/s² for the whole fall, reaching the core at escape velocity and being "launched through the planet" out the far side. The earlier frame-pin fixed the upward launch; this one kills the fall-through itself.
+
+#### 🛠️ Fixes
+- **Interior gravity is now physically correct (linear falloff):** inside a body the pull scales g·(d/R) toward zero at the core (`CosmicRegistry.GetGravityMetersS2`). A player can no longer gain core-escape energy from a terrain clip — there is no launch-through-the-planet path left in the physics.
+- **Radial fall-speed cap (55 m/s) near any active body:** `PlayerController` clamps inward speed within 2.5× surface radius, so even a player restored from a bad space save falls at a speed the CharacterController always resolves against terrain colliders — no tunneling at hundreds of m/s.
+- **Poisoned saves rejected:** `PlayerSpawner.IsSavedPositionInsideBody` — if a saved position would restore the player INSIDE any celestial body, the save is ignored and the surface/bed spawn path is used (legit surface/orbit/deep-space saves still restore).
+- **Spawn starts at rest:** the player's controller + any rigidbody velocity are zeroed at control handover (both spawn and respawn).
+- **Spawn grace in SpaceOrigin:** automatic reference-frame switches (and their velocity deltas) are suppressed for the first 3 s after load — the frame stays pinned to the home body; forced switches (warp, save restore) still work.
+- **Floating origin always tracks the real player:** SpaceOrigin re-resolves the viewer every fixed tick if it isn't the PlayerController (the bootstrap can initialise with a placeholder before the player exists), and the bootstrap hands the player to SpaceOrigin when it resolves late.
+- **No more late body-move race:** when the viewer resolves AFTER bootstrap (late scene order), the home body is no longer moved under the viewer — the origin is aligned to the body where it sits and PlayerSpawner places the player on its surface deterministically.
+
+#### ✅ Static delivery checks
+- All 5 modified sources parse cleanly (tree-sitter grammar validation).
+
+### [7.13.5-dev] Spawn Launch Fix, No Boot Replay on Refresh, Weather HUD Removed & HUD Space Recovery
+
+**Type:** PATCH — critical spawn-stability fix + UI polish (boot animation replay, weather indicator removal, vitals text alignment, compact gravity instrument); no save/API break.
+
+#### 🚀 Spawn Launch Fix (player no longer flung into space)
+- **Root cause:** the scene reference frame started as the SOLAR (star) frame at spawn. The home planet immediately raced away at its real orbital speed while the freshly-spawned player stood still — and when the frame then switched to the planet, the frame-velocity delta applied to every scene object hurled the player into space at hundreds of m/s with no way to stop.
+- **Fix:** `CosmosBootstrap` now pins the scene reference frame to the HOME body at bootstrap (`SpaceOrigin.SetFrame(body)`). The planet is at rest in the scene from frame one, the player is born standing on it, and no frame-velocity kick ever fires at spawn. Interplanetary frame switches (leaving/entering gravity wells) keep the same correct physics as before.
+
+#### 🖥️ LCD Boot No Longer Replays on Every UI Refresh
+- **New `LcdHudTheme.BootsMuted`:** while set, boot animations (scale-in + phosphor wipe) are skipped and elements appear instantly.
+- **`GameUIController.Refresh()`** (inventory, chests, machine panels, and the Ship Control terminal, which routes through it) now mutes boots around rebuilds — the boot only plays when a panel genuinely opens, never on item moves, toggles, or refresh ticks.
+- **Main menu + pause menu:** rebuilding the SAME page (settings toggles, tab refreshes) is muted; real page changes keep the full boot.
+
+#### ☀️ Weather Indicator Removed
+- `WeatherHud.EnsureMounted` is now a no-op — the "☀ Clear / Overcast / …" readout no longer appears on screen (weather simulation itself is untouched).
+
+#### 📟 Vitals HUD Text Alignment
+- Value/code labels in the vitals rows are now vertically centred (`MiddleLeft`/`MiddleRight` + `alignSelf Center`, segment track centred) so the numbers sit exactly in line with the segment bars.
+
+#### 🪐 Gravity Field HUD — Smaller, Less Wasted Space
+- Card width 236 → 196 px, tighter padding.
+- LCD display 100×64 → 84×50, G-readout 22px → 16px, acceleration line 8px → 7px.
+- **VECTOR row removed** (hidden) — the surface-reference segments carry the useful info.
+- Reference column, surface segments and captions all tightened — the same information in ~40% less screen space.
+
+#### ✅ Static delivery checks
+- All 8 modified sources parse cleanly (tree-sitter grammar validation).
 
 ### [7.13.4-dev] Boot Sweep Scheduler Compile Recovery (CS0426)
 

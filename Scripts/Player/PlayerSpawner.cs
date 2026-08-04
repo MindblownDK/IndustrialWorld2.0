@@ -98,6 +98,16 @@ namespace VoxelEngine.Player
             // If we died offline, ignore saved pos — force world spawn path
             if (offlineDied) hasSavedPos = false;
 
+            // Real-space safety (7.13.6): a save written during a launch/bug session can
+            // restore the player INSIDE a planet (or so close to a core that they spawn
+            // in solid terrain). Those saves are poisoned — reject them and fall back to
+            // the surface/bed spawn path. Legit surface/orbit/deep-space saves pass.
+            if (hasSavedPos && IsSavedPositionInsideBody(savedPos))
+            {
+                Debug.LogWarning("[PlayerSpawner] Saved position is inside a celestial body — rejecting poisoned save, spawning on the surface instead.");
+                hasSavedPos = false;
+            }
+
             // Determine the target position.
             Vector3 target;
             bool isFreshWorld = false;
@@ -287,6 +297,9 @@ namespace VoxelEngine.Player
             }
 
             EnableController();
+            // Spawn must start at REST — clear any residual velocity (frame deltas,
+            // stale physics) so the player can never be "launched" by old state.
+            ZeroPlayerVelocity();
             ReadyForPlayerControl = true;
             if (!VoxelEngine.UI.UIState.IsBlocking)
             {
@@ -370,7 +383,41 @@ namespace VoxelEngine.Player
             SetPosition(SnapToGround(transform.position));
             yield return EnsureDrySpawn(transform.position);
             EnableController();
+            ZeroPlayerVelocity();
             ReadyForPlayerControl = true;
+        }
+
+        /// <summary>
+        /// True when a saved scene position would restore the player INSIDE a celestial
+        /// body (distance from any body's core below its surface radius). Such saves are
+        /// the result of launch/tunnel bugs and must never be restored as-is.
+        /// </summary>
+        private static bool IsSavedPositionInsideBody(Vector3 scenePos)
+        {
+            var origin = VoxelEngine.Cosmos.SpaceOrigin.Instance;
+            var registry = VoxelEngine.Cosmos.CosmicRegistry.Instance;
+            if (origin == null || registry == null || !registry.IsReady) return false;
+
+            double3 cosmic = origin.GetCosmicKm(scenePos);
+            foreach (var kv in registry.SceneBodies)
+            {
+                if (kv.Key == null || kv.Value == null || kv.Key.settings == null) continue;
+                double3 bodyCosmic = registry.CosmicPositionOf(kv.Key);
+                double d = math.length(bodyCosmic - cosmic);
+                double rSurface = kv.Key.settings.radiusKm;
+                // Strictly inside the crust (5% margin below the surface).
+                if (d < rSurface * 0.95d) return true;
+            }
+            return false;
+        }
+
+        /// <summary>Brings the player to a full stop before control handover.</summary>
+        private void ZeroPlayerVelocity()
+        {
+            var pc = GetComponent<PlayerController>();
+            if (pc != null) pc.ResetVelocity();
+            var rb = GetComponentInChildren<Rigidbody>();
+            if (rb != null) rb.linearVelocity = Vector3.zero;
         }
 
         // ============================================================

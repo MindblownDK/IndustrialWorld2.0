@@ -58,6 +58,12 @@ namespace VoxelEngine.Cosmos
         [Tooltip("Player transform (auto-resolved). Scene origin keeps this near zero.")]
         public Transform viewer;
 
+        [Header("Spawn Stability")]
+        [Tooltip("Seconds after scene load during which automatic reference-frame switches " +
+                 "are suppressed (the frame is pinned to the home body at bootstrap; this " +
+                 "prevents any spawn-time frame-velocity kick).")]
+        [Range(0f, 10f)] public float spawnGraceSeconds = 3f;
+
         // ── State ─────────────────────────────────────────────────
         /// <summary>Cosmic position (km) of the scene origin.</summary>
         public double3 AnchorKm { get; private set; }
@@ -199,12 +205,18 @@ namespace VoxelEngine.Cosmos
         {
             var reg = CosmicRegistry.Instance;
             if (reg == null || !reg.IsReady) return;
-            if (viewer == null)
+            // ALWAYS track the real player: the bootstrap may have initialised us with a
+            // placeholder transform before the player existed. Viewer position drives the
+            // rebase and the frame-selection point — a stale viewer corrupts both.
+            if (viewer == null || viewer.GetComponent<PlayerController>() == null)
             {
                 var pc = FindAnyObjectByType<PlayerController>();
-                if (pc != null) viewer = pc.transform;
+                if (pc != null)
+                {
+                    viewer = pc.transform;
+                    RegisterRoot(viewer);
+                }
                 if (viewer == null) return;
-                RegisterRoot(viewer);
             }
 
             if (!_frameReady)
@@ -253,6 +265,12 @@ namespace VoxelEngine.Cosmos
         {
             var reg = CosmicRegistry.Instance;
             if (reg == null) return;
+
+            // Spawn grace: during the first seconds after scene load the frame is already
+            // pinned to the home body and NO automatic frame switch may apply a velocity
+            // delta (that delta is what flung players at spawn). Forced switches (warp,
+            // save restore) still work.
+            if (!force && Time.timeSinceLevelLoad < spawnGraceSeconds) return;
 
             BodyInstance dominant = reg.GetDominantBody(ViewerCosmicKm, out double candidateAccel);
             CelestialBody candidateBody = null;

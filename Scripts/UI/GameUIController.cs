@@ -1088,11 +1088,19 @@ namespace VoxelEngine.UI
                 return;
             }
             _refreshing = true;
+            // Rebuilds of an already-open surface must NOT replay the LCD boot —
+            // mute it so the boot animation only plays when a panel genuinely opens.
+            bool prevBootMute = LcdHudTheme.BootsMuted;
+            LcdHudTheme.BootsMuted = true;
             try
             {
                 RefreshInternal();
             }
-            finally { _refreshing = false; }
+            finally
+            {
+                LcdHudTheme.BootsMuted = prevBootMute;
+                _refreshing = false;
+            }
         }
 
         private void RefreshInternal()

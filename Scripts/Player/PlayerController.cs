@@ -559,6 +559,27 @@ namespace VoxelEngine.Player
             if (!inWater && wishDir.sqrMagnitude > 0.001f)
                 AssistTerrainAscent(up, wishDir, Mathf.Max(0.25f, horiz.magnitude * dt));
 
+            // ── Re-entry / terrain-clip safety ──────────────────────────
+            // Cap the INWARD radial speed near the active body. Without this, a player
+            // restored from a bad save (or clipped through the terrain) accelerates to
+            // hundreds of m/s toward the core and tunnels straight through the planet.
+            // 55 m/s is fast enough to feel like a dangerous fall, slow enough that the
+            // CharacterController always resolves against the terrain collider.
+            var activeBody = GravityProvider.ActiveBody;
+            if (activeBody != null)
+            {
+                Vector3 toCore = activeBody.transform.position - transform.position;
+                float dist = toCore.magnitude;
+                if (dist > 1f && dist < activeBody.SurfaceRadius * 2.5f)
+                {
+                    Vector3 radialIn = toCore / dist;
+                    float inwardSpeed = Vector3.Dot(_velocity, radialIn);
+                    const float maxFallSpeed = 55f;
+                    if (inwardSpeed > maxFallSpeed)
+                        _velocity -= radialIn * (inwardSpeed - maxFallSpeed);
+                }
+            }
+
             // -- move --
             // Keep the small radial anti-stick lift, then run a post-move footing
             // recovery below for both flat and spherical terrain.

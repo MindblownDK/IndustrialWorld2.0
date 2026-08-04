@@ -153,6 +153,8 @@ namespace VoxelEngine.UI
             codeLabel.style.fontSize = 8;
             codeLabel.style.letterSpacing = 0.85f;
             codeLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            codeLabel.style.unityTextAlign = TextAnchor.MiddleLeft;
+            codeLabel.style.alignSelf = Align.Center;
             codeLabel.style.color = new StyleColor(signalColor);
             codeLabel.pickingMode = PickingMode.Ignore;
             row.Add(codeLabel);
@@ -160,6 +162,7 @@ namespace VoxelEngine.UI
             var track = LcdHudTheme.CreateSegmentTrack(SegmentCount, out var segments, 11f);
             track.style.flexGrow = 1;
             track.style.marginRight = 6;
+            track.style.alignSelf = Align.Center;
             row.Add(track);
 
             var value = new Label("—");
@@ -168,6 +171,7 @@ namespace VoxelEngine.UI
             value.style.letterSpacing = 0.35f;
             value.style.unityFontStyleAndWeight = FontStyle.Bold;
             value.style.unityTextAlign = TextAnchor.MiddleRight;
+            value.style.alignSelf = Align.Center;
             value.style.color = new StyleColor(signalColor);
             value.pickingMode = PickingMode.Ignore;
             row.Add(value);
