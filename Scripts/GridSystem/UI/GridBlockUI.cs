@@ -8,6 +8,7 @@
 // (Chemical Plant / Refinery panels arrive in Phase 3.)
 
 using UnityEngine;
+using System.Collections.Generic;
 using UnityEngine.UIElements;
 using VoxelEngine.Items;
 using VoxelEngine.UI;
@@ -30,28 +31,49 @@ namespace VoxelEngine.GridSystem.UI
             {
                 case GridLiquidTank lt:     return LiquidTankPanel(lt);
                 case GridGasTank gt:        return GasTankPanel(gt, slot);
-                case GridH2O2Generator h2:  return H2O2Panel(h2, slot);
+                case GridH2O2Generator h2:  return MakeScrollable(H2O2Panel(h2, slot));
                 case GridBattery bat:       return BatteryPanel(bat, slot);
                 case GridCargoContainer cc: return CargoPanel(cc, slot);
-                case GridWeapon gw:         return WeaponPanel(gw, slot);
-                case GridRefinery rf:       return ProcessorPanel("⚗ Ship Refinery", rf.Current, rf.Progress01, rf.PowerDraw, rf.knownRecipes, rf.Grid, rf.selectedRecipe, r => rf.selectedRecipe = r);
-                case GridChemicalPlant cp:  return ProcessorPanel("🧪 Ship Chemical Plant", cp.Current, cp.Progress01, cp.PowerDraw, cp.knownRecipes, cp.Grid, cp.selectedRecipe, r => cp.selectedRecipe = r);
-                case GridPortableReactor pr: return ReactorPanel(pr, slot);
+                case GridWeapon gw:         return MakeScrollable(WeaponPanel(gw, slot));
+                case GridRefinery rf:       return MakeScrollable(ProcessorPanel("⚗ Ship Refinery", rf.Current, rf.Progress01, rf.PowerDraw, rf.knownRecipes, rf.Grid, rf.selectedRecipe, r => rf.selectedRecipe = r));
+                case GridChemicalPlant cp:  return MakeScrollable(ProcessorPanel("🧪 Ship Chemical Plant", cp.Current, cp.Progress01, cp.PowerDraw, cp.knownRecipes, cp.Grid, cp.selectedRecipe, r => cp.selectedRecipe = r));
+                case GridPortableReactor pr: return MakeScrollable(ReactorPanel(pr, slot));
                 case GridDockingPort dp:    return DockingPortPanel(dp, slot);
                 case GridLandingGear lg:    return LandingGearPanel(lg);
                 case GridWheel wh:          return WheelPanel(wh);
                 case GridSolarPanel sp:     return SolarPanel(sp);
-                case GridHydrogenEngine he: return HydrogenEnginePanel(he);
-                case GridDrill dr:          return DrillPanel(dr, slot);
-                case GridElectricFurnace ef: return FurnacePanel(ef, slot);
+                case GridHydrogenEngine he: return MakeScrollable(HydrogenEnginePanel(he));
+                case GridDrill dr:          return MakeScrollable(DrillPanel(dr, slot));
+                case GridElectricFurnace ef: return MakeScrollable(FurnacePanel(ef, slot));
                 case GridBeacon bc:         return BeaconPanel(bc);
                 case GridOreDetector od:    return OreDetectorPanel(od);
-                case GridBiofarm bio:      return BiofarmPanel(bio, slot);
-                case GridCryobed cryo:      return CryobedPanel(cryo);
+                case GridBiofarm bio:      return MakeScrollable(BiofarmPanel(bio, slot));
+                case GridCryobed cryo:      return MakeScrollable(CryobedPanel(cryo));
                 case GridSlidingDoor door:  return SlidingDoorPanel(door);
                 case VoxelEngine.Simulation.GridLightBlock gl: return GridLightPanel(gl);
                 default:                    return GenericPanel(block);
             }
+        }
+
+        /// <summary>
+        /// Wraps a machine panel's content in a vertical ScrollView so tall panels
+        /// (recipe books, many slot rows, tank gauges) never clip their slots —
+        /// everything stays inside the box, scrollable when needed.
+        /// </summary>
+        private static VisualElement MakeScrollable(VisualElement panel)
+        {
+            if (panel == null) return panel;
+            var children = new List<VisualElement>();
+            foreach (var child in panel.Children()) children.Add(child);
+            foreach (var child in children) child.RemoveFromHierarchy();
+
+            var scroll = new ScrollView(ScrollViewMode.Vertical);
+            scroll.style.flexGrow = 1;
+            scroll.style.marginTop = 2;
+            T.StyleScroller(scroll);
+            foreach (var child in children) scroll.Add(child);
+            panel.Add(scroll);
+            return panel;
         }
 
         // ── LIQUID TANK ───────────────────────────────────────────────────────

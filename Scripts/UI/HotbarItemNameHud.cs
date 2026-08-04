@@ -51,6 +51,7 @@ namespace VoxelEngine.UI
             _card.style.display = DisplayStyle.None;
             _card.pickingMode = PickingMode.Ignore;
             uiRoot.Add(_card);
+            LcdHudTheme.YieldWhileBlocking(_card);
 
             _bezel = new VisualElement { name = "HeldItemLcdBezel" };
             _bezel.style.flexDirection = FlexDirection.Row;

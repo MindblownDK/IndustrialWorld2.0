@@ -68,6 +68,7 @@ namespace VoxelEngine.UI
             T.Radius(_card, 3f);
             T.Border(_card, 1f, new Color(0.25f, 0.29f, 0.34f, 0.92f));
             uiRoot.Add(_card);
+            LcdHudTheme.YieldWhileBlocking(_card);
 
             BuildHeader();
             BuildInstrumentFace();

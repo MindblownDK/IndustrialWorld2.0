@@ -74,6 +74,7 @@ namespace VoxelEngine.UI
             _root.style.maxHeight = new StyleLength(new Length(44f, LengthUnit.Percent));
             _root.pickingMode = PickingMode.Position;
             uiRoot.Add(_root);
+            LcdHudTheme.YieldWhileBlocking(_root);
 
             _list = new VisualElement();
             _root.Add(_list);

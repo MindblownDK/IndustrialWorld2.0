@@ -1,9 +1,34 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.13.2-dev`
+**Current Version:** `7.13.3-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.13.3-dev] Premium LCD Feel — HUD Declutter, Panel Overlap Fix & Slot Fit Recovery
+
+**Type:** PATCH — HUD declutter, panel/HUD overlap elimination, machine-slot fit recovery and boot-sweep compile fix; no save/API break.
+
+#### 🖥️ Compile Fix
+- **Boot sweep scheduler (CS8030):** `LcdHudTheme.AnimateBootSweep` no longer returns values from the scheduled action — Unity 6 UI Toolkit's `schedule.Execute` takes an `Action`; the repeating item now pauses itself via `IVisualElementSchedulerItem.Pause()` when the wipe finishes.
+
+#### 🧹 HUD Declutter (cleaner, calmer screen)
+- **Vitals cluster compacted:** row height 25→20 px, gaps 3→2 px — same information in a tighter, quieter bottom-right instrument (`TOTAL_HEIGHT` 166→142 so the feedback toasts still clear it).
+- **Interaction prompt** now fades out whenever a panel owns the screen.
+
+#### 🚧 No More HUD/Panel Overlap
+- **New `LcdHudTheme.YieldWhileBlocking`:** a HUD module smoothly fades out while a blocking UI (machine panel, chest, terminal, inventory) is open and returns when it closes. Applied to **WorldInspectionHud, RecipePinHud, VitalsHud, BuildFeedbackHud, GravityPullHud, HotbarItemNameHud, InteractionHud and the cockpit Flight Computer (GridPilotHud)** — right-side and bottom HUDs always step aside for panels.
+- **Machine panels dock higher:** `UITheme.MachinePanel` bottom inset 72→92 and right 12→14 so a machine never covers the hotbar strip; width min 260→280, max 46%→44% for a cleaner right column.
+
+#### 📦 Machine Slots Always Fit Their Box
+- **New `MakeScrollable`** (GridBlockUI + MaritimeBlockUI): wraps a machine panel's content in a vertical ScrollView so tall panels never clip their slots. Applied to the heavy panels: **Ship Refinery, Ship Chemical Plant, Portable Reactor, Electric Furnace, Hydrogen Engine, Drill, Weapon, Biofarm, Cryobed, H2/O2 Generator** and maritime **Engine, Generator, Helm** — every slot, gauge and recipe row stays inside the box, scrollable when needed.
+
+#### ✨ Premium Feel
+- **New `LcdHudTheme.ApplyPanelDepth`:** hairline top highlight + soft bottom shade on every themed panel (machined-metal/glass edge instead of a flat rectangle).
+- Panels boot with scale-in + wipe, scanlines shimmer, buttons micro-interact — the full shared LCD language now extends to every corner of the UI.
+
+#### ✅ Static delivery checks
+- All changed sources parse cleanly (tree-sitter grammar validation).
 
 ### [7.13.2-dev] Unified LCD Theme — Menus, Settings, Storage & Ship Terminals + Compile Recovery
 

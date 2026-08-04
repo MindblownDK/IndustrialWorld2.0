@@ -46,6 +46,7 @@ namespace VoxelEngine.UI
             _container.style.alignItems    = Align.Stretch;
             _container.pickingMode         = PickingMode.Ignore;
             uiRoot.Add(_container);
+            LcdHudTheme.YieldWhileBlocking(_container);
         }
 
         // ── Public API ─────────────────────────────────────────────────

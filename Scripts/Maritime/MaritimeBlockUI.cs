@@ -26,6 +26,7 @@
 //    • GridExhaustPipe         — venting status.
 //    • GridHelm                — throttle + steer status.
 
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UIElements;
 using VoxelEngine.GridSystem;
@@ -46,8 +47,8 @@ namespace VoxelEngine.Maritime
         {
             return block switch
             {
-                GridMaritimeEngine eng      => EnginePanel(eng, slot),
-                GridMaritimeGenerator gen   => GeneratorPanel(gen, slot),
+                GridMaritimeEngine eng      => MakeScrollable(EnginePanel(eng, slot)),
+                GridMaritimeGenerator gen   => MakeScrollable(GeneratorPanel(gen, slot)),
                 GridGearbox gb              => GearboxPanel(gb),
                 GridBilgePump bp            => BilgePumpPanel(bp),
                 GridMarineWaterPump mwp     => MarineWaterPumpPanel(mwp),
@@ -58,10 +59,30 @@ namespace VoxelEngine.Maritime
                 GridDriveShaft ds           => DriveShaftPanel(ds),
                 GridShaftHousing housing    => ShaftHousingPanel(housing),
                 GridExhaustPipe ex          => ExhaustPipePanel(ex),
-                GridHelm helm               => HelmPanel(helm),
+                GridHelm helm               => MakeScrollable(HelmPanel(helm)),
                 GridHullBlock hull          => HullPanel(hull),
                 _                           => null,
             };
+        }
+
+        /// <summary>
+        /// Wraps a maritime machine panel's content in a vertical ScrollView so tall
+        /// panels (engine/generator readouts, many rows) never clip their slots.
+        /// </summary>
+        private static VisualElement MakeScrollable(VisualElement panel)
+        {
+            if (panel == null) return panel;
+            var children = new List<VisualElement>();
+            foreach (var child in panel.Children()) children.Add(child);
+            foreach (var child in children) child.RemoveFromHierarchy();
+
+            var scroll = new ScrollView(ScrollViewMode.Vertical);
+            scroll.style.flexGrow = 1;
+            scroll.style.marginTop = 2;
+            T.StyleScroller(scroll);
+            foreach (var child in children) scroll.Add(child);
+            panel.Add(scroll);
+            return panel;
         }
 
         // ════════════════════════════════════════════════════════════════

@@ -77,6 +77,8 @@ namespace VoxelEngine.UI
             LcdHudTheme.ApplyChassis(_card, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.96f), 3f);
             LcdHudTheme.AddAnimatedScanlines(_card, 3, 6f, 18f);
             uiRoot.Add(_card);
+            // Step aside while machine/chest panels are open — never overlap them.
+            LcdHudTheme.YieldWhileBlocking(_card);
 
             var headingRow = new VisualElement();
             headingRow.style.flexDirection = FlexDirection.Row;

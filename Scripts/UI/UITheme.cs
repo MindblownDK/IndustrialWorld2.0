@@ -84,6 +84,7 @@ namespace VoxelEngine.UI
             // whole game — chests, containers, machines, menus — speaks one language.
             LcdHudTheme.AnimateScreenBoot(v);
             LcdHudTheme.AnimateBootSweep(v);
+            LcdHudTheme.ApplyPanelDepth(v);
             v.AddToClassList("themed-panel");
             return v;
         }
@@ -93,12 +94,14 @@ namespace VoxelEngine.UI
         {
             var p = Panel();
             p.style.position = Position.Absolute;
+            // Clear the bottom hotbar/vitals strip so a machine panel never covers
+            // the hotbar or overlaps the bottom-right vitals cluster.
             p.style.top      = 12;
-            p.style.bottom   = 72;
-            p.style.right    = 12;
+            p.style.bottom   = 92;
+            p.style.right    = 14;
             p.style.width    = new StyleLength(new Length(34f, LengthUnit.Percent));
-            p.style.minWidth = 260;
-            p.style.maxWidth = new StyleLength(new Length(46f, LengthUnit.Percent));
+            p.style.minWidth = 280;
+            p.style.maxWidth = new StyleLength(new Length(44f, LengthUnit.Percent));
             p.style.overflow = Overflow.Hidden;
             AddScanlines(p, 6, 25f, 45f);
             return p;

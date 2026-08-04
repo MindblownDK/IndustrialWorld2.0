@@ -177,6 +177,8 @@ namespace VoxelEngine.GridSystem
             LcdHudTheme.ApplyChassis(_container, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.96f), 3f);
             uiRoot.Add(_container);
             LcdHudTheme.AnimateScreenBoot(_container);
+            // Step aside while the ship terminal / master terminal is open.
+            LcdHudTheme.YieldWhileBlocking(_container);
 
             var titleRow = LcdHudTheme.CreateDisplayHeader("GRID NAVIGATION", "FLIGHT COMPUTER", "FC-01", "LIVE");
             titleRow.name = "FlightComputerHeader";

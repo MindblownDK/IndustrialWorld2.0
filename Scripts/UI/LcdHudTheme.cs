@@ -399,9 +399,16 @@ namespace VoxelEngine.UI
             const float duration = 0.95f;
             float start = Time.realtimeSinceStartup;
             float last = -1f;
-            screen.schedule.Execute(() =>
+            // Unity 6 UI Toolkit: schedule.Execute takes an Action (no Func<bool>
+            // overload) — the item pauses itself when the wipe is finished.
+            IVisualElementScheduler.IVisualElementSchedulerItem item = null;
+            item = screen.schedule.Execute(() =>
             {
-                if (sweep == null || sweep.parent == null) return false;
+                if (sweep == null || sweep.parent == null)
+                {
+                    item?.Pause();
+                    return;
+                }
                 float t = Mathf.Clamp01((Time.realtimeSinceStartup - start) / duration);
                 float h = Mathf.Max(160f, screen.resolvedStyle.height);
                 // Smoothstep travel top → bottom.
@@ -413,10 +420,10 @@ namespace VoxelEngine.UI
                 if (t >= 1f && Mathf.Abs(t - last) < 0.0001f)
                 {
                     sweep.RemoveFromHierarchy();
-                    return false;
+                    item?.Pause();
+                    return;
                 }
                 last = t;
-                return true;
             }).Every(16);
         }
 
@@ -459,6 +466,58 @@ namespace VoxelEngine.UI
                 button.style.backgroundColor = new StyleColor(hoverBg);
                 button.style.scale = new StyleScale(new Scale(new Vector3(1.03f, 1.03f, 1f)));
             });
+        }
+
+        /// <summary>
+        /// Auto-yield a HUD module while a blocking UI (machine panel, chest, terminal)
+        /// is open: the module fades out smoothly and returns when the UI closes.
+        /// This is the systemic fix for HUD/panel overlap — right-side and bottom
+        /// modules step aside whenever a panel needs the screen.
+        /// </summary>
+        public static void YieldWhileBlocking(VisualElement element, float minOpacity = 0f)
+        {
+            if (element == null) return;
+            float smooth = 1f;
+            element.schedule.Execute(() =>
+            {
+                if (element == null) return;
+                bool blocked = VoxelEngine.UI.UIState.IsBlocking;
+                float target = blocked ? minOpacity : 1f;
+                smooth = Mathf.MoveTowards(smooth, target, Time.unscaledDeltaTime * 6f);
+                element.style.opacity = smooth;
+                // Fully hidden modules must never intercept the cursor.
+                element.pickingMode = smooth < 0.02f ? PickingMode.Ignore : element.pickingMode;
+            }).Every(33);
+        }
+
+        /// <summary>
+        /// Premium machined depth for panels: a hairline top highlight and a soft
+        /// bottom shade that make the chassis read as physical metal/glass instead
+        /// of a flat rectangle.
+        /// </summary>
+        public static void ApplyPanelDepth(VisualElement panel)
+        {
+            if (panel == null) return;
+
+            var highlight = new VisualElement { name = "LcdPanelHighlight" };
+            highlight.style.position = Position.Absolute;
+            highlight.style.left = 1f;
+            highlight.style.right = 1f;
+            highlight.style.top = 0f;
+            highlight.style.height = 1f;
+            highlight.style.backgroundColor = new StyleColor(new Color(1f, 1f, 1f, 0.055f));
+            highlight.pickingMode = PickingMode.Ignore;
+            panel.Add(highlight);
+
+            var shade = new VisualElement { name = "LcdPanelShade" };
+            shade.style.position = Position.Absolute;
+            shade.style.left = 0f;
+            shade.style.right = 0f;
+            shade.style.bottom = 0f;
+            shade.style.height = 3f;
+            shade.style.backgroundColor = new StyleColor(new Color(0f, 0f, 0f, 0.30f));
+            shade.pickingMode = PickingMode.Ignore;
+            panel.Add(shade);
         }
 
         /// <summary>Styles a search/input field as inset phosphor glass.</summary>
