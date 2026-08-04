@@ -466,9 +466,12 @@ namespace VoxelEngine.GridSystem.UI
 
             // Mass-cap header (the headline "total weight at top of inventory").
             p.Add(GridUIHelpers.WeightCapHeader(cc.CurrentMassKg, cc.maxMassKg));
-            var (fill, _) = T.ProgressBar(cc.Fill01,
-                cc.Fill01 >= 0.99f ? T.AccentRed : T.AccentGold, 8, true);
-            p.Add(fill);
+            // Animated phosphor segment fill (LCD cargo matrix style).
+            var segTrack = LcdHudTheme.CreateSegmentTrack(14, out var segs, height: 9f);
+            segTrack.style.marginTop = 2;
+            p.Add(segTrack);
+            LcdHudTheme.AnimateSegments(segs, cc.Fill01,
+                cc.Fill01 >= 0.99f ? T.AccentRed : T.AccentGold);
             p.Add(T.Muted($"Cargo mass: {MassFormat.Format(cc.CurrentMassKg)} / {MassFormat.Format(cc.maxMassKg)}"));
             p.Add(T.Spacer(6));
 

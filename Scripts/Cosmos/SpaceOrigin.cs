@@ -133,12 +133,12 @@ namespace VoxelEngine.Cosmos
                 if (b != null && b.settings == body.settings) { inst = b; break; }
             }
             if (inst == null) return;
-            AnchorKm = reg.CosmicPositionOf(inst) - (double3)body.transform.position / 1000d;
+            AnchorKm = reg.CosmicPositionOf(inst) - CosmicRegistry.ToDouble3(body.transform.position) / 1000d;
             _frameReady = true;
         }
 
         /// <summary>Cosmic position (km) for a scene position (m).</summary>
-        public double3 GetCosmicKm(Vector3 scenePos) => AnchorKm + (double3)scenePos / 1000d;
+        public double3 GetCosmicKm(Vector3 scenePos) => AnchorKm + CosmicRegistry.ToDouble3(scenePos) / 1000d;
 
         /// <summary>
         /// Teleport the origin so the viewer's cosmic position equals the given value.
@@ -153,7 +153,7 @@ namespace VoxelEngine.Cosmos
                 if (viewer == null) return;
                 RegisterRoot(viewer);
             }
-            double3 newAnchor = newViewerCosmicKm - (double3)viewer.position / 1000d;
+            double3 newAnchor = newViewerCosmicKm - CosmicRegistry.ToDouble3(viewer.position) / 1000d;
             double3 delta = newAnchor - AnchorKm;
             if (math.lengthsq(delta) < 1e-18) return;
             AnchorKm = newAnchor;
@@ -232,7 +232,7 @@ namespace VoxelEngine.Cosmos
             {
                 Vector3 shift = -scenePos;
                 ShiftWorld(shift);
-                AnchorKm += (double3)scenePos / 1000d;
+                AnchorKm += CosmicRegistry.ToDouble3(scenePos) / 1000d;
                 ViewerCosmicKm = GetCosmicKm(Vector3.zero);
             }
 

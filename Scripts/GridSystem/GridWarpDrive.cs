@@ -94,7 +94,7 @@ namespace VoxelEngine.GridSystem
             }
             Charge01 = 0f;
             IsCharging = true;
-            BuildFeedbackHud.Show("Warp Drive", "Charging… power draw " + PowerFormat.Watts(powerDrawWatts), null, new Color(0.55f, 0.85f, 1f));
+            BuildFeedbackHud.Show("Warp Drive", "Charging… power draw " + VoxelEngine.Items.PowerFormat.Watts(powerDrawWatts), null, new Color(0.55f, 0.85f, 1f));
         }
 
         /// <summary>Cancel charging (drains the accumulated charge).</summary>
@@ -135,7 +135,7 @@ namespace VoxelEngine.GridSystem
             Vector3 aimDir = aimFrame.forward.normalized;
 
             double3 gridCosmic = origin.GetCosmicKm(transform.position);
-            double3 destination = gridCosmic + (double3)aimDir * jumpRangeKm;
+            double3 destination = gridCosmic + CosmicRegistry.ToDouble3(aimDir) * jumpRangeKm;
             BodyInstance targetPlanet = null;
 
             // Planet acquisition: nearest body inside the aim cone within 20 000 km.
@@ -152,7 +152,7 @@ namespace VoxelEngine.GridSystem
             if (nearest != null && nearestDist < 20000d)
             {
                 double3 toTarget = registry.CosmicPositionOf(nearest) - gridCosmic;
-                double angleDeg = AngleDeg((double3)aimDir, toTarget);
+                double angleDeg = AngleDeg(CosmicRegistry.ToDouble3(aimDir), toTarget);
                 if (angleDeg <= targetConeDeg && nearestDist > minJumpKm * 2d)
                 {
                     targetPlanet = nearest;

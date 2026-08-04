@@ -348,6 +348,119 @@ namespace VoxelEngine.UI
             });
         }
 
+        /// <summary>
+        /// LCD-ify an EXISTING plain panel in one call: dark chassis, bezel border,
+        /// corner brackets, animated scanlines, phosphor boot animation and a one-shot
+        /// boot sweep. Used to lift menus / settings / plain panels onto the shared
+        /// LCD language without rebuilding their content.
+        /// </summary>
+        public static void UpgradePanel(VisualElement panel, string caption = null, Color? accent = null)
+        {
+            if (panel == null) return;
+            Color signal = accent ?? Phosphor;
+
+            panel.style.backgroundColor = new StyleColor(Chassis);
+            UITheme.Radius(panel, 4f);
+            UITheme.Border(panel, 1f, new Color(Bezel.r, Bezel.g, Bezel.b, 0.96f));
+            panel.style.overflow = Overflow.Hidden;
+
+            AddBezelAccents(panel, new Color(signal.r, signal.g, signal.b, 0.42f));
+            AddAnimatedScanlines(panel, 5, 8f, 22f);
+            AnimateScreenBoot(panel);
+            AnimateBootSweep(panel);
+
+            if (!string.IsNullOrEmpty(caption))
+            {
+                var cap = CaptionLabel(caption);
+                cap.style.marginBottom = 4f;
+                panel.Insert(0, cap);
+            }
+        }
+
+        /// <summary>
+        /// One-shot CRT/LCD power-on wipe: a phosphor line sweeps down the screen once,
+        /// then fades out. Complements <see cref="AnimateScreenBoot"/> with real motion.
+        /// </summary>
+        public static void AnimateBootSweep(VisualElement screen, Color? sweepColor = null)
+        {
+            if (screen == null) return;
+            Color baseColor = sweepColor ?? new Color(Phosphor.r, Phosphor.g, Phosphor.b, 0.55f);
+
+            var sweep = new VisualElement { name = "LcdBootSweep" };
+            sweep.style.position = Position.Absolute;
+            sweep.style.left = 2f;
+            sweep.style.right = 2f;
+            sweep.style.top = -8f;
+            sweep.style.height = 3f;
+            sweep.style.backgroundColor = new StyleColor(baseColor);
+            sweep.pickingMode = PickingMode.Ignore;
+            screen.Add(sweep);
+
+            const float duration = 0.95f;
+            float start = Time.realtimeSinceStartup;
+            float last = -1f;
+            screen.schedule.Execute(() =>
+            {
+                if (sweep == null || sweep.parent == null) return false;
+                float t = Mathf.Clamp01((Time.realtimeSinceStartup - start) / duration);
+                float h = Mathf.Max(160f, screen.resolvedStyle.height);
+                // Smoothstep travel top → bottom.
+                float p = t * t * (3f - 2f * t);
+                sweep.style.top = -8f + (h + 16f) * p;
+                // Bright core, fading tail as the wipe completes.
+                float alpha = t < 0.94f ? 0.55f : Mathf.Lerp(0.55f, 0f, (t - 0.94f) / 0.06f);
+                sweep.style.backgroundColor = new StyleColor(new Color(baseColor.r, baseColor.g, baseColor.b, alpha));
+                if (t >= 1f && Mathf.Abs(t - last) < 0.0001f)
+                {
+                    sweep.RemoveFromHierarchy();
+                    return false;
+                }
+                last = t;
+                return true;
+            }).Every(16);
+        }
+
+        /// <summary>
+        /// Micro-interactions for MENU-scale buttons (keeps their sizing): smooth 0.1 s
+        /// colour transitions, 1.03× hover scale, 0.98× press scale — per the project's
+        /// interaction guidelines. The button's own colours stay intact; hover blends
+        /// toward the signal colour.
+        /// </summary>
+        public static void AddMenuInteractions(Button button, Color signalColor, Color idleBackground)
+        {
+            if (button == null) return;
+            Color hoverBg = Color.Lerp(idleBackground, signalColor, 0.20f);
+            Color pressedBg = Color.Lerp(idleBackground, signalColor, 0.42f);
+
+            button.style.transitionProperty = new List<StylePropertyName> { "background-color", "scale", "border-color" };
+            button.style.transitionDuration = new List<TimeValue>
+            {
+                new TimeValue(0.10f, TimeUnit.Second),
+                new TimeValue(0.10f, TimeUnit.Second),
+                new TimeValue(0.10f, TimeUnit.Second),
+            };
+            button.RegisterCallback<PointerEnterEvent>(_ =>
+            {
+                button.style.backgroundColor = new StyleColor(hoverBg);
+                button.style.scale = new StyleScale(new Scale(new Vector3(1.03f, 1.03f, 1f)));
+            });
+            button.RegisterCallback<PointerLeaveEvent>(_ =>
+            {
+                button.style.backgroundColor = new StyleColor(idleBackground);
+                button.style.scale = new StyleScale(new Scale(Vector3.one));
+            });
+            button.RegisterCallback<PointerDownEvent>(_ =>
+            {
+                button.style.backgroundColor = new StyleColor(pressedBg);
+                button.style.scale = new StyleScale(new Scale(new Vector3(0.98f, 0.98f, 1f)));
+            });
+            button.RegisterCallback<PointerUpEvent>(_ =>
+            {
+                button.style.backgroundColor = new StyleColor(hoverBg);
+                button.style.scale = new StyleScale(new Scale(new Vector3(1.03f, 1.03f, 1f)));
+            });
+        }
+
         /// <summary>Styles a search/input field as inset phosphor glass.</summary>
         public static void ApplySearchField(TextField field)
         {

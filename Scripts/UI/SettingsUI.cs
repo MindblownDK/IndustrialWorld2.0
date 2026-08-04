@@ -30,6 +30,23 @@ namespace VoxelEngine.UI
     /// </summary>
     public static class SettingsUI
     {
+        /// <summary>
+        /// Turns a settings tab body into an inset phosphor-glass LCD screen (shared by
+        /// the main menu and the in-game pause menu so both settings surfaces match).
+        /// The surrounding panel already provides chassis, bezel, scanlines and boot.
+        /// </summary>
+        public static void ApplyLcdScreen(VisualElement body)
+        {
+            if (body == null) return;
+            body.style.backgroundColor = new StyleColor(LcdHudTheme.Glass);
+            body.style.paddingTop = 10;
+            body.style.paddingBottom = 10;
+            body.style.paddingLeft = 12;
+            body.style.paddingRight = 12;
+            UITheme.Radius(body, 2f);
+            UITheme.Border(body, 1f, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.9f));
+        }
+
         // ════════════════════════════════════════════════════════════
         //  TABS
         // ════════════════════════════════════════════════════════════

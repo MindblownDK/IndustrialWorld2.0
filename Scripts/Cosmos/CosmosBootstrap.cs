@@ -423,7 +423,7 @@ namespace VoxelEngine.Cosmos
 
             // Anchor the scene so the HOME body sits at bodyOrigin.
             double3 homeCosmic = homeInstance != null ? registry.CosmicPositionOf(homeInstance) : double3.zero;
-            double3 anchor = homeCosmic - (double3)bodyOrigin / 1000d;
+            double3 anchor = homeCosmic - VoxelEngine.Cosmos.CosmicRegistry.ToDouble3(bodyOrigin) / 1000d;
 
             _spaceOrigin.Initialize(viewer != null ? viewer : transform, anchor);
             _spaceOrigin.RegisterRoot(go.transform);
@@ -581,7 +581,7 @@ namespace VoxelEngine.Cosmos
             var registry = CosmicRegistry.Instance;
             if (registry == null || _spaceOrigin == null) return;
 
-            _spaceOrigin.TeleportCosmic((double3)savedCosmicKm);
+            _spaceOrigin.TeleportCosmic(VoxelEngine.Cosmos.CosmicRegistry.ToDouble3(savedCosmicKm));
 
             CelestialBody frame = null;
             if (!string.IsNullOrEmpty(frameBodyName))

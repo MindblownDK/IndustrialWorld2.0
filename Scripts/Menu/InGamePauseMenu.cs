@@ -206,6 +206,7 @@ namespace VoxelEngine.Menu
             var scroll = new ScrollView(ScrollViewMode.Vertical);
             VoxelEngine.UI.UITheme.StyleScroller(scroll);
             scroll.style.flexGrow = 1;
+            SettingsUI.ApplyLcdScreen(scroll);
             panel.Add(scroll);
 
             switch (_tab)
@@ -256,6 +257,9 @@ namespace VoxelEngine.Menu
             v.style.backgroundColor = new StyleColor(T.BgPanel);
             T.Radius(v, T.PanelRadius);
             T.Border(v, 1, T.BorderBright);
+            // LCD chassis treatment matching the main menu: bezel, corner brackets,
+            // animated scanlines, phosphor boot + wipe.
+            LcdHudTheme.UpgradePanel(v);
             return v;
         }
 
@@ -270,6 +274,7 @@ namespace VoxelEngine.Menu
             b.style.backgroundColor           = new StyleColor(new Color(bg.r, bg.g, bg.b, 0.85f));
             T.Radius(b, T.ButtonRadius);
             T.Border(b, 0, Color.clear);
+            LcdHudTheme.AddMenuInteractions(b, bg, new Color(bg.r, bg.g, bg.b, 0.85f));
             return b;
         }
 
@@ -288,6 +293,9 @@ namespace VoxelEngine.Menu
             T.Radius(b, T.ButtonRadius);
             T.Border(b, 0, Color.clear);
             b.style.marginRight = 5;
+            LcdHudTheme.AddMenuInteractions(b, T.AccentCyan,
+                active ? new Color(T.AccentCyan.r, T.AccentCyan.g, T.AccentCyan.b, 0.85f)
+                       : new Color(T.BgSlot.r, T.BgSlot.g, T.BgSlot.b, 0.85f));
             return b;
         }
 

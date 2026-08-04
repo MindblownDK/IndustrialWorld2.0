@@ -9,6 +9,7 @@
 // Phase 6+ when we have a floating-origin space renderer.
 using System.Collections.Generic;
 using Unity.Collections;
+using Unity.Mathematics;
 using UnityEngine;
 using VoxelEngine.Materials;
 

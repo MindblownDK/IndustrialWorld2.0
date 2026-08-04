@@ -80,6 +80,10 @@ namespace VoxelEngine.UI
             float glow = UIThemeManager.AccentGlow;
             Border(v, 1, new Color(accent.r, accent.g, accent.b, 0.35f + glow * 0.4f));
             LcdHudTheme.AddBezelAccents(v, new Color(accent.r, accent.g, accent.b, 0.42f));
+            // Every themed panel plays the shared LCD boot + phosphor wipe so the
+            // whole game — chests, containers, machines, menus — speaks one language.
+            LcdHudTheme.AnimateScreenBoot(v);
+            LcdHudTheme.AnimateBootSweep(v);
             v.AddToClassList("themed-panel");
             return v;
         }
@@ -96,7 +100,6 @@ namespace VoxelEngine.UI
             p.style.minWidth = 260;
             p.style.maxWidth = new StyleLength(new Length(46f, LengthUnit.Percent));
             p.style.overflow = Overflow.Hidden;
-            LcdHudTheme.AnimateScreenBoot(p);
             AddScanlines(p, 6, 25f, 45f);
             return p;
         }

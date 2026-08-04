@@ -238,7 +238,7 @@ namespace VoxelEngine.Cosmos
             IsReady = true;
         }
 
-        private static OrbitElements BuildPlanetElements(PlanetTemplate pt, double a, Random rng,
+        private static OrbitElements BuildPlanetElements(PlanetTemplate pt, double a, ref Random rng,
             int index, int count)
         {
             double eAuthored = pt.orbitEccentricity;
@@ -499,10 +499,10 @@ namespace VoxelEngine.Cosmos
 
         /// <summary>Legacy wrapper: direction toward the star from a km-space position.</summary>
         public Vector3 GetSunDirection(Vector3 worldPositionKm)
-            => (Vector3)(float3)GetSunDirectionKm((double3)worldPositionKm);
+            => (Vector3)(float3)GetSunDirectionKm(ToDouble3(worldPositionKm));
 
         /// <summary>Nearest body (by cosmic distance) to a km-space position.</summary>
-        public BodyInstance FindNearestBody(Vector3 worldPositionKm) => FindNearestBodyKm((double3)worldPositionKm);
+        public BodyInstance FindNearestBody(Vector3 worldPositionKm) => FindNearestBodyKm(ToDouble3(worldPositionKm));
 
         /// <summary>Nearest body (by cosmic distance) to a cosmic position.</summary>
         public BodyInstance FindNearestBodyKm(double3 posKm)
@@ -574,6 +574,9 @@ namespace VoxelEngine.Cosmos
         /// <summary>Uniform random double in [lo, hi). Version-safe wrapper around Random.NextDouble().</summary>
         private static double ND(ref Random rng, double lo, double hi)
             => lo + (hi - lo) * rng.NextDouble();
+
+        /// <summary>UnityEngine.Vector3 → Unity.Mathematics.double3 (via float3 — no direct cast exists).</summary>
+        public static double3 ToDouble3(Vector3 v) => new double3(v.x, v.y, v.z);
 
         private static double3 RandomUnitAxisD(ref Random rng)
         {

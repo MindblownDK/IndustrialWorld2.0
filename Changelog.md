@@ -1,9 +1,41 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.13.1-dev`
+**Current Version:** `7.13.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.13.2-dev] Unified LCD Theme — Menus, Settings, Storage & Ship Terminals + Compile Recovery
+
+**Type:** PATCH — compile recovery for the real-space delivery + full LCD theme pass across menus, settings, storage terminal, block UIs and ship terminal; no save/API break.
+
+#### 🖥️ Shared LCD Language (one consistent look everywhere)
+- **New `LcdHudTheme.UpgradePanel`:** LCD-ify any existing plain panel in one call — dark chassis, bezel border, corner brackets, animated scanlines, phosphor boot + wipe. Used by the menus.
+- **New `LcdHudTheme.AnimateBootSweep`:** one-shot CRT/LCD power-on wipe — a phosphor line sweeps down the screen and fades. Complements the existing boot animation with real motion.
+- **New `LcdHudTheme.AddMenuInteractions`:** menu-scale button micro-interactions (0.1 s colour transitions, 1.03× hover scale, 0.98× press scale) that preserve each button's own sizing.
+- **`UITheme.Panel()` boot + wipe:** every themed panel in the game (chests, containers, machines, browsers, right-side panels) now plays the shared LCD boot and phosphor wipe — one animation language everywhere. `MachinePanel()` keeps its denser scanlines without double-booting.
+
+#### 🎛️ Main Menu & Pause Menu
+- `MainMenuController.MakePanel` and `InGamePauseMenu.MakePanel` upgraded to full LCD chassis (bezel + corner brackets + animated scanlines + boot + wipe) — every page (Main, Saves, New World, Edit World, Settings, Pause) instantly matches the in-game terminals.
+- All menu buttons (`PrimaryBtn`, icon buttons, tab buttons in both menus) now have hover/press micro-interactions per the interaction guidelines.
+
+#### ⚙️ Settings (shared main-menu + pause surface)
+- New `SettingsUI.ApplyLcdScreen` turns both settings tab bodies into inset phosphor-glass LCD screens — the two surfaces stay in lock-step by construction.
+
+#### 💾 Storage Terminal & Block UIs
+- **Storage Terminal:** storage fill bar is now an animated 14-segment phosphor track; search field styled as inset phosphor glass; sort button becomes an LCD command button with micro-interactions.
+- **Ship Cargo Container (GridBlockUI):** weight fill upgraded to the same animated segment track.
+- **Ship Control terminal (GridMasterTerminal):** group page + all-storage page play the boot sweep on open.
+
+#### 🛠️ Compiler Fixes (real-space 7.13.0 follow-ups)
+- **`Random` ambiguity (CS0104):** `CosmicRegistry.cs` + `SpaceAsteroidField.cs` carry `using Random = Unity.Mathematics.Random;`.
+- **`Vector3 → double3` casts (CS0030):** Unity.Mathematics has no direct cast; added `CosmicRegistry.ToDouble3` and routed every cast site (`SpaceOrigin`, `GravityProvider`, `CosmosBootstrap`, `GridWarpDrive`, registry wrappers) through it.
+- **`ref` mismatch (CS1615):** `BuildPlanetElements` now takes `ref Random`.
+- **Missing `Unity.Mathematics` using (CS0246):** added to `AsteroidFieldRenderer.cs`.
+- **`PowerFormat` scope (CS0103):** fully qualified in `GridWarpDrive`.
+
+#### ✅ Static delivery checks
+- All 17 modified sources parse cleanly (tree-sitter grammar validation).
 
 ### [7.13.1-dev] REAL SPACE Compile Recovery — Ambiguous Random & Duplicate ResetVelocity
 

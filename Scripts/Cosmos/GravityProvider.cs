@@ -96,7 +96,7 @@ namespace VoxelEngine.Cosmos
             if (reg != null && reg.IsReady)
             {
                 var origin = SpaceOrigin.Instance;
-                double3 cosmic = origin != null ? origin.GetCosmicKm(worldPosition) : (double3)worldPosition;
+                double3 cosmic = origin != null ? origin.GetCosmicKm(worldPosition) : CosmicRegistry.ToDouble3(worldPosition);
                 double3 g = reg.GetGravityMetersS2(cosmic);
                 return (Vector3)(float3)g;
             }
