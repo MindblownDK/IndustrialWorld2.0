@@ -1,9 +1,25 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.12.0-dev`
+**Current Version:** `7.12.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.12.1-dev] Vast Infinite Space Flight, Sparse 3D Asteroid Belts & Camera-Relative Asteroid Removal
+
+**Type:** PATCH — interplanetary flight navigation without warp prompts, sparse 3D Asteroid Belt voxel spawning, removal of camera-relative fake asteroids, and material enum correction; no save/API break.
+
+#### 🚀 Vast Infinite Space & Ship-Driven Interplanetary Flight
+- **Ship-Driven Solar System Navigation:** Removed artificial `[F / WARP]` prompt overlays from `PlayerInteractionTool.cs`. Interplanetary travel is now driven exclusively by flying ships through vast, open space toward distant orbiting planets in the sky.
+- **Real Orbital Approach Transition:** When a player flies in high orbit (`> 1800m` altitude) aiming their ship toward a distant planet in `CosmicRegistry.Instance.Bodies`, `CosmosBootstrap.CheckInterplanetaryFlight` seamlessly transitions to arrive in high orbit around the destination planet. Warp drives remain a separate dedicated propulsion mechanism.
+
+#### ☄️ Sparse 3D Asteroid Belt Spawning (No Surface Shell or Fake Rocks)
+- **Sparse 3D Voxel Asteroids:** Reworked `SphereDensity.EvaluateVoxel` on Asteroid Belt worlds (`isAsteroidBelt = 1`) to remove radial shell masking (`beltMask`). Mineable procedural voxel asteroids spawn rarely (`rockNoise > 0.44f`) everywhere around the player in 3D zero-gravity space.
+- **Removed Camera-Following Fake Asteroids:** Removed `AddVisualFallbackAsteroids` from `AsteroidFieldRenderer.cs` and changed visual asteroid placement from camera-relative to fixed astronomical world-space coordinates (`deltaKm * 4f`). Asteroids in deep space no longer follow the player's camera.
+- **Fixed Asteroidal Ore Catalogue:** Replaced non-existent `MaterialId.Titanium` with `MaterialId.Cobalt` in `SphereDensity.cs` alongside Platinum, Gold, Iron, Silicon, and Ice.
+
+#### ✅ Static delivery checks
+- Verified C# syntax and brace balance across all modified space flight, asteroid rendering, and voxel density sources (`SphereDensity.cs`, `AsteroidFieldRenderer.cs`, `PlayerInteractionTool.cs`, `CosmosBootstrap.cs`).
 
 ### [7.12.0-dev] Hierarchical Sky Orbits, Sub-Moon Satellites & Zero-G Asteroid Belt Voxel Generation
 

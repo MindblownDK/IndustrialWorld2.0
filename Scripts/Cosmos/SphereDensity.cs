@@ -231,23 +231,21 @@ namespace VoxelEngine.Cosmos
             if (prm.isAsteroidBelt == 1)
             {
                 // Roadmap Era 4 Asteroid Belt: zero-gravity scattered procedural voxel asteroids
-                // in 3D space, rich in Platinum, Titanium, Gold, Iron, Silicon, and Ice.
+                // spawning rarely in 3D space everywhere around the player (no surface/shell).
                 float3 p = worldPos * 0.038f;
                 float n1 = noise.snoise(p + SeedOffset(prm.seed, 1));
                 float n2 = noise.snoise(p * 2.3f + SeedOffset(prm.seed, 2)) * 0.45f;
                 float n3 = noise.snoise(p * 5.1f + SeedOffset(prm.seed, 3)) * 0.20f;
                 float rockNoise = (n1 + n2 + n3);
 
-                float dist = math.length(worldPos);
-                float beltMask = math.smoothstep(120f, 280f, dist) * (1f - math.smoothstep(850f, 1300f, dist));
-                float densityAst = (rockNoise - 0.32f) * 40f * beltMask;
+                float densityAst = (rockNoise - 0.44f) * 40f;
 
                 if (densityAst > 0f)
                 {
                     byte material = (byte)MaterialId.Stone;
                     float oreChoice = noise.snoise(worldPos * 0.11f + SeedOffset(prm.seed, 4));
                     if (oreChoice > 0.52f) material = (byte)MaterialId.Platinum;
-                    else if (oreChoice > 0.30f) material = (byte)MaterialId.Titanium;
+                    else if (oreChoice > 0.30f) material = (byte)MaterialId.Cobalt;
                     else if (oreChoice > 0.10f) material = (byte)MaterialId.Gold;
                     else if (oreChoice > -0.15f) material = (byte)MaterialId.Iron;
                     else if (oreChoice > -0.40f) material = (byte)MaterialId.Silicon;

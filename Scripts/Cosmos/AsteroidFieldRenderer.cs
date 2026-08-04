@@ -84,8 +84,6 @@ namespace VoxelEngine.Cosmos
             // Prefer the registry's deterministic asteroid belt. Unlike the old tiny random
             // pebbles, these use the actual system layout and a readable apparent size.
             AddRegistryAsteroids(viewerPos, ref rng, matrices, colors);
-            if (matrices.Count == 0)
-                AddVisualFallbackAsteroids(viewerPos, ref rng, matrices, colors);
 
             if (_matrices.IsCreated) _matrices.Dispose();
             if (_colors.IsCreated) _colors.Dispose();
@@ -128,39 +126,8 @@ namespace VoxelEngine.Cosmos
                 float size = Mathf.Max(8f, asteroid.sizeKm * 350f);
                 Quaternion rotation = Quaternion.Euler(
                     rng.NextFloat(0f, 360f), rng.NextFloat(0f, 360f), rng.NextFloat(0f, 360f));
-                matrices.Add(Matrix4x4.TRS(viewerPos + direction * visualDistance, rotation, Vector3.one * size));
+                matrices.Add(Matrix4x4.TRS(deltaKm * 4f, rotation, Vector3.one * size));
                 Color color = MaterialRegistry.DefaultColor(asteroid.material);
-                colors.Add(new Vector4(color.r, color.g, color.b, 1f));
-            }
-        }
-
-        private void AddVisualFallbackAsteroids(Vector3 viewerPos, ref Unity.Mathematics.Random rng,
-            List<Matrix4x4> matrices, List<Vector4> colors)
-        {
-            var chosenColors = new List<Color>();
-            if (settings.possibleResources != null && settings.resourceCount > 0)
-            {
-                var pool = new List<MaterialId>(settings.possibleResources);
-                for (int i = 0; i < settings.resourceCount && pool.Count > 0; i++)
-                {
-                    int index = rng.NextInt(0, pool.Count);
-                    chosenColors.Add(MaterialRegistry.DefaultColor(pool[index]));
-                    pool.RemoveAt(index);
-                }
-            }
-            if (chosenColors.Count == 0) chosenColors.Add(MaterialRegistry.DefaultColor(MaterialId.Stone));
-
-            int count = Mathf.Clamp(Mathf.RoundToInt(maxAsteroids * settings.density), 0, maxAsteroids);
-            for (int i = 0; i < count; i++)
-            {
-                Vector3 direction = new Vector3(
-                    rng.NextFloat(-1f, 1f), rng.NextFloat(-0.45f, 1f), rng.NextFloat(-1f, 1f)).normalized;
-                float distance = rng.NextFloat(visualDistanceRange.x, visualDistanceRange.y);
-                float size = Mathf.Max(8f, rng.NextFloat(settings.sizeRangeKm.x, settings.sizeRangeKm.y) * 350f);
-                Quaternion rotation = Quaternion.Euler(
-                    rng.NextFloat(0f, 360f), rng.NextFloat(0f, 360f), rng.NextFloat(0f, 360f));
-                matrices.Add(Matrix4x4.TRS(viewerPos + direction * distance, rotation, Vector3.one * size));
-                Color color = chosenColors[rng.NextInt(0, chosenColors.Count)];
                 colors.Add(new Vector4(color.r, color.g, color.b, 1f));
             }
         }

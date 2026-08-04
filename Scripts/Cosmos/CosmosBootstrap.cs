@@ -148,6 +148,15 @@ namespace VoxelEngine.Cosmos
             world.biomeRegistry = biomeRegistry;
             world.worldName = session != null ? session.worldName : "SphereTest";
 
+            bool isBelt = body.settings != null &&
+                          (body.settings.bodyName.IndexOf("Asteroid", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                           body.settings.bodyName.IndexOf("Belt", System.StringComparison.OrdinalIgnoreCase) >= 0);
+            if (isBelt)
+            {
+                world.enableScatter = false;
+                placeViewerOnPlanetSurface = false;
+            }
+
             // ── Far LOD (space view), as a CHILD of the body ──
             var lodGO = new GameObject("LOD");
             lodGO.transform.SetParent(_bodyGO.transform, false);

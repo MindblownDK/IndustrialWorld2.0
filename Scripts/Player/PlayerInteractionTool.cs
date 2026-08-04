@@ -361,35 +361,6 @@ namespace VoxelEngine.Player
 
             if (!hasHit)
             {
-                var activeBody = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
-                if (activeBody != null && activeBody.settings != null)
-                {
-                    float alt = (transform.position - activeBody.transform.position).magnitude - activeBody.settings.radiusKm * 1000f;
-                    if (alt > 1200f && VoxelEngine.Cosmos.CosmicRegistry.Instance != null && VoxelEngine.Cosmos.CosmicRegistry.Instance.IsReady)
-                    {
-                        var reg = VoxelEngine.Cosmos.CosmicRegistry.Instance;
-                        Vector3 viewerKm = Vector3.zero;
-                        for (int i = 0; i < reg.Bodies.Count; i++)
-                            if (reg.Bodies[i].settings == activeBody.settings) { viewerKm = reg.Bodies[i].positionKm; break; }
-                        for (int i = 0; i < reg.Bodies.Count; i++)
-                        {
-                            var target = reg.Bodies[i];
-                            if (target == null || target.settings == activeBody.settings || target.planetTemplate == null) continue;
-                            Vector3 dirToTarget = (target.positionKm - viewerKm).normalized;
-                            if (Vector3.Dot(ray.direction, dirToTarget) > 0.96f)
-                            {
-                                VoxelEngine.UI.InteractionHud.Show("F / WARP", $"Warp to {target.settings.bodyName}");
-                                if (GameSettings.WasPressed(InputAction.Interact) && VoxelEngine.Cosmos.CosmosBootstrap.Instance != null)
-                                {
-                                    VoxelEngine.Cosmos.CosmosBootstrap.Instance.TransitionToPlanet(target.planetTemplate);
-                                    return;
-                                }
-                                break;
-                            }
-                        }
-                    }
-                }
-
                 // Mining tools still play their swing when aimed at the sky (nothing to hit).
                 if (mineHeld && Time.time >= _nextHit
                     && !heldStack.IsEmpty && heldStack.item is ToolItem mt
