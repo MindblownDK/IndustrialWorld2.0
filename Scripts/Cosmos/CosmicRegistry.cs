@@ -20,6 +20,7 @@ using System.Collections.Generic;
 using Unity.Mathematics;
 using UnityEngine;
 using VoxelEngine.Materials;
+using Random = Unity.Mathematics.Random;
 
 namespace VoxelEngine.Cosmos
 {

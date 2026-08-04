@@ -1,9 +1,20 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.13.0-dev`
+**Current Version:** `7.13.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.13.1-dev] REAL SPACE Compile Recovery — Ambiguous Random & Duplicate ResetVelocity
+
+**Type:** PATCH — compile recovery for the 7.13.0-dev real-space delivery; no behaviour change, no save/API break.
+
+#### 🛠️ Compiler Fixes
+- **Ambiguous `Random` reference:** `CosmicRegistry.cs` and `SpaceAsteroidField.cs` now carry an explicit `using Random = Unity.Mathematics.Random;` alias, resolving the CS0104 conflict between `Unity.Mathematics.Random` and `UnityEngine.Random` (the files import both namespaces for double3/float3 math and UnityEngine types).
+- **Duplicate `ResetVelocity`:** removed the second `ResetVelocity()` from `PlayerController.cs` — the class already defined the identical public method (used by the Warp Drive arrival). The Warp Drive call sites are unchanged.
+
+#### ✅ Static delivery checks
+- Verified C# grammar (tree-sitter parse) across all 26 modified/new sources.
 
 ### [7.13.0-dev] REAL SPACE — Infinite Keplerian Universe, Floating Origin, Deep-Space Asteroids & The Only Warp (Warp Drive Block)
 

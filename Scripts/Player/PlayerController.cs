@@ -756,12 +756,6 @@ namespace VoxelEngine.Player
             _velocity += deltaMps;
         }
 
-        /// <summary>Bring the controller to rest (warp arrival, respawn, …).</summary>
-        public void ResetVelocity()
-        {
-            _velocity = Vector3.zero;
-        }
-
         /// <summary>The vertical (along-up) component of velocity, as a signed scalar.</summary>
         private float VerticalSpeed(Vector3 up) => Vector3.Dot(_velocity, up);
 
