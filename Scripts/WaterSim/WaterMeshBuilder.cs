@@ -361,7 +361,6 @@ namespace VoxelEngine.WaterSim
                     if (TryGetTerrainH(c, u, v + 1, h, dom, S, out tH)) { bordersTerrain = true; terrainH = Mathf.Min(terrainH, tH); }
 
                     float finalH = baseH;
-                    if (bordersTerrain) finalH = Mathf.Min(baseH, terrainH + 0.12f);
 
                     cells[u, v] = new SurfaceCell
                     {
@@ -379,8 +378,6 @@ namespace VoxelEngine.WaterSim
             }
 
             if (!any) { ClearGO(c); return; }
-
-            SmoothHeightField(cells, S);
 
             var verts     = new List<Vector3>(S * S * 6);
             var norms     = new List<Vector3>(S * S * 6);

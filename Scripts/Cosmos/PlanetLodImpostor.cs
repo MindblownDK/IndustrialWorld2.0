@@ -254,9 +254,14 @@ namespace VoxelEngine.Cosmos
         private void UpdateFade(CelestialBody body)
         {
             if (meshRenderer == null || _lodMaterial == null) return;
-            // This sampled shell stays enabled at every altitude, but it is inset beneath
-            // real voxel terrain. Detailed chunks naturally hide it nearby; outside the stream
-            // bubble it fills the entire planet surface with the matching procedural LOD.
+            bool isBelt = body != null && body.settings != null &&
+                          (body.settings.bodyName.IndexOf("Asteroid", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                           body.settings.bodyName.IndexOf("Belt", System.StringComparison.OrdinalIgnoreCase) >= 0);
+            if (isBelt)
+            {
+                meshRenderer.enabled = false;
+                return;
+            }
             float a = 1f;
             if (_lodMaterial.HasProperty("_Tint"))
             {

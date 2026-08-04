@@ -158,6 +158,27 @@ namespace VoxelEngine.Cosmos
                     };
                     moon.positionKm = OrbitPosition(moon, planet.positionKm);
                     _bodies.Add(moon);
+
+                    // ── Orbiting moons around the moon (sub-satellites / moonlets) ──
+                    int subMoonCount = (m == 0 || rng.NextFloat() > 0.45f) ? 1 : 0;
+                    for (int sm = 0; sm < subMoonCount; sm++)
+                    {
+                        float smRadius = Mathf.Max(12f, rng.NextFloat(15f, 32f));
+                        var subMoon = new BodyInstance
+                        {
+                            isPlanet        = false,
+                            settings        = mt.body,
+                            moonTemplate    = mt,
+                            parentBody      = moon,
+                            orbitRadiusKm   = smRadius,
+                            orbitAngle      = rng.NextFloat(0f, Mathf.PI * 2f),
+                            orbitAngularSpd = Mathf.Max(0.25f, mt.orbitSpeed) * BaseAngularRate * 3.5f / Mathf.Sqrt(Mathf.Max(1f, smRadius)),
+                            inclination     = rng.NextFloat(-0.35f, 0.35f),
+                            phaseAxis       = RandomUnitAxis(ref rng),
+                        };
+                        subMoon.positionKm = OrbitPosition(subMoon, moon.positionKm);
+                        _bodies.Add(subMoon);
+                    }
                 }
             }
 

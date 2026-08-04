@@ -30,6 +30,9 @@ namespace VoxelEngine.Cosmos
         /// <summary>Mountain amplitude multiplier (scales every biome's heightAmplitude).</summary>
         public float mountainScale;
 
+        /// <summary>1 if Asteroid Belt (zero gravity, scattered procedural rocks in 3D space).</summary>
+        public byte isAsteroidBelt;
+
         /// <summary>Convenience: mean surface radius (no terrain noise).</summary>
         public float MeanSurfaceRadius => radiusWorld + baseHeight;
     }

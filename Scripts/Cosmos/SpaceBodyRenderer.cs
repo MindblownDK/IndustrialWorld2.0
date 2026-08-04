@@ -79,15 +79,15 @@ namespace VoxelEngine.Cosmos
 
             // Render the sun(s).
             EnsureCount(_sunVisuals, registry.Sun != null ? 1 : 0, "SpaceSun");
+            Vector3 sunPos = GetViewerPosition() + Vector3.up * visualRange * 1.5f;
             if (registry.Sun != null)
             {
                 var sun = registry.Sun;
                 float intensity = sun.settings != null ? sun.settings.intensity : 1f;
                 Color glow = sun.settings != null ? sun.settings.glowColor : new Color(1f, 0.9f, 0.7f);
-                // Position the sun FAR from the viewer in the ACTUAL cosmic direction.
                 Vector3 sunDirKm = sun.positionKm - viewerKm;
                 Vector3 sunDir = sunDirKm.sqrMagnitude < 1f ? Vector3.up : sunDirKm.normalized;
-                Vector3 sunPos = GetViewerPosition() + sunDir * visualRange * 1.5f;
+                sunPos = GetViewerPosition() + sunDir * visualRange * 1.5f;
                 PositionBody(_sunVisuals[0], sunPos, sunVisualScale * intensity, glow, emissive: true);
             }
 
@@ -111,44 +111,45 @@ namespace VoxelEngine.Cosmos
                 if (_bodyVisuals[i].go != null && !_bodyVisuals[i].go.activeSelf)
                     _bodyVisuals[i].go.SetActive(true);
 
-                // Direction from viewer to this body (cosmic space).
-                Vector3 dir = b.positionKm - viewerKm;
-                float distKm = dir.magnitude;
-                if (distKm < 1f)
-                {
-                    // The registry is body-centric, so a player above the active home body
-                    // has the same cosmic coordinates as that body. Keep its visual locked
-                    // toward the real planet core instead of picking a new random sky point
-                    // every frame during ascent/orbit.
-                    Vector3 towardHomeCore = activeBody != null
-                        ? activeBody.transform.position - viewerPosition
-                        : Vector3.down;
-                    dir = towardHomeCore.sqrMagnitude > 0.0001f
-                        ? towardHomeCore.normalized
-                        : Vector3.down;
-                }
-                else dir /= distKm;
-
-                // Compress cosmic distance to visual range.
-                // Use a logarithmic compression so very distant planets are still visible but smaller.
-                float compressedDist = Mathf.Lerp(visualRange * 0.3f, visualRange, Mathf.Clamp01(distKm / 5000f));
-
-                // Visual position is camera-relative so celestial bodies remain in the sky
-                // during high-altitude travel instead of being left behind at the bootstrap origin.
-                Vector3 visualPos = viewerPosition + dir * compressedDist;
+                // Hierarchical orbital positioning:
+                // 1) Planets visibly orbit around the Sun in the sky.
+                // 2) Moons visibly orbit around their parent planet in the sky.
+                // 3) Sub-moons (moons around moons) visibly orbit around their parent moon in the sky.
+                Vector3 visualPos = GetVisualPositionFor(b, registry, sunPos, viewerPosition, activeBody);
 
                 // Visual size: based on body radius (km), scaled down.
                 float radiusKm = b.settings.radiusKm;
                 float visualSize = (b.isPlanet ? planetVisualScale : moonVisualScale) *
                                    Mathf.Clamp01(radiusKm / 8f);
-                // Distant bodies appear smaller (perspective).
+                if (!b.isPlanet && b.parentBody != null && !b.parentBody.isPlanet)
+                    visualSize *= 0.6f; // Sub-moonlets appear slightly smaller
+                float distKm = (b.positionKm - viewerKm).magnitude;
                 visualSize *= Mathf.Lerp(1f, 0.4f, Mathf.Clamp01(distKm / 8000f));
 
-                // Colour: use the body's characteristics.
                 Color color = GetBodyColor(b);
-
                 PositionBody(_bodyVisuals[i], visualPos, visualSize, color, emissive: false);
             }
+        }
+
+        private Vector3 GetVisualPositionFor(BodyInstance b, CosmicRegistry registry, Vector3 sunPos, Vector3 viewerPosition, CelestialBody activeBody)
+        {
+            if (b == null) return viewerPosition;
+            if (activeBody != null && b.settings == activeBody.settings)
+            {
+                return activeBody.transform.position;
+            }
+
+            if (b.isPlanet || b.parentBody == null)
+            {
+                Vector3 fromSunKm = b.positionKm - (registry.Sun != null ? registry.Sun.positionKm : Vector3.zero);
+                float scaleKmToSky = (visualRange * 0.45f) / 4500f;
+                return sunPos + fromSunKm * scaleKmToSky;
+            }
+
+            Vector3 parentPos = GetVisualPositionFor(b.parentBody, registry, sunPos, viewerPosition, activeBody);
+            Vector3 fromParentKm = b.positionKm - b.parentBody.positionKm;
+            float scale = b.parentBody.isPlanet ? 18f : 26f;
+            return parentPos + fromParentKm * scale;
         }
 
         private static Color GetBodyColor(BodyInstance b)

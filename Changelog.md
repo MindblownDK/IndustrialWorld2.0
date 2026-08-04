@@ -1,9 +1,43 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.11.15-dev`
+**Current Version:** `7.12.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.12.0-dev] Hierarchical Sky Orbits, Sub-Moon Satellites & Zero-G Asteroid Belt Voxel Generation
+
+**Type:** MINOR — hierarchical multi-body sky orbits (planets around Sun, moons around planets, sub-moons around moons) and roadmap Era 4 3D Asteroid Belt procedural zero-gravity voxel generation; save-compatible.
+
+#### 🌌 Real Hierarchical Sky Orbits (Planets Around Sun, Moons Around Planets & Moons Around Moons)
+- **Hierarchical Sky Orbit Positioning:** Upgraded `SpaceBodyRenderer.cs` with recursive orbital placement (`GetVisualPositionFor`) so celestial bodies in the sky reflect their true relative astronomical orbits instead of independent camera-centric projections.
+- **Planets Orbiting the Sun:** When looking at the sky, every planet visually revolves in an orbit around the Sun (`sunPos + fromSunKm * scaleKmToSky`).
+- **Moons Orbiting Planets:** Moons dynamically revolve around their parent planet's visual position in the sky (`parentPos + fromParentKm * 18f`), clearly showing real orbital mechanics.
+- **Sub-Satellites (Moons Around Moons):** Upgraded `CosmicRegistry.cs` to generate non-intersecting sub-moons (`moonlet.parentBody = moon`) orbiting larger moons. In the sky, sub-moons visibly circle their parent moon (`parentPos + fromParentKm * 26f`), creating a living 3-tier orbital hierarchy.
+
+#### ☄️ Roadmap Era 4 Asteroid Belt Procedural Zero-G Voxel Generation
+- **True 3D Asteroid Belt Worlds:** When generating or warping to an Asteroid Belt world (`isAsteroidBelt = 1`), `SphereDensity.cs` replaces the spherical planet crust with a vast 3D procedural belt (`120m..1300m` from origin) of floating voxel asteroids in zero gravity (`SurfaceGravity = 0f`).
+- **Roadmap-Accurate Ores:** Procedural asteroids are shaped via 3D Simplex noise (`rockNoise`) and packed with rich veins of **Platinum**, **Titanium**, **Gold**, **Iron**, **Silicon**, and **Ice** per the Roadmap Era 4 specification.
+- **Dedicated Zero-G LOD Masking:** Automatically hides `PlanetLodImpostor` and `PlanetOceanLodRenderer` on Asteroid Belt worlds so players fly through deep space surrounded by instanced background rocks and mineable floating voxel asteroids without a spherical proxy.
+
+#### ✅ Static delivery checks
+- Verified C# syntax and brace balance across all modified cosmos, orbital, and density sources (`CosmicRegistry.cs`, `SpaceBodyRenderer.cs`, `SphereGenParams.cs`, `CelestialBody.cs`, `SphereDensity.cs`, `PlanetLodImpostor.cs`, `PlanetOceanLodRenderer.cs`).
+
+### [7.11.16-dev] Seamless Water & Ocean Continuity, Top-Left Inspection HUD Relocation & Voxel Name Resolution
+
+**Type:** PATCH — water surface continuity, coastline height alignment, inspection HUD layout relocation, and target name display resolution; no save/API break.
+
+#### 🌊 Seamless Water Surface & Ocean Continuity
+- **Eliminated Coastal Water Pull-Down:** Removed `bordersTerrain` height depression (`finalH = Mathf.Min(baseH, terrainH + 0.12f)`) in `WaterMeshBuilder.cs`. Water along coastlines and islands no longer slopes downward into terrain holes, remaining level with open water.
+- **Eliminated Inter-Chunk Water Step Seams:** Removed `SmoothHeightField(cells, S)` in `WaterMeshBuilder.cs`. Interior water cells and border water cells now stay at the exact same height across chunk boundaries, eliminating vertical step gaps between adjacent water chunks.
+- **Full Coastline Ocean LOD Triangles:** Upgraded `PlanetOceanLodRenderer.cs` to keep coastal triangles (`!ocean[a] && !ocean[b] && !ocean[c]`) and set `_CutoutRadius` to `0f`, preventing gaps between the ocean LOD and coastal land.
+
+#### 📺 Top-Left LCD World Inspection HUD & Voxel Name Resolution
+- **Top-Left Relocation:** Relocated `WorldInspectionHud` to the top-left (`left = 16`, `top = 18`, removed `right`) per Thomas's feedback, styled as a Tektronix phosphor LCD terminal.
+- **Guaranteed Target Name Display:** Upgraded `TryDescribeVoxel` and `TryResolve` so aiming at any block, terrain voxel (Dirt, Grass, Sand, Stone, Clay), tree, or machine always resolves and displays the target's name, hardness, and mining tier without blank titles.
+
+#### ✅ Static delivery checks
+- Verified C# syntax and brace balance across all modified water meshing, ocean rendering, and UI inspection sources (`WaterMeshBuilder.cs`, `PlanetOceanLodRenderer.cs`, `WorldInspectionHud.cs`).
 
 ### [7.11.15-dev] Interplanetary Flight, Correct Planet Biomes, Full-Sphere LODs, Oil Seep Reservoirs & LCD Inspection HUD
 

@@ -133,7 +133,7 @@ namespace VoxelEngine.Cosmos
             {
                 Vector3 dir = directions[i].normalized;
                 SphereDensity.EvaluateColumn(resolved.genParams, _biomes, (float3)dir, out float surfaceRadius, out _);
-                ocean[i] = surfaceRadius < seaRadius - 1f;
+                ocean[i] = surfaceRadius < seaRadius + 0.5f;
                 vertices[i] = dir * Mathf.Max(1f, seaRadius - surfaceInset);
                 normals[i] = dir;
                 float depth = Mathf.Clamp01((seaRadius - surfaceRadius) / 42f);
@@ -146,7 +146,7 @@ namespace VoxelEngine.Cosmos
                 int a = allTriangles[i];
                 int b = allTriangles[i + 1];
                 int c = allTriangles[i + 2];
-                if (!ocean[a] || !ocean[b] || !ocean[c]) continue;
+                if (!ocean[a] && !ocean[b] && !ocean[c]) continue;
                 oceanTriangles.Add(a); oceanTriangles.Add(b); oceanTriangles.Add(c);
             }
 
@@ -166,6 +166,15 @@ namespace VoxelEngine.Cosmos
         private void UpdateMaterial(CelestialBody resolved)
         {
             if (_material == null || resolved == null) return;
+            bool isBelt = resolved.settings != null &&
+                          (resolved.settings.bodyName.IndexOf("Asteroid", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                           resolved.settings.bodyName.IndexOf("Belt", System.StringComparison.OrdinalIgnoreCase) >= 0);
+            if (isBelt)
+            {
+                if (_renderer != null) _renderer.enabled = false;
+                return;
+            }
+            if (_renderer != null) _renderer.enabled = true;
             Vector3 center = resolved.transform.position;
             if (_material.HasProperty("_BodyCenter")) _material.SetVector("_BodyCenter", new Vector4(center.x, center.y, center.z, 1f));
             if (_material.HasProperty("_ViewerPosition"))
@@ -177,7 +186,7 @@ namespace VoxelEngine.Cosmos
             {
                 // The ocean LOD sits slightly below actual streamed water and can safely fill
                 // every chunk seam. A zero radius means no local cutout, eliminating gaps.
-                _material.SetFloat("_CutoutRadius", Mathf.Max(0f, localCutoutPadding));
+                _material.SetFloat("_CutoutRadius", 0f);
             }
             if (_material.HasProperty("_WaveTime")) _material.SetFloat("_WaveTime", Time.time);
         }

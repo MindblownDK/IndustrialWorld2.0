@@ -72,9 +72,13 @@ namespace VoxelEngine.Cosmos
             // scale, with the authored factor preserving designer control across planet sizes.
             genParams.continentScaleDir   = Mathf.Clamp(2.4f * settings.continentScaleFactor, 0.6f, 7f);
             genParams.mountainScale       = settings.mountainScale;
+            bool isBelt = settings.bodyName != null &&
+                          (settings.bodyName.IndexOf("Asteroid", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                           settings.bodyName.IndexOf("Belt", System.StringComparison.OrdinalIgnoreCase) >= 0);
+            genParams.isAsteroidBelt      = (byte)(isBelt ? 1 : 0);
 
-            // Earth-like gravity baseline (9.81) scaled by the body's gravity multiplier.
-            SurfaceGravity = 9.81f * Mathf.Clamp(settings.gravity, 0f, 5f);
+            // Earth-like gravity baseline (9.81) scaled by the body's gravity multiplier (0 for Asteroid Belts).
+            SurfaceGravity = isBelt ? 0f : 9.81f * Mathf.Clamp(settings.gravity, 0f, 5f);
         }
 
         // ── Spatial queries (body-relative) ───────────────────────

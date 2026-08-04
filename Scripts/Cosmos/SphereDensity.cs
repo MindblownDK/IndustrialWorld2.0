@@ -228,6 +228,41 @@ namespace VoxelEngine.Cosmos
             in NativeArray<OreLayer> ores,
             in float3 worldPos)
         {
+            if (prm.isAsteroidBelt == 1)
+            {
+                // Roadmap Era 4 Asteroid Belt: zero-gravity scattered procedural voxel asteroids
+                // in 3D space, rich in Platinum, Titanium, Gold, Iron, Silicon, and Ice.
+                float3 p = worldPos * 0.038f;
+                float n1 = noise.snoise(p + SeedOffset(prm.seed, 1));
+                float n2 = noise.snoise(p * 2.3f + SeedOffset(prm.seed, 2)) * 0.45f;
+                float n3 = noise.snoise(p * 5.1f + SeedOffset(prm.seed, 3)) * 0.20f;
+                float rockNoise = (n1 + n2 + n3);
+
+                float dist = math.length(worldPos);
+                float beltMask = math.smoothstep(120f, 280f, dist) * (1f - math.smoothstep(850f, 1300f, dist));
+                float densityAst = (rockNoise - 0.32f) * 40f * beltMask;
+
+                if (densityAst > 0f)
+                {
+                    byte material = (byte)MaterialId.Stone;
+                    float oreChoice = noise.snoise(worldPos * 0.11f + SeedOffset(prm.seed, 4));
+                    if (oreChoice > 0.52f) material = (byte)MaterialId.Platinum;
+                    else if (oreChoice > 0.30f) material = (byte)MaterialId.Titanium;
+                    else if (oreChoice > 0.10f) material = (byte)MaterialId.Gold;
+                    else if (oreChoice > -0.15f) material = (byte)MaterialId.Iron;
+                    else if (oreChoice > -0.40f) material = (byte)MaterialId.Silicon;
+                    else if (oreChoice > -0.65f) material = (byte)MaterialId.Ice;
+
+                    int scaledD = (int)math.round(densityAst * 32f);
+                    return new Voxel((sbyte)math.clamp(scaledD, 1, 127), material, 0);
+                }
+                else
+                {
+                    int scaledD = (int)math.round(densityAst * 32f);
+                    return new Voxel((sbyte)math.clamp(scaledD, -127, -1), (byte)MaterialId.Air, 0);
+                }
+            }
+
             float radius = math.length(worldPos);
             float3 dir   = math.normalizesafe(worldPos, new float3(1f, 0f, 0f));
 
