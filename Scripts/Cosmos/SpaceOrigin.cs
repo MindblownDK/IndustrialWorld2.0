@@ -248,10 +248,28 @@ namespace VoxelEngine.Cosmos
             // 1. Frame selection by gravitational dominance.
             ReEvaluateFrame(force: false);
 
-            // 2. Anchor follows the frame body's orbital motion (so the frame body is
-            //    static in the scene while everything else moves along real orbits).
-            if (math.lengthsq(FrameVelocityKmS) > 1e-18)
+            // 2. Anchor tracks the frame body's TRUE propagated position so the body is
+            //    PERFECTLY stationary in the scene. The old extrapolation (anchor +=
+            //    velocity·dt) assumed straight-line motion, but a real orbit curves — the
+            //    planet's true position falls behind the extrapolation and the surface
+            //    slid sideways under the player at ever-increasing speed ("infinitely
+            //    pulled in X/Z"). Recomputing the anchor from the body's actual position
+            //    every tick makes the ground perfectly still.
+            if (FrameBody != null)
+            {
+                var frameInst = FindInstanceOf(FrameBody);
+                if (frameInst != null)
+                {
+                    double3 bodyCosmic = reg.CosmicPositionOf(frameInst);
+                    AnchorKm = bodyCosmic - CosmicRegistry.ToDouble3(FrameBody.transform.position) / 1000d;
+                }
+            }
+            else if (math.lengthsq(FrameVelocityKmS) > 1e-18)
+            {
+                // Deep space: the star is the inertial anchor; only the viewer rebase
+                // below ever moves it.
                 AnchorKm += FrameVelocityKmS * Time.fixedDeltaTime;
+            }
 
             // 3. Place every body at its true scene position.
             PlaceBodies();

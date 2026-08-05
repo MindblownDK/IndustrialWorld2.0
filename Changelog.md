@@ -1,9 +1,26 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.13.8-dev`
+**Current Version:** `7.13.9-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.13.9-dev] Phantom Horizontal Pull Fixed — Curved-Orbit Anchor & Frame-Relative Gravity
+
+**Type:** PATCH — removes the constant sideways (X/Z) force the player felt by fixing two co-moving-frame physics errors; no save/API break.
+
+#### 🧲 Root cause of the infinite X/Z pull
+The scene is the planet's co-moving frame, but two effects leaked the planet's orbital motion into the player's frame:
+1. **Ground slide:** the floating-origin anchor followed the planet by straight-line velocity extrapolation (`anchor += v·dt`), while the planet's REAL orbit curves (Kepler). The planet's true position fell behind the extrapolation, so the surface slid sideways under the player at ever-increasing speed — reading as a constant pull in X/Z that never stops.
+2. **Phantom solar pull:** `GravityProvider` applied the RAW cosmic N-body gravity (star + every planet + moons). In a free-falling (co-moving) reference frame the frame body's own orbital acceleration must be cancelled — otherwise the player feels the sun's full pull as a constant sideways force, even standing on the planet.
+
+#### 🛠️ Fixes
+- **`SpaceOrigin` anchor now tracks the frame body's TRUE propagated position every fixed tick** (`anchor = bodyCosmic − bodyScenePos`). The planet is perfectly stationary in the scene — zero ground slide, zero phantom drift. Deep space keeps the inertial star frame.
+- **New `CosmicRegistry.GetFrameRelativeGravityMetersS2`:** scene-frame gravity = cosmic pull at the player MINUS the pull the frame body itself experiences (its own orbital acceleration). Standing on a planet now feels exactly the local pull (~9.81 m/s²) with only a negligible tidal term; flying between bodies feels the correct residual gravity.
+- `GravityProvider.GetGravity` (consumed by the player, grids, dampeners and HUD) now uses the frame-relative value whenever a scene frame exists; deep space stays plain cosmic gravity (~0).
+
+#### ✅ Static delivery checks
+- All 3 modified sources parse cleanly (tree-sitter grammar validation).
 
 ### [7.13.8-dev] Respawn Sideways-Launch Fix & Space Bed/Cryobed Spawns
 

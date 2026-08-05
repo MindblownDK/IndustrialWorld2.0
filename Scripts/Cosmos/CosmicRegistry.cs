@@ -405,6 +405,28 @@ namespace VoxelEngine.Cosmos
         }
 
         /// <summary>
+        /// N-body gravity in the SCENE frame: the cosmic pull at a position MINUS the
+        /// pull the frame body itself experiences (its orbital acceleration around the
+        /// star). Without this subtraction the player on a planet's surface feels the
+        /// sun's full pull as a constant sideways force — a free-falling reference
+        /// frame must cancel the frame body's own acceleration, leaving only the local
+        /// body's pull plus a negligible tidal term.
+        /// </summary>
+        public double3 GetFrameRelativeGravityMetersS2(double3 posKm, CelestialBody frameBody)
+        {
+            double3 g = GetGravityMetersS2(posKm);
+            if (frameBody == null) return g;
+            foreach (var kv in SceneBodies)
+            {
+                if (kv.Value != frameBody) continue;
+                double3 center = CosmicPositionOf(kv.Key);
+                g -= GetGravityMetersS2(center);
+                break;
+            }
+            return g;
+        }
+
+        /// <summary>
         /// The body whose gravity dominates at a cosmic position — or null when the star
         /// dominates (deep space). This is the scene reference frame selection rule.
         /// </summary>

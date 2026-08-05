@@ -97,7 +97,12 @@ namespace VoxelEngine.Cosmos
             {
                 var origin = SpaceOrigin.Instance;
                 double3 cosmic = origin != null ? origin.GetCosmicKm(worldPosition) : CosmicRegistry.ToDouble3(worldPosition);
-                double3 g = reg.GetGravityMetersS2(cosmic);
+                // Scene-frame gravity: subtract the frame body's own orbital acceleration
+                // so the player feels ONLY the local pull — no phantom sideways force
+                // toward the star or other planets (free-fall frame correction).
+                double3 g = origin != null
+                    ? reg.GetFrameRelativeGravityMetersS2(cosmic, origin.FrameBody)
+                    : reg.GetGravityMetersS2(cosmic);
                 return (Vector3)(float3)g;
             }
 
