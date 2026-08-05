@@ -74,12 +74,14 @@ namespace VoxelEngine.Cosmos
         private SphereCollider _safetySphere;
         private Mesh _safetyMesh;
 
-        [Tooltip("Altitude above the surface where the safety mesh collider engages (metres). " +
-                 "Inside this shell the streamed voxel colliders own collision.")]
-        public float safetyBubbleMeters = 220f;
+        [Tooltip("Altitude above the surface where the safety mesh collider stays engaged (metres). " +
+                 "Below it, the shell steps aside ONLY when real streamed terrain colliders exist " +
+                 "under the player — so there is never a fall-through gap for fast players.")]
+        public float safetyBubbleMeters = 45f;
 
-        [Tooltip("Safety shell inflation above the sampled surface (metres).")]
-        public float safetyInflationMeters = 8f;
+        [Tooltip("Safety shell offset above the VISIBLE sampled surface (metres). The collider " +
+                 "hugs the real terrain shape so what you hit is what you see.")]
+        public float safetyInflationMeters = 0.3f;
 
         // ── Progressive (batched) high-detail build state ─────────────
         // Building a 40k–160k-vertex sampled surface in ONE frame would hitch the game.
@@ -323,9 +325,10 @@ namespace VoxelEngine.Cosmos
         }
 
         /// <summary>
-        /// (Re)build the safety collision shell: the sampled surface inflated slightly
-        /// outward, capped at 10242 verts so cooking stays cheap. Only the active body's
-        /// collider is ever enabled, so other planets cost nothing.
+        /// (Re)build the safety collision shell from the REAL sampled terrain surface
+        /// (not a flat sphere): the same density field the visible LOD uses, pushed a
+        /// hair outward so what you collide with is exactly what you see. Capped at 10242
+        /// verts so cooking stays cheap. Only the active body's collider is ever enabled.
         /// </summary>
         private void RebuildSafetyCollider(CelestialBody body)
         {
@@ -333,13 +336,14 @@ namespace VoxelEngine.Cosmos
             int budget = Mathf.Min(10242, Mathf.Max(642, _lastEffectiveResolution));
             var (verts, tris, _) = BuildIcosphere(body, budget);
 
-            // Inflate outward by the safety margin.
-            float inflate = Mathf.Max(1f, safetyInflationMeters);
+            // BuildIcosphere returns verts AT the visible LOD surface (surfaceR − lodInset).
+            // Nudge them a hair outward so the collider sits exactly on the surface you SEE —
+            // a player lands on the visible planet, never floating above an invisible shell.
+            float push = Mathf.Max(0.2f, safetyInflationMeters);
             for (int i = 0; i < verts.Length; i++)
             {
                 Vector3 dir = verts[i].normalized;
-                float r = body.SurfaceRadius + inflate;
-                verts[i] = dir * r;
+                verts[i] = dir * (verts[i].magnitude + push);
             }
 
             if (_safetyMesh == null) _safetyMesh = new Mesh { name = "PlanetSafetyShell" };
@@ -352,7 +356,9 @@ namespace VoxelEngine.Cosmos
 
         /// <summary>
         /// Toggle the safety colliders based on the viewer's altitude relative to this body.
-        /// Only the ACTIVE body's colliders are ever enabled (cheap for distant planets).
+        /// The shell stays ON down to safetyBubbleMeters, and below that only steps aside
+        /// when REAL streamed terrain colliders exist under the player — the planet is solid
+        /// everywhere, at every speed, with no fall-through gap.
         /// </summary>
         private void UpdateSafetyColliders(CelestialBody body)
         {
@@ -367,13 +373,20 @@ namespace VoxelEngine.Cosmos
             }
 
             float alt = body.AltitudeAt(viewer.position);
-            bool outsideShell = alt > safetyBubbleMeters;
-            bool deepInside = alt < -64f;
-            _safetyMeshCollider.enabled = outsideShell;
-            _safetySphere.enabled = deepInside;
+            bool shellOn = alt > safetyBubbleMeters;
+            if (!shellOn)
+            {
+                // Near the surface: the shell steps aside only when the real voxel terrain
+                // under the player already has a collider. Otherwise keep it solid.
+                var sphere = SphereWorld.Instance;
+                if (sphere == null || sphere.body != body || !sphere.HasColliderAt(viewer.position))
+                    shellOn = true;
+            }
+            _safetyMeshCollider.enabled = shellOn;
+            _safetySphere.enabled = alt < -64f;
 
             // Keep the core sphere centred + sized to this body (it may have changed).
-            float targetRadius = body.SurfaceRadius + safetyInflationMeters;
+            float targetRadius = body.SurfaceRadius - 12f;
             if (Mathf.Abs(_safetySphere.radius - targetRadius) > 0.5f)
                 _safetySphere.radius = targetRadius;
             _safetySphere.center = Vector3.zero;

@@ -1,9 +1,33 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.13.10-dev`
+**Current Version:** `7.13.11-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.13.11-dev] Solid Real-Planet Collision (No Fly-Through) & Visible Oil Bore → Reservoir
+
+**Type:** PATCH — the whole planet is now solid everywhere with collision that matches the visible terrain, and crude-oil seeps show their real shaft down to the reservoir; no save/API break.
+
+#### 🌍 Whole Planet Solid — No More Flying Through
+- **Root cause:** the planet's collision had a GAP — the LOD safety shell disengaged at 220 m altitude while real voxel colliders only reached ~96 m, so a fast player passed through the unguarded band and into the planet. And the shell was a flat inflated sphere floating above the visible surface.
+- **Fixes:**
+  • The safety shell is now built from the **REAL sampled terrain surface** (the same density field as the visible planet), nudged 0.3 m outward — **what you hit is exactly what you see**, no invisible floating shell.
+  • The shell stays engaged down to **45 m** and below that only steps aside when **real streamed terrain colliders actually exist under the player** (`SphereWorld.HasColliderAt`) — there is no speed at which a fall-through gap exists anymore.
+  • The deep-inside core sphere catches anyone who somehow ends up below the crust.
+  • Real voxel terrain now reaches further and faster: streamed bubble raised to **5/6/7/8 chunks** (Low→Ultra, up to ~256 m of true editable planet), mesh-collider radius **2 → 4 chunks** (~128 m of solid real terrain), jobs 4/8/10/12 per frame.
+- Space-Engineers-style stack: real editable voxels near the player → the same real density field as a solid collidable surface beyond → sky projection for distant bodies. The whole planet is solid and minable everywhere you can reach.
+
+#### 🛢️ Crude Oil — Visible Shaft Down to the Reservoir
+- **Root cause 1 (invisible):** the terrain mesher treated ALL crude oil as empty (fluid), and the fluid renderer only draws fluid that touches open air — so the sealed bore + reservoir were completely invisible. Only the surface puddle rendered.
+- **Root cause 2 (skipped writes):** the decorator silently dropped writes when the chunks below the surface weren't generated yet, so the shaft/reservoir were often never carved at all.
+- **Fixes:**
+  • The bore and reservoir are now written as **SOLID oil-soaked rock** (density +127, material CrudeOil) and the terrain mesher renders solid-density crude as visible dark terrain (`IsEmptyFluid` treats liquid fluids as empty, solid oil as terrain) — dig down and you see a real dark shaft opening into a reservoir chamber.
+  • The surface puddle stays a true liquid for pumps.
+  • **Write-retry:** if any carve was skipped because a chunk wasn't generated, the site is queued for retry (writes are idempotent) — the puddle → bore → reservoir is now always complete.
+
+#### ✅ Static delivery checks
+- All 5 modified sources parse cleanly (tree-sitter grammar validation).
 
 ### [7.13.10-dev] Static Sky, One Sun, Solar Hazard & Solid Planets (No Flying Through)
 

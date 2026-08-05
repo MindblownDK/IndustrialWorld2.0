@@ -53,10 +53,21 @@ namespace VoxelEngine.Meshing
         public bool enableVertexAo;
         public float3 chunkOrigin;
 
-        // Fluid material IDs — these are treated as EMPTY for terrain mesh generation
+        // Fluid material IDs — treated as EMPTY for terrain mesh generation UNLESS the
+        // cell is SOLID. Solid-density crude oil (the geological bore/reservoir written by
+        // OilReservoirDecorator) is real visible terrain; only liquid oil (density ≤ 0,
+        // rendered by the fluid mesh at open-air surfaces) stays empty here.
         private const byte WaterVoxelMat = 5;  // MaterialId.WaterVoxel  (solid form)
         private const byte WaterLiquidMat = 6;  // MaterialId.WaterLiquid (sim form)
         private const byte OilMat         = 18; // MaterialId.CrudeOil
+
+        /// <summary>
+        /// True when a fluid material cell must be treated as EMPTY by the terrain mesh:
+        /// liquid fluids (density ≤ 0). A solid-density oil cell is geological oil-soaked
+        /// rock and must be meshed like any other terrain.
+        /// </summary>
+        private static bool IsEmptyFluid(byte material, sbyte density)
+            => IsFluidMat(material) && density <= VoxelConstants.ISO_LEVEL;
 
         public void Execute()
         {
@@ -102,14 +113,14 @@ namespace VoxelEngine.Meshing
                 // This prevents the terrain mesh from generating faces inside fluid volumes,
                 // eliminating the "double water layer" where terrain faces were visible through
                 // semi-transparent water and appeared as a second water surface.
-                int vd000 = IsFluidMat(voxels[i000].material) ? -1 : d000;
-                int vd100 = IsFluidMat(voxels[i100].material) ? -1 : d100;
-                int vd010 = IsFluidMat(voxels[i010].material) ? -1 : d010;
-                int vd110 = IsFluidMat(voxels[i110].material) ? -1 : d110;
-                int vd001 = IsFluidMat(voxels[i001].material) ? -1 : d001;
-                int vd101 = IsFluidMat(voxels[i101].material) ? -1 : d101;
-                int vd011 = IsFluidMat(voxels[i011].material) ? -1 : d011;
-                int vd111 = IsFluidMat(voxels[i111].material) ? -1 : d111;
+                int vd000 = IsEmptyFluid(voxels[i000].material, voxels[i000].density) ? -1 : d000;
+                int vd100 = IsEmptyFluid(voxels[i100].material, voxels[i100].density) ? -1 : d100;
+                int vd010 = IsEmptyFluid(voxels[i010].material, voxels[i010].density) ? -1 : d010;
+                int vd110 = IsEmptyFluid(voxels[i110].material, voxels[i110].density) ? -1 : d110;
+                int vd001 = IsEmptyFluid(voxels[i001].material, voxels[i001].density) ? -1 : d001;
+                int vd101 = IsEmptyFluid(voxels[i101].material, voxels[i101].density) ? -1 : d101;
+                int vd011 = IsEmptyFluid(voxels[i011].material, voxels[i011].density) ? -1 : d011;
+                int vd111 = IsEmptyFluid(voxels[i111].material, voxels[i111].density) ? -1 : d111;
 
                 // Mask uses VIRTUAL densities — fluid materials are empty
                 int mask = 0;
@@ -150,14 +161,14 @@ namespace VoxelEngine.Meshing
                 // colour. There are only eight possible contributors, so an 8×8 comparison is
                 // dramatically cheaper than the former 256-entry clear + scan for every vertex.
                 int materialCandidateCount = 0;
-                if ((mask & 1)   != 0) { byte mt = voxels[i000].material; if (!IsFluidMat(mt)) materialCandidates[materialCandidateCount++] = mt; }
-                if ((mask & 2)   != 0) { byte mt = voxels[i100].material; if (!IsFluidMat(mt)) materialCandidates[materialCandidateCount++] = mt; }
-                if ((mask & 4)   != 0) { byte mt = voxels[i010].material; if (!IsFluidMat(mt)) materialCandidates[materialCandidateCount++] = mt; }
-                if ((mask & 8)   != 0) { byte mt = voxels[i110].material; if (!IsFluidMat(mt)) materialCandidates[materialCandidateCount++] = mt; }
-                if ((mask & 16)  != 0) { byte mt = voxels[i001].material; if (!IsFluidMat(mt)) materialCandidates[materialCandidateCount++] = mt; }
-                if ((mask & 32)  != 0) { byte mt = voxels[i101].material; if (!IsFluidMat(mt)) materialCandidates[materialCandidateCount++] = mt; }
-                if ((mask & 64)  != 0) { byte mt = voxels[i011].material; if (!IsFluidMat(mt)) materialCandidates[materialCandidateCount++] = mt; }
-                if ((mask & 128) != 0) { byte mt = voxels[i111].material; if (!IsFluidMat(mt)) materialCandidates[materialCandidateCount++] = mt; }
+                if ((mask & 1)   != 0) { byte mt = voxels[i000].material; if (!IsEmptyFluid(mt, voxels[i000].density)) materialCandidates[materialCandidateCount++] = mt; }
+                if ((mask & 2)   != 0) { byte mt = voxels[i100].material; if (!IsEmptyFluid(mt, voxels[i100].density)) materialCandidates[materialCandidateCount++] = mt; }
+                if ((mask & 4)   != 0) { byte mt = voxels[i010].material; if (!IsEmptyFluid(mt, voxels[i010].density)) materialCandidates[materialCandidateCount++] = mt; }
+                if ((mask & 8)   != 0) { byte mt = voxels[i110].material; if (!IsEmptyFluid(mt, voxels[i110].density)) materialCandidates[materialCandidateCount++] = mt; }
+                if ((mask & 16)  != 0) { byte mt = voxels[i001].material; if (!IsEmptyFluid(mt, voxels[i001].density)) materialCandidates[materialCandidateCount++] = mt; }
+                if ((mask & 32)  != 0) { byte mt = voxels[i101].material; if (!IsEmptyFluid(mt, voxels[i101].density)) materialCandidates[materialCandidateCount++] = mt; }
+                if ((mask & 64)  != 0) { byte mt = voxels[i011].material; if (!IsEmptyFluid(mt, voxels[i011].density)) materialCandidates[materialCandidateCount++] = mt; }
+                if ((mask & 128) != 0) { byte mt = voxels[i111].material; if (!IsEmptyFluid(mt, voxels[i111].density)) materialCandidates[materialCandidateCount++] = mt; }
                 int dominantMat = 0, dominantCount = 0;
                 for (int a = 0; a < materialCandidateCount; a++)
                 {
@@ -275,13 +286,14 @@ namespace VoxelEngine.Meshing
         }
 
         /// <summary>
-        /// Returns true if the voxel is solid terrain (not a fluid material).
-        /// Fluid materials (WaterVoxel, WaterLiquid, CrudeOil) are treated as empty
-        /// so the terrain mesh never generates faces inside fluid volumes.
+        /// Returns true if the voxel is solid terrain (not an empty fluid material).
+        /// Fluid materials (WaterVoxel, WaterLiquid) are treated as empty so the terrain
+        /// mesh never generates faces inside fluid volumes. SOLID crude oil (geological
+        /// bore/reservoir) IS terrain — it renders as visible oil-soaked rock.
         /// </summary>
         private bool IsTerrainSolid(Voxel v)
         {
-            return v.density > 0 && !IsFluidMat(v.material);
+            return v.density > 0 && !IsEmptyFluid(v.material, v.density);
         }
 
         /// <summary>

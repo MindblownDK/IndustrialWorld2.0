@@ -234,10 +234,20 @@ namespace VoxelEngine.Generation
                 Vector3 reservoirTop = reservoirCenter + up * Mathf.Max(1f, reservoirRadius * 0.55f);
 
                 var touched = new HashSet<Chunk>();
-                BuildSurfacePuddle(world, surface, up, puddleRadius, touched);
-                BuildRadialFunnel(world, surface, reservoirTop, up, Mathf.Max(2, puddleRadius - 1), 2, touched);
-                BuildReservoir(world, Vector3Int.RoundToInt(reservoirCenter), reservoirRadius, touched);
+                bool allWritten = BuildSurfacePuddle(world, surface, up, puddleRadius, touched);
+                // The bore + reservoir are written as SOLID oil-soaked rock (density +127) so
+                // the terrain mesher renders them VISIBLE (liquid oil sealed inside rock was
+                // invisible — only fluid-at-air surfaces render). The surface puddle stays a
+                // real liquid for pumps.
+                allWritten &= BuildRadialFunnel(world, surface, reservoirTop, up, Mathf.Max(2, puddleRadius - 1), 2, touched);
+                allWritten &= BuildReservoir(world, Vector3Int.RoundToInt(reservoirCenter), reservoirRadius, touched);
                 FlushTouchedChunks(world, touched);
+
+                // If any write was skipped because a chunk below the surface wasn't generated
+                // yet (fast streaming), re-run later — the writes are idempotent, so retrying
+                // the whole build is safe and simply fills in the missing bore/reservoir.
+                if (!allWritten)
+                    return SiteBuildResult.WaitingForLoadedChunks;
 
                 if (infinite)
                     PirateOilNode.Ensure(world, surface, Vector3Int.RoundToInt(reservoirCenter));
@@ -341,9 +351,10 @@ namespace VoxelEngine.Generation
             return true;
         }
 
-        private static void BuildSurfacePuddle(SphereWorld world, Vector3Int surface, Vector3 up,
+        private static bool BuildSurfacePuddle(SphereWorld world, Vector3Int surface, Vector3 up,
             int radius, HashSet<Chunk> touched)
         {
+            bool allWritten = true;
             GetTangentBasis(up, out Vector3 tangentA, out Vector3 tangentB);
             for (int a = -radius; a <= radius; a++)
             for (int b = -radius; b <= radius; b++)
@@ -358,8 +369,9 @@ namespace VoxelEngine.Generation
                 // Preserve the terrain cell underneath the visible puddle. Oil lives in the
                 // exterior air/fluid cell, so the player sees a pooled surface rather than a
                 // carved hole with no collision floor.
-                WriteSurfaceOil(world, localSurface, localUp, touched);
+                allWritten &= WriteSurfaceOil(world, localSurface, localUp, touched);
             }
+            return allWritten;
         }
 
         private static bool TryResolvePuddleSurface(SphereWorld world, Vector3 probe, out Vector3Int surface)
@@ -381,15 +393,17 @@ namespace VoxelEngine.Generation
         /// <summary>
         /// Builds a tapered geological funnel from right below the surface puddle down to
         /// the top of the deep reservoir, connecting puddle -> funnel -> reservoir cleanly.
+        /// Writes SOLID oil-soaked rock so the shaft is visible in the terrain.
         /// </summary>
-        private static void BuildRadialFunnel(SphereWorld world, Vector3Int surface, Vector3 reservoirTop,
+        private static bool BuildRadialFunnel(SphereWorld world, Vector3Int surface, Vector3 reservoirTop,
             Vector3 up, int mouthRadius, int throatRadius, HashSet<Chunk> touched)
         {
+            bool allWritten = true;
             Vector3 start = surface - up * 1f;
             Vector3 direction = reservoirTop - start;
             int steps = Mathf.Max(1, Mathf.CeilToInt(direction.magnitude));
             int effectiveMouth = Mathf.Max(2, mouthRadius);
-            int effectiveThroat = Mathf.Max(1, throatRadius);
+            int effectiveThroat = Mathf.Max(2, throatRadius);   // ≥2 so the shaft reads as a real bore
 
             for (int step = 1; step <= steps; step++)
             {
@@ -405,21 +419,24 @@ namespace VoxelEngine.Generation
                 {
                     if (a * a + b * b > r2) continue;
                     Vector3Int pos = Vector3Int.RoundToInt(center + tangentA * a + tangentB * b);
-                    WriteOil(world, pos, touched);
+                    allWritten &= WriteSolidOil(world, pos, touched);
                 }
             }
+            return allWritten;
         }
 
-        private static void BuildReservoir(SphereWorld world, Vector3Int center, int radius, HashSet<Chunk> touched)
+        private static bool BuildReservoir(SphereWorld world, Vector3Int center, int radius, HashSet<Chunk> touched)
         {
+            bool allWritten = true;
             int radiusSquared = radius * radius;
             for (int z = -radius; z <= radius; z++)
             for (int y = -radius; y <= radius; y++)
             for (int x = -radius; x <= radius; x++)
             {
                 if (x * x + y * y + z * z > radiusSquared) continue;
-                WriteOil(world, center + new Vector3Int(x, y, z), touched);
+                allWritten &= WriteSolidOil(world, center + new Vector3Int(x, y, z), touched);
             }
+            return allWritten;
         }
 
         private static void GetTangentBasis(Vector3 up, out Vector3 tangentA, out Vector3 tangentB)
@@ -451,33 +468,52 @@ namespace VoxelEngine.Generation
             return true;
         }
 
-        private static void WriteSurfaceOil(SphereWorld world, Vector3Int surface, Vector3 up, HashSet<Chunk> touched)
+        private static bool WriteSurfaceOil(SphereWorld world, Vector3Int surface, Vector3 up, HashSet<Chunk> touched)
         {
-            if (world == null) return;
+            if (world == null) return true;
             if (TryGetLoadedVoxel(world, surface, out Voxel current) && FluidMaterialUtility.IsFluid(current))
             {
                 // At a genuine ocean surface, replace only the top fluid cell with crude.
-                WriteOil(world, surface, touched);
-                return;
+                return WriteOil(world, surface, touched);
             }
 
             Vector3Int exterior = Vector3Int.RoundToInt((Vector3)surface + up);
-            if (!TryGetLoadedVoxel(world, exterior, out Voxel above)) return;
-            if (above.IsSolid) return;
-            WriteOil(world, exterior, touched);
+            if (!TryGetLoadedVoxel(world, exterior, out Voxel above)) return false;
+            if (above.IsSolid) return true;
+            return WriteOil(world, exterior, touched);
         }
 
-        private static void WriteOil(SphereWorld world, Vector3Int voxel, HashSet<Chunk> touched)
+        /// <summary>Liquid crude for the visible surface puddle (rendered by the fluid mesh).</summary>
+        private static bool WriteOil(SphereWorld world, Vector3Int voxel, HashSet<Chunk> touched)
         {
+            if (!TryGetChunkForWrite(world, voxel, out Chunk chunk)) return false;
+            world.SetVoxelWorld(voxel, new Voxel(-1, (byte)MaterialId.CrudeOil, 255), remesh: false);
+            touched.Add(chunk);
+            return true;
+        }
+
+        /// <summary>
+        /// SOLID oil-soaked rock for the bore + reservoir — the terrain mesher renders it
+        /// visibly (dark oil), so the shaft down to the reservoir is real and seeable.
+        /// </summary>
+        private static bool WriteSolidOil(SphereWorld world, Vector3Int voxel, HashSet<Chunk> touched)
+        {
+            if (!TryGetChunkForWrite(world, voxel, out Chunk chunk)) return false;
+            world.SetVoxelWorld(voxel, new Voxel(127, (byte)MaterialId.CrudeOil, 0), remesh: false);
+            touched.Add(chunk);
+            return true;
+        }
+
+        private static bool TryGetChunkForWrite(SphereWorld world, Vector3Int voxel, out Chunk chunk)
+        {
+            chunk = null;
             const int size = VoxelConstants.CHUNK_SIZE;
             Vector3Int coord = new(
                 Mathf.FloorToInt(voxel.x / (float)size),
                 Mathf.FloorToInt(voxel.y / (float)size),
                 Mathf.FloorToInt(voxel.z / (float)size));
-            if (!world.TryGetChunk(coord, out Chunk chunk) || chunk == null || !chunk.isGenerated) return;
-
-            world.SetVoxelWorld(voxel, new Voxel(-1, (byte)MaterialId.CrudeOil, 255), remesh: false);
-            touched.Add(chunk);
+            if (!world.TryGetChunk(coord, out chunk) || chunk == null || !chunk.isGenerated) return false;
+            return true;
         }
 
         private static void FlushTouchedChunks(SphereWorld world, HashSet<Chunk> touched)

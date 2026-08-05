@@ -38,12 +38,12 @@ namespace VoxelEngine.Cosmos
         public static int ViewDistance => Current switch
         {
             // This is the editable collider/chunk bubble around the player (the continuous
-            // planet LOD covers everything beyond it). Raised in 7.13.10 so the real terrain
-            // reaches further and the LOD safety shell engages later.
-            GraphicsTier.Low  => 4,
-            GraphicsTier.Mid  => 5,
-            GraphicsTier.High => 6,
-            _                 => 7,
+            // planet LOD covers everything beyond it). Raised so REAL voxel terrain reaches
+            // further around the player (the whole planet stays solid via the LOD shell).
+            GraphicsTier.Low  => 5,
+            GraphicsTier.Mid  => 6,
+            GraphicsTier.High => 7,
+            _                 => 8,
         };
 
         /// <summary>Grass density multiplier (0 = off) per tier.</summary>
@@ -92,10 +92,10 @@ namespace VoxelEngine.Cosmos
         /// <summary>Max chunks to generate per frame per tier.</summary>
         public static int JobsPerFrame => Current switch
         {
-            GraphicsTier.Low  => 3,
-            GraphicsTier.Mid  => 6,
-            GraphicsTier.High => 8,
-            _                 => 10,
+            GraphicsTier.Low  => 4,
+            GraphicsTier.Mid  => 8,
+            GraphicsTier.High => 10,
+            _                 => 12,
         };
 
         /// <summary>Whether atmospheric fog/post-FX are enabled per tier.</summary>

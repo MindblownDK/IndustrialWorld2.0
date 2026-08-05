@@ -70,8 +70,8 @@ namespace VoxelEngine.Cosmos
         [Range(1, 16)] public int viewDistance = VoxelConstants.DEFAULT_VIEW_DISTANCE;
         [Range(1, 16)] public int maxJobsPerFrame = 4;
         public bool generateColliders = true;
-        [Tooltip("Only the nearby gameplay bubble needs expensive mesh colliders; distant local chunks remain visual until approached. Raised to 3 in 7.13.10 so fast players meet solid terrain earlier (the LOD safety shell covers everything beyond).")]
-        [Range(1, 4)] public int colliderChunkRadius = 3;
+        [Tooltip("Only the nearby gameplay bubble needs expensive mesh colliders; distant local chunks remain visual until approached. 4 chunks gives fast players solid real terrain up to ~128 m (the LOD safety shell covers everything beyond).")]
+        [Range(1, 6)] public int colliderChunkRadius = 4;
         [Tooltip("Spawn trees/rocks from biome scatter lists.")]
         public bool enableScatter = true;
         [Tooltip("Maximum generated chunks whose scatter may be populated in one frame. A low budget prevents vegetation creation from stalling terrain streaming.")]
@@ -929,6 +929,22 @@ namespace VoxelEngine.Cosmos
                 return reg;
             }
             return Resources.Load<BiomeRegistry>("BiomeRegistry");
+        }
+
+        /// <summary>
+        /// True when the chunk containing this world position has a live mesh collider —
+        /// i.e. REAL editable terrain is solid right here. The planet-LOD safety shell asks
+        /// this before it steps aside, so a fast player can never fall through a gap between
+        /// the shell and not-yet-streamed terrain.
+        /// </summary>
+        public bool HasColliderAt(Vector3 worldPos)
+        {
+            if (body == null) return false;
+            Vector3 local = body.transform.InverseTransformPoint(worldPos);
+            Vector3Int coord = LocalToChunk(local);
+            if (!_chunks.TryGetValue(coord, out Chunk chunk) || chunk == null || chunk.meshCollider == null)
+                return false;
+            return chunk.meshCollider.sharedMesh != null;
         }
 
         /// <summary>True if this chunk still has an in-flight SphereChunkGenJob writing its voxels.</summary>
