@@ -41,6 +41,16 @@ namespace VoxelEngine.Cosmos
         [Tooltip("Highest vertex budget for the sampled full-planet surface. Runtime distance LOD selects a cheaper mesh farther out.")]
         public int resolution = 2562;
 
+        [Tooltip("When true, this body renders at the HIGH-DETAIL budget — the 'whole planet' " +
+                 "surface the player is currently on / approaching (full planet, proper LOD). " +
+                 "Built progressively over several frames so there is no spawn hitch. " +
+                 "Distant bodies keep the cheap proxy.")]
+        public bool highDetail;
+
+        [Range(10242, 163842)]
+        [Tooltip("Vertex budget used when highDetail is enabled (the active body's full surface).")]
+        public int highDetailVertexBudget = 40962;
+
         [Tooltip("Optional biome registry for accurate surface colours.")]
         public BiomeRegistry biomeRegistry;
 
@@ -59,6 +69,16 @@ namespace VoxelEngine.Cosmos
         private int _lastEffectiveResolution;
         private int _lastSeed;
 
+        // ── Progressive (batched) high-detail build state ─────────────
+        // Building a 40k–160k-vertex sampled surface in ONE frame would hitch the game.
+        // Instead the vertex loop runs in small batches inside Update() until done, then
+        // the mesh is finalised once — no spawn/frame-entry stall.
+        private List<Vector3> _buildVerts;
+        private List<int> _buildTris;
+        private Color[] _buildColors;
+        private int _buildIndex;
+        private bool _buildInProgress;
+
         private void OnEnable()
         {
             EnsureComponents();
@@ -72,6 +92,14 @@ namespace VoxelEngine.Cosmos
         {
             var resolvedBody = ResolveBody();
             if (resolvedBody == null || resolvedBody.settings == null) return;
+
+            // Continue an in-flight progressive build before anything else.
+            if (_buildInProgress)
+            {
+                if (ContinueProgressiveBuild(resolvedBody))
+                    UpdateFade(resolvedBody);
+                return;
+            }
 
             int effectiveResolution = ResolveRuntimeResolution(resolvedBody);
             bool needRebuild = !_biomes.IsCreated ||
@@ -96,10 +124,11 @@ namespace VoxelEngine.Cosmos
 
         private int ResolveRuntimeResolution(CelestialBody resolvedBody)
         {
-            int highest = Mathf.Clamp(resolution, 642, 10242);
-            // The capped 10k proxy is inexpensive enough to retain its authored detail in
-            // orbit. Lower quality tiers still use their own lower ceiling via GraphicsPreset.
-            return highest;
+            // High-detail (active body): the FULL planet surface with real continents and
+            // mountains visible from ground to orbit. Distant bodies keep the cheap proxy.
+            if (highDetail)
+                return Mathf.Clamp(highDetailVertexBudget, 10242, 163842);
+            return Mathf.Clamp(resolution, 642, 10242);
         }
 
         private void EnsureComponents()
@@ -163,8 +192,88 @@ namespace VoxelEngine.Cosmos
             for (int i = 0; i < biomeArr.Length; i++) _biomes[i] = biomeArr[i];
 
             if (targetResolution <= 0) targetResolution = ResolveRuntimeResolution(resolvedBody);
+
+            // High-detail surface: build progressively (batched across frames) so the
+            // whole-planet upgrade never hitches the game.
+            if (targetResolution > 10242)
+            {
+                BeginProgressiveBuild(resolvedBody, targetResolution);
+                return;
+            }
+
             var (verts, tris, colors) = BuildIcosphere(resolvedBody, targetResolution);
 
+            FinalizeMesh(verts, tris, colors, targetResolution, resolvedBody);
+        }
+
+        /// <summary>Start a batched high-detail build (vertex loop runs in Update()).</summary>
+        private void BeginProgressiveBuild(CelestialBody body, int targetVerts)
+        {
+            _buildVerts = new List<Vector3>(IcosahedronVerts());
+            _buildTris  = new List<int>(IcosahedronTris());
+
+            int sub = 0;
+            while (_buildVerts.Count < targetVerts && sub < 8)
+            {
+                Subdivide(_buildVerts, _buildTris);
+                sub++;
+            }
+
+            _buildColors = new Color[_buildVerts.Count];
+            _buildIndex = 0;
+            _buildInProgress = true;
+            _lastEffectiveResolution = targetVerts;
+            _lastSeed = body.genParams.seed;
+        }
+
+        /// <summary>
+        /// Sample a batch of vertices (keeps the main-thread hit tiny), finalise the mesh
+        /// when done. Returns true while the build is still running.
+        /// </summary>
+        private bool ContinueProgressiveBuild(CelestialBody body)
+        {
+            if (_buildVerts == null || _buildColors == null)
+            {
+                _buildInProgress = false;
+                return false;
+            }
+
+            const int Batch = 4096;
+            int end = Mathf.Min(_buildIndex + Batch, _buildVerts.Count);
+            var prm = body.genParams;
+            for (int i = _buildIndex; i < end; i++)
+            {
+                Vector3 dir = _buildVerts[i].normalized;
+                SphereDensity.EvaluateColumn(prm, _biomes, (float3)dir, out float surfaceR, out _);
+                float alt = surfaceR - prm.MeanSurfaceRadius;
+                // Keep the full-planet shell just INSIDE the sampled terrain so streamed
+                // voxel chunks depth-occlude it, while everything beyond the chunk bubble
+                // stays a continuous sampled surface.
+                float lodInset = Mathf.Clamp(prm.radiusWorld * 0.001f, 2f, 12f);
+                _buildVerts[i] = dir * Mathf.Max(1f, surfaceR - lodInset);
+                Color baseCol = ColorFor(alt, Mathf.Abs(dir.y));
+                if (body.settings != null && body.settings.displayColor.a > 0.01f)
+                    baseCol = Color.Lerp(baseCol, body.settings.displayColor, 0.72f);
+                _buildColors[i] = baseCol;
+            }
+            _buildIndex = end;
+
+            if (_buildIndex < _buildVerts.Count) return true;
+
+            // Done — finalise on this frame.
+            FinalizeMesh(_buildVerts.ToArray(), _buildTris.ToArray(), _buildColors,
+                _lastEffectiveResolution, body);
+            _buildVerts = null;
+            _buildTris = null;
+            _buildColors = null;
+            _buildIndex = 0;
+            _buildInProgress = false;
+            Debug.Log($"[PlanetLodImpostor] High-detail planet surface ready: {_lastEffectiveResolution} verts ('{body.DisplayName}').");
+            return false;
+        }
+
+        private void FinalizeMesh(Vector3[] verts, int[] tris, Color[] colors, int targetResolution, CelestialBody body)
+        {
             if (_mesh == null)
             {
                 _mesh = new Mesh { name = "PlanetLOD" };
@@ -179,7 +288,7 @@ namespace VoxelEngine.Cosmos
             if (meshFilter != null) meshFilter.sharedMesh = _mesh;
 
             _lastEffectiveResolution = targetResolution;
-            _lastSeed = resolvedBody.genParams.seed;
+            _lastSeed = body.genParams.seed;
         }
 
         private (Vector3[] verts, int[] tris, Color[] colors) BuildIcosphere(CelestialBody body, int targetVerts)
@@ -282,6 +391,11 @@ namespace VoxelEngine.Cosmos
         {
             if (_biomes.IsCreated) _biomes.Dispose();
             _biomes = default;
+            _buildVerts = null;
+            _buildTris = null;
+            _buildColors = null;
+            _buildIndex = 0;
+            _buildInProgress = false;
         }
 
         // ── Icosahedron primitives ────────────────────────────────

@@ -1,9 +1,32 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.13.6-dev`
+**Current Version:** `7.13.7-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.13.7-dev] Instant HUD Fade, Death-Loop Elimination & Whole-Planet LOD
+
+**Type:** PATCH — HUD fade feel, respawn death-loop breaker, survivable fall cap, and the full planet surface at high LOD; no save/API break.
+
+#### ⚡ HUD Fades Fast on Open
+- `LcdHudTheme.YieldWhileBlocking` is now ASYMMETRIC: fades OUT at 18/s (~0.05 s — opening inventory/UI feels instant) and fades back in at 8/s (elegant return), polled every 16 ms instead of 33 ms.
+
+#### 💀 Launch → Fall → Die → Respawn-in-Space Loop Eliminated
+- **Respawn destination validation (the loop breaker):** every respawn (`RespawnRoutine`, used by the death screen AND `RespawnAt`) now validates the destination — if it is inside a planet or more than 3.5× surface radius out in space (a stale launch-era world-spawn/bed coordinate), a fresh deterministic dry surface spawn is computed instead. Dying can no longer put you back in space.
+- **Bed-spawn validation:** a bed saved during the launch-era is also rejected on load and the poisoned bed flag is cleared.
+- **Survivable fall cap:** inward radial speed cap lowered 55 → 24 m/s — BELOW the lethal fall threshold (28 m/s). Even a worst-case restored fall lands you bruised, not dead. No more impact-death loop.
+- **Spawn/respawn fall-damage grace (2.5 s):** `PlayerController.BeginSpawnGrace` — physics settle / chunk-streaming timing at spawn can never insta-kill.
+
+#### 🌍 Whole Planet Loaded (proper LOD, Space-Engineers style)
+- **`PlanetLodImpostor.highDetail`:** the ACTIVE body (the one you're on / approaching) now renders at a high-detail budget — 10k/40k/163k vertices by graphics tier (`GraphicsPreset.ActiveBodyLodResolution`) — a single continuous sampled planet surface with real continents and mountains, visible from ground to orbit.
+- **Progressive build:** high-detail meshes are built in 4096-vertex batches across frames — no spawn or frame-entry hitch, no stutter.
+- **Frame switching:** entering a body's gravity well upgrades its LOD to high detail (previous body downgrades to the cheap proxy); deep space downgrades everything.
+- The home body is upgraded right at bootstrap, so the planet looks whole from the first frame.
+- Local voxel chunks still stream around the player (proper LOD stack: chunks up close, sampled surface beyond, sky projection for distant bodies).
+
+#### ✅ Static delivery checks
+- All 6 modified sources parse cleanly (tree-sitter grammar validation).
 
 ### [7.13.6-dev] Spawn Launch Elimination — Interior Gravity Falloff, Fall-Speed Cap, Poisoned-Save Rejection & Spawn Grace
 

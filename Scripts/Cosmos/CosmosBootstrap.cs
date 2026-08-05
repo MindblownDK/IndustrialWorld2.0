@@ -296,6 +296,16 @@ namespace VoxelEngine.Cosmos
 
             // ── Activate LAST: now every Awake/OnEnable sees a fully-wired component graph. ──
             _bodyGO.SetActive(true);
+
+            // ── Whole-planet surface (Space-Engineers style): the home body renders at the
+            // high-detail LOD budget — one continuous sampled planet, built progressively
+            // over the next frames so the spawn stays smooth. ──
+            if (_terrainLod != null)
+            {
+                _terrainLod.highDetail = true;
+                _terrainLod.highDetailVertexBudget = GraphicsPreset.ActiveBodyLodResolution;
+            }
+
             TryResolveViewerAndAnchor();
 
             _wind = FindAnyObjectByType<WindField>();
@@ -543,7 +553,11 @@ namespace VoxelEngine.Cosmos
                 {
                     // Downgrade the previous body's LOD back to the cheap proxy.
                     var oldLod = previousBody.GetComponentInChildren<PlanetLodImpostor>(true);
-                    if (oldLod != null) oldLod.resolution = Mathf.Min(GraphicsPreset.LodResolution, 642);
+                    if (oldLod != null)
+                    {
+                        oldLod.highDetail = false;
+                        oldLod.resolution = Mathf.Min(GraphicsPreset.LodResolution, 642);
+                    }
                 }
                 _sphereWorld.SetBody(null);
                 SetAuxSystemsEnabled(false);
@@ -553,8 +567,18 @@ namespace VoxelEngine.Cosmos
             else
             {
                 // ── Entering another body's frame: re-target the streamer. ──
+                // The entered body becomes the high-detail WHOLE-PLANET surface.
                 var newLod = newBody.GetComponentInChildren<PlanetLodImpostor>(true);
-                if (newLod != null) newLod.resolution = GraphicsPreset.LodResolution;
+                if (newLod != null)
+                {
+                    newLod.highDetail = true;
+                    newLod.highDetailVertexBudget = GraphicsPreset.ActiveBodyLodResolution;
+                }
+                if (previousBody != null)
+                {
+                    var prevLod = previousBody.GetComponentInChildren<PlanetLodImpostor>(true);
+                    if (prevLod != null) prevLod.highDetail = false;
+                }
                 _sphereWorld.SetBody(newBody);
                 MoveAuxSystemsUnder(newBody);
                 // Belt worlds are zero-g rock fields — no grass, waterfalls or oceans.

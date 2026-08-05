@@ -496,11 +496,14 @@ namespace VoxelEngine.UI
                 if (element == null) return;
                 bool blocked = VoxelEngine.UI.UIState.IsBlocking;
                 float target = blocked ? minOpacity : 1f;
-                smooth = Mathf.MoveTowards(smooth, target, Time.unscaledDeltaTime * 6f);
+                // ASYMMETRIC fade: out fast (opening inventory/UI should feel instant),
+                // back in slower and smoother so the module returns elegantly.
+                float rate = blocked ? 18f : 8f;
+                smooth = Mathf.MoveTowards(smooth, target, Time.unscaledDeltaTime * rate);
                 element.style.opacity = smooth;
                 // Fully hidden modules must never intercept the cursor.
                 element.pickingMode = smooth < 0.02f ? PickingMode.Ignore : element.pickingMode;
-            }).Every(33);
+            }).Every(16);
         }
 
         /// <summary>

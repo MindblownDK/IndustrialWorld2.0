@@ -67,6 +67,19 @@ namespace VoxelEngine.Cosmos
             _                 => 10242,
         };
 
+        /// <summary>
+        /// Vertex budget for the ACTIVE body's full-planet surface (the body the player is
+        /// on / approaching). Built progressively, so these can be large — the whole planet
+        /// is one continuous sampled surface from ground to orbit.
+        /// </summary>
+        public static int ActiveBodyLodResolution => Current switch
+        {
+            GraphicsTier.Low  => 10242,
+            GraphicsTier.Mid  => 40962,
+            GraphicsTier.High => 163842,
+            _                 => 163842,
+        };
+
         /// <summary>Waterfall scan range (metres) per tier.</summary>
         public static float WaterfallRange => Current switch
         {

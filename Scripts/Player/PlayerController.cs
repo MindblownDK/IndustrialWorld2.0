@@ -112,6 +112,15 @@ namespace VoxelEngine.Player
         private bool   _sprinting;
         private float  _smoothedEyeHeight;
         private float  _jetpackBoostCharge;
+
+        // Spawn/respawn fall-damage immunity window (set by PlayerSpawner at handover).
+        private float _spawnGraceUntil;
+
+        /// <summary>Grants temporary immunity to fall damage (spawn settle grace).</summary>
+        public void BeginSpawnGrace(float seconds = 2.5f)
+        {
+            _spawnGraceUntil = Time.time + Mathf.Max(0.5f, seconds);
+        }
         // Reused by terrain support probes to avoid per-frame raycast allocations.
         private readonly RaycastHit[] _terrainProbeHits = new RaycastHit[12];
 
@@ -563,8 +572,8 @@ namespace VoxelEngine.Player
             // Cap the INWARD radial speed near the active body. Without this, a player
             // restored from a bad save (or clipped through the terrain) accelerates to
             // hundreds of m/s toward the core and tunnels straight through the planet.
-            // 55 m/s is fast enough to feel like a dangerous fall, slow enough that the
-            // CharacterController always resolves against the terrain collider.
+            // 24 m/s sits BELOW the lethal fall threshold (28 m/s), so even a worst-case
+            // restored fall is survivable instead of being an instant death loop.
             var activeBody = GravityProvider.ActiveBody;
             if (activeBody != null)
             {
@@ -574,7 +583,7 @@ namespace VoxelEngine.Player
                 {
                     Vector3 radialIn = toCore / dist;
                     float inwardSpeed = Vector3.Dot(_velocity, radialIn);
-                    const float maxFallSpeed = 55f;
+                    const float maxFallSpeed = 24f;
                     if (inwardSpeed > maxFallSpeed)
                         _velocity -= radialIn * (inwardSpeed - maxFallSpeed);
                 }
@@ -594,6 +603,9 @@ namespace VoxelEngine.Player
 
         private void ApplyFallDamage(float impactDownSpeed)
         {
+            // Spawn grace: physics settle / chunk-streaming timing at spawn (or respawn)
+            // must never insta-kill the player with a bogus impact. 2.5 s of immunity.
+            if (Time.time < _spawnGraceUntil) return;
             if (impactDownSpeed <= fallDamageStartSpeed) return;
             var waterState = GetComponent<PlayerWaterState>();
             if (waterState != null && waterState.IsSwimming) return;

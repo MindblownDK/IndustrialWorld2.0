@@ -121,6 +121,13 @@ namespace VoxelEngine.Player
             {
                 target = session.bedSpawnPoint;
                 Debug.Log("[PlayerSpawner] Bed spawn: " + target);
+                // A bed saved during the launch-era can also be a stale space coordinate.
+                if (!IsValidSurfaceDestination(target, out Vector3 safeBed))
+                {
+                    Debug.LogWarning("[PlayerSpawner] Bed spawn invalid (in space / inside planet) — using a fresh surface point instead.");
+                    target = safeBed;
+                    session.hasBedSpawn = false;   // don't loop back to the poisoned bed
+                }
             }
             else
             {
@@ -300,6 +307,8 @@ namespace VoxelEngine.Player
             // Spawn must start at REST — clear any residual velocity (frame deltas,
             // stale physics) so the player can never be "launched" by old state.
             ZeroPlayerVelocity();
+            var pcSpawn = GetComponent<PlayerController>();
+            if (pcSpawn != null) pcSpawn.BeginSpawnGrace();
             ReadyForPlayerControl = true;
             if (!VoxelEngine.UI.UIState.IsBlocking)
             {
@@ -366,6 +375,18 @@ namespace VoxelEngine.Player
         {
             ReadyForPlayerControl = false;
             DisableController();
+
+            // Death-loop breaker (7.13.7): a respawn destination stored during an earlier
+            // launch-era session can be a stale scene coordinate HIGH IN SPACE (or inside
+            // the planet). Respawn there → fall → lethal impact → die → respawn there…
+            // Validate every respawn: inside a body or outside ~3× surface radius → compute
+            // a fresh dry surface spawn instead.
+            if (!IsValidSurfaceDestination(dest, out Vector3 safeDest))
+            {
+                Debug.LogWarning("[PlayerSpawner] Respawn destination invalid (in space / inside planet) — respawning on a fresh surface point instead: " + dest);
+                dest = safeDest;
+            }
+
             // Mirror the first-spawn routine: on a spherical body the parked position
             // must sit at the TRUE destination height. The player transform drives chunk
             // streaming, so forcing Y up to 250 (a flat-world streaming trick) on a sphere
@@ -384,7 +405,50 @@ namespace VoxelEngine.Player
             yield return EnsureDrySpawn(transform.position);
             EnableController();
             ZeroPlayerVelocity();
+            // Brief fall-damage grace so the physics settle at spawn can never insta-kill.
+            var pc = GetComponent<PlayerController>();
+            if (pc != null) pc.BeginSpawnGrace();
             ReadyForPlayerControl = true;
+        }
+
+        /// <summary>
+        /// True when a scene position is a sane surface destination for the active body:
+        /// not inside the planet, and not far out in space (a stale launch-era coordinate).
+        /// When invalid, outputs a fresh deterministic dry surface spawn.
+        /// </summary>
+        private bool IsValidSurfaceDestination(Vector3 scenePos, out Vector3 safePoint)
+        {
+            var body = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
+            if (body == null)
+            {
+                safePoint = scenePos.y > 0f ? scenePos : new Vector3(0f, 250f, 0f);
+                return true;
+            }
+
+            Vector3 toCore = scenePos - body.transform.position;
+            float dist = toCore.magnitude;
+            float surface = body.SurfaceRadius;
+            bool inside = dist < surface * 0.95f;
+            bool inSpace = dist > surface * 3.5f;
+            if (!inside && !inSpace)
+            {
+                safePoint = scenePos;
+                return true;
+            }
+
+            // Recompute a fresh surface point from the analytic density field.
+            Vector3 ground = Vector3.zero;
+            if (VoxelEngine.Core.ActiveWorld.Current is VoxelEngine.Cosmos.SphereWorld sphereWorld &&
+                sphereWorld.TryFindDrySpawnPoint(drySpawnSearchAttempts, out Vector3 analyticGround))
+            {
+                ground = analyticGround;
+            }
+            else
+            {
+                ground = body.transform.position + body.transform.up * (surface + 30f);
+            }
+            safePoint = ground + body.UpAt(ground) * SpawnGroundClearance;
+            return false;
         }
 
         /// <summary>
