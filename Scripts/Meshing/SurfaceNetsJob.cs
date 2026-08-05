@@ -302,7 +302,7 @@ namespace VoxelEngine.Meshing
         /// may contain solid water blocks that would otherwise generate blue
         /// terrain faces indistinguishable from the water surface.
         /// </summary>
-        private bool IsFluidMat(byte mat)
+        private static bool IsFluidMat(byte mat)
         {
             return mat == WaterVoxelMat || mat == WaterLiquidMat || mat == OilMat;
         }

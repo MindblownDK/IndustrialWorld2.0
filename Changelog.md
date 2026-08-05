@@ -1,9 +1,19 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.13.11-dev`
+**Current Version:** `7.13.12-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.13.12-dev] Oil Mesher Compile Recovery (CS0120)
+
+**Type:** PATCH — compile recovery for the visible-oil terrain meshing; no behaviour change, no save/API break.
+
+#### 🛠️ Compiler Fix
+- **CS0120 in `SurfaceNetsJob`:** the new static helper `IsEmptyFluid` called the instance method `IsFluidMat`. `IsFluidMat` is now `static` (it only reads compile-time constants), so solid-density crude-oil cells mesh as visible terrain and liquid fluids stay empty — exactly as intended in 7.13.11.
+
+#### ✅ Static delivery checks
+- Verified the modified source parses cleanly (tree-sitter grammar validation).
 
 ### [7.13.11-dev] Solid Real-Planet Collision (No Fly-Through) & Visible Oil Bore → Reservoir
 
