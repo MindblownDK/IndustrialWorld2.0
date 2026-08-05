@@ -1,9 +1,34 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.13.9-dev`
+**Current Version:** `7.13.10-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.13.10-dev] Static Sky, One Sun, Solar Hazard & Solid Planets (No Flying Through)
+
+**Type:** PATCH — fixes planets visually following the player, the duplicate sun, the random sun-death, and lets you no longer fly through planets; no save/API break.
+
+#### 🪐 Planets Stay Put in the Sky
+- **Root cause:** the sky-proxy renderers anchored their bodies to the PLAYER's scene position — walk 100 m and every planet/sun visual moved 100 m with you.
+- **Fix:** `SpaceBodyRenderer` and `QuasarRenderer` now anchor to the ACTIVE BODY's scene position (perfectly static in the scene thanks to the floating origin), falling back to the scene origin in deep space. Planets, moons and the sun now hold their true positions in the sky while the player moves; the real high-LOD body takes over seamlessly when you get close.
+
+#### ☀️ One Sun Only
+- The bright quasar backdrop read as a second sun — it is now **disabled whenever the system has a real star** (kept only for sun-less systems), leaving exactly one sun.
+
+#### 🔥 The Sun Warns Before It Kills
+- New `SolarHazard` component: inside 2,200 km of the star you get escalating HUD warnings ("SOL APPROACH — HEAT RISING" → "SOL FLARE — CRITICAL HEAT, TURN BACK" → "SOL CORONA — CERTAIN DEATH") and heat damage that ramps from zero at the warning edge to lethal at the corona. Flying into the sun is now a warned, deliberate act — never a random death.
+
+#### 🌍 Whole Planet Solid — No More Flying Through
+- **Root cause:** the streamed voxel bubble only covers the player's vicinity; beyond it the planet LOD shell was VISUAL ONLY (no collider), so a fast player flew straight through the planet.
+- **Safety colliders on the planet LOD (`PlanetLodImpostor`):**
+  • A **mesh safety shell** (the sampled surface inflated +8 m, ≤10k verts, cheap to cook) engages when the player is above the streamed bubble — orbital approaches land on the real planet.
+  • A **solid core sphere** engages when the player is deep inside the body and pushes them back to the surface shell.
+  • Both auto-disable in the thin surface shell where real voxel colliders rule — mining/walking are untouched. Only the ACTIVE body's colliders are ever enabled (distant planets cost nothing).
+- **Bigger real-terrain bubble:** `GraphicsPreset.ViewDistance` raised (Low 4 / Mid 5 / High 6 / Ultra 7 chunks) and `JobsPerFrame` raised (3/6/8/10) so the editable terrain streams further and faster; `SphereWorld.colliderChunkRadius` 2 → 3 so solid terrain extends further around the player.
+
+#### ✅ Static delivery checks
+- All 7 modified/new sources parse cleanly (tree-sitter grammar validation).
 
 ### [7.13.9-dev] Phantom Horizontal Pull Fixed — Curved-Orbit Anchor & Frame-Relative Gravity
 

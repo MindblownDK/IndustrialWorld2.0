@@ -222,6 +222,10 @@ namespace VoxelEngine.Cosmos
             var activeSolarSystem = ResolveSolarSystemTemplate();
             if (activeSolarSystem != null)
                 quasar.settings = activeSolarSystem.quasar;
+            // ONE sun only (7.13.10): with a real star in the system the quasar's bright
+            // core reads as a second sun — disable it. Systems without a sun keep it.
+            if (activeSolarSystem != null && activeSolarSystem.sun != null)
+                quasar.settings.enabled = false;
 
             // ── Asteroid field (Phase 5 visual belt) ──
             var asteroidGO = new GameObject("AsteroidField");
@@ -275,6 +279,10 @@ namespace VoxelEngine.Cosmos
             // ── Deep-space procedural asteroid spawner ──
             var fieldGO = new GameObject("SpaceAsteroidField");
             _asteroidField = fieldGO.AddComponent<SpaceAsteroidField>();
+
+            // ── Solar hazard: the star warns before it kills (no more random sun deaths) ──
+            var sunHazardGO = new GameObject("SolarHazard");
+            sunHazardGO.AddComponent<SolarHazard>();
 
             // Activate radial gravity for the whole game + wind personality.
             _streamingBody = body;

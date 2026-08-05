@@ -37,13 +37,13 @@ namespace VoxelEngine.Cosmos
         /// <summary>Sphere streaming view distance (chunk radius) per tier.</summary>
         public static int ViewDistance => Current switch
         {
-            // This is the editable collider/chunk bubble, not visual draw distance: the
-            // continuous planet LOD covers everything beyond it. Keep it bounded so Ultra does
-            // not allocate thousands of 3D voxel chunks at spawn.
-            GraphicsTier.Low  => 3,
-            GraphicsTier.Mid  => 4,
-            GraphicsTier.High => 5,
-            _                 => 6,
+            // This is the editable collider/chunk bubble around the player (the continuous
+            // planet LOD covers everything beyond it). Raised in 7.13.10 so the real terrain
+            // reaches further and the LOD safety shell engages later.
+            GraphicsTier.Low  => 4,
+            GraphicsTier.Mid  => 5,
+            GraphicsTier.High => 6,
+            _                 => 7,
         };
 
         /// <summary>Grass density multiplier (0 = off) per tier.</summary>
@@ -92,10 +92,10 @@ namespace VoxelEngine.Cosmos
         /// <summary>Max chunks to generate per frame per tier.</summary>
         public static int JobsPerFrame => Current switch
         {
-            GraphicsTier.Low  => 2,
-            GraphicsTier.Mid  => 4,
-            GraphicsTier.High => 6,
-            _                 => 8,
+            GraphicsTier.Low  => 3,
+            GraphicsTier.Mid  => 6,
+            GraphicsTier.High => 8,
+            _                 => 10,
         };
 
         /// <summary>Whether atmospheric fog/post-FX are enabled per tier.</summary>

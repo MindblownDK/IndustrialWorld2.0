@@ -70,8 +70,8 @@ namespace VoxelEngine.Cosmos
         [Range(1, 16)] public int viewDistance = VoxelConstants.DEFAULT_VIEW_DISTANCE;
         [Range(1, 16)] public int maxJobsPerFrame = 4;
         public bool generateColliders = true;
-        [Tooltip("Only the nearby gameplay bubble needs expensive mesh colliders; distant local chunks remain visual until approached.")]
-        [Range(1, 4)] public int colliderChunkRadius = 2;
+        [Tooltip("Only the nearby gameplay bubble needs expensive mesh colliders; distant local chunks remain visual until approached. Raised to 3 in 7.13.10 so fast players meet solid terrain earlier (the LOD safety shell covers everything beyond).")]
+        [Range(1, 4)] public int colliderChunkRadius = 3;
         [Tooltip("Spawn trees/rocks from biome scatter lists.")]
         public bool enableScatter = true;
         [Tooltip("Maximum generated chunks whose scatter may be populated in one frame. A low budget prevents vegetation creation from stalling terrain streaming.")]

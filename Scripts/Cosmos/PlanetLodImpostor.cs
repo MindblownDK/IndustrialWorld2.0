@@ -69,6 +69,18 @@ namespace VoxelEngine.Cosmos
         private int _lastEffectiveResolution;
         private int _lastSeed;
 
+        // ── Safety colliders (solid planet, no flying through) ─────
+        private MeshCollider _safetyMeshCollider;
+        private SphereCollider _safetySphere;
+        private Mesh _safetyMesh;
+
+        [Tooltip("Altitude above the surface where the safety mesh collider engages (metres). " +
+                 "Inside this shell the streamed voxel colliders own collision.")]
+        public float safetyBubbleMeters = 220f;
+
+        [Tooltip("Safety shell inflation above the sampled surface (metres).")]
+        public float safetyInflationMeters = 8f;
+
         // ── Progressive (batched) high-detail build state ─────────────
         // Building a 40k–160k-vertex sampled surface in ONE frame would hitch the game.
         // Instead the vertex loop runs in small batches inside Update() until done, then
@@ -97,7 +109,10 @@ namespace VoxelEngine.Cosmos
             if (_buildInProgress)
             {
                 if (ContinueProgressiveBuild(resolvedBody))
+                {
                     UpdateFade(resolvedBody);
+                    UpdateSafetyColliders(resolvedBody);
+                }
                 return;
             }
 
@@ -108,6 +123,7 @@ namespace VoxelEngine.Cosmos
             if (needRebuild) Rebuild(effectiveResolution);
 
             UpdateFade(resolvedBody);
+            UpdateSafetyColliders(resolvedBody);
         }
 
         private CelestialBody ResolveBody()
@@ -137,10 +153,24 @@ namespace VoxelEngine.Cosmos
             if (meshRenderer == null) meshRenderer = GetComponent<MeshRenderer>();
             if (meshFilter == null)  meshFilter  = gameObject.AddComponent<MeshFilter>();
             if (meshRenderer == null) meshRenderer = gameObject.AddComponent<MeshRenderer>();
-            // LOD is visual only. Remove stale colliders from earlier experimental shells so
-            // a player can never collide with, mine, or become trapped by the far surface.
+            // Remove stale colliders from earlier experimental shells, then re-add the
+            // managed SAFETY colliders below (they are the ones that stop fast players
+            // from flying through the planet).
             foreach (var collider in GetComponents<Collider>())
                 if (Application.isPlaying) Destroy(collider); else DestroyImmediate(collider);
+
+            // ── SAFETY COLLIDERS (7.13.10) ─────────────────────────────
+            // The streamed voxel bubble only covers the player's vicinity — beyond it the
+            // LOD shell is the planet, and it must be SOLID or a fast player flies through
+            // the planet. Two safety nets:
+            //   • MeshCollider: the LOD surface inflated +8 m, catches orbital approaches.
+            //   • SphereCollider: a solid core sphere, catches players who somehow ended
+            //     up deep inside the body and pushes them back to the surface shell.
+            // Both are disabled in the thin surface shell where real voxel colliders rule.
+            _safetyMeshCollider = gameObject.AddComponent<MeshCollider>();
+            _safetyMeshCollider.enabled = false;
+            _safetySphere = gameObject.AddComponent<SphereCollider>();
+            _safetySphere.enabled = false;
         }
 
         /// <summary>
@@ -287,8 +317,66 @@ namespace VoxelEngine.Cosmos
             _mesh.RecalculateBounds();
             if (meshFilter != null) meshFilter.sharedMesh = _mesh;
 
+            RebuildSafetyCollider(body);
             _lastEffectiveResolution = targetResolution;
             _lastSeed = body.genParams.seed;
+        }
+
+        /// <summary>
+        /// (Re)build the safety collision shell: the sampled surface inflated slightly
+        /// outward, capped at 10242 verts so cooking stays cheap. Only the active body's
+        /// collider is ever enabled, so other planets cost nothing.
+        /// </summary>
+        private void RebuildSafetyCollider(CelestialBody body)
+        {
+            if (_safetyMeshCollider == null || body == null) return;
+            int budget = Mathf.Min(10242, Mathf.Max(642, _lastEffectiveResolution));
+            var (verts, tris, _) = BuildIcosphere(body, budget);
+
+            // Inflate outward by the safety margin.
+            float inflate = Mathf.Max(1f, safetyInflationMeters);
+            for (int i = 0; i < verts.Length; i++)
+            {
+                Vector3 dir = verts[i].normalized;
+                float r = body.SurfaceRadius + inflate;
+                verts[i] = dir * r;
+            }
+
+            if (_safetyMesh == null) _safetyMesh = new Mesh { name = "PlanetSafetyShell" };
+            _safetyMesh.Clear();
+            _safetyMesh.SetVertices(verts);
+            _safetyMesh.SetTriangles(tris, 0);
+            _safetyMesh.RecalculateBounds();
+            _safetyMeshCollider.sharedMesh = _safetyMesh;
+        }
+
+        /// <summary>
+        /// Toggle the safety colliders based on the viewer's altitude relative to this body.
+        /// Only the ACTIVE body's colliders are ever enabled (cheap for distant planets).
+        /// </summary>
+        private void UpdateSafetyColliders(CelestialBody body)
+        {
+            if (_safetyMeshCollider == null || _safetySphere == null || viewer == null || body == null) return;
+
+            bool isActiveBody = GravityProvider.ActiveBody == body;
+            if (!isActiveBody)
+            {
+                _safetyMeshCollider.enabled = false;
+                _safetySphere.enabled = false;
+                return;
+            }
+
+            float alt = body.AltitudeAt(viewer.position);
+            bool outsideShell = alt > safetyBubbleMeters;
+            bool deepInside = alt < -64f;
+            _safetyMeshCollider.enabled = outsideShell;
+            _safetySphere.enabled = deepInside;
+
+            // Keep the core sphere centred + sized to this body (it may have changed).
+            float targetRadius = body.SurfaceRadius + safetyInflationMeters;
+            if (Mathf.Abs(_safetySphere.radius - targetRadius) > 0.5f)
+                _safetySphere.radius = targetRadius;
+            _safetySphere.center = Vector3.zero;
         }
 
         private (Vector3[] verts, int[] tris, Color[] colors) BuildIcosphere(CelestialBody body, int targetVerts)
@@ -396,6 +484,8 @@ namespace VoxelEngine.Cosmos
             _buildColors = null;
             _buildIndex = 0;
             _buildInProgress = false;
+            if (_safetyMesh != null) { Destroy(_safetyMesh); _safetyMesh = null; }
+            if (_safetyMeshCollider != null) _safetyMeshCollider.sharedMesh = null;
         }
 
         // ── Icosahedron primitives ────────────────────────────────

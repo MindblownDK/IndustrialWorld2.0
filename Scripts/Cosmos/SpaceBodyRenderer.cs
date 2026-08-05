@@ -192,12 +192,18 @@ namespace VoxelEngine.Cosmos
         }
 
 
+        /// <summary>
+        /// Sky-proxy anchor: the ACTIVE BODY's scene position (falling back to the scene
+        /// origin in deep space). The active body is perfectly static in the scene (the
+        /// floating origin tracks it), so anchoring here means the sky never moves when the
+        /// player walks — walk 100 m and the planets stay put. It also keeps the proxies
+        /// outside the planet. In deep space the star-frame origin anchors the sky.
+        /// </summary>
         private Vector3 GetViewerPosition()
         {
-            var pc = UnityEngine.Object.FindAnyObjectByType<VoxelEngine.Player.PlayerController>();
-            if (pc != null) return pc.transform.position;
-            var cam = Camera.main;
-            return cam != null ? cam.transform.position : transform.position;
+            var active = GravityProvider.ActiveBody;
+            if (active != null) return active.transform.position;
+            return Vector3.zero;
         }
 
         private void EnsureCount(List<BodyVisual> list, int count, string namePrefix)
