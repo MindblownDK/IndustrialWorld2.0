@@ -1,9 +1,31 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.13.12-dev`
+**Current Version:** `7.13.13-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.13.13-dev] Top-Left Block Info, Fixed Blank Targets, Orbit-Approach Terrain, Planet Spacing & a Real Deadly Sun
+
+**Type:** PATCH — inspection HUD placement + target resolution, planet-approach terrain streaming, system spacing, and a visible/lethal sun; no save/API break.
+
+#### 📍 Block Info HUD → Top-Left & Always Resolves
+- **Moved** `WorldInspectionHud` from the top-right to the **top-left** (slides in from the left edge).
+- **Blank-target fix:** the planet-LOD SAFETY colliders (the solid shell/core that stop fly-through) were intercepting the crosshair raycast — the HUD couldn't see the real terrain/block behind them, so it showed nothing (especially after breaking a surface). A new `PlanetSafetyCollider` marker lets every interaction raycast (inspection HUD + mining/building tool) skip the safety shell; the real streamed voxel terrain is resolved instead. Physics still collides with the shell — you just can't mine/inspect it.
+
+#### 🌍 Planet Surface Generates During Approach
+- **Root cause:** when flying to another planet from space, the streamer only generates chunks in a small ball AROUND THE VIEWER — kilometres above the surface that meant pure air, so the surface never generated until you were ~200 m from touchdown (only the LOD shell showed).
+- **Fix — orbit-approach streaming:** when the viewer is far above the surface, `SphereWorld` streams around the **radial surface point beneath the viewer** (sampled from the real density field) — the actual terrain is generated and visible for the entire descent.
+
+#### 🪐 Planets No Longer Hug Earth
+- Enforced a **2,000 km minimum gap between planet orbits** at runtime (authored templates could place them 500 km apart, making planets hover right next to each other with overlapping gravity wells).
+
+#### ☀️ The Sun Is Real, Visible & Deadly
+- **Real sun mesh** at the star's true cosmic position (emissive sphere, 120 km radius, placed via the floating origin) — flying toward the sun you see in the sky genuinely approaches it, instead of passing through a fake 10 km sprite.
+- **Auto-scaled hazard zones:** warning = 80% of the innermost planet's orbit, lethal = 45% — always sane for the system scale. Escalating warnings + heat damage ramp still apply ("SOL APPROACH" → "SOL FLARE" → "SOL CORONA — CERTAIN DEATH").
+
+#### ✅ Static delivery checks
+- All 7 modified/new sources parse cleanly (tree-sitter grammar validation).
 
 ### [7.13.12-dev] Oil Mesher Compile Recovery (CS0120)
 

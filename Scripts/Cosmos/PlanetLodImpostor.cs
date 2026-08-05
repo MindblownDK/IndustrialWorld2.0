@@ -169,6 +169,9 @@ namespace VoxelEngine.Cosmos
             //   • SphereCollider: a solid core sphere, catches players who somehow ended
             //     up deep inside the body and pushes them back to the surface shell.
             // Both are disabled in the thin surface shell where real voxel colliders rule.
+            // The PlanetSafetyCollider marker lets interaction raycasts skip them.
+            var marker = gameObject.GetComponent<PlanetSafetyCollider>();
+            if (marker == null) gameObject.AddComponent<PlanetSafetyCollider>();
             _safetyMeshCollider = gameObject.AddComponent<MeshCollider>();
             _safetyMeshCollider.enabled = false;
             _safetySphere = gameObject.AddComponent<SphereCollider>();

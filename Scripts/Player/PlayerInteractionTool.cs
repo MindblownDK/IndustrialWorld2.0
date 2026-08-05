@@ -1117,6 +1117,9 @@ namespace VoxelEngine.Player
                 if (selfRoot != null && candidate.collider.transform.IsChildOf(selfRoot)) continue;
                 if (PlayerRaycastFilter.IsOwnPlayerCollider(candidate.collider, transform)) continue;
                 if (IsLiquidSurfaceCollider(candidate.collider)) continue;
+                // The planet-LOD safety shell is physical ground, never an interactable /
+                // minable surface — the real terrain is the streamed voxels behind it.
+                if (candidate.collider.GetComponentInParent<VoxelEngine.Cosmos.PlanetSafetyCollider>() != null) continue;
                 hit = candidate;
                 return true;
             }

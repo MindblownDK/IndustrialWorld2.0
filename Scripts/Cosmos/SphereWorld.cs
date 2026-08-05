@@ -498,6 +498,22 @@ namespace VoxelEngine.Cosmos
             Vector3 localViewer = body.transform.InverseTransformPoint(viewer.position);
             Vector3Int center = LocalToChunk(localViewer);
 
+            // ── ORBIT APPROACH STREAMING (7.13.13) ─────────────────────
+            // When the viewer is far above the surface (approaching a planet from space),
+            // the usual ball-around-viewer streams only AIR (the terrain is kilometres
+            // below). Instead, stream around the RADIAL SURFACE POINT under the viewer so
+            // the real terrain is generated and visible during the whole descent — not a
+            // bare LOD shell until the last 200 m.
+            float viewerAltitude = localViewer.magnitude - body.SurfaceRadius;
+            float surfaceFocusAltitude = VoxelConstants.CHUNK_SIZE * viewDistance * 2f;
+            if (viewerAltitude > surfaceFocusAltitude && _biomes.IsCreated)
+            {
+                float3 radial = math.normalizesafe((float3)localViewer, new float3(0f, 1f, 0f));
+                SphereDensity.EvaluateColumn(body.genParams, _biomes, radial, out float surfaceRadius, out _);
+                Vector3 surfaceLocal = (Vector3)radial * Mathf.Max(surfaceRadius, body.SeaRadius);
+                center = LocalToChunk(surfaceLocal);
+            }
+
             int r = viewDistance;
             int loadR2 = r * r;
             int evictR2 = (r + 3) * (r + 3); // hysteresis to avoid load/unload flicker

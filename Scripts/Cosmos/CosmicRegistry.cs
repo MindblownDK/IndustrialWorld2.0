@@ -72,6 +72,10 @@ namespace VoxelEngine.Cosmos
         // Minimum gap between sibling moon rings (km) so they can never intersect.
         private const double MinMoonGapKm = 40d;
 
+        // Minimum gap between consecutive planet orbits (km). Enforced at runtime so a
+        // system never reads as planets sitting right on top of each other.
+        private const double MinPlanetGapKm = 2000d;
+
         // ── Lifecycle ─────────────────────────────────────────────
         private void Awake()
         {
@@ -139,7 +143,15 @@ namespace VoxelEngine.Cosmos
                 else if (i == 0)
                     planetRadius = ND(ref rng, pt.orbitalDistanceKm.x, pt.orbitalDistanceKm.y);
                 else
-                    planetRadius += ND(ref rng, template.minPlanetSeparationKm, template.maxPlanetSeparationKm);
+                {
+                    // Runtime spacing floor: authored templates can allow planets 500 km
+                    // apart, which reads as planets hovering right next to each other and
+                    // their gravity wells overlapping. Enforce a sensible minimum gap so
+                    // the system feels vast (Space-Engineers scale).
+                    double sepLo = Mathd.Max(MinPlanetGapKm, template.minPlanetSeparationKm);
+                    double sepHi = Mathd.Max(sepLo + 100d, template.maxPlanetSeparationKm);
+                    planetRadius += ND(ref rng, sepLo, sepHi);
+                }
 
                 var elements = BuildPlanetElements(pt, planetRadius, ref rng, i, templates.Length);
                 var planet = new BodyInstance

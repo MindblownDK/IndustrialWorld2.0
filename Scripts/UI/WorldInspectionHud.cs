@@ -58,7 +58,7 @@ namespace VoxelEngine.UI
 
             _card = new VisualElement { name = "WorldInspectionHud" };
             _card.style.position = Position.Absolute;
-            _card.style.right = 16;
+            _card.style.left = 16;
             _card.style.top = 18;
             _card.style.width = 310;
             _card.style.paddingLeft = 14;
@@ -66,7 +66,7 @@ namespace VoxelEngine.UI
             _card.style.paddingTop = 11;
             _card.style.paddingBottom = 11;
             _card.style.opacity = 0f;
-            _card.style.translate = new StyleTranslate(new Translate(new Length(10f, LengthUnit.Pixel), new Length(0f, LengthUnit.Pixel), 0f));
+            _card.style.translate = new StyleTranslate(new Translate(new Length(-10f, LengthUnit.Pixel), new Length(0f, LengthUnit.Pixel), 0f));
             _card.style.transitionProperty = new System.Collections.Generic.List<StylePropertyName> { "opacity", "translate" };
             _card.style.transitionDuration = new System.Collections.Generic.List<TimeValue>
             {
@@ -254,6 +254,9 @@ namespace VoxelEngine.UI
         private static bool IsRuntimeSystemCollider(Collider collider)
         {
             if (collider == null) return true;
+            // The planet-LOD safety shell/core must never be inspected as a block — the
+            // real target is the streamed voxel terrain behind it.
+            if (collider.GetComponentInParent<VoxelEngine.Cosmos.PlanetSafetyCollider>() != null) return true;
             string ownName = collider.gameObject.name;
             string rootName = collider.transform.root != null ? collider.transform.root.name : string.Empty;
             return ownName.IndexOf("Bootstrap", System.StringComparison.OrdinalIgnoreCase) >= 0
