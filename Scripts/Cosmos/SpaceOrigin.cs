@@ -64,6 +64,12 @@ namespace VoxelEngine.Cosmos
                  "prevents any spawn-time frame-velocity kick).")]
         [Range(0f, 10f)] public float spawnGraceSeconds = 3f;
 
+        [Tooltip("While true, NO automatic reference-frame switch may run (and therefore no " +
+                 "frame-velocity delta is ever applied). The spawner sets this around spawn / " +
+                 "respawn teleports so the freshly-placed player can never be kicked sideways " +
+                 "by a frame switch landing between teleport and control handover.")]
+        public bool suppressAutoFrameSwitches;
+
         // ── State ─────────────────────────────────────────────────
         /// <summary>Cosmic position (km) of the scene origin.</summary>
         public double3 AnchorKm { get; private set; }
@@ -168,7 +174,19 @@ namespace VoxelEngine.Cosmos
             ShiftWorld(shift);
             ViewerCosmicKm = newViewerCosmicKm;
             PlaceBodies();
-            ReEvaluateFrame(force: true);
+            // Re-pick the frame WITHOUT applying a velocity delta: a teleport re-anchors
+            // the world, and velocities are the caller's responsibility (the warp drive
+            // zeroes the ship, save-restore zeroes the player). Applying the delta here
+            // used to kick freshly-teleported players sideways at hundreds of m/s.
+            var reg = CosmicRegistry.Instance;
+            if (reg != null && reg.IsReady)
+            {
+                BodyInstance dominant = reg.GetDominantBody(newViewerCosmicKm, out _);
+                CelestialBody frame = null;
+                if (dominant != null) reg.SceneBodies.TryGetValue(dominant, out frame);
+                SetFrame(frame);
+                PlaceBodies();
+            }
         }
 
         /// <summary>Set the frame directly (used by save restore to co-move with the right body).</summary>
@@ -269,8 +287,9 @@ namespace VoxelEngine.Cosmos
             // Spawn grace: during the first seconds after scene load the frame is already
             // pinned to the home body and NO automatic frame switch may apply a velocity
             // delta (that delta is what flung players at spawn). Forced switches (warp,
-            // save restore) still work.
-            if (!force && Time.timeSinceLevelLoad < spawnGraceSeconds) return;
+            // save restore) still work. The spawner also suppresses auto switches around
+            // spawn/respawn teleports for the same reason.
+            if (!force && (suppressAutoFrameSwitches || Time.timeSinceLevelLoad < spawnGraceSeconds)) return;
 
             BodyInstance dominant = reg.GetDominantBody(ViewerCosmicKm, out double candidateAccel);
             CelestialBody candidateBody = null;

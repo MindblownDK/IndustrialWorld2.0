@@ -661,6 +661,23 @@ namespace VoxelEngine.Cosmos
         /// <summary>Current scene frame body (null = deep space).</summary>
         public CelestialBody CurrentFrameBody => _spaceOrigin != null ? _spaceOrigin.FrameBody : _body;
 
+        /// <summary>
+        /// Force the streaming systems (voxel world, gravity, grass, ocean, LOD) onto a
+        /// specific body without waiting for an automatic frame switch — used right after
+        /// a respawn/teleport pins the scene frame directly (SetFrame), so the streamer
+        /// never stays on the wrong planet. Pass null for deep space.
+        /// </summary>
+        public void ForceStreamingBody(CelestialBody body)
+        {
+            if (body == _streamingBody) return;
+            CelestialBody previous = _streamingBody;
+            // Defeat the early-out in HandleFrameChange — but only when switching TO a
+            // body; a deep-space (null) target must keep a non-null previous to pass.
+            if (body != null) _streamingBody = null;
+            HandleFrameChange(body);
+            Debug.Log($"[CosmosBootstrap] Streaming forced to {(body != null ? "'" + body.DisplayName + "'" : "deep space")} (was {(previous != null ? "'" + previous.DisplayName + "'" : "deep space")}).");
+        }
+
         /// <summary>True when the player is in deep space (outside every body's gravity well).</summary>
         public bool IsDeepSpace => _spaceOrigin != null && _spaceOrigin.IsDeepSpace;
 

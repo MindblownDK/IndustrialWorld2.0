@@ -1,9 +1,26 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.13.7-dev`
+**Current Version:** `7.13.8-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.13.8-dev] Respawn Sideways-Launch Fix & Space Bed/Cryobed Spawns
+
+**Type:** PATCH — eliminates the sideways frame-velocity kick on respawn/teleport and officially supports spawning in space next to beds/cryobeds; no save/API break.
+
+#### 🚀 Respawn Sideways Launch — Root Cause & Fix
+- **Root cause:** respawning teleported the player to the destination while the scene frame could still be a DIFFERENT body's frame (e.g., died mid-fall in the planet frame, respawn destination near another body — or died in space, respawn on surface). The next automatic frame switch then applied the frame-velocity DELTA to every scene object — including the freshly-respawned player — producing a violent sideways (tangential) kick. The previous fix zeroed velocity, but a frame switch landing between the zero and control handover re-injected the delta.
+- **Fix:** the spawner now **pins the scene frame to the destination's dominant body BEFORE the teleport** (`PrepareRespawnFrame` → `SpaceOrigin.SetFrame`, which never applies velocity deltas), **suppresses automatic frame switches for the whole spawn/respawn sequence** (`SpaceOrigin.suppressAutoFrameSwitches`), and only re-enables them after the player is at rest with control. No window remains for a kick — applied to first spawn AND every respawn.
+- **Streaming follows the frame:** new `CosmosBootstrap.ForceStreamingBody` retargets the voxel streamer, gravity, grass/ocean and LOD to the pinned destination body (or deep space) right away, so the world matches where you spawn.
+- **Teleports never kick (warp & save restore):** `SpaceOrigin.TeleportCosmic` now re-picks the frame WITHOUT applying the velocity delta (the warp drive zeroes the ship; save-restore zeroes the player).
+
+#### 🛏️ Space Bed / Cryobed Spawns Supported
+- Respawn destination validation now only rejects destinations **inside a planet** (a launch-era save buried in terrain). Positions in space are VALID — a bed or cryobed in orbit, on a station, or on a ship now spawns you exactly next to it, in the correct reference frame, at rest.
+- The world-spawn fallback also validates against EVERY body (not just the active one).
+
+#### ✅ Static delivery checks
+- All 3 modified sources parse cleanly (tree-sitter grammar validation).
 
 ### [7.13.7-dev] Instant HUD Fade, Death-Loop Elimination & Whole-Planet LOD
 
