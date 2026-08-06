@@ -1,9 +1,20 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.15.0-dev`
+**Current Version:** `7.15.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.15.1-dev] Voxel LOD Compile Recovery (CS8773/CS8983 — C# 9 struct field initializer)
+
+**Type:** PATCH — compile recovery for the real-voxel LOD delivery; no behaviour change, no save/API break.
+
+#### 🛠️ Compiler Fix
+- **CS8773 / CS8983 in `SurfaceNetsJob`:** the new `voxelSize` field used a C# 10 field initializer (`= VoxelConstants.VOXEL_SIZE`), which Unity's C# 9.0 language level rejects in structs. The field is now plain (`public float voxelSize;`) and `Execute()` resolves the safe fallback itself: `vs = voxelSize > 0f ? voxelSize : VoxelConstants.VOXEL_SIZE` — bounds and vertex positions use `vs`.
+- **Explicit call-site hygiene:** `VoxelWorld` and `SphereWorld` now pass `voxelSize = VoxelConstants.VOXEL_SIZE` explicitly, so the gameplay world's intent is self-documenting (behaviour identical to before).
+
+#### ✅ Static delivery checks
+- All modified sources parse cleanly (tree-sitter grammar validation); swept the whole 7.15.0 delivery for other C# 10+ constructs (struct field initializers) — none remain.
 
 ### [7.15.0-dev] REAL Voxel Planet Surfaces — Whole-Planet Voxel LOD Generation (No More Fake Spheres)
 

@@ -515,7 +515,8 @@ namespace VoxelEngine.Core
                 vertexAttributes = _vertexAttributes,
                 isSphere         = false,
                 enableVertexAo   = true,
-                chunkOrigin      = new float3(chunk.coord.x, chunk.coord.y, chunk.coord.z) * VoxelConstants.CHUNK_SIZE
+                chunkOrigin      = new float3(chunk.coord.x, chunk.coord.y, chunk.coord.z) * VoxelConstants.CHUNK_SIZE,
+                voxelSize        = VoxelConstants.VOXEL_SIZE
             };
             pending.handle = job.Schedule();
             _pendingMesh.Add(pending);

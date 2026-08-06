@@ -690,7 +690,8 @@ namespace VoxelEngine.Cosmos
                 vertexAttributes = _vertexAttributes,
                 isSphere = true,
                 enableVertexAo = false,
-                chunkOrigin = new float3(chunk.coord.x, chunk.coord.y, chunk.coord.z) * VoxelConstants.CHUNK_SIZE
+                chunkOrigin = new float3(chunk.coord.x, chunk.coord.y, chunk.coord.z) * VoxelConstants.CHUNK_SIZE,
+                voxelSize = VoxelConstants.VOXEL_SIZE
             };
             pending.handle = job.Schedule();
             _pendingMesh.Add(pending);

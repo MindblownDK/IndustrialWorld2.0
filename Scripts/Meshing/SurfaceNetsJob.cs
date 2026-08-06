@@ -57,8 +57,9 @@ namespace VoxelEngine.Meshing
         /// World-space edge length of one voxel (metres). The gameplay world uses
         /// VoxelConstants.VOXEL_SIZE (1 m); PlanetVoxelLod's LOD levels use larger
         /// voxels (8–512 m) so the same job builds the whole planet at real LOD.
+        /// Zero (default) falls back to VoxelConstants.VOXEL_SIZE in Execute().
         /// </summary>
-        public float voxelSize = VoxelConstants.VOXEL_SIZE;
+        public float voxelSize;
 
         // Fluid material IDs — treated as EMPTY for terrain mesh generation UNLESS the
         // cell is SOLID. Solid-density crude oil (the geological bore/reservoir written by
@@ -79,6 +80,9 @@ namespace VoxelEngine.Meshing
         public void Execute()
         {
             const int S  = VoxelConstants.CHUNK_SIZE;
+            // Zero (default) means "the caller did not set a custom voxel size" — fall back
+            // to the standard gameplay voxel size. (C# 9 forbids struct field initializers.)
+            float vs = voxelSize > 0f ? voxelSize : VoxelConstants.VOXEL_SIZE;
 
             for (int i = 0; i < cellVertexIndex.Length; i++) cellVertexIndex[i] = -1;
 
@@ -267,7 +271,7 @@ namespace VoxelEngine.Meshing
             // Bounds are reported in world metres (vertex positions are scaled below), so
             // frustum culling of the chunk GO is correct at any voxel size.
             bounds[0] = vertexCount > 0
-                ? new Bounds((Vector3)((bbMin + bbMax) * 0.5f) * voxelSize, (Vector3)(bbMax - bbMin) * voxelSize)
+                ? new Bounds((Vector3)((bbMin + bbMax) * 0.5f) * vs, (Vector3)(bbMax - bbMin) * vs)
                 : new Bounds(Vector3.zero, Vector3.zero);
 
             // ---- Write into Mesh.MeshData (Unity 6 fast path) ----
@@ -277,7 +281,7 @@ namespace VoxelEngine.Meshing
             for (int i = 0; i < vertexCount; i++)
                 verts[i] = new VertexLayout
                 {
-                    pos    = vertexScratch[i] * voxelSize,
+                    pos    = vertexScratch[i] * vs,
                     normal = normalScratch[i],
                     color  = colorScratch[i]
                 };
