@@ -506,8 +506,12 @@ namespace VoxelEngine.Cosmos
             {
                 // Terrain bakes carry their own vertex colours (tint = white); bodies
                 // without a bake (belts, sun, not-yet-baked) tint through the flat colour.
+                // (UnityEngine.Color has no .rgb accessor — channels are set individually.)
                 var tint = mat.GetColor("_Tint");
-                tint.rgb = hasTerrain ? Color.white : color;
+                Color tintColor = hasTerrain ? Color.white : color;
+                tint.r = tintColor.r;
+                tint.g = tintColor.g;
+                tint.b = tintColor.b;
                 tint.a = hasTerrain ? alpha : 1f;
                 mat.SetColor("_Tint", tint);
             }

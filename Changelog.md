@@ -1,9 +1,19 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.14.0-dev`
+**Current Version:** `7.14.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.14.1-dev] Sky Proxy Compile Recovery (CS1061 Color.rgb)
+
+**Type:** PATCH — compile recovery for the sampled-terrain sky proxies; no behaviour change, no save/API break.
+
+#### 🛠️ Compiler Fix
+- **CS1061 in `SpaceBodyRenderer.PositionBody`:** the tint path wrote `tint.rgb = ...`, but `UnityEngine.Color` has no `.rgb` accessor (that's an HLSL/`Color32`-style member). The flat-colour tint for bodies without a terrain bake (asteroid belts, the sun sprite, not-yet-baked proxies) now assigns `r`/`g`/`b` individually — identical behaviour, valid C#.
+
+#### ✅ Static delivery checks
+- Verified the modified source parses cleanly (tree-sitter grammar validation); swept all touched files for other `.rgb`-style Color misuse (none — the only remaining mention is in a comment).
 
 ### [7.14.0-dev] Real Planets — Sampled Terrain on Every Body, Distance-Based LOD Ladder & Seamless Proxy→Surface Handoff
 
