@@ -43,8 +43,9 @@ namespace VoxelEngine.Cosmos
         public int updateEveryNFrames = 3;
 
         [Tooltip("Bodies closer than this (metres, true scene distance) render their real LOD " +
-                 "instead of the compressed sky proxy. Farther bodies use the sky projection.")]
-        public float trueLodDistanceMeters = 200000f;
+                 "instead of the compressed sky proxy. Farther bodies use the sky projection. " +
+                 "800 km keeps the approached planet visible for the whole descent.")]
+        public float trueLodDistanceMeters = 800000f;
 
         private struct BodyVisual
         {
@@ -90,16 +91,32 @@ namespace VoxelEngine.Cosmos
 
             // Render the sun(s).
             EnsureCount(_sunVisuals, registry.Sun != null ? 1 : 0, "SpaceSun");
-            Vector3 sunPos = GetViewerPosition() + Vector3.up * visualRange * 1.5f;
             if (registry.Sun != null)
             {
                 var sun = registry.Sun;
                 float intensity = sun.settings != null ? sun.settings.intensity : 1f;
                 Color glow = sun.settings != null ? sun.settings.glowColor : new Color(1f, 0.9f, 0.7f);
-                Vector3 sunDirKm = sun.positionKm - viewerKm;
-                Vector3 sunDir = sunDirKm.sqrMagnitude < 1f ? Vector3.up : sunDirKm.normalized;
-                sunPos = GetViewerPosition() + sunDir * visualRange * 1.5f;
-                PositionBody(_sunVisuals[0], sunPos, sunVisualScale * intensity, glow, emissive: true);
+
+                // Real sun distance (scene metres): when it's close enough to render at its
+                // TRUE position (SolarHazard's emissive sphere), hide this fake sprite —
+                // one sun only, and the one you fly toward is the real hazard.
+                bool realSunVisible = spaceOrigin != null && spaceOrigin.viewer != null
+                    ? math.length(registry.Sun.positionKmD - spaceOrigin.GetCosmicKm(spaceOrigin.viewer.position)) * 1000d < trueLodDistanceMeters
+                    : false;
+                if (realSunVisible)
+                {
+                    if (_sunVisuals.Count > 0 && _sunVisuals[0].go != null)
+                        _sunVisuals[0].go.SetActive(false);
+                }
+                else
+                {
+                    Vector3 sunDirKm = sun.positionKm - viewerKm;
+                    Vector3 sunDir = sunDirKm.sqrMagnitude < 1f ? Vector3.up : sunDirKm.normalized;
+                    Vector3 sunPos = GetViewerPosition() + sunDir * visualRange * 1.5f;
+                    if (_sunVisuals.Count > 0 && _sunVisuals[0].go != null && !_sunVisuals[0].go.activeSelf)
+                        _sunVisuals[0].go.SetActive(true);
+                    PositionBody(_sunVisuals[0], sunPos, sunVisualScale * intensity, glow, emissive: true);
+                }
             }
 
             // Render planets + moons.

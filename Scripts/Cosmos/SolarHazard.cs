@@ -33,8 +33,8 @@ namespace VoxelEngine.Cosmos
         public float lethalDamagePerSecond = 60f;
 
         [Header("Sun Visual")]
-        [Tooltip("Radius of the rendered sun mesh (km).")]
-        public float sunVisualRadiusKm = 120f;
+        [Tooltip("Radius of the rendered sun mesh (km). ~80 km reads as a dramatic 4-6° disc from the innermost planets.")]
+        public float sunVisualRadiusKm = 80f;
 
         [Tooltip("Sun core colour.")]
         public Color sunColor = new Color(1f, 0.92f, 0.72f);

@@ -48,11 +48,14 @@ namespace VoxelEngine.Cosmos
         public float rebaseDistanceMeters = 32000f;
 
         [Header("Frame Selection")]
-        [Tooltip("A candidate body must exceed the current frame body's pull by this factor before the frame switches (hysteresis — prevents flicker).")]
-        [Range(1.05f, 2f)] public float frameSwitchHysteresis = 1.25f;
+        [Tooltip("A candidate body must exceed the current frame body's pull by this factor before the frame switches. 1.05 = switch at the gravity dominance crossover (leaving a planet's well releases you the moment another body wins — the old 1.25 value trapped the player in Earth's well forever).")]
+        [Range(1.0f, 1.5f)] public float frameSwitchHysteresis = 1.05f;
 
-        [Tooltip("Minimum gravity (m/s²) a body needs at the player to be eligible as the scene frame body.")]
-        public float frameEligibilityGravityMps2 = 0.012f;
+        [Tooltip("Minimum gravity (m/s²) a body needs at the player to be eligible as the scene frame body (entering a well).")]
+        public float frameEligibilityGravityMps2 = 0.02f;
+
+        [Tooltip("Gravity (m/s²) below which the CURRENT frame body releases the scene to deep space. Slightly lower than the entry threshold so there is a hysteresis band (no frame oscillation when hovering at the boundary).")]
+        public float releaseGravityMps2 = 0.014f;
 
         [Header("References")]
         [Tooltip("Player transform (auto-resolved). Scene origin keeps this near zero.")]
@@ -317,6 +320,34 @@ namespace VoxelEngine.Cosmos
                 if (candidateBody == null) return; // body factory not ready yet
             }
 
+            // Current frame body's pull (for the release rule).
+            double currentAccel = 0d;
+            if (FrameBody != null)
+            {
+                var curInst = FindInstanceOf(FrameBody);
+                if (curInst != null)
+                {
+                    double3 toCur = curInst.positionKmD - ViewerCosmicKm;
+                    double dCur = math.length(toCur);
+                    double rKm = curInst.settings != null ? curInst.settings.radiusKm : 1d;
+                    if (dCur < rKm) dCur = rKm;
+                    if (dCur > 0.05d)
+                        currentAccel = curInst.gravitationalParamKm3S2 * 1000d / (dCur * dCur);
+                }
+            }
+
+            // ── RELEASE rule ───────────────────────────────────────────
+            // When the CURRENT frame body's pull decays below the release floor and no
+            // eligible new body is winning, drop to the deep-space (star) frame. Without
+            // this the player stays in Earth's co-moving frame forever ("still in Earth's
+            // gravity pull very far away") — Earth remained technically dominant, the
+            // early-return kept the frame, and the residual frame-relative gravity pulled
+            // the player back. Releasing is the physically correct free-fall handoff.
+            bool currentWeak = currentAccel < releaseGravityMps2;
+            bool newEligible = candidateBody != null && candidateAccel >= frameEligibilityGravityMps2;
+            if (!force && currentWeak && !newEligible && FrameBody != null)
+                candidateBody = null; // release to deep space
+
             if (candidateBody == FrameBody) return;
 
             // Hysteresis: only switch when the new candidate meaningfully wins.
@@ -327,22 +358,14 @@ namespace VoxelEngine.Cosmos
                     // Deep space → body: require real pull.
                     if (candidateAccel < frameEligibilityGravityMps2) return;
                 }
-                else
+                else if (candidateBody != null)
                 {
-                    double currentAccel = 0d;
-                    var curInst = FindInstanceOf(FrameBody);
-                    if (curInst != null)
-                    {
-                        double3 toCur = curInst.positionKmD - ViewerCosmicKm;
-                        double dCur = math.length(toCur);
-                        double rKm = curInst.settings != null ? curInst.settings.radiusKm : 1d;
-                        if (dCur < rKm) dCur = rKm;
-                        if (dCur > 0.05d)
-                            currentAccel = curInst.gravitationalParamKm3S2 * 1000d / (dCur * dCur);
-                    }
-                    // Switch when the candidate clearly wins (or the current frame body is gone).
+                    // Switch at the gravity dominance crossover (candidate wins by a hair).
+                    // The old 1.25× factor trapped the player in Earth's well forever —
+                    // at the midpoint between two equal bodies neither ever won 1.25×.
                     if (candidateAccel < currentAccel * frameSwitchHysteresis) return;
                 }
+                // candidateBody == null here = releasing to deep space — always allowed.
             }
 
             // ── Apply the frame switch ────────────────────────────

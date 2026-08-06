@@ -1,9 +1,34 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.13.13-dev`
+**Current Version:** `7.13.14-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.13.14-dev] Gravity-Well Release, Always-Visible Planets & Sun (Real LOD Approach)
+
+**Type:** PATCH — the player can now leave a planet's gravity well for real, other planets stay visible and generate terrain during approach, and the sun is a real target; no save/API break.
+
+#### 🌍 Leaving Earth's Gravity Well (the "pulled back from very far" fix)
+- **Root cause:** two frame-selection bugs kept the player glued to Earth's co-moving frame forever: (1) the frame switch required a candidate body to pull 1.25× harder than the current body — at the midpoint between two equal bodies neither ever wins, so the frame never switched; (2) even when the current body's pull had decayed to almost nothing, the "Earth is still dominant" early-return kept the frame, and the frame-relative gravity kept pulling the player back.
+- **Fixes in `SpaceOrigin.ReEvaluateFrame`:**
+  • **RELEASE rule:** when the current frame body's pull drops below `releaseGravityMps2` (0.014 m/s²) and no eligible new body is winning, the scene releases to the deep-space (star) frame — the physically correct free-fall handoff.
+  • **Crossover switching:** body→body switches now happen at the gravity dominance crossover (candidate > current × 1.05) instead of 1.25×.
+  • **Hysteresis band:** entry threshold 0.02 m/s² vs release 0.014 m/s² — no frame oscillation at the boundary.
+
+#### 🪐 Other Planets Always Visible + Surface Generates on Approach
+- **Root cause of "planet disappears / surface never generates":** when the frame switched to the approached planet at ~4,200 km, the sky-proxy renderer HID its sprite (it became the "active body") while the real LOD sat BEYOND the camera's 900 km far clip — the planet was invisible for the entire descent, and terrain never streamed because the player never reached its frame.
+- **Fixes:**
+  • **Far clip rework:** `EnsureCameraFarClip` now covers the active body for the whole approach, every body within the 800 km true-LOD window, AND the star at its true position — capped at 50,000 km (URP reversed-Z keeps near precision). Refreshed every 2 s so it tracks the flight.
+  • **True-LOD window 200 → 800 km** in `SpaceBodyRenderer` — the approached planet renders its real high-detail LOD much earlier and grows as you descend.
+  • Orbit-approach streaming (7.13.13) now actually engages because the frame switches correctly — the surface beneath the approach point generates during the whole descent.
+
+#### ☀️ The Sun Is the Real Sun
+- The fake 9.75 km sun sprite is now hidden whenever the REAL sun (emissive sphere at its true cosmic position) is within the LOD window — one sun, and the one you fly toward is the real hazard.
+- Sun visual radius 120 → 80 km for a natural 4–6° disc from the inner planets; hazard zones remain auto-scaled to the innermost orbit.
+
+#### ✅ Static delivery checks
+- All 4 modified sources parse cleanly (tree-sitter grammar validation).
 
 ### [7.13.13-dev] Top-Left Block Info, Fixed Blank Targets, Orbit-Approach Terrain, Planet Spacing & a Real Deadly Sun
 

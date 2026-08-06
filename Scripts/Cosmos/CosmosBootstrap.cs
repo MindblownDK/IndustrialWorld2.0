@@ -420,33 +420,64 @@ namespace VoxelEngine.Cosmos
                 cam = FindAnyObjectByType<Camera>();
             }
             if (cam == null) return;
+
+            var registry = CosmicRegistry.Instance;
+            if (registry == null || _spaceOrigin == null) return;
+
+            double3 camCosmic = _spaceOrigin.GetCosmicKm(cam.transform.position);
+            double needed = 0d;
+
+            // 1) The ACTIVE body — always visible, including the whole approach from orbit
+            //    (the old 900 km cap hid the planet the moment its frame became active,
+            //    because the sky proxy is hidden for the active body — the planet vanished).
             var body = GravityProvider.ActiveBody != null
                 ? GravityProvider.ActiveBody
                 : (_bodyGO != null ? _bodyGO.GetComponent<CelestialBody>() : null);
-            float bodyRadiusM = body != null ? body.SurfaceRadius : 1000f;
-            Vector3 bodyCenter = body != null ? body.transform.position : bodyOrigin;
-            float needed = Vector3.Distance(cam.transform.position, bodyCenter) + bodyRadiusM * 2f + 5000f;
-            // Real space: also cover the closest non-active bodies whose true LODs render.
-            var registry = CosmicRegistry.Instance;
-            if (registry != null && registry.SceneBodies != null && _spaceOrigin != null)
+            if (body != null)
             {
-                double3 camCosmic = _spaceOrigin.GetCosmicKm(cam.transform.position);
+                double d = math.length(_spaceOrigin.GetCosmicKm(body.transform.position) - camCosmic) * 1000d;
+                needed = math.max(needed, d + body.SurfaceRadius * 2d + 5000d);
+            }
+
+            // 2) Every other body whose real LOD renders (true-LOD window).
+            if (registry.SceneBodies != null)
+            {
                 for (int i = 0; i < registry.Bodies.Count; i++)
                 {
                     var b = registry.Bodies[i];
                     if (b == null) continue;
                     if (b.settings != null && body != null && b.settings == body.settings) continue;
                     double distM = math.length(registry.CosmicPositionOf(b) - camCosmic) * 1000d;
-                    if (distM < 400000d) // only within the true-LOD window
-                        needed = Mathf.Max(needed, (float)distM + (float)(b.settings != null ? b.settings.radiusKm * 1000f : 6000f) + 5000f);
+                    if (distM < trueLodViewKm * 1000d)
+                        needed = math.max(needed, distM + (b.settings != null ? b.settings.radiusKm * 1000d : 6000d) + 5000d);
                 }
             }
-            if (cam.farClipPlane < needed)
+
+            // 3) The STAR — the real sun must render at its true position (capped far clips
+            //    previously culled it, so "flying into the sun" passed through a fake sprite).
+            if (registry.Sun != null)
             {
-                cam.farClipPlane = Mathf.Min(needed, 900000f);
-                Debug.Log($"[CosmosBootstrap] Camera far clip plane raised to {cam.farClipPlane:0} so celestial bodies are visible.");
+                double sunDistM = math.length(registry.Sun.positionKmD - camCosmic) * 1000d;
+                needed = math.max(needed, math.min(sunDistM + 100000d, maxFarClipMeters));
+            }
+
+            if (needed > 1000d)
+            {
+                float target = (float)math.min(needed, maxFarClipMeters);
+                if (Mathf.Abs(cam.farClipPlane - target) > target * 0.05f)
+                {
+                    cam.farClipPlane = target;
+                    Debug.Log($"[CosmosBootstrap] Camera far clip plane set to {cam.farClipPlane:0} so the sun, planets and LODs are visible.");
+                }
             }
         }
+
+        /// <summary>Far-plane cap (metres). 50,000 km keeps the whole system visible;
+        /// URP reversed-Z depth keeps near-terrain precision intact.</summary>
+        private const double maxFarClipMeters = 50000000d;
+
+        /// <summary>Bodies within this distance (km) render their real LOD instead of the sky proxy.</summary>
+        private const double trueLodViewKm = 800d;
 
         // ── Real-space infrastructure ──────────────────────────────
 
@@ -919,7 +950,18 @@ namespace VoxelEngine.Cosmos
             // Frame changes can also arrive via polling (robust against missed events).
             if (_spaceOrigin != null && _streamingBody != _spaceOrigin.FrameBody)
                 HandleFrameChange(_spaceOrigin.FrameBody);
+
+            // Keep the far clip tracking the approach every 2 s (bodies move along their
+            // orbits; the sun/planet must stay visible as you travel between them).
+            _farClipTimer -= Time.deltaTime;
+            if (_farClipTimer <= 0f)
+            {
+                _farClipTimer = 2f;
+                EnsureCameraFarClip();
+            }
         }
+
+        private float _farClipTimer = 1f;
 
         /// <summary>
         /// Gives the player an actual visual handoff from sky to deep space without replacing
