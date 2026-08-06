@@ -76,6 +76,8 @@ namespace VoxelEngine.Cosmos
                           (settings.bodyName.IndexOf("Asteroid", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
                            settings.bodyName.IndexOf("Belt", System.StringComparison.OrdinalIgnoreCase) >= 0);
             genParams.isAsteroidBelt      = (byte)(isBelt ? 1 : 0);
+            genParams.hasOilSeeps         = (byte)((settings.CanGenerateFiniteCrudeOilSeeps
+                                                    || settings.CanGenerateInfiniteJackPumpNodes) ? 1 : 0);
 
             // Earth-like gravity baseline (9.81) scaled by the body's gravity multiplier (0 for Asteroid Belts).
             SurfaceGravity = isBelt ? 0f : 9.81f * Mathf.Clamp(settings.gravity, 0f, 5f);

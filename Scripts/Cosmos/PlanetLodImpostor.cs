@@ -396,10 +396,12 @@ namespace VoxelEngine.Cosmos
             _mesh.RecalculateBounds();
             if (meshFilter != null) meshFilter.sharedMesh = _mesh;
 
-            // The collision shell only matters for the body the player is actually on /
-            // approaching — every distant body would otherwise cook a 10k-vertex collider
-            // mesh on every LOD tier change during an interplanetary crossing.
-            if (GravityProvider.ActiveBody == body) RebuildSafetyCollider(body);
+            // The collision shell is ALWAYS built (the approached planet must be solid the
+            // instant its frame activates — a missing shell meant flying straight through).
+            // Distant bodies get a cheap 642-vert shell; the active body gets full detail
+            // (and UpdateSafetyColliders upgrades it on frame entry).
+            bool isActive = GravityProvider.ActiveBody == body;
+            RebuildSafetyCollider(body, isActive ? 10242 : 642);
             _lastEffectiveResolution = targetResolution;
             _lastSeed = body.genParams.seed;
         }
@@ -408,12 +410,13 @@ namespace VoxelEngine.Cosmos
         /// (Re)build the safety collision shell from the REAL sampled terrain surface
         /// (not a flat sphere): the same density field the visible LOD uses, pushed a
         /// hair outward so what you collide with is exactly what you see. Capped at 10242
-        /// verts so cooking stays cheap. Only the active body's collider is ever enabled.
+        /// verts so cooking stays cheap. Built for EVERY body so the planet is solid the
+        /// moment its frame activates; only the active body's collider is ever enabled.
         /// </summary>
-        private void RebuildSafetyCollider(CelestialBody body)
+        private void RebuildSafetyCollider(CelestialBody body, int budget)
         {
             if (_safetyMeshCollider == null || body == null) return;
-            int budget = Mathf.Min(10242, Mathf.Max(642, _lastEffectiveResolution));
+            budget = Mathf.Clamp(budget, 642, 10242);
             var (verts, tris, _) = BuildIcosphere(body, budget);
 
             // BuildIcosphere returns verts AT the visible LOD surface (surfaceR − lodInset).
@@ -450,6 +453,14 @@ namespace VoxelEngine.Cosmos
                 _safetyMeshCollider.enabled = false;
                 _safetySphere.enabled = false;
                 return;
+            }
+
+            // Frame entry upgrade: the approached body may only have the cheap 642-vert
+            // shell — cook the full 10k shell so landing on it matches the visible terrain.
+            if (_safetyMeshCollider.sharedMesh == null ||
+                _safetyMeshCollider.sharedMesh.vertexCount < 2562)
+            {
+                RebuildSafetyCollider(body, 10242);
             }
 
             float alt = body.AltitudeAt(viewer.position);

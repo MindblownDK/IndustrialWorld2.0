@@ -1,9 +1,34 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.15.1-dev`
+**Current Version:** `7.16.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.16.0-dev] One Surface Only, Solid Planets on Approach & Oil Fields Visible from the Air
+
+**Type:** MINOR — the LOD levels now nest with NO double surface, every planet is solid the moment you approach it, and crude-oil sites (puddle → bore → reservoir) render in the voxel LOD. Save-compatible, no API break.
+
+#### 🥞 ONE surface — the "two surfaces, top one not solid" fix
+- **Root cause:** the level-exclusion math only skipped chunks that were *fully inside* a finer level's bubble. Most chunks straddle the boundary, so the 8 m NEAR ring rendered over the 1 m gameplay bubble, and the 32 m MID level rendered over both — a ghost surface up to ~16 m above the real terrain, with no colliders (you walked through it).
+- **Fix — strict nesting:** `PlanetVoxelLod.IsChunkDesired` now skips ANY chunk whose near face is inside a finer level's coverage (used identically for admission AND eviction):
+  • NEAR ring starts exactly at the 1 m gameplay bubble's edge.
+  • MID never renders inside the NEAR ring (or the gameplay bubble when the ring is off).
+  • The exclusion measures from the **L0 stream centre** — which is the radial surface point beneath the viewer during high-altitude flight (orbit-approach streaming), so the 1 m bubble and the coarse LOD can never render the same patch.
+  • While the MID level builds, FAR stays active but steps aside under every meshed MID chunk (footprint check) — no double surface during the approach either.
+- Result: exactly **one** rendered surface at every distance.
+
+#### 🪨 Planets are solid again on approach — the "fly straight through" fix
+- **Root cause:** a perf gate from 7.15.0 only built the safety collision shell for the *active* body — every other planet had NO shell, and the real-voxel LOD chunks are intentionally visual-only. When the frame switched to the approached planet, there was nothing solid until the deep core sphere.
+- **Fix:** the safety shell is now built for **every** body (cheap 642-vert shell for distant bodies, full 10,242-vert shell for the active body), and `UpdateSafetyColliders` upgrades the shell to full resolution the moment a body becomes the active frame. You land on the shell, exactly as before.
+
+#### 🛢️ Oil fields visible in the LOD (puddle above → shaft → reservoir below)
+- **Root cause:** oil sites were only written into the 1 m gameplay chunks, so the LOD levels (which sample pure density) showed nothing from the air — and the double surface hid nearby sites too.
+- **Fix — `OilSiteSampler` (new):** a deterministic site map per oil-rich body, using the **exact same 96 m cell hash, salts and seed as `OilReservoirDecorator`** — so every cell that rolls a seep in the gameplay world rolls one in the LOD. Each site is anchored at the radial surface through the cell with puddle disc → tapered solid-oil bore → reservoir sphere, scaled to read at coarse voxel sizes. The LOD levels sample the map (`SphereChunkGenJob` gains a `NativeParallelHashMap` site map; `SphereDensity.EvaluateVoxel` gains an oil-aware overload), so you see dark oil patches, shafts and reservoirs from orbit and from the air.
+- The map builds in small batches per frame (no hitch) and LOD streaming waits for it (~1 s); bodies without oil skip it entirely. When you land, the gameplay world's real liquid puddle + exact decorator geometry take over seamlessly (the LOD version is an approximation anchored within the same 96 m cell).
+
+#### ✅ Static delivery checks
+- All 14 modified/added sources parse cleanly (tree-sitter grammar validation); C# 9 compatibility sweep (struct field initializers) clean.
 
 ### [7.15.1-dev] Voxel LOD Compile Recovery (CS8773/CS8983 — C# 9 struct field initializer)
 

@@ -30,6 +30,12 @@ namespace VoxelEngine.Cosmos
         [ReadOnly] public NativeArray<BiomeData> biomes;
         [ReadOnly] public NativeArray<OreLayer>   ores;
 
+        /// <summary>
+        /// Oil-site map for LOD levels (PlanetVoxelLod). The gameplay world passes the
+        /// default (uncreated) map — its oil is authored by OilReservoirDecorator instead.
+        /// </summary>
+        [ReadOnly] public NativeParallelHashMap<int, OilSiteData> oilSites;
+
         [WriteOnly] public NativeArray<Voxel> voxels;
 
         // Box dimensions (voxels per axis). Caller passes them so the job isn't coupled to
@@ -46,7 +52,7 @@ namespace VoxelEngine.Cosmos
             int z = index / (sizeX * sizeY);
 
             float3 worldPos = originWorld + new float3(x, y, z) * voxelSize;
-            voxels[index] = SphereDensity.EvaluateVoxel(prm, biomes, ores, worldPos);
+            voxels[index] = SphereDensity.EvaluateVoxel(prm, biomes, ores, worldPos, oilSites);
         }
     }
 }

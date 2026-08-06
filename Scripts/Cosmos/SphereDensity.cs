@@ -219,14 +219,28 @@ namespace VoxelEngine.Cosmos
         }
 
         /// <summary>
-        /// Full per-voxel evaluation. Returns the voxel (density byte + material + water level)
-        /// for a body-relative cartesian position.
+        /// Full per-voxel evaluation (no oil map — the gameplay world path).
+        /// Returns the voxel (density byte + material + water level) for a body-relative
+        /// cartesian position.
         /// </summary>
         public static Voxel EvaluateVoxel(
             in SphereGenParams prm,
             in NativeArray<BiomeData> biomes,
             in NativeArray<OreLayer> ores,
             in float3 worldPos)
+            => EvaluateVoxel(prm, biomes, ores, worldPos, default);
+
+        /// <summary>
+        /// Full per-voxel evaluation with an optional oil-site map (LOD levels).
+        /// Returns the voxel (density byte + material + water level) for a body-relative
+        /// cartesian position.
+        /// </summary>
+        public static Voxel EvaluateVoxel(
+            in SphereGenParams prm,
+            in NativeArray<BiomeData> biomes,
+            in NativeArray<OreLayer> ores,
+            in float3 worldPos,
+            in NativeParallelHashMap<int, OilSiteData> oilSites)
         {
             if (prm.isAsteroidBelt == 1)
             {
@@ -358,6 +372,17 @@ namespace VoxelEngine.Cosmos
                             break;
                         }
                     }
+                }
+
+                // ── Oil sites (LOD levels) ──
+                // The gameplay world authors oil with OilReservoirDecorator; the LOD
+                // levels reproduce the same puddle → bore → reservoir story from the
+                // precomputed site map so oil fields are visible from orbit and from
+                // the air. Only probed near the surface (map lookup is cheap).
+                if (prm.hasOilSeeps == 1 && oilSites.IsCreated && oilSites.Length > 0 && depth < 90f)
+                {
+                    byte oilMaterial = OilSiteSampler.Sample(oilSites, worldPos, depth, dir);
+                    if (oilMaterial != 0) material = oilMaterial;
                 }
 
                 // Scale physical distance (metres) by 32 into signed-byte density units so
