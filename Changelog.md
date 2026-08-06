@@ -1,9 +1,32 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.13.15-dev`
+**Current Version:** `7.14.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.14.0-dev] Real Planets — Sampled Terrain on Every Body, Distance-Based LOD Ladder & Seamless Proxy→Surface Handoff
+
+**Type:** MINOR — a full planet-surface LOD system (Space-Engineers style): every body in the solar system now renders its REAL sampled terrain — continents, oceans, ice caps — from the moment it appears in the sky to the moment you land. Save-compatible, no API break.
+
+#### 🌍 The Problem (why planets were flat colored balls)
+- **Sky proxies were flat-colour spheres.** Bodies beyond the true-LOD window were Unlit spheres tinted with one display colour — zero terrain. Since planets are separated by at least 2,000 km, the planet you were flying to was a featureless ball for almost the entire trip.
+- **The real LOD was washed out.** `PlanetLodImpostor` lerped every sampled surface colour 72% toward the body's `displayColor`, so even the 40k–160k-vertex whole-planet surface read as a flat ball whenever a display colour was authored (all runtime-fallback worlds).
+- **No distance-based quality.** Non-active bodies were locked to 642 vertices; high detail only arrived when the gravity frame switched. "Closer = better surface" never happened.
+- **Hard proxy→LOD pop.** The compressed sky proxy and the real LOD were never visually reconciled.
+
+#### 🪐 What's new
+- **Sampled-terrain sky proxies:** every planet/moon in the sky now bakes its vertex colours from the SAME `SphereDensity` field the voxel generator uses (new shared `SphereSurfaceColor` palette + new `VoxelEngine/PlanetSkyProxyURP` shader with real-sun lighting and atmosphere rim). The continents you see in the sky are the continents you land on.
+- **Distance-based LOD ladder (all bodies):** each `PlanetLodImpostor` picks its vertex budget from its distance in body radii — 642 verts for a distant dot → 2,562 → 10,242 → 40,962 → full high-detail surface (up to 163,842) as you close in. Tier changes rebuild progressively (batched across frames) and abandon a stale in-flight build immediately, so there is never a hitch.
+- **Proxy→surface convergence & crossfade:** outside the true-LOD window the sky proxy now morphs from its compressed sky position/size toward the body's TRUE scene position/size over the last 3,500 km, while the real LOD fades in over the same band — the hand-off happens at the same apparent size, no popping sphere.
+- **True-LOD window 800 → 2,500 km:** the approached planet renders its real sampled surface for the entire interplanetary crossing (min planet separation is 2,000 km), and the far clip covers the convergence band (1.25×) so the morphing proxy is never culled.
+- **Display-colour tint 0.72 → 0.18:** authored personality colours remain as a subtle tint; the sampled terrain is now the star.
+- **Per-material `_BodyCenter` in `PlanetSurfaceLodURP`:** surface-detail noise is now correct for EVERY body, not just the active streaming one (global fallback preserved).
+- **Safety colliders only for the active body:** distant bodies no longer cook a 10k-vertex collision mesh on every LOD tier change during a crossing.
+- **Viewer propagation to every body's LOD** (late-spawned players) + `Camera.main` fallback — distant planets are never stuck at their cheap budget.
+
+#### ✅ Static delivery checks
+- All 5 modified/added sources parse cleanly (tree-sitter grammar validation): `PlanetLodImpostor.cs`, `SpaceBodyRenderer.cs`, `CosmosBootstrap.cs`, `SphereSurfaceColor.cs` (new), `GameVersion.cs`.
 
 ### [7.13.15-dev] SpaceBodyRenderer Compile Recovery (CS0103 sunPos)
 

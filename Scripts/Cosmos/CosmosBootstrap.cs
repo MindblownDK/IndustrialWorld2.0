@@ -205,7 +205,10 @@ namespace VoxelEngine.Cosmos
 
             // ── Distant bodies + sparse vacuum starfield ────────────────
             var spaceGO = new GameObject("SpaceRenderer");
-            spaceGO.AddComponent<SpaceBodyRenderer>();
+            var spaceBodies = spaceGO.AddComponent<SpaceBodyRenderer>();
+            // Sky proxies sample the real terrain density per body — they need the biome
+            // registry so the continents in the sky match the continents on the ground.
+            spaceBodies.biomeRegistry = biomeRegistry;
             spaceGO.AddComponent<SpaceStarfieldRenderer>();
 
             // ── Live quality preset applier (Phase 7) ──
@@ -373,6 +376,17 @@ namespace VoxelEngine.Cosmos
             if (_oceanLod != null) _oceanLod.viewer = viewer;
             if (_grass != null) _grass.viewer = viewer;
             if (_waterfalls != null) _waterfalls.viewer = viewer;
+            // Every other body's LOD must also track the real player (their distance
+            // ladder upgrades as you fly toward them). Late-resolved viewers would
+            // otherwise leave distant planets stuck at their cheap budget forever.
+            var registry = CosmicRegistry.Instance;
+            if (registry == null) return;
+            foreach (var kv in registry.SceneBodies)
+            {
+                if (kv.Value == null) continue;
+                var lod = kv.Value.GetComponentInChildren<PlanetLodImpostor>(true);
+                if (lod != null) lod.viewer = viewer;
+            }
         }
 
         private void TryResolveViewerAndAnchor()
@@ -439,16 +453,20 @@ namespace VoxelEngine.Cosmos
                 needed = math.max(needed, d + body.SurfaceRadius * 2d + 5000d);
             }
 
-            // 2) Every other body whose real LOD renders (true-LOD window).
+            // 2) Every other body whose real LOD renders (true-LOD window) — PLUS the
+            //    convergence band where the compressed sky proxy morphs toward the body's
+            //    true scene position. Without the extra margin the converging proxy would
+            //    be culled by the far plane mid-flight.
             if (registry.SceneBodies != null)
             {
+                double coverKm = trueLodViewKm * 1.25d;
                 for (int i = 0; i < registry.Bodies.Count; i++)
                 {
                     var b = registry.Bodies[i];
                     if (b == null) continue;
                     if (b.settings != null && body != null && b.settings == body.settings) continue;
                     double distM = math.length(registry.CosmicPositionOf(b) - camCosmic) * 1000d;
-                    if (distM < trueLodViewKm * 1000d)
+                    if (distM < coverKm * 1000d)
                         needed = math.max(needed, distM + (b.settings != null ? b.settings.radiusKm * 1000d : 6000d) + 5000d);
                 }
             }
@@ -476,8 +494,11 @@ namespace VoxelEngine.Cosmos
         /// URP reversed-Z depth keeps near-terrain precision intact.</summary>
         private const double maxFarClipMeters = 50000000d;
 
-        /// <summary>Bodies within this distance (km) render their real LOD instead of the sky proxy.</summary>
-        private const double trueLodViewKm = 800d;
+        /// <summary>Bodies within this distance (km) render their real LOD instead of the sky proxy.
+        /// Kept in sync with SpaceBodyRenderer.TrueLodWindowMeters: with a 2,000 km minimum planet
+        /// separation, 2,500 km keeps the approached planet's REAL sampled surface visible for the
+        /// whole interplanetary crossing, and the LOD ladder upgrades it as you close in.</summary>
+        private const double trueLodViewKm = 2500d;
 
         // ── Real-space infrastructure ──────────────────────────────
 
@@ -565,8 +586,9 @@ namespace VoxelEngine.Cosmos
                 lod.body = cb;
                 lod.viewer = viewer;
                 lod.biomeRegistry = biomeRegistry;
-                // Distant bodies get the cheap proxy; the active body is upgraded on entry.
-                lod.resolution = Mathf.Min(GraphicsPreset.LodResolution, 642);
+                // The distance-based LOD ladder owns the vertex budget from here on:
+                // cheap far away, progressively denser as the player closes in.
+                lod.resolution = 642;
 
                 registry.SceneBodies[instance] = cb;
                 _spaceOrigin.RegisterRoot(go.transform);

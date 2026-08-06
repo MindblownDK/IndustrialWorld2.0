@@ -1,17 +1,25 @@
 // Assets/Scripts/VoxelEngine/Cosmos/SpaceBodyRenderer.cs
 //
-// Renders distant celestial bodies (planets, moons, sun) as low-quality LOD spheres in the sky.
+// Renders distant celestial bodies (planets, moons, sun) as LOD spheres in the sky.
 //
 // The player can see the whole solar system around you — other planets hang in the
-// distance, the sun glows, moons orbit. When far away, bodies are simple coloured spheres (a
-// few hundred polys); they cost almost nothing because they're ONE draw call each.
+// distance, the sun glows, moons orbit.
 //
-// This reads the CosmicRegistry's body layout each frame and positions scaled-down LOD spheres
-// at the correct direction + apparent size. The km-scale cosmic positions are compressed to a
-// manageable visual range so you can actually SEE the other planets without floating-origin.
+// REAL SURFACES (7.14.0): every sky proxy is now a SAMPLED TERRAIN sphere — its vertex
+// colours are baked from the same SphereDensity field the voxel generator uses, so the
+// planet in the sky shows its actual continents, oceans and ice caps, not a flat
+// colored ball. As the player approaches, the proxy CONVERGES to the body's true
+// scene position and size and crossfades into the real PlanetLodImpostor surface
+// (which continues upgrading through its distance-based LOD ladder) — a seamless
+// space-to-surface descent, Space-Engineers style.
+//
+// Cosmic km-scale positions are compressed to a manageable visual range so you can
+// actually SEE the other planets without floating-origin.
 using System.Collections.Generic;
+using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
+using VoxelEngine.Biomes;
 
 namespace VoxelEngine.Cosmos
 {
@@ -36,32 +44,77 @@ namespace VoxelEngine.Cosmos
         public float sunVisualScale = 800f;
 
         [Header("Quality")]
-        [Tooltip("LOD sphere resolution (higher = smoother distant planets).")]
-        [Range(8, 64)] public int sphereResolution = 24;
+        [Tooltip("Sampled-terrain sky proxy resolution (higher = crisper continents in the sky).")]
+        [Range(642, 10242)] public int proxyResolution = 2562;
 
         [Tooltip("Rebuild body positions every N frames (lower = smoother orbits, higher = cheaper).")]
         public int updateEveryNFrames = 3;
 
         [Tooltip("Bodies closer than this (metres, true scene distance) render their real LOD " +
-                 "instead of the compressed sky proxy. Farther bodies use the sky projection. " +
-                 "800 km keeps the approached planet visible for the whole descent.")]
-        public float trueLodDistanceMeters = 800000f;
+                 "instead of the compressed sky proxy. 2,500 km keeps the approached planet's " +
+                 "real surface visible for the whole interplanetary crossing.")]
+        public float trueLodDistanceMeters = 2500000f;
+
+        /// <summary>Shared window constant (metres) — also consumed by CosmosBootstrap's far clip
+        /// and PlanetLodImpostor's crossfade, so every system agrees on where real LOD begins.</summary>
+        public const double TrueLodWindowMeters = 2500000d;
+
+        /// <summary>Distance band (metres) OUTSIDE the window over which the proxy fades out
+        /// while the real LOD fades in.</summary>
+        public const double TrueLodFadeBandMeters = 300000d;
+
+        [Tooltip("True distance (metres) at which the sky proxy starts converging from its " +
+                 "compressed sky position/size toward the body's true scene position/size, so " +
+                 "the proxy → real-LOD swap happens at the same apparent size.")]
+        public float proxyConvergeDistanceMeters = 6000000f;
+
+        [Tooltip("Optional biome registry for accurate surface colours on the sky proxies.")]
+        public BiomeRegistry biomeRegistry;
 
         private struct BodyVisual
         {
             public GameObject go;
             public MeshFilter mf;
             public MeshRenderer mr;
-            public Mesh mesh;
+            public Mesh flatMesh;      // fallback plain sphere (no terrain bake available)
+            public Mesh terrainMesh;   // sampled terrain sphere (baked once per body)
+            public BodyInstance bakeKey;
+            public int bakeSeed;
         }
 
         private readonly List<BodyVisual> _sunVisuals = new();
         private readonly List<BodyVisual> _bodyVisuals = new();
         private int _frameCount;
 
+        // ── Terrain baking ─────────────────────────────────────────────
+        // The sky proxy's vertex colours are sampled from the body's own density field
+        // (identical to the real LOD), baked lazily in small batches so spawning or
+        // entering a system never hitches. One shared icosphere topology; each body
+        // owns its baked colour mesh.
+        private Vector3[] _sharedDirs;
+        private int[] _sharedTris;
+        private int _sharedTopologyResolution;
+
+        private class ProxyBake
+        {
+            public BodyInstance body;
+            public CelestialBody sceneBody;
+            public SphereGenParams prm;
+            public NativeArray<BiomeData> biomes;
+            public Color[] colors;
+            public int index;
+            public bool done;
+        }
+
+        private readonly List<ProxyBake> _bakeQueue = new();
+        private ProxyBake _activeBake;
+        private readonly Dictionary<CelestialBody, NativeArray<BiomeData>> _biomeCache = new();
+
         private void Update()
         {
             _frameCount++;
+            PumpBakes(); // terrain baking continues every frame, independent of the render throttle
+
             if (_frameCount % updateEveryNFrames != 0) return;
 
             var registry = CosmicRegistry.Instance;
@@ -118,14 +171,14 @@ namespace VoxelEngine.Cosmos
                     sunPos = GetViewerPosition() + sunDir * visualRange * 1.5f;
                     if (_sunVisuals.Count > 0 && _sunVisuals[0].go != null && !_sunVisuals[0].go.activeSelf)
                         _sunVisuals[0].go.SetActive(true);
-                    PositionBody(_sunVisuals[0], sunPos, sunVisualScale * intensity, glow, emissive: true);
+                    PositionBody(_sunVisuals[0], sunPos, sunVisualScale * intensity, glow, emissive: true, alpha: 1f);
                 }
             }
 
             // Render planets + moons.
-            Vector3 viewerPosition = GetViewerPosition();
             int bodyCount = registry.Bodies.Count;
             EnsureCount(_bodyVisuals, bodyCount, "SpaceBody");
+            EnsureSharedTopology();
 
             for (int i = 0; i < bodyCount; i++)
             {
@@ -140,42 +193,69 @@ namespace VoxelEngine.Cosmos
                     continue;
                 }
 
-                // REAL SPACE: bodies close enough to render their true LOD (real scene
-                // geometry, placed by SpaceOrigin) skip the compressed sky proxy.
-                if (spaceOrigin != null && spaceOrigin.viewer != null
-                    && SpaceOrigin.Instance != null)
+                // True distance to the body (scene metres via cosmic positions).
+                double distM = double.MaxValue;
+                if (spaceOrigin != null && spaceOrigin.viewer != null)
                 {
                     double3 bodyAbs = registry.CosmicPositionOf(b);
                     double3 viewerCosmic = spaceOrigin.GetCosmicKm(spaceOrigin.viewer.position);
-                    double distM = math.length(bodyAbs - viewerCosmic) * 1000d;
-                    if (distM < trueLodDistanceMeters)
-                    {
-                        if (_bodyVisuals[i].go != null) _bodyVisuals[i].go.SetActive(false);
-                        continue;
-                    }
+                    distM = math.length(bodyAbs - viewerCosmic) * 1000d;
                 }
 
-                if (_bodyVisuals[i].go != null && !_bodyVisuals[i].go.activeSelf)
-                    _bodyVisuals[i].go.SetActive(true);
+                // REAL SPACE: bodies inside the true-LOD window render their real sampled
+                // LOD (placed by SpaceOrigin) — the sky proxy must step aside.
+                if (distM < trueLodDistanceMeters)
+                {
+                    if (_bodyVisuals[i].go != null) _bodyVisuals[i].go.SetActive(false);
+                    continue;
+                }
 
-                // Hierarchical orbital positioning:
-                // 1) Planets visibly orbit around the Sun in the sky.
-                // 2) Moons visibly orbit around their parent planet in the sky.
-                // 3) Sub-moons (moons around moons) visibly orbit around their parent moon in the sky.
-                Vector3 visualPos = GetVisualPositionFor(b, registry, sunPos, viewerPosition, activeBody);
+                var visual = _bodyVisuals[i];
+                if (visual.go != null && !visual.go.activeSelf)
+                    visual.go.SetActive(true);
 
-                // Visual size: based on body radius (km), scaled down.
+                // Queue a lazy terrain bake for this body's sky proxy (once per settings+seed).
+                EnsureBakeQueued(b, registry);
+
+                // ── Proxy → real-LOD convergence ──────────────────────────
+                // Outside the window the proxy starts at its compressed sky position/size;
+                // as the true distance drops it morphs toward the body's TRUE scene
+                // position/size, so the hand-off to the real LOD at the window edge happens
+                // at the exact same apparent size — no popping sphere, just detail.
+                float convergeT = Mathf.Clamp01((float)((proxyConvergeDistanceMeters - distM)
+                                              / (proxyConvergeDistanceMeters - trueLodDistanceMeters)));
+                Vector3 visualPos = Vector3.Lerp(
+                    GetVisualPositionFor(b, registry, sunPos, GetViewerPosition(), activeBody),
+                    GetTrueScenePosition(b, spaceOrigin),
+                    convergeT);
+
                 float radiusKm = b.settings.radiusKm;
-                float visualSize = (b.isPlanet ? planetVisualScale : moonVisualScale) *
-                                   Mathf.Clamp01(radiusKm / 8f);
+                float stylizedSize = (b.isPlanet ? planetVisualScale : moonVisualScale) *
+                                     Mathf.Clamp01(radiusKm / 8f);
                 if (!b.isPlanet && b.parentBody != null && !b.parentBody.isPlanet)
-                    visualSize *= 0.6f; // Sub-moonlets appear slightly smaller
-                float distKm = (b.positionKm - viewerKm).magnitude;
-                visualSize *= Mathf.Lerp(1f, 0.4f, Mathf.Clamp01(distKm / 8000f));
+                    stylizedSize *= 0.6f; // Sub-moonlets appear slightly smaller
+                float size = Mathf.Lerp(stylizedSize, radiusKm * 1000f, convergeT);
 
-                Color color = GetBodyColor(b);
-                PositionBody(_bodyVisuals[i], visualPos, visualSize, color, emissive: false);
+                // Crossfade with the real LOD over the same band the LOD uses to fade in:
+                // fully opaque beyond the band, fully transparent at the window edge.
+                float alpha = Mathf.Clamp01((float)((distM - trueLodDistanceMeters) / TrueLodFadeBandMeters));
+
+                PositionBody(visual, visualPos, size, GetBodyColor(b), emissive: false, alpha: alpha);
             }
+        }
+
+        /// <summary>
+        /// True scene position of a body (metres). SpaceOrigin places every registered body
+        /// every tick, so the scene transform is the exact, float-precise answer.
+        /// </summary>
+        private static Vector3 GetTrueScenePosition(BodyInstance b, SpaceOrigin spaceOrigin)
+        {
+            var registry = CosmicRegistry.Instance;
+            if (registry == null) return Vector3.zero;
+            if (registry.SceneBodies != null && registry.SceneBodies.TryGetValue(b, out var cb) && cb != null)
+                return cb.transform.position;
+            if (spaceOrigin != null) return spaceOrigin.GetScenePos(registry.CosmicPositionOf(b));
+            return Vector3.zero;
         }
 
         private Vector3 GetVisualPositionFor(BodyInstance b, CosmicRegistry registry, Vector3 sunPos, Vector3 viewerPosition, CelestialBody activeBody)
@@ -226,6 +306,159 @@ namespace VoxelEngine.Cosmos
             return Vector3.zero;
         }
 
+        // ── Sampled-terrain baking ────────────────────────────────────
+
+        /// <summary>Queue a one-time terrain bake for a body's sky proxy if not already done.</summary>
+        private void EnsureBakeQueued(BodyInstance b, CosmicRegistry registry)
+        {
+            int index = -1;
+            for (int i = 0; i < registry.Bodies.Count; i++)
+                if (registry.Bodies[i] == b) { index = i; break; }
+            if (index < 0 || index >= _bodyVisuals.Count) return;
+
+            if (registry.SceneBodies == null || !registry.SceneBodies.TryGetValue(b, out var sceneBody) || sceneBody == null)
+                return; // no scene body yet — keep the flat fallback colour
+
+            // Asteroid belts are procedural rock fields, not sampled surfaces — keep the
+            // flat fallback for them.
+            if (sceneBody.genParams.isAsteroidBelt == 1) return;
+
+            var visual = _bodyVisuals[index];
+            if (visual.terrainMesh != null && visual.bakeKey == b && visual.bakeSeed == sceneBody.genParams.seed)
+                return; // already baked for this body + seed
+
+            // (Re)queue: new body, or its seed changed since the last bake.
+            visual.bakeKey = b;
+            visual.bakeSeed = sceneBody.genParams.seed;
+            _bodyVisuals[index] = visual;
+
+            // Drop any previously queued bake for this body.
+            for (int i = _bakeQueue.Count - 1; i >= 0; i--)
+                if (_bakeQueue[i].body == b) _bakeQueue.RemoveAt(i);
+
+            if (_sharedDirs == null || _sharedDirs.Length == 0) return; // topology not ready yet — retried next frame
+
+            var bake = new ProxyBake
+            {
+                body = b,
+                sceneBody = sceneBody,
+                prm = sceneBody.genParams,
+                biomes = GetBiomesFor(sceneBody),
+                colors = new Color[_sharedDirs.Length],
+                index = 0,
+                done = false
+            };
+            _bakeQueue.Add(bake);
+        }
+
+        private NativeArray<BiomeData> GetBiomesFor(CelestialBody sceneBody)
+        {
+            if (_biomeCache.TryGetValue(sceneBody, out var cached) && cached.IsCreated) return cached;
+            var arr = sceneBody.BuildBiomeData(biomeRegistry);
+            var native = new NativeArray<BiomeData>(arr.Length, Allocator.Persistent);
+            for (int i = 0; i < arr.Length; i++) native[i] = arr[i];
+            _biomeCache[sceneBody] = native;
+            return native;
+        }
+
+        /// <summary>Bake a small batch of proxy vertex colours per frame (never a hitch).</summary>
+        private void PumpBakes()
+        {
+            const int Batch = 1024;
+            for (int pass = 0; pass < 1; pass++)
+            {
+                if (_activeBake == null)
+                {
+                    while (_bakeQueue.Count > 0)
+                    {
+                        _activeBake = _bakeQueue[0];
+                        _bakeQueue.RemoveAt(0);
+                        if (_activeBake.done) { _activeBake = null; continue; }
+                        break;
+                    }
+                    if (_activeBake == null) return;
+                }
+
+                var bake = _activeBake;
+                // The shared topology may have been rebuilt (proxy resolution changed) —
+                // a stale bake whose colour array no longer matches is dropped.
+                if (_sharedDirs == null || bake.colors.Length != _sharedDirs.Length)
+                {
+                    bake.done = true;
+                    _activeBake = null;
+                    continue;
+                }
+                int end = Mathf.Min(bake.index + Batch, bake.colors.Length);
+                var prm = bake.prm;
+                for (int i = bake.index; i < end; i++)
+                {
+                    Vector3 dir = _sharedDirs[i];
+                    SphereDensity.EvaluateColumn(prm, bake.biomes, (float3)dir, out float surfaceR, out _);
+                    float alt = surfaceR - prm.MeanSurfaceRadius;
+                    Color c = SphereSurfaceColor.For(alt, Mathf.Abs(dir.y));
+                    if (bake.body != null && bake.body.settings != null)
+                        c = SphereSurfaceColor.WithDisplayTint(c, bake.body.settings.displayColor, 0.3f);
+                    bake.colors[i] = c;
+                }
+                bake.index = end;
+
+                if (bake.index >= bake.colors.Length)
+                {
+                    FinishBake(bake);
+                    _activeBake = null;
+                }
+            }
+        }
+
+        private void FinishBake(ProxyBake bake)
+        {
+            bake.done = true;
+            var registry = CosmicRegistry.Instance;
+            if (registry == null) return;
+
+            int index = -1;
+            for (int i = 0; i < registry.Bodies.Count; i++)
+                if (registry.Bodies[i] == bake.body) { index = i; break; }
+            if (index < 0 || index >= _bodyVisuals.Count) return;
+
+            var visual = _bodyVisuals[index];
+            if (visual.terrainMesh == null)
+            {
+                var mesh = new Mesh { name = "PlanetSkyProxy_" + bake.body.DisplayName };
+                mesh.SetVertices(_sharedDirs);
+                mesh.SetTriangles(_sharedTris, 0);
+                mesh.SetColors(bake.colors);
+                mesh.RecalculateNormals();
+                mesh.RecalculateBounds();
+                visual.terrainMesh = mesh;
+                _bodyVisuals[index] = visual;
+            }
+
+            if (visual.mr != null && visual.terrainMesh != null && visual.mf != null)
+            {
+                visual.mf.sharedMesh = visual.terrainMesh;
+            }
+            Debug.Log($"[SpaceBodyRenderer] Sky proxy terrain ready for '{bake.body.DisplayName}' ({bake.colors.Length} verts).");
+        }
+
+        private void EnsureSharedTopology()
+        {
+            int target = Mathf.Clamp(proxyResolution, 642, 10242);
+            if (_sharedDirs != null && _sharedTopologyResolution == target) return;
+
+            var dirs = new List<Vector3>(IcosphereVerts());
+            var tris = new List<int>(IcosphereTris());
+            int sub = 0;
+            while (dirs.Count < target && sub < 6)
+            {
+                Subdivide(dirs, tris);
+                sub++;
+            }
+            _sharedDirs = dirs.ToArray();
+            _sharedTris = tris.ToArray();
+            _sharedTopologyResolution = target;
+        }
+
         private void EnsureCount(List<BodyVisual> list, int count, string namePrefix)
         {
             while (list.Count < count)
@@ -234,20 +467,21 @@ namespace VoxelEngine.Cosmos
                 go.transform.SetParent(transform, false);
                 var mf = go.AddComponent<MeshFilter>();
                 var mr = go.AddComponent<MeshRenderer>();
-                var mesh = CreateSphere(sphereResolution);
+                var mesh = CreateSphere(24);
                 mf.sharedMesh = mesh;
-                list.Add(new BodyVisual { go = go, mf = mf, mr = mr, mesh = mesh });
+                list.Add(new BodyVisual { go = go, mf = mf, mr = mr, flatMesh = mesh });
             }
             while (list.Count > count)
             {
                 var v = list[list.Count - 1];
-                if (v.mesh != null) Destroy(v.mesh);
+                if (v.flatMesh != null) Destroy(v.flatMesh);
+                if (v.terrainMesh != null) Destroy(v.terrainMesh);
                 if (v.go != null) Destroy(v.go);
                 list.RemoveAt(list.Count - 1);
             }
         }
 
-        private void PositionBody(BodyVisual v, Vector3 pos, float size, Color color, bool emissive)
+        private void PositionBody(BodyVisual v, Vector3 pos, float size, Color color, bool emissive, float alpha)
         {
             if (v.go == null) return;
             v.go.transform.position = pos;
@@ -256,16 +490,34 @@ namespace VoxelEngine.Cosmos
             // Ensure material exists.
             if (v.mr.sharedMaterial == null)
             {
-                // Sky proxies need to remain readable on day/night sides and against every
-                // atmosphere backdrop. Unlit colour is intentional for this compressed visual LOD.
-                var shader = Shader.Find("Universal Render Pipeline/Unlit")
+                // The dedicated proxy shader renders the baked sampled-terrain vertex
+                // colours with real-sun lighting; built-in URP materials are only a
+                // last-resort fallback (they ignore vertex colours).
+                var shader = Shader.Find("VoxelEngine/PlanetSkyProxyURP")
+                          ?? Shader.Find("Universal Render Pipeline/Unlit")
                           ?? Shader.Find("Universal Render Pipeline/Lit")
                           ?? Shader.Find("Standard");
                 v.mr.sharedMaterial = new Material(shader) { name = "Mat_SpaceBody" };
             }
             var mat = v.mr.sharedMaterial;
-            if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", color);
-            if (mat.HasProperty("_Color"))     mat.SetColor("_Color", color);
+
+            bool hasTerrain = v.terrainMesh != null;
+            if (mat.HasProperty("_Tint"))
+            {
+                // Terrain bakes carry their own vertex colours (tint = white); bodies
+                // without a bake (belts, sun, not-yet-baked) tint through the flat colour.
+                var tint = mat.GetColor("_Tint");
+                tint.rgb = hasTerrain ? Color.white : color;
+                tint.a = hasTerrain ? alpha : 1f;
+                mat.SetColor("_Tint", tint);
+            }
+
+            // Flat-colour properties only matter for the fallback (built-in) shaders.
+            if (!hasTerrain)
+            {
+                if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", color);
+                if (mat.HasProperty("_Color"))     mat.SetColor("_Color", color);
+            }
             if (emissive)
             {
                 if (mat.HasProperty("_EmissionColor"))
@@ -293,6 +545,17 @@ namespace VoxelEngine.Cosmos
             mesh.RecalculateNormals();
             mesh.RecalculateBounds();
             return mesh;
+        }
+
+        private void OnDestroy()
+        {
+            foreach (var kv in _biomeCache)
+            {
+                if (kv.Value.IsCreated) kv.Value.Dispose();
+            }
+            _biomeCache.Clear();
+            _bakeQueue.Clear();
+            _activeBake = null;
         }
 
         private static List<Vector3> IcosphereVerts()

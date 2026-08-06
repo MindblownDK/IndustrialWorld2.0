@@ -69,11 +69,19 @@ namespace VoxelEngine.Cosmos
                 grass.enabled = true;
             }
 
-            // LOD resolution.
+            // LOD resolution (+ the active body's full-surface budget so a mid-game
+            // quality change upgrades/downgrades the whole-planet surface instantly).
             var lod = FindAnyObjectByType<PlanetLodImpostor>();
             if (lod != null)
             {
                 lod.resolution = GraphicsPreset.LodResolution;
+                var active = GravityProvider.ActiveBody;
+                if (active != null)
+                {
+                    var activeLod = active.GetComponentInChildren<PlanetLodImpostor>(true);
+                    if (activeLod != null)
+                        activeLod.highDetailVertexBudget = GraphicsPreset.ActiveBodyLodResolution;
+                }
             }
 
             // Whole-planet ocean LOD uses the same distance budget as terrain LOD.

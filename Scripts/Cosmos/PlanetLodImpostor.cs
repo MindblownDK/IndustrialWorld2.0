@@ -41,15 +41,27 @@ namespace VoxelEngine.Cosmos
         [Tooltip("Highest vertex budget for the sampled full-planet surface. Runtime distance LOD selects a cheaper mesh farther out.")]
         public int resolution = 2562;
 
-        [Tooltip("When true, this body renders at the HIGH-DETAIL budget — the 'whole planet' " +
+        [Tooltip("When true, this body always renders at the HIGH-DETAIL budget — the 'whole planet' " +
                  "surface the player is currently on / approaching (full planet, proper LOD). " +
                  "Built progressively over several frames so there is no spawn hitch. " +
-                 "Distant bodies keep the cheap proxy.")]
+                 "Every OTHER body picks its own budget from the distance ladder below.")]
         public bool highDetail;
 
         [Range(10242, 163842)]
         [Tooltip("Vertex budget used when highDetail is enabled (the active body's full surface).")]
         public int highDetailVertexBudget = 40962;
+
+        // ── True-LOD window shared with SpaceBodyRenderer's sky proxies ──
+        // Bodies closer than this (metres, true scene distance) render their REAL
+        // sampled-surface LOD instead of the compressed sky proxy. 2,500 km keeps
+        // the approached planet's real surface visible for the whole interplanetary
+        // crossing (min planet separation is 2,000 km) — the LOD ladder below then
+        // upgrades the surface continuously as you close in.
+        public const double TrueLodWindowMeters = 2500000d;
+
+        /// <summary>Distance band (metres) OUTSIDE the window over which the LOD crossfades
+        /// with the sky proxy (proxy fades out while this LOD fades in).</summary>
+        public const double TrueLodFadeBandMeters = 300000d;
 
         [Tooltip("Optional biome registry for accurate surface colours.")]
         public BiomeRegistry biomeRegistry;
@@ -104,26 +116,42 @@ namespace VoxelEngine.Cosmos
 
         private void Update()
         {
+            // Late-resolved viewers (players spawned after bootstrap) must reach every
+            // body's LOD, not just the active one — otherwise distant planets never
+            // upgrade past their cheap budget.
+            if (viewer == null && Camera.main != null) viewer = Camera.main.transform;
+
             var resolvedBody = ResolveBody();
             if (resolvedBody == null || resolvedBody.settings == null) return;
+
+            int effectiveResolution = ResolveRuntimeResolution(resolvedBody);
 
             // Continue an in-flight progressive build before anything else.
             if (_buildInProgress)
             {
-                if (ContinueProgressiveBuild(resolvedBody))
+                // The target tier changed mid-build (player closing in / moving away):
+                // abandon the stale build and restart at the new tier immediately —
+                // never finish a 160k-vertex surface nobody is looking at.
+                if (effectiveResolution != _lastEffectiveResolution)
                 {
+                    CancelProgressiveBuild();
+                    _lastEffectiveResolution = -1;
+                }
+                else if (ContinueProgressiveBuild(resolvedBody))
+                {
+                    UpdateBodyCenter(resolvedBody);
                     UpdateFade(resolvedBody);
                     UpdateSafetyColliders(resolvedBody);
+                    return;
                 }
-                return;
             }
 
-            int effectiveResolution = ResolveRuntimeResolution(resolvedBody);
             bool needRebuild = !_biomes.IsCreated ||
                                _lastEffectiveResolution != effectiveResolution ||
                                _lastSeed != resolvedBody.genParams.seed;
             if (needRebuild) Rebuild(effectiveResolution);
 
+            UpdateBodyCenter(resolvedBody);
             UpdateFade(resolvedBody);
             UpdateSafetyColliders(resolvedBody);
         }
@@ -140,13 +168,31 @@ namespace VoxelEngine.Cosmos
             return body;
         }
 
+        /// <summary>
+        /// Continuous distance-based LOD ladder (Space-Engineers style): every body in
+        /// the system renders its REAL sampled surface, and the vertex budget grows as
+        /// you get closer — 642 verts for a distant dot up to the full high-detail
+        /// surface when you arrive. Tiers are relative to the body's own radius so the
+        /// same ladder works for 2 km moons and 30 km planets.
+        /// </summary>
         private int ResolveRuntimeResolution(CelestialBody resolvedBody)
         {
-            // High-detail (active body): the FULL planet surface with real continents and
-            // mountains visible from ground to orbit. Distant bodies keep the cheap proxy.
+            // The ACTIVE body (the one the player is on / entering) always renders at
+            // the full high-detail budget — one continuous planet from ground to orbit.
             if (highDetail)
                 return Mathf.Clamp(highDetailVertexBudget, 10242, 163842);
-            return Mathf.Clamp(resolution, 642, 10242);
+
+            if (viewer == null)
+                return Mathf.Clamp(resolution, 642, 10242);
+
+            float distM = Vector3.Distance(viewer.position, transform.position);
+            float radii = distM / Mathf.Max(1f, resolvedBody.SurfaceRadius);
+
+            if (radii < 1.35f) return Mathf.Clamp(highDetailVertexBudget, 10242, 163842); // on / very near the surface
+            if (radii < 3f)    return 40962;   // atmosphere / low orbit — near-complete surface
+            if (radii < 8f)    return 10242;   // mid approach
+            if (radii < 25f)   return 2562;    // high approach
+            return Mathf.Clamp(resolution, 642, 2562); // far away — cheap proxy budget
         }
 
         private void EnsureComponents()
@@ -228,9 +274,9 @@ namespace VoxelEngine.Cosmos
 
             if (targetResolution <= 0) targetResolution = ResolveRuntimeResolution(resolvedBody);
 
-            // High-detail surface: build progressively (batched across frames) so the
-            // whole-planet upgrade never hitches the game.
-            if (targetResolution > 10242)
+            // Progressive (batched across frames) for any surface that would take a
+            // visible main-thread hit; the cheap tiers build synchronously in one frame.
+            if (targetResolution > 2562)
             {
                 BeginProgressiveBuild(resolvedBody, targetResolution);
                 return;
@@ -261,6 +307,16 @@ namespace VoxelEngine.Cosmos
             _lastSeed = body.genParams.seed;
         }
 
+        /// <summary>Abandon an in-flight progressive build (target tier changed).</summary>
+        private void CancelProgressiveBuild()
+        {
+            _buildVerts = null;
+            _buildTris = null;
+            _buildColors = null;
+            _buildIndex = 0;
+            _buildInProgress = false;
+        }
+
         /// <summary>
         /// Sample a batch of vertices (keeps the main-thread hit tiny), finalise the mesh
         /// when done. Returns true while the build is still running.
@@ -286,9 +342,9 @@ namespace VoxelEngine.Cosmos
                 // stays a continuous sampled surface.
                 float lodInset = Mathf.Clamp(prm.radiusWorld * 0.001f, 2f, 12f);
                 _buildVerts[i] = dir * Mathf.Max(1f, surfaceR - lodInset);
-                Color baseCol = ColorFor(alt, Mathf.Abs(dir.y));
-                if (body.settings != null && body.settings.displayColor.a > 0.01f)
-                    baseCol = Color.Lerp(baseCol, body.settings.displayColor, 0.72f);
+                Color baseCol = SphereSurfaceColor.For(alt, Mathf.Abs(dir.y));
+                if (body.settings != null)
+                    baseCol = SphereSurfaceColor.WithDisplayTint(baseCol, body.settings.displayColor, 0.18f);
                 _buildColors[i] = baseCol;
             }
             _buildIndex = end;
@@ -322,7 +378,10 @@ namespace VoxelEngine.Cosmos
             _mesh.RecalculateBounds();
             if (meshFilter != null) meshFilter.sharedMesh = _mesh;
 
-            RebuildSafetyCollider(body);
+            // The collision shell only matters for the body the player is actually on /
+            // approaching — every distant body would otherwise cook a 10k-vertex collider
+            // mesh on every LOD tier change during an interplanetary crossing.
+            if (GravityProvider.ActiveBody == body) RebuildSafetyCollider(body);
             _lastEffectiveResolution = targetResolution;
             _lastSeed = body.genParams.seed;
         }
@@ -423,10 +482,11 @@ namespace VoxelEngine.Cosmos
                 float lodInset = Mathf.Clamp(prm.radiusWorld * 0.001f, 2f, 12f);
                 verts[i] = dir * Mathf.Max(1f, surfaceR - lodInset);
                 float latitude = Mathf.Abs(dir.y);
-                Color baseCol = ColorFor(alt, latitude);
-                // Apply the body's custom display colour as a tint if set.
-                if (body != null && body.settings != null && body.settings.displayColor.a > 0.01f)
-                    baseCol = Color.Lerp(baseCol, body.settings.displayColor, 0.72f);
+                Color baseCol = SphereSurfaceColor.For(alt, latitude);
+                // Apply the body's custom display colour as a SUBTLE personality tint —
+                // never a wash (the old 0.72 lerp turned the whole planet flat).
+                if (body != null && body.settings != null)
+                    baseCol = SphereSurfaceColor.WithDisplayTint(baseCol, body.settings.displayColor, 0.18f);
                 colors[i] = baseCol;
             }
 
@@ -434,34 +494,18 @@ namespace VoxelEngine.Cosmos
         }
 
         /// <summary>
-        /// Surface colour for the LOD sphere based on altitude + latitude.
-        /// Phase 3: latitude factor adds polar ice caps (white near poles) so the LOD matches
-        /// the real terrain's snow caps.
+        /// Keeps the shader's per-material body center in sync with THIS body. The
+        /// surface-detail noise needs the radial direction from this body's own core —
+        /// the global _VoxelTerrainBodyCenter only describes the active streaming body.
         /// </summary>
-        private static Color ColorFor(float altMetres, float latitude)
+        private void UpdateBodyCenter(CelestialBody body)
         {
-            // Polar ice: near the poles, everything is white (ice/snow).
-            if (latitude > 0.82f) return new Color(0.92f, 0.95f, 0.98f, 1f);
-
-            if (altMetres < 0f)
+            if (_lodMaterial == null || body == null) return;
+            if (_lodMaterial.HasProperty("_BodyCenter"))
             {
-                float depth = Mathf.Clamp01(-altMetres / 40f);
-                return Color.Lerp(new Color(0.20f, 0.45f, 0.70f, 1f), new Color(0.03f, 0.10f, 0.30f, 1f), depth);
+                Vector3 center = body.transform.position;
+                _lodMaterial.SetVector("_BodyCenter", new Vector4(center.x, center.y, center.z, 1f));
             }
-            if (altMetres < 2f) return new Color(0.80f, 0.74f, 0.52f, 1f);
-            float h = Mathf.Clamp01(altMetres / 60f);
-            // Equatorial = lush green; higher latitudes = browner/cooler.
-            float greenness = Mathf.Clamp01(1f - latitude * 1.2f);
-            Color lush = new Color(0.26f, 0.55f, 0.22f, 1f);
-            Color dry  = new Color(0.50f, 0.45f, 0.28f, 1f);
-            Color lowland = Color.Lerp(dry, lush, greenness);
-            Color highland = new Color(0.50f, 0.40f, 0.28f, 1f);
-            Color land = Color.Lerp(lowland, highland, h);
-            // Snow caps on high peaks.
-            if (h > 0.7f) land = Color.Lerp(land, Color.white, (h - 0.7f) / 0.3f);
-            // Sub-polar regions get partial snow.
-            if (latitude > 0.65f) land = Color.Lerp(land, new Color(0.85f, 0.88f, 0.92f, 1f), (latitude - 0.65f) / 0.17f);
-            return land;
         }
 
         private void UpdateFade(CelestialBody body)
@@ -476,6 +520,15 @@ namespace VoxelEngine.Cosmos
                 return;
             }
             float a = 1f;
+            // Non-active bodies crossfade with the compressed sky proxy at the edge of the
+            // true-LOD window: invisible far away, fully opaque once the real sampled
+            // surface is worth rendering. The proxy fades out over the same band, so the
+            // swap reads as a smooth resolution upgrade — no popping sphere.
+            if (!highDetail && viewer != null && _lodMaterial.HasProperty("_Tint"))
+            {
+                float distM = Vector3.Distance(viewer.position, transform.position);
+                a = 1f - Mathf.Clamp01((float)((distM - TrueLodWindowMeters) / TrueLodFadeBandMeters));
+            }
             if (_lodMaterial.HasProperty("_Tint"))
             {
                 var tint = _lodMaterial.GetColor("_Tint"); tint.a = a; _lodMaterial.SetColor("_Tint", tint);

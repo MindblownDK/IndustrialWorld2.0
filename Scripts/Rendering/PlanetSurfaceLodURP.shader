@@ -36,6 +36,10 @@ Shader "VoxelEngine/PlanetSurfaceLodURP"
                 float _RimStrength;
                 float _SurfaceDetailStrength;
                 float _SurfaceDetailScale;
+                // Per-material body core (set by each PlanetLodImpostor). Falls back to
+                // the global streaming-body center below when unset, so the surface-detail
+                // noise is correct for EVERY body in the system, not just the active one.
+                float4 _BodyCenter;
             CBUFFER_END
 
             // Published by SphereWorld. The proxy remains fully body-relative even when
@@ -92,7 +96,8 @@ Shader "VoxelEngine/PlanetSurfaceLodURP"
                 Light sun = GetMainLight();
                 float diffuse = saturate(dot(normal, sun.direction)) * 0.72 + 0.28;
                 float rim = pow(saturate(1.0 - dot(view, normal)), 3.0) * _RimStrength;
-                float3 radial = normalize(input.positionWS - _VoxelTerrainBodyCenter.xyz);
+                float3 bodyCenter = length(_BodyCenter.xyz) > 0.0001 ? _BodyCenter.xyz : _VoxelTerrainBodyCenter.xyz;
+                float3 radial = normalize(input.positionWS - bodyCenter);
                 // Shader-side macro/fine variation preserves a rich continental read from
                 // orbit without forcing dense local voxel chunks or a huge proxy mesh.
                 float detail = SurfaceDetail(radial) * _SurfaceDetailStrength;
