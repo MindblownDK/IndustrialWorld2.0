@@ -91,6 +91,9 @@ namespace VoxelEngine.Cosmos
 
             // Render the sun(s).
             EnsureCount(_sunVisuals, registry.Sun != null ? 1 : 0, "SpaceSun");
+            // Origin-anchored fallback position for the sky-proxy hierarchy (used by the
+            // planet/moon sky projection below, which orbits bodies around this point).
+            Vector3 sunPos = GetViewerPosition() + Vector3.up * (visualRange * 1.5f);
             if (registry.Sun != null)
             {
                 var sun = registry.Sun;
@@ -112,7 +115,7 @@ namespace VoxelEngine.Cosmos
                 {
                     Vector3 sunDirKm = sun.positionKm - viewerKm;
                     Vector3 sunDir = sunDirKm.sqrMagnitude < 1f ? Vector3.up : sunDirKm.normalized;
-                    Vector3 sunPos = GetViewerPosition() + sunDir * visualRange * 1.5f;
+                    sunPos = GetViewerPosition() + sunDir * visualRange * 1.5f;
                     if (_sunVisuals.Count > 0 && _sunVisuals[0].go != null && !_sunVisuals[0].go.activeSelf)
                         _sunVisuals[0].go.SetActive(true);
                     PositionBody(_sunVisuals[0], sunPos, sunVisualScale * intensity, glow, emissive: true);

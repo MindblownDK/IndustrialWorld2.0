@@ -1,9 +1,19 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.13.14-dev`
+**Current Version:** `7.13.15-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.13.15-dev] SpaceBodyRenderer Compile Recovery (CS0103 sunPos)
+
+**Type:** PATCH — compile recovery for the always-visible-sun sky rendering; no behaviour change, no save/API break.
+
+#### 🛠️ Compiler Fix
+- **CS0103 `sunPos` in `SpaceBodyRenderer`:** the variable was declared inside the sun-sprite branch but also consumed by the planet/moon sky-projection hierarchy below. It is now declared once before the sun branch (origin-anchored fallback) and assigned inside the sprite branch — the sky hierarchy always has a valid sun anchor.
+
+#### ✅ Static delivery checks
+- Verified the modified source parses cleanly (tree-sitter grammar validation).
 
 ### [7.13.14-dev] Gravity-Well Release, Always-Visible Planets & Sun (Real LOD Approach)
 
