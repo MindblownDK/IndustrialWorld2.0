@@ -80,6 +80,32 @@ namespace VoxelEngine.Cosmos
             _                 => 163842,
         };
 
+        /// <summary>
+        /// Voxel size (metres) of the MID whole-planet real-voxel LOD level per tier.
+        /// 32 m = ~768 chunks on an 8 km planet (High/Ultra); 64 m = ~192 (Mid);
+        /// 128 m = ~48 (Low). PlanetVoxelLod doubles these on larger planets to keep the
+        /// whole-planet chunk count bounded.
+        /// </summary>
+        public static float PlanetMidLodVoxelSize => Current switch
+        {
+            GraphicsTier.Low  => 128f,
+            GraphicsTier.Mid  => 64f,
+            GraphicsTier.High => 32f,
+            _                 => 32f,
+        };
+
+        /// <summary>
+        /// Voxel size (metres) of the FAR whole-planet real-voxel LOD level per tier
+        /// (visible from space during the whole interplanetary crossing).
+        /// </summary>
+        public static float PlanetFarLodVoxelSize => Current switch
+        {
+            GraphicsTier.Low  => 512f,
+            GraphicsTier.Mid  => 256f,
+            GraphicsTier.High => 128f,
+            _                 => 128f,
+        };
+
         /// <summary>Waterfall scan range (metres) per tier.</summary>
         public static float WaterfallRange => Current switch
         {

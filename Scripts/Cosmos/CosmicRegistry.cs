@@ -74,7 +74,13 @@ namespace VoxelEngine.Cosmos
 
         // Minimum gap between consecutive planet orbits (km). Enforced at runtime so a
         // system never reads as planets sitting right on top of each other.
-        private const double MinPlanetGapKm = 2000d;
+        /// <summary>
+        /// Runtime floor for the gap between neighbouring planet orbits. 8,000 km keeps the
+        /// system vast (Space-Engineers feel): from the surface of an 8 km planet the next
+        /// world is a small distant disc, deep space between planets is genuinely empty,
+        /// and the real-voxel LOD window (8,000 km) covers the whole crossing.
+        /// </summary>
+        private const double MinPlanetGapKm = 8000d;
 
         // ── Lifecycle ─────────────────────────────────────────────
         private void Awake()

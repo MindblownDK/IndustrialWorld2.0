@@ -53,6 +53,13 @@ namespace VoxelEngine.Meshing
         public bool enableVertexAo;
         public float3 chunkOrigin;
 
+        /// <summary>
+        /// World-space edge length of one voxel (metres). The gameplay world uses
+        /// VoxelConstants.VOXEL_SIZE (1 m); PlanetVoxelLod's LOD levels use larger
+        /// voxels (8–512 m) so the same job builds the whole planet at real LOD.
+        /// </summary>
+        public float voxelSize = VoxelConstants.VOXEL_SIZE;
+
         // Fluid material IDs — treated as EMPTY for terrain mesh generation UNLESS the
         // cell is SOLID. Solid-density crude oil (the geological bore/reservoir written by
         // OilReservoirDecorator) is real visible terrain; only liquid oil (density ≤ 0,
@@ -257,8 +264,10 @@ namespace VoxelEngine.Meshing
 
             counts[0] = vertexCount;
             counts[1] = indexCount;
+            // Bounds are reported in world metres (vertex positions are scaled below), so
+            // frustum culling of the chunk GO is correct at any voxel size.
             bounds[0] = vertexCount > 0
-                ? new Bounds((Vector3)((bbMin + bbMax) * 0.5f), (Vector3)(bbMax - bbMin))
+                ? new Bounds((Vector3)((bbMin + bbMax) * 0.5f) * voxelSize, (Vector3)(bbMax - bbMin) * voxelSize)
                 : new Bounds(Vector3.zero, Vector3.zero);
 
             // ---- Write into Mesh.MeshData (Unity 6 fast path) ----
@@ -268,7 +277,7 @@ namespace VoxelEngine.Meshing
             for (int i = 0; i < vertexCount; i++)
                 verts[i] = new VertexLayout
                 {
-                    pos    = vertexScratch[i] * VoxelConstants.VOXEL_SIZE,
+                    pos    = vertexScratch[i] * voxelSize,
                     normal = normalScratch[i],
                     color  = colorScratch[i]
                 };

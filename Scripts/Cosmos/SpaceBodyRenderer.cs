@@ -51,13 +51,13 @@ namespace VoxelEngine.Cosmos
         public int updateEveryNFrames = 3;
 
         [Tooltip("Bodies closer than this (metres, true scene distance) render their real LOD " +
-                 "instead of the compressed sky proxy. 2,500 km keeps the approached planet's " +
-                 "real surface visible for the whole interplanetary crossing.")]
-        public float trueLodDistanceMeters = 2500000f;
+                 "instead of the compressed sky proxy. 8,000 km keeps the approached planet's real voxel surface " +
+                 "visible for the whole interplanetary crossing (min planet separation is 8,000 km).")]
+        public float trueLodDistanceMeters = 8000000f;
 
         /// <summary>Shared window constant (metres) — also consumed by CosmosBootstrap's far clip
         /// and PlanetLodImpostor's crossfade, so every system agrees on where real LOD begins.</summary>
-        public const double TrueLodWindowMeters = 2500000d;
+        public const double TrueLodWindowMeters = 8000000d;
 
         /// <summary>Distance band (metres) OUTSIDE the window over which the proxy fades out
         /// while the real LOD fades in.</summary>
@@ -66,7 +66,7 @@ namespace VoxelEngine.Cosmos
         [Tooltip("True distance (metres) at which the sky proxy starts converging from its " +
                  "compressed sky position/size toward the body's true scene position/size, so " +
                  "the proxy → real-LOD swap happens at the same apparent size.")]
-        public float proxyConvergeDistanceMeters = 6000000f;
+        public float proxyConvergeDistanceMeters = 12000000f;
 
         [Tooltip("Optional biome registry for accurate surface colours on the sky proxies.")]
         public BiomeRegistry biomeRegistry;
@@ -80,6 +80,7 @@ namespace VoxelEngine.Cosmos
             public Mesh terrainMesh;   // sampled terrain sphere (baked once per body)
             public BodyInstance bakeKey;
             public int bakeSeed;
+            public bool bakePending;   // a bake is queued/in-flight for this body
         }
 
         private readonly List<BodyVisual> _sunVisuals = new();
@@ -326,10 +327,13 @@ namespace VoxelEngine.Cosmos
             var visual = _bodyVisuals[index];
             if (visual.terrainMesh != null && visual.bakeKey == b && visual.bakeSeed == sceneBody.genParams.seed)
                 return; // already baked for this body + seed
+            if (visual.bakePending && visual.bakeKey == b && visual.bakeSeed == sceneBody.genParams.seed)
+                return; // a bake is already queued/in-flight
 
             // (Re)queue: new body, or its seed changed since the last bake.
             visual.bakeKey = b;
             visual.bakeSeed = sceneBody.genParams.seed;
+            visual.bakePending = true;
             _bodyVisuals[index] = visual;
 
             // Drop any previously queued bake for this body.
@@ -349,6 +353,8 @@ namespace VoxelEngine.Cosmos
                 done = false
             };
             _bakeQueue.Add(bake);
+            Debug.Log($"[SpaceBodyRenderer] Queued sampled-terrain bake for '{b.DisplayName}' " +
+                      $"({_sharedDirs.Length} verts) — used only beyond the {trueLodDistanceMeters / 1000f:0} km real-voxel window.");
         }
 
         private NativeArray<BiomeData> GetBiomesFor(CelestialBody sceneBody)
@@ -431,6 +437,7 @@ namespace VoxelEngine.Cosmos
                 mesh.RecalculateNormals();
                 mesh.RecalculateBounds();
                 visual.terrainMesh = mesh;
+                visual.bakePending = false;
                 _bodyVisuals[index] = visual;
             }
 

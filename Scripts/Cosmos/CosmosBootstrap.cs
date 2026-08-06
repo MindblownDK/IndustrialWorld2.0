@@ -193,6 +193,20 @@ namespace VoxelEngine.Cosmos
             lod.viewer = viewer;
             lod.biomeRegistry = biomeRegistry;
 
+            // ── REAL voxel surface LOD (Space-Engineers style) ──
+            // The whole planet is generated as actual voxel chunks at LOD resolutions
+            // (far/mid whole-planet + near ring); the sampled impostor above is only a
+            // brief bridge until this real surface is ready, then it steps aside.
+            var voxelLodGO = new GameObject("VoxelLod");
+            voxelLodGO.transform.SetParent(_bodyGO.transform, false);
+            var voxelLod = voxelLodGO.AddComponent<PlanetVoxelLod>();
+            voxelLod.body = body;
+            voxelLod.viewer = viewer;
+            voxelLod.biomeRegistry = biomeRegistry;
+            voxelLod.materialRegistry = materialRegistry;
+            voxelLod.terrainMaterial = terrainMaterial;
+            voxelLod.maxJobsPerFrame = GraphicsPreset.JobsPerFrame;
+
             // Ocean LOD is a separate mesh generated only over real ocean basins. It fills
             // distant water without creating a wrapped water sphere in dry caves or on land.
             var oceanLodGO = new GameObject("OceanLOD");
@@ -386,6 +400,8 @@ namespace VoxelEngine.Cosmos
                 if (kv.Value == null) continue;
                 var lod = kv.Value.GetComponentInChildren<PlanetLodImpostor>(true);
                 if (lod != null) lod.viewer = viewer;
+                var voxelLod = kv.Value.GetComponentInChildren<PlanetVoxelLod>(true);
+                if (voxelLod != null) voxelLod.viewer = viewer;
             }
         }
 
@@ -494,11 +510,12 @@ namespace VoxelEngine.Cosmos
         /// URP reversed-Z depth keeps near-terrain precision intact.</summary>
         private const double maxFarClipMeters = 50000000d;
 
-        /// <summary>Bodies within this distance (km) render their real LOD instead of the sky proxy.
-        /// Kept in sync with SpaceBodyRenderer.TrueLodWindowMeters: with a 2,000 km minimum planet
-        /// separation, 2,500 km keeps the approached planet's REAL sampled surface visible for the
-        /// whole interplanetary crossing, and the LOD ladder upgrades it as you close in.</summary>
-        private const double trueLodViewKm = 2500d;
+        /// <summary>Bodies within this distance (km) render their REAL voxel surface LOD
+        /// (PlanetVoxelLod) instead of the sky proxy. Kept in sync with
+        /// SpaceBodyRenderer.TrueLodWindowMeters: with an 8,000 km minimum planet
+        /// separation, 8,000 km keeps the approached planet's real voxel surface visible
+        /// for the whole interplanetary crossing, and the LOD levels upgrade as you close in.</summary>
+        private const double trueLodViewKm = 8000d;
 
         // ── Real-space infrastructure ──────────────────────────────
 
@@ -589,6 +606,18 @@ namespace VoxelEngine.Cosmos
                 // The distance-based LOD ladder owns the vertex budget from here on:
                 // cheap far away, progressively denser as the player closes in.
                 lod.resolution = 642;
+
+                // REAL voxel surface LOD for this body too — every planet in the system
+                // generates its true voxel surface; the impostor steps aside when ready.
+                var voxelLodGO = new GameObject("VoxelLod");
+                voxelLodGO.transform.SetParent(go.transform, false);
+                var voxelLod = voxelLodGO.AddComponent<PlanetVoxelLod>();
+                voxelLod.body = cb;
+                voxelLod.viewer = viewer;
+                voxelLod.biomeRegistry = biomeRegistry;
+                voxelLod.materialRegistry = materialRegistry;
+                voxelLod.terrainMaterial = terrainMaterial;
+                voxelLod.maxJobsPerFrame = Mathf.Clamp(GraphicsPreset.JobsPerFrame, 2, 6);
 
                 registry.SceneBodies[instance] = cb;
                 _spaceOrigin.RegisterRoot(go.transform);

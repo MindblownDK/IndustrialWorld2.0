@@ -1,9 +1,48 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.14.1-dev`
+**Current Version:** `7.15.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.15.0-dev] REAL Voxel Planet Surfaces — Whole-Planet Voxel LOD Generation (No More Fake Spheres)
+
+**Type:** MINOR — the sampled impostor sphere is replaced by REAL voxel LOD generation for the whole planet surface, Space-Engineers style. Save-compatible, no API break.
+
+#### 🪐 The core change
+Every celestial body now generates its surface as **actual voxel chunks** at LOD resolutions — the same `SphereChunkGenJob` + `SurfaceNetsJob` pipeline as the gameplay world, just with bigger voxels for distance. What you see from orbit IS the real terrain density field: continents, oceans, mountains, biomes, ore-coloured strata. No sampled sphere with "nothing".
+
+**Levels (voxel → chunk size):**
+| Level | Voxel | Coverage | Active when |
+| :-- | :-- | :-- | :-- |
+| **L3 FAR** | 128–512 m (adaptive, tier) | whole planet (~48 chunks) | within **8,000 km** — the whole interplanetary crossing |
+| **L2 MID** | 32–128 m (adaptive, tier) | whole planet (~192–770 chunks) | within 150 km (approach + on-surface) |
+| **L1 NEAR** | 8 m | ring around the viewer (~190 chunks) | below 4 km altitude on the streaming body |
+| **L0 PLAY** | 1 m | SphereWorld gameplay bubble (unchanged) | as before |
+
+- All levels sample the **same density field** → levels match exactly, just resolution differs.
+- **Nesting without gaps:** a finer level excludes the coarser chunks fully inside its bubble (fully-inside rule) — no holes, no overlap z-fighting beyond the tiny boundary band.
+- **Adaptive voxel size by planet radius** (doubles past 12 km radius) so whole-planet chunk counts stay bounded on any planet/moon size.
+- **Quality tiers:** Low = 128 m mid voxels (~48 chunks), Mid = 64 m (~192), High/Ultra = 32 m (~770) — `GraphicsPreset.PlanetMidLodVoxelSize` / `PlanetFarLodVoxelSize`.
+- **Memory-lean:** LOD chunk voxel buffers are disposed the moment their mesh is applied (LOD chunks are never edited) — only meshes stay resident.
+- **Visual-only:** no colliders (the LOD safety shell keeps the planet solid), no scatter/fluid/persistence on LOD chunks.
+- **Nearest-first streaming** so the visible side of the planet builds before the back side.
+- `SurfaceNetsJob` gained a `voxelSize` parameter (bounds now correctly reported in metres — fixes latent bounds/culling at any voxel size).
+
+#### 🔄 The impostor is now only a 1–3 s bridge
+`PlanetLodImpostor` renders the old sampled sphere **only until** the body's real voxel surface (`PlanetVoxelLod.SurfaceReady`) is built, then hides permanently — its safety colliders stay forever. The sampled-terrain sky proxies remain only for bodies **beyond** the 8,000 km window (they still bake the real terrain palette).
+
+#### 🪐 Planets are now far apart (Space-Engineers scale)
+- **Minimum orbit gap 2,000 → 8,000 km** (`CosmicRegistry.MinPlanetGapKm`) — from the surface of an 8 km planet the next world is a small distant disc; interplanetary space is genuinely vast (gravity wells are only ~200 km).
+- True-LOD window **2,500 → 8,000 km** everywhere (bootstrap far clip, `SpaceBodyRenderer` proxy handoff, impostor crossfade) — the approached planet's REAL voxel surface is visible for the entire crossing; proxy convergence band now 12,000 → 8,000 km.
+
+#### 🛠️ Diagnostics
+- `[PlanetVoxelLod] Real voxel surface ready for '<body>' (far x/y, mid x/y)` — when a body's real surface is built.
+- `[PlanetVoxelLod] '<body>': far/mid/near chunk counts` — once, after 5 s.
+- `[SpaceBodyRenderer] Queued sampled-terrain bake for '<body>'` — confirms far-body proxy baking runs (previously "isn't running" was the compile error blocking the whole build).
+
+#### ✅ Static delivery checks
+- All 10 modified/added sources parse cleanly (tree-sitter grammar validation): `PlanetVoxelLod.cs` (new), `SurfaceNetsJob.cs`, `PlanetLodImpostor.cs`, `SpaceBodyRenderer.cs`, `CosmosBootstrap.cs`, `CosmicRegistry.cs`, `GraphicsPreset.cs`, `QualityPresetApplier.cs`, `SphereSurfaceColor.cs`, `GameVersion.cs`.
 
 ### [7.14.1-dev] Sky Proxy Compile Recovery (CS1061 Color.rgb)
 

@@ -81,6 +81,12 @@ namespace VoxelEngine.Cosmos
         private int _lastEffectiveResolution;
         private int _lastSeed;
 
+        // ── Real-voxel bridge (7.15.0) ────────────────────────────────
+        // This sampled sphere is ONLY a short bridge: PlanetVoxelLod generates the body's
+        // REAL voxel surface (whole planet, LOD levels). Once that surface is ready the
+        // impostor's visual steps aside — the safety colliders below stay forever.
+        private PlanetVoxelLod _voxelSurface;
+
         // ── Safety colliders (solid planet, no flying through) ─────
         private MeshCollider _safetyMeshCollider;
         private SphereCollider _safetySphere;
@@ -123,6 +129,18 @@ namespace VoxelEngine.Cosmos
 
             var resolvedBody = ResolveBody();
             if (resolvedBody == null || resolvedBody.settings == null) return;
+
+            // ── Real-voxel bridge: once this body's REAL voxel surface (PlanetVoxelLod)
+            // is ready, this sampled sphere hides and the safety colliders remain the only
+            // job here. The voxel surface is what you see from orbit to the ground. ──
+            if (_voxelSurface == null) _voxelSurface = GetComponentInChildren<PlanetVoxelLod>(true);
+            if (_voxelSurface != null && _voxelSurface.SurfaceReady)
+            {
+                if (meshRenderer != null) meshRenderer.enabled = false;
+                UpdateBodyCenter(resolvedBody);
+                UpdateSafetyColliders(resolvedBody);
+                return;
+            }
 
             int effectiveResolution = ResolveRuntimeResolution(resolvedBody);
 

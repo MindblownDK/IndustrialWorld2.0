@@ -84,6 +84,14 @@ namespace VoxelEngine.Cosmos
                 }
             }
 
+            // Real-voxel planet LOD: push the job budget to every body's surface generator
+            // (voxel sizes are resolved per body at stream time from the new tier).
+            foreach (var voxelLod in FindObjectsByType<PlanetVoxelLod>(FindObjectsInactive.Include))
+            {
+                if (voxelLod == null) continue;
+                voxelLod.maxJobsPerFrame = GraphicsPreset.JobsPerFrame;
+            }
+
             // Whole-planet ocean LOD uses the same distance budget as terrain LOD.
             var oceanLod = FindAnyObjectByType<PlanetOceanLodRenderer>();
             if (oceanLod != null) oceanLod.resolution = GraphicsPreset.LodResolution;
