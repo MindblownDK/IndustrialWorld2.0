@@ -70,7 +70,7 @@ namespace VoxelEngine.Cosmos
             float depth,
             float3 up)
         {
-            if (!sites.IsCreated || sites.Length == 0) return 0;
+            if (!sites.IsCreated || sites.Count() == 0) return 0;
 
             int3 cell = new int3(
                 (int)math.floor(worldPos.x / SiteCellSize),

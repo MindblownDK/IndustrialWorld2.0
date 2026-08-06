@@ -379,7 +379,7 @@ namespace VoxelEngine.Cosmos
                 // levels reproduce the same puddle → bore → reservoir story from the
                 // precomputed site map so oil fields are visible from orbit and from
                 // the air. Only probed near the surface (map lookup is cheap).
-                if (prm.hasOilSeeps == 1 && oilSites.IsCreated && oilSites.Length > 0 && depth < 90f)
+                if (prm.hasOilSeeps == 1 && oilSites.IsCreated && oilSites.Count() > 0 && depth < 90f)
                 {
                     byte oilMaterial = OilSiteSampler.Sample(oilSites, worldPos, depth, dir);
                     if (oilMaterial != 0) material = oilMaterial;

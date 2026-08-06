@@ -53,10 +53,8 @@ namespace VoxelEngine.Cosmos
 
         // ── True-LOD window shared with SpaceBodyRenderer's sky proxies ──
         // Bodies closer than this (metres, true scene distance) render their REAL
-        // sampled-surface LOD instead of the compressed sky proxy. 2,500 km keeps
-        // the approached planet's real surface visible for the whole interplanetary
-        // crossing (min planet separation is 2,000 km) — the LOD ladder below then
-        // upgrades the surface continuously as you close in.
+        // voxel surface LOD instead of the compressed sky proxy. 60,000 km covers the
+        // whole system — every planet renders its real surface at all times.
         public const double TrueLodWindowMeters = 2500000d;
 
         /// <summary>Distance band (metres) OUTSIDE the window over which the LOD crossfades

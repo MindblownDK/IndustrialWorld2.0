@@ -1,9 +1,29 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.16.0-dev`
+**Current Version:** `7.17.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.17.0-dev] All Planets Always Real (Whole-System Window) + LOD Compile Recovery
+
+**Type:** MINOR — every planet in the system now renders its REAL voxel surface at all times (60,000 km window covers the whole system), forge-created planets get the same treatment automatically, and the oil-site map API compiles clean. Save-compatible, no API break.
+
+#### 🪐 All planets are ACTIVE (real surfaces, everywhere)
+- **Whole-system window:** the real-voxel FAR level now streams for any body within **60,000 km** (was 8,000 km) — with the 8,000 km planet gap floor, EVERY planet/moon in the system renders its genuine voxel surface at all times. No more "only the approached planet is real; the rest are painted spheres".
+- **Far clip 50,000 → 80,000 km** (`CosmosBootstrap.maxFarClipMeters`) so planets at 60,000 km are never culled; `trueLodViewKm` 8,000 → 60,000 keeps every body in the real-LOD path.
+- **Sky proxies** (sampled spheres) now only remain for bodies beyond 60,000 km (system edge) — convergence/fade constants moved to match (12,000 → 65,000 km converge band).
+- **Forge-forward:** `SpawnBodySystems` is extracted from `EnsureAllBodiesInScene`, and `CosmosBootstrap` now polls the registry every 2 s — any body **added to the registry after bootstrap** (the World Forge / runtime content tools, not implemented yet) automatically spawns as a real world: CelestialBody + bridge LOD + real voxel surface + floating-origin registration. When the forge lands, its planets are immediately real, flyable worlds with zero extra wiring.
+
+#### 🛠️ Compiler Fixes (CS1061 / CS0019 / CS0428)
+- `NativeParallelHashMap` has no `.Length` / `.Count` properties — both are METHODS:
+  • `SphereDensity.cs`: `oilSites.Length > 0` → `oilSites.Count() > 0`
+  • `OilSiteSampler.cs`: `sites.Length == 0` → `sites.Count() == 0`
+  • `PlanetVoxelLod.cs`: `_oilSites.Count` → `_oilSites.Count()` (log line)
+- `PlanetVoxelLod.cs`: `int3 * float` is invalid — the oil-map scan centre now casts `(float3)c * ...` explicitly.
+
+#### ✅ Static delivery checks
+- All modified sources parse cleanly (tree-sitter grammar validation); C# 9 compatibility sweep clean (no struct field initializers).
 
 ### [7.16.0-dev] One Surface Only, Solid Planets on Approach & Oil Fields Visible from the Air
 

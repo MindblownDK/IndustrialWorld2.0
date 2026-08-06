@@ -51,13 +51,13 @@ namespace VoxelEngine.Cosmos
         public int updateEveryNFrames = 3;
 
         [Tooltip("Bodies closer than this (metres, true scene distance) render their real LOD " +
-                 "instead of the compressed sky proxy. 8,000 km keeps the approached planet's real voxel surface " +
-                 "visible for the whole interplanetary crossing (min planet separation is 8,000 km).")]
-        public float trueLodDistanceMeters = 8000000f;
+                 "instead of the compressed sky proxy. 60,000 km keeps EVERY planet's real voxel surface visible — the whole " +
+                 "system renders real surfaces at all times; the proxy remains only for the far edge.")]
+        public float trueLodDistanceMeters = 60000000f;
 
         /// <summary>Shared window constant (metres) — also consumed by CosmosBootstrap's far clip
         /// and PlanetLodImpostor's crossfade, so every system agrees on where real LOD begins.</summary>
-        public const double TrueLodWindowMeters = 8000000d;
+        public const double TrueLodWindowMeters = 60000000d;
 
         /// <summary>Distance band (metres) OUTSIDE the window over which the proxy fades out
         /// while the real LOD fades in.</summary>
@@ -66,7 +66,7 @@ namespace VoxelEngine.Cosmos
         [Tooltip("True distance (metres) at which the sky proxy starts converging from its " +
                  "compressed sky position/size toward the body's true scene position/size, so " +
                  "the proxy → real-LOD swap happens at the same apparent size.")]
-        public float proxyConvergeDistanceMeters = 12000000f;
+        public float proxyConvergeDistanceMeters = 65000000f;
 
         [Tooltip("Optional biome registry for accurate surface colours on the sky proxies.")]
         public BiomeRegistry biomeRegistry;

@@ -506,16 +506,16 @@ namespace VoxelEngine.Cosmos
             }
         }
 
-        /// <summary>Far-plane cap (metres). 50,000 km keeps the whole system visible;
-        /// URP reversed-Z depth keeps near-terrain precision intact.</summary>
-        private const double maxFarClipMeters = 50000000d;
+        /// <summary>Far-plane cap (metres). 80,000 km keeps the WHOLE system (including
+        /// planets at 60,000 km) visible; URP reversed-Z depth keeps near-terrain
+        /// precision intact.</summary>
+        private const double maxFarClipMeters = 80000000d;
 
         /// <summary>Bodies within this distance (km) render their REAL voxel surface LOD
         /// (PlanetVoxelLod) instead of the sky proxy. Kept in sync with
-        /// SpaceBodyRenderer.TrueLodWindowMeters: with an 8,000 km minimum planet
-        /// separation, 8,000 km keeps the approached planet's real voxel surface visible
-        /// for the whole interplanetary crossing, and the LOD levels upgrade as you close in.</summary>
-        private const double trueLodViewKm = 8000d;
+        /// SpaceBodyRenderer.TrueLodWindowMeters: 60,000 km covers the whole system, so
+        /// EVERY planet renders its real voxel surface at all times.</summary>
+        private const double trueLodViewKm = 60000d;
 
         // ── Real-space infrastructure ──────────────────────────────
 
@@ -568,60 +568,93 @@ namespace VoxelEngine.Cosmos
                 if (instance == null || instance.settings == null) continue;
                 if (registry.SceneBodies.ContainsKey(instance)) continue;
                 if (instance.settings == _body.settings) continue;
+                SpawnBodySystems(registry, instance);
+            }
+        }
 
-                var go = new GameObject("CelestialBody_" + instance.DisplayName);
-                go.transform.SetParent(transform, false);
-                go.SetActive(false);
+        /// <summary>
+        /// Spawns one registry body as real scene geometry: CelestialBody + sampled
+        /// bridge LOD + REAL voxel surface LOD + floating-origin registration.
+        /// Extracted so FORGE-CREATED bodies (added to the registry at runtime — the
+        /// World Forge is not implemented yet, but when it lands) automatically get the
+        /// same real voxel surface treatment as every authored planet.
+        /// </summary>
+        private void SpawnBodySystems(CosmicRegistry registry, BodyInstance instance)
+        {
+            var go = new GameObject("CelestialBody_" + instance.DisplayName);
+            go.transform.SetParent(transform, false);
+            go.SetActive(false);
 
-                var cb = go.AddComponent<CelestialBody>();
-                cb.settings = instance.settings;
-                int perBodySeed = instance.settings.seed;
-                var session = VoxelEngine.Menu.WorldSession.Instance;
-                if (session != null && session.seedState != null && instance.planetTemplate != null)
+            var cb = go.AddComponent<CelestialBody>();
+            cb.settings = instance.settings;
+            int perBodySeed = instance.settings.seed;
+            var session = VoxelEngine.Menu.WorldSession.Instance;
+            if (session != null && session.seedState != null && instance.planetTemplate != null)
+            {
+                // The seed table is index-aligned with the system template's planet order.
+                int planetIndex = 0;
+                if (registry.systemTemplate != null && registry.systemTemplate.planets != null)
                 {
-                    // The seed table is index-aligned with the system template's planet order.
-                    int planetIndex = 0;
-                    if (registry.systemTemplate != null && registry.systemTemplate.planets != null)
+                    for (int k = 0; k < registry.systemTemplate.planets.Length; k++)
                     {
-                        for (int k = 0; k < registry.systemTemplate.planets.Length; k++)
+                        if (registry.systemTemplate.planets[k] == instance.planetTemplate)
                         {
-                            if (registry.systemTemplate.planets[k] == instance.planetTemplate)
-                            {
-                                planetIndex = k;
-                                break;
-                            }
+                            planetIndex = k;
+                            break;
                         }
                     }
-                    perBodySeed = session.seedState.GetSeed(planetIndex, instance.settings.seed);
                 }
-                cb.SetRuntimeSeedOverride(perBodySeed);
-                cb.ApplySettings();
+                perBodySeed = session.seedState.GetSeed(planetIndex, instance.settings.seed);
+            }
+            cb.SetRuntimeSeedOverride(perBodySeed);
+            cb.ApplySettings();
 
-                var lodGO = new GameObject("LOD");
-                lodGO.transform.SetParent(go.transform, false);
-                var lod = lodGO.AddComponent<PlanetLodImpostor>();
-                lod.body = cb;
-                lod.viewer = viewer;
-                lod.biomeRegistry = biomeRegistry;
-                // The distance-based LOD ladder owns the vertex budget from here on:
-                // cheap far away, progressively denser as the player closes in.
-                lod.resolution = 642;
+            var lodGO = new GameObject("LOD");
+            lodGO.transform.SetParent(go.transform, false);
+            var lod = lodGO.AddComponent<PlanetLodImpostor>();
+            lod.body = cb;
+            lod.viewer = viewer;
+            lod.biomeRegistry = biomeRegistry;
+            // The distance-based LOD ladder owns the vertex budget from here on:
+            // cheap far away, progressively denser as the player closes in.
+            lod.resolution = 642;
 
-                // REAL voxel surface LOD for this body too — every planet in the system
-                // generates its true voxel surface; the impostor steps aside when ready.
-                var voxelLodGO = new GameObject("VoxelLod");
-                voxelLodGO.transform.SetParent(go.transform, false);
-                var voxelLod = voxelLodGO.AddComponent<PlanetVoxelLod>();
-                voxelLod.body = cb;
-                voxelLod.viewer = viewer;
-                voxelLod.biomeRegistry = biomeRegistry;
-                voxelLod.materialRegistry = materialRegistry;
-                voxelLod.terrainMaterial = terrainMaterial;
-                voxelLod.maxJobsPerFrame = Mathf.Clamp(GraphicsPreset.JobsPerFrame, 2, 6);
+            // REAL voxel surface LOD for this body too — every planet in the system
+            // generates its true voxel surface; the impostor steps aside when ready.
+            var voxelLodGO = new GameObject("VoxelLod");
+            voxelLodGO.transform.SetParent(go.transform, false);
+            var voxelLod = voxelLodGO.AddComponent<PlanetVoxelLod>();
+            voxelLod.body = cb;
+            voxelLod.viewer = viewer;
+            voxelLod.biomeRegistry = biomeRegistry;
+            voxelLod.materialRegistry = materialRegistry;
+            voxelLod.terrainMaterial = terrainMaterial;
+            voxelLod.maxJobsPerFrame = Mathf.Clamp(GraphicsPreset.JobsPerFrame, 2, 6);
 
-                registry.SceneBodies[instance] = cb;
-                _spaceOrigin.RegisterRoot(go.transform);
-                go.SetActive(true);
+            registry.SceneBodies[instance] = cb;
+            _spaceOrigin.RegisterRoot(go.transform);
+            go.SetActive(true);
+
+            Debug.Log($"[CosmosBootstrap] Spawned real-voxel body '{instance.DisplayName}' (seed {perBodySeed}).");
+        }
+
+        /// <summary>
+        /// Periodically checks the registry for bodies that were added AFTER bootstrap
+        /// (the World Forge / runtime content tools) and spawns their real systems —
+        /// so forge-created planets are immediately real, flyable worlds.
+        /// </summary>
+        private float _bodySyncTimer;
+        private void EnsureNewBodiesRegistered()
+        {
+            var registry = CosmicRegistry.Instance;
+            if (registry == null || !registry.IsReady || _spaceOrigin == null) return;
+            for (int i = 0; i < registry.Bodies.Count; i++)
+            {
+                var instance = registry.Bodies[i];
+                if (instance == null || instance.settings == null) continue;
+                if (instance.settings == _body.settings) continue;
+                if (registry.SceneBodies.ContainsKey(instance)) continue;
+                SpawnBodySystems(registry, instance);
             }
         }
 
@@ -1009,6 +1042,14 @@ namespace VoxelEngine.Cosmos
             {
                 _farClipTimer = 2f;
                 EnsureCameraFarClip();
+            }
+
+            // Forge/runtime content: spawn real systems for bodies added after bootstrap.
+            _bodySyncTimer -= Time.deltaTime;
+            if (_bodySyncTimer <= 0f)
+            {
+                _bodySyncTimer = 2f;
+                EnsureNewBodiesRegistered();
             }
         }
 

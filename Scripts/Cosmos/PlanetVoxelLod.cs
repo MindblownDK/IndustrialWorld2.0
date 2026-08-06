@@ -61,7 +61,7 @@ namespace VoxelEngine.Cosmos
 
         [Header("Level Windows")]
         [Tooltip("Distance (m) within which the FAR whole-planet level streams (128–512 m voxels).")]
-        public float farWindowMeters = 8000000f;
+        public float farWindowMeters = 60000000f;
         [Tooltip("Distance (m) within which the MID whole-planet level streams (32–128 m voxels).")]
         public float midWindowMeters = 150000f;
         [Tooltip("Altitude (m) below which the NEAR 8 m voxel ring streams around the viewer.")]
@@ -299,7 +299,7 @@ namespace VoxelEngine.Cosmos
             for (int i = _oilBuildIndex; i < end; i++)
             {
                 int3 c = _oilCells[i];
-                float3 center = c * (OilSiteSampler.SiteCellSize * 3f);
+                float3 center = (float3)c * (OilSiteSampler.SiteCellSize * 3f);
                 float cd = math.length(center);
                 float3 dir = cd > 0.001f ? center / cd : new float3(0f, 1f, 0f);
 
@@ -342,7 +342,7 @@ namespace VoxelEngine.Cosmos
             {
                 _oilReady = true;
                 _oilCells = null;
-                Debug.Log($"[PlanetVoxelLod] '{body.DisplayName}' oil site map ready ({_oilSites.Count} sites).");
+                Debug.Log($"[PlanetVoxelLod] '{body.DisplayName}' oil site map ready ({_oilSites.Count()} sites).");
             }
         }
 
