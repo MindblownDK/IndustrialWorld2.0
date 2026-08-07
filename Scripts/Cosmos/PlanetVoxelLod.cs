@@ -258,6 +258,9 @@ namespace VoxelEngine.Cosmos
                            body.settings.CanGenerateInfiniteJackPumpNodes);
             if (!hasOil)
             {
+                // No oil on this body — but the job still needs a CONSTRUCTED map on
+                // every schedule (an uncreated container throws at Schedule time).
+                _oilSites = new NativeParallelHashMap<int, OilSiteData>(1, Allocator.Persistent);
                 _oilReady = true;
                 return;
             }
@@ -652,6 +655,9 @@ namespace VoxelEngine.Cosmos
                     var chunk = q.chunk;
                     if (chunk == null || chunk.epoch != q.epoch || chunk.generated) continue;
                     if (!l.active.TryGetValue(chunk.coord, out var live) || !ReferenceEquals(live, chunk)) continue;
+                    // The job requires a CONSTRUCTED oil map on every schedule — an
+                    // uncreated container throws at Schedule time.
+                    if (!_oilSites.IsCreated) continue;
                     chunk.inGenQueue = false;
 
                     // Recycle the voxel buffer on re-rent.

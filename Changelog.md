@@ -1,9 +1,29 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.17.0-dev`
+**Current Version:** `7.17.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.17.1-dev] Chunk-Generation Recovery — Unconstructed Oil Map Fixed (Spawn / Load / HUD Restored)
+
+**Type:** PATCH — critical runtime recovery. The unconstructed job container broke ALL terrain generation (gameplay world + voxel LOD), which cascaded into: planet not loaded at spawn, player falling in space on load, and the world-space HUD appearing off-screen (the HUD is parented to the player — when the player is stranded in a broken world, the HUD goes with them). No save/API break.
+
+#### 🛠️ Root cause & fix
+- **`InvalidOperationException: SphereChunkGenJob.oilSites has not been assigned`** — Unity's job scheduler REQUIRES every container field to be constructed at Schedule time. The oil-site map is only created on oil-rich bodies, so:
+  • `SphereWorld` (the 1 m gameplay world) never set it → **every gameplay chunk generation threw** → no terrain anywhere → "planet isn't loaded where the player is", falling through at spawn/load, and the world-space HUD (parented to the player) rendered off-screen.
+  • `PlanetVoxelLod` left it uncreated on bodies without oil → every LOD chunk schedule threw.
+- **Fix:** both worlds now ALWAYS pass a constructed (possibly empty) map:
+  • `SphereWorld` allocates a permanently-empty `_emptyOilSites` map (1 entry) in Awake, disposes it in OnDestroy, and passes it to every `SphereChunkGenJob` (its oil is still authored by `OilReservoirDecorator` as before).
+  • `PlanetVoxelLod` allocates an empty map for no-oil bodies instead of leaving the field default.
+  • Defensive guard in `PlanetVoxelLod.DispatchJobs`: never schedule a gen job while the map is uncreated.
+
+#### 🪂 Load-path hardening ("falling in space" when loading a world)
+- `RestoreCosmicState` used to FORCE the scene into deep space whenever the saved frame-body name was missing or didn't match — even though `TeleportCosmic` had already re-picked the correct dominant body at the saved position. A surface save with a missing/mismatched frame name therefore loaded the player in space with no ground.
+- **Fix:** the named frame is now only a HINT. If it can't be matched, the scene keeps the dominant-body frame that `TeleportCosmic` selected (null there genuinely means a deep-space save, which is respected). Log now reports the actually-restored frame.
+
+#### ✅ Static delivery checks
+- All modified sources parse cleanly (tree-sitter grammar validation); both `SphereChunkGenJob` schedulers verified to pass a constructed `oilSites` map.
 
 ### [7.17.0-dev] All Planets Always Real (Whole-System Window) + LOD Compile Recovery
 

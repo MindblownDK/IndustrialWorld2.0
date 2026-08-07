@@ -114,6 +114,12 @@ namespace VoxelEngine.Cosmos
         private NativeArray<BiomeData> _biomes;
         private NativeArray<VertexAttributeDescriptor> _vertexAttributes;
 
+        // Always-valid (possibly empty) oil-site map passed to SphereChunkGenJob — the
+        // job MUST receive a constructed container or scheduling throws. The gameplay
+        // world authors oil via OilReservoirDecorator, so this map stays empty here;
+        // it exists only so the job's container validation always passes.
+        private NativeParallelHashMap<int, OilSiteData> _emptyOilSites;
+
         private readonly List<PendingGen> _pendingGen = new();
         private readonly List<PendingMesh> _pendingMesh = new();
 
@@ -245,6 +251,11 @@ namespace VoxelEngine.Cosmos
 
             if (enablePersistence)
                 _storage = new ChunkStorage(ResolveStorageKey(worldName, body));
+
+            // The job's container-validation requires a constructed oil map on every
+            // schedule; the gameplay world keeps this one permanently empty.
+            if (!_emptyOilSites.IsCreated)
+                _emptyOilSites = new NativeParallelHashMap<int, OilSiteData>(1, Allocator.Persistent);
         }
 
         /// <summary>
@@ -335,6 +346,7 @@ namespace VoxelEngine.Cosmos
             if (_ores.IsCreated)            _ores.Dispose();
             if (_biomes.IsCreated)          _biomes.Dispose();
             if (_vertexAttributes.IsCreated)_vertexAttributes.Dispose();
+            if (_emptyOilSites.IsCreated)   _emptyOilSites.Dispose();
             // Never leave the static ActiveWorld pointer dangling at this destroyed world —
             // otherwise callers route terrain queries into a dead CelestialBody and throw
             // MissingReferenceException every frame (breaking the whole world on reload).
@@ -619,6 +631,7 @@ namespace VoxelEngine.Cosmos
                     voxelSize  = VoxelConstants.VOXEL_SIZE,
                     biomes     = _biomes,
                     ores       = _ores,
+                    oilSites   = _emptyOilSites,
                     voxels     = chunk.voxels,
                     sizeX      = VoxelConstants.CHUNK_SIZE_P,
                     sizeY      = VoxelConstants.CHUNK_SIZE_P,

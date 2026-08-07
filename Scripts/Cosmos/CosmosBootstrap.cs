@@ -751,6 +751,10 @@ namespace VoxelEngine.Cosmos
 
             _spaceOrigin.TeleportCosmic(VoxelEngine.Cosmos.CosmicRegistry.ToDouble3(savedCosmicKm));
 
+            // The named frame body is a HINT. TeleportCosmic already re-picked the frame
+            // from gravitational dominance at the saved position — that pick is the source
+            // of truth. Forcing deep space here when the name is missing/mismatched used
+            // to strand restored players above their planet ("falling in space" on load).
             CelestialBody frame = null;
             if (!string.IsNullOrEmpty(frameBodyName))
             {
@@ -770,15 +774,18 @@ namespace VoxelEngine.Cosmos
                 _spaceOrigin.SetFrame(frame);
                 HandleFrameChange(frame);
             }
-            else if (frame == null && _streamingBody != null)
+            else
             {
-                _spaceOrigin.SetFrame(null);
-                HandleFrameChange(null);
+                // No usable name → trust the dominant-body frame TeleportCosmic picked
+                // (null there means a genuine deep-space save, which is respected).
+                CelestialBody picked = _spaceOrigin.FrameBody;
+                if (picked != _streamingBody) HandleFrameChange(picked);
             }
 
             TryResolveViewerAndAnchor();
             EnsureCameraFarClip();
-            Debug.Log($"[CosmosBootstrap] Space state restored at {savedCosmicKm} km, frame '{(frame != null ? frame.DisplayName : "SOL")}'.");
+            var restoredFrame = _spaceOrigin.FrameBody;
+            Debug.Log($"[CosmosBootstrap] Space state restored at {savedCosmicKm} km, frame '{(restoredFrame != null ? restoredFrame.DisplayName : "SOL")}'.");
         }
 
         /// <summary>Current scene frame body (null = deep space).</summary>
