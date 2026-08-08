@@ -1,9 +1,30 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.17.3-dev`
+**Current Version:** `7.17.4-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.17.4-dev] Clean Near Horizon (4 m Detail Ring + Wider 8 m Ring), UI Forced On-Screen & Collider Fix
+
+**Type:** PATCH — visual polish + fixes; no save/API break.
+
+#### 🏔️ Near-horizon LOD visible in front of the player — FIXED with a new level
+- **Root cause:** the quality ladder jumped 1 m → 8 m at ~250 m from the player, so the blocky 8 m voxel surface was clearly visible right in front of you while walking.
+- **NEW L1 DETAIL ring (4 m voxels, 900 m radius):** a shell-filtered ring between the 1 m gameplay bubble and the 8 m ring — the near horizon is now 1 m → 4 m → 8 m → 32 m, a much smoother falloff.
+- **8 m NEAR ring widened 2,000 → 3,000 m** (the visible horizon quality extends further).
+- **Shell-filtered rings:** ring levels only render chunks near the planet's surface shell (air/interior chunks skipped) — the bigger rings actually cost LESS than the old full 3D ball (~600 ring chunks vs ~2,000). Ring levels carry mesh colliders (4 m + 8 m), so you still walk on real voxel terrain the whole way.
+
+#### 🖥️ UI still outside of the screen / smaller & worse quality — FIXED
+- **Runtime screen-space force:** `GameUIController.Awake` now forces `renderMode = ScreenSpaceOverlay` on ITS document and every UIDocument in the scene (and `HammerBuildWheel` on its own). World-space serialization (or a Unity 6.x panel migration) can no longer push the HUD off-screen — the panel is an overlay by code, regardless of scene state.
+- **Width-priority scaling:** `ApplyUiScaleAndFit` match 0.5 → 0 (width-first). On wide-but-short windows the HUD stays LARGE instead of shrinking to the height ratio; at 1920×1080 it is still exactly 1:1. (Setup Step 3 bake updated to match.)
+- **Unity 6.5 "Panel Renderer" warning:** noted — `UIDocument` still works and is what the codebase uses; the warning is cosmetic. Migrating the whole UI to Panel Renderer can be a separate task if you want it.
+
+#### 🛠️ MeshCollider error — FIXED
+- **`"LodChunkMesh" mesh must have at least three distinct vertices to be a valid collision mesh`** — the new ring colliders were enabled even for EMPTY meshes (air/interior chunks have 0 real vertices). Colliders now enable only when the mesh has ≥3 vertices AND non-zero bounds; empty chunks keep the collider off (disabled on pool return too).
+
+#### ✅ Static delivery checks
+- All modified sources parse cleanly (tree-sitter grammar validation).
 
 ### [7.17.3-dev] UI Back On-Screen (Screen-Space Panels) & One Solid Surface (Strict LOD Eviction + Real 8 m Collision)
 

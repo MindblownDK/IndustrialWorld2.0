@@ -8,11 +8,13 @@
 // from orbit IS the real terrain density field, just chunked bigger.
 //
 // Levels (voxel size → chunk size):
-//   L3 FAR   — whole planet, adaptive 128–512 m voxels   (visible from space,
-//              window 8,000 km — the whole interplanetary crossing)
-//   L2 MID   — whole planet, adaptive 32–128 m voxels    (approach + surface,
+//   L4 FAR   — whole planet, adaptive 128–512 m voxels   (visible from space,
+//              window 60,000 km — every planet in the system stays real)
+//   L3 MID   — whole planet, adaptive 32–128 m voxels    (approach + surface,
 //              window 150 km — quality-tier driven)
-//   L1 NEAR  — 8 m voxel ring around the viewer          (low altitude, ~2 km)
+//   L2 NEAR  — 8 m voxel ring around the viewer          (low altitude, ~3 km, shell-filtered)
+//   L1 DETAIL— 4 m voxel ring around the viewer          (0.9 km — clean near horizon,
+//              bridges the 1 m bubble to the 8 m ring; shell-filtered)
 //   L0 PLAY  — the existing SphereWorld 1 m gameplay bubble (unchanged)
 //
 // LEVEL NESTING — one surface only:
@@ -68,8 +70,10 @@ namespace VoxelEngine.Cosmos
         public float nearAltitudeMeters = 4000f;
         [Tooltip("Hysteresis added to nearAltitudeMeters before the ring is torn down.")]
         public float nearAltitudeHysteresisMeters = 1500f;
-        [Tooltip("Radius (m) of the NEAR 8 m voxel ring around the viewer.")]
-        public float nearRadiusMeters = 2000f;
+        [Tooltip("Radius (m) of the NEAR 8 m voxel ring around the viewer (the visible horizon quality).")]
+        public float nearRadiusMeters = 3000f;
+        [Tooltip("Radius (m) of the DETAIL 4 m voxel ring around the viewer — sits between the 1 m gameplay bubble and the 8 m ring so the near horizon isn't visibly blocky.")]
+        public float detailRadiusMeters = 900f;
 
         [Header("Budget")]
         [Range(1, 12)] public int maxJobsPerFrame = 4;
@@ -88,6 +92,7 @@ namespace VoxelEngine.Cosmos
             public float chunkSize;    // 32 * voxelSize
             public float halfDiag;     // chunkSize * √3 / 2
             public bool wholePlanet;   // true = shell band around the core, false = ring around viewer
+            public float ringRadius;   // ring levels: ball radius around the viewer (m)
             public readonly Dictionary<Vector3Int, LodChunk> active = new();
             public readonly Stack<LodChunk> pool = new();
             public readonly Queue<QueuedChunk> genQueue = new();
@@ -141,7 +146,7 @@ namespace VoxelEngine.Cosmos
             public NativeArray<int> idxScratch, cellLut;
         }
 
-        private readonly LevelState[] _levels = { new(), new(), new() }; // far, mid, near
+        private readonly LevelState[] _levels = { new(), new(), new(), new() }; // far, mid, near(8m), detail(4m)
 
         private NativeArray<Color32> _materialColors;
         private NativeArray<OreLayer> _ores;
@@ -159,9 +164,10 @@ namespace VoxelEngine.Cosmos
         private float _diagTimer;
         private bool _logBuilt;
 
-        private const int LevelFar  = 0;
-        private const int LevelMid  = 1;
-        private const int LevelNear = 2;
+        private const int LevelFar    = 0;
+        private const int LevelMid    = 1;
+        private const int LevelNear   = 2; // 8 m ring
+        private const int LevelDetail = 3; // 4 m ring
 
         private void Awake()
         {
@@ -211,19 +217,22 @@ namespace VoxelEngine.Cosmos
             float farVoxel  = GraphicsPreset.PlanetFarLodVoxelSize * mult;
             float midVoxel  = GraphicsPreset.PlanetMidLodVoxelSize * mult;
             float nearVoxel = 8f;
+            float detailVoxel = 4f;
 
-            ConfigureLevel(LevelFar,  farVoxel,  wholePlanet: true);
-            ConfigureLevel(LevelMid,  midVoxel,  wholePlanet: true);
-            ConfigureLevel(LevelNear, nearVoxel, wholePlanet: false);
+            ConfigureLevel(LevelFar,    farVoxel,    wholePlanet: true);
+            ConfigureLevel(LevelMid,    midVoxel,    wholePlanet: true);
+            ConfigureLevel(LevelNear,   nearVoxel,   wholePlanet: false, ringRadius: nearRadiusMeters);
+            ConfigureLevel(LevelDetail, detailVoxel, wholePlanet: false, ringRadius: detailRadiusMeters);
 
-            Debug.Log($"[PlanetVoxelLod] '{body.DisplayName}': far {farVoxel:0}m / mid {midVoxel:0}m / near {nearVoxel:0}m voxels " +
+            Debug.Log($"[PlanetVoxelLod] '{body.DisplayName}': far {farVoxel:0}m / mid {midVoxel:0}m / near {nearVoxel:0}m / detail {detailVoxel:0}m voxels " +
                       $"(planet radius {radius / 1000f:0.#} km).");
         }
 
-        private void ConfigureLevel(int index, float voxelSize, bool wholePlanet)
+        private void ConfigureLevel(int index, float voxelSize, bool wholePlanet, float ringRadius = 0f)
         {
             var l = _levels[index];
             l.index = index;
+            l.ringRadius = ringRadius;
             l.voxelSize = Mathf.Max(2f, voxelSize);
             l.chunkSize = 32f * l.voxelSize;
             l.halfDiag = l.chunkSize * 0.8660254f; // √3/2
@@ -395,6 +404,8 @@ namespace VoxelEngine.Cosmos
             _levels[LevelFar].isActive = farActive;
             _levels[LevelMid].isActive = midActive;
             _levels[LevelNear].isActive = _nearActive;
+            // The 4 m detail ring follows the 8 m ring (same altitude gate).
+            _levels[LevelDetail].isActive = _nearActive;
 
             if (_levels[LevelMid].isActive != _levels[LevelMid].wasActive)
             {
@@ -405,6 +416,13 @@ namespace VoxelEngine.Cosmos
             {
                 _levels[LevelFar].wasActive = _levels[LevelFar].isActive;
                 _levels[LevelFar].meshedCount = 0;
+            }
+            if (_levels[LevelNear].isActive != _levels[LevelNear].wasActive)
+            {
+                _levels[LevelNear].wasActive = _levels[LevelNear].isActive;
+                _levels[LevelNear].meshedCount = 0;
+                _levels[LevelDetail].wasActive = _levels[LevelNear].isActive;
+                _levels[LevelDetail].meshedCount = 0;
             }
         }
 
@@ -459,6 +477,12 @@ namespace VoxelEngine.Cosmos
                         if (faceFromViewer < nearRadiusMeters + _levels[LevelNear].halfDiag * 2f)
                             return false;
                     }
+                    if (_levels[LevelDetail].isActive)
+                    {
+                        float faceFromDetail = Vector3.Distance(center, viewerLocal) - l.halfDiag;
+                        if (faceFromDetail < detailRadiusMeters + _levels[LevelDetail].halfDiag * 2f)
+                            return false;
+                    }
                     if (l0Reach > 0f)
                     {
                         float faceFromL0 = Vector3.Distance(center, l0CenterLocal) - l.halfDiag;
@@ -473,12 +497,23 @@ namespace VoxelEngine.Cosmos
                 return true;
             }
 
-            // NEAR ring: ball around the viewer, outside the L0 gameplay bubble.
+            // Ring levels (DETAIL 4 m / NEAR 8 m): ball around the viewer, surface shell
+            // only, outside every finer level's coverage.
             float d = Vector3.Distance(center, viewerLocal);
             // OUTER edge — hysteresis margin allowed here.
-            if (d > nearRadiusMeters + l.halfDiag + outerMargin) return false;
-            // INNER nesting edge — STRICT: the ring must never overlap the 1 m world.
+            if (d > l.ringRadius + l.halfDiag + outerMargin) return false;
+            // Surface-shell filter — only chunks near the planet's terrain surface are
+            // ever visible; skipping air/interior chunks keeps the bigger rings cheap.
+            float centerDist = center.magnitude;
+            if (Mathf.Abs(centerDist - radius) > l.halfDiag + 100f) return false;
+            // INNER nesting edge — STRICT: the ring must never overlap a finer world.
             if (d - l.halfDiag < l0Reach) return false;
+            if (l.index == LevelNear)
+            {
+                // The 8 m ring must stay outside the 4 m detail ring's reach.
+                float detailReach = detailRadiusMeters + _levels[LevelDetail].halfDiag * 2f;
+                if (d - l.halfDiag < detailReach) return false;
+            }
             return true;
         }
 
@@ -570,7 +605,7 @@ namespace VoxelEngine.Cosmos
                 }
                 else
                 {
-                    int range = Mathf.CeilToInt((nearRadiusMeters + l.halfDiag) / l.chunkSize);
+                    int range = Mathf.CeilToInt((l.ringRadius + l.halfDiag) / l.chunkSize);
                     Vector3Int vc = new(
                         Mathf.FloorToInt(viewerLocal.x / l.chunkSize),
                         Mathf.FloorToInt(viewerLocal.y / l.chunkSize),
@@ -651,8 +686,8 @@ namespace VoxelEngine.Cosmos
             int genBudget = Mathf.Clamp((maxJobsPerFrame + 1) / 2, 2, 4);
             int meshBudget = Mathf.Clamp((maxJobsPerFrame + 3) / 4, 1, 3);
 
-            // Priority: near → mid → far (the player's surroundings build first).
-            int[] order = { LevelNear, LevelMid, LevelFar };
+            // Priority: detail → near → mid → far (the player's surroundings build first).
+            int[] order = { LevelDetail, LevelNear, LevelMid, LevelFar };
 
             foreach (int li in order)
             {
@@ -781,8 +816,13 @@ namespace VoxelEngine.Cosmos
                         chunk.mf.sharedMesh = chunk.mesh;
                         if (chunk.mc != null)
                         {
-                            chunk.mc.sharedMesh = chunk.mesh;
-                            chunk.mc.enabled = true;
+                            // Air/interior chunks produce empty meshes (0 real vertices) —
+                            // enabling a MeshCollider on those throws
+                            // "mesh must have at least three distinct vertices".
+                            bool valid = chunk.mesh.vertexCount >= 3 &&
+                                         chunk.mesh.bounds.size.sqrMagnitude > 0.0000001f;
+                            chunk.mc.sharedMesh = valid ? chunk.mesh : null;
+                            chunk.mc.enabled = valid;
                         }
                         chunk.meshed = true;
                         l.meshedCount++;
@@ -823,7 +863,7 @@ namespace VoxelEngine.Cosmos
                 {
                     _logBuilt = true;
                     Debug.Log($"[PlanetVoxelLod] '{body.DisplayName}': far {far.active.Count} mid {mid.active.Count} " +
-                              $"near {_levels[LevelNear].active.Count} chunks, ready={SurfaceReady}.");
+                              $"near {_levels[LevelNear].active.Count} detail {_levels[LevelDetail].active.Count} chunks, ready={SurfaceReady}.");
                 }
             }
         }
@@ -872,13 +912,13 @@ namespace VoxelEngine.Cosmos
                 mr = mr,
                 mesh = mesh
             };
-            // The NEAR ring is the finest level with colliders — the player walks on it
-            // beyond the 1 m gameplay bubble (the MID/FAR levels stay visual-only; the
-            // LOD safety shell remains the fallback beneath them).
-            if (li == LevelNear)
+            // The ring levels (4 m detail + 8 m near) carry real colliders — the player
+            // walks on them beyond the 1 m gameplay bubble (MID/FAR stay visual-only;
+            // the LOD safety shell remains the fallback beneath them).
+            if (li == LevelNear || li == LevelDetail)
             {
                 chunk.mc = go.AddComponent<MeshCollider>();
-                chunk.mc.enabled = false; // enabled when its mesh is applied
+                chunk.mc.enabled = false; // enabled when a valid mesh is applied
             }
             return chunk;
         }
@@ -899,21 +939,28 @@ namespace VoxelEngine.Cosmos
         }
 
         /// <summary>
-        /// True when a NEAR-ring chunk with a live mesh collider covers this world
-        /// position — the LOD safety shell asks this before stepping aside, so the
-        /// player always stands on real voxel collision (1 m or 8 m), never on a gap.
+        /// True when a ring-level chunk (4 m detail or 8 m near) with a live mesh
+        /// collider covers this world position — the LOD safety shell asks this before
+        /// stepping aside, so the player always stands on real voxel collision
+        /// (1 m, 4 m or 8 m), never on a gap.
         /// </summary>
         public bool HasColliderAt(Vector3 worldPos)
         {
             if (body == null) return false;
-            var near = _levels[LevelNear];
-            if (!near.isActive) return false;
             Vector3 local = body.transform.InverseTransformPoint(worldPos);
+            // Check the finest ring first (4 m detail, then 8 m near) — allocation-free.
+            if (HasRingColliderAt(_levels[LevelDetail], local)) return true;
+            return HasRingColliderAt(_levels[LevelNear], local);
+        }
+
+        private static bool HasRingColliderAt(LevelState l, Vector3 local)
+        {
+            if (l == null || !l.isActive) return false;
             Vector3Int coord = new(
-                Mathf.FloorToInt(local.x / near.chunkSize),
-                Mathf.FloorToInt(local.y / near.chunkSize),
-                Mathf.FloorToInt(local.z / near.chunkSize));
-            if (!near.active.TryGetValue(coord, out var chunk) || chunk == null || chunk.mc == null)
+                Mathf.FloorToInt(local.x / l.chunkSize),
+                Mathf.FloorToInt(local.y / l.chunkSize),
+                Mathf.FloorToInt(local.z / l.chunkSize));
+            if (!l.active.TryGetValue(coord, out var chunk) || chunk == null || chunk.mc == null)
                 return false;
             return chunk.mc.enabled && chunk.mc.sharedMesh != null;
         }

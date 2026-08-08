@@ -53,6 +53,7 @@ namespace VoxelEngine.Building.Tiered
             if (Instance != null && Instance != this) { Destroy(this); return; }
             Instance = this;
             _document = GetComponent<UIDocument>();
+            _document.renderMode = PanelRenderMode.ScreenSpaceOverlay;
             if (_document.panelSettings == null)
                 _document.panelSettings = Resources.Load<PanelSettings>("MenuPanelSettings");
             if (_document.panelSettings != null)

@@ -146,15 +146,22 @@ namespace VoxelEngine.UI
             Time.timeScale = 1f;
             _doc = GetComponent<UIDocument>();
             _doc.sortingOrder = 500;
+            // Force SCREEN-SPACE OVERLAY at runtime — world-space panels are a
+            // 1920×1080 world-unit quad and the camera only sees its center slice
+            // (the HUD was cut off at the screen edges). This survives scenes
+            // serialized in world space and Unity 6.x panel migrations.
+            _doc.renderMode = PanelRenderMode.ScreenSpaceOverlay;
+            foreach (var other in FindObjectsByType<UIDocument>(FindObjectsInactive.Include))
+            {
+                if (other != null) other.renderMode = PanelRenderMode.ScreenSpaceOverlay;
+            }
             if (_doc.panelSettings == null)
                 _doc.panelSettings = Resources.Load<PanelSettings>("MenuPanelSettings");
             if (_doc.panelSettings != null)
             {
-                // ScaleWithScreenSize (1920×1080 reference, balanced match): the HUD must
-                // FIT the actual window. ConstantPixelSize rendered the 1280/1920-wide
-                // panel 1:1 and anchored it bottom-left — on any smaller window the whole
-                // HUD was pushed off-screen (top-anchored elements landed at the bottom
-                // corners, hotbar vanished below the view).
+                // ScaleWithScreenSize (1920×1080 reference, width-priority match): the HUD
+                // must FIT the actual window AND stay large. ConstantPixelSize rendered
+                // the panel 1:1 and pushed the HUD off-screen on smaller windows.
                 VoxelEngine.Settings.GameSettings.ApplyUiScaleAndFit(_doc.panelSettings);
             }
             _root = _doc.rootVisualElement;
