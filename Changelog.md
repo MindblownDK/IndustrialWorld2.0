@@ -1,9 +1,20 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.17.4-dev`
+**Current Version:** `7.17.5-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.17.5-dev] UI Compile Recovery (CS1061 UIDocument.renderMode)
+
+**Type:** PATCH — compile recovery; no behaviour change, no save/API break.
+
+#### 🛠️ Compiler Fix
+- **CS1061 in `GameUIController.cs` + `HammerBuildWheel.cs`:** the 7.17.4 screen-space force used `UIDocument.renderMode`, which does not exist on `UIDocument` in this Unity version. The render mode lives on **`PanelSettings.renderMode`** (the serialized `m_RenderMode` field).
+- **Fix:** the ScreenSpaceOverlay force moved into `GameSettings.ApplyUiScaleAndFit` — `ps.renderMode = PanelRenderMode.ScreenSpaceOverlay` — the shared single source of truth called by GameUIController, HammerBuildWheel, and the Setup Step 3 bake (which now also writes it). Since all HUD documents share `MenuPanelSettings`, one property set covers every panel.
+
+#### ✅ Static delivery checks
+- All modified sources parse cleanly (tree-sitter grammar validation); no `UIDocument.renderMode` references remain (only `PanelSettings.renderMode`).
 
 ### [7.17.4-dev] Clean Near Horizon (4 m Detail Ring + Wider 8 m Ring), UI Forced On-Screen & Collider Fix
 

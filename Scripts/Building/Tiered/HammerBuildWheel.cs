@@ -53,13 +53,13 @@ namespace VoxelEngine.Building.Tiered
             if (Instance != null && Instance != this) { Destroy(this); return; }
             Instance = this;
             _document = GetComponent<UIDocument>();
-            _document.renderMode = PanelRenderMode.ScreenSpaceOverlay;
             if (_document.panelSettings == null)
                 _document.panelSettings = Resources.Load<PanelSettings>("MenuPanelSettings");
             if (_document.panelSettings != null)
             {
-                // Same fit-to-screen scaling as the main HUD — the build wheel must
-                // never be anchored off-screen by ConstantPixelSize on smaller windows.
+                // Same fit-to-screen scaling as the main HUD (also forces
+                // ScreenSpaceOverlay) — the build wheel must never be anchored
+                // off-screen on smaller windows.
                 VoxelEngine.Settings.GameSettings.ApplyUiScaleAndFit(_document.panelSettings);
             }
             _root = _document.rootVisualElement;

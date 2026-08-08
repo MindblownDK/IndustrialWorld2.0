@@ -1024,6 +1024,8 @@ namespace VoxelEngine.EditorTools
             // ScaleWithScreenSize (not ConstantPixelSize): the HUD must fit ANY window —
             // a constant-pixel panel is anchored bottom-left and pushed off-screen on
             // smaller/non-1080p views. Width-priority keeps the HUD large on wide windows.
+            // ScreenSpaceOverlay: world-space quads cut the HUD off at the screen edges.
+            panelSettings.renderMode = UnityEngine.UIElements.PanelRenderMode.ScreenSpaceOverlay;
             panelSettings.scaleMode = UnityEngine.UIElements.PanelScaleMode.ScaleWithScreenSize;
             panelSettings.referenceResolution = new Vector2Int(1920, 1080);
             panelSettings.screenMatchMode = UnityEngine.UIElements.PanelScreenMatchMode.MatchWidthOrHeight;
