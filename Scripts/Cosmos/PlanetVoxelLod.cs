@@ -108,6 +108,7 @@ namespace VoxelEngine.Cosmos
             public GameObject go;
             public MeshFilter mf;
             public MeshRenderer mr;
+            public MeshCollider mc;   // NEAR ring only — the player walks on real 8 m voxel terrain
             public Mesh mesh;
             public NativeArray<Voxel> voxels;
             public bool voxelsAllocated;
@@ -429,9 +430,15 @@ namespace VoxelEngine.Cosmos
         /// level's maximum reach (outer far face), so adjacent levels abut exactly —
         /// no overlap (which rendered a coarser surface ABOVE the finer terrain) and no
         /// gap. Used identically for admission and eviction.
+        ///
+        /// `outerMargin` (hysteresis) applies ONLY to the level's OUTER boundary — a
+        /// chunk just outside the ring may stay a moment longer to avoid flicker. It is
+        /// deliberately NEVER applied to the inner nesting edges: a chunk inside a finer
+        /// level's coverage must be evicted immediately, or the coarse surface follows
+        /// the player around and floats above the real terrain.
         /// </summary>
         private bool IsChunkDesired(LevelState l, Vector3Int coord, Vector3 viewerLocal,
-            Vector3 l0CenterLocal, float radius, float l0Reach, float evictMargin = 0f)
+            Vector3 l0CenterLocal, float radius, float l0Reach, float outerMargin = 0f)
         {
             Vector3 center = new Vector3(coord.x + 0.5f, coord.y + 0.5f, coord.z + 0.5f) * l.chunkSize;
 
@@ -441,7 +448,7 @@ namespace VoxelEngine.Cosmos
                 float coreDist = center.magnitude;
                 if (Mathf.Abs(coreDist - radius) > l.halfDiag + 200f) return false;
 
-                // Never render where finer levels cover.
+                // Never render where finer levels cover (STRICT — no margin).
                 if (l.index == LevelMid || l.index == LevelFar)
                 {
                     if (_levels[LevelNear].isActive)
@@ -449,13 +456,13 @@ namespace VoxelEngine.Cosmos
                         // NEAR ring's max reach = ring radius + 2× ring half-diagonal
                         // (a ring chunk centred at the edge still extends one half-diag out).
                         float faceFromViewer = Vector3.Distance(center, viewerLocal) - l.halfDiag;
-                        if (faceFromViewer < nearRadiusMeters + _levels[LevelNear].halfDiag * 2f - evictMargin)
+                        if (faceFromViewer < nearRadiusMeters + _levels[LevelNear].halfDiag * 2f)
                             return false;
                     }
                     if (l0Reach > 0f)
                     {
                         float faceFromL0 = Vector3.Distance(center, l0CenterLocal) - l.halfDiag;
-                        if (faceFromL0 < l0Reach - evictMargin)
+                        if (faceFromL0 < l0Reach)
                             return false;
                     }
                 }
@@ -468,7 +475,9 @@ namespace VoxelEngine.Cosmos
 
             // NEAR ring: ball around the viewer, outside the L0 gameplay bubble.
             float d = Vector3.Distance(center, viewerLocal);
-            if (d > nearRadiusMeters + l.halfDiag + evictMargin) return false;
+            // OUTER edge — hysteresis margin allowed here.
+            if (d > nearRadiusMeters + l.halfDiag + outerMargin) return false;
+            // INNER nesting edge — STRICT: the ring must never overlap the 1 m world.
             if (d - l.halfDiag < l0Reach) return false;
             return true;
         }
@@ -770,6 +779,11 @@ namespace VoxelEngine.Cosmos
                             MeshUpdateFlags.DontRecalculateBounds | MeshUpdateFlags.DontValidateIndices);
                         chunk.mesh.bounds = p.bounds[0];
                         chunk.mf.sharedMesh = chunk.mesh;
+                        if (chunk.mc != null)
+                        {
+                            chunk.mc.sharedMesh = chunk.mesh;
+                            chunk.mc.enabled = true;
+                        }
                         chunk.meshed = true;
                         l.meshedCount++;
                         // Voxels are only needed for meshing — LOD chunks are never edited,
@@ -850,7 +864,7 @@ namespace VoxelEngine.Cosmos
             var mesh = new Mesh { name = "LodChunkMesh", indexFormat = IndexFormat.UInt32 };
 
             int li = l == _levels[LevelFar] ? LevelFar : l == _levels[LevelMid] ? LevelMid : LevelNear;
-            return new LodChunk
+            var chunk = new LodChunk
             {
                 levelIndex = li,
                 go = go,
@@ -858,6 +872,15 @@ namespace VoxelEngine.Cosmos
                 mr = mr,
                 mesh = mesh
             };
+            // The NEAR ring is the finest level with colliders — the player walks on it
+            // beyond the 1 m gameplay bubble (the MID/FAR levels stay visual-only; the
+            // LOD safety shell remains the fallback beneath them).
+            if (li == LevelNear)
+            {
+                chunk.mc = go.AddComponent<MeshCollider>();
+                chunk.mc.enabled = false; // enabled when its mesh is applied
+            }
+            return chunk;
         }
 
         private void ReturnToPool(LevelState l, LodChunk chunk)
@@ -866,8 +889,33 @@ namespace VoxelEngine.Cosmos
             ReleaseVoxels(chunk);
             if (chunk.mesh != null) chunk.mesh.Clear();
             if (chunk.mf != null) chunk.mf.sharedMesh = null;
+            if (chunk.mc != null)
+            {
+                chunk.mc.sharedMesh = null;
+                chunk.mc.enabled = false;
+            }
             chunk.go.SetActive(false);
             l.pool.Push(chunk);
+        }
+
+        /// <summary>
+        /// True when a NEAR-ring chunk with a live mesh collider covers this world
+        /// position — the LOD safety shell asks this before stepping aside, so the
+        /// player always stands on real voxel collision (1 m or 8 m), never on a gap.
+        /// </summary>
+        public bool HasColliderAt(Vector3 worldPos)
+        {
+            if (body == null) return false;
+            var near = _levels[LevelNear];
+            if (!near.isActive) return false;
+            Vector3 local = body.transform.InverseTransformPoint(worldPos);
+            Vector3Int coord = new(
+                Mathf.FloorToInt(local.x / near.chunkSize),
+                Mathf.FloorToInt(local.y / near.chunkSize),
+                Mathf.FloorToInt(local.z / near.chunkSize));
+            if (!near.active.TryGetValue(coord, out var chunk) || chunk == null || chunk.mc == null)
+                return false;
+            return chunk.mc.enabled && chunk.mc.sharedMesh != null;
         }
 
         private void CancelChunk(LevelState l, LodChunk chunk)

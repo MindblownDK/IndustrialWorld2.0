@@ -70,8 +70,8 @@ namespace VoxelEngine.Cosmos
         [Range(1, 16)] public int viewDistance = VoxelConstants.DEFAULT_VIEW_DISTANCE;
         [Range(1, 16)] public int maxJobsPerFrame = 4;
         public bool generateColliders = true;
-        [Tooltip("Only the nearby gameplay bubble needs expensive mesh colliders; distant local chunks remain visual until approached. 4 chunks gives fast players solid real terrain up to ~128 m (the LOD safety shell covers everything beyond).")]
-        [Range(1, 6)] public int colliderChunkRadius = 4;
+        [Tooltip("Only the nearby gameplay bubble needs expensive mesh colliders; distant local chunks remain visual until approached. 6 chunks gives fast players solid real terrain up to ~200 m, where the 8 m NEAR LOD ring (which HAS colliders) takes over — no gap where the player would walk on the coarse safety shell.")]
+        [Range(1, 6)] public int colliderChunkRadius = 6;
         [Tooltip("Spawn trees/rocks from biome scatter lists.")]
         public bool enableScatter = true;
         [Tooltip("Maximum generated chunks whose scatter may be populated in one frame. A low budget prevents vegetation creation from stalling terrain streaming.")]
@@ -844,7 +844,10 @@ namespace VoxelEngine.Cosmos
         private bool ShouldHaveCollider(Chunk chunk)
         {
             if (!generateColliders) return false;
-            float radius = Mathf.Clamp(colliderChunkRadius, 1, 4) + 0.85f;
+            // Mirrors the inspector range (1–6): the larger bubble meets the NEAR LOD
+            // ring's colliders, so there is no sliver where only the coarse safety shell
+            // is solid under the player.
+            float radius = Mathf.Clamp(colliderChunkRadius, 1, 6) + 0.85f;
             return IsWithinGameplayDetail(chunk, radius);
         }
 

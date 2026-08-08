@@ -465,11 +465,18 @@ namespace VoxelEngine.Cosmos
             bool shellOn = alt > safetyBubbleMeters;
             if (!shellOn)
             {
-                // Near the surface: the shell steps aside only when the real voxel terrain
-                // under the player already has a collider. Otherwise keep it solid.
+                // Near the surface: the shell steps aside only when REAL voxel terrain
+                // (1 m gameplay chunks OR the 8 m NEAR ring) has a collider under the
+                // player. Otherwise keep it solid — never a fall-through gap.
                 var sphere = SphereWorld.Instance;
-                if (sphere == null || sphere.body != body || !sphere.HasColliderAt(viewer.position))
-                    shellOn = true;
+                bool realCollider = sphere != null && sphere.body == body && sphere.HasColliderAt(viewer.position);
+                if (!realCollider)
+                {
+                    if (_voxelSurface == null) _voxelSurface = GetComponentInChildren<PlanetVoxelLod>(true);
+                    if (_voxelSurface != null && _voxelSurface.HasColliderAt(viewer.position))
+                        realCollider = true;
+                }
+                if (!realCollider) shellOn = true;
             }
             _safetyMeshCollider.enabled = shellOn;
             _safetySphere.enabled = alt < -64f;

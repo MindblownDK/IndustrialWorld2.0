@@ -1,9 +1,26 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.17.2-dev`
+**Current Version:** `7.17.3-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.17.3-dev] UI Back On-Screen (Screen-Space Panels) & One Solid Surface (Strict LOD Eviction + Real 8 m Collision)
+
+**Type:** PATCH — bug fixes; no save/API break.
+
+#### 🖥️ The whole UI / HUD was still outside of the screen view — FIXED
+- **Root cause:** ALL UIDocuments in the scenes were serialized in **World Space mode** (`m_WorldSpaceSizeMode: 1`) with a **1920 × 1080 world-unit quad** (Game.unity ×6, MainMenu.unity ×1). The camera only sees the CENTER slice of that giant quad — so the HUD rendered as a tiny central strip stretched across the screen, with everything anchored to panel edges (vitals, gravity, "looking at" HUD, hotbar) cut off at the left/right screen edges.
+- **Fix:** every UIDocument is back to **Screen Space (overlay)** (`m_WorldSpaceSizeMode: 0`) — the HUD is a normal full-screen overlay again, combined with the 7.17.2 `ScaleWithScreenSize` scaling it fits any window.
+
+#### 🗻 "Still two surfaces, now both solid — I walk on the LOD above the real terrain" — FIXED
+- **Root cause (the ghost that follows you):** the eviction hysteresis applied its margin to the **inner nesting boundary** too. The NEAR ring (8 m) chunks were admitted strictly outside the 1 m bubble, but with a 512 m eviction margin they were **never evicted once inside it** — so 8 m-voxel surfaces trailed the player everywhere and rendered 0–8 m ABOVE the 1 m terrain (both visible; the player stood on the 1 m colliders while the coarse surface floated at their feet/chest).
+- **Fix — strict inner nesting:** `outerMargin` now applies ONLY to the ring's outer edge (flicker hysteresis). The inner boundary (1 m bubble / NEAR ring / MID coverage) is strict in BOTH admission and eviction — a chunk inside a finer level's coverage is evicted immediately. One rendered surface at every distance.
+- **Solid beyond the 1 m bubble:** the NEAR ring chunks now carry **real mesh colliders** (the player walks on actual 8 m voxel terrain from the bubble edge to ~2.4 km — visual == collision, no more floating on the coarse planet shell), and the 1 m collider bubble was raised 4 → 6 chunks (~220 m, the `ShouldHaveCollider` clamp fixed to match) so there's no sliver where only the coarse safety shell is solid.
+- The LOD safety shell now also checks the voxel LOD's NEAR colliders before stepping aside — the planet stays solid everywhere, with exactly one collision layer under the player at any spot.
+
+#### ✅ Static delivery checks
+- All modified sources parse cleanly (tree-sitter grammar validation); both scenes' UIDocuments verified at `m_WorldSpaceSizeMode: 0`.
 
 ### [7.17.2-dev] HUD Fits Any Window (ScaleWithScreenSize) & Exact LOD Nesting (No More Ghost Surface)
 
