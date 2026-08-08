@@ -1,10 +1,10 @@
 # 🏭 IndustrialWorld
 
-[![Engine](https://img.shields.io/badge/Unity-6.4+-black.svg?style=flat-square&logo=unity&logoColor=white)](https://unity.com/)
+[![Engine](https://img.shields.io/badge/Unity-6.5+-black.svg?style=flat-square&logo=unity&logoColor=white)](https://unity.com/)
 [![Focus](https://img.shields.io/badge/Design-Sleek%20%7C%20Minimal%20%7C%20Premium-E0A96D.svg?style=flat-square)](#)
 [![Target](https://img.shields.io/badge/AI--Optimized-Context%20Ready-00ADB5.svg?style=flat-square)](#-ai-agent-system-prompt--execution-guidelines)
 
-`IndustrialWorld` is a next-generation automation and industrial simulation project built from the ground up on **Unity 6.4**. The project is architected with a strict core philosophy: **radical simplicity in execution, absolute premium quality in aesthetics, and incredibly fluid, responsive user experiences.** Instead of overwhelming players with visual clutter, `IndustrialWorld` focuses on minimal, sleek, high-fidelity UI/UX design, micro-interactions, and pristine production quality to deliver a deeply satisfying and complete game feel.
+`IndustrialWorld` is a next-generation automation and industrial simulation project built from the ground up on **Unity 6.5**. The project is architected with a strict core philosophy: **radical simplicity in execution, absolute premium quality in aesthetics, and incredibly fluid, responsive user experiences.** Instead of overwhelming players with visual clutter, `IndustrialWorld` focuses on minimal, sleek, high-fidelity UI/UX design, micro-interactions, and pristine production quality to deliver a deeply satisfying and complete game feel.
 
 ---
 
@@ -34,7 +34,7 @@ When building or modifying features for this project, always adhere to our three
 > You are acting as an expert Senior Unity Systems Architect and High-Fidelity Technical UI/UX Designer. Read this section before generating code, proposing features, or refactoring scripts within this repository.
 
 ### 🧠 1. Cognitive Operational Constraints
-* **Efficiency First:** Write highly optimized C# code conforming to **Unity 6.4 standards**. Leverage new Unity 6 performance improvements, efficient memory allocation, and the Universal Render Pipeline (URP).
+* **Efficiency First:** Write highly optimized C# code conforming to **Unity 6.5 standards**. Leverage new Unity 6 performance improvements, efficient memory allocation, and the Universal Render Pipeline (URP).
 * **Zero Bloat:** Never provide repetitive or boilerplate logic unless explicitly requested. Prefer concise, modular, and self-documenting code using appropriate design patterns (Observer, Factory, Component-based architectures).
 * **The "Finished Product" Rule:** When generating code or assets, never write half-finished placeholders (`// TODO: Implement later`). Every piece of code must be fully fleshed out, safe against null exceptions, and complete.
 
@@ -85,10 +85,10 @@ The project structure is broken down into clean, single-responsibility domains:
 
 ---
 
-## 🚀 Getting Started with Unity 6.4
+## 🚀 Getting Started with Unity 6.5
 
 ### Prerequisites
-* **Unity Hub** with **Unity 6.4.x** installed.
+* **Unity Hub** with **Unity 6.5.x** installed.
 * **Render Pipeline:** Universal Render Pipeline (URP). Keep modern post-processing active (Bloom, ACES Tonemapping, Motion Blur) to support the sleek look.
 
 ### Repository Conventions
