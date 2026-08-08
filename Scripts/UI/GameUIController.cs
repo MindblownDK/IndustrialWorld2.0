@@ -150,10 +150,12 @@ namespace VoxelEngine.UI
                 _doc.panelSettings = Resources.Load<PanelSettings>("MenuPanelSettings");
             if (_doc.panelSettings != null)
             {
-                _doc.panelSettings.scaleMode = PanelScaleMode.ConstantPixelSize;
-                _doc.panelSettings.scale = 1f;
-                _doc.panelSettings.referenceDpi = 96f;
-                _doc.panelSettings.fallbackDpi = 96f;
+                // ScaleWithScreenSize (1920×1080 reference, balanced match): the HUD must
+                // FIT the actual window. ConstantPixelSize rendered the 1280/1920-wide
+                // panel 1:1 and anchored it bottom-left — on any smaller window the whole
+                // HUD was pushed off-screen (top-anchored elements landed at the bottom
+                // corners, hotbar vanished below the view).
+                VoxelEngine.Settings.GameSettings.ApplyUiScaleAndFit(_doc.panelSettings);
             }
             _root = _doc.rootVisualElement;
             _root.style.flexGrow = 1;

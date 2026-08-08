@@ -411,27 +411,27 @@ namespace VoxelEngine.Cosmos
         private readonly List<Vector3Int> _evict = new();
 
         /// <summary>
-        /// Radius of the ball that the L0 gameplay bubble (SphereWorld 1 m chunks) fully
-        /// renders. 64 m margin beyond the last 1 m chunk row.
+        /// Maximum reach (m) of the L0 gameplay bubble: the outermost 1 m chunk's outer
+        /// face. SphereWorld streams chunk centers within viewDistance·32 m, so the last
+        /// row's far face sits 16 m beyond that. Used as the exact inner edge for the
+        /// NEAR ring — anything closer must be rendered by the 1 m world alone.
         /// </summary>
-        private float L0CoverRadius(SphereWorld sphere)
+        private float L0ReachRadius(SphereWorld sphere)
         {
             if (sphere == null || sphere.body != body || sphere.viewer == null) return 0f;
-            return Mathf.Max(0f, sphere.viewDistance * VoxelConstants.CHUNK_SIZE * VoxelConstants.VOXEL_SIZE) + 64f;
+            return Mathf.Max(0f, sphere.viewDistance * VoxelConstants.CHUNK_SIZE * VoxelConstants.VOXEL_SIZE) + 16f;
         }
 
         /// <summary>
         /// THE nesting rule — decides whether a level should render a chunk at all.
-        /// A chunk is desired iff it lies in the level's band AND its near face is
-        /// OUTSIDE every finer level's coverage (so no two levels ever render the same
-        /// patch of surface — the "two surfaces" ghost bug). Finer coverage is:
-        ///   • the L0 gameplay bubble (a ball around the viewer on the ground, or around
-        ///     the radial surface point beneath the viewer during high-altitude flight);
-        ///   • the NEAR ring (a ball around the viewer when the ring is active).
-        /// Used identically for admission and eviction.
+        /// A chunk is desired iff it lies in the level's band AND its NEAR FACE is
+        /// OUTSIDE every finer level's exact coverage edge. Coverage edges are the finer
+        /// level's maximum reach (outer far face), so adjacent levels abut exactly —
+        /// no overlap (which rendered a coarser surface ABOVE the finer terrain) and no
+        /// gap. Used identically for admission and eviction.
         /// </summary>
         private bool IsChunkDesired(LevelState l, Vector3Int coord, Vector3 viewerLocal,
-            Vector3 l0CenterLocal, float radius, float l0R, float evictMargin = 0f)
+            Vector3 l0CenterLocal, float radius, float l0Reach, float evictMargin = 0f)
         {
             Vector3 center = new Vector3(coord.x + 0.5f, coord.y + 0.5f, coord.z + 0.5f) * l.chunkSize;
 
@@ -446,14 +446,16 @@ namespace VoxelEngine.Cosmos
                 {
                     if (_levels[LevelNear].isActive)
                     {
-                        float faceFromViewer = Vector3.Distance(center, viewerLocal) - l.chunkSize * 0.5f;
-                        if (faceFromViewer < nearRadiusMeters + _levels[LevelNear].halfDiag + 64f - evictMargin)
+                        // NEAR ring's max reach = ring radius + 2× ring half-diagonal
+                        // (a ring chunk centred at the edge still extends one half-diag out).
+                        float faceFromViewer = Vector3.Distance(center, viewerLocal) - l.halfDiag;
+                        if (faceFromViewer < nearRadiusMeters + _levels[LevelNear].halfDiag * 2f - evictMargin)
                             return false;
                     }
-                    if (l0R > 0f)
+                    if (l0Reach > 0f)
                     {
-                        float faceFromL0 = Vector3.Distance(center, l0CenterLocal) - l.chunkSize * 0.5f;
-                        if (faceFromL0 < l0R - evictMargin)
+                        float faceFromL0 = Vector3.Distance(center, l0CenterLocal) - l.halfDiag;
+                        if (faceFromL0 < l0Reach - evictMargin)
                             return false;
                     }
                 }
@@ -467,8 +469,7 @@ namespace VoxelEngine.Cosmos
             // NEAR ring: ball around the viewer, outside the L0 gameplay bubble.
             float d = Vector3.Distance(center, viewerLocal);
             if (d > nearRadiusMeters + l.halfDiag + evictMargin) return false;
-            float nearFace = d - l.chunkSize * 0.5f;
-            if (nearFace < Mathf.Max(0f, l0R - 64f)) return false;
+            if (d - l.halfDiag < l0Reach) return false;
             return true;
         }
 
@@ -498,7 +499,7 @@ namespace VoxelEngine.Cosmos
             Vector3 viewerLocal = body.transform.InverseTransformPoint(viewer.position);
             float radius = body.SurfaceRadius;
             var sphere = SphereWorld.Instance;
-            float l0R = L0CoverRadius(sphere);
+            float l0R = L0ReachRadius(sphere);
 
             // The L0 gameplay bubble is centred on the viewer on the ground, but during
             // high-altitude flight SphereWorld streams around the RADIAL SURFACE POINT

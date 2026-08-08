@@ -1,9 +1,30 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.17.1-dev`
+**Current Version:** `7.17.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.17.2-dev] HUD Fits Any Window (ScaleWithScreenSize) & Exact LOD Nesting (No More Ghost Surface)
+
+**Type:** PATCH — bug fixes; no save/API break.
+
+#### 🖥️ The whole UI was outside of the screen view — FIXED
+- **Root cause:** the runtime UI controllers forced `PanelScaleMode.ConstantPixelSize` on the shared panel settings (`GameUIController.Awake`, `HammerBuildWheel.Awake`, and the Setup Step 3 bake). A constant-pixel panel is anchored bottom-left at 1:1 pixels — on any window smaller than its reference (1280×720 / 1920×1080) the entire HUD is displaced off-screen: top-anchored elements (vitals, block info, gravity LCD) slide down past the bottom edge and appear as corner fragments, the hotbar vanishes below the view, and the screen shows mostly empty panel space over the world.
+- **Fix — fit the window:** the runtime controllers now call `GameSettings.ApplyUiScaleAndFit` (the existing single source of truth): `ScaleWithScreenSize`, 1920×1080 reference, balanced match — the HUD scales to ANY window/game view (including the 1544×570 editor view from the report). Step 3's bake now writes `ScaleWithScreenSize` too, so re-running setup can't regress it.
+
+#### 🗻 The LOD was still generating above the actual terrain — FIXED
+- **Root cause:** the level-nesting boundaries overlapped instead of abutting exactly:
+  • the NEAR ring could start **64 m inside the L0 gameplay bubble** (`l0R − 64`) — 8 m-voxel surfaces rendered over 1 m terrain near the bubble edge, sitting up to several metres ABOVE the real ground on slopes;
+  • MID chunks could start **inside the NEAR ring's max reach** (`+ halfDiag + 64`) — the 32 m surface rendered over the 8 m ring in a wide band around ~2 km, visibly floating above the terrain.
+- **Fix — exact abutment:** each coarser level's chunk is now excluded while its NEAR FACE (centre − half-diagonal) is inside the finer level's **true maximum reach**:
+  • L0 reach = last 1 m chunk row's outer face (`viewDistance·32 + 16`);
+  • NEAR reach = ring radius + 2× ring half-diagonal;
+  • MID/FAR respect both (and FAR still steps aside under meshed MID chunks).
+  Adjacent levels now meet edge-to-edge — no overlap (no ghost surface), no gap.
+
+#### ✅ Static delivery checks
+- All modified sources parse cleanly (tree-sitter grammar validation).
 
 ### [7.17.1-dev] Chunk-Generation Recovery — Unconstructed Oil Map Fixed (Spawn / Load / HUD Restored)
 
