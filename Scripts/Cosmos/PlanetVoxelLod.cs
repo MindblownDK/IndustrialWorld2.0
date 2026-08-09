@@ -507,10 +507,15 @@ namespace VoxelEngine.Cosmos
             float centerDist = center.magnitude;
             if (Mathf.Abs(centerDist - radius) > l.halfDiag + 100f) return false;
             // INNER nesting edge — STRICT: the ring must never overlap a finer world.
-            if (d - l.halfDiag < l0Reach) return false;
+            if (l0Reach > 0f)
+            {
+                float faceFromL0 = Vector3.Distance(center, l0CenterLocal) - l.halfDiag;
+                if (faceFromL0 < l0Reach) return false;
+            }
             if (l.index == LevelNear)
             {
                 // The 8 m ring must stay outside the 4 m detail ring's reach.
+                // Detail chunks are driven by viewerLocal, so we measure from viewerLocal.
                 float detailReach = detailRadiusMeters + _levels[LevelDetail].halfDiag * 2f;
                 if (d - l.halfDiag < detailReach) return false;
             }
@@ -545,21 +550,25 @@ namespace VoxelEngine.Cosmos
             var sphere = SphereWorld.Instance;
             float l0R = L0ReachRadius(sphere);
 
-            // The L0 gameplay bubble is centred on the viewer on the ground, but during
-            // high-altitude flight SphereWorld streams around the RADIAL SURFACE POINT
-            // beneath the viewer (orbit-approach streaming) — the LOD exclusion must
-            // measure from the same centre, or the 1 m bubble and the coarse LOD would
-            // render the same patch twice (ghost surface).
             Vector3 l0CenterLocal = viewerLocal;
             if (sphere != null && sphere.body == body && l0R > 0f)
             {
                 float viewerAlt = viewerLocal.magnitude - radius;
                 float surfaceFocusAlt = VoxelConstants.CHUNK_SIZE * sphere.viewDistance * 2f;
-                if (viewerAlt > surfaceFocusAlt)
+                Vector3 referenceLocal = viewerLocal;
+                if (viewerAlt > surfaceFocusAlt && _biomes.IsCreated)
                 {
                     float3 radial = math.normalizesafe((float3)viewerLocal, new float3(0f, 1f, 0f));
-                    l0CenterLocal = (Vector3)radial * radius;
+                    SphereDensity.EvaluateColumn(body.genParams, _biomes, radial, out float surfaceRadius, out _);
+                    referenceLocal = (Vector3)radial * Mathf.Max(surfaceRadius, body.SeaRadius);
                 }
+                // Match SphereWorld's chunk-snapped center exactly to prevent overlaps/gaps.
+                float cs = VoxelConstants.CHUNK_SIZE * VoxelConstants.VOXEL_SIZE;
+                Vector3Int chunkCoord = new(
+                    Mathf.FloorToInt(referenceLocal.x / cs),
+                    Mathf.FloorToInt(referenceLocal.y / cs),
+                    Mathf.FloorToInt(referenceLocal.z / cs));
+                l0CenterLocal = new Vector3(chunkCoord.x + 0.5f, chunkCoord.y + 0.5f, chunkCoord.z + 0.5f) * cs;
             }
 
             for (int li = 0; li < _levels.Length; li++)
@@ -818,8 +827,8 @@ namespace VoxelEngine.Cosmos
                         {
                             // Air/interior chunks produce empty meshes (0 real vertices) —
                             // enabling a MeshCollider on those throws
-                            // "mesh must have at least three distinct vertices".
-                            bool valid = chunk.mesh.vertexCount >= 3 &&
+                            // "mesh must have at least three distinct vertices" or "must have at least one non-degenerate triangle".
+                            bool valid = chunk.mesh.vertexCount >= 3 && p.counts[1] >= 3 &&
                                          chunk.mesh.bounds.size.sqrMagnitude > 0.0000001f;
                             chunk.mc.sharedMesh = valid ? chunk.mesh : null;
                             chunk.mc.enabled = valid;

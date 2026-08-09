@@ -247,19 +247,10 @@ namespace VoxelEngine.Settings
         public static void ApplyUiScaleAndFit(UnityEngine.UIElements.PanelSettings ps)
         {
             if (ps == null) return;
-            // SCREEN-SPACE OVERLAY: world-space panels are a 1920×1080 world-unit quad —
-            // the camera only sees its center slice, cutting the HUD off at the screen
-            // edges. Setting it here (the shared single source of truth) applies to every
-            // document that uses this panel settings.
             ps.renderMode = UnityEngine.UIElements.PanelRenderMode.ScreenSpaceOverlay;
             ps.scaleMode = UnityEngine.UIElements.PanelScaleMode.ScaleWithScreenSize;
             ps.referenceResolution = new Vector2Int(1920, 1080);
-            // Width-priority scaling: on wide-but-short windows (e.g. editor game views)
-            // the HUD stays LARGE instead of shrinking to the height ratio — and on a
-            // standard 1920×1080 screen it is exactly 1:1. Content is edge-anchored, so
-            // nothing clips.
-            ps.screenMatchMode = UnityEngine.UIElements.PanelScreenMatchMode.MatchWidthOrHeight;
-            ps.match = 0f;
+            ps.screenMatchMode = UnityEngine.UIElements.PanelScreenMatchMode.Expand; // Expand ensures the UI scales safely without cropping regardless of aspect ratio
             ps.referenceDpi = 96;
             ps.fallbackDpi = 96;
         }

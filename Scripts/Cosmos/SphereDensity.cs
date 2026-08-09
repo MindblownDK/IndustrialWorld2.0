@@ -287,7 +287,7 @@ namespace VoxelEngine.Cosmos
             if (radius <= coreRadius)
                 return new Voxel(127, (byte)MaterialId.Stone, 0);
 
-            int depth = (int)math.round(surfaceRadius - radius);
+            int depth = (int)math.floor(surfaceRadius - radius);
 
             // Caves are deliberately kept below a continuous radial crust. Earlier cave
             // noise could begin only a few metres below the sampled surface, occasionally

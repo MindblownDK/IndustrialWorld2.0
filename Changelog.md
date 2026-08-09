@@ -1,9 +1,20 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.17.5-dev`
+**Current Version:** `7.17.6-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.17.6-dev] Grass Banding & Sliding Fix, UI Scale Polish, LOD Overlap & Degenerate Collider Fix
+
+**Type:** PATCH — visual polish and bug fixes.
+
+#### 🛠️ Fixes & Polish
+- **Grass Banding / Surface Material Fix:** Fixed `SphereDensity.cs` using `math.round` on voxel depth calculations, which resulted in the terrain slicing perfectly into horizontal concentric bands of "Grass" and "Dirt/Clay" material across the sphere. Replaced with `math.floor` so the topmost layer consistently receives the surface material, allowing grass to spawn continuously across biomes.
+- **Grass Sliding & Grid Artifact Fix:** Fixed `GpuGrassRenderer.cs` calculating blade placement purely from the player's continuously moving tangent plane, causing grass to slowly slide and "pop" when the grid refreshed. Anchored blade positions to their underlying `surfaceVoxel` center while smoothly projecting their height to the analytical sphere radius, permanently locking grass strictly to the world. Updated the jitter scaling to `step` to remove grid-like blade dotting patterns.
+- **UI Off-Screen Crop Fix:** Changed the fallback UI sizing behavior in `GameSettings.ApplyUiScaleAndFit` from `MatchWidthOrHeight` (`0`) to `Expand`. This ensures that on ultra-wide screens, taller, or awkwardly resized windows, the UI scales fully into the safe frame without cropping off the bottom/sides.
+- **LOD Generation Overlap Fix:** Modified `PlanetVoxelLod.cs` streaming center logic (`l0CenterLocal`) to snap exactly to `SphereWorld`'s internal chunk-aligned origin. This closes the slight mathematical gap/overlap where the unaligned LOD chunks rendered directly above and clipped into the actual high-definition 1m voxel terrain.
+- **Degenerate Collider Crash Fix:** Added an explicit index check (`p.counts[1] >= 3`) before assigning new LOD meshes to colliders in `PlanetVoxelLod.cs`. This cleanly intercepts cases where interior chunks were successfully generated but contained zero physical faces, preventing Unity from throwing the "must have at least one non-degenerate triangle" error.
 
 ### [7.17.5-dev] UI Compile Recovery (CS1061 UIDocument.renderMode)
 

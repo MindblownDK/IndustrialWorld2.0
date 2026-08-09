@@ -66,6 +66,7 @@ namespace VoxelEngine.Cosmos
             if (grassBladeMesh == null) grassBladeMesh = CreateDefaultBlade();
             if (grassMaterial == null) grassMaterial = CreateDefaultGrassMaterial();
             _renderParams = new RenderParams(grassMaterial);
+            _renderParams.worldBounds = new Bounds(Vector3.zero, new Vector3(100000f, 100000f, 100000f)); // Prevent frustum culling from hiding the grass field
         }
 
         private void OnDestroy()
@@ -144,14 +145,19 @@ namespace VoxelEngine.Cosmos
                 Vector3 terrainNormalWorld = body.transform.TransformDirection(terrainNormalLocal).normalized;
                 GetTangentBasis(radialUpLocal, out Vector3 localTangentA, out Vector3 localTangentB);
 
-                int bladeCount = Mathf.Max(1, Mathf.RoundToInt(density));
+                int bladeCount = Mathf.Max(1, Mathf.RoundToInt(density * step * step));
                 uint hash = (uint)(surfaceVoxel.x * 73856093 ^ surfaceVoxel.y * 19349663 ^ surfaceVoxel.z * 83492791);
                 var rng = new Unity.Mathematics.Random(math.max(1u, hash));
+                
+                // Anchor the placement to the voxel center to prevent grass from sliding when the player moves
+                Vector3 voxelCenter = new Vector3(surfaceVoxel.x + 0.5f, surfaceVoxel.y + 0.5f, surfaceVoxel.z + 0.5f) * VoxelConstants.VOXEL_SIZE;
+                Vector3 stableSurfaceLocal = voxelCenter.sqrMagnitude > 0.0001f ? voxelCenter.normalized * surfaceLocal.magnitude : surfaceLocal;
+
                 for (int blade = 0; blade < bladeCount; blade++)
                 {
-                    Vector3 localJitter = localTangentA * rng.NextFloat(-0.5f, 0.5f)
-                        + localTangentB * rng.NextFloat(-0.5f, 0.5f);
-                    Vector3 worldPosition = body.transform.TransformPoint(surfaceLocal + localJitter + radialUpLocal * 0.35f);
+                    Vector3 localJitter = localTangentA * rng.NextFloat(-step * 0.5f, step * 0.5f)
+                        + localTangentB * rng.NextFloat(-step * 0.5f, step * 0.5f);
+                    Vector3 worldPosition = body.transform.TransformPoint(stableSurfaceLocal + localJitter + radialUpLocal * 0.35f);
                     Quaternion rotation = Quaternion.FromToRotation(Vector3.up, terrainNormalWorld);
                     rotation = Quaternion.AngleAxis(rng.NextFloat(0f, 360f), terrainNormalWorld) * rotation;
                     float height = bladeHeight * (1f + rng.NextFloat(-heightVariance, heightVariance));
