@@ -224,6 +224,9 @@ namespace VoxelEngine.Cosmos
             // registry so the continents in the sky match the continents on the ground.
             spaceBodies.biomeRegistry = biomeRegistry;
             spaceGO.AddComponent<SpaceStarfieldRenderer>();
+            spaceGO.AddComponent<SpaceNebulaRenderer>();
+            var skyGO = new GameObject("PlanetSky");
+            skyGO.AddComponent<PlanetSkyController>();
 
             // ── Live quality preset applier (Phase 7) ──
             var qpaGO = new GameObject("QualityPresetApplier");
@@ -1116,7 +1119,16 @@ namespace VoxelEngine.Cosmos
             _spaceTransitionCamera.clearFlags = CameraClearFlags.SolidColor;
             Color upperAir = new Color(0.075f, 0.145f, 0.245f, 1f);
             Color deepSpace = new Color(0.002f, 0.004f, 0.012f, 1f);
-            _spaceTransitionCamera.backgroundColor = Color.Lerp(upperAir, deepSpace, spaceBlend);
+            var sky = PlanetSkyController.Instance;
+            if (sky != null)
+            {
+                upperAir = sky.CurrentPalette.UpperAir;
+                _spaceTransitionCamera.backgroundColor = sky.ResolveBackgroundColor();
+            }
+            else
+            {
+                _spaceTransitionCamera.backgroundColor = Color.Lerp(upperAir, deepSpace, spaceBlend);
+            }
 
             float bodyDistance = Vector3.Distance(_spaceTransitionCamera.transform.position, body.transform.position);
             float requiredFarClip = bodyDistance + body.SurfaceRadius * 1.25f + 2500f;

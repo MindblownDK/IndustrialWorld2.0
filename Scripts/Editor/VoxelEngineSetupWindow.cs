@@ -467,6 +467,14 @@ namespace VoxelEngine.EditorTools
             AddWizardButton(scroll, "49. Initialize Atmosphere + Space Profiles (Non-Destructive)", BuildAtmosphereSpaceProfiles, 56);
             AddWizardButton(scroll, "50. Build Warp Drive (Item, Prefab, Recipe, Research — Non-Destructive)", BuildWarpDriveContent, 56);
 
+            AddInfo(scroll,
+                "Step 51 authors PLANET-SPECIFIC SKY + NEBULA profiles (non-destructive):\n" +
+                "  • Resolves each planet/moon to a sky theme (temperate, ice, volcanic, acid, moon, …)\n" +
+                "  • Existing sky colour overrides and display colours are preserved\n" +
+                "  • Missing display colours are filled from the theme so distant planets match their sky\n" +
+                "Re-runnable. Run after Step 21 / Step 49 when celestial worlds are present.");
+            AddWizardButton(scroll, "51. Author Planet Skies + Nebulae (Non-Destructive)", BuildPlanetSkyProfiles, 56);
+
             AddSpacer(scroll, 20);
         }
 
@@ -15549,6 +15557,88 @@ AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
                 "• Recipe: 40 Steel Plate + 12 Advanced Circuit + 8 Uranium Ore + 6 Lithium @ Assembler\n" +
                 "• Research: Warp Drive (tier 7) after Shipbuilding\n\n" +
                 "In-game: place it on a ship, fly to space, press [N] in the cockpit to charge (45 s, 45 kW), then press [N] again to jump to the aimed planet — or 2500 km straight ahead. It is the ONLY warp in the game; everything else is real flight.",
+                "OK");
+        }
+
+        // ============================================================
+        //   STEP 51 - PLANET SKIES + NEBULAE
+        //   Non-destructive: existing sky overrides and display colours
+        //   are preserved. Missing display colours are filled from the
+        //   theme so distant planets match the sky they wear on the ground.
+        // ============================================================
+        private void BuildPlanetSkyProfiles()
+        {
+            const int ProfileVersion = 1;
+            int initialized = 0;
+            int preserved = 0;
+            int displayFilled = 0;
+            var summary = new System.Text.StringBuilder();
+
+            void Author(BodySettings body, UnityEngine.Object owner)
+            {
+                if (body == null || owner == null) return;
+                var kind = PlanetSkyCatalog.ResolveKind(body);
+                var palette = PlanetSkyCatalog.ForKind(kind);
+
+                bool hasOverrides = body.skyZenith.a > 0.01f
+                    || body.skyHorizon.a > 0.01f
+                    || body.skySunset.a > 0.01f
+                    || body.skyFog.a > 0.01f;
+                if (body.skyProfileVersion >= ProfileVersion || hasOverrides)
+                {
+                    if (body.skyProfileVersion < ProfileVersion)
+                    {
+                        body.skyProfileVersion = ProfileVersion;
+                        EditorUtility.SetDirty(owner);
+                    }
+                    preserved++;
+                }
+                else
+                {
+                    body.skyProfileVersion = ProfileVersion;
+                    EditorUtility.SetDirty(owner);
+                    initialized++;
+                }
+
+                if (body.displayColor.a <= 0.01f)
+                {
+                    Color inferred = palette.AtmosphereRim;
+                    inferred.a = 1f;
+                    body.displayColor = inferred;
+                    EditorUtility.SetDirty(owner);
+                    displayFilled++;
+                }
+
+                summary.Append("• ");
+                summary.Append(string.IsNullOrEmpty(body.bodyName) ? owner.name : body.bodyName);
+                summary.Append(" → ");
+                summary.Append(kind);
+                if (hasOverrides) summary.Append(" (overrides kept)");
+                summary.Append('\n');
+            }
+
+            foreach (string guid in AssetDatabase.FindAssets("t:PlanetTemplate"))
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                var planet = AssetDatabase.LoadAssetAtPath<PlanetTemplate>(path);
+                if (planet != null) Author(planet.body, planet);
+            }
+            foreach (string guid in AssetDatabase.FindAssets("t:MoonTemplate"))
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                var moon = AssetDatabase.LoadAssetAtPath<MoonTemplate>(path);
+                if (moon != null) Author(moon.body, moon);
+            }
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            EditorUtility.DisplayDialog("Voxel Engine — Planet Skies + Nebulae",
+                "Sky themes authored (non-destructive):\n\n" +
+                "• " + initialized + " bodies marked with the sky catalogue\n" +
+                "• " + preserved + " existing sky overrides preserved\n" +
+                "• " + displayFilled + " missing display colours filled from the theme\n\n" +
+                summary +
+                "\nRuntime sky dome + nebulae spawn from CosmosBootstrap. Re-run after adding planets; authored colours stay untouched.",
                 "OK");
         }
 

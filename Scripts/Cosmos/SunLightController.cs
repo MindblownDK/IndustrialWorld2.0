@@ -100,15 +100,27 @@ namespace VoxelEngine.Cosmos
             float dayFactor = Mathf.Clamp01(elevation * 1.5f + 0.3f);
             sunLight.intensity = baseIntensity * dayFactor;
 
+            // Planet-specific sun / ambient when the sky controller is live.
+            // Designer inspector colours remain the fallback for scenes without it.
+            Color localDay = dayColor;
+            Color localSunset = sunsetColor;
+            Color localAmbient = ambientColor;
+            Color localNight = new Color(0.02f, 0.03f, 0.08f, 1f);
+            var sky = PlanetSkyController.Instance;
+            if (sky != null)
+            {
+                localDay = sky.CurrentPalette.SunDay;
+                localSunset = sky.CurrentPalette.SunSunset;
+                localAmbient = sky.CurrentPalette.AmbientDay;
+                localNight = sky.CurrentPalette.AmbientNight;
+            }
+
             // Warm colour near sunrise/sunset (low elevation but positive).
             float sunsetFactor = Mathf.Clamp01(1f - Mathf.Abs(elevation) * 3f);
-            sunLight.color = Color.Lerp(dayColor, sunsetColor, sunsetFactor);
+            sunLight.color = Color.Lerp(localDay, localSunset, sunsetFactor);
 
             // Ambient follows the day cycle too.
-            RenderSettings.ambientLight = Color.Lerp(
-                new Color(0.02f, 0.03f, 0.08f, 1f),  // deep night ambient
-                ambientColor,                          // day ambient
-                dayFactor);
+            RenderSettings.ambientLight = Color.Lerp(localNight, localAmbient, dayFactor);
             RenderSettings.ambientIntensity = Mathf.Lerp(0.2f, 1f, dayFactor);
             
             // Add a subtle "moonlight" blue tint to shadows during the night

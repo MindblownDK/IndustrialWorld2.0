@@ -172,7 +172,7 @@ namespace VoxelEngine.Cosmos
                     sunPos = GetViewerPosition() + sunDir * visualRange * 1.5f;
                     if (_sunVisuals.Count > 0 && _sunVisuals[0].go != null && !_sunVisuals[0].go.activeSelf)
                         _sunVisuals[0].go.SetActive(true);
-                    PositionBody(_sunVisuals[0], sunPos, sunVisualScale * intensity, glow, emissive: true, alpha: 1f);
+                    PositionBody(_sunVisuals[0], sunPos, sunVisualScale * intensity, glow, emissive: true, alpha: 1f, settings: null);
                 }
             }
 
@@ -241,7 +241,7 @@ namespace VoxelEngine.Cosmos
                 // fully opaque beyond the band, fully transparent at the window edge.
                 float alpha = Mathf.Clamp01((float)((distM - trueLodDistanceMeters) / TrueLodFadeBandMeters));
 
-                PositionBody(visual, visualPos, size, GetBodyColor(b), emissive: false, alpha: alpha);
+                PositionBody(visual, visualPos, size, GetBodyColor(b), emissive: false, alpha: alpha, settings: b.settings);
             }
         }
 
@@ -285,11 +285,7 @@ namespace VoxelEngine.Cosmos
             if (b.settings == null) return Color.gray;
             // Custom display colour wins if set (alpha > 0 means user-chosen).
             if (b.settings.displayColor.a > 0.01f) return b.settings.displayColor;
-            // Otherwise infer from climate.
-            if (!b.settings.HasOxygen) return new Color(0.5f, 0.5f, 0.55f);  // moon/airless grey
-            if (b.settings.temperature < -5f) return new Color(0.8f, 0.85f, 0.9f);  // ice world
-            if (b.settings.temperature > 30f) return new Color(0.8f, 0.65f, 0.4f);  // desert
-            return new Color(0.2f, 0.4f, 0.6f);  // earth-like blue
+            return PlanetSkyCatalog.ForBody(b.settings).AtmosphereRim;
         }
 
 
@@ -488,7 +484,7 @@ namespace VoxelEngine.Cosmos
             }
         }
 
-        private void PositionBody(BodyVisual v, Vector3 pos, float size, Color color, bool emissive, float alpha)
+        private void PositionBody(BodyVisual v, Vector3 pos, float size, Color color, bool emissive, float alpha, BodySettings settings)
         {
             if (v.go == null) return;
             v.go.transform.position = pos;
@@ -521,6 +517,12 @@ namespace VoxelEngine.Cosmos
                 tint.b = tintColor.b;
                 tint.a = hasTerrain ? alpha : 1f;
                 mat.SetColor("_Tint", tint);
+            }
+            if (mat.HasProperty("_AtmosphereRim") && settings != null)
+            {
+                Color rim = PlanetSkyCatalog.ForBody(settings).AtmosphereRim;
+                rim.a = 1f;
+                mat.SetColor("_AtmosphereRim", rim);
             }
 
             // Flat-colour properties only matter for the fallback (built-in) shaders.

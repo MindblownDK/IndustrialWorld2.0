@@ -1,9 +1,31 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.17.9-dev`
+**Current Version:** `7.18.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.18.0-dev] Planet-Specific Skies & Deep-Space Nebulae
+
+**Type:** MINOR — new sky-art system; save-compatible, no API break.
+
+#### 🌌 Planet-specific skies
+- Every celestial body now resolves to a **sky theme** from its name / climate: Temperate, Moon, Ice, Volcanic, Acid, Ocean, Water, Pirate, Desolate, Venus, Mars, Crystal, Olympus, Asteroid.
+- A camera-relative **sky dome** paints zenith → horizon → sunset, with optional **aurora belts** (Ice / Crystal) and **dust haze** (Volcanic / Venus / Mars / Acid / Pirate / Desolate).
+- The atmosphere-to-space camera handoff uses the **theme's upper-air colour** instead of a single Earth blue, then fades to vacuum.
+- Sun colour, ambient, and clear-weather fog follow the same palette so a volcanic noon is orange and an ice dusk is pink — not generic steel-blue.
+- Distant planet **atmosphere rims** use that body's own rim colour.
+
+#### ✨ Deep-space nebulae
+- Sparse, seeded **galactic-band clouds** fade in with the existing vacuum starfield. Soft additive veils, not a particle storm.
+- Nebula tint tracks the departed world's palette so leaving a crystal world still feels like that sky's afterimage.
+
+#### 🛠️ Setup
+- **Step 51 — Author Planet Skies + Nebulae (Non-Destructive):** marks each planet/moon with the catalogue, preserves any hand-authored sky colour overrides, and fills missing `displayColor` from the theme so distant planets match the ground sky.
+- Designer overrides live on `BodySettings` (`skyZenith` / `skyHorizon` / `skySunset` / `skyFog`, alpha 0 = catalogue). Balance and existing colours are never reset.
+
+#### ✅ Static delivery checks
+- New sources parse cleanly; C# 9 compatible (no struct field initializers). No save-schema or public API change.
 
 ### [7.17.9-dev] Fix NaN Collider Bounds Crash in Sun Visual & LOD Offset Tuning
 

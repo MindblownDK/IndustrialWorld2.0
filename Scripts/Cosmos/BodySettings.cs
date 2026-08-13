@@ -147,6 +147,21 @@ namespace VoxelEngine.Cosmos
                  "If clear, the renderer infers a colour from climate settings.")]
         public Color displayColor = new Color(0f, 0f, 0f, 0f);  // alpha 0 = auto
 
+        // ── Sky art (optional designer overrides; alpha 0 = use the catalogue) ──
+        [Header("Sky Art")]
+        [Tooltip("Zenith colour override. Alpha 0 keeps the catalogue colour for this world's theme.")]
+        public Color skyZenith = new Color(0f, 0f, 0f, 0f);
+        [Tooltip("Horizon colour override. Alpha 0 keeps the catalogue colour.")]
+        public Color skyHorizon = new Color(0f, 0f, 0f, 0f);
+        [Tooltip("Sunset glow override. Alpha 0 keeps the catalogue colour.")]
+        public Color skySunset = new Color(0f, 0f, 0f, 0f);
+        [Tooltip("Surface fog / haze override. Alpha 0 keeps the catalogue colour.")]
+        public Color skyFog = new Color(0f, 0f, 0f, 0f);
+
+        // Written by Voxel Engine Setup Step 51. Version zero means the catalogue
+        // still owns the look; existing non-zero override colours are never reset.
+        [HideInInspector] public int skyProfileVersion = 0;
+
         // ── Biomes ────────────────────────────────────────────────
         [Header("Biomes")]
         [Tooltip("Whitelist of biomes that may generate on this body. Empty = use registry defaults.")]
