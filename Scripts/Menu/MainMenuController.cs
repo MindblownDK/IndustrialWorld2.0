@@ -151,8 +151,6 @@ namespace VoxelEngine.Menu
             _root.style.top = 0;
             _root.style.right = 0;
             _root.style.bottom = 0;
-            _root.style.width = new StyleLength(new Length(100, LengthUnit.Percent));
-            _root.style.height = new StyleLength(new Length(100, LengthUnit.Percent));
             _root.style.flexGrow        = 1;
             _root.style.backgroundColor = new StyleColor(T.BgBase);
             _root.style.alignItems      = Align.Center;

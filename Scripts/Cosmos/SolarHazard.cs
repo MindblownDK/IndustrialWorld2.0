@@ -59,7 +59,10 @@ namespace VoxelEngine.Cosmos
         {
             if (_sunGO != null) return;
             _sunGO = new GameObject("SunVisual_Real");
+            // By instantiating and THEN parenting without keeping world pos, we avoid NaN exceptions
+            // if the parent's world position isn't perfectly valid yet.
             _sunGO.transform.SetParent(transform, false);
+            _sunGO.transform.localPosition = Vector3.zero;
 
             var mf = _sunGO.AddComponent<MeshFilter>();
             mf.sharedMesh = CreateSunMesh();
@@ -100,8 +103,11 @@ namespace VoxelEngine.Cosmos
             if (_sunGO != null)
             {
                 Vector3 sunScene = origin.GetScenePos(registry.Sun.positionKmD);
-                _sunGO.transform.position = sunScene;
-                _sunGO.transform.localScale = Vector3.one * (sunVisualRadiusKm * 1000f);
+                if (!float.IsNaN(sunScene.x) && !float.IsNaN(sunScene.y) && !float.IsNaN(sunScene.z))
+                {
+                    _sunGO.transform.position = sunScene;
+                    _sunGO.transform.localScale = Vector3.one * (sunVisualRadiusKm * 1000f);
+                }
             }
 
             // ── Hazard zones (auto-scale to the system) ────────────────

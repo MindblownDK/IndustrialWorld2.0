@@ -692,8 +692,8 @@ namespace VoxelEngine.Cosmos
 
         private void DispatchJobs()
         {
-            int genBudget = Mathf.Clamp((maxJobsPerFrame + 1) / 2, 2, 4);
-            int meshBudget = Mathf.Clamp((maxJobsPerFrame + 3) / 4, 1, 3);
+            int genBudget = Mathf.Clamp((maxJobsPerFrame + 1) / 2, 2, 8);
+            int meshBudget = Mathf.Clamp((maxJobsPerFrame + 3) / 4, 1, 4);
 
             // Priority: detail → near → mid → far (the player's surroundings build first).
             int[] order = { LevelDetail, LevelNear, LevelMid, LevelFar };
@@ -722,11 +722,21 @@ namespace VoxelEngine.Cosmos
                     }
 
                     float s = l.chunkSize;
+                    
+                    // Deflate the LOD level slightly to ensure it hides under the higher-res 1m terrain
+                    // instead of floating above it in the overlap zones.
+                    float offset = 0f;
+                    if (l.index == LevelDetail) offset = 0.5f;
+                    else if (l.index == LevelNear) offset = 1.0f;
+                    else if (l.index == LevelMid) offset = 3.0f;
+                    else if (l.index == LevelFar) offset = 12.0f;
+
                     var job = new SphereChunkGenJob
                     {
                         prm        = body.genParams,
                         originWorld= new float3(chunk.coord.x, chunk.coord.y, chunk.coord.z) * s - new float3(l.voxelSize),
                         voxelSize  = l.voxelSize,
+                        radiusOffset = offset,
                         biomes     = _biomes,
                         ores       = _ores,
                         oilSites   = _oilSites,

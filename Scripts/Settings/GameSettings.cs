@@ -250,7 +250,7 @@ namespace VoxelEngine.Settings
             ps.renderMode = UnityEngine.UIElements.PanelRenderMode.ScreenSpaceOverlay;
             ps.scaleMode = UnityEngine.UIElements.PanelScaleMode.ScaleWithScreenSize;
             ps.referenceResolution = new Vector2Int(1920, 1080);
-            ps.screenMatchMode = UnityEngine.UIElements.PanelScreenMatchMode.Expand; // Expand ensures the UI scales safely without cropping regardless of aspect ratio
+            ps.screenMatchMode = UnityEngine.UIElements.PanelScreenMatchMode.Shrink; // Shrink ensures the UI scales safely without cropping regardless of aspect ratio
             ps.referenceDpi = 96;
             ps.fallbackDpi = 96;
         }

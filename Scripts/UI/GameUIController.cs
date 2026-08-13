@@ -165,8 +165,6 @@ namespace VoxelEngine.UI
             // PanelScaler configs, which collapsed the terminal to a single line.
             _root.style.position = Position.Absolute;
             _root.style.left = 0; _root.style.top = 0; _root.style.right = 0; _root.style.bottom = 0;
-            _root.style.width = new StyleLength(new Length(100, LengthUnit.Percent));
-            _root.style.height = new StyleLength(new Length(100, LengthUnit.Percent));
             _root.pickingMode = PickingMode.Ignore;
             EnsureUiLayers();
 

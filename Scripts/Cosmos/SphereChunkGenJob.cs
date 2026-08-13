@@ -44,6 +44,11 @@ namespace VoxelEngine.Cosmos
         public int sizeY;
         public int sizeZ;
 
+        // A radial deflation offset applied to LOD generation. Setting this >0 pulls the LOD
+        // surface slightly inward toward the planet core, ensuring it sinks inside the higher-res
+        // overlapping L0 chunks so it never visually pokes out above them.
+        public float radiusOffset;
+
         public void Execute(int index)
         {
             // index → (x,y,z) within the box.
@@ -52,6 +57,16 @@ namespace VoxelEngine.Cosmos
             int z = index / (sizeX * sizeY);
 
             float3 worldPos = originWorld + new float3(x, y, z) * voxelSize;
+            float3 radial = worldPos;
+            if (radiusOffset != 0f)
+            {
+                float sq = math.lengthsq(radial);
+                if (sq > 0.0001f)
+                {
+                    radial = radial / math.sqrt(sq);
+                    worldPos += radial * radiusOffset;
+                }
+            }
             voxels[index] = SphereDensity.EvaluateVoxel(prm, biomes, ores, worldPos, oilSites);
         }
     }

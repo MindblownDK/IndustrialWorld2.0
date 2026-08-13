@@ -1,10 +1,30 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.17.6-dev`
+**Current Version:** `7.17.9-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
 
+### [7.17.9-dev] Fix NaN Collider Bounds Crash in Sun Visual & LOD Offset Tuning
+
+**Type:** PATCH — stability and edge-case exceptions.
+
+#### 🛠️ Fixes & Polish
+- **NaN Vector Rejection (SunVisual):** Added explicit `float.IsNaN` checks within `SolarHazard.cs` to prevent assigning `NaN` world/local positions to the Sun mesh during early scene construction or fast-travel rebases where the floating origin's anchor could temporarily drop a mathematically invalid `Vector3` result. This suppresses the noisy Unity GUI layout exception.
+### [7.17.8-dev] Interplanetary Voxel Streaming & LOD Pacing Fix, UI Constraint Polish
+
+**Type:** PATCH — voxel streaming logic and UI scaling fixes.
+
+#### 🛠️ Fixes & Polish
+- **Interplanetary Voxel Generation Fix:** Fixed a critical flaw where traveling to a non-starter planet caused the voxel surface to never generate. This occurred because `PlanetVoxelLod` instantiated its systems before the new planet's biome lists were fully passed, resulting in an internal `IndexOutOfRangeException` when evaluating the planet's surface column density. Adjusted the `CosmosBootstrap` initialization sequence to ensure the child LOD component is properly paused until all registries (like `biomeRegistry`) are securely assigned.
+- **LOD Pacing / Pop-in Fix:** Increased `PlanetVoxelLod` generation job budget limits per frame. Fast-moving ships previously outran the single-thread chunk budget, causing coarse terrain LOD blocks to visibly "pop in" right in front of the player. Tripled the chunk evaluation limit to ensure the 8m and 4m detail rings spawn fast enough to cover the horizon seamlessly during flight.
+- **UI Overflow & Cropping Fix:** Removed over-constrained `100%` CSS width/height overrides in `GameUIController` and `MainMenuController`. These overrides, combined with Unity's scaling system, forced the root visual tree outside of the physical viewport constraints on wider or non-16:9 aspect ratios. Restored pure absolute anchor bindings with `MatchHeight` UI scaling to ensure the interface dynamically conforms strictly to the window boundaries.
+### [7.17.7-dev] Fix LOD overlap clipping via Deflation
+
+**Type:** PATCH — visual polish.
+
+#### 🛠️ Fixes & Polish
+- **LOD Generation Floating Artifact Fix:** Fixed an issue where the lower-resolution planet LOD chunks (4m, 8m, 32m) could visibly float or clip slightly above the high-resolution 1m voxel surface at the boundaries where the two resolution rings overlap. Modified `SphereChunkGenJob` and `PlanetVoxelLod` to introduce a `radiusOffset` deflation property, slightly shrinking the radius of coarser LOD levels by 0.5m to 12.0m respectively. This forces the lower poly meshes strictly underneath the actual solid terrain, resolving the "two surfaces above each other" issue while preserving a seamless horizon.
 ### [7.17.6-dev] Grass Banding & Sliding Fix, UI Scale Polish, LOD Overlap & Degenerate Collider Fix
 
 **Type:** PATCH — visual polish and bug fixes.

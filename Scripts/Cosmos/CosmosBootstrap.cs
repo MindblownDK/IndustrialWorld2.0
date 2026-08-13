@@ -629,7 +629,7 @@ namespace VoxelEngine.Cosmos
             voxelLod.biomeRegistry = biomeRegistry;
             voxelLod.materialRegistry = materialRegistry;
             voxelLod.terrainMaterial = terrainMaterial;
-            voxelLod.maxJobsPerFrame = Mathf.Clamp(GraphicsPreset.JobsPerFrame, 2, 6);
+            voxelLod.maxJobsPerFrame = Mathf.Clamp(GraphicsPreset.JobsPerFrame * 2, 4, 16);
 
             registry.SceneBodies[instance] = cb;
             _spaceOrigin.RegisterRoot(go.transform);
