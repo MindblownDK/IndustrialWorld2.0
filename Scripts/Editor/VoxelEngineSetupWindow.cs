@@ -15569,10 +15569,38 @@ AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
         private void BuildPlanetSkyProfiles()
         {
             const int ProfileVersion = 1;
+            const string RuntimeResourceFolder = "Assets/Resources/VoxelEngineRuntime";
+            const string RuntimeMaterialPath = RuntimeResourceFolder + "/PlanetSkyDome.mat";
             int initialized = 0;
             int preserved = 0;
             int displayFilled = 0;
+            bool runtimeMaterialCreated = false;
+            bool runtimeMaterialRepaired = false;
             var summary = new System.Text.StringBuilder();
+
+            // Keep the procedural sky shader referenced in standalone builds. Runtime
+            // code clones this setup-owned template, then applies each planet's palette.
+            // Existing material properties are preserved; only the required shader
+            // reference is repaired, so repeated setup runs are idempotent.
+            EnsureFolder(RuntimeResourceFolder);
+            var skyShader = Shader.Find("VoxelEngine/PlanetSkyDomeURP");
+            var runtimeMaterial = AssetDatabase.LoadAssetAtPath<Material>(RuntimeMaterialPath);
+            if (runtimeMaterial == null && skyShader != null)
+            {
+                runtimeMaterial = new Material(skyShader) { name = "PlanetSkyDome" };
+                AssetDatabase.CreateAsset(runtimeMaterial, RuntimeMaterialPath);
+                runtimeMaterialCreated = true;
+            }
+            else if (runtimeMaterial != null && skyShader != null && runtimeMaterial.shader != skyShader)
+            {
+                runtimeMaterial.shader = skyShader;
+                EditorUtility.SetDirty(runtimeMaterial);
+                runtimeMaterialRepaired = true;
+            }
+            else if (skyShader == null)
+            {
+                Debug.LogError("[VoxelEngineSetup] Planet sky shader is missing; runtime material was not changed.");
+            }
 
             void Author(BodySettings body, UnityEngine.Object owner)
             {
@@ -15636,9 +15664,10 @@ AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
                 "Sky themes authored (non-destructive):\n\n" +
                 "• " + initialized + " bodies marked with the sky catalogue\n" +
                 "• " + preserved + " existing sky overrides preserved\n" +
-                "• " + displayFilled + " missing display colours filled from the theme\n\n" +
+                "• " + displayFilled + " missing display colours filled from the theme\n" +
+                "• Runtime sky material: " + (skyShader == null ? "ERROR — shader missing" : runtimeMaterialCreated ? "created" : runtimeMaterialRepaired ? "shader link repaired" : "preserved") + "\n\n" +
                 summary +
-                "\nRuntime sky dome + nebulae spawn from CosmosBootstrap. Re-run after adding planets; authored colours stay untouched.",
+                "\nRuntime sky dome + nebulae spawn from CosmosBootstrap. Re-run after adding planets; authored colours and material properties stay untouched.",
                 "OK");
         }
 

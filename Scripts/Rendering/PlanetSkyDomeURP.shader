@@ -8,10 +8,12 @@ Shader "VoxelEngine/PlanetSkyDomeURP"
         _Zenith ("Zenith", Color) = (0.18, 0.42, 0.78, 1)
         _Horizon ("Horizon", Color) = (0.72, 0.84, 0.92, 1)
         _Ground ("Ground Haze", Color) = (0.70, 0.80, 0.90, 1)
+        _Night ("Night", Color) = (0.02, 0.03, 0.08, 1)
         _Sunset ("Sunset", Color) = (1.00, 0.55, 0.25, 1)
         _SunDir ("Sun Direction", Vector) = (0, 1, 0, 0)
         _RadialUp ("Radial Up", Vector) = (0, 1, 0, 0)
         _SpaceBlend ("Space Blend", Range(0,1)) = 0
+        _DayFactor ("Day Factor", Range(0,1)) = 1
         _Haze ("Haze", Range(0,1)) = 0.28
         _Aurora ("Aurora", Range(0,1)) = 0
         _AuroraColorA ("Aurora A", Color) = (0.25, 0.95, 0.72, 1)
@@ -27,7 +29,7 @@ Shader "VoxelEngine/PlanetSkyDomeURP"
             Name "PlanetSkyDome"
             Tags { "LightMode"="UniversalForward" }
             ZWrite Off
-            ZTest LEqual
+            ZTest Always
             Cull Front
             Blend Off
 
@@ -40,10 +42,12 @@ Shader "VoxelEngine/PlanetSkyDomeURP"
                 float4 _Zenith;
                 float4 _Horizon;
                 float4 _Ground;
+                float4 _Night;
                 float4 _Sunset;
                 float4 _SunDir;
                 float4 _RadialUp;
                 float _SpaceBlend;
+                float _DayFactor;
                 float _Haze;
                 float _Aurora;
                 float4 _AuroraColorA;
@@ -84,12 +88,26 @@ Shader "VoxelEngine/PlanetSkyDomeURP"
                 float3 up = normalize(_RadialUp.xyz);
                 float3 sun = normalize(_SunDir.xyz);
 
-                float elevation = saturate(dot(dir, up) * 0.5 + 0.5);
-                float horizonBand = saturate(1.0 - abs(dot(dir, up)) * 2.4);
-                float ground = saturate(-dot(dir, up));
+                float vertical = dot(dir, up);
+                float skyHeight = saturate(vertical);
+                float zenithMix = pow(smoothstep(0.015, 0.82, skyHeight), 0.78);
+                float horizonWidth = lerp(3.8, 1.65, saturate(_Haze));
+                float horizonBand = saturate(1.0 - abs(vertical) * horizonWidth);
+                float ground = saturate(-vertical * 1.8);
 
-                float3 color = lerp(_Horizon.rgb, _Zenith.rgb, saturate(pow(elevation, 0.72)));
-                color = lerp(color, _Ground.rgb, ground * 0.55);
+                // At vertical == 0 the result is the authored horizon colour exactly.
+                // The previous hemisphere remap put the horizon halfway toward zenith,
+                // which let the generic blue skybox look survive around every planet.
+                float3 color = lerp(_Horizon.rgb, _Zenith.rgb, zenithMix);
+                color = lerp(color, _Ground.rgb, ground * (0.48 + _Haze * 0.22));
+                float horizonMist = horizonBand * _Haze * 0.24;
+                color = lerp(color, lerp(_Horizon.rgb, _Ground.rgb, 0.38), horizonMist);
+
+                // Night retains the world's palette instead of snapping to one shared
+                // Unity sky. Sunset is applied below on top of this local night grade.
+                float night = 1.0 - saturate(_DayFactor);
+                float nightAmount = night * lerp(0.90, 0.72, horizonBand);
+                color = lerp(color, _Night.rgb * lerp(0.58, 1.25, horizonBand), nightAmount);
 
                 float sunFacing = saturate(dot(dir, sun));
                 float sunsetGate = saturate(1.0 - abs(dot(sun, up)) * 2.6);

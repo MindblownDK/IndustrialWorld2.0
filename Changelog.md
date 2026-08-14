@@ -1,9 +1,35 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.18.0-dev`
+**Current Version:** `7.18.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.18.1-dev] Planet Horizon Ownership & Surface-Sky Reliability
+
+**Type:** PATCH — planet-sky rendering reliability and visual polish; no save-schema or public API change.
+
+#### 🌅 Planet-specific horizon now fully owns the background
+- The active camera uses the authored planet-sky background while the procedural dome is live, so an assigned default Unity skybox can no longer leak through at the surface, during a far-clip change, or while the dome is rebuilt.
+- Camera clear flags and background colour are captured and restored safely when the sky controller is disabled, destroyed, underwater, or moved to a different camera.
+- The radial shader now places the exact authored `Horizon` colour at the real local horizon plane. The previous hemisphere remap already mixed it halfway toward the zenith, weakening every world's identity.
+
+#### 🌙 Local night horizons and render hardening
+- Each world now grades into its own night palette while preserving its sunset glow instead of retaining a bright shared daytime gradient after dark.
+- The sky dome renders as a guaranteed background pass, opts out of dynamic occlusion, and configures fallback material culling for an inside-sphere camera.
+- Step 51 now creates/preserves `Assets/Resources/VoxelEngineRuntime/PlanetSkyDome.mat`, keeping the custom sky shader referenced in standalone builds without overwriting authored material properties or any gameplay balance.
+
+#### ✅ Static delivery checks
+- Version/documentation synchronization, C# syntax parsing, shader structure/property checks, setup idempotency assertions, forbidden-folder absence, and sparse-checkout deletion safety are validated locally. Unity compile and Play Mode visual validation remain pending from Thomas.
+
+#### Manual Unity steps
+1. Let Unity finish compiling on the `Dev` branch.
+2. Open `Tools > Voxel Engine > Voxel Engine Setup` and run **51. Author Planet Skies + Nebulae (Non-Destructive)** twice.
+3. Confirm the second run reports the runtime sky material as **preserved**, with existing sky overrides and display colours unchanged.
+4. Enter Play Mode on the home world and look across the complete horizon; confirm no default Unity blue/grey horizon remains behind the authored sky.
+5. Visit at least one contrasting world (Ice, Volcanic, Acid, Mars, Crystal, or Pirate) and confirm its horizon, zenith, fog, sunset, and night colour family are distinct.
+6. Fly from the surface through upper atmosphere into space and back; confirm the planet sky hands off smoothly to stars/nebulae with no skybox flash.
+7. Enter and leave water once; confirm the sky hides underwater and returns with the correct planet palette.
 
 ### [7.18.0-dev] Planet-Specific Skies & Deep-Space Nebulae
 

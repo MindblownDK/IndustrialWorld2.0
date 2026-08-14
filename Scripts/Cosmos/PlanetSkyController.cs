@@ -1,10 +1,10 @@
 // Assets/Scripts/VoxelEngine/Cosmos/PlanetSkyController.cs
 //
 // Camera-relative sky dome that paints a planet-specific zenith → horizon →
-// sunset gradient, plus optional aurora / dust haze. It never replaces a
-// scene skybox asset: the dome is a runtime mesh that sits behind every
-// celestial object. Fog and ambient are driven here when weather is clear
-// so a volcanic world stays orange even at noon.
+// sunset gradient, plus optional aurora / dust haze. It never mutates the
+// scene skybox asset: while active, the authored dome and matching solid camera
+// background supersede it behind every celestial object. Fog and ambient are
+// driven here when weather is clear so a volcanic world stays orange even at noon.
 
 using UnityEngine;
 using VoxelEngine.GridSystem;
@@ -29,6 +29,10 @@ namespace VoxelEngine.Cosmos
         private MeshRenderer _domeRenderer;
         private Material _domeMaterial;
         private Camera _camera;
+        private Camera _cameraBackgroundOwner;
+        private CameraClearFlags _savedCameraClearFlags;
+        private Color _savedCameraBackground;
+        private bool _ownsCameraBackground;
         private PlanetSkyPalette _fromPalette;
         private PlanetSkyPalette _toPalette;
         private float _blend;
@@ -43,10 +47,12 @@ namespace VoxelEngine.Cosmos
         private static readonly int IdZenith = Shader.PropertyToID("_Zenith");
         private static readonly int IdHorizon = Shader.PropertyToID("_Horizon");
         private static readonly int IdGround = Shader.PropertyToID("_Ground");
+        private static readonly int IdNight = Shader.PropertyToID("_Night");
         private static readonly int IdSunset = Shader.PropertyToID("_Sunset");
         private static readonly int IdSunDir = Shader.PropertyToID("_SunDir");
         private static readonly int IdRadialUp = Shader.PropertyToID("_RadialUp");
         private static readonly int IdSpaceBlend = Shader.PropertyToID("_SpaceBlend");
+        private static readonly int IdDayFactor = Shader.PropertyToID("_DayFactor");
         private static readonly int IdHaze = Shader.PropertyToID("_Haze");
         private static readonly int IdAurora = Shader.PropertyToID("_Aurora");
         private static readonly int IdAuroraA = Shader.PropertyToID("_AuroraColorA");
@@ -63,9 +69,17 @@ namespace VoxelEngine.Cosmos
             EnsureDome();
         }
 
+        private void OnDisable()
+        {
+            if (_domeRenderer != null) _domeRenderer.enabled = false;
+            RestoreCameraBackground();
+            RestoreFog();
+        }
+
         private void OnDestroy()
         {
             if (Instance == this) Instance = null;
+            RestoreCameraBackground();
             RestoreFog();
             if (_domeMaterial != null) Destroy(_domeMaterial);
         }
@@ -73,12 +87,20 @@ namespace VoxelEngine.Cosmos
         private void LateUpdate()
         {
             ResolveCamera();
-            if (_camera == null || _domeRoot == null) return;
+            if (_camera == null || _domeRoot == null)
+            {
+                RestoreCameraBackground();
+                return;
+            }
 
             var underwater = _camera.GetComponent<VoxelEngine.Player.UnderwaterEffect>();
             bool hidden = underwater != null && underwater.IsUnderwater;
             if (_domeRenderer != null) _domeRenderer.enabled = !hidden;
-            if (hidden) return;
+            if (hidden)
+            {
+                RestoreCameraBackground();
+                return;
+            }
 
             UpdatePaletteTarget();
             if (_blend < 1f)
@@ -104,13 +126,15 @@ namespace VoxelEngine.Cosmos
             _domeRoot.localScale = Vector3.one * radius;
 
             ApplyDomeMaterial();
+            ApplyCameraBackground();
             ApplyFogAndAmbient(atmosphere);
             PushGlobals();
         }
 
         public Color ResolveBackgroundColor()
         {
-            return Color.Lerp(CurrentPalette.UpperAir, new Color(0.002f, 0.004f, 0.012f, 1f), SpaceBlend);
+            Color localAir = Color.Lerp(CurrentPalette.AmbientNight, CurrentPalette.UpperAir, DayFactor);
+            return Color.Lerp(localAir, new Color(0.002f, 0.004f, 0.012f, 1f), SpaceBlend);
         }
 
         public Color ResolveSunColor()
@@ -157,10 +181,12 @@ namespace VoxelEngine.Cosmos
             if (_domeMaterial.HasProperty(IdZenith)) _domeMaterial.SetColor(IdZenith, p.Zenith);
             if (_domeMaterial.HasProperty(IdHorizon)) _domeMaterial.SetColor(IdHorizon, p.Horizon);
             if (_domeMaterial.HasProperty(IdGround)) _domeMaterial.SetColor(IdGround, p.GroundFog);
+            if (_domeMaterial.HasProperty(IdNight)) _domeMaterial.SetColor(IdNight, p.AmbientNight);
             if (_domeMaterial.HasProperty(IdSunset)) _domeMaterial.SetColor(IdSunset, p.Sunset);
             if (_domeMaterial.HasProperty(IdSunDir)) _domeMaterial.SetVector(IdSunDir, SunDirection);
             if (_domeMaterial.HasProperty(IdRadialUp)) _domeMaterial.SetVector(IdRadialUp, RadialUp);
             if (_domeMaterial.HasProperty(IdSpaceBlend)) _domeMaterial.SetFloat(IdSpaceBlend, SpaceBlend);
+            if (_domeMaterial.HasProperty(IdDayFactor)) _domeMaterial.SetFloat(IdDayFactor, DayFactor);
             if (_domeMaterial.HasProperty(IdHaze)) _domeMaterial.SetFloat(IdHaze, p.HazeStrength);
             if (_domeMaterial.HasProperty(IdAurora)) _domeMaterial.SetFloat(IdAurora, p.AuroraStrength * (1f - SpaceBlend));
             if (_domeMaterial.HasProperty(IdAuroraA)) _domeMaterial.SetColor(IdAuroraA, new Color(0.25f, 0.95f, 0.72f, 1f));
@@ -170,6 +196,37 @@ namespace VoxelEngine.Cosmos
                 _domeMaterial.SetColor("_BaseColor", Color.Lerp(p.Zenith, p.Horizon, 0.45f));
             if (_domeMaterial.HasProperty("_Color"))
                 _domeMaterial.SetColor("_Color", Color.Lerp(p.Zenith, p.Horizon, 0.45f));
+        }
+
+        private void ApplyCameraBackground()
+        {
+            if (_camera == null) return;
+            if (!_ownsCameraBackground || _cameraBackgroundOwner != _camera)
+            {
+                RestoreCameraBackground();
+                _cameraBackgroundOwner = _camera;
+                _savedCameraClearFlags = _camera.clearFlags;
+                _savedCameraBackground = _camera.backgroundColor;
+                _ownsCameraBackground = true;
+            }
+
+            // The authored dome is the only surface/deep-space background. Keeping the
+            // camera on SolidColor prevents Unity's assigned skybox from leaking through
+            // during first-frame setup, far-clip changes, or a temporary dome rebuild.
+            _camera.clearFlags = CameraClearFlags.SolidColor;
+            _camera.backgroundColor = ResolveBackgroundColor();
+        }
+
+        private void RestoreCameraBackground()
+        {
+            if (!_ownsCameraBackground) return;
+            if (_cameraBackgroundOwner != null)
+            {
+                _cameraBackgroundOwner.clearFlags = _savedCameraClearFlags;
+                _cameraBackgroundOwner.backgroundColor = _savedCameraBackground;
+            }
+            _cameraBackgroundOwner = null;
+            _ownsCameraBackground = false;
         }
 
         private void ApplyFogAndAmbient(AtmosphereSample atmosphere)
@@ -235,29 +292,55 @@ namespace VoxelEngine.Cosmos
                 _domeRenderer.receiveShadows = false;
                 _domeRenderer.lightProbeUsage = UnityEngine.Rendering.LightProbeUsage.Off;
                 _domeRenderer.reflectionProbeUsage = UnityEngine.Rendering.ReflectionProbeUsage.Off;
+                _domeRenderer.allowOcclusionWhenDynamic = false;
                 _domeRenderer.sharedMaterial = CreateDomeMaterial();
             }
         }
 
         private Material CreateDomeMaterial()
         {
-            Shader shader = Shader.Find("VoxelEngine/PlanetSkyDomeURP")
-                         ?? Shader.Find("Universal Render Pipeline/Unlit")
-                         ?? Shader.Find("Unlit/Color")
-                         ?? Shader.Find("Sprites/Default");
-            _domeMaterial = new Material(shader) { name = "Mat_PlanetSkyDome_Runtime" };
+            // Step 51 creates this Resources template so the custom shader remains
+            // referenced in standalone builds. Editor/no-setup sessions retain the
+            // Shader.Find path and still receive the complete runtime sky.
+            var template = Resources.Load<Material>("VoxelEngineRuntime/PlanetSkyDome");
+            if (template != null && template.shader != null)
+            {
+                _domeMaterial = new Material(template) { name = "Mat_PlanetSkyDome_Runtime" };
+            }
+            else
+            {
+                Shader shader = Shader.Find("VoxelEngine/PlanetSkyDomeURP")
+                             ?? Shader.Find("Universal Render Pipeline/Unlit")
+                             ?? Shader.Find("Unlit/Color")
+                             ?? Shader.Find("Sprites/Default")
+                             ?? Shader.Find("Hidden/InternalErrorShader");
+                if (shader == null)
+                {
+                    Debug.LogError("[PlanetSkyController] No compatible sky shader is available.");
+                    return null;
+                }
+                _domeMaterial = new Material(shader) { name = "Mat_PlanetSkyDome_Runtime" };
+            }
+
             _domeMaterial.renderQueue = 1000;
             if (_domeMaterial.HasProperty("_ZWrite")) _domeMaterial.SetInt("_ZWrite", 0);
+            if (_domeMaterial.HasProperty("_Cull"))
+                _domeMaterial.SetInt("_Cull", (int)UnityEngine.Rendering.CullMode.Front);
             return _domeMaterial;
         }
 
         private void ResolveCamera()
         {
-            if (_camera != null) return;
-            _camera = Camera.main;
-            if (_camera != null) return;
-            var player = FindAnyObjectByType<VoxelEngine.Player.PlayerController>();
-            if (player != null) _camera = player.playerCamera;
+            Camera candidate = Camera.main;
+            if (candidate == null)
+            {
+                var player = FindAnyObjectByType<VoxelEngine.Player.PlayerController>();
+                if (player != null) candidate = player.playerCamera;
+            }
+
+            if (candidate == _camera) return;
+            RestoreCameraBackground();
+            _camera = candidate;
         }
 
         private Vector3 ResolveViewerPosition()
