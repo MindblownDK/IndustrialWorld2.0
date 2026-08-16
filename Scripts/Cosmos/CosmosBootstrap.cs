@@ -225,6 +225,8 @@ namespace VoxelEngine.Cosmos
             spaceBodies.biomeRegistry = biomeRegistry;
             spaceGO.AddComponent<SpaceStarfieldRenderer>();
             spaceGO.AddComponent<SpaceNebulaRenderer>();
+            spaceGO.AddComponent<SpaceDustRenderer>();
+            spaceGO.AddComponent<SolarGlareRenderer>();
             var skyGO = new GameObject("PlanetSky");
             skyGO.AddComponent<PlanetSkyController>();
 

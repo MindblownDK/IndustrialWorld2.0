@@ -468,12 +468,13 @@ namespace VoxelEngine.EditorTools
             AddWizardButton(scroll, "50. Build Warp Drive (Item, Prefab, Recipe, Research — Non-Destructive)", BuildWarpDriveContent, 56);
 
             AddInfo(scroll,
-                "Step 51 authors PLANET-SPECIFIC SKY + NEBULA profiles (non-destructive):\n" +
+                "Step 51 authors PLANET-SPECIFIC SKY + SPACE AMBIANCE profiles (non-destructive):\n" +
                 "  • Resolves each planet/moon to a sky theme (temperate, ice, volcanic, acid, moon, …)\n" +
-                "  • Existing sky colour overrides and display colours are preserved\n" +
+                "  • Preserves existing sky overrides, display colours, and runtime material properties\n" +
+                "  • Keeps the sky, nebula, eclipse-aware solar glare, and sparse dust shaders in standalone builds\n" +
                 "  • Missing display colours are filled from the theme so distant planets match their sky\n" +
                 "Re-runnable. Run after Step 21 / Step 49 when celestial worlds are present.");
-            AddWizardButton(scroll, "51. Author Planet Skies + Nebulae (Non-Destructive)", BuildPlanetSkyProfiles, 56);
+            AddWizardButton(scroll, "51. Author Planet Skies + Space Ambiance (Non-Destructive)", BuildPlanetSkyProfiles, 56);
 
             AddSpacer(scroll, 20);
         }
@@ -15561,7 +15562,7 @@ AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
         }
 
         // ============================================================
-        //   STEP 51 - PLANET SKIES + NEBULAE
+        //   STEP 51 - PLANET SKIES + SPACE AMBIANCE
         //   Non-destructive: existing sky overrides and display colours
         //   are preserved. Missing display colours are filled from the
         //   theme so distant planets match the sky they wear on the ground.
@@ -15570,37 +15571,49 @@ AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
         {
             const int ProfileVersion = 1;
             const string RuntimeResourceFolder = "Assets/Resources/VoxelEngineRuntime";
-            const string RuntimeMaterialPath = RuntimeResourceFolder + "/PlanetSkyDome.mat";
             int initialized = 0;
             int preserved = 0;
             int displayFilled = 0;
-            bool runtimeMaterialCreated = false;
-            bool runtimeMaterialRepaired = false;
             var summary = new System.Text.StringBuilder();
 
-            // Keep the procedural sky shader referenced in standalone builds. Runtime
-            // code clones this setup-owned template, then applies each planet's palette.
-            // Existing material properties are preserved; only the required shader
-            // reference is repaired, so repeated setup runs are idempotent.
+            // Keep every procedural space-art shader referenced in standalone builds.
+            // Runtime code clones these setup-owned templates and applies live palette
+            // values. Existing material properties are preserved; only a required shader
+            // reference is repaired, so repeated setup runs remain idempotent.
             EnsureFolder(RuntimeResourceFolder);
-            var skyShader = Shader.Find("VoxelEngine/PlanetSkyDomeURP");
-            var runtimeMaterial = AssetDatabase.LoadAssetAtPath<Material>(RuntimeMaterialPath);
-            if (runtimeMaterial == null && skyShader != null)
+
+            string EnsureRuntimeMaterial(string assetName, string shaderName)
             {
-                runtimeMaterial = new Material(skyShader) { name = "PlanetSkyDome" };
-                AssetDatabase.CreateAsset(runtimeMaterial, RuntimeMaterialPath);
-                runtimeMaterialCreated = true;
+                string path = RuntimeResourceFolder + "/" + assetName + ".mat";
+                var shader = Shader.Find(shaderName);
+                if (shader == null)
+                {
+                    Debug.LogError("[VoxelEngineSetup] Required shader '" + shaderName + "' is missing; '" + assetName + "' was not changed.");
+                    return "ERROR — shader missing";
+                }
+
+                var material = AssetDatabase.LoadAssetAtPath<Material>(path);
+                if (material == null)
+                {
+                    material = new Material(shader) { name = assetName };
+                    AssetDatabase.CreateAsset(material, path);
+                    return "created";
+                }
+
+                if (material.shader != shader)
+                {
+                    material.shader = shader;
+                    EditorUtility.SetDirty(material);
+                    return "shader link repaired";
+                }
+
+                return "preserved";
             }
-            else if (runtimeMaterial != null && skyShader != null && runtimeMaterial.shader != skyShader)
-            {
-                runtimeMaterial.shader = skyShader;
-                EditorUtility.SetDirty(runtimeMaterial);
-                runtimeMaterialRepaired = true;
-            }
-            else if (skyShader == null)
-            {
-                Debug.LogError("[VoxelEngineSetup] Planet sky shader is missing; runtime material was not changed.");
-            }
+
+            string skyMaterialStatus = EnsureRuntimeMaterial("PlanetSkyDome", "VoxelEngine/PlanetSkyDomeURP");
+            string nebulaMaterialStatus = EnsureRuntimeMaterial("SpaceNebula", "VoxelEngine/SpaceNebulaURP");
+            string glareMaterialStatus = EnsureRuntimeMaterial("SolarGlare", "VoxelEngine/SolarGlareURP");
+            string dustMaterialStatus = EnsureRuntimeMaterial("SpaceDust", "VoxelEngine/SpaceDustURP");
 
             void Author(BodySettings body, UnityEngine.Object owner)
             {
@@ -15660,14 +15673,17 @@ AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
-            EditorUtility.DisplayDialog("Voxel Engine — Planet Skies + Nebulae",
-                "Sky themes authored (non-destructive):\n\n" +
+            EditorUtility.DisplayDialog("Voxel Engine — Planet Skies + Space Ambiance",
+                "Sky and space ambiance authored (non-destructive):\n\n" +
                 "• " + initialized + " bodies marked with the sky catalogue\n" +
                 "• " + preserved + " existing sky overrides preserved\n" +
                 "• " + displayFilled + " missing display colours filled from the theme\n" +
-                "• Runtime sky material: " + (skyShader == null ? "ERROR — shader missing" : runtimeMaterialCreated ? "created" : runtimeMaterialRepaired ? "shader link repaired" : "preserved") + "\n\n" +
+                "• Runtime sky material: " + skyMaterialStatus + "\n" +
+                "• Space nebula material: " + nebulaMaterialStatus + "\n" +
+                "• Solar glare material: " + glareMaterialStatus + "\n" +
+                "• Space dust material: " + dustMaterialStatus + "\n\n" +
                 summary +
-                "\nRuntime sky dome + nebulae spawn from CosmosBootstrap. Re-run after adding planets; authored colours and material properties stay untouched.",
+                "\nRuntime sky, nebulae, eclipse-aware glare, and sparse dust spawn from CosmosBootstrap. Re-run after adding planets; authored colours and material properties stay untouched.",
                 "OK");
         }
 

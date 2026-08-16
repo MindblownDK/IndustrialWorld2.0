@@ -101,11 +101,19 @@ namespace VoxelEngine.Cosmos
 
         private Material CreateMaterial()
         {
-            Shader shader = Shader.Find("VoxelEngine/SpaceNebulaURP")
-                         ?? Shader.Find("Universal Render Pipeline/Particles/Unlit")
-                         ?? Shader.Find("Particles/Standard Unlit")
-                         ?? Shader.Find("Sprites/Default");
-            _material = new Material(shader) { name = "Mat_SpaceNebula_Runtime" };
+            var template = Resources.Load<Material>("VoxelEngineRuntime/SpaceNebula");
+            if (template != null && template.shader != null)
+            {
+                _material = new Material(template) { name = "Mat_SpaceNebula_Runtime" };
+            }
+            else
+            {
+                Shader shader = Shader.Find("VoxelEngine/SpaceNebulaURP")
+                             ?? Shader.Find("Universal Render Pipeline/Particles/Unlit")
+                             ?? Shader.Find("Particles/Standard Unlit")
+                             ?? Shader.Find("Sprites/Default");
+                _material = new Material(shader) { name = "Mat_SpaceNebula_Runtime" };
+            }
             _material.renderQueue = 2450;
             if (_material.HasProperty("_ZWrite")) _material.SetInt("_ZWrite", 0);
             if (_material.HasProperty("_BaseColor")) _material.SetColor("_BaseColor", Color.white);

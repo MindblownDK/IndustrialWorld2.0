@@ -1,9 +1,43 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.18.1-dev`
+**Current Version:** `7.19.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.19.0-dev] Eclipse-Aware Solar Glare & Sparse Orbital Dust
+
+**Type:** MINOR — new save-compatible space-ambiance rendering systems; no save-schema or public API break.
+
+#### ☀️ Cinematic solar glare without fake visibility
+- Added a procedural camera-space solar glare with a restrained core, horizontal/vertical bloom streaks, and two subtle palette-tinted lens ghosts.
+- Glare follows the real cosmic star direction and apparent angular size rather than a camera-fixed sprite.
+- Local planetary horizon checks, nearby physics occlusion, and double-precision celestial-disc tests hide or feather the effect behind terrain, structures, planets, and moons. Real eclipses now visibly extinguish the glare.
+- Surface atmosphere produces a broader warm response while vacuum keeps a tighter, calmer glare; planet sky palettes tint the result automatically.
+
+#### ✦ Sparse motion-readable space dust
+- Added a bounded 52-mote world-anchored dust field that fades in only through upper atmosphere and vacuum.
+- Motes wrap around the camera at a fixed radius and remain world-anchored between wraps, creating real flight parallax without noisy emission, trails, physics, or unbounded particles.
+- Dust tint follows the current sky/nebula palette and disappears cleanly on atmospheric return.
+
+#### 🛠️ Non-destructive setup and runtime wiring
+- `CosmosBootstrap` now creates both ambiance renderers automatically; no scene object or prefab is required.
+- Step 51 is now **Author Planet Skies + Space Ambiance (Non-Destructive)** and creates/preserves standalone-build material references for the sky dome, nebulae, solar glare, and space dust.
+- Existing sky overrides, display colours, runtime material properties, balance values, and custom content remain untouched on reruns.
+
+#### ✅ Static delivery checks
+- Modified C# syntax, shader structure, runtime bootstrap wiring, eclipse/dust source assertions, Step 51 idempotency, version synchronization, sparse-workspace exclusions, and diff whitespace are validated locally. Unity compile and Play Mode visual validation remain pending from Thomas.
+
+#### Manual Unity steps
+1. Let Unity finish compiling on the `Dev` branch.
+2. Open `Tools > Voxel Engine > Voxel Engine Setup` and run **51. Author Planet Skies + Space Ambiance (Non-Destructive)** twice.
+3. Confirm the second run reports the Sky, Nebula, Solar Glare, and Space Dust runtime materials as **preserved**.
+4. Enter Play Mode on the home world, face the sun, and confirm the soft glare and restrained lens ghosts appear without covering the HUD.
+5. Move behind terrain or a solid structure and confirm the glare fades out; step back into direct sight and confirm it eases in.
+6. Fly through upper atmosphere into vacuum and confirm sparse dust motes fade in and show gentle parallax while moving.
+7. Stop the ship and confirm the dust remains calm rather than streaming like a particle storm.
+8. Return to atmosphere and confirm dust fades out while the glare returns to the active planet's sky palette.
+9. If a moon or planet crosses the star, confirm the glare feathers out during the eclipse and returns after separation.
 
 ### [7.18.1-dev] Planet Horizon Ownership & Surface-Sky Reliability
 
@@ -19,8 +53,9 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 - The sky dome renders as a guaranteed background pass, opts out of dynamic occlusion, and configures fallback material culling for an inside-sphere camera.
 - Step 51 now creates/preserves `Assets/Resources/VoxelEngineRuntime/PlanetSkyDome.mat`, keeping the custom sky shader referenced in standalone builds without overwriting authored material properties or any gameplay balance.
 
-#### ✅ Static delivery checks
-- Version/documentation synchronization, C# syntax parsing, shader structure/property checks, setup idempotency assertions, forbidden-folder absence, and sparse-checkout deletion safety are validated locally. Unity compile and Play Mode visual validation remain pending from Thomas.
+#### ✅ Validation
+- Version/documentation synchronization, C# syntax parsing, shader structure/property checks, setup idempotency assertions, forbidden-folder absence, and sparse-checkout deletion safety were validated locally.
+- Thomas confirmed the planet-specific horizon works in Unity on the `Dev` branch.
 
 #### Manual Unity steps
 1. Let Unity finish compiling on the `Dev` branch.
