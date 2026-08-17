@@ -935,7 +935,7 @@ namespace VoxelEngine.EditorTools
                 screenConfigGo.gameObject.AddComponent<VoxelEngine.GridSystem.UI.GridScreenConfigUI>();
 
             // Link viewer on whichever world exists. No manager is created here.
-            if (flatWorld != null) flatWorld.viewer = playerGo.transform;
+            // (8.0.0: flat world removed — the sphere is the only world.)
             if (sphereWorld != null) sphereWorld.viewer = playerGo.transform;
 
             // World-state persistence (player position, inventory, placed blocks).
@@ -3588,26 +3588,6 @@ namespace VoxelEngine.EditorTools
             // ====================================================================
             //  2) FACTORY MACHINES — Pumpjack, Oil Refinery, Wireless Storage Term
             // ====================================================================
-
-            GameObject MakeIndustrialPrefab(string name, Color color, Vector3 scale,
-                System.Action<GameObject> configure)
-            {
-                string path = $"{prefabsFolder}/{name}.prefab";
-                var root = new GameObject(name);
-
-                var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                cube.name = "Mesh";
-                cube.transform.SetParent(root.transform, false);
-                cube.transform.localScale = scale;
-                var mat = MakeColoredMat(prefabsFolder, $"Mat_{name}", color);
-                cube.GetComponent<Renderer>().sharedMaterial = mat;
-
-                configure?.Invoke(root);
-
-                var prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
-                Object.DestroyImmediate(root);
-                return prefab;
-            }
 
             // ─ Jack Pump ─
             // Kept at the existing Pumpjack asset path so old placed blocks repair

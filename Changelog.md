@@ -1,9 +1,24 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `8.0.0-dev`
+**Current Version:** `8.0.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [8.0.1-dev] Flat World Removal Compile Recovery (CS0103 flatWorld + CS8321 dead local)
+
+**Type:** PATCH — compile recovery for the 8.0.0 flat-world removal; no behaviour, save-schema, or API change.
+
+#### 🛠️ Compiler Fixes
+- **CS0103 `flatWorld` (VoxelEngineSetupWindow.cs):** a leftover viewer-link line still referenced the deleted flat world variable inside `SpawnManagerAndPlayer`. Removed the flat-world link — the sphere (`sphereWorld`) is the only world and is linked as before.
+- **CS8321 `MakeIndustrialPrefab` unused local function:** removed the dead prefab helper (the factory-machines step uses `GetOrCreatePrefab` instead). Warning eliminated; no content creation behaviour changed.
+
+#### ✅ Static delivery checks
+- No remaining references to the deleted flat-world classes, GUIDs, or fields (`flatWorld`, `flatBiomeRegistry`, `flatSeed`, `flatSeaLevel`, `flatBaseHeight`, `flatContinentScale`) anywhere in `Scripts/`; modified editor file parses cleanly.
+
+#### Manual Unity steps
+1. Let Unity finish compiling on the `Dev` branch — both errors are gone.
+2. No setup steps required; Play Mode behaviour is unchanged from 8.0.0.
 
 ### [8.0.0-dev] Flat World Removed — Spherical Planets Only
 
