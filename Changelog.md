@@ -1,9 +1,39 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.20.0-dev`
+**Current Version:** `8.0.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [8.0.0-dev] Flat World Removed — Spherical Planets Only
+
+**Type:** MAJOR — the flat voxel world is removed as a core system and the home-world save key is namespaced (old flat-era saves are no longer read → the home planet regenerates fresh spherical terrain). Per Semantic Versioning this bumps MAJOR because it removes a core system and changes the save-key schema.
+
+#### 🪐 Why (the flat layers bug)
+The legacy flat `VoxelWorld` (heightmap generator: `ChunkHeightJob` + `ChunkGenJob` + `NoiseUtility`) was still able to pollute the spherical planet:
+- The HOME body's chunk save folder was deliberately shared with the flat world's save folder (`<worldName>`). Old flat-era chunk saves therefore loaded straight into the spherical world and rendered as **flat terrain layers stacked on each other with visible gaps between them** — exactly the broken planet generation Thomas reported.
+- The flat world code paths still existed (bootstrap disable logic, editor references, drill fallback) even though the game is planets-only.
+
+#### 🗑️ Removed (flat world, fully)
+- Deleted `Scripts/Core/VoxelWorld.cs`, `Scripts/Generation/ChunkGenJob.cs`, `Scripts/Generation/ChunkHeightJob.cs`, `Scripts/Generation/NoiseUtility.cs` (+ .meta files).
+- `CosmosBootstrap`: removed the flat-world disable block and the flat-world asset fallback — the sphere is the sole world; assets resolve from Inspector → Resources → Editor asset path.
+- `ActiveWorld` (IVoxelWorld): removed the `VoxelWorld.Instance` fallback — a dead reference simply clears.
+- `VoxelEngineSetupWindow` (Step 2 + scene checks): sphere-only; no flat-world creation or detection remains.
+- `GridDrill`: resolves the world from `ActiveWorld.Current` only.
+
+#### 💾 Save key change (home planet)
+- `SphereWorld.ResolveStorageKey` now namespaces EVERY body, home included (`<worldName>_Earth`). Old flat-era saves under the plain `<worldName>` folder are never read again — they cannot inject flat chunks into the sphere. The home planet (and any other body) regenerates its real spherical terrain procedurally on first load.
+- Old save folders are left untouched on disk (non-destructive), they are simply no longer the active storage path.
+
+#### ✅ Static delivery checks
+- All 562 C# sources parse cleanly (tree-sitter); no references to the deleted classes, scripts, or GUIDs remain in scenes/prefabs/assets; version constants synchronized (8.0.0); no other game's name introduced.
+
+#### Manual Unity steps
+1. Let Unity finish compiling on the `Dev` branch. The deleted classes will make Unity reimport — this is expected.
+2. **Scene hierarchy:** if your scene still contains an old `World` / `VoxelWorld` GameObject (it may appear as a "Missing Script" component after the class was deleted), **delete that GameObject** — the sphere (CosmosBootstrap) is the only world.
+3. Open `Tools > Voxel Engine > Voxel Engine Setup` and run **Step 2** (spawns/relinks Player + UI to the sphere) and **Step 21** (celestial content repair) once each — both idempotent and non-destructive.
+4. **(Recommended) Old saves:** delete the old world folder(s) under `<persistentDataPath>/VoxelWorlds/<worldName>` (e.g. `%USERPROFILE%/AppData/LocalLow/<company>/<product>/VoxelWorlds/MyWorld`). The new home save key is `<worldName>_Earth`, which is created fresh on next save.
+5. Enter Play Mode: you should spawn on a **continuous spherical planet** — no flat layers, no gaps. Flying to any other planet/moon streams its real spherical voxel surface as before.
 
 ### [7.20.0-dev] Full-Planet Real Voxel Coverage, Fast Chunk Generation & Reliable Interplanetary Surfaces
 

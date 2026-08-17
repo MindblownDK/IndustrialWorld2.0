@@ -318,20 +318,9 @@ namespace VoxelEngine.Cosmos
             // Activate radial gravity for the whole game + wind personality.
             _streamingBody = body;
             GravityProvider.ActiveBody = body;
-            // Route mining/building tools to THIS world (not the flat VoxelWorld).
+            // Route mining/building tools to THIS world (8.0.0: the sphere is the sole
+            // voxel world — the flat world is removed).
             VoxelEngine.Core.ActiveWorld.Current = world;
-
-            // CRITICAL: disable the flat VoxelWorld so ONLY the sphere streams chunks + uses the
-            // shared FluidManager/WaterMeshBuilder. Running BOTH worlds simultaneously causes them
-            // to fight over the same singletons and generate chunks at each other's positions → 
-            // job-safety violations + scatter crashes. We disable the component (not destroy it)
-            // so its inspector-assigned assets stay available for the sphere to borrow.
-            var flatWorld = FindAnyObjectByType<VoxelEngine.Core.VoxelWorld>(FindObjectsInactive.Include);
-            if (flatWorld != null && flatWorld != this)
-            {
-                flatWorld.enabled = false;
-                Debug.Log("[CosmosBootstrap] Flat VoxelWorld disabled — sphere is now the sole world.");
-            }
 
             // ── Activate LAST: now every Awake/OnEnable sees a fully-wired component graph. ──
             _bodyGO.SetActive(true);
@@ -1014,8 +1003,9 @@ namespace VoxelEngine.Cosmos
         }
 
         /// <summary>
-        /// Resolve materialRegistry + terrainMaterial. Priority: inspector → scene's flat
-        /// VoxelWorld (which has them assigned) → Resources → Editor asset path. Never null.
+        /// Resolve materialRegistry + terrainMaterial. Priority: inspector → Resources →
+        /// Editor asset path. Never null. (8.0.0: the scene's flat VoxelWorld fallback is
+        /// removed with the flat world.)
         /// </summary>
         private void ResolveAssets()
         {
@@ -1028,16 +1018,6 @@ namespace VoxelEngine.Cosmos
             if (terrainMaterial == null)
                 terrainMaterial = AssetDatabase.LoadAssetAtPath<Material>("Assets/VoxelEngineAssets/VoxelTerrain.mat");
 #endif
-
-            if (materialRegistry == null || terrainMaterial == null)
-            {
-                var flat = FindAnyObjectByType<VoxelEngine.Core.VoxelWorld>(FindObjectsInactive.Include);
-                if (flat != null)
-                {
-                    if (materialRegistry == null) materialRegistry = flat.materialRegistry;
-                    if (terrainMaterial  == null) terrainMaterial  = flat.terrainMaterial;
-                }
-            }
         }
 
         /// <summary>Build a complete, ready-to-play Earth PlanetTemplate in memory.</summary>

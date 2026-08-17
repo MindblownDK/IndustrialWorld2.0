@@ -800,16 +800,13 @@ namespace VoxelEngine.EditorTools
             var registry = AssetDatabase.LoadAssetAtPath<MaterialRegistry>($"{ASSET_ROOT}/MaterialRegistry.asset");
 
             // Step 2 no longer creates a world manager. The current game scene is
-            // expected to own its world through CosmosBootstrap/SphereWorld or an
-            // existing VoxelWorld. We only link the player to whatever world already exists.
+            // expected to own its world through CosmosBootstrap/SphereWorld (8.0.0: the
+            // flat world is removed). We only link the player to whatever world exists.
             VoxelEngine.Core.IVoxelWorld activeWorld = VoxelEngine.Core.ActiveWorld.Current;
-            var flatWorld = Object.FindAnyObjectByType<VoxelEngine.Core.VoxelWorld>();
             var sphereWorld = Object.FindAnyObjectByType<VoxelEngine.Cosmos.SphereWorld>();
             if (activeWorld == null)
             {
-                if (flatWorld != null) activeWorld = flatWorld;
-                else if (sphereWorld != null) activeWorld = sphereWorld;
-                if (activeWorld != null) VoxelEngine.Core.ActiveWorld.Current = activeWorld;
+                if (sphereWorld != null) VoxelEngine.Core.ActiveWorld.Current = sphereWorld;
             }
 
             // ----- Player -----
@@ -978,8 +975,7 @@ namespace VoxelEngine.EditorTools
             {
                 if (go.GetComponentInChildren<VoxelEngine.Player.PlayerController>(true) != null ||
                     go.GetComponentInChildren<VoxelEngine.Cosmos.CosmosBootstrap>(true) != null ||
-                    go.GetComponentInChildren<VoxelEngine.Cosmos.SphereWorld>(true) != null ||
-                    go.GetComponentInChildren<VoxelEngine.Core.VoxelWorld>(true) != null)
+                    go.GetComponentInChildren<VoxelEngine.Cosmos.SphereWorld>(true) != null)
                 {
                     hasGameplayRoot = true;
                     break;

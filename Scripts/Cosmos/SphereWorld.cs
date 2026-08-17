@@ -259,17 +259,18 @@ namespace VoxelEngine.Cosmos
         }
 
         /// <summary>
-        /// Per-body persistence key. The HOME body keeps the legacy flat key (old saves
-        /// keep loading), while every other body gets its own sub-key so chunks mined on
-        /// different planets can never collide in one folder.
+        /// Per-body persistence key. 8.0.0: EVERY body is namespaced — the home body used
+        /// to share the legacy flat-world folder, so old flat-era chunk saves loaded into
+        /// the spherical world and rendered as flat terrain layers with gaps between them.
+        /// The flat world is removed, so old flat saves under the plain world folder are
+        /// never read again; each body (home included) gets its own sub-key and generates
+        /// its real spherical terrain fresh.
         /// </summary>
         private static string ResolveStorageKey(string baseName, CelestialBody forBody)
         {
             string root = string.IsNullOrEmpty(baseName) ? "DefaultSphereWorld" : baseName;
             if (forBody == null || forBody.settings == null) return root;
             string bodyKey = forBody.settings.bodyName;
-            // The canonical home planet keeps the legacy key; others are namespaced.
-            if (bodyKey == "Earth" || bodyKey == "Home") return root;
             return root + "_" + bodyKey.Replace(" ", "");
         }
 

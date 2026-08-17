@@ -1,9 +1,10 @@
 // Assets/Scripts/VoxelEngine/Core/IVoxelWorld.cs
 //
 // Shared interface for anything that owns a voxel terrain the player can mine/build on.
-// Implemented by both the flat VoxelWorld AND the spherical SphereWorld. Systems that need to
-// read/write terrain (pumps, drills, farms, map, weather, audio) target ActiveWorld.Current,
-// so they work on whichever world the player is currently in.
+// Implemented by the spherical SphereWorld (the flat VoxelWorld was removed in 8.0.0 —
+// this game is planets-only). Systems that need to read/write terrain (pumps, drills,
+// farms, map, weather, audio) target ActiveWorld.Current, so they work on whichever
+// world the player is currently in.
 using UnityEngine;
 using VoxelEngine.Materials;
 
@@ -11,7 +12,7 @@ namespace VoxelEngine.Core
 {
     /// <summary>
     /// Voxel-world contract: read/write voxels, look up chunks, remesh, plus shared assets.
-    /// Both the flat VoxelWorld and the spherical SphereWorld implement this.
+    /// The spherical SphereWorld implements this.
     /// </summary>
     public interface IVoxelWorld
     {
@@ -38,15 +39,15 @@ namespace VoxelEngine.Core
     }
 
     /// <summary>
-    /// Static pointer to the world the player is currently interacting with. Set by the scene
-    /// bootstrap (flat world sets VoxelWorld.Instance; CosmosBootstrap sets the SphereWorld).
-    /// Systems read Current to target whichever world the player is in.
+    /// Static pointer to the world the player is currently interacting with. Set by the
+    /// scene bootstrap (CosmosBootstrap sets the SphereWorld — the flat world is removed
+    /// since 8.0.0). Systems read Current to target whichever world the player is in.
     /// </summary>
     public static class ActiveWorld
     {
         private static IVoxelWorld _current;
 
-        /// <summary>The active voxel world (flat or spherical). Null until a bootstrap sets it.</summary>
+        /// <summary>The active voxel world (the sphere). Null until a bootstrap sets it.</summary>
         public static IVoxelWorld Current
         {
             get
@@ -56,7 +57,9 @@ namespace VoxelEngine.Core
                 // null", so a torn-down SphereWorld would otherwise be handed back to callers
                 // and its dead CelestialBody would throw MissingReferenceException (e.g. the
                 // dropped-item ice probe). Re-validate the backing Unity object before return.
-                if (!IsAlive(_current)) _current = VoxelWorld.Instance as IVoxelWorld;
+                // (8.0.0: the old VoxelWorld.Instance fallback is gone — the sphere is the
+                // only world and re-registers itself through CosmosBootstrap.)
+                if (!IsAlive(_current)) _current = null;
                 return IsAlive(_current) ? _current : null;
             }
             set => _current = value;
