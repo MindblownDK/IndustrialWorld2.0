@@ -67,6 +67,12 @@ namespace VoxelEngine.GpuVoxel
         private CelestialBody _activeBody;
         private Material _waterMaterial;
 
+        // The descent job REQUIRES a constructed split-set container (9.4.0 fix for
+        // "splitSet has not been assigned or constructed" — the exception aborted every
+        // ocean rebuild, leaving seas rendered as giant holes). The ocean uses an empty
+        // set: water patches are flat, so split flip-flop is invisible here.
+        private NativeParallelHashSet<QuadNodeId> _emptySplitSet;
+
         // reusable mesh-build buffers
         private Vector3[] _verts;
         private Vector3[] _normals;
@@ -78,6 +84,7 @@ namespace VoxelEngine.GpuVoxel
         private void Awake()
         {
             _desired = new NativeList<QuadNodeDesc>(512, Allocator.Persistent);
+            _emptySplitSet = new NativeParallelHashSet<QuadNodeId>(1, Allocator.Persistent);
 
             int vcount = PATCH_VERTS * PATCH_VERTS;
             _verts = new Vector3[vcount];
@@ -108,6 +115,7 @@ namespace VoxelEngine.GpuVoxel
             _queue.Clear();
             while (_goPool.Count > 0) Destroy(_goPool.Pop());
             if (_desired.IsCreated) _desired.Dispose();
+            if (_emptySplitSet.IsCreated) _emptySplitSet.Dispose();
         }
 
         /// <summary>Quality-tier hook (QualityPresetApplier).</summary>
@@ -188,6 +196,7 @@ namespace VoxelEngine.GpuVoxel
                 maxDepth = _maxDepth,
                 splitFactor = splitFactor,
                 maxLeaves = 3072,
+                splitSet = _emptySplitSet,
                 results = _desired
             };
             _desiredHandle = job.Schedule();

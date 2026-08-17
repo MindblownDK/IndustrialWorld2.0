@@ -373,17 +373,19 @@ namespace VoxelEngine.Player
                 else if (session.TryResolveWorldSpawn(out Vector3 resolvedSpawn)) dest = resolvedSpawn;
                 else dest = transform.position;
 
-                // Space rejection (9.3.0): a stale legacy scene point (or a save from
-                // before body anchoring) can resolve to empty space. A WORLD-spawn
-                // respawn must always land on a planet — recompute a fresh dry surface
-                // point and heal the save. (Bed/cryobed spawns may be in space by
-                // design — orbital stations — and are left untouched.)
-                if (!session.hasBedSpawn && IsOpenSpacePosition(dest) &&
+                // 9.4.0 — a world spawn WITHOUT a body anchor is never trusted: raw
+                // scene points go stale with every floating-origin re-anchor (THE
+                // "respawn in space" bug, final form). Also reject any anchored point
+                // that still resolves to open space. Either way: compute a fresh dry
+                // surface point on the active world and heal the save.
+                bool anchorMissing = string.IsNullOrEmpty(session.worldSpawnBodyName);
+                if (!session.hasBedSpawn && (anchorMissing || IsOpenSpacePosition(dest)) &&
                     VoxelEngine.Core.ActiveWorld.Current is VoxelEngine.Cosmos.SphereWorld sphereWorld &&
                     sphereWorld.TryFindDrySpawnPoint(drySpawnSearchAttempts, out Vector3 freshGround))
                 {
-                    Debug.LogWarning("[PlayerSpawner] Stored world spawn resolved to open space — " +
-                                     "recomputed a fresh surface spawn and healed the save.");
+                    Debug.LogWarning("[PlayerSpawner] World spawn was " +
+                                     (anchorMissing ? "un-anchored (legacy save)" : "resolving to open space") +
+                                     " — recomputed a fresh surface spawn and healed the save.");
                     dest = freshGround;
                     session.RecordWorldSpawn(dest, VoxelEngine.Cosmos.GravityProvider.ActiveBody);
                     session.SaveSpawnSidecar();

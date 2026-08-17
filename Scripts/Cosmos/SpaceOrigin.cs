@@ -270,14 +270,19 @@ namespace VoxelEngine.Cosmos
                 if (frameInst != null)
                 {
                     double3 bodyCosmic = reg.CosmicPositionOf(frameInst);
-                    AnchorKm = bodyCosmic - CosmicRegistry.ToDouble3(FrameBody.transform.position) / 1000d;
+                    double3 candidate = bodyCosmic - CosmicRegistry.ToDouble3(FrameBody.transform.position) / 1000d;
+                    // NaN defence (9.4.0): a poisoned anchor poisons EVERY scene position.
+                    if (IsFinite(candidate)) AnchorKm = candidate;
+                    else ReportAnchorNaNOnce("frame-body anchor update");
                 }
             }
             else if (math.lengthsq(FrameVelocityKmS) > 1e-18)
             {
                 // Deep space: the star is the inertial anchor; only the viewer rebase
                 // below ever moves it.
-                AnchorKm += FrameVelocityKmS * Time.fixedDeltaTime;
+                double3 step = FrameVelocityKmS * Time.fixedDeltaTime;
+                if (IsFinite(step)) AnchorKm += step;
+                else ReportAnchorNaNOnce("deep-space velocity step");
             }
 
             // 3. Place every body at its true scene position.
@@ -285,12 +290,17 @@ namespace VoxelEngine.Cosmos
 
             // 4. Rebase when the viewer drifts too far from scene origin.
             Vector3 scenePos = viewer.position;
-            if (scenePos.sqrMagnitude > rebaseDistanceMeters * rebaseDistanceMeters)
+            bool viewerFinite = !(float.IsNaN(scenePos.x) || float.IsNaN(scenePos.y) || float.IsNaN(scenePos.z));
+            if (viewerFinite && scenePos.sqrMagnitude > rebaseDistanceMeters * rebaseDistanceMeters)
             {
                 Vector3 shift = -scenePos;
                 ShiftWorld(shift);
                 AnchorKm += CosmicRegistry.ToDouble3(scenePos) / 1000d;
                 ViewerCosmicKm = GetCosmicKm(Vector3.zero);
+            }
+            else if (!viewerFinite)
+            {
+                ReportAnchorNaNOnce("viewer position is NaN (physics blow-up?)");
             }
 
             // 5. Sweep for late-registered scene objects (grids placed after boot, etc.).
@@ -489,6 +499,19 @@ namespace VoxelEngine.Cosmos
                 }
                 body.transform.position = scenePos;
             }
+        }
+
+        private static bool IsFinite(double3 v) =>
+            !(double.IsNaN(v.x) || double.IsNaN(v.y) || double.IsNaN(v.z) ||
+              double.IsInfinity(v.x) || double.IsInfinity(v.y) || double.IsInfinity(v.z));
+
+        private static bool _anchorNaNReported;
+        private static void ReportAnchorNaNOnce(string context)
+        {
+            if (_anchorNaNReported) return;
+            _anchorNaNReported = true;
+            Debug.LogError($"[SpaceOrigin] Non-finite value blocked in {context} — the anchor keeps its last valid value. " +
+                           "Send this log line to the dev chat: it pinpoints the NaN source.");
         }
 
         private static readonly System.Collections.Generic.HashSet<string> _reportedInvalidBodies = new();

@@ -215,12 +215,11 @@ namespace VoxelEngine.Cosmos
             ocean.body = body;
             ocean.viewer = viewer;
 
-            // ── Distant bodies + sparse vacuum starfield ────────────────
+            // ── Space backdrop (REAL bodies only — 9.4.0) ────────────────
+            // The compressed sky-proxy system is GONE: every planet/moon/sun you see is
+            // the real body at its real position (GPU quadtree surfaces + the real star
+            // mesh). Only genuine backdrop remains: starfield, nebulae, dust, glare.
             var spaceGO = new GameObject("SpaceRenderer");
-            var spaceBodies = spaceGO.AddComponent<SpaceBodyRenderer>();
-            // Sky proxies sample the real terrain density per body — they need the biome
-            // registry so the continents in the sky match the continents on the ground.
-            spaceBodies.biomeRegistry = biomeRegistry;
             spaceGO.AddComponent<SpaceStarfieldRenderer>();
             spaceGO.AddComponent<SpaceNebulaRenderer>();
             spaceGO.AddComponent<SpaceDustRenderer>();
@@ -498,7 +497,7 @@ namespace VoxelEngine.Cosmos
 
         /// <summary>Bodies within this distance (km) render their REAL voxel surface LOD
         /// (GpuPlanetEngine) instead of the sky proxy. Kept in sync with
-        /// SpaceBodyRenderer.TrueLodWindowMeters: 60,000 km covers the whole system, so
+        /// the former proxy window: 60,000 km covers the whole system, so
         /// EVERY planet renders its real voxel surface at all times.</summary>
         private const double trueLodViewKm = 60000d;
 
@@ -1027,6 +1026,32 @@ namespace VoxelEngine.Cosmos
                 _bodySyncTimer = 2f;
                 EnsureNewBodiesRegistered();
             }
+
+            // ── Cosmic diagnostics (every 30 s): one line per body with its REAL scene
+            // distance, so any placement/NaN issue is visible in a single log line. ──
+            _cosmicDiagTimer -= Time.deltaTime;
+            if (_cosmicDiagTimer <= 0f)
+            {
+                _cosmicDiagTimer = 30f;
+                LogCosmicDiagnostics();
+            }
+        }
+
+        private float _cosmicDiagTimer = 10f;
+        private void LogCosmicDiagnostics()
+        {
+            var registry = CosmicRegistry.Instance;
+            if (registry == null || registry.SceneBodies == null || viewer == null) return;
+            var sb = new System.Text.StringBuilder("[CosmosBootstrap] Bodies: ");
+            foreach (var kv in registry.SceneBodies)
+            {
+                if (kv.Key == null || kv.Value == null) continue;
+                Vector3 p = kv.Value.transform.position;
+                bool ok = !(float.IsNaN(p.x) || float.IsNaN(p.y) || float.IsNaN(p.z));
+                float dKm = ok ? Vector3.Distance(viewer.position, p) / 1000f : -1f;
+                sb.Append($"{kv.Key.DisplayName}={(ok ? dKm.ToString("0") + "km" : "NaN!")} ");
+            }
+            Debug.Log(sb.ToString());
         }
 
         /// <summary>

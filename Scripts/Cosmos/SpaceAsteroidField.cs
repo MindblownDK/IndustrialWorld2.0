@@ -171,6 +171,7 @@ namespace VoxelEngine.Cosmos
                 // it was culled immediately — "no asteroids ever appear").
                 double3 spawnCosmicKm = viewerCosmic + dir * (distance / 1000d);
                 Vector3 pos = origin.GetScenePos(spawnCosmicKm);
+                if (float.IsNaN(pos.x) || float.IsNaN(pos.y) || float.IsNaN(pos.z)) continue;
 
                 if (HasRockNear(pos, minSeparationMeters)) continue;
                 if (IsInsidePlanet(origin, registry, spawnCosmicKm)) continue;
@@ -187,6 +188,8 @@ namespace VoxelEngine.Cosmos
                 origin.RegisterRoot(asteroid.transform);
                 _live.Add(asteroid);
                 deficit--;
+                if (_live.Count == 1)
+                    Debug.Log($"[SpaceAsteroidField] Rocks populating open space ({Vector3.Distance(pos, viewerPos):0} m out).");
             }
         }
 

@@ -172,6 +172,7 @@ namespace VoxelEngine.Cosmos
                 // The star's μ drives the planet's orbit.
                 planet.orbit.gravitationalParamKm3S2 = sunMu;
                 planet.UpdateFromOrbit(0d);
+                ValidateAndRepairOrbit(planet);
                 _bodies.Add(planet);
 
                 // ── Moons of this planet (non-intersecting radii) ──
@@ -206,6 +207,7 @@ namespace VoxelEngine.Cosmos
                     // The parent planet's μ drives the moon's orbit.
                     moon.orbit.gravitationalParamKm3S2 = planet.gravitationalParamKm3S2;
                     moon.UpdateFromOrbit(0d);
+                    ValidateAndRepairOrbit(moon);
                     _bodies.Add(moon);
 
                     // ── Orbiting moons around the moon (sub-moons) ──
@@ -235,6 +237,7 @@ namespace VoxelEngine.Cosmos
                             gravitationalParamKm3S2 = ComputeBodyMuKm3S2(mt.body) * 0.1d,
                         };
                         subMoon.UpdateFromOrbit(0d);
+                        ValidateAndRepairOrbit(subMoon);
                         _bodies.Add(subMoon);
                     }
                 }
@@ -526,6 +529,45 @@ namespace VoxelEngine.Cosmos
         }
 
         /// <summary>Cosmic position (km) of a body in the inertial frame (parent chain summed).</summary>
+        /// <summary>
+        /// NaN defence (9.4.0): if a freshly-built orbit propagates to a non-finite
+        /// position, replace it with a safe circular orbit and report the original
+        /// elements ONCE — a single corrupt template must never break the system.
+        /// </summary>
+        private static void ValidateAndRepairOrbit(BodyInstance b)
+        {
+            if (b == null) return;
+            double3 pos = b.positionKmD;
+            bool bad = double.IsNaN(pos.x) || double.IsNaN(pos.y) || double.IsNaN(pos.z) ||
+                       double.IsInfinity(pos.x) || double.IsInfinity(pos.y) || double.IsInfinity(pos.z);
+            if (!bad) return;
+
+            var o = b.orbit;
+            Debug.LogError($"[CosmicRegistry] '{b.DisplayName}' orbit propagated to NaN — repaired to a safe " +
+                           $"circular orbit. Original: a={o.semiMajorAxisKm:0.###} km, e={o.eccentricity:0.###}, " +
+                           $"i={o.inclinationRad:0.###}, μ={o.gravitationalParamKm3S2:0.###}, M0={o.meanAnomaly0:0.###}, " +
+                           $"timeScale={o.timeScale:0.###}. Fix the authored template values.");
+
+            double a = (double.IsNaN(o.semiMajorAxisKm) || o.semiMajorAxisKm < 1d) ? 30000d : o.semiMajorAxisKm;
+            double mu = (double.IsNaN(o.gravitationalParamKm3S2) || o.gravitationalParamKm3S2 < 0.000001d)
+                        ? 1000d : o.gravitationalParamKm3S2;
+            b.orbit = new OrbitElements
+            {
+                semiMajorAxisKm = a,
+                eccentricity = 0d,
+                inclinationRad = 0d,
+                raanRad = 0d,
+                argPeriapsisRad = 0d,
+                meanAnomaly0 = double.IsNaN(o.meanAnomaly0) ? 0d : o.meanAnomaly0,
+                gravitationalParamKm3S2 = mu,
+                timeScale = 1d
+            };
+            b.UpdateFromOrbit(0d);
+            if (double.IsNaN(b.positionKmD.x))
+                b.positionKmD = new double3(a, 0d, 0d);   // absolute last resort
+            b.positionKm = (Vector3)(Unity.Mathematics.float3)b.positionKmD;
+        }
+
         public double3 CosmicPositionOf(BodyInstance body)
         {
             if (body == null) return double3.zero;

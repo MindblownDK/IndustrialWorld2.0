@@ -183,14 +183,15 @@ float SurfaceRadiusF(float3 dir)
 
 float CaveCarve(float3 worldPos, float surfaceRadius, float radius)
 {
+    // Single-return form (Metal warned about the early-return pattern). Identical
+    // maths to PlanetField.CaveCarve: the gate is 0 below the crust threshold and
+    // the sea guard multiplies the carve to zero under ocean floors.
     float depth = surfaceRadius - radius;
-    if (depth < _CrustDepth + 2.0) return 0.0;
-    if (surfaceRadius < _SeaRadius + 2.0) return 0.0;
-
     float gate = smoothstep(_CrustDepth + 2.0, _CrustDepth + 8.0, depth);
+    float seaGuard = (surfaceRadius < _SeaRadius + 2.0) ? 0.0 : 1.0;
     float n = snoise(worldPos * 0.045) * 0.5 + 0.5;
     n += snoise(worldPos * 0.09 + 50.0) * 0.25;
-    return max(0.0, n - 0.68) * 90.0 * gate;
+    return max(0.0, n - 0.68) * 90.0 * gate * seaGuard;
 }
 
 // Climate — mirror of SphereDensity.SampleClimate (latitude-blended, seamless).

@@ -1,9 +1,44 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.3.0-dev`
+**Current Version:** `9.4.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.4.0-dev] Real-Only Space — Proxies Deleted, Ocean Job Crash Fixed, NaN Defence-in-Depth, Trust-No-Legacy Respawn
+
+**Type:** MINOR — removes the fake sky-proxy system entirely and fixes the 9.3 regressions. Save-compatible.
+
+#### 🌊 0. THE crash — ocean job container (also a big part of "gaps in the planet")
+`GpuOceanEngine` scheduled the shared quadtree job without the new `splitSet` container → `InvalidOperationException` EVERY update since 9.3 — the ocean never rebuilt, so every sea rendered as a giant hole in the planet. The ocean now passes a constructed (empty) set. If terrain gaps remain after this, they are a separate report.
+
+#### 🪐 1. NO MORE FAKE PLANETS — real bodies only
+The carrot-on-a-stick proxies (true bearing at a fixed 30 km — they "followed the player" and could never be reached, which is also why "the surface never generated" and "the sun is unreachable": you were chasing sprites) are DELETED, not patched: `SpaceBodyRenderer`, `SphereSurfaceColor` and `PlanetSkyProxyURP` removed. What you see in space is now exclusively REAL: real planets/moons (their GPU quadtree surfaces stream at any distance), the real star mesh (StarSurfaceURP — flying at it gets you there, and into its heat hazard), real minable asteroids, plus genuine backdrop only (starfield, nebulae, dust, glare). Black hole & quasar bodies: locked in for **Phase 5**.
+
+#### 🧭 2. NaN defence-in-depth (the missing-planets poison)
+One non-finite value anywhere in the cosmic chain froze every other body at the scene origin (inside the home planet — "planets don't spawn"), corrupted respawn's space test and killed asteroid spawns. Now:
+- **Registry build:** every freshly-built orbit is validated; NaN → repaired to a safe circular orbit + ONE error naming the body and its authored elements.
+- **SpaceOrigin:** all three anchor-update paths and the world rebase reject non-finite values (one-shot report incl. "viewer position is NaN" for physics blow-ups); `PlaceBodies` guard stays.
+- **Asteroids:** non-finite spawn positions skipped; first successful rock logs a confirmation line.
+- **Diagnostics:** every 30 s one log line lists EVERY body with its live distance (`Venus=8123km …` or `NaN!`) — whatever is still wrong will name itself.
+
+#### 🛌 3. Respawn — trust no legacy point
+Saves from before body-anchoring can never gain an anchor by themselves, and their raw scene points are meaningless after any re-anchor. A world-spawn respawn now REQUIRES a body anchor: un-anchored or open-space destinations are rejected outright, a fresh dry surface point is computed on the active world, and the save is healed (anchor written back). Orbital bed spawns remain by-design untouched.
+
+#### ☄️ 4. Asteroid spawn distance fix confirmed + shader warning
+The 9.3 km/m fix plus the NaN guards make rocks actually appear (900–6,000 m ring, high orbit + deep space). The Metal warning in `PlanetFieldGpu` (`potentially uninitialized variable (CaveCarve)`) is silenced via a single-return carve — identical maths, CPU/GPU parity intact.
+
+#### ✅ Static delivery checks
+- All sources parse clean (tree-sitter C#); zero references to the deleted proxy system; version synchronized to 9.4.0-dev.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile.
+2. Console must be free of the `splitSet` exception; oceans must be water again.
+3. Watch the 30 s `[CosmosBootstrap] Bodies:` line — every planet should show a real distance. **If any says `NaN!` or an error names a body/orbit, send me those lines — they are the last piece of the puzzle.**
+4. Fly toward a planet you SEE (it's the real one now — it grows the entire way): surface streams in, gravity/atmosphere engage on arrival.
+5. Fly at the sun: it must get closer, show the plasma surface, then burn you (hazard warning first).
+6. Die without a bed: respawn must land on the planet — every time, even on old saves (watch for the heal log).
+7. High orbit/deep space: rocks appear within ~6 km (look for the `[SpaceAsteroidField]` line).
 
 ### [9.3.0-dev] Root-Cause Round — SRP-Batcher Cutout, Global Band, Depenetration Guard, NaN-Proof Orbits, Healed Respawn, Real Asteroid Ranges & a Burning Star Surface
 

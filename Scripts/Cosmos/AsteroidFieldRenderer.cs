@@ -17,7 +17,7 @@ namespace VoxelEngine.Cosmos
 {
     /// <summary>
     /// GPU-instanced asteroid field. Reads AsteroidFieldSettings from the active system.
-    /// Attach near the SpaceBodyRenderer.
+    /// Attach on the space renderer rig (starfield/nebula/dust).
     /// </summary>
     public class AsteroidFieldRenderer : MonoBehaviour
     {
