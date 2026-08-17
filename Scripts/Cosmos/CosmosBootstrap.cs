@@ -271,8 +271,7 @@ namespace VoxelEngine.Cosmos
             // Apply the current graphics preset to the visual systems.
             world.viewDistance = GraphicsPreset.ViewDistance;
             grass.qualityDensityMul = new float[] { 0f, GraphicsPreset.GrassDensityMul * 0.5f, GraphicsPreset.GrassDensityMul, GraphicsPreset.GrassDensityMul * 1.5f };
-            if (lod != null) lod.resolution = GraphicsPreset.LodResolution;
-            if (oceanLod != null) oceanLod.resolution = GraphicsPreset.LodResolution;
+            if (_oceanGpu != null) _oceanGpu.ApplyQualityBudget(GraphicsPreset.LodResolution);
             waterfalls.scanRange = GraphicsPreset.WaterfallRange;
             world.maxJobsPerFrame = GraphicsPreset.JobsPerFrame;
 

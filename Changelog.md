@@ -1,9 +1,24 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.0.0-dev`
+**Current Version:** `9.0.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.0.1-dev] GPU Engine Compile Recovery (CS0103 lod/oceanLod + FindObjectsByType Deprecation)
+
+**Type:** PATCH — compile recovery for the 9.0.0 rework; no behaviour, save-schema, or API change.
+
+#### 🛠️ Compiler Fixes
+- **CS0103 `lod` / `oceanLod` (CosmosBootstrap.cs:274–275):** the graphics-preset application block still referenced the deleted legacy LOD components. The terrain budget is already pushed via `_terrainGpu.ApplyQualityBudget(...)` at spawn; the line now routes the ocean tier to `_oceanGpu.ApplyQualityBudget(GraphicsPreset.LodResolution)` instead.
+- **CS0618 `FindObjectsByType(FindObjectsInactive, FindObjectsSortMode)` (QualityPresetApplier.cs:74):** switched to the non-deprecated `FindObjectsByType<GpuPlanetEngine>(FindObjectsInactive.Include)` overload (Unity 6.5 removes the sort-mode parameter path).
+
+#### ✅ Static delivery checks
+- Both touched sources parse clean (tree-sitter C#); no remaining `lod`/`oceanLod` identifiers or `FindObjectsSortMode` usages in runtime code; version synchronized to 9.0.1-dev.
+
+#### Manual Unity steps
+1. Pull `Dev`, let Unity recompile — the console must be clean (no CS0103, no CS0618 from these files).
+2. Continue with the 9.0.0 validation checklist (fresh save, top-down refinement, coastlines, wakes, planet-to-planet flight).
 
 ### [9.0.0-dev] GPU-Driven Voxel Engine — Compute Density, Dual Contouring & Asynchronous Spherified Quadtree (Rework Phase 1)
 

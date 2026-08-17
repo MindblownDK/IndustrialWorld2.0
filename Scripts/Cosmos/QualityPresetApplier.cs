@@ -71,7 +71,7 @@ namespace VoxelEngine.Cosmos
 
             // GPU-driven planet surfaces: push the streaming budget to every body's
             // quadtree engine (node resolution resolves per body from the new tier).
-            foreach (var engine in FindObjectsByType<VoxelEngine.GpuVoxel.GpuPlanetEngine>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            foreach (var engine in FindObjectsByType<VoxelEngine.GpuVoxel.GpuPlanetEngine>(FindObjectsInactive.Include))
             {
                 if (engine == null) continue;
                 engine.ApplyQualityBudget(GraphicsPreset.JobsPerFrame);
