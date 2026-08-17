@@ -529,8 +529,12 @@ namespace VoxelEngine.Cosmos
                 int d2 = dx * dx + dy * dy + dz * dz;
                 if (d2 > loadR2) continue;
                 var c = new Vector3Int(_streamChunkCenter.x + dx, _streamChunkCenter.y + dy, _streamChunkCenter.z + dz);
-                bool covering = _chunks.TryGetValue(c, out var ch) && ch != null &&
-                                ch.isGenerated && ch.meshFilter != null && ch.meshFilter.sharedMesh != null;
+                // Covered = generated AND (has its surface mesh applied, or needs no mesh
+                // at all — air/interior chunks intentionally skip SurfaceNets and still
+                // fully cover their region).
+                bool covering = _chunks.TryGetValue(c, out var ch) && ch != null && ch.isGenerated &&
+                                (!ch.needsSurfaceMesh ||
+                                 (ch.meshFilter != null && ch.meshFilter.sharedMesh != null));
                 if (!covering)
                 {
                     float d = Mathf.Sqrt(d2);
@@ -873,6 +877,7 @@ namespace VoxelEngine.Cosmos
             p.chunk.isScattered = false;
 
             bool initialSurfaceChunk = ShouldBuildInitialTerrainMesh(p.chunk);
+            p.chunk.needsSurfaceMesh = initialSurfaceChunk;
             // Oil site discovery is surface-only. Skipping it for interior/air chunks prevents
             // geological scanning from competing with terrain streaming as the player moves.
             if (initialSurfaceChunk)

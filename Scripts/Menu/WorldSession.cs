@@ -52,7 +52,57 @@ namespace VoxelEngine.Menu
         public Vector3 bedSpawnPoint = Vector3.zero;
         public bool    hasBedSpawn = false;
 
-        public Vector3 GetActiveSpawn() => hasBedSpawn ? bedSpawnPoint : worldSpawnPoint;
+        // ── Body-anchored world spawn (9.2.0) ─────────────────────────────
+        // Scene positions go stale the moment the floating origin re-anchors (orbital
+        // motion, visiting another planet). The world spawn is therefore ALSO stored as
+        // body name + body-local offset, and respawn reconstructs the live scene position
+        // from the body's CURRENT transform — never a point in empty space.
+        public string  worldSpawnBodyName = "";
+        public Vector3 worldSpawnLocalPos = Vector3.zero;
+
+        /// <summary>Record the world spawn as scene position + body anchor in one call.</summary>
+        public void RecordWorldSpawn(Vector3 scenePos, VoxelEngine.Cosmos.CelestialBody body)
+        {
+            worldSpawnPoint = scenePos;
+            worldSpawnInitialized = true;
+            if (body != null && body.settings != null)
+            {
+                worldSpawnBodyName = body.settings.bodyName;
+                worldSpawnLocalPos = body.transform.InverseTransformPoint(scenePos);
+            }
+        }
+
+        /// <summary>
+        /// Resolve the CURRENT scene position of the world spawn. Prefers the body anchor
+        /// (immune to floating-origin drift); falls back to the legacy scene point.
+        /// </summary>
+        public bool TryResolveWorldSpawn(out Vector3 scenePos)
+        {
+            if (!string.IsNullOrEmpty(worldSpawnBodyName))
+            {
+                var registry = VoxelEngine.Cosmos.CosmicRegistry.Instance;
+                if (registry != null && registry.SceneBodies != null)
+                {
+                    foreach (var kv in registry.SceneBodies)
+                    {
+                        if (kv.Key == null || kv.Key.settings == null || kv.Value == null) continue;
+                        if (!string.Equals(kv.Key.settings.bodyName, worldSpawnBodyName,
+                                           System.StringComparison.OrdinalIgnoreCase)) continue;
+                        scenePos = kv.Value.transform.TransformPoint(worldSpawnLocalPos);
+                        return true;
+                    }
+                }
+            }
+            scenePos = worldSpawnPoint;
+            return worldSpawnInitialized || worldSpawnPoint.sqrMagnitude > 0.1f;
+        }
+
+        public Vector3 GetActiveSpawn()
+        {
+            if (hasBedSpawn) return bedSpawnPoint;
+            TryResolveWorldSpawn(out Vector3 resolved);
+            return resolved;
+        }
         public bool   isNewWorld = false;
 
         // (Legacy flat-world override fields removed — the sphere uses BodySettings.)
@@ -112,7 +162,8 @@ namespace VoxelEngine.Menu
                 var data = new SpawnData
                 {
                     worldSpawn = worldSpawnPoint, worldInit = worldSpawnInitialized,
-                    bedSpawn   = bedSpawnPoint,   hasBed    = hasBedSpawn
+                    bedSpawn   = bedSpawnPoint,   hasBed    = hasBedSpawn,
+                    spawnBody  = worldSpawnBodyName, spawnLocal = worldSpawnLocalPos
                 };
                 System.IO.File.WriteAllText(SpawnSidecarPath, UnityEngine.JsonUtility.ToJson(data, true));
             }
@@ -130,6 +181,8 @@ namespace VoxelEngine.Menu
                 worldSpawnInitialized = data.worldInit;
                 bedSpawnPoint         = data.bedSpawn;
                 hasBedSpawn           = data.hasBed;
+                worldSpawnBodyName    = data.spawnBody ?? "";
+                worldSpawnLocalPos    = data.spawnLocal;
             }
             catch (System.Exception ex) { UnityEngine.Debug.LogWarning("[WorldSession] LoadSpawnSidecar: " + ex.Message); }
         }
@@ -141,6 +194,8 @@ namespace VoxelEngine.Menu
             public bool    worldInit;
             public Vector3 bedSpawn;
             public bool    hasBed;
+            public string  spawnBody;
+            public Vector3 spawnLocal;
         }
 
         public List<WorldSummary> ListWorlds()

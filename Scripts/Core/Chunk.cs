@@ -24,6 +24,14 @@ namespace VoxelEngine.Core
         public bool isScattered;            // tree/rock scatter has been placed
         public bool isModified;             // player has edited this chunk -> needs persistence
 
+        /// <summary>
+        /// True when this chunk intersects the terrain surface and therefore MUST have a
+        /// mesh to count as visually covered (set by SphereWorld.FinalizeGen). Air/interior
+        /// chunks are false — they are "covered" with no mesh at all. Consumed by the
+        /// single-surface handshake's meshed-bubble scan (9.1.x).
+        /// </summary>
+        public bool needsSurfaceMesh;
+
         // Incremented every time this pooled Chunk is rented. SphereWorld records this value
         // with queued work so an old queue entry can never generate/mesh a later coordinate
         // after fast movement has recycled the same Chunk object.

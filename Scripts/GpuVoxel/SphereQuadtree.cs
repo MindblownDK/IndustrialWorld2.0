@@ -156,8 +156,24 @@ namespace VoxelEngine.GpuVoxel
             // Radial band: sampled min/max padded against peaks between probes.
             float pad = 8f + 0.5f * (maxS - minS) + 2f * cellArc;
             pad = math.min(pad, 500f);
-            float rLo = math.max(radiusWorld * 0.5f, minS - pad);
-            float rHi = maxS + pad;
+
+            // ── SHARED RADIAL LATTICE (9.2.0 gap fix) ─────────────────────────
+            // Neighbouring nodes at the same depth previously used free-floating
+            // radial bands, so their ghost-cell corner radii did not align — the
+            // watertight stitching broke and cracks/gaps opened along node borders
+            // wherever relief differed. The band is now quantised onto a per-depth
+            // lattice: dr is a power-of-two multiple of the cell arc (identical for
+            // every same-depth node) and rLo snaps to a multiple of dr, so shared
+            // boundary corners sample the field at IDENTICAL positions on both
+            // sides — bit-identical vertices, no cracks. dr doubles only over
+            // extreme relief (rare; skirts cover those transitions).
+            float span = (maxS - minS) + 2f * pad;
+            float dr = cellArc;
+            while (span > 63.5f * dr) dr *= 2f;
+            float rLo = math.floor((minS - pad) / dr) * dr;
+            float coreFloor = radiusWorld * 0.4f;
+            if (rLo < coreFloor) rLo = math.floor(coreFloor / dr) * dr;
+            float rHi = rLo + GpuVoxelConstants.NODE_CELLS * dr;
 
             // Viewer distance to the tile's surface shell (footprint-compensated).
             float viewerR = math.length(viewerLocal);

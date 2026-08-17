@@ -30,15 +30,14 @@ namespace VoxelEngine.Cosmos
     public class SpaceBodyRenderer : MonoBehaviour
     {
         [Header("Scaling")]
-        [Tooltip("Cosmic distances (km) are compressed to this visual range (metres) so other " +
-                 "planets are actually visible in the sky without floating-origin.")]
+        [Tooltip("Cosmic distances (km) are compressed to this visual range (metres) for the SUN sprite fallback only.")]
         public float visualRange = 6500f;
 
-        [Tooltip("Base visual size of a planet (metres at 1× scale).")]
-        public float planetVisualScale = 260f;
+        [Tooltip("Distance (metres) at which planet/moon proxies are rendered along the TRUE direction to the real body. The proxy keeps the body's true apparent size, so flying toward it IS flying toward the real planet.")]
+        public float proxyRenderDistanceMeters = 30000f;
 
-        [Tooltip("Base visual size of a moon.")]
-        public float moonVisualScale = 60f;
+        [Tooltip("Minimum apparent size (radians) a proxy is drawn at so distant planets stay findable in the sky (0.004 ≈ 0.23°). The proxy fades out once the REAL body reaches this apparent size itself.")]
+        public float minApparentAngularRadians = 0.004f;
 
         [Tooltip("Visual size of the sun (always large + glowing).")]
         public float sunVisualScale = 800f;
@@ -62,11 +61,6 @@ namespace VoxelEngine.Cosmos
         /// <summary>Distance band (metres) OUTSIDE the window over which the proxy fades out
         /// while the real LOD fades in.</summary>
         public const double TrueLodFadeBandMeters = 300000d;
-
-        [Tooltip("True distance (metres) at which the sky proxy starts converging from its " +
-                 "compressed sky position/size toward the body's true scene position/size, so " +
-                 "the proxy → real-LOD swap happens at the same apparent size.")]
-        public float proxyConvergeDistanceMeters = 65000000f;
 
         [Tooltip("Optional biome registry for accurate surface colours on the sky proxies.")]
         public BiomeRegistry biomeRegistry;
@@ -203,9 +197,29 @@ namespace VoxelEngine.Cosmos
                     distM = math.length(bodyAbs - viewerCosmic) * 1000d;
                 }
 
-                // REAL SPACE: bodies inside the true-LOD window render their real sampled
-                // LOD (placed by SpaceOrigin) — the sky proxy must step aside.
-                if (distM < trueLodDistanceMeters)
+                // ── TRUE-DIRECTION PROXY (9.2.0) ─────────────────────────
+                // The proxy is a far-visualisation of the REAL body: it sits on the
+                // true bearing from the viewer at a fixed render distance and keeps
+                // the body's true apparent size (with a minimum so distant planets
+                // stay findable). Flying toward the proxy IS flying toward the real
+                // planet — the compressed fake sky layout is gone. Once the real
+                // body (whose GPU quadtree surface always streams) reaches the
+                // minimum apparent size itself, the proxy fades away.
+                float radiusM = b.settings.radiusKm * 1000f;
+                float handoffDist = radiusM / Mathf.Max(0.0005f, minApparentAngularRadians);
+                float alpha = Mathf.Clamp01((float)((distM - handoffDist * 0.85d) / (handoffDist * 0.35d)));
+                if (alpha <= 0.01f)
+                {
+                    if (_bodyVisuals[i].go != null) _bodyVisuals[i].go.SetActive(false);
+                    continue;
+                }
+
+                Vector3 viewerScenePos = spaceOrigin != null && spaceOrigin.viewer != null
+                    ? spaceOrigin.viewer.position
+                    : GetViewerPosition();
+                Vector3 truePos = GetTrueScenePosition(b, spaceOrigin);
+                Vector3 toBody = truePos - viewerScenePos;
+                if (toBody.sqrMagnitude < 1f)
                 {
                     if (_bodyVisuals[i].go != null) _bodyVisuals[i].go.SetActive(false);
                     continue;
@@ -218,30 +232,14 @@ namespace VoxelEngine.Cosmos
                 // Queue a lazy terrain bake for this body's sky proxy (once per settings+seed).
                 EnsureBakeQueued(b, registry);
 
-                // ── Proxy → real-LOD convergence ──────────────────────────
-                // Outside the window the proxy starts at its compressed sky position/size;
-                // as the true distance drops it morphs toward the body's TRUE scene
-                // position/size, so the hand-off to the real LOD at the window edge happens
-                // at the exact same apparent size — no popping sphere, just detail.
-                float convergeT = Mathf.Clamp01((float)((proxyConvergeDistanceMeters - distM)
-                                              / (proxyConvergeDistanceMeters - trueLodDistanceMeters)));
-                Vector3 visualPos = Vector3.Lerp(
-                    GetVisualPositionFor(b, registry, sunPos, GetViewerPosition(), activeBody),
-                    GetTrueScenePosition(b, spaceOrigin),
-                    convergeT);
-
-                float radiusKm = b.settings.radiusKm;
-                float stylizedSize = (b.isPlanet ? planetVisualScale : moonVisualScale) *
-                                     Mathf.Clamp01(radiusKm / 8f);
-                if (!b.isPlanet && b.parentBody != null && !b.parentBody.isPlanet)
-                    stylizedSize *= 0.6f; // Sub-moonlets appear slightly smaller
-                float size = Mathf.Lerp(stylizedSize, radiusKm * 1000f, convergeT);
-
-                // Crossfade with the real LOD over the same band the LOD uses to fade in:
-                // fully opaque beyond the band, fully transparent at the window edge.
-                float alpha = Mathf.Clamp01((float)((distM - trueLodDistanceMeters) / TrueLodFadeBandMeters));
+                float trueAngular = (float)(radiusM / math.max(1d, distM));
+                float shownAngular = Mathf.Max(trueAngular, minApparentAngularRadians);
+                Vector3 visualPos = viewerScenePos + toBody.normalized * proxyRenderDistanceMeters;
+                float size = proxyRenderDistanceMeters * shownAngular;
 
                 PositionBody(visual, visualPos, size, GetBodyColor(b), emissive: false, alpha: alpha, settings: b.settings);
+                if (visual.go != null && b.settings != null)
+                    visual.go.name = "Proxy_" + b.settings.bodyName;
             }
         }
 
@@ -257,27 +255,6 @@ namespace VoxelEngine.Cosmos
                 return cb.transform.position;
             if (spaceOrigin != null) return spaceOrigin.GetScenePos(registry.CosmicPositionOf(b));
             return Vector3.zero;
-        }
-
-        private Vector3 GetVisualPositionFor(BodyInstance b, CosmicRegistry registry, Vector3 sunPos, Vector3 viewerPosition, CelestialBody activeBody)
-        {
-            if (b == null) return viewerPosition;
-            if (activeBody != null && b.settings == activeBody.settings)
-            {
-                return activeBody.transform.position;
-            }
-
-            if (b.isPlanet || b.parentBody == null)
-            {
-                Vector3 fromSunKm = b.positionKm - (registry.Sun != null ? registry.Sun.positionKm : Vector3.zero);
-                float scaleKmToSky = (visualRange * 0.45f) / 4500f;
-                return sunPos + fromSunKm * scaleKmToSky;
-            }
-
-            Vector3 parentPos = GetVisualPositionFor(b.parentBody, registry, sunPos, viewerPosition, activeBody);
-            Vector3 fromParentKm = b.positionKm - b.parentBody.positionKm;
-            float scale = b.parentBody.isPlanet ? 18f : 26f;
-            return parentPos + fromParentKm * scale;
         }
 
         private static Color GetBodyColor(BodyInstance b)

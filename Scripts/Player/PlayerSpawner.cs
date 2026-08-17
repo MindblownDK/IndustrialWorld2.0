@@ -304,10 +304,11 @@ namespace VoxelEngine.Player
                                    session.worldSpawnPoint.y >= 249f && session.worldSpawnPoint.y <= 251f);
                 if (shouldSave)
                 {
-                    session.worldSpawnPoint = finalSpawn;
-                    session.worldSpawnInitialized = true;
+                    session.RecordWorldSpawn(finalSpawn, VoxelEngine.Cosmos.GravityProvider.ActiveBody);
                     session.SaveSpawnSidecar();
-                    Debug.Log("[PlayerSpawner] World spawn initialized at " + finalSpawn);
+                    Debug.Log("[PlayerSpawner] World spawn initialized at " + finalSpawn +
+                              (string.IsNullOrEmpty(session.worldSpawnBodyName) ? "" :
+                               $" (anchored to '{session.worldSpawnBodyName}')"));
                 }
             }
 
@@ -363,12 +364,13 @@ namespace VoxelEngine.Player
             Vector3 dest;
             if (session != null)
             {
-                // Prefer the explicit linked bed spawn; otherwise use the true world spawn.
-                // If world spawn is still uninitialized (legacy save), fall back to current player
-                // position rather than teleporting to 0,250,0 sky.
+                // Prefer the explicit linked bed spawn; otherwise the world spawn is
+                // reconstructed from its BODY ANCHOR (9.2.0): the stored scene point goes
+                // stale whenever the floating origin re-anchors (orbits, planet hops),
+                // which used to respawn the player in empty space. The body-local offset
+                // is transformed by the body's CURRENT transform instead.
                 if (session.hasBedSpawn) dest = session.bedSpawnPoint;
-                else if (session.worldSpawnInitialized) dest = session.worldSpawnPoint;
-                else if (session.worldSpawnPoint.sqrMagnitude > 0.1f) dest = session.worldSpawnPoint;
+                else if (session.TryResolveWorldSpawn(out Vector3 resolvedSpawn)) dest = resolvedSpawn;
                 else dest = transform.position;
             }
             else
@@ -745,7 +747,7 @@ namespace VoxelEngine.Player
             }
             else if (session.worldSpawnInitialized && Vector3.Distance(session.worldSpawnPoint, previousSpawn) <= MatchDistance)
             {
-                session.worldSpawnPoint = drySpawn;
+                session.RecordWorldSpawn(drySpawn, VoxelEngine.Cosmos.GravityProvider.ActiveBody);
                 changed = true;
             }
 

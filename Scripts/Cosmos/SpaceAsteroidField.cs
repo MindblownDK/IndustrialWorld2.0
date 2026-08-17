@@ -26,22 +26,25 @@ namespace VoxelEngine.Cosmos
     {
         [Header("Spawning")]
         [Tooltip("Maximum live asteroids around the player.")]
-        public int maxAsteroids = 14;
+        public int maxAsteroids = 28;
 
-        [Tooltip("Seconds between spawn attempts (in deep space).")]
-        public float spawnIntervalSeconds = 8f;
+        [Tooltip("Seconds between spawn attempts (in open space).")]
+        public float spawnIntervalSeconds = 5f;
 
         [Tooltip("Asteroids spawn in this ring around the player (metres).")]
-        public Vector2 spawnRingMeters = new Vector2(1400f, 4200f);
+        public Vector2 spawnRingMeters = new Vector2(900f, 6000f);
 
         [Tooltip("Asteroids beyond this distance are culled (metres).")]
-        public float despawnDistanceMeters = 9000f;
+        public float despawnDistanceMeters = 12000f;
 
         [Tooltip("Minimum clearance between spawned asteroids (metres).")]
-        public float minSeparationMeters = 1600f;
+        public float minSeparationMeters = 650f;
 
         [Tooltip("Asteroid radius range (metres).")]
-        public Vector2 asteroidRadiusMeters = new Vector2(18f, 70f);
+        public Vector2 asteroidRadiusMeters = new Vector2(12f, 90f);
+
+        [Tooltip("Minimum altitude (m) above a body's surface before rocks appear while inside its frame — keeps the sky over bases clean while making high orbit and transfers feel populated.")]
+        public float minOrbitAltitudeMeters = 12000f;
 
         [Tooltip("Cosmic cell size (km) used to seed deterministic regions.")]
         public double regionCellKm = 4096d;
@@ -63,7 +66,7 @@ namespace VoxelEngine.Cosmos
         private void OnEnable()
         {
             SpaceOrigin.OnFrameChanged += OnFrameChanged;
-            _wasDeepSpace = IsDeepSpaceNow();
+            _wasDeepSpace = IsOpenSpaceNow();
         }
 
         private void OnDisable()
@@ -82,13 +85,27 @@ namespace VoxelEngine.Cosmos
             // local rock population — clear it so the next deep-space stretch re-populates
             // deterministically for its region.
             ClearAsteroids();
-            _wasDeepSpace = frameBody == null;
+            _wasDeepSpace = IsOpenSpaceNow();
         }
 
-        private static bool IsDeepSpaceNow()
+        /// <summary>
+        /// True when the player is in OPEN SPACE — either the deep-space star frame, or
+        /// inside a body's frame but well above its surface/atmosphere (high orbit,
+        /// transfer trajectories). 9.2.0: rocks are no longer exclusive to deep space —
+        /// space feels populated the whole journey, exactly like planets, just smaller.
+        /// </summary>
+        private bool IsOpenSpaceNow()
         {
             var origin = SpaceOrigin.Instance;
-            return origin != null && origin.IsDeepSpace;
+            if (origin == null) return false;
+            if (origin.IsDeepSpace) return true;
+
+            var frame = origin.FrameBody;
+            if (frame == null || origin.viewer == null) return false;
+            float altitude = Vector3.Distance(origin.viewer.position, frame.transform.position)
+                             - frame.SurfaceRadius;
+            float floor = Mathf.Max(minOrbitAltitudeMeters, frame.AtmosphereHeight * 1.25f);
+            return altitude > floor;
         }
 
         private void Update()
@@ -97,11 +114,11 @@ namespace VoxelEngine.Cosmos
             var registry = CosmicRegistry.Instance;
             if (origin == null || registry == null || !registry.IsReady) return;
 
-            bool deepSpace = IsDeepSpaceNow();
-            if (deepSpace != _wasDeepSpace)
+            bool openSpace = IsOpenSpaceNow();
+            if (openSpace != _wasDeepSpace)
             {
-                if (!deepSpace) ClearAsteroids();
-                _wasDeepSpace = deepSpace;
+                if (!openSpace) ClearAsteroids();
+                _wasDeepSpace = openSpace;
             }
 
             // Cull rocks that drifted out of range (or into a gravity well).
@@ -115,14 +132,14 @@ namespace VoxelEngine.Cosmos
                     continue;
                 }
                 float d = Vector3.Distance(rock.transform.position, viewerPos);
-                if (d > despawnDistanceMeters || !deepSpace)
+                if (d > despawnDistanceMeters || !openSpace)
                 {
                     Destroy(rock.gameObject);
                     _live.RemoveAt(i);
                 }
             }
 
-            if (!deepSpace) return;
+            if (!openSpace) return;
 
             _spawnTimer -= Time.deltaTime;
             if (_spawnTimer > 0f) return;

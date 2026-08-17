@@ -58,7 +58,7 @@ namespace VoxelEngine.GpuVoxel
         [Tooltip("Nodes whose cells are at least this fine receive mesh colliders when near the viewer.")]
         public float colliderMaxCellMeters = 4.5f;
         public float colliderRange = 500f;
-        [Range(1, 4)] public int maxColliderBakesPerFrame = 1;
+        [Range(1, 4)] public int maxColliderBakesPerFrame = 2;
 
         // ─────────────────────────── runtime ───────────────────────────
         private enum NodeState { Queued, Building, Ready }
@@ -567,7 +567,7 @@ namespace VoxelEngine.GpuVoxel
                 rLo = d.rLo,
                 dr = d.Dr,
                 anchor = d.Anchor,
-                skirtDepth = math.max(2f * d.CellArc, 2f * d.Dr),
+                skirtDepth = math.max(3f * d.CellArc, 3f * d.Dr),
                 meshData = slot.meshDataArray[0],
                 boundsOut = slot.bounds,
                 counts = slot.counts,
@@ -831,7 +831,13 @@ namespace VoxelEngine.GpuVoxel
 
                 bool fine = rec.desc.CellArc <= colliderMaxCellMeters;
                 float dist = Vector3.Distance(viewerLocal, (Vector3)rec.desc.Anchor);
-                bool wantCollider = fine && dist < colliderRange + rec.desc.arc;
+
+                // Fine nodes collide within the collider range. ADDITIONALLY the node
+                // chain directly under the viewer collides at EVERY depth — a fast
+                // approach from orbit always finds solid ground even before the fine
+                // levels have streamed (no more flying INTO the planet).
+                bool underViewer = dist < 1.35f * rec.desc.arc + 250f;
+                bool wantCollider = (fine && dist < colliderRange + rec.desc.arc) || underViewer;
 
                 // Single-surface handshake: wherever the bubble provides REAL mesh
                 // colliders, the LOD skin must not collide — otherwise its surface

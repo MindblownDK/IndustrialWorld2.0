@@ -1,9 +1,48 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.1.0-dev`
+**Current Version:** `9.2.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.2.0-dev] Field Report Fixes — Deep Mining, Solid Approaches, Watertight Lattice, True-Direction Planets, Anchored Respawn & Open-Space Asteroids
+
+**Type:** MINOR — six field-reported fixes + the open-space asteroid population. Save-compatible (spawn sidecar gains optional body-anchor fields).
+
+#### ⛏️ 1. Mining stopped ~0.5 m down (handshake never engaged)
+The 9.1.0 meshed-bubble scan required EVERY chunk in the bubble to have a mesh — but air/interior chunks intentionally never mesh, so the scan always failed, the GPU LOD skin kept rendering AND colliding under the bubble, and every dig hit an invisible skin ~0.5 m below the surface with phantom terrain behind it.
+- `Chunk.needsSurfaceMesh` (set by `FinalizeGen`) now records whether a chunk intersects the surface at all; the coverage scan treats meshless air/interior chunks as fully covered. The handshake engages properly: skin clipped, LOD colliders yield — dig as deep as you want.
+
+#### 🛬 2. Flying fast into a planet passed through the surface
+Only fine (≤4.5 m cell) nodes ever received colliders — a fast approach reached the ground before any existed, dropping the player through the surface onto the deep safety core (with the surface invisible from inside until the bubble streamed).
+- The node chain directly under the viewer now colliders at EVERY quadtree depth (`dist < 1.35×arc + 250 m`), so an approach from orbit always finds solid ground; collider bake budget raised to 2/frame. The bubble-yield rule still wins near the player.
+
+#### 🧩 3. Terrain gaps away from spawn (radial lattice mismatch)
+Same-depth neighbour nodes used free-floating radial bands, so their ghost-cell corners sampled DIFFERENT radii — the watertight stitching broke wherever relief differed and cracks/holes opened along node borders.
+- Radial bands are now quantised onto a SHARED per-depth lattice (dr = power-of-two multiple of the cell arc, rLo snapped to a dr multiple) with a guaranteed relief fit — boundary corners are bit-identical on both sides again. Skirts deepened to 3 cells for the rare lattice-scale transitions.
+
+#### 🪐 4+6. Planets you fly toward are now THE planets (no more SpaceBody_N decoys)
+The sky proxies were drawn at COMPRESSED positions (~20 km away in a fake layout): flying to one arrived at empty space while the real body — with the gravity, atmosphere and surface — was tens of thousands of km elsewhere. Frame/gravity/atmosphere never engaged because you were never actually near the planet.
+- Proxies are now TRUE-DIRECTION visualisations: placed on the real bearing at a fixed render distance with the body's true apparent size (plus a minimum so distant planets stay findable), fading out exactly when the real body grows large enough to carry itself. Flying at the dot IS flying at the planet — gravity dominance, proximity hold, atmosphere and streaming all engage naturally on arrival. Hierarchy objects are named `Proxy_<BodyName>`.
+
+#### 🛌 5. Respawn dropped the player in space
+The world spawn was stored as a raw SCENE position — stale the moment the floating origin re-anchored (orbital motion, visiting another body).
+- The world spawn is now body-anchored (body name + body-local offset, persisted in the spawn sidecar) and respawn reconstructs the live scene position from the body's CURRENT transform. Legacy scene-point fallback retained; bed spawns unchanged.
+
+#### ☄️ 7. Open-space asteroids (feature)
+Minable rocks were exclusive to the deep-space star frame — most flights never saw one.
+- Rocks now populate any OPEN SPACE: deep space or high orbit inside a body's frame (above `max(12 km, 1.25× atmosphere height)`), denser and wider (28 rocks, 0.9–6 km ring, 12 km despawn, 12–90 m radii), still deterministic per cosmic region, still fully minable. The sky above bases stays clean.
+
+#### ✅ Static delivery checks
+- All touched sources parse clean (tree-sitter C#); version synchronized to 9.2.0-dev.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile — existing saves keep working.
+2. Mine straight down 10+ m and tunnel sideways — no floor, no phantom walls at any depth.
+3. Fly full speed into the planet from orbit — you must land ON terrain (coarse at worst), never inside it.
+4. Fly a few km across the planet at low altitude — no cracks or holes along the way.
+5. Fly toward another planet's dot in the sky — it must grow continuously into the real planet; watch gravity/atmosphere engage on approach; land, then die on purpose — you must respawn at the world spawn on the planet.
+6. Climb to high orbit — asteroid rocks should appear around your route and be minable up close.
 
 ### [9.1.0-dev] Single-Surface Handshake — Bubble ⇄ GPU Surface Unification (Rework Phase 2)
 
