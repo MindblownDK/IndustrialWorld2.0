@@ -57,7 +57,10 @@ namespace VoxelEngine.Cosmos
         [Tooltip("Gravity (m/s²) below which the CURRENT frame body releases the scene to deep space. Slightly lower than the entry threshold so there is a hysteresis band (no frame oscillation when hovering at the boundary).")]
         public float releaseGravityMps2 = 0.014f;
 
-        [Header("References")]
+        [Header("Proximity Hold (7.20.0)")]
+        [Tooltip("Distance (km) within which a body armed as proximityHoldBody is force-held as the scene frame. Small moons / low-gravity bodies whose pull never exceeds the star's at their orbital distance can never win gravity dominance — without this hold their real voxel surface would never stream. CosmosBootstrap arms the hold while the player is near a body that is not the current streaming body; it self-releases once the player leaves ~1.6× this range.")]
+        public float proximityHoldRangeKm = 25f;
+        public CelestialBody proximityHoldBody;
         [Tooltip("Player transform (auto-resolved). Scene origin keeps this near zero.")]
         public Transform viewer;
 
@@ -196,6 +199,9 @@ namespace VoxelEngine.Cosmos
         public void SetFrame(CelestialBody body)
         {
             if (body == FrameBody) return;
+            // A direct frame set (teleport / save restore) always supersedes the
+            // proximity hold — the saved/teleported position already picked its frame.
+            proximityHoldBody = null;
             FrameBody = body;
             if (body != null)
             {
@@ -318,6 +324,35 @@ namespace VoxelEngine.Cosmos
             {
                 reg.SceneBodies.TryGetValue(dominant, out candidateBody);
                 if (candidateBody == null) return; // body factory not ready yet
+            }
+
+            // ── PROXIMITY HOLD (7.20.0) ───────────────────────────────
+            // Small moons and low-gravity bodies may NEVER win gravity dominance over the
+            // star at their orbital distance (GetDominantBody always returns the sun), so
+            // the frame would never switch to them and their real voxel surface would
+            // never stream — the player would only ever see LOD. While CosmosBootstrap
+            // has armed a hold body and the viewer is inside its range, force the frame
+            // to it (real-pull eligibility is granted so the normal switch path runs).
+            if (proximityHoldBody != null)
+            {
+                var holdInst = FindInstanceOf(proximityHoldBody);
+                if (holdInst != null)
+                {
+                    double holdDist = math.length(holdInst.positionKmD - ViewerCosmicKm);
+                    if (holdDist < proximityHoldRangeKm)
+                    {
+                        candidateBody = proximityHoldBody;
+                        candidateAccel = math.max(candidateAccel, frameEligibilityGravityMps2);
+                    }
+                    else if (holdDist > proximityHoldRangeKm * 1.6d)
+                    {
+                        proximityHoldBody = null; // released — normal dominance resumes
+                    }
+                }
+                else
+                {
+                    proximityHoldBody = null;
+                }
             }
 
             // Current frame body's pull (for the release rule).

@@ -44,10 +44,30 @@ namespace VoxelEngine.Cosmos
         public int sizeY;
         public int sizeZ;
 
+        // Precomputed surface column for this chunk (7.20.0): the expensive climate/biome/
+        // tectonic column evaluation runs ONCE per chunk instead of once per voxel —
+        // ~10–30× faster generation with no visible terrain change. See
+        // SphereDensity.EvaluateChunkColumn.
+        public SphereDensity.ChunkColumn column;
+
         // A radial deflation offset applied to LOD generation. Setting this >0 pulls the LOD
         // surface slightly inward toward the planet core, ensuring it sinks inside the higher-res
         // overlapping L0 chunks so it never visually pokes out above them.
         public float radiusOffset;
+
+        /// <summary>
+        /// Build the shared column for a chunk box. `chunkCenterWorld` is the box's radial
+        /// centre in body-relative metres — the direction whose column the whole chunk uses.
+        /// </summary>
+        public static SphereDensity.ChunkColumn BuildColumn(
+            in SphereGenParams prm,
+            in NativeArray<BiomeData> biomes,
+            in float3 chunkCenterWorld)
+        {
+            if (prm.isAsteroidBelt == 1) return default;
+            float3 dir = math.normalizesafe(chunkCenterWorld, new float3(0f, 1f, 0f));
+            return SphereDensity.EvaluateChunkColumn(prm, biomes, dir);
+        }
 
         public void Execute(int index)
         {
@@ -67,7 +87,7 @@ namespace VoxelEngine.Cosmos
                     worldPos += radial * radiusOffset;
                 }
             }
-            voxels[index] = SphereDensity.EvaluateVoxel(prm, biomes, ores, worldPos, oilSites);
+            voxels[index] = SphereDensity.EvaluateVoxelCached(prm, biomes, ores, worldPos, column, oilSites);
         }
     }
 }

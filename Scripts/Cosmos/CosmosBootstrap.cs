@@ -63,6 +63,10 @@ namespace VoxelEngine.Cosmos
         [Header("Streaming")]
         [Range(3, 16)] public int viewDistance = 8;   // local editable voxel detail radius; full planet uses LOD outside it
 
+        [Header("Full Planet Voxel Coverage (7.20.0)")]
+        [Tooltip("Radius (km) around the player on the planet/moon they are NEAR that renders as REAL voxel surface (no sampled impostor, no coarse LOD blocks). 50 km covers an entire 8–16 km planet — the whole planet becomes real voxels. 0 = legacy ring-only coverage. Stored per-world in the world-settings sidecar (WorldSession.fullVoxelRadiusKm); this inspector value is the runtime fallback/override.")]
+        [Range(0f, 500f)] public float fullVoxelRadiusKm = 50f;
+
         private GameObject _bodyGO;
         private CelestialBody _body;
         private SphereWorld _sphereWorld;
@@ -133,6 +137,10 @@ namespace VoxelEngine.Cosmos
             _body = body;
             body.settings = planetTemplate.body;
             var session = VoxelEngine.Menu.WorldSession.Instance;
+            // World-settings sidecar owns the real-voxel coverage radius (default 50 km);
+            // the inspector value is the runtime fallback/override when no sidecar exists.
+            if (session != null && session.fullVoxelRadiusKm > 0f)
+                fullVoxelRadiusKm = session.fullVoxelRadiusKm;
             int seed = body.settings.seed;
             int spawnIdx = session != null ? Mathf.Clamp(session.spawnPlanetIndex, 0, 99) : 0;
             if (session != null && session.seedState != null)
@@ -206,6 +214,7 @@ namespace VoxelEngine.Cosmos
             voxelLod.materialRegistry = materialRegistry;
             voxelLod.terrainMaterial = terrainMaterial;
             voxelLod.maxJobsPerFrame = GraphicsPreset.JobsPerFrame;
+            voxelLod.fullVoxelRadiusKm = fullVoxelRadiusKm;
 
             // Ocean LOD is a separate mesh generated only over real ocean basins. It fills
             // distant water without creating a wrapped water sphere in dry caves or on land.
@@ -635,6 +644,7 @@ namespace VoxelEngine.Cosmos
             voxelLod.materialRegistry = materialRegistry;
             voxelLod.terrainMaterial = terrainMaterial;
             voxelLod.maxJobsPerFrame = Mathf.Clamp(GraphicsPreset.JobsPerFrame * 2, 4, 16);
+            voxelLod.fullVoxelRadiusKm = fullVoxelRadiusKm;
 
             registry.SceneBodies[instance] = cb;
             _spaceOrigin.RegisterRoot(go.transform);
@@ -716,6 +726,14 @@ namespace VoxelEngine.Cosmos
                 SetAuxSystemsEnabled(!isBelt);
                 GravityProvider.ActiveBody = newBody;
                 if (_wind != null) _wind.ApplyBody(newBody.settings);
+                // Re-apply the coverage radius and rebuild the level ladder for the body
+                // we just entered (its FULL shell + rings must match the world setting).
+                var enteredVoxelLod = newBody.GetComponentInChildren<PlanetVoxelLod>(true);
+                if (enteredVoxelLod != null)
+                {
+                    enteredVoxelLod.fullVoxelRadiusKm = fullVoxelRadiusKm;
+                    enteredVoxelLod.RefreshCoverage();
+                }
                 Debug.Log($"[CosmosBootstrap] Entered '{newBody.DisplayName}' — streaming re-targeted.");
             }
 
@@ -1038,6 +1056,8 @@ namespace VoxelEngine.Cosmos
             TryResolveViewerAndAnchor();
         }
 
+        private float _proximityHoldTimer;
+
         private void Update()
         {
             if (viewer == null || _awaitingViewerSurfacePlacement) TryResolveViewerAndAnchor();
@@ -1046,6 +1066,19 @@ namespace VoxelEngine.Cosmos
             // Frame changes can also arrive via polling (robust against missed events).
             if (_spaceOrigin != null && _streamingBody != _spaceOrigin.FrameBody)
                 HandleFrameChange(_spaceOrigin.FrameBody);
+
+            // ── Proximity hold (7.20.0) ─────────────────────────────
+            // Arm the frame-selection hold while the player is genuinely NEAR a body that
+            // is not the streaming body. This guarantees real voxel terrain engages on
+            // arrival even for small moons / low-gravity bodies whose gravity never beats
+            // the star's at their orbital distance (they could otherwise never become the
+            // scene frame — the "only LOD, no surface" bug on non-starter planets).
+            _proximityHoldTimer -= Time.deltaTime;
+            if (_proximityHoldTimer <= 0f && _spaceOrigin != null)
+            {
+                _proximityHoldTimer = 0.5f;
+                UpdateProximityHold();
+            }
 
             // Keep the far clip tracking the approach every 2 s (bodies move along their
             // orbits; the sun/planet must stay visible as you travel between them).
@@ -1062,6 +1095,52 @@ namespace VoxelEngine.Cosmos
             {
                 _bodySyncTimer = 2f;
                 EnsureNewBodiesRegistered();
+            }
+        }
+
+        /// <summary>
+        /// Arm the SpaceOrigin proximity hold while the player is near a body that is not
+        /// the current streaming body. The hold forces the scene frame to that body (see
+        /// SpaceOrigin.ReEvaluateFrame) so its real voxel surface ALWAYS streams on
+        /// arrival — fixing the "non-starter planet shows only LOD" failure mode for
+        /// small moons / low-gravity bodies that can never win gravity dominance.
+        /// The hold self-releases once the player leaves ~1.6× the hold range.
+        /// </summary>
+        private void UpdateProximityHold()
+        {
+            if (_spaceOrigin == null || viewer == null) return;
+            var reg = CosmicRegistry.Instance;
+            if (reg == null || reg.SceneBodies == null) return;
+
+            // Nearest body by SURFACE distance (not centre distance — a player standing on
+            // the home planet is 0 m from its surface and millions of metres from any other).
+            CelestialBody nearest = null;
+            float bestSurfaceDist = float.MaxValue;
+            foreach (var kv in reg.SceneBodies)
+            {
+                var b = kv.Value;
+                if (b == null || b.settings == null) continue;
+                float d = Vector3.Distance(viewer.position, b.transform.position) - b.SurfaceRadius;
+                if (d < bestSurfaceDist) { bestSurfaceDist = d; nearest = b; }
+            }
+            if (nearest == null) return;
+
+            // Planet spacing is ≥ 2,000 km, so the nearest body at engage range is
+            // unambiguously the one the player is flying to. The streaming-body guard
+            // prevents hijacking the frame while the player is still on/near their
+            // current body (a forced switch there would apply a velocity delta kick).
+            float engageM = _spaceOrigin.proximityHoldRangeKm * 1000f * 0.6f;
+            float streamingSurfaceDist = float.MaxValue;
+            if (_streamingBody != null)
+            {
+                streamingSurfaceDist = Vector3.Distance(viewer.position, _streamingBody.transform.position)
+                                       - _streamingBody.SurfaceRadius;
+            }
+            if (bestSurfaceDist < engageM && nearest != _streamingBody && streamingSurfaceDist > engageM)
+            {
+                _spaceOrigin.proximityHoldBody = nearest;
+                Debug.Log($"[CosmosBootstrap] Proximity hold armed for '{nearest.DisplayName}' " +
+                          $"(surface {bestSurfaceDist:0} m) — real voxel streaming will engage on arrival.");
             }
         }
 

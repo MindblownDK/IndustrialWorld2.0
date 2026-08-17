@@ -25,10 +25,19 @@ namespace VoxelEngine.Menu
         public const int DefaultInventoryWeightPercent = 100;
         public const int DefaultContainerWeightPercent = 100;
         public const bool DefaultAllowRuinLootRespawn = true;
+        public const float DefaultFullVoxelRadiusKm = 50f;
 
         /// <summary>Maximum simultaneous physical world drops. Conveyor packets use
         /// their own simulation and are deliberately never included in this limit.</summary>
         public int maxDroppedItems = DefaultMaxDroppedItems;
+
+        /// <summary>
+        /// Radius (km) around the player that renders as REAL voxel surface (not sampled
+        /// LOD / coarse MID blocks) on the planet or moon they are near. 50 km covers an
+        /// entire 8–16 km planet. 0 = legacy ring-only coverage. Persisted per-world in
+        /// the world-settings sidecar; read by CosmosBootstrap at world load.
+        /// </summary>
+        public float fullVoxelRadiusKm = DefaultFullVoxelRadiusKm;
 
         public int inventoryWeightPercent = DefaultInventoryWeightPercent;
         public int containerWeightPercent = DefaultContainerWeightPercent;
@@ -217,6 +226,7 @@ namespace VoxelEngine.Menu
             public int containerWeightPercent = DefaultContainerWeightPercent;
             public int showDropVoidWarning = 1;
             public int allowRuinLootRespawn = 1;
+            public float fullVoxelRadiusKm = DefaultFullVoxelRadiusKm;
         }
 
         /// <summary>Non-generation settings only. This sidecar never changes seeds,
@@ -233,7 +243,8 @@ namespace VoxelEngine.Menu
                     inventoryWeightPercent = Mathf.Clamp(inventoryWeightPercent, 25, 1000),
                     containerWeightPercent = Mathf.Clamp(containerWeightPercent, 25, 1000),
                     showDropVoidWarning = this.showDropVoidWarning ? 1 : -1,
-                    allowRuinLootRespawn = this.allowRuinLootRespawn ? 1 : -1
+                    allowRuinLootRespawn = this.allowRuinLootRespawn ? 1 : -1,
+                    fullVoxelRadiusKm = Mathf.Clamp(fullVoxelRadiusKm, 0f, 500f)
                 }, true));
             }
             catch (Exception ex) { Debug.LogWarning("[WorldSession] SaveWorldSettings: " + ex.Message); }
@@ -246,6 +257,7 @@ namespace VoxelEngine.Menu
             containerWeightPercent = DefaultContainerWeightPercent;
             showDropVoidWarning = true;
             allowRuinLootRespawn = DefaultAllowRuinLootRespawn;
+            fullVoxelRadiusKm = DefaultFullVoxelRadiusKm;
             try
             {
                 if (!File.Exists(WorldSettingsPath)) return;
@@ -257,6 +269,7 @@ namespace VoxelEngine.Menu
                     containerWeightPercent = data.containerWeightPercent <= 0 ? DefaultContainerWeightPercent : Mathf.Clamp(data.containerWeightPercent, 25, 1000);
                     showDropVoidWarning = data.showDropVoidWarning != -1;
                     allowRuinLootRespawn = data.allowRuinLootRespawn != -1;
+                    fullVoxelRadiusKm = data.fullVoxelRadiusKm <= 0f ? DefaultFullVoxelRadiusKm : Mathf.Clamp(data.fullVoxelRadiusKm, 0f, 500f);
                 }
             }
             catch (Exception ex) { Debug.LogWarning("[WorldSession] LoadWorldSettings: " + ex.Message); }

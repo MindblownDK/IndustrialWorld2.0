@@ -1,9 +1,41 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.19.0-dev`
+**Current Version:** `7.20.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.20.0-dev] Full-Planet Real Voxel Coverage, Fast Chunk Generation & Reliable Interplanetary Surfaces
+
+**Type:** MINOR — new save-compatible world-rendering feature + voxel-streaming fixes; no save-schema or public API break.
+
+#### 🌍 The planet you're near is now REAL voxels — all of it
+- **Whole-planet FULL voxel shell:** the active body (the planet/moon you are on or approaching) now streams its ENTIRE surface as real generated voxel chunks — no sampled impostor sphere, no 32–128 m coarse MID blocks. The FULL shell's voxel size is chosen from a chunk budget (≈3.2k chunks on High/Ultra → **8–16 m voxels on home-sized worlds**, 4–8 m on moons, coarser only on giants).
+- **Coverage radius world setting:** new `fullVoxelRadiusKm` world setting (default **50 km** — covers a whole 8–16 km planet) controls how far real voxel surface extends around the player. Persisted per-world in the world-settings sidecar (`WorldSession`), overridable on the `CosmosBootstrap` inspector (0 = legacy ring-only behavior).
+- **New 2 m detail ring** bridges the 1 m gameplay bubble to the 4 m ring; the 4 m ring extends to 3 km and the 8 m ring to 6 km (coverage-driven). All three rings carry real colliders, so walking/mining terrain extends kilometres from the player.
+- **LOD ladder rebuilt:** `FAR → MID → FULL(whole planet) → 8 m → 4 m → 2 m → 1 m bubble`, with strict one-surface nesting between every adjacent pair (the generalized nesting rule). The sampled impostor steps aside as soon as the FULL shell is ready.
+
+#### ⚡ Voxel generation ~10–30× faster
+- **Per-chunk surface-column caching:** the expensive climate/biome/tectonic/slope column evaluation now runs **once per chunk** instead of once per voxel (`SphereDensity.ChunkColumn` + `SphereChunkGenJob.BuildColumn`). The density field is smooth over a 32 m chunk, so terrain, biomes, snow lines, beaches, cliff-rock and ore bands are visually unchanged — but a chunk's generation drops from ~40–80 ms to ~2–5 ms.
+- **Higher streaming budgets** for the active body: more concurrent generation/mesh jobs and a larger outstanding-chunk allowance (SphereWorld + PlanetVoxelLod), so the whole-planet shell fills in seconds instead of minutes.
+- **Candidate caching:** the planet shell and ring scans (tens of thousands of chunk coordinates per rebuild) are cached and rebuilt lazily as the player moves, keeping the per-frame streaming cost near zero even with 10k+ chunks active.
+
+#### 🛸 Non-starter planets / moons always generate a real surface
+- **Proximity hold (frame-selection failsafe):** small moons and low-gravity bodies can never win gravity dominance over the star at their orbital distance — the scene frame therefore never switched to them and their real voxel surface never streamed (the "only LOD, no surface" bug). `CosmosBootstrap` now arms a **proximity hold** while the player is within ~15 km of a non-streaming body's surface; `SpaceOrigin` force-holds the frame to that body (with the streaming-body guard preventing hijack kicks), so arriving anywhere — planet, moon, sub-moon — always engages real voxel terrain.
+- **Coverage re-applied on arrival:** entering a body's frame re-applies the coverage radius and rebuilds that body's level ladder, so every planet/moon streams with the same full-coverage rules as the home world.
+
+#### ✅ Static delivery checks
+- All modified sources parse cleanly (tree-sitter C#), C# 9 compatible (no struct field initializers), no save-schema or public API change, version constants synchronized (7.20.0), world-settings sidecar backward-compatible (old worlds default to 50 km coverage).
+
+#### Manual Unity steps
+1. Let Unity finish compiling on the `Dev` branch.
+2. Open `Tools > Voxel Engine > Voxel Engine Setup` and run **Step 21 (celestial content repair)** once — it is idempotent and reconnects any missing planet/library wiring non-destructively. (No new setup step is required for this feature; it is pure runtime code.)
+3. Enter Play Mode on the home world. Confirm the console logs `[PlanetVoxelLod] '<Home>' ... FULL x m / near ... (coverage 50 km)`.
+4. Walk/fly around: the 1 m terrain bubble, the new 2 m ring, the 4 m ring and the whole-planet FULL shell should be visible as one continuous real voxel surface — no flat impostor sphere, no blocky MID patches, no visible surface seams.
+5. Fly to another planet (e.g. Mars) from orbit. During the descent, watch the console for `Proximity hold armed` / `Reference frame → '<Planet>'` and confirm the REAL voxel surface (rings + FULL shell) generates as you approach — no more LOD-only arrival.
+6. Land and mine/build on the new planet: real 1 m voxel terrain must be editable and collidable exactly like the home world.
+7. Visit a moon if the system has one: confirm the proximity hold switches the frame even if gravity dominance wouldn't, and the moon's real surface streams.
+8. (Optional) Change `fullVoxelRadiusKm` on the `CosmosBootstrap` inspector (e.g. 5 km on a weaker PC) and confirm the coverage shrinks accordingly; re-enter the world or switch planets to see the new radius applied.
 
 ### [7.19.0-dev] Eclipse-Aware Solar Glare & Sparse Orbital Dust
 

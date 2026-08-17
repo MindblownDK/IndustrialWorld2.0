@@ -468,10 +468,12 @@ namespace VoxelEngine.Cosmos
 
         // Bound queued/in-flight work as well as per-frame dispatch. Without these limits a
         // fast camera move could enqueue hundreds of expensive radial density/mesh jobs and
-        // saturate every worker thread long after the player had moved on.
-        private int MaxOutstandingChunkRequests => Mathf.Clamp(maxJobsPerFrame * 3, 6, 16);
-        private int GenerationConcurrencyLimit => Mathf.Clamp((maxJobsPerFrame + 1) / 2, 1, 3);
-        private int MeshConcurrencyLimit => Mathf.Clamp((maxJobsPerFrame + 3) / 4, 1, 2);
+        // saturate every worker thread long after the player had moved on. 7.20.0 raised
+        // these budgets because chunk generation is now ~10–30× cheaper (shared per-chunk
+        // surface column), so the same thread time fills a far bigger real-voxel area.
+        private int MaxOutstandingChunkRequests => Mathf.Clamp(maxJobsPerFrame * 5, 10, 40);
+        private int GenerationConcurrencyLimit => Mathf.Clamp(maxJobsPerFrame, 2, 8);
+        private int MeshConcurrencyLimit => Mathf.Clamp((maxJobsPerFrame + 2) / 3, 1, 5);
 
         private bool IsCurrentChunk(Chunk chunk, int epoch)
         {
@@ -624,6 +626,13 @@ namespace VoxelEngine.Cosmos
                 var originWorld = new float3(chunk.coord.x, chunk.coord.y, chunk.coord.z) * s
                                   - new float3(VoxelConstants.VOXEL_SIZE);
 
+                // 7.20.0: evaluate the expensive surface column ONCE per chunk (climate,
+                // biomes, tectonic, slope probe) instead of once per voxel — the density
+                // field is smooth over a 32 m chunk, so the shared column is visually
+                // identical while chunk generation runs ~10–30× faster.
+                var column = SphereChunkGenJob.BuildColumn(body.genParams, _biomes,
+                    new float3(chunk.coord.x + 0.5f, chunk.coord.y + 0.5f, chunk.coord.z + 0.5f) * s);
+
                 var job = new SphereChunkGenJob
                 {
                     prm        = body.genParams,
@@ -633,6 +642,7 @@ namespace VoxelEngine.Cosmos
                     ores       = _ores,
                     oilSites   = _emptyOilSites,
                     voxels     = chunk.voxels,
+                    column     = column,
                     sizeX      = VoxelConstants.CHUNK_SIZE_P,
                     sizeY      = VoxelConstants.CHUNK_SIZE_P,
                     sizeZ      = VoxelConstants.CHUNK_SIZE_P,

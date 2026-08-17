@@ -75,6 +75,12 @@ namespace VoxelEngine.Cosmos
         [Tooltip("Radius (m) of the DETAIL 4 m voxel ring around the viewer — sits between the 1 m gameplay bubble and the 8 m ring so the near horizon isn't visibly blocky.")]
         public float detailRadiusMeters = 900f;
 
+        [Header("Full Voxel Coverage (7.20.0)")]
+        [Tooltip("Radius (km) around the player on the ACTIVE body that is rendered as REAL voxel surface (no sampled impostor, no coarse MID LOD). 50 km covers an entire 8–16 km planet. 0 = legacy ring-only coverage. Stored per-world in the world settings sidecar; the CosmosBootstrap inspector value is the runtime source.")]
+        public float fullVoxelRadiusKm = 50f;
+        [Tooltip("Whole-planet FULL-shell chunk budget. 0 = automatic from the graphics tier (Low 800 / Mid 1600 / High 3200 / Ultra 4800). The FULL level picks its voxel size so the whole planet stays near this many chunks — 8–16 m voxels on home-sized worlds.")]
+        [Range(0, 8000)] public int fullShellChunkBudget = 0;
+
         [Header("Budget")]
         [Range(1, 12)] public int maxJobsPerFrame = 4;
 
@@ -146,7 +152,7 @@ namespace VoxelEngine.Cosmos
             public NativeArray<int> idxScratch, cellLut;
         }
 
-        private readonly LevelState[] _levels = { new(), new(), new(), new() }; // far, mid, near(8m), detail(4m)
+        private readonly LevelState[] _levels = { new(), new(), new(), new(), new(), new() }; // far, mid, full, near(8m), detail(4m), detail2(2m)
 
         private NativeArray<Color32> _materialColors;
         private NativeArray<OreLayer> _ores;
@@ -164,10 +170,12 @@ namespace VoxelEngine.Cosmos
         private float _diagTimer;
         private bool _logBuilt;
 
-        private const int LevelFar    = 0;
-        private const int LevelMid    = 1;
-        private const int LevelNear   = 2; // 8 m ring
-        private const int LevelDetail = 3; // 4 m ring
+        private const int LevelFar      = 0;
+        private const int LevelMid      = 1;
+        private const int LevelFull     = 2; // whole-planet real-voxel shell (ACTIVE body)
+        private const int LevelNear     = 3; // 8 m ring
+        private const int LevelDetail   = 4; // 4 m ring
+        private const int LevelDetail2  = 5; // 2 m ring (new — bridges the 1 m bubble)
 
         private void Awake()
         {
@@ -206,6 +214,10 @@ namespace VoxelEngine.Cosmos
         /// <summary>
         /// Pick voxel sizes per level, adaptive to the body's radius so the whole-planet
         /// chunk count stays ~constant (≈ 700–770 mid chunks) on any planet size.
+        /// 7.20.0 adds the FULL whole-planet real-voxel shell for the ACTIVE body (chunk
+        /// budget bounded) and coverage-driven ring radii (2 m / 4 m / 8 m ladder) so the
+        /// player's planet renders as REAL voxel surface out to the world-settings
+        /// coverage radius (default 50 km — the whole planet on home-sized worlds).
         /// </summary>
         private void ConfigureLevels()
         {
@@ -216,16 +228,53 @@ namespace VoxelEngine.Cosmos
 
             float farVoxel  = GraphicsPreset.PlanetFarLodVoxelSize * mult;
             float midVoxel  = GraphicsPreset.PlanetMidLodVoxelSize * mult;
-            float nearVoxel = 8f;
-            float detailVoxel = 4f;
+            float fullVoxel = ComputeFullShellVoxelSize(radius);
 
-            ConfigureLevel(LevelFar,    farVoxel,    wholePlanet: true);
-            ConfigureLevel(LevelMid,    midVoxel,    wholePlanet: true);
-            ConfigureLevel(LevelNear,   nearVoxel,   wholePlanet: false, ringRadius: nearRadiusMeters);
-            ConfigureLevel(LevelDetail, detailVoxel, wholePlanet: false, ringRadius: detailRadiusMeters);
+            // Ring radii follow the world-settings coverage radius. A planet at or below
+            // the coverage gets its WHOLE surface from the FULL shell + rings; a giant
+            // planet keeps rings out to the coverage and the adaptive MID shell beyond.
+            float coverage = Mathf.Max(0f, fullVoxelRadiusKm * 1000f);
+            float rDetail2 = coverage > 0f ? Mathf.Min(1500f, coverage) : 0f;          // 2 m ring (new)
+            float rDetail  = coverage > 0f ? Mathf.Min(3000f, coverage) : detailRadiusMeters; // 4 m ring
+            float rNear    = coverage > 0f ? Mathf.Min(6000f, coverage) : nearRadiusMeters;   // 8 m ring
 
-            Debug.Log($"[PlanetVoxelLod] '{body.DisplayName}': far {farVoxel:0}m / mid {midVoxel:0}m / near {nearVoxel:0}m / detail {detailVoxel:0}m voxels " +
-                      $"(planet radius {radius / 1000f:0.#} km).");
+            ConfigureLevel(LevelFar,      farVoxel,    wholePlanet: true);
+            ConfigureLevel(LevelMid,      midVoxel,    wholePlanet: true);
+            ConfigureLevel(LevelFull,     fullVoxel,   wholePlanet: true);
+            ConfigureLevel(LevelNear,     8f,          wholePlanet: false, ringRadius: rNear);
+            ConfigureLevel(LevelDetail,   4f,          wholePlanet: false, ringRadius: rDetail);
+            ConfigureLevel(LevelDetail2,  2f,          wholePlanet: false, ringRadius: rDetail2);
+
+            Debug.Log($"[PlanetVoxelLod] '{body.DisplayName}': far {farVoxel:0}m / mid {midVoxel:0}m / " +
+                      $"FULL {fullVoxel:0}m / near {8f:0}m ({rNear / 1000f:0.#} km) / detail {4f:0}m ({rDetail / 1000f:0.#} km) / " +
+                      $"detail2 {2f:0}m ({rDetail2 / 1000f:0.#} km) voxels (planet radius {radius / 1000f:0.#} km, " +
+                      $"coverage {fullVoxelRadiusKm:0.#} km).");
+        }
+
+        /// <summary>
+        /// Whole-planet FULL-shell voxel size: solves 4πR² / (32·voxel)² ≈ budget for
+        /// voxel and rounds UP to a clean ladder step. Any body, any size, lands near
+        /// the same chunk count (≈3.2k on High/Ultra) — 4–8 m on moons, 8–16 m on
+        /// home-sized worlds, coarser only on giants.
+        /// </summary>
+        private float ComputeFullShellVoxelSize(float radius)
+        {
+            int budget = fullShellChunkBudget > 0
+                ? fullShellChunkBudget
+                : GraphicsPreset.Current switch
+                {
+                    GraphicsTier.Low  => 800,
+                    GraphicsTier.Mid  => 1600,
+                    GraphicsTier.High => 3200,
+                    _                 => 4800,
+                };
+            float target = radius * Mathf.Sqrt(4f * Mathf.PI / Mathf.Max(300f, budget)) / 32f;
+            float[] ladder = { 2f, 4f, 8f, 16f, 32f, 64f, 128f, 256f };
+            for (int i = 0; i < ladder.Length; i++)
+            {
+                if (ladder[i] >= target) return ladder[i];
+            }
+            return 256f;
         }
 
         private void ConfigureLevel(int index, float voxelSize, bool wholePlanet, float ringRadius = 0f)
@@ -237,6 +286,37 @@ namespace VoxelEngine.Cosmos
             l.chunkSize = 32f * l.voxelSize;
             l.halfDiag = l.chunkSize * 0.8660254f; // √3/2
             l.wholePlanet = wholePlanet;
+        }
+
+        /// <summary>
+        /// Re-derive the level ladder from the current coverage settings (world-settings
+        /// sidecar / CosmosBootstrap inspector). Call whenever <see cref="fullVoxelRadiusKm"/>
+        /// changes at runtime — e.g. when the streamer re-targets to another body. Evicts
+        /// all current chunks so the next Update streams with the new radii/voxel sizes.
+        /// </summary>
+        public void RefreshCoverage()
+        {
+            if (body == null) return;
+            body.ApplySettings();
+            for (int li = 0; li < _levels.Length; li++)
+            {
+                var l = _levels[li];
+                _evict.Clear();
+                foreach (var kv in l.active) _evict.Add(kv.Key);
+                foreach (var c in _evict)
+                {
+                    if (!l.active.TryGetValue(c, out var chunk)) continue;
+                    CancelChunk(l, chunk);
+                    l.active.Remove(c);
+                    ReturnToPool(l, chunk);
+                }
+                l.genQueue.Clear();
+                l.meshQueue.Clear();
+                l.wasActive = false;
+                l.meshedCount = 0;
+            }
+            InvalidateCandidateCache();
+            ConfigureLevels();
         }
 
         private void OnDestroy()
@@ -384,28 +464,46 @@ namespace VoxelEngine.Cosmos
             Vector3 viewerLocal = body.transform.InverseTransformPoint(viewer.position);
             float alt = viewerLocal.magnitude - body.SurfaceRadius;
 
-            // FAR: whole planet within the interplanetary window. While MID is building,
-            // FAR stays active and fills the gaps (it skips footprints of meshed MID
-            // chunks, so the two never double-render); once MID completes FAR steps aside.
-            bool midActive = distM < midWindowMeters;
+            var sphere = SphereWorld.Instance;
+            bool onThisBody = sphere != null && sphere.body == body;
+
+            // FULL: the whole-planet real-voxel shell of the ACTIVE body (the player is
+            // on it / near it). Replaces the coarse MID shell there — the planet you are
+            // near is REAL voxel surface from horizon to horizon (or out to the world
+            // settings coverage radius), never a sampled impostor or 32–128 m blocks.
+            bool fullActive = onThisBody && fullVoxelRadiusKm > 0f;
+            bool fullComplete = _levels[LevelFull].isActive &&
+                                _levels[LevelFull].targetCount > 0 &&
+                                _levels[LevelFull].meshedCount >= _levels[LevelFull].targetCount;
+
+            // MID: whole planet for every OTHER body (and active giants while their FULL
+            // shell is still streaming — no, MID is skipped entirely for the active body:
+            // FULL owns it, FAR covers the gaps while FULL builds).
+            bool midActive = distM < midWindowMeters && !fullActive;
             bool midComplete = _levels[LevelMid].isActive &&
                                _levels[LevelMid].targetCount > 0 &&
                                _levels[LevelMid].meshedCount >= _levels[LevelMid].targetCount;
-            bool farActive = distM < farWindowMeters && !midComplete;
+            bool farActive = distM < farWindowMeters && !midComplete && !fullComplete;
 
-            // NEAR ring: only around the player on the streaming (active) body, low altitude.
-            var sphere = SphereWorld.Instance;
-            bool onThisBody = sphere != null && sphere.body == body;
+            // Rings: only around the player on the streaming (active) body, low altitude.
             if (_nearActive)
                 _nearActive = onThisBody && alt < nearAltitudeMeters + nearAltitudeHysteresisMeters;
             else
                 _nearActive = onThisBody && alt < nearAltitudeMeters;
 
+            // The 8 m / 4 m rings step aside when the FULL shell already covers their
+            // band at equal-or-finer voxels (e.g. an 8 km planet's FULL shell is 8–16 m).
+            bool fullFinerThan8 = fullActive && _levels[LevelFull].voxelSize <= 8f;
+            bool fullFinerThan4 = fullActive && _levels[LevelFull].voxelSize <= 4f;
+
             _levels[LevelFar].isActive = farActive;
             _levels[LevelMid].isActive = midActive;
-            _levels[LevelNear].isActive = _nearActive;
-            // The 4 m detail ring follows the 8 m ring (same altitude gate).
-            _levels[LevelDetail].isActive = _nearActive;
+            _levels[LevelFull].isActive = fullActive;
+            _levels[LevelNear].isActive = _nearActive && !fullFinerThan8;
+            _levels[LevelDetail].isActive = _nearActive && !fullFinerThan4;
+            // The 2 m detail-2 ring follows the same altitude gate; it is always finer
+            // than FULL so it always runs (bridges the 1 m bubble to the 4 m ring).
+            _levels[LevelDetail2].isActive = _nearActive && _levels[LevelDetail2].ringRadius > 0f;
 
             if (_levels[LevelMid].isActive != _levels[LevelMid].wasActive)
             {
@@ -417,12 +515,19 @@ namespace VoxelEngine.Cosmos
                 _levels[LevelFar].wasActive = _levels[LevelFar].isActive;
                 _levels[LevelFar].meshedCount = 0;
             }
+            if (_levels[LevelFull].isActive != _levels[LevelFull].wasActive)
+            {
+                _levels[LevelFull].wasActive = _levels[LevelFull].isActive;
+                _levels[LevelFull].meshedCount = 0;
+            }
             if (_levels[LevelNear].isActive != _levels[LevelNear].wasActive)
             {
                 _levels[LevelNear].wasActive = _levels[LevelNear].isActive;
                 _levels[LevelNear].meshedCount = 0;
                 _levels[LevelDetail].wasActive = _levels[LevelNear].isActive;
                 _levels[LevelDetail].meshedCount = 0;
+                _levels[LevelDetail2].wasActive = _levels[LevelNear].isActive;
+                _levels[LevelDetail2].meshedCount = 0;
             }
         }
 
@@ -449,6 +554,10 @@ namespace VoxelEngine.Cosmos
         /// no overlap (which rendered a coarser surface ABOVE the finer terrain) and no
         /// gap. Used identically for admission and eviction.
         ///
+        /// 7.20.0: the finer-coverage test is generalized over ALL levels — whole-planet
+        /// shells (FAR/MID/FULL) step aside under every finer ring AND under meshed finer
+        /// whole-planet shells; rings step aside under every finer ring and the 1 m bubble.
+        ///
         /// `outerMargin` (hysteresis) applies ONLY to the level's OUTER boundary — a
         /// chunk just outside the ring may stay a moment longer to avoid flicker. It is
         /// deliberately NEVER applied to the inner nesting edges: a chunk inside a finer
@@ -466,38 +575,36 @@ namespace VoxelEngine.Cosmos
                 float coreDist = center.magnitude;
                 if (Mathf.Abs(coreDist - radius) > l.halfDiag + 200f) return false;
 
-                // Never render where finer levels cover (STRICT — no margin).
-                if (l.index == LevelMid || l.index == LevelFar)
+                // Never render where FINER RINGS cover (STRICT — no margin).
+                for (int ri = 0; ri < _levels.Length; ri++)
                 {
-                    if (_levels[LevelNear].isActive)
-                    {
-                        // NEAR ring's max reach = ring radius + 2× ring half-diagonal
-                        // (a ring chunk centred at the edge still extends one half-diag out).
-                        float faceFromViewer = Vector3.Distance(center, viewerLocal) - l.halfDiag;
-                        if (faceFromViewer < nearRadiusMeters + _levels[LevelNear].halfDiag * 2f)
-                            return false;
-                    }
-                    if (_levels[LevelDetail].isActive)
-                    {
-                        float faceFromDetail = Vector3.Distance(center, viewerLocal) - l.halfDiag;
-                        if (faceFromDetail < detailRadiusMeters + _levels[LevelDetail].halfDiag * 2f)
-                            return false;
-                    }
-                    if (l0Reach > 0f)
-                    {
-                        float faceFromL0 = Vector3.Distance(center, l0CenterLocal) - l.halfDiag;
-                        if (faceFromL0 < l0Reach)
-                            return false;
-                    }
+                    var ring = _levels[ri];
+                    if (ring == l || ring.wholePlanet || !ring.isActive || ring.ringRadius <= 0f) continue;
+                    if (ring.voxelSize >= l.voxelSize) continue; // only FINER rings carve out
+                    float reach = ring.ringRadius + ring.halfDiag * 2f;
+                    float faceFromRing = Vector3.Distance(center, viewerLocal) - l.halfDiag;
+                    if (faceFromRing < reach) return false;
                 }
-                // While MID builds, FAR additionally steps aside under meshed MID chunks.
-                if (l.index == LevelFar && HasMeshedMidChunkUnder(coord, l))
-                    return false;
+                if (l0Reach > 0f)
+                {
+                    float faceFromL0 = Vector3.Distance(center, l0CenterLocal) - l.halfDiag;
+                    if (faceFromL0 < l0Reach)
+                        return false;
+                }
+                // Step aside under meshed FINER whole-planet shells (FAR under FULL/MID,
+                // MID under FULL) while those finer shells are still building.
+                for (int fi = 0; fi < _levels.Length; fi++)
+                {
+                    var finer = _levels[fi];
+                    if (finer == l || !finer.wholePlanet || !finer.isActive) continue;
+                    if (finer.voxelSize >= l.voxelSize) continue;
+                    if (HasMeshedWholePlanetChunkUnder(coord, l, finer)) return false;
+                }
 
                 return true;
             }
 
-            // Ring levels (DETAIL 4 m / NEAR 8 m): ball around the viewer, surface shell
+            // Ring levels (2 m / 4 m / 8 m): ball around the viewer, surface shell
             // only, outside every finer level's coverage.
             float d = Vector3.Distance(center, viewerLocal);
             // OUTER edge — hysteresis margin allowed here.
@@ -512,35 +619,69 @@ namespace VoxelEngine.Cosmos
                 float faceFromL0 = Vector3.Distance(center, l0CenterLocal) - l.halfDiag;
                 if (faceFromL0 < l0Reach) return false;
             }
-            if (l.index == LevelNear)
+            // Never render inside a FINER ring's reach (e.g. 8 m ring outside the 4 m
+            // ring's reach; 4 m ring outside the 2 m ring's reach).
+            for (int ri = 0; ri < _levels.Length; ri++)
             {
-                // The 8 m ring must stay outside the 4 m detail ring's reach.
-                // Detail chunks are driven by viewerLocal, so we measure from viewerLocal.
-                float detailReach = detailRadiusMeters + _levels[LevelDetail].halfDiag * 2f;
-                if (d - l.halfDiag < detailReach) return false;
+                var finer = _levels[ri];
+                if (finer == l || finer.wholePlanet || !finer.isActive || finer.ringRadius <= 0f) continue;
+                if (finer.voxelSize >= l.voxelSize) continue;
+                float reach = finer.ringRadius + finer.halfDiag * 2f;
+                if (d - l.halfDiag < reach) return false;
             }
             return true;
         }
 
-        /// <summary>True when any MESHED MID chunk's footprint overlaps this FAR chunk.</summary>
-        private bool HasMeshedMidChunkUnder(Vector3Int farCoord, LevelState farLevel)
+        /// <summary>True when any MESHED chunk of `finerLevel` overlaps this coarser chunk.</summary>
+        private bool HasMeshedWholePlanetChunkUnder(Vector3Int coarseCoord, LevelState coarseLevel, LevelState finerLevel)
         {
-            var mid = _levels[LevelMid];
-            if (!mid.isActive || mid.active.Count == 0) return false;
-            float ratio = farLevel.chunkSize / mid.chunkSize;
+            if (!finerLevel.isActive || finerLevel.active.Count == 0) return false;
+            float ratio = coarseLevel.chunkSize / finerLevel.chunkSize;
             int r = Mathf.CeilToInt(ratio) + 1;
-            int baseX = Mathf.FloorToInt(farCoord.x * ratio) - 1;
-            int baseY = Mathf.FloorToInt(farCoord.y * ratio) - 1;
-            int baseZ = Mathf.FloorToInt(farCoord.z * ratio) - 1;
+            int baseX = Mathf.FloorToInt(coarseCoord.x * ratio) - 1;
+            int baseY = Mathf.FloorToInt(coarseCoord.y * ratio) - 1;
+            int baseZ = Mathf.FloorToInt(coarseCoord.z * ratio) - 1;
             for (int dz = 0; dz <= r; dz++)
             for (int dy = 0; dy <= r; dy++)
             for (int dx = 0; dx <= r; dx++)
             {
-                if (!mid.active.TryGetValue(new Vector3Int(baseX + dx, baseY + dy, baseZ + dz), out var midChunk))
+                if (!finerLevel.active.TryGetValue(new Vector3Int(baseX + dx, baseY + dy, baseZ + dz), out var finerChunk))
                     continue;
-                if (midChunk.meshed) return true;
+                if (finerChunk.meshed) return true;
             }
             return false;
+        }
+
+        // ── Candidate caching (7.20.0) ───────────────────────────────
+        // The whole-planet FULL shell and the wider rings scan tens of thousands of
+        // chunk coordinates per rebuild. The desired SET only changes when the viewer
+        // crosses a chunk boundary or a level's config/activity changes, so the list is
+        // cached and rebuilt lazily — the per-frame cost drops to ~nothing while the
+        // coverage radius grows to tens of kilometres.
+        private readonly Dictionary<int, List<(Vector3Int coord, float distSq)>> _candidateCache = new();
+        private readonly Dictionary<int, Vector3> _candidateCacheAt = new();
+        private readonly Dictionary<int, float> _candidateCacheSig = new();
+
+        private float ComputeCandidateSignature()
+        {
+            float sig = body != null ? body.SurfaceRadius * 0.001f : 0f;
+            for (int i = 0; i < _levels.Length; i++)
+            {
+                var l = _levels[i];
+                float f = i + 1;
+                sig += l.voxelSize * 7919f * f
+                     + l.ringRadius * 104729f * f
+                     + (l.isActive ? 31337f : 1f) * f
+                     + (l.wholePlanet ? 6151f : 1f) * f;
+            }
+            return sig;
+        }
+
+        private void InvalidateCandidateCache()
+        {
+            _candidateCache.Clear();
+            _candidateCacheAt.Clear();
+            _candidateCacheSig.Clear();
         }
 
         private void UpdateStreaming()
@@ -571,6 +712,8 @@ namespace VoxelEngine.Cosmos
                 l0CenterLocal = new Vector3(chunkCoord.x + 0.5f, chunkCoord.y + 0.5f, chunkCoord.z + 0.5f) * cs;
             }
 
+            float signature = ComputeCandidateSignature();
+
             for (int li = 0; li < _levels.Length; li++)
             {
                 var l = _levels[li];
@@ -597,39 +740,55 @@ namespace VoxelEngine.Cosmos
                     continue;
                 }
 
-                // 1) Build the desired candidate list (nearest first).
+                // 1) Build the desired candidate list (nearest first) — cached until the
+                //    viewer moves more than half a chunk or the level config changes.
                 _candidates.Clear();
-                if (l.wholePlanet)
+                bool cacheValid = _candidateCache.TryGetValue(li, out var cachedCandidates) &&
+                                  _candidateCacheAt.TryGetValue(li, out Vector3 builtAt) &&
+                                  _candidateCacheSig.TryGetValue(li, out float builtSig) &&
+                                  Mathf.Abs(builtSig - signature) < 0.001f &&
+                                  (builtAt - viewerLocal).sqrMagnitude < (l.chunkSize * 0.5f) * (l.chunkSize * 0.5f);
+                if (cacheValid)
                 {
-                    int range = Mathf.CeilToInt((radius + l.halfDiag + 200f) / l.chunkSize);
-                    for (int cz = -range; cz <= range; cz++)
-                    for (int cy = -range; cy <= range; cy++)
-                    for (int cx = -range; cx <= range; cx++)
-                    {
-                        var coord = new Vector3Int(cx, cy, cz);
-                        if (!IsChunkDesired(l, coord, viewerLocal, l0CenterLocal, radius, l0R)) continue;
-                        float d2 = DistToPlayerSq(coord, l, viewerLocal);
-                        _candidates.Add((coord, d2));
-                    }
+                    _candidates.AddRange(cachedCandidates);
                 }
                 else
                 {
-                    int range = Mathf.CeilToInt((l.ringRadius + l.halfDiag) / l.chunkSize);
-                    Vector3Int vc = new(
-                        Mathf.FloorToInt(viewerLocal.x / l.chunkSize),
-                        Mathf.FloorToInt(viewerLocal.y / l.chunkSize),
-                        Mathf.FloorToInt(viewerLocal.z / l.chunkSize));
-                    for (int cz = vc.z - range; cz <= vc.z + range; cz++)
-                    for (int cy = vc.y - range; cy <= vc.y + range; cy++)
-                    for (int cx = vc.x - range; cx <= vc.x + range; cx++)
+                    if (l.wholePlanet)
                     {
-                        var coord = new Vector3Int(cx, cy, cz);
-                        if (!IsChunkDesired(l, coord, viewerLocal, l0CenterLocal, radius, l0R)) continue;
-                        Vector3 center = new Vector3(coord.x + 0.5f, coord.y + 0.5f, coord.z + 0.5f) * l.chunkSize;
-                        _candidates.Add((coord, (center - viewerLocal).sqrMagnitude));
+                        int range = Mathf.CeilToInt((radius + l.halfDiag + 200f) / l.chunkSize);
+                        for (int cz = -range; cz <= range; cz++)
+                        for (int cy = -range; cy <= range; cy++)
+                        for (int cx = -range; cx <= range; cx++)
+                        {
+                            var coord = new Vector3Int(cx, cy, cz);
+                            if (!IsChunkDesired(l, coord, viewerLocal, l0CenterLocal, radius, l0R)) continue;
+                            float d2 = DistToPlayerSq(coord, l, viewerLocal);
+                            _candidates.Add((coord, d2));
+                        }
                     }
+                    else
+                    {
+                        int range = Mathf.CeilToInt((l.ringRadius + l.halfDiag) / l.chunkSize);
+                        Vector3Int vc = new(
+                            Mathf.FloorToInt(viewerLocal.x / l.chunkSize),
+                            Mathf.FloorToInt(viewerLocal.y / l.chunkSize),
+                            Mathf.FloorToInt(viewerLocal.z / l.chunkSize));
+                        for (int cz = vc.z - range; cz <= vc.z + range; cz++)
+                        for (int cy = vc.y - range; cy <= vc.y + range; cy++)
+                        for (int cx = vc.x - range; cx <= vc.x + range; cx++)
+                        {
+                            var coord = new Vector3Int(cx, cy, cz);
+                            if (!IsChunkDesired(l, coord, viewerLocal, l0CenterLocal, radius, l0R)) continue;
+                            Vector3 center = new Vector3(coord.x + 0.5f, coord.y + 0.5f, coord.z + 0.5f) * l.chunkSize;
+                            _candidates.Add((coord, (center - viewerLocal).sqrMagnitude));
+                        }
+                    }
+                    _candidates.Sort((a, b) => a.distSq.CompareTo(b.distSq));
+                    _candidateCache[li] = new List<(Vector3Int, float)>(_candidates);
+                    _candidateCacheAt[li] = viewerLocal;
+                    _candidateCacheSig[li] = signature;
                 }
-                _candidates.Sort((a, b) => a.distSq.CompareTo(b.distSq));
 
                 // 2) Evict chunks that are no longer desired (same nesting rule).
                 _evict.Clear();
@@ -673,7 +832,7 @@ namespace VoxelEngine.Cosmos
             return (center - viewerLocal).sqrMagnitude;
         }
 
-        private int MaxOutstanding => Mathf.Clamp(maxJobsPerFrame * 4, 8, 24);
+        private int MaxOutstanding => Mathf.Clamp(maxJobsPerFrame * 6, 12, 48);
 
         // ── Jobs ──────────────────────────────────────────────────────
         private void QueueGen(LevelState l, LodChunk chunk)
@@ -692,11 +851,15 @@ namespace VoxelEngine.Cosmos
 
         private void DispatchJobs()
         {
-            int genBudget = Mathf.Clamp((maxJobsPerFrame + 1) / 2, 2, 8);
-            int meshBudget = Mathf.Clamp((maxJobsPerFrame + 3) / 4, 1, 4);
+            // 7.20.0: budgets raised — chunk generation is ~10–30× cheaper (shared
+            // per-chunk surface column), so the same frame budget streams far more
+            // real voxel surface per second.
+            int genBudget = Mathf.Clamp((maxJobsPerFrame + 1) / 2, 2, 12);
+            int meshBudget = Mathf.Clamp((maxJobsPerFrame + 3) / 4, 1, 6);
 
-            // Priority: detail → near → mid → far (the player's surroundings build first).
-            int[] order = { LevelDetail, LevelNear, LevelMid, LevelFar };
+            // Priority: detail2 → detail → near → full → mid → far (the player's
+            // surroundings build first; the whole-planet FULL shell then fills the rest).
+            int[] order = { LevelDetail2, LevelDetail, LevelNear, LevelFull, LevelMid, LevelFar };
 
             foreach (int li in order)
             {
@@ -726,10 +889,16 @@ namespace VoxelEngine.Cosmos
                     // Deflate the LOD level slightly to ensure it hides under the higher-res 1m terrain
                     // instead of floating above it in the overlap zones.
                     float offset = 0f;
-                    if (l.index == LevelDetail) offset = 0.5f;
+                    if (l.index == LevelDetail2) offset = 0.25f;
+                    else if (l.index == LevelDetail) offset = 0.5f;
                     else if (l.index == LevelNear) offset = 1.0f;
+                    else if (l.index == LevelFull) offset = 2.0f;
                     else if (l.index == LevelMid) offset = 3.0f;
                     else if (l.index == LevelFar) offset = 12.0f;
+
+                    // Shared per-chunk surface column (7.20.0) — see SphereChunkGenJob.
+                    var column = SphereChunkGenJob.BuildColumn(body.genParams, _biomes,
+                        new float3(chunk.coord.x + 0.5f, chunk.coord.y + 0.5f, chunk.coord.z + 0.5f) * s);
 
                     var job = new SphereChunkGenJob
                     {
@@ -741,6 +910,7 @@ namespace VoxelEngine.Cosmos
                         ores       = _ores,
                         oilSites   = _oilSites,
                         voxels     = chunk.voxels,
+                        column     = column,
                         sizeX      = VoxelConstants.CHUNK_SIZE_P,
                         sizeY      = VoxelConstants.CHUNK_SIZE_P,
                         sizeZ      = VoxelConstants.CHUNK_SIZE_P,
@@ -865,13 +1035,16 @@ namespace VoxelEngine.Cosmos
             if (SurfaceReady) return;
             var far = _levels[LevelFar];
             var mid = _levels[LevelMid];
+            var full = _levels[LevelFull];
             bool farComplete = far.isActive && far.targetCount > 0 && far.meshedCount >= far.targetCount;
             bool midComplete = mid.isActive && mid.targetCount > 0 && mid.meshedCount >= mid.targetCount;
-            if (farComplete || midComplete)
+            bool fullComplete = full.isActive && full.targetCount > 0 && full.meshedCount >= full.targetCount;
+            if (farComplete || midComplete || fullComplete)
             {
                 SurfaceReady = true;
                 Debug.Log($"[PlanetVoxelLod] Real voxel surface ready for '{body.DisplayName}' " +
-                          $"(far {far.meshedCount}/{far.targetCount}, mid {mid.meshedCount}/{mid.targetCount}).");
+                          $"(far {far.meshedCount}/{far.targetCount}, mid {mid.meshedCount}/{mid.targetCount}, " +
+                          $"full {full.meshedCount}/{full.targetCount}).");
             }
 
             _diagTimer += Time.deltaTime;
@@ -882,7 +1055,8 @@ namespace VoxelEngine.Cosmos
                 {
                     _logBuilt = true;
                     Debug.Log($"[PlanetVoxelLod] '{body.DisplayName}': far {far.active.Count} mid {mid.active.Count} " +
-                              $"near {_levels[LevelNear].active.Count} detail {_levels[LevelDetail].active.Count} chunks, ready={SurfaceReady}.");
+                              $"full {full.active.Count} near {_levels[LevelNear].active.Count} " +
+                              $"detail {_levels[LevelDetail].active.Count} detail2 {_levels[LevelDetail2].active.Count} chunks, ready={SurfaceReady}.");
                 }
             }
         }
@@ -922,7 +1096,7 @@ namespace VoxelEngine.Cosmos
 
             var mesh = new Mesh { name = "LodChunkMesh", indexFormat = IndexFormat.UInt32 };
 
-            int li = l == _levels[LevelFar] ? LevelFar : l == _levels[LevelMid] ? LevelMid : LevelNear;
+            int li = l.index;
             var chunk = new LodChunk
             {
                 levelIndex = li,
@@ -931,10 +1105,10 @@ namespace VoxelEngine.Cosmos
                 mr = mr,
                 mesh = mesh
             };
-            // The ring levels (4 m detail + 8 m near) carry real colliders — the player
-            // walks on them beyond the 1 m gameplay bubble (MID/FAR stay visual-only;
-            // the LOD safety shell remains the fallback beneath them).
-            if (li == LevelNear || li == LevelDetail)
+            // The ring levels (2 m detail-2 + 4 m detail + 8 m near) carry real colliders —
+            // the player walks on them beyond the 1 m gameplay bubble (whole-planet shells
+            // stay visual-only; the LOD safety shell remains the fallback beneath them).
+            if (li == LevelNear || li == LevelDetail || li == LevelDetail2)
             {
                 chunk.mc = go.AddComponent<MeshCollider>();
                 chunk.mc.enabled = false; // enabled when a valid mesh is applied
@@ -967,7 +1141,8 @@ namespace VoxelEngine.Cosmos
         {
             if (body == null) return false;
             Vector3 local = body.transform.InverseTransformPoint(worldPos);
-            // Check the finest ring first (4 m detail, then 8 m near) — allocation-free.
+            // Check the finest ring first (2 m detail-2, then 4 m detail, then 8 m near) — allocation-free.
+            if (HasRingColliderAt(_levels[LevelDetail2], local)) return true;
             if (HasRingColliderAt(_levels[LevelDetail], local)) return true;
             return HasRingColliderAt(_levels[LevelNear], local);
         }
