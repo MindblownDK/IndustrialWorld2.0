@@ -470,6 +470,7 @@ namespace VoxelEngine.Cosmos
                           $"{scattered} scattered | {waterChunks} with water-GO | {waterVoxels} water voxels (5-chunk sample) | " +
                           $"FluidMgr: {(fm == null ? "NULL" : "alive")} | " +
                           $"genQ:{_genQueue.Count} meshQ:{_meshQueue.Count} | " +
+                          $"handshake: meshedR={_meshedBubbleRadius:0}m colliderR={ColliderBubbleRadius:0}m | " +
                           $"seaRadius:{body?.SeaRadius} meanSurf:{body?.SurfaceRadius}");
             }
         }
@@ -483,9 +484,11 @@ namespace VoxelEngine.Cosmos
 
             // Single-surface handshake globals: the GPU LOD skin clips its fragments
             // inside this ball (see VoxelTerrainURP/_Enhanced — _BubbleCutout path).
+            // The RENDER cutout uses the full meshed radius (minus a safety margin) so
+            // the overlap band with the LOD skin is as small as possible.
             Vector3 bubbleWS = body.transform.TransformPoint(_streamCenterLocal);
             Shader.SetGlobalVector("_VoxelBubbleCenterWS", new Vector4(bubbleWS.x, bubbleWS.y, bubbleWS.z, 1f));
-            Shader.SetGlobalFloat("_VoxelBubbleCutoutRadius", ColliderBubbleRadius);
+            Shader.SetGlobalFloat("_VoxelBubbleCutoutRadius", Mathf.Max(0f, _meshedBubbleRadius - 8f));
         }
 
         /// <summary>
@@ -544,7 +547,27 @@ namespace VoxelEngine.Cosmos
 
             float chunkM = VoxelConstants.CHUNK_SIZE * VoxelConstants.VOXEL_SIZE;
             float radiusChunks = minUnmeshed == float.MaxValue ? (r + 0.5f) : (minUnmeshed - 0.87f);
-            _meshedBubbleRadius = Mathf.Clamp(radiusChunks * chunkM, 0f, (r + 0.5f) * chunkM);
+            float radius = Mathf.Clamp(radiusChunks * chunkM, 0f, (r + 0.5f) * chunkM);
+
+            // LOCAL GUARANTEE (9.3.0): the player is STANDING on meshed terrain — if the
+            // 27-chunk block around the stream centre is fully covered, the handshake is
+            // guaranteed a minimum ball even while distant parts of the bubble are still
+            // streaming (a single far straggler must never re-enable the LOD skin's
+            // colliders under the player's feet — that was the 0.5 m mining wall).
+            bool localOk = true;
+            for (int dz = -1; dz <= 1 && localOk; dz++)
+            for (int dy = -1; dy <= 1 && localOk; dy++)
+            for (int dx = -1; dx <= 1 && localOk; dx++)
+            {
+                var c = new Vector3Int(_streamChunkCenter.x + dx, _streamChunkCenter.y + dy, _streamChunkCenter.z + dz);
+                bool covering = _chunks.TryGetValue(c, out var ch) && ch != null && ch.isGenerated &&
+                                (!ch.needsSurfaceMesh ||
+                                 (ch.meshFilter != null && ch.meshFilter.sharedMesh != null));
+                if (!covering) localOk = false;
+            }
+            if (localOk) radius = Mathf.Max(radius, 2f * chunkM);
+
+            _meshedBubbleRadius = radius;
         }
 
         // ---- Streaming (body-relative cartesian) ----

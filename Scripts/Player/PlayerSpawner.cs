@@ -372,12 +372,46 @@ namespace VoxelEngine.Player
                 if (session.hasBedSpawn) dest = session.bedSpawnPoint;
                 else if (session.TryResolveWorldSpawn(out Vector3 resolvedSpawn)) dest = resolvedSpawn;
                 else dest = transform.position;
+
+                // Space rejection (9.3.0): a stale legacy scene point (or a save from
+                // before body anchoring) can resolve to empty space. A WORLD-spawn
+                // respawn must always land on a planet — recompute a fresh dry surface
+                // point and heal the save. (Bed/cryobed spawns may be in space by
+                // design — orbital stations — and are left untouched.)
+                if (!session.hasBedSpawn && IsOpenSpacePosition(dest) &&
+                    VoxelEngine.Core.ActiveWorld.Current is VoxelEngine.Cosmos.SphereWorld sphereWorld &&
+                    sphereWorld.TryFindDrySpawnPoint(drySpawnSearchAttempts, out Vector3 freshGround))
+                {
+                    Debug.LogWarning("[PlayerSpawner] Stored world spawn resolved to open space — " +
+                                     "recomputed a fresh surface spawn and healed the save.");
+                    dest = freshGround;
+                    session.RecordWorldSpawn(dest, VoxelEngine.Cosmos.GravityProvider.ActiveBody);
+                    session.SaveSpawnSidecar();
+                }
             }
             else
             {
                 dest = new Vector3(0, 250, 0);
             }
             StartCoroutine(RespawnRoutine(dest));
+        }
+
+        /// <summary>
+        /// True when a scene position is far above EVERY celestial body's surface
+        /// (more than 800 m of altitude everywhere) — i.e. genuinely in open space.
+        /// </summary>
+        private static bool IsOpenSpacePosition(Vector3 scenePos)
+        {
+            var registry = VoxelEngine.Cosmos.CosmicRegistry.Instance;
+            if (registry == null || registry.SceneBodies == null) return false;
+            foreach (var kv in registry.SceneBodies)
+            {
+                var body = kv.Value;
+                if (body == null) continue;
+                float altitude = Vector3.Distance(scenePos, body.transform.position) - body.SurfaceRadius;
+                if (altitude < 800f) return false;
+            }
+            return true;
         }
 
         public void RespawnAt(Vector3 destination)

@@ -166,10 +166,14 @@ namespace VoxelEngine.Cosmos
                 attempts++;
                 float distance = rng.NextFloat(spawnRingMeters.x, spawnRingMeters.y);
                 double3 dir = RandomUnit(ref rng);
-                Vector3 pos = origin.GetScenePos(viewerCosmic + dir * distance);
+                // Cosmic coordinates are KM — the ring distance is METRES (9.3.0 fix:
+                // metres were added as km, spawning every rock 900–6,000 km away where
+                // it was culled immediately — "no asteroids ever appear").
+                double3 spawnCosmicKm = viewerCosmic + dir * (distance / 1000d);
+                Vector3 pos = origin.GetScenePos(spawnCosmicKm);
 
                 if (HasRockNear(pos, minSeparationMeters)) continue;
-                if (IsInsidePlanet(origin, registry, viewerCosmic + dir * distance)) continue;
+                if (IsInsidePlanet(origin, registry, spawnCosmicKm)) continue;
 
                 MaterialId material = orePool.Length > 0
                     ? orePool[rng.NextInt(0, orePool.Length)]

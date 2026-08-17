@@ -25,6 +25,9 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
         _Smoothness  ("Smoothness",       Range(0, 1))   = 0.15
         _Metallic    ("Metallic",         Range(0, 1))   = 0.0
         _SpecularVar ("Specular Variation", Range(0, 1)) = 0.3
+        // Single-surface handshake (9.3.0): 1 on the GPU LOD-skin material clone.
+        _BubbleCutout  ("Bubble Cutout",   Float) = 0
+        _LodRadialBias ("LOD Radial Bias", Float) = 0
     }
 
     SubShader
@@ -84,6 +87,8 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
                 float  _Smoothness;
                 float  _Metallic;
                 float  _SpecularVar;
+                float  _BubbleCutout;
+                float  _LodRadialBias;
             CBUFFER_END
 
             // Published by SphereWorld. Body-local coordinates keep terrain detail,
@@ -91,8 +96,7 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
             float4 _VoxelTerrainBodyCenter;
             float _VoxelTerrainIsPlanet;
 
-            // Single-surface handshake (9.1.0) — see VoxelTerrainURP for details.
-            float  _BubbleCutout;
+            // Single-surface handshake — see VoxelTerrainURP for details.
             float4 _VoxelBubbleCenterWS;
             float  _VoxelBubbleCutoutRadius;
 
@@ -159,6 +163,13 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
                 UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(OUT);
 
                 VertexPositionInputs vp = GetVertexPositionInputs(IN.positionOS.xyz);
+                if (_LodRadialBias > 0.0001)
+                {
+                    float3 biasedWS = vp.positionWS
+                        - normalize(vp.positionWS - _VoxelTerrainBodyCenter.xyz) * _LodRadialBias;
+                    vp.positionWS = biasedWS;
+                    vp.positionCS = TransformWorldToHClip(biasedWS);
+                }
                 VertexNormalInputs   vn = GetVertexNormalInputs(IN.normalOS);
 
                 OUT.positionCS = vp.positionCS;
@@ -255,8 +266,11 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
                 float  _Smoothness;
                 float  _Metallic;
                 float  _SpecularVar;
+                float  _BubbleCutout;
+                float  _LodRadialBias;
             CBUFFER_END
 
+            float4 _VoxelTerrainBodyCenter;
             float3 _LightDirection;
 
             struct A { float4 positionOS:POSITION; float3 normalOS:NORMAL; UNITY_VERTEX_INPUT_INSTANCE_ID };
@@ -268,6 +282,8 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
                 UNITY_SETUP_INSTANCE_ID(IN);
                 UNITY_TRANSFER_INSTANCE_ID(IN, OUT);
                 float3 posWS = TransformObjectToWorld(IN.positionOS.xyz);
+                if (_LodRadialBias > 0.0001)
+                    posWS -= normalize(posWS - _VoxelTerrainBodyCenter.xyz) * _LodRadialBias;
                 float3 nrmWS = TransformObjectToWorldNormal(IN.normalOS);
                 float4 clip = TransformWorldToHClip(ApplyShadowBias(posWS, nrmWS, _LightDirection));
                 #if UNITY_REVERSED_Z
@@ -293,9 +309,33 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
             #pragma fragment frag
             #pragma multi_compile_instancing
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+
+            CBUFFER_START(UnityPerMaterial)
+                float4 _BaseColor;
+                float  _DetailScale;
+                float  _DetailStrength;
+                float  _SlopeDarken;
+                float  _NoiseFreq;
+                float  _Smoothness;
+                float  _Metallic;
+                float  _SpecularVar;
+                float  _BubbleCutout;
+                float  _LodRadialBias;
+            CBUFFER_END
+
+            float4 _VoxelTerrainBodyCenter;
+
             struct A { float4 positionOS:POSITION; UNITY_VERTEX_INPUT_INSTANCE_ID };
             struct V { float4 positionCS:SV_POSITION; UNITY_VERTEX_INPUT_INSTANCE_ID };
-            V vert(A IN) { V OUT; UNITY_SETUP_INSTANCE_ID(IN); UNITY_TRANSFER_INSTANCE_ID(IN,OUT); OUT.positionCS = TransformObjectToHClip(IN.positionOS.xyz); return OUT; }
+            V vert(A IN)
+            {
+                V OUT; UNITY_SETUP_INSTANCE_ID(IN); UNITY_TRANSFER_INSTANCE_ID(IN,OUT);
+                float3 posWS = TransformObjectToWorld(IN.positionOS.xyz);
+                if (_LodRadialBias > 0.0001)
+                    posWS -= normalize(posWS - _VoxelTerrainBodyCenter.xyz) * _LodRadialBias;
+                OUT.positionCS = TransformWorldToHClip(posWS);
+                return OUT;
+            }
             half4 frag(V IN) : SV_Target { return 0; }
             ENDHLSL
         }

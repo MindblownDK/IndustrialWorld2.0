@@ -90,6 +90,13 @@ namespace VoxelEngine.GpuVoxel
         public float  splitFactor;   // split while viewerDist < splitFactor × arc
         public int    maxLeaves;     // hard safety cap
 
+        /// <summary>
+        /// Node ids that were split last pass — they only merge back once the viewer
+        /// retreats 15% beyond the split distance (hysteresis kills the visible
+        /// split/merge flashing at threshold distances).
+        /// </summary>
+        [ReadOnly] public NativeParallelHashSet<QuadNodeId> splitSet;
+
         public NativeList<QuadNodeDesc> results;
 
         private struct StackEntry { public QuadNodeId id; }
@@ -108,7 +115,10 @@ namespace VoxelEngine.GpuVoxel
 
                 QuadNodeDesc desc = BuildDesc(e.id);
 
-                bool split = e.id.depth < maxDepth && desc.distance < splitFactor * desc.arc;
+                float factor = splitSet.IsCreated && splitSet.Contains(e.id)
+                    ? splitFactor * 1.15f     // was split — hold until clearly out of range
+                    : splitFactor;
+                bool split = e.id.depth < maxDepth && desc.distance < factor * desc.arc;
                 if (split)
                 {
                     stack.Add(new StackEntry { id = e.id.Child(0, 0) });
@@ -151,29 +161,18 @@ namespace VoxelEngine.GpuVoxel
             }
 
             float arc = (math.PI * 0.5f) * radiusWorld / n;   // footprint edge (m)
-            float cellArc = arc / GpuVoxelConstants.NODE_CELLS;
 
-            // Radial band: sampled min/max padded against peaks between probes.
-            float pad = 8f + 0.5f * (maxS - minS) + 2f * cellArc;
-            pad = math.min(pad, 500f);
-
-            // ── SHARED RADIAL LATTICE (9.2.0 gap fix) ─────────────────────────
-            // Neighbouring nodes at the same depth previously used free-floating
-            // radial bands, so their ghost-cell corner radii did not align — the
-            // watertight stitching broke and cracks/gaps opened along node borders
-            // wherever relief differed. The band is now quantised onto a per-depth
-            // lattice: dr is a power-of-two multiple of the cell arc (identical for
-            // every same-depth node) and rLo snaps to a multiple of dr, so shared
-            // boundary corners sample the field at IDENTICAL positions on both
-            // sides — bit-identical vertices, no cracks. dr doubles only over
-            // extreme relief (rare; skirts cover those transitions).
-            float span = (maxS - minS) + 2f * pad;
-            float dr = cellArc;
-            while (span > 63.5f * dr) dr *= 2f;
-            float rLo = math.floor((minS - pad) / dr) * dr;
-            float coreFloor = radiusWorld * 0.4f;
-            if (rLo < coreFloor) rLo = math.floor(coreFloor / dr) * dr;
-            float rHi = rLo + GpuVoxelConstants.NODE_CELLS * dr;
+            // ── GLOBAL ANALYTIC BAND (9.3.0 gap fix, final form) ────────────────
+            // Every node at EVERY depth shares one radial band derived from the
+            // field's analytic elevation bounds. Consequences, all deliberate:
+            //   • the surface can NEVER leave the band — sampled 9-point bands could
+            //     miss peaks/valleys between probes and clip the terrain (the gaps);
+            //   • one shared lattice planet-wide — corner radii align exactly across
+            //     every node border at every depth: watertight by construction;
+            //   • fine radial resolution (~2–4 m) at all LODs — coarse nodes get
+            //     wide, flat cells, which Dual Contouring handles natively.
+            float rLo = radiusWorld + baseHeight + PlanetField.MinElevation(radiusWorld) - 8f;
+            float rHi = radiusWorld + baseHeight + PlanetField.MaxElevation(mountainScale) + 8f;
 
             // Viewer distance to the tile's surface shell (footprint-compensated).
             float viewerR = math.length(viewerLocal);

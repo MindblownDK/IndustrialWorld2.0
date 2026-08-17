@@ -684,8 +684,16 @@ namespace VoxelEngine.Cosmos
         /// <summary>Propagate position/velocity from the orbital elements at time t (sim seconds).</summary>
         public void UpdateFromOrbit(double t)
         {
-            positionKmD = OrbitMath.PositionKm(orbit, t);
-            velocityKmS = OrbitMath.VelocityKmS(orbit, t);
+            double3 newPos = OrbitMath.PositionKm(orbit, t);
+            double3 newVel = OrbitMath.VelocityKmS(orbit, t);
+
+            // NaN guard (9.3.0): corrupt elements (e ≥ 1, degenerate μ/a) must never
+            // poison the body's position — keep the last valid state instead.
+            bool posOk = !(double.IsNaN(newPos.x) || double.IsNaN(newPos.y) || double.IsNaN(newPos.z));
+            bool velOk = !(double.IsNaN(newVel.x) || double.IsNaN(newVel.y) || double.IsNaN(newVel.z));
+            if (posOk) positionKmD = newPos;
+            if (velOk) velocityKmS = newVel;
+
             positionKm = (Vector3)(float3)positionKmD;
             orbitRadiusKm = (float)orbit.semiMajorAxisKm;
             orbitAngle = (float)OrbitMath.MeanAnomalyAt(orbit, t);

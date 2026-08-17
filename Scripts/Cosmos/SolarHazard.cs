@@ -68,10 +68,21 @@ namespace VoxelEngine.Cosmos
             mf.sharedMesh = CreateSunMesh();
 
             _sunRenderer = _sunGO.AddComponent<MeshRenderer>();
-            Shader shader = Shader.Find("Universal Render Pipeline/Unlit")
+            // 9.3.0: the sun is a real STAR SURFACE — animated procedural plasma
+            // (granulation, starspots, limb darkening), not a flat glow ball.
+            Shader shader = Shader.Find("VoxelEngine/StarSurfaceURP")
+                         ?? Shader.Find("Universal Render Pipeline/Unlit")
                          ?? Shader.Find("Universal Render Pipeline/Lit")
                          ?? Shader.Find("Standard");
             _sunMaterial = new Material(shader) { name = "Mat_SunVisual" };
+            if (_sunMaterial.HasProperty("_StarColor"))
+            {
+                _sunMaterial.SetColor("_StarColor", sunColor);
+                Color hot = Color.Lerp(sunColor, Color.white, 0.75f);
+                _sunMaterial.SetColor("_HotColor", hot);
+                Color spot = Color.Lerp(sunColor, Color.black, 0.65f);
+                _sunMaterial.SetColor("_SpotColor", spot);
+            }
             if (_sunMaterial.HasProperty("_BaseColor")) _sunMaterial.SetColor("_BaseColor", sunColor);
             if (_sunMaterial.HasProperty("_Color")) _sunMaterial.SetColor("_Color", sunColor);
             if (_sunMaterial.HasProperty("_EmissionColor"))

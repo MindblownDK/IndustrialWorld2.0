@@ -120,6 +120,8 @@ namespace VoxelEngine.GpuVoxel
         private float _desiredTimer;
         private int _desiredStamp;
         private bool _hasDesiredSet;
+        private readonly HashSet<QuadNodeId> _splitIds = new();
+        private NativeParallelHashSet<QuadNodeId> _splitSetNative;
 
         private CelestialBody _activeBody;
         private int _maxDepth = 6;
@@ -179,6 +181,7 @@ namespace VoxelEngine.GpuVoxel
             while (_goPool.Count > 0) Destroy(_goPool.Pop());
 
             if (_desired.IsCreated) _desired.Dispose();
+            if (_splitSetNative.IsCreated) _splitSetNative.Dispose();
             if (_materialColors.IsCreated) _materialColors.Dispose();
             if (_vertexAttributes.IsCreated) _vertexAttributes.Dispose();
             _climateLut?.Release();
@@ -281,6 +284,78 @@ namespace VoxelEngine.GpuVoxel
             PollSlots();
             UpdateVisibilityAndEviction();
             UpdateColliders();
+            DepenetrationGuard();
+        }
+
+        // ── Depenetration guard (9.3.0) ─────────────────────────────────────
+        // Extreme approach speeds can tunnel through baked mesh colliders (discrete
+        // physics). If the viewer crosses from OUTSIDE the analytic surface to well
+        // INSIDE it at high radial speed, snap it back onto the surface and kill the
+        // velocity. Cave/tunnel players never trigger this: they are already inside
+        // slowly, and the outside→inside transition at ≥60 m/s only happens when
+        // physics genuinely missed the ground.
+        private float _guardTimer;
+        private float _guardLastDepth = -1000f;
+        private float _guardLastTime = -1f;
+
+        private void DepenetrationGuard()
+        {
+            _guardTimer += Time.deltaTime;
+            if (_guardTimer < 0.2f) return;
+            float dt = Mathf.Max(0.05f, Time.time - (_guardLastTime < 0f ? Time.time - 0.2f : _guardLastTime));
+            _guardTimer = 0f;
+
+            var prm = body.genParams;
+            Vector3 local = body.transform.InverseTransformPoint(viewer.position);
+            float r = local.magnitude;
+            if (r < 1f || r > prm.radiusWorld * 2f)
+            {
+                _guardLastDepth = -1000f;
+                _guardLastTime = Time.time;
+                return;
+            }
+
+            Unity.Mathematics.float3 dir = Unity.Mathematics.math.normalizesafe(
+                (Unity.Mathematics.float3)local, new Unity.Mathematics.float3(0f, 1f, 0f));
+            float surf = PlanetField.SurfaceRadius(prm.seed, dir, prm.radiusWorld, prm.baseHeight,
+                                                   prm.seaRadius, prm.continentScaleDir, prm.mountainScale);
+            float depth = surf - r;                    // >0 = below the analytic surface
+            bool wasOutside = _guardLastDepth < -2f;
+            float sinkSpeed = (depth - _guardLastDepth) / dt;   // m/s downward through the crust
+
+            if (depth > 3f && wasOutside && sinkSpeed > 60f)
+            {
+                Vector3 up = (viewer.position - body.transform.position).normalized;
+                Vector3 target = body.transform.position + up * (surf + 4f);
+                MoveViewerRootTo(target);
+                Debug.LogWarning($"[GpuPlanetEngine] Depenetration guard: viewer tunnelled " +
+                                 $"{depth:0.0} m into '{body.DisplayName}' at ~{sinkSpeed:0} m/s — snapped to surface.");
+                depth = -4f;
+            }
+
+            _guardLastDepth = depth;
+            _guardLastTime = Time.time;
+        }
+
+        private void MoveViewerRootTo(Vector3 target)
+        {
+            var rb = viewer.GetComponentInParent<Rigidbody>();
+            if (rb != null)
+            {
+                rb.position = target;
+                rb.linearVelocity = Vector3.zero;
+                return;
+            }
+            var cc = viewer.GetComponentInParent<CharacterController>();
+            if (cc != null)
+            {
+                bool wasEnabled = cc.enabled;
+                cc.enabled = false;
+                cc.transform.position = target;
+                cc.enabled = wasEnabled;
+                return;
+            }
+            viewer.position = target;
         }
 
         private bool ResolveContext()
@@ -401,6 +476,14 @@ namespace VoxelEngine.GpuVoxel
 
             var prm = body.genParams;
             float3 viewerLocal = body.transform.InverseTransformPoint(viewer.position);
+
+            // Hysteresis input: node ids that were split last pass hold their split
+            // until the viewer clearly leaves range (kills LOD flip-flop flashing).
+            if (_splitSetNative.IsCreated) _splitSetNative.Dispose();
+            _splitSetNative = new NativeParallelHashSet<QuadNodeId>(
+                math.max(64, _splitIds.Count + 16), Allocator.Persistent);
+            foreach (var id in _splitIds) _splitSetNative.Add(id);
+
             var job = new BuildDesiredLeavesJob
             {
                 seed = prm.seed,
@@ -413,6 +496,7 @@ namespace VoxelEngine.GpuVoxel
                 maxDepth = _maxDepth,
                 splitFactor = splitFactor,
                 maxLeaves = 6144,
+                splitSet = _splitSetNative,
                 results = _desired
             };
             _desiredHandle = job.Schedule();
@@ -423,9 +507,19 @@ namespace VoxelEngine.GpuVoxel
         {
             _hasDesiredSet = true;
             _desiredStamp++;
+            _splitIds.Clear();
             for (int i = 0; i < _desired.Length; i++)
             {
                 QuadNodeDesc desc = _desired[i];
+
+                // Every ancestor of a desired leaf is (by definition) split.
+                QuadNodeId cur = desc.id;
+                while (cur.depth > 0)
+                {
+                    cur = cur.Parent;
+                    if (!_splitIds.Add(cur)) break;   // ancestors above are already added
+                }
+
                 if (_nodes.TryGetValue(desc.id, out NodeRec rec))
                 {
                     rec.desiredStamp = _desiredStamp;
@@ -634,6 +728,9 @@ namespace VoxelEngine.GpuVoxel
                         name = terrainMaterial.name + " (GpuLodSkin)"
                     };
                     _lodSkinMaterial.SetFloat("_BubbleCutout", 1f);
+                    // Sink the whole LOD skin slightly toward the core so the bubble's
+                    // surface always renders on top — no coincident-surface z-fighting.
+                    _lodSkinMaterial.SetFloat("_LodRadialBias", 0.45f);
                 }
                 return _lodSkinMaterial != null ? _lodSkinMaterial : terrainMaterial;
             }

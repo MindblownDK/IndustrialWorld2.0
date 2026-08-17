@@ -1,9 +1,53 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.2.0-dev`
+**Current Version:** `9.3.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.3.0-dev] Root-Cause Round — SRP-Batcher Cutout, Global Band, Depenetration Guard, NaN-Proof Orbits, Healed Respawn, Real Asteroid Ranges & a Burning Star Surface
+
+**Type:** MINOR — deep root-cause fixes for every 9.2 field report + the procedural star surface. Save-compatible.
+
+#### ⛏️ 1. Mining wall & ground flicker — the cutout NEVER ran (SRP Batcher)
+The real culprit behind BOTH "still can only mine 0.5 m" and "terrain disappears when you look at the ground": `_BubbleCutout` was declared OUTSIDE the `UnityPerMaterial` CBUFFER. With URP's SRP Batcher, such uniforms are treated as GLOBALS — `material.SetFloat` on the LOD-skin clone silently did nothing, so the skin was never clipped (phantom ground behind mined holes) and sat EXACTLY on the bubble surface (coincident z-fighting = the view-dependent shimmer/vanish).
+- `_BubbleCutout` + new `_LodRadialBias` now live in Properties AND in every pass's `UnityPerMaterial` CBUFFER of `VoxelTerrainURP` and `VoxelTerrainEnhanced` (forward, shadow, depth — identical layouts, SRP-Batcher compatible).
+- **LOD radial deflation:** the skin clone sinks 0.45 m toward the core (vertex stage, all passes) — the bubble surface always renders on top; no more coincident z-fighting anywhere in the overlap band.
+- Render cutout radius now uses the full meshed-bubble radius (−8 m) instead of the collider window.
+- **Local guarantee:** if the 27 chunks around the stream centre are covered, the handshake gets a minimum 64 m ball — one distant straggler chunk can never re-arm the skin's colliders under your feet again. Handshake state is now printed in the 3 s SphereWorld diagnostics.
+
+#### 🧩 2. Terrain gaps + LOD flashing — global analytic band & split hysteresis
+- The 9-point sampled radial bands could miss peaks/valleys between probes at coarse depths → the band CLIPPED the terrain (the gaps), and the "correct ↔ gapped" flashing was the quadtree flip-flopping between the parent (full band, correct) and children (clipped). Bands are now derived from the field's ANALYTIC elevation bounds — one shared radial lattice for the entire planet at every depth: the surface can never leave the band, and every node border matches bit-identically. Watertight by construction, at last.
+- Split/merge hysteresis (15%) via a split-set fed back into the Burst descent job — no more threshold flip-flop flashing.
+
+#### 🛬 3. 40 m inside the planet at extreme speed — depenetration guard
+Discrete physics tunnels through ANY mesh collider at extreme velocity. The engine now watches the viewer: crossing from outside the analytic surface to >3 m inside at ≥60 m/s snaps the player/ship back onto the surface and zeroes velocity (cave and mined-shaft players never trigger it — they're inside slowly).
+
+#### 🪐 4. Other planets missing / NaN — orbits are NaN-proof and self-reporting
+`transform.localPosition is {NaN}` on other bodies meant corrupt orbital data was poisoning their positions (also why proxies pointed at nothing). Kepler propagation now clamps eccentricity to <1 in the solver AND the true-anomaly √(1−e); `UpdateFromOrbit` keeps the last valid state on NaN; `SpaceOrigin.PlaceBodies` refuses NaN assignments and reports the offending body ONCE with its full orbital elements — planets stay where they were and the log names the bad data.
+
+#### 🛌 5. Respawn-in-space, final word
+Even body-anchored spawns couldn't help saves written before 9.2. A world-spawn respawn that resolves to open space (>800 m above every body) is now REJECTED: a fresh dry surface point is computed on the active world and written back — the save heals itself. Orbital bed/cryobed spawns remain untouched by design.
+
+#### ☄️ 6. Asteroids — the km/m unit bug
+Spawn ring distances (metres) were added to COSMIC coordinates (kilometres): every rock spawned 900–6,000 KM away and was instantly culled — asteroids "never existed". Ring distances are now correctly converted (÷1000). Combined with 9.2's open-space gating you'll see rocks in high orbit and deep space.
+
+#### ☀️ 7. The sun is a STAR now (feature)
+New `VoxelEngine/StarSurfaceURP`: fully procedural animated plasma surface — domain-warped granulation cells, drifting dark starspots, limb darkening and a hot fresnel rim, tinted by the authored glow colour. `SolarHazard`'s real sun mesh uses it automatically (graceful fallback to Unlit if the shader is missing).
+
+#### ✅ Static delivery checks
+- All touched sources parse clean (tree-sitter C#); both terrain shaders keep identical per-pass CBUFFER layouts; version synchronized to 9.3.0-dev.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile. Saves keep working.
+2. Mine deep + tunnel: no wall, no phantom ground, and NO shimmer when looking at the ground.
+3. Watch the console 3 s diagnostics: `handshake: meshedR=…` should sit around 150–250 m while standing on terrain. If it reads 0, send me that log line.
+4. Fly low and far: no gaps, no correct↔gapped flashing.
+5. Ram the planet at max speed: you must end ON the surface (the guard logs a warning if it had to catch you).
+6. Check the Console for `[SpaceOrigin] Body '…' produced a NaN…` — if it appears, send me the line (it names the corrupt orbit); the planets will render regardless.
+7. Fly toward another planet's proxy dot — it must grow into the real planet; gravity/atmosphere engage.
+8. Die away from base with no bed: respawn must land on the planet surface (watch for the heal log).
+9. High orbit: minable rocks within ~6 km; approach the sun: a burning animated star surface with spots, not a light ball.
 
 ### [9.2.0-dev] Field Report Fixes — Deep Mining, Solid Approaches, Watertight Lattice, True-Direction Planets, Anchored Respawn & Open-Space Asteroids
 

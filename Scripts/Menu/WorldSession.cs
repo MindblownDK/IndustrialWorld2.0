@@ -60,11 +60,32 @@ namespace VoxelEngine.Menu
         public string  worldSpawnBodyName = "";
         public Vector3 worldSpawnLocalPos = Vector3.zero;
 
-        /// <summary>Record the world spawn as scene position + body anchor in one call.</summary>
+        /// <summary>Record the world spawn as scene position + body anchor in one call.
+        /// Falls back to the nearest scene body when no active body is supplied yet.</summary>
         public void RecordWorldSpawn(Vector3 scenePos, VoxelEngine.Cosmos.CelestialBody body)
         {
             worldSpawnPoint = scenePos;
             worldSpawnInitialized = true;
+
+            if (body == null)
+            {
+                // First spawn can run before the gravity frame is assigned — anchor to
+                // the nearest body whose surface the point is actually near.
+                var registry = VoxelEngine.Cosmos.CosmicRegistry.Instance;
+                if (registry != null && registry.SceneBodies != null)
+                {
+                    float best = float.MaxValue;
+                    foreach (var kv in registry.SceneBodies)
+                    {
+                        var candidate = kv.Value;
+                        if (candidate == null || candidate.settings == null) continue;
+                        float altitude = Vector3.Distance(scenePos, candidate.transform.position)
+                                         - candidate.SurfaceRadius;
+                        if (altitude < best && altitude < 2000f) { best = altitude; body = candidate; }
+                    }
+                }
+            }
+
             if (body != null && body.settings != null)
             {
                 worldSpawnBodyName = body.settings.bodyName;

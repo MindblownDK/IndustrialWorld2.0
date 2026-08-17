@@ -87,7 +87,9 @@ namespace VoxelEngine.Cosmos
         public static double SolveKepler(double meanAnomaly, double eccentricity)
         {
             double M = meanAnomaly;
-            double e = eccentricity;
+            // Elliptical solver only: authored/corrupt e ≥ 1 would diverge to NaN —
+            // clamp to a near-parabolic ellipse instead (9.3.0 hardening).
+            double e = math.clamp(eccentricity, 0.0, 0.95);
             if (e < 1e-9)
             {
                 // Circular orbit: E = M exactly.
@@ -117,7 +119,7 @@ namespace VoxelEngine.Cosmos
         public static double TrueAnomaly(double eccentricAnomaly, double eccentricity)
         {
             double E = eccentricAnomaly;
-            double e = eccentricity;
+            double e = math.clamp(eccentricity, 0.0, 0.95);   // e ≥ 1 → √(1−e) = NaN
             double nu = 2.0 * math.atan2(
                 math.sqrt(1.0 + e) * math.sin(E * 0.5),
                 math.sqrt(1.0 - e) * math.cos(E * 0.5));

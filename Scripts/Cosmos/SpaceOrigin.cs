@@ -469,8 +469,38 @@ namespace VoxelEngine.Cosmos
                 var body = kv.Value;
                 if (body == null) continue;
                 double3 absolute = reg.CosmicPositionOf(kv.Key);
-                body.transform.position = GetScenePos(absolute);
+
+                // NaN guard (9.3.0): a single body with corrupt orbital elements must
+                // never poison scene transforms ("localPosition assign attempt is not
+                // valid: NaN"). The body keeps its last valid position and the offender
+                // is reported ONCE so the source can be fixed at the data level.
+                if (double.IsNaN(absolute.x) || double.IsNaN(absolute.y) || double.IsNaN(absolute.z) ||
+                    double.IsInfinity(absolute.x) || double.IsInfinity(absolute.y) || double.IsInfinity(absolute.z))
+                {
+                    ReportInvalidBodyOnce(kv.Key);
+                    continue;
+                }
+
+                Vector3 scenePos = GetScenePos(absolute);
+                if (float.IsNaN(scenePos.x) || float.IsNaN(scenePos.y) || float.IsNaN(scenePos.z))
+                {
+                    ReportInvalidBodyOnce(kv.Key);
+                    continue;
+                }
+                body.transform.position = scenePos;
             }
+        }
+
+        private static readonly System.Collections.Generic.HashSet<string> _reportedInvalidBodies = new();
+        private static void ReportInvalidBodyOnce(VoxelEngine.Cosmos.BodyInstance inst)
+        {
+            string name = inst != null ? inst.DisplayName : "<null>";
+            if (!_reportedInvalidBodies.Add(name)) return;
+            var o = inst != null ? inst.orbit : default;
+            Debug.LogError($"[SpaceOrigin] Body '{name}' produced a NaN/Infinity cosmic position — " +
+                           $"orbit a={o.semiMajorAxisKm:0.###} km, e={o.eccentricity:0.###}, μ={o.gravitationalParamKm3S2:0.###}, " +
+                           $"i={o.inclinationRad:0.###}, M0={o.meanAnomaly0:0.###}, timeScale={o.timeScale:0.###}. " +
+                           "The body keeps its last valid scene position; fix the offending orbital data.");
         }
 
         /// <summary>Shift every registered scene root by a uniform delta (rebase / teleport).</summary>
