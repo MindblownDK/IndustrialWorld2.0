@@ -74,6 +74,7 @@ namespace VoxelEngine.GpuVoxel
             public Mesh mesh;
             public bool hasMesh;
             public bool colliderOn;
+            public bool hiddenByBubble;
             public int desiredStamp;
         }
 
@@ -124,6 +125,7 @@ namespace VoxelEngine.GpuVoxel
         private int _maxDepth = 6;
         private SphereCollider _safetyCore;
         private float _visibilityTimer;
+        private Material _lodSkinMaterial;   // terrainMaterial clone with _BubbleCutout = 1
 
         private static readonly int PropFace = Shader.PropertyToID("_Face");
         private static readonly int PropSeed = Shader.PropertyToID("_Seed");
@@ -181,6 +183,7 @@ namespace VoxelEngine.GpuVoxel
             if (_vertexAttributes.IsCreated) _vertexAttributes.Dispose();
             _climateLut?.Release();
             _climateLut = null;
+            if (_lodSkinMaterial != null) { Destroy(_lodSkinMaterial); _lodSkinMaterial = null; }
         }
 
         private BuildSlot CreateSlot()
@@ -614,6 +617,47 @@ namespace VoxelEngine.GpuVoxel
 
         // ─────────────────────────── node objects ───────────────────────────
 
+        /// <summary>
+        /// The LOD-skin material: a clone of the shared terrain material with
+        /// _BubbleCutout enabled, so this engine's fragments clip inside the gameplay
+        /// bubble's meshed ball (mined holes never show phantom terrain behind them).
+        /// Bubble chunks keep the original material (cutout off).
+        /// </summary>
+        private Material LodSkinMaterial
+        {
+            get
+            {
+                if (_lodSkinMaterial == null && terrainMaterial != null)
+                {
+                    _lodSkinMaterial = new Material(terrainMaterial)
+                    {
+                        name = terrainMaterial.name + " (GpuLodSkin)"
+                    };
+                    _lodSkinMaterial.SetFloat("_BubbleCutout", 1f);
+                }
+                return _lodSkinMaterial != null ? _lodSkinMaterial : terrainMaterial;
+            }
+        }
+
+        /// <summary>
+        /// Gameplay-bubble coverage on THIS body (single-surface handshake, 9.1.0).
+        /// </summary>
+        private bool TryGetBubble(out Vector3 centerLocal, out float meshedRadius, out float colliderRadius)
+        {
+            var sw = SphereWorld.Instance;
+            if (sw != null && sw.body == body &&
+                sw.TryGetMeshedBubble(out centerLocal, out meshedRadius, out colliderRadius))
+                return true;
+            centerLocal = default;
+            meshedRadius = 0f;
+            colliderRadius = 0f;
+            return false;
+        }
+
+        /// <summary>Conservative bounding-ball radius of a node's shell volume.</summary>
+        private static float NodeBallRadius(in QuadNodeDesc desc)
+            => 0.75f * desc.arc + 0.5f * (desc.rHi - desc.rLo);
+
         private void AcquireNodeObjects(NodeRec rec)
         {
             GameObject go;
@@ -641,7 +685,7 @@ namespace VoxelEngine.GpuVoxel
             rec.filter = go.GetComponent<MeshFilter>();
             rec.renderer = go.GetComponent<MeshRenderer>();
             rec.collider = go.GetComponent<MeshCollider>();
-            rec.renderer.sharedMaterial = terrainMaterial;
+            rec.renderer.sharedMaterial = LodSkinMaterial;
             rec.renderer.enabled = true;
             rec.collider.sharedMesh = null;
             rec.collider.enabled = false;
@@ -680,13 +724,36 @@ namespace VoxelEngine.GpuVoxel
             if (_visibilityTimer < 0.15f) return;
             _visibilityTimer = 0f;
 
-            // 1. A ready node hides once all four children fully cover it.
+            bool hasBubble = TryGetBubble(out Vector3 bubbleCenter, out float bubbleRadius, out _);
+
+            // 1. A ready node hides once all four children fully cover it. Nodes whose
+            //    entire shell sits inside the bubble's meshed ball also hide — the
+            //    gameplay bubble IS the surface there (hysteresis avoids flicker).
             foreach (var kv in _nodes)
             {
                 NodeRec rec = kv.Value;
                 if (rec.state != NodeState.Ready || rec.renderer == null) continue;
+
+                if (hasBubble)
+                {
+                    float ball = NodeBallRadius(rec.desc);
+                    float dist = Vector3.Distance((Vector3)rec.desc.Anchor, bubbleCenter);
+                    if (rec.hiddenByBubble)
+                    {
+                        if (dist + ball > bubbleRadius - 4f) rec.hiddenByBubble = false;
+                    }
+                    else if (dist + ball < bubbleRadius - 12f)
+                    {
+                        rec.hiddenByBubble = true;
+                    }
+                }
+                else
+                {
+                    rec.hiddenByBubble = false;
+                }
+
                 bool covered = ChildrenCover(kv.Key, 0);
-                rec.renderer.enabled = rec.hasMesh && !covered;
+                rec.renderer.enabled = rec.hasMesh && !covered && !rec.hiddenByBubble;
             }
 
             // 2. Evict stale nodes only when something else covers their footprint.
@@ -755,6 +822,7 @@ namespace VoxelEngine.GpuVoxel
             if (!generateColliders || viewer == null) return;
             int bakesLeft = maxColliderBakesPerFrame;
             Vector3 viewerLocal = body.transform.InverseTransformPoint(viewer.position);
+            bool hasBubble = TryGetBubble(out Vector3 bubbleCenter, out _, out float bubbleColliderRadius);
 
             foreach (var kv in _nodes)
             {
@@ -764,6 +832,17 @@ namespace VoxelEngine.GpuVoxel
                 bool fine = rec.desc.CellArc <= colliderMaxCellMeters;
                 float dist = Vector3.Distance(viewerLocal, (Vector3)rec.desc.Anchor);
                 bool wantCollider = fine && dist < colliderRange + rec.desc.arc;
+
+                // Single-surface handshake: wherever the bubble provides REAL mesh
+                // colliders, the LOD skin must not collide — otherwise its surface
+                // sheet would wall off every mined tunnel. The bubble always
+                // surrounds the player, so physics never loses its floor.
+                if (hasBubble && wantCollider)
+                {
+                    float ball = NodeBallRadius(rec.desc);
+                    float bubbleDist = Vector3.Distance((Vector3)rec.desc.Anchor, bubbleCenter);
+                    if (bubbleDist - ball < bubbleColliderRadius) wantCollider = false;
+                }
 
                 if (wantCollider && !rec.colliderOn)
                 {

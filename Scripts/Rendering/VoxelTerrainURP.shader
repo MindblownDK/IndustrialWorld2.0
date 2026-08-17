@@ -78,6 +78,24 @@ Shader "VoxelEngine/VoxelTerrainURP"
             float4 _VoxelTerrainBodyCenter;
             float _VoxelTerrainIsPlanet;
 
+            // ── Single-surface handshake (9.1.0) ──────────────────────────
+            // The GPU quadtree LOD skin sets _BubbleCutout = 1 on its material clone.
+            // Inside the gameplay bubble's meshed+collider ball (globals published by
+            // SphereWorld) its fragments are clipped, so mined holes and tunnels show
+            // the REAL edited voxels — never a phantom LOD surface behind them.
+            float  _BubbleCutout;              // per-material: 1 = LOD skin, 0 = bubble chunks
+            float4 _VoxelBubbleCenterWS;       // global
+            float  _VoxelBubbleCutoutRadius;   // global (0 = disabled)
+
+            void ApplyBubbleCutout(float3 positionWS)
+            {
+                if (_BubbleCutout > 0.5)
+                {
+                    float3 d = positionWS - _VoxelBubbleCenterWS.xyz;
+                    clip(dot(d, d) - _VoxelBubbleCutoutRadius * _VoxelBubbleCutoutRadius);
+                }
+            }
+
             float3 TerrainMappingPosition(float3 worldPos)
             {
                 return lerp(worldPos, worldPos - _VoxelTerrainBodyCenter.xyz, saturate(_VoxelTerrainIsPlanet));
@@ -119,6 +137,7 @@ Shader "VoxelEngine/VoxelTerrainURP"
             half4 frag(Varyings IN) : SV_Target
             {
                 UNITY_SETUP_INSTANCE_ID(IN);
+                ApplyBubbleCutout(IN.positionWS);
 
                 float3 baseTint = _BaseColor.rgb * IN.color.rgb;
                 float3 tex = SampleTriplanar(TerrainMappingPosition(IN.positionWS), normalize(IN.normalWS), _BaseMap_ST.xy);

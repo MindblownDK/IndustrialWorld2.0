@@ -91,6 +91,20 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
             float4 _VoxelTerrainBodyCenter;
             float _VoxelTerrainIsPlanet;
 
+            // Single-surface handshake (9.1.0) — see VoxelTerrainURP for details.
+            float  _BubbleCutout;
+            float4 _VoxelBubbleCenterWS;
+            float  _VoxelBubbleCutoutRadius;
+
+            void ApplyBubbleCutout(float3 positionWS)
+            {
+                if (_BubbleCutout > 0.5)
+                {
+                    float3 d = positionWS - _VoxelBubbleCenterWS.xyz;
+                    clip(dot(d, d) - _VoxelBubbleCutoutRadius * _VoxelBubbleCutoutRadius);
+                }
+            }
+
             float3 TerrainCoordinate(float3 worldPos)
             {
                 return lerp(worldPos, worldPos - _VoxelTerrainBodyCenter.xyz, saturate(_VoxelTerrainIsPlanet));
@@ -158,6 +172,7 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
             half4 frag(Varyings IN) : SV_Target
             {
                 UNITY_SETUP_INSTANCE_ID(IN);
+                ApplyBubbleCutout(IN.positionWS);
                 float3 worldPos = IN.positionWS;
                 float3 worldNormal = normalize(IN.normalWS);
                 float3 terrainCoord = TerrainCoordinate(worldPos);

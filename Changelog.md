@@ -1,9 +1,36 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.0.1-dev`
+**Current Version:** `9.1.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.1.0-dev] Single-Surface Handshake — Bubble ⇄ GPU Surface Unification (Rework Phase 2)
+
+**Type:** MINOR — new save-compatible handshake system between the gameplay bubble and the GPU quadtree surface. No save-schema change.
+
+#### 🎯 Why Phase 2 changed shape
+The original Phase-2 plan ("move mining/persistence onto the GPU engine, 64³ bubble chunks") became unnecessary the moment 9.0.0 unified the density field: the bubble already generates EXACTLY the surface the GPU engine renders, and mining/persistence already work. What remained was the overlap zone around the player where BOTH systems rendered and collided:
+- a mined hole in the bubble could reveal the GPU LOD skin behind it — the tunnel looked filled with phantom terrain;
+- the GPU skin's mesh collider (a surface sheet) could wall off tunnel mouths;
+- two nearly-coincident surfaces shimmered where they overlapped.
+9.1.0 makes the two systems ONE surface, everywhere. (A 64³ bubble was evaluated and rejected: 8× the voxel memory/latency per chunk for zero visible gain — the GPU nodes are already 64³.)
+
+#### 🤝 The handshake
+- **SphereWorld publishes its real coverage** — a conservative "meshed bubble" ball (centre + radius where every chunk is generated AND meshed, rescanned every 0.35 s, ~2 k dictionary probes) plus the collider window, via `TryGetMeshedBubble(...)` and the shader globals `_VoxelBubbleCenterWS` / `_VoxelBubbleCutoutRadius`. The globals reset on body switch and teardown so a stale cutout can never punch a hole in terrain.
+- **The GPU LOD skin clips inside the bubble** — `GpuPlanetEngine` now renders through a clone of the terrain material with `_BubbleCutout = 1`; `VoxelTerrainURP` and `VoxelTerrainEnhanced` discard those fragments inside the published ball. Bubble chunks keep the original material untouched. Mined holes and tunnels now show the REAL edited voxels — never a ghost surface.
+- **LOD colliders yield to the bubble** — GPU node colliders switch off whenever the node's bounding ball touches the bubble's collider window (and re-bake when the player moves on). The bubble always surrounds the player, so physics never loses its floor; tunnels dig freely.
+- **Whole nodes fully swallowed by the bubble hide entirely** (with hysteresis), removing coincident-surface shimmer near the player.
+
+#### ✅ Static delivery checks
+- All touched sources parse clean (tree-sitter C#); cutout declared + applied in both terrain shaders; version synchronized to 9.1.0-dev.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile (existing 9.0.x saves keep working — MINOR).
+2. In Play Mode, mine straight down and sideways into a hillside: the tunnel must stay OPEN — no phantom floor/wall appearing behind mined voxels, and you can walk through freely.
+3. Look at the horizon while walking: no double-surface shimmer in the near field; terrain past the bubble edge unchanged.
+4. Fly up fast: the GPU surface should still be there when the bubble lags behind (cutout ball shrinks automatically), with no holes in the planet.
+5. Fly to another planet and back: no stale see-through hole where the old bubble was.
 
 ### [9.0.1-dev] GPU Engine Compile Recovery (CS0103 lod/oceanLod + FindObjectsByType Deprecation)
 

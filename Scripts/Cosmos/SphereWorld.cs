@@ -99,6 +99,17 @@ namespace VoxelEngine.Cosmos
         // ---- Runtime ----
         private readonly Dictionary<Vector3Int, Chunk> _chunks = new();
 
+        // ── Single-surface handshake (9.1.0) ─────────────────────────────
+        // The GPU quadtree surface (GpuPlanetEngine) must yield to the gameplay
+        // bubble wherever the bubble has REAL meshed chunks: its skin is clipped
+        // there (mined holes must never show phantom terrain behind them) and its
+        // LOD colliders switch off (tunnels must be diggable). SphereWorld is the
+        // source of truth for that coverage ball.
+        private Vector3 _streamCenterLocal;          // bubble centre (body-local metres)
+        private Vector3Int _streamChunkCenter;       // bubble centre (chunk coords)
+        private float _meshedBubbleRadius;           // conservative fully-meshed radius (m)
+        private float _bubbleScanTimer = 999f;
+
         // Chunk GameObjects are pooled. Queue entries therefore carry the rent epoch captured
         // at enqueue time; a stale entry cannot write to a Chunk that has already been recycled
         // for a different coordinate after fast movement or a teleport.
@@ -286,6 +297,12 @@ namespace VoxelEngine.Cosmos
             // Settle and flush everything currently streamed.
             ResetAllChunks();
 
+            // The old bubble is gone — stop clipping the GPU LOD skin until the new
+            // bubble has actually meshed (a stale cutout would punch a hole in terrain).
+            _meshedBubbleRadius = 0f;
+            _bubbleScanTimer = 999f;
+            Shader.SetGlobalFloat("_VoxelBubbleCutoutRadius", 0f);
+
             if (_storage != null)
             {
                 _storage.WaitForIdle();
@@ -328,6 +345,7 @@ namespace VoxelEngine.Cosmos
 
         private void OnDestroy()
         {
+            Shader.SetGlobalFloat("_VoxelBubbleCutoutRadius", 0f);
             VoxelEngine.Generation.OilReservoirDecorator.ForgetWorld(this);
             ChunkScatter.ForgetWorld(this);
             foreach (var p in _pendingGen) p.handle.Complete();
@@ -399,6 +417,7 @@ namespace VoxelEngine.Cosmos
             if (viewer == null || body == null) return;
             PublishTerrainShaderContext();
             UpdateStreaming();
+            UpdateMeshedBubble();
             QueueNearbyDetailMeshes();
             DispatchGenerationJobs();
             DispatchMeshingJobs();
@@ -461,6 +480,67 @@ namespace VoxelEngine.Cosmos
             Vector3 center = body.transform.position;
             Shader.SetGlobalVector("_VoxelTerrainBodyCenter", new Vector4(center.x, center.y, center.z, 1f));
             Shader.SetGlobalFloat("_VoxelTerrainIsPlanet", 1f);
+
+            // Single-surface handshake globals: the GPU LOD skin clips its fragments
+            // inside this ball (see VoxelTerrainURP/_Enhanced — _BubbleCutout path).
+            Vector3 bubbleWS = body.transform.TransformPoint(_streamCenterLocal);
+            Shader.SetGlobalVector("_VoxelBubbleCenterWS", new Vector4(bubbleWS.x, bubbleWS.y, bubbleWS.z, 1f));
+            Shader.SetGlobalFloat("_VoxelBubbleCutoutRadius", ColliderBubbleRadius);
+        }
+
+        /// <summary>
+        /// Radius (m) of the ball around the stream centre in which the bubble owns BOTH
+        /// rendering and physics: fully meshed AND within the mesh-collider window.
+        /// </summary>
+        public float ColliderBubbleRadius =>
+            Mathf.Max(0f, Mathf.Min(_meshedBubbleRadius,
+                colliderChunkRadius * VoxelConstants.CHUNK_SIZE * VoxelConstants.VOXEL_SIZE));
+
+        /// <summary>
+        /// The bubble's conservative coverage ball for the GPU surface handshake.
+        /// Returns false until the initial fill has meshed at least one chunk shell.
+        /// </summary>
+        public bool TryGetMeshedBubble(out Vector3 centerLocal, out float meshedRadius, out float colliderRadius)
+        {
+            centerLocal = _streamCenterLocal;
+            meshedRadius = _meshedBubbleRadius;
+            colliderRadius = ColliderBubbleRadius;
+            return _meshedBubbleRadius > VoxelConstants.CHUNK_SIZE * VoxelConstants.VOXEL_SIZE;
+        }
+
+        /// <summary>
+        /// Recompute the largest ball around the stream centre in which EVERY chunk is
+        /// generated and meshed (conservative: minus one chunk half-diagonal). Runs on a
+        /// short timer — ~2 k dictionary probes, negligible against streaming itself.
+        /// </summary>
+        private void UpdateMeshedBubble()
+        {
+            _bubbleScanTimer += Time.deltaTime;
+            if (_bubbleScanTimer < 0.35f) return;
+            _bubbleScanTimer = 0f;
+
+            int r = viewDistance;
+            int loadR2 = r * r;
+            float minUnmeshed = float.MaxValue;
+            for (int dz = -r; dz <= r; dz++)
+            for (int dy = -r; dy <= r; dy++)
+            for (int dx = -r; dx <= r; dx++)
+            {
+                int d2 = dx * dx + dy * dy + dz * dz;
+                if (d2 > loadR2) continue;
+                var c = new Vector3Int(_streamChunkCenter.x + dx, _streamChunkCenter.y + dy, _streamChunkCenter.z + dz);
+                bool covering = _chunks.TryGetValue(c, out var ch) && ch != null &&
+                                ch.isGenerated && ch.meshFilter != null && ch.meshFilter.sharedMesh != null;
+                if (!covering)
+                {
+                    float d = Mathf.Sqrt(d2);
+                    if (d < minUnmeshed) minUnmeshed = d;
+                }
+            }
+
+            float chunkM = VoxelConstants.CHUNK_SIZE * VoxelConstants.VOXEL_SIZE;
+            float radiusChunks = minUnmeshed == float.MaxValue ? (r + 0.5f) : (minUnmeshed - 0.87f);
+            _meshedBubbleRadius = Mathf.Clamp(radiusChunks * chunkM, 0f, (r + 0.5f) * chunkM);
         }
 
         // ---- Streaming (body-relative cartesian) ----
@@ -532,6 +612,11 @@ namespace VoxelEngine.Cosmos
             int r = viewDistance;
             int loadR2 = r * r;
             int evictR2 = (r + 3) * (r + 3); // hysteresis to avoid load/unload flicker
+
+            // Publish the bubble centre for the single-surface handshake scan.
+            _streamChunkCenter = center;
+            _streamCenterLocal = ((Vector3)center + new Vector3(0.5f, 0.5f, 0.5f))
+                                 * (VoxelConstants.CHUNK_SIZE * VoxelConstants.VOXEL_SIZE);
 
             // A planet needs a body-relative 3D stream, not a flat-world XZ column. The local
             // editable layer remains a ball around the player; the full sampled planet LOD owns
