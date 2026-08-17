@@ -1,9 +1,49 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `8.0.2-dev`
+**Current Version:** `9.0.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.0.0-dev] GPU-Driven Voxel Engine — Compute Density, Dual Contouring & Asynchronous Spherified Quadtree (Rework Phase 1)
+
+**Type:** MAJOR — complete planetary generation rework. New unified density field → all worlds regenerate differently. **Requires a fresh save.**
+
+#### 🚀 Why the rework
+The 7.x/8.x ladder (impostor + 5-level voxel LOD rings + gradient-corrected chunk columns) approximated one surface with several independent systems, and every approximation seam was a place for gaps, slabs and ghost layers to appear. 9.0.0 replaces all of it with ONE pipeline evaluating ONE continuous field.
+
+#### 🧠 The new engine (`Scripts/GpuVoxel/`)
+- **GPU density evaluation** — `Resources/PlanetFieldGpu.compute` evaluates the whole 3D density formula for a 64³-cell node (67³ corners) across thousands of GPU cores in milliseconds. Two kernels: `CSColumns` (per-column surface radius + climate + slope — the expensive stack runs once per column) and `CSField` (per-corner signed density + material). Results return via `AsyncGPUReadback` — the main thread never stalls.
+- **Dual Contouring over Marching Cubes** — `GpuDualContourJob` (Burst, worker threads) places ONE QEF-relaxed vertex per surface-crossing cell (Schmitz particle over the Hermite edge data): far fewer polygons, smooth hills AND sharp mountain ridges. Zero-copy upload via `Mesh.ApplyAndDisposeWritableMeshData`.
+- **Asynchronous Spherified Quadtree** — `SphereQuadtree.cs` divides each of the 6 cube faces into a quadtree of curved shell nodes whose radial band hugs the terrain. The desired-leaf computation is a Burst job on background threads (Unity Job System), fully isolated from the game loop. Approach the surface → nodes split into four higher-res children; parents stay visible until all four children are ready (no holes, top-down refinement).
+- **Watertight by construction** — every node meshes one ghost cell beyond its footprint and each quad has exactly one owner node, so equal-depth neighbours stitch bit-identically (no cracks, no overlap, no z-fighting). Depth transitions are masked by radial skirts. The field itself is `density = surfaceRadius(dir) − |p| − caves(p)` — a closed 2-manifold that CANNOT have gaps at any resolution.
+- **`GpuPlanetEngine`** — one orchestrator per body: dispatch budgets, readback slots, mesh application budgets, distance-prioritised coarse-first streaming, pooled node GameObjects, near-viewer mesh colliders (marked `PlanetSafetyCollider` so interaction rays skip them) and a safety core sphere so nothing ever falls through a streaming planet.
+
+#### 🌍 One field for everything (`PlanetField.cs` ⇄ `PlanetFieldGpu.compute`, kept in lockstep)
+- Brand-new gap-free terrain: domain-warped fBm continents with soft shorelines, continental-shelf→deep-basin ocean floors, mid-frequency hills, ridged-multifractal mountain chains masked to continental uplift zones, sealed-crust caves that never breach ocean floors.
+- `SphereDensity.EvaluateColumn` now sources its surface shape from `PlanetField` — the 1 m gameplay bubble, scatter, waterfalls, ocean cut-outs, safety colliders and sky proxies all agree with the GPU surface exactly. Cave carving is the same shared function on both sides.
+- Biomes still drive materials, climate and scatter; the GPU picks materials through a climate→biome LUT built from the same authored `BiomeData` (snow lines, polar ice, waterline beaches, slope rock included).
+
+#### 🌊 Water (Phase-1 scope)
+- **`GpuOceanEngine`** — quadtree ocean sphere: curved water patches at sea radius, skipped over dry-land tiles, refined near the viewer, sharing the chunk-water material (`VoxelEngine/VoxelWaterURP`) — so **boat wakes** (`NativeWaterWakeSystem`), Gerstner waves, foam and shore blending work on the open ocean exactly as in the bubble. UV2 is reserved per-vertex as the flow-map channel for the Phase-3 liquid-flow rework.
+
+#### 🗑️ Removed (legacy generation path — deleted, no fallback)
+- `PlanetVoxelLod.cs`, `PlanetLodImpostor.cs`, `PlanetOceanLodRenderer.cs`, `PlanetSurfaceLodURP.shader` and all references. `CosmosBootstrap` now spawns `GpuSurface` + `GpuOcean` per body; `QualityPresetApplier` budgets route to the new engines.
+
+#### 🔜 Rework phases
+- **Phase 2:** gameplay bubble (mining/persistence/colliders) moves onto the GPU engine with edit-delta persistence, 64³ chunks.
+- **Phase 3:** liquid FLOW simulation rework (rivers, springs, pumped water) on the new engine + flow-map ocean currents.
+
+#### ✅ Static delivery checks
+- All new/modified sources parse clean (tree-sitter C#); zero remaining references to the deleted LOD classes; version synchronized to 9.0.0-dev.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, let Unity import `Scripts/GpuVoxel/` (the compute shader lives in `Scripts/GpuVoxel/Resources/PlanetFieldGpu.compute` — the engine loads it by name, no wiring needed).
+2. **Fresh save required:** delete `<persistentDataPath>/VoxelWorlds/` (all worlds) — the new field regenerates every planet.
+3. Enter Play Mode: within ~1–2 s the six coarse face shells should appear, then refine top-down toward your position. Verify: no gaps/slabs at any distance, mountains have sharp ridgelines, oceans end at real coastlines (no water over land).
+4. Walk to a shoreline and sail/fly out: distant ocean should show waves + your boat's wake outside the 1 m bubble.
+5. Fly to orbit and to another planet: every body should show its real surface refining as you approach; no falling through planets (safety core + near colliders).
+6. Report FPS during streaming — budgets (`maxConcurrentBuilds`, `maxAppliesPerFrame`, `splitFactor`) are tunable on the `GpuSurface` object if we need a patch.
 
 ### [8.0.2-dev] Spherical Surface Restoration — Gradient-Corrected Chunk Columns (Flat-Layer Fix)
 

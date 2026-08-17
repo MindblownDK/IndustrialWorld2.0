@@ -1,6 +1,6 @@
 // Assets/Scripts/VoxelEngine/Cosmos/OilSiteSampler.cs
 //
-// Deterministic crude-oil site sampling for the LOD levels (PlanetVoxelLod).
+// Deterministic crude-oil site sampling for coarse LOD generation paths.
 //
 // The gameplay world (SphereWorld 1 m chunks) builds oil sites with
 // OilReservoirDecorator: a liquid puddle on the surface, a tapered solid-oil

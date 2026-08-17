@@ -6,7 +6,7 @@
 //
 // CRITICAL INIT ORDER: Unity calls Awake()/OnEnable() the moment you AddComponent on an ACTIVE
 // GameObject — BEFORE the caller can assign any public field. That caused NPEs in SphereWorld
-// (materialRegistry null) and PlanetLodImpostor (body null). We defeat this by creating the
+// (materialRegistry null) and the surface engines (body null). We defeat this by creating the
 // body hierarchy INACTIVE, wiring every field, then activating it last so Awake sees a fully
 // configured component graph.
 //
@@ -70,8 +70,8 @@ namespace VoxelEngine.Cosmos
         private GameObject _bodyGO;
         private CelestialBody _body;
         private SphereWorld _sphereWorld;
-        private PlanetLodImpostor _terrainLod;
-        private PlanetOceanLodRenderer _oceanLod;
+        private VoxelEngine.GpuVoxel.GpuPlanetEngine _terrainGpu;
+        private VoxelEngine.GpuVoxel.GpuOceanEngine _oceanGpu;
         private GpuGrassRenderer _grass;
         private WaterfallSystem _waterfalls;
         private SpaceOrigin _spaceOrigin;
@@ -120,7 +120,7 @@ namespace VoxelEngine.Cosmos
 
             // ── Home body (the planet the player starts on) ──
             // Build the body GameObject INACTIVE so we can configure components before their
-            // Awake/OnEnable fire (the fix for the SphereWorld / PlanetLodImpostor NPEs).
+            // Awake/OnEnable fire (the fix for the SphereWorld / surface-engine NPEs).
             _bodyGO = new GameObject("CelestialBody_" +
                 (planetTemplate.body != null ? planetTemplate.body.bodyName : "Planet"));
             _bodyGO.transform.SetParent(transform, false);
@@ -191,40 +191,29 @@ namespace VoxelEngine.Cosmos
                 placeViewerOnPlanetSurface = false;
             }
 
-            // ── Far LOD (space view), as a CHILD of the body ──
-            var lodGO = new GameObject("LOD");
-            lodGO.transform.SetParent(_bodyGO.transform, false);
-            lodGO.transform.localPosition = Vector3.zero;
-            var lod = lodGO.AddComponent<PlanetLodImpostor>();
-            _terrainLod = lod;
-            lod.body = body;
-            lod.viewer = viewer;
-            lod.biomeRegistry = biomeRegistry;
+            // ── GPU-driven planet surface (9.0.0) — spherified quadtree + compute
+            // density + Dual Contouring. Replaces the legacy impostor/voxel-LOD ladder:
+            // the whole planet is real geometry from the unified PlanetField. ──
+            var surfaceGO = new GameObject("GpuSurface");
+            surfaceGO.transform.SetParent(_bodyGO.transform, false);
+            surfaceGO.transform.localPosition = Vector3.zero;
+            var surface = surfaceGO.AddComponent<VoxelEngine.GpuVoxel.GpuPlanetEngine>();
+            _terrainGpu = surface;
+            surface.body = body;
+            surface.viewer = viewer;
+            surface.biomeRegistry = biomeRegistry;
+            surface.materialRegistry = materialRegistry;
+            surface.terrainMaterial = terrainMaterial;
+            surface.ApplyQualityBudget(GraphicsPreset.JobsPerFrame);
 
-            // ── REAL voxel surface LOD (Space-Engineers style) ──
-            // The whole planet is generated as actual voxel chunks at LOD resolutions
-            // (far/mid whole-planet + near ring); the sampled impostor above is only a
-            // brief bridge until this real surface is ready, then it steps aside.
-            var voxelLodGO = new GameObject("VoxelLod");
-            voxelLodGO.transform.SetParent(_bodyGO.transform, false);
-            var voxelLod = voxelLodGO.AddComponent<PlanetVoxelLod>();
-            voxelLod.body = body;
-            voxelLod.viewer = viewer;
-            voxelLod.biomeRegistry = biomeRegistry;
-            voxelLod.materialRegistry = materialRegistry;
-            voxelLod.terrainMaterial = terrainMaterial;
-            voxelLod.maxJobsPerFrame = GraphicsPreset.JobsPerFrame;
-            voxelLod.fullVoxelRadiusKm = fullVoxelRadiusKm;
-
-            // Ocean LOD is a separate mesh generated only over real ocean basins. It fills
-            // distant water without creating a wrapped water sphere in dry caves or on land.
-            var oceanLodGO = new GameObject("OceanLOD");
-            oceanLodGO.transform.SetParent(_bodyGO.transform, false);
-            var oceanLod = oceanLodGO.AddComponent<PlanetOceanLodRenderer>();
-            _oceanLod = oceanLod;
-            oceanLod.body = body;
-            oceanLod.viewer = viewer;
-            oceanLod.biomeRegistry = biomeRegistry;
+            // ── GPU quadtree ocean — real water sphere over ocean basins only, wake
+            // and flow-map ready (shares the chunk-water material). ──
+            var oceanGO = new GameObject("GpuOcean");
+            oceanGO.transform.SetParent(_bodyGO.transform, false);
+            var ocean = oceanGO.AddComponent<VoxelEngine.GpuVoxel.GpuOceanEngine>();
+            _oceanGpu = ocean;
+            ocean.body = body;
+            ocean.viewer = viewer;
 
             // ── Distant bodies + sparse vacuum starfield ────────────────
             var spaceGO = new GameObject("SpaceRenderer");
@@ -325,14 +314,10 @@ namespace VoxelEngine.Cosmos
             // ── Activate LAST: now every Awake/OnEnable sees a fully-wired component graph. ──
             _bodyGO.SetActive(true);
 
-            // ── Whole-planet surface (Space-Engineers style): the home body renders at the
-            // high-detail LOD budget — one continuous sampled planet, built progressively
-            // over the next frames so the spawn stays smooth. ──
-            if (_terrainLod != null)
-            {
-                _terrainLod.highDetail = true;
-                _terrainLod.highDetailVertexBudget = GraphicsPreset.ActiveBodyLodResolution;
-            }
+            // ── Whole-planet surface: the GPU quadtree engine streams the home body
+            // top-down (coarse shells first, fine detail around the player). ──
+            if (_terrainGpu != null)
+                _terrainGpu.ApplyQualityBudget(GraphicsPreset.JobsPerFrame);
 
             TryResolveViewerAndAnchor();
 
@@ -389,22 +374,20 @@ namespace VoxelEngine.Cosmos
         private void PropagateViewer()
         {
             if (_sphereWorld != null) _sphereWorld.viewer = viewer;
-            if (_terrainLod != null) _terrainLod.viewer = viewer;
-            if (_oceanLod != null) _oceanLod.viewer = viewer;
+            if (_terrainGpu != null) _terrainGpu.viewer = viewer;
+            if (_oceanGpu != null) _oceanGpu.viewer = viewer;
             if (_grass != null) _grass.viewer = viewer;
             if (_waterfalls != null) _waterfalls.viewer = viewer;
-            // Every other body's LOD must also track the real player (their distance
-            // ladder upgrades as you fly toward them). Late-resolved viewers would
-            // otherwise leave distant planets stuck at their cheap budget forever.
+            // Every other body's surface engine must also track the real player (their
+            // quadtree refines as you fly toward them). Late-resolved viewers would
+            // otherwise leave distant planets stuck at their coarse shells forever.
             var registry = CosmicRegistry.Instance;
             if (registry == null) return;
             foreach (var kv in registry.SceneBodies)
             {
                 if (kv.Value == null) continue;
-                var lod = kv.Value.GetComponentInChildren<PlanetLodImpostor>(true);
-                if (lod != null) lod.viewer = viewer;
-                var voxelLod = kv.Value.GetComponentInChildren<PlanetVoxelLod>(true);
-                if (voxelLod != null) voxelLod.viewer = viewer;
+                var engine = kv.Value.GetComponentInChildren<VoxelEngine.GpuVoxel.GpuPlanetEngine>(true);
+                if (engine != null) engine.viewer = viewer;
             }
         }
 
@@ -515,7 +498,7 @@ namespace VoxelEngine.Cosmos
         private const double maxFarClipMeters = 80000000d;
 
         /// <summary>Bodies within this distance (km) render their REAL voxel surface LOD
-        /// (PlanetVoxelLod) instead of the sky proxy. Kept in sync with
+        /// (GpuPlanetEngine) instead of the sky proxy. Kept in sync with
         /// SpaceBodyRenderer.TrueLodWindowMeters: 60,000 km covers the whole system, so
         /// EVERY planet renders its real voxel surface at all times.</summary>
         private const double trueLodViewKm = 60000d;
@@ -612,28 +595,17 @@ namespace VoxelEngine.Cosmos
             cb.SetRuntimeSeedOverride(perBodySeed);
             cb.ApplySettings();
 
-            var lodGO = new GameObject("LOD");
-            lodGO.transform.SetParent(go.transform, false);
-            var lod = lodGO.AddComponent<PlanetLodImpostor>();
-            lod.body = cb;
-            lod.viewer = viewer;
-            lod.biomeRegistry = biomeRegistry;
-            // The distance-based LOD ladder owns the vertex budget from here on:
-            // cheap far away, progressively denser as the player closes in.
-            lod.resolution = 642;
-
-            // REAL voxel surface LOD for this body too — every planet in the system
-            // generates its true voxel surface; the impostor steps aside when ready.
-            var voxelLodGO = new GameObject("VoxelLod");
-            voxelLodGO.transform.SetParent(go.transform, false);
-            var voxelLod = voxelLodGO.AddComponent<PlanetVoxelLod>();
-            voxelLod.body = cb;
-            voxelLod.viewer = viewer;
-            voxelLod.biomeRegistry = biomeRegistry;
-            voxelLod.materialRegistry = materialRegistry;
-            voxelLod.terrainMaterial = terrainMaterial;
-            voxelLod.maxJobsPerFrame = Mathf.Clamp(GraphicsPreset.JobsPerFrame * 2, 4, 16);
-            voxelLod.fullVoxelRadiusKm = fullVoxelRadiusKm;
+            // GPU-driven surface for this body too — every planet in the system
+            // streams its real quadtree surface, refining as the player approaches.
+            var surfaceGO = new GameObject("GpuSurface");
+            surfaceGO.transform.SetParent(go.transform, false);
+            var surface = surfaceGO.AddComponent<VoxelEngine.GpuVoxel.GpuPlanetEngine>();
+            surface.body = cb;
+            surface.viewer = viewer;
+            surface.biomeRegistry = biomeRegistry;
+            surface.materialRegistry = materialRegistry;
+            surface.terrainMaterial = terrainMaterial;
+            surface.ApplyQualityBudget(GraphicsPreset.JobsPerFrame);
 
             registry.SceneBodies[instance] = cb;
             _spaceOrigin.RegisterRoot(go.transform);
@@ -676,16 +648,6 @@ namespace VoxelEngine.Cosmos
             if (newBody == null)
             {
                 // ── Deep space: suspend voxel streaming + planet-side effects. ──
-                if (previousBody != null)
-                {
-                    // Downgrade the previous body's LOD back to the cheap proxy.
-                    var oldLod = previousBody.GetComponentInChildren<PlanetLodImpostor>(true);
-                    if (oldLod != null)
-                    {
-                        oldLod.highDetail = false;
-                        oldLod.resolution = Mathf.Min(GraphicsPreset.LodResolution, 642);
-                    }
-                }
                 _sphereWorld.SetBody(null);
                 SetAuxSystemsEnabled(false);
                 GravityProvider.ActiveBody = null;
@@ -694,18 +656,6 @@ namespace VoxelEngine.Cosmos
             else
             {
                 // ── Entering another body's frame: re-target the streamer. ──
-                // The entered body becomes the high-detail WHOLE-PLANET surface.
-                var newLod = newBody.GetComponentInChildren<PlanetLodImpostor>(true);
-                if (newLod != null)
-                {
-                    newLod.highDetail = true;
-                    newLod.highDetailVertexBudget = GraphicsPreset.ActiveBodyLodResolution;
-                }
-                if (previousBody != null)
-                {
-                    var prevLod = previousBody.GetComponentInChildren<PlanetLodImpostor>(true);
-                    if (prevLod != null) prevLod.highDetail = false;
-                }
                 _sphereWorld.SetBody(newBody);
                 MoveAuxSystemsUnder(newBody);
                 // Belt worlds are zero-g rock fields — no grass, waterfalls or oceans.
@@ -715,14 +665,9 @@ namespace VoxelEngine.Cosmos
                 SetAuxSystemsEnabled(!isBelt);
                 GravityProvider.ActiveBody = newBody;
                 if (_wind != null) _wind.ApplyBody(newBody.settings);
-                // Re-apply the coverage radius and rebuild the level ladder for the body
-                // we just entered (its FULL shell + rings must match the world setting).
-                var enteredVoxelLod = newBody.GetComponentInChildren<PlanetVoxelLod>(true);
-                if (enteredVoxelLod != null)
-                {
-                    enteredVoxelLod.fullVoxelRadiusKm = fullVoxelRadiusKm;
-                    enteredVoxelLod.RefreshCoverage();
-                }
+                // Make sure the entered body's surface engine tracks the real viewer.
+                var enteredSurface = newBody.GetComponentInChildren<VoxelEngine.GpuVoxel.GpuPlanetEngine>(true);
+                if (enteredSurface != null) enteredSurface.viewer = viewer;
                 Debug.Log($"[CosmosBootstrap] Entered '{newBody.DisplayName}' — streaming re-targeted.");
             }
 
@@ -736,7 +681,7 @@ namespace VoxelEngine.Cosmos
         {
             if (_grass != null) _grass.gameObject.SetActive(enabled);
             if (_waterfalls != null) _waterfalls.gameObject.SetActive(enabled);
-            if (_oceanLod != null) _oceanLod.gameObject.SetActive(enabled);
+            if (_oceanGpu != null) _oceanGpu.gameObject.SetActive(enabled);
         }
 
         private void MoveAuxSystemsUnder(CelestialBody targetBody)
@@ -744,11 +689,18 @@ namespace VoxelEngine.Cosmos
             if (targetBody == null) return;
             if (_grass != null) _grass.body = targetBody;
             if (_waterfalls != null) _waterfalls.body = targetBody;
-            if (_oceanLod != null) _oceanLod.body = targetBody;
+            if (_oceanGpu != null) _oceanGpu.body = targetBody;
 
             if (_grass != null) _grass.transform.SetParent(targetBody.transform, true);
             if (_waterfalls != null) _waterfalls.transform.SetParent(targetBody.transform, true);
-            if (_oceanLod != null) _oceanLod.transform.SetParent(targetBody.transform, true);
+            if (_oceanGpu != null)
+            {
+                // The ocean sphere must sit exactly at the body core, not keep its old
+                // world offset — re-parent and re-centre, then rebuild its patches.
+                _oceanGpu.transform.SetParent(targetBody.transform, false);
+                _oceanGpu.transform.localPosition = Vector3.zero;
+                _oceanGpu.ResetAllPatches();
+            }
         }
 
         /// <summary>

@@ -1,0 +1,315 @@
+// Assets/Scripts/VoxelEngine/GpuVoxel/Resources/PlanetFieldGpu.compute
+//
+// GPU density evaluation for the spherified-quadtree voxel engine (9.0.0).
+//
+// EXACT mirror of PlanetField.cs — if you change a constant here, change it
+// there too. Two kernels:
+//
+//   CSColumns : one thread per (u,v) column of the node — evaluates the
+//               expensive surface stack ONCE per column (surface radius,
+//               climate, slope) because it only depends on direction.
+//   CSField   : one thread per corner of the 67³ grid — assembles the signed
+//               density (surface − radius − caves) and picks the material.
+//
+// The simplex noise below is the Ashima/webgl-noise reference implementation —
+// the same algorithm Unity.Mathematics' noise.snoise uses on the CPU, so both
+// sides of the engine sample the identical field.
+
+#pragma kernel CSColumns
+#pragma kernel CSField
+
+// ─────────────────────────── Simplex noise (Ashima) ───────────────────────────
+float3 mod289(float3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+float4 mod289(float4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+float4 permute(float4 x) { return mod289(((x * 34.0) + 1.0) * x); }
+float4 taylorInvSqrt(float4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
+
+float snoise(float3 v)
+{
+    const float2 C = float2(1.0 / 6.0, 1.0 / 3.0);
+    const float4 D = float4(0.0, 0.5, 1.0, 2.0);
+
+    float3 i  = floor(v + dot(v, C.yyy));
+    float3 x0 = v - i + dot(i, C.xxx);
+
+    float3 g  = step(x0.yzx, x0.xyz);
+    float3 l  = 1.0 - g;
+    float3 i1 = min(g.xyz, l.zxy);
+    float3 i2 = max(g.xyz, l.zxy);
+
+    float3 x1 = x0 - i1 + C.xxx;
+    float3 x2 = x0 - i2 + C.yyy;
+    float3 x3 = x0 - D.yyy;
+
+    i = mod289(i);
+    float4 p = permute(permute(permute(
+                 i.z + float4(0.0, i1.z, i2.z, 1.0))
+               + i.y + float4(0.0, i1.y, i2.y, 1.0))
+               + i.x + float4(0.0, i1.x, i2.x, 1.0));
+
+    float  n_ = 0.142857142857;
+    float3 ns = n_ * D.wyz - D.xzx;
+
+    float4 j = p - 49.0 * floor(p * ns.z * ns.z);
+
+    float4 x_ = floor(j * ns.z);
+    float4 y_ = floor(j - 7.0 * x_);
+
+    float4 x = x_ * ns.x + ns.yyyy;
+    float4 y = y_ * ns.x + ns.yyyy;
+    float4 h = 1.0 - abs(x) - abs(y);
+
+    float4 b0 = float4(x.xy, y.xy);
+    float4 b1 = float4(x.zw, y.zw);
+
+    float4 s0 = floor(b0) * 2.0 + 1.0;
+    float4 s1 = floor(b1) * 2.0 + 1.0;
+    float4 sh = -step(h, 0.0);
+
+    float4 a0 = b0.xzyw + s0.xzyw * sh.xxyy;
+    float4 a1 = b1.xzyw + s1.xzyw * sh.zzww;
+
+    float3 p0 = float3(a0.xy, h.x);
+    float3 p1 = float3(a0.zw, h.y);
+    float3 p2 = float3(a1.xy, h.z);
+    float3 p3 = float3(a1.zw, h.w);
+
+    float4 norm = taylorInvSqrt(float4(dot(p0, p0), dot(p1, p1), dot(p2, p2), dot(p3, p3)));
+    p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
+
+    float4 m = max(0.6 - float4(dot(x0, x0), dot(x1, x1), dot(x2, x2), dot(x3, x3)), 0.0);
+    m = m * m;
+    return 42.0 * dot(m * m, float4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));
+}
+
+// ─────────────────────────── Parameters ───────────────────────────
+cbuffer NodeParams
+{
+    int    _Face;            // cube face 0..5
+    int    _Seed;
+    int    _GridP;           // 67
+    int    _Pad0;
+    float2 _UvMin;           // face-space uv of footprint corner c = 0
+    float2 _CellUv;          // uv per cell (uvSize / 64)
+    float  _RLo;             // radius at radial corner c = 0
+    float  _Dr;              // radial metres per cell
+    float  _RadiusWorld;
+    float  _BaseHeight;
+    float  _SeaRadius;
+    float  _ContinentScale;
+    float  _MountainScale;
+    float  _CrustDepth;      // protected cave crust (m)
+    float  _SlopeSpan;       // metres between slope probes (2 × cell arc)
+    float  _Pad1;
+}
+
+RWStructuredBuffer<float4> _Columns;   // xyz = surfaceRadius, temp, humid; w = slope01
+RWStructuredBuffer<float>  _Density;   // GP³ signed metres (>0 solid)
+RWStructuredBuffer<uint>   _Material;  // GP³ material ids
+
+StructuredBuffer<uint> _ClimateLut;    // 8×8 packed biome LUT (see GpuPlanetEngine)
+
+// ─────────────────────────── Field (mirror of PlanetField.cs) ───────────────────────────
+static const float WARP_FREQUENCY = 1.31;
+static const float WARP_STRENGTH  = 0.18;
+static const float HILL_AMPLITUDE = 9.0;
+static const float MOUNTAIN_BASE  = 62.0;
+static const float LAND_PLATEAU   = 2.0;
+static const float SHELF_DEPTH    = 5.0;
+
+float SeedOffset(int seed, int channel)
+{
+    uint h = (uint)(seed ^ (channel * 0x9E3779B9));
+    h = (h ^ (h >> 16)) * 0x85EBCA6Bu;
+    h = (h ^ (h >> 13)) * 0xC2B2AE35u;
+    h = h ^ (h >> 16);
+    return ((h & 0xFFFF) / 65535.0 - 0.5) * 1000.0;
+}
+
+float Fbm(int seed, float3 p, float frequency, int octaves, int seedChannel)
+{
+    float amp = 1.0, freq = frequency, sum = 0.0, norm = 0.0;
+    for (int o = 0; o < octaves; o++)
+    {
+        sum  += snoise(p * freq + SeedOffset(seed, seedChannel + o)) * amp;
+        norm += amp;
+        amp  *= 0.5;
+        freq *= 2.02;
+    }
+    return sum / norm;
+}
+
+float Ridged(int seed, float3 p, float frequency, int octaves, int seedChannel)
+{
+    float amp = 1.0, freq = frequency, sum = 0.0, norm = 0.0;
+    for (int o = 0; o < octaves; o++)
+    {
+        float n = 1.0 - abs(snoise(p * freq + SeedOffset(seed, seedChannel + o)));
+        n = n * n;
+        sum  += n * amp;
+        norm += amp;
+        amp  *= 0.55;
+        freq *= 2.13;
+    }
+    return sum / norm;
+}
+
+float SurfaceRadiusF(float3 dir)
+{
+    float wx = snoise(dir * WARP_FREQUENCY + SeedOffset(_Seed, 40));
+    float wy = snoise(dir * WARP_FREQUENCY + SeedOffset(_Seed, 41));
+    float wz = snoise(dir * WARP_FREQUENCY + SeedOffset(_Seed, 42));
+    float3 wd = normalize(dir + WARP_STRENGTH * float3(wx, wy, wz));
+
+    float contFreq = max(0.25, _ContinentScale);
+    float cont = Fbm(_Seed, wd, contFreq, 4, 50);
+    float land = smoothstep(-0.06, 0.14, cont);
+
+    float basin = min(44.0, 18.0 + _RadiusWorld * 0.0022);
+    float shelf = smoothstep(-0.32, -0.06, cont);
+    float ocean = -lerp(basin, SHELF_DEPTH, shelf);
+
+    float hillFreq = max(3.0, _RadiusWorld / 260.0);
+    float hills = Fbm(_Seed, wd, hillFreq, 4, 60) * HILL_AMPLITUDE;
+
+    float mountFreq = max(1.6, _RadiusWorld / 950.0);
+    float uplift = smoothstep(0.15, 0.75, Fbm(_Seed, wd, contFreq * 2.6, 3, 70));
+    float mountains = Ridged(_Seed, wd, mountFreq, 5, 80) * uplift
+                      * (MOUNTAIN_BASE * max(0.05, _MountainScale));
+
+    float elevation = lerp(ocean, LAND_PLATEAU + hills + mountains, land);
+    return _RadiusWorld + _BaseHeight + elevation;
+}
+
+float CaveCarve(float3 worldPos, float surfaceRadius, float radius)
+{
+    float depth = surfaceRadius - radius;
+    if (depth < _CrustDepth + 2.0) return 0.0;
+    if (surfaceRadius < _SeaRadius + 2.0) return 0.0;
+
+    float gate = smoothstep(_CrustDepth + 2.0, _CrustDepth + 8.0, depth);
+    float n = snoise(worldPos * 0.045) * 0.5 + 0.5;
+    n += snoise(worldPos * 0.09 + 50.0) * 0.25;
+    return max(0.0, n - 0.68) * 90.0 * gate;
+}
+
+// Climate — mirror of SphereDensity.SampleClimate (latitude-blended, seamless).
+float2 SampleClimate(float3 dir)
+{
+    float tNoise = snoise(dir * 1.7 + (SeedOffset(_Seed, 1) + 47.3)) * 0.5 + 0.5;
+    float hNoise = snoise(dir * 2.1 + (SeedOffset(_Seed, 2) + 91.7)) * 0.5 + 0.5;
+
+    float lat  = abs(dir.y);
+    float tLat = saturate(1.0 - lat * 1.25);
+    float hLat = saturate(cos(lat * 3.0) * 0.3 + 0.55);
+
+    float t = lerp(tNoise, tLat, 0.55);
+    float h = lerp(hNoise, hLat, 0.55 * 0.7);
+    return float2(t, h);
+}
+
+// ─────────────────────────── Cube-sphere mapping (mirror of CubeSphere.cs) ───────────────────────────
+float3 FaceDirection(int face, float u, float v)
+{
+    float3 p;
+    if      (face == 0) p = float3( 1.0, v, -u);
+    else if (face == 1) p = float3(-1.0, v,  u);
+    else if (face == 2) p = float3( u, 1.0,  v);
+    else if (face == 3) p = float3( u,-1.0, -v);
+    else if (face == 4) p = float3( u, v,  1.0);
+    else                p = float3(-u, v, -1.0);
+    return normalize(p);
+}
+
+float3 CornerDirection(float cu, float cv)
+{
+    // Corner grid index g maps to cell coordinate c = g − 1 (one ghost cell pad).
+    float u = _UvMin.x + cu * _CellUv.x;
+    float v = _UvMin.y + cv * _CellUv.y;
+    return FaceDirection(_Face, u, v);
+}
+
+// ─────────────────────────── Kernel 1: per-column surface cache ───────────────────────────
+[numthreads(8, 8, 1)]
+void CSColumns(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= (uint)_GridP || id.y >= (uint)_GridP) return;
+
+    float cu = (float)id.x - 1.0;
+    float cv = (float)id.y - 1.0;
+    float3 dir = CornerDirection(cu, cv);
+
+    float surf = SurfaceRadiusF(dir);
+    float2 climate = SampleClimate(dir);
+
+    // Slope probe over ~2 cells for the rock-on-cliffs material rule.
+    float du = max(0.25, _SlopeSpan / max(1.0, _RadiusWorld)) / max(1e-6, _CellUv.x);
+    float s1 = SurfaceRadiusF(CornerDirection(cu + du, cv));
+    float s2 = SurfaceRadiusF(CornerDirection(cu, cv + du));
+    float dh = max(abs(s1 - surf), abs(s2 - surf));
+    float slope01 = saturate(dh / max(1.0, _SlopeSpan));
+
+    _Columns[id.x + id.y * _GridP] = float4(surf, climate.x, climate.y, slope01);
+}
+
+// ─────────────────────────── Kernel 2: per-corner density + material ───────────────────────────
+[numthreads(4, 4, 4)]
+void CSField(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= (uint)_GridP || id.y >= (uint)_GridP || id.z >= (uint)_GridP) return;
+
+    int columnIdx = id.x + id.y * _GridP;
+    float4 col = _Columns[columnIdx];
+    float surf = col.x;
+    float2 climate = float2(col.y, col.z);
+    float slope01 = col.w;
+
+    float cu = (float)id.x - 1.0;
+    float cv = (float)id.y - 1.0;
+    float ck = (float)id.z - 1.0;
+
+    float3 dir = CornerDirection(cu, cv);
+    float radius = _RLo + ck * _Dr;
+    float3 worldPos = dir * radius;
+
+    float density = surf - radius - CaveCarve(worldPos, surf, radius);
+
+    int outIdx = id.x + id.y * _GridP + id.z * _GridP * _GridP;
+    _Density[outIdx] = density;
+
+    // ── Material (visual LOD rules — mirrors SphereDensity's surface bands) ──
+    uint material = 0; // Air
+    if (density > 0.0)
+    {
+        // Climate LUT: dominant biome's packed surface data for this (temp, humid).
+        int lt = clamp((int)(climate.x * 8.0), 0, 7);
+        int lh = clamp((int)(climate.y * 8.0), 0, 7);
+        uint lutEntry = _ClimateLut[lt + lh * 8];
+        uint surfMat  = lutEntry & 0xFF;
+        uint subMat   = (lutEntry >> 8) & 0xFF;
+        uint surfD    = (lutEntry >> 16) & 0xF;
+        uint subD     = (lutEntry >> 20) & 0xF;
+        uint beachOk  = (lutEntry >> 24) & 0x1;
+
+        float depth = surf - radius;
+        float altSea = surf - _SeaRadius;
+        bool atSurface = depth < (float)surfD;
+
+        material = 1; // Stone
+        if (beachOk == 1 && radius >= _SeaRadius - 1.0 && radius <= _SeaRadius + 1.0 && depth < 2.0)
+            material = 2; // Sand — beach band right at the waterline
+        else if (depth < (float)surfD)
+            material = surfMat;
+        else if (depth < (float)(surfD + subD))
+            material = subMat;
+
+        // Snow line: high + cold, and polar ice.
+        if (atSurface && altSea > 35.0 && climate.x < 0.25) material = 4;  // Ice
+        else if (atSurface && climate.x < 0.1)              material = 4;  // Ice
+
+        // Steep faces read as rock, not grass.
+        if (slope01 > 0.8 && depth < (float)(surfD + subD) && altSea > 5.0)
+            material = 1; // Stone
+    }
+    _Material[outIdx] = material;
+}

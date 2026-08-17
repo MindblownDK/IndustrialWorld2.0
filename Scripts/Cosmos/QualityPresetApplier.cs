@@ -69,32 +69,17 @@ namespace VoxelEngine.Cosmos
                 grass.enabled = true;
             }
 
-            // LOD resolution (+ the active body's full-surface budget so a mid-game
-            // quality change upgrades/downgrades the whole-planet surface instantly).
-            var lod = FindAnyObjectByType<PlanetLodImpostor>();
-            if (lod != null)
+            // GPU-driven planet surfaces: push the streaming budget to every body's
+            // quadtree engine (node resolution resolves per body from the new tier).
+            foreach (var engine in FindObjectsByType<VoxelEngine.GpuVoxel.GpuPlanetEngine>(FindObjectsInactive.Include, FindObjectsSortMode.None))
             {
-                lod.resolution = GraphicsPreset.LodResolution;
-                var active = GravityProvider.ActiveBody;
-                if (active != null)
-                {
-                    var activeLod = active.GetComponentInChildren<PlanetLodImpostor>(true);
-                    if (activeLod != null)
-                        activeLod.highDetailVertexBudget = GraphicsPreset.ActiveBodyLodResolution;
-                }
+                if (engine == null) continue;
+                engine.ApplyQualityBudget(GraphicsPreset.JobsPerFrame);
             }
 
-            // Real-voxel planet LOD: push the job budget to every body's surface generator
-            // (voxel sizes are resolved per body at stream time from the new tier).
-            foreach (var voxelLod in FindObjectsByType<PlanetVoxelLod>(FindObjectsInactive.Include))
-            {
-                if (voxelLod == null) continue;
-                voxelLod.maxJobsPerFrame = GraphicsPreset.JobsPerFrame;
-            }
-
-            // Whole-planet ocean LOD uses the same distance budget as terrain LOD.
-            var oceanLod = FindAnyObjectByType<PlanetOceanLodRenderer>();
-            if (oceanLod != null) oceanLod.resolution = GraphicsPreset.LodResolution;
+            // Quadtree ocean uses the same distance budget as the terrain tier.
+            var oceanGpu = FindAnyObjectByType<VoxelEngine.GpuVoxel.GpuOceanEngine>();
+            if (oceanGpu != null) oceanGpu.ApplyQualityBudget(GraphicsPreset.LodResolution);
 
             // Waterfall range.
             var waterfalls = FindAnyObjectByType<WaterfallSystem>();

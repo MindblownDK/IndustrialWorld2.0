@@ -149,8 +149,10 @@ namespace VoxelEngine.Cosmos
 
         /// <summary>
         /// Evaluate the surface radius (metres from core) and dominant biome index for a
-        /// direction. Blends all biome heights via softmax so adjacent biomes never produce a
-        /// cliff at the seam. Ocean biomes are pulled below sea level and damped by the land mask.
+        /// direction. 9.0.0: the terrain SHAPE comes from <see cref="VoxelEngine.GpuVoxel.PlanetField"/> —
+        /// the exact field the GPU quadtree surface evaluates — so the gameplay bubble,
+        /// scatter, waterfalls, sky proxies and ocean cut-outs all agree with the rendered
+        /// planet at every LOD. Biomes still drive materials, scatter and climate.
         /// </summary>
         public static void EvaluateColumn(
             in SphereGenParams prm,
@@ -160,9 +162,8 @@ namespace VoxelEngine.Cosmos
             out int  biomeIndex)
         {
             float2 climate = SampleClimate(prm.seed, dir);
-            float landMask = LandMask(prm.seed, dir, prm.continentScaleDir);
 
-            // Dominant biome.
+            // Dominant biome (materials / scatter / climate flavour only).
             float bestScore = -1e9f;
             biomeIndex = 0;
             for (int i = 0; i < biomes.Length; i++)
@@ -171,51 +172,10 @@ namespace VoxelEngine.Cosmos
                 if (s > bestScore) { bestScore = s; biomeIndex = i; }
             }
 
-            // Softmax-blend all biome heights.
-            float weightSum = 0f, heightSum = 0f;
-            for (int i = 0; i < biomes.Length; i++)
-            {
-                var b = biomes[i];
-                float s = Score(b, climate);
-                float w = math.exp((s - bestScore) * 2.5f);
-                if (w < 0.0005f) continue;
-
-                // Biome height frequencies were authored in world-metre terms. Convert them
-                // into direction-space frequency using the planet radius. Keep this one-noise
-                // sample per biome so radial chunk generation remains Burst-friendly; broad
-                // mountain structure is added once below through the shared tectonic field.
-                float terrainScale = math.max(0.65f, prm.radiusWorld * b.heightFrequency * 0.12f);
-                float micro = noise.snoise(dir * terrainScale + SeedOffset(prm.seed, 10 + i) + i * 5.1f);
-                float ridged = 1f - math.abs(micro);
-                float detail = b.ridgedness > 0.01f
-                    ? math.lerp(micro, ridged * 2f - 1f, b.ridgedness)
-                    : micro;
-
-                float biomeHeight = b.heightOffset + detail * b.heightAmplitude * prm.mountainScale;
-
-                if (b.isOceanic == 1)
-                    biomeHeight = -math.lerp(40f, 5f, landMask) + detail * (b.heightAmplitude * 0.5f);
-
-                heightSum += biomeHeight * w;
-                weightSum += w;
-            }
-
-            float blended = weightSum > 0f ? heightSum / weightSum : 0f;
-
-            float coastPull  = math.smoothstep(0f, 0.45f, landMask);
-            float oceanFloor = -25f;
-            float terrainOffset = math.lerp(oceanFloor, blended, coastPull);
-
-            // Sparse tectonic ridges create visible mountain chains only inside established
-            // continents. Smooth masks avoid the old rigid stepped slopes while giving orbit
-            // and surface play a readable highland silhouette.
-            float tectonic = 1f - math.abs(noise.snoise(dir * (prm.continentScaleDir * 2.8f)
-                + SeedOffset(prm.seed, 7)));
-            float mountainMask = math.saturate((landMask - 0.50f) * 2f)
-                * math.smoothstep(0.58f, 0.84f, tectonic);
-            terrainOffset += mountainMask * 52f * prm.mountainScale;
-
-            surfaceRadius = prm.MeanSurfaceRadius + terrainOffset;
+            // Terrain shape — the unified 9.0.0 planetary field (GPU/CPU lockstep).
+            surfaceRadius = VoxelEngine.GpuVoxel.PlanetField.SurfaceRadius(
+                prm.seed, dir, prm.radiusWorld, prm.baseHeight, prm.seaRadius,
+                prm.continentScaleDir, prm.mountainScale);
         }
 
         // ────────────────────────────────────────────────────────────────
@@ -376,18 +336,14 @@ namespace VoxelEngine.Cosmos
 
             int depth = (int)math.floor(surfaceRadius - radius);
 
-            // Caves are deliberately kept below a continuous radial crust. Earlier cave
-            // noise could begin only a few metres below the sampled surface, occasionally
-            // opening a cave straight through a terrain chunk and making it look missing.
-            // A sealed 8 m minimum shell preserves a reliable playable planet surface while
-            // retaining genuine underground caves deeper inside dry land.
+            // Caves come from the SAME carve function the GPU surface evaluates
+            // (PlanetField.CaveCarve) — sealed beneath a protective crust and never
+            // under the sea, so the bubble's caves match the rendered planet exactly.
             int protectedSurfaceCrust = math.max(8, biome.surfaceDepth + biome.subsurfaceDepth + 2);
-            if (depth > protectedSurfaceCrust && radius > coreRadius + 6f && surfaceRadius > prm.seaRadius - 1f)
+            if (radius > coreRadius + 6f)
             {
-                float cave = noise.snoise(worldPos * 0.045f) * 0.5f + 0.5f;
-                cave += noise.snoise(worldPos * 0.09f + 50f) * 0.25f;
-                if (cave > 0.68f)
-                    density -= (cave - 0.68f) * 90f;
+                density -= VoxelEngine.GpuVoxel.PlanetField.CaveCarve(
+                    worldPos, surfaceRadius, radius, prm.seaRadius, protectedSurfaceCrust);
             }
 
             if (density > 0f)

@@ -1,7 +1,7 @@
 // Assets/Scripts/VoxelEngine/Cosmos/SphereSurfaceColor.cs
 //
 // Shared sampled-surface colour palette for EVERY spherical body renderer
-// (PlanetLodImpostor + SpaceBodyRenderer sky proxies).
+// (SpaceBodyRenderer sky proxies + orbital colour sampling).
 //
 // Both renderers read the same SphereDensity field and colour it with this one
 // function, so a planet hanging in the sky shows EXACTLY the continents, oceans,

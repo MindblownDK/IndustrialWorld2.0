@@ -55,7 +55,7 @@ namespace VoxelEngine.Meshing
 
         /// <summary>
         /// World-space edge length of one voxel (metres). The gameplay world uses
-        /// VoxelConstants.VOXEL_SIZE (1 m); PlanetVoxelLod's LOD levels use larger
+        /// VoxelConstants.VOXEL_SIZE (1 m); coarse LOD callers may use larger
         /// voxels (8–512 m) so the same job builds the whole planet at real LOD.
         /// Zero (default) falls back to VoxelConstants.VOXEL_SIZE in Execute().
         /// </summary>

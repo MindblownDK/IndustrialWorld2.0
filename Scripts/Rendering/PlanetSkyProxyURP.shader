@@ -5,7 +5,7 @@
 // generator uses), so every planet in the sky shows its actual continents and
 // oceans instead of a flat colored ball.
 //
-// Unlike PlanetSurfaceLodURP this shader has NO camera-distance clip and NO
+// Unlike the terrain surface shaders this one has NO camera-distance clip and NO
 // dependency on the active body's global shader context: proxies are drawn at
 // compressed positions (often within a few km of the camera) and must keep
 // rendering no matter which body the streamer is following. Lighting comes from

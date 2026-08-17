@@ -9,7 +9,7 @@
 // colours are baked from the same SphereDensity field the voxel generator uses, so the
 // planet in the sky shows its actual continents, oceans and ice caps, not a flat
 // colored ball. As the player approaches, the proxy CONVERGES to the body's true
-// scene position and size and crossfades into the real PlanetLodImpostor surface
+// scene position and size and crossfades into the real GPU quadtree surface
 // (which continues upgrading through its distance-based LOD ladder) — a seamless
 // space-to-surface descent, Space-Engineers style.
 //
@@ -56,7 +56,7 @@ namespace VoxelEngine.Cosmos
         public float trueLodDistanceMeters = 60000000f;
 
         /// <summary>Shared window constant (metres) — also consumed by CosmosBootstrap's far clip
-        /// and PlanetLodImpostor's crossfade, so every system agrees on where real LOD begins.</summary>
+        /// and the GPU surface engine's coverage, so every system agrees on where real LOD begins.</summary>
         public const double TrueLodWindowMeters = 60000000d;
 
         /// <summary>Distance band (metres) OUTSIDE the window over which the proxy fades out
@@ -186,7 +186,7 @@ namespace VoxelEngine.Cosmos
                 var b = registry.Bodies[i];
                 if (b == null || b.settings == null) continue;
 
-                // The active body already has a physical PlanetLodImpostor around its
+                // The active body already has a physical GPU quadtree surface around its
                 // real core. Do not draw a second compressed sky proxy for it.
                 if (activeBody != null && b.settings == activeBody.settings)
                 {

@@ -31,7 +31,7 @@ namespace VoxelEngine.Cosmos
         [ReadOnly] public NativeArray<OreLayer>   ores;
 
         /// <summary>
-        /// Oil-site map for LOD levels (PlanetVoxelLod). The gameplay world passes the
+        /// Oil-site map for coarse LOD generation. The gameplay world passes the
         /// default (uncreated) map — its oil is authored by OilReservoirDecorator instead.
         /// </summary>
         [ReadOnly] public NativeParallelHashMap<int, OilSiteData> oilSites;

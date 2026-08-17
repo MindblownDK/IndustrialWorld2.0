@@ -13,7 +13,7 @@ namespace VoxelEngine.Cosmos
     public enum GraphicsTier { Low, Mid, High, Ultra }
 
     /// <summary>
-    /// Centralized graphics budget. Read by GpuGrassRenderer, PlanetLodImpostor, SphereWorld,
+    /// Centralized graphics budget. Read by GpuGrassRenderer, GpuPlanetEngine, SphereWorld,
     /// and the post-FX bootstrap. Maps the Unity QualitySettings level to our 4 tiers.
     /// </summary>
     public static class GraphicsPreset
@@ -83,7 +83,7 @@ namespace VoxelEngine.Cosmos
         /// <summary>
         /// Voxel size (metres) of the MID whole-planet real-voxel LOD level per tier.
         /// 32 m = ~768 chunks on an 8 km planet (High/Ultra); 64 m = ~192 (Mid);
-        /// 128 m = ~48 (Low). PlanetVoxelLod doubles these on larger planets to keep the
+        /// 128 m = ~48 (Low). Legacy note — the GPU quadtree engine now derives its own budgets; kept for the
         /// whole-planet chunk count bounded.
         /// </summary>
         public static float PlanetMidLodVoxelSize => Current switch
