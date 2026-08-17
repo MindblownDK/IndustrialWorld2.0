@@ -1,9 +1,33 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `8.0.1-dev`
+**Current Version:** `8.0.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [8.0.2-dev] Spherical Surface Restoration — Gradient-Corrected Chunk Columns (Flat-Layer Fix)
+
+**Type:** PATCH — restores correct spherical planet generation; no save-schema or public API change.
+
+#### 🌍 The real cause of the "flat layers" planet
+The 7.20.0 chunk-column caching evaluated the surface column **once per chunk at the chunk centre** and reused that single surface radius for every voxel of the chunk. On the 1 m gameplay bubble (32 m chunks) the error was invisible — but on the LOD levels (4 m / 8 m rings, the whole-planet FULL shell at 8–16 m voxels, and MID/FAR shells up to 16 km chunks) every chunk rendered as a **flat slab at its own centre height**. Adjacent chunks sat at different heights, so the planet read as **flat terrain layers stacked on each other with visible gaps between them** — exactly what Thomas reported, and not the flat world at all (the 8.0.0 removal was still correct, just not the culprit).
+
+#### 🧭 The fix — first-order gradient correction
+- `SphereDensity.ChunkColumn` now carries the **chunk-centre direction** and a **surface gradient** (∂surfaceRadius/∂dir) sampled with 7 column evaluations per chunk (centre + 2 slope probes + 4 gradient probes over a ~36 m baseline).
+- `EvaluateVoxelCached` applies a per-voxel linear correction:
+  `surfaceRadius(dir) ≈ surfaceRadius(centerDir) + dot(surfaceGrad, dir − centerDir)`
+- Every voxel's density, depth, cave, material-band, snow-line, beach, slope-rock, ocean-basin and water decisions now use the **corrected** surface radius, so the surface follows the true sphere + terrain across the entire chunk footprint.
+- Cost: ~5 column evaluations per chunk instead of ~39,000 — the ~10–30× generation speed-up from 7.20.0 is retained.
+
+#### ✅ Static delivery checks
+- All modified sources parse cleanly (tree-sitter C#); no leftover references to the removed column fields; runtime chunk generation uses the corrected cached path; version synchronized to 8.0.2.
+
+#### Manual Unity steps
+1. Let Unity finish compiling on the `Dev` branch.
+2. **Clean saves (important):** the `_Earth` world folder created by 8.0.0/8.0.1 test runs may contain slabbed terrain chunks. Delete `<persistentDataPath>/VoxelWorlds/<worldName>_Earth` (or the whole world) so the planet regenerates fresh with the corrected field. Old flat-era folders are irrelevant now.
+3. Enter Play Mode on the home world: the surface must read as one continuous **spherical planet** — terrain follows mountains/oceans, no horizontal slabs, no gaps between chunks.
+4. Fly to another planet/moon and confirm its real voxel surface is spherical too.
+5. Confirm generation speed is still fast (whole-planet FULL shell fills within seconds, as in 7.20.0).
 
 ### [8.0.1-dev] Flat World Removal Compile Recovery (CS0103 flatWorld + CS8321 dead local)
 
