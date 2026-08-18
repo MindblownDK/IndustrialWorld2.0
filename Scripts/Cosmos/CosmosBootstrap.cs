@@ -92,6 +92,9 @@ namespace VoxelEngine.Cosmos
 
         public static CosmosBootstrap Instance { get; private set; }
 
+        /// <summary>The HOME body (world spawn planet) — used by respawn fallbacks.</summary>
+        public CelestialBody HomeBody => _body;
+
         private void Awake()
         {
             if (Instance == null) Instance = this;
@@ -224,6 +227,9 @@ namespace VoxelEngine.Cosmos
             spaceGO.AddComponent<SpaceNebulaRenderer>();
             spaceGO.AddComponent<SpaceDustRenderer>();
             spaceGO.AddComponent<SolarGlareRenderer>();
+            // True-position beacons: real bodies optically boosted to a findable minimum
+            // apparent size AT their real positions (they fade as the real surface grows).
+            spaceGO.AddComponent<VoxelEngine.Cosmos.DistantBodyBeacons>();
             var skyGO = new GameObject("PlanetSky");
             skyGO.AddComponent<PlanetSkyController>();
 

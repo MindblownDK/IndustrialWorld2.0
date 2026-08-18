@@ -20,6 +20,9 @@ namespace VoxelEngine.Cosmos
     [BurstCompile(FloatPrecision.Standard, FloatMode.Fast, CompileSynchronously = false)]
     public struct SphereChunkGenJob : IJobParallelFor
     {
+        /// <summary>Surface-lattice resolution per axis (5³ = 125 samples per chunk).</summary>
+        public const int LATTICE = 5;
+
         public SphereGenParams prm;
 
         // Body-relative origin (metres) of the chunk box [min corner].
@@ -44,11 +47,16 @@ namespace VoxelEngine.Cosmos
         public int sizeY;
         public int sizeZ;
 
-        // Precomputed surface column for this chunk (7.20.0): the expensive climate/biome/
-        // tectonic column evaluation runs ONCE per chunk instead of once per voxel —
-        // ~10–30× faster generation with no visible terrain change. See
-        // SphereDensity.EvaluateChunkColumn.
+        // Precomputed surface column for this chunk (7.20.0): climate/biome/slope
+        // flavour is evaluated ONCE per chunk. 9.5.0: the surface SHAPE no longer
+        // comes from the column's linear gradient — the ridged 9.x field broke that
+        // approximation (hollow/filled chunks, gaps appearing exactly when chunks
+        // generated). The exact surface radius is now trilinearly interpolated from
+        // a 5³ per-chunk lattice built by BuildSurfaceLatticeJob.
         public SphereDensity.ChunkColumn column;
+
+        /// <summary>Per-chunk 5³ surface-radius lattice (built by BuildSurfaceLatticeJob).</summary>
+        [ReadOnly] public NativeArray<float> surfaceLattice;
 
         // A radial deflation offset applied to LOD generation. Setting this >0 pulls the LOD
         // surface slightly inward toward the planet core, ensuring it sinks inside the higher-res
@@ -87,7 +95,71 @@ namespace VoxelEngine.Cosmos
                     worldPos += radial * radiusOffset;
                 }
             }
+
+            if (surfaceLattice.IsCreated && surfaceLattice.Length == LATTICE * LATTICE * LATTICE)
+            {
+                // Exact path (9.5.0): trilinear surface radius from the per-chunk lattice.
+                float3 f = new float3(
+                    x / (float)math.max(1, sizeX - 1),
+                    y / (float)math.max(1, sizeY - 1),
+                    z / (float)math.max(1, sizeZ - 1)) * (LATTICE - 1);
+                int3 i0 = math.clamp((int3)math.floor(f), 0, LATTICE - 2);
+                float3 t = math.saturate(f - i0);
+
+                float s000 = surfaceLattice[LatIdx(i0.x,     i0.y,     i0.z)];
+                float s100 = surfaceLattice[LatIdx(i0.x + 1, i0.y,     i0.z)];
+                float s010 = surfaceLattice[LatIdx(i0.x,     i0.y + 1, i0.z)];
+                float s110 = surfaceLattice[LatIdx(i0.x + 1, i0.y + 1, i0.z)];
+                float s001 = surfaceLattice[LatIdx(i0.x,     i0.y,     i0.z + 1)];
+                float s101 = surfaceLattice[LatIdx(i0.x + 1, i0.y,     i0.z + 1)];
+                float s011 = surfaceLattice[LatIdx(i0.x,     i0.y + 1, i0.z + 1)];
+                float s111 = surfaceLattice[LatIdx(i0.x + 1, i0.y + 1, i0.z + 1)];
+
+                float surfaceRadius = math.lerp(
+                    math.lerp(math.lerp(s000, s100, t.x), math.lerp(s010, s110, t.x), t.y),
+                    math.lerp(math.lerp(s001, s101, t.x), math.lerp(s011, s111, t.x), t.y),
+                    t.z);
+
+                voxels[index] = SphereDensity.EvaluateVoxelWithSurface(
+                    prm, biomes, ores, worldPos, surfaceRadius, column, oilSites);
+                return;
+            }
+
             voxels[index] = SphereDensity.EvaluateVoxelCached(prm, biomes, ores, worldPos, column, oilSites);
+        }
+
+        private static int LatIdx(int x, int y, int z) => x + y * LATTICE + z * LATTICE * LATTICE;
+    }
+
+    /// <summary>
+    /// Small Burst prepass: evaluates the EXACT surface radius (PlanetField) at a 5³
+    /// lattice spanning the chunk box. SphereChunkGenJob trilinearly interpolates it
+    /// per voxel — the surface follows the true ridged field across the whole chunk
+    /// (max lattice spacing ≈ 8.5 m), where the old chunk-centre linear gradient
+    /// produced hollow or overfilled chunks on sharp relief.
+    /// </summary>
+    [BurstCompile(FloatPrecision.Standard, FloatMode.Fast, CompileSynchronously = false)]
+    public struct BuildSurfaceLatticeJob : IJobParallelFor
+    {
+        public SphereGenParams prm;
+        public float3 originWorld;   // padded-box min corner (body-relative metres)
+        public float3 boxExtent;     // padded-box extent (metres)
+
+        [WriteOnly] public NativeArray<float> lattice;   // LATTICE³
+
+        public void Execute(int index)
+        {
+            const int L = SphereChunkGenJob.LATTICE;
+            int x = index % L;
+            int y = (index / L) % L;
+            int z = index / (L * L);
+
+            float3 pos = originWorld + boxExtent * new float3(
+                x / (float)(L - 1), y / (float)(L - 1), z / (float)(L - 1));
+            float3 dir = Unity.Mathematics.math.normalizesafe(pos, new float3(0f, 1f, 0f));
+            lattice[index] = VoxelEngine.GpuVoxel.PlanetField.SurfaceRadius(
+                prm.seed, dir, prm.radiusWorld, prm.baseHeight, prm.seaRadius,
+                prm.continentScaleDir, prm.mountainScale);
         }
     }
 }

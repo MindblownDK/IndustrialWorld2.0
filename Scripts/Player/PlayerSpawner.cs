@@ -379,23 +379,87 @@ namespace VoxelEngine.Player
                 // that still resolves to open space. Either way: compute a fresh dry
                 // surface point on the active world and heal the save.
                 bool anchorMissing = string.IsNullOrEmpty(session.worldSpawnBodyName);
-                if (!session.hasBedSpawn && (anchorMissing || IsOpenSpacePosition(dest)) &&
-                    VoxelEngine.Core.ActiveWorld.Current is VoxelEngine.Cosmos.SphereWorld sphereWorld &&
-                    sphereWorld.TryFindDrySpawnPoint(drySpawnSearchAttempts, out Vector3 freshGround))
+                if (!session.hasBedSpawn && (anchorMissing || IsOpenSpacePosition(dest)))
                 {
-                    Debug.LogWarning("[PlayerSpawner] World spawn was " +
-                                     (anchorMissing ? "un-anchored (legacy save)" : "resolving to open space") +
-                                     " — recomputed a fresh surface spawn and healed the save.");
-                    dest = freshGround;
-                    session.RecordWorldSpawn(dest, VoxelEngine.Cosmos.GravityProvider.ActiveBody);
-                    session.SaveSpawnSidecar();
+                    // Heal path A: the streamed world can search a dry point (only valid
+                    // while its body is assigned — dying in deep space leaves it null).
+                    bool healed = false;
+                    if (VoxelEngine.Core.ActiveWorld.Current is VoxelEngine.Cosmos.SphereWorld sphereWorld &&
+                        sphereWorld.body != null &&
+                        sphereWorld.TryFindDrySpawnPoint(drySpawnSearchAttempts, out Vector3 freshGround))
+                    {
+                        dest = freshGround;
+                        healed = true;
+                    }
+                    // Heal path B (9.5.0): ANALYTIC spawn on the HOME body straight from
+                    // PlanetField — needs no streamed chunks and works from any frame
+                    // (deep-space deaths, other-planet deaths).
+                    else
+                    {
+                        var home = VoxelEngine.Cosmos.GravityProvider.ActiveBody
+                                   ?? (VoxelEngine.Cosmos.CosmosBootstrap.Instance != null
+                                       ? VoxelEngine.Cosmos.CosmosBootstrap.Instance.HomeBody : null);
+                        if (TryComputeAnalyticSpawn(home, out Vector3 analytic))
+                        {
+                            dest = analytic;
+                            healed = true;
+                        }
+                    }
+
+                    if (healed)
+                    {
+                        Debug.LogWarning("[PlayerSpawner] World spawn was " +
+                                         (anchorMissing ? "un-anchored (legacy save)" : "resolving to open space") +
+                                         " — recomputed a fresh surface spawn and healed the save. dest=" + dest);
+                        session.RecordWorldSpawn(dest, VoxelEngine.Cosmos.GravityProvider.ActiveBody);
+                        session.SaveSpawnSidecar();
+                    }
+                    else
+                    {
+                        Debug.LogError("[PlayerSpawner] Could not heal the world spawn (no usable body) — dest=" + dest);
+                    }
                 }
+                Debug.Log($"[PlayerSpawner] Respawn → dest={dest} anchor='{session.worldSpawnBodyName}' bed={session.hasBedSpawn}");
             }
             else
             {
                 dest = new Vector3(0, 250, 0);
             }
             StartCoroutine(RespawnRoutine(dest));
+        }
+
+        /// <summary>
+        /// Analytic surface spawn straight from the planetary field — no chunks, no
+        /// colliders, valid from any reference frame. Scans deterministic directions
+        /// for dry land (surface above sea) and returns a point just above it.
+        /// </summary>
+        private static bool TryComputeAnalyticSpawn(VoxelEngine.Cosmos.CelestialBody body, out Vector3 scenePos)
+        {
+            scenePos = default;
+            if (body == null || body.settings == null) return false;
+            var prm = body.genParams;
+            if (prm.radiusWorld < 10f) return false;
+
+            var rng = new System.Random(prm.seed ^ 0x5F3759DF);
+            for (int i = 0; i < 64; i++)
+            {
+                var d = new Vector3(
+                    (float)(rng.NextDouble() * 2.0 - 1.0),
+                    (float)(rng.NextDouble() * 2.0 - 1.0),
+                    (float)(rng.NextDouble() * 2.0 - 1.0));
+                if (d.sqrMagnitude < 0.01f) continue;
+                d.Normalize();
+
+                float surf = VoxelEngine.GpuVoxel.PlanetField.SurfaceRadius(
+                    prm.seed, new Unity.Mathematics.float3(d.x, d.y, d.z),
+                    prm.radiusWorld, prm.baseHeight, prm.seaRadius,
+                    prm.continentScaleDir, prm.mountainScale);
+                if (surf <= prm.seaRadius + 2f) continue;   // wet — keep looking
+
+                scenePos = body.transform.position + d * (surf + SpawnGroundClearance);
+                return true;
+            }
+            return false;
         }
 
         /// <summary>

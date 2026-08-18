@@ -210,36 +210,11 @@ namespace VoxelEngine.Cosmos
                     ValidateAndRepairOrbit(moon);
                     _bodies.Add(moon);
 
-                    // ── Orbiting moons around the moon (sub-moons) ──
-                    int subMoonCount = (m == 0 || rng.NextFloat() > 0.45f) ? 1 : 0;
-                    for (int sm = 0; sm < subMoonCount; sm++)
-                    {
-                        double smRadius = Mathd.Max(12d, ND(ref rng, 15d, 32d));
-                        var subElements = new OrbitElements
-                        {
-                            semiMajorAxisKm      = smRadius,
-                            eccentricity         = ND(ref rng, 0d, 0.05d),
-                            inclinationRad       = ND(ref rng, -0.35d, 0.35d),
-                            raanRad              = ND(ref rng, 0d, Mathd.TwoPi),
-                            argPeriapsisRad      = ND(ref rng, 0d, Mathd.TwoPi),
-                            meanAnomaly0         = ND(ref rng, 0d, Mathd.TwoPi),
-                            gravitationalParamKm3S2 = moon.gravitationalParamKm3S2 * 0.1d,
-                            timeScale            = Mathd.Max(0.25d, mt.orbitSpeed * 3.5d),
-                        };
-                        var subMoon = new BodyInstance
-                        {
-                            isPlanet       = false,
-                            settings       = mt.body,
-                            moonTemplate   = mt,
-                            parentBody     = moon,
-                            sunOrigin      = Sun,
-                            orbit          = subElements,
-                            gravitationalParamKm3S2 = ComputeBodyMuKm3S2(mt.body) * 0.1d,
-                        };
-                        subMoon.UpdateFromOrbit(0d);
-                        ValidateAndRepairOrbit(subMoon);
-                        _bodies.Add(subMoon);
-                    }
+                    // 9.5.0: auto-generated "sub-moons" are REMOVED. They cloned the
+                    // parent moon's BodySettings, which spawned a duplicate of the same
+                    // moon (same name, same look) orbiting itself — the "two moons but
+                    // only one is assigned" bug. Sub-moons return only when they can be
+                    // authored with their own settings in the templates.
                 }
             }
 

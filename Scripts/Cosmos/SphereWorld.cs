@@ -151,6 +151,13 @@ namespace VoxelEngine.Cosmos
         private struct PendingGen
         {
             public Chunk chunk; public int epoch; public JobHandle handle;
+            /// <summary>Per-chunk 5³ exact-surface lattice (owned; disposed on completion).</summary>
+            public Unity.Collections.NativeArray<float> lattice;
+        }
+
+        private static void DisposeGenLattice(in PendingGen p)
+        {
+            if (p.lattice.IsCreated) p.lattice.Dispose();
         }
         private struct PendingMesh
         {
@@ -348,7 +355,7 @@ namespace VoxelEngine.Cosmos
             Shader.SetGlobalFloat("_VoxelBubbleCutoutRadius", 0f);
             VoxelEngine.Generation.OilReservoirDecorator.ForgetWorld(this);
             ChunkScatter.ForgetWorld(this);
-            foreach (var p in _pendingGen) p.handle.Complete();
+            foreach (var p in _pendingGen) { p.handle.Complete(); DisposeGenLattice(p); }
             foreach (var p in _pendingMesh) DisposePendingMesh(p, complete: true);
             _pendingGen.Clear(); _pendingMesh.Clear();
             _genQueue.Clear(); _meshQueue.Clear();
@@ -389,7 +396,7 @@ namespace VoxelEngine.Cosmos
             }
             // Settle in-flight jobs BEFORE reclaiming chunk memory (body switches and the
             // deep-space suspension reuse this path constantly in real space).
-            foreach (var p in _pendingGen) p.handle.Complete();
+            foreach (var p in _pendingGen) { p.handle.Complete(); DisposeGenLattice(p); }
             foreach (var p in _pendingMesh) DisposePendingMesh(p, complete: true);
             _pendingGen.Clear();
             _pendingMesh.Clear();
@@ -746,6 +753,24 @@ namespace VoxelEngine.Cosmos
                 var column = SphereChunkGenJob.BuildColumn(body.genParams, _biomes,
                     new float3(chunk.coord.x + 0.5f, chunk.coord.y + 0.5f, chunk.coord.z + 0.5f) * s);
 
+                // 9.5.0: exact-surface prepass — a 5³ lattice of true PlanetField surface
+                // radii spanning the padded box. The gen job trilinearly interpolates it,
+                // replacing the chunk-centre linear gradient that generated hollow/filled
+                // chunks on the ridged field (gaps on generation, holes when mining).
+                var lattice = new Unity.Collections.NativeArray<float>(
+                    SphereChunkGenJob.LATTICE * SphereChunkGenJob.LATTICE * SphereChunkGenJob.LATTICE,
+                    Unity.Collections.Allocator.Persistent,
+                    Unity.Collections.NativeArrayOptions.UninitializedMemory);
+                var latticeJob = new BuildSurfaceLatticeJob
+                {
+                    prm         = body.genParams,
+                    originWorld = originWorld,
+                    boxExtent   = new float3(
+                        (VoxelConstants.CHUNK_SIZE_P - 1) * VoxelConstants.VOXEL_SIZE),
+                    lattice     = lattice,
+                };
+                var latticeHandle = latticeJob.Schedule(lattice.Length, 16);
+
                 var job = new SphereChunkGenJob
                 {
                     prm        = body.genParams,
@@ -756,12 +781,13 @@ namespace VoxelEngine.Cosmos
                     oilSites   = _emptyOilSites,
                     voxels     = chunk.voxels,
                     column     = column,
+                    surfaceLattice = lattice,
                     sizeX      = VoxelConstants.CHUNK_SIZE_P,
                     sizeY      = VoxelConstants.CHUNK_SIZE_P,
                     sizeZ      = VoxelConstants.CHUNK_SIZE_P,
                 };
-                var handle = job.Schedule(VoxelConstants.VOXELS_PER_CHUNK_P, 64);
-                _pendingGen.Add(new PendingGen { chunk = chunk, epoch = queued.epoch, handle = handle });
+                var handle = job.Schedule(VoxelConstants.VOXELS_PER_CHUNK_P, 64, latticeHandle);
+                _pendingGen.Add(new PendingGen { chunk = chunk, epoch = queued.epoch, handle = handle, lattice = lattice });
             }
         }
 
@@ -893,6 +919,7 @@ namespace VoxelEngine.Cosmos
         private void FinalizeGen(PendingGen p)
         {
             p.handle.Complete();
+            DisposeGenLattice(p);
             if (!IsCurrentChunk(p.chunk, p.epoch)) return;
 
             p.chunk.isGenerated = true;
@@ -1174,6 +1201,7 @@ namespace VoxelEngine.Cosmos
                 // re-enter editing/decorator paths); the deterministic padded border is already
                 // safe to mesh and this queue path preserves the normal finalisation order.
                 p.handle.Complete();
+                DisposeGenLattice(p);
                 if (!IsCurrentChunk(p.chunk, p.epoch)) return;
                 p.chunk.isGenerated = true;
                 p.chunk.genCompletedTime = Time.time;

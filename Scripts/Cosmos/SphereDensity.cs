@@ -317,15 +317,40 @@ namespace VoxelEngine.Cosmos
             float radius = math.length(worldPos);
             float3 dir   = math.normalizesafe(worldPos, new float3(1f, 0f, 0f));
 
-            // First-order surface correction (8.0.2): the column is evaluated at the
-            // chunk centre, so the surface radius is corrected toward the voxel's own
-            // direction with the sampled gradient. This keeps LOD chunks (64 m–16 km)
-            // hugging the true spherical terrain instead of rendering as flat slabs.
+            // Legacy first-order surface correction (8.0.2). NOTE: the gameplay world no
+            // longer uses this path — the linear extrapolation breaks on the 9.x ridged
+            // field (whole chunks generated hollow or filled = the "gaps on generation"
+            // and "hole through the planet" reports). SphereChunkGenJob now supplies an
+            // exact per-voxel surface radius via its surface LATTICE and calls
+            // EvaluateVoxelWithSurface below. This wrapper remains for probe callers.
             float3 dDir = dir - column.centerDir;
             float surfaceRadius = column.surfaceRadius
                 + column.surfaceGrad.x * dDir.x
                 + column.surfaceGrad.y * dDir.y
                 + column.surfaceGrad.z * dDir.z;
+
+            return EvaluateVoxelWithSurface(prm, biomes, ores, worldPos, surfaceRadius, column, oilSites);
+        }
+
+        /// <summary>
+        /// Per-voxel evaluation against an EXACT (or lattice-interpolated) surface
+        /// radius (9.5.0) — the artifact-free path used by SphereChunkGenJob. Biome,
+        /// climate and slope flavour still come from the shared chunk column.
+        /// </summary>
+        public static Voxel EvaluateVoxelWithSurface(
+            in SphereGenParams prm,
+            in NativeArray<BiomeData> biomes,
+            in NativeArray<OreLayer> ores,
+            in float3 worldPos,
+            float surfaceRadius,
+            in ChunkColumn column,
+            in NativeParallelHashMap<int, OilSiteData> oilSites)
+        {
+            if (prm.isAsteroidBelt == 1)
+                return EvaluateAsteroidVoxel(prm, worldPos);
+
+            float radius = math.length(worldPos);
+            float3 dir   = math.normalizesafe(worldPos, new float3(1f, 0f, 0f));
             var biome = biomes[column.biomeIndex];
 
             float density = surfaceRadius - radius;

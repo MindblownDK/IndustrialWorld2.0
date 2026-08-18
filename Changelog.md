@@ -1,9 +1,42 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.4.0-dev`
+**Current Version:** `9.5.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.5.0-dev] Exact-Surface Chunks — Lattice Generation, No More Hollow Planets, Duplicate Moon Removed, True-Position Beacons & Deep-Space-Proof Respawn
+
+**Type:** MINOR — the bubble now generates the EXACT field (root cause of "gaps appear when chunks generate", the 0.5 m wall AND the hollow "hole through the planet"). Save-compatible; freshly generated chunks improve automatically.
+
+#### ⛏️🧩 1. THE big one — the bubble was generating an approximation, not the field
+Your observation "before generation there are no gaps" was the key: the GPU surface (exact field) was right — the VOXEL CHUNKS were wrong. Since 8.0.2 each chunk approximated the surface with a chunk-centre LINEAR gradient. The 9.x field has ridged mountains and domain warping — linear extrapolation across a 32 m chunk misses by tens of metres at crests and warped coasts, so chunks generated HOLLOW (mine down into a void "hole through the planet") or OVERFILLED/clipped (gaps appearing exactly when chunks streamed in, phantom 0.5 m walls where the cutout removed the correct GPU skin over incorrect voxels).
+- New `BuildSurfaceLatticeJob` (Burst prepass): evaluates the TRUE `PlanetField` surface radius on a 5³ lattice per chunk; `SphereChunkGenJob` trilinearly interpolates it per voxel (max lattice spacing ≈ 8.5 m; ~125 field samples per chunk — negligible cost, still ~300× cheaper than per-voxel).
+- New `SphereDensity.EvaluateVoxelWithSurface(...)`: evaluation against an exact surface radius; the legacy gradient path remains only for probe callers.
+- Voxels, GPU skin, mining, colliders and the cutout now all agree on ONE surface. Mine to the core: the interior is solid rock the whole way down (as it always should have been).
+
+#### 🌙 2. Duplicate moon — auto sub-moons removed
+The registry auto-generated a "sub-moon" per moon that CLONED the moon's own BodySettings — a duplicate of the same moon orbiting itself ("two moons but only one is assigned"). Auto sub-moons are gone; they return only when authorable with their own settings.
+
+#### 🔭 3. Can't see other planets — true-position beacons
+An 8 km planet at 40,000 km is sub-pixel — physically present, optically invisible (that's why the sky looked empty once the fake proxies were gone). New `DistantBodyBeacons`: each REAL body gets a small emissive sphere parented AT the body itself (zero offset — nothing follows the player), scaled so the body never drops below ~0.2° apparent size, shrinking back inside the real body as its true surface takes over. Honest night-sky planets: fly at the dot, the dot IS the planet.
+
+#### 🛌 4. Respawn — deep-space-proof
+The 9.4 heal used the streamed world's dry-point search, which fails when death happens in deep space or another frame (streamer suspended / body null) — the heal silently did nothing. New analytic fallback: a fresh dry spawn is computed on the HOME body straight from `PlanetField` (no chunks, no colliders, frame-independent), and every respawn now logs its decision (`[PlayerSpawner] Respawn → dest=… anchor=… bed=…`).
+
+#### 🔬 5. "Surface not generated on the new planet" — instrumented
+Per-body engine telemetry every 15 s: `[GpuPlanetEngine:<Body>] nodes/ready/building/queued, finest depth, altitude`. If a planet still refuses to refine on approach, that one line tells us exactly which stage is starving — send it with your next report.
+
+#### ✅ Static delivery checks
+- All sources parse clean (tree-sitter C#); lattice arrays disposed on every completion/teardown path; version synchronized to 9.5.0-dev.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile. Existing saves work — but chunks you already visited were generated with the OLD approximation and stay as saved if modified; unmodified areas regenerate exact. For the cleanest check, use a fresh world.
+2. Fly along ridged mountains while chunks stream in: NO gaps may appear at generation time any more.
+3. Mine straight down 30+ m: solid rock the whole way (ores included); no voids except real caves; and yes — with patience you can now dig clean through the planet.
+4. Sky check: exactly ONE moon for the home planet, and the other planets visible as honest bright dots that grow into real planets.
+5. Die in deep space with no bed: respawn must land on the HOME planet (watch the `[PlayerSpawner] Respawn →` log).
+6. Approach a new planet and hold ~2–8 km altitude for a minute: if its surface stays coarse, send me its `[GpuPlanetEngine:…]` lines plus the `[CosmosBootstrap] Bodies:` line.
 
 ### [9.4.0-dev] Real-Only Space — Proxies Deleted, Ocean Job Crash Fixed, NaN Defence-in-Depth, Trust-No-Legacy Respawn
 

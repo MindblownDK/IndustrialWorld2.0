@@ -285,6 +285,29 @@ namespace VoxelEngine.GpuVoxel
             UpdateVisibilityAndEviction();
             UpdateColliders();
             DepenetrationGuard();
+            PumpDiagnostics();
+        }
+
+        private float _engineDiagTimer = 12f;
+        private void PumpDiagnostics()
+        {
+            _engineDiagTimer -= Time.deltaTime;
+            if (_engineDiagTimer > 0f) return;
+            _engineDiagTimer = 15f;
+
+            int ready = 0, building = 0, finest = 0;
+            foreach (var kv in _nodes)
+            {
+                if (kv.Value.state == NodeState.Ready) ready++;
+                else if (kv.Value.state == NodeState.Building) building++;
+                if (kv.Key.depth > finest) finest = kv.Key.depth;
+            }
+            float viewerDist = viewer != null
+                ? Vector3.Distance(viewer.position, body.transform.position) - body.genParams.radiusWorld
+                : -1f;
+            Debug.Log($"[GpuPlanetEngine:{body.DisplayName}] nodes={_nodes.Count} ready={ready} " +
+                      $"building={building} queued={_queue.Count} depth={finest}/{_maxDepth} " +
+                      $"altitude={viewerDist:0}m");
         }
 
         // ── Depenetration guard (9.3.0) ─────────────────────────────────────
