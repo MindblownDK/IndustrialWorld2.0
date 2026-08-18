@@ -32,8 +32,8 @@ namespace VoxelEngine.GpuVoxel
         [Range(1.2f, 4f)] public float splitFactor = 2f;
         [Tooltip("Finest water grid spacing (m) near the viewer — vertex resolution available to Gerstner waves and wakes.")]
         [Range(2f, 32f)] public float finestCellMeters = 6f;
-        [Tooltip("Water surface sits this far (m) below the mathematical sea radius so the bubble's chunk water renders on top without z-fighting.")]
-        [Range(0f, 1f)] public float surfaceInset = 0.3f;
+        [Tooltip("Water surface sits this far (m) below the mathematical sea radius so the bubble's chunk water renders on top without z-fighting, and shore waves stay below beach level.")]
+        [Range(0f, 2f)] public float surfaceInset = 0.65f;
         [Range(1, 8)] public int maxBuildsPerFrame = 4;
         [Range(0.1f, 2f)] public float desiredRefreshInterval = 0.4f;
 
@@ -116,6 +116,7 @@ namespace VoxelEngine.GpuVoxel
             while (_goPool.Count > 0) Destroy(_goPool.Pop());
             if (_desired.IsCreated) _desired.Dispose();
             if (_emptySplitSet.IsCreated) _emptySplitSet.Dispose();
+            if (_waterMaterial != null) { Destroy(_waterMaterial); _waterMaterial = null; }
         }
 
         /// <summary>Quality-tier hook (QualityPresetApplier).</summary>
@@ -154,8 +155,28 @@ namespace VoxelEngine.GpuVoxel
                     1, 11);
             }
             if (_waterMaterial == null)
-                _waterMaterial = WaterMeshBuilder.GetWaterMaterial();
+            {
+                // Own calmer CLONE of the shared chunk-water material (9.5.x): the open
+                // ocean keeps the same look, waves and wakes, but with reduced vertical
+                // wave/tide excursion so the animated shoreline can never climb above
+                // beach level (the chunk water inside the bubble is unchanged).
+                Material shared = WaterMeshBuilder.GetWaterMaterial();
+                if (shared != null)
+                {
+                    _waterMaterial = new Material(shared) { name = shared.name + " (GpuOcean)" };
+                    SetFloatIfPresent(_waterMaterial, "_DeepWaveAmplitude", 0.45f);
+                    SetFloatIfPresent(_waterMaterial, "_SecondaryWaveAmplitude", 0.2f);
+                    SetFloatIfPresent(_waterMaterial, "_ShallowWaveAmplitude", 0.05f);
+                    SetFloatIfPresent(_waterMaterial, "_WaveChop", 0.18f);
+                    SetFloatIfPresent(_waterMaterial, "_TideStrength", 0.05f);
+                }
+            }
             return true;
+        }
+
+        private static void SetFloatIfPresent(Material m, string prop, float value)
+        {
+            if (m != null && m.HasProperty(prop)) m.SetFloat(prop, value);
         }
 
         public void ResetAllPatches()

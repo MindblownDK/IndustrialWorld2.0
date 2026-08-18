@@ -20,8 +20,14 @@ namespace VoxelEngine.Cosmos
     [BurstCompile(FloatPrecision.Standard, FloatMode.Fast, CompileSynchronously = false)]
     public struct SphereChunkGenJob : IJobParallelFor
     {
-        /// <summary>Surface-lattice resolution per axis (5³ = 125 samples per chunk).</summary>
-        public const int LATTICE = 5;
+        /// <summary>Surface-lattice resolution per axis (7³ = 343 samples per chunk).</summary>
+        public const int LATTICE = 7;
+
+        /// <summary>Lattice plane spacing (m). Planes sit on the GLOBAL 8 m grid, so
+        /// neighbouring chunks sample the surface at IDENTICAL world positions — their
+        /// interpolated surfaces agree exactly at shared borders (9.5.1: the per-box
+        /// lattice disagreed at chunk faces and opened small seams between chunks).</summary>
+        public const float LATTICE_SPACING = 8f;
 
         public SphereGenParams prm;
 
@@ -55,8 +61,11 @@ namespace VoxelEngine.Cosmos
         // a 5³ per-chunk lattice built by BuildSurfaceLatticeJob.
         public SphereDensity.ChunkColumn column;
 
-        /// <summary>Per-chunk 5³ surface-radius lattice (built by BuildSurfaceLatticeJob).</summary>
+        /// <summary>Per-chunk 7³ surface-radius lattice (built by BuildSurfaceLatticeJob).</summary>
         [ReadOnly] public NativeArray<float> surfaceLattice;
+
+        /// <summary>World-grid-snapped origin of the lattice (multiple of LATTICE_SPACING).</summary>
+        public float3 latticeOrigin;
 
         // A radial deflation offset applied to LOD generation. Setting this >0 pulls the LOD
         // surface slightly inward toward the planet core, ensuring it sinks inside the higher-res
@@ -98,11 +107,11 @@ namespace VoxelEngine.Cosmos
 
             if (surfaceLattice.IsCreated && surfaceLattice.Length == LATTICE * LATTICE * LATTICE)
             {
-                // Exact path (9.5.0): trilinear surface radius from the per-chunk lattice.
-                float3 f = new float3(
-                    x / (float)math.max(1, sizeX - 1),
-                    y / (float)math.max(1, sizeY - 1),
-                    z / (float)math.max(1, sizeZ - 1)) * (LATTICE - 1);
+                // Exact path (9.5.x): trilinear surface radius from the WORLD-ALIGNED
+                // lattice — shared plane positions across chunk borders (seam-free).
+                float3 f = (originWorld + new float3(x, y, z) * voxelSize - latticeOrigin)
+                           / LATTICE_SPACING;
+                f = math.clamp(f, 0f, LATTICE - 1.0001f);
                 int3 i0 = math.clamp((int3)math.floor(f), 0, LATTICE - 2);
                 float3 t = math.saturate(f - i0);
 
@@ -142,8 +151,7 @@ namespace VoxelEngine.Cosmos
     public struct BuildSurfaceLatticeJob : IJobParallelFor
     {
         public SphereGenParams prm;
-        public float3 originWorld;   // padded-box min corner (body-relative metres)
-        public float3 boxExtent;     // padded-box extent (metres)
+        public float3 latticeOrigin;   // world-grid-snapped (multiple of LATTICE_SPACING)
 
         [WriteOnly] public NativeArray<float> lattice;   // LATTICE³
 
@@ -154,8 +162,7 @@ namespace VoxelEngine.Cosmos
             int y = (index / L) % L;
             int z = index / (L * L);
 
-            float3 pos = originWorld + boxExtent * new float3(
-                x / (float)(L - 1), y / (float)(L - 1), z / (float)(L - 1));
+            float3 pos = latticeOrigin + new float3(x, y, z) * SphereChunkGenJob.LATTICE_SPACING;
             float3 dir = Unity.Mathematics.math.normalizesafe(pos, new float3(0f, 1f, 0f));
             lattice[index] = VoxelEngine.GpuVoxel.PlanetField.SurfaceRadius(
                 prm.seed, dir, prm.radiusWorld, prm.baseHeight, prm.seaRadius,

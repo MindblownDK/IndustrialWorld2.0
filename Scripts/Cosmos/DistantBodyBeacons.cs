@@ -17,8 +17,8 @@ namespace VoxelEngine.Cosmos
     [DisallowMultipleComponent]
     public sealed class DistantBodyBeacons : MonoBehaviour
     {
-        [Tooltip("Minimum apparent size (radians) a body is displayed at (0.0035 ≈ 0.2°). Below this, the beacon boosts the body to stay findable; above it, the real surface carries itself and the beacon fades.")]
-        public float minApparentAngularRadians = 0.0035f;
+        [Tooltip("Minimum apparent size (radians) a body is displayed at (0.009 ≈ 0.5° — about the full moon). Below this, the beacon boosts the body to stay clearly findable for navigation; above it, the real surface carries itself and the beacon fades.")]
+        public float minApparentAngularRadians = 0.009f;
 
         [Tooltip("Seconds between beacon refreshes.")]
         public float refreshInterval = 0.25f;
@@ -113,7 +113,7 @@ namespace VoxelEngine.Cosmos
         {
             var s = body.settings;
             if (s != null && s.displayColor.a > 0.01f) return s.displayColor;
-            return new Color(0.85f, 0.88f, 0.95f, 1f);
+            return new Color(0.95f, 0.97f, 1f, 1f);
         }
 
         private static Beacon CreateBeacon(CelestialBody body)

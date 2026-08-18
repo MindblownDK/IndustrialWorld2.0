@@ -307,6 +307,7 @@ namespace VoxelEngine.Cosmos
             // The old bubble is gone — stop clipping the GPU LOD skin until the new
             // bubble has actually meshed (a stale cutout would punch a hole in terrain).
             _meshedBubbleRadius = 0f;
+            HasLocalFooting = false;
             _bubbleScanTimer = 999f;
             Shader.SetGlobalFloat("_VoxelBubbleCutoutRadius", 0f);
 
@@ -477,7 +478,7 @@ namespace VoxelEngine.Cosmos
                           $"{scattered} scattered | {waterChunks} with water-GO | {waterVoxels} water voxels (5-chunk sample) | " +
                           $"FluidMgr: {(fm == null ? "NULL" : "alive")} | " +
                           $"genQ:{_genQueue.Count} meshQ:{_meshQueue.Count} | " +
-                          $"handshake: meshedR={_meshedBubbleRadius:0}m colliderR={ColliderBubbleRadius:0}m | " +
+                          $"handshake: meshedR={_meshedBubbleRadius:0}m footing={HasLocalFooting} | " +
                           $"seaRadius:{body?.SeaRadius} meanSurf:{body?.SurfaceRadius}");
             }
         }
@@ -499,23 +500,27 @@ namespace VoxelEngine.Cosmos
         }
 
         /// <summary>
-        /// Radius (m) of the ball around the stream centre in which the bubble owns BOTH
-        /// rendering and physics: fully meshed AND within the mesh-collider window.
+        /// True while the player is standing on real streamed terrain — the chunk block
+        /// around the stream centre has meshed geometry. While footing exists, the GPU
+        /// LOD skin must NEVER collide inside the bubble's collider window (this is the
+        /// bulletproof form of the yield rule — the full-ball scan alone proved too
+        /// strict and left the skin collider active 0.5 m under the surface).
         /// </summary>
-        public float ColliderBubbleRadius =>
-            Mathf.Max(0f, Mathf.Min(_meshedBubbleRadius,
-                colliderChunkRadius * VoxelConstants.CHUNK_SIZE * VoxelConstants.VOXEL_SIZE));
+        public bool HasLocalFooting { get; private set; }
 
         /// <summary>
         /// The bubble's conservative coverage ball for the GPU surface handshake.
-        /// Returns false until the initial fill has meshed at least one chunk shell.
+        /// True whenever the bubble is meaningfully present around the viewer.
         /// </summary>
         public bool TryGetMeshedBubble(out Vector3 centerLocal, out float meshedRadius, out float colliderRadius)
         {
             centerLocal = _streamCenterLocal;
             meshedRadius = _meshedBubbleRadius;
-            colliderRadius = ColliderBubbleRadius;
-            return _meshedBubbleRadius > VoxelConstants.CHUNK_SIZE * VoxelConstants.VOXEL_SIZE;
+            float window = Mathf.Max(0f, colliderChunkRadius * VoxelConstants.CHUNK_SIZE * VoxelConstants.VOXEL_SIZE);
+            // With footing, the whole collider window belongs to the bubble.
+            colliderRadius = HasLocalFooting ? window : Mathf.Min(_meshedBubbleRadius, window);
+            return HasLocalFooting ||
+                   _meshedBubbleRadius > 12f;
         }
 
         /// <summary>
@@ -575,6 +580,21 @@ namespace VoxelEngine.Cosmos
             if (localOk) radius = Mathf.Max(radius, 2f * chunkM);
 
             _meshedBubbleRadius = radius;
+
+            // Footing: ANY meshed geometry in the 27-chunk block around the stream
+            // centre means the player is on (or right next to) real bubble terrain.
+            bool footing = false;
+            for (int dz = -1; dz <= 1 && !footing; dz++)
+            for (int dy = -1; dy <= 1 && !footing; dy++)
+            for (int dx = -1; dx <= 1 && !footing; dx++)
+            {
+                var c = new Vector3Int(_streamChunkCenter.x + dx, _streamChunkCenter.y + dy, _streamChunkCenter.z + dz);
+                if (_chunks.TryGetValue(c, out var ch) && ch != null && ch.isGenerated &&
+                    ch.meshFilter != null && ch.meshFilter.sharedMesh != null &&
+                    ch.meshFilter.sharedMesh.vertexCount > 0)
+                    footing = true;
+            }
+            HasLocalFooting = footing;
         }
 
         // ---- Streaming (body-relative cartesian) ----
@@ -761,13 +781,15 @@ namespace VoxelEngine.Cosmos
                     SphereChunkGenJob.LATTICE * SphereChunkGenJob.LATTICE * SphereChunkGenJob.LATTICE,
                     Unity.Collections.Allocator.Persistent,
                     Unity.Collections.NativeArrayOptions.UninitializedMemory);
+                // Snap the lattice to the GLOBAL 8 m grid so neighbouring chunks sample
+                // identical world positions — seam-free surfaces across chunk borders.
+                float3 latticeOrigin = math.floor(originWorld / SphereChunkGenJob.LATTICE_SPACING)
+                                       * SphereChunkGenJob.LATTICE_SPACING;
                 var latticeJob = new BuildSurfaceLatticeJob
                 {
-                    prm         = body.genParams,
-                    originWorld = originWorld,
-                    boxExtent   = new float3(
-                        (VoxelConstants.CHUNK_SIZE_P - 1) * VoxelConstants.VOXEL_SIZE),
-                    lattice     = lattice,
+                    prm           = body.genParams,
+                    latticeOrigin = latticeOrigin,
+                    lattice       = lattice,
                 };
                 var latticeHandle = latticeJob.Schedule(lattice.Length, 16);
 
@@ -782,6 +804,7 @@ namespace VoxelEngine.Cosmos
                     voxels     = chunk.voxels,
                     column     = column,
                     surfaceLattice = lattice,
+                    latticeOrigin = latticeOrigin,
                     sizeX      = VoxelConstants.CHUNK_SIZE_P,
                     sizeY      = VoxelConstants.CHUNK_SIZE_P,
                     sizeZ      = VoxelConstants.CHUNK_SIZE_P,

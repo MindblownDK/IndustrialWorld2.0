@@ -1,9 +1,35 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.5.0-dev`
+**Current Version:** `9.5.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.5.1-dev] Footing Yield, World-Aligned Lattice, Bright Navigation Beacons & Calm Ocean Shores
+
+**Type:** PATCH — final mining unblock, chunk-border seams, beacon visibility, shore overreach. No save/API change.
+
+#### ⛏️ 1. Mining 0.5 m stopper, final piece — collider FOOTING rule
+Visual layers are gone (cutout confirmed working) — the remaining stopper was the LOD skin's MESH COLLIDER still active under the player: the pickaxe ray ignores it (safety marker), your body doesn't. The yield gate demanded a >32 m fully-meshed ball from the scan — too strict in practice. New rule: **while the player has FOOTING** (any meshed chunk in the 27-block around the stream centre — i.e. you are literally standing on bubble terrain), the ENTIRE collider window belongs to the bubble and every LOD collider inside it switches off. No scan sensitivity, no threshold: standing on ground = dig freely, to the core. Engine telemetry now also prints the bubble state (`bubble=meshedR/colR`).
+
+#### 🧩 2. Small gaps BETWEEN chunks — world-aligned lattice
+9.5.0's per-chunk lattice sampled each chunk's own box, so two neighbours interpolated the surface from DIFFERENT plane positions and disagreed exactly at their shared border → the thin between-chunk gaps you found. The lattice now sits on the GLOBAL 8 m world grid (7³ planes, snapped origins): neighbouring chunks sample the surface at IDENTICAL world positions and their interpolated surfaces agree bit-for-bit at every shared voxel. Seam-free by construction.
+
+#### 🔭 3. Distant planets — navigation-grade beacons
+Minimum apparent size raised from ~0.2° to **~0.5° (full-moon size)** with a brighter tint — every planet in the system reads clearly in the sky as a destination, still rendered AT its true position and still fading into the real surface on approach.
+
+#### 🌊 4. Shore waves climbing above land
+The open-ocean patches shared the chunk-water material 1:1, whose full wave/tide stack (~1.3 m vertical excursion at 0.3 m inset) let animated shore swells crest above beach level. The ocean now uses its own CALMER clone (reduced deep/secondary/shallow amplitudes, minimal tide, softer chop) at a 0.65 m inset — same look, wakes and foam, but the shoreline animation stays below the land. Bubble chunk water is untouched.
+
+#### ✅ Static delivery checks
+- All sources parse clean (tree-sitter C#); version synchronized to 9.5.1-dev.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile.
+2. Mine straight down: past 0.5 m, past 5 m, keep going — nothing may ever stop the descent again (check `bubble=` in the `[GpuPlanetEngine:…]` log if it does).
+3. Fresh-world flyover: the thin between-chunk gaps must be gone.
+4. Look at the night sky: planets/moons as clear bright dots (~full-moon size) you can navigate by.
+5. Watch a shoreline: waves stay at/below beach level while animating.
 
 ### [9.5.0-dev] Exact-Surface Chunks — Lattice Generation, No More Hollow Planets, Duplicate Moon Removed, True-Position Beacons & Deep-Space-Proof Respawn
 

@@ -305,9 +305,10 @@ namespace VoxelEngine.GpuVoxel
             float viewerDist = viewer != null
                 ? Vector3.Distance(viewer.position, body.transform.position) - body.genParams.radiusWorld
                 : -1f;
+            bool hasBubble = TryGetBubble(out _, out float meshedR, out float colR);
             Debug.Log($"[GpuPlanetEngine:{body.DisplayName}] nodes={_nodes.Count} ready={ready} " +
                       $"building={building} queued={_queue.Count} depth={finest}/{_maxDepth} " +
-                      $"altitude={viewerDist:0}m");
+                      $"altitude={viewerDist:0}m bubble={(hasBubble ? $"{meshedR:0}/{colR:0}m" : "none")}");
         }
 
         // ── Depenetration guard (9.3.0) ─────────────────────────────────────
