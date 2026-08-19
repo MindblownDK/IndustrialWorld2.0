@@ -27,6 +27,9 @@ namespace VoxelEngine.UI
             public string detail;
             public Vector3 position;
             public Color accent;
+            /// <summary>World-spawn choices route through PlayerSpawner.Respawn() —
+            /// the body-anchored, self-healing path (raw scene points go stale).</summary>
+            public bool isWorldSpawn;
         }
 
         public static void EnsureMounted(VisualElement uiRoot)
@@ -119,7 +122,7 @@ namespace VoxelEngine.UI
 
         private static VisualElement BuildChoiceButton(RespawnChoice choice)
         {
-            var btn = new Button(() => Respawn(choice.position));
+            var btn = new Button(() => Respawn(choice));
             btn.style.marginBottom = 8;
             btn.style.minHeight = 58;
             btn.style.paddingLeft = 14;
@@ -151,11 +154,20 @@ namespace VoxelEngine.UI
             return btn;
         }
 
-        private static void Respawn(Vector3 position)
+        private static void Respawn(RespawnChoice choice)
         {
             var player = _deadPlayer != null ? _deadPlayer : PlayerStats.Instance;
             Hide();
-            if (player != null) player.RespawnAt(position);
+            if (player == null) return;
+
+            if (choice.isWorldSpawn)
+            {
+                // Healing path: resolves the BODY-ANCHORED world spawn, rejects stale
+                // scene points, falls back to an analytic surface point — never space.
+                var spawner = player.GetComponent<VoxelEngine.Player.PlayerSpawner>();
+                if (spawner != null) { spawner.Respawn(); return; }
+            }
+            player.RespawnAt(choice.position);
         }
 
         private static List<RespawnChoice> GatherRespawnChoices()
@@ -166,27 +178,17 @@ namespace VoxelEngine.UI
             // World spawn: prefer the initialized true spawn, but tolerate non-zero legacy saves.
             // The 0,250,0 fallback is only used if absolutely nothing else exists — PlayerSpawner
             // now initializes worldSpawnPoint to the real grounded position on first play.
-            Vector3 worldSpawn;
-            if (session != null)
-            {
-                if (session.worldSpawnInitialized)
-                    worldSpawn = session.worldSpawnPoint;
-                else if (session.worldSpawnPoint.sqrMagnitude > 0.5f)
-                    worldSpawn = session.worldSpawnPoint;
-                else
-                    worldSpawn = new Vector3(0f, 250f, 0f);
-            }
-            else
-            {
-                worldSpawn = new Vector3(0f, 250f, 0f);
-            }
+            Vector3 worldSpawn = new Vector3(0f, 250f, 0f);
+            if (session != null && !session.TryResolveWorldSpawn(out worldSpawn))
+                worldSpawn = session.worldSpawnPoint;
 
             AddUnique(list, new RespawnChoice
             {
                 title = "World Spawn",
                 detail = FormatPosition(worldSpawn),
                 position = worldSpawn,
-                accent = new Color(0.42f, 0.75f, 1.0f)
+                accent = new Color(0.42f, 0.75f, 1.0f),
+                isWorldSpawn = true
             });
 
             if (session != null && session.hasBedSpawn && !LinkedSpawnIsUnavailableCryobed(session.bedSpawnPoint))

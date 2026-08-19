@@ -24,7 +24,12 @@ namespace VoxelEngine.Persistence
     {
         public const int   REGION_SIZE = 16;
         private const uint MAGIC       = 0x52434556; // "VECR"
-        private const int  VERSION     = 2;
+        // V3 (9.5.3): unchanged binary layout vs V2, but the version stamp now also
+        // guards FIELD compatibility. Chunks saved against the pre-9.5 planetary field
+        // (gradient-approximated surfaces) are geometrically wrong next to freshly
+        // generated exact-field chunks — floating islands, unmineable phantom surfaces,
+        // mesh/data disagreement. Older versions are rejected and regenerate fresh.
+        private const int  VERSION     = 3;
         // V2 reserves a signed vertical range and writes explicit chunk coordinates.
         // V1 used WORLD_HEIGHT_CHUNKS as its stride, which collided for planet chunks
         // with negative vertical coordinates and restored unrelated voxel payloads.
@@ -123,9 +128,11 @@ namespace VoxelEngine.Persistence
                 using var br = new BinaryReader(fs);
                 if (br.ReadUInt32() != MAGIC) { Debug.LogWarning($"[RegionFile] Bad magic in {path}"); return result; }
                 int version = br.ReadInt32();
-                if (version != 1 && version != VERSION)
+                if (version != VERSION)
                 {
-                    Debug.LogWarning($"[RegionFile] Unknown version {version} in {path}");
+                    Debug.LogWarning($"[RegionFile] Chunk data in {path} is version {version} — " +
+                                     "stale against the rebuilt planetary field (pre-9.5.3). " +
+                                     "Those chunks regenerate fresh from the exact field.");
                     return result;
                 }
                 int count = br.ReadInt32();

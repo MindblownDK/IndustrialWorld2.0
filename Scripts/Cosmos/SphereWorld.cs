@@ -288,8 +288,30 @@ namespace VoxelEngine.Cosmos
         {
             string root = string.IsNullOrEmpty(baseName) ? "DefaultSphereWorld" : baseName;
             if (forBody == null || forBody.settings == null) return root;
-            string bodyKey = forBody.settings.bodyName;
-            return root + "_" + bodyKey.Replace(" ", "");
+            string bodyKey = forBody.settings.bodyName.Replace(" ", "");
+
+            // ONE save per world (9.5.3): per-body chunk stores now live INSIDE the
+            // world folder (VoxelWorlds/<world>/Bodies/<body>) instead of polluting
+            // VoxelWorlds with sibling "<world>_<body>" folders. Existing legacy
+            // folders migrate in place on first touch.
+            string newKey = System.IO.Path.Combine(root, "Bodies", bodyKey);
+            try
+            {
+                string rootDir = System.IO.Path.Combine(UnityEngine.Application.persistentDataPath, "VoxelWorlds");
+                string legacy = System.IO.Path.Combine(rootDir, root + "_" + bodyKey);
+                string target = System.IO.Path.Combine(rootDir, newKey);
+                if (System.IO.Directory.Exists(legacy) && !System.IO.Directory.Exists(target))
+                {
+                    System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(target));
+                    System.IO.Directory.Move(legacy, target);
+                    Debug.Log($"[SphereWorld] Migrated legacy chunk store '{legacy}' → '{target}'.");
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning("[SphereWorld] Chunk store migration skipped: " + ex.Message);
+            }
+            return newKey;
         }
 
         /// <summary>

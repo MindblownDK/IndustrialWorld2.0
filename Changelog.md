@@ -1,9 +1,35 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.5.2-dev`
+**Current Version:** `9.5.3-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.5.3-dev] The Logs Spoke — Stale-Era Chunk Rejection, Healed Death-Screen Respawn & One Save Per World
+
+**Type:** PATCH — three fixes pinpointed by Thomas's diagnostics. No API change; stale pre-9.5 chunk edits regenerate fresh (intended heal).
+
+#### 🧾 What the logs proved
+- `[Mining] rayHit='Chunk_…' voxel(density=-38, mat=Air) collidersBelow:'Chunk_…'@0.50m` — the pickaxe hit a REAL bubble-chunk collider whose surface sits ~1.4 m above voxel data that says AIR. Mesh and data can only disagree like that across SAVE ERAS: chunks saved before 9.5 (gradient-approximated field, metres off) sitting next to freshly regenerated exact-field chunks. That's the unmineable "top layer", and it's also the "respawned onto a floating chunk in the air" — the old spawn-area chunks literally float above the rebuilt terrain.
+- The respawn stack trace showed the death screen calling `RespawnAt(rawScenePoint)` directly — bypassing every body-anchored healing path built since 9.2 (and, marked as an explicit destination, exempt from the space clamp).
+
+#### 💾 1. Stale-era chunk rejection (auto-heal)
+Region files bump to format V3. Loading older versions now logs one warning and regenerates those chunks fresh from the exact field — mixed-era worlds heal themselves on load. Old player edits in those chunks are discarded (they were geometrically wrong against the current planet); from V3 on, saved chunks always match the field that generated them.
+
+#### 🛌 2. Death screen respawn — routed through the healing path
+The "World Spawn" choice now resolves the BODY-ANCHORED spawn for display and executes `PlayerSpawner.Respawn()` — anchor resolution, open-space rejection, analytic fallback and the final clamp all apply. Bed/cryobed choices keep their explicit destinations (orbital spawns by design).
+
+#### 📁 3. One save per world
+Per-body chunk stores move from sibling `VoxelWorlds/<world>_<planet>` folders into `VoxelWorlds/<world>/Bodies/<planet>` — a single world folder holds everything. Existing legacy folders migrate automatically on first touch (contents preserved; their pre-V3 regions then regenerate per fix 1).
+
+#### ✅ Static delivery checks
+- All sources parse clean (tree-sitter C#); version synchronized to 9.5.3-dev.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile, load your existing world — expect `[RegionFile] … stale …` warnings once per old region: that is the heal working.
+2. Mine at your old spawn area: the floating-island/unmineable zones must be gone (terrain regenerates consistent), and digging must continue arbitrarily deep. Any `[Mining]` line that still appears — send it.
+3. Die → death screen → World Spawn: must land ON the planet surface (watch `[PlayerSpawner] Respawn parked/complete`).
+4. Check `persistentDataPath/VoxelWorlds/`: only `<world>` folders remain, with `Bodies/<planet>` inside; `<world>_<planet>` siblings are migrated away.
 
 ### [9.5.2-dev] Unconditional Collider Yield, Self-Naming Mining Diagnostics, Hard-Clamped Respawn & Faster Streaming
 
