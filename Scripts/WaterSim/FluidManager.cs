@@ -205,6 +205,64 @@ namespace VoxelEngine.WaterSim
             if (_activeChunks.Add(chunkCoord)) _workQueue.Enqueue(chunkCoord);
         }
 
+        // ── Mountain springs (9.6.0 — Phase 3 liquid flow) ─────────────────
+        // Deterministic spring voxels (registered by SphereWorld during chunk
+        // finalisation) act as infinite sources: while their chunk is loaded they
+        // refill to full every few ticks and the cellular sim carries the water
+        // downhill — real streams that run down mountainsides, pool in dips and
+        // feed waterfalls. No save data: the same world seed always re-derives the
+        // same springs. Buried or built-over springs go dormant automatically.
+        [Header("Springs")]
+        [Tooltip("Spring voxels refilled per fluid tick (keeps stream sources flowing without hitching).")]
+        public int maxSpringRefillsPerTick = 24;
+
+        private readonly HashSet<Vector3Int> _springs = new();
+        private readonly List<Vector3Int> _springScratch = new();
+        private int _springCursor;
+
+        /// <summary>Register an infinite water source at a body-local voxel.</summary>
+        public void RegisterSpring(Vector3Int worldVoxel) => _springs.Add(worldVoxel);
+
+        /// <summary>Forget every spring (world/body switch).</summary>
+        public void ClearSprings() { _springs.Clear(); _springScratch.Clear(); _springCursor = 0; }
+
+        private void RefillSprings(IVoxelWorld world)
+        {
+            if (_springs.Count == 0) return;
+            if (_springScratch.Count != _springs.Count)
+            {
+                _springScratch.Clear();
+                _springScratch.AddRange(_springs);
+            }
+
+            int budget = maxSpringRefillsPerTick;
+            int scanned = 0;
+            const int S = VoxelConstants.CHUNK_SIZE;
+            while (budget > 0 && scanned < _springScratch.Count)
+            {
+                scanned++;
+                _springCursor = (_springCursor + 1) % _springScratch.Count;
+                Vector3Int s = _springScratch[_springCursor];
+                var chunkCoord = new Vector3Int(
+                    Mathf.FloorToInt(s.x / (float)S),
+                    Mathf.FloorToInt(s.y / (float)S),
+                    Mathf.FloorToInt(s.z / (float)S));
+                if (!world.TryGetChunk(chunkCoord, out var chunk) || chunk == null || !chunk.isGenerated)
+                    continue;
+
+                var v = world.GetVoxelWorld(s);
+                if (v.IsSolid) continue;              // buried / built over → dormant
+                if (v.waterLevel >= 200) continue;    // already full
+
+                FluidMaterialUtility.SetLiquid(ref v, VoxelEngine.Items.LiquidType.Water, 255);
+                world.SetVoxelWorld(s, v, remesh: false);
+                chunk.isDirty = true;
+                MarkActive(chunkCoord);
+                WaterMeshBuilder.Schedule(chunk);
+                budget--;
+            }
+        }
+
         private void Update()
         {
             _timer += Time.deltaTime;
@@ -214,6 +272,8 @@ namespace VoxelEngine.WaterSim
 
             var world = ActiveWorld.Current;
             if (world == null) return;
+
+            RefillSprings(world);
 
             int budget = maxChunksPerTick;
             int processed = 0;

@@ -41,6 +41,19 @@ namespace VoxelEngine.GpuVoxel
         private const int PATCH_VERTS = PATCH_CELLS + 1;
         private const float SKIRT_OVERLAP = 0.015f;   // uv overshoot hides LOD T-junction pinholes
 
+        // ── Ocean currents (9.6.0 — Phase 3) ────────────────────────────
+        // Per-vertex UV2 flow consumed by the water shader (flow-mapped normals,
+        // foam streaks, wave drift): large-scale divergence-free GYRES from rotated
+        // noise gradients + ALONG-SHORE currents where the seabed nears the
+        // waterline. Sampled on a coarse lattice and bilinearly interpolated —
+        // ~0.5 ms per near patch, skipped entirely on far patches.
+        private const int FLOW_LATTICE = 9;
+        private const float FLOW_PATCH_MAX_ARC = 8000f;   // only patches finer than this get flow
+        private const float GYRE_STRENGTH = 0.22f;
+        private const float COAST_STRENGTH = 0.5f;
+        private const float COAST_BAND_METERS = 18f;
+        private readonly Vector2[] _flowLattice = new Vector2[FLOW_LATTICE * FLOW_LATTICE];
+
         private sealed class PatchRec
         {
             public QuadNodeDesc desc;
@@ -293,6 +306,9 @@ namespace VoxelEngine.GpuVoxel
             float2 uvMin = rec.desc.uvMin - rec.desc.uvSize * SKIRT_OVERLAP;
             float2 uvSize = rec.desc.uvSize * (1f + 2f * SKIRT_OVERLAP);
 
+            bool wantFlow = rec.desc.arc < FLOW_PATCH_MAX_ARC;
+            if (wantFlow) ComputeFlowLattice(rec.desc.id.face, uvMin, uvSize, prm);
+
             for (int j = 0; j < PATCH_VERTS; j++)
             for (int i = 0; i < PATCH_VERTS; i++)
             {
@@ -305,7 +321,9 @@ namespace VoxelEngine.GpuVoxel
                 _verts[vi] = (Vector3)pos;
                 _normals[vi] = (Vector3)dir;
                 _uv0[vi] = new Vector2(u * 64f, v * 64f);
-                _uv2[vi] = Vector2.zero;                    // flow-map channel (Phase 3)
+                _uv2[vi] = wantFlow
+                    ? SampleFlowLattice(i / (float)PATCH_CELLS, j / (float)PATCH_CELLS)
+                    : Vector2.zero;
                 _colors[vi] = new Color32(255, 255, 255, 255);
             }
 
@@ -327,6 +345,70 @@ namespace VoxelEngine.GpuVoxel
             rec.filter.sharedMesh = rec.mesh;
             rec.renderer.sharedMaterial = _waterMaterial;
             rec.hasMesh = true;
+        }
+
+        private void ComputeFlowLattice(int face, Vector2 uvMin, Vector2 uvSize, VoxelEngine.Cosmos.SphereGenParams prm)
+        {
+            const float eps = 0.01f;
+            for (int j = 0; j < FLOW_LATTICE; j++)
+            for (int i = 0; i < FLOW_LATTICE; i++)
+            {
+                float u = uvMin.x + uvSize.x * (i / (float)(FLOW_LATTICE - 1));
+                float v = uvMin.y + uvSize.y * (j / (float)(FLOW_LATTICE - 1));
+                float3 d = CubeSphere.FaceDirection(face, u, v);
+
+                // Tangent basis on the sphere.
+                float3 refv = math.abs(d.y) < 0.9f ? new float3(0f, 1f, 0f) : new float3(1f, 0f, 0f);
+                float3 t1 = math.normalizesafe(math.cross(d, refv), new float3(1f, 0f, 0f));
+                float3 t2 = math.cross(d, t1);
+
+                // GYRES: rotate the gradient of a scalar noise field 90° in the tangent
+                // plane → a divergence-free large-scale current (ocean gyre look).
+                float off = prm.seed * 0.001f + 37.7f;
+                float g1p = noise.snoise((d + t1 * eps) * 2.3f + off);
+                float g1m = noise.snoise((d - t1 * eps) * 2.3f + off);
+                float g2p = noise.snoise((d + t2 * eps) * 2.3f + off);
+                float g2m = noise.snoise((d - t2 * eps) * 2.3f + off);
+                Vector2 gyre = new Vector2(g2p - g2m, -(g1p - g1m)) * (GYRE_STRENGTH / (2f * eps) * 0.05f);
+
+                // ALONG-SHORE current: where the seabed nears the waterline, flow runs
+                // parallel to the coast (rotated seabed gradient), fading with depth.
+                float sC = PlanetField.SurfaceRadius(prm.seed, d, prm.radiusWorld, prm.baseHeight,
+                                                     prm.seaRadius, prm.continentScaleDir, prm.mountainScale);
+                float coast = 1f - Mathf.Clamp01(Mathf.Abs(sC - prm.seaRadius) / COAST_BAND_METERS);
+                if (coast > 0.01f)
+                {
+                    float s1 = PlanetField.SurfaceRadius(prm.seed, math.normalizesafe(d + t1 * eps, d),
+                        prm.radiusWorld, prm.baseHeight, prm.seaRadius, prm.continentScaleDir, prm.mountainScale);
+                    float s2 = PlanetField.SurfaceRadius(prm.seed, math.normalizesafe(d + t2 * eps, d),
+                        prm.radiusWorld, prm.baseHeight, prm.seaRadius, prm.continentScaleDir, prm.mountainScale);
+                    Vector2 gradS = new Vector2(s1 - sC, s2 - sC);
+                    if (gradS.sqrMagnitude > 1e-6f)
+                    {
+                        Vector2 alongShore = new Vector2(gradS.y, -gradS.x).normalized;
+                        gyre += alongShore * (COAST_STRENGTH * coast);
+                    }
+                }
+
+                // Project the tangent-space flow into world axes for the shader's
+                // XZ-based flow scrolling (the same convention the chunk water uses).
+                float3 flow3 = t1 * gyre.x + t2 * gyre.y;
+                Vector2 flow = new Vector2(flow3.x, flow3.z);
+                if (flow.sqrMagnitude > 0.81f) flow = flow.normalized * 0.9f;
+                _flowLattice[i + j * FLOW_LATTICE] = flow;
+            }
+        }
+
+        private Vector2 SampleFlowLattice(float fu, float fv)
+        {
+            float x = Mathf.Clamp01(fu) * (FLOW_LATTICE - 1);
+            float y = Mathf.Clamp01(fv) * (FLOW_LATTICE - 1);
+            int x0 = Mathf.Min((int)x, FLOW_LATTICE - 2);
+            int y0 = Mathf.Min((int)y, FLOW_LATTICE - 2);
+            float tx = x - x0, ty = y - y0;
+            Vector2 a = Vector2.Lerp(_flowLattice[x0 + y0 * FLOW_LATTICE], _flowLattice[x0 + 1 + y0 * FLOW_LATTICE], tx);
+            Vector2 b = Vector2.Lerp(_flowLattice[x0 + (y0 + 1) * FLOW_LATTICE], _flowLattice[x0 + 1 + (y0 + 1) * FLOW_LATTICE], tx);
+            return Vector2.Lerp(a, b, ty);
         }
 
         private void AcquirePatchObjects(PatchRec rec)

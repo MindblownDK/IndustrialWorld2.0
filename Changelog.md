@@ -1,9 +1,34 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.5.5-dev`
+**Current Version:** `9.6.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.6.0-dev] Living Water — Mountain Springs, Downhill Streams & Ocean Currents (Rework Phase 3)
+
+**Type:** MINOR — new water systems, fully save-compatible (springs are seed-derived, no save data).
+
+#### ⛰️💧 1. Mountain springs & real downhill streams
+~2% of surface chunks above the spring line (≥15 m over sea level) host ONE deterministic spring — an infinite water source derived purely from the world seed (same world → same springs, nothing saved, dormant when buried or built over).
+- `FluidManager` gains a spring registry: sources refill every fluid tick (budgeted, round-robin) while their chunk is loaded, and the existing planet-aware cellular sim carries the water DOWNHILL — streams run down mountainsides, pool in dips, feed the WaterfallSystem, and reach the sea. Springs re-register when saved chunks load; the registry clears on body switch.
+- This is also free infrastructure for gameplay: pumped/placed water and future irrigation share the exact same flow path.
+
+#### 🌊 2. Ocean currents & coastal flow (the open sea moves now)
+The GPU ocean patches' reserved UV2 flow channel goes LIVE:
+- **Gyres:** a rotated noise-gradient field (divergence-free by construction) gives every planet large-scale, seed-stable ocean currents — the same convention the chunk water uses, so the shader's flow-mapped normals, foam streaks and wave drift pick it up with zero shader changes.
+- **Along-shore currents:** where the seabed nears the waterline, flow turns parallel to the coast (rotated seabed gradient, fading with depth band ±18 m) — surf lines and shore drift read naturally.
+- Flow is sampled on a 9×9 lattice and bilinearly interpolated per vertex (~0.5 ms per near patch, skipped on far patches entirely).
+
+#### ✅ Static delivery checks
+- All sources parse clean (tree-sitter C#); no save-schema change; version synchronized to 9.6.0-dev.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile — existing worlds fine (springs appear as their chunks (re)load).
+2. Hike uphill and look for a spring: water should visibly RUN downhill, pool in terrain dips, and keep flowing while you watch (the source refills). Mine a channel next to a stream — the water should follow it.
+3. Bury a spring with the build tool: it must go dormant (no water through solid).
+4. Fly along a coast: the water surface should show along-shore drift and foam movement; open sea shows slow large-scale current motion.
+5. Perf check: streaming near many streams should stay smooth (refills are budgeted at 24/tick — tunable on FluidManager).
 
 ### [9.5.5-dev] Border Write-Through & Teleport-Immune Guard — The Last Two Ghosts
 

@@ -332,6 +332,7 @@ namespace VoxelEngine.Cosmos
             HasLocalFooting = false;
             _bubbleScanTimer = 999f;
             Shader.SetGlobalFloat("_VoxelBubbleCutoutRadius", 0f);
+            WaterSim.FluidManager.Instance?.ClearSprings();
 
             if (_storage != null)
             {
@@ -781,6 +782,7 @@ namespace VoxelEngine.Cosmos
                     // Saved chunks can contain intentional player mines/building edits below the
                     // exterior band, so preserve their full mesh restore path.
                     QueueMesh(chunk);
+                    if (loadedSurfaceChunk) TryPlaceSprings(chunk);
                     if (!loadedSurfaceChunk) chunk.isScattered = true;
                     continue;
                 }
@@ -992,6 +994,7 @@ namespace VoxelEngine.Cosmos
             if (initialSurfaceChunk)
             {
                 QueueMesh(p.chunk);
+                TryPlaceSprings(p.chunk);
             }
             else
             {
@@ -999,6 +1002,73 @@ namespace VoxelEngine.Cosmos
                 // on demand after a player edit, but does not consume a SurfaceNets job now.
                 p.chunk.isScattered = true;
                 if (p.chunk.meshCollider != null) p.chunk.meshCollider.sharedMesh = null;
+            }
+        }
+
+        /// <summary>
+        /// Mountain springs (9.6.0 — Phase 3): ~2% of surface chunks above the
+        /// spring line host one deterministic infinite water source. FluidManager
+        /// refills it while the chunk is loaded and the cellular sim carries the
+        /// water downhill — real streams, pools and waterfall feeds. Derived purely
+        /// from the world seed: no save data, same world → same springs.
+        /// </summary>
+        private void TryPlaceSprings(Chunk chunk)
+        {
+            if (!enableScatter || body == null || body.genParams.isAsteroidBelt == 1) return;
+            var fm = WaterSim.FluidManager.Instance;
+            if (fm == null || chunk == null || !chunk.isGenerated) return;
+
+            const int S = VoxelConstants.CHUNK_SIZE;
+            uint h = (uint)(body.genParams.seed
+                            ^ (chunk.coord.x * 73856093) ^ (chunk.coord.y * 19349663) ^ (chunk.coord.z * 83492791));
+            h = (h ^ (h >> 13)) * 0x9E3779B1u; h ^= h >> 16;
+            if ((h & 0xFFFF) / 65535f > 0.02f) return;   // ~1 spring per 50 surface chunks
+
+            // Dominant radial axis = local "up" for the column scan.
+            Vector3 center = chunk.WorldOrigin + Vector3.one * (S * 0.5f);
+            if (center.sqrMagnitude < 1f) return;
+            Vector3 up = center.normalized;
+            int axis = Mathf.Abs(up.x) >= Mathf.Abs(up.y) && Mathf.Abs(up.x) >= Mathf.Abs(up.z)
+                ? 0 : (Mathf.Abs(up.y) >= Mathf.Abs(up.z) ? 1 : 2);
+            float axisComp = axis == 0 ? up.x : (axis == 1 ? up.y : up.z);
+            int sign = axisComp >= 0f ? 1 : -1;
+
+            for (int attempt = 0; attempt < 6; attempt++)
+            {
+                h = h * 1664525u + 1013904223u; int u = (int)(h % S);
+                h = h * 1664525u + 1013904223u; int w = (int)(h % S);
+
+                // Walk from the outer face inward: the first solid voxel is ground;
+                // the air cell just outside it hosts the spring.
+                int springA = -1;
+                for (int step = 0; step < S; step++)
+                {
+                    int a = sign > 0 ? S - 1 - step : step;
+                    int lx = axis == 0 ? a : u;
+                    int ly = axis == 1 ? a : (axis == 0 ? u : w);
+                    int lz = axis == 2 ? a : w;
+                    if (!chunk.GetVoxelLocal(lx, ly, lz).IsSolid) continue;
+                    springA = a + sign;
+                    break;
+                }
+                if (springA < 0 || springA >= S) continue;
+
+                int sx = axis == 0 ? springA : u;
+                int sy = axis == 1 ? springA : (axis == 0 ? u : w);
+                int sz = axis == 2 ? springA : w;
+                Vector3Int worldVoxel = chunk.coord * S + new Vector3Int(sx, sy, sz);
+                float radius = ((Vector3)worldVoxel + Vector3.one * 0.5f).magnitude;
+                if (radius < body.genParams.seaRadius + 15f) continue;   // above the spring line only
+
+                var v = chunk.GetVoxelLocal(sx, sy, sz);
+                if (v.IsSolid || v.waterLevel > 0) continue;
+                VoxelEngine.WaterSim.FluidMaterialUtility.SetLiquid(
+                    ref v, VoxelEngine.Items.LiquidType.Water, 255);
+                chunk.SetVoxelLocal(sx, sy, sz, v);
+                fm.RegisterSpring(worldVoxel);
+                fm.MarkActive(chunk.coord);
+                VoxelEngine.WaterSim.WaterMeshBuilder.Schedule(chunk);
+                return;   // one spring per chunk
             }
         }
 
