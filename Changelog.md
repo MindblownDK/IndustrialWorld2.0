@@ -1,9 +1,32 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.7.0-dev`
+**Current Version:** `9.7.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.7.1-dev] The Dune Tarp Was SOLID OIL — Air-Write Ban, Trustworthy Drape & Findable Lakes
+
+**Type:** PATCH — fixes diagnosed straight from the dune screenshot.
+
+#### 🛢️ 1. The floating black sheet was the oil BORE, written into open air
+The screenshot's angular dark mass is not a liquid surface — it is SOLID oil-soaked rock rendered by the terrain mesher, floating mid-air. `WriteSolidOil` wrote density-127 rock into ANY voxel, so on slopes and dunes the funnel/bore disks poked out of the hillside as free-floating slabs. That is also why the "tube down" seemed missing: part of the bore was hanging in the sky instead of sitting in the ground.
+- Solid oil now RECOLOURS existing rock only (original density preserved — terrain silhouette untouched, never creates geometry, never floats). The bore + reservoir live fully inside the hill and are discovered by mining under the seep pond, exactly as designed.
+
+#### 💧 2. Drape v2 — the 9.7.0 fix trusted poisoned densities
+The first drape used the LIQUID cell's density for the ground crossing — but the decorator/sim overwrite liquid densities with constants (−1/−5), so the crossing was garbage and the clamp rarely engaged (your "still a tarp"). The ground height now comes from the SOLID cell below alone — its density IS the field distance to the true surface (metres × 32). Thin films sit ≤ ~0.5 m above the real ground everywhere; lake/ocean interiors keep their level; shores taper naturally.
+
+#### 🏞️ 3. Lakes: 3× spawn chance + placement logs
+Lake chance 1.2% → 3.5% of fresh dip-bearing chunks, and both lakes and springs now log their positions (`[SphereWorld] Lake formed (N voxels) in chunk …` / `Spring placed at voxel …`) so you can fly straight to one to verify instead of searching blind. Note: lakes/springs only appear in chunks generated AFTER this patch — fresh world or unexplored areas.
+
+#### ✅ Static delivery checks
+- All sources parse clean (tree-sitter C#); version synchronized to 9.7.1-dev.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile, FRESH world (the dune tarp in an old world is baked into saved chunks).
+2. Find an oil seep (`[OilReservoirDecorator]` site log): it must be a small dark pond IN the ground — no floating black slabs anywhere on slopes. Mine under it: recoloured oil rock leads down to the reservoir.
+3. Watch the console for `Lake formed` / `Spring placed` lines and fly to the coordinates: lakes sit IN their dips, streams lie ON the hillside.
+4. If any liquid still hovers, screenshot + the nearest log line — the pattern is proven.
 
 ### [9.7.0-dev] Water That Looks Like Water — Terrain Drape, Natural Lakes & Oil Basins
 

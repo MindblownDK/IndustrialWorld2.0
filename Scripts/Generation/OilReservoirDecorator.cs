@@ -517,7 +517,16 @@ namespace VoxelEngine.Generation
         private static bool WriteSolidOil(SphereWorld world, Vector3Int voxel, HashSet<Chunk> touched)
         {
             if (!TryGetChunkForWrite(world, voxel, out Chunk chunk)) return false;
-            world.SetVoxelWorld(voxel, new Voxel(127, (byte)MaterialId.CrudeOil, 0), remesh: false);
+            // 9.7.1 — the bore/reservoir RECOLOUR existing rock, never create it:
+            // writing density 127 into open air made funnel disks poke out of
+            // hillsides as floating black slabs (the "tarp over the dunes"). The
+            // original density is preserved, so the terrain silhouette is untouched —
+            // the oil vein simply shows where it genuinely meets the surface and is
+            // discovered by mining, exactly as intended.
+            if (!TryGetLoadedVoxel(world, voxel, out Voxel existing)) return false;
+            if (!existing.IsSolid) return true;   // air/liquid/cave — nothing to soak
+            if (existing.material == (byte)MaterialId.CrudeOil) return true;
+            world.SetVoxelWorld(voxel, new Voxel(existing.density, (byte)MaterialId.CrudeOil, 0), remesh: false);
             touched.Add(chunk);
             return true;
         }

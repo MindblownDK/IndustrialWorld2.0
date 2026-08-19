@@ -362,22 +362,19 @@ namespace VoxelEngine.WaterSim
 
                     float finalH = baseH;
 
-                    // ── Drape (9.7.0): thin liquid follows the SMOOTH terrain ──
-                    // Voxel tops are integer-quantised while SurfaceNets ground is
-                    // sub-voxel — a 1-cell stream/puddle used to hover up to ~1.5 m
-                    // above sloped ground like a stiff tarp. When the cell directly
-                    // below is solid, place the liquid surface just above the actual
-                    // density zero-crossing instead of the voxel ceiling.
+                    // ── Drape v2 (9.7.1): thin liquid follows the SMOOTH terrain ──
+                    // Liquid-cell densities are overwritten by the decorator/sim, so the
+                    // crossing must come from the SOLID cell below alone: its density IS
+                    // the field distance to the true surface (metres × 32). Thin films now
+                    // sit ≤ ~0.5 m above the real ground everywhere; lake/ocean interiors
+                    // (liquid below) keep their level, and shore cells taper naturally.
                     Vector3Int belowLocal = local - dom;
                     var belowVox = c.GetVoxelLocal(belowLocal.x, belowLocal.y, belowLocal.z);
                     if (belowVox.IsSolid)
                     {
-                        float dBelow = belowVox.density;                    // > 0 (solid)
-                        float dHere  = Mathf.Min(vox.density, -1f);         // liquid cell ≤ -1
-                        float t = dBelow / (dBelow - dHere);                // crossing 0..1
-                        float groundSmooth = (h - 0.5f) + t;                // dom-axis coordinate
+                        float groundSmooth = (h - 0.5f) + Mathf.Clamp(belowVox.density / 32f, 0f, 1.45f);
                         float fill = vox.waterLevel / 255f;
-                        float draped = groundSmooth + Mathf.Max(0.15f, fill * 0.8f);
+                        float draped = groundSmooth + Mathf.Clamp(fill * 0.35f, 0.1f, 0.5f);
                         if (draped < finalH) finalH = draped;
                     }
 

@@ -1069,6 +1069,7 @@ namespace VoxelEngine.Cosmos
                 fm.RegisterSpring(worldVoxel);
                 fm.MarkActive(chunk.coord);
                 VoxelEngine.WaterSim.WaterMeshBuilder.Schedule(chunk);
+                Debug.Log($"[SphereWorld] Spring placed at voxel {worldVoxel} (chunk {chunk.coord}).");
                 return;   // one spring per chunk
             }
         }
@@ -1088,7 +1089,7 @@ namespace VoxelEngine.Cosmos
             uint h = (uint)(body.genParams.seed
                             ^ (chunk.coord.x * 668265263) ^ (chunk.coord.y * 374761393) ^ (chunk.coord.z * 2246822519));
             h = (h ^ (h >> 15)) * 0x85EBCA6Bu; h ^= h >> 13;
-            if ((h & 0xFFFF) / 65535f > 0.012f) return;
+            if ((h & 0xFFFF) / 65535f > 0.035f) return;
 
             Vector3 center = chunk.WorldOrigin + Vector3.one * (S * 0.5f);
             if (center.sqrMagnitude < 1f) return;
@@ -1159,6 +1160,8 @@ namespace VoxelEngine.Cosmos
             {
                 WaterSim.FluidManager.Instance?.MarkActive(chunk.coord);
                 VoxelEngine.WaterSim.WaterMeshBuilder.Schedule(chunk);
+                Debug.Log($"[SphereWorld] Lake formed ({filled} voxels) in chunk {chunk.coord} — " +
+                          $"local position ≈ {(Vector3)(chunk.coord * VoxelConstants.CHUNK_SIZE)}.");
             }
         }
 
