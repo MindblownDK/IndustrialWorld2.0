@@ -370,6 +370,24 @@ namespace VoxelEngine.Generation
                 // exterior air/fluid cell, so the player sees a pooled surface rather than a
                 // carved hole with no collision floor.
                 allWritten &= WriteSurfaceOil(world, localSurface, localUp, touched);
+
+                // 9.7.0 — a seep is a SMALL LAKE, not a film: interior cells sink one
+                // voxel (the top solid converts to liquid oil), giving the pool real
+                // depth with an intact rim and floor.
+                if (a * a + b * b <= (radius - 1) * (radius - 1))
+                {
+                    Vector3Int digPos = localSurface - Vector3Int.RoundToInt(localUp);
+                    if (TryGetLoadedVoxel(world, digPos, out Voxel digVox) && digVox.IsSolid)
+                    {
+                        var oilVox = new Voxel(-5, (byte)VoxelEngine.Materials.MaterialId.CrudeOil, 255);
+                        world.SetVoxelWorld(digPos, oilVox, remesh: false);
+                        if (world.TryGetChunk(new Vector3Int(
+                                Mathf.FloorToInt(digPos.x / (float)VoxelConstants.CHUNK_SIZE),
+                                Mathf.FloorToInt(digPos.y / (float)VoxelConstants.CHUNK_SIZE),
+                                Mathf.FloorToInt(digPos.z / (float)VoxelConstants.CHUNK_SIZE)), out var digChunk))
+                            touched.Add(digChunk);
+                    }
+                }
             }
             return allWritten;
         }

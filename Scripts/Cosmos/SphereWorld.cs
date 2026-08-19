@@ -995,6 +995,7 @@ namespace VoxelEngine.Cosmos
             {
                 QueueMesh(p.chunk);
                 TryPlaceSprings(p.chunk);
+                TryPlaceLake(p.chunk);
             }
             else
             {
@@ -1069,6 +1070,95 @@ namespace VoxelEngine.Cosmos
                 fm.MarkActive(chunk.coord);
                 VoxelEngine.WaterSim.WaterMeshBuilder.Schedule(chunk);
                 return;   // one spring per chunk
+            }
+        }
+
+        /// <summary>
+        /// Natural lakes (9.7.0 — Phase 3): ~1.2% of freshly generated surface chunks
+        /// with a genuine terrain DIP get a water-filled hollow — a small lake. Filled
+        /// once at generation (players may drain them permanently); the cellular sim
+        /// settles the fill against the actual basin shape.
+        /// </summary>
+        private void TryPlaceLake(Chunk chunk)
+        {
+            if (!enableScatter || body == null || body.genParams.isAsteroidBelt == 1) return;
+            if (chunk == null || !chunk.isGenerated) return;
+
+            const int S = VoxelConstants.CHUNK_SIZE;
+            uint h = (uint)(body.genParams.seed
+                            ^ (chunk.coord.x * 668265263) ^ (chunk.coord.y * 374761393) ^ (chunk.coord.z * 2246822519));
+            h = (h ^ (h >> 15)) * 0x85EBCA6Bu; h ^= h >> 13;
+            if ((h & 0xFFFF) / 65535f > 0.012f) return;
+
+            Vector3 center = chunk.WorldOrigin + Vector3.one * (S * 0.5f);
+            if (center.sqrMagnitude < 1f) return;
+            if (center.magnitude < body.genParams.seaRadius + 6f) return;   // above sea only
+            Vector3 up = center.normalized;
+            int axis = Mathf.Abs(up.x) >= Mathf.Abs(up.y) && Mathf.Abs(up.x) >= Mathf.Abs(up.z)
+                ? 0 : (Mathf.Abs(up.y) >= Mathf.Abs(up.z) ? 1 : 2);
+            float axisComp = axis == 0 ? up.x : (axis == 1 ? up.y : up.z);
+            int sign = axisComp >= 0f ? 1 : -1;
+
+            // Topmost-solid altitude (signed along the radial axis) for a column.
+            int GroundAlt(int u, int w)
+            {
+                for (int step = 0; step < S; step++)
+                {
+                    int a = sign > 0 ? S - 1 - step : step;
+                    int lx = axis == 0 ? a : u;
+                    int ly = axis == 1 ? a : (axis == 0 ? u : w);
+                    int lz = axis == 2 ? a : w;
+                    if (chunk.GetVoxelLocal(lx, ly, lz).IsSolid) return sign * a;
+                }
+                return int.MinValue;
+            }
+
+            int cu = S / 2, cw = S / 2;
+            int alt0 = GroundAlt(cu, cw);
+            if (alt0 == int.MinValue) return;
+
+            // A lake needs a genuine dip: the surrounding rim must sit ≥2 voxels higher.
+            int rimMin = int.MaxValue;
+            int[] du = { 6, -6, 0, 0, 4, 4, -4, -4 };
+            int[] dw = { 0, 0, 6, -6, 4, -4, 4, -4 };
+            for (int i = 0; i < du.Length; i++)
+            {
+                int uu = cu + du[i], ww = cw + dw[i];
+                if (uu < 0 || uu >= S || ww < 0 || ww >= S) return;
+                int alt = GroundAlt(uu, ww);
+                if (alt == int.MinValue) return;
+                rimMin = Mathf.Min(rimMin, alt);
+            }
+            if (rimMin - alt0 < 2) return;
+
+            int lakeAlt = alt0 + Mathf.Min(rimMin - alt0 - 1, 3);
+            int filled = 0;
+            for (int uu = Mathf.Max(0, cu - 7); uu <= Mathf.Min(S - 1, cu + 7); uu++)
+            for (int ww = Mathf.Max(0, cw - 7); ww <= Mathf.Min(S - 1, cw + 7); ww++)
+            {
+                int ru = uu - cu, rw = ww - cw;
+                if (ru * ru + rw * rw > 49) continue;
+                int g = GroundAlt(uu, ww);
+                if (g == int.MinValue || g >= lakeAlt) continue;
+                for (int alt = g + 1; alt <= lakeAlt && filled < 900; alt++)
+                {
+                    int a = sign > 0 ? alt : -alt;
+                    if (a < 0 || a >= S) break;
+                    int lx = axis == 0 ? a : uu;
+                    int ly = axis == 1 ? a : (axis == 0 ? uu : ww);
+                    int lz = axis == 2 ? a : ww;
+                    var v = chunk.GetVoxelLocal(lx, ly, lz);
+                    if (v.IsSolid || v.waterLevel > 0) continue;
+                    VoxelEngine.WaterSim.FluidMaterialUtility.SetLiquid(
+                        ref v, VoxelEngine.Items.LiquidType.Water, 255);
+                    chunk.SetVoxelLocal(lx, ly, lz, v);
+                    filled++;
+                }
+            }
+            if (filled > 0)
+            {
+                WaterSim.FluidManager.Instance?.MarkActive(chunk.coord);
+                VoxelEngine.WaterSim.WaterMeshBuilder.Schedule(chunk);
             }
         }
 

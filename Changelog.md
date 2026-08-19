@@ -1,9 +1,32 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.6.0-dev`
+**Current Version:** `9.7.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.7.0-dev] Water That Looks Like Water — Terrain Drape, Natural Lakes & Oil Basins
+
+**Type:** MINOR — the liquid look overhaul from the field report (tarp screenshot) + natural lakes. Save-compatible.
+
+#### 💧 1. The "raised tarp" — liquids now drape onto the smooth terrain
+Root cause from the screenshot: liquid surface heights were VOXEL-QUANTISED (integer grid tops) while the SurfaceNets terrain underneath is sub-voxel smooth — a 1-cell stream/puddle hovered up to ~1.5 m above sloped ground as a stiff angular sheet. Fix in the water mesher: whenever the cell below a liquid cell is solid, the liquid surface now sits just above the actual DENSITY ZERO-CROSSING (the same crossing the terrain mesh uses), scaled by fill. Thin streams hug the hillside, pool floors follow the ground, and the effect applies to ALL liquids — water, spring streams AND crude oil — with zero extra draw cost.
+
+#### 🏞️ 2. Natural lakes
+~1.2% of freshly generated surface chunks with a genuine terrain DIP (rim ≥2 voxels above the hollow, above sea + 6 m) now fill with water up to just below their rim — small mountain tarns and valley ponds, capped at ~900 voxels, settled by the cellular sim against the real basin shape. Filled once at generation: drain one deliberately and it stays drained (springs, by contrast, keep flowing).
+
+#### 🛢️ 3. Crude-oil seeps read as small dark lakes
+Seep puddles were a surface film. Interior puddle cells now sink one voxel — the top solid converts to liquid oil — giving every seep a real basin with an intact rim and floor. Combined with the drape fix, a seep reads as a pooled black pond. (The bore + reservoir underneath are unchanged and still build with the idempotent retry; mine under the puddle and you hit the oil-soaked funnel rock.)
+
+#### ✅ Static delivery checks
+- All sources parse clean (tree-sitter C#); no save-schema change; version synchronized to 9.7.0-dev.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile. Existing worlds: already-visited saved chunks keep their old water placement; fresh areas / fresh worlds show everything below.
+2. Revisit a spring stream on a slope: the water must LIE ON the hillside — no more raised tarp, no dark floating sheet.
+3. Explore for lakes: dips in the terrain above sea level should hold small ponds/tarns. Drain one by mining the rim — the water flows out downhill and stays drained.
+4. Find a crude-oil seep: it should read as a small black pond with depth; mine beneath it to confirm the oil-rock funnel + reservoir.
+5. If any liquid still looks wrong, a screenshot like the last one is perfect — it identified the exact quantisation mismatch.
 
 ### [9.6.0-dev] Living Water — Mountain Springs, Downhill Streams & Ocean Currents (Rework Phase 3)
 

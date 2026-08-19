@@ -362,6 +362,25 @@ namespace VoxelEngine.WaterSim
 
                     float finalH = baseH;
 
+                    // ── Drape (9.7.0): thin liquid follows the SMOOTH terrain ──
+                    // Voxel tops are integer-quantised while SurfaceNets ground is
+                    // sub-voxel — a 1-cell stream/puddle used to hover up to ~1.5 m
+                    // above sloped ground like a stiff tarp. When the cell directly
+                    // below is solid, place the liquid surface just above the actual
+                    // density zero-crossing instead of the voxel ceiling.
+                    Vector3Int belowLocal = local - dom;
+                    var belowVox = c.GetVoxelLocal(belowLocal.x, belowLocal.y, belowLocal.z);
+                    if (belowVox.IsSolid)
+                    {
+                        float dBelow = belowVox.density;                    // > 0 (solid)
+                        float dHere  = Mathf.Min(vox.density, -1f);         // liquid cell ≤ -1
+                        float t = dBelow / (dBelow - dHere);                // crossing 0..1
+                        float groundSmooth = (h - 0.5f) + t;                // dom-axis coordinate
+                        float fill = vox.waterLevel / 255f;
+                        float draped = groundSmooth + Mathf.Max(0.15f, fill * 0.8f);
+                        if (draped < finalH) finalH = draped;
+                    }
+
                     cells[u, v] = new SurfaceCell
                     {
                         has = true,
