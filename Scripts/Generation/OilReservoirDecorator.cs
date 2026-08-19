@@ -354,41 +354,71 @@ namespace VoxelEngine.Generation
         private static bool BuildSurfacePuddle(SphereWorld world, Vector3Int surface, Vector3 up,
             int radius, HashSet<Chunk> touched)
         {
+            // 9.7.2 REDESIGN — carve-and-fill. The old approach placed a liquid FILM in
+            // exterior air cells: on any slope the film hovered (the recurring "tarp"),
+            // and there was no dent for the pool to sit in. Now the seep:
+            //   1. CARVES a real crater bowl into the terrain (solid → liquid oil, so
+            //      the terrain mesh genuinely dips), 2 voxels deep in the centre,
+            //      1 at the edge — liquid can never exist above ground level;
+            //   2. SOAKS the bowl floor dark (CrudeOil rock, density preserved) so the
+            //      shaft mouth is visible from the surface;
+            //   3. leaves ocean seeps as before (top fluid cell becomes crude).
             bool allWritten = true;
             GetTangentBasis(up, out Vector3 tangentA, out Vector3 tangentB);
+            int pondColumns = 0, carvedCells = 0;
+
             for (int a = -radius; a <= radius; a++)
             for (int b = -radius; b <= radius; b++)
             {
-                if (a * a + b * b > radius * radius) continue;
+                int d2 = a * a + b * b;
+                if (d2 > radius * radius) continue;
                 Vector3 probe = surface + tangentA * a + tangentB * b;
-                // Follow each point back to its own local radial terrain surface. The old
-                // fixed-radius disk cut across slopes and made oil appear as random scattered
-                // cells instead of a puddle that sits naturally on the land.
-                if (!TryResolvePuddleSurface(world, probe, out Vector3Int localSurface)) continue;
-                Vector3 localUp = GetUpDir(localSurface);
-                // Preserve the terrain cell underneath the visible puddle. Oil lives in the
-                // exterior air/fluid cell, so the player sees a pooled surface rather than a
-                // carved hole with no collision floor.
-                allWritten &= WriteSurfaceOil(world, localSurface, localUp, touched);
-
-                // 9.7.0 — a seep is a SMALL LAKE, not a film: interior cells sink one
-                // voxel (the top solid converts to liquid oil), giving the pool real
-                // depth with an intact rim and floor.
-                if (a * a + b * b <= (radius - 1) * (radius - 1))
+                if (!TryResolvePuddleSurface(world, probe, out Vector3Int localSurface))
                 {
-                    Vector3Int digPos = localSurface - Vector3Int.RoundToInt(localUp);
-                    if (TryGetLoadedVoxel(world, digPos, out Voxel digVox) && digVox.IsSolid)
-                    {
-                        var oilVox = new Voxel(-5, (byte)VoxelEngine.Materials.MaterialId.CrudeOil, 255);
-                        world.SetVoxelWorld(digPos, oilVox, remesh: false);
-                        if (world.TryGetChunk(new Vector3Int(
-                                Mathf.FloorToInt(digPos.x / (float)VoxelConstants.CHUNK_SIZE),
-                                Mathf.FloorToInt(digPos.y / (float)VoxelConstants.CHUNK_SIZE),
-                                Mathf.FloorToInt(digPos.z / (float)VoxelConstants.CHUNK_SIZE)), out var digChunk))
-                            touched.Add(digChunk);
-                    }
+                    allWritten = false;
+                    continue;
                 }
+
+                // Ocean seep: replace only the top fluid cell with crude (unchanged).
+                if (TryGetLoadedVoxel(world, localSurface, out Voxel atSurface) &&
+                    FluidMaterialUtility.IsFluid(atSurface))
+                {
+                    allWritten &= WriteOil(world, localSurface, touched);
+                    pondColumns++;
+                    continue;
+                }
+
+                Vector3 localUp = GetUpDir(localSurface);
+                Vector3Int step = Vector3Int.RoundToInt(localUp);
+                if (step == Vector3Int.zero) step = Vector3Int.up;
+
+                int depth = d2 <= (radius - 1) * (radius - 1) ? 2 : 1;
+                bool carvedAny = false;
+                for (int d = 0; d < depth; d++)
+                {
+                    Vector3Int pos = localSurface - step * d;
+                    if (!TryGetLoadedVoxel(world, pos, out Voxel cell)) { allWritten = false; break; }
+                    if (!cell.IsSolid) continue;   // already open — nothing to carve here
+                    world.SetVoxelWorld(pos, new Voxel(-5, (byte)MaterialId.CrudeOil, 255), remesh: false);
+                    if (TryGetChunkForWrite(world, pos, out Chunk carvedChunk)) touched.Add(carvedChunk);
+                    carvedCells++;
+                    carvedAny = true;
+                }
+
+                // Soak the bowl floor dark — the visible shaft mouth.
+                Vector3Int floorPos = localSurface - step * depth;
+                if (TryGetLoadedVoxel(world, floorPos, out Voxel floorVox) && floorVox.IsSolid &&
+                    floorVox.material != (byte)MaterialId.CrudeOil)
+                {
+                    world.SetVoxelWorld(floorPos,
+                        new Voxel(floorVox.density, (byte)MaterialId.CrudeOil, 0), remesh: false);
+                    if (TryGetChunkForWrite(world, floorPos, out Chunk floorChunk)) touched.Add(floorChunk);
+                }
+                if (carvedAny) pondColumns++;
             }
+
+            Debug.Log($"[OilReservoirDecorator] Seep basin at {surface}: {pondColumns} pond columns, " +
+                      $"{carvedCells} carved cells (crater + fill).");
             return allWritten;
         }
 
@@ -484,21 +514,6 @@ namespace VoxelEngine.Generation
             }
             value = world.GetVoxelWorld(voxel);
             return true;
-        }
-
-        private static bool WriteSurfaceOil(SphereWorld world, Vector3Int surface, Vector3 up, HashSet<Chunk> touched)
-        {
-            if (world == null) return true;
-            if (TryGetLoadedVoxel(world, surface, out Voxel current) && FluidMaterialUtility.IsFluid(current))
-            {
-                // At a genuine ocean surface, replace only the top fluid cell with crude.
-                return WriteOil(world, surface, touched);
-            }
-
-            Vector3Int exterior = Vector3Int.RoundToInt((Vector3)surface + up);
-            if (!TryGetLoadedVoxel(world, exterior, out Voxel above)) return false;
-            if (above.IsSolid) return true;
-            return WriteOil(world, exterior, touched);
         }
 
         /// <summary>Liquid crude for the visible surface puddle (rendered by the fluid mesh).</summary>

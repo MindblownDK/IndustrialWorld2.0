@@ -1,9 +1,29 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.7.1-dev`
+**Current Version:** `9.7.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.7.2-dev] Oil Seep Redesign — Carve-and-Fill Craters (No Film, No Air, No Tarp Possible)
+
+**Type:** PATCH — the seep is rebuilt from first principles instead of patched again.
+
+#### 🛢️ The film approach is gone
+Every tarp incarnation traced back to one design: the seep placed a LIQUID FILM in exterior air cells above the terrain. Films hover on slopes, have no dent to sit in, and depend on fragile drape math. 9.7.2 deletes that design:
+1. **CARVE:** the seep digs a real crater bowl INTO the terrain (solid voxels → liquid oil; 2 deep in the centre, 1 at the edge). The terrain mesh genuinely dips — the "dent" exists in the geometry itself.
+2. **FILL:** liquid oil exists ONLY in the carved cells. It is physically impossible for seep oil to sit above ground level, on any slope, ever.
+3. **SOAK:** the bowl floor converts to dark oil rock (density preserved) — the shaft mouth is visible at the pond bottom, and the recolour-only funnel (9.7.1) continues from there down to the reservoir. Mining follows the dark rock the whole way.
+4. Ocean seeps unchanged (top fluid cell becomes crude). Every site build logs a summary: `Seep basin at …: N pond columns, M carved cells`.
+
+#### ✅ Static delivery checks
+- Decorator parses clean; unused film writer removed; version synchronized to 9.7.2-dev.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile — **FRESH WORLD is mandatory for this test**: old worlds carry the floating slabs and film cells inside their saved chunks forever (Decorate re-runs on load are idempotent and cannot remove already-saved geometry).
+2. Find a seep via the `Seep basin at …` console line: it must be a dark pond sitting INSIDE a visible crater, level with the dent, zero floating geometry from any angle.
+3. Mine at the pond bottom: dark oil rock leads down the shaft to the reservoir.
+4. Check a spring stream on a slope in the same fresh world — if water still hovers anywhere, screenshot + the nearest `Spring placed` log line and I'll take the same redesign approach to stream rendering.
 
 ### [9.7.1-dev] The Dune Tarp Was SOLID OIL — Air-Write Ban, Trustworthy Drape & Findable Lakes
 
