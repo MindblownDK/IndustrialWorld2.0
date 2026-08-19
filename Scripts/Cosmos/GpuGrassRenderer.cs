@@ -33,19 +33,19 @@ namespace VoxelEngine.Cosmos
 
         [Header("Placement")]
         [Tooltip("Radius around the viewer to fill with grass (metres).")]
-        public float range = 45f;
+        public float range = 70f;
         [Tooltip("Rebuild the field when the viewer moves more than this (metres).")]
         public float rebuildThreshold = 12f;
 
         [Header("Density (per square metre, before quality scaling)")]
         [Range(0f, 4f)] public float baseDensity = 1.2f;
         [Tooltip("Maximum radial terrain samples used when rebuilding one grass field.")]
-        [Range(256, 4096)] public int maxSurfaceSamples = 1600;
+        [Range(256, 4096)] public int maxSurfaceSamples = 2600;
 
         [Header("Blade")]
-        [Range(0.1f, 2f)] public float bladeHeight = 0.45f;
+        [Range(0.1f, 2f)] public float bladeHeight = 0.55f;
         [Range(0.1f, 2f)] public float bladeWidth = 0.08f;
-        [Range(0f, 0.5f)] public float heightVariance = 0.2f;
+        [Range(0f, 0.5f)] public float heightVariance = 0.3f;
 
         [Header("Quality Scaling")]
         [Tooltip("Density multiplier per quality preset (Low, Mid, High, Ultra).")]
@@ -87,11 +87,22 @@ namespace VoxelEngine.Cosmos
             }
 
             // Push the current wind vector to the grass shader (VoxelGrass.shader uses _WindDir).
+            // 9.9.0 GUSTS: the strength breathes with layered time-noise (slow swells +
+            // quick flutters) and the direction meanders a few degrees — the whole field
+            // moves like living grass instead of a metronome.
             var wind = WindField.Instance;
             if (wind != null && grassMaterial != null)
             {
-                grassMaterial.SetVector("_WindDir", wind.Direction);
-                grassMaterial.SetFloat("_WindStrength", Mathf.Clamp01(wind.strength * 0.4f));
+                float t = Time.time;
+                float gust = 0.65f
+                           + 0.45f * (Mathf.PerlinNoise(t * 0.11f, 13.7f) - 0.5f) * 2f
+                           + 0.18f * (Mathf.PerlinNoise(t * 0.9f, 71.3f) - 0.5f) * 2f;
+                float meander = (Mathf.PerlinNoise(t * 0.05f, 3.1f) - 0.5f) * 0.6f;   // ±~17°
+                Vector3 dir = Quaternion.AngleAxis(meander * Mathf.Rad2Deg,
+                    body != null ? (transform.position - body.transform.position).normalized : Vector3.up)
+                    * wind.Direction;
+                grassMaterial.SetVector("_WindDir", dir);
+                grassMaterial.SetFloat("_WindStrength", Mathf.Clamp01(wind.strength * 0.4f * Mathf.Max(0.15f, gust)));
             }
 
             // Draw all blades in one GPU draw call.

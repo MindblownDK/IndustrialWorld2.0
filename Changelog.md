@@ -1,9 +1,34 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.8.0-dev`
+**Current Version:** `9.9.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.9.0-dev] Living Ground — Terrain Material Overhaul & Wind-Swept Grass (Beauty Pass, Part 2)
+
+**Type:** MINOR — visual only, save-compatible.
+
+#### 🏔️ 1. Terrain material overhaul (VoxelTerrainEnhanced)
+- **Distance-faded micro detail:** the procedural grain now fades out by ~140 m — close terrain is tactile, far terrain is clean (no more shimmer/noise tiling at range).
+- **Procedural detail normals:** near the camera the detail field perturbs the surface normal — grain catches real sun/shadow, giving rock and soil sculpted relief with zero textures.
+- **Macro variation:** ~55 m colour patches (brightness + a subtle warm/cool hue drift) break up uniform grass plains and deserts — fields finally read as natural land, not one flat paint.
+- **Wet waterline band:** a darker, glossier strip hugs the shoreline (±~1.6 m of the sea radius, published by SphereWorld as `_VoxelSeaRadius`) — beaches look wet where the surf touches them, on every planet.
+
+#### 🌾 2. Wind-swept grass
+- **Gusts:** wind strength breathes with layered time-noise (slow swells + quick flutters) and the direction meanders ±17° around the local up — the whole field moves like living grass instead of a metronome.
+- **Denser, taller field:** range 45 → 70 m, sample budget 1600 → 2600, blades 0.45 → 0.55 m with more height variance. (All still quality-tier scaled — Low keeps its lighter budget.)
+
+#### ✅ Static delivery checks
+- All sources parse clean (tree-sitter C#); shader edits confined to the Enhanced forward pass; version synchronized to 9.9.0-dev.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile (existing worlds fine — all visual).
+2. Walk on grass/rock in sunlight: close-up grain must have real relief (light/shadow across the detail), fading clean into the distance.
+3. Look across a plain: subtle large patches of colour variation instead of one uniform green.
+4. Visit a shoreline: a wet, glossy dark band right at the waterline.
+5. Watch the grass: gusty swells rolling through the field, direction gently drifting; denser and taller than before.
+6. Confirm FPS is unchanged on your usual test route (detail work is distance-gated; grass budget +60% but instanced).
 
 ### [9.8.0-dev] Starlight — True Sun-Driven World & Space Lighting + Water Polish (Beauty Pass, Part 1)
 

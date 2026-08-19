@@ -512,6 +512,7 @@ namespace VoxelEngine.Cosmos
             Vector3 center = body.transform.position;
             Shader.SetGlobalVector("_VoxelTerrainBodyCenter", new Vector4(center.x, center.y, center.z, 1f));
             Shader.SetGlobalFloat("_VoxelTerrainIsPlanet", 1f);
+            Shader.SetGlobalFloat("_VoxelSeaRadius", body.SeaRadius);   // wet waterline band (9.9.0)
 
             // Single-surface handshake globals: the GPU LOD skin clips its fragments
             // inside this ball (see VoxelTerrainURP/_Enhanced — _BubbleCutout path).

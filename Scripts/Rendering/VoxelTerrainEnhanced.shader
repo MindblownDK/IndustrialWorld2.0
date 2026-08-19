@@ -194,14 +194,34 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
 
                 // ── Procedural micro-detail: multi-octave noise for surface texture ──
                 // This gives the terrain a rocky/grainy appearance without textures.
+                // 9.9.0: detail FADES with distance (no far shimmer) and perturbs the
+                // normal near the camera for tactile relief in direct sunlight.
+                float camDist = distance(_WorldSpaceCameraPos, worldPos);
+                float detailFade = saturate(1.0 - camDist / 140.0);
+
                 float3 noisePos = terrainCoord * _NoiseFreq;
                 float detail = fbm3(noisePos);
                 float detail2 = fbm3(noisePos * 3.2 + 10.0);
                 float microDetail = detail * 0.6 + detail2 * 0.4;
 
                 // Apply detail as brightness modulation (darker in noise valleys).
-                float detailMod = lerp(1.0, 0.65 + microDetail * 0.7, _DetailStrength);
+                float detailMod = lerp(1.0, 0.65 + microDetail * 0.7, _DetailStrength * detailFade);
                 baseColor *= detailMod;
+
+                // ── Macro variation (9.9.0): ~55 m patches break up uniform fields ──
+                float macro = fbm3(terrainCoord * 0.018);
+                baseColor *= lerp(0.93, 1.07, macro);
+                baseColor = lerp(baseColor, baseColor * float3(1.045, 1.0, 0.94), (macro - 0.5) * 0.55);
+
+                // ── Procedural detail normals (9.9.0): near-camera relief ──
+                if (detailFade > 0.01)
+                {
+                    float e = 0.35;
+                    float hX = fbm3(noisePos + float3(e, 0.0, 0.0));
+                    float hZ = fbm3(noisePos + float3(0.0, 0.0, e));
+                    float3 grad = float3(hX - detail, 0.0, hZ - detail);
+                    worldNormal = normalize(worldNormal + grad * (0.55 * _DetailStrength * detailFade));
+                }
 
                 // ── Slope-aware shading: steep = darker (enhances relief) ──
                 // Support both flat world (Y-up) and spherical planets (radial-up from center)
@@ -215,6 +235,16 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
                 float specVar = fbm3(terrainCoord * _DetailScale * 0.5);
                 float smoothness = _Smoothness + specVar * _SpecularVar * 0.3;
                 smoothness = saturate(smoothness);
+
+                // ── Wet waterline band (9.9.0): darker, glossier sand right at the
+                // shoreline — published by SphereWorld as _VoxelSeaRadius. ──
+                if (_VoxelSeaRadius > 1.0 && _VoxelTerrainIsPlanet > 0.5)
+                {
+                    float rWS = distance(worldPos, _VoxelTerrainBodyCenter.xyz);
+                    float wet = saturate(1.0 - abs(rWS - _VoxelSeaRadius - 0.1) / 1.6);
+                    baseColor *= 1.0 - wet * 0.18;
+                    smoothness = saturate(smoothness + wet * 0.35);
+                }
 
                 // ── Full PBR lighting ──
                 InputData inputData = (InputData)0;
