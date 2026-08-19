@@ -341,6 +341,26 @@ namespace VoxelEngine.Player
             OnStatsChanged?.Invoke();
         }
 
+        /// <summary>
+        /// World-spawn respawn through the body-anchored HEALING path (PlayerSpawner.
+        /// Respawn) — with full stat restore. 9.5.4: the death screen previously reached
+        /// the spawner directly and skipped the revive (players respawned at 0 health).
+        /// </summary>
+        public void RespawnAtWorldSpawn()
+        {
+            IsDead = false;
+            Health  = MaxHealth;
+            Stamina = MaxStamina;
+            MaxHunger = baseMaxHunger;
+            Hunger = MaxHunger;
+            MaxOxygen = baseMaxOxygen;
+            Oxygen = MaxOxygen;
+
+            var spawner = GetComponent<PlayerSpawner>();
+            if (spawner != null) spawner.Respawn();
+            OnStatsChanged?.Invoke();
+        }
+
         public void RespawnAt(Vector3 position)
         {
             IsDead = false;

@@ -1,9 +1,36 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.5.3-dev`
+**Current Version:** `9.5.4-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.5.4-dev] FOUND IT — The Collider That Never Re-Baked, Plus Revived Respawns and Grounded Loads
+
+**Type:** PATCH — the definitive mining fix (root cause confirmed by fresh-world logs) + respawn health/grounding + load-position assurance.
+
+#### ⛏️ 1. THE 0.5 m mining wall — a MeshCollider that never re-baked
+Thomas's fresh-world log (`rayHit='Chunk_249_-39_-25'`, voxel data = pure Air behind the collider) eliminated every environmental suspect and left only one: the chunk's OWN collider disagreeing with its OWN data. Root cause, in one line:
+`if (meshCollider.sharedMesh != mesh) meshCollider.sharedMesh = mesh;`
+Chunks REUSE a single Mesh object for every remesh — so after a mining edit, the reference is unchanged, the guard skips the assignment and **the MeshCollider keeps the ORIGINAL surface bake forever**. You dug real holes in the data and the visuals while standing on the launch-day ghost surface — which also blocked the next swing's raycast (probes read Air → "Swing changed no voxels"). Mesh-completion now force re-bakes (null-cycle the reference) whenever content changed; the per-frame collider window refresh keeps the cheap reference guard. **This was the 0.5 m wall since 9.0.**
+
+#### ❤️ 2. Respawn with 0 health
+The 9.5.3 death-screen routing called the spawner directly and skipped `PlayerStats`' revive. New `PlayerStats.RespawnAtWorldSpawn()`: full stat restore (health/hunger/oxygen) + the body-anchored healing respawn. The death screen uses it.
+
+#### 🛬 3. Fell through the ground on respawn
+Mesh-collider baking lags mesh visuals by a few frames under streaming load. The respawn routine now HOLDS the control handover until a real (non-safety) ground collider answers a raycast under the player (up to 6 s, re-snapping onto it), then applies the usual dry-spawn and open-space clamps.
+
+#### 🌍 4. Loading a save spawned above the planet in space
+Cross-session frame drift can restore the on-foot player at a stale altitude ("logged out on Venus, loaded, hung in space"). After position restore, if the player is on foot (not seated in a grid) and hangs 300 m–100 km above the frame body's surface, the spawner snaps them to the surface directly below, waits for chunks, and re-snaps. Genuine deep-space saves and seated/ship saves are untouched.
+
+#### ✅ Static delivery checks
+- All sources parse clean (tree-sitter C#); both mesh-completion collider paths force re-bake; version synchronized to 9.5.4-dev.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile — fresh world.
+2. **Mine.** Down, sideways, deep, through overhangs — the wall is gone (the collider now follows every edit). This one I'm confident in: your log pointed at the exact line.
+3. Die → World Spawn: full health, solid ground underfoot, no fall-through.
+4. Fly to Venus, log out on its surface, reload: you must wake up ON Venus's ground (watch for the snap warning if the restore drifted).
 
 ### [9.5.3-dev] The Logs Spoke — Stale-Era Chunk Rejection, Healed Death-Screen Respawn & One Save Per World
 

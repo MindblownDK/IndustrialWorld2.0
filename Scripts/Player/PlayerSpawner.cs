@@ -312,6 +312,28 @@ namespace VoxelEngine.Player
                 }
             }
 
+            // Load-position assurance (9.5.4): a restored position hanging in open space
+            // over a body (frame drift between sessions — "loaded the world and spawned
+            // above the planet") is pulled down to the surface below. Genuine deep-space
+            // saves (no gravity frame) are untouched.
+            var frameBody = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
+            if (frameBody != null && transform.parent == null)   // seated/grid players are exempt
+            {
+                float altitude = Vector3.Distance(transform.position, frameBody.transform.position)
+                                 - frameBody.SurfaceRadius;
+                if (altitude > 300f && altitude < 100000f)
+                {
+                    Debug.LogWarning($"[PlayerSpawner] Restored position hangs {altitude:0} m above " +
+                                     $"'{frameBody.DisplayName}' — snapping to the surface below.");
+                    Vector3 upLoad = frameBody.UpAt(transform.position);
+                    Vector3 radialGround = frameBody.transform.position +
+                                           upLoad * (frameBody.SurfaceRadius + SpawnGroundClearance);
+                    SetPosition(SnapToGround(radialGround));
+                    yield return WaitForChunkAt(VoxelCoordOf(transform.position), 8f);
+                    SetPosition(SnapToGround(transform.position));
+                }
+            }
+
             EnableController();
             // Spawn must start at REST — clear any residual velocity (frame deltas,
             // stale physics) so the player can never be "launched" by old state.
@@ -524,6 +546,26 @@ namespace VoxelEngine.Player
             yield return null;
             SetPosition(SnapToGround(transform.position));
             yield return EnsureDrySpawn(transform.position);
+
+            // Collider assurance (9.5.4 — "went through the ground on respawn"): hold the
+            // handover until REAL ground collision exists under the player (mesh collider
+            // baking lags mesh visuals by a few frames under streaming load).
+            float colliderWait = 6f;
+            while (colliderWait > 0f)
+            {
+                Vector3 upNow = VoxelEngine.Cosmos.GravityProvider.ActiveBody != null
+                    ? VoxelEngine.Cosmos.GravityProvider.ActiveBody.UpAt(transform.position)
+                    : Vector3.up;
+                if (Physics.Raycast(transform.position + upNow * 40f, -upNow, out var groundHit,
+                                    400f, ~0, QueryTriggerInteraction.Ignore) &&
+                    groundHit.collider.GetComponentInParent<VoxelEngine.Cosmos.PlanetSafetyCollider>() == null)
+                {
+                    SetPosition(groundHit.point + upNow * SpawnGroundClearance);
+                    break;
+                }
+                colliderWait -= 0.25f;
+                yield return new WaitForSeconds(0.25f);
+            }
 
             // Final clamp (9.5.2): if everything above still left us floating in open
             // space (chunk wait timeout, failed snap), force the analytic surface point.

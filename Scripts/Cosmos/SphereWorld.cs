@@ -953,7 +953,7 @@ namespace VoxelEngine.Cosmos
                         MeshUpdateFlags.DontRecalculateBounds | MeshUpdateFlags.DontValidateIndices);
                     mesh.bounds = p.bounds[0];
                     p.chunk.meshFilter.sharedMesh = mesh;
-                    ApplyColliderState(p.chunk, mesh, p.counts[1] > 0);
+                    ApplyColliderState(p.chunk, mesh, p.counts[1] > 0, contentChanged: true);
                 }
                 else
                 {
@@ -1084,13 +1084,27 @@ namespace VoxelEngine.Cosmos
             return mesh.bounds.size.sqrMagnitude > 0.0000001f;
         }
 
-        private void ApplyColliderState(Chunk chunk, Mesh mesh, bool hasIndices)
+        private void ApplyColliderState(Chunk chunk, Mesh mesh, bool hasIndices, bool contentChanged = false)
         {
             if (chunk == null || chunk.meshCollider == null) return;
             bool canCollide = hasIndices && HasValidCollisionGeometry(mesh) && ShouldHaveCollider(chunk);
             if (canCollide)
             {
-                if (chunk.meshCollider.sharedMesh != mesh) chunk.meshCollider.sharedMesh = mesh;
+                // 9.5.4 — THE 0.5 m mining wall: chunks REUSE one Mesh object for every
+                // remesh, so the old reference-equality guard skipped the assignment after
+                // edits and the MeshCollider NEVER re-baked. Players dug visual holes while
+                // standing on the original surface's ghost collider (ray hit 'Chunk_…',
+                // voxel data said Air). When the mesh CONTENT changed, force a re-bake by
+                // null-cycling the shared mesh reference.
+                if (contentChanged)
+                {
+                    chunk.meshCollider.sharedMesh = null;
+                    chunk.meshCollider.sharedMesh = mesh;
+                }
+                else if (chunk.meshCollider.sharedMesh != mesh)
+                {
+                    chunk.meshCollider.sharedMesh = mesh;
+                }
             }
             else if (chunk.meshCollider.sharedMesh != null)
             {
@@ -1282,7 +1296,7 @@ namespace VoxelEngine.Cosmos
                         MeshUpdateFlags.DontRecalculateBounds | MeshUpdateFlags.DontValidateIndices);
                     mesh.bounds = p.bounds[0];
                     p.chunk.meshFilter.sharedMesh = mesh;
-                    ApplyColliderState(p.chunk, mesh, p.counts[1] > 0);
+                    ApplyColliderState(p.chunk, mesh, p.counts[1] > 0, contentChanged: true);
                 }
                 else
                 {

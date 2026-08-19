@@ -162,10 +162,10 @@ namespace VoxelEngine.UI
 
             if (choice.isWorldSpawn)
             {
-                // Healing path: resolves the BODY-ANCHORED world spawn, rejects stale
-                // scene points, falls back to an analytic surface point — never space.
-                var spawner = player.GetComponent<VoxelEngine.Player.PlayerSpawner>();
-                if (spawner != null) { spawner.Respawn(); return; }
+                // Healing path WITH stat restore (9.5.4: going straight to the spawner
+                // skipped the revive — players respawned at 0 health).
+                player.RespawnAtWorldSpawn();
+                return;
             }
             player.RespawnAt(choice.position);
         }
