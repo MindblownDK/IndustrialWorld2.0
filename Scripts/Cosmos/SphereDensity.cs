@@ -465,7 +465,14 @@ namespace VoxelEngine.Cosmos
                 // Only true ocean basins receive generated water. A cave excavated below the
                 // mathematical sea shell on otherwise dry land must remain air: players should
                 // encounter water only in oceans, intentional lakes, or placed/pumped liquid.
-                bool genuineOcean = column.landMask < 0.45f || surfaceRadius < prm.seaRadius - 6f;
+                // 9.7.7 gate v2: at the WATERLINE the land mask sits near ~0.6 (the
+                // smoothstep midpoint maps to positive elevation), so 0.45 still let
+                // beach chunks flood isolated dips. Water now requires the CHUNK to be
+                // ocean-centred (centre surface below sea − 2), or clearly open ocean
+                // mask, or a genuinely deep local basin.
+                bool genuineOcean = column.surfaceRadius < prm.seaRadius - 2f
+                                    || column.landMask < 0.30f
+                                    || surfaceRadius < prm.seaRadius - 5f;
                 if (genuineOcean && surfaceRadius < prm.seaRadius - 1f && radius <= prm.seaRadius)
                 {
                     // Crude oil is authored separately as one coherent surface seep, tapered

@@ -383,8 +383,17 @@ namespace VoxelEngine.Generation
             if (!anchorLoaded) return false;
             if (anchorG == int.MinValue) return true;   // no ground here (ocean/void) — skip site
 
-            int pondSurf = anchorG;          // pond can never exceed the centre ground line
-            int pondFloor = anchorG - 2;     // 2 deep at the centre
+            // ── RADIUS SHELLS (9.7.7): a level pond must be a constant-RADIUS body,
+            // not a constant-axis-altitude stack — the cardinal-axis fill produced a
+            // staircase the mesh could only partially level (the residual tilt).
+            // Cells are classified purely by their world radius:
+            //   (pondTopR, groundR]  → carved to open AIR   (the crater mouth)
+            //   (floorR,  pondTopR]  → LIQUID crude          (the level pond)
+            //   ≤ floorR             → floor soak (dark casing) and stop.
+            Vector3 half = Vector3.one * 0.5f;
+            float groundR = ((Vector3)(surface + step * anchorG) + half).magnitude;
+            float pondTopR = groundR - 1.0f;
+            float floorR = groundR - 3.0f;
             int carvedCells = 0, columns = 0;
 
             for (int a = -radius; a <= radius; a++)
@@ -399,41 +408,53 @@ namespace VoxelEngine.Generation
                 if (!colLoaded) { allWritten = false; continue; }
                 if (g == int.MinValue) continue;
 
-                int targetFloor = d2 <= (radius - 1) * (radius - 1) ? pondFloor : pondFloor + 1;
-                if (g > pondSurf) continue;          // rim column — higher ground stays intact
-                if (g <= targetFloor) continue;      // already low — open pond edge, sim settles
+                // Higher rim columns are walls — untouched (carving them would open
+                // covered pockets inside the hillside).
+                float topR = ((Vector3)(columnBase + step * g) + half).magnitude;
+                if (topR > groundR + 1.2f) continue;
 
-                for (int alt = targetFloor + 1; alt <= Mathf.Min(g, pondSurf); alt++)
+                bool touchedColumn = false;
+                for (int alt = g; alt > g - 8; alt--)
                 {
                     Vector3Int pos = columnBase + step * alt;
-                    if (!TryGetLoadedVoxel(world, pos, out Voxel cell)) { allWritten = false; break; }
-                    if (!cell.IsSolid && cell.waterLevel > 0) continue;   // already liquid
-                    // 9.7.4: the liquid tops out ONE cell below the ground line — a full
-                    // cell at the ground line rendered ~0.5 m ABOVE the smooth terrain
-                    // (the tilted plate). The ground-line cell is carved to open AIR, so
-                    // the pond surface sits visibly sunk inside the crater.
-                    Voxel carvedVoxel = alt <= pondSurf - 1
-                        ? new Voxel(-5, (byte)MaterialId.CrudeOil, 255)
-                        : new Voxel(-5, (byte)MaterialId.Air, 0);
-                    world.SetVoxelWorld(pos, carvedVoxel, remesh: false);
-                    if (TryGetChunkForWrite(world, pos, out Chunk carvedChunk)) touched.Add(carvedChunk);
-                    carvedCells++;
-                }
+                    float cellR = ((Vector3)pos + half).magnitude;
 
-                // Soak the floor cell dark — the visible shaft mouth at the pond bottom.
-                Vector3Int floorPos = columnBase + step * targetFloor;
-                if (TryGetLoadedVoxel(world, floorPos, out Voxel floorVox) && floorVox.IsSolid &&
-                    floorVox.material != (byte)MaterialId.CrudeOil)
-                {
-                    world.SetVoxelWorld(floorPos,
-                        new Voxel(floorVox.density, (byte)MaterialId.CrudeOil, 0), remesh: false);
-                    if (TryGetChunkForWrite(world, floorPos, out Chunk floorChunk)) touched.Add(floorChunk);
+                    if (cellR <= floorR)
+                    {
+                        // Floor: soak dark (shaft mouth casing) and stop this column.
+                        if (TryGetLoadedVoxel(world, pos, out Voxel floorVox) && floorVox.IsSolid &&
+                            floorVox.material != (byte)MaterialId.CrudeOil)
+                        {
+                            world.SetVoxelWorld(pos,
+                                new Voxel(floorVox.density, (byte)MaterialId.CrudeOil, 0), remesh: false);
+                            if (TryGetChunkForWrite(world, pos, out Chunk floorChunk)) touched.Add(floorChunk);
+                        }
+                        break;
+                    }
+
+                    if (!TryGetLoadedVoxel(world, pos, out Voxel cell)) { allWritten = false; break; }
+
+                    if (cellR > pondTopR)
+                    {
+                        if (cell.IsSolid)
+                        {
+                            world.SetVoxelWorld(pos, new Voxel(-5, (byte)MaterialId.Air, 0), remesh: false);
+                            if (TryGetChunkForWrite(world, pos, out Chunk airChunk)) touched.Add(airChunk);
+                            carvedCells++; touchedColumn = true;
+                        }
+                    }
+                    else if (cell.IsSolid || cell.waterLevel == 0)
+                    {
+                        world.SetVoxelWorld(pos, new Voxel(-5, (byte)MaterialId.CrudeOil, 255), remesh: false);
+                        if (TryGetChunkForWrite(world, pos, out Chunk oilChunk)) touched.Add(oilChunk);
+                        carvedCells++; touchedColumn = true;
+                    }
                 }
-                columns++;
+                if (touchedColumn) columns++;
             }
 
-            Debug.Log($"[OilReservoirDecorator] Seep basin at {surface}: axis {step}, ground {anchorG}, " +
-                      $"{columns} columns, {carvedCells} carved cells.");
+            Debug.Log($"[OilReservoirDecorator] Seep basin at {surface}: axis {step}, groundR {groundR:0.0}, " +
+                      $"{columns} columns, {carvedCells} carved cells (radius-shell pond).");
             return allWritten;
         }
 

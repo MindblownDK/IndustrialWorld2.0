@@ -1,9 +1,31 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.7.6-dev`
+**Current Version:** `9.7.7-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.7.7-dev] Radius-Shell Ponds, Padding Remesh & the Shoreline Mask Correction
+
+**Type:** PATCH — the three leftovers from the crater screenshot.
+
+#### 🕳️ 1. See-through gaps around the crater — padding-only neighbours never remeshed
+The border write-through updates a neighbour's PADDED voxels, but batched callers (remesh:false — the oil decorator) only reflush chunks they wrote directly. A neighbour whose padding changed kept its old border mesh → torn see-through slivers around carved craters. Padding write-through now ALWAYS queues the neighbour remesh (deduped, cheap).
+
+#### 🛢️ 2. Oil "almost aligned" — the fill was a cardinal staircase
+The pond was filled per-axis-altitude, producing a stepped body the mesh leveling could only correct by ±0.9 voxel (the residual tilt). The basin is now built from RADIUS SHELLS: cells classified purely by world radius — (groundR−1, groundR] carved to open air (crater mouth), (groundR−3, groundR−1] liquid crude (the pond), below that the dark floor soak. A constant-radius body is level against gravity BY CONSTRUCTION at any latitude; the 9.7.6 mesh leveling now only does sub-voxel polish.
+
+#### 🏖️ 3. Beach water — the mask threshold sat on the wrong side of the shoreline
+At the waterline the continent mask evaluates near ~0.6 (the smoothstep midpoint maps to positive elevation), so the 0.45 gate still let beach chunks flood their dips. Gate v2: water requires the CHUNK to be ocean-centred (chunk-centre surface < sea − 2 m), or clearly open ocean (mask < 0.30), or a genuinely deep local basin (< sea − 5 m). Isolated one-column dips under beach sand no longer flood.
+
+#### ✅ Static delivery checks
+- All sources parse clean (tree-sitter C#); version synchronized to 9.7.7-dev.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile, FRESH region/world (previous craters are baked into saved chunks).
+2. Seep: level pond at every latitude, crater mouth open, NO see-through slivers around the rim, shaft + reservoir liquid below.
+3. Beach: dig inland a few metres — dry. Chunk-scale test: also try a spot ~20–30 m inland.
+4. If anything remains, the seep log now prints `groundR` — include it with the screenshot.
 
 ### [9.7.6-dev] Radial Liquid Leveling — Surfaces Perpendicular to Gravity, Smoothed Corners
 

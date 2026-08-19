@@ -1733,7 +1733,11 @@ namespace VoxelEngine.Cosmos
                     int px = lx - dx * S, py = ly - dy * S, pz = lz - dz * S;
                     n.voxels[Chunk.LocalToPaddedIndex(px, py, pz)] = v;
                     n.isModified = true;
-                    if (remesh) QueueMesh(n);
+                    // 9.7.7: ALWAYS remesh a neighbour whose padding changed — batched
+                    // callers (remesh:false, e.g. the oil decorator) only reflush the
+                    // chunks they wrote directly; a padding-only neighbour kept its old
+                    // border mesh and tore see-through slivers around carved craters.
+                    QueueMesh(n);
                 }
             }
 
