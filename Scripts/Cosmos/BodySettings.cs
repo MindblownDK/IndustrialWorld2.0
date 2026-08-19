@@ -147,6 +147,21 @@ namespace VoxelEngine.Cosmos
                  "If clear, the renderer infers a colour from climate settings.")]
         public Color displayColor = new Color(0f, 0f, 0f, 0f);  // alpha 0 = auto
 
+        // ── Sky art (optional designer overrides; alpha 0 = use the catalogue) ──
+        [Header("Sky Art")]
+        [Tooltip("Zenith colour override. Alpha 0 keeps the catalogue colour for this world's theme.")]
+        public Color skyZenith = new Color(0f, 0f, 0f, 0f);
+        [Tooltip("Horizon colour override. Alpha 0 keeps the catalogue colour.")]
+        public Color skyHorizon = new Color(0f, 0f, 0f, 0f);
+        [Tooltip("Sunset glow override. Alpha 0 keeps the catalogue colour.")]
+        public Color skySunset = new Color(0f, 0f, 0f, 0f);
+        [Tooltip("Surface fog / haze override. Alpha 0 keeps the catalogue colour.")]
+        public Color skyFog = new Color(0f, 0f, 0f, 0f);
+
+        // Written by Voxel Engine Setup Step 51. Version zero means the catalogue
+        // still owns the look; existing non-zero override colours are never reset.
+        [HideInInspector] public int skyProfileVersion = 0;
+
         // ── Biomes ────────────────────────────────────────────────
         [Header("Biomes")]
         [Tooltip("Whitelist of biomes that may generate on this body. Empty = use registry defaults.")]
@@ -162,11 +177,96 @@ namespace VoxelEngine.Cosmos
         [Header("Specials (crude oil, ice, …)")]
         public List<OreDeposit> specials = new List<OreDeposit>();
 
-        [Header("Rare Infinite Resource Nodes")]
-        [Tooltip("Enables the rare infinite crude-oil node sites on this spherical body. Author this only on Pirate World.")]
+        [Header("Finite Crude-Oil Seeps")]
+        [Tooltip("Setup-owned. Enables finite, drainable crude-oil seep sites on a body whose geology is oil-rich. This never enables an infinite Jack Pump node.")]
+        public bool enableCrudeOilSeeps;
+        [Tooltip("Chance that an oil-rich body's geological surface cell becomes a visible finite crude-oil seep.")]
+        [Range(0.01f, 0.75f)] public float crudeOilSiteChance = 0.12f;
+
+        // Written by Voxel Engine Setup. Version zero identifies assets from before finite
+        // seep distribution was authored per world; legacy Pirate World remains compatible
+        // until the setup tool serializes the explicit setting.
+        [HideInInspector] public int crudeOilSeepSettingsVersion;
+
+        [Header("Rare Pirate Jack Pump Nodes")]
+        [Tooltip("Enables rare infinite crude-oil Jack Pump nodes. Setup authorizes this only on Planet_Pirate.")]
         public bool enableInfiniteOilNodes;
-        [Tooltip("Chance that a crude-bearing geological cell becomes an infinite oil node. Kept deliberately low for Pirate World.")]
-        [Range(0.001f, 0.25f)] public float infiniteOilNodeChance = 0.025f;
+        [Tooltip("Chance that a Pirate World geological surface cell becomes an infinite Jack Pump node. Kept deliberately low.")]
+        [Range(0.001f, 0.25f)] public float infiniteOilNodeChance = 0.003f;
+
+        // Written by Voxel Engine Setup. Version zero identifies legacy planet assets that
+        // predate the infinite-node fields; their exact Pirate World identity is accepted once
+        // so they cannot silently lose all oil until the setup tool is re-run.
+        [HideInInspector] public int pirateOilNodeSettingsVersion;
+        [HideInInspector] public bool isCanonicalPirateJackPumpWorld;
+
+        /// <summary>True only for the one authored Pirate World identity.</summary>
+        public bool IsPirateWorld => string.Equals(bodyName?.Trim(), "Pirate World", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Finite crude seeps may appear only on worlds explicitly marked oil-rich by setup.
+        /// The narrow Pirate fallback preserves already-created 7.10.1 worlds until setup runs.
+        /// </summary>
+        public bool CanGenerateFiniteCrudeOilSeeps => enableCrudeOilSeeps
+            || (crudeOilSeepSettingsVersion == 0 && IsLegacyOilRichWorld);
+
+        // Existing worlds created before Step 21 did not serialize the finite-seep flags even
+        // though their templates already contained crude-oil layers. Keep the intended selected
+        // oil worlds productive until setup writes explicit authored values; unrelated worlds
+        // remain oil-free and the Pirate-only infinite rule stays separate.
+        private bool IsLegacyOilRichWorld
+        {
+            get
+            {
+                string name = bodyName?.Trim() ?? string.Empty;
+                return string.Equals(name, "Earth", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(name, "Ocean World", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(name, "Acid World", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(name, "Desolate World", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(name, "Pirate World", StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
+        /// <summary>
+        /// Infinite nodes are never a general oil-world feature: they remain exclusive to the
+        /// canonical Pirate World even if another asset is hand-edited with the serialized flag.
+        /// </summary>
+        public bool CanGenerateInfiniteJackPumpNodes
+        {
+            get
+            {
+                // Before the 7.10.2 setup migration, preserve the existing Pirate World
+                // node behaviour. Once setup has serialized the distribution, require the
+                // canonical Planet_Pirate marker rather than trusting a display name.
+                if (crudeOilSeepSettingsVersion < 2)
+                    return IsPirateWorld && (enableInfiniteOilNodes || pirateOilNodeSettingsVersion == 0);
+                return isCanonicalPirateJackPumpWorld && enableInfiniteOilNodes;
+            }
+        }
+
+        /// <summary>
+        /// Legacy alias retained for external callers. It deliberately means the infinite
+        /// Pirate-only capability, not generic finite crude seep generation.
+        /// </summary>
+        public bool CanGeneratePirateOilNodes => CanGenerateInfiniteJackPumpNodes;
+
+        /// <summary>Finite seep frequency with a defensive clamp for legacy serialized data.</summary>
+        public float ResolveCrudeOilSiteChance()
+        {
+            if (crudeOilSeepSettingsVersion == 0)
+            {
+                string name = bodyName?.Trim() ?? string.Empty;
+                if (string.Equals(name, "Earth", StringComparison.OrdinalIgnoreCase)) return 0.08f;
+                if (string.Equals(name, "Ocean World", StringComparison.OrdinalIgnoreCase)) return 0.10f;
+                if (string.Equals(name, "Acid World", StringComparison.OrdinalIgnoreCase)) return 0.06f;
+                if (string.Equals(name, "Desolate World", StringComparison.OrdinalIgnoreCase)) return 0.05f;
+                if (string.Equals(name, "Pirate World", StringComparison.OrdinalIgnoreCase)) return 0.12f;
+            }
+            return Mathf.Clamp(crudeOilSiteChance, 0.01f, 0.75f);
+        }
+
+        /// <summary>Rare Jack Pump node frequency with a defensive clamp for legacy serialized data.</summary>
+        public float ResolveInfiniteOilNodeChance() => Mathf.Clamp(infiniteOilNodeChance, 0.001f, 0.25f);
 
         /// <summary>Enumerate every deposit across all tiers.</summary>
         public IEnumerable<OreDeposit> AllOres()
@@ -212,7 +312,10 @@ namespace VoxelEngine.Cosmos
                 mountainScale        = 1.1f,
                 continentScaleFactor = 1f,
                 enableGrass          = true,
-                radiusKm             = 8f,
+                radiusKm                    = 8f,
+                enableCrudeOilSeeps         = true,
+                crudeOilSiteChance          = 0.08f,
+                crudeOilSeepSettingsVersion = 2,
             };
 
             // ── Sub-surface (common) ──────────────────────────────

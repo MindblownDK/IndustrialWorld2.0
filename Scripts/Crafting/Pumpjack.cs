@@ -12,7 +12,6 @@ using VoxelEngine.Cosmos;
 using VoxelEngine.Items;
 using VoxelEngine.Power;
 using VoxelEngine.Transport;
-using VoxelEngine.WaterSim;
 
 namespace VoxelEngine.Crafting
 {
@@ -34,9 +33,10 @@ namespace VoxelEngine.Crafting
         public float baseWattsPerSecond = 4000f;
         [Tooltip("Standby draw in watts while connected but not pumping.")]
         public float idleWattsPerSecond = 120f;
-        [Tooltip("Radial depth probed below the pump for its generated bore/reservoir.")]
+        [Header("Legacy Compatibility")]
+        [Tooltip("Retained for existing prefab/save compatibility. Infinite eligibility now uses the explicit Pirate oil-node marker.")]
         public int scanDepth = 120;
-        [Tooltip("Tangent scan radius around the bore, in voxel cells.")]
+        [Tooltip("Retained for existing prefab/save compatibility. Infinite eligibility now uses the explicit Pirate oil-node marker.")]
         public int scanRadius = 3;
 
         [Header("Containers (auto-created)")]
@@ -180,39 +180,16 @@ namespace VoxelEngine.Crafting
         {
             oilVoxel = default;
             if (ActiveWorld.Current is not SphereWorld sphere || sphere.body == null || sphere.body.settings == null
-                || !sphere.body.settings.enableInfiniteOilNodes) return false;
+                || !sphere.body.settings.CanGenerateInfiniteJackPumpNodes) return false;
 
-            Vector3 down = -sphere.body.UpAt(transform.position);
-            if (down.sqrMagnitude < 0.0001f) return false;
-            down.Normalize();
-            Vector3 reference = Mathf.Abs(Vector3.Dot(down, Vector3.up)) < 0.9f ? Vector3.up : Vector3.right;
-            Vector3 tangentA = Vector3.Cross(reference, down).normalized;
-            Vector3 tangentB = Vector3.Cross(down, tangentA).normalized;
+            // A visible crude puddle alone is a finite seep. The Jack Pump must require the
+            // explicit rare-node identity, otherwise it could turn every ordinary oil site
+            // into an unintended infinite source.
+            if (!VoxelEngine.Generation.PirateOilNode.IsPumpableNear(sphere, transform.position))
+                return false;
 
-            // The runtime marker makes the node genuinely infinite even if a player
-            // drains visible surface oil with a bucket. The fluid scan below remains
-            // a safe fallback for a freshly generated node during the same frame.
-            if (VoxelEngine.Generation.PirateOilNode.IsPumpableNear(sphere, transform.position))
-            {
-                oilVoxel = sphere.WorldToVoxel(transform.position);
-                return true;
-            }
-
-            var world = ActiveWorld.Current;
-            for (int depth = 0; depth <= Mathf.Max(1, scanDepth); depth++)
-            for (int a = -scanRadius; a <= scanRadius; a++)
-            for (int b = -scanRadius; b <= scanRadius; b++)
-            {
-                if (a * a + b * b > scanRadius * scanRadius) continue;
-                Vector3 probe = transform.position + down * depth + tangentA * a + tangentB * b;
-                Vector3Int voxel = world.WorldToVoxel(probe);
-                Voxel fluid = world.GetVoxelWorld(voxel);
-                if (!FluidMaterialUtility.IsFluid(fluid) || FluidMaterialUtility.LiquidFromVoxel(fluid) != LiquidType.CrudeOil)
-                    continue;
-                oilVoxel = voxel;
-                return true;
-            }
-            return false;
+            oilVoxel = sphere.WorldToVoxel(transform.position);
+            return true;
         }
 
         private void PumpOneBarrel()

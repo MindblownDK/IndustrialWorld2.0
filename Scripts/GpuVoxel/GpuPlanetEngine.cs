@@ -945,6 +945,15 @@ namespace VoxelEngine.GpuVoxel
             Vector3 viewerLocal = body.transform.InverseTransformPoint(viewer.position);
             bool hasBubble = TryGetBubble(out Vector3 bubbleCenter, out _, out float bubbleColliderRadius);
 
+            // UNCONDITIONAL near-viewer yield (9.5.2): whenever the gameplay bubble is
+            // actively streaming THIS body, the LOD skin must NEVER collide near the
+            // player — the bubble's own mesh colliders are the ground there. This is
+            // deliberately independent of every scan/footing heuristic: the heuristics
+            // repeatedly failed in the field and left an invisible collider sheet just
+            // under the surface (the unmineable "top layer").
+            var sw = SphereWorld.Instance;
+            bool bubbleStreamingHere = sw != null && sw.body == body && sw.ActiveChunkCount > 24;
+
             foreach (var kv in _nodes)
             {
                 NodeRec rec = kv.Value;
@@ -960,13 +969,14 @@ namespace VoxelEngine.GpuVoxel
                 bool underViewer = dist < 1.35f * rec.desc.arc + 250f;
                 bool wantCollider = (fine && dist < colliderRange + rec.desc.arc) || underViewer;
 
-                // Single-surface handshake: wherever the bubble provides REAL mesh
-                // colliders, the LOD skin must not collide — otherwise its surface
-                // sheet would wall off every mined tunnel. The bubble always
-                // surrounds the player, so physics never loses its floor.
+                float ball = NodeBallRadius(rec.desc);
+
+                if (bubbleStreamingHere && wantCollider && dist - ball < 300f)
+                    wantCollider = false;
+
+                // Handshake yield (kept as the wider, window-sized rule).
                 if (hasBubble && wantCollider)
                 {
-                    float ball = NodeBallRadius(rec.desc);
                     float bubbleDist = Vector3.Distance((Vector3)rec.desc.Anchor, bubbleCenter);
                     if (bubbleDist - ball < bubbleColliderRadius) wantCollider = false;
                 }

@@ -1499,7 +1499,27 @@ namespace VoxelEngine.Player
                 }
             }
 
-            VoxelEditor.Subtract(world, registry, miningPoint, radius, strength);
+            var digResult = VoxelEditor.Subtract(world, registry, miningPoint, radius, strength);
+
+            // ── Mining diagnostics (9.5.2) ──────────────────────────────────
+            // If a swing changes NOTHING, name the exact blocker in one log line:
+            // what the ray hit, the voxel under the brush, and every collider in a
+            // short downward probe. This turns "mining stops at 0.5 m" reports into
+            // a copy-pasteable root cause.
+            if (!digResult.changed)
+            {
+                var probeDef = registry != null ? registry.Get(v.material) : null;
+                var sbDiag = new System.Text.StringBuilder();
+                sbDiag.Append("[Mining] Swing changed no voxels. ");
+                sbDiag.Append($"rayHit='{hit.collider?.name}' ");
+                sbDiag.Append($"voxel(density={v.density}, mat={v.material}, def={(probeDef != null ? probeDef.name : "null")}, ");
+                sbDiag.Append($"mineable={(probeDef != null ? probeDef.isMineable.ToString() : "?")}, tier={(probeDef != null ? probeDef.miningTier : -1)} vs tool {tier}) ");
+                var below = Physics.RaycastAll(new Ray(hit.point + hit.normal * 0.5f, -hit.normal), 4f, ~0, QueryTriggerInteraction.Ignore);
+                sbDiag.Append("collidersBelow: ");
+                foreach (var b in below)
+                    if (b.collider != null) sbDiag.Append($"'{b.collider.name}'@{b.distance:0.00}m ");
+                Debug.Log(sbDiag.ToString());
+            }
             // Sample tint from the hit material.
             Color tint = new Color(0.85f, 0.78f, 0.6f);
             if (registry != null && v.density > 0)

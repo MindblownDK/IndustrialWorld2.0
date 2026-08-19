@@ -425,7 +425,7 @@ namespace VoxelEngine.Player
             {
                 dest = new Vector3(0, 250, 0);
             }
-            StartCoroutine(RespawnRoutine(dest));
+            StartCoroutine(RespawnRoutine(dest, allowSpaceDestination: session != null && session.hasBedSpawn));
         }
 
         /// <summary>
@@ -482,10 +482,11 @@ namespace VoxelEngine.Player
 
         public void RespawnAt(Vector3 destination)
         {
-            StartCoroutine(RespawnRoutine(destination));
+            // Explicit destinations (beds, cryobeds, stations) may be in space by design.
+            StartCoroutine(RespawnRoutine(destination, allowSpaceDestination: true));
         }
 
-        private IEnumerator RespawnRoutine(Vector3 dest)
+        private IEnumerator RespawnRoutine(Vector3 dest, bool allowSpaceDestination = false)
         {
             ReadyForPlayerControl = false;
             DisableController();
@@ -509,21 +510,36 @@ namespace VoxelEngine.Player
             PrepareRespawnFrame(dest);
 
             // Mirror the first-spawn routine: on a spherical body the parked position
-            // must sit at the TRUE destination height. The player transform drives chunk
-            // streaming, so forcing Y up to 250 (a flat-world streaming trick) on a sphere
-            // parks the viewer far below the surface spawn — the chunks around the cryobed
-            // never stream in, WaitForChunkAt times out, and the player is dropped far from
-            // the chosen respawn point.
-            float parkY = VoxelEngine.Cosmos.GravityProvider.ActiveBody != null
-                          ? dest.y
-                          : Mathf.Max(dest.y, 250f);
-            SetPosition(new Vector3(dest.x, parkY, dest.z));
+            // must sit at the TRUE destination height (9.5.2: the legacy flat-world
+            // "park at Y ≥ 250" trick parked deep-space deaths on a nonsense plane —
+            // the destination knows its own height; park slightly above it instead).
+            Vector3 parkUp = Vector3.up;
+            var destBody = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
+            if (destBody != null) parkUp = destBody.UpAt(dest);
+            SetPosition(dest + parkUp * 12f);
+            Debug.Log($"[PlayerSpawner] Respawn parked at {transform.position} (dest {dest}), waiting for chunks…");
             yield return WaitForChunkAt(VoxelCoordOf(dest), 8f);
             SetPosition(SnapToGround(dest));
             yield return null;
             yield return null;
             SetPosition(SnapToGround(transform.position));
             yield return EnsureDrySpawn(transform.position);
+
+            // Final clamp (9.5.2): if everything above still left us floating in open
+            // space (chunk wait timeout, failed snap), force the analytic surface point.
+            // Bed/station spawns may be in space by design and are never clamped.
+            if (!allowSpaceDestination && IsOpenSpacePosition(transform.position))
+            {
+                var clampBody = VoxelEngine.Cosmos.GravityProvider.ActiveBody
+                                ?? (VoxelEngine.Cosmos.CosmosBootstrap.Instance != null
+                                    ? VoxelEngine.Cosmos.CosmosBootstrap.Instance.HomeBody : null);
+                if (TryComputeAnalyticSpawn(clampBody, out Vector3 clamped))
+                {
+                    Debug.LogWarning("[PlayerSpawner] Respawn ended in open space — hard-clamped to analytic surface " + clamped);
+                    SetPosition(clamped);
+                }
+            }
+            Debug.Log($"[PlayerSpawner] Respawn complete at {transform.position}");
             EnableController();
             ZeroPlayerVelocity();
             // Brief fall-damage grace so the physics settle at spawn can never insta-kill.

@@ -36,6 +36,17 @@ namespace VoxelEngine.Cosmos
         /// <summary>Display name of this body (from its settings).</summary>
         public string DisplayName => settings != null ? settings.bodyName : "Body";
 
+        // Session seed is runtime-only. It must never mutate the shared PlanetTemplate asset,
+        // and it must survive repeated ApplySettings calls during bootstrap/streamer startup.
+        [System.NonSerialized] private bool _hasRuntimeSeedOverride;
+        [System.NonSerialized] private int _runtimeSeedOverride;
+
+        public void SetRuntimeSeedOverride(int seed)
+        {
+            _runtimeSeedOverride = seed;
+            _hasRuntimeSeedOverride = true;
+        }
+
         private void Awake()
         {
             ApplySettings();
@@ -48,20 +59,28 @@ namespace VoxelEngine.Cosmos
 
             // Convert designer-facing km radius → world metres. 1000 m/km.
             float radiusM = Mathf.Max(50f, settings.radiusKm * 1000f);
-            genParams.seed                = settings.seed;
+            genParams.seed                = _hasRuntimeSeedOverride ? _runtimeSeedOverride : settings.seed;
             genParams.radiusWorld         = radiusM;
             // Terrain height vs sea level: mean terrain should be SLIGHTLY above sea level so
             // we get a good mix of land (~60%) and ocean (~40%). Too high (+12) = no water;
             // too low (0) = all beach. +4m gives realistic continents with visible oceans.
             genParams.baseHeight          = settings.waterLevel + 4f;
             genParams.seaRadius           = radiusM + settings.waterLevel;
-            // Continent wavelength ≈ planet circumference / ~6 continents.
-            float circumference           = Mathf.PI * 2f * radiusM;
-            genParams.continentScaleDir   = (2f * Mathf.PI) / Mathf.Max(1f, circumference / 1200f);
+            // Direction-space noise receives a unit vector, not metre coordinates. The old
+            // inverse-radius formula reduced continent frequency to ~0.15 on full-size worlds,
+            // creating one rigid near-flat shell. Use a stable direction-space continental
+            // scale, with the authored factor preserving designer control across planet sizes.
+            genParams.continentScaleDir   = Mathf.Clamp(2.4f * settings.continentScaleFactor, 0.6f, 7f);
             genParams.mountainScale       = settings.mountainScale;
+            bool isBelt = settings.bodyName != null &&
+                          (settings.bodyName.IndexOf("Asteroid", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                           settings.bodyName.IndexOf("Belt", System.StringComparison.OrdinalIgnoreCase) >= 0);
+            genParams.isAsteroidBelt      = (byte)(isBelt ? 1 : 0);
+            genParams.hasOilSeeps         = (byte)((settings.CanGenerateFiniteCrudeOilSeeps
+                                                    || settings.CanGenerateInfiniteJackPumpNodes) ? 1 : 0);
 
-            // Earth-like gravity baseline (9.81) scaled by the body's gravity multiplier.
-            SurfaceGravity = 9.81f * Mathf.Clamp(settings.gravity, 0f, 5f);
+            // Earth-like gravity baseline (9.81) scaled by the body's gravity multiplier (0 for Asteroid Belts).
+            SurfaceGravity = isBelt ? 0f : 9.81f * Mathf.Clamp(settings.gravity, 0f, 5f);
         }
 
         // ── Spatial queries (body-relative) ───────────────────────
@@ -152,6 +171,9 @@ namespace VoxelEngine.Cosmos
             foreach (var def in src)
             {
                 if (def == null) continue;
+                string bName = settings != null ? settings.bodyName ?? string.Empty : string.Empty;
+                bool hasAtmosphere = settings != null && settings.HasAtmosphere;
+                if (!IsBiomeCompatibleWithPlanet(def, bName, temperature, hasAtmosphere)) continue;
                 // Exclude biomes whose temperature window is incompatible with the body's climate.
                 if (temperature < -5f && def.minTemperature > 0.55f) continue;   // cold body, hot biome
                 if (temperature > 35f && def.maxTemperature < 0.45f) continue;   // hot body, cold biome
@@ -196,15 +218,93 @@ namespace VoxelEngine.Cosmos
             return result;
         }
 
+        private bool IsBiomeCompatibleWithPlanet(BiomeDefinition def, string bodyName, float temperature, bool hasAtmosphere)
+        {
+            if (def == null) return false;
+            string bName = def.biomeName ?? string.Empty;
+
+            // 1. Check planet identity / keywords
+            bool isMoon = bodyName.IndexOf("Moon", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                          bodyName.IndexOf("Lunar", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                          !hasAtmosphere;
+            bool isIce = bodyName.IndexOf("Ice", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                         bodyName.IndexOf("Europa", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                         bodyName.IndexOf("Frost", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                         temperature < -15f;
+            bool isDesert = bodyName.IndexOf("Desert", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                            bodyName.IndexOf("Mars", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                            bodyName.IndexOf("Arid", System.StringComparison.OrdinalIgnoreCase) >= 0;
+            bool isVolcanic = bodyName.IndexOf("Volcan", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                              bodyName.IndexOf("Lava", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                              bodyName.IndexOf("Io", System.StringComparison.OrdinalIgnoreCase) >= 0;
+            bool isAcid = bodyName.IndexOf("Acid", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                          bodyName.IndexOf("Toxic", System.StringComparison.OrdinalIgnoreCase) >= 0;
+            bool isPirate = bodyName.IndexOf("Pirate", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                            bodyName.IndexOf("Scrap", System.StringComparison.OrdinalIgnoreCase) >= 0;
+
+            // Strict exclusion rules so biomes never cross-contaminate planets
+            if (isMoon)
+            {
+                return bName.IndexOf("Moon", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       bName.IndexOf("Lunar", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       bName.IndexOf("Barren", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       bName.IndexOf("Crater", System.StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+            if (isIce)
+            {
+                return bName.IndexOf("Ice", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       bName.IndexOf("Snow", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       bName.IndexOf("Tundra", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       bName.IndexOf("Glacier", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       bName.IndexOf("Frozen", System.StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+            if (isDesert)
+            {
+                return bName.IndexOf("Desert", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       bName.IndexOf("Sand", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       bName.IndexOf("Dune", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       bName.IndexOf("Canyon", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       bName.IndexOf("Arid", System.StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+            if (isVolcanic)
+            {
+                return bName.IndexOf("Volcan", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       bName.IndexOf("Lava", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       bName.IndexOf("Basalt", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       bName.IndexOf("Obsidian", System.StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+            if (isAcid)
+            {
+                return bName.IndexOf("Acid", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       bName.IndexOf("Toxic", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       bName.IndexOf("Corrod", System.StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+            if (isPirate)
+            {
+                return bName.IndexOf("Pirate", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       bName.IndexOf("Wasteland", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       bName.IndexOf("Scrap", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       bName.IndexOf("Rust", System.StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+
+            // Earthlike / Home planet: exclude specialized moon/volcanic/acid/pirate biomes
+            if (bName.IndexOf("Moon", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                bName.IndexOf("Volcan", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                bName.IndexOf("Acid", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                bName.IndexOf("Pirate", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                return false;
+
+            return true;
+        }
+
         /// <summary>Prebuilt ore layers for this body (common + rare + specials).</summary>
         public OreLayer[] BuildOreLayers()
         {
             if (settings == null) return System.Array.Empty<OreLayer>();
             var layers = settings.BuildOreLayers();
-            // Infinite crude is a Pirate World resource. Other bodies must not
-            // generate dormant raw-oil markers that look collectible but cannot form
-            // a legitimate node or power a Jack Pump.
-            if (!settings.enableInfiniteOilNodes)
+            // Raw crude markers support finite surface seeps on setup-authorized oil-rich
+            // bodies. Infinite Jack Pump identity is checked separately and remains Pirate-only.
+            if (!settings.CanGenerateFiniteCrudeOilSeeps)
                 layers.RemoveAll(layer => layer.material == VoxelEngine.Materials.MaterialId.CrudeOil);
             return layers.ToArray();
         }

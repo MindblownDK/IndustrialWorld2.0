@@ -118,7 +118,7 @@ namespace VoxelEngine.EditorTools
             AddWizardButton(scroll, "5. Build Tiered Building Content (10 player-scale families x 4 tiers + Hammer)", BuildTieredContent, 40);
             AddWizardButton(scroll, "6. Build Power Content (4 wire tiers + Generator + Battery + Light)", BuildPowerContent, 40);
             AddWizardButton(scroll, "7. Build Research Content (Tech tree + Science packs + Research Lab)", BuildResearchContent, 40);
-            AddWizardButton(scroll, "8. Build Fluid Content (Water bucket, tank, pump, pipes)", BuildFluidContent, 40);
+            AddWizardButton(scroll, "8. Build Native Spherical Fluid Content (buckets, pool pumps, tanks, pipes, wakes)", BuildFluidContent, 48);
 
             AddSpacer(scroll, 6);
             AddInfo(scroll,
@@ -126,7 +126,7 @@ namespace VoxelEngine.EditorTools
                 "  • Iron / Copper / Steel PLATES, Iron Gear, Copper Wire, Glass\n" +
                 "  • Electronic & Advanced Circuits\n" +
                 "  • Empty Barrel / Crude-Oil Barrel / Refined-Oil Barrel / Plastic Bar\n" +
-                "  • Pirate Jack Pump + Oil Refinery prefabs & recipes\n" +
+                "  • Pirate Jack Pump + Oil Refinery prefabs & recipes, plus oil-rich crude seep distribution + Pirate Jack Pump node repair\n" +
                 "  • Wireless Storage Terminal (new block)\n" +
                 "  • Factory research tree expansion (Plating, Electronics,\n" +
                 "    Oil Extraction, Oil Refining, Plastics, Logistics Network,\n" +
@@ -186,14 +186,13 @@ namespace VoxelEngine.EditorTools
 
             AddSpacer(scroll, 6);
             AddInfo(scroll,
-                "Step 16 configures Crest water for the active scene:\n" +
-                "  • UI Toolkit panel fit settings\n" +
-                "  • Shallow/clear Crest water material settings\n" +
-                "  • Crest dynamic waves + flow simulation where available\n" +
-                "  • Planet water bootstrap material overrides\n" +
-                "  • Water-only maritime wake emitters on ship grids\n" +
-                "Re-runnable. Idempotent. Run after importing Crest into Liquid/.");
-            AddWizardButton(scroll, "16. Configure Crest Water Integration (UI fit, shallow water, flow + boat wakes)", CrestWaterSetupUtility.Configure, 56);
+                "Step 16 rebuilds the active scene's native spherical water stack:\n" +
+                "  • Removes legacy external-ocean components and Assets/Liquid when present\n" +
+                "  • Creates native VoxelWaterURP water + viscous crude materials\n" +
+                "  • Real voxel ocean basins, lakes/pools, and radial boat wakes — no wrapped water sphere\n" +
+                "  • Finite/infinite pool pump telemetry, internal tanks, existing pipe transport, and Dirt-drop repair\n" +
+                "Re-runnable. Idempotent. Run after Step 8.");
+            AddWizardButton(scroll, "16. Rebuild Real Spherical Water (ocean basins, dirt drops, pools, pipes + boat wakes)", BuildFluidContent, 56);
 
             AddSpacer(scroll, 6);
             AddInfo(scroll,
@@ -270,6 +269,7 @@ namespace VoxelEngine.EditorTools
                 "  • 11 themed biomes with planet-correct surface materials + ruin scatter\n" +
                 "  • Mars/Venus reconfigured + 8 new planets (Acid, Pirate, Greek, Ice, Water, Desolate, Volcanic, Crystal)\n" +
                 "  • Moon wired to the Lunar biome; all planets appended to System_Sol\n" +
+                "  • Creates/repairs the runtime CosmosTemplateLibrary + Asteroids_MainBelt automatically\n" +
                 "  • 5 new voxel surface materials (Martian Dust, Venus Ash, Acid Bog, Volcanic Basalt, Crystal Geode)\n" +
                 "Run AFTER Steps 1 and 20. Re-runnable. Idempotent.");
             AddWizardButton(scroll, "21. Build Celestial Worlds — Planets, Themed Biomes & Ruin Spawning (Phase 2)", BuildCelestialWorldsContent, 72);
@@ -465,6 +465,16 @@ namespace VoxelEngine.EditorTools
                 "  • Existing initialized profile values are preserved unchanged\n" +
                 "Re-runnable. Run after Step 21 when themed celestial worlds are present.");
             AddWizardButton(scroll, "49. Initialize Atmosphere + Space Profiles (Non-Destructive)", BuildAtmosphereSpaceProfiles, 56);
+            AddWizardButton(scroll, "50. Build Warp Drive (Item, Prefab, Recipe, Research — Non-Destructive)", BuildWarpDriveContent, 56);
+
+            AddInfo(scroll,
+                "Step 51 authors PLANET-SPECIFIC SKY + SPACE AMBIANCE profiles (non-destructive):\n" +
+                "  • Resolves each planet/moon to a sky theme (temperate, ice, volcanic, acid, moon, …)\n" +
+                "  • Preserves existing sky overrides, display colours, and runtime material properties\n" +
+                "  • Keeps the sky, nebula, eclipse-aware solar glare, and sparse dust shaders in standalone builds\n" +
+                "  • Missing display colours are filled from the theme so distant planets match their sky\n" +
+                "Re-runnable. Run after Step 21 / Step 49 when celestial worlds are present.");
+            AddWizardButton(scroll, "51. Author Planet Skies + Space Ambiance (Non-Destructive)", BuildPlanetSkyProfiles, 56);
 
             AddSpacer(scroll, 20);
         }
@@ -556,9 +566,9 @@ namespace VoxelEngine.EditorTools
                 if (item == null)
                 {
                     item = ScriptableObject.CreateInstance<ItemDefinition>();
-
+                    AssetDatabase.CreateAsset(item, path);
                 }
-                item.itemId = id.ToString().ToLower();
+                item.itemId = id == MaterialId.Clay ? "dirt" : id.ToString().ToLower();
                 item.displayName = display;
                 item.maxStack = 999;
                 item.massPerUnit = 1f;
@@ -567,7 +577,7 @@ namespace VoxelEngine.EditorTools
             }
             MakeItem(MaterialId.Stone,     "Stone");
             MakeItem(MaterialId.Sand,      "Sand");
-            MakeItem(MaterialId.Clay,      "Clay");
+            MakeItem(MaterialId.Clay,      "Dirt");
             MakeItem(MaterialId.Ice,       "Ice");
             MakeItem(MaterialId.Iron,      "Iron Ore");
             MakeItem(MaterialId.Copper,    "Copper Ore");
@@ -619,6 +629,7 @@ namespace VoxelEngine.EditorTools
             Make(MaterialId.Stone,      "Stone",       new Color(0.45f,0.42f,0.40f), 1.0f, itemMap[MaterialId.Stone]);
             Make(MaterialId.Sand,       "Sand",        new Color(0.92f,0.84f,0.55f), 0.4f, itemMap[MaterialId.Sand]);
             Make(MaterialId.Clay,       "Clay/Dirt",   new Color(0.40f,0.27f,0.16f), 0.6f, itemMap[MaterialId.Clay]);
+            Make(MaterialId.Grass,      "Grass/Dirt",  new Color(0.24f,0.52f,0.18f), 0.4f, itemMap[MaterialId.Clay]);
             Make(MaterialId.Ice,        "Ice",         new Color(0.78f,0.92f,0.98f), 0.7f, itemMap[MaterialId.Ice]);
             Make(MaterialId.WaterVoxel, "Water (Voxel)", new Color(0.15f,0.35f,0.7f,0.85f), 0.1f, null, fluid:true, mineable:false);
             Make(MaterialId.WaterLiquid,"Water (Liquid)",new Color(0.15f,0.35f,0.7f,0.85f), 0.1f, null, fluid:true, mineable:false);
@@ -789,16 +800,13 @@ namespace VoxelEngine.EditorTools
             var registry = AssetDatabase.LoadAssetAtPath<MaterialRegistry>($"{ASSET_ROOT}/MaterialRegistry.asset");
 
             // Step 2 no longer creates a world manager. The current game scene is
-            // expected to own its world through CosmosBootstrap/SphereWorld or an
-            // existing VoxelWorld. We only link the player to whatever world already exists.
+            // expected to own its world through CosmosBootstrap/SphereWorld (8.0.0: the
+            // flat world is removed). We only link the player to whatever world exists.
             VoxelEngine.Core.IVoxelWorld activeWorld = VoxelEngine.Core.ActiveWorld.Current;
-            var flatWorld = Object.FindAnyObjectByType<VoxelEngine.Core.VoxelWorld>();
             var sphereWorld = Object.FindAnyObjectByType<VoxelEngine.Cosmos.SphereWorld>();
             if (activeWorld == null)
             {
-                if (flatWorld != null) activeWorld = flatWorld;
-                else if (sphereWorld != null) activeWorld = sphereWorld;
-                if (activeWorld != null) VoxelEngine.Core.ActiveWorld.Current = activeWorld;
+                if (sphereWorld != null) VoxelEngine.Core.ActiveWorld.Current = sphereWorld;
             }
 
             // ----- Player -----
@@ -927,7 +935,7 @@ namespace VoxelEngine.EditorTools
                 screenConfigGo.gameObject.AddComponent<VoxelEngine.GridSystem.UI.GridScreenConfigUI>();
 
             // Link viewer on whichever world exists. No manager is created here.
-            if (flatWorld != null) flatWorld.viewer = playerGo.transform;
+            // (8.0.0: flat world removed — the sphere is the only world.)
             if (sphereWorld != null) sphereWorld.viewer = playerGo.transform;
 
             // World-state persistence (player position, inventory, placed blocks).
@@ -967,8 +975,7 @@ namespace VoxelEngine.EditorTools
             {
                 if (go.GetComponentInChildren<VoxelEngine.Player.PlayerController>(true) != null ||
                     go.GetComponentInChildren<VoxelEngine.Cosmos.CosmosBootstrap>(true) != null ||
-                    go.GetComponentInChildren<VoxelEngine.Cosmos.SphereWorld>(true) != null ||
-                    go.GetComponentInChildren<VoxelEngine.Core.VoxelWorld>(true) != null)
+                    go.GetComponentInChildren<VoxelEngine.Cosmos.SphereWorld>(true) != null)
                 {
                     hasGameplayRoot = true;
                     break;
@@ -1011,18 +1018,23 @@ namespace VoxelEngine.EditorTools
             {
                 panelSettings = ScriptableObject.CreateInstance<UnityEngine.UIElements.PanelSettings>();
                 panelSettings.name      = "MenuPanelSettings";
-                panelSettings.scaleMode = UnityEngine.UIElements.PanelScaleMode.ConstantPixelSize;
-                panelSettings.referenceResolution = new Vector2Int(1280, 720);
+                panelSettings.scaleMode = UnityEngine.UIElements.PanelScaleMode.ScaleWithScreenSize;
+                panelSettings.referenceResolution = new Vector2Int(1920, 1080);
                 panelSettings.match = 0.5f;
                 AssetDatabase.CreateAsset(panelSettings, panelSettingsPath);
             }
             // Step 3 is the explicit authoring point for shared UI scaling. Runtime
             // controllers no longer overwrite these values, so Inspector edits made
             // after this step remain under developer control.
-            panelSettings.scaleMode = UnityEngine.UIElements.PanelScaleMode.ConstantPixelSize;
-            panelSettings.referenceResolution = new Vector2Int(1280, 720);
+            // ScaleWithScreenSize (not ConstantPixelSize): the HUD must fit ANY window —
+            // a constant-pixel panel is anchored bottom-left and pushed off-screen on
+            // smaller/non-1080p views. Width-priority keeps the HUD large on wide windows.
+            // ScreenSpaceOverlay: world-space quads cut the HUD off at the screen edges.
+            panelSettings.renderMode = UnityEngine.UIElements.PanelRenderMode.ScreenSpaceOverlay;
+            panelSettings.scaleMode = UnityEngine.UIElements.PanelScaleMode.ScaleWithScreenSize;
+            panelSettings.referenceResolution = new Vector2Int(1920, 1080);
             panelSettings.screenMatchMode = UnityEngine.UIElements.PanelScreenMatchMode.MatchWidthOrHeight;
-            panelSettings.match = 0.5f;
+            panelSettings.match = 0f;
             panelSettings.scale = 1f;
             panelSettings.referenceDpi = 96f;
             panelSettings.fallbackDpi = 96f;
@@ -2980,10 +2992,12 @@ namespace VoxelEngine.EditorTools
             const string recipesFolder  = fluidFolder + "/Recipes";
             const string itemsFolder    = ASSET_ROOT + "/Items";
 
+            int removedLegacyCrestObjects = RemoveLegacyCrestWaterContent();
             EnsureFolder(fluidFolder);
             EnsureFolder(prefabsFolder);
             EnsureFolder(blocksFolder);
             EnsureFolder(recipesFolder);
+            EnsureSurfaceMiningDrops();
 
             // ---- Pull common items ----
             var ironIngot   = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{itemsFolder}/Item_IronIngot.asset");
@@ -3005,7 +3019,7 @@ namespace VoxelEngine.EditorTools
             }
             bucket.itemId       = "water_bucket";
             bucket.displayName  = "Water Bucket";
-            bucket.description  = "LMB scoops a water voxel into the bucket. RMB places it elsewhere — and it spreads to fill holes! Use durability to track if it's filled (1 = full, 0 = empty).";
+            bucket.description  = "LMB scoops water or crude oil into the bucket. RMB places the carried liquid into the native voxel simulation. Durability tracks filled state (1 = full, 0 = empty).";
             bucket.iconTint     = new Color(0.20f, 0.50f, 0.85f);
             bucket.maxStack     = 1;
             bucket.maxDurability= 1;
@@ -3139,7 +3153,7 @@ namespace VoxelEngine.EditorTools
             var bTankGlass = MakeFluidBlock("Block_TankGlass", "Water Tank (Glass)", new Color(0.55f,0.75f,0.95f), tankGlass,
                 "Same as the solid tank but the water level is visible through the glass.");
             var bPump      = MakeFluidBlock("Block_WaterPump", "Water Pump",         new Color(0.55f,0.30f,0.20f), pumpPrefab,
-                "Pulls 20 L/s of water into the network while powered (~30 W). Connect cables to power, pipes to tanks.");
+                "Scans a nearby water or crude-oil pool, shows finite litres or ∞ source status, buffers liquid internally, then sends it through connected pipes and tanks while powered (~30 W).");
             var bPipeSolid = MakeFluidBlock("Block_PipeSolid", "Liquid Pipe (Solid) · 0.5 m", new Color(0.55f,0.30f,0.20f), pipeSolid,
                 "Carries up to 50 L/s of any supported liquid. Place between tanks, pumps, and liquid-fed machines to connect them.");
             var bPipeGlass = MakeFluidBlock("Block_PipeGlass", "Liquid Pipe (Glass) · 0.5 m", new Color(0.55f,0.75f,0.95f), pipeGlass,
@@ -3166,15 +3180,287 @@ namespace VoxelEngine.EditorTools
             if (Object.FindAnyObjectByType<VoxelEngine.Fluids.FluidSimManager>() == null)
                 new GameObject("FluidSimManager").AddComponent<VoxelEngine.Fluids.FluidSimManager>();
 
+            ConfigureNativeSphericalWaterRuntime(prefabsFolder);
+            UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(UnityEngine.SceneManagement.SceneManager.GetActiveScene());
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+
             EditorUtility.DisplayDialog("Voxel Engine",
-                "Fluid content created!\n\n" +
-                "* Water Bucket (LMB scoop, RMB place — spreads to fill holes)\n" +
-                "* Water Tank (Solid + Glass variants, 1000L each)\n" +
-                "* Water Pump (20 L/s, ~30 W)\n" +
-                "* Liquid Pipes (Solid + Glass, 50 L/s capacity, any supported liquid)\n" +
-                "* 6 new recipes added to RecipeRegistry\n" +
-                "* FluidNetworkManager + FluidSimManager spawned in scene",
+                "Native spherical fluid content created!\n\n" +
+                "* Buckets preserve water or crude oil as real voxel liquid\n" +
+                "* Water Tank (Solid + Glass variants, 10,000 L each)\n" +
+                "* Pool Pump: finite volume / ∞ source UI + internal tank + pipe output\n" +
+                "* Real voxel ocean basins, lakes/pools, grounded crude, and ship wakes\n" +
+                "* Dirt mining-drop repair plus Liquid Pipes (Solid + Glass, 50 L/s capacity)\n" +
+                "* Legacy Crest content removed: " + removedLegacyCrestObjects + " scene components/objects\n" +
+                "* FluidNetworkManager + FluidSimManager + NativeWaterWakeSystem ready",
                 "OK");
+        }
+
+        /// <summary>
+        /// Repairs the hand-mineable dirt chain through setup. Historic projects could have a
+        /// Clay/Dirt material with a null drop because its ItemDefinition was instantiated but
+        /// never written as an asset. This creates the missing Dirt item and only fills absent
+        /// drop links, preserving any custom authored material rewards.
+        /// </summary>
+        private static void EnsureSurfaceMiningDrops()
+        {
+            string itemsFolder = ASSET_ROOT + "/Items";
+            EnsureFolder(itemsFolder);
+            string dirtPath = itemsFolder + "/Item_Clay.asset";
+            var dirt = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>(dirtPath);
+            if (dirt == null)
+            {
+                dirt = ScriptableObject.CreateInstance<VoxelEngine.Items.ItemDefinition>();
+                AssetDatabase.CreateAsset(dirt, dirtPath);
+            }
+            dirt.itemId = "dirt";
+            dirt.displayName = "Dirt";
+            dirt.description = "Hand-mined soil from grassy and clay terrain.";
+            dirt.iconTint = new Color(0.40f, 0.27f, 0.16f);
+            dirt.maxStack = Mathf.Max(999, dirt.maxStack);
+            dirt.massPerUnit = Mathf.Max(0.1f, dirt.massPerUnit);
+            dirt.category = "Resources";
+            EditorUtility.SetDirty(dirt);
+
+            var registry = AssetDatabase.LoadAssetAtPath<VoxelEngine.Materials.MaterialRegistry>(ASSET_ROOT + "/MaterialRegistry.asset");
+            if (registry == null) return;
+            registry.definitions ??= new List<VoxelEngine.Materials.VoxelMaterialDefinition>();
+
+            // Sand may already live in the industrial content folder. Reuse it by itemId so
+            // this setup repair never creates a duplicate custom item.
+            var sand = FindOrCreateSurfaceItem("sand", "Sand", new Color(0.92f, 0.84f, 0.55f));
+            EnsureSurfaceDrop(VoxelEngine.Materials.MaterialId.Sand, "Sand", new Color(0.92f, 0.84f, 0.55f), sand);
+            EnsureSurfaceDrop(VoxelEngine.Materials.MaterialId.Clay, "Clay/Dirt", new Color(0.40f, 0.27f, 0.16f), dirt);
+            EnsureSurfaceDrop(VoxelEngine.Materials.MaterialId.Grass, "Grass/Dirt", new Color(0.24f, 0.52f, 0.18f), dirt);
+            registry.Build();
+            EditorUtility.SetDirty(registry);
+
+            VoxelEngine.Items.ItemDefinition FindOrCreateSurfaceItem(string itemId, string display, Color tint)
+            {
+                foreach (string guid in AssetDatabase.FindAssets("t:ItemDefinition", new[] { ASSET_ROOT }))
+                {
+                    var existing = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>(AssetDatabase.GUIDToAssetPath(guid));
+                    if (existing != null && string.Equals(existing.itemId, itemId, System.StringComparison.OrdinalIgnoreCase)) return existing;
+                }
+
+                string path = itemsFolder + "/Item_" + char.ToUpperInvariant(itemId[0]) + itemId.Substring(1) + ".asset";
+                var created = ScriptableObject.CreateInstance<VoxelEngine.Items.ItemDefinition>();
+                created.itemId = itemId;
+                created.displayName = display;
+                created.description = "Hand-mined " + display.ToLowerInvariant() + " resource.";
+                created.iconTint = tint;
+                created.maxStack = 999;
+                created.massPerUnit = 1f;
+                created.category = "Resources";
+                AssetDatabase.CreateAsset(created, path);
+                return created;
+            }
+
+            void EnsureSurfaceDrop(VoxelEngine.Materials.MaterialId id, string display, Color color, VoxelEngine.Items.ItemDefinition fallbackDrop)
+            {
+                var definition = AssetDatabase.LoadAssetAtPath<VoxelEngine.Materials.VoxelMaterialDefinition>($"{ASSET_ROOT}/Materials/Mat_{id}.asset");
+                if (definition == null)
+                {
+                    definition = ScriptableObject.CreateInstance<VoxelEngine.Materials.VoxelMaterialDefinition>();
+                    AssetDatabase.CreateAsset(definition, $"{ASSET_ROOT}/Materials/Mat_{id}.asset");
+                }
+                definition.id = id;
+                if (string.IsNullOrEmpty(definition.displayName) || definition.displayName == "Stone") definition.displayName = display;
+                if (definition.color == Color.clear || definition.color == Color.gray) definition.color = color;
+                definition.hardness = Mathf.Max(0.2f, definition.hardness);
+                definition.miningTier = 0;
+                definition.isMineable = true;
+                if (definition.dropItem == null) definition.dropItem = fallbackDrop;
+                definition.dropAmount = Mathf.Max(1, definition.dropAmount);
+                if (!registry.definitions.Contains(definition)) registry.definitions.Add(definition);
+                EditorUtility.SetDirty(definition);
+            }
+        }
+
+        // ────────────────────────────────────────────────────────────
+        //  Native spherical water helpers (Step 8)
+        // ────────────────────────────────────────────────────────────
+        private static void ConfigureNativeSphericalWaterRuntime(string prefabsFolder)
+        {
+            var water = EnsureNativeWaterMaterial(
+                $"{prefabsFolder}/Mat_NativeSphericalWater.mat",
+                "Mat_NativeSphericalWater",
+                new Color(0.08f, 0.52f, 0.82f, 0.94f),
+                new Color(0.01f, 0.06f, 0.22f, 0.98f),
+                deepWaveAmplitude: 0.85f,
+                waveSpeed: 0.55f);
+            var oil = EnsureNativeWaterMaterial(
+                $"{prefabsFolder}/Mat_NativeCrudeOil.mat",
+                "Mat_NativeCrudeOil",
+                new Color(0.12f, 0.085f, 0.05f, 0.92f),
+                new Color(0.02f, 0.015f, 0.01f, 0.98f),
+                deepWaveAmplitude: 0.04f,
+                waveSpeed: 0.12f);
+
+            var bootstrap = Object.FindAnyObjectByType<VoxelEngine.WaterSim.PlanetWaterRendererBootstrap>(FindObjectsInactive.Include);
+            if (bootstrap == null)
+            {
+                var root = new GameObject("NativeSphericalWater");
+                bootstrap = root.AddComponent<VoxelEngine.WaterSim.PlanetWaterRendererBootstrap>();
+            }
+            bootstrap.renderVoxelLiquidSurfaces = true;
+            bootstrap.renderNativeSphericalOceanPatch = false;
+            // Migrate only the known old default (4) to the bounded local-water budget;
+            // any other designer-authored number remains untouched.
+            if (bootstrap.meshBuildBudgetPerFrame == 4) bootstrap.meshBuildBudgetPerFrame = 1;
+            else if (bootstrap.meshBuildBudgetPerFrame <= 0) bootstrap.meshBuildBudgetPerFrame = 1;
+            // The old recovery scan repeatedly rebuilt every nearby ocean surface. SphereWorld
+            // now schedules real liquid changes directly, so disable only the recognizable old
+            // default configuration while preserving intentional custom recovery tuning.
+            if (bootstrap.rescheduleVisibleLiquidSurfaces &&
+                bootstrap.liquidRescheduleChunkRadius >= 3 && bootstrap.liquidRescheduleInterval <= 1.01f)
+                bootstrap.rescheduleVisibleLiquidSurfaces = false;
+            bootstrap.nativeOceanSearchRadius = Mathf.Clamp(bootstrap.nativeOceanSearchRadius, 192f, 512f);
+            bootstrap.nativeOceanTileSize = Mathf.Clamp(bootstrap.nativeOceanTileSize, 8f, 16f);
+            bootstrap.waterMaterialOverride = water;
+            bootstrap.oilMaterialOverride = oil;
+            foreach (var legacyWrappedWater in Object.FindObjectsByType<VoxelEngine.WaterSim.ProceduralWaterPatchRenderer>(FindObjectsInactive.Include))
+            {
+                if (legacyWrappedWater != null) Object.DestroyImmediate(legacyWrappedWater);
+            }
+
+            var performance = bootstrap.GetComponent<VoxelEngine.WaterSim.FluidPerformanceBootstrap>();
+            if (performance == null) performance = bootstrap.gameObject.AddComponent<VoxelEngine.WaterSim.FluidPerformanceBootstrap>();
+            performance.renderNativeWater = true;
+            performance.useNativeVolumetricAssist = false;
+            if (Mathf.Approximately(performance.tickRate, 8f) && performance.maxChunksPerTick == 6)
+            {
+                performance.tickRate = 4f;
+                performance.maxChunksPerTick = 2;
+            }
+
+            if (Object.FindAnyObjectByType<VoxelEngine.WaterSim.NativeWaterWakeSystem>(FindObjectsInactive.Include) == null)
+                new GameObject("NativeWaterWakeSystem").AddComponent<VoxelEngine.WaterSim.NativeWaterWakeSystem>();
+
+            EditorUtility.SetDirty(bootstrap);
+            EditorUtility.SetDirty(performance);
+            EditorUtility.SetDirty(water);
+            EditorUtility.SetDirty(oil);
+        }
+
+        private static Material EnsureNativeWaterMaterial(string path, string materialName, Color shallow, Color deep,
+            float deepWaveAmplitude, float waveSpeed)
+        {
+            var shader = Shader.Find("VoxelEngine/VoxelWaterURP")
+                ?? Shader.Find("Universal Render Pipeline/Lit")
+                ?? Shader.Find("Standard");
+            var material = AssetDatabase.LoadAssetAtPath<Material>(path);
+            bool created = material == null;
+            if (created)
+            {
+                material = new Material(shader) { name = materialName };
+                AssetDatabase.CreateAsset(material, path);
+            }
+
+            // Setup owns the native conversion, but once a non-Crest native material exists,
+            // preserve hand-tuned properties on subsequent runs.
+            bool legacyExternal = material.shader == null || material.shader.name.StartsWith("Crest/");
+            if (created || legacyExternal)
+            {
+                material.shader = shader;
+                material.name = materialName;
+                material.SetOverrideTag("RenderType", "Transparent");
+                material.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+                material.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+                material.SetInt("_ZWrite", 0);
+                material.SetInt("_Cull", (int)UnityEngine.Rendering.CullMode.Off);
+                material.renderQueue = 3000;
+                if (material.HasProperty("_Surface")) material.SetFloat("_Surface", 1f);
+                if (material.HasProperty("_ShallowColor")) material.SetColor("_ShallowColor", shallow);
+                if (material.HasProperty("_DeepColor")) material.SetColor("_DeepColor", deep);
+                if (material.HasProperty("_FoamColor")) material.SetColor("_FoamColor", Color.white);
+                if (material.HasProperty("_DeepWaveAmplitude")) material.SetFloat("_DeepWaveAmplitude", deepWaveAmplitude);
+                if (material.HasProperty("_DeepWaveSpeed")) material.SetFloat("_DeepWaveSpeed", waveSpeed);
+                if (material.HasProperty("_SecondaryWaveAmplitude")) material.SetFloat("_SecondaryWaveAmplitude", deepWaveAmplitude * 0.42f);
+                if (material.HasProperty("_SecondaryWaveSpeed")) material.SetFloat("_SecondaryWaveSpeed", waveSpeed * 1.65f);
+                if (material.HasProperty("_NormalScale")) material.SetFloat("_NormalScale", deepWaveAmplitude < 0.1f ? 0.45f : 2.2f);
+                if (material.HasProperty("_Gloss")) material.SetFloat("_Gloss", deepWaveAmplitude < 0.1f ? 1f : 0.94f);
+                if (material.HasProperty("_PlanetWaveBlend")) material.SetFloat("_PlanetWaveBlend", 1f);
+            }
+            return material;
+        }
+
+        /// <summary>
+        /// Removes old external-ocean scene/prefab components, bridge material, and the
+        /// previous Assets/Liquid package path when it exists. This never
+        /// touches VoxelEngineAssets/Fluids, which owns our buckets, pumps, tanks, and pipes.
+        /// </summary>
+        private static int RemoveLegacyCrestWaterContent()
+        {
+            int removed = 0;
+            var transforms = Object.FindObjectsByType<Transform>(FindObjectsInactive.Include);
+            foreach (var transform in transforms)
+            {
+                if (transform == null || !transform.gameObject.scene.IsValid()) continue;
+                removed += RemoveLegacyCrestComponents(transform.gameObject);
+            }
+
+            // Existing authored prefabs may have received a legacy wake/binder component in a
+            // prior setup pass. Remove only those identified external-water components; leave all
+            // custom meshes, materials, colliders, and gameplay components untouched.
+            foreach (var guid in AssetDatabase.FindAssets("t:Prefab"))
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                if (string.IsNullOrEmpty(path) || path.StartsWith("Assets/Liquid/", System.StringComparison.Ordinal)) continue;
+                GameObject root = null;
+                try
+                {
+                    root = PrefabUtility.LoadPrefabContents(path);
+                    int prefabRemoved = 0;
+                    foreach (var transform in root.GetComponentsInChildren<Transform>(true))
+                        prefabRemoved += RemoveLegacyCrestComponents(transform.gameObject);
+                    if (prefabRemoved > 0)
+                    {
+                        PrefabUtility.SaveAsPrefabAsset(root, path);
+                        removed += prefabRemoved;
+                    }
+                }
+                catch (System.Exception ex)
+                {
+                    Debug.LogWarning($"[NativeWaterSetup] Could not inspect legacy-water prefab '{path}': {ex.Message}");
+                }
+                finally
+                {
+                    if (root != null) PrefabUtility.UnloadPrefabContents(root);
+                }
+            }
+
+            foreach (var rootName in new[] { "Crest Ocean", "Crest Oil Ocean", "CrestVoxelBridge", "Crest Wake Probes" })
+            {
+                var root = GameObject.Find(rootName);
+                if (root == null) continue;
+                Object.DestroyImmediate(root);
+                removed++;
+            }
+
+            const string oldBridge = "Assets/Resources/CrestOcean_VoxelBridge.mat";
+            if (AssetDatabase.LoadAssetAtPath<Material>(oldBridge) != null && AssetDatabase.DeleteAsset(oldBridge)) removed++;
+            if (AssetDatabase.IsValidFolder("Assets/Liquid") && AssetDatabase.DeleteAsset("Assets/Liquid")) removed++;
+            return removed;
+        }
+
+        private static int RemoveLegacyCrestComponents(GameObject go)
+        {
+            if (go == null) return 0;
+            int removed = 0;
+            foreach (var component in go.GetComponents<Component>())
+            {
+                if (component == null) continue;
+                string typeName = component.GetType().FullName ?? string.Empty;
+                if (!typeName.StartsWith("Crest.", System.StringComparison.Ordinal)
+                    && !typeName.StartsWith("VoxelEngine.WaterSim.Crest", System.StringComparison.Ordinal)
+                    && !typeName.StartsWith("VoxelEngine.Maritime.Crest", System.StringComparison.Ordinal))
+                    continue;
+                Object.DestroyImmediate(component);
+                removed++;
+            }
+            return removed;
         }
 
         // ============================================================
@@ -3302,26 +3588,6 @@ namespace VoxelEngine.EditorTools
             // ====================================================================
             //  2) FACTORY MACHINES — Pumpjack, Oil Refinery, Wireless Storage Term
             // ====================================================================
-
-            GameObject MakeIndustrialPrefab(string name, Color color, Vector3 scale,
-                System.Action<GameObject> configure)
-            {
-                string path = $"{prefabsFolder}/{name}.prefab";
-                var root = new GameObject(name);
-
-                var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                cube.name = "Mesh";
-                cube.transform.SetParent(root.transform, false);
-                cube.transform.localScale = scale;
-                var mat = MakeColoredMat(prefabsFolder, $"Mat_{name}", color);
-                cube.GetComponent<Renderer>().sharedMaterial = mat;
-
-                configure?.Invoke(root);
-
-                var prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
-                Object.DestroyImmediate(root);
-                return prefab;
-            }
 
             // ─ Jack Pump ─
             // Kept at the existing Pumpjack asset path so old placed blocks repair
@@ -3452,7 +3718,7 @@ namespace VoxelEngine.EditorTools
             blockPumpjack.massPerUnit = 35f;
             blockPumpjack.miningTier = 3;
             EditorUtility.SetDirty(blockPumpjack);
-            ConfigurePirateInfiniteOilPlanet();
+            ConfigureCrudeOilWorlds();
             EnsurePirateJackPumpHeadRuinLoot(pirateJackPumpHead);
             var blockRefinery   = MakeIndustrialBlock("Block_OilRefinery", "Oil Refinery",      new Color(0.30f,0.20f,0.10f), refineryPrefab,
                 "Industrial multi-recipe processor. Crude Oil Barrel → Refined Oil Barrel + Empty Barrel, and Refined Oil + Coal → Plastic Bar + Empty Barrel. 2 input / 4 output / 2 upgrade slots. 400 W base draw.");
@@ -3916,9 +4182,12 @@ namespace VoxelEngine.EditorTools
                 "  • Glass (smelted at any furnace from Sand)\n" +
                 "  • Empty / Crude / Refined Oil Barrel, Plastic Bar\n\n" +
                 "BLOCKS\n" +
-                "  • Jack Pump (rare Pirate node extractor; requires a Pirate Jack Pump Head)\n" +
+                "  • Jack Pump (rare Planet_Pirate-only node extractor; requires a Pirate Jack Pump Head)\n" +
                 "  • Oil Refinery (Crude → Refined → Plastic)\n" +
                 "  • Wireless Storage Terminal\n\n" +
+                "OIL GEOLOGY\n" +
+                "  • Finite seep worlds: Earth, Ocean, Acid, Desolate, Pirate\n" +
+                "  • Infinite Jack Pump nodes: Planet_Pirate only\n\n" +
                 "RESEARCH TREE (new nodes)\n" +
                 "  T2: Plating, Glassworking, Fluid Handling\n" +
                 "  T3: Electronics, Logistics Network, Item Logistics, Oil Extraction\n" +
@@ -4055,8 +4324,13 @@ namespace VoxelEngine.EditorTools
             recipe.inputs = list.ToArray();
         }
 
-        /// <summary>Marks Pirate World as the sole author of rare infinite oil nodes.</summary>
-        private static void ConfigurePirateInfiniteOilPlanet()
+        /// <summary>
+        /// Authors finite crude seeps only on the project's explicit oil-rich planets while
+        /// reserving rare infinite Jack Pump nodes for the canonical Planet_Pirate asset.
+        /// This is deliberately setup-owned: runtime code consumes the authored booleans and
+        /// never infers oil richness from a loose display-name match.
+        /// </summary>
+        private static void ConfigureCrudeOilWorlds()
         {
             var guids = AssetDatabase.FindAssets("t:PlanetTemplate", new[] { PLANET_FOLDER });
             foreach (var guid in guids)
@@ -4065,37 +4339,102 @@ namespace VoxelEngine.EditorTools
                 var planet = AssetDatabase.LoadAssetAtPath<VoxelEngine.Cosmos.PlanetTemplate>(path);
                 if (planet == null || planet.body == null) continue;
 
-                bool pirate = path.EndsWith("Planet_Pirate.asset")
-                    || (!string.IsNullOrEmpty(planet.body.bodyName)
-                        && planet.body.bodyName.IndexOf("pirate", System.StringComparison.OrdinalIgnoreCase) >= 0);
+                bool legacySeepSettings = planet.body.crudeOilSeepSettingsVersion < 2;
+                bool oilRich = TryGetOilRichSeepDefault(path, out float defaultSeepChance);
+                if (oilRich)
+                {
+                    planet.body.enableCrudeOilSeeps = true;
+                    // Preserve hand-tuned rates after the first authored distribution pass.
+                    // The old generic 12% default is migrated to each world's intended profile.
+                    if (planet.body.crudeOilSiteChance <= 0f
+                        || (legacySeepSettings && Mathf.Approximately(planet.body.crudeOilSiteChance, 0.12f)))
+                        planet.body.crudeOilSiteChance = defaultSeepChance;
+                    EnsureCrudeOilSpecialDeposit(planet.body);
+                }
+                else if (legacySeepSettings)
+                {
+                    // First distribution pass disables legacy generic crude markers on the
+                    // non-oil-rich templates. Later setup runs preserve any deliberate custom
+                    // finite-seep flag a designer has authored for a custom world.
+                    planet.body.enableCrudeOilSeeps = false;
+                }
+                planet.body.crudeOilSeepSettingsVersion = 2;
+
+                // Infinite extraction is not a general oil-world feature. It is locked to the
+                // exact Planet_Pirate asset, even if another body's display name is edited.
+                bool pirate = IsCanonicalPlanet(path, "Planet_Pirate");
+                planet.body.isCanonicalPirateJackPumpWorld = pirate;
                 if (pirate)
                 {
+                    bool legacyInfiniteSettings = planet.body.pirateOilNodeSettingsVersion == 0;
                     planet.body.enableInfiniteOilNodes = true;
-                    planet.body.infiniteOilNodeChance = 0.025f;
-                    planet.body.specials ??= new List<VoxelEngine.Cosmos.OreDeposit>();
-                    bool hasCrude = false;
-                    foreach (var deposit in planet.body.specials)
-                        if (deposit.material == VoxelEngine.Materials.MaterialId.CrudeOil) { hasCrude = true; break; }
-                    if (!hasCrude)
-                    {
-                        planet.body.specials.Add(new VoxelEngine.Cosmos.OreDeposit
-                        {
-                            material = VoxelEngine.Materials.MaterialId.CrudeOil,
-                            tier = VoxelEngine.Cosmos.OreTier.Special,
-                            scale = 0.04f,
-                            threshold = 0.70f,
-                            minDepth = 25,
-                            maxDepth = 90,
-                            abundance = 1f
-                        });
-                    }
+                    // The old 2.5% default was not actually "very rare" at 96 m cell density;
+                    // migrate only that legacy default to the 0.3% rare-node rate.
+                    if (planet.body.infiniteOilNodeChance <= 0f
+                        || (legacyInfiniteSettings && Mathf.Approximately(planet.body.infiniteOilNodeChance, 0.025f)))
+                        planet.body.infiniteOilNodeChance = 0.003f;
                 }
                 else
                 {
                     planet.body.enableInfiniteOilNodes = false;
                 }
+                planet.body.pirateOilNodeSettingsVersion = 1;
                 EditorUtility.SetDirty(planet);
             }
+        }
+
+        /// <summary>
+        /// Intentional finite-oil distribution. Earth has mature sedimentary basins; Ocean
+        /// World has marine basins; Acid and Desolate Worlds hold organic/ancient basin deposits;
+        /// Pirate World remains the richest conventional seep world. All other current worlds
+        /// retain their distinct non-petroleum resource identity.
+        /// </summary>
+        private static bool TryGetOilRichSeepDefault(string path, out float chance)
+        {
+            chance = 0f;
+            string asset = Path.GetFileNameWithoutExtension(path);
+            switch (asset)
+            {
+                case "Planet_Earth":
+                    chance = 0.08f;
+                    return true;
+                case "Planet_Water":
+                    chance = 0.10f;
+                    return true;
+                case "Planet_Acid":
+                    chance = 0.06f;
+                    return true;
+                case "Planet_Desolate":
+                    chance = 0.05f;
+                    return true;
+                case "Planet_Pirate":
+                    chance = 0.12f;
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private static bool IsCanonicalPlanet(string path, string assetName)
+            => string.Equals(Path.GetFileNameWithoutExtension(path), assetName, System.StringComparison.Ordinal);
+
+        private static void EnsureCrudeOilSpecialDeposit(VoxelEngine.Cosmos.BodySettings body)
+        {
+            if (body == null) return;
+            body.specials ??= new List<VoxelEngine.Cosmos.OreDeposit>();
+            foreach (var deposit in body.specials)
+                if (deposit.material == VoxelEngine.Materials.MaterialId.CrudeOil) return;
+
+            body.specials.Add(new VoxelEngine.Cosmos.OreDeposit
+            {
+                material = VoxelEngine.Materials.MaterialId.CrudeOil,
+                tier = VoxelEngine.Cosmos.OreTier.Special,
+                scale = 0.04f,
+                threshold = 0.70f,
+                minDepth = 25,
+                maxDepth = 90,
+                abundance = 1f
+            });
         }
 
         /// <summary>Adds the uncraftable relic head only to Pirate ruin rare rolls, preserving normal loot pools.</summary>
@@ -10752,6 +11091,7 @@ root =>
             {
                 string path = $"{PLANETS_DIR}/Planet_{assetName}.asset";
                 var p = GetOrCreateAsset<PlanetTemplate>(path);
+                if (p.body == null) p.body = BodySettings.CreateEarthlike();
                 p.body.bodyName = bodyName;
                 p.body.temperature = temp;
                 p.body.oxygenLevel = oxygen;
@@ -10802,21 +11142,38 @@ root =>
 
             // ── Append all themed planets to System_Sol (non-destructive: only add missing) ──
             string sysPath = $"{PLANETS_DIR}/System_Sol.asset";
-            var sys = AssetDatabase.LoadAssetAtPath<SolarSystemTemplate>(sysPath);
+            // Step 21 owns the complete celestial-system authoring path. A missing System_Sol
+            // is created here rather than requiring a separate manual asset step.
+            var sys = GetOrCreateAsset<SolarSystemTemplate>(sysPath);
             if (sys != null)
             {
+                if (string.IsNullOrWhiteSpace(sys.systemName)) sys.systemName = "Sol System";
+                if (sys.sun == null) sys.sun = new SunSettings { displayName = "Sol", sunCount = 1, intensity = 1.3f };
+                if (sys.minPlanetSeparationKm <= 0f) sys.minPlanetSeparationKm = 500f;
+                if (sys.maxPlanetSeparationKm <= sys.minPlanetSeparationKm) sys.maxPlanetSeparationKm = 10000f;
+
                 var list = (sys.planets != null) ? new List<PlanetTemplate>(sys.planets) : new List<PlanetTemplate>();
-                list.RemoveAll(pl => pl != null && pl.body != null && pl.body.bodyName == "Greek"); // legacy Greek -> Olympus rename
+                // Preserve existing orbital/seed indices. A legacy null slot is intentionally
+                // retained rather than removed (seed tables are index-aligned); CosmicRegistry
+                // skips it safely. Only a legacy live Greek template is repaired in place.
+                for (int i = 0; i < list.Count; i++)
+                {
+                    if (list[i] != null && list[i].body != null && list[i].body.bodyName == "Greek")
+                        list[i] = pGreek;
+                }
+                var earth = AssetDatabase.LoadAssetAtPath<PlanetTemplate>($"{PLANETS_DIR}/Planet_Earth.asset");
+                if (earth != null && !list.Contains(earth)) list.Insert(0, earth);
                 foreach (var p in new[] { pMars, pVenus, pAcid, pPirate, pGreek, pIce, pWater, pDesolate, pVolcanic, pCrystal })
                     if (p != null && !list.Contains(p)) list.Add(p);
                 sys.planets = list.ToArray();
                 AssetDatabase.DeleteAsset($"{PLANETS_DIR}/Planet_Greek.asset"); // remove legacy asset (renamed to Olympus)
                 EditorUtility.SetDirty(sys);
+                EnsureSolarSystemRuntimeLinks(sys);
             }
-            else
-            {
-                Debug.LogWarning("[CelestialWorlds] System_Sol.asset not found — run 'Tools ▸ Voxel Engine ▸ Create Solar System (Sol)' first, then re-run this step.");
-            }
+
+            // Keep the oil-rich seep distribution and Planet_Pirate-only infinite-node
+            // configuration setup-owned when this celestial-worlds step is re-run.
+            ConfigureCrudeOilWorlds();
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
@@ -10825,11 +11182,142 @@ root =>
                 "• 11 themed biomes (Lunar, Martian, Venusian, Acid, Pirate, Greek, Frozen, Ocean, Desolate, Volcanic, Crystal)\n" +
                 "• 10 planets configured (Mars/Venus reconfigured + 8 new) with themed terrain + ruin scatter\n" +
                 "• Moon wired to the Lunar biome\n" +
-                "• All appended to System_Sol\n\n" +
+                "• All appended to System_Sol\n" +
+                "• Runtime CosmosTemplateLibrary + Asteroids_MainBelt repaired automatically\n\n" +
                 "New surface materials: Martian Dust, Venus Ash, Acid Bog, Volcanic Basalt, Crystal Geode.\n" +
                 "Ruins now spawn on their own world via biome scatter (~0.0006 density).\n\n" +
                 "IMPORTANT: re-run Step 1 (Create All Assets) once to register the 5 new materials in the MaterialRegistry, then create/visit a new world to see them.",
                 "OK");
+        }
+
+        /// <summary>
+        /// Step 21 owns the build-safe bridge from the authored System_Sol asset to runtime.
+        /// It creates only missing assets/links, preserves any existing belt tuning, removes
+        /// null references that cannot render, and never asks designers to hand-author a
+        /// Resources registry or asteroid asset.
+        /// </summary>
+        private void EnsureSolarSystemRuntimeLinks(SolarSystemTemplate system)
+        {
+            if (system == null) return;
+
+            const string resourcesFolder = "Assets/Resources";
+            const string libraryPath = resourcesFolder + "/CosmosTemplateLibrary.asset";
+            const string beltPath = ASSET_ROOT + "/Planets/Asteroids_MainBelt.asset";
+            EnsureFolder(resourcesFolder);
+
+            int repaired = 0;
+            var library = AssetDatabase.LoadAssetAtPath<CosmosTemplateLibrary>(libraryPath);
+            if (library == null)
+            {
+                if (AssetDatabase.LoadMainAssetAtPath(libraryPath) == null)
+                {
+                    library = ScriptableObject.CreateInstance<CosmosTemplateLibrary>();
+                    AssetDatabase.CreateAsset(library, libraryPath);
+                    repaired++;
+                }
+                else
+                {
+                    Debug.LogError("[CelestialWorlds] Preserved conflicting Resources/CosmosTemplateLibrary.asset; it is not a CosmosTemplateLibrary.");
+                }
+            }
+            if (library != null)
+            {
+                library.systems ??= new List<SolarSystemTemplate>();
+                if (!library.systems.Contains(system))
+                {
+                    library.systems.Add(system);
+                    repaired++;
+                }
+                EditorUtility.SetDirty(library);
+            }
+
+            var belt = AssetDatabase.LoadAssetAtPath<AsteroidFieldTemplate>(beltPath);
+            bool createdBelt = false;
+            if (belt == null)
+            {
+                if (AssetDatabase.LoadMainAssetAtPath(beltPath) == null)
+                {
+                    belt = ScriptableObject.CreateInstance<AsteroidFieldTemplate>();
+                    AssetDatabase.CreateAsset(belt, beltPath);
+                    createdBelt = true;
+                    repaired++;
+                }
+                else
+                {
+                    Debug.LogError("[CelestialWorlds] Preserved conflicting Asteroids_MainBelt asset; it is not an AsteroidFieldTemplate.");
+                }
+            }
+            if (belt != null)
+            {
+                if (belt.settings == null)
+                {
+                    belt.settings = new AsteroidFieldSettings();
+                    createdBelt = true;
+                    repaired++;
+                }
+                // Only a newly-created/missing settings block receives defaults; existing
+                // density/resources/sizes remain designer-owned on repeated setup runs.
+                if (createdBelt)
+                {
+                    belt.settings.density = 1f;
+                    belt.settings.resourceCount = 3;
+                    belt.settings.possibleResources = new[]
+                    {
+                        MaterialId.Iron, MaterialId.Nickel, MaterialId.Silicon,
+                        MaterialId.Platinum, MaterialId.Ice
+                    };
+                    belt.settings.sizeRangeKm = new Vector2(0.03f, 0.35f);
+                    belt.settings.shellRadiusKm = new Vector2(8000f, 12000f);
+                }
+                if (belt.solarSystem == null)
+                {
+                    belt.solarSystem = system;
+                    repaired++;
+                }
+                EditorUtility.SetDirty(belt);
+
+                var fields = system.asteroidFields != null
+                    ? new List<AsteroidFieldTemplate>(system.asteroidFields)
+                    : new List<AsteroidFieldTemplate>();
+                int beforeFields = fields.Count;
+                fields.RemoveAll(field => field == null);
+                if (!fields.Contains(belt)) fields.Add(belt);
+                if (fields.Count != beforeFields || system.asteroidFields == null)
+                {
+                    system.asteroidFields = fields.ToArray();
+                    repaired++;
+                }
+            }
+
+            var planets = system.planets != null
+                ? new List<PlanetTemplate>(system.planets)
+                : new List<PlanetTemplate>();
+            // Do not remove a malformed slot here: system seed tables are index-aligned. Step
+            // 21 repairs the known legacy slot in place above, while unrelated custom systems
+            // retain their order and are skipped safely by CosmicRegistry until repaired.
+            foreach (var planet in planets)
+            {
+                if (planet == null || planet.body == null || planet.solarSystem != null) continue;
+                planet.solarSystem = system;
+                EditorUtility.SetDirty(planet);
+                repaired++;
+            }
+
+            // Repair null bootstrap links in the currently open scene without overwriting an
+            // intentionally custom assigned system. Runtime still resolves the Resources library
+            // for every scene/build, so no manual scene assignment is required.
+            foreach (var bootstrap in Object.FindObjectsByType<CosmosBootstrap>(FindObjectsInactive.Include))
+            {
+                if (bootstrap == null || bootstrap.solarSystemTemplate != null) continue;
+                bootstrap.solarSystemTemplate = system;
+                EditorUtility.SetDirty(bootstrap);
+                repaired++;
+            }
+
+            EditorUtility.SetDirty(system);
+            CosmosTemplateLibrary.InvalidateCache();
+            Debug.Log("[CelestialWorlds] Runtime System_Sol bridge repaired: " + repaired +
+                      " link(s); persistent asteroid belt " + (belt != null ? "ready" : "unavailable") + ".");
         }
 
         // ============================================================
@@ -14889,6 +15377,289 @@ AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
                 "• " + preserved + " existing profiles preserved\n\n" +
                 "Atmospheric thrust, aerodynamic drag, jetpack environment checks, life support, and cockpit altitude now share one profile-driven transition.\n\n" +
                 "Run this step again after adding celestial templates; initialized profile values remain untouched.",
+                "OK");
+        }
+
+        // ============================================================
+        //   STEP 50 - WARP DRIVE (real-space travel)
+        //   Item + prefab + recipe + research, fully non-destructive.
+        //   The Warp Drive is the ONLY warp in the game: an expensive,
+        //   chargeable grid block gated behind research.
+        // ============================================================
+        private void BuildWarpDriveContent()
+        {
+            const string GRID_ROOT = ASSET_ROOT + "/GridSystem";
+            const string ITEMS     = GRID_ROOT + "/Items";
+            const string PREFABS   = GRID_ROOT + "/Prefabs";
+            const string RECIPES   = GRID_ROOT + "/Recipes";
+            const string NODES     = ASSET_ROOT + "/Research/Nodes";
+            foreach (var f in new[] { GRID_ROOT, ITEMS, PREFABS, RECIPES }) EnsureFolder(f);
+
+            // ── Dependencies (existing setup-owned assets, never recreated) ──
+            string craftItems = ASSET_ROOT + "/Items";
+            string indItems   = ASSET_ROOT + "/Industrial/Items";
+            var steelPlate  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{indItems}/Item_SteelPlate.asset");
+            var advCircuit  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{indItems}/Item_AdvCircuit.asset");
+            var uraniumOre  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{craftItems}/Item_Uranium.asset");
+            var lithium     = EnsureLithiumResource();
+            var sciT2       = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{craftItems}/Item_ScienceT2.asset");
+            var sciT3       = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{craftItems}/Item_ScienceT3.asset");
+
+            // ── Prefab (non-destructive: existing drive tuning is preserved) ──
+            string prefabPath = $"{PREFABS}/WarpDrive_Large.prefab";
+            var warpPrefab = GetOrCreatePrefab(prefabPath, "WarpDrive_Large", (root) =>
+            {
+                var drive = root.GetComponent<VoxelEngine.GridSystem.GridWarpDrive>();
+                if (drive == null) drive = root.AddComponent<VoxelEngine.GridSystem.GridWarpDrive>();
+
+                // Connect identity fields ALWAYS; only tune numbers when they are at their
+                // script defaults so designer balance tweaks survive re-runs.
+                drive.blockName = "Warp Drive";
+                if (drive.chargeSeconds <= 0f) drive.chargeSeconds = 45f;
+                if (drive.powerDrawWatts <= 0f) drive.powerDrawWatts = 45000f;
+                if (drive.cooldownSeconds <= 0f) drive.cooldownSeconds = 180f;
+                if (drive.jumpRangeKm <= 0f) drive.jumpRangeKm = 2500f;
+                if (drive.arrivalAltitudeKm <= 0f) drive.arrivalAltitudeKm = 90f;
+
+                // Visual: industrial drive housing + glowing core. Rebuilt ONLY when the
+                // prefab has no visual yet — designer-customised visuals survive re-runs.
+                if (root.transform.childCount == 0 && root.GetComponent<MeshFilter>() == null)
+                {
+                    var core = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    core.name = "Core";
+                    core.transform.SetParent(root.transform, false);
+                    core.transform.localScale = new Vector3(0.55f, 0.55f, 0.55f);
+                    UnityEngine.Object.DestroyImmediate(core.GetComponent<Collider>());
+                    var coreMat = MakeColoredMat(PREFABS + "/Mats", "Mat_WarpDriveCore", new Color(0.30f, 0.55f, 0.95f, 1f));
+                    core.GetComponent<Renderer>().sharedMaterial = coreMat;
+
+                    var ring = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                    ring.name = "Coil";
+                    ring.transform.SetParent(root.transform, false);
+                    ring.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+                    ring.transform.localScale = new Vector3(0.9f, 0.12f, 0.9f);
+                    UnityEngine.Object.DestroyImmediate(ring.GetComponent<Collider>());
+                    ring.GetComponent<Renderer>().sharedMaterial =
+                        MakeColoredMat(PREFABS + "/Mats", "Mat_WarpDriveCoil", new Color(0.75f, 0.78f, 0.85f, 1f));
+                }
+
+                var bcol = root.GetComponent<BoxCollider>();
+                if (bcol == null) bcol = root.AddComponent<BoxCollider>();
+                bcol.size = Vector3.one * VoxelEngine.GridSystem.GridSizeExt.CellSize(VoxelEngine.GridSystem.GridSize.Large);
+            });
+
+            // ── Item (non-destructive) ──
+            string itemPath = $"{ITEMS}/GItem_WarpDrive.asset";
+            var item = AssetDatabase.LoadAssetAtPath<VoxelEngine.GridSystem.GridBlockItem>(itemPath);
+            if (item == null)
+            {
+                item = ScriptableObject.CreateInstance<VoxelEngine.GridSystem.GridBlockItem>();
+                AssetDatabase.CreateAsset(item, itemPath);
+            }
+            item.itemId = "gitem_warpdrive";
+            item.displayName = "Warp Drive";
+            item.description = "The ONLY warp in the game. Charges over 45 seconds under a heavy power load, then jumps the ship to the aimed planet's orbit (or a fixed 2500 km ahead). Requires vacuum, a pilot, and Warp Drive research. Build real rockets for honest interplanetary flight — this is the expensive shortcut.";
+            item.iconTint = new Color(0.30f, 0.55f, 0.95f);
+            item.maxStack = 20;
+            item.gridSize = VoxelEngine.GridSystem.GridSize.Large;
+            item.blockPrefab = warpPrefab;
+            item.blockMass = 2600f;
+            item.blockHP = 2600f;
+            item.category = "Grid Blocks";
+            EditorUtility.SetDirty(item);
+
+            // ── Recipe (non-destructive append) ──
+            string recipePath = $"{RECIPES}/Recipe_GWarpDrive.asset";
+            var recipe = GetOrCreateAsset<VoxelEngine.Crafting.RecipeDefinition>(recipePath);
+            recipe.displayName = "Warp Drive";
+            recipe.outputItem = item;
+            recipe.outputCount = 1;
+            recipe.requiredStation = VoxelEngine.Crafting.StationTier.Assembler;
+            recipe.craftSeconds = 30f;
+            recipe.unlockedByDefault = false;
+            var inputs = new System.Collections.Generic.List<VoxelEngine.Crafting.RecipeIngredient>();
+            if (steelPlate != null) inputs.Add(new VoxelEngine.Crafting.RecipeIngredient { item = steelPlate, count = 40 });
+            if (advCircuit != null) inputs.Add(new VoxelEngine.Crafting.RecipeIngredient { item = advCircuit, count = 12 });
+            if (uraniumOre != null) inputs.Add(new VoxelEngine.Crafting.RecipeIngredient { item = uraniumOre, count = 8 });
+            if (lithium != null)    inputs.Add(new VoxelEngine.Crafting.RecipeIngredient { item = lithium, count = 6 });
+            recipe.inputs = inputs.ToArray();
+            EditorUtility.SetDirty(recipe);
+
+            var recipeRegistry = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeRegistry>($"{ASSET_ROOT}/RecipeRegistry.asset");
+            if (recipeRegistry != null && !recipeRegistry.recipes.Contains(recipe))
+            {
+                recipeRegistry.recipes.Add(recipe);
+                EditorUtility.SetDirty(recipeRegistry);
+            }
+
+            // ── Research (non-destructive: only creates the node if missing) ──
+            var tree = AssetDatabase.LoadAssetAtPath<VoxelEngine.Research.ResearchTree>($"{ASSET_ROOT}/Research/ResearchTree.asset");
+            if (tree != null)
+            {
+                var node = FindNodeByName(tree, "res_warpdrive");
+                if (node == null)
+                {
+                    node = ScriptableObject.CreateInstance<VoxelEngine.Research.ResearchNode>();
+                    node.nodeId = "res_warpdrive";
+                    node.displayName = "Warp Drive";
+                    node.description = "Unlocks the Warp Drive grid block — the only warp in the game. Charges under heavy power, then jumps the ship to the aimed planet's orbit. Expensive, gated, and never free.";
+                    node.category = VoxelEngine.Research.ResearchCategory.Environment;
+                    node.subCategory = VoxelEngine.Research.ResearchSubCategory.Building;
+                    node.tier = 7;
+                    node.column = 6;
+                    node.iconTint = new Color(0.30f, 0.55f, 0.95f);
+                    node.researchSeconds = 900f;
+                    node.cost = new[]
+                    {
+                        new VoxelEngine.Research.ResearchNode.ScienceCost { pack = sciT2 as VoxelEngine.Items.ScienceItem, count = 120 },
+                        new VoxelEngine.Research.ResearchNode.ScienceCost { pack = sciT3 as VoxelEngine.Items.ScienceItem, count = 60 },
+                    };
+                    var shipbuilding = FindNodeByName(tree, "res_shipbuilding");
+                    if (shipbuilding != null) node.prerequisites = new[] { shipbuilding };
+                    AssetDatabase.CreateAsset(node, $"{NODES}/res_warpdrive.asset");
+                    tree.nodes.Add(node);
+                }
+                node.unlocksRecipes = new VoxelEngine.Crafting.RecipeDefinition[] { recipe };
+                EditorUtility.SetDirty(node);
+                EditorUtility.SetDirty(tree);
+                VoxelEngine.Research.ResearchRecipeLinker.Register("res_warpdrive", recipe);
+            }
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            EditorUtility.DisplayDialog("Voxel Engine — Warp Drive",
+                "Warp Drive wired (non-destructive):\n\n" +
+                "• Prefab: " + prefabPath + "\n" +
+                "• Item: GItem_WarpDrive (Grid Blocks)\n" +
+                "• Recipe: 40 Steel Plate + 12 Advanced Circuit + 8 Uranium Ore + 6 Lithium @ Assembler\n" +
+                "• Research: Warp Drive (tier 7) after Shipbuilding\n\n" +
+                "In-game: place it on a ship, fly to space, press [N] in the cockpit to charge (45 s, 45 kW), then press [N] again to jump to the aimed planet — or 2500 km straight ahead. It is the ONLY warp in the game; everything else is real flight.",
+                "OK");
+        }
+
+        // ============================================================
+        //   STEP 51 - PLANET SKIES + SPACE AMBIANCE
+        //   Non-destructive: existing sky overrides and display colours
+        //   are preserved. Missing display colours are filled from the
+        //   theme so distant planets match the sky they wear on the ground.
+        // ============================================================
+        private void BuildPlanetSkyProfiles()
+        {
+            const int ProfileVersion = 1;
+            const string RuntimeResourceFolder = "Assets/Resources/VoxelEngineRuntime";
+            int initialized = 0;
+            int preserved = 0;
+            int displayFilled = 0;
+            var summary = new System.Text.StringBuilder();
+
+            // Keep every procedural space-art shader referenced in standalone builds.
+            // Runtime code clones these setup-owned templates and applies live palette
+            // values. Existing material properties are preserved; only a required shader
+            // reference is repaired, so repeated setup runs remain idempotent.
+            EnsureFolder(RuntimeResourceFolder);
+
+            string EnsureRuntimeMaterial(string assetName, string shaderName)
+            {
+                string path = RuntimeResourceFolder + "/" + assetName + ".mat";
+                var shader = Shader.Find(shaderName);
+                if (shader == null)
+                {
+                    Debug.LogError("[VoxelEngineSetup] Required shader '" + shaderName + "' is missing; '" + assetName + "' was not changed.");
+                    return "ERROR — shader missing";
+                }
+
+                var material = AssetDatabase.LoadAssetAtPath<Material>(path);
+                if (material == null)
+                {
+                    material = new Material(shader) { name = assetName };
+                    AssetDatabase.CreateAsset(material, path);
+                    return "created";
+                }
+
+                if (material.shader != shader)
+                {
+                    material.shader = shader;
+                    EditorUtility.SetDirty(material);
+                    return "shader link repaired";
+                }
+
+                return "preserved";
+            }
+
+            string skyMaterialStatus = EnsureRuntimeMaterial("PlanetSkyDome", "VoxelEngine/PlanetSkyDomeURP");
+            string nebulaMaterialStatus = EnsureRuntimeMaterial("SpaceNebula", "VoxelEngine/SpaceNebulaURP");
+            string glareMaterialStatus = EnsureRuntimeMaterial("SolarGlare", "VoxelEngine/SolarGlareURP");
+            string dustMaterialStatus = EnsureRuntimeMaterial("SpaceDust", "VoxelEngine/SpaceDustURP");
+
+            void Author(BodySettings body, UnityEngine.Object owner)
+            {
+                if (body == null || owner == null) return;
+                var kind = PlanetSkyCatalog.ResolveKind(body);
+                var palette = PlanetSkyCatalog.ForKind(kind);
+
+                bool hasOverrides = body.skyZenith.a > 0.01f
+                    || body.skyHorizon.a > 0.01f
+                    || body.skySunset.a > 0.01f
+                    || body.skyFog.a > 0.01f;
+                if (body.skyProfileVersion >= ProfileVersion || hasOverrides)
+                {
+                    if (body.skyProfileVersion < ProfileVersion)
+                    {
+                        body.skyProfileVersion = ProfileVersion;
+                        EditorUtility.SetDirty(owner);
+                    }
+                    preserved++;
+                }
+                else
+                {
+                    body.skyProfileVersion = ProfileVersion;
+                    EditorUtility.SetDirty(owner);
+                    initialized++;
+                }
+
+                if (body.displayColor.a <= 0.01f)
+                {
+                    Color inferred = palette.AtmosphereRim;
+                    inferred.a = 1f;
+                    body.displayColor = inferred;
+                    EditorUtility.SetDirty(owner);
+                    displayFilled++;
+                }
+
+                summary.Append("• ");
+                summary.Append(string.IsNullOrEmpty(body.bodyName) ? owner.name : body.bodyName);
+                summary.Append(" → ");
+                summary.Append(kind);
+                if (hasOverrides) summary.Append(" (overrides kept)");
+                summary.Append('\n');
+            }
+
+            foreach (string guid in AssetDatabase.FindAssets("t:PlanetTemplate"))
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                var planet = AssetDatabase.LoadAssetAtPath<PlanetTemplate>(path);
+                if (planet != null) Author(planet.body, planet);
+            }
+            foreach (string guid in AssetDatabase.FindAssets("t:MoonTemplate"))
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                var moon = AssetDatabase.LoadAssetAtPath<MoonTemplate>(path);
+                if (moon != null) Author(moon.body, moon);
+            }
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            EditorUtility.DisplayDialog("Voxel Engine — Planet Skies + Space Ambiance",
+                "Sky and space ambiance authored (non-destructive):\n\n" +
+                "• " + initialized + " bodies marked with the sky catalogue\n" +
+                "• " + preserved + " existing sky overrides preserved\n" +
+                "• " + displayFilled + " missing display colours filled from the theme\n" +
+                "• Runtime sky material: " + skyMaterialStatus + "\n" +
+                "• Space nebula material: " + nebulaMaterialStatus + "\n" +
+                "• Solar glare material: " + glareMaterialStatus + "\n" +
+                "• Space dust material: " + dustMaterialStatus + "\n\n" +
+                summary +
+                "\nRuntime sky, nebulae, eclipse-aware glare, and sparse dust spawn from CosmosBootstrap. Re-run after adding planets; authored colours and material properties stay untouched.",
                 "OK");
         }
 

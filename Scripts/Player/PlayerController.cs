@@ -112,6 +112,15 @@ namespace VoxelEngine.Player
         private bool   _sprinting;
         private float  _smoothedEyeHeight;
         private float  _jetpackBoostCharge;
+
+        // Spawn/respawn fall-damage immunity window (set by PlayerSpawner at handover).
+        private float _spawnGraceUntil;
+
+        /// <summary>Grants temporary immunity to fall damage (spawn settle grace).</summary>
+        public void BeginSpawnGrace(float seconds = 2.5f)
+        {
+            _spawnGraceUntil = Time.time + Mathf.Max(0.5f, seconds);
+        }
         // Reused by terrain support probes to avoid per-frame raycast allocations.
         private readonly RaycastHit[] _terrainProbeHits = new RaycastHit[12];
 
@@ -493,8 +502,10 @@ namespace VoxelEngine.Player
             if (inWater)
             {
                 float surfY = waterState.WaterSurfaceY;
+                // Use the real local voxel-liquid depth. A mined or player-filled pool can be
+                // above/below the global sea shell, so sea-radius math alone would trap swimmers.
                 float depth = GravityProvider.IsRadial
-                    ? Mathf.Max(0f, -VoxelEngine.WaterSim.PlanetWaterUtility.SignedDistanceToSea(transform.position))
+                    ? waterState.WaterDepth * 1.8f
                     : (surfY - transform.position.y);
 
                 // ── Build 3D swim direction using camera look ────────────────
@@ -557,6 +568,27 @@ namespace VoxelEngine.Player
             if (!inWater && wishDir.sqrMagnitude > 0.001f)
                 AssistTerrainAscent(up, wishDir, Mathf.Max(0.25f, horiz.magnitude * dt));
 
+            // ── Re-entry / terrain-clip safety ──────────────────────────
+            // Cap the INWARD radial speed near the active body. Without this, a player
+            // restored from a bad save (or clipped through the terrain) accelerates to
+            // hundreds of m/s toward the core and tunnels straight through the planet.
+            // 24 m/s sits BELOW the lethal fall threshold (28 m/s), so even a worst-case
+            // restored fall is survivable instead of being an instant death loop.
+            var activeBody = GravityProvider.ActiveBody;
+            if (activeBody != null)
+            {
+                Vector3 toCore = activeBody.transform.position - transform.position;
+                float dist = toCore.magnitude;
+                if (dist > 1f && dist < activeBody.SurfaceRadius * 2.5f)
+                {
+                    Vector3 radialIn = toCore / dist;
+                    float inwardSpeed = Vector3.Dot(_velocity, radialIn);
+                    const float maxFallSpeed = 24f;
+                    if (inwardSpeed > maxFallSpeed)
+                        _velocity -= radialIn * (inwardSpeed - maxFallSpeed);
+                }
+            }
+
             // -- move --
             // Keep the small radial anti-stick lift, then run a post-move footing
             // recovery below for both flat and spherical terrain.
@@ -571,6 +603,9 @@ namespace VoxelEngine.Player
 
         private void ApplyFallDamage(float impactDownSpeed)
         {
+            // Spawn grace: physics settle / chunk-streaming timing at spawn (or respawn)
+            // must never insta-kill the player with a bogus impact. 2.5 s of immunity.
+            if (Time.time < _spawnGraceUntil) return;
             if (impactDownSpeed <= fallDamageStartSpeed) return;
             var waterState = GetComponent<PlayerWaterState>();
             if (waterState != null && waterState.IsSwimming) return;
@@ -739,9 +774,20 @@ namespace VoxelEngine.Player
         // player reorients to stand upright on the sphere — gravity, jump and horizontal
         // movement all operate on the local ground plane (perpendicular to `up`).
         private Vector3 UpVec => GravityProvider.GetUp(transform.position);
-        private Vector3 GravVec => GravityProvider.IsRadial
-            ? GravityProvider.GetGravity(transform.position)
-            : (Vector3.up * gravity);   // gravity is negative → Vector3.up * gravity points down
+
+        // Real-space N-body gravity: inverse-square pulls from the star + every body.
+        // On a planet it behaves exactly like the old radial gravity; in deep space it
+        // is ~0 so the player floats (the jetpack / a ship is required to move out there).
+        private Vector3 GravVec => GravityProvider.GetGravity(transform.position);
+
+        /// <summary>
+        /// Re-express this controller's velocity when the scene reference frame changes
+        /// (leaving/entering a body's gravity well). Cosmic velocity is conserved.
+        /// </summary>
+        public void AddFrameVelocityDelta(Vector3 deltaMps)
+        {
+            _velocity += deltaMps;
+        }
 
         /// <summary>The vertical (along-up) component of velocity, as a signed scalar.</summary>
         private float VerticalSpeed(Vector3 up) => Vector3.Dot(_velocity, up);

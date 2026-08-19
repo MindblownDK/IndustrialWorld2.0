@@ -499,6 +499,10 @@ namespace VoxelEngine.Cosmos
             Shader.SetGlobalFloat("_VoxelBubbleCutoutRadius", Mathf.Max(0f, _meshedBubbleRadius - 8f));
         }
 
+        /// <summary>Live streamed chunk count — used by the GPU engine's unconditional
+        /// near-viewer collider yield (never gate mining on scan heuristics again).</summary>
+        public int ActiveChunkCount => _chunks.Count;
+
         /// <summary>
         /// True while the player is standing on real streamed terrain — the chunk block
         /// around the stream centre has meshed geometry. While footing exists, the GPU
@@ -603,12 +607,13 @@ namespace VoxelEngine.Cosmos
 
         // Bound queued/in-flight work as well as per-frame dispatch. Without these limits a
         // fast camera move could enqueue hundreds of expensive radial density/mesh jobs and
-        // saturate every worker thread long after the player had moved on. 7.20.0 raised
-        // these budgets because chunk generation is now ~10–30× cheaper (shared per-chunk
-        // surface column), so the same thread time fills a far bigger real-voxel area.
-        private int MaxOutstandingChunkRequests => Mathf.Clamp(maxJobsPerFrame * 5, 10, 40);
-        private int GenerationConcurrencyLimit => Mathf.Clamp(maxJobsPerFrame, 2, 8);
-        private int MeshConcurrencyLimit => Mathf.Clamp((maxJobsPerFrame + 2) / 3, 1, 5);
+        // saturate every worker thread long after the player had moved on. 9.5.2 raised
+        // these budgets again: generation is Burst worker-thread work (the main thread only
+        // uploads), the field reports zero gameplay lag, and surface streaming was falling
+        // behind normal movement speed.
+        private int MaxOutstandingChunkRequests => Mathf.Clamp(maxJobsPerFrame * 8, 16, 64);
+        private int GenerationConcurrencyLimit => Mathf.Clamp(maxJobsPerFrame * 2, 4, 12);
+        private int MeshConcurrencyLimit => Mathf.Clamp((maxJobsPerFrame + 1) / 2, 2, 8);
 
         private bool IsCurrentChunk(Chunk chunk, int epoch)
         {

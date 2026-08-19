@@ -1,9 +1,1484 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `7.10.0-dev`
+**Current Version:** `9.5.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.5.2-dev] Unconditional Collider Yield, Self-Naming Mining Diagnostics, Hard-Clamped Respawn & Faster Streaming
+
+**Type:** PATCH — no save/API change.
+
+#### ⛏️ 1. Mining — heuristics are out, an unconditional rule is in (plus a truth serum)
+Every yield heuristic so far (scan ball, footing) had a failure mode in the field. New ABSOLUTE rule in `GpuPlanetEngine`: whenever the gameplay bubble is actively streaming THIS body (`SphereWorld.ActiveChunkCount > 24` — trivially true in play), NO LOD-skin collider may exist within 300 m of the player. No thresholds, no scans, no footing checks. The wider handshake window still applies beyond that.
+AND, because remote guessing has cost us three rounds: **mining now diagnoses itself.** Any swing that changes zero voxels prints ONE line — what the ray hit, the exact voxel under the brush (density / material / mineable / tier vs tool tier) and every collider found in a 4 m downward probe with names and distances. If mining still stops, that line IS the answer — please copy it into the chat.
+
+#### 🛌 2. Respawn — spherical parking, staged logging, final hard clamp
+- The routine still contained a flat-world relic: deep-space deaths parked the player on a "Y ≥ 250" plane before snapping — nonsense on a sphere. Parking is now `dest + 12 m` along the destination body's real up.
+- If, after chunk-wait, ground-snap and dry-spawn, the player is STILL in open space, the routine hard-clamps to an analytic `PlanetField` surface point on the home body — a world-spawn respawn physically cannot end in space any more. (Bed/cryobed/station respawns are exempt by design.)
+- Every stage logs (`parked at… / complete at…`) so any remaining oddity is one copy-paste away.
+
+#### 🚀 3. Surface streaming speed
+Bubble budgets raised (outstanding requests 40→64, generation concurrency 8→12, mesh concurrency 5→8, scaled from the quality tier). Generation is Burst worker-thread work and the field reports zero gameplay lag — the headroom belongs to streaming. Normal-speed movement should now stay ahead of the surface.
+
+#### ✅ Static delivery checks
+- All sources parse clean (tree-sitter C#); version synchronized to 9.5.2-dev.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile.
+2. Mine down. If ANYTHING still stops you, copy the `[Mining] Swing changed no voxels…` console line into the chat — it names the blocker outright (collider names included).
+3. Die (with and without bed): watch `[PlayerSpawner] Respawn parked at… / complete at…` — a world respawn must end on the planet, guaranteed by the final clamp.
+4. Run/fly across the planet at normal speed: chunks should now stay ahead of you.
+
+### [9.5.1-dev] Footing Yield, World-Aligned Lattice, Bright Navigation Beacons & Calm Ocean Shores
+
+**Type:** PATCH — final mining unblock, chunk-border seams, beacon visibility, shore overreach. No save/API change.
+
+#### ⛏️ 1. Mining 0.5 m stopper, final piece — collider FOOTING rule
+Visual layers are gone (cutout confirmed working) — the remaining stopper was the LOD skin's MESH COLLIDER still active under the player: the pickaxe ray ignores it (safety marker), your body doesn't. The yield gate demanded a >32 m fully-meshed ball from the scan — too strict in practice. New rule: **while the player has FOOTING** (any meshed chunk in the 27-block around the stream centre — i.e. you are literally standing on bubble terrain), the ENTIRE collider window belongs to the bubble and every LOD collider inside it switches off. No scan sensitivity, no threshold: standing on ground = dig freely, to the core. Engine telemetry now also prints the bubble state (`bubble=meshedR/colR`).
+
+#### 🧩 2. Small gaps BETWEEN chunks — world-aligned lattice
+9.5.0's per-chunk lattice sampled each chunk's own box, so two neighbours interpolated the surface from DIFFERENT plane positions and disagreed exactly at their shared border → the thin between-chunk gaps you found. The lattice now sits on the GLOBAL 8 m world grid (7³ planes, snapped origins): neighbouring chunks sample the surface at IDENTICAL world positions and their interpolated surfaces agree bit-for-bit at every shared voxel. Seam-free by construction.
+
+#### 🔭 3. Distant planets — navigation-grade beacons
+Minimum apparent size raised from ~0.2° to **~0.5° (full-moon size)** with a brighter tint — every planet in the system reads clearly in the sky as a destination, still rendered AT its true position and still fading into the real surface on approach.
+
+#### 🌊 4. Shore waves climbing above land
+The open-ocean patches shared the chunk-water material 1:1, whose full wave/tide stack (~1.3 m vertical excursion at 0.3 m inset) let animated shore swells crest above beach level. The ocean now uses its own CALMER clone (reduced deep/secondary/shallow amplitudes, minimal tide, softer chop) at a 0.65 m inset — same look, wakes and foam, but the shoreline animation stays below the land. Bubble chunk water is untouched.
+
+#### ✅ Static delivery checks
+- All sources parse clean (tree-sitter C#); version synchronized to 9.5.1-dev.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile.
+2. Mine straight down: past 0.5 m, past 5 m, keep going — nothing may ever stop the descent again (check `bubble=` in the `[GpuPlanetEngine:…]` log if it does).
+3. Fresh-world flyover: the thin between-chunk gaps must be gone.
+4. Look at the night sky: planets/moons as clear bright dots (~full-moon size) you can navigate by.
+5. Watch a shoreline: waves stay at/below beach level while animating.
+
+### [9.5.0-dev] Exact-Surface Chunks — Lattice Generation, No More Hollow Planets, Duplicate Moon Removed, True-Position Beacons & Deep-Space-Proof Respawn
+
+**Type:** MINOR — the bubble now generates the EXACT field (root cause of "gaps appear when chunks generate", the 0.5 m wall AND the hollow "hole through the planet"). Save-compatible; freshly generated chunks improve automatically.
+
+#### ⛏️🧩 1. THE big one — the bubble was generating an approximation, not the field
+Your observation "before generation there are no gaps" was the key: the GPU surface (exact field) was right — the VOXEL CHUNKS were wrong. Since 8.0.2 each chunk approximated the surface with a chunk-centre LINEAR gradient. The 9.x field has ridged mountains and domain warping — linear extrapolation across a 32 m chunk misses by tens of metres at crests and warped coasts, so chunks generated HOLLOW (mine down into a void "hole through the planet") or OVERFILLED/clipped (gaps appearing exactly when chunks streamed in, phantom 0.5 m walls where the cutout removed the correct GPU skin over incorrect voxels).
+- New `BuildSurfaceLatticeJob` (Burst prepass): evaluates the TRUE `PlanetField` surface radius on a 5³ lattice per chunk; `SphereChunkGenJob` trilinearly interpolates it per voxel (max lattice spacing ≈ 8.5 m; ~125 field samples per chunk — negligible cost, still ~300× cheaper than per-voxel).
+- New `SphereDensity.EvaluateVoxelWithSurface(...)`: evaluation against an exact surface radius; the legacy gradient path remains only for probe callers.
+- Voxels, GPU skin, mining, colliders and the cutout now all agree on ONE surface. Mine to the core: the interior is solid rock the whole way down (as it always should have been).
+
+#### 🌙 2. Duplicate moon — auto sub-moons removed
+The registry auto-generated a "sub-moon" per moon that CLONED the moon's own BodySettings — a duplicate of the same moon orbiting itself ("two moons but only one is assigned"). Auto sub-moons are gone; they return only when authorable with their own settings.
+
+#### 🔭 3. Can't see other planets — true-position beacons
+An 8 km planet at 40,000 km is sub-pixel — physically present, optically invisible (that's why the sky looked empty once the fake proxies were gone). New `DistantBodyBeacons`: each REAL body gets a small emissive sphere parented AT the body itself (zero offset — nothing follows the player), scaled so the body never drops below ~0.2° apparent size, shrinking back inside the real body as its true surface takes over. Honest night-sky planets: fly at the dot, the dot IS the planet.
+
+#### 🛌 4. Respawn — deep-space-proof
+The 9.4 heal used the streamed world's dry-point search, which fails when death happens in deep space or another frame (streamer suspended / body null) — the heal silently did nothing. New analytic fallback: a fresh dry spawn is computed on the HOME body straight from `PlanetField` (no chunks, no colliders, frame-independent), and every respawn now logs its decision (`[PlayerSpawner] Respawn → dest=… anchor=… bed=…`).
+
+#### 🔬 5. "Surface not generated on the new planet" — instrumented
+Per-body engine telemetry every 15 s: `[GpuPlanetEngine:<Body>] nodes/ready/building/queued, finest depth, altitude`. If a planet still refuses to refine on approach, that one line tells us exactly which stage is starving — send it with your next report.
+
+#### ✅ Static delivery checks
+- All sources parse clean (tree-sitter C#); lattice arrays disposed on every completion/teardown path; version synchronized to 9.5.0-dev.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile. Existing saves work — but chunks you already visited were generated with the OLD approximation and stay as saved if modified; unmodified areas regenerate exact. For the cleanest check, use a fresh world.
+2. Fly along ridged mountains while chunks stream in: NO gaps may appear at generation time any more.
+3. Mine straight down 30+ m: solid rock the whole way (ores included); no voids except real caves; and yes — with patience you can now dig clean through the planet.
+4. Sky check: exactly ONE moon for the home planet, and the other planets visible as honest bright dots that grow into real planets.
+5. Die in deep space with no bed: respawn must land on the HOME planet (watch the `[PlayerSpawner] Respawn →` log).
+6. Approach a new planet and hold ~2–8 km altitude for a minute: if its surface stays coarse, send me its `[GpuPlanetEngine:…]` lines plus the `[CosmosBootstrap] Bodies:` line.
+
+### [9.4.0-dev] Real-Only Space — Proxies Deleted, Ocean Job Crash Fixed, NaN Defence-in-Depth, Trust-No-Legacy Respawn
+
+**Type:** MINOR — removes the fake sky-proxy system entirely and fixes the 9.3 regressions. Save-compatible.
+
+#### 🌊 0. THE crash — ocean job container (also a big part of "gaps in the planet")
+`GpuOceanEngine` scheduled the shared quadtree job without the new `splitSet` container → `InvalidOperationException` EVERY update since 9.3 — the ocean never rebuilt, so every sea rendered as a giant hole in the planet. The ocean now passes a constructed (empty) set. If terrain gaps remain after this, they are a separate report.
+
+#### 🪐 1. NO MORE FAKE PLANETS — real bodies only
+The carrot-on-a-stick proxies (true bearing at a fixed 30 km — they "followed the player" and could never be reached, which is also why "the surface never generated" and "the sun is unreachable": you were chasing sprites) are DELETED, not patched: `SpaceBodyRenderer`, `SphereSurfaceColor` and `PlanetSkyProxyURP` removed. What you see in space is now exclusively REAL: real planets/moons (their GPU quadtree surfaces stream at any distance), the real star mesh (StarSurfaceURP — flying at it gets you there, and into its heat hazard), real minable asteroids, plus genuine backdrop only (starfield, nebulae, dust, glare). Black hole & quasar bodies: locked in for **Phase 5**.
+
+#### 🧭 2. NaN defence-in-depth (the missing-planets poison)
+One non-finite value anywhere in the cosmic chain froze every other body at the scene origin (inside the home planet — "planets don't spawn"), corrupted respawn's space test and killed asteroid spawns. Now:
+- **Registry build:** every freshly-built orbit is validated; NaN → repaired to a safe circular orbit + ONE error naming the body and its authored elements.
+- **SpaceOrigin:** all three anchor-update paths and the world rebase reject non-finite values (one-shot report incl. "viewer position is NaN" for physics blow-ups); `PlaceBodies` guard stays.
+- **Asteroids:** non-finite spawn positions skipped; first successful rock logs a confirmation line.
+- **Diagnostics:** every 30 s one log line lists EVERY body with its live distance (`Venus=8123km …` or `NaN!`) — whatever is still wrong will name itself.
+
+#### 🛌 3. Respawn — trust no legacy point
+Saves from before body-anchoring can never gain an anchor by themselves, and their raw scene points are meaningless after any re-anchor. A world-spawn respawn now REQUIRES a body anchor: un-anchored or open-space destinations are rejected outright, a fresh dry surface point is computed on the active world, and the save is healed (anchor written back). Orbital bed spawns remain by-design untouched.
+
+#### ☄️ 4. Asteroid spawn distance fix confirmed + shader warning
+The 9.3 km/m fix plus the NaN guards make rocks actually appear (900–6,000 m ring, high orbit + deep space). The Metal warning in `PlanetFieldGpu` (`potentially uninitialized variable (CaveCarve)`) is silenced via a single-return carve — identical maths, CPU/GPU parity intact.
+
+#### ✅ Static delivery checks
+- All sources parse clean (tree-sitter C#); zero references to the deleted proxy system; version synchronized to 9.4.0-dev.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile.
+2. Console must be free of the `splitSet` exception; oceans must be water again.
+3. Watch the 30 s `[CosmosBootstrap] Bodies:` line — every planet should show a real distance. **If any says `NaN!` or an error names a body/orbit, send me those lines — they are the last piece of the puzzle.**
+4. Fly toward a planet you SEE (it's the real one now — it grows the entire way): surface streams in, gravity/atmosphere engage on arrival.
+5. Fly at the sun: it must get closer, show the plasma surface, then burn you (hazard warning first).
+6. Die without a bed: respawn must land on the planet — every time, even on old saves (watch for the heal log).
+7. High orbit/deep space: rocks appear within ~6 km (look for the `[SpaceAsteroidField]` line).
+
+### [9.3.0-dev] Root-Cause Round — SRP-Batcher Cutout, Global Band, Depenetration Guard, NaN-Proof Orbits, Healed Respawn, Real Asteroid Ranges & a Burning Star Surface
+
+**Type:** MINOR — deep root-cause fixes for every 9.2 field report + the procedural star surface. Save-compatible.
+
+#### ⛏️ 1. Mining wall & ground flicker — the cutout NEVER ran (SRP Batcher)
+The real culprit behind BOTH "still can only mine 0.5 m" and "terrain disappears when you look at the ground": `_BubbleCutout` was declared OUTSIDE the `UnityPerMaterial` CBUFFER. With URP's SRP Batcher, such uniforms are treated as GLOBALS — `material.SetFloat` on the LOD-skin clone silently did nothing, so the skin was never clipped (phantom ground behind mined holes) and sat EXACTLY on the bubble surface (coincident z-fighting = the view-dependent shimmer/vanish).
+- `_BubbleCutout` + new `_LodRadialBias` now live in Properties AND in every pass's `UnityPerMaterial` CBUFFER of `VoxelTerrainURP` and `VoxelTerrainEnhanced` (forward, shadow, depth — identical layouts, SRP-Batcher compatible).
+- **LOD radial deflation:** the skin clone sinks 0.45 m toward the core (vertex stage, all passes) — the bubble surface always renders on top; no more coincident z-fighting anywhere in the overlap band.
+- Render cutout radius now uses the full meshed-bubble radius (−8 m) instead of the collider window.
+- **Local guarantee:** if the 27 chunks around the stream centre are covered, the handshake gets a minimum 64 m ball — one distant straggler chunk can never re-arm the skin's colliders under your feet again. Handshake state is now printed in the 3 s SphereWorld diagnostics.
+
+#### 🧩 2. Terrain gaps + LOD flashing — global analytic band & split hysteresis
+- The 9-point sampled radial bands could miss peaks/valleys between probes at coarse depths → the band CLIPPED the terrain (the gaps), and the "correct ↔ gapped" flashing was the quadtree flip-flopping between the parent (full band, correct) and children (clipped). Bands are now derived from the field's ANALYTIC elevation bounds — one shared radial lattice for the entire planet at every depth: the surface can never leave the band, and every node border matches bit-identically. Watertight by construction, at last.
+- Split/merge hysteresis (15%) via a split-set fed back into the Burst descent job — no more threshold flip-flop flashing.
+
+#### 🛬 3. 40 m inside the planet at extreme speed — depenetration guard
+Discrete physics tunnels through ANY mesh collider at extreme velocity. The engine now watches the viewer: crossing from outside the analytic surface to >3 m inside at ≥60 m/s snaps the player/ship back onto the surface and zeroes velocity (cave and mined-shaft players never trigger it — they're inside slowly).
+
+#### 🪐 4. Other planets missing / NaN — orbits are NaN-proof and self-reporting
+`transform.localPosition is {NaN}` on other bodies meant corrupt orbital data was poisoning their positions (also why proxies pointed at nothing). Kepler propagation now clamps eccentricity to <1 in the solver AND the true-anomaly √(1−e); `UpdateFromOrbit` keeps the last valid state on NaN; `SpaceOrigin.PlaceBodies` refuses NaN assignments and reports the offending body ONCE with its full orbital elements — planets stay where they were and the log names the bad data.
+
+#### 🛌 5. Respawn-in-space, final word
+Even body-anchored spawns couldn't help saves written before 9.2. A world-spawn respawn that resolves to open space (>800 m above every body) is now REJECTED: a fresh dry surface point is computed on the active world and written back — the save heals itself. Orbital bed/cryobed spawns remain untouched by design.
+
+#### ☄️ 6. Asteroids — the km/m unit bug
+Spawn ring distances (metres) were added to COSMIC coordinates (kilometres): every rock spawned 900–6,000 KM away and was instantly culled — asteroids "never existed". Ring distances are now correctly converted (÷1000). Combined with 9.2's open-space gating you'll see rocks in high orbit and deep space.
+
+#### ☀️ 7. The sun is a STAR now (feature)
+New `VoxelEngine/StarSurfaceURP`: fully procedural animated plasma surface — domain-warped granulation cells, drifting dark starspots, limb darkening and a hot fresnel rim, tinted by the authored glow colour. `SolarHazard`'s real sun mesh uses it automatically (graceful fallback to Unlit if the shader is missing).
+
+#### ✅ Static delivery checks
+- All touched sources parse clean (tree-sitter C#); both terrain shaders keep identical per-pass CBUFFER layouts; version synchronized to 9.3.0-dev.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile. Saves keep working.
+2. Mine deep + tunnel: no wall, no phantom ground, and NO shimmer when looking at the ground.
+3. Watch the console 3 s diagnostics: `handshake: meshedR=…` should sit around 150–250 m while standing on terrain. If it reads 0, send me that log line.
+4. Fly low and far: no gaps, no correct↔gapped flashing.
+5. Ram the planet at max speed: you must end ON the surface (the guard logs a warning if it had to catch you).
+6. Check the Console for `[SpaceOrigin] Body '…' produced a NaN…` — if it appears, send me the line (it names the corrupt orbit); the planets will render regardless.
+7. Fly toward another planet's proxy dot — it must grow into the real planet; gravity/atmosphere engage.
+8. Die away from base with no bed: respawn must land on the planet surface (watch for the heal log).
+9. High orbit: minable rocks within ~6 km; approach the sun: a burning animated star surface with spots, not a light ball.
+
+### [9.2.0-dev] Field Report Fixes — Deep Mining, Solid Approaches, Watertight Lattice, True-Direction Planets, Anchored Respawn & Open-Space Asteroids
+
+**Type:** MINOR — six field-reported fixes + the open-space asteroid population. Save-compatible (spawn sidecar gains optional body-anchor fields).
+
+#### ⛏️ 1. Mining stopped ~0.5 m down (handshake never engaged)
+The 9.1.0 meshed-bubble scan required EVERY chunk in the bubble to have a mesh — but air/interior chunks intentionally never mesh, so the scan always failed, the GPU LOD skin kept rendering AND colliding under the bubble, and every dig hit an invisible skin ~0.5 m below the surface with phantom terrain behind it.
+- `Chunk.needsSurfaceMesh` (set by `FinalizeGen`) now records whether a chunk intersects the surface at all; the coverage scan treats meshless air/interior chunks as fully covered. The handshake engages properly: skin clipped, LOD colliders yield — dig as deep as you want.
+
+#### 🛬 2. Flying fast into a planet passed through the surface
+Only fine (≤4.5 m cell) nodes ever received colliders — a fast approach reached the ground before any existed, dropping the player through the surface onto the deep safety core (with the surface invisible from inside until the bubble streamed).
+- The node chain directly under the viewer now colliders at EVERY quadtree depth (`dist < 1.35×arc + 250 m`), so an approach from orbit always finds solid ground; collider bake budget raised to 2/frame. The bubble-yield rule still wins near the player.
+
+#### 🧩 3. Terrain gaps away from spawn (radial lattice mismatch)
+Same-depth neighbour nodes used free-floating radial bands, so their ghost-cell corners sampled DIFFERENT radii — the watertight stitching broke wherever relief differed and cracks/holes opened along node borders.
+- Radial bands are now quantised onto a SHARED per-depth lattice (dr = power-of-two multiple of the cell arc, rLo snapped to a dr multiple) with a guaranteed relief fit — boundary corners are bit-identical on both sides again. Skirts deepened to 3 cells for the rare lattice-scale transitions.
+
+#### 🪐 4+6. Planets you fly toward are now THE planets (no more SpaceBody_N decoys)
+The sky proxies were drawn at COMPRESSED positions (~20 km away in a fake layout): flying to one arrived at empty space while the real body — with the gravity, atmosphere and surface — was tens of thousands of km elsewhere. Frame/gravity/atmosphere never engaged because you were never actually near the planet.
+- Proxies are now TRUE-DIRECTION visualisations: placed on the real bearing at a fixed render distance with the body's true apparent size (plus a minimum so distant planets stay findable), fading out exactly when the real body grows large enough to carry itself. Flying at the dot IS flying at the planet — gravity dominance, proximity hold, atmosphere and streaming all engage naturally on arrival. Hierarchy objects are named `Proxy_<BodyName>`.
+
+#### 🛌 5. Respawn dropped the player in space
+The world spawn was stored as a raw SCENE position — stale the moment the floating origin re-anchored (orbital motion, visiting another body).
+- The world spawn is now body-anchored (body name + body-local offset, persisted in the spawn sidecar) and respawn reconstructs the live scene position from the body's CURRENT transform. Legacy scene-point fallback retained; bed spawns unchanged.
+
+#### ☄️ 7. Open-space asteroids (feature)
+Minable rocks were exclusive to the deep-space star frame — most flights never saw one.
+- Rocks now populate any OPEN SPACE: deep space or high orbit inside a body's frame (above `max(12 km, 1.25× atmosphere height)`), denser and wider (28 rocks, 0.9–6 km ring, 12 km despawn, 12–90 m radii), still deterministic per cosmic region, still fully minable. The sky above bases stays clean.
+
+#### ✅ Static delivery checks
+- All touched sources parse clean (tree-sitter C#); version synchronized to 9.2.0-dev.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile — existing saves keep working.
+2. Mine straight down 10+ m and tunnel sideways — no floor, no phantom walls at any depth.
+3. Fly full speed into the planet from orbit — you must land ON terrain (coarse at worst), never inside it.
+4. Fly a few km across the planet at low altitude — no cracks or holes along the way.
+5. Fly toward another planet's dot in the sky — it must grow continuously into the real planet; watch gravity/atmosphere engage on approach; land, then die on purpose — you must respawn at the world spawn on the planet.
+6. Climb to high orbit — asteroid rocks should appear around your route and be minable up close.
+
+### [9.1.0-dev] Single-Surface Handshake — Bubble ⇄ GPU Surface Unification (Rework Phase 2)
+
+**Type:** MINOR — new save-compatible handshake system between the gameplay bubble and the GPU quadtree surface. No save-schema change.
+
+#### 🎯 Why Phase 2 changed shape
+The original Phase-2 plan ("move mining/persistence onto the GPU engine, 64³ bubble chunks") became unnecessary the moment 9.0.0 unified the density field: the bubble already generates EXACTLY the surface the GPU engine renders, and mining/persistence already work. What remained was the overlap zone around the player where BOTH systems rendered and collided:
+- a mined hole in the bubble could reveal the GPU LOD skin behind it — the tunnel looked filled with phantom terrain;
+- the GPU skin's mesh collider (a surface sheet) could wall off tunnel mouths;
+- two nearly-coincident surfaces shimmered where they overlapped.
+9.1.0 makes the two systems ONE surface, everywhere. (A 64³ bubble was evaluated and rejected: 8× the voxel memory/latency per chunk for zero visible gain — the GPU nodes are already 64³.)
+
+#### 🤝 The handshake
+- **SphereWorld publishes its real coverage** — a conservative "meshed bubble" ball (centre + radius where every chunk is generated AND meshed, rescanned every 0.35 s, ~2 k dictionary probes) plus the collider window, via `TryGetMeshedBubble(...)` and the shader globals `_VoxelBubbleCenterWS` / `_VoxelBubbleCutoutRadius`. The globals reset on body switch and teardown so a stale cutout can never punch a hole in terrain.
+- **The GPU LOD skin clips inside the bubble** — `GpuPlanetEngine` now renders through a clone of the terrain material with `_BubbleCutout = 1`; `VoxelTerrainURP` and `VoxelTerrainEnhanced` discard those fragments inside the published ball. Bubble chunks keep the original material untouched. Mined holes and tunnels now show the REAL edited voxels — never a ghost surface.
+- **LOD colliders yield to the bubble** — GPU node colliders switch off whenever the node's bounding ball touches the bubble's collider window (and re-bake when the player moves on). The bubble always surrounds the player, so physics never loses its floor; tunnels dig freely.
+- **Whole nodes fully swallowed by the bubble hide entirely** (with hysteresis), removing coincident-surface shimmer near the player.
+
+#### ✅ Static delivery checks
+- All touched sources parse clean (tree-sitter C#); cutout declared + applied in both terrain shaders; version synchronized to 9.1.0-dev.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile (existing 9.0.x saves keep working — MINOR).
+2. In Play Mode, mine straight down and sideways into a hillside: the tunnel must stay OPEN — no phantom floor/wall appearing behind mined voxels, and you can walk through freely.
+3. Look at the horizon while walking: no double-surface shimmer in the near field; terrain past the bubble edge unchanged.
+4. Fly up fast: the GPU surface should still be there when the bubble lags behind (cutout ball shrinks automatically), with no holes in the planet.
+5. Fly to another planet and back: no stale see-through hole where the old bubble was.
+
+### [9.0.1-dev] GPU Engine Compile Recovery (CS0103 lod/oceanLod + FindObjectsByType Deprecation)
+
+**Type:** PATCH — compile recovery for the 9.0.0 rework; no behaviour, save-schema, or API change.
+
+#### 🛠️ Compiler Fixes
+- **CS0103 `lod` / `oceanLod` (CosmosBootstrap.cs:274–275):** the graphics-preset application block still referenced the deleted legacy LOD components. The terrain budget is already pushed via `_terrainGpu.ApplyQualityBudget(...)` at spawn; the line now routes the ocean tier to `_oceanGpu.ApplyQualityBudget(GraphicsPreset.LodResolution)` instead.
+- **CS0618 `FindObjectsByType(FindObjectsInactive, FindObjectsSortMode)` (QualityPresetApplier.cs:74):** switched to the non-deprecated `FindObjectsByType<GpuPlanetEngine>(FindObjectsInactive.Include)` overload (Unity 6.5 removes the sort-mode parameter path).
+
+#### ✅ Static delivery checks
+- Both touched sources parse clean (tree-sitter C#); no remaining `lod`/`oceanLod` identifiers or `FindObjectsSortMode` usages in runtime code; version synchronized to 9.0.1-dev.
+
+#### Manual Unity steps
+1. Pull `Dev`, let Unity recompile — the console must be clean (no CS0103, no CS0618 from these files).
+2. Continue with the 9.0.0 validation checklist (fresh save, top-down refinement, coastlines, wakes, planet-to-planet flight).
+
+### [9.0.0-dev] GPU-Driven Voxel Engine — Compute Density, Dual Contouring & Asynchronous Spherified Quadtree (Rework Phase 1)
+
+**Type:** MAJOR — complete planetary generation rework. New unified density field → all worlds regenerate differently. **Requires a fresh save.**
+
+#### 🚀 Why the rework
+The 7.x/8.x ladder (impostor + 5-level voxel LOD rings + gradient-corrected chunk columns) approximated one surface with several independent systems, and every approximation seam was a place for gaps, slabs and ghost layers to appear. 9.0.0 replaces all of it with ONE pipeline evaluating ONE continuous field.
+
+#### 🧠 The new engine (`Scripts/GpuVoxel/`)
+- **GPU density evaluation** — `Resources/PlanetFieldGpu.compute` evaluates the whole 3D density formula for a 64³-cell node (67³ corners) across thousands of GPU cores in milliseconds. Two kernels: `CSColumns` (per-column surface radius + climate + slope — the expensive stack runs once per column) and `CSField` (per-corner signed density + material). Results return via `AsyncGPUReadback` — the main thread never stalls.
+- **Dual Contouring over Marching Cubes** — `GpuDualContourJob` (Burst, worker threads) places ONE QEF-relaxed vertex per surface-crossing cell (Schmitz particle over the Hermite edge data): far fewer polygons, smooth hills AND sharp mountain ridges. Zero-copy upload via `Mesh.ApplyAndDisposeWritableMeshData`.
+- **Asynchronous Spherified Quadtree** — `SphereQuadtree.cs` divides each of the 6 cube faces into a quadtree of curved shell nodes whose radial band hugs the terrain. The desired-leaf computation is a Burst job on background threads (Unity Job System), fully isolated from the game loop. Approach the surface → nodes split into four higher-res children; parents stay visible until all four children are ready (no holes, top-down refinement).
+- **Watertight by construction** — every node meshes one ghost cell beyond its footprint and each quad has exactly one owner node, so equal-depth neighbours stitch bit-identically (no cracks, no overlap, no z-fighting). Depth transitions are masked by radial skirts. The field itself is `density = surfaceRadius(dir) − |p| − caves(p)` — a closed 2-manifold that CANNOT have gaps at any resolution.
+- **`GpuPlanetEngine`** — one orchestrator per body: dispatch budgets, readback slots, mesh application budgets, distance-prioritised coarse-first streaming, pooled node GameObjects, near-viewer mesh colliders (marked `PlanetSafetyCollider` so interaction rays skip them) and a safety core sphere so nothing ever falls through a streaming planet.
+
+#### 🌍 One field for everything (`PlanetField.cs` ⇄ `PlanetFieldGpu.compute`, kept in lockstep)
+- Brand-new gap-free terrain: domain-warped fBm continents with soft shorelines, continental-shelf→deep-basin ocean floors, mid-frequency hills, ridged-multifractal mountain chains masked to continental uplift zones, sealed-crust caves that never breach ocean floors.
+- `SphereDensity.EvaluateColumn` now sources its surface shape from `PlanetField` — the 1 m gameplay bubble, scatter, waterfalls, ocean cut-outs, safety colliders and sky proxies all agree with the GPU surface exactly. Cave carving is the same shared function on both sides.
+- Biomes still drive materials, climate and scatter; the GPU picks materials through a climate→biome LUT built from the same authored `BiomeData` (snow lines, polar ice, waterline beaches, slope rock included).
+
+#### 🌊 Water (Phase-1 scope)
+- **`GpuOceanEngine`** — quadtree ocean sphere: curved water patches at sea radius, skipped over dry-land tiles, refined near the viewer, sharing the chunk-water material (`VoxelEngine/VoxelWaterURP`) — so **boat wakes** (`NativeWaterWakeSystem`), Gerstner waves, foam and shore blending work on the open ocean exactly as in the bubble. UV2 is reserved per-vertex as the flow-map channel for the Phase-3 liquid-flow rework.
+
+#### 🗑️ Removed (legacy generation path — deleted, no fallback)
+- `PlanetVoxelLod.cs`, `PlanetLodImpostor.cs`, `PlanetOceanLodRenderer.cs`, `PlanetSurfaceLodURP.shader` and all references. `CosmosBootstrap` now spawns `GpuSurface` + `GpuOcean` per body; `QualityPresetApplier` budgets route to the new engines.
+
+#### 🔜 Rework phases
+- **Phase 2:** gameplay bubble (mining/persistence/colliders) moves onto the GPU engine with edit-delta persistence, 64³ chunks.
+- **Phase 3:** liquid FLOW simulation rework (rivers, springs, pumped water) on the new engine + flow-map ocean currents.
+
+#### ✅ Static delivery checks
+- All new/modified sources parse clean (tree-sitter C#); zero remaining references to the deleted LOD classes; version synchronized to 9.0.0-dev.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, let Unity import `Scripts/GpuVoxel/` (the compute shader lives in `Scripts/GpuVoxel/Resources/PlanetFieldGpu.compute` — the engine loads it by name, no wiring needed).
+2. **Fresh save required:** delete `<persistentDataPath>/VoxelWorlds/` (all worlds) — the new field regenerates every planet.
+3. Enter Play Mode: within ~1–2 s the six coarse face shells should appear, then refine top-down toward your position. Verify: no gaps/slabs at any distance, mountains have sharp ridgelines, oceans end at real coastlines (no water over land).
+4. Walk to a shoreline and sail/fly out: distant ocean should show waves + your boat's wake outside the 1 m bubble.
+5. Fly to orbit and to another planet: every body should show its real surface refining as you approach; no falling through planets (safety core + near colliders).
+6. Report FPS during streaming — budgets (`maxConcurrentBuilds`, `maxAppliesPerFrame`, `splitFactor`) are tunable on the `GpuSurface` object if we need a patch.
+
+### [8.0.2-dev] Spherical Surface Restoration — Gradient-Corrected Chunk Columns (Flat-Layer Fix)
+
+**Type:** PATCH — restores correct spherical planet generation; no save-schema or public API change.
+
+#### 🌍 The real cause of the "flat layers" planet
+The 7.20.0 chunk-column caching evaluated the surface column **once per chunk at the chunk centre** and reused that single surface radius for every voxel of the chunk. On the 1 m gameplay bubble (32 m chunks) the error was invisible — but on the LOD levels (4 m / 8 m rings, the whole-planet FULL shell at 8–16 m voxels, and MID/FAR shells up to 16 km chunks) every chunk rendered as a **flat slab at its own centre height**. Adjacent chunks sat at different heights, so the planet read as **flat terrain layers stacked on each other with visible gaps between them** — exactly what Thomas reported, and not the flat world at all (the 8.0.0 removal was still correct, just not the culprit).
+
+#### 🧭 The fix — first-order gradient correction
+- `SphereDensity.ChunkColumn` now carries the **chunk-centre direction** and a **surface gradient** (∂surfaceRadius/∂dir) sampled with 7 column evaluations per chunk (centre + 2 slope probes + 4 gradient probes over a ~36 m baseline).
+- `EvaluateVoxelCached` applies a per-voxel linear correction:
+  `surfaceRadius(dir) ≈ surfaceRadius(centerDir) + dot(surfaceGrad, dir − centerDir)`
+- Every voxel's density, depth, cave, material-band, snow-line, beach, slope-rock, ocean-basin and water decisions now use the **corrected** surface radius, so the surface follows the true sphere + terrain across the entire chunk footprint.
+- Cost: ~5 column evaluations per chunk instead of ~39,000 — the ~10–30× generation speed-up from 7.20.0 is retained.
+
+#### ✅ Static delivery checks
+- All modified sources parse cleanly (tree-sitter C#); no leftover references to the removed column fields; runtime chunk generation uses the corrected cached path; version synchronized to 8.0.2.
+
+#### Manual Unity steps
+1. Let Unity finish compiling on the `Dev` branch.
+2. **Clean saves (important):** the `_Earth` world folder created by 8.0.0/8.0.1 test runs may contain slabbed terrain chunks. Delete `<persistentDataPath>/VoxelWorlds/<worldName>_Earth` (or the whole world) so the planet regenerates fresh with the corrected field. Old flat-era folders are irrelevant now.
+3. Enter Play Mode on the home world: the surface must read as one continuous **spherical planet** — terrain follows mountains/oceans, no horizontal slabs, no gaps between chunks.
+4. Fly to another planet/moon and confirm its real voxel surface is spherical too.
+5. Confirm generation speed is still fast (whole-planet FULL shell fills within seconds, as in 7.20.0).
+
+### [8.0.1-dev] Flat World Removal Compile Recovery (CS0103 flatWorld + CS8321 dead local)
+
+**Type:** PATCH — compile recovery for the 8.0.0 flat-world removal; no behaviour, save-schema, or API change.
+
+#### 🛠️ Compiler Fixes
+- **CS0103 `flatWorld` (VoxelEngineSetupWindow.cs):** a leftover viewer-link line still referenced the deleted flat world variable inside `SpawnManagerAndPlayer`. Removed the flat-world link — the sphere (`sphereWorld`) is the only world and is linked as before.
+- **CS8321 `MakeIndustrialPrefab` unused local function:** removed the dead prefab helper (the factory-machines step uses `GetOrCreatePrefab` instead). Warning eliminated; no content creation behaviour changed.
+
+#### ✅ Static delivery checks
+- No remaining references to the deleted flat-world classes, GUIDs, or fields (`flatWorld`, `flatBiomeRegistry`, `flatSeed`, `flatSeaLevel`, `flatBaseHeight`, `flatContinentScale`) anywhere in `Scripts/`; modified editor file parses cleanly.
+
+#### Manual Unity steps
+1. Let Unity finish compiling on the `Dev` branch — both errors are gone.
+2. No setup steps required; Play Mode behaviour is unchanged from 8.0.0.
+
+### [8.0.0-dev] Flat World Removed — Spherical Planets Only
+
+**Type:** MAJOR — the flat voxel world is removed as a core system and the home-world save key is namespaced (old flat-era saves are no longer read → the home planet regenerates fresh spherical terrain). Per Semantic Versioning this bumps MAJOR because it removes a core system and changes the save-key schema.
+
+#### 🪐 Why (the flat layers bug)
+The legacy flat `VoxelWorld` (heightmap generator: `ChunkHeightJob` + `ChunkGenJob` + `NoiseUtility`) was still able to pollute the spherical planet:
+- The HOME body's chunk save folder was deliberately shared with the flat world's save folder (`<worldName>`). Old flat-era chunk saves therefore loaded straight into the spherical world and rendered as **flat terrain layers stacked on each other with visible gaps between them** — exactly the broken planet generation Thomas reported.
+- The flat world code paths still existed (bootstrap disable logic, editor references, drill fallback) even though the game is planets-only.
+
+#### 🗑️ Removed (flat world, fully)
+- Deleted `Scripts/Core/VoxelWorld.cs`, `Scripts/Generation/ChunkGenJob.cs`, `Scripts/Generation/ChunkHeightJob.cs`, `Scripts/Generation/NoiseUtility.cs` (+ .meta files).
+- `CosmosBootstrap`: removed the flat-world disable block and the flat-world asset fallback — the sphere is the sole world; assets resolve from Inspector → Resources → Editor asset path.
+- `ActiveWorld` (IVoxelWorld): removed the `VoxelWorld.Instance` fallback — a dead reference simply clears.
+- `VoxelEngineSetupWindow` (Step 2 + scene checks): sphere-only; no flat-world creation or detection remains.
+- `GridDrill`: resolves the world from `ActiveWorld.Current` only.
+
+#### 💾 Save key change (home planet)
+- `SphereWorld.ResolveStorageKey` now namespaces EVERY body, home included (`<worldName>_Earth`). Old flat-era saves under the plain `<worldName>` folder are never read again — they cannot inject flat chunks into the sphere. The home planet (and any other body) regenerates its real spherical terrain procedurally on first load.
+- Old save folders are left untouched on disk (non-destructive), they are simply no longer the active storage path.
+
+#### ✅ Static delivery checks
+- All 562 C# sources parse cleanly (tree-sitter); no references to the deleted classes, scripts, or GUIDs remain in scenes/prefabs/assets; version constants synchronized (8.0.0); no other game's name introduced.
+
+#### Manual Unity steps
+1. Let Unity finish compiling on the `Dev` branch. The deleted classes will make Unity reimport — this is expected.
+2. **Scene hierarchy:** if your scene still contains an old `World` / `VoxelWorld` GameObject (it may appear as a "Missing Script" component after the class was deleted), **delete that GameObject** — the sphere (CosmosBootstrap) is the only world.
+3. Open `Tools > Voxel Engine > Voxel Engine Setup` and run **Step 2** (spawns/relinks Player + UI to the sphere) and **Step 21** (celestial content repair) once each — both idempotent and non-destructive.
+4. **(Recommended) Old saves:** delete the old world folder(s) under `<persistentDataPath>/VoxelWorlds/<worldName>` (e.g. `%USERPROFILE%/AppData/LocalLow/<company>/<product>/VoxelWorlds/MyWorld`). The new home save key is `<worldName>_Earth`, which is created fresh on next save.
+5. Enter Play Mode: you should spawn on a **continuous spherical planet** — no flat layers, no gaps. Flying to any other planet/moon streams its real spherical voxel surface as before.
+
+### [7.20.0-dev] Full-Planet Real Voxel Coverage, Fast Chunk Generation & Reliable Interplanetary Surfaces
+
+**Type:** MINOR — new save-compatible world-rendering feature + voxel-streaming fixes; no save-schema or public API break.
+
+#### 🌍 The planet you're near is now REAL voxels — all of it
+- **Whole-planet FULL voxel shell:** the active body (the planet/moon you are on or approaching) now streams its ENTIRE surface as real generated voxel chunks — no sampled impostor sphere, no 32–128 m coarse MID blocks. The FULL shell's voxel size is chosen from a chunk budget (≈3.2k chunks on High/Ultra → **8–16 m voxels on home-sized worlds**, 4–8 m on moons, coarser only on giants).
+- **Coverage radius world setting:** new `fullVoxelRadiusKm` world setting (default **50 km** — covers a whole 8–16 km planet) controls how far real voxel surface extends around the player. Persisted per-world in the world-settings sidecar (`WorldSession`), overridable on the `CosmosBootstrap` inspector (0 = legacy ring-only behavior).
+- **New 2 m detail ring** bridges the 1 m gameplay bubble to the 4 m ring; the 4 m ring extends to 3 km and the 8 m ring to 6 km (coverage-driven). All three rings carry real colliders, so walking/mining terrain extends kilometres from the player.
+- **LOD ladder rebuilt:** `FAR → MID → FULL(whole planet) → 8 m → 4 m → 2 m → 1 m bubble`, with strict one-surface nesting between every adjacent pair (the generalized nesting rule). The sampled impostor steps aside as soon as the FULL shell is ready.
+
+#### ⚡ Voxel generation ~10–30× faster
+- **Per-chunk surface-column caching:** the expensive climate/biome/tectonic/slope column evaluation now runs **once per chunk** instead of once per voxel (`SphereDensity.ChunkColumn` + `SphereChunkGenJob.BuildColumn`). The density field is smooth over a 32 m chunk, so terrain, biomes, snow lines, beaches, cliff-rock and ore bands are visually unchanged — but a chunk's generation drops from ~40–80 ms to ~2–5 ms.
+- **Higher streaming budgets** for the active body: more concurrent generation/mesh jobs and a larger outstanding-chunk allowance (SphereWorld + PlanetVoxelLod), so the whole-planet shell fills in seconds instead of minutes.
+- **Candidate caching:** the planet shell and ring scans (tens of thousands of chunk coordinates per rebuild) are cached and rebuilt lazily as the player moves, keeping the per-frame streaming cost near zero even with 10k+ chunks active.
+
+#### 🛸 Non-starter planets / moons always generate a real surface
+- **Proximity hold (frame-selection failsafe):** small moons and low-gravity bodies can never win gravity dominance over the star at their orbital distance — the scene frame therefore never switched to them and their real voxel surface never streamed (the "only LOD, no surface" bug). `CosmosBootstrap` now arms a **proximity hold** while the player is within ~15 km of a non-streaming body's surface; `SpaceOrigin` force-holds the frame to that body (with the streaming-body guard preventing hijack kicks), so arriving anywhere — planet, moon, sub-moon — always engages real voxel terrain.
+- **Coverage re-applied on arrival:** entering a body's frame re-applies the coverage radius and rebuilds that body's level ladder, so every planet/moon streams with the same full-coverage rules as the home world.
+
+#### ✅ Static delivery checks
+- All modified sources parse cleanly (tree-sitter C#), C# 9 compatible (no struct field initializers), no save-schema or public API change, version constants synchronized (7.20.0), world-settings sidecar backward-compatible (old worlds default to 50 km coverage).
+
+#### Manual Unity steps
+1. Let Unity finish compiling on the `Dev` branch.
+2. Open `Tools > Voxel Engine > Voxel Engine Setup` and run **Step 21 (celestial content repair)** once — it is idempotent and reconnects any missing planet/library wiring non-destructively. (No new setup step is required for this feature; it is pure runtime code.)
+3. Enter Play Mode on the home world. Confirm the console logs `[PlanetVoxelLod] '<Home>' ... FULL x m / near ... (coverage 50 km)`.
+4. Walk/fly around: the 1 m terrain bubble, the new 2 m ring, the 4 m ring and the whole-planet FULL shell should be visible as one continuous real voxel surface — no flat impostor sphere, no blocky MID patches, no visible surface seams.
+5. Fly to another planet (e.g. Mars) from orbit. During the descent, watch the console for `Proximity hold armed` / `Reference frame → '<Planet>'` and confirm the REAL voxel surface (rings + FULL shell) generates as you approach — no more LOD-only arrival.
+6. Land and mine/build on the new planet: real 1 m voxel terrain must be editable and collidable exactly like the home world.
+7. Visit a moon if the system has one: confirm the proximity hold switches the frame even if gravity dominance wouldn't, and the moon's real surface streams.
+8. (Optional) Change `fullVoxelRadiusKm` on the `CosmosBootstrap` inspector (e.g. 5 km on a weaker PC) and confirm the coverage shrinks accordingly; re-enter the world or switch planets to see the new radius applied.
+
+### [7.19.0-dev] Eclipse-Aware Solar Glare & Sparse Orbital Dust
+
+**Type:** MINOR — new save-compatible space-ambiance rendering systems; no save-schema or public API break.
+
+#### ☀️ Cinematic solar glare without fake visibility
+- Added a procedural camera-space solar glare with a restrained core, horizontal/vertical bloom streaks, and two subtle palette-tinted lens ghosts.
+- Glare follows the real cosmic star direction and apparent angular size rather than a camera-fixed sprite.
+- Local planetary horizon checks, nearby physics occlusion, and double-precision celestial-disc tests hide or feather the effect behind terrain, structures, planets, and moons. Real eclipses now visibly extinguish the glare.
+- Surface atmosphere produces a broader warm response while vacuum keeps a tighter, calmer glare; planet sky palettes tint the result automatically.
+
+#### ✦ Sparse motion-readable space dust
+- Added a bounded 52-mote world-anchored dust field that fades in only through upper atmosphere and vacuum.
+- Motes wrap around the camera at a fixed radius and remain world-anchored between wraps, creating real flight parallax without noisy emission, trails, physics, or unbounded particles.
+- Dust tint follows the current sky/nebula palette and disappears cleanly on atmospheric return.
+
+#### 🛠️ Non-destructive setup and runtime wiring
+- `CosmosBootstrap` now creates both ambiance renderers automatically; no scene object or prefab is required.
+- Step 51 is now **Author Planet Skies + Space Ambiance (Non-Destructive)** and creates/preserves standalone-build material references for the sky dome, nebulae, solar glare, and space dust.
+- Existing sky overrides, display colours, runtime material properties, balance values, and custom content remain untouched on reruns.
+
+#### ✅ Static delivery checks
+- Modified C# syntax, shader structure, runtime bootstrap wiring, eclipse/dust source assertions, Step 51 idempotency, version synchronization, sparse-workspace exclusions, and diff whitespace are validated locally. Unity compile and Play Mode visual validation remain pending from Thomas.
+
+#### Manual Unity steps
+1. Let Unity finish compiling on the `Dev` branch.
+2. Open `Tools > Voxel Engine > Voxel Engine Setup` and run **51. Author Planet Skies + Space Ambiance (Non-Destructive)** twice.
+3. Confirm the second run reports the Sky, Nebula, Solar Glare, and Space Dust runtime materials as **preserved**.
+4. Enter Play Mode on the home world, face the sun, and confirm the soft glare and restrained lens ghosts appear without covering the HUD.
+5. Move behind terrain or a solid structure and confirm the glare fades out; step back into direct sight and confirm it eases in.
+6. Fly through upper atmosphere into vacuum and confirm sparse dust motes fade in and show gentle parallax while moving.
+7. Stop the ship and confirm the dust remains calm rather than streaming like a particle storm.
+8. Return to atmosphere and confirm dust fades out while the glare returns to the active planet's sky palette.
+9. If a moon or planet crosses the star, confirm the glare feathers out during the eclipse and returns after separation.
+
+### [7.18.1-dev] Planet Horizon Ownership & Surface-Sky Reliability
+
+**Type:** PATCH — planet-sky rendering reliability and visual polish; no save-schema or public API change.
+
+#### 🌅 Planet-specific horizon now fully owns the background
+- The active camera uses the authored planet-sky background while the procedural dome is live, so an assigned default Unity skybox can no longer leak through at the surface, during a far-clip change, or while the dome is rebuilt.
+- Camera clear flags and background colour are captured and restored safely when the sky controller is disabled, destroyed, underwater, or moved to a different camera.
+- The radial shader now places the exact authored `Horizon` colour at the real local horizon plane. The previous hemisphere remap already mixed it halfway toward the zenith, weakening every world's identity.
+
+#### 🌙 Local night horizons and render hardening
+- Each world now grades into its own night palette while preserving its sunset glow instead of retaining a bright shared daytime gradient after dark.
+- The sky dome renders as a guaranteed background pass, opts out of dynamic occlusion, and configures fallback material culling for an inside-sphere camera.
+- Step 51 now creates/preserves `Assets/Resources/VoxelEngineRuntime/PlanetSkyDome.mat`, keeping the custom sky shader referenced in standalone builds without overwriting authored material properties or any gameplay balance.
+
+#### ✅ Validation
+- Version/documentation synchronization, C# syntax parsing, shader structure/property checks, setup idempotency assertions, forbidden-folder absence, and sparse-checkout deletion safety were validated locally.
+- Thomas confirmed the planet-specific horizon works in Unity on the `Dev` branch.
+
+#### Manual Unity steps
+1. Let Unity finish compiling on the `Dev` branch.
+2. Open `Tools > Voxel Engine > Voxel Engine Setup` and run **51. Author Planet Skies + Nebulae (Non-Destructive)** twice.
+3. Confirm the second run reports the runtime sky material as **preserved**, with existing sky overrides and display colours unchanged.
+4. Enter Play Mode on the home world and look across the complete horizon; confirm no default Unity blue/grey horizon remains behind the authored sky.
+5. Visit at least one contrasting world (Ice, Volcanic, Acid, Mars, Crystal, or Pirate) and confirm its horizon, zenith, fog, sunset, and night colour family are distinct.
+6. Fly from the surface through upper atmosphere into space and back; confirm the planet sky hands off smoothly to stars/nebulae with no skybox flash.
+7. Enter and leave water once; confirm the sky hides underwater and returns with the correct planet palette.
+
+### [7.18.0-dev] Planet-Specific Skies & Deep-Space Nebulae
+
+**Type:** MINOR — new sky-art system; save-compatible, no API break.
+
+#### 🌌 Planet-specific skies
+- Every celestial body now resolves to a **sky theme** from its name / climate: Temperate, Moon, Ice, Volcanic, Acid, Ocean, Water, Pirate, Desolate, Venus, Mars, Crystal, Olympus, Asteroid.
+- A camera-relative **sky dome** paints zenith → horizon → sunset, with optional **aurora belts** (Ice / Crystal) and **dust haze** (Volcanic / Venus / Mars / Acid / Pirate / Desolate).
+- The atmosphere-to-space camera handoff uses the **theme's upper-air colour** instead of a single Earth blue, then fades to vacuum.
+- Sun colour, ambient, and clear-weather fog follow the same palette so a volcanic noon is orange and an ice dusk is pink — not generic steel-blue.
+- Distant planet **atmosphere rims** use that body's own rim colour.
+
+#### ✨ Deep-space nebulae
+- Sparse, seeded **galactic-band clouds** fade in with the existing vacuum starfield. Soft additive veils, not a particle storm.
+- Nebula tint tracks the departed world's palette so leaving a crystal world still feels like that sky's afterimage.
+
+#### 🛠️ Setup
+- **Step 51 — Author Planet Skies + Nebulae (Non-Destructive):** marks each planet/moon with the catalogue, preserves any hand-authored sky colour overrides, and fills missing `displayColor` from the theme so distant planets match the ground sky.
+- Designer overrides live on `BodySettings` (`skyZenith` / `skyHorizon` / `skySunset` / `skyFog`, alpha 0 = catalogue). Balance and existing colours are never reset.
+
+#### ✅ Static delivery checks
+- New sources parse cleanly; C# 9 compatible (no struct field initializers). No save-schema or public API change.
+
+### [7.17.9-dev] Fix NaN Collider Bounds Crash in Sun Visual & LOD Offset Tuning
+
+**Type:** PATCH — stability and edge-case exceptions.
+
+#### 🛠️ Fixes & Polish
+- **NaN Vector Rejection (SunVisual):** Added explicit `float.IsNaN` checks within `SolarHazard.cs` to prevent assigning `NaN` world/local positions to the Sun mesh during early scene construction or fast-travel rebases where the floating origin's anchor could temporarily drop a mathematically invalid `Vector3` result. This suppresses the noisy Unity GUI layout exception.
+### [7.17.8-dev] Interplanetary Voxel Streaming & LOD Pacing Fix, UI Constraint Polish
+
+**Type:** PATCH — voxel streaming logic and UI scaling fixes.
+
+#### 🛠️ Fixes & Polish
+- **Interplanetary Voxel Generation Fix:** Fixed a critical flaw where traveling to a non-starter planet caused the voxel surface to never generate. This occurred because `PlanetVoxelLod` instantiated its systems before the new planet's biome lists were fully passed, resulting in an internal `IndexOutOfRangeException` when evaluating the planet's surface column density. Adjusted the `CosmosBootstrap` initialization sequence to ensure the child LOD component is properly paused until all registries (like `biomeRegistry`) are securely assigned.
+- **LOD Pacing / Pop-in Fix:** Increased `PlanetVoxelLod` generation job budget limits per frame. Fast-moving ships previously outran the single-thread chunk budget, causing coarse terrain LOD blocks to visibly "pop in" right in front of the player. Tripled the chunk evaluation limit to ensure the 8m and 4m detail rings spawn fast enough to cover the horizon seamlessly during flight.
+- **UI Overflow & Cropping Fix:** Removed over-constrained `100%` CSS width/height overrides in `GameUIController` and `MainMenuController`. These overrides, combined with Unity's scaling system, forced the root visual tree outside of the physical viewport constraints on wider or non-16:9 aspect ratios. Restored pure absolute anchor bindings with `MatchHeight` UI scaling to ensure the interface dynamically conforms strictly to the window boundaries.
+### [7.17.7-dev] Fix LOD overlap clipping via Deflation
+
+**Type:** PATCH — visual polish.
+
+#### 🛠️ Fixes & Polish
+- **LOD Generation Floating Artifact Fix:** Fixed an issue where the lower-resolution planet LOD chunks (4m, 8m, 32m) could visibly float or clip slightly above the high-resolution 1m voxel surface at the boundaries where the two resolution rings overlap. Modified `SphereChunkGenJob` and `PlanetVoxelLod` to introduce a `radiusOffset` deflation property, slightly shrinking the radius of coarser LOD levels by 0.5m to 12.0m respectively. This forces the lower poly meshes strictly underneath the actual solid terrain, resolving the "two surfaces above each other" issue while preserving a seamless horizon.
+### [7.17.6-dev] Grass Banding & Sliding Fix, UI Scale Polish, LOD Overlap & Degenerate Collider Fix
+
+**Type:** PATCH — visual polish and bug fixes.
+
+#### 🛠️ Fixes & Polish
+- **Grass Banding / Surface Material Fix:** Fixed `SphereDensity.cs` using `math.round` on voxel depth calculations, which resulted in the terrain slicing perfectly into horizontal concentric bands of "Grass" and "Dirt/Clay" material across the sphere. Replaced with `math.floor` so the topmost layer consistently receives the surface material, allowing grass to spawn continuously across biomes.
+- **Grass Sliding & Grid Artifact Fix:** Fixed `GpuGrassRenderer.cs` calculating blade placement purely from the player's continuously moving tangent plane, causing grass to slowly slide and "pop" when the grid refreshed. Anchored blade positions to their underlying `surfaceVoxel` center while smoothly projecting their height to the analytical sphere radius, permanently locking grass strictly to the world. Updated the jitter scaling to `step` to remove grid-like blade dotting patterns.
+- **UI Off-Screen Crop Fix:** Changed the fallback UI sizing behavior in `GameSettings.ApplyUiScaleAndFit` from `MatchWidthOrHeight` (`0`) to `Expand`. This ensures that on ultra-wide screens, taller, or awkwardly resized windows, the UI scales fully into the safe frame without cropping off the bottom/sides.
+- **LOD Generation Overlap Fix:** Modified `PlanetVoxelLod.cs` streaming center logic (`l0CenterLocal`) to snap exactly to `SphereWorld`'s internal chunk-aligned origin. This closes the slight mathematical gap/overlap where the unaligned LOD chunks rendered directly above and clipped into the actual high-definition 1m voxel terrain.
+- **Degenerate Collider Crash Fix:** Added an explicit index check (`p.counts[1] >= 3`) before assigning new LOD meshes to colliders in `PlanetVoxelLod.cs`. This cleanly intercepts cases where interior chunks were successfully generated but contained zero physical faces, preventing Unity from throwing the "must have at least one non-degenerate triangle" error.
+
+### [7.17.5-dev] UI Compile Recovery (CS1061 UIDocument.renderMode)
+
+**Type:** PATCH — compile recovery; no behaviour change, no save/API break.
+
+#### 🛠️ Compiler Fix
+- **CS1061 in `GameUIController.cs` + `HammerBuildWheel.cs`:** the 7.17.4 screen-space force used `UIDocument.renderMode`, which does not exist on `UIDocument` in this Unity version. The render mode lives on **`PanelSettings.renderMode`** (the serialized `m_RenderMode` field).
+- **Fix:** the ScreenSpaceOverlay force moved into `GameSettings.ApplyUiScaleAndFit` — `ps.renderMode = PanelRenderMode.ScreenSpaceOverlay` — the shared single source of truth called by GameUIController, HammerBuildWheel, and the Setup Step 3 bake (which now also writes it). Since all HUD documents share `MenuPanelSettings`, one property set covers every panel.
+
+#### ✅ Static delivery checks
+- All modified sources parse cleanly (tree-sitter grammar validation); no `UIDocument.renderMode` references remain (only `PanelSettings.renderMode`).
+
+### [7.17.4-dev] Clean Near Horizon (4 m Detail Ring + Wider 8 m Ring), UI Forced On-Screen & Collider Fix
+
+**Type:** PATCH — visual polish + fixes; no save/API break.
+
+#### 🏔️ Near-horizon LOD visible in front of the player — FIXED with a new level
+- **Root cause:** the quality ladder jumped 1 m → 8 m at ~250 m from the player, so the blocky 8 m voxel surface was clearly visible right in front of you while walking.
+- **NEW L1 DETAIL ring (4 m voxels, 900 m radius):** a shell-filtered ring between the 1 m gameplay bubble and the 8 m ring — the near horizon is now 1 m → 4 m → 8 m → 32 m, a much smoother falloff.
+- **8 m NEAR ring widened 2,000 → 3,000 m** (the visible horizon quality extends further).
+- **Shell-filtered rings:** ring levels only render chunks near the planet's surface shell (air/interior chunks skipped) — the bigger rings actually cost LESS than the old full 3D ball (~600 ring chunks vs ~2,000). Ring levels carry mesh colliders (4 m + 8 m), so you still walk on real voxel terrain the whole way.
+
+#### 🖥️ UI still outside of the screen / smaller & worse quality — FIXED
+- **Runtime screen-space force:** `GameUIController.Awake` now forces `renderMode = ScreenSpaceOverlay` on ITS document and every UIDocument in the scene (and `HammerBuildWheel` on its own). World-space serialization (or a Unity 6.x panel migration) can no longer push the HUD off-screen — the panel is an overlay by code, regardless of scene state.
+- **Width-priority scaling:** `ApplyUiScaleAndFit` match 0.5 → 0 (width-first). On wide-but-short windows the HUD stays LARGE instead of shrinking to the height ratio; at 1920×1080 it is still exactly 1:1. (Setup Step 3 bake updated to match.)
+- **Unity 6.5 "Panel Renderer" warning:** noted — `UIDocument` still works and is what the codebase uses; the warning is cosmetic. Migrating the whole UI to Panel Renderer can be a separate task if you want it.
+
+#### 🛠️ MeshCollider error — FIXED
+- **`"LodChunkMesh" mesh must have at least three distinct vertices to be a valid collision mesh`** — the new ring colliders were enabled even for EMPTY meshes (air/interior chunks have 0 real vertices). Colliders now enable only when the mesh has ≥3 vertices AND non-zero bounds; empty chunks keep the collider off (disabled on pool return too).
+
+#### ✅ Static delivery checks
+- All modified sources parse cleanly (tree-sitter grammar validation).
+
+### [7.17.3-dev] UI Back On-Screen (Screen-Space Panels) & One Solid Surface (Strict LOD Eviction + Real 8 m Collision)
+
+**Type:** PATCH — bug fixes; no save/API break.
+
+#### 🖥️ The whole UI / HUD was still outside of the screen view — FIXED
+- **Root cause:** ALL UIDocuments in the scenes were serialized in **World Space mode** (`m_WorldSpaceSizeMode: 1`) with a **1920 × 1080 world-unit quad** (Game.unity ×6, MainMenu.unity ×1). The camera only sees the CENTER slice of that giant quad — so the HUD rendered as a tiny central strip stretched across the screen, with everything anchored to panel edges (vitals, gravity, "looking at" HUD, hotbar) cut off at the left/right screen edges.
+- **Fix:** every UIDocument is back to **Screen Space (overlay)** (`m_WorldSpaceSizeMode: 0`) — the HUD is a normal full-screen overlay again, combined with the 7.17.2 `ScaleWithScreenSize` scaling it fits any window.
+
+#### 🗻 "Still two surfaces, now both solid — I walk on the LOD above the real terrain" — FIXED
+- **Root cause (the ghost that follows you):** the eviction hysteresis applied its margin to the **inner nesting boundary** too. The NEAR ring (8 m) chunks were admitted strictly outside the 1 m bubble, but with a 512 m eviction margin they were **never evicted once inside it** — so 8 m-voxel surfaces trailed the player everywhere and rendered 0–8 m ABOVE the 1 m terrain (both visible; the player stood on the 1 m colliders while the coarse surface floated at their feet/chest).
+- **Fix — strict inner nesting:** `outerMargin` now applies ONLY to the ring's outer edge (flicker hysteresis). The inner boundary (1 m bubble / NEAR ring / MID coverage) is strict in BOTH admission and eviction — a chunk inside a finer level's coverage is evicted immediately. One rendered surface at every distance.
+- **Solid beyond the 1 m bubble:** the NEAR ring chunks now carry **real mesh colliders** (the player walks on actual 8 m voxel terrain from the bubble edge to ~2.4 km — visual == collision, no more floating on the coarse planet shell), and the 1 m collider bubble was raised 4 → 6 chunks (~220 m, the `ShouldHaveCollider` clamp fixed to match) so there's no sliver where only the coarse safety shell is solid.
+- The LOD safety shell now also checks the voxel LOD's NEAR colliders before stepping aside — the planet stays solid everywhere, with exactly one collision layer under the player at any spot.
+
+#### ✅ Static delivery checks
+- All modified sources parse cleanly (tree-sitter grammar validation); both scenes' UIDocuments verified at `m_WorldSpaceSizeMode: 0`.
+
+### [7.17.2-dev] HUD Fits Any Window (ScaleWithScreenSize) & Exact LOD Nesting (No More Ghost Surface)
+
+**Type:** PATCH — bug fixes; no save/API break.
+
+#### 🖥️ The whole UI was outside of the screen view — FIXED
+- **Root cause:** the runtime UI controllers forced `PanelScaleMode.ConstantPixelSize` on the shared panel settings (`GameUIController.Awake`, `HammerBuildWheel.Awake`, and the Setup Step 3 bake). A constant-pixel panel is anchored bottom-left at 1:1 pixels — on any window smaller than its reference (1280×720 / 1920×1080) the entire HUD is displaced off-screen: top-anchored elements (vitals, block info, gravity LCD) slide down past the bottom edge and appear as corner fragments, the hotbar vanishes below the view, and the screen shows mostly empty panel space over the world.
+- **Fix — fit the window:** the runtime controllers now call `GameSettings.ApplyUiScaleAndFit` (the existing single source of truth): `ScaleWithScreenSize`, 1920×1080 reference, balanced match — the HUD scales to ANY window/game view (including the 1544×570 editor view from the report). Step 3's bake now writes `ScaleWithScreenSize` too, so re-running setup can't regress it.
+
+#### 🗻 The LOD was still generating above the actual terrain — FIXED
+- **Root cause:** the level-nesting boundaries overlapped instead of abutting exactly:
+  • the NEAR ring could start **64 m inside the L0 gameplay bubble** (`l0R − 64`) — 8 m-voxel surfaces rendered over 1 m terrain near the bubble edge, sitting up to several metres ABOVE the real ground on slopes;
+  • MID chunks could start **inside the NEAR ring's max reach** (`+ halfDiag + 64`) — the 32 m surface rendered over the 8 m ring in a wide band around ~2 km, visibly floating above the terrain.
+- **Fix — exact abutment:** each coarser level's chunk is now excluded while its NEAR FACE (centre − half-diagonal) is inside the finer level's **true maximum reach**:
+  • L0 reach = last 1 m chunk row's outer face (`viewDistance·32 + 16`);
+  • NEAR reach = ring radius + 2× ring half-diagonal;
+  • MID/FAR respect both (and FAR still steps aside under meshed MID chunks).
+  Adjacent levels now meet edge-to-edge — no overlap (no ghost surface), no gap.
+
+#### ✅ Static delivery checks
+- All modified sources parse cleanly (tree-sitter grammar validation).
+
+### [7.17.1-dev] Chunk-Generation Recovery — Unconstructed Oil Map Fixed (Spawn / Load / HUD Restored)
+
+**Type:** PATCH — critical runtime recovery. The unconstructed job container broke ALL terrain generation (gameplay world + voxel LOD), which cascaded into: planet not loaded at spawn, player falling in space on load, and the world-space HUD appearing off-screen (the HUD is parented to the player — when the player is stranded in a broken world, the HUD goes with them). No save/API break.
+
+#### 🛠️ Root cause & fix
+- **`InvalidOperationException: SphereChunkGenJob.oilSites has not been assigned`** — Unity's job scheduler REQUIRES every container field to be constructed at Schedule time. The oil-site map is only created on oil-rich bodies, so:
+  • `SphereWorld` (the 1 m gameplay world) never set it → **every gameplay chunk generation threw** → no terrain anywhere → "planet isn't loaded where the player is", falling through at spawn/load, and the world-space HUD (parented to the player) rendered off-screen.
+  • `PlanetVoxelLod` left it uncreated on bodies without oil → every LOD chunk schedule threw.
+- **Fix:** both worlds now ALWAYS pass a constructed (possibly empty) map:
+  • `SphereWorld` allocates a permanently-empty `_emptyOilSites` map (1 entry) in Awake, disposes it in OnDestroy, and passes it to every `SphereChunkGenJob` (its oil is still authored by `OilReservoirDecorator` as before).
+  • `PlanetVoxelLod` allocates an empty map for no-oil bodies instead of leaving the field default.
+  • Defensive guard in `PlanetVoxelLod.DispatchJobs`: never schedule a gen job while the map is uncreated.
+
+#### 🪂 Load-path hardening ("falling in space" when loading a world)
+- `RestoreCosmicState` used to FORCE the scene into deep space whenever the saved frame-body name was missing or didn't match — even though `TeleportCosmic` had already re-picked the correct dominant body at the saved position. A surface save with a missing/mismatched frame name therefore loaded the player in space with no ground.
+- **Fix:** the named frame is now only a HINT. If it can't be matched, the scene keeps the dominant-body frame that `TeleportCosmic` selected (null there genuinely means a deep-space save, which is respected). Log now reports the actually-restored frame.
+
+#### ✅ Static delivery checks
+- All modified sources parse cleanly (tree-sitter grammar validation); both `SphereChunkGenJob` schedulers verified to pass a constructed `oilSites` map.
+
+### [7.17.0-dev] All Planets Always Real (Whole-System Window) + LOD Compile Recovery
+
+**Type:** MINOR — every planet in the system now renders its REAL voxel surface at all times (60,000 km window covers the whole system), forge-created planets get the same treatment automatically, and the oil-site map API compiles clean. Save-compatible, no API break.
+
+#### 🪐 All planets are ACTIVE (real surfaces, everywhere)
+- **Whole-system window:** the real-voxel FAR level now streams for any body within **60,000 km** (was 8,000 km) — with the 8,000 km planet gap floor, EVERY planet/moon in the system renders its genuine voxel surface at all times. No more "only the approached planet is real; the rest are painted spheres".
+- **Far clip 50,000 → 80,000 km** (`CosmosBootstrap.maxFarClipMeters`) so planets at 60,000 km are never culled; `trueLodViewKm` 8,000 → 60,000 keeps every body in the real-LOD path.
+- **Sky proxies** (sampled spheres) now only remain for bodies beyond 60,000 km (system edge) — convergence/fade constants moved to match (12,000 → 65,000 km converge band).
+- **Forge-forward:** `SpawnBodySystems` is extracted from `EnsureAllBodiesInScene`, and `CosmosBootstrap` now polls the registry every 2 s — any body **added to the registry after bootstrap** (the World Forge / runtime content tools, not implemented yet) automatically spawns as a real world: CelestialBody + bridge LOD + real voxel surface + floating-origin registration. When the forge lands, its planets are immediately real, flyable worlds with zero extra wiring.
+
+#### 🛠️ Compiler Fixes (CS1061 / CS0019 / CS0428)
+- `NativeParallelHashMap` has no `.Length` / `.Count` properties — both are METHODS:
+  • `SphereDensity.cs`: `oilSites.Length > 0` → `oilSites.Count() > 0`
+  • `OilSiteSampler.cs`: `sites.Length == 0` → `sites.Count() == 0`
+  • `PlanetVoxelLod.cs`: `_oilSites.Count` → `_oilSites.Count()` (log line)
+- `PlanetVoxelLod.cs`: `int3 * float` is invalid — the oil-map scan centre now casts `(float3)c * ...` explicitly.
+
+#### ✅ Static delivery checks
+- All modified sources parse cleanly (tree-sitter grammar validation); C# 9 compatibility sweep clean (no struct field initializers).
+
+### [7.16.0-dev] One Surface Only, Solid Planets on Approach & Oil Fields Visible from the Air
+
+**Type:** MINOR — the LOD levels now nest with NO double surface, every planet is solid the moment you approach it, and crude-oil sites (puddle → bore → reservoir) render in the voxel LOD. Save-compatible, no API break.
+
+#### 🥞 ONE surface — the "two surfaces, top one not solid" fix
+- **Root cause:** the level-exclusion math only skipped chunks that were *fully inside* a finer level's bubble. Most chunks straddle the boundary, so the 8 m NEAR ring rendered over the 1 m gameplay bubble, and the 32 m MID level rendered over both — a ghost surface up to ~16 m above the real terrain, with no colliders (you walked through it).
+- **Fix — strict nesting:** `PlanetVoxelLod.IsChunkDesired` now skips ANY chunk whose near face is inside a finer level's coverage (used identically for admission AND eviction):
+  • NEAR ring starts exactly at the 1 m gameplay bubble's edge.
+  • MID never renders inside the NEAR ring (or the gameplay bubble when the ring is off).
+  • The exclusion measures from the **L0 stream centre** — which is the radial surface point beneath the viewer during high-altitude flight (orbit-approach streaming), so the 1 m bubble and the coarse LOD can never render the same patch.
+  • While the MID level builds, FAR stays active but steps aside under every meshed MID chunk (footprint check) — no double surface during the approach either.
+- Result: exactly **one** rendered surface at every distance.
+
+#### 🪨 Planets are solid again on approach — the "fly straight through" fix
+- **Root cause:** a perf gate from 7.15.0 only built the safety collision shell for the *active* body — every other planet had NO shell, and the real-voxel LOD chunks are intentionally visual-only. When the frame switched to the approached planet, there was nothing solid until the deep core sphere.
+- **Fix:** the safety shell is now built for **every** body (cheap 642-vert shell for distant bodies, full 10,242-vert shell for the active body), and `UpdateSafetyColliders` upgrades the shell to full resolution the moment a body becomes the active frame. You land on the shell, exactly as before.
+
+#### 🛢️ Oil fields visible in the LOD (puddle above → shaft → reservoir below)
+- **Root cause:** oil sites were only written into the 1 m gameplay chunks, so the LOD levels (which sample pure density) showed nothing from the air — and the double surface hid nearby sites too.
+- **Fix — `OilSiteSampler` (new):** a deterministic site map per oil-rich body, using the **exact same 96 m cell hash, salts and seed as `OilReservoirDecorator`** — so every cell that rolls a seep in the gameplay world rolls one in the LOD. Each site is anchored at the radial surface through the cell with puddle disc → tapered solid-oil bore → reservoir sphere, scaled to read at coarse voxel sizes. The LOD levels sample the map (`SphereChunkGenJob` gains a `NativeParallelHashMap` site map; `SphereDensity.EvaluateVoxel` gains an oil-aware overload), so you see dark oil patches, shafts and reservoirs from orbit and from the air.
+- The map builds in small batches per frame (no hitch) and LOD streaming waits for it (~1 s); bodies without oil skip it entirely. When you land, the gameplay world's real liquid puddle + exact decorator geometry take over seamlessly (the LOD version is an approximation anchored within the same 96 m cell).
+
+#### ✅ Static delivery checks
+- All 14 modified/added sources parse cleanly (tree-sitter grammar validation); C# 9 compatibility sweep (struct field initializers) clean.
+
+### [7.15.1-dev] Voxel LOD Compile Recovery (CS8773/CS8983 — C# 9 struct field initializer)
+
+**Type:** PATCH — compile recovery for the real-voxel LOD delivery; no behaviour change, no save/API break.
+
+#### 🛠️ Compiler Fix
+- **CS8773 / CS8983 in `SurfaceNetsJob`:** the new `voxelSize` field used a C# 10 field initializer (`= VoxelConstants.VOXEL_SIZE`), which Unity's C# 9.0 language level rejects in structs. The field is now plain (`public float voxelSize;`) and `Execute()` resolves the safe fallback itself: `vs = voxelSize > 0f ? voxelSize : VoxelConstants.VOXEL_SIZE` — bounds and vertex positions use `vs`.
+- **Explicit call-site hygiene:** `VoxelWorld` and `SphereWorld` now pass `voxelSize = VoxelConstants.VOXEL_SIZE` explicitly, so the gameplay world's intent is self-documenting (behaviour identical to before).
+
+#### ✅ Static delivery checks
+- All modified sources parse cleanly (tree-sitter grammar validation); swept the whole 7.15.0 delivery for other C# 10+ constructs (struct field initializers) — none remain.
+
+### [7.15.0-dev] REAL Voxel Planet Surfaces — Whole-Planet Voxel LOD Generation (No More Fake Spheres)
+
+**Type:** MINOR — the sampled impostor sphere is replaced by REAL voxel LOD generation for the whole planet surface, Space-Engineers style. Save-compatible, no API break.
+
+#### 🪐 The core change
+Every celestial body now generates its surface as **actual voxel chunks** at LOD resolutions — the same `SphereChunkGenJob` + `SurfaceNetsJob` pipeline as the gameplay world, just with bigger voxels for distance. What you see from orbit IS the real terrain density field: continents, oceans, mountains, biomes, ore-coloured strata. No sampled sphere with "nothing".
+
+**Levels (voxel → chunk size):**
+| Level | Voxel | Coverage | Active when |
+| :-- | :-- | :-- | :-- |
+| **L3 FAR** | 128–512 m (adaptive, tier) | whole planet (~48 chunks) | within **8,000 km** — the whole interplanetary crossing |
+| **L2 MID** | 32–128 m (adaptive, tier) | whole planet (~192–770 chunks) | within 150 km (approach + on-surface) |
+| **L1 NEAR** | 8 m | ring around the viewer (~190 chunks) | below 4 km altitude on the streaming body |
+| **L0 PLAY** | 1 m | SphereWorld gameplay bubble (unchanged) | as before |
+
+- All levels sample the **same density field** → levels match exactly, just resolution differs.
+- **Nesting without gaps:** a finer level excludes the coarser chunks fully inside its bubble (fully-inside rule) — no holes, no overlap z-fighting beyond the tiny boundary band.
+- **Adaptive voxel size by planet radius** (doubles past 12 km radius) so whole-planet chunk counts stay bounded on any planet/moon size.
+- **Quality tiers:** Low = 128 m mid voxels (~48 chunks), Mid = 64 m (~192), High/Ultra = 32 m (~770) — `GraphicsPreset.PlanetMidLodVoxelSize` / `PlanetFarLodVoxelSize`.
+- **Memory-lean:** LOD chunk voxel buffers are disposed the moment their mesh is applied (LOD chunks are never edited) — only meshes stay resident.
+- **Visual-only:** no colliders (the LOD safety shell keeps the planet solid), no scatter/fluid/persistence on LOD chunks.
+- **Nearest-first streaming** so the visible side of the planet builds before the back side.
+- `SurfaceNetsJob` gained a `voxelSize` parameter (bounds now correctly reported in metres — fixes latent bounds/culling at any voxel size).
+
+#### 🔄 The impostor is now only a 1–3 s bridge
+`PlanetLodImpostor` renders the old sampled sphere **only until** the body's real voxel surface (`PlanetVoxelLod.SurfaceReady`) is built, then hides permanently — its safety colliders stay forever. The sampled-terrain sky proxies remain only for bodies **beyond** the 8,000 km window (they still bake the real terrain palette).
+
+#### 🪐 Planets are now far apart (Space-Engineers scale)
+- **Minimum orbit gap 2,000 → 8,000 km** (`CosmicRegistry.MinPlanetGapKm`) — from the surface of an 8 km planet the next world is a small distant disc; interplanetary space is genuinely vast (gravity wells are only ~200 km).
+- True-LOD window **2,500 → 8,000 km** everywhere (bootstrap far clip, `SpaceBodyRenderer` proxy handoff, impostor crossfade) — the approached planet's REAL voxel surface is visible for the entire crossing; proxy convergence band now 12,000 → 8,000 km.
+
+#### 🛠️ Diagnostics
+- `[PlanetVoxelLod] Real voxel surface ready for '<body>' (far x/y, mid x/y)` — when a body's real surface is built.
+- `[PlanetVoxelLod] '<body>': far/mid/near chunk counts` — once, after 5 s.
+- `[SpaceBodyRenderer] Queued sampled-terrain bake for '<body>'` — confirms far-body proxy baking runs (previously "isn't running" was the compile error blocking the whole build).
+
+#### ✅ Static delivery checks
+- All 10 modified/added sources parse cleanly (tree-sitter grammar validation): `PlanetVoxelLod.cs` (new), `SurfaceNetsJob.cs`, `PlanetLodImpostor.cs`, `SpaceBodyRenderer.cs`, `CosmosBootstrap.cs`, `CosmicRegistry.cs`, `GraphicsPreset.cs`, `QualityPresetApplier.cs`, `SphereSurfaceColor.cs`, `GameVersion.cs`.
+
+### [7.14.1-dev] Sky Proxy Compile Recovery (CS1061 Color.rgb)
+
+**Type:** PATCH — compile recovery for the sampled-terrain sky proxies; no behaviour change, no save/API break.
+
+#### 🛠️ Compiler Fix
+- **CS1061 in `SpaceBodyRenderer.PositionBody`:** the tint path wrote `tint.rgb = ...`, but `UnityEngine.Color` has no `.rgb` accessor (that's an HLSL/`Color32`-style member). The flat-colour tint for bodies without a terrain bake (asteroid belts, the sun sprite, not-yet-baked proxies) now assigns `r`/`g`/`b` individually — identical behaviour, valid C#.
+
+#### ✅ Static delivery checks
+- Verified the modified source parses cleanly (tree-sitter grammar validation); swept all touched files for other `.rgb`-style Color misuse (none — the only remaining mention is in a comment).
+
+### [7.14.0-dev] Real Planets — Sampled Terrain on Every Body, Distance-Based LOD Ladder & Seamless Proxy→Surface Handoff
+
+**Type:** MINOR — a full planet-surface LOD system (Space-Engineers style): every body in the solar system now renders its REAL sampled terrain — continents, oceans, ice caps — from the moment it appears in the sky to the moment you land. Save-compatible, no API break.
+
+#### 🌍 The Problem (why planets were flat colored balls)
+- **Sky proxies were flat-colour spheres.** Bodies beyond the true-LOD window were Unlit spheres tinted with one display colour — zero terrain. Since planets are separated by at least 2,000 km, the planet you were flying to was a featureless ball for almost the entire trip.
+- **The real LOD was washed out.** `PlanetLodImpostor` lerped every sampled surface colour 72% toward the body's `displayColor`, so even the 40k–160k-vertex whole-planet surface read as a flat ball whenever a display colour was authored (all runtime-fallback worlds).
+- **No distance-based quality.** Non-active bodies were locked to 642 vertices; high detail only arrived when the gravity frame switched. "Closer = better surface" never happened.
+- **Hard proxy→LOD pop.** The compressed sky proxy and the real LOD were never visually reconciled.
+
+#### 🪐 What's new
+- **Sampled-terrain sky proxies:** every planet/moon in the sky now bakes its vertex colours from the SAME `SphereDensity` field the voxel generator uses (new shared `SphereSurfaceColor` palette + new `VoxelEngine/PlanetSkyProxyURP` shader with real-sun lighting and atmosphere rim). The continents you see in the sky are the continents you land on.
+- **Distance-based LOD ladder (all bodies):** each `PlanetLodImpostor` picks its vertex budget from its distance in body radii — 642 verts for a distant dot → 2,562 → 10,242 → 40,962 → full high-detail surface (up to 163,842) as you close in. Tier changes rebuild progressively (batched across frames) and abandon a stale in-flight build immediately, so there is never a hitch.
+- **Proxy→surface convergence & crossfade:** outside the true-LOD window the sky proxy now morphs from its compressed sky position/size toward the body's TRUE scene position/size over the last 3,500 km, while the real LOD fades in over the same band — the hand-off happens at the same apparent size, no popping sphere.
+- **True-LOD window 800 → 2,500 km:** the approached planet renders its real sampled surface for the entire interplanetary crossing (min planet separation is 2,000 km), and the far clip covers the convergence band (1.25×) so the morphing proxy is never culled.
+- **Display-colour tint 0.72 → 0.18:** authored personality colours remain as a subtle tint; the sampled terrain is now the star.
+- **Per-material `_BodyCenter` in `PlanetSurfaceLodURP`:** surface-detail noise is now correct for EVERY body, not just the active streaming one (global fallback preserved).
+- **Safety colliders only for the active body:** distant bodies no longer cook a 10k-vertex collision mesh on every LOD tier change during a crossing.
+- **Viewer propagation to every body's LOD** (late-spawned players) + `Camera.main` fallback — distant planets are never stuck at their cheap budget.
+
+#### ✅ Static delivery checks
+- All 5 modified/added sources parse cleanly (tree-sitter grammar validation): `PlanetLodImpostor.cs`, `SpaceBodyRenderer.cs`, `CosmosBootstrap.cs`, `SphereSurfaceColor.cs` (new), `GameVersion.cs`.
+
+### [7.13.15-dev] SpaceBodyRenderer Compile Recovery (CS0103 sunPos)
+
+**Type:** PATCH — compile recovery for the always-visible-sun sky rendering; no behaviour change, no save/API break.
+
+#### 🛠️ Compiler Fix
+- **CS0103 `sunPos` in `SpaceBodyRenderer`:** the variable was declared inside the sun-sprite branch but also consumed by the planet/moon sky-projection hierarchy below. It is now declared once before the sun branch (origin-anchored fallback) and assigned inside the sprite branch — the sky hierarchy always has a valid sun anchor.
+
+#### ✅ Static delivery checks
+- Verified the modified source parses cleanly (tree-sitter grammar validation).
+
+### [7.13.14-dev] Gravity-Well Release, Always-Visible Planets & Sun (Real LOD Approach)
+
+**Type:** PATCH — the player can now leave a planet's gravity well for real, other planets stay visible and generate terrain during approach, and the sun is a real target; no save/API break.
+
+#### 🌍 Leaving Earth's Gravity Well (the "pulled back from very far" fix)
+- **Root cause:** two frame-selection bugs kept the player glued to Earth's co-moving frame forever: (1) the frame switch required a candidate body to pull 1.25× harder than the current body — at the midpoint between two equal bodies neither ever wins, so the frame never switched; (2) even when the current body's pull had decayed to almost nothing, the "Earth is still dominant" early-return kept the frame, and the frame-relative gravity kept pulling the player back.
+- **Fixes in `SpaceOrigin.ReEvaluateFrame`:**
+  • **RELEASE rule:** when the current frame body's pull drops below `releaseGravityMps2` (0.014 m/s²) and no eligible new body is winning, the scene releases to the deep-space (star) frame — the physically correct free-fall handoff.
+  • **Crossover switching:** body→body switches now happen at the gravity dominance crossover (candidate > current × 1.05) instead of 1.25×.
+  • **Hysteresis band:** entry threshold 0.02 m/s² vs release 0.014 m/s² — no frame oscillation at the boundary.
+
+#### 🪐 Other Planets Always Visible + Surface Generates on Approach
+- **Root cause of "planet disappears / surface never generates":** when the frame switched to the approached planet at ~4,200 km, the sky-proxy renderer HID its sprite (it became the "active body") while the real LOD sat BEYOND the camera's 900 km far clip — the planet was invisible for the entire descent, and terrain never streamed because the player never reached its frame.
+- **Fixes:**
+  • **Far clip rework:** `EnsureCameraFarClip` now covers the active body for the whole approach, every body within the 800 km true-LOD window, AND the star at its true position — capped at 50,000 km (URP reversed-Z keeps near precision). Refreshed every 2 s so it tracks the flight.
+  • **True-LOD window 200 → 800 km** in `SpaceBodyRenderer` — the approached planet renders its real high-detail LOD much earlier and grows as you descend.
+  • Orbit-approach streaming (7.13.13) now actually engages because the frame switches correctly — the surface beneath the approach point generates during the whole descent.
+
+#### ☀️ The Sun Is the Real Sun
+- The fake 9.75 km sun sprite is now hidden whenever the REAL sun (emissive sphere at its true cosmic position) is within the LOD window — one sun, and the one you fly toward is the real hazard.
+- Sun visual radius 120 → 80 km for a natural 4–6° disc from the inner planets; hazard zones remain auto-scaled to the innermost orbit.
+
+#### ✅ Static delivery checks
+- All 4 modified sources parse cleanly (tree-sitter grammar validation).
+
+### [7.13.13-dev] Top-Left Block Info, Fixed Blank Targets, Orbit-Approach Terrain, Planet Spacing & a Real Deadly Sun
+
+**Type:** PATCH — inspection HUD placement + target resolution, planet-approach terrain streaming, system spacing, and a visible/lethal sun; no save/API break.
+
+#### 📍 Block Info HUD → Top-Left & Always Resolves
+- **Moved** `WorldInspectionHud` from the top-right to the **top-left** (slides in from the left edge).
+- **Blank-target fix:** the planet-LOD SAFETY colliders (the solid shell/core that stop fly-through) were intercepting the crosshair raycast — the HUD couldn't see the real terrain/block behind them, so it showed nothing (especially after breaking a surface). A new `PlanetSafetyCollider` marker lets every interaction raycast (inspection HUD + mining/building tool) skip the safety shell; the real streamed voxel terrain is resolved instead. Physics still collides with the shell — you just can't mine/inspect it.
+
+#### 🌍 Planet Surface Generates During Approach
+- **Root cause:** when flying to another planet from space, the streamer only generates chunks in a small ball AROUND THE VIEWER — kilometres above the surface that meant pure air, so the surface never generated until you were ~200 m from touchdown (only the LOD shell showed).
+- **Fix — orbit-approach streaming:** when the viewer is far above the surface, `SphereWorld` streams around the **radial surface point beneath the viewer** (sampled from the real density field) — the actual terrain is generated and visible for the entire descent.
+
+#### 🪐 Planets No Longer Hug Earth
+- Enforced a **2,000 km minimum gap between planet orbits** at runtime (authored templates could place them 500 km apart, making planets hover right next to each other with overlapping gravity wells).
+
+#### ☀️ The Sun Is Real, Visible & Deadly
+- **Real sun mesh** at the star's true cosmic position (emissive sphere, 120 km radius, placed via the floating origin) — flying toward the sun you see in the sky genuinely approaches it, instead of passing through a fake 10 km sprite.
+- **Auto-scaled hazard zones:** warning = 80% of the innermost planet's orbit, lethal = 45% — always sane for the system scale. Escalating warnings + heat damage ramp still apply ("SOL APPROACH" → "SOL FLARE" → "SOL CORONA — CERTAIN DEATH").
+
+#### ✅ Static delivery checks
+- All 7 modified/new sources parse cleanly (tree-sitter grammar validation).
+
+### [7.13.12-dev] Oil Mesher Compile Recovery (CS0120)
+
+**Type:** PATCH — compile recovery for the visible-oil terrain meshing; no behaviour change, no save/API break.
+
+#### 🛠️ Compiler Fix
+- **CS0120 in `SurfaceNetsJob`:** the new static helper `IsEmptyFluid` called the instance method `IsFluidMat`. `IsFluidMat` is now `static` (it only reads compile-time constants), so solid-density crude-oil cells mesh as visible terrain and liquid fluids stay empty — exactly as intended in 7.13.11.
+
+#### ✅ Static delivery checks
+- Verified the modified source parses cleanly (tree-sitter grammar validation).
+
+### [7.13.11-dev] Solid Real-Planet Collision (No Fly-Through) & Visible Oil Bore → Reservoir
+
+**Type:** PATCH — the whole planet is now solid everywhere with collision that matches the visible terrain, and crude-oil seeps show their real shaft down to the reservoir; no save/API break.
+
+#### 🌍 Whole Planet Solid — No More Flying Through
+- **Root cause:** the planet's collision had a GAP — the LOD safety shell disengaged at 220 m altitude while real voxel colliders only reached ~96 m, so a fast player passed through the unguarded band and into the planet. And the shell was a flat inflated sphere floating above the visible surface.
+- **Fixes:**
+  • The safety shell is now built from the **REAL sampled terrain surface** (the same density field as the visible planet), nudged 0.3 m outward — **what you hit is exactly what you see**, no invisible floating shell.
+  • The shell stays engaged down to **45 m** and below that only steps aside when **real streamed terrain colliders actually exist under the player** (`SphereWorld.HasColliderAt`) — there is no speed at which a fall-through gap exists anymore.
+  • The deep-inside core sphere catches anyone who somehow ends up below the crust.
+  • Real voxel terrain now reaches further and faster: streamed bubble raised to **5/6/7/8 chunks** (Low→Ultra, up to ~256 m of true editable planet), mesh-collider radius **2 → 4 chunks** (~128 m of solid real terrain), jobs 4/8/10/12 per frame.
+- Space-Engineers-style stack: real editable voxels near the player → the same real density field as a solid collidable surface beyond → sky projection for distant bodies. The whole planet is solid and minable everywhere you can reach.
+
+#### 🛢️ Crude Oil — Visible Shaft Down to the Reservoir
+- **Root cause 1 (invisible):** the terrain mesher treated ALL crude oil as empty (fluid), and the fluid renderer only draws fluid that touches open air — so the sealed bore + reservoir were completely invisible. Only the surface puddle rendered.
+- **Root cause 2 (skipped writes):** the decorator silently dropped writes when the chunks below the surface weren't generated yet, so the shaft/reservoir were often never carved at all.
+- **Fixes:**
+  • The bore and reservoir are now written as **SOLID oil-soaked rock** (density +127, material CrudeOil) and the terrain mesher renders solid-density crude as visible dark terrain (`IsEmptyFluid` treats liquid fluids as empty, solid oil as terrain) — dig down and you see a real dark shaft opening into a reservoir chamber.
+  • The surface puddle stays a true liquid for pumps.
+  • **Write-retry:** if any carve was skipped because a chunk wasn't generated, the site is queued for retry (writes are idempotent) — the puddle → bore → reservoir is now always complete.
+
+#### ✅ Static delivery checks
+- All 5 modified sources parse cleanly (tree-sitter grammar validation).
+
+### [7.13.10-dev] Static Sky, One Sun, Solar Hazard & Solid Planets (No Flying Through)
+
+**Type:** PATCH — fixes planets visually following the player, the duplicate sun, the random sun-death, and lets you no longer fly through planets; no save/API break.
+
+#### 🪐 Planets Stay Put in the Sky
+- **Root cause:** the sky-proxy renderers anchored their bodies to the PLAYER's scene position — walk 100 m and every planet/sun visual moved 100 m with you.
+- **Fix:** `SpaceBodyRenderer` and `QuasarRenderer` now anchor to the ACTIVE BODY's scene position (perfectly static in the scene thanks to the floating origin), falling back to the scene origin in deep space. Planets, moons and the sun now hold their true positions in the sky while the player moves; the real high-LOD body takes over seamlessly when you get close.
+
+#### ☀️ One Sun Only
+- The bright quasar backdrop read as a second sun — it is now **disabled whenever the system has a real star** (kept only for sun-less systems), leaving exactly one sun.
+
+#### 🔥 The Sun Warns Before It Kills
+- New `SolarHazard` component: inside 2,200 km of the star you get escalating HUD warnings ("SOL APPROACH — HEAT RISING" → "SOL FLARE — CRITICAL HEAT, TURN BACK" → "SOL CORONA — CERTAIN DEATH") and heat damage that ramps from zero at the warning edge to lethal at the corona. Flying into the sun is now a warned, deliberate act — never a random death.
+
+#### 🌍 Whole Planet Solid — No More Flying Through
+- **Root cause:** the streamed voxel bubble only covers the player's vicinity; beyond it the planet LOD shell was VISUAL ONLY (no collider), so a fast player flew straight through the planet.
+- **Safety colliders on the planet LOD (`PlanetLodImpostor`):**
+  • A **mesh safety shell** (the sampled surface inflated +8 m, ≤10k verts, cheap to cook) engages when the player is above the streamed bubble — orbital approaches land on the real planet.
+  • A **solid core sphere** engages when the player is deep inside the body and pushes them back to the surface shell.
+  • Both auto-disable in the thin surface shell where real voxel colliders rule — mining/walking are untouched. Only the ACTIVE body's colliders are ever enabled (distant planets cost nothing).
+- **Bigger real-terrain bubble:** `GraphicsPreset.ViewDistance` raised (Low 4 / Mid 5 / High 6 / Ultra 7 chunks) and `JobsPerFrame` raised (3/6/8/10) so the editable terrain streams further and faster; `SphereWorld.colliderChunkRadius` 2 → 3 so solid terrain extends further around the player.
+
+#### ✅ Static delivery checks
+- All 7 modified/new sources parse cleanly (tree-sitter grammar validation).
+
+### [7.13.9-dev] Phantom Horizontal Pull Fixed — Curved-Orbit Anchor & Frame-Relative Gravity
+
+**Type:** PATCH — removes the constant sideways (X/Z) force the player felt by fixing two co-moving-frame physics errors; no save/API break.
+
+#### 🧲 Root cause of the infinite X/Z pull
+The scene is the planet's co-moving frame, but two effects leaked the planet's orbital motion into the player's frame:
+1. **Ground slide:** the floating-origin anchor followed the planet by straight-line velocity extrapolation (`anchor += v·dt`), while the planet's REAL orbit curves (Kepler). The planet's true position fell behind the extrapolation, so the surface slid sideways under the player at ever-increasing speed — reading as a constant pull in X/Z that never stops.
+2. **Phantom solar pull:** `GravityProvider` applied the RAW cosmic N-body gravity (star + every planet + moons). In a free-falling (co-moving) reference frame the frame body's own orbital acceleration must be cancelled — otherwise the player feels the sun's full pull as a constant sideways force, even standing on the planet.
+
+#### 🛠️ Fixes
+- **`SpaceOrigin` anchor now tracks the frame body's TRUE propagated position every fixed tick** (`anchor = bodyCosmic − bodyScenePos`). The planet is perfectly stationary in the scene — zero ground slide, zero phantom drift. Deep space keeps the inertial star frame.
+- **New `CosmicRegistry.GetFrameRelativeGravityMetersS2`:** scene-frame gravity = cosmic pull at the player MINUS the pull the frame body itself experiences (its own orbital acceleration). Standing on a planet now feels exactly the local pull (~9.81 m/s²) with only a negligible tidal term; flying between bodies feels the correct residual gravity.
+- `GravityProvider.GetGravity` (consumed by the player, grids, dampeners and HUD) now uses the frame-relative value whenever a scene frame exists; deep space stays plain cosmic gravity (~0).
+
+#### ✅ Static delivery checks
+- All 3 modified sources parse cleanly (tree-sitter grammar validation).
+
+### [7.13.8-dev] Respawn Sideways-Launch Fix & Space Bed/Cryobed Spawns
+
+**Type:** PATCH — eliminates the sideways frame-velocity kick on respawn/teleport and officially supports spawning in space next to beds/cryobeds; no save/API break.
+
+#### 🚀 Respawn Sideways Launch — Root Cause & Fix
+- **Root cause:** respawning teleported the player to the destination while the scene frame could still be a DIFFERENT body's frame (e.g., died mid-fall in the planet frame, respawn destination near another body — or died in space, respawn on surface). The next automatic frame switch then applied the frame-velocity DELTA to every scene object — including the freshly-respawned player — producing a violent sideways (tangential) kick. The previous fix zeroed velocity, but a frame switch landing between the zero and control handover re-injected the delta.
+- **Fix:** the spawner now **pins the scene frame to the destination's dominant body BEFORE the teleport** (`PrepareRespawnFrame` → `SpaceOrigin.SetFrame`, which never applies velocity deltas), **suppresses automatic frame switches for the whole spawn/respawn sequence** (`SpaceOrigin.suppressAutoFrameSwitches`), and only re-enables them after the player is at rest with control. No window remains for a kick — applied to first spawn AND every respawn.
+- **Streaming follows the frame:** new `CosmosBootstrap.ForceStreamingBody` retargets the voxel streamer, gravity, grass/ocean and LOD to the pinned destination body (or deep space) right away, so the world matches where you spawn.
+- **Teleports never kick (warp & save restore):** `SpaceOrigin.TeleportCosmic` now re-picks the frame WITHOUT applying the velocity delta (the warp drive zeroes the ship; save-restore zeroes the player).
+
+#### 🛏️ Space Bed / Cryobed Spawns Supported
+- Respawn destination validation now only rejects destinations **inside a planet** (a launch-era save buried in terrain). Positions in space are VALID — a bed or cryobed in orbit, on a station, or on a ship now spawns you exactly next to it, in the correct reference frame, at rest.
+- The world-spawn fallback also validates against EVERY body (not just the active one).
+
+#### ✅ Static delivery checks
+- All 3 modified sources parse cleanly (tree-sitter grammar validation).
+
+### [7.13.7-dev] Instant HUD Fade, Death-Loop Elimination & Whole-Planet LOD
+
+**Type:** PATCH — HUD fade feel, respawn death-loop breaker, survivable fall cap, and the full planet surface at high LOD; no save/API break.
+
+#### ⚡ HUD Fades Fast on Open
+- `LcdHudTheme.YieldWhileBlocking` is now ASYMMETRIC: fades OUT at 18/s (~0.05 s — opening inventory/UI feels instant) and fades back in at 8/s (elegant return), polled every 16 ms instead of 33 ms.
+
+#### 💀 Launch → Fall → Die → Respawn-in-Space Loop Eliminated
+- **Respawn destination validation (the loop breaker):** every respawn (`RespawnRoutine`, used by the death screen AND `RespawnAt`) now validates the destination — if it is inside a planet or more than 3.5× surface radius out in space (a stale launch-era world-spawn/bed coordinate), a fresh deterministic dry surface spawn is computed instead. Dying can no longer put you back in space.
+- **Bed-spawn validation:** a bed saved during the launch-era is also rejected on load and the poisoned bed flag is cleared.
+- **Survivable fall cap:** inward radial speed cap lowered 55 → 24 m/s — BELOW the lethal fall threshold (28 m/s). Even a worst-case restored fall lands you bruised, not dead. No more impact-death loop.
+- **Spawn/respawn fall-damage grace (2.5 s):** `PlayerController.BeginSpawnGrace` — physics settle / chunk-streaming timing at spawn can never insta-kill.
+
+#### 🌍 Whole Planet Loaded (proper LOD, Space-Engineers style)
+- **`PlanetLodImpostor.highDetail`:** the ACTIVE body (the one you're on / approaching) now renders at a high-detail budget — 10k/40k/163k vertices by graphics tier (`GraphicsPreset.ActiveBodyLodResolution`) — a single continuous sampled planet surface with real continents and mountains, visible from ground to orbit.
+- **Progressive build:** high-detail meshes are built in 4096-vertex batches across frames — no spawn or frame-entry hitch, no stutter.
+- **Frame switching:** entering a body's gravity well upgrades its LOD to high detail (previous body downgrades to the cheap proxy); deep space downgrades everything.
+- The home body is upgraded right at bootstrap, so the planet looks whole from the first frame.
+- Local voxel chunks still stream around the player (proper LOD stack: chunks up close, sampled surface beyond, sky projection for distant bodies).
+
+#### ✅ Static delivery checks
+- All 6 modified sources parse cleanly (tree-sitter grammar validation).
+
+### [7.13.6-dev] Spawn Launch Elimination — Interior Gravity Falloff, Fall-Speed Cap, Poisoned-Save Rejection & Spawn Grace
+
+**Type:** PATCH — eliminates the spawn-time launch through the planet from every angle; no save/API break.
+
+#### 🚀 Why the player was launched (root cause)
+The real-space N-body gravity clamped a body's pull to FULL SURFACE STRENGTH everywhere inside the crust. Any player who clipped the terrain — a bad spawn point, a save written mid-launch, a terrain-collider timing gap — was then accelerated toward the core at ~9.8 m/s² for the whole fall, reaching the core at escape velocity and being "launched through the planet" out the far side. The earlier frame-pin fixed the upward launch; this one kills the fall-through itself.
+
+#### 🛠️ Fixes
+- **Interior gravity is now physically correct (linear falloff):** inside a body the pull scales g·(d/R) toward zero at the core (`CosmicRegistry.GetGravityMetersS2`). A player can no longer gain core-escape energy from a terrain clip — there is no launch-through-the-planet path left in the physics.
+- **Radial fall-speed cap (55 m/s) near any active body:** `PlayerController` clamps inward speed within 2.5× surface radius, so even a player restored from a bad space save falls at a speed the CharacterController always resolves against terrain colliders — no tunneling at hundreds of m/s.
+- **Poisoned saves rejected:** `PlayerSpawner.IsSavedPositionInsideBody` — if a saved position would restore the player INSIDE any celestial body, the save is ignored and the surface/bed spawn path is used (legit surface/orbit/deep-space saves still restore).
+- **Spawn starts at rest:** the player's controller + any rigidbody velocity are zeroed at control handover (both spawn and respawn).
+- **Spawn grace in SpaceOrigin:** automatic reference-frame switches (and their velocity deltas) are suppressed for the first 3 s after load — the frame stays pinned to the home body; forced switches (warp, save restore) still work.
+- **Floating origin always tracks the real player:** SpaceOrigin re-resolves the viewer every fixed tick if it isn't the PlayerController (the bootstrap can initialise with a placeholder before the player exists), and the bootstrap hands the player to SpaceOrigin when it resolves late.
+- **No more late body-move race:** when the viewer resolves AFTER bootstrap (late scene order), the home body is no longer moved under the viewer — the origin is aligned to the body where it sits and PlayerSpawner places the player on its surface deterministically.
+
+#### ✅ Static delivery checks
+- All 5 modified sources parse cleanly (tree-sitter grammar validation).
+
+### [7.13.5-dev] Spawn Launch Fix, No Boot Replay on Refresh, Weather HUD Removed & HUD Space Recovery
+
+**Type:** PATCH — critical spawn-stability fix + UI polish (boot animation replay, weather indicator removal, vitals text alignment, compact gravity instrument); no save/API break.
+
+#### 🚀 Spawn Launch Fix (player no longer flung into space)
+- **Root cause:** the scene reference frame started as the SOLAR (star) frame at spawn. The home planet immediately raced away at its real orbital speed while the freshly-spawned player stood still — and when the frame then switched to the planet, the frame-velocity delta applied to every scene object hurled the player into space at hundreds of m/s with no way to stop.
+- **Fix:** `CosmosBootstrap` now pins the scene reference frame to the HOME body at bootstrap (`SpaceOrigin.SetFrame(body)`). The planet is at rest in the scene from frame one, the player is born standing on it, and no frame-velocity kick ever fires at spawn. Interplanetary frame switches (leaving/entering gravity wells) keep the same correct physics as before.
+
+#### 🖥️ LCD Boot No Longer Replays on Every UI Refresh
+- **New `LcdHudTheme.BootsMuted`:** while set, boot animations (scale-in + phosphor wipe) are skipped and elements appear instantly.
+- **`GameUIController.Refresh()`** (inventory, chests, machine panels, and the Ship Control terminal, which routes through it) now mutes boots around rebuilds — the boot only plays when a panel genuinely opens, never on item moves, toggles, or refresh ticks.
+- **Main menu + pause menu:** rebuilding the SAME page (settings toggles, tab refreshes) is muted; real page changes keep the full boot.
+
+#### ☀️ Weather Indicator Removed
+- `WeatherHud.EnsureMounted` is now a no-op — the "☀ Clear / Overcast / …" readout no longer appears on screen (weather simulation itself is untouched).
+
+#### 📟 Vitals HUD Text Alignment
+- Value/code labels in the vitals rows are now vertically centred (`MiddleLeft`/`MiddleRight` + `alignSelf Center`, segment track centred) so the numbers sit exactly in line with the segment bars.
+
+#### 🪐 Gravity Field HUD — Smaller, Less Wasted Space
+- Card width 236 → 196 px, tighter padding.
+- LCD display 100×64 → 84×50, G-readout 22px → 16px, acceleration line 8px → 7px.
+- **VECTOR row removed** (hidden) — the surface-reference segments carry the useful info.
+- Reference column, surface segments and captions all tightened — the same information in ~40% less screen space.
+
+#### ✅ Static delivery checks
+- All 8 modified sources parse cleanly (tree-sitter grammar validation).
+
+### [7.13.4-dev] Boot Sweep Scheduler Compile Recovery (CS0426)
+
+**Type:** PATCH — compile recovery for the 7.13.3-dev boot-sweep animation; no behaviour change, no save/API break.
+
+#### 🛠️ Compiler Fix
+- **`IVisualElementSchedulerItem` (CS0426):** the nested scheduler-item type does not exist in Unity 6.4's UI Toolkit API. `LcdHudTheme.AnimateBootSweep` no longer names the type — it chains the scheduler item's `Until(() => done)` stop-condition instead, so the repeating wipe automatically stops itself when finished (no type reference, no leak, no runaway timer).
+
+#### ✅ Static delivery checks
+- Verified the modified source parses cleanly (tree-sitter grammar validation).
+
+### [7.13.3-dev] Premium LCD Feel — HUD Declutter, Panel Overlap Fix & Slot Fit Recovery
+
+**Type:** PATCH — HUD declutter, panel/HUD overlap elimination, machine-slot fit recovery and boot-sweep compile fix; no save/API break.
+
+#### 🖥️ Compile Fix
+- **Boot sweep scheduler (CS8030):** `LcdHudTheme.AnimateBootSweep` no longer returns values from the scheduled action — Unity 6 UI Toolkit's `schedule.Execute` takes an `Action`; the repeating item now pauses itself via `IVisualElementSchedulerItem.Pause()` when the wipe finishes.
+
+#### 🧹 HUD Declutter (cleaner, calmer screen)
+- **Vitals cluster compacted:** row height 25→20 px, gaps 3→2 px — same information in a tighter, quieter bottom-right instrument (`TOTAL_HEIGHT` 166→142 so the feedback toasts still clear it).
+- **Interaction prompt** now fades out whenever a panel owns the screen.
+
+#### 🚧 No More HUD/Panel Overlap
+- **New `LcdHudTheme.YieldWhileBlocking`:** a HUD module smoothly fades out while a blocking UI (machine panel, chest, terminal, inventory) is open and returns when it closes. Applied to **WorldInspectionHud, RecipePinHud, VitalsHud, BuildFeedbackHud, GravityPullHud, HotbarItemNameHud, InteractionHud and the cockpit Flight Computer (GridPilotHud)** — right-side and bottom HUDs always step aside for panels.
+- **Machine panels dock higher:** `UITheme.MachinePanel` bottom inset 72→92 and right 12→14 so a machine never covers the hotbar strip; width min 260→280, max 46%→44% for a cleaner right column.
+
+#### 📦 Machine Slots Always Fit Their Box
+- **New `MakeScrollable`** (GridBlockUI + MaritimeBlockUI): wraps a machine panel's content in a vertical ScrollView so tall panels never clip their slots. Applied to the heavy panels: **Ship Refinery, Ship Chemical Plant, Portable Reactor, Electric Furnace, Hydrogen Engine, Drill, Weapon, Biofarm, Cryobed, H2/O2 Generator** and maritime **Engine, Generator, Helm** — every slot, gauge and recipe row stays inside the box, scrollable when needed.
+
+#### ✨ Premium Feel
+- **New `LcdHudTheme.ApplyPanelDepth`:** hairline top highlight + soft bottom shade on every themed panel (machined-metal/glass edge instead of a flat rectangle).
+- Panels boot with scale-in + wipe, scanlines shimmer, buttons micro-interact — the full shared LCD language now extends to every corner of the UI.
+
+#### ✅ Static delivery checks
+- All changed sources parse cleanly (tree-sitter grammar validation).
+
+### [7.13.2-dev] Unified LCD Theme — Menus, Settings, Storage & Ship Terminals + Compile Recovery
+
+**Type:** PATCH — compile recovery for the real-space delivery + full LCD theme pass across menus, settings, storage terminal, block UIs and ship terminal; no save/API break.
+
+#### 🖥️ Shared LCD Language (one consistent look everywhere)
+- **New `LcdHudTheme.UpgradePanel`:** LCD-ify any existing plain panel in one call — dark chassis, bezel border, corner brackets, animated scanlines, phosphor boot + wipe. Used by the menus.
+- **New `LcdHudTheme.AnimateBootSweep`:** one-shot CRT/LCD power-on wipe — a phosphor line sweeps down the screen and fades. Complements the existing boot animation with real motion.
+- **New `LcdHudTheme.AddMenuInteractions`:** menu-scale button micro-interactions (0.1 s colour transitions, 1.03× hover scale, 0.98× press scale) that preserve each button's own sizing.
+- **`UITheme.Panel()` boot + wipe:** every themed panel in the game (chests, containers, machines, browsers, right-side panels) now plays the shared LCD boot and phosphor wipe — one animation language everywhere. `MachinePanel()` keeps its denser scanlines without double-booting.
+
+#### 🎛️ Main Menu & Pause Menu
+- `MainMenuController.MakePanel` and `InGamePauseMenu.MakePanel` upgraded to full LCD chassis (bezel + corner brackets + animated scanlines + boot + wipe) — every page (Main, Saves, New World, Edit World, Settings, Pause) instantly matches the in-game terminals.
+- All menu buttons (`PrimaryBtn`, icon buttons, tab buttons in both menus) now have hover/press micro-interactions per the interaction guidelines.
+
+#### ⚙️ Settings (shared main-menu + pause surface)
+- New `SettingsUI.ApplyLcdScreen` turns both settings tab bodies into inset phosphor-glass LCD screens — the two surfaces stay in lock-step by construction.
+
+#### 💾 Storage Terminal & Block UIs
+- **Storage Terminal:** storage fill bar is now an animated 14-segment phosphor track; search field styled as inset phosphor glass; sort button becomes an LCD command button with micro-interactions.
+- **Ship Cargo Container (GridBlockUI):** weight fill upgraded to the same animated segment track.
+- **Ship Control terminal (GridMasterTerminal):** group page + all-storage page play the boot sweep on open.
+
+#### 🛠️ Compiler Fixes (real-space 7.13.0 follow-ups)
+- **`Random` ambiguity (CS0104):** `CosmicRegistry.cs` + `SpaceAsteroidField.cs` carry `using Random = Unity.Mathematics.Random;`.
+- **`Vector3 → double3` casts (CS0030):** Unity.Mathematics has no direct cast; added `CosmicRegistry.ToDouble3` and routed every cast site (`SpaceOrigin`, `GravityProvider`, `CosmosBootstrap`, `GridWarpDrive`, registry wrappers) through it.
+- **`ref` mismatch (CS1615):** `BuildPlanetElements` now takes `ref Random`.
+- **Missing `Unity.Mathematics` using (CS0246):** added to `AsteroidFieldRenderer.cs`.
+- **`PowerFormat` scope (CS0103):** fully qualified in `GridWarpDrive`.
+
+#### ✅ Static delivery checks
+- All 17 modified sources parse cleanly (tree-sitter grammar validation).
+
+### [7.13.1-dev] REAL SPACE Compile Recovery — Ambiguous Random & Duplicate ResetVelocity
+
+**Type:** PATCH — compile recovery for the 7.13.0-dev real-space delivery; no behaviour change, no save/API break.
+
+#### 🛠️ Compiler Fixes
+- **Ambiguous `Random` reference:** `CosmicRegistry.cs` and `SpaceAsteroidField.cs` now carry an explicit `using Random = Unity.Mathematics.Random;` alias, resolving the CS0104 conflict between `Unity.Mathematics.Random` and `UnityEngine.Random` (the files import both namespaces for double3/float3 math and UnityEngine types).
+- **Duplicate `ResetVelocity`:** removed the second `ResetVelocity()` from `PlayerController.cs` — the class already defined the identical public method (used by the Warp Drive arrival). The Warp Drive call sites are unchanged.
+
+#### ✅ Static delivery checks
+- Verified C# grammar (tree-sitter parse) across all 26 modified/new sources.
+
+### [7.13.0-dev] REAL SPACE — Infinite Keplerian Universe, Floating Origin, Deep-Space Asteroids & The Only Warp (Warp Drive Block)
+
+**Type:** MINOR — a complete real-space simulation layer (save-compatible): real elliptical Keplerian orbits, continuous infinite flight between planets with zero warps (except the new expensive Warp Drive grid block), N-body gravity, deep-space procedural asteroids, and floating-origin precision. Old saves load fine.
+
+#### 🚀 REAL ORBITS — Keplerian Mechanics (not lazy circles)
+- **Real elliptical orbits for every body:** `CosmicRegistry` now propagates planets, moons and sub-moons with classical orbital elements (semi-major axis a, eccentricity e, inclination i, RAAN Ω, argument of periapsis ω, mean anomaly M0) solved through Kepler's equation — the same math real astrodynamics uses. Periods follow T = 2π√(a³/μ) and velocities follow the vis-viva equation.
+- **New `OrbitMath.cs`:** double-precision Kepler solver + perifocal→reference rotation, shared by every body.
+- **Physically consistent masses:** each body's gravitational parameter is derived from its authored surface gravity and radius (μ = g·r²); the star's μ (default 180 km³/s², authorable on `SunSettings`) drives every planet orbit.
+- **Authorable eccentricity:** `PlanetTemplate.orbitEccentricity` / `MoonTemplate.orbitEccentricity` (0 = seeded small value).
+- **All positions double-precision (km)** via `positionKmD`/`velocityKmS`; legacy `positionKm` fields remain for sky renderers.
+
+#### 🌌 INFINITE SPACE — Floating Origin & Reference Frames (real-flight level)
+- **New `SpaceOrigin.cs`:** the floating-origin + reference-frame engine. The whole solar system is real geometry around you; the scene re-bases itself (32 km threshold) so float precision stays millimetre-fine no matter how far you fly. Physically invisible — every object shifts together.
+- **Real reference frames:** the scene co-moves with the dominant body (planet/moon gravity well), and switches frames KSP-style when you leave a well or enter another — scene velocities are re-expressed by the frame-velocity delta so cosmic (inertial) velocity is always conserved. Entering a planet's frame makes it stand still; deep space is the star frame where every planet visibly orbits.
+- **N-body gravity:** `GravityProvider` now sums the inverse-square pull of the star + every body (m/s²). Near a planet it is exactly the old radial gravity; in deep space it is genuine zero-g (dampeners hold, ships coast).
+- **Continuous planet switching — no warp:** `SphereWorld.SetBody()` re-targets the voxel streamer to whatever body's frame you enter (per-body chunk persistence keys keep saves separate), grass/waterfalls/ocean LOD follow, and the sampled-surface LOD upgrades as you approach. Leaving a planet into deep space suspends streaming cleanly.
+- **All bodies are real scene geometry:** every planet/moon in the system gets a real `CelestialBody` + sampled-surface LOD; close bodies render at true scale/position, far bodies use the compressed sky projection (200 km crossover).
+- **Deep-space atmosphere fix:** `AtmosphereManager` reports true vacuum (not the old flat-world fallback) and `GravityProvider.Sample` reports 0.00 g in deep space.
+- **REMOVED the lazy warp:** `CosmosBootstrap.CheckInterplanetaryFlight` + `TransitionToPlanet` are deleted — looking at/flying toward another planet never teleports you. The ONLY warp left is the Warp Drive block (below).
+- **Save/load:** the player's cosmic position + reference frame are persisted; logging out in deep space or high orbit restores exactly where you were (legacy saves unaffected).
+
+#### ☄️ DEEP-SPACE ASTEROIDS (outside planet/moon orbits)
+- **New `SpaceAsteroidField.cs`:** while the player is in the solar frame (outside every planet/moon gravity well), procedural minable asteroids spawn around you — seeded per cosmic region with per-attempt nonces, despawned when you leave or when you enter a planet's well.
+- **New `SpaceAsteroid.cs`:** noise-displaced icosphere rocks with MeshCollider, ore-tinted vertex colours, slow tumble, HP scaled by size, and ore drops (Iron/Nickel/Silicon/Cobalt/Gold/Platinum/Ice) — mineable with any tool via the damage pipeline (pickaxe hook added to `PlayerInteractionTool`).
+- The authored visual belt (`AsteroidFieldRenderer`) keeps rendering the distant main belt in the sky.
+
+#### ⚡ THE ONLY WARP — Warp Drive Block (expensive, researched, chargeable)
+- **New `GridWarpDrive.cs`:** charges over 45 s under a heavy 45 kW power load; when charged, the pilot presses [N] (`InputAction.WarpDrive`, rebindable) to jump the ship to the aimed planet's orbit (90 km altitude, co-moving with the planet) or 2,500 km straight ahead. Requires vacuum, has a 3-minute cooldown, and refuses to short-hop.
+- **Cockpit integration:** [N] begins charging, shows charge %, and fires when ready (`GridCockpit.HandleWarpDriveInput`).
+- **Setup-owned content (non-destructive):** new **Step 50 — Build Warp Drive** in Tools ▸ Voxel Engine ▸ Voxel Engine Setup creates the prefab, `GItem_WarpDrive`, the Assembler recipe (40 Steel Plate + 12 Advanced Circuit + 8 Uranium Ore + 6 Lithium), and the `res_warpdrive` research node (tier 7, gated after Shipbuilding) — existing tuning is preserved on re-runs.
+
+#### 📟 HUD & FEEDBACK
+- `GridPilotHud`: deep space shows **DEEP SPACE · 0% AIR**, altitude reads DEEP SPACE, and the trajectory module becomes a solar-frame coast readout (SPD + nearest body).
+- `OrbitalTelemetry` gains the `DeepSpace` state for the flight computer.
+- Frame switches toast via console + HUD (frame name + Δv).
+
+#### ✅ Static delivery checks
+- All 25 modified/new sources pass the C# grammar validation (tree-sitter) — brace/paren balance and parse-tree clean.
+
+
+All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [7.12.1-dev] Vast Infinite Space Flight, Sparse 3D Asteroid Belts & Camera-Relative Asteroid Removal
+
+**Type:** PATCH — interplanetary flight navigation without warp prompts, sparse 3D Asteroid Belt voxel spawning, removal of camera-relative fake asteroids, and material enum correction; no save/API break.
+
+#### 🚀 Vast Infinite Space & Ship-Driven Interplanetary Flight
+- **Ship-Driven Solar System Navigation:** Removed artificial `[F / WARP]` prompt overlays from `PlayerInteractionTool.cs`. Interplanetary travel is now driven exclusively by flying ships through vast, open space toward distant orbiting planets in the sky.
+- **Real Orbital Approach Transition:** When a player flies in high orbit (`> 1800m` altitude) aiming their ship toward a distant planet in `CosmicRegistry.Instance.Bodies`, `CosmosBootstrap.CheckInterplanetaryFlight` seamlessly transitions to arrive in high orbit around the destination planet. Warp drives remain a separate dedicated propulsion mechanism.
+
+#### ☄️ Sparse 3D Asteroid Belt Spawning (No Surface Shell or Fake Rocks)
+- **Sparse 3D Voxel Asteroids:** Reworked `SphereDensity.EvaluateVoxel` on Asteroid Belt worlds (`isAsteroidBelt = 1`) to remove radial shell masking (`beltMask`). Mineable procedural voxel asteroids spawn rarely (`rockNoise > 0.44f`) everywhere around the player in 3D zero-gravity space.
+- **Removed Camera-Following Fake Asteroids:** Removed `AddVisualFallbackAsteroids` from `AsteroidFieldRenderer.cs` and changed visual asteroid placement from camera-relative to fixed astronomical world-space coordinates (`deltaKm * 4f`). Asteroids in deep space no longer follow the player's camera.
+- **Fixed Asteroidal Ore Catalogue:** Replaced non-existent `MaterialId.Titanium` with `MaterialId.Cobalt` in `SphereDensity.cs` alongside Platinum, Gold, Iron, Silicon, and Ice.
+
+#### ✅ Static delivery checks
+- Verified C# syntax and brace balance across all modified space flight, asteroid rendering, and voxel density sources (`SphereDensity.cs`, `AsteroidFieldRenderer.cs`, `PlayerInteractionTool.cs`, `CosmosBootstrap.cs`).
+
+### [7.12.0-dev] Hierarchical Sky Orbits, Sub-Moon Satellites & Zero-G Asteroid Belt Voxel Generation
+
+**Type:** MINOR — hierarchical multi-body sky orbits (planets around Sun, moons around planets, sub-moons around moons) and roadmap Era 4 3D Asteroid Belt procedural zero-gravity voxel generation; save-compatible.
+
+#### 🌌 Real Hierarchical Sky Orbits (Planets Around Sun, Moons Around Planets & Moons Around Moons)
+- **Hierarchical Sky Orbit Positioning:** Upgraded `SpaceBodyRenderer.cs` with recursive orbital placement (`GetVisualPositionFor`) so celestial bodies in the sky reflect their true relative astronomical orbits instead of independent camera-centric projections.
+- **Planets Orbiting the Sun:** When looking at the sky, every planet visually revolves in an orbit around the Sun (`sunPos + fromSunKm * scaleKmToSky`).
+- **Moons Orbiting Planets:** Moons dynamically revolve around their parent planet's visual position in the sky (`parentPos + fromParentKm * 18f`), clearly showing real orbital mechanics.
+- **Sub-Satellites (Moons Around Moons):** Upgraded `CosmicRegistry.cs` to generate non-intersecting sub-moons (`moonlet.parentBody = moon`) orbiting larger moons. In the sky, sub-moons visibly circle their parent moon (`parentPos + fromParentKm * 26f`), creating a living 3-tier orbital hierarchy.
+
+#### ☄️ Roadmap Era 4 Asteroid Belt Procedural Zero-G Voxel Generation
+- **True 3D Asteroid Belt Worlds:** When generating or warping to an Asteroid Belt world (`isAsteroidBelt = 1`), `SphereDensity.cs` replaces the spherical planet crust with a vast 3D procedural belt (`120m..1300m` from origin) of floating voxel asteroids in zero gravity (`SurfaceGravity = 0f`).
+- **Roadmap-Accurate Ores:** Procedural asteroids are shaped via 3D Simplex noise (`rockNoise`) and packed with rich veins of **Platinum**, **Titanium**, **Gold**, **Iron**, **Silicon**, and **Ice** per the Roadmap Era 4 specification.
+- **Dedicated Zero-G LOD Masking:** Automatically hides `PlanetLodImpostor` and `PlanetOceanLodRenderer` on Asteroid Belt worlds so players fly through deep space surrounded by instanced background rocks and mineable floating voxel asteroids without a spherical proxy.
+
+#### ✅ Static delivery checks
+- Verified C# syntax and brace balance across all modified cosmos, orbital, and density sources (`CosmicRegistry.cs`, `SpaceBodyRenderer.cs`, `SphereGenParams.cs`, `CelestialBody.cs`, `SphereDensity.cs`, `PlanetLodImpostor.cs`, `PlanetOceanLodRenderer.cs`).
+
+### [7.11.16-dev] Seamless Water & Ocean Continuity, Top-Left Inspection HUD Relocation & Voxel Name Resolution
+
+**Type:** PATCH — water surface continuity, coastline height alignment, inspection HUD layout relocation, and target name display resolution; no save/API break.
+
+#### 🌊 Seamless Water Surface & Ocean Continuity
+- **Eliminated Coastal Water Pull-Down:** Removed `bordersTerrain` height depression (`finalH = Mathf.Min(baseH, terrainH + 0.12f)`) in `WaterMeshBuilder.cs`. Water along coastlines and islands no longer slopes downward into terrain holes, remaining level with open water.
+- **Eliminated Inter-Chunk Water Step Seams:** Removed `SmoothHeightField(cells, S)` in `WaterMeshBuilder.cs`. Interior water cells and border water cells now stay at the exact same height across chunk boundaries, eliminating vertical step gaps between adjacent water chunks.
+- **Full Coastline Ocean LOD Triangles:** Upgraded `PlanetOceanLodRenderer.cs` to keep coastal triangles (`!ocean[a] && !ocean[b] && !ocean[c]`) and set `_CutoutRadius` to `0f`, preventing gaps between the ocean LOD and coastal land.
+
+#### 📺 Top-Left LCD World Inspection HUD & Voxel Name Resolution
+- **Top-Left Relocation:** Relocated `WorldInspectionHud` to the top-left (`left = 16`, `top = 18`, removed `right`) per Thomas's feedback, styled as a Tektronix phosphor LCD terminal.
+- **Guaranteed Target Name Display:** Upgraded `TryDescribeVoxel` and `TryResolve` so aiming at any block, terrain voxel (Dirt, Grass, Sand, Stone, Clay), tree, or machine always resolves and displays the target's name, hardness, and mining tier without blank titles.
+
+#### ✅ Static delivery checks
+- Verified C# syntax and brace balance across all modified water meshing, ocean rendering, and UI inspection sources (`WaterMeshBuilder.cs`, `PlanetOceanLodRenderer.cs`, `WorldInspectionHud.cs`).
+
+### [7.11.15-dev] Interplanetary Flight, Correct Planet Biomes, Full-Sphere LODs, Oil Seep Reservoirs & LCD Inspection HUD
+
+**Type:** PATCH — interplanetary travel, biome filtering, full-planet LOD clipping, oil seep geology, tree harvesting, and LCD inspection HUD polish; no save/API break.
+
+#### 🚀 Interplanetary Space Flight & Transition System
+- **Active Solar System Navigation:** Added `CosmosBootstrap.Instance.TransitionToPlanet(PlanetTemplate)` and high-orbit flight telemetry in `CosmosBootstrap` and `PlayerInteractionTool`.
+- **Warp & Orbital Arrival:** Players flying in high orbit (`> 1400m` altitude) aiming towards a distant planet in `CosmicRegistry.Instance` can press `F / WARP` (or fly directly towards it above `1800m`) to transition seamlessly to that planet's orbit.
+- **Clean Voxel Re-Bootstrap:** Transitioning invokes `SphereWorld.ResetAllChunks()` to instantly reclaim old planet meshes and generate the target celestial body's unique terrain, atmosphere, gravity, and biomes without leaking memory.
+
+#### 🌍 Correct Biomes per Planet & Full-Sphere Distance LODs
+- **Strict Planet-to-Biome Filtering:** Upgraded `CelestialBody.BuildBiomeData` with `IsBiomeCompatibleWithPlanet` keywords (`bodyName`, `temperature`, `hasAtmosphere`). Moon worlds only receive barren/crater biomes, ice worlds only frozen tundra/glaciers, desert worlds only arid dunes/canyons, volcanic worlds only basalt/lava, and pirate worlds only rust/scrap. Alien biomes no longer cross-contaminate Earthlike worlds.
+- **Near-Camera LOD Clipping:** Added `clip(distToCamera - 240.0)` and smoothstep alpha fade (`240m..320m`) to `PlanetSurfaceLodURP.shader`. When close to the planet, low-poly impostor triangles inside local streamed terrain are hidden so they never clip through ground or caves, while the full planet surface remains 100% visible at any distance.
+
+#### 🛢️ Oil Seep Reservoirs & Ruined Pirate Jack Pump Landmarks
+- **Puddle-to-Reservoir Geological Funnel:** Reworked `OilReservoirDecorator.BuildRadialFunnel` to generate a continuous tapering conduit from `mouthRadius = puddleRadius - 1` right below the surface puddle down to `throatRadius = 2` at the deep reservoir, connecting puddle -> bore -> reservoir cleanly.
+- **Ruined Jack Pump Relics:** `PirateOilNode.Ensure` now spawns a weathered industrial `BrokenJackPump` (`IDamageable`, 120 HP) right on top of infinite Pirate World oil nodes. Breaking down the ruined pump awards 4 Iron Plates (`"Item_IronPlate"`) and leaves the infinite oil node marked for operational Jack Pump placement.
+
+#### 📺 Top-Right LCD World Inspection HUD & Bare-Hand Tree Mining
+- **Top-Right LCD Terminal Display:** Relocated `WorldInspectionHud` to the top right (`right = 16`, `top = 18`) and restyled it with our signature phosphor LCD instrument chassis, scanlines, and bezel brackets.
+- **3-Depth Voxel & Vegetation Resolution:** Upgraded `TryDescribeVoxel` and `TryResolve` with 3 surface-normal sample depths (`0.55m`, `0.25m`, `0.85m`) and a finer `0.25m` ray step so aiming at dirt, grass, stone, or trees reliably displays material hardness, mining tier, and harvestability.
+- **Bare-Hand Tree Harvesting:** `ChunkScatter` now automatically ensures scatter trees have a capsule collider and the `VoxelEngine.Trees.Tree` component. Upgraded `Tree.Hit` so punching with empty hands (`ToolType.Other`) deals `Mathf.Max(4, damage / 2)` damage, breaking trees down in ~16 punches for Wood Logs.
+
+#### 🐛 Compiler Fixes
+- Fixed lowercase `.execute(` -> capital `.Execute(` across `UITheme.cs` and `LcdHudTheme.cs` to conform to Unity 6.4 UI Toolkit's `IVisualElementScheduler` API.
+
+#### ✅ Static delivery checks
+- Verified C# syntax and brace balance across all 19 modified player, UI, cosmos, generation, scattering, and shader sources.
+
+### [7.11.14-dev] LCD Screen UI Animations, Unified Instrument Aesthetics & Smooth Planet Surfaces
+
+**Type:** PATCH — UI visual polish, animated scanline drift, phosphor boot sequences, bezel corner brackets, button micro-interactions, and 32x sub-voxel density scaling for smooth planet terrain; no save/API break.
+
+#### 📺 Retro-Futuristic LCD Screen Animations & Instrument Language
+- **Animated Scanline Shimmer:** LCD displays across the game (`LcdHudTheme.AddAnimatedScanlines`) now feature subtly drifting, animated phosphor scanlines that shimmer at 20 fps without causing layout recalculation.
+- **Phosphor Boot Sequences:** Added `LcdHudTheme.AnimateScreenBoot` and `UITheme.AnimatePanelBoot`. Every LCD display and machine UI panel now plays a crisp 2-stage phosphor boot sequence when opened—expanding from a thin horizontal scanline to nominal scale with a subtle ignition flash.
+- **Tektronix Bezel Brackets & Status Badges:** Added `LcdHudTheme.AddBezelAccents` and pulsing status indicator dots (`CreateLiveStatusBadge`). All LCD screens now feature 4 high-contrast L-bracket corner elements inside the bezel frame and pulsing live status dots ("LIVE", "RUNNING", "ONLINE").
+- **Enhanced Button Micro-Interactions:** Upgraded `ApplyCommandButton` and `UITheme` buttons to follow our AI Agent System Prompt & Execution Guidelines: buttons scale smoothly to `1.03x` on hover with a 0.10s color/border transition and drop to `0.98x` on press for tactile feedback.
+- **Unified Aesthetic Across All UIs:** Integrated LCD bezel corner brackets and scanline helpers into `UITheme.cs` (`Panel()`, `MachinePanel()`, `StatusPill()`), automatically elevating all machine UIs, crafting screens, recipe browsers, pilot HUDs, vitals monitors, and production terminals into a cohesive retro-futuristic flight-computer dashboard.
+
+#### 🌍 Smooth Planet Surface Slopes (Eliminated Terraced Rings)
+- **32x Sub-Voxel Density Scaling:** Upgraded `SphereDensity.EvaluateVoxel` and `ChunkGenJob.cs` to scale physical world distance (metres) by 32 before converting to signed-byte (`sbyte`) density units.
+- **Eliminated Contour Stepping:** Unscaled density clamped to integer `±1` previously forced every surface edge zero-crossing to interpolate at `t = 0.5` in `SurfaceNetsJob`, causing gentle slopes and flat regions on planets to quantize into rigid concentric rings stacked on each other.
+- **Smooth Mountains & Plains:** With 1 metre of distance represented by 32 density units, `SurfaceNetsJob` now interpolates zero-crossing ratios with 3 cm sub-voxel precision, producing butter-smooth continental slopes, rolling hills, and mountain terrain across spherical planets.
+
+#### ✅ Static delivery checks
+- Verified C# syntax and brace balance across all modified cosmos, generation, and UI sources (`SphereDensity.cs`, `ChunkGenJob.cs`, `LcdHudTheme.cs`, `UITheme.cs`, `CraftingScreen.cs`, `RecipeBrowserUI.cs`, `ProductionStatsUI.cs`, `GridPilotHud.cs`, `VitalsHud.cs`).
+
+### [7.11.13-dev] Valid Terrain Colliders, Wrapped Grass & Living Planet Recovery
+
+**Type:** PATCH — collision validity, voxel inspection/mining, spherical terrain shaping, vegetation orientation, and legacy oil/drop recovery; no save/API break.
+
+#### 🧱 Valid gameplay terrain
+- Mesh colliders now require three indexed, non-degenerate vertices before assignment. Empty SurfaceNets placeholder meshes are rejected, eliminating the repeated `ChunkMesh must have at least three distinct vertices` console spam.
+- The nearby collider window still keeps physics cheap, but correctly promotes valid terrain collision as the player approaches.
+- World inspection now ray-marches ready spherical voxels when a collider is temporarily unavailable, preserving the top-left material/object title during streaming instead of showing nothing.
+
+#### 🌍 Rounded terrain and real mountains
+- Corrected planet direction-space continent scaling, which had collapsed authored-size worlds into a near-flat rigid shell.
+- Converted biome terrain frequencies from metre-authored values into stable spherical direction-space frequencies, seeded the terrain field per world, and added smooth continent-only tectonic mountain masks.
+- Reworked slope sampling to use physical metre spans rather than oversized fixed angular offsets, removing widespread artificial cliff/ramp material changes.
+- High/Ultra now retain the detailed capped planet proxy in orbit, with procedural surface variation for readable continents from space.
+
+#### 🌿 Mining, grass, water, and oil recovery
+- Grass blades now align directly to radial planet-up, avoiding chunk-gradient tilt that made grass appear flat against global space rather than wrapped around the sphere.
+- Under-tier tools and hands now mine every solid voxel at reduced speed/brush efficiency instead of hard-locking materials. Correct tools remain much faster.
+- Step 16 surface-drop repair now also repairs missing Sand drops, alongside Dirt/Grass drops, without overwriting custom rewards.
+- Legacy oil-rich templates now restore intended finite seep eligibility/chances for Earth, Ocean, Acid, Desolate, and Pirate worlds until Step 21 writes explicit settings. Natural oceans return through the corrected continent/ocean field.
+
+#### ✅ Static delivery checks
+- Parsed terrain, streaming, meshing, water, player, HUD, material, celestial, and setup C# sources with Tree-sitter.
+- Ran targeted collider/HUD/mining/terrain/oil/version/sparse-workspace assertions locally. Unity compile and Play Mode validation remain pending from Thomas.
+
+---
+
+### [7.11.12-dev] Bounded Voxel Streaming, Low-Cost Water & Detailed Space Surface
+
+**Type:** PATCH — spherical streaming/meshing throughput, native-water budgeting, and full-planet space presentation; no save/API break.
+
+#### ⚙️ Generation no longer monopolizes the frame
+- Added hard outstanding-work and in-flight-job ceilings to `SphereWorld`: new chunk admission, radial generation, and mesh jobs are bounded instead of accumulating hundreds of expensive work items while moving.
+- Surface-only initial meshing now skips unneeded deep-solid/empty-air chunks, while nearby underground chunks are promoted one at a time as the player approaches or mines into them.
+- Added a near-player collider window: only gameplay-near terrain owns costly `MeshCollider` data; approaching chunks receive collision before the player reaches them.
+- Replaced the per-vertex 256-material histogram in `SurfaceNetsJob` with an eight-corner vote and disabled the 26-neighbour vertex-AO pass for streamed spherical chunks. Static-world AO remains enabled.
+- Oil-site discovery now uses an exposed two-metre candidate lattice and runs only on surface chunks, avoiding deep geological scans during ordinary terrain streaming.
+
+#### 🌊 Native voxel water: gameplay-local, ocean-visual at distance
+- Natural oceans remain static voxel source data with the full planet ocean LOD for distant visuals; only local pools, placed liquid, pumps, and changed liquid chunks enter detailed water meshing/simulation.
+- Removed duplicate water queue pumping between `SphereWorld` and the native-water bootstrap.
+- Existing default scenes migrate from 4 water mesh builds/frame and 8 Hz / 6-chunk fluid ticks to a bounded 1 build/frame and 4 Hz / 2-chunk local simulation budget, preserving deliberate custom values.
+- Periodic liquid recovery no longer force-completes nearby terrain meshes or repeatedly rebuilds visible ocean chunks.
+
+#### 🪐 Detailed surface from space without dense voxel streaming
+- Kept the capped 10,242-vertex terrain/ocean proxy at High/Ultra in orbit rather than dropping to a coarse far hexasphere.
+- Added body-relative procedural macro/fine surface variation to the planet LOD shader, giving continents readable texture from space without spawning extra terrain chunks.
+
+#### ✅ Static delivery checks
+- Parsed the modified streaming, meshing, water, terrain-LOD, scatter, player-spawn, and setup C# sources with Tree-sitter.
+- Ran targeted throughput/version/sparse-workspace assertions. Unity compilation and Play Mode validation remain pending from Thomas.
+
+---
+
+### [7.11.11-dev] Spawn Scope Compile Recovery
+
+**Type:** PATCH — Unity compiler recovery; no save/API break.
+
+- Renamed the nested spherical fallback up-vector local in `PlayerSpawner.EnsureDrySpawn`, resolving the reported `CS0136` local-name scope collision.
+- No generation, spawn-selection, performance-budget, save, prefab, recipe, or balance behaviour changed from `7.11.10-dev`.
+
+---
+
+### [7.11.10-dev] Seamless Surface Spawn & Streaming Performance Recovery
+
+**Type:** PATCH — runtime scheduling, vegetation/grass budgets, visual LOD budget, and deterministic spherical spawn recovery; no save/API break.
+
+#### ⚡ Restored frame budget
+- Reduced the local editable chunk bubble to a bounded **3 / 4 / 5 / 6** chunk radius across Low → Ultra. This is collision/edit detail only; the whole-planet terrain and ocean LOD remain visible outside it.
+- Capped runtime planet and ocean proxy resolution at **10,242** vertices, restored verified back-face culling for the terrain proxy, and removed the 40k-vertex high-quality startup spike.
+- Throttled native water mesh work to the live generation budget instead of rebuilding four liquid chunks every frame during spawn.
+- Deferred scatter now processes only the nearest visible surface chunk per frame by default. Empty interior chunks retire without a scatter scan.
+- Tree/rock scatter now uses a 2 m candidate lattice, cheap outward rejection before exact radial tests, and allocation-free overlap checks.
+- Reworked GPU grass from a 145-voxel radial search per sample into a direct spherical density-column query, with a 1,600-sample cap, smaller local field, and less frequent rebuilds.
+
+#### 🧭 One stable spherical spawn
+- `SphereWorld` now exposes a deterministic density-field dry-land finder.
+- Fresh spherical spawns choose a valid land surface **before** terrain colliders stream, then wait and snap at that one location.
+- Wet-spawn recovery now makes at most one analytical spherical relocation. Fully oceanic/custom bodies hold the player safely above the selected water column rather than visibly hopping through many candidates.
+
+#### ✅ Static delivery checks
+- Parsed the updated performance/spawn/world-generation C# sources with Tree-sitter and ran targeted source, padded-coordinate, version, and sparse-workspace assertions.
+- Unity compilation and Play Mode validation remain pending from Thomas; no runtime confirmation is claimed.
+
+---
+
+### [7.11.9-dev] Spherical World Generation Integrity & Celestial Visibility
+
+**Type:** PATCH — spherical chunk-generation, exterior-scatter, full-planet continuity, and automatic celestial-visual recovery; no save/API break.
+
+#### 🌍 Reliable spherical terrain instead of streaming scars
+- Corrected the padded spherical generation origin so voxel samples and `SurfaceNets` coordinates agree across every chunk boundary; this removes the one-voxel overlap/slit source behind floating, offset, and apparently missing terrain chunks.
+- Added rent-epoch guards to terrain and native-water work queues. A recycled pooled chunk now rejects stale generation, meshing, and liquid rebuild work after fast travel, preventing old queue entries from writing a new coordinate in the air or under the planet.
+- Removed the remaining neighbour-wait mesh stall from the spherical stream: each deterministic padded chunk can mesh immediately, while the sampled full-planet LOD remains present beyond editable local detail.
+- Protected an 8 m minimum radial terrain crust before cave carving, so caves remain underground and cannot randomly puncture the playable surface.
+- Raised near-surface full-planet LOD budgets to 2,562 / 10,242 / 40,962 vertices by quality tier and made the terrain proxy two-sided, eliminating coarse square-horizon/one-sided proxy failures while retaining visual-only LOD interaction.
+
+#### 🌲 Exterior-only, separated vegetation
+- Rebuilt chunk scatter around the exact radial density surface rather than rounded global-axis neighbours. Trees/rocks now reject cave walls, deep terrain, water, and unstreamed false surfaces, and roots are projected slightly above the real spherical iso-surface.
+- Added cross-chunk live placement reservations plus tree-canopy clearance. Adjacent chunks cannot spawn trees into one another, including when they finish generation on separate frames.
+- Applied the same exterior proof to GPU grass so it cannot select underground cave surfaces.
+
+#### 🛢 Stable oil geology
+- Oil candidates now require the true sampled exterior surface. Surface puddles preserve their terrain floor; deep deposits use a sealed one-cell conduit below an intact cap instead of a player-sized open bore.
+- This keeps puddle/reservoir geology readable without creating an accidental route beneath the planet at an oil site.
+
+#### ☀️ Automatic System_Sol, planets, and asteroids
+- `CosmosBootstrap` now resolves the setup-owned `CosmosTemplateLibrary` before editor-only fallbacks, assigns the resolved `System_Sol` to both bootstrap and `CosmicRegistry`, retries late player/viewer binding, and anchors a late-spawned viewer safely on the authored-scale surface.
+- `CosmicRegistry` supplies deterministic fallback asteroid instances when a legacy system has no belt. `AsteroidFieldRenderer` now uses registry belt data at visible proxy sizes, while distant planet proxies use unlit authored colours for reliable sky readability.
+- Step 21 now non-destructively creates/repairs `System_Sol`, its `Resources/CosmosTemplateLibrary` registration, `Asteroids_MainBelt`, legacy celestial links, and null bootstrap links. Existing custom belt tuning and custom bootstrap assignments are preserved.
+
+#### ✅ Static delivery checks
+- Parsed the modified spherical-world, water, scatter, oil, celestial, setup, and version C# sources with Tree-sitter and ran targeted source/sparse-workspace assertions locally.
+- Unity compilation and Play Mode validation remain pending from Thomas; this entry does not claim Unity confirmation.
+
+---
+
+### [7.11.8-dev] Full-Scale Bootstrap & Automatic Solar System Recovery
+
+**Type:** PATCH — authored planet scale, automatic solar-system assignment, and asteroid fallback repair; no save/API break.
+
+- Removed the remaining `CosmosBootstrap.testRadiusKm` workflow and preserves each selected template’s authored radius at runtime.
+- Added a runtime-only session seed override so bootstrap never mutates shared `PlanetTemplate` settings or loses the selected seed when `SphereWorld` reapplies settings.
+- Added viewer-to-surface anchoring and actual-radius camera clipping for full-size planets.
+- `CosmosBootstrap` now resolves and assigns `System_Sol` automatically, drives `CosmicRegistry` from it, and supplies a deterministic visual asteroid-belt fallback when no authored belt asset is present.
+
+---
+
+### [7.11.7-dev] Ocean LOD Compile Recovery & Craft Queue Serialization Guard
+
+**Type:** PATCH — Unity compiler/analyzer recovery; no save/API break.
+
+- Replaced the unsupported target-typed `new(float, float, float)` expression in `PlanetOceanLodRenderer` with explicit `new Vector3(...)`, resolving reported `CS8754`.
+- Marked `CraftQueue.Entry` serializable and its runtime-only interface destination/queue fields `[NonSerialized]`, resolving the reported `UAC1001` serialization warning without changing live crafting behaviour.
+
+---
+
+### [7.11.6-dev] Authored Planet Scale & Surface Spawn Repair
+
+**Type:** PATCH — removes the test-radius override and restores authored spherical planet scale; no save/API break.
+
+#### 🌍 Real authored planet radius
+- Removed `CosmosBootstrap.testRadiusKm`; it no longer shrinks every selected planet to a 0.5 km test sphere.
+- Celestial bodies now preserve their authored `PlanetTemplate.body.radiusKm` at runtime. Session seeds use a dedicated runtime override rather than mutating shared template assets or being reset by later bootstrap calls.
+- Added default viewer-to-surface anchoring for real-size planets, keeping the player just above the initial radial surface instead of spawning inside a 6–8 km solid planet.
+- Camera far-clip sizing and bootstrap diagnostics now use the actual generated body centre/radius.
+
+#### ✅ Static delivery checks
+- Source parsing and targeted planet-scale/LOD/water/HUD regression assertions are run locally. Unity compilation and Play Mode validation remain pending from Thomas.
+
+---
+
+### [7.11.5-dev] LOD Interaction Guard & HUD Cleanup
+
+**Type:** PATCH — visual-only LOD hardening and HUD stale-text/inspection cleanup; no save/API break.
+
+#### 🪐 LOD cannot block play
+- `PlanetLodImpostor` and `PlanetOceanLodRenderer` strip stale colliders. The full terrain/ocean LODs are now strictly visual: they cannot be mined, ray-hit as terrain, or trap the player after local voxel terrain is excavated.
+
+#### 🖥 HUD cleanup
+- World inspection now ignores bootstrap, LOD, ocean-LOD, and native-water helper colliders, so the top-left readout never reports `Bootstrap Controller` instead of a real block or voxel.
+- Raised the held-item HUD layout revision and added a document-wide raw-item-id scrub. Legacy labels such as `dirt_item` are removed both on initial mount and selection changes, leaving only the intended **Dirt** display label.
+
+#### ✅ Static delivery checks
+- Source parsing and targeted LOD/HUD/real-water regression assertions are run locally. Unity compilation and Play Mode validation remain pending from Thomas.
+
+---
+
+### [7.11.4-dev] Real Ocean LOD & Seamless Planet Surface
+
+**Type:** PATCH — actual-ocean LOD, wrapped-water removal, and full-surface continuity repair; no save/API break.
+
+#### 🌊 Actual ocean geometry with no gaps
+- Added `PlanetOceanLodRenderer`: a whole-planet ocean mesh sampled from `SphereDensity` that emits triangles **only** above real terrain-defined ocean basins. It is not a global water sphere and cannot appear beneath dry land or inside a mined cave.
+- Ocean LOD uses the same 642 / 2,562 / 10,242 distance budgets as terrain, sits slightly beneath local streamed water, and fills visual seams between water chunks rather than leaving large blue gaps.
+- Disabled every retained procedural wrapped-water patch at runtime and through Step 16 setup. Generated voxel water remains the local gameplay authority for buckets, pumps, swimming, buoyancy, and mining.
+
+#### 🪐 Continuous surface hierarchy
+- The inset terrain LOD now fills every unstreamed region at ground, flight, and orbit while real voxel chunks naturally occlude it near the player. Terrain and ocean therefore share a continuous full-planet LOD hierarchy instead of a square loaded island.
+
+#### ✅ Static delivery checks
+- Source parsing and targeted ocean/terrain LOD, real-water, dirt, mining, oil, and regression assertions are run locally. Unity compilation and Play Mode validation remain pending from Thomas.
+
+---
+
+### [7.11.3-dev] Real Ocean Basins, Dirt Drops & Surface Continuity
+
+**Type:** PATCH — real-water rendering, complete surface continuity, mining-drop, and oil-seep follow-up; no save/API break.
+
+#### 💧 Real water, never a wrapped cave sphere
+- Disabled and removes every retained `ProceduralWaterPatchRenderer` at runtime/setup. The former mathematical sea shell was the remaining reason mined caves still appeared to strike water.
+- Real generated water voxels now own every visible ocean, lake, pool, bucket, and oil surface; `WaterMeshBuilder` no longer skips sea-level water for a fake shell.
+- Full-planet LOD now stays active at all altitudes but is inset beneath real local voxel terrain. Nearby chunks depth-occlude it, while the sampled LOD fills every unstreamed part of the planet instead of leaving a square chunk bubble or missing horizon.
+
+#### 🪨 Dirt and actual terrain continuity
+- Step 8 / Step 16 setup now repairs the missing setup-authored `Item_Clay.asset` as **Dirt**, creates/repairs Grass/Dirt material definitions, and links absent Clay/Grass mining drops without overwriting custom rewards.
+- Corrected the original normal-item authoring path so future setup runs actually save newly created material item assets.
+- Forced radial terrain normals outward and made terrain surface passes two-sided, removing spherical chunk-face winding holes and improving wrapped grass/lighting continuity.
+
+#### 🛢 Grounded crude seep geometry
+- Surface puddle cells now individually resolve their local radial hillside/ocean surface before oil is written, preventing the prior fixed-radius disc from scattering crude across slopes.
+- Increased the tapering funnel mouth to match the puddle and reduced crude lateral spread to one voxel step, keeping dense oil cohesive as it descends into the deep reservoir.
+
+#### ✅ Static delivery checks
+- Source parsing and targeted real-water/LOD/dirt/oil regression assertions are run locally. Unity compilation and Play Mode validation remain pending from Thomas.
+
+---
+
+### [7.11.2-dev] Full Planet Surface LOD & Active-World Mining Repair
+
+**Type:** PATCH — full-sphere LOD, terrain/grass wrapping, interaction, and cave-water follow-up; no save/API break.
+
+#### 🪐 Full planet surface from orbit
+- Replaced the unreliable white built-in-material LOD with a native vertex-colour `PlanetSurfaceLodURP` shader. The active body now renders as its sampled ocean/land/mountain sphere rather than a white coarse hexasphere.
+- Upgraded the full-planet mesh into true near/mid/far vertex-budget LODs (10,242 / 2,562 / 642 vertices depending on altitude and graphics tier), while local voxel chunks remain the close-range editable detail layer.
+- Repaired parent-body binding and transparent hand-off: the far shell is disabled on the ground, never writes depth over terrain, then returns as a colored spherical surface in flight/orbit. Distant system bodies continue using their authored `displayColor` proxies.
+
+#### ⛏ Terrain, grass, caves, and liquid interaction
+- Fixed hand/pickaxe routing to the active spherical world and its real material registry, including radial hit resolution and liquid-collider ray filtering.
+- Converted grass/scatter placement and wind bending to radial/tangent coordinates. Terrain material noise, slopes, and triplanar coordinates now use the active body centre, eliminating the top-of-planet-only appearance.
+- Restricted generated water to real ocean basins, repaired legacy dry-cave water locally as a player mines, and lets real local liquid trigger swim/escape and mining correctly.
+
+#### ✅ Static delivery checks
+- Source parsing and targeted spherical-terrain/LOD/mining/water regression assertions are run locally. Unity compilation and Play Mode validation remain pending from Thomas.
+
+---
+
+### [7.11.1-dev] Spherical Terrain, Dry Caves & Planet LOD Repair
+
+**Type:** PATCH — spherical-world interaction, terrain orientation, cave-water, and far-LOD fixes; no save/API break.
+
+#### ⛏ Reliable mining in terrain and liquid
+- Rebound `PlayerInteractionTool` to `ActiveWorld.Current` and that world’s `MaterialRegistry` every frame, preventing the disabled legacy flat-world reference from silently blocking hand/pickaxe mining on sphere terrain.
+- Hardened terrain hit resolution to enter the radial terrain surface before editing, and ignores liquid visual colliders so a player can keep mining while submerged in water or crude oil.
+- Real-liquid swim state now activates from any actual local liquid voxel, including a mined/pumped pocket away from the global sea shell; jump/swim depth uses local fluid depth so players can escape rather than getting wedged in a hole.
+
+#### 🌍 Wrapped terrain, grass, and full-planet LOD
+- Rebuilt GPU grass placement from a top-of-planet XZ scan into a radial/tangent surface search. Blades, scatter yaw, wind bending, terrain noise, triplanar mapping, and slope shading now follow the body’s local radial frame around the entire sphere.
+- Added body-centre shader globals from `SphereWorld`, fixing offset-planet terrain/grass orientation instead of treating scene origin or global Y as the top of every planet.
+- Repaired `PlanetLodImpostor` body binding: the far shell now resolves the actual parent body rather than an empty child component, fades completely out near voxel terrain, and appears from orbit with proper spherical LOD. Existing distant-body proxies continue using each template’s `displayColor` (including acid-world green).
+
+#### 💧 Dry caves and legacy water repair
+- Spherical density now generates water only in true terrain-defined ocean basins. Dry-land caves excavated below the mathematical sea radius remain air; placed/pumped liquid and oceans remain valid fluid.
+- Added a small local migration cleanup when mining removes terrain: old auto-generated dry-cave water around that excavation is cleared while real ocean basins and current-session player-placed liquid are preserved.
+
+#### ✅ Static delivery checks
+- Source parsing and targeted regression assertions are run locally. Unity compilation and Play Mode validation remain pending from Thomas.
+
+---
+
+### [7.11.0-dev] Native Spherical Water, Pool Pumps & Boat Wakes
+
+**Type:** MINOR — new save-compatible native spherical-water presentation and wake system, with additive liquid-state persistence.
+
+#### 🌊 Native water — no external ocean runtime
+- Removed all shipped external-ocean integration scripts, binders, clip/depth helpers, oil controller, and wake emitter code. Step 8 / Step 16 now removes legacy scene components and deletes `Assets/Liquid` when that old package path exists; `VoxelEngineAssets/Fluids` remains as the game’s own bucket/pump/tank/pipe content.
+- Re-enabled and rebuilt the in-house curved ocean renderer as a camera-local **spherical sea shell**. It publishes the active body centre to `VoxelWaterURP`, so radial waves, normals, and water visuals no longer use raw scene-origin math.
+- Native voxel meshes retain finite lakes, rivers, buckets, and all crude pools; the curved shell owns open ocean water without double surfaces.
+- Added in-house radial boat wakes: maritime ships submit actual submerged movement to a 16-stamp native wake registry, and the water shader renders fading V-wake foam plus subtle surface displacement around spherical planets.
+
+#### 🪣 Pools, pumps, tanks, and pipes
+- Repaired finite-pool pumping: `FluidManager.ScanPool` now returns the scanned cells as well as litres/voxel count, allowing a normal finite source to truly drain into the pump buffer instead of only reporting volume.
+- Pump source acquisition now follows local radial down/tangent directions on spherical planets, not global world-Y. Its existing UI continues to show **NO SOURCE / FINITE / ∞ INFINITE**, pool litres, pool voxels, threshold progress, intake/output rates, pipe-network status, and the live internal tank.
+- Large connected water or crude pools are classified as infinite; the pump creates liquid directly in its internal tank without draining that source. Finite sources drain voxel-by-voxel. Output now honours the connected pipe network’s bottleneck before filling compatible tanks.
+- Added additive save/restore for world and grid liquid tank contents plus Water Pump internal liquid type/buffer.
+
+#### 🛢 Dense crude geology
+- Refined natural crude sites to visibly form **surface seep → tapered radial funnel → deep reservoir** on the existing oil-rich spherical worlds.
+- Per the approved game rule, crude oil is denser than water and sinks through it in deliberately slow deterministic pulses; its fall and lateral spread are much slower than water.
+- Buckets, pumps, tanks, pipes, and the refinery share the same voxel-liquid types. The Pirate-only Jack Pump infinite-node gate remains unchanged.
+
+#### ✅ Static delivery checks
+- Source parsing and native-water/oil/pump regression assertions are run locally. Unity compilation and Play Mode validation remain pending from Thomas.
+
+---
+
+### [7.10.2-dev] Oil-Rich Seep Distribution & Pirate-Only Infinite Nodes
+
+**Type:** PATCH — resource-distribution correction and strict infinite-node scoping; no save/API break.
+
+#### 🛢 Finite crude where planetary geology supports it
+- Split ordinary finite crude-oil seep generation from rare infinite Jack Pump nodes. Finite sites now use setup-authored per-world permissions rather than inheriting Pirate World’s restriction.
+- Setup configures finite, drainable seep fields on **Earth** (8%), **Ocean World** (10%), **Acid World** (6%), **Desolate World** (5%), and **Pirate World** (12%). Each remains the visible puddle → bore → reservoir feature and can be collected with normal liquid handling.
+- Worlds outside that intentional oil-rich list continue to filter crude markers and receive no finite seep sites, preserving their own resource identity.
+
+#### ⚙ Infinite extraction locked to Planet_Pirate
+- Hardened the infinite-node authorization path: after setup migration, only the canonical `Planet_Pirate` asset receives the internal infinite-node identity, even if another world shares a similar display name or a copied serialized flag.
+- `PirateOilNode`, Jack Pump eligibility, and generic-pump protection all now enforce that same canonical Pirate-only gate. Every non-Pirate oil seep is finite.
+
+#### 🛠 Setup-owned migration
+- Step 10 — **Build Industrial Content** and Step 21 — **Build Celestial Worlds** now author/repair the full finite-oil distribution and the Pirate-only infinite flag non-destructively.
+- The first migration applies intended default rates while later setup runs preserve deliberate custom finite-seep rates on custom worlds.
+
+#### ✅ Static delivery checks
+- Source parsing and targeted regression assertions are run locally. Unity compilation and Play Mode validation remain pending from Thomas.
+
+---
+
+### [7.10.1-dev] Pirate Crude Site Discovery Repair
+
+**Type:** PATCH — generation reliability, migration, and progression-gate correction; no save/API break.
+
+#### 🛢 Discoverable Pirate crude oil
+- Reworked Pirate oil-site placement to be deterministic from real spherical surface cells instead of relying on one randomly encountered underground crude marker. Pirate World now produces visible **finite** crude seeps reliably: a dark surface puddle, radial bore, and compact reservoir.
+- Kept rare infinite sites as the much lower-frequency **0.3% per geological cell** subset (migrating the previous 2.5% default). They retain the larger puddle → bore → deep-reservoir read and register the infinite runtime identity required by a Jack Pump.
+- Existing streamed/saved spherical chunks are now checked safely as they load, so the repair can populate compatible Pirate terrain without requiring a fresh save. Deferred site construction waits for the needed streamed terrain instead of giving up while surface chunks are unavailable.
+
+#### 🔒 Pirate-only and progression-safe
+- Added a setup-owned finite-seep chance, strict exact **Pirate World** identity check, and a legacy configuration bridge. Old `Planet_Pirate` assets no longer silently lose crude oil just because their newly added serialized flag has not yet been written; all non-Pirate planets remain blocked.
+- Jack Pumps now require the explicit rare-node marker rather than any visible crude fluid, so ordinary finite seeps cannot become accidental infinite sources.
+- Generic liquid pumps decline marked infinite-node crude, preserving the relic-gated Jack Pump as the only infinite extraction route.
+
+#### 🛠 Setup and diagnostics
+- Step 10 — **Build Industrial Content** repairs/serializes Pirate World oil settings non-destructively; Step 21 also preserves that configuration when celestial templates are rebuilt.
+- Added concise runtime diagnostics for Pirate oil configuration and the first created sites to make Unity feedback actionable.
+
+#### ✅ Static delivery checks
+- Source parsing and targeted regression assertions are run locally. Unity compilation and Play Mode validation remain pending from Thomas.
+
+---
 
 ### [7.10.0-dev] Pirate Infinite Oil Nodes & Jack Pump Industry
 

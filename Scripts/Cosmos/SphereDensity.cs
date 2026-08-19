@@ -85,9 +85,13 @@ namespace VoxelEngine.Cosmos
         /// </summary>
         public static float LandMask(int seed, in float3 dir, float continentScaleDir)
         {
-            float3 p = dir + SeedOffset(seed, 3);
-            float coarse = noise.snoise(p * continentScaleDir)             * 0.5f + 0.5f;
-            float shape  = noise.snoise(p * continentScaleDir * 2.3f + 13f) * 0.5f + 0.5f;
+            // Apply frequency to the unit direction before the seed translation. This keeps
+            // continental scale stable on authored-size planets instead of collapsing into one
+            // nearly flat land/ocean band as radius grows.
+            float scale = math.max(0.25f, continentScaleDir);
+            float3 p = dir * scale + SeedOffset(seed, 3);
+            float coarse = noise.snoise(p)             * 0.5f + 0.5f;
+            float shape  = noise.snoise(p * 2.3f + 13f) * 0.5f + 0.5f;
             float land   = coarse * 0.72f + shape * 0.28f;
             return math.saturate(math.smoothstep(0.34f, 0.62f, land));
         }
@@ -110,9 +114,12 @@ namespace VoxelEngine.Cosmos
             float3 tangent1 = math.normalizesafe(math.cross(dir, refVec), new float3(1, 0, 0));
             float3 tangent2 = math.normalizesafe(math.cross(dir, tangent1), new float3(0, 0, 1));
 
-            // Small angular offset (~1° in direction space).
-            float3 d1 = math.normalizesafe(dir + tangent1 * 0.02f, dir);
-            float3 d2 = math.normalizesafe(dir + tangent2 * 0.02f, dir);
+            // Sample a stable physical span instead of a fixed large angular offset. Full-size
+            // planets otherwise interpret 0.02 radians as a huge distance and report artificial
+            // cliff slopes everywhere.
+            float angularStep = math.clamp(16f / math.max(1f, prm.radiusWorld), 0.0005f, 0.006f);
+            float3 d1 = math.normalizesafe(dir + tangent1 * angularStep, dir);
+            float3 d2 = math.normalizesafe(dir + tangent2 * angularStep, dir);
 
             EvaluateColumn(prm, biomes, d1, out float h1, out _);
             EvaluateColumn(prm, biomes, d2, out float h2, out _);
@@ -142,8 +149,10 @@ namespace VoxelEngine.Cosmos
 
         /// <summary>
         /// Evaluate the surface radius (metres from core) and dominant biome index for a
-        /// direction. Blends all biome heights via softmax so adjacent biomes never produce a
-        /// cliff at the seam. Ocean biomes are pulled below sea level and damped by the land mask.
+        /// direction. 9.0.0: the terrain SHAPE comes from <see cref="VoxelEngine.GpuVoxel.PlanetField"/> —
+        /// the exact field the GPU quadtree surface evaluates — so the gameplay bubble,
+        /// scatter, waterfalls, sky proxies and ocean cut-outs all agree with the rendered
+        /// planet at every LOD. Biomes still drive materials, scatter and climate.
         /// </summary>
         public static void EvaluateColumn(
             in SphereGenParams prm,
@@ -153,9 +162,8 @@ namespace VoxelEngine.Cosmos
             out int  biomeIndex)
         {
             float2 climate = SampleClimate(prm.seed, dir);
-            float landMask = LandMask(prm.seed, dir, prm.continentScaleDir);
 
-            // Dominant biome.
+            // Dominant biome (materials / scatter / climate flavour only).
             float bestScore = -1e9f;
             biomeIndex = 0;
             for (int i = 0; i < biomes.Length; i++)
@@ -164,59 +172,186 @@ namespace VoxelEngine.Cosmos
                 if (s > bestScore) { bestScore = s; biomeIndex = i; }
             }
 
-            // Softmax-blend all biome heights.
-            float weightSum = 0f, heightSum = 0f;
-            for (int i = 0; i < biomes.Length; i++)
-            {
-                var b = biomes[i];
-                float s = Score(b, climate);
-                float w = math.exp((s - bestScore) * 2.5f);
-                if (w < 0.0005f) continue;
+            // Terrain shape — the unified 9.0.0 planetary field (GPU/CPU lockstep).
+            surfaceRadius = VoxelEngine.GpuVoxel.PlanetField.SurfaceRadius(
+                prm.seed, dir, prm.radiusWorld, prm.baseHeight, prm.seaRadius,
+                prm.continentScaleDir, prm.mountainScale);
+        }
 
-                float detail;
-                if (b.ridgedness > 0.01f)
-                {
-                    float n = 1f - math.abs(noise.snoise(dir * b.heightFrequency + i * 5.1f));
-                    detail = math.lerp(noise.snoise(dir * b.heightFrequency + i * 5.1f), n * n, b.ridgedness);
-                }
-                else
-                {
-                    detail = noise.snoise(dir * b.heightFrequency + i * 5.1f);
-                }
+        // ────────────────────────────────────────────────────────────────
+        // CHUNK-COLUMN CACHING (7.20.0, gradient-corrected 8.0.2)
+        // ────────────────────────────────────────────────────────────────
+        // Evaluating the FULL column (climate + landmask + biome softmax + tectonic
+        // ridges + slope probe ≈ 10–30 snoise calls) once per VOXEL was the dominant
+        // generation cost. The column is now evaluated once per CHUNK (≈5 column
+        // samples) plus a first-order gradient correction per voxel, so chunk
+        // generation stays ~10–30× faster while the surface follows the true
+        // spherical terrain across the whole chunk — LOD chunks (64 m–16 km) are
+        // NOT flat slabs. The per-voxel work that remains (density, caves, surface
+        // material bands, ores, oil, water) is unchanged.
 
-                float biomeHeight = b.heightOffset + detail * b.heightAmplitude * prm.mountainScale;
-
-                if (b.isOceanic == 1)
-                    biomeHeight = -math.lerp(40f, 5f, landMask) + detail * (b.heightAmplitude * 0.5f);
-
-                heightSum += biomeHeight * w;
-                weightSum += w;
-            }
-
-            float blended = weightSum > 0f ? heightSum / weightSum : 0f;
-
-            float coastPull  = math.smoothstep(0f, 0.45f, landMask);
-            float oceanFloor = -25f;
-            float terrainOffset = math.lerp(oceanFloor, blended, coastPull);
-
-            surfaceRadius = prm.MeanSurfaceRadius + terrainOffset;
+        /// <summary>
+        /// One precomputed surface column shared by every voxel of a chunk, PLUS a
+        /// first-order gradient correction so the surface stays correct ACROSS the
+        /// whole chunk (8.0.2). A single centre-only column made LOD chunks render as
+        /// flat slabs at the chunk-centre height — stacked layers with gaps on the
+        /// planet. The gradient restores the true spherical/terrain-following surface:
+        ///
+        ///     surfaceRadius(dir) ≈ surfaceRadius(centerDir)
+        ///                        + dot(surfaceGrad, dir − centerDir)
+        ///
+        /// Burst-blittable POD — safe to pass into jobs.
+        /// </summary>
+        public struct ChunkColumn
+        {
+            /// <summary>Terrain surface radius (m from core) at the chunk's direction.</summary>
+            public float surfaceRadius;
+            /// <summary>Dominant biome index into the biome array.</summary>
+            public int   biomeIndex;
+            /// <summary>Climate (temperature, humidity) at the chunk's direction.</summary>
+            public float2 climate;
+            /// <summary>1 = the chunk's local slope is a genuine cliff (rock surface).</summary>
+            public byte  slopeRock;
+            /// <summary>Unit direction the column was evaluated at (chunk centre).</summary>
+            public float3 centerDir;
+            /// <summary>∂surfaceRadius/∂dir (m per unit direction) — linear correction.</summary>
+            public float3 surfaceGrad;
         }
 
         /// <summary>
-        /// Full per-voxel evaluation. Returns the voxel (density byte + material + water level)
-        /// for a body-relative cartesian position.
+        /// Evaluate the full surface column ONCE for a whole chunk (direction = the
+        /// chunk's radial centre), including a 7-sample gradient so the shared column
+        /// stays accurate across the chunk's whole footprint. Slope probing is done
+        /// once here too — the old code re-sampled two offset columns per voxel,
+        /// which dominated generation cost.
+        /// </summary>
+        public static ChunkColumn EvaluateChunkColumn(
+            in SphereGenParams prm,
+            in NativeArray<BiomeData> biomes,
+            in float3 dir)
+        {
+            ChunkColumn col;
+            EvaluateColumn(prm, biomes, dir, out float surfaceRadius, out int biomeI);
+            col.surfaceRadius = surfaceRadius;
+            col.biomeIndex    = biomeI;
+            col.climate       = SampleClimate(prm.seed, dir);
+            col.slopeRock      = 0;
+            col.centerDir      = dir;
+            col.surfaceGrad    = float3.zero;
+
+            // Tangent basis on the sphere at the chunk centre.
+            float3 refVec = math.abs(dir.y) < 0.9f ? new float3(0, 1, 0) : new float3(1, 0, 0);
+            float3 t1 = math.normalizesafe(math.cross(dir, refVec), new float3(1, 0, 0));
+            float3 t2 = math.normalizesafe(math.cross(dir, t1), new float3(0, 0, 1));
+
+            // Slope probe — identical maths to the original per-voxel cliff test
+            // (physical ~12 m span), run once per chunk.
+            float slopeStep = math.clamp(12f / math.max(1f, prm.radiusWorld), 0.0005f, 0.005f);
+            EvaluateColumn(prm, biomes, math.normalizesafe(dir + t1 * slopeStep, dir), out float s1, out _);
+            EvaluateColumn(prm, biomes, math.normalizesafe(dir + t2 * slopeStep, dir), out float s2, out _);
+            float heightDiff = math.max(math.abs(s1 - surfaceRadius), math.abs(s2 - surfaceRadius));
+            col.slopeRock = heightDiff > 10f ? (byte)1 : (byte)0;
+
+            // Gradient probe — central differences over a wider (~36 m) baseline so
+            // the linear correction captures real terrain slopes across the chunk.
+            float gradStep = math.clamp(36f / math.max(1f, prm.radiusWorld), 0.0015f, 0.012f);
+            EvaluateColumn(prm, biomes, math.normalizesafe(dir + t1 * gradStep, dir), out float g1p, out _);
+            EvaluateColumn(prm, biomes, math.normalizesafe(dir - t1 * gradStep, dir), out float g1m, out _);
+            EvaluateColumn(prm, biomes, math.normalizesafe(dir + t2 * gradStep, dir), out float g2p, out _);
+            EvaluateColumn(prm, biomes, math.normalizesafe(dir - t2 * gradStep, dir), out float g2m, out _);
+            float d1 = (g1p - g1m) / (2f * gradStep);
+            float d2 = (g2p - g2m) / (2f * gradStep);
+            col.surfaceGrad = t1 * d1 + t2 * d2;
+            return col;
+        }
+
+        /// <summary>
+        /// Full per-voxel evaluation (no oil map — the gameplay world path).
+        /// Returns the voxel (density byte + material + water level) for a body-relative
+        /// cartesian position.
         /// </summary>
         public static Voxel EvaluateVoxel(
             in SphereGenParams prm,
             in NativeArray<BiomeData> biomes,
             in NativeArray<OreLayer> ores,
             in float3 worldPos)
+            => EvaluateVoxel(prm, biomes, ores, worldPos, default);
+
+        /// <summary>
+        /// Full per-voxel evaluation with an optional oil-site map (LOD levels).
+        /// Returns the voxel (density byte + material + water level) for a body-relative
+        /// cartesian position. Equivalent to computing the column at the voxel's own
+        /// direction and delegating to <see cref="EvaluateVoxelCached"/> — kept for
+        /// preview/authoring callers; chunk generation uses the cached path.
+        /// </summary>
+        public static Voxel EvaluateVoxel(
+            in SphereGenParams prm,
+            in NativeArray<BiomeData> biomes,
+            in NativeArray<OreLayer> ores,
+            in float3 worldPos,
+            in NativeParallelHashMap<int, OilSiteData> oilSites)
         {
+            if (prm.isAsteroidBelt == 1)
+                return EvaluateAsteroidVoxel(prm, worldPos);
+
+            float3 dir = math.normalizesafe(worldPos, new float3(1f, 0f, 0f));
+            return EvaluateVoxelCached(prm, biomes, ores, worldPos,
+                EvaluateChunkColumn(prm, biomes, dir), oilSites);
+        }
+
+        /// <summary>
+        /// Per-voxel evaluation against a precomputed <see cref="ChunkColumn"/> — the
+        /// fast path used by <see cref="SphereChunkGenJob"/> (one column per chunk).
+        /// </summary>
+        public static Voxel EvaluateVoxelCached(
+            in SphereGenParams prm,
+            in NativeArray<BiomeData> biomes,
+            in NativeArray<OreLayer> ores,
+            in float3 worldPos,
+            in ChunkColumn column,
+            in NativeParallelHashMap<int, OilSiteData> oilSites)
+        {
+            if (prm.isAsteroidBelt == 1)
+                return EvaluateAsteroidVoxel(prm, worldPos);
+
             float radius = math.length(worldPos);
             float3 dir   = math.normalizesafe(worldPos, new float3(1f, 0f, 0f));
 
-            EvaluateColumn(prm, biomes, dir, out float surfaceRadius, out int biomeI);
-            var biome = biomes[biomeI];
+            // Legacy first-order surface correction (8.0.2). NOTE: the gameplay world no
+            // longer uses this path — the linear extrapolation breaks on the 9.x ridged
+            // field (whole chunks generated hollow or filled = the "gaps on generation"
+            // and "hole through the planet" reports). SphereChunkGenJob now supplies an
+            // exact per-voxel surface radius via its surface LATTICE and calls
+            // EvaluateVoxelWithSurface below. This wrapper remains for probe callers.
+            float3 dDir = dir - column.centerDir;
+            float surfaceRadius = column.surfaceRadius
+                + column.surfaceGrad.x * dDir.x
+                + column.surfaceGrad.y * dDir.y
+                + column.surfaceGrad.z * dDir.z;
+
+            return EvaluateVoxelWithSurface(prm, biomes, ores, worldPos, surfaceRadius, column, oilSites);
+        }
+
+        /// <summary>
+        /// Per-voxel evaluation against an EXACT (or lattice-interpolated) surface
+        /// radius (9.5.0) — the artifact-free path used by SphereChunkGenJob. Biome,
+        /// climate and slope flavour still come from the shared chunk column.
+        /// </summary>
+        public static Voxel EvaluateVoxelWithSurface(
+            in SphereGenParams prm,
+            in NativeArray<BiomeData> biomes,
+            in NativeArray<OreLayer> ores,
+            in float3 worldPos,
+            float surfaceRadius,
+            in ChunkColumn column,
+            in NativeParallelHashMap<int, OilSiteData> oilSites)
+        {
+            if (prm.isAsteroidBelt == 1)
+                return EvaluateAsteroidVoxel(prm, worldPos);
+
+            float radius = math.length(worldPos);
+            float3 dir   = math.normalizesafe(worldPos, new float3(1f, 0f, 0f));
+            var biome = biomes[column.biomeIndex];
 
             float density = surfaceRadius - radius;
 
@@ -224,15 +359,16 @@ namespace VoxelEngine.Cosmos
             if (radius <= coreRadius)
                 return new Voxel(127, (byte)MaterialId.Stone, 0);
 
-            int depth = (int)math.round(surfaceRadius - radius);
+            int depth = (int)math.floor(surfaceRadius - radius);
 
-            // Caves.
-            if (depth > 6 && radius > coreRadius + 6f && surfaceRadius > prm.seaRadius - 1f)
+            // Caves come from the SAME carve function the GPU surface evaluates
+            // (PlanetField.CaveCarve) — sealed beneath a protective crust and never
+            // under the sea, so the bubble's caves match the rendered planet exactly.
+            int protectedSurfaceCrust = math.max(8, biome.surfaceDepth + biome.subsurfaceDepth + 2);
+            if (radius > coreRadius + 6f)
             {
-                float cave = noise.snoise(worldPos * 0.045f) * 0.5f + 0.5f;
-                cave += noise.snoise(worldPos * 0.09f + 50f) * 0.25f;
-                if (cave > 0.68f)
-                    density -= (cave - 0.68f) * 90f;
+                density -= VoxelEngine.GpuVoxel.PlanetField.CaveCarve(
+                    worldPos, surfaceRadius, radius, prm.seaRadius, protectedSurfaceCrust);
             }
 
             if (density > 0f)
@@ -240,8 +376,8 @@ namespace VoxelEngine.Cosmos
                 byte material = (byte)MaterialId.Stone;
 
                 // ── Surface material selection (Phase 3: slope + snow + beach) ──
-                float altitudeAboveSea = surfaceRadius - prm.seaRadius;  // metres above sea level
-                float2 climate = SampleClimate(prm.seed, dir);
+                float altitudeAboveSea = surfaceRadius - prm.seaRadius; // metres above sea level
+                float2 climate = column.climate;                    // cached per chunk (smooth fields)
                 bool atSurface = depth < biome.surfaceDepth;
 
                 // Beach band: ONLY right at the waterline (±1m, top 2 voxels). The old band was
@@ -273,19 +409,13 @@ namespace VoxelEngine.Cosmos
                 }
 
                 // ── SLOPE-BASED ROCK: steep terrain = stone, no grass on cliffs ──
-                // Only apply on genuinely steep slopes (large height difference over a small
-                // angular step). Threshold tuned high (8m) so gentle hills keep their grass —
-                // only cliffs and mountain faces become rock.
-                if (depth < biome.surfaceDepth + biome.subsurfaceDepth && altitudeAboveSea > 5f)
+                // The slope probe itself is evaluated ONCE per chunk (ChunkColumn);
+                // here we only apply it inside the same depth/altitude band the old
+                // per-voxel test used, so gentle hills keep their grass.
+                if (column.slopeRock == 1 &&
+                    depth < biome.surfaceDepth + biome.subsurfaceDepth && altitudeAboveSea > 5f)
                 {
-                    // Cheap slope estimate: sample height noise at an offset.
-                    float3 refVec = math.abs(dir.y) < 0.9f ? new float3(0, 1, 0) : new float3(1, 0, 0);
-                    float3 tangent = math.normalizesafe(math.cross(dir, refVec), new float3(1, 0, 0));
-                    float3 dirOff = math.normalizesafe(dir + tangent * 0.03f, dir);
-                    EvaluateColumn(prm, biomes, dirOff, out float surfaceOff, out _);
-                    float heightDiff = math.abs(surfaceOff - surfaceRadius);
-                    if (heightDiff > 8f)   // only genuine cliffs/mountain faces → rock
-                        material = (byte)MaterialId.Stone;
+                    material = (byte)MaterialId.Stone;
                 }
 
                 // ── Ore veins ──
@@ -305,19 +435,77 @@ namespace VoxelEngine.Cosmos
                     }
                 }
 
-                sbyte densityByte = (sbyte)math.clamp(density, 1f, 127f);
+                // ── Oil sites (LOD levels) ──
+                // The gameplay world authors oil with OilReservoirDecorator; the LOD
+                // levels reproduce the same puddle → bore → reservoir story from the
+                // precomputed site map so oil fields are visible from orbit and from
+                // the air. Only probed near the surface (map lookup is cheap).
+                if (prm.hasOilSeeps == 1 && oilSites.IsCreated && oilSites.Count() > 0 && depth < 90f)
+                {
+                    byte oilMaterial = OilSiteSampler.Sample(oilSites, worldPos, depth, dir);
+                    if (oilMaterial != 0) material = oilMaterial;
+                }
+
+                // Scale physical distance (metres) by 32 into signed-byte density units so
+                // SurfaceNetsJob's zero-crossing interpolation (t = da / (da - db)) operates
+                // with sub-voxel precision. Unscaled density clamped to ±1 caused every surface
+                // edge to interpolate at t=0.5, creating stepped contour rings on gentle slopes.
+                int scaledDensity = (int)math.round(density * 32f);
+                sbyte densityByte = (sbyte)math.clamp(scaledDensity, 1, 127);
                 return new Voxel(densityByte, material, 0);
             }
             else
             {
-                if (radius <= prm.seaRadius)
+                // Only true ocean basins receive generated water. A cave excavated below the
+                // mathematical sea shell on otherwise dry land must remain air: players should
+                // encounter water only in oceans, intentional lakes, or placed/pumped liquid.
+                if (surfaceRadius < prm.seaRadius - 1f && radius <= prm.seaRadius)
                 {
-                    // Ocean volume is always water. Crude oil is authored by
-                    // OilReservoirDecorator as one coherent surface puddle + bore +
-                    // underground reservoir, never as random submerged noise patches.
+                    // Crude oil is authored separately as one coherent surface seep, tapered
+                    // funnel, and deep reservoir — never as random submerged noise patches.
                     return new Voxel(-5, (byte)MaterialId.WaterLiquid, 255);
                 }
-                return new Voxel((sbyte)math.clamp(density, -127f, -1f), (byte)MaterialId.Air, 0);
+                int scaledDensity = (int)math.round(density * 32f);
+                sbyte densityByte = (sbyte)math.clamp(scaledDensity, -127, -1);
+                return new Voxel(densityByte, (byte)MaterialId.Air, 0);
+            }
+        }
+
+        /// <summary>
+        /// Roadmap Era 4 Asteroid Belt: zero-gravity scattered procedural voxel asteroids
+        /// spawning rarely in 3D space everywhere around the player (no surface/shell).
+        /// Fully per-voxel — belt rocks have no coherent column to cache.
+        /// </summary>
+        private static Voxel EvaluateAsteroidVoxel(
+            in SphereGenParams prm,
+            in float3 worldPos)
+        {
+            float3 p = worldPos * 0.038f;
+            float n1 = noise.snoise(p + SeedOffset(prm.seed, 1));
+            float n2 = noise.snoise(p * 2.3f + SeedOffset(prm.seed, 2)) * 0.45f;
+            float n3 = noise.snoise(p * 5.1f + SeedOffset(prm.seed, 3)) * 0.20f;
+            float rockNoise = (n1 + n2 + n3);
+
+            float densityAst = (rockNoise - 0.44f) * 40f;
+
+            if (densityAst > 0f)
+            {
+                byte material = (byte)MaterialId.Stone;
+                float oreChoice = noise.snoise(worldPos * 0.11f + SeedOffset(prm.seed, 4));
+                if (oreChoice > 0.52f) material = (byte)MaterialId.Platinum;
+                else if (oreChoice > 0.30f) material = (byte)MaterialId.Cobalt;
+                else if (oreChoice > 0.10f) material = (byte)MaterialId.Gold;
+                else if (oreChoice > -0.15f) material = (byte)MaterialId.Iron;
+                else if (oreChoice > -0.40f) material = (byte)MaterialId.Silicon;
+                else if (oreChoice > -0.65f) material = (byte)MaterialId.Ice;
+
+                int scaledD = (int)math.round(densityAst * 32f);
+                return new Voxel((sbyte)math.clamp(scaledD, 1, 127), material, 0);
+            }
+            else
+            {
+                int scaledD = (int)math.round(densityAst * 32f);
+                return new Voxel((sbyte)math.clamp(scaledD, -127, -1), (byte)MaterialId.Air, 0);
             }
         }
     }

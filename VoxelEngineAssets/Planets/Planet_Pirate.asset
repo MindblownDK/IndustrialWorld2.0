@@ -33,6 +33,11 @@ MonoBehaviour:
     enableGrass: 0
     radiusKm: 7
     displayColor: {r: 0.5, g: 0.42, b: 0.32, a: 1}
+    skyZenith: {r: 0, g: 0, b: 0, a: 0}
+    skyHorizon: {r: 0, g: 0, b: 0, a: 0}
+    skySunset: {r: 0, g: 0, b: 0, a: 0}
+    skyFog: {r: 0, g: 0, b: 0, a: 0}
+    skyProfileVersion: 1
     allowedBiomes:
     - {fileID: 11400000, guid: 3a99509023238744b894af83358e1314, type: 2}
     subSurfaceOres:
@@ -136,11 +141,17 @@ MonoBehaviour:
       minDepth: 0
       maxDepth: 12
       abundance: 1
+    enableCrudeOilSeeps: 1
+    crudeOilSiteChance: 0.08
+    crudeOilSeepSettingsVersion: 2
     enableInfiniteOilNodes: 1
-    infiniteOilNodeChance: 0.025
-  solarSystem: {fileID: 0}
+    infiniteOilNodeChance: 0.003
+    pirateOilNodeSettingsVersion: 1
+    isCanonicalPirateJackPumpWorld: 1
+  solarSystem: {fileID: 11400000, guid: 9bb2dbc7a9af8df42b2c57567cac00f6, type: 2}
   distanceFromSun: 0
   orbitalDistanceKm: {x: 1500, y: 6000}
   orbitSpeed: 1
+  orbitEccentricity: 0
   orbitPhaseDegrees: 0
   moons: []
