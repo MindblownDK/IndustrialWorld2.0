@@ -354,59 +354,67 @@ namespace VoxelEngine.Generation
         private static bool BuildSurfacePuddle(SphereWorld world, Vector3Int surface, Vector3 up,
             int radius, HashSet<Chunk> touched)
         {
-            // 9.7.2 REDESIGN — carve-and-fill. The old approach placed a liquid FILM in
-            // exterior air cells: on any slope the film hovered (the recurring "tarp"),
-            // and there was no dent for the pool to sit in. Now the seep:
-            //   1. CARVES a real crater bowl into the terrain (solid → liquid oil, so
-            //      the terrain mesh genuinely dips), 2 voxels deep in the centre,
-            //      1 at the edge — liquid can never exist above ground level;
-            //   2. SOAKS the bowl floor dark (CrudeOil rock, density preserved) so the
-            //      shaft mouth is visible from the surface;
-            //   3. leaves ocean seeps as before (top fluid cell becomes crude).
+            // 9.7.3 — DOMINANT-AXIS basin. The previous carve stepped along
+            // Vector3Int.RoundToInt(up), which is DIAGONAL almost everywhere on a
+            // sphere (e.g. up ≈ (0.55, −0.29, 0.72) → step (1,0,1)): it drilled
+            // slanted holes through hillsides (the see-through gaps) and scattered
+            // the fill. The basin now works like the fluid sim: ONE cardinal axis
+            // (the dominant radial component) for every column of the seep, and a
+            // LEVEL pond that never rises above the centre's original ground line.
             bool allWritten = true;
-            GetTangentBasis(up, out Vector3 tangentA, out Vector3 tangentB);
-            int pondColumns = 0, carvedCells = 0;
+            Vector3Int step = DominantAxisStep(up);
+            GetTangentBasis(step, out Vector3 tangentA, out Vector3 tangentB);
+
+            // Ground altitude (signed along the axis) for a column near the anchor.
+            int GroundAlt(Vector3Int columnBase, out bool loaded)
+            {
+                loaded = true;
+                for (int off = 8; off >= -16; off--)
+                {
+                    Vector3Int pos = columnBase + step * off;
+                    if (!TryGetLoadedVoxel(world, pos, out Voxel vox)) { loaded = false; return int.MinValue; }
+                    if (vox.IsSolid) return off;
+                }
+                return int.MinValue;
+            }
+
+            bool anchorLoaded;
+            int anchorG = GroundAlt(surface, out anchorLoaded);
+            if (!anchorLoaded) return false;
+            if (anchorG == int.MinValue) return true;   // no ground here (ocean/void) — skip site
+
+            int pondSurf = anchorG;          // pond can never exceed the centre ground line
+            int pondFloor = anchorG - 2;     // 2 deep at the centre
+            int carvedCells = 0, columns = 0;
 
             for (int a = -radius; a <= radius; a++)
             for (int b = -radius; b <= radius; b++)
             {
                 int d2 = a * a + b * b;
                 if (d2 > radius * radius) continue;
-                Vector3 probe = surface + tangentA * a + tangentB * b;
-                if (!TryResolvePuddleSurface(world, probe, out Vector3Int localSurface))
-                {
-                    allWritten = false;
-                    continue;
-                }
+                Vector3Int columnBase = Vector3Int.RoundToInt((Vector3)surface + tangentA * a + tangentB * b);
 
-                // Ocean seep: replace only the top fluid cell with crude (unchanged).
-                if (TryGetLoadedVoxel(world, localSurface, out Voxel atSurface) &&
-                    FluidMaterialUtility.IsFluid(atSurface))
-                {
-                    allWritten &= WriteOil(world, localSurface, touched);
-                    pondColumns++;
-                    continue;
-                }
+                bool colLoaded;
+                int g = GroundAlt(columnBase, out colLoaded);
+                if (!colLoaded) { allWritten = false; continue; }
+                if (g == int.MinValue) continue;
 
-                Vector3 localUp = GetUpDir(localSurface);
-                Vector3Int step = Vector3Int.RoundToInt(localUp);
-                if (step == Vector3Int.zero) step = Vector3Int.up;
+                int targetFloor = d2 <= (radius - 1) * (radius - 1) ? pondFloor : pondFloor + 1;
+                if (g > pondSurf) continue;          // rim column — higher ground stays intact
+                if (g <= targetFloor) continue;      // already low — open pond edge, sim settles
 
-                int depth = d2 <= (radius - 1) * (radius - 1) ? 2 : 1;
-                bool carvedAny = false;
-                for (int d = 0; d < depth; d++)
+                for (int alt = targetFloor + 1; alt <= Mathf.Min(g, pondSurf); alt++)
                 {
-                    Vector3Int pos = localSurface - step * d;
+                    Vector3Int pos = columnBase + step * alt;
                     if (!TryGetLoadedVoxel(world, pos, out Voxel cell)) { allWritten = false; break; }
-                    if (!cell.IsSolid) continue;   // already open — nothing to carve here
+                    if (!cell.IsSolid && cell.waterLevel > 0) continue;   // already liquid
                     world.SetVoxelWorld(pos, new Voxel(-5, (byte)MaterialId.CrudeOil, 255), remesh: false);
                     if (TryGetChunkForWrite(world, pos, out Chunk carvedChunk)) touched.Add(carvedChunk);
                     carvedCells++;
-                    carvedAny = true;
                 }
 
-                // Soak the bowl floor dark — the visible shaft mouth.
-                Vector3Int floorPos = localSurface - step * depth;
+                // Soak the floor cell dark — the visible shaft mouth at the pond bottom.
+                Vector3Int floorPos = columnBase + step * targetFloor;
                 if (TryGetLoadedVoxel(world, floorPos, out Voxel floorVox) && floorVox.IsSolid &&
                     floorVox.material != (byte)MaterialId.CrudeOil)
                 {
@@ -414,12 +422,21 @@ namespace VoxelEngine.Generation
                         new Voxel(floorVox.density, (byte)MaterialId.CrudeOil, 0), remesh: false);
                     if (TryGetChunkForWrite(world, floorPos, out Chunk floorChunk)) touched.Add(floorChunk);
                 }
-                if (carvedAny) pondColumns++;
+                columns++;
             }
 
-            Debug.Log($"[OilReservoirDecorator] Seep basin at {surface}: {pondColumns} pond columns, " +
-                      $"{carvedCells} carved cells (crater + fill).");
+            Debug.Log($"[OilReservoirDecorator] Seep basin at {surface}: axis {step}, ground {anchorG}, " +
+                      $"{columns} columns, {carvedCells} carved cells.");
             return allWritten;
+        }
+
+        /// <summary>Single cardinal step for the dominant component of a radial up vector.</summary>
+        private static Vector3Int DominantAxisStep(Vector3 up)
+        {
+            float ax = Mathf.Abs(up.x), ay = Mathf.Abs(up.y), az = Mathf.Abs(up.z);
+            if (ax >= ay && ax >= az) return new Vector3Int(up.x >= 0f ? 1 : -1, 0, 0);
+            if (ay >= az) return new Vector3Int(0, up.y >= 0f ? 1 : -1, 0);
+            return new Vector3Int(0, 0, up.z >= 0f ? 1 : -1);
         }
 
         private static bool TryResolvePuddleSurface(SphereWorld world, Vector3 probe, out Vector3Int surface)

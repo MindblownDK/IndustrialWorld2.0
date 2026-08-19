@@ -1,9 +1,30 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.7.2-dev`
+**Current Version:** `9.7.3-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.7.3-dev] The Diagonal Step — Dominant-Axis Seep Basins (Level Ponds, Sealed Ground)
+
+**Type:** PATCH — one rounding call was the entire remaining mess.
+
+#### 🛢️ Root cause, at last: `Vector3Int.RoundToInt(up)` is DIAGONAL almost everywhere on a sphere
+At the reported site the radial up is ≈ (0.55, −0.29, 0.72) → rounds to step **(1, 0, 1)**. Every "down" the carve took marched diagonally: it drilled slanted holes through hillsides (the see-through-the-planet gaps), displaced the floor soak, and left most columns uncarved (your log: 8 of 29). The liquid then draped over that torn ground — still reading as a hovering sheet.
+
+#### The fix — basins work like the fluid sim now
+- ONE cardinal axis per seep (the dominant radial component — the same convention `FluidManager` uses), for every column.
+- Ground is found by scanning actual VOXELS along that axis (no boundary-walk semantics), so data, carve and mesh all agree.
+- The pond is LEVEL: floor = centre ground − 2 (−1 at the edge), surface can never exceed the centre's original ground line; higher rim columns are left fully intact as walls. Oil above ground is geometrically impossible, and nothing can be torn open sideways.
+- Floor cells soak dark (shaft mouth), funnel + reservoir unchanged (recolour-only). The site log now prints the axis and ground altitude for verification.
+
+#### ✅ Static delivery checks
+- Decorator parses clean; version synchronized to 9.7.3-dev.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile, fresh world (or an unexplored region far from previous seep tests).
+2. Fly to a `Seep basin at …` log site: a level dark pond sunk INTO the ground, intact rim, no holes, no floating plates, no see-through terrain anywhere around it.
+3. Mine the dark pond floor → shaft → reservoir.
 
 ### [9.7.2-dev] Oil Seep Redesign — Carve-and-Fill Craters (No Film, No Air, No Tarp Possible)
 
