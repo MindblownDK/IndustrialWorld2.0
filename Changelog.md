@@ -1,9 +1,30 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.5.4-dev`
+**Current Version:** `9.5.5-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.5.5-dev] Border Write-Through & Teleport-Immune Guard — The Last Two Ghosts
+
+**Type:** PATCH — the chunk-border mining ghost and the guard's teleport misfire (which was poisoning saves).
+
+#### ⛏️ 1. Mining ghost walls at CHUNK BORDERS (the "-215/-216 stacked colliders" log)
+Deep digging works since 9.5.4 — except exactly at chunk boundaries, where Thomas's log showed two chunks' colliders stacked over pure-air data. Root cause: every chunk keeps a 1-voxel PADDED copy of its neighbours' border voxels, but `SetVoxelWorld` only wrote the owner. The neighbour then remeshed from its STALE padding and faithfully rebuilt the OLD surface strip along the border — a ghost wall one voxel wide at every chunk face the player dug through.
+- Border edits now WRITE THROUGH into every adjacent chunk's padded cell — faces, edges AND corners (the old remesh triggers were cardinal-only; corner seams are covered now too) — before the neighbour remeshes. Neighbours are marked modified so the padding persists consistently.
+
+#### 🛡️ 2. Depenetration guard vs. teleports ("tunnelled 1182 m at ~10914 m/s")
+Respawns/loads/warps move the viewer hundreds of metres in one 0.2 s sample — the guard read that as a hypersonic dive, snapped the player MID-SPAWN (fighting the spawn routine), and the resulting mid-flight state is what produced "Saved position is inside a celestial body" on the next load.
+- The guard now tracks actual displacement: anything faster than any craft (> ~900 m/s) is treated as a teleport and silently rebaselined. The snap window is bounded to genuine physics tunnelling (60–1500 m/s of crust penetration), and a fresh baseline can never count as "was outside".
+
+#### ✅ Static delivery checks
+- All sources parse clean (tree-sitter C#); version synchronized to 9.5.5-dev.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, fresh world.
+2. Dig a long tunnel straight through several chunk borders (32 m spacing) — no more walls that refuse to break; the `[Mining]` line should never fire. If it does, send it — note it now lists ALL colliders below.
+3. Respawn/load repeatedly: no more guard warnings about impossible speeds, no "poisoned save" rejections caused by it.
+4. Ram the planet with a ship at real speed: the guard must still catch THAT (60–1500 m/s window).
 
 ### [9.5.4-dev] FOUND IT — The Collider That Never Re-Baked, Plus Revived Respawns and Grounded Loads
 

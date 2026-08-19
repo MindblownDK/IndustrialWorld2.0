@@ -1544,6 +1544,36 @@ namespace VoxelEngine.Cosmos
             c.SetVoxelLocal(lx, ly, lz, v);
             c.isModified = true;
 
+            // ── Border write-through (9.5.5 — the last mining ghost wall) ──
+            // Neighbour chunks keep a 1-voxel PADDED copy of this chunk's border. An edit
+            // on the border used to update only the owner: the neighbour then remeshed
+            // from its stale padding and faithfully rebuilt the OLD surface strip along
+            // the boundary (ghost collider walls exactly at chunk borders — the
+            // "-215/-216" stacked-collider mining log). Push the edited voxel into every
+            // adjacent chunk's padded cell (faces, edges AND corners) before remeshing.
+            int ox = lx == 0 ? -1 : (lx == S - 1 ? 1 : 0);
+            int oy = ly == 0 ? -1 : (ly == S - 1 ? 1 : 0);
+            int oz = lz == 0 ? -1 : (lz == S - 1 ? 1 : 0);
+            if (ox != 0 || oy != 0 || oz != 0)
+            {
+                for (int ix = 0; ix <= (ox != 0 ? 1 : 0); ix++)
+                for (int iy = 0; iy <= (oy != 0 ? 1 : 0); iy++)
+                for (int iz = 0; iz <= (oz != 0 ? 1 : 0); iz++)
+                {
+                    int dx = ix == 1 ? ox : 0;
+                    int dy = iy == 1 ? oy : 0;
+                    int dz = iz == 1 ? oz : 0;
+                    if (dx == 0 && dy == 0 && dz == 0) continue;
+                    var ncoord = chunkCoord + new Vector3Int(dx, dy, dz);
+                    if (!_chunks.TryGetValue(ncoord, out var n) || n == null || !n.isGenerated) continue;
+                    CompleteGenJobFor(n); CompleteMeshJobFor(n);
+                    int px = lx - dx * S, py = ly - dy * S, pz = lz - dz * S;
+                    n.voxels[Chunk.LocalToPaddedIndex(px, py, pz)] = v;
+                    n.isModified = true;
+                    if (remesh) QueueMesh(n);
+                }
+            }
+
             // Schedule real fluid mesh rebuild if the voxel change affects fluids.
             if (VoxelEngine.WaterSim.FluidMaterialUtility.IsFluid(v))
             {
@@ -1552,18 +1582,10 @@ namespace VoxelEngine.Cosmos
 
             if (!remesh) return;
             EnqueueRemesh(c);
-            if (lx == 0)     EnqueueRemeshNeighbour(chunkCoord + new Vector3Int(-1, 0, 0));
-            if (lx == S - 1) EnqueueRemeshNeighbour(chunkCoord + new Vector3Int( 1, 0, 0));
-            if (ly == 0)     EnqueueRemeshNeighbour(chunkCoord + new Vector3Int( 0,-1, 0));
-            if (ly == S - 1) EnqueueRemeshNeighbour(chunkCoord + new Vector3Int( 0, 1, 0));
-            if (lz == 0)     EnqueueRemeshNeighbour(chunkCoord + new Vector3Int( 0, 0,-1));
-            if (lz == S - 1) EnqueueRemeshNeighbour(chunkCoord + new Vector3Int( 0, 0, 1));
+            // Neighbour remeshes are queued by the border write-through above (which
+            // also covers edge/corner diagonals the old cardinal-only checks missed).
         }
 
         private void EnqueueRemesh(Chunk c) => QueueMesh(c);
-        private void EnqueueRemeshNeighbour(Vector3Int coord)
-        {
-            if (_chunks.TryGetValue(coord, out var n) && n.isGenerated) QueueMesh(n);
-        }
     }
 }

@@ -322,6 +322,9 @@ namespace VoxelEngine.GpuVoxel
         private float _guardLastDepth = -1000f;
         private float _guardLastTime = -1f;
 
+        private Vector3 _guardLastPos;
+        private bool _guardHasLastPos;
+
         private void DepenetrationGuard()
         {
             _guardTimer += Time.deltaTime;
@@ -329,10 +332,20 @@ namespace VoxelEngine.GpuVoxel
             float dt = Mathf.Max(0.05f, Time.time - (_guardLastTime < 0f ? Time.time - 0.2f : _guardLastTime));
             _guardTimer = 0f;
 
+            // Teleport immunity (9.5.5): respawns/loads/warps move the viewer hundreds of
+            // metres in one sample — the guard read that as a "10,000 m/s dive" and
+            // snapped players MID-SPAWN, fighting the spawner (and poisoning saves).
+            // Displacement faster than any craft = teleport: rebaseline silently.
+            Vector3 viewerPos = viewer.position;
+            float moved = _guardHasLastPos ? Vector3.Distance(viewerPos, _guardLastPos) : 0f;
+            _guardLastPos = viewerPos;
+            _guardHasLastPos = true;
+            bool teleported = moved > 900f * dt + 50f;
+
             var prm = body.genParams;
-            Vector3 local = body.transform.InverseTransformPoint(viewer.position);
+            Vector3 local = body.transform.InverseTransformPoint(viewerPos);
             float r = local.magnitude;
-            if (r < 1f || r > prm.radiusWorld * 2f)
+            if (r < 1f || r > prm.radiusWorld * 2f || teleported)
             {
                 _guardLastDepth = -1000f;
                 _guardLastTime = Time.time;
@@ -344,10 +357,11 @@ namespace VoxelEngine.GpuVoxel
             float surf = PlanetField.SurfaceRadius(prm.seed, dir, prm.radiusWorld, prm.baseHeight,
                                                    prm.seaRadius, prm.continentScaleDir, prm.mountainScale);
             float depth = surf - r;                    // >0 = below the analytic surface
-            bool wasOutside = _guardLastDepth < -2f;
+            bool wasOutside = _guardLastDepth < -2f && _guardLastDepth > -900f;
             float sinkSpeed = (depth - _guardLastDepth) / dt;   // m/s downward through the crust
 
-            if (depth > 3f && wasOutside && sinkSpeed > 60f)
+            // 60–1500 m/s: genuine physics tunnelling. Anything faster is a teleport.
+            if (depth > 3f && wasOutside && sinkSpeed > 60f && sinkSpeed < 1500f)
             {
                 Vector3 up = (viewer.position - body.transform.position).normalized;
                 Vector3 target = body.transform.position + up * (surf + 4f);
