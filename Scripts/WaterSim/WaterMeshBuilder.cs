@@ -194,7 +194,7 @@ namespace VoxelEngine.WaterSim
             {
                 _waterMat = new Material(sh) { name = "VoxelWater_KWS2" };
                 ConfigureTransparent(_waterMat);
-                _waterMat.SetColor("_ShallowColor", new Color(0.08f, 0.52f, 0.82f, 0.97f));
+                _waterMat.SetColor("_ShallowColor", new Color(0.10f, 0.58f, 0.86f, 0.96f));
                 _waterMat.SetColor("_DeepColor",    new Color(0.01f, 0.06f, 0.22f, 0.995f));
                 _waterMat.SetColor("_FoamColor",    new Color(0.92f, 0.96f, 1.00f, 0.88f));
                 _waterMat.SetFloat("_DeepWaveAmplitude", 0.85f);
@@ -209,15 +209,15 @@ namespace VoxelEngine.WaterSim
                 _waterMat.SetFloat("_ShoreBlendDistance", 2.5f);
                 _waterMat.SetFloat("_WaveChop", 0.28f);
                 _waterMat.SetFloat("_NormalScale", 2.4f);
-                _waterMat.SetFloat("_Gloss", 0.94f);
-                _waterMat.SetFloat("_FresnelPower", 3.5f);
+                _waterMat.SetFloat("_Gloss", 0.97f);
+                _waterMat.SetFloat("_FresnelPower", 4.2f);
                 _waterMat.SetFloat("_RefractionStrength", 0.045f);
-                _waterMat.SetFloat("_CausticsIntensity", 0.45f);
+                _waterMat.SetFloat("_CausticsIntensity", 0.62f);
                 _waterMat.SetFloat("_DepthFade", 2.5f);
                 _waterMat.SetFloat("_ShoreOpaqueDepth", 1.5f);
                 _waterMat.SetFloat("_ShoreFoamWidth", 2.0f);
-                _waterMat.SetFloat("_ShoreFoamIntensity", 1.2f);
-                _waterMat.SetFloat("_SSSIntensity", 0.45f);
+                _waterMat.SetFloat("_ShoreFoamIntensity", 1.4f);
+                _waterMat.SetFloat("_SSSIntensity", 0.62f);
                 _waterMat.SetFloat("_FlowNormalStrength", 1.0f);
                 _waterMat.SetFloat("_FlowFoamStrength", 0.8f);
                 _waterMat.SetFloat("_PlanetWaveBlend", 1.0f);

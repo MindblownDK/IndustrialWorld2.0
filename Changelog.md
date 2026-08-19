@@ -1,9 +1,36 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.7.7-dev`
+**Current Version:** `9.8.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.8.0-dev] Starlight — True Sun-Driven World & Space Lighting + Water Polish (Beauty Pass, Part 1)
+
+**Type:** MINOR — Phase 4 begins. Save-compatible, visual only.
+
+#### ☀️ 1. The star lights everything now (SunLightController v2)
+- **True star direction from the viewer's cosmic position** — correct on the surface, in orbit and in deep space (the old controller went DARK the moment you left a gravity well: it only ran with an active body).
+- **Deep space:** harsh unfiltered starlight (+20% intensity, full shadow strength), near-black ambient (~0.01) — vacuum feels like vacuum.
+- **Ascent blend:** climbing out of the atmosphere smoothly fades the day/night cycle into space lighting (altitude vs. authored atmosphere height) — no pop at the karman line.
+- **Star-authored colour:** the system star's glowColor tints the sunlight, the day palette and the space light — different stars genuinely light their worlds differently. Sky-palette day/sunset/ambient colours still apply on the surface, with a stronger sunset ramp and elevation-driven shadow softening.
+- Player transform cached (the old code ran a FindAnyObjectByType every update tick).
+
+#### 💧 2. Water glow-up (shared material defaults)
+Glossier surface (0.97), stronger fresnel (4.2), brighter caustics & subsurface scattering (0.62), livelier shore foam (1.4), slightly clearer shallow tint. Applies to bubble water, streams, lakes and the GPU ocean (shared material lineage).
+
+#### 🔜 Beauty pass roadmap
+Part 2: terrain material overhaul (triplanar macro+detail layering, biome-blended tinting) + real wind-swept grass. Part 3: sky/atmosphere polish. Then Phase 5 (black hole & quasar).
+
+#### ✅ Static delivery checks
+- All sources parse clean (tree-sitter C#); version synchronized to 9.8.0-dev.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile (existing worlds fine).
+2. Watch a full sunrise→noon→sunset on the surface: warmer sunset ramp, softer dawn shadows, night with faint blue moonlight.
+3. Fly straight up: the sky light fades into harsh space light as you leave the atmosphere — and in deep space the sun STILL lights your ship (it used to freeze).
+4. Look at water in sunlight: crisper reflections, brighter shore foam, visible caustic shimmer in shallows.
+5. If your system's star has a coloured glow (orange/red star), verify the daylight is subtly tinted by it.
 
 ### [9.7.7-dev] Radius-Shell Ponds, Padding Remesh & the Shoreline Mask Correction
 
