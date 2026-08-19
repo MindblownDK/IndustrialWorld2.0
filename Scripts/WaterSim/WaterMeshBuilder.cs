@@ -558,7 +558,8 @@ namespace VoxelEngine.WaterSim
             var key = new VertexKey(cornerU, cornerV, owner.liquid);
             if (cache.TryGetValue(key, out int existing)) return existing;
 
-            CornerData(cells, cornerU, cornerV, owner.liquid, owner.h, owner.flow, out float h, out Vector2 flow, out bool shallow);
+            CornerData(cells, cornerU, cornerV, owner.liquid, owner.h, owner.flow, chunkVoxel, dom,
+                out float h, out Vector2 flow, out bool shallow, out float cornerRadius);
             // v3.20.2 seam skirt – extend edge vertices slightly to hide chunk gaps
             float uSkirt = cornerU;
             float vSkirt = cornerV;
@@ -567,6 +568,25 @@ namespace VoxelEngine.WaterSim
             else if (cornerU >= S) uSkirt += skirt;
             if (cornerV <= 0) vSkirt -= skirt;
             else if (cornerV >= S) vSkirt += skirt;
+
+            // ── Radial leveling (9.7.6) ─────────────────────────────────────
+            // The liquid top plane was perpendicular to the chunk's dominant
+            // CARDINAL axis — visibly tilted against the local horizon anywhere
+            // the radial up isn't axis-aligned ("oil doesn't align with the
+            // planet"). Solve the vertex height so its WORLD RADIUS equals the
+            // averaged cell radius: liquid surfaces become constant-radius
+            // (level against gravity) and corners smooth out.
+            Vector3 probePt = ToXYZFloat(uSkirt, vSkirt, h, dom, S) + chunkVoxel;
+            float probeR = probePt.magnitude;
+            if (probeR > 0.001f)
+            {
+                float axisDot = Vector3.Dot((Vector3)dom, probePt / probeR);
+                if (Mathf.Abs(axisDot) > 0.35f)
+                {
+                    float hAligned = h + (cornerRadius - probeR) / axisDot;
+                    h = Mathf.Clamp(hAligned, h - 0.9f, h + 0.9f);
+                }
+            }
 
             Vector3 localPt = ToXYZFloat(uSkirt, vSkirt, h, dom, S);
             Vector3 worldPt = localPt + chunkVoxel;
@@ -584,32 +604,36 @@ namespace VoxelEngine.WaterSim
         }
 
         private static void CornerData(SurfaceCell[,] cells, int cornerU, int cornerV, LiquidType liquid, float fallbackH, Vector2 fallbackFlow,
-            out float height, out Vector2 flow, out bool shallow)
+            Vector3 chunkVoxel, Vector3Int dom, out float height, out Vector2 flow, out bool shallow, out float radius)
         {
-            float sumH = 0f;
+            const int S = VoxelConstants.CHUNK_SIZE;
+            float sumH = 0f, sumR = 0f;
             Vector2 sumFlow = Vector2.zero;
             int count = 0;
             bool anyBorder = false;
 
-            AccumulateCornerCell(cells, cornerU - 1, cornerV - 1, liquid, ref sumH, ref sumFlow, ref count, ref anyBorder);
-            AccumulateCornerCell(cells, cornerU,     cornerV - 1, liquid, ref sumH, ref sumFlow, ref count, ref anyBorder);
-            AccumulateCornerCell(cells, cornerU - 1, cornerV,     liquid, ref sumH, ref sumFlow, ref count, ref anyBorder);
-            AccumulateCornerCell(cells, cornerU,     cornerV,     liquid, ref sumH, ref sumFlow, ref count, ref anyBorder);
+            AccumulateCornerCell(cells, cornerU - 1, cornerV - 1, liquid, chunkVoxel, dom, ref sumH, ref sumR, ref sumFlow, ref count, ref anyBorder);
+            AccumulateCornerCell(cells, cornerU,     cornerV - 1, liquid, chunkVoxel, dom, ref sumH, ref sumR, ref sumFlow, ref count, ref anyBorder);
+            AccumulateCornerCell(cells, cornerU - 1, cornerV,     liquid, chunkVoxel, dom, ref sumH, ref sumR, ref sumFlow, ref count, ref anyBorder);
+            AccumulateCornerCell(cells, cornerU,     cornerV,     liquid, chunkVoxel, dom, ref sumH, ref sumR, ref sumFlow, ref count, ref anyBorder);
 
             if (count == 0)
             {
                 height = fallbackH;
                 flow = fallbackFlow;
                 shallow = true;
+                radius = (chunkVoxel + ToXYZFloat(cornerU, cornerV, fallbackH, dom, S)).magnitude;
                 return;
             }
 
             height = sumH / count;
             flow = sumFlow / count;
             shallow = anyBorder;
+            radius = sumR / count;
         }
 
-        private static void AccumulateCornerCell(SurfaceCell[,] cells, int u, int v, LiquidType liquid, ref float sumH, ref Vector2 sumFlow, ref int count, ref bool anyBorder)
+        private static void AccumulateCornerCell(SurfaceCell[,] cells, int u, int v, LiquidType liquid, Vector3 chunkVoxel, Vector3Int dom,
+            ref float sumH, ref float sumR, ref Vector2 sumFlow, ref int count, ref bool anyBorder)
         {
             const int S = VoxelConstants.CHUNK_SIZE;
             if (u < 0 || u >= S || v < 0 || v >= S)
@@ -623,6 +647,9 @@ namespace VoxelEngine.WaterSim
             var c = cells[u, v];
             if (!c.has || c.liquid != liquid) return;
             sumH += c.h;
+            // 9.7.6: accumulate the cell surface's WORLD RADIUS too — liquid corners
+            // level by radius (perpendicular to gravity), not by cardinal-axis height.
+            sumR += (chunkVoxel + ToXYZFloat(u + 0.5f, v + 0.5f, c.h, dom, S)).magnitude;
             sumFlow += c.flow;
             count++;
             anyBorder |= c.bordersTerrain;

@@ -1,9 +1,26 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.7.5-dev`
+**Current Version:** `9.7.6-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.7.6-dev] Radial Liquid Leveling — Surfaces Perpendicular to Gravity, Smoothed Corners
+
+**Type:** PATCH — the tilted pond + sharp polygonal liquid edges, fixed at the vertex level.
+
+#### 💧 Liquids level against GRAVITY now, not against a cardinal axis
+The liquid top plane was built perpendicular to the chunk's dominant CARDINAL axis. Anywhere the radial up isn't axis-aligned (most of the planet — e.g. up ≈ (0.55, −0.29, 0.72)), the pond plane tilted visibly against the local horizon: "the oil doesn't align with the planet."
+- Corner vertices now average the contributing cells' WORLD RADII and solve their height so the vertex lands on that radius: liquid surfaces become constant-radius shells — level against gravity on every latitude, exactly like the ocean.
+- The same radius averaging smooths corner heights across neighbouring cells, softening the sharp polygonal edges ("not liquid like"); the seam skirt and drape behaviours are preserved, and sloped streams still follow their terrain (their neighbour radii differ, so the average follows the slope — now smoothly).
+
+#### ✅ Static delivery checks
+- WaterMeshBuilder parses clean; correction clamped to ±0.9 voxel so streams can never runaway-level; version synchronized to 9.7.6-dev.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile, revisit a seep (fresh region): the oil surface must lie LEVEL with the horizon inside its crater, matching the planet's curvature — no tilt at any latitude.
+2. Check lakes and spring pools the same way: level surfaces, softly rounded edges.
+3. Streams on slopes should still follow the hillside, just smoother.
 
 ### [9.7.5-dev] Reservoir Loop Compile Recovery (CS1023 / CS0103)
 
