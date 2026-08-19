@@ -47,6 +47,8 @@ namespace VoxelEngine.UI
             _box.pickingMode         = PickingMode.Ignore;
             _box.style.display       = DisplayStyle.None;
             uiRoot.Add(_box);
+            // Fade out while a panel/terminal owns the screen.
+            LcdHudTheme.YieldWhileBlocking(_box);
 
             // The prompt "card".
             var card = new VisualElement();

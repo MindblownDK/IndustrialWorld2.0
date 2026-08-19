@@ -36,6 +36,9 @@ namespace VoxelEngine.Pooling
             }
 
             c.coord = coord;
+            // A pooled Chunk object can still be referenced by an old streaming queue entry.
+            // Advance its lease before it is exposed again so stale work is rejected safely.
+            c.streamEpoch = c.streamEpoch == int.MaxValue ? 1 : c.streamEpoch + 1;
             c.go.name = $"Chunk_{coord.x}_{coord.y}_{coord.z}";
             c.go.transform.position = c.WorldOrigin;
             c.isGenerated = false;

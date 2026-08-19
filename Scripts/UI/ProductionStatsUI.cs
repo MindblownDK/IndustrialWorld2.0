@@ -89,6 +89,8 @@ namespace VoxelEngine.UI
             display.style.overflow = Overflow.Hidden;
             LcdHudTheme.ApplyScreen(display, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.92f), 1f);
             panel.Add(display);
+            LcdHudTheme.AddAnimatedScanlines(display, 8, 25f, 35f);
+            LcdHudTheme.AnimateScreenBoot(display);
 
             var snapshot = ProductionStatsTracker.Instance.GetSnapshot();
             display.Add(Header(snapshot));

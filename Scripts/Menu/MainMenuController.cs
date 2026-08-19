@@ -34,6 +34,7 @@ namespace VoxelEngine.Menu
 
         private enum Page { Main, Saves, NewWorld, EditWorld, Settings }
         private Page _page = Page.Main;
+        private Page _lastBuiltPage = (Page)(-1);
 
         // New-world form values.
         private string _newName            = "MyWorld";
@@ -114,6 +115,23 @@ namespace VoxelEngine.Menu
         // ── UI Root ────────────────────────────────────────────────
         private void BuildUI()
         {
+            // Rebuilding the SAME page (settings toggle, tab refresh) must not replay
+            // the LCD boot — only real page changes get the full boot animation.
+            bool samePage = _lastBuiltPage == _page;
+            _lastBuiltPage = _page;
+            if (samePage) LcdHudTheme.BootsMuted = true;
+            try
+            {
+                BuildUIBody();
+            }
+            finally
+            {
+                LcdHudTheme.BootsMuted = false;
+            }
+        }
+
+        private void BuildUIBody()
+        {
             // Preserve scroll Y if we are rebuilding settings and a ScrollView exists
             if (_root != null)
             {
@@ -133,8 +151,6 @@ namespace VoxelEngine.Menu
             _root.style.top = 0;
             _root.style.right = 0;
             _root.style.bottom = 0;
-            _root.style.width = new StyleLength(new Length(100, LengthUnit.Percent));
-            _root.style.height = new StyleLength(new Length(100, LengthUnit.Percent));
             _root.style.flexGrow        = 1;
             _root.style.backgroundColor = new StyleColor(T.BgBase);
             _root.style.alignItems      = Align.Center;
@@ -682,6 +698,7 @@ namespace VoxelEngine.Menu
             VoxelEngine.UI.UITheme.StyleScroller(scroll);
             scroll.style.flexGrow  = 1;
             scroll.style.maxHeight = 420;
+            VoxelEngine.UI.SettingsUI.ApplyLcdScreen(scroll);
             panel.Add(scroll);
 
             switch (_settingsTab)
@@ -1072,6 +1089,9 @@ namespace VoxelEngine.Menu
             v.style.backgroundColor = new StyleColor(T.BgPanel);
             T.Radius(v, T.PanelRadius);
             T.Border(v, 1, T.BorderBright);
+            // LCD chassis treatment: bezel, corner brackets, animated scanlines,
+            // phosphor boot + wipe — every main-menu page inherits the same look.
+            LcdHudTheme.UpgradePanel(v);
             return v;
         }
 
@@ -1108,6 +1128,8 @@ namespace VoxelEngine.Menu
             lbl.style.unityTextAlign          = TextAnchor.MiddleCenter;
             b.Add(lbl);
 
+            // Micro-interactions: 1.03x hover / 0.98x press with 0.1s colour transitions.
+            LcdHudTheme.AddMenuInteractions(b, bg, new Color(bg.r, bg.g, bg.b, 0.85f));
             return b;
         }
 
@@ -1142,6 +1164,7 @@ namespace VoxelEngine.Menu
             lbl.style.unityTextAlign          = TextAnchor.MiddleCenter;
             b.Add(lbl);
 
+            LcdHudTheme.AddMenuInteractions(b, bg, new Color(bg.r, bg.g, bg.b, 0.85f));
             return b;
         }
 
@@ -1160,6 +1183,9 @@ namespace VoxelEngine.Menu
             T.Radius(b, T.ButtonRadius);
             T.Border(b, 0, Color.clear);
             b.style.marginRight = 5;
+            LcdHudTheme.AddMenuInteractions(b, T.AccentCyan,
+                active ? new Color(T.AccentCyan.r, T.AccentCyan.g, T.AccentCyan.b, 0.85f)
+                       : new Color(T.BgSlot.r, T.BgSlot.g, T.BgSlot.b, 0.85f));
             return b;
         }
 

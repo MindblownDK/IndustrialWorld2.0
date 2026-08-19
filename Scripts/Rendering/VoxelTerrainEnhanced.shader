@@ -25,6 +25,9 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
         _Smoothness  ("Smoothness",       Range(0, 1))   = 0.15
         _Metallic    ("Metallic",         Range(0, 1))   = 0.0
         _SpecularVar ("Specular Variation", Range(0, 1)) = 0.3
+        // Single-surface handshake (9.3.0): 1 on the GPU LOD-skin material clone.
+        _BubbleCutout  ("Bubble Cutout",   Float) = 0
+        _LodRadialBias ("LOD Radial Bias", Float) = 0
     }
 
     SubShader
@@ -36,6 +39,10 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
         {
             Name "ForwardLit"
             Tags { "LightMode"="UniversalForward" }
+            // Spherical surface-net quads can cross Cartesian chunk faces with opposite
+            // winding. Two-sided terrain prevents far-side/radial seam holes; normals are
+            // explicitly oriented away from the body core in SurfaceNetsJob.
+            Cull Off
 
             HLSLPROGRAM
             #pragma vertex   vert
@@ -80,7 +87,40 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
                 float  _Smoothness;
                 float  _Metallic;
                 float  _SpecularVar;
+                float  _BubbleCutout;
+                float  _LodRadialBias;
             CBUFFER_END
+
+            // Published by SphereWorld. Body-local coordinates keep terrain detail,
+            // slope shading, and material variation wrapped around offset planets.
+            float4 _VoxelTerrainBodyCenter;
+            float _VoxelTerrainIsPlanet;
+
+            // Single-surface handshake — see VoxelTerrainURP for details.
+            float4 _VoxelBubbleCenterWS;
+            float  _VoxelBubbleCutoutRadius;
+
+            void ApplyBubbleCutout(float3 positionWS)
+            {
+                if (_BubbleCutout > 0.5)
+                {
+                    float3 d = positionWS - _VoxelBubbleCenterWS.xyz;
+                    clip(dot(d, d) - _VoxelBubbleCutoutRadius * _VoxelBubbleCutoutRadius);
+                }
+            }
+
+            float3 TerrainCoordinate(float3 worldPos)
+            {
+                return lerp(worldPos, worldPos - _VoxelTerrainBodyCenter.xyz, saturate(_VoxelTerrainIsPlanet));
+            }
+
+            float3 TerrainUp(float3 worldPos)
+            {
+                float3 radial = worldPos - _VoxelTerrainBodyCenter.xyz;
+                float lenSq = dot(radial, radial);
+                radial = lenSq > 0.0001 ? radial * rsqrt(lenSq) : float3(0, 1, 0);
+                return normalize(lerp(float3(0, 1, 0), radial, saturate(_VoxelTerrainIsPlanet)));
+            }
 
             // ── Procedural noise (hash-based value noise + FBM) ──
             float hash31(float3 p)
@@ -123,6 +163,13 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
                 UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(OUT);
 
                 VertexPositionInputs vp = GetVertexPositionInputs(IN.positionOS.xyz);
+                if (_LodRadialBias > 0.0001)
+                {
+                    float3 biasedWS = vp.positionWS
+                        - normalize(vp.positionWS - _VoxelTerrainBodyCenter.xyz) * _LodRadialBias;
+                    vp.positionWS = biasedWS;
+                    vp.positionCS = TransformWorldToHClip(biasedWS);
+                }
                 VertexNormalInputs   vn = GetVertexNormalInputs(IN.normalOS);
 
                 OUT.positionCS = vp.positionCS;
@@ -136,15 +183,18 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
             half4 frag(Varyings IN) : SV_Target
             {
                 UNITY_SETUP_INSTANCE_ID(IN);
+                ApplyBubbleCutout(IN.positionWS);
                 float3 worldPos = IN.positionWS;
                 float3 worldNormal = normalize(IN.normalWS);
+                float3 terrainCoord = TerrainCoordinate(worldPos);
+                float3 terrainUp = TerrainUp(worldPos);
 
                 // ── Base colour from vertex colour (material ID → colour) ──
                 float3 baseColor = _BaseColor.rgb * IN.color.rgb;
 
                 // ── Procedural micro-detail: multi-octave noise for surface texture ──
                 // This gives the terrain a rocky/grainy appearance without textures.
-                float3 noisePos = worldPos * _NoiseFreq;
+                float3 noisePos = terrainCoord * _NoiseFreq;
                 float detail = fbm3(noisePos);
                 float detail2 = fbm3(noisePos * 3.2 + 10.0);
                 float microDetail = detail * 0.6 + detail2 * 0.4;
@@ -155,14 +205,14 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
 
                 // ── Slope-aware shading: steep = darker (enhances relief) ──
                 // Support both flat world (Y-up) and spherical planets (radial-up from center)
-                float radialUpDot = abs(dot(worldNormal, normalize(worldPos)));
+                float radialUpDot = abs(dot(worldNormal, terrainUp));
                 float flatUpDot = abs(worldNormal.y);
-                float upDot = max(flatUpDot, radialUpDot);
+                float upDot = lerp(flatUpDot, radialUpDot, saturate(_VoxelTerrainIsPlanet));
                 float slopeFactor = lerp(1.0 - _SlopeDarken, 1.0, saturate(upDot * 1.5));
                 baseColor *= slopeFactor;
 
                 // ── Specular variation: some surfaces shinier (wet rock look) ──
-                float specVar = fbm3(worldPos * _DetailScale * 0.5);
+                float specVar = fbm3(terrainCoord * _DetailScale * 0.5);
                 float smoothness = _Smoothness + specVar * _SpecularVar * 0.3;
                 smoothness = saturate(smoothness);
 
@@ -216,8 +266,11 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
                 float  _Smoothness;
                 float  _Metallic;
                 float  _SpecularVar;
+                float  _BubbleCutout;
+                float  _LodRadialBias;
             CBUFFER_END
 
+            float4 _VoxelTerrainBodyCenter;
             float3 _LightDirection;
 
             struct A { float4 positionOS:POSITION; float3 normalOS:NORMAL; UNITY_VERTEX_INPUT_INSTANCE_ID };
@@ -229,6 +282,8 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
                 UNITY_SETUP_INSTANCE_ID(IN);
                 UNITY_TRANSFER_INSTANCE_ID(IN, OUT);
                 float3 posWS = TransformObjectToWorld(IN.positionOS.xyz);
+                if (_LodRadialBias > 0.0001)
+                    posWS -= normalize(posWS - _VoxelTerrainBodyCenter.xyz) * _LodRadialBias;
                 float3 nrmWS = TransformObjectToWorldNormal(IN.normalOS);
                 float4 clip = TransformWorldToHClip(ApplyShadowBias(posWS, nrmWS, _LightDirection));
                 #if UNITY_REVERSED_Z
@@ -254,9 +309,33 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
             #pragma fragment frag
             #pragma multi_compile_instancing
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+
+            CBUFFER_START(UnityPerMaterial)
+                float4 _BaseColor;
+                float  _DetailScale;
+                float  _DetailStrength;
+                float  _SlopeDarken;
+                float  _NoiseFreq;
+                float  _Smoothness;
+                float  _Metallic;
+                float  _SpecularVar;
+                float  _BubbleCutout;
+                float  _LodRadialBias;
+            CBUFFER_END
+
+            float4 _VoxelTerrainBodyCenter;
+
             struct A { float4 positionOS:POSITION; UNITY_VERTEX_INPUT_INSTANCE_ID };
             struct V { float4 positionCS:SV_POSITION; UNITY_VERTEX_INPUT_INSTANCE_ID };
-            V vert(A IN) { V OUT; UNITY_SETUP_INSTANCE_ID(IN); UNITY_TRANSFER_INSTANCE_ID(IN,OUT); OUT.positionCS = TransformObjectToHClip(IN.positionOS.xyz); return OUT; }
+            V vert(A IN)
+            {
+                V OUT; UNITY_SETUP_INSTANCE_ID(IN); UNITY_TRANSFER_INSTANCE_ID(IN,OUT);
+                float3 posWS = TransformObjectToWorld(IN.positionOS.xyz);
+                if (_LodRadialBias > 0.0001)
+                    posWS -= normalize(posWS - _VoxelTerrainBodyCenter.xyz) * _LodRadialBias;
+                OUT.positionCS = TransformWorldToHClip(posWS);
+                return OUT;
+            }
             half4 frag(V IN) : SV_Target { return 0; }
             ENDHLSL
         }

@@ -196,6 +196,8 @@ namespace VoxelEngine.UI
             display.style.overflow = Overflow.Hidden;
             LcdHudTheme.ApplyScreen(display, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.92f), 1f);
             panel.Add(display);
+            LcdHudTheme.AddAnimatedScanlines(display, 8, 25f, 35f);
+            LcdHudTheme.AnimateScreenBoot(display);
 
             // ── Header: printed terminal title + search ─────────────────────
             var header = new VisualElement { name = "CraftingDisplayHeader" };

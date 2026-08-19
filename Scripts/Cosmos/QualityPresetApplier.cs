@@ -69,12 +69,17 @@ namespace VoxelEngine.Cosmos
                 grass.enabled = true;
             }
 
-            // LOD resolution.
-            var lod = FindAnyObjectByType<PlanetLodImpostor>();
-            if (lod != null)
+            // GPU-driven planet surfaces: push the streaming budget to every body's
+            // quadtree engine (node resolution resolves per body from the new tier).
+            foreach (var engine in FindObjectsByType<VoxelEngine.GpuVoxel.GpuPlanetEngine>(FindObjectsInactive.Include))
             {
-                lod.resolution = GraphicsPreset.LodResolution;
+                if (engine == null) continue;
+                engine.ApplyQualityBudget(GraphicsPreset.JobsPerFrame);
             }
+
+            // Quadtree ocean uses the same distance budget as the terrain tier.
+            var oceanGpu = FindAnyObjectByType<VoxelEngine.GpuVoxel.GpuOceanEngine>();
+            if (oceanGpu != null) oceanGpu.ApplyQualityBudget(GraphicsPreset.LodResolution);
 
             // Waterfall range.
             var waterfalls = FindAnyObjectByType<WaterfallSystem>();

@@ -36,8 +36,12 @@ namespace VoxelEngine.Cosmos
         public Vector2 orbitRadiusKm = new Vector2(80f, 400f);
 
         [Range(0f, 5f)]
-        [Tooltip("Orbital speed multiplier.")]
+        [Tooltip("Orbital speed multiplier (scales the moon's time along its Keplerian orbit).")]
         public float orbitSpeed = 1f;
+
+        [Range(0f, 0.4f)]
+        [Tooltip("Orbital eccentricity around the parent planet. Leave 0 for a seeded small value.")]
+        public float orbitEccentricity = 0f;
 
         [Range(0f, 360f)]
         [Tooltip("Starting orbital phase (deg). Auto-spread among sibling moons if left at 0.")]

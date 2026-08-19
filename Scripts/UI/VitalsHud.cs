@@ -25,7 +25,8 @@ namespace VoxelEngine.UI
         private static float _prevHp, _prevH2, _prevHunger, _prevOxy, _prevPwr;
 
         // Used by the held paint monitor so it clears this larger instrument chassis.
-        public const float TOTAL_HEIGHT = 166f;
+        // Compacted in 7.13.3: tighter rows, same information, less screen space.
+        public const float TOTAL_HEIGHT = 142f;
 
         public static void EnsureMounted(VisualElement uiRoot)
         {
@@ -48,25 +49,28 @@ namespace VoxelEngine.UI
             _container.pickingMode = PickingMode.Ignore;
             LcdHudTheme.ApplyChassis(_container, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.94f), 3f);
             uiRoot.Add(_container);
+            LcdHudTheme.AnimateScreenBoot(_container);
+            // Yield to machine/chest panels so the right-side cluster never overlaps.
+            LcdHudTheme.YieldWhileBlocking(_container);
 
             BuildHeader();
             var hpRow = AddVitalRow("HP", T.AccentRed);
             _hpSegments = hpRow.segments;
             _hpVal = hpRow.value;
-            AddGap(3);
+            AddGap(2);
             var h2Row = AddVitalRow("H₂", new Color(0.42f, 0.78f, 0.72f));
             _h2Segments = h2Row.segments;
             _h2Val = h2Row.value;
-            AddGap(3);
+            AddGap(2);
             var hungerRow = AddVitalRow("HNG", T.AccentAmber);
             _hungerSegments = hungerRow.segments;
             _hungerVal = hungerRow.value;
-            AddGap(3);
+            AddGap(2);
             var oxygenRow = AddVitalRow("O₂", LcdHudTheme.Phosphor);
             _oxySegments = oxygenRow.segments;
             _oxyVal = oxygenRow.value;
             _oxyCode = oxygenRow.code;
-            AddGap(3);
+            AddGap(2);
             var powerRow = AddVitalRow("PWR", new Color(0.64f, 0.86f, 0.44f), out _pwrRow);
             _pwrSegments = powerRow.segments;
             _pwrVal = powerRow.value;
@@ -134,7 +138,7 @@ namespace VoxelEngine.UI
             out VisualElement row)
         {
             row = new VisualElement { name = "VitalLcd_" + code };
-            row.style.height = 25;
+            row.style.height = 20;
             row.style.paddingLeft = 5;
             row.style.paddingRight = 5;
             row.style.flexDirection = FlexDirection.Row;
@@ -142,12 +146,15 @@ namespace VoxelEngine.UI
             row.pickingMode = PickingMode.Ignore;
             LcdHudTheme.ApplyScreen(row, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.85f), 1f);
             _container.Add(row);
+            LcdHudTheme.AddAnimatedScanlines(row, 2, 4f, 10f);
 
             var codeLabel = new Label(code);
             codeLabel.style.width = 27;
             codeLabel.style.fontSize = 8;
             codeLabel.style.letterSpacing = 0.85f;
             codeLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            codeLabel.style.unityTextAlign = TextAnchor.MiddleLeft;
+            codeLabel.style.alignSelf = Align.Center;
             codeLabel.style.color = new StyleColor(signalColor);
             codeLabel.pickingMode = PickingMode.Ignore;
             row.Add(codeLabel);
@@ -155,6 +162,7 @@ namespace VoxelEngine.UI
             var track = LcdHudTheme.CreateSegmentTrack(SegmentCount, out var segments, 11f);
             track.style.flexGrow = 1;
             track.style.marginRight = 6;
+            track.style.alignSelf = Align.Center;
             row.Add(track);
 
             var value = new Label("—");
@@ -163,6 +171,7 @@ namespace VoxelEngine.UI
             value.style.letterSpacing = 0.35f;
             value.style.unityFontStyleAndWeight = FontStyle.Bold;
             value.style.unityTextAlign = TextAnchor.MiddleRight;
+            value.style.alignSelf = Align.Center;
             value.style.color = new StyleColor(signalColor);
             value.pickingMode = PickingMode.Ignore;
             row.Add(value);

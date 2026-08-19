@@ -18,6 +18,8 @@ namespace VoxelEngine.Cosmos
         Suborbital = 3,
         Orbiting = 4,
         Escape = 5,
+        /// <summary>Outside every body's gravity well — solar-frame coasting.</summary>
+        DeepSpace = 6,
     }
 
     /// <summary>Instantaneous ballistic/coast-path solution around the active body.</summary>
@@ -70,6 +72,15 @@ namespace VoxelEngine.Cosmos
             float gravityScale = 1f)
         {
             var body = GravityProvider.ActiveBody;
+
+            // ── Deep space (solar frame): no two-body orbit exists; report the coast state. ──
+            if (body == null && CosmicRegistry.Instance != null && CosmicRegistry.Instance.IsReady)
+            {
+                return new OrbitalTelemetrySample(true, OrbitalFlightState.DeepSpace,
+                    float.PositiveInfinity, 0f, worldVelocity.magnitude,
+                    0f, 0f, float.NaN, float.NaN, 0f, 0f);
+            }
+
             if (body == null) return default;
 
             Vector3 radiusVector = worldPosition - body.transform.position;

@@ -84,6 +84,15 @@ namespace VoxelEngine.Weather
             float targetFogDensity;
             bool enableFog;
 
+            Color themedClearAmbient = clearAmbient;
+            Color themedClearFog = clearFogColor;
+            var sky = VoxelEngine.Cosmos.PlanetSkyController.Instance;
+            if (sky != null)
+            {
+                themedClearAmbient = sky.CurrentPalette.AmbientDay;
+                themedClearFog = sky.CurrentPalette.GroundFog;
+            }
+
             switch (state)
             {
                 case WeatherState.HeavyRain:
@@ -102,8 +111,8 @@ namespace VoxelEngine.Weather
                     break;
                 case WeatherState.Overcast:
                     targetLightIntensity = Mathf.Lerp(clearIntensity, rainIntensity, 0.5f);
-                    targetAmbient = Color.Lerp(clearAmbient, rainAmbient, 0.4f);
-                    targetFog = rainFogColor;
+                    targetAmbient = Color.Lerp(themedClearAmbient, rainAmbient, 0.4f);
+                    targetFog = Color.Lerp(themedClearFog, rainFogColor, 0.55f);
                     targetFogDensity = 0.005f;
                     enableFog = true;
                     break;

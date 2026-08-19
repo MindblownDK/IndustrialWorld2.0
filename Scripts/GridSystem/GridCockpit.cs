@@ -125,7 +125,43 @@ namespace VoxelEngine.GridSystem
             // P toggles ALL landing gear on the grid (lock ⇆ unlock).
             if (GridInput.PPressed) ToggleAllLandingGear();
 
+            // N engages / fires the Warp Drive (the ONLY warp in the game — an expensive,
+            // chargeable grid block). First press begins charging; second fires when ready.
+            if (VoxelEngine.Settings.GameSettings.WasPressed(VoxelEngine.Settings.InputAction.WarpDrive))
+                HandleWarpDriveInput();
+
             ReadFlightInput();
+        }
+
+        /// <summary>
+        /// Warp Drive input: charge when idle, fire when ready. Only ONE drive per grid
+        /// is engaged (the first enabled one). Requires vacuum — the drive refuses to
+        /// charge or jump inside an atmosphere.
+        /// </summary>
+        private void HandleWarpDriveInput()
+        {
+            if (Grid == null) return;
+            GridWarpDrive drive = null;
+            foreach (var block in Grid.AllBlocks)
+            {
+                if (block is GridWarpDrive candidate && candidate.Enabled)
+                {
+                    drive = candidate;
+                    break;
+                }
+            }
+            if (drive == null)
+            {
+                VoxelEngine.UI.BuildFeedbackHud.Show("Warp Drive", "No warp drive on this grid", null, new Color(1f, 0.7f, 0.25f));
+                return;
+            }
+
+            if (drive.IsReady)
+                drive.TryWarp();
+            else if (!drive.IsCharging)
+                drive.BeginCharge();
+            else
+                drive.TryWarp(); // shows the charge % toast while charging
         }
 
         private bool IsThirdPerson => _cameraDistance > THIRD_PERSON_THRESHOLD;

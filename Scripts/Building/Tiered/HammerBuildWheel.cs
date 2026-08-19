@@ -57,10 +57,10 @@ namespace VoxelEngine.Building.Tiered
                 _document.panelSettings = Resources.Load<PanelSettings>("MenuPanelSettings");
             if (_document.panelSettings != null)
             {
-                _document.panelSettings.scaleMode = PanelScaleMode.ConstantPixelSize;
-                _document.panelSettings.scale = 1f;
-                _document.panelSettings.referenceDpi = 96f;
-                _document.panelSettings.fallbackDpi = 96f;
+                // Same fit-to-screen scaling as the main HUD (also forces
+                // ScreenSpaceOverlay) — the build wheel must never be anchored
+                // off-screen on smaller windows.
+                VoxelEngine.Settings.GameSettings.ApplyUiScaleAndFit(_document.panelSettings);
             }
             _root = _document.rootVisualElement;
             _root.style.flexGrow = 1;

@@ -16,14 +16,17 @@ namespace VoxelEngine.Crafting
     [RequireComponent(typeof(CraftingStation))]
     public class CraftQueue : MonoBehaviour
     {
+        [Serializable]
         public class Entry
         {
             public RecipeDefinition recipe;
-            public IItemContainer   destination;
+            [NonSerialized] public IItemContainer destination;
             public float            progressSeconds;
         }
 
-        public List<Entry> entries = new();
+        // Runtime-only queue: destination is an interface and intentionally does not participate
+        // in Unity serialization. Craft state is owned by the live station/session.
+        [NonSerialized] public List<Entry> entries = new();
         public event Action OnChanged;
 
         public Entry Head => entries.Count > 0 ? entries[0] : null;

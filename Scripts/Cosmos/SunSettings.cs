@@ -28,5 +28,10 @@ namespace VoxelEngine.Cosmos
 
         [Tooltip("Tint applied to water volumes lit by this sun.")]
         public Color waterColor = new Color(0.09f, 0.34f, 0.55f, 0.85f);
+
+        [Tooltip("Gravitational parameter μ of this star in km³/s². Drives the real Keplerian " +
+                 "orbits of every planet (T = 2π√(a³/μ) and v = √(μ(2/r − 1/a))). 0 = safe default 180. " +
+                 "Higher μ = faster orbits and stronger deep-space pull.")]
+        public double gravitationalParameterKm3S2 = 180d;
     }
 }

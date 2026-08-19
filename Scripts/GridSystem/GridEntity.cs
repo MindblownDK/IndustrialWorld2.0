@@ -196,6 +196,20 @@ namespace VoxelEngine.GridSystem
             return list;
         }
 
+        /// <summary>
+        /// Re-express this grid's velocity when the scene reference frame changes
+        /// (leaving/entering a planet's gravity well). Cosmic velocity is conserved;
+        /// this is the real-space frame switch the SpaceOrigin applies to every body.
+        /// </summary>
+        public void AddFrameVelocityDelta(Vector3 deltaMps)
+        {
+            if (_rb != null)
+            {
+                _rb.linearVelocity += deltaMps;
+                if (_restorePoseTicks > 0) _restoreVelocity += deltaMps;
+            }
+        }
+
         /// <summary>Set by the piloting cockpit each frame to drive thrusters + gyros.</summary>
         public void SetFlightInput(Vector3 thrust, float yaw, float pitch, float roll)
         {

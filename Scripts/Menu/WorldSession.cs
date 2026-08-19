@@ -25,10 +25,19 @@ namespace VoxelEngine.Menu
         public const int DefaultInventoryWeightPercent = 100;
         public const int DefaultContainerWeightPercent = 100;
         public const bool DefaultAllowRuinLootRespawn = true;
+        public const float DefaultFullVoxelRadiusKm = 50f;
 
         /// <summary>Maximum simultaneous physical world drops. Conveyor packets use
         /// their own simulation and are deliberately never included in this limit.</summary>
         public int maxDroppedItems = DefaultMaxDroppedItems;
+
+        /// <summary>
+        /// Radius (km) around the player that renders as REAL voxel surface (not sampled
+        /// LOD / coarse MID blocks) on the planet or moon they are near. 50 km covers an
+        /// entire 8–16 km planet. 0 = legacy ring-only coverage. Persisted per-world in
+        /// the world-settings sidecar; read by CosmosBootstrap at world load.
+        /// </summary>
+        public float fullVoxelRadiusKm = DefaultFullVoxelRadiusKm;
 
         public int inventoryWeightPercent = DefaultInventoryWeightPercent;
         public int containerWeightPercent = DefaultContainerWeightPercent;
@@ -43,7 +52,78 @@ namespace VoxelEngine.Menu
         public Vector3 bedSpawnPoint = Vector3.zero;
         public bool    hasBedSpawn = false;
 
-        public Vector3 GetActiveSpawn() => hasBedSpawn ? bedSpawnPoint : worldSpawnPoint;
+        // ── Body-anchored world spawn (9.2.0) ─────────────────────────────
+        // Scene positions go stale the moment the floating origin re-anchors (orbital
+        // motion, visiting another planet). The world spawn is therefore ALSO stored as
+        // body name + body-local offset, and respawn reconstructs the live scene position
+        // from the body's CURRENT transform — never a point in empty space.
+        public string  worldSpawnBodyName = "";
+        public Vector3 worldSpawnLocalPos = Vector3.zero;
+
+        /// <summary>Record the world spawn as scene position + body anchor in one call.
+        /// Falls back to the nearest scene body when no active body is supplied yet.</summary>
+        public void RecordWorldSpawn(Vector3 scenePos, VoxelEngine.Cosmos.CelestialBody body)
+        {
+            worldSpawnPoint = scenePos;
+            worldSpawnInitialized = true;
+
+            if (body == null)
+            {
+                // First spawn can run before the gravity frame is assigned — anchor to
+                // the nearest body whose surface the point is actually near.
+                var registry = VoxelEngine.Cosmos.CosmicRegistry.Instance;
+                if (registry != null && registry.SceneBodies != null)
+                {
+                    float best = float.MaxValue;
+                    foreach (var kv in registry.SceneBodies)
+                    {
+                        var candidate = kv.Value;
+                        if (candidate == null || candidate.settings == null) continue;
+                        float altitude = Vector3.Distance(scenePos, candidate.transform.position)
+                                         - candidate.SurfaceRadius;
+                        if (altitude < best && altitude < 2000f) { best = altitude; body = candidate; }
+                    }
+                }
+            }
+
+            if (body != null && body.settings != null)
+            {
+                worldSpawnBodyName = body.settings.bodyName;
+                worldSpawnLocalPos = body.transform.InverseTransformPoint(scenePos);
+            }
+        }
+
+        /// <summary>
+        /// Resolve the CURRENT scene position of the world spawn. Prefers the body anchor
+        /// (immune to floating-origin drift); falls back to the legacy scene point.
+        /// </summary>
+        public bool TryResolveWorldSpawn(out Vector3 scenePos)
+        {
+            if (!string.IsNullOrEmpty(worldSpawnBodyName))
+            {
+                var registry = VoxelEngine.Cosmos.CosmicRegistry.Instance;
+                if (registry != null && registry.SceneBodies != null)
+                {
+                    foreach (var kv in registry.SceneBodies)
+                    {
+                        if (kv.Key == null || kv.Key.settings == null || kv.Value == null) continue;
+                        if (!string.Equals(kv.Key.settings.bodyName, worldSpawnBodyName,
+                                           System.StringComparison.OrdinalIgnoreCase)) continue;
+                        scenePos = kv.Value.transform.TransformPoint(worldSpawnLocalPos);
+                        return true;
+                    }
+                }
+            }
+            scenePos = worldSpawnPoint;
+            return worldSpawnInitialized || worldSpawnPoint.sqrMagnitude > 0.1f;
+        }
+
+        public Vector3 GetActiveSpawn()
+        {
+            if (hasBedSpawn) return bedSpawnPoint;
+            TryResolveWorldSpawn(out Vector3 resolved);
+            return resolved;
+        }
         public bool   isNewWorld = false;
 
         // (Legacy flat-world override fields removed — the sphere uses BodySettings.)
@@ -103,7 +183,8 @@ namespace VoxelEngine.Menu
                 var data = new SpawnData
                 {
                     worldSpawn = worldSpawnPoint, worldInit = worldSpawnInitialized,
-                    bedSpawn   = bedSpawnPoint,   hasBed    = hasBedSpawn
+                    bedSpawn   = bedSpawnPoint,   hasBed    = hasBedSpawn,
+                    spawnBody  = worldSpawnBodyName, spawnLocal = worldSpawnLocalPos
                 };
                 System.IO.File.WriteAllText(SpawnSidecarPath, UnityEngine.JsonUtility.ToJson(data, true));
             }
@@ -121,6 +202,8 @@ namespace VoxelEngine.Menu
                 worldSpawnInitialized = data.worldInit;
                 bedSpawnPoint         = data.bedSpawn;
                 hasBedSpawn           = data.hasBed;
+                worldSpawnBodyName    = data.spawnBody ?? "";
+                worldSpawnLocalPos    = data.spawnLocal;
             }
             catch (System.Exception ex) { UnityEngine.Debug.LogWarning("[WorldSession] LoadSpawnSidecar: " + ex.Message); }
         }
@@ -132,6 +215,8 @@ namespace VoxelEngine.Menu
             public bool    worldInit;
             public Vector3 bedSpawn;
             public bool    hasBed;
+            public string  spawnBody;
+            public Vector3 spawnLocal;
         }
 
         public List<WorldSummary> ListWorlds()
@@ -217,6 +302,7 @@ namespace VoxelEngine.Menu
             public int containerWeightPercent = DefaultContainerWeightPercent;
             public int showDropVoidWarning = 1;
             public int allowRuinLootRespawn = 1;
+            public float fullVoxelRadiusKm = DefaultFullVoxelRadiusKm;
         }
 
         /// <summary>Non-generation settings only. This sidecar never changes seeds,
@@ -233,7 +319,8 @@ namespace VoxelEngine.Menu
                     inventoryWeightPercent = Mathf.Clamp(inventoryWeightPercent, 25, 1000),
                     containerWeightPercent = Mathf.Clamp(containerWeightPercent, 25, 1000),
                     showDropVoidWarning = this.showDropVoidWarning ? 1 : -1,
-                    allowRuinLootRespawn = this.allowRuinLootRespawn ? 1 : -1
+                    allowRuinLootRespawn = this.allowRuinLootRespawn ? 1 : -1,
+                    fullVoxelRadiusKm = Mathf.Clamp(fullVoxelRadiusKm, 0f, 500f)
                 }, true));
             }
             catch (Exception ex) { Debug.LogWarning("[WorldSession] SaveWorldSettings: " + ex.Message); }
@@ -246,6 +333,7 @@ namespace VoxelEngine.Menu
             containerWeightPercent = DefaultContainerWeightPercent;
             showDropVoidWarning = true;
             allowRuinLootRespawn = DefaultAllowRuinLootRespawn;
+            fullVoxelRadiusKm = DefaultFullVoxelRadiusKm;
             try
             {
                 if (!File.Exists(WorldSettingsPath)) return;
@@ -257,6 +345,7 @@ namespace VoxelEngine.Menu
                     containerWeightPercent = data.containerWeightPercent <= 0 ? DefaultContainerWeightPercent : Mathf.Clamp(data.containerWeightPercent, 25, 1000);
                     showDropVoidWarning = data.showDropVoidWarning != -1;
                     allowRuinLootRespawn = data.allowRuinLootRespawn != -1;
+                    fullVoxelRadiusKm = data.fullVoxelRadiusKm <= 0f ? DefaultFullVoxelRadiusKm : Mathf.Clamp(data.fullVoxelRadiusKm, 0f, 500f);
                 }
             }
             catch (Exception ex) { Debug.LogWarning("[WorldSession] LoadWorldSettings: " + ex.Message); }

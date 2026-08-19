@@ -54,6 +54,17 @@ Shader "VoxelEngine/VoxelGrass"
                 float  _GustScale;
             CBUFFER_END
 
+            float4 _VoxelTerrainBodyCenter;
+            float _VoxelTerrainIsPlanet;
+
+            float3 GrassUp(float3 worldPos)
+            {
+                float3 radial = worldPos - _VoxelTerrainBodyCenter.xyz;
+                float lenSq = dot(radial, radial);
+                radial = lenSq > 0.0001 ? radial * rsqrt(lenSq) : float3(0, 1, 0);
+                return normalize(lerp(float3(0, 1, 0), radial, saturate(_VoxelTerrainIsPlanet)));
+            }
+
             // Unity's built-in time
             // We use _Time.y for animation.
 
@@ -110,26 +121,24 @@ Shader "VoxelEngine/VoxelGrass"
                 float3 worldNormal = TransformObjectToWorldNormal(IN.normalOS);
 
                 // ── Wind animation ──
-                // Base wind direction (from the global WindField via _WindDir).
-                float2 windDir = normalize(_WindDir.xz + 0.001);
+                // Project the world wind onto the local tangent plane. Grass therefore bends
+                // along the surface at every latitude instead of always toward global XZ.
+                float3 grassUp = GrassUp(worldPos);
+                float3 windTangent = _WindDir.xyz - grassUp * dot(_WindDir.xyz, grassUp);
+                float windLenSq = dot(windTangent, windTangent);
+                windTangent = windLenSq > 0.0001 ? windTangent * rsqrt(windLenSq) : float3(1, 0, 0);
 
-                // Per-blade phase (based on world position so each blade is unique).
-                float phase = hash(floor(worldPos.xzx * 10.0)) * 6.28;
-
-                // Gust: large-scale turbulence that sweeps across the field.
-                float2 gustUV = worldPos.xz * _GustScale * 0.01 + _Time.y * _WindSpeed * 0.3;
+                // Per-blade phase and gust remain body-centred for stable planet wrapping.
+                float3 bodyCoord = lerp(worldPos, worldPos - _VoxelTerrainBodyCenter.xyz, saturate(_VoxelTerrainIsPlanet));
+                float phase = hash(floor(bodyCoord * 10.0)) * 6.28;
+                float2 gustUV = bodyCoord.xz * _GustScale * 0.01 + _Time.y * _WindSpeed * 0.3;
                 float gust = vnoise(gustUV) * 2.0 - 1.0;
 
-                // Sway: the tip bends more than the root (quadratic falloff).
                 float sway = sin(_Time.y * _WindSpeed + phase) * 0.5 + 0.5;
                 sway = sway * gust * _WindStrength;
-
-                // Displace the vertex in the wind direction (only the top part of the blade).
                 float bendAmount = heightFactor * heightFactor * sway;
-                worldPos.xz += windDir * bendAmount * 0.8;
-
-                // Slight vertical droop at the tip when wind is strong.
-                worldPos.y -= bendAmount * 0.3;
+                worldPos += windTangent * bendAmount * 0.8;
+                worldPos -= grassUp * bendAmount * 0.3;
 
                 // ── Colour: gradient from root (dark) to tip (bright) ──
                 float3 color = lerp(_BaseColor.rgb, _TipColor.rgb, heightFactor);

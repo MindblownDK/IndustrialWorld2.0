@@ -68,6 +68,15 @@ namespace VoxelEngine.GridSystem
         public static AtmosphereSample Sample(Vector3 worldPosition)
         {
             var body = GravityProvider.ActiveBody;
+
+            // Deep space: the cosmos is active but no body holds the player — true vacuum,
+            // regardless of scene Y (the old flat-world fallback would have reported air
+            // at ground level, which is wrong a thousand kilometres from any planet).
+            if (body == null && CosmicRegistry.Instance != null && CosmicRegistry.Instance.IsReady)
+            {
+                return new AtmosphereSample(float.PositiveInfinity, 0f, 0f, 0f, false, true);
+            }
+
             if (body != null)
             {
                 float altitude = body.AltitudeAt(worldPosition);
@@ -99,6 +108,9 @@ namespace VoxelEngine.GridSystem
 
         public static float GetGravityMultiplier(Vector3 worldPosition)
         {
+            // Deep space: no gravity at all for legacy flat-world-style callers.
+            if (GravityProvider.IsDeepSpace) return 0f;
+
             // When a celestial body is active, GridEntity uses GravityProvider directly.
             // Keep this ratio for legacy callers that only need the flat-world style multiplier.
             if (GravityProvider.ActiveBody != null)

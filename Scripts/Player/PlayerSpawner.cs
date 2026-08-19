@@ -98,6 +98,16 @@ namespace VoxelEngine.Player
             // If we died offline, ignore saved pos — force world spawn path
             if (offlineDied) hasSavedPos = false;
 
+            // Real-space safety (7.13.6): a save written during a launch/bug session can
+            // restore the player INSIDE a planet (or so close to a core that they spawn
+            // in solid terrain). Those saves are poisoned — reject them and fall back to
+            // the surface/bed spawn path. Legit surface/orbit/deep-space saves pass.
+            if (hasSavedPos && IsSavedPositionInsideBody(savedPos))
+            {
+                Debug.LogWarning("[PlayerSpawner] Saved position is inside a celestial body — rejecting poisoned save, spawning on the surface instead.");
+                hasSavedPos = false;
+            }
+
             // Determine the target position.
             Vector3 target;
             bool isFreshWorld = false;
@@ -111,6 +121,13 @@ namespace VoxelEngine.Player
             {
                 target = session.bedSpawnPoint;
                 Debug.Log("[PlayerSpawner] Bed spawn: " + target);
+                // A bed saved during the launch-era can also be a stale space coordinate.
+                if (!IsValidSurfaceDestination(target, out Vector3 safeBed))
+                {
+                    Debug.LogWarning("[PlayerSpawner] Bed spawn invalid (in space / inside planet) — using a fresh surface point instead.");
+                    target = safeBed;
+                    session.hasBedSpawn = false;   // don't loop back to the poisoned bed
+                }
             }
             else
             {
@@ -119,44 +136,42 @@ namespace VoxelEngine.Player
                 var body = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
                 if (body != null)
                 {
-                    // Scan around temperate latitude to find a valid land surface above sea level (not water).
-                    Vector3 equator = new Vector3(1f, 0f, 0f);
+                    // Choose one land target analytically before colliders exist. The old
+                    // Physics-only scan ran before chunks had streamed, then the wet-spawn
+                    // fallback visibly moved the player through many candidate locations.
                     bool foundLand = false;
                     Vector3 bestSpawn = body.transform.position + body.transform.up * (body.SurfaceRadius + 30f);
-
-                    int initialSamples = Mathf.Max(16, drySpawnSearchAttempts);
-                    for (int i = 0; i < initialSamples; i++)
+                    if (VoxelEngine.Core.ActiveWorld.Current is VoxelEngine.Cosmos.SphereWorld sphereWorld &&
+                        sphereWorld.TryFindDrySpawnPoint(drySpawnSearchAttempts, out Vector3 analyticGround))
                     {
-                        float angle = i * (360f / initialSamples);
-                        Vector3 sampleDir = Quaternion.AngleAxis(angle, body.transform.up) * (equator + body.transform.up * 0.55f);
-                        sampleDir = math.normalizesafe(sampleDir, body.transform.up);
+                        bestSpawn = analyticGround + body.UpAt(analyticGround) * SpawnGroundClearance;
+                        foundLand = true;
+                    }
 
-                        Vector3 rayFrom = body.transform.position + sampleDir * (body.SurfaceRadius + 250f);
-                        Vector3 rayDir = -sampleDir;
-                        if (Physics.Raycast(rayFrom, rayDir, out var hit, 400f, ~0, QueryTriggerInteraction.Ignore))
+                    // Keep a small collider fallback for malformed/custom density assets, but
+                    // only after the deterministic path declined to provide land.
+                    if (!foundLand)
+                    {
+                        Vector3 equator = new Vector3(1f, 0f, 0f);
+                        int initialSamples = Mathf.Min(8, Mathf.Max(4, drySpawnSearchAttempts));
+                        for (int i = 0; i < initialSamples; i++)
                         {
-                            float hitRadius = Vector3.Distance(hit.point, body.transform.position);
-                            float seaRadius = body.SeaRadius;
-                            if (hitRadius > seaRadius + 3f)
-                            {
-                                Vector3 candidate = hit.point + sampleDir * SpawnGroundClearance;
-                                if (!IsSpawnInWater(candidate))
-                                {
-                                    bestSpawn = candidate;
-                                    foundLand = true;
-                                    break;
-                                }
-                            }
+                            float angle = i * (360f / initialSamples);
+                            Vector3 sampleDir = Quaternion.AngleAxis(angle, body.transform.up) * (equator + body.transform.up * 0.55f);
+                            sampleDir = math.normalizesafe(sampleDir, body.transform.up);
+                            Vector3 rayFrom = body.transform.position + sampleDir * (body.SurfaceRadius + 250f);
+                            if (!Physics.Raycast(rayFrom, -sampleDir, out var hit, 400f, ~0, QueryTriggerInteraction.Ignore)) continue;
+                            if (Vector3.Distance(hit.point, body.transform.position) <= body.SeaRadius + 3f) continue;
+                            Vector3 candidate = hit.point + sampleDir * SpawnGroundClearance;
+                            if (IsSpawnInWater(candidate)) continue;
+                            bestSpawn = candidate;
+                            foundLand = true;
+                            break;
                         }
                     }
 
-                    if (!foundLand)
-                    {
-                        Vector3 surfDir = math.normalizesafe(equator + body.transform.up * 0.55f, body.transform.up);
-                        bestSpawn = body.transform.position + surfDir * (body.SurfaceRadius + 25f);
-                    }
                     target = bestSpawn;
-                    Debug.Log("[PlayerSpawner] Fresh SPHERE world — spawning on land surface at " + target);
+                    Debug.Log("[PlayerSpawner] Fresh SPHERE world — selected one dry surface target at " + target);
                 }
                 else
                 {
@@ -168,6 +183,14 @@ namespace VoxelEngine.Player
             // Park the CharacterController-disabled player at the (X,Z) of target with a HIGH Y.
             // This forces VoxelWorld's streamer to start loading chunks around the spawn site.
             DisableController();
+
+            // Frame preparation for the spawn target (covers saved positions, beds, and
+            // space beds): pin the scene frame + streaming to the destination's dominant
+            // body WITHOUT a velocity delta, and suppress auto frame switches until the
+            // player is at rest and in control. Prevents any spawn-time sideways kick.
+            var spawnOrigin = VoxelEngine.Cosmos.SpaceOrigin.Instance;
+            if (spawnOrigin != null) spawnOrigin.suppressAutoFrameSwitches = true;
+            PrepareRespawnFrame(target);
             // On a sphere, DON'T force Y to 250 — that would park the player far above the
             // body's surface (which could be at Y=700+). Use the target Y directly so chunks
             // around the surface start streaming immediately.
@@ -177,10 +200,12 @@ namespace VoxelEngine.Player
             SetPosition(new Vector3(target.x, parkY, target.z));
 
             // A saved high-altitude/space location has no terrain column to wait for.
-            // Waiting there would unnecessarily freeze control before an orbital logout.
+            // Waiting there would unnecessarily freeze control before an orbital logout
+            // — this includes REAL-SPACE deep-space logouts (no active body at all).
             var activeBody = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
-            bool savedInSpace = hasSavedPos && activeBody != null
-                && Vector3.Distance(target, activeBody.transform.position) > activeBody.SurfaceRadius + 80f;
+            bool savedInSpace = hasSavedPos && (VoxelEngine.Cosmos.GravityProvider.IsDeepSpace
+                || (activeBody != null
+                    && Vector3.Distance(target, activeBody.transform.position) > activeBody.SurfaceRadius + 80f));
             if (!savedInSpace)
                 yield return WaitForChunkAt(VoxelCoordOf(target), maxWaitSeconds);
 
@@ -279,15 +304,25 @@ namespace VoxelEngine.Player
                                    session.worldSpawnPoint.y >= 249f && session.worldSpawnPoint.y <= 251f);
                 if (shouldSave)
                 {
-                    session.worldSpawnPoint = finalSpawn;
-                    session.worldSpawnInitialized = true;
+                    session.RecordWorldSpawn(finalSpawn, VoxelEngine.Cosmos.GravityProvider.ActiveBody);
                     session.SaveSpawnSidecar();
-                    Debug.Log("[PlayerSpawner] World spawn initialized at " + finalSpawn);
+                    Debug.Log("[PlayerSpawner] World spawn initialized at " + finalSpawn +
+                              (string.IsNullOrEmpty(session.worldSpawnBodyName) ? "" :
+                               $" (anchored to '{session.worldSpawnBodyName}')"));
                 }
             }
 
             EnableController();
+            // Spawn must start at REST — clear any residual velocity (frame deltas,
+            // stale physics) so the player can never be "launched" by old state.
+            ZeroPlayerVelocity();
+            var pcSpawn = GetComponent<PlayerController>();
+            if (pcSpawn != null) pcSpawn.BeginSpawnGrace();
             ReadyForPlayerControl = true;
+            // Re-enable automatic frame switches now that the player is at rest in the
+            // correct frame.
+            var originEnd = VoxelEngine.Cosmos.SpaceOrigin.Instance;
+            if (originEnd != null) originEnd.suppressAutoFrameSwitches = false;
             if (!VoxelEngine.UI.UIState.IsBlocking)
             {
                 Cursor.lockState = CursorLockMode.Locked;
@@ -329,19 +364,120 @@ namespace VoxelEngine.Player
             Vector3 dest;
             if (session != null)
             {
-                // Prefer the explicit linked bed spawn; otherwise use the true world spawn.
-                // If world spawn is still uninitialized (legacy save), fall back to current player
-                // position rather than teleporting to 0,250,0 sky.
+                // Prefer the explicit linked bed spawn; otherwise the world spawn is
+                // reconstructed from its BODY ANCHOR (9.2.0): the stored scene point goes
+                // stale whenever the floating origin re-anchors (orbits, planet hops),
+                // which used to respawn the player in empty space. The body-local offset
+                // is transformed by the body's CURRENT transform instead.
                 if (session.hasBedSpawn) dest = session.bedSpawnPoint;
-                else if (session.worldSpawnInitialized) dest = session.worldSpawnPoint;
-                else if (session.worldSpawnPoint.sqrMagnitude > 0.1f) dest = session.worldSpawnPoint;
+                else if (session.TryResolveWorldSpawn(out Vector3 resolvedSpawn)) dest = resolvedSpawn;
                 else dest = transform.position;
+
+                // 9.4.0 — a world spawn WITHOUT a body anchor is never trusted: raw
+                // scene points go stale with every floating-origin re-anchor (THE
+                // "respawn in space" bug, final form). Also reject any anchored point
+                // that still resolves to open space. Either way: compute a fresh dry
+                // surface point on the active world and heal the save.
+                bool anchorMissing = string.IsNullOrEmpty(session.worldSpawnBodyName);
+                if (!session.hasBedSpawn && (anchorMissing || IsOpenSpacePosition(dest)))
+                {
+                    // Heal path A: the streamed world can search a dry point (only valid
+                    // while its body is assigned — dying in deep space leaves it null).
+                    bool healed = false;
+                    if (VoxelEngine.Core.ActiveWorld.Current is VoxelEngine.Cosmos.SphereWorld sphereWorld &&
+                        sphereWorld.body != null &&
+                        sphereWorld.TryFindDrySpawnPoint(drySpawnSearchAttempts, out Vector3 freshGround))
+                    {
+                        dest = freshGround;
+                        healed = true;
+                    }
+                    // Heal path B (9.5.0): ANALYTIC spawn on the HOME body straight from
+                    // PlanetField — needs no streamed chunks and works from any frame
+                    // (deep-space deaths, other-planet deaths).
+                    else
+                    {
+                        var home = VoxelEngine.Cosmos.GravityProvider.ActiveBody
+                                   ?? (VoxelEngine.Cosmos.CosmosBootstrap.Instance != null
+                                       ? VoxelEngine.Cosmos.CosmosBootstrap.Instance.HomeBody : null);
+                        if (TryComputeAnalyticSpawn(home, out Vector3 analytic))
+                        {
+                            dest = analytic;
+                            healed = true;
+                        }
+                    }
+
+                    if (healed)
+                    {
+                        Debug.LogWarning("[PlayerSpawner] World spawn was " +
+                                         (anchorMissing ? "un-anchored (legacy save)" : "resolving to open space") +
+                                         " — recomputed a fresh surface spawn and healed the save. dest=" + dest);
+                        session.RecordWorldSpawn(dest, VoxelEngine.Cosmos.GravityProvider.ActiveBody);
+                        session.SaveSpawnSidecar();
+                    }
+                    else
+                    {
+                        Debug.LogError("[PlayerSpawner] Could not heal the world spawn (no usable body) — dest=" + dest);
+                    }
+                }
+                Debug.Log($"[PlayerSpawner] Respawn → dest={dest} anchor='{session.worldSpawnBodyName}' bed={session.hasBedSpawn}");
             }
             else
             {
                 dest = new Vector3(0, 250, 0);
             }
             StartCoroutine(RespawnRoutine(dest));
+        }
+
+        /// <summary>
+        /// Analytic surface spawn straight from the planetary field — no chunks, no
+        /// colliders, valid from any reference frame. Scans deterministic directions
+        /// for dry land (surface above sea) and returns a point just above it.
+        /// </summary>
+        private static bool TryComputeAnalyticSpawn(VoxelEngine.Cosmos.CelestialBody body, out Vector3 scenePos)
+        {
+            scenePos = default;
+            if (body == null || body.settings == null) return false;
+            var prm = body.genParams;
+            if (prm.radiusWorld < 10f) return false;
+
+            var rng = new System.Random(prm.seed ^ 0x5F3759DF);
+            for (int i = 0; i < 64; i++)
+            {
+                var d = new Vector3(
+                    (float)(rng.NextDouble() * 2.0 - 1.0),
+                    (float)(rng.NextDouble() * 2.0 - 1.0),
+                    (float)(rng.NextDouble() * 2.0 - 1.0));
+                if (d.sqrMagnitude < 0.01f) continue;
+                d.Normalize();
+
+                float surf = VoxelEngine.GpuVoxel.PlanetField.SurfaceRadius(
+                    prm.seed, new Unity.Mathematics.float3(d.x, d.y, d.z),
+                    prm.radiusWorld, prm.baseHeight, prm.seaRadius,
+                    prm.continentScaleDir, prm.mountainScale);
+                if (surf <= prm.seaRadius + 2f) continue;   // wet — keep looking
+
+                scenePos = body.transform.position + d * (surf + SpawnGroundClearance);
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// True when a scene position is far above EVERY celestial body's surface
+        /// (more than 800 m of altitude everywhere) — i.e. genuinely in open space.
+        /// </summary>
+        private static bool IsOpenSpacePosition(Vector3 scenePos)
+        {
+            var registry = VoxelEngine.Cosmos.CosmicRegistry.Instance;
+            if (registry == null || registry.SceneBodies == null) return false;
+            foreach (var kv in registry.SceneBodies)
+            {
+                var body = kv.Value;
+                if (body == null) continue;
+                float altitude = Vector3.Distance(scenePos, body.transform.position) - body.SurfaceRadius;
+                if (altitude < 800f) return false;
+            }
+            return true;
         }
 
         public void RespawnAt(Vector3 destination)
@@ -353,6 +489,25 @@ namespace VoxelEngine.Player
         {
             ReadyForPlayerControl = false;
             DisableController();
+
+            // Death-loop breaker: only destinations INSIDE a planet are rejected (a save
+            // written mid-launch). Spawns in space are intentional — a bed / cryobed in
+            // orbit or on a station must spawn you next to it (design decision).
+            if (!IsValidSurfaceDestination(dest, out Vector3 safeDest))
+            {
+                Debug.LogWarning("[PlayerSpawner] Respawn destination is inside a planet — respawning on a fresh surface point instead: " + dest);
+                dest = safeDest;
+            }
+
+            // Respawn frame preparation: pin the scene frame to the destination's dominant
+            // body (or deep space) WITHOUT a velocity delta, and suppress automatic frame
+            // switches until control handover. This is what stopped the sideways launch:
+            // a frame switch landing between the teleport and velocity-zeroing used to
+            // kick the freshly-respawned player with the frame-velocity delta.
+            var spawnOrigin = VoxelEngine.Cosmos.SpaceOrigin.Instance;
+            if (spawnOrigin != null) spawnOrigin.suppressAutoFrameSwitches = true;
+            PrepareRespawnFrame(dest);
+
             // Mirror the first-spawn routine: on a spherical body the parked position
             // must sit at the TRUE destination height. The player transform drives chunk
             // streaming, so forcing Y up to 250 (a flat-world streaming trick) on a sphere
@@ -370,7 +525,111 @@ namespace VoxelEngine.Player
             SetPosition(SnapToGround(transform.position));
             yield return EnsureDrySpawn(transform.position);
             EnableController();
+            ZeroPlayerVelocity();
+            // Brief fall-damage grace so the physics settle at spawn can never insta-kill.
+            var pc = GetComponent<PlayerController>();
+            if (pc != null) pc.BeginSpawnGrace();
             ReadyForPlayerControl = true;
+            // Re-enable automatic frame switches now that control has fully handed over
+            // and the player is at rest in the correct frame.
+            var originEnd = VoxelEngine.Cosmos.SpaceOrigin.Instance;
+            if (originEnd != null) originEnd.suppressAutoFrameSwitches = false;
+        }
+
+        /// <summary>
+        /// Pins the scene reference frame to the dominant body at a scene position (or the
+        /// star frame in deep space) so a respawn/teleport starts at rest relative to where
+        /// the player is actually going. Uses SetFrame directly — no velocity delta — and
+        /// forces the streaming systems onto the destination body.
+        /// </summary>
+        private void PrepareRespawnFrame(Vector3 sceneDest)
+        {
+            var origin = VoxelEngine.Cosmos.SpaceOrigin.Instance;
+            var registry = VoxelEngine.Cosmos.CosmicRegistry.Instance;
+            if (origin == null || registry == null || !registry.IsReady) return;
+
+            double3 cosmic = origin.GetCosmicKm(sceneDest);
+            var dominant = registry.GetDominantBody(cosmic, out _);
+            VoxelEngine.Cosmos.CelestialBody frame = null;
+            if (dominant != null) registry.SceneBodies.TryGetValue(dominant, out frame);
+
+            origin.SetFrame(frame);
+            var bootstrap = VoxelEngine.Cosmos.CosmosBootstrap.Instance;
+            if (bootstrap != null) bootstrap.ForceStreamingBody(frame);
+        }
+
+        /// <summary>
+        /// True when a scene position is a usable spawn destination: NOT inside a planet
+        /// (a launch-era save can bury you in solid terrain). Positions in space are VALID —
+        /// a bed/cryobed in orbit or on a station must spawn you next to it. When invalid,
+        /// outputs a fresh deterministic dry surface spawn.
+        /// </summary>
+        private bool IsValidSurfaceDestination(Vector3 scenePos, out Vector3 safePoint)
+        {
+            var origin = VoxelEngine.Cosmos.SpaceOrigin.Instance;
+            var registry = VoxelEngine.Cosmos.CosmicRegistry.Instance;
+
+            // Check EVERY celestial body, not just the active one (a destination near
+            // another planet's core must also be rejected).
+            if (origin != null && registry != null && registry.IsReady)
+            {
+                double3 cosmic = origin.GetCosmicKm(scenePos);
+                foreach (var kv in registry.SceneBodies)
+                {
+                    if (kv.Key == null || kv.Key.settings == null || kv.Value == null) continue;
+                    double3 bodyCosmic = registry.CosmicPositionOf(kv.Key);
+                    double d = math.length(bodyCosmic - cosmic);
+                    if (d < kv.Key.settings.radiusKm * 0.95d)
+                    {
+                        // Recompute a fresh surface point on THIS body from the density field.
+                        var body = kv.Value;
+                        Vector3 ground = body.transform.position + body.transform.up * (body.SurfaceRadius + 30f);
+                        if (VoxelEngine.Core.ActiveWorld.Current is VoxelEngine.Cosmos.SphereWorld sphereWorld &&
+                            sphereWorld.TryFindDrySpawnPoint(drySpawnSearchAttempts, out Vector3 analyticGround))
+                        {
+                            ground = analyticGround;
+                        }
+                        safePoint = ground + body.UpAt(ground) * SpawnGroundClearance;
+                        return false;
+                    }
+                }
+            }
+
+            safePoint = scenePos;
+            return true;
+        }
+
+        /// <summary>
+        /// True when a saved scene position would restore the player INSIDE a celestial
+        /// body (distance from any body's core below its surface radius). Such saves are
+        /// the result of launch/tunnel bugs and must never be restored as-is.
+        /// </summary>
+        private static bool IsSavedPositionInsideBody(Vector3 scenePos)
+        {
+            var origin = VoxelEngine.Cosmos.SpaceOrigin.Instance;
+            var registry = VoxelEngine.Cosmos.CosmicRegistry.Instance;
+            if (origin == null || registry == null || !registry.IsReady) return false;
+
+            double3 cosmic = origin.GetCosmicKm(scenePos);
+            foreach (var kv in registry.SceneBodies)
+            {
+                if (kv.Key == null || kv.Value == null || kv.Key.settings == null) continue;
+                double3 bodyCosmic = registry.CosmicPositionOf(kv.Key);
+                double d = math.length(bodyCosmic - cosmic);
+                double rSurface = kv.Key.settings.radiusKm;
+                // Strictly inside the crust (5% margin below the surface).
+                if (d < rSurface * 0.95d) return true;
+            }
+            return false;
+        }
+
+        /// <summary>Brings the player to a full stop before control handover.</summary>
+        private void ZeroPlayerVelocity()
+        {
+            var pc = GetComponent<PlayerController>();
+            if (pc != null) pc.ResetVelocity();
+            var rb = GetComponentInChildren<Rigidbody>();
+            if (rb != null) rb.linearVelocity = Vector3.zero;
         }
 
         // ============================================================
@@ -473,6 +732,32 @@ namespace VoxelEngine.Player
         {
             if (!IsSpawnInWater(transform.position)) yield break;
 
+            var body = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
+            if (body != null && VoxelEngine.Core.ActiveWorld.Current is VoxelEngine.Cosmos.SphereWorld sphereWorld &&
+                sphereWorld.TryFindDrySpawnPoint(drySpawnSearchAttempts, out Vector3 analyticGround))
+            {
+                // One deterministic relocation replaces the old visible sequence of trial
+                // teleports. Keep the controller disabled while this single target streams.
+                Vector3 analyticSpawn = analyticGround + body.UpAt(analyticGround) * SpawnGroundClearance;
+                SetPosition(GetSpawnParkingPosition(analyticSpawn));
+                yield return WaitForChunkAt(VoxelCoordOf(analyticSpawn), 3f);
+                if (TryFindDryGround(analyticSpawn, out Vector3 dryGround)) analyticSpawn = dryGround;
+                SetPosition(analyticSpawn);
+                PersistDrySpawnRelocation(preferred, analyticSpawn);
+                Debug.Log("[PlayerSpawner] Replaced wet spawn with one deterministic dry surface target at " + analyticSpawn);
+                yield break;
+            }
+            if (body != null)
+            {
+                // A fully oceanic/custom body has no density-confirmed dry land. Do not make
+                // the player watch a long sequence of trial teleports; hold one safe point
+                // above the selected water column and report the authoring issue once.
+                Vector3 surfaceUp = body.UpAt(preferred);
+                SetPosition(preferred + (surfaceUp.sqrMagnitude > 0.0001f ? surfaceUp.normalized : Vector3.up) * 4f);
+                Debug.LogError("[PlayerSpawner] No dry spherical spawn was found in the authored density field; held player above the selected water column without relocation hopping.");
+                yield break;
+            }
+
             int attempts = Mathf.Max(8, drySpawnSearchAttempts);
             Debug.LogWarning("[PlayerSpawner] Selected spawn is wet; searching nearby dry ground.");
             for (int attempt = 0; attempt < attempts; attempt++)
@@ -562,7 +847,7 @@ namespace VoxelEngine.Player
             }
             else if (session.worldSpawnInitialized && Vector3.Distance(session.worldSpawnPoint, previousSpawn) <= MatchDistance)
             {
-                session.worldSpawnPoint = drySpawn;
+                session.RecordWorldSpawn(drySpawn, VoxelEngine.Cosmos.GravityProvider.ActiveBody);
                 changed = true;
             }
 

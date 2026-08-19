@@ -65,7 +65,6 @@ namespace VoxelEngine.UI
             _card.style.paddingRight = 14;
             _card.style.paddingTop = 11;
             _card.style.paddingBottom = 11;
-            _card.style.backgroundColor = new StyleColor(new Color(0.025f, 0.035f, 0.055f, 0.94f));
             _card.style.opacity = 0f;
             _card.style.translate = new StyleTranslate(new Translate(new Length(-10f, LengthUnit.Pixel), new Length(0f, LengthUnit.Pixel), 0f));
             _card.style.transitionProperty = new System.Collections.Generic.List<StylePropertyName> { "opacity", "translate" };
@@ -75,9 +74,11 @@ namespace VoxelEngine.UI
                 new(0.13f, TimeUnit.Second)
             };
             _card.pickingMode = PickingMode.Ignore;
-            T.Radius(_card, 8f);
-            T.Border(_card, 1f, new Color(T.BorderBright.r, T.BorderBright.g, T.BorderBright.b, 0.78f));
+            LcdHudTheme.ApplyChassis(_card, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.96f), 3f);
+            LcdHudTheme.AddAnimatedScanlines(_card, 3, 6f, 18f);
             uiRoot.Add(_card);
+            // Step aside while machine/chest panels are open — never overlap them.
+            LcdHudTheme.YieldWhileBlocking(_card);
 
             var headingRow = new VisualElement();
             headingRow.style.flexDirection = FlexDirection.Row;
@@ -103,7 +104,7 @@ namespace VoxelEngine.UI
             _title.style.fontSize = 13;
             _title.style.unityFontStyleAndWeight = FontStyle.Bold;
             _title.style.letterSpacing = 0.5f;
-            _title.style.color = new StyleColor(T.TextPrimary);
+            _title.style.color = new StyleColor(LcdHudTheme.Phosphor);
             _title.pickingMode = PickingMode.Ignore;
             textColumn.Add(_title);
 
@@ -111,14 +112,14 @@ namespace VoxelEngine.UI
             _detail.style.fontSize = 9;
             _detail.style.marginTop = 2;
             _detail.style.letterSpacing = 0.6f;
-            _detail.style.color = new StyleColor(T.TextMuted);
+            _detail.style.color = new StyleColor(LcdHudTheme.Caption);
             _detail.pickingMode = PickingMode.Ignore;
             textColumn.Add(_detail);
 
             _status = new Label();
             _status.style.fontSize = 10;
             _status.style.marginTop = 8;
-            _status.style.color = new StyleColor(T.TextSecondary);
+            _status.style.color = new StyleColor(LcdHudTheme.Phosphor);
             _status.style.whiteSpace = WhiteSpace.Normal;
             _status.pickingMode = PickingMode.Ignore;
             _card.Add(_status);
@@ -215,7 +216,7 @@ namespace VoxelEngine.UI
             // displayable info. Don't give up at the first collider: ghosts, held-tool
             // viewmodels and other transient blockers must never swallow the card when
             // the player has items or tools in hand.
-            if (!TryResolveAlongRay(ray, out var info))
+            if (!TryResolveAlongRay(ray, out var info) && !TryResolveVoxelAlongRay(ray, out info))
             {
                 Hide();
                 return;
@@ -238,6 +239,7 @@ namespace VoxelEngine.UI
                 if (candidate.collider == null) continue;
                 if (playerRoot != null && candidate.collider.transform.IsChildOf(playerRoot)) continue;
                 if (localPlayer != null && VoxelEngine.Player.PlayerRaycastFilter.IsOwnPlayerCollider(candidate.collider, localPlayer.transform)) continue;
+                if (IsRuntimeSystemCollider(candidate.collider)) continue;
                 // Skip transient rigs: build ghosts, viewmodels, held items.
                 string rootName = candidate.collider.transform.root.name;
                 if (IsTransientRigName(rootName)) continue;
@@ -246,6 +248,23 @@ namespace VoxelEngine.UI
             }
             info = default;
             return false;
+        }
+
+        /// <summary>Never present bootstrap/LOD/helper colliders as inspectable world blocks.</summary>
+        private static bool IsRuntimeSystemCollider(Collider collider)
+        {
+            if (collider == null) return true;
+            // The planet-LOD safety shell/core must never be inspected as a block — the
+            // real target is the streamed voxel terrain behind it.
+            if (collider.GetComponentInParent<VoxelEngine.Cosmos.PlanetSafetyCollider>() != null) return true;
+            string ownName = collider.gameObject.name;
+            string rootName = collider.transform.root != null ? collider.transform.root.name : string.Empty;
+            return ownName.IndexOf("Bootstrap", System.StringComparison.OrdinalIgnoreCase) >= 0
+                || (collider.transform == collider.transform.root
+                    && rootName.IndexOf("Bootstrap", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                || ownName.IndexOf("OceanLOD", System.StringComparison.OrdinalIgnoreCase) >= 0
+                || ownName.IndexOf("PlanetLOD", System.StringComparison.OrdinalIgnoreCase) >= 0
+                || ownName.IndexOf("NativeSphericalWater", System.StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private static bool IsTransientRigName(string rootName)
@@ -262,6 +281,36 @@ namespace VoxelEngine.UI
         {
             info = default;
             if (hit.collider == null) return false;
+
+            var tree = hit.collider.GetComponentInParent<VoxelEngine.Trees.Tree>();
+            if (tree != null)
+            {
+                string treeName = hit.collider.name.Replace("(Clone)", string.Empty).Trim();
+                if (treeName.StartsWith("Tree_", System.StringComparison.OrdinalIgnoreCase))
+                    treeName = treeName.Substring(5) + " Tree";
+                else if (string.IsNullOrEmpty(treeName) || treeName == "__scatter")
+                    treeName = "Tree";
+
+                info.title = treeName.ToUpperInvariant();
+                info.detail = "VEGETATION · HARVESTABLE";
+                info.status = "Harvestable with Axe or Hands for Wood Logs";
+                info.showHealth = tree.maxHp > 0;
+                info.health01 = tree.maxHp > 0 ? Mathf.Clamp01(tree.hp / (float)tree.maxHp) : 0f;
+                info.healthText = $"{Mathf.Max(0, tree.hp)}/{tree.maxHp}";
+                return true;
+            }
+
+            var brokenPump = hit.collider.GetComponentInParent<VoxelEngine.Generation.BrokenJackPump>();
+            if (brokenPump != null)
+            {
+                info.title = "RUINED JACK PUMP";
+                info.detail = "PIRATE RELIC SITE · HARVESTABLE";
+                info.status = "Break down for Iron Plates · Marks an Infinite Crude Oil Node";
+                info.showHealth = true;
+                info.health01 = Mathf.Clamp01(1f);
+                info.healthText = "SALVAGEABLE";
+                return true;
+            }
 
             // Automated defense network — ammo, filter, auto/manual, HP.
             var defense = hit.collider.GetComponentInParent<Damageable>();
@@ -395,32 +444,74 @@ namespace VoxelEngine.UI
             var world = ActiveWorld.Current;
             if (world != null)
             {
-                Vector3 samplePoint = hit.point - hit.normal.normalized * 0.15f;
-                Vector3Int voxelPosition = world.WorldToVoxel(samplePoint);
-                var voxel = world.GetVoxelWorld(voxelPosition);
-                if (voxel.material != (byte)MaterialId.Air)
-                {
-                    byte materialByte = voxel.material == (byte)MaterialId.LegacySolidFloor
-                        ? (byte)MaterialId.Stone
-                        : voxel.material;
-                    var definition = world.MaterialRegistry?.Get(materialByte);
-                    var materialId = (MaterialId)materialByte;
-                    info.title = definition != null && !string.IsNullOrWhiteSpace(definition.displayName)
-                        ? definition.displayName
-                        : materialId.ToString();
-                    info.detail = "VOXEL MATERIAL";
-                    info.status = definition != null
-                        ? $"Hardness: {definition.hardness:0.0} · Mining tier: {definition.miningTier}"
-                        : $"Material ID: {(byte)materialId}";
-                    return true;
-                }
+                Vector3 samplePoint1 = hit.point - hit.normal.normalized * 0.55f;
+                if (TryDescribeVoxel(world, world.WorldToVoxel(samplePoint1), out info)) return true;
+                Vector3 samplePoint2 = hit.point - hit.normal.normalized * 0.25f;
+                if (TryDescribeVoxel(world, world.WorldToVoxel(samplePoint2), out info)) return true;
+                Vector3 samplePoint3 = hit.point - hit.normal.normalized * 0.85f;
+                if (TryDescribeVoxel(world, world.WorldToVoxel(samplePoint3), out info)) return true;
             }
+
+            // A terrain chunk without a resolved voxel should not become a meaningless root
+            // object name; let the ray-marched voxel fallback below identify the real material.
+            if (hit.collider.gameObject.name.StartsWith("Chunk_", System.StringComparison.Ordinal))
+                return false;
 
             string fallback = hit.collider.transform.root.name;
             if (string.IsNullOrWhiteSpace(fallback)) return false;
             info.title = fallback.Replace("(Clone)", string.Empty).Trim();
             info.detail = "WORLD OBJECT";
             info.status = $"Distance: {hit.distance:0.0} m";
+            return true;
+        }
+
+        private static bool TryResolveVoxelAlongRay(Ray ray, out TargetInfo info)
+        {
+            info = default;
+            var world = ActiveWorld.Current;
+            if (world == null) return false;
+
+            Vector3Int lastVoxel = new Vector3Int(int.MinValue, int.MinValue, int.MinValue);
+            // A collider can be deferred for a newly streamed chunk while its voxel data is
+            // already valid. Marching the short inspection reach keeps the top-left title alive
+            // during that hand-off instead of flashing blank/no-object.
+            for (float distance = 0.20f; distance <= ProbeDistance; distance += 0.25f)
+            {
+                Vector3Int voxelPosition = world.WorldToVoxel(ray.GetPoint(distance));
+                if (voxelPosition == lastVoxel) continue;
+                lastVoxel = voxelPosition;
+                if (TryDescribeVoxel(world, voxelPosition, out info)) return true;
+            }
+            return false;
+        }
+
+        private static bool TryDescribeVoxel(IVoxelWorld world, Vector3Int voxelPosition, out TargetInfo info)
+        {
+            info = default;
+            if (world == null) return false;
+            Voxel voxel;
+            if (world is VoxelEngine.Cosmos.SphereWorld sphere)
+            {
+                if (!sphere.TryGetVoxelReady(voxelPosition, out voxel)) return false;
+            }
+            else
+            {
+                voxel = world.GetVoxelWorld(voxelPosition);
+            }
+            if (voxel.density <= 0 && voxel.material == (byte)MaterialId.Air) return false;
+
+            byte materialByte = voxel.material == (byte)MaterialId.LegacySolidFloor
+                ? (byte)MaterialId.Stone
+                : voxel.material;
+            var definition = world.MaterialRegistry?.Get(materialByte);
+            var materialId = (MaterialId)materialByte;
+            info.title = definition != null && !string.IsNullOrWhiteSpace(definition.displayName)
+                ? definition.displayName
+                : materialId.ToString();
+            info.detail = "VOXEL MATERIAL";
+            info.status = definition != null
+                ? $"Hardness: {definition.hardness:0.0} · Mining tier: {definition.miningTier}"
+                : $"Material ID: {(byte)materialId}";
             return true;
         }
 

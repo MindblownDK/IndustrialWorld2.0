@@ -849,6 +849,7 @@ namespace VoxelEngine.GridSystem.UI
             page.style.alignSelf = Align.FlexStart;
             page.style.flexShrink = 0;
             page.style.paddingBottom = 40;
+            LcdHudTheme.AnimateBootSweep(page);
 
             page.Add(T.Subtitle("GROUP"));
             var name = new TextField { value = group.name };
@@ -1087,6 +1088,7 @@ namespace VoxelEngine.GridSystem.UI
             p.style.width = StyleKeyword.Auto;
             p.style.flexShrink = 0;
             p.style.paddingBottom = 40;
+            LcdHudTheme.AnimateBootSweep(p);
 
             var entries = CollectStorageEntries(grid);
             float totalKg = 0f;

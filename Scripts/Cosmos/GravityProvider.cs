@@ -9,6 +9,7 @@
 // This singleton is the single source every movement system (player, vehicles, atmosphere)
 // asks: "which way is down here, right now?" When no spherical body is active it reports the
 // classic flat-world answer (Vector3.up / -22 m/s²), so existing flat-world code is unaffected.
+using Unity.Mathematics;
 using UnityEngine;
 
 namespace VoxelEngine.Cosmos
@@ -52,6 +53,20 @@ namespace VoxelEngine.Cosmos
         /// <summary>True when a spherical body is driving gravity (radial mode).</summary>
         public static bool IsRadial => ActiveBody != null;
 
+        /// <summary>
+        /// True when the player is in deep space (cosmos active, no body in control).
+        /// The scene is in the star frame and gravity is effectively zero.
+        /// </summary>
+        public static bool IsDeepSpace
+        {
+            get
+            {
+                var reg = CosmicRegistry.Instance;
+                return reg != null && reg.IsReady && ActiveBody == null
+                    && SpaceOrigin.Instance != null && SpaceOrigin.Instance.IsDeepSpace;
+            }
+        }
+
         private void Awake()
         {
             if (Instance != null && Instance != this) { Destroy(this); return; }
@@ -68,13 +83,32 @@ namespace VoxelEngine.Cosmos
         /// <summary>"Down" at a world position (the direction gravity pulls toward).</summary>
         public static Vector3 GetDown(Vector3 worldPosition) => -GetUp(worldPosition);
 
-        /// <summary>Gravity acceleration vector (m/s²) at a world position.</summary>
+        /// <summary>
+        /// Gravity acceleration vector (m/s²) at a world position.
+        ///
+        /// Real-space N-body model: when the cosmos is active the acceleration is the sum
+        /// of the star's and every body's inverse-square pull (dominant near the active
+        /// body, vanishing in deep space). Flat-world fallback stays −22 m/s² down.
+        /// </summary>
         public static Vector3 GetGravity(Vector3 worldPosition)
         {
+            var reg = CosmicRegistry.Instance;
+            if (reg != null && reg.IsReady)
+            {
+                var origin = SpaceOrigin.Instance;
+                double3 cosmic = origin != null ? origin.GetCosmicKm(worldPosition) : CosmicRegistry.ToDouble3(worldPosition);
+                // Scene-frame gravity: subtract the frame body's own orbital acceleration
+                // so the player feels ONLY the local pull — no phantom sideways force
+                // toward the star or other planets (free-fall frame correction).
+                double3 g = origin != null
+                    ? reg.GetFrameRelativeGravityMetersS2(cosmic, origin.FrameBody)
+                    : reg.GetGravityMetersS2(cosmic);
+                return (Vector3)(float3)g;
+            }
+
             if (ActiveBody != null)
             {
-                // CelestialBody.GravityAt already returns a vector pointing toward the core
-                // with the correct magnitude (inverse-square above the surface).
+                // CelestialBody.GravityAt returns the inverse-square pull toward the core.
                 return ActiveBody.GravityAt(worldPosition);
             }
             return Vector3.down * (Instance != null ? Instance.flatGravity : 22f);
@@ -99,6 +133,12 @@ namespace VoxelEngine.Cosmos
             float scale = Mathf.Max(0f, gravityScale);
             Vector3 acceleration = GetGravity(worldPosition) * scale;
             bool radial = ActiveBody != null;
+
+            // Deep space: genuine zero-g — never report the flat-world fallback.
+            if (IsDeepSpace)
+            {
+                return new GravityFieldSample(Vector3.zero, 0f, false);
+            }
             float surfaceMagnitude = radial
                 ? ActiveBody.SurfaceGravity * scale
                 : FlatMagnitude * scale;

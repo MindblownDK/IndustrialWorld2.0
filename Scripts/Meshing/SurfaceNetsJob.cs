@@ -48,16 +48,41 @@ namespace VoxelEngine.Meshing
         [ReadOnly] public NativeArray<VertexAttributeDescriptor> vertexAttributes;
 
         public bool isSphere;
+        // Vertex AO is attractive on static worlds but costs 26 voxel reads per output vertex.
+        // Spherical streaming disables it and relies on radial normals/shader lighting instead.
+        public bool enableVertexAo;
         public float3 chunkOrigin;
 
-        // Fluid material IDs — these are treated as EMPTY for terrain mesh generation
+        /// <summary>
+        /// World-space edge length of one voxel (metres). The gameplay world uses
+        /// VoxelConstants.VOXEL_SIZE (1 m); coarse LOD callers may use larger
+        /// voxels (8–512 m) so the same job builds the whole planet at real LOD.
+        /// Zero (default) falls back to VoxelConstants.VOXEL_SIZE in Execute().
+        /// </summary>
+        public float voxelSize;
+
+        // Fluid material IDs — treated as EMPTY for terrain mesh generation UNLESS the
+        // cell is SOLID. Solid-density crude oil (the geological bore/reservoir written by
+        // OilReservoirDecorator) is real visible terrain; only liquid oil (density ≤ 0,
+        // rendered by the fluid mesh at open-air surfaces) stays empty here.
         private const byte WaterVoxelMat = 5;  // MaterialId.WaterVoxel  (solid form)
         private const byte WaterLiquidMat = 6;  // MaterialId.WaterLiquid (sim form)
         private const byte OilMat         = 18; // MaterialId.CrudeOil
 
+        /// <summary>
+        /// True when a fluid material cell must be treated as EMPTY by the terrain mesh:
+        /// liquid fluids (density ≤ 0). A solid-density oil cell is geological oil-soaked
+        /// rock and must be meshed like any other terrain.
+        /// </summary>
+        private static bool IsEmptyFluid(byte material, sbyte density)
+            => IsFluidMat(material) && density <= VoxelConstants.ISO_LEVEL;
+
         public void Execute()
         {
             const int S  = VoxelConstants.CHUNK_SIZE;
+            // Zero (default) means "the caller did not set a custom voxel size" — fall back
+            // to the standard gameplay voxel size. (C# 9 forbids struct field initializers.)
+            float vs = voxelSize > 0f ? voxelSize : VoxelConstants.VOXEL_SIZE;
 
             for (int i = 0; i < cellVertexIndex.Length; i++) cellVertexIndex[i] = -1;
 
@@ -67,8 +92,9 @@ namespace VoxelEngine.Meshing
             float3 bbMin = new float3(float.MaxValue);
             float3 bbMax = new float3(float.MinValue);
 
-            // Local material vote buffer (stack allocated, no GC)
-            int* matVotes = stackalloc int[256];
+            // At most eight corners contribute to a surface cell. Keep a tiny local candidate
+            // list instead of clearing/scanning a 256-entry material histogram per vertex.
+            byte* materialCandidates = stackalloc byte[8];
 
             // ---- Pass 1: place one vertex per cell whose 8 corners straddle iso ----
             for (int cz = 0; cz < S + 1; cz++)
@@ -98,14 +124,14 @@ namespace VoxelEngine.Meshing
                 // This prevents the terrain mesh from generating faces inside fluid volumes,
                 // eliminating the "double water layer" where terrain faces were visible through
                 // semi-transparent water and appeared as a second water surface.
-                int vd000 = IsFluidMat(voxels[i000].material) ? -1 : d000;
-                int vd100 = IsFluidMat(voxels[i100].material) ? -1 : d100;
-                int vd010 = IsFluidMat(voxels[i010].material) ? -1 : d010;
-                int vd110 = IsFluidMat(voxels[i110].material) ? -1 : d110;
-                int vd001 = IsFluidMat(voxels[i001].material) ? -1 : d001;
-                int vd101 = IsFluidMat(voxels[i101].material) ? -1 : d101;
-                int vd011 = IsFluidMat(voxels[i011].material) ? -1 : d011;
-                int vd111 = IsFluidMat(voxels[i111].material) ? -1 : d111;
+                int vd000 = IsEmptyFluid(voxels[i000].material, voxels[i000].density) ? -1 : d000;
+                int vd100 = IsEmptyFluid(voxels[i100].material, voxels[i100].density) ? -1 : d100;
+                int vd010 = IsEmptyFluid(voxels[i010].material, voxels[i010].density) ? -1 : d010;
+                int vd110 = IsEmptyFluid(voxels[i110].material, voxels[i110].density) ? -1 : d110;
+                int vd001 = IsEmptyFluid(voxels[i001].material, voxels[i001].density) ? -1 : d001;
+                int vd101 = IsEmptyFluid(voxels[i101].material, voxels[i101].density) ? -1 : d101;
+                int vd011 = IsEmptyFluid(voxels[i011].material, voxels[i011].density) ? -1 : d011;
+                int vd111 = IsEmptyFluid(voxels[i111].material, voxels[i111].density) ? -1 : d111;
 
                 // Mask uses VIRTUAL densities — fluid materials are empty
                 int mask = 0;
@@ -142,21 +168,31 @@ namespace VoxelEngine.Meshing
 
                 if (n == 0) continue;
 
-                // Dominant material vote — skip ALL fluid materials so the terrain
-                // mesh never gets painted with water/oil colors. Only non-fluid
-                // solid materials (Stone, Sand, etc.) participate in the vote.
-                for (int m = 0; m < 256; m++) matVotes[m] = 0;
-                if ((mask & 1)   != 0) { byte mt = voxels[i000].material; if (!IsFluidMat(mt)) matVotes[mt]++; }
-                if ((mask & 2)   != 0) { byte mt = voxels[i100].material; if (!IsFluidMat(mt)) matVotes[mt]++; }
-                if ((mask & 4)   != 0) { byte mt = voxels[i010].material; if (!IsFluidMat(mt)) matVotes[mt]++; }
-                if ((mask & 8)   != 0) { byte mt = voxels[i110].material; if (!IsFluidMat(mt)) matVotes[mt]++; }
-                if ((mask & 16)  != 0) { byte mt = voxels[i001].material; if (!IsFluidMat(mt)) matVotes[mt]++; }
-                if ((mask & 32)  != 0) { byte mt = voxels[i101].material; if (!IsFluidMat(mt)) matVotes[mt]++; }
-                if ((mask & 64)  != 0) { byte mt = voxels[i011].material; if (!IsFluidMat(mt)) matVotes[mt]++; }
-                if ((mask & 128) != 0) { byte mt = voxels[i111].material; if (!IsFluidMat(mt)) matVotes[mt]++; }
+                // Dominant material vote — skip fluids so terrain never inherits water/oil
+                // colour. There are only eight possible contributors, so an 8×8 comparison is
+                // dramatically cheaper than the former 256-entry clear + scan for every vertex.
+                int materialCandidateCount = 0;
+                if ((mask & 1)   != 0) { byte mt = voxels[i000].material; if (!IsEmptyFluid(mt, voxels[i000].density)) materialCandidates[materialCandidateCount++] = mt; }
+                if ((mask & 2)   != 0) { byte mt = voxels[i100].material; if (!IsEmptyFluid(mt, voxels[i100].density)) materialCandidates[materialCandidateCount++] = mt; }
+                if ((mask & 4)   != 0) { byte mt = voxels[i010].material; if (!IsEmptyFluid(mt, voxels[i010].density)) materialCandidates[materialCandidateCount++] = mt; }
+                if ((mask & 8)   != 0) { byte mt = voxels[i110].material; if (!IsEmptyFluid(mt, voxels[i110].density)) materialCandidates[materialCandidateCount++] = mt; }
+                if ((mask & 16)  != 0) { byte mt = voxels[i001].material; if (!IsEmptyFluid(mt, voxels[i001].density)) materialCandidates[materialCandidateCount++] = mt; }
+                if ((mask & 32)  != 0) { byte mt = voxels[i101].material; if (!IsEmptyFluid(mt, voxels[i101].density)) materialCandidates[materialCandidateCount++] = mt; }
+                if ((mask & 64)  != 0) { byte mt = voxels[i011].material; if (!IsEmptyFluid(mt, voxels[i011].density)) materialCandidates[materialCandidateCount++] = mt; }
+                if ((mask & 128) != 0) { byte mt = voxels[i111].material; if (!IsEmptyFluid(mt, voxels[i111].density)) materialCandidates[materialCandidateCount++] = mt; }
                 int dominantMat = 0, dominantCount = 0;
-                for (int m = 1; m < 256; m++)
-                    if (matVotes[m] > dominantCount) { dominantCount = matVotes[m]; dominantMat = m; }
+                for (int a = 0; a < materialCandidateCount; a++)
+                {
+                    int votes = 0;
+                    byte candidate = materialCandidates[a];
+                    for (int b = 0; b < materialCandidateCount; b++)
+                        if (materialCandidates[b] == candidate) votes++;
+                    if (votes > dominantCount)
+                    {
+                        dominantCount = votes;
+                        dominantMat = candidate;
+                    }
+                }
 
                 float3 local = sum / n + new float3(cx - 1, cy - 1, cz - 1);
                 vertexScratch[vertexCount] = local;
@@ -166,6 +202,14 @@ namespace VoxelEngine.Meshing
                 float gy = (vd010 + vd110 + vd011 + vd111) - (vd000 + vd100 + vd001 + vd101);
                 float gz = (vd001 + vd101 + vd011 + vd111) - (vd000 + vd100 + vd010 + vd110);
                 float3 nrm = -math.normalizesafe(new float3(gx, gy, gz), new float3(0, 1, 0));
+                if (isSphere)
+                {
+                    // Density gradients can flip at cube/chunk boundaries. Keep every terrain
+                    // normal facing away from the body core so lighting, grass, and material
+                    // slope treatment wrap consistently around the entire planet.
+                    float3 radialUp = math.normalizesafe(chunkOrigin + local, new float3(0, 1, 0));
+                    if (math.dot(nrm, radialUp) < 0f) nrm = -nrm;
+                }
                 normalScratch[vertexCount] = nrm;
                 colorScratch[vertexCount]  = ApplyTerrainShading(materialColors[dominantMat], local, nrm, cx, cy, cz);
 
@@ -224,8 +268,10 @@ namespace VoxelEngine.Meshing
 
             counts[0] = vertexCount;
             counts[1] = indexCount;
+            // Bounds are reported in world metres (vertex positions are scaled below), so
+            // frustum culling of the chunk GO is correct at any voxel size.
             bounds[0] = vertexCount > 0
-                ? new Bounds((Vector3)((bbMin + bbMax) * 0.5f), (Vector3)(bbMax - bbMin))
+                ? new Bounds((Vector3)((bbMin + bbMax) * 0.5f) * vs, (Vector3)(bbMax - bbMin) * vs)
                 : new Bounds(Vector3.zero, Vector3.zero);
 
             // ---- Write into Mesh.MeshData (Unity 6 fast path) ----
@@ -235,7 +281,7 @@ namespace VoxelEngine.Meshing
             for (int i = 0; i < vertexCount; i++)
                 verts[i] = new VertexLayout
                 {
-                    pos    = vertexScratch[i] * VoxelConstants.VOXEL_SIZE,
+                    pos    = vertexScratch[i] * vs,
                     normal = normalScratch[i],
                     color  = colorScratch[i]
                 };
@@ -253,13 +299,14 @@ namespace VoxelEngine.Meshing
         }
 
         /// <summary>
-        /// Returns true if the voxel is solid terrain (not a fluid material).
-        /// Fluid materials (WaterVoxel, WaterLiquid, CrudeOil) are treated as empty
-        /// so the terrain mesh never generates faces inside fluid volumes.
+        /// Returns true if the voxel is solid terrain (not an empty fluid material).
+        /// Fluid materials (WaterVoxel, WaterLiquid) are treated as empty so the terrain
+        /// mesh never generates faces inside fluid volumes. SOLID crude oil (geological
+        /// bore/reservoir) IS terrain — it renders as visible oil-soaked rock.
         /// </summary>
         private bool IsTerrainSolid(Voxel v)
         {
-            return v.density > 0 && !IsFluidMat(v.material);
+            return v.density > 0 && !IsEmptyFluid(v.material, v.density);
         }
 
         /// <summary>
@@ -268,7 +315,7 @@ namespace VoxelEngine.Meshing
         /// may contain solid water blocks that would otherwise generate blue
         /// terrain faces indistinguishable from the water surface.
         /// </summary>
-        private bool IsFluidMat(byte mat)
+        private static bool IsFluidMat(byte mat)
         {
             return mat == WaterVoxelMat || mat == WaterLiquidMat || mat == OilMat;
         }
@@ -324,25 +371,29 @@ namespace VoxelEngine.Meshing
             g *= slopeShade;
             b *= slopeShade;
 
-            // 3. Vertex AO: estimate occlusion by sampling neighbor cell densities.
-            // Vertices surrounded by more solid voxels = more occluded = darker.
-            int solidCount = 0;
-            int checked_ = 0;
-            for (int dz = -1; dz <= 1; dz++)
-            for (int dy = -1; dy <= 1; dy++)
-            for (int dx = -1; dx <= 1; dx++)
+            // 3. Vertex AO is optional. It is kept for the legacy static world, but a
+            // streamed spherical chunk would otherwise perform 26 extra voxel reads for every
+            // vertex while the player moves. Radial lighting already provides the needed relief.
+            if (enableVertexAo)
             {
-                if (dx == 0 && dy == 0 && dz == 0) continue;
-                int nx = cx + dx, ny = cy + dy, nz = cz + dz;
-                if (nx < 0 || ny < 0 || nz < 0 || nx > VoxelConstants.CHUNK_SIZE || ny > VoxelConstants.CHUNK_SIZE || nz > VoxelConstants.CHUNK_SIZE) continue;
-                var nv = voxels[Idx(nx, ny, nz)];
-                if (IsTerrainSolid(nv)) solidCount++;
-                checked_++;
+                int solidCount = 0;
+                int checked_ = 0;
+                for (int dz = -1; dz <= 1; dz++)
+                for (int dy = -1; dy <= 1; dy++)
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    if (dx == 0 && dy == 0 && dz == 0) continue;
+                    int nx = cx + dx, ny = cy + dy, nz = cz + dz;
+                    if (nx < 0 || ny < 0 || nz < 0 || nx > VoxelConstants.CHUNK_SIZE || ny > VoxelConstants.CHUNK_SIZE || nz > VoxelConstants.CHUNK_SIZE) continue;
+                    var nv = voxels[Idx(nx, ny, nz)];
+                    if (IsTerrainSolid(nv)) solidCount++;
+                    checked_++;
+                }
+                float ao = checked_ > 0 ? math.lerp(1.0f, 0.65f, (float)solidCount / checked_) : 1f;
+                r *= ao;
+                g *= ao;
+                b *= ao;
             }
-            float ao = checked_ > 0 ? math.lerp(1.0f, 0.65f, (float)solidCount / checked_) : 1f;
-            r *= ao;
-            g *= ao;
-            b *= ao;
 
             return new Color32(
                 (byte)math.clamp(r * 255f, 0, 255),

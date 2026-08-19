@@ -13,7 +13,7 @@ namespace VoxelEngine.Cosmos
     public enum GraphicsTier { Low, Mid, High, Ultra }
 
     /// <summary>
-    /// Centralized graphics budget. Read by GpuGrassRenderer, PlanetLodImpostor, SphereWorld,
+    /// Centralized graphics budget. Read by GpuGrassRenderer, GpuPlanetEngine, SphereWorld,
     /// and the post-FX bootstrap. Maps the Unity QualitySettings level to our 4 tiers.
     /// </summary>
     public static class GraphicsPreset
@@ -37,10 +37,13 @@ namespace VoxelEngine.Cosmos
         /// <summary>Sphere streaming view distance (chunk radius) per tier.</summary>
         public static int ViewDistance => Current switch
         {
-            GraphicsTier.Low  => 4,
+            // This is the editable collider/chunk bubble around the player (the continuous
+            // planet LOD covers everything beyond it). Raised so REAL voxel terrain reaches
+            // further around the player (the whole planet stays solid via the LOD shell).
+            GraphicsTier.Low  => 5,
             GraphicsTier.Mid  => 6,
-            GraphicsTier.High => 8,
-            _                 => 10,
+            GraphicsTier.High => 7,
+            _                 => 8,
         };
 
         /// <summary>Grass density multiplier (0 = off) per tier.</summary>
@@ -55,10 +58,52 @@ namespace VoxelEngine.Cosmos
         /// <summary>LOD icosphere resolution per tier (higher = smoother from space).</summary>
         public static int LodResolution => Current switch
         {
-            GraphicsTier.Low  => 32,
-            GraphicsTier.Mid  => 64,
-            GraphicsTier.High => 128,
-            _                 => 256,
+            // The full surface is always present; local voxel chunks own close detail. Keep
+            // the runtime proxy within a stable frame budget rather than rebuilding a 40k-vertex
+            // shell/ocean pair on every high-quality spawn.
+            GraphicsTier.Low  => 642,
+            GraphicsTier.Mid  => 2562,
+            GraphicsTier.High => 10242,
+            _                 => 10242,
+        };
+
+        /// <summary>
+        /// Vertex budget for the ACTIVE body's full-planet surface (the body the player is
+        /// on / approaching). Built progressively, so these can be large — the whole planet
+        /// is one continuous sampled surface from ground to orbit.
+        /// </summary>
+        public static int ActiveBodyLodResolution => Current switch
+        {
+            GraphicsTier.Low  => 10242,
+            GraphicsTier.Mid  => 40962,
+            GraphicsTier.High => 163842,
+            _                 => 163842,
+        };
+
+        /// <summary>
+        /// Voxel size (metres) of the MID whole-planet real-voxel LOD level per tier.
+        /// 32 m = ~768 chunks on an 8 km planet (High/Ultra); 64 m = ~192 (Mid);
+        /// 128 m = ~48 (Low). Legacy note — the GPU quadtree engine now derives its own budgets; kept for the
+        /// whole-planet chunk count bounded.
+        /// </summary>
+        public static float PlanetMidLodVoxelSize => Current switch
+        {
+            GraphicsTier.Low  => 128f,
+            GraphicsTier.Mid  => 64f,
+            GraphicsTier.High => 32f,
+            _                 => 32f,
+        };
+
+        /// <summary>
+        /// Voxel size (metres) of the FAR whole-planet real-voxel LOD level per tier
+        /// (visible from space during the whole interplanetary crossing).
+        /// </summary>
+        public static float PlanetFarLodVoxelSize => Current switch
+        {
+            GraphicsTier.Low  => 512f,
+            GraphicsTier.Mid  => 256f,
+            GraphicsTier.High => 128f,
+            _                 => 128f,
         };
 
         /// <summary>Waterfall scan range (metres) per tier.</summary>
@@ -73,10 +118,10 @@ namespace VoxelEngine.Cosmos
         /// <summary>Max chunks to generate per frame per tier.</summary>
         public static int JobsPerFrame => Current switch
         {
-            GraphicsTier.Low  => 2,
-            GraphicsTier.Mid  => 4,
-            GraphicsTier.High => 6,
-            _                 => 8,
+            GraphicsTier.Low  => 4,
+            GraphicsTier.Mid  => 8,
+            GraphicsTier.High => 10,
+            _                 => 12,
         };
 
         /// <summary>Whether atmospheric fog/post-FX are enabled per tier.</summary>

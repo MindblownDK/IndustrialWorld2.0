@@ -22,24 +22,29 @@ namespace VoxelEngine.WaterSim
 
         [Header("Simulation")]
         [Tooltip("Ticks per second for chunk sleep tracking.")]
-        public float tickRate = 8f;
+        public float tickRate = 4f;
         [Tooltip("Max chunks to process CPU sync per tick.")]
-        public int maxChunksPerTick = 6;
+        public int maxChunksPerTick = 2;
         [Tooltip("Chunks within this radius of the player are active.")]
         public int activeRadius = 4;
         [Tooltip("Compute solver iterations dispatched per rendered frame.")]
         public int computeIterationsPerFrame = 1;
 
-        [Header("Performance – v3.20 Crest Integration")]
-        [Tooltip("Skip compute every N frames to save GPU. 1 = every frame, 2 = every other frame.")]
+        [Header("Native Volumetric Assist")]
+        [Tooltip("Skip optional native volumetric compute every N frames. 1 = every frame, 2 = every other frame.")]
         public int computeFrameSkip = 2;
-        [Tooltip("Disable volumetric compute when Crest is handling visuals – saves massive GPU time.")]
-        public bool useCrestVisualMode = true;
+        [Tooltip("Optional GPU density assist. The authoritative liquid simulation and native surface renderer remain voxel-driven either way.")]
+        public bool useNativeVolumetricAssist = false;
         private int _computeFrameCounter;
 
         private readonly HashSet<Vector3Int> _activeChunks = new();
         private readonly Queue<Vector3Int> _workQueue = new();
+        // Runtime marker for player/bucket-placed water. It lets a local legacy-water cleanup
+        // distinguish deliberate placed liquid from the old cave-fill generation bug.
+        private readonly HashSet<Vector3Int> _playerPlacedLiquid = new();
+        private IVoxelWorld _placementWorld;
         private float _timer;
+        private int _simulationStep;
 
         // Compute Volumetric Layer
         private ComputeShader _fluidSimShader;
@@ -59,7 +64,7 @@ namespace VoxelEngine.WaterSim
 
         private void Start()
         {
-            InitializeComputeSystem();
+            if (useNativeVolumetricAssist) InitializeComputeSystem();
         }
 
         private void OnEnable()
@@ -102,19 +107,10 @@ namespace VoxelEngine.WaterSim
 
         private void OnBeginContextRendering(ScriptableRenderContext context, List<Camera> cameras)
         {
-            // Crest Visual Mode: skip heavy GPU compute – Crest handles surface visuals.
-            // We keep CPU voxel fluid sim for pumps / gameplay, but GPU volumetric is optional.
-            if (useCrestVisualMode) 
-            {
-                // Still update LOD allocation occasionally, but at 1/4 rate
-                if ((Time.frameCount & 3) == 0 && cameras != null && cameras.Count > 0)
-                {
-                    Camera mainCam = cameras[0];
-                    UpdateLodAndSparseAllocation(mainCam != null ? mainCam.transform.position : Vector3.zero);
-                }
-                return;
-            }
-
+            // Native voxel surfaces are authoritative. The optional compute pass only adds
+            // density-assist data for nearby gameplay/render sampling; it never owns the ocean.
+            if (!useNativeVolumetricAssist) return;
+            if (!_isComputeInitialized) InitializeComputeSystem();
             if (!_isComputeInitialized || _fluidSimShader == null || cameras == null || cameras.Count == 0) return;
 
             _computeFrameCounter++;
@@ -221,6 +217,7 @@ namespace VoxelEngine.WaterSim
 
             int budget = maxChunksPerTick;
             int processed = 0;
+            int simulationStep = ++_simulationStep;
             var toRemove = new List<Vector3Int>();
 
             int queueSize = _workQueue.Count;
@@ -267,7 +264,8 @@ namespace VoxelEngine.WaterSim
                         downX      = downX,
                         downY      = downY,
                         downZ      = downZ,
-                        changed    = changed
+                        changed    = changed,
+                        simulationStep = simulationStep
                     };
                     job.Run();
                     didChange = changed[0] != 0;
@@ -365,6 +363,38 @@ namespace VoxelEngine.WaterSim
             WaterMeshBuilder.Schedule(target);
         }
 
+        private void EnsurePlacementWorld(IVoxelWorld world)
+        {
+            if (object.ReferenceEquals(_placementWorld, world)) return;
+            _placementWorld = world;
+            _playerPlacedLiquid.Clear();
+        }
+
+        /// <summary>
+        /// Removes legacy auto-generated water around a freshly mined dry cave. Real ocean basins
+        /// and bucket/pump-placed liquid are preserved. New SphereDensity output no longer creates
+        /// this water; this is a local migration repair for already-generated terrain.
+        /// </summary>
+        public void PruneLegacyDryCaveWater(Vector3Int center, int radius = 2)
+        {
+            var world = ActiveWorld.Current;
+            if (world is not SphereWorld sphere || sphere.body == null) return;
+            EnsurePlacementWorld(world);
+            radius = Mathf.Clamp(radius, 1, 6);
+            for (int z = -radius; z <= radius; z++)
+            for (int y = -radius; y <= radius; y++)
+            for (int x = -radius; x <= radius; x++)
+            {
+                var cell = center + new Vector3Int(x, y, z);
+                if ((cell - center).sqrMagnitude > radius * radius) continue;
+                if (_playerPlacedLiquid.Contains(cell) || sphere.IsNaturalOceanBasinAt(cell)) continue;
+                Voxel voxel = world.GetVoxelWorld(cell);
+                if (!FluidMaterialUtility.Matches(voxel, LiquidType.Water)) continue;
+                world.SetVoxelWorld(cell, Voxel.Empty, remesh: true);
+                _playerPlacedLiquid.Remove(cell);
+            }
+        }
+
         public void PlaceWater(Vector3Int worldVoxel, byte level = 255) => PlaceLiquid(worldVoxel, LiquidType.Water, level);
         public void PlaceOil(Vector3Int worldVoxel, byte level = 255) => PlaceLiquid(worldVoxel, LiquidType.CrudeOil, level);
 
@@ -372,6 +402,7 @@ namespace VoxelEngine.WaterSim
         {
             var world = ActiveWorld.Current;
             if (world == null || !TryGetChunkAndLocal(world, worldVoxel, out var coord, out var ch, out int lx, out int ly, out int lz)) return;
+            EnsurePlacementWorld(world);
 
             world.CompleteGenJobForChunk(ch);
             world.CompleteMeshJobForChunk(ch);
@@ -381,6 +412,7 @@ namespace VoxelEngine.WaterSim
 
             FluidMaterialUtility.SetLiquid(ref v, liquid, level);
             ch.SetVoxelLocal(lx, ly, lz, v);
+            _playerPlacedLiquid.Add(worldVoxel);
             ch.isDirty = true;
             MarkActive(coord);
             WaterMeshBuilder.Schedule(ch);
@@ -424,7 +456,12 @@ namespace VoxelEngine.WaterSim
 
             byte drained = v.waterLevel < maxLevel ? v.waterLevel : maxLevel;
             v.waterLevel = (byte)(v.waterLevel - drained);
-            if (v.waterLevel == 0) FluidMaterialUtility.ClearLiquid(ref v);
+            if (v.waterLevel == 0)
+            {
+                FluidMaterialUtility.ClearLiquid(ref v);
+                EnsurePlacementWorld(world);
+                _playerPlacedLiquid.Remove(worldVoxel);
+            }
             ch.SetVoxelLocal(lx, ly, lz, v);
             ch.isDirty = true;
             MarkActive(coord);
@@ -450,8 +487,10 @@ namespace VoxelEngine.WaterSim
         }
 
         public (int voxels, float litres, bool isInfinite) ScanPool(
-            Vector3Int seed, LiquidType liquid, float reachRadius, int infiniteThreshold, int maxScan)
+            Vector3Int seed, LiquidType liquid, float reachRadius, int infiniteThreshold, int maxScan,
+            List<Vector3Int> capturedCells = null)
         {
+            capturedCells?.Clear();
             var world = ActiveWorld.Current;
             if (world == null) return (0, 0, false);
             if (!FluidMaterialUtility.Matches(world.GetVoxelWorld(seed), liquid)) return (0, 0, false);
@@ -472,6 +511,7 @@ namespace VoxelEngine.WaterSim
                 if (!FluidMaterialUtility.Matches(v, liquid)) continue;
                 count++;
                 litres += v.waterLevel * litresPerLevel;
+                capturedCells?.Add(p);
 
                 foreach (var off in NeighbourOffsets)
                 {

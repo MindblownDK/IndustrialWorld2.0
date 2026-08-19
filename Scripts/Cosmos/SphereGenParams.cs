@@ -30,6 +30,13 @@ namespace VoxelEngine.Cosmos
         /// <summary>Mountain amplitude multiplier (scales every biome's heightAmplitude).</summary>
         public float mountainScale;
 
+        /// <summary>1 if Asteroid Belt (zero gravity, scattered procedural rocks in 3D space).</summary>
+        public byte isAsteroidBelt;
+
+        /// <summary>1 when this body's settings authorize crude-oil seeps (finite and/or
+        /// infinite Jack Pump nodes) — the LOD levels then sample the oil site map.</summary>
+        public byte hasOilSeeps;
+
         /// <summary>Convenience: mean surface radius (no terrain noise).</summary>
         public float MeanSurfaceRadius => radiusWorld + baseHeight;
     }

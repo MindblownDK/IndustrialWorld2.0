@@ -46,7 +46,7 @@ namespace VoxelEngine.Player
 
         private void Awake()
         {
-            if (world      == null) world      = VoxelEngine.Core.ActiveWorld.Current;
+            SyncActiveWorld();
             if (shootCamera== null) shootCamera= Camera.main;
             if (inventory  == null) inventory  = GetComponentInParent<Inventory>();
             if (registry   == null) registry   = Object.FindAnyObjectByType<MaterialRegistry>();
@@ -62,6 +62,20 @@ namespace VoxelEngine.Player
                 gb.inventory = inventory;
             }
             }
+        }
+
+        /// <summary>Always route mining to the currently active spherical world, never a disabled legacy flat-world reference.</summary>
+        private void SyncActiveWorld()
+        {
+            var active = VoxelEngine.Core.ActiveWorld.Current;
+            if (active != null && !object.ReferenceEquals(world, active))
+            {
+                world = active;
+                registry = active.MaterialRegistry;
+                return;
+            }
+            if (world == null) world = active;
+            if (registry == null && world != null) registry = world.MaterialRegistry;
         }
 
         private bool TryEquipActiveArmor()
@@ -112,10 +126,10 @@ namespace VoxelEngine.Player
             if (VoxelEngine.GridSystem.GridCockpit.AnyPilotSeatActive) return;
             if (VoxelEngine.Combat.Artillery.ActiveArtilleryCockpit != null) return;   // artillery cockpit owns LMB
             IsGrinding = false; // reset each frame — HandleGrind sets it true when active
-            if (world      == null) world      = VoxelEngine.Core.ActiveWorld.Current;
+            SyncActiveWorld();
             if (inventory  == null) inventory  = GetComponentInParent<Inventory>();
             if (registry   == null) registry   = Object.FindAnyObjectByType<MaterialRegistry>();
-            if (world == null || shootCamera == null || inventory == null) return;
+            if (world == null || shootCamera == null || inventory == null || registry == null) return;
 
             bool mineHeld  = GameSettings.IsHeld (InputAction.Mine);
             bool mineDown  = GameSettings.WasPressed(InputAction.Mine);
@@ -463,6 +477,32 @@ namespace VoxelEngine.Player
                 // 1) Tree?
                 var tree = hit.collider.GetComponentInParent<Tree>();
                 if (tree != null) { HitTree(tree); return; }
+
+                // 1b) Space asteroid? (real-space procedural rocks — Damageable with ore drops)
+                var asteroid = hit.collider.GetComponentInParent<VoxelEngine.Cosmos.SpaceAsteroid>();
+                if (asteroid != null)
+                {
+                    int astDmg = (int)handStrength;
+                    if (!inventory.ActiveStack.IsEmpty && inventory.ActiveStack.item is ToolItem astTool)
+                        astDmg = (int)astTool.strength;
+                    asteroid.TakeDamage(new VoxelEngine.Combat.DamageEvent
+                    {
+                        amount = astDmg, point = hit.point, direction = ray.direction
+                    });
+                    _nextHit = Time.time + 0.12f;
+                    return;
+                }
+
+                var ruinedPump = hit.collider.GetComponentInParent<VoxelEngine.Generation.BrokenJackPump>();
+                if (ruinedPump != null)
+                {
+                    int dmg = (int)handStrength;
+                    if (!inventory.ActiveStack.IsEmpty && inventory.ActiveStack.item is ToolItem rpTool)
+                        dmg = (int)rpTool.strength;
+                    ruinedPump.TakeDamage(new VoxelEngine.Combat.DamageEvent { amount = dmg, point = hit.point, direction = ray.direction });
+                    _nextHit = Time.time + 0.15f;
+                    return;
+                }
 
                 // Grid block breaking — resolver tolerates colliders sitting on child
                 // visuals (maritime machinery, screens) instead of the block root.
@@ -1076,11 +1116,26 @@ namespace VoxelEngine.Player
                 if (candidate.collider == null) continue;
                 if (selfRoot != null && candidate.collider.transform.IsChildOf(selfRoot)) continue;
                 if (PlayerRaycastFilter.IsOwnPlayerCollider(candidate.collider, transform)) continue;
+                if (IsLiquidSurfaceCollider(candidate.collider)) continue;
+                // The planet-LOD safety shell is physical ground, never an interactable /
+                // minable surface — the real terrain is the streamed voxels behind it.
+                if (candidate.collider.GetComponentInParent<VoxelEngine.Cosmos.PlanetSafetyCollider>() != null) continue;
                 hit = candidate;
                 return true;
             }
             hit = default;
             return false;
+        }
+
+        /// <summary>Liquid visuals must never intercept a mining/building ray.</summary>
+        private static bool IsLiquidSurfaceCollider(Collider collider)
+        {
+            if (collider == null) return false;
+            string name = collider.gameObject.name;
+            return name.IndexOf("LiquidSurface", System.StringComparison.OrdinalIgnoreCase) >= 0
+                || name.IndexOf("WaterSurface", System.StringComparison.OrdinalIgnoreCase) >= 0
+                || name.IndexOf("ProceduralWater", System.StringComparison.OrdinalIgnoreCase) >= 0
+                || name.IndexOf("Ocean", System.StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private static bool IsFrontHit(Transform blockTransform, RaycastHit hit)
@@ -1417,16 +1472,34 @@ namespace VoxelEngine.Player
                 tier     = t.miningTier;
             }
 
-            // Tier check on the surface voxel material (cheap).
-            var hitVoxelPos = world.WorldToVoxel(hit.point - ray.direction.normalized * 0.2f);
+            // Resolve a point just inside the terrain. Mesh hit normals are radial on planets,
+            // so this stays reliable while mining from any latitude or while submerged.
+            Vector3 miningPoint = hit.point - hit.normal.normalized * 0.22f;
+            var hitVoxelPos = world.WorldToVoxel(miningPoint);
             var v = world.GetVoxelWorld(hitVoxelPos);
-            if (v.density > 0 && registry != null)
+            if (v.density <= 0)
+            {
+                miningPoint = hit.point - ray.direction.normalized * 0.35f;
+                hitVoxelPos = world.WorldToVoxel(miningPoint);
+                v = world.GetVoxelWorld(hitVoxelPos);
+            }
+            if (v.density > 0)
             {
                 var def = registry.Get(v.material);
-                if (def != null && def.miningTier > tier) return; // wrong tool tier — no progress
+                if (def != null && def.miningTier > tier)
+                {
+                    // Every solid remains breakable by hand or an under-tier tool. The tier
+                    // requirement now controls efficiency instead of creating an invisible
+                    // hard lock: correct tools stay fast, while improvised mining is deliberate
+                    // and much slower with a smaller effective brush.
+                    int tierGap = def.miningTier - tier;
+                    strength = Mathf.Max(1f, strength * Mathf.Pow(0.22f, tierGap));
+                    radius = Mathf.Min(radius, 0.65f);
+                    rate = Mathf.Max(0.35f, rate * Mathf.Pow(0.55f, tierGap));
+                }
             }
 
-            VoxelEditor.Subtract(world, registry, hit.point - ray.direction.normalized * 0.2f, radius, strength);
+            VoxelEditor.Subtract(world, registry, miningPoint, radius, strength);
             // Sample tint from the hit material.
             Color tint = new Color(0.85f, 0.78f, 0.6f);
             if (registry != null && v.density > 0)

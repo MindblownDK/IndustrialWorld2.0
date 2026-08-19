@@ -209,10 +209,11 @@ namespace VoxelEngine.Cosmos
 
         private Vector3 GetViewerPosition()
         {
-            var pc = FindAnyObjectByType<VoxelEngine.Player.PlayerController>();
-            if (pc != null) return pc.transform.position;
-            var cam = Camera.main;
-            return cam != null ? cam.transform.position : transform.position;
+            // Anchor to the ACTIVE BODY (static in the scene) so the backdrop never moves
+            // when the player walks; fall back to the scene origin in deep space.
+            var active = GravityProvider.ActiveBody;
+            if (active != null) return active.transform.position;
+            return Vector3.zero;
         }
 
         private void SetAllActive(bool active)

@@ -245,11 +245,16 @@ namespace VoxelEngine.Persistence
         {
             var inv = FindPlayerInventory();
             if (inv == null || !IsSafePlayerSavePosition(inv.transform.position)) return false;
+            var origin = VoxelEngine.Cosmos.SpaceOrigin.Instance;
             var equipment = inv.GetComponent<VoxelEngine.Player.PlayerEquipment>();
             save.player = new SavedPlayer
             {
                 pos = inv.transform.position,
                 rotY = inv.transform.eulerAngles.y,
+                cosmicPosX = origin != null ? origin.GetCosmicKm(inv.transform.position).x : 0d,
+                cosmicPosY = origin != null ? origin.GetCosmicKm(inv.transform.position).y : 0d,
+                cosmicPosZ = origin != null ? origin.GetCosmicKm(inv.transform.position).z : 0d,
+                frameBody = origin != null && origin.FrameBody != null ? origin.FrameBody.DisplayName : null,
                 container = SerializeContainer(inv.container),
                 jetpackSlots = equipment != null ? SerializeContainer(equipment.JetpackSlots) : null,
                 helmetSlots = equipment != null ? SerializeContainer(equipment.HelmetSlots) : null,
@@ -273,7 +278,12 @@ namespace VoxelEngine.Persistence
             if (float.IsNaN(pos.x) || float.IsNaN(pos.y) || float.IsNaN(pos.z)
                 || float.IsInfinity(pos.x) || float.IsInfinity(pos.y) || float.IsInfinity(pos.z)) return false;
             var body = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
-            if (body == null) return Mathf.Abs(pos.x) < 100000f && Mathf.Abs(pos.y) < 100000f && Mathf.Abs(pos.z) < 100000f;
+            if (body == null)
+            {
+                // Deep space is a perfectly valid disconnect position (real-space flight).
+                if (VoxelEngine.Cosmos.GravityProvider.IsDeepSpace) return true;
+                return Mathf.Abs(pos.x) < 100000f && Mathf.Abs(pos.y) < 100000f && Mathf.Abs(pos.z) < 100000f;
+            }
             // Space and high-atmosphere locations are valid disconnect positions.
             // Reject only locations buried deep inside the active planetary body.
             return Vector3.Distance(pos, body.transform.position) >= body.SurfaceRadius * 0.70f;
@@ -334,6 +344,22 @@ namespace VoxelEngine.Persistence
 
         private static void CaptureFactoryRuntime(GameObject go, SavedPlacedBlock entry)
         {
+            var liquidTank = go.GetComponentInChildren<VoxelEngine.Fluids.WaterTank>(true);
+            if (liquidTank != null)
+            {
+                entry.hasFluidTankState = true;
+                entry.fluidTankType = (int)liquidTank.liquidType;
+                entry.fluidTankLitres = Mathf.Clamp(liquidTank.StoredLitres, 0f, Mathf.Max(0f, liquidTank.capacityLitres));
+            }
+
+            var liquidPump = go.GetComponentInChildren<VoxelEngine.Fluids.WaterPump>(true);
+            if (liquidPump != null)
+            {
+                entry.hasFluidPumpState = true;
+                entry.fluidPumpType = (int)liquidPump.liquidType;
+                entry.fluidPumpLitres = Mathf.Clamp(liquidPump.internalLitres, 0f, Mathf.Max(0f, liquidPump.internalCapacityLitres));
+            }
+
             var belt = go.GetComponentInChildren<VoxelEngine.Simulation.ConveyorBelt>(true);
             if (belt != null)
             {
@@ -1006,6 +1032,11 @@ namespace VoxelEngine.Persistence
                 durability = s == null || s.IsEmpty ? 0 : s.durability,
                 charge = s == null || s.IsEmpty ? 0 : s.charge
             };
+            if (s != null && s.payload is VoxelEngine.Items.LiquidType liquidPayload)
+            {
+                saved.hasLiquidPayload = true;
+                saved.liquidPayloadType = (int)liquidPayload;
+            }
             if (s != null && s.payload is VoxelEngine.Storage.StorageDrawer.DrawerItemPayload payload)
             {
                 saved.isPackedDrawer = true;
@@ -1426,6 +1457,33 @@ namespace VoxelEngine.Persistence
             inv.transform.position = restorePosition;
             inv.transform.eulerAngles = new Vector3(0, restoreRotY, 0);
             if (cc != null) cc.enabled = true;
+            // Real-space restore: re-anchor the floating origin + reference frame at the
+            // saved cosmic position (deep-space/orbital logouts). Scene position above is
+            // then automatically consistent because the anchor is derived from it.
+            // Legacy saves omit the cosmic fields (deserialize as 0,0,0 = the star's
+            // location, which no player can legitimately occupy) — only restore when the
+            // saved cosmic position is actually non-zero.
+            bool hasCosmic = IsFinite((float)save.player.cosmicPosX) && IsFinite((float)save.player.cosmicPosY)
+                          && IsFinite((float)save.player.cosmicPosZ)
+                          && (Mathf.Abs((float)save.player.cosmicPosX)
+                            + Mathf.Abs((float)save.player.cosmicPosY)
+                            + Mathf.Abs((float)save.player.cosmicPosZ)) > 0.001f;
+            if (hasCosmic && VoxelEngine.Cosmos.CosmicRegistry.Instance != null
+                          && VoxelEngine.Cosmos.CosmicRegistry.Instance.IsReady)
+            {
+                var bootstrap = VoxelEngine.Cosmos.CosmosBootstrap.Instance;
+                if (bootstrap != null)
+                {
+                    bootstrap.RestoreCosmicState(
+                        new Vector3((float)save.player.cosmicPosX, (float)save.player.cosmicPosY, (float)save.player.cosmicPosZ),
+                        save.player.frameBody);
+                    // Re-apply the scene position AFTER the anchor settled so the
+                    // CharacterController sits exactly on the saved pose.
+                    inv.transform.position = restorePosition;
+                    inv.transform.eulerAngles = new Vector3(0, restoreRotY, 0);
+                }
+            }
+
             // Inventory + equipment.
             if (save.player.container != null) DeserializeInto(inv.container, save.player.container);
             var equipment = inv.GetComponent<VoxelEngine.Player.PlayerEquipment>();
@@ -1548,6 +1606,26 @@ namespace VoxelEngine.Persistence
 
         private void RestoreFactoryRuntime(GameObject go, SavedPlacedBlock saved)
         {
+            if (saved.hasFluidTankState)
+            {
+                var liquidTank = go.GetComponentInChildren<VoxelEngine.Fluids.WaterTank>(true);
+                if (liquidTank != null && System.Enum.IsDefined(typeof(VoxelEngine.Items.LiquidType), saved.fluidTankType))
+                {
+                    liquidTank.liquidType = (VoxelEngine.Items.LiquidType)saved.fluidTankType;
+                    liquidTank.water = Mathf.Clamp(saved.fluidTankLitres, 0f, Mathf.Max(0f, liquidTank.capacityLitres));
+                }
+            }
+
+            if (saved.hasFluidPumpState)
+            {
+                var liquidPump = go.GetComponentInChildren<VoxelEngine.Fluids.WaterPump>(true);
+                if (liquidPump != null && System.Enum.IsDefined(typeof(VoxelEngine.Items.LiquidType), saved.fluidPumpType))
+                {
+                    liquidPump.liquidType = (VoxelEngine.Items.LiquidType)saved.fluidPumpType;
+                    liquidPump.internalLitres = Mathf.Clamp(saved.fluidPumpLitres, 0f, Mathf.Max(0f, liquidPump.internalCapacityLitres));
+                }
+            }
+
             var belt = go.GetComponentInChildren<VoxelEngine.Simulation.ConveyorBelt>(true);
             if (belt != null && saved.conveyorItems != null)
             {
@@ -2152,7 +2230,10 @@ namespace VoxelEngine.Persistence
                     Debug.LogWarning($"[WorldState] Saved item '{e.itemId}' was not present in the runtime item cache. Run the relevant Voxel Engine Setup step to repair the persistence catalog before saving again; this stack could not be restored this session.");
                 return new ItemStack();
             }
-            return new ItemStack { item = item, count = e.count, durability = e.durability, charge = e.charge };
+            var stack = new ItemStack { item = item, count = e.count, durability = e.durability, charge = e.charge };
+            if (e.hasLiquidPayload && System.Enum.IsDefined(typeof(VoxelEngine.Items.LiquidType), e.liquidPayloadType))
+                stack.payload = (VoxelEngine.Items.LiquidType)e.liquidPayloadType;
+            return stack;
         }
 
         private void DeserializeInto(ItemContainer c, SavedContainer sc)
@@ -2267,6 +2348,11 @@ namespace VoxelEngine.Persistence
         [Serializable] private class SavedPlayer
         {
             public Vector3 pos; public float rotY;
+            // Real-space (7.13.0): cosmic position + reference frame so logging out in
+            // deep space / high orbit restores exactly where the player was. Legacy saves
+            // omit these (0 + null) and restore through the old scene-anchored path.
+            public double cosmicPosX; public double cosmicPosY; public double cosmicPosZ;
+            public string frameBody;
             public SavedContainer container;
             // Additive in 6.22.1: two dedicated jetpack equipment slots.
             // Legacy saves leave this null and restore with empty slots.
@@ -2297,6 +2383,14 @@ namespace VoxelEngine.Persistence
             // hasBatteryCharge false and the block keeps its prefab charge.
             public bool hasBatteryCharge;
             public float batteryCharge;
+            // Additive native liquid persistence. Legacy saves leave the flags false and
+            // keep prefab defaults, while new saves retain tank contents and pump buffers.
+            public bool hasFluidTankState;
+            public int fluidTankType;
+            public float fluidTankLitres;
+            public bool hasFluidPumpState;
+            public int fluidPumpType;
+            public float fluidPumpLitres;
             // Wind turbine part condition (0..100). 0 = "not set" (legacy saves)
             // and restores as factory-new. Only written for WindTurbinePart blocks.
             public float windCondition;
@@ -2455,6 +2549,10 @@ namespace VoxelEngine.Persistence
             // Secondary per-instance pool (additive, save-compatible — legacy saves
             // deserialize as 0). Hybrid jetpacks store their power cell (Wh) here.
             public int charge;
+            // Additive bucket/liquid payload. A filled bucket must remember whether it
+            // carries water or crude oil across save/load.
+            public bool hasLiquidPayload;
+            public int liquidPayloadType;
             public bool isPackedDrawer;
             public string packedOriginalItemId;
             public string drawerInstanceId;

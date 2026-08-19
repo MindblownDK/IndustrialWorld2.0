@@ -150,10 +150,12 @@ namespace VoxelEngine.UI
                 _doc.panelSettings = Resources.Load<PanelSettings>("MenuPanelSettings");
             if (_doc.panelSettings != null)
             {
-                _doc.panelSettings.scaleMode = PanelScaleMode.ConstantPixelSize;
-                _doc.panelSettings.scale = 1f;
-                _doc.panelSettings.referenceDpi = 96f;
-                _doc.panelSettings.fallbackDpi = 96f;
+                // ScaleWithScreenSize (1920×1080 reference, width-priority match): the HUD
+                // must FIT the actual window AND stay large. ConstantPixelSize rendered
+                // the panel 1:1 and pushed the HUD off-screen on smaller windows.
+                // ApplyUiScaleAndFit also forces ScreenSpaceOverlay (world-space quads cut
+                // the HUD off at the screen edges).
+                VoxelEngine.Settings.GameSettings.ApplyUiScaleAndFit(_doc.panelSettings);
             }
             _root = _doc.rootVisualElement;
             _root.style.flexGrow = 1;
@@ -163,8 +165,6 @@ namespace VoxelEngine.UI
             // PanelScaler configs, which collapsed the terminal to a single line.
             _root.style.position = Position.Absolute;
             _root.style.left = 0; _root.style.top = 0; _root.style.right = 0; _root.style.bottom = 0;
-            _root.style.width = new StyleLength(new Length(100, LengthUnit.Percent));
-            _root.style.height = new StyleLength(new Length(100, LengthUnit.Percent));
             _root.pickingMode = PickingMode.Ignore;
             EnsureUiLayers();
 
@@ -1088,11 +1088,19 @@ namespace VoxelEngine.UI
                 return;
             }
             _refreshing = true;
+            // Rebuilds of an already-open surface must NOT replay the LCD boot —
+            // mute it so the boot animation only plays when a panel genuinely opens.
+            bool prevBootMute = LcdHudTheme.BootsMuted;
+            LcdHudTheme.BootsMuted = true;
             try
             {
                 RefreshInternal();
             }
-            finally { _refreshing = false; }
+            finally
+            {
+                LcdHudTheme.BootsMuted = prevBootMute;
+                _refreshing = false;
+            }
         }
 
         private void RefreshInternal()

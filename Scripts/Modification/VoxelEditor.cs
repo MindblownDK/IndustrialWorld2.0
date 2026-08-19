@@ -114,6 +114,8 @@ namespace VoxelEngine.Modification
             // Trigger one remesh pass for affected chunks.
             if (result.changed)
             {
+                if (subtract && world is VoxelEngine.Cosmos.SphereWorld)
+                    VoxelEngine.WaterSim.FluidManager.Instance?.PruneLegacyDryCaveWater(center, r + 1);
                 // Mark a coarse 2-chunk radius around the brush dirty to be safe.
                 int cs = VoxelConstants.CHUNK_SIZE;
                 Vector3Int chunkCenter = new Vector3Int(

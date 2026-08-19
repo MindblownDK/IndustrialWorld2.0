@@ -16,6 +16,13 @@ namespace VoxelEngine.Weather
 
         public static void EnsureMounted(VisualElement uiRoot)
         {
+            // REMOVED per design feedback (7.13.5): the weather readout is not wanted
+            // on screen. The class stays as a no-op so existing callers compile; the
+            // weather simulation itself is unaffected.
+            return;
+
+            // Legacy implementation (kept for reference):
+            /*
             if (_root == uiRoot && _container != null && _container.parent == uiRoot) return;
             _root = uiRoot;
             if (_container != null) _container.RemoveFromHierarchy();
@@ -48,6 +55,7 @@ namespace VoxelEngine.Weather
             _textLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
             _textLabel.pickingMode = PickingMode.Ignore;
             _container.Add(_textLabel);
+            */
         }
 
         public static void Tick()

@@ -38,7 +38,7 @@ namespace VoxelEngine.WaterSim
         public float deepDepth = 28f;
 
         [Header("Surface Motion")]
-        [Tooltip("How strongly Crest flow splines/current data influence water normals and foam.")]
+        [Tooltip("How strongly native voxel currents influence water normals and foam.")]
         [UnityEngine.Range(0f, 2f)] public float flowVisualStrength = 1f;
 
         [Header("Material")]
@@ -149,14 +149,9 @@ namespace VoxelEngine.WaterSim
 
         private void Rebuild()
         {
-            // v3.20 – Crest is now authoritative water visual.
-            // This legacy procedural patch renderer is disabled to prevent a second big ocean plane.
-            // Keep mesh cleared so it does not compete with Crest.
-            ClearMesh();
-            if (_renderer != null) _renderer.enabled = false;
-            return;
-#pragma warning disable CS0162 // legacy disabled render path retained for reference
-
+            // Native spherical ocean patch. It is a camera-local curved shell sourced from
+            // the active SphereWorld sea radius, while voxel meshes still render finite lakes,
+            // rivers, player buckets, and oil pools.
             EnsureRuntimeObjects();
 
             var world = ActiveWorld.Current;
@@ -190,7 +185,10 @@ namespace VoxelEngine.WaterSim
             tangentA.Normalize();
             Vector3 tangentB = Vector3.Cross(up, tangentA).normalized;
 
-            int halfTiles = Mathf.Clamp(Mathf.CeilToInt(searchRadius / Mathf.Max(tileSize, 1f)), 2, maxTilesPerAxis / 2);
+            float effectiveRadius = searchRadius;
+            if (world is VoxelEngine.Cosmos.SphereWorld sphereWorld && sphereWorld.body != null)
+                effectiveRadius = Mathf.Min(searchRadius, sphereWorld.body.SeaRadius * 0.35f);
+            int halfTiles = Mathf.Clamp(Mathf.CeilToInt(effectiveRadius / Mathf.Max(tileSize, 1f)), 2, maxTilesPerAxis / 2);
             int grid = halfTiles * 2;
             int vertCountPerAxis = grid + 1;
             int[,] indices = new int[vertCountPerAxis, vertCountPerAxis];
@@ -262,15 +260,16 @@ namespace VoxelEngine.WaterSim
         private bool TrySample(Vector3 samplePosition, out Sample sample)
         {
             sample = default;
+            var world = ActiveWorld.Current;
+            if (world == null) return false;
+
             float depth;
             float surface;
             bool hasWater;
-
-            if (PlanetWaterUtility.IsPlanetWorld && fastSphericalOceanPatch)
+            if (world is VoxelEngine.Cosmos.SphereWorld && fastSphericalOceanPatch)
             {
-                // Fast path: avoid thousands of voxel-column scans per rebuild. The
-                // patch is already anchored to the procedural sea shell, so each
-                // vertex can stay on that shell and use stable deep-ocean depth.
+                // The shell is the true spherical sea radius, so a local patch never uses
+                // flat-world Y coordinates or develops an offset-planet seam.
                 depth = deepDepth;
                 surface = 0f;
                 hasWater = true;
@@ -281,21 +280,27 @@ namespace VoxelEngine.WaterSim
                            VoxelWaterDepthSampler.TrySampleSeaSurface(samplePosition, out depth, out surface);
             }
 
-            Vector3 up = PlanetWaterUtility.IsPlanetWorld ? PlanetWaterUtility.WorldUp(samplePosition) : Vector3.up;
-            if (up.sqrMagnitude < 0.0001f) up = Vector3.up;
-            up.Normalize();
-
             if (!hasWater)
             {
-                var world = ActiveWorld.Current;
-                if (world == null) return false;
-                surface = PlanetWaterUtility.IsPlanetWorld ? 0f : world.SeaLevel * VoxelConstants.VOXEL_SIZE;
-                depth = 32f;
+                surface = world is VoxelEngine.Cosmos.SphereWorld ? 0f : world.SeaLevel * VoxelConstants.VOXEL_SIZE;
+                depth = deepDepth;
             }
 
-            Vector3 position = PlanetWaterUtility.IsPlanetWorld
-                ? samplePosition + up * (surface + waterHeightOffset)
-                : new Vector3(samplePosition.x, surface + waterHeightOffset, samplePosition.z);
+            Vector3 position;
+            Vector3 up;
+            if (world is VoxelEngine.Cosmos.SphereWorld sphere && sphere.body != null)
+            {
+                Vector3 localSample = sphere.body.transform.InverseTransformPoint(samplePosition);
+                Vector3 localUp = localSample.sqrMagnitude > 0.0001f ? localSample.normalized : Vector3.up;
+                float seaRadius = world.SeaLevel * VoxelConstants.VOXEL_SIZE + surface + waterHeightOffset;
+                position = sphere.body.transform.TransformPoint(localUp * seaRadius);
+                up = sphere.body.transform.TransformDirection(localUp).normalized;
+            }
+            else
+            {
+                up = Vector3.up;
+                position = new Vector3(samplePosition.x, surface + waterHeightOffset, samplePosition.z);
+            }
 
             sample.position = position;
             sample.normal = up;
@@ -306,7 +311,8 @@ namespace VoxelEngine.WaterSim
 
         private Vector2 SampleFlow(Vector3 position, Vector3 up)
         {
-            if (!CrestFlowSampler.TrySampleFlow(position, out var flow3)) return Vector2.zero;
+            var flow3 = VoxelEngine.Maritime.WaterProbeSystem.GetWaterFlow(
+                new Unity.Mathematics.float3(position.x, position.y, position.z));
             Vector3 flow = new Vector3(flow3.x, flow3.y, flow3.z);
             if (flow.sqrMagnitude < 0.0001f) return Vector2.zero;
 
@@ -326,8 +332,7 @@ namespace VoxelEngine.WaterSim
             return _cachedViewpoint = cam != null ? cam.transform : null;
         }
 
-        // v3.20 – missing helper restored for compile compatibility.
-        // Crest is authoritative now, but keep method for legacy fallback.
+        // Converts the viewer direction into the active body's real sea shell.
         private static Vector3 GetPlanetSeaPoint(IVoxelWorld world, Vector3 viewPos)
         {
             if (world == null) return viewPos;
@@ -356,5 +361,4 @@ namespace VoxelEngine.WaterSim
             if (_renderer != null) _renderer.enabled = true;
         }
     }
-#pragma warning restore CS0162
 }

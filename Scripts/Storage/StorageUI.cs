@@ -59,10 +59,13 @@ namespace VoxelEngine.Storage
             // ── Storage fill bar ──────────────────────────────────
             p.Add(T.StatRow("💾", "Storage",
                 $"{rack.TotalStored:N0} / {rack.TotalCapacity:N0} GB", T.AccentCyan));
-            var (fillBar, _) = T.ProgressBar(
+            // Animated phosphor segment track — the LCD "good feel" fill.
+            var segTrack = LcdHudTheme.CreateSegmentTrack(14, out var segs, height: 9f);
+            segTrack.style.marginTop = 2;
+            p.Add(segTrack);
+            LcdHudTheme.AnimateSegments(segs,
                 rack.TotalCapacity > 0 ? (float)rack.TotalStored / rack.TotalCapacity : 0f,
-                T.AccentCyan, 8, true);
-            p.Add(fillBar);
+                T.AccentCyan);
             p.Add(T.Spacer(4));
             p.Add(T.Muted("Matter conversion: each stored unit is encoded as stable matter data. Heavier items consume more GB."));
             p.Add(T.Spacer(6));
@@ -83,6 +86,7 @@ namespace VoxelEngine.Storage
             var searchField = new TextField { value = "" };
             searchField.style.flexGrow  = 1;
             searchField.style.minHeight = 26;
+            LcdHudTheme.ApplySearchField(searchField);
             searchRow.Add(searchField);
 
             // Sort selector — two modes × ascending/descending. Default = item
@@ -97,6 +101,7 @@ namespace VoxelEngine.Storage
             sortBtn.style.backgroundColor = new StyleColor(T.BgSlot);
             T.Radius(sortBtn, 5f);
             T.Border(sortBtn, 1, T.BorderDim);
+            LcdHudTheme.ApplyCommandButton(sortBtn, T.AccentCyan);
             sortBtn.tooltip = "Click to cycle sort:\n• Count ↑ (default)\n• Count ↓\n• Name A→Z\n• Name Z→A";
             searchRow.Add(sortBtn);
             p.Add(searchRow);

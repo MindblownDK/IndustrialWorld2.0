@@ -24,7 +24,8 @@ namespace VoxelEngine.Settings
         ToolCycle,
         Hotbar1, Hotbar2, Hotbar3, Hotbar4, Hotbar5,
         Hotbar6, Hotbar7, Hotbar8, Hotbar9, Hotbar0,
-        EnterCockpit, ExitCockpit
+        EnterCockpit, ExitCockpit,
+        WarpDrive
     }
 
     public static class GameSettings
@@ -51,7 +52,7 @@ namespace VoxelEngine.Settings
 
         // Bump this when default keybinds change to force a one-time migration
         // that fills in missing or invalid bindings on old saves.
-        private const int    CURRENT_VERSION = 12;
+        private const int    CURRENT_VERSION = 13;
 
         // ----- defaults -----
         public const float DEFAULT_FOV       = 75f;
@@ -156,6 +157,7 @@ namespace VoxelEngine.Settings
             InputAction.Hotbar0         => "Digit0",
             InputAction.EnterCockpit    => "H",
             InputAction.ExitCockpit     => "F",
+            InputAction.WarpDrive       => "N",
             _ => "None"
         };
 
@@ -245,12 +247,10 @@ namespace VoxelEngine.Settings
         public static void ApplyUiScaleAndFit(UnityEngine.UIElements.PanelSettings ps)
         {
             if (ps == null) return;
+            ps.renderMode = UnityEngine.UIElements.PanelRenderMode.ScreenSpaceOverlay;
             ps.scaleMode = UnityEngine.UIElements.PanelScaleMode.ScaleWithScreenSize;
             ps.referenceResolution = new Vector2Int(1920, 1080);
-            // Balanced width/height scaling keeps text crisp while responsive panel
-            // constraints keep content inside non-16:9 game views.
-            ps.screenMatchMode = UnityEngine.UIElements.PanelScreenMatchMode.MatchWidthOrHeight;
-            ps.match = 0.5f;
+            ps.screenMatchMode = UnityEngine.UIElements.PanelScreenMatchMode.Shrink; // Shrink ensures the UI scales safely without cropping regardless of aspect ratio
             ps.referenceDpi = 96;
             ps.fallbackDpi = 96;
         }

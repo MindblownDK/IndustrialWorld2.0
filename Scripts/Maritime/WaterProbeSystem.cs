@@ -200,22 +200,22 @@ namespace VoxelEngine.Maritime
             var world = VoxelEngine.Core.ActiveWorld.Current;
             if (world != null)
             {
-                int vx = Mathf.RoundToInt(worldPos.x / VOXEL_SIZE);
-                int vy = Mathf.RoundToInt(worldPos.y / VOXEL_SIZE);
-                int vz = Mathf.RoundToInt(worldPos.z / VOXEL_SIZE);
+                // SphereWorld voxel coordinates are body-local. Never derive them from raw
+                // scene X/Y/Z or currents drift to the wrong side of an offset planet.
+                Vector3Int voxel = world.WorldToVoxel(new Vector3(worldPos.x, worldPos.y, worldPos.z));
                 var coord = new Vector3Int(
-                    Mathf.FloorToInt(vx / (float)CHUNK_SIZE),
-                    Mathf.FloorToInt(vy / (float)CHUNK_SIZE),
-                    Mathf.FloorToInt(vz / (float)CHUNK_SIZE));
+                    Mathf.FloorToInt(voxel.x / (float)CHUNK_SIZE),
+                    Mathf.FloorToInt(voxel.y / (float)CHUNK_SIZE),
+                    Mathf.FloorToInt(voxel.z / (float)CHUNK_SIZE));
 
                 if (world.TryGetChunk(coord, out var chunk) && chunk != null && chunk.isGenerated)
                 {
-                    int lx = vx - coord.x * CHUNK_SIZE;
-                    int lz = vz - coord.z * CHUNK_SIZE;
+                    int lx = voxel.x - coord.x * CHUNK_SIZE;
+                    int lz = voxel.z - coord.z * CHUNK_SIZE;
                     Vector2 flow = chunk.GetFlow(lx, lz);
                     if (world is VoxelEngine.Cosmos.SphereWorld)
                     {
-                        Vector3 local = new Vector3(vx, vy, vz) * VOXEL_SIZE;
+                        Vector3 local = ((Vector3)voxel + Vector3.one * 0.5f) * VOXEL_SIZE;
                         Vector3 up = PlanetWaterUtility.LocalUp(local);
                         Vector3 east = Vector3.Cross(Vector3.up, up);
                         if (east.sqrMagnitude < 0.001f) east = Vector3.Cross(Vector3.forward, up);
@@ -247,28 +247,15 @@ namespace VoxelEngine.Maritime
             _cachedFrame = -1;
         }
 
-        private static RenderTexture _wakeTexture;
-        public static RenderTexture WakeTexture
-        {
-            get
-            {
-                if (_wakeTexture == null)
-                {
-                    _wakeTexture = new RenderTexture(512, 512, 0, RenderTextureFormat.ARGBHalf);
-                    _wakeTexture.name = "GlobalShipWakeTexture";
-                    _wakeTexture.wrapMode = TextureWrapMode.Clamp;
-                    Shader.SetGlobalTexture("_GlobalShipWakeTexture", _wakeTexture);
-                }
-                return _wakeTexture;
-            }
-        }
-
+        /// <summary>
+        /// Hands a moving submerged grid to the in-house wake registry. The registry projects
+        /// each stamp to the actual radial water surface, so wakes wrap correctly around
+        /// spherical planets instead of being written into a flat XZ texture.
+        /// </summary>
         public static void RegisterShipWake(Vector3 shipPos, Vector3 velocity, float hullSize)
         {
-            float speed = velocity.magnitude;
-            if (speed < 0.1f) return;
-            var wt = WakeTexture;
-            Shader.SetGlobalVector("_ShipWakeParams", new Vector4(shipPos.x, shipPos.z, velocity.x, velocity.z));
+            VoxelEngine.WaterSim.NativeWaterWakeSystem.RegisterWake(shipPos, velocity, hullSize);
         }
+
     }
 }
