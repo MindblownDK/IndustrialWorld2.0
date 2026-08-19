@@ -408,7 +408,14 @@ namespace VoxelEngine.Generation
                     Vector3Int pos = columnBase + step * alt;
                     if (!TryGetLoadedVoxel(world, pos, out Voxel cell)) { allWritten = false; break; }
                     if (!cell.IsSolid && cell.waterLevel > 0) continue;   // already liquid
-                    world.SetVoxelWorld(pos, new Voxel(-5, (byte)MaterialId.CrudeOil, 255), remesh: false);
+                    // 9.7.4: the liquid tops out ONE cell below the ground line — a full
+                    // cell at the ground line rendered ~0.5 m ABOVE the smooth terrain
+                    // (the tilted plate). The ground-line cell is carved to open AIR, so
+                    // the pond surface sits visibly sunk inside the crater.
+                    Voxel carvedVoxel = alt <= pondSurf - 1
+                        ? new Voxel(-5, (byte)MaterialId.CrudeOil, 255)
+                        : new Voxel(-5, (byte)MaterialId.Air, 0);
+                    world.SetVoxelWorld(pos, carvedVoxel, remesh: false);
                     if (TryGetChunkForWrite(world, pos, out Chunk carvedChunk)) touched.Add(carvedChunk);
                     carvedCells++;
                 }
@@ -479,12 +486,20 @@ namespace VoxelEngine.Generation
                 int r2 = rInt * rInt;
 
                 GetTangentBasis(up, out Vector3 tangentA, out Vector3 tangentB);
+                int core2 = Mathf.Max(1, (rInt - 1) * (rInt - 1));
                 for (int a = -rInt; a <= rInt; a++)
                 for (int b = -rInt; b <= rInt; b++)
                 {
-                    if (a * a + b * b > r2) continue;
+                    int dd = a * a + b * b;
+                    if (dd > r2) continue;
                     Vector3Int pos = Vector3Int.RoundToInt(center + tangentA * a + tangentB * b);
-                    allWritten &= WriteSolidOil(world, pos, touched);
+                    // 9.7.4: the shaft CORE is LIQUID oil (a real hole filled with crude,
+                    // minable/pumpable, connected pond → reservoir); the outer ring stays
+                    // soaked solid rock as the visible casing. Both only replace existing
+                    // solid — never air.
+                    allWritten &= dd <= core2
+                        ? WriteLiquidOilIntoSolid(world, pos, touched)
+                        : WriteSolidOil(world, pos, touched);
                 }
             }
             return allWritten;
@@ -494,12 +509,18 @@ namespace VoxelEngine.Generation
         {
             bool allWritten = true;
             int radiusSquared = radius * radius;
+            int innerSquared = Mathf.Max(1, (radius - 1) * (radius - 1));
             for (int z = -radius; z <= radius; z++)
             for (int y = -radius; y <= radius; y++)
             for (int x = -radius; x <= radius; x++)
             {
-                if (x * x + y * y + z * z > radiusSquared) continue;
-                allWritten &= WriteSolidOil(world, center + new Vector3Int(x, y, z), touched);
+                int dd = x * x + y * y + z * z;
+                if (dd > radiusSquared) continue;
+                // 9.7.4: the reservoir INTERIOR is liquid crude (what the shaft delivers
+                // and pumps extract); the outer shell stays soaked rock as the casing.
+                allWritten &= dd <= innerSquared
+                    ? WriteLiquidOilIntoSolid(world, center + new Vector3Int(x, y, z), touched)
+                    : WriteSolidOil(world, center + new Vector3Int(x, y, z), touched);
             }
             return allWritten;
         }
@@ -546,6 +567,19 @@ namespace VoxelEngine.Generation
         /// SOLID oil-soaked rock for the bore + reservoir — the terrain mesher renders it
         /// visibly (dark oil), so the shaft down to the reservoir is real and seeable.
         /// </summary>
+        /// <summary>Convert EXISTING solid rock into liquid crude (shaft core / reservoir
+        /// interior). Air, caves and existing liquid are never touched — no geometry is
+        /// ever created, so nothing can float or tear open.</summary>
+        private static bool WriteLiquidOilIntoSolid(SphereWorld world, Vector3Int voxel, HashSet<Chunk> touched)
+        {
+            if (!TryGetChunkForWrite(world, voxel, out Chunk chunk)) return false;
+            if (!TryGetLoadedVoxel(world, voxel, out Voxel existing)) return false;
+            if (!existing.IsSolid) return true;
+            world.SetVoxelWorld(voxel, new Voxel(-5, (byte)MaterialId.CrudeOil, 255), remesh: false);
+            touched.Add(chunk);
+            return true;
+        }
+
         private static bool WriteSolidOil(SphereWorld world, Vector3Int voxel, HashSet<Chunk> touched)
         {
             if (!TryGetChunkForWrite(world, voxel, out Chunk chunk)) return false;

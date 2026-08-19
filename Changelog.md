@@ -1,9 +1,45 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.7.3-dev`
+**Current Version:** `9.7.5-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.7.5-dev] Reservoir Loop Compile Recovery (CS1023 / CS0103)
+
+**Type:** PATCH — compile recovery for the 9.7.4 reservoir edit; no behaviour change.
+
+#### 🛠️ Compiler Fixes
+- **CS1023 + CS0103 (OilReservoirDecorator.cs:514–523):** the 9.7.4 patch inserted the `innerSquared` declaration BETWEEN the stacked `for (z) / for (y) / for (x)` statements, making it the embedded statement of the outer loops (illegal) and pushing `y`/`z` out of scope for the body. The declaration now sits before the loop stack; the three loops nest correctly again. Reservoir behaviour is exactly as specified in 9.7.4 (liquid interior, soaked-rock shell).
+
+#### ✅ Static delivery checks
+- Full-project parse clean (tree-sitter C#); version synchronized to 9.7.5-dev.
+
+#### Manual Unity steps
+1. Pull `Dev`, recompile — console clean.
+2. Continue the 9.7.4 checklist: sunken oil pond, liquid shaft → liquid reservoir, dry beaches.
+
+### [9.7.4-dev] Sunken Pond Surface, Liquid Oil Shaft & Reservoir, and the Beach Ground-Water Gate
+
+**Type:** PATCH — the three items from the crater screenshot round.
+
+#### 🛢️ 1. Oil surface aligned INTO the crater
+The crater carved correctly, but the pond filled up to the ground-line cell: a full liquid cell tops out ~0.5 m ABOVE the smooth terrain (the tilted plate over the pit). The fill now stops ONE cell below the ground line and the ground-line cell is carved to open air — the oil surface sits visibly sunk inside the crater, aligned with the dent.
+
+#### 🕳️ 2. The shaft is a real oil-filled hole now
+As requested: the funnel CORE is LIQUID crude (a genuine hole filled with oil, minable and pumpable, continuously connecting pond → reservoir) inside a soaked-rock casing ring; the reservoir INTERIOR is liquid crude inside a soaked-rock shell. Every conversion still replaces existing solid only — nothing can float or tear the terrain, and mining down the casing follows liquid oil the whole way to the reservoir pool.
+
+#### 🏖️ 3. Water under the beach — the ocean fill was flooding land dips
+Generated sea water filled ANY column whose surface pokes below sea−1 — including dips behind beach berms and inland hollows, leaving hidden water lenses under a smooth sand roof (your mining find). New `PlanetField.LandMask01` (the exact continent mask the surface composes with) gates the fill: water generates only in genuine ocean regions (land mask < 0.45) or genuinely deep basins (surface < sea − 6 m). The GPU ocean patches apply the same gate on near tiles so the water plane never renders over a dry land dip either.
+
+#### ✅ Static delivery checks
+- All sources parse clean (tree-sitter C#); CPU-only gate (no GPU parity impact); version synchronized to 9.7.4-dev.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile, fresh world / unexplored region.
+2. Seep: oil surface sunk INSIDE the crater (no plate above the rim); mine the pond floor: liquid oil shaft inside dark casing all the way down; reservoir interior is a liquid crude pool.
+3. Dig on a beach a few metres inland: dry sand and rock — no hidden water lens. Ocean-side digging at the waterline may still meet the sea itself, which is correct.
+4. Confirm shores/oceans still look right (the gate must not remove real coastal water).
 
 ### [9.7.3-dev] The Diagonal Step — Dominant-Axis Seep Basins (Level Ponds, Sealed Ground)
 

@@ -216,6 +216,10 @@ namespace VoxelEngine.Cosmos
             public float3 centerDir;
             /// <summary>∂surfaceRadius/∂dir (m per unit direction) — linear correction.</summary>
             public float3 surfaceGrad;
+            /// <summary>Continent mask at the chunk centre (0 = ocean, 1 = land) —
+            /// gates generated sea water (9.7.4: no more hidden water lenses under
+            /// beaches and inland dips that merely poke below the sea shell).</summary>
+            public float landMask;
         }
 
         /// <summary>
@@ -238,6 +242,8 @@ namespace VoxelEngine.Cosmos
             col.slopeRock      = 0;
             col.centerDir      = dir;
             col.surfaceGrad    = float3.zero;
+            col.landMask       = VoxelEngine.GpuVoxel.PlanetField.LandMask01(
+                prm.seed, dir, prm.continentScaleDir);
 
             // Tangent basis on the sphere at the chunk centre.
             float3 refVec = math.abs(dir.y) < 0.9f ? new float3(0, 1, 0) : new float3(1, 0, 0);
@@ -459,7 +465,8 @@ namespace VoxelEngine.Cosmos
                 // Only true ocean basins receive generated water. A cave excavated below the
                 // mathematical sea shell on otherwise dry land must remain air: players should
                 // encounter water only in oceans, intentional lakes, or placed/pumped liquid.
-                if (surfaceRadius < prm.seaRadius - 1f && radius <= prm.seaRadius)
+                bool genuineOcean = column.landMask < 0.45f || surfaceRadius < prm.seaRadius - 6f;
+                if (genuineOcean && surfaceRadius < prm.seaRadius - 1f && radius <= prm.seaRadius)
                 {
                     // Crude oil is authored separately as one coherent surface seep, tapered
                     // funnel, and deep reservoir — never as random submerged noise patches.

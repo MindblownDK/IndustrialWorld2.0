@@ -86,6 +86,22 @@ namespace VoxelEngine.GpuVoxel
             => -(BasinDepth(radiusWorld) + ShelfDepth + HillAmplitude + 3f);
 
         /// <summary>
+        /// Continent land mask (0 = open ocean, 1 = continental interior) — the exact
+        /// mask <see cref="SurfaceRadius"/> composes with. Used to gate generated sea
+        /// water: only genuine ocean regions flood, never land dips behind a beach.
+        /// </summary>
+        public static float LandMask01(int seed, in float3 dir, float continentScaleDir)
+        {
+            float wx = noise.snoise(dir * WarpFrequency + SeedOffset(seed, 40));
+            float wy = noise.snoise(dir * WarpFrequency + SeedOffset(seed, 41));
+            float wz = noise.snoise(dir * WarpFrequency + SeedOffset(seed, 42));
+            float3 wd = math.normalizesafe(dir + WarpStrength * new float3(wx, wy, wz), dir);
+            float contFreq = math.max(0.25f, continentScaleDir);
+            float cont = Fbm(seed, wd, contFreq, 4, 50);
+            return math.smoothstep(-0.06f, 0.14f, cont);
+        }
+
+        /// <summary>
         /// Terrain surface radius (metres from core) for a unit direction.
         /// Continuous across the whole sphere — the heart of the field.
         /// </summary>

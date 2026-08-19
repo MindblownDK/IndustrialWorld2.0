@@ -298,6 +298,16 @@ namespace VoxelEngine.GpuVoxel
                 return;
             }
 
+            // 9.7.4: near-land dips that merely poke below the sea shell are NOT ocean —
+            // the data layer no longer floods them, so the water plane must not render
+            // over them either. Near tiles only (far tiles span mixed regions).
+            if (rec.desc.arc < 2000f && rec.desc.minSurface > prm.seaRadius - 6f &&
+                PlanetField.LandMask01(prm.seed, rec.desc.centerDir, prm.continentScaleDir) > 0.55f)
+            {
+                rec.hasMesh = false;
+                return;
+            }
+
             float seaR = prm.seaRadius - surfaceInset;
             float3 anchor = rec.desc.centerDir * seaR;
 
