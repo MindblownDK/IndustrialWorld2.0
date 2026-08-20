@@ -23,6 +23,22 @@ namespace VoxelEngine.Player
     {
         public static PlayerStats Instance { get; private set; }
 
+        /// <summary>
+        /// Cause of the current death, set by hazards (solar, singularity, quasar jets)
+        /// right before their lethal damage lands. Shown on the death screen, cleared on
+        /// respawn. Null = generic death.
+        /// </summary>
+        public static string LastDeathCause { get; private set; }
+
+        /// <summary>Record a death cause (hazards call this before lethal damage).</summary>
+        public static void SetDeathCause(string cause)
+        {
+            if (!string.IsNullOrEmpty(cause)) LastDeathCause = cause;
+        }
+
+        /// <summary>Clear the recorded death cause (called when the player respawns).</summary>
+        public static void ClearDeathCause() => LastDeathCause = null;
+
         [Header("Baselines (before upgrades)")]
         public float baseMaxHealth      = 100f;
         public VoxelEngine.Combat.ArmorItem equippedArmor; // currently worn Crusader armor

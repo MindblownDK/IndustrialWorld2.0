@@ -7,8 +7,8 @@ Material:
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_Name: VoxelTerrain
-  m_Shader: {fileID: 4800000, guid: 489cb051eb03b1a4290d8de6015d4832, type: 3}
+  m_Name: Mat_HarvesterDisc
+  m_Shader: {fileID: 4800000, guid: cbe0552c65eb47143a3527c262dfd3eb, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords: []
@@ -22,19 +22,19 @@ Material:
   m_LockedProperties: 
   m_SavedProperties:
     serializedVersion: 3
-    m_TexEnvs:
-    - _BaseMap:
-        m_Texture: {fileID: 0}
-        m_Scale: {x: 0.2, y: 0.2}
-        m_Offset: {x: 0, y: 0}
+    m_TexEnvs: []
     m_Ints: []
     m_Floats:
-    - _BubbleCutout: 0
-    - _LodRadialBias: 0
-    - _Metallic: 0
-    - _Smoothness: 0
-    - _TexBlend: 0.6
+    - _Brightness: 1.5
+    - _DopplerStrength: 1.8
+    - _NoiseScale: 8
+    - _PhotonRingPower: 2.2
+    - _PhotonRingWidth: 0.03
+    - _SpiralTight: 3.5
+    - _TimeScale: 0.35
     m_Colors:
-    - _BaseColor: {r: 1, g: 1, b: 1, a: 1}
+    - _CoreColor: {r: 1, g: 0.92, b: 0.78, a: 1}
+    - _MidColor: {r: 0.95, g: 0.45, b: 0.18, a: 1}
+    - _OuterColor: {r: 0.55, g: 0.1, b: 0.06, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

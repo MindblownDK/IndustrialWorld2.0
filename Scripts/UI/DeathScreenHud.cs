@@ -69,6 +69,7 @@ namespace VoxelEngine.UI
         {
             _visible = false;
             _deadPlayer = null;
+            PlayerStats.ClearDeathCause();
             if (_overlay != null) _overlay.style.display = DisplayStyle.None;
             if (_blocking)
             {
@@ -105,6 +106,18 @@ namespace VoxelEngine.UI
             title.style.color = new Color(1.0f, 0.30f, 0.22f);
             title.style.unityTextAlign = TextAnchor.MiddleCenter;
             panel.Add(title);
+
+            // Hazard death causes (solar, singularity, quasar jets) get their own line.
+            if (!string.IsNullOrEmpty(PlayerStats.LastDeathCause))
+            {
+                var cause = new Label(PlayerStats.LastDeathCause);
+                cause.style.marginTop = 3;
+                cause.style.fontSize = 13;
+                cause.style.letterSpacing = 1.4f;
+                cause.style.color = new Color(0.95f, 0.62f, 0.40f);
+                cause.style.unityTextAlign = TextAnchor.MiddleCenter;
+                panel.Add(cause);
+            }
 
             var subtitle = new Label("Select a respawn anchor");
             subtitle.style.marginTop = 4;

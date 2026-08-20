@@ -56,6 +56,18 @@ namespace VoxelEngine.Cosmos
         public IReadOnlyList<AsteroidInstance> Asteroids => _asteroids;
         private readonly List<BodyInstance> _bodies = new List<BodyInstance>();
         private readonly List<AsteroidInstance> _asteroids = new List<AsteroidInstance>();
+
+        // ── Deep-space singularities (Phase 5) ────────────────────
+        /// <summary>The system's real black hole body (null when the template disables it).</summary>
+        public SingularityInstance BlackHole { get; private set; }
+
+        /// <summary>The system's real quasar body (null when the template disables it).</summary>
+        public SingularityInstance Quasar { get; private set; }
+
+        /// <summary>Every enabled singularity remnant (black hole and/or quasar).</summary>
+        public IReadOnlyList<SingularityInstance> Singularities => _singularities;
+        private readonly List<SingularityInstance> _singularities = new List<SingularityInstance>();
+
         public bool IsReady { get; private set; }
 
         /// <summary>Simulation clock (seconds since world creation). Drives every orbit.</summary>
@@ -231,6 +243,9 @@ namespace VoxelEngine.Cosmos
             }
             if (!hasAuthoredField || _asteroids.Count == 0) SpawnAsteroids(CreateFallbackAsteroidSettings(), ref rng);
 
+            // ── Deep-space singularity remnants (Phase 5) ──────────
+            BuildSingularities(template, ref rng);
+
             IsReady = true;
         }
 
@@ -339,6 +354,93 @@ namespace VoxelEngine.Cosmos
             }
         }
 
+        /// <summary>
+        /// Builds the deep-space singularity remnants (Phase 5): the real black hole and the
+        /// real quasar. Both are STATIC cosmic anchors (no orbit) seeded far beyond the whole
+        /// planet system in well-separated directions, so a world's deep space has genuine,
+        /// flyable landmarks — and genuine danger.
+        /// </summary>
+        private void BuildSingularities(SolarSystemTemplate template, ref Random rng)
+        {
+            _singularities.Clear();
+            BlackHole = null;
+            Quasar = null;
+
+            double3 blackHoleDir = double3.zero;
+
+            if (template.blackHole != null && template.blackHole.enabled)
+            {
+                var s = template.blackHole;
+                blackHoleDir = RandomUnitAxisD(ref rng);
+                double d = ND(ref rng, Mathd.Max(10000d, s.distanceFromStarKm.x), s.distanceFromStarKm.y);
+                BlackHole = new SingularityInstance
+                {
+                    kind                      = SingularityKind.BlackHole,
+                    blackHoleSettings         = s,
+                    positionKmD               = blackHoleDir * d,
+                    gravitationalParamKm3S2   = Mathd.Max(1d, s.gravitationalParamKm3S2),
+                    eventHorizonKm            = Mathd.Max(1d, s.eventHorizonRadiusKm),
+                    maxAccelMps2              = Mathd.Max(10d, s.maxAccelMps2),
+                    discAxis                  = SeededAxis(s.discAxis, ref rng),
+                    discOuterRadiusKm         = Mathf.Max(10f, s.discOuterRadiusKm),
+                    discInnerRadiusKm         = Mathf.Max(1.05f, s.discInnerRadiusFactor) * Mathf.Max(1f, s.eventHorizonRadiusKm),
+                    jetLengthKm               = 0f,
+                    jetCoreRadiusKm           = 0f,
+                    jetDamagePerSecond        = 0f,
+                    tidalDamagePerSecond      = Mathf.Max(0f, s.tidalDamagePerSecond),
+                    warningRadiusKm           = s.warningRadiusKm,
+                    lethalRadiusKm            = s.lethalRadiusKm,
+                    standoffArrivalKm         = Mathf.Max(500f, s.standoffArrivalKm),
+                };
+                _singularities.Add(BlackHole);
+            }
+
+            if (template.quasar != null && template.quasar.enabled && template.quasar.realBody)
+            {
+                var s = template.quasar;
+                // The quasar is its own body: keep its direction well away from the black
+                // hole's (≥ 75°) so the two remnants read as separate destinations.
+                double3 quasarDir;
+                int guard = 0;
+                do
+                {
+                    quasarDir = RandomUnitAxisD(ref rng);
+                    guard++;
+                }
+                while (guard < 32 && math.dot(quasarDir, blackHoleDir) > 0.26d);
+                double d = ND(ref rng, Mathd.Max(20000d, s.distanceFromStarKm.x), s.distanceFromStarKm.y);
+                Quasar = new SingularityInstance
+                {
+                    kind                      = SingularityKind.Quasar,
+                    quasarSettings            = s,
+                    positionKmD               = quasarDir * d,
+                    gravitationalParamKm3S2   = Mathd.Max(1d, s.gravitationalParamKm3S2),
+                    eventHorizonKm            = Mathd.Max(1d, s.eventHorizonRadiusKm),
+                    maxAccelMps2              = Mathd.Max(10d, s.maxAccelMps2),
+                    discAxis                  = SeededAxis(s.discAxis, ref rng),
+                    discOuterRadiusKm         = Mathf.Max(10f, s.discOuterRadiusKm),
+                    discInnerRadiusKm         = Mathf.Max(1.05f, s.discInnerRadiusFactor) * Mathf.Max(1f, s.eventHorizonRadiusKm),
+                    jetLengthKm               = Mathf.Max(0f, s.jetLengthKm),
+                    jetCoreRadiusKm           = Mathf.Max(1f, s.jetCoreRadiusKm),
+                    jetDamagePerSecond        = Mathf.Max(0f, s.jetDamagePerSecond),
+                    tidalDamagePerSecond      = Mathf.Max(0f, s.tidalDamagePerSecond),
+                    warningRadiusKm           = s.warningRadiusKm,
+                    lethalRadiusKm            = s.lethalRadiusKm,
+                    standoffArrivalKm         = Mathf.Max(500f, s.standoffArrivalKm),
+                };
+                _singularities.Add(Quasar);
+            }
+        }
+
+        /// <summary>Authored disc axis + gentle seeded jitter (±18°), normalized.</summary>
+        private static Vector3 SeededAxis(Vector3 authored, ref Random rng)
+        {
+            Vector3 axis = authored.sqrMagnitude > 0.001f ? authored.normalized : Vector3.up;
+            Vector3 jitter = (Vector3)(float3)(RandomUnitAxisD(ref rng) * 0.32d);
+            Vector3 result = (axis + jitter).normalized;
+            return result;
+        }
+
         // ── Per-frame orbit advance (real Keplerian propagation) ──
         private void Update()
         {
@@ -373,6 +475,20 @@ namespace VoxelEngine.Cosmos
             {
                 double a = Sun.gravitationalParamKm3S2 * 1000d / dSun2; // μ·1000/d² with d in km → m/s²
                 g += toSun / dSun * a;
+            }
+
+            // Singularity remnants (Phase 5): real inverse-square pull, capped for sim stability.
+            for (int i = 0; i < _singularities.Count; i++)
+            {
+                var s = _singularities[i];
+                if (s == null || s.gravitationalParamKm3S2 <= 0d) continue;
+                double3 toS = s.positionKmD - posKm;
+                double d2 = math.lengthsq(toS);
+                if (d2 < 1e-9) continue;
+                double d = math.sqrt(d2);
+                double a = s.gravitationalParamKm3S2 * 1000d / d2;
+                if (a > s.maxAccelMps2) a = s.maxAccelMps2;
+                g += toS / d * a;
             }
 
             for (int i = 0; i < _bodies.Count; i++)
@@ -617,6 +733,26 @@ namespace VoxelEngine.Cosmos
                 for (int i = 0; i < _asteroids.Count; i++)
                     Gizmos.DrawSphere(_asteroids[i].positionKm, _asteroids[i].sizeKm);
             }
+
+            // Singularity remnants: event horizon + disc ring + jets.
+            for (int i = 0; i < _singularities.Count; i++)
+            {
+                var s = _singularities[i];
+                if (s == null) continue;
+                Vector3 p = (Vector3)(float3)s.positionKmD;
+                bool isQuasar = s.kind == SingularityKind.Quasar;
+
+                Gizmos.color = isQuasar ? new Color(0.4f, 0.7f, 1f, 0.85f) : new Color(0.85f, 0.35f, 0.15f, 0.85f);
+                Gizmos.DrawSphere(p, (float)s.eventHorizonKm);
+
+                DrawOrbit(p, s.discOuterRadiusKm, 0f, s.discAxis.normalized);
+                if (isQuasar)
+                {
+                    Gizmos.color = new Color(0.5f, 0.7f, 1f, 0.35f);
+                    Vector3 axis = s.discAxis.normalized * s.jetLengthKm;
+                    Gizmos.DrawLine(p - axis, p + axis);
+                }
+            }
         }
 
         private static void DrawOrbit(Vector3 center, float radius, float inclination, Vector3 axis)
@@ -725,5 +861,63 @@ namespace VoxelEngine.Cosmos
         public Vector3 positionKm;
         public float sizeKm;
         public MaterialId material;
+    }
+
+    // ── Deep-space singularity remnants (Phase 5) ─────────────────
+    public enum SingularityKind
+    {
+        BlackHole = 0,
+        Quasar    = 1,
+    }
+
+    /// <summary>
+    /// Runtime POD for a real black hole or quasar body. Static cosmic anchor (no orbit),
+    /// real gravitational parameter (contributes to N-body gravity), a flyable event
+    /// horizon and — for quasars — lethal relativistic jets along the disc axis.
+    /// Deliberately NOT a BodyInstance: singularities never become the scene reference
+    /// frame (no streaming world), so the frame selection logic stays untouched.
+    /// </summary>
+    public class SingularityInstance
+    {
+        public SingularityKind kind;
+        public BlackHoleSettings blackHoleSettings;   // kind == BlackHole
+        public QuasarSettings quasarSettings;         // kind == Quasar
+
+        /// <summary>Cosmic position (km, double — star-centred space).</summary>
+        public double3 positionKmD;
+
+        public double gravitationalParamKm3S2;
+        public double eventHorizonKm;
+        public double maxAccelMps2;
+
+        /// <summary>Disc normal in cosmic space (jets run along it for quasars).</summary>
+        public Vector3 discAxis = Vector3.up;
+
+        public float discOuterRadiusKm;
+        public float discInnerRadiusKm;
+        public float jetLengthKm;
+        public float jetCoreRadiusKm;
+        public float jetDamagePerSecond;
+        public float tidalDamagePerSecond;
+        public float warningRadiusKm;
+        public float lethalRadiusKm;
+        public float standoffArrivalKm;
+
+        public Vector3 positionKm => (Vector3)(float3)positionKmD;
+
+        public string DisplayName => kind == SingularityKind.Quasar ? "Quasar" : "Black Hole";
+
+        /// <summary>Warning horizon distance (km). 0-authored resolves to 150× the horizon.</summary>
+        public double WarningRadiusKm => warningRadiusKm > 0f ? warningRadiusKm : eventHorizonKm * 150d;
+
+        /// <summary>Lethal horizon distance (km). 0-authored resolves to 40× the horizon.</summary>
+        public double LethalRadiusKm => lethalRadiusKm > 0f ? lethalRadiusKm : eventHorizonKm * 40d;
+
+        /// <summary>Distance from a cosmic position to the event horizon (km; negative = inside).</summary>
+        public double HorizonDistanceKm(double3 posKm)
+        {
+            double3 toS = positionKmD - posKm;
+            return math.length(toS) - eventHorizonKm;
+        }
     }
 }

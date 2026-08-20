@@ -476,6 +476,32 @@ namespace VoxelEngine.EditorTools
                 "Re-runnable. Run after Step 21 / Step 49 when celestial worlds are present.");
             AddWizardButton(scroll, "51. Author Planet Skies + Space Ambiance (Non-Destructive)", BuildPlanetSkyProfiles, 56);
 
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
+                "Step 52 (Phase 5) authors the SINGULARITY REMNANTS — the real BLACK HOLE and QUASAR bodies (non-destructive):\n" +
+                "  • Adds a black hole to every solar system: real inverse-square gravity, a flyable event horizon,\n" +
+                "    a swirling Doppler-beamed accretion disc, tidal crush death ('COMPRESSED BY THE SINGULARITY')\n" +
+                "  • Promotes the quasar to a REAL distant body: bigger mass, accretion disc + lethal relativistic\n" +
+                "    polar jets that shear anything crossing them\n" +
+                "  • Both are seeded far beyond the planets (deep space); aim at their beacons and warp-lock to travel\n" +
+                "  • Enforces the ONE SUN policy: authored sun counts are normalized to 1\n" +
+                "  • Never overwrites authored physics, colours, or distances — creates only what is missing\n" +
+                "Re-runnable. Idempotent. Run after Step 21 / Step 49 / Step 51.");
+            AddWizardButton(scroll, "52. Author Singularity Remnants — Black Hole + Quasar (Non-Destructive)", () => VoxelEngine.EditorTools.SingularitySetup.RunStep52(), 56);
+
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
+                "Step 53 (Phase 5) builds the SINGULARITY HARVESTER — the grid block that turns the black hole into an endgame resource node (non-destructive):\n" +
+                "  • Grand Large grid block with a contained mini black hole: lensed horizon sphere, spinning\n" +
+                "    accretion disc, glowing containment coils, amber collector tips\n" +
+                "  • Harvests SINGULARITY MATTER when within 2,500 km of a singularity's horizon — yield\n" +
+                "    climbs the closer you park (danger = reward); the quasar pays 1.5×\n" +
+                "  • Auto-pushes the resource into grid cargo containers; LCD screen data provider included\n" +
+                "  • Full authoring chain: resource item + prefab + item + recipe + tier-8 research after Warp Drive\n" +
+                "  • Never overwrites authored balance (rates, power, recipe inputs, research costs)\n" +
+                "Re-runnable. Idempotent. Run after Step 52 (the black hole must exist to harvest it).");
+            AddWizardButton(scroll, "53. Build Singularity Harvester (Resource, Prefab, Item, Recipe, Research — Non-Destructive)", () => VoxelEngine.EditorTools.SingularityHarvesterSetup.RunStep53(), 56);
+
             AddSpacer(scroll, 20);
         }
 

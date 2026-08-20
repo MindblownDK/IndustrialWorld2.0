@@ -8,7 +8,8 @@ namespace VoxelEngine.Cosmos
     /// Create ▸ Voxel Engine ▸ Planets ▸ Solar System.
     ///
     /// Holds the system name, its sun(s), the planet-separation range (500–10000 km),
-    /// the planets that belong to it, any asteroid fields, and the background quasar.
+    /// the planets that belong to it, any asteroid fields, the deep-space singularity
+    /// remnants (real black hole + real quasar, Phase 5), and the legacy background quasar.
     /// </summary>
     [CreateAssetMenu(menuName = "Voxel Engine/Planets/Solar System", fileName = "System_")]
     public class SolarSystemTemplate : ScriptableObject
@@ -34,8 +35,15 @@ namespace VoxelEngine.Cosmos
         [Tooltip("Asteroid fields that drift in this system's space.")]
         public AsteroidFieldTemplate[] asteroidFields;
 
+        [Header("Deep-Space Remnants (Phase 5)")]
+        [Tooltip("The system's REAL black hole body — seeded far beyond the outermost planet. " +
+                 "Real gravity, real flyable event horizon, lethal.")]
+        public BlackHoleSettings blackHole = new BlackHoleSettings();
+
         [Header("Aesthetics")]
-        [Tooltip("Background quasar pinned to the system's deep-space skybox.")]
+        [Tooltip("The system's quasar. With realBody enabled (Phase 5) this is a REAL distant body " +
+                 "with gravity, an accretion disc and lethal relativistic jets; otherwise it is the " +
+                 "legacy pinned backdrop.")]
         public QuasarSettings quasar = new QuasarSettings();
     }
 }

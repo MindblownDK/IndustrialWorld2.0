@@ -38,6 +38,7 @@ namespace VoxelEngine.Player
         private float _eventShake;       // one-off event shake (0..1)
         private float _eventShakeTarget;
         private float _fovOffset;
+        private float _fovSqueeze;       // slow-push FOV modifier (hazards: black-hole crush, etc.)
         private Vector3 _noisePosition;
         private float _noiseTime;
 
@@ -93,9 +94,10 @@ namespace VoxelEngine.Player
             transform.localPosition = pos;
             transform.localRotation = rot;
 
-            // FOV warp: cockpit speed warp + a small event kick.
+            // FOV warp: cockpit speed warp + a small event kick + hazard squeeze (black hole crush).
             float warp = (IsPiloting ? _impulse : 0f) * maxFovOffset + _eventShake * maxFovOffset * 0.8f;
-            _fovOffset = Mathf.MoveTowards(_fovOffset, warp, fovResponse * dt);
+            _fovSqueeze = Mathf.MoveTowards(_fovSqueeze, 0f, 8f * dt);
+            _fovOffset = Mathf.MoveTowards(_fovOffset, warp + _fovSqueeze, fovResponse * dt);
             _cam.fieldOfView = _baseFov + _fovOffset;
         }
 
@@ -113,6 +115,17 @@ namespace VoxelEngine.Player
         {
             if (Instance == null || magnitude <= 0f) return;
             Instance._eventShakeTarget = Mathf.Max(Instance._eventShakeTarget, Mathf.Clamp01(magnitude) * Instance.eventShakeScale);
+        }
+
+        /// <summary>
+        /// Slow-push FOV squeeze (degrees, negative = narrower view) for hazard feedback —
+        /// the black hole's tidal compression, quasar shear, etc. Locks onto the strongest
+        /// request; decays smoothly when the hazard releases.
+        /// </summary>
+        public static void AddFovSqueeze(float degrees)
+        {
+            if (Instance == null) return;
+            Instance._fovSqueeze = Mathf.Max(Instance._fovSqueeze, Mathf.Clamp(degrees, -14f, 14f));
         }
     }
 }

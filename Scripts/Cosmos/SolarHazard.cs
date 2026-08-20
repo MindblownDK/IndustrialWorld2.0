@@ -36,6 +36,9 @@ namespace VoxelEngine.Cosmos
         [Tooltip("Radius of the rendered sun mesh (km). ~80 km reads as a dramatic 4-6° disc from the innermost planets.")]
         public float sunVisualRadiusKm = 80f;
 
+        [Tooltip("Corona shell multiplier over the sun radius (soft outer atmosphere of the star).")]
+        public float coronaShellMultiplier = 1.45f;
+
         [Tooltip("Sun core colour.")]
         public Color sunColor = new Color(1f, 0.92f, 0.72f);
 
@@ -43,10 +46,13 @@ namespace VoxelEngine.Cosmos
         public Transform player;
 
         private GameObject _sunGO;
+        private GameObject _coronaGO;
         private MeshRenderer _sunRenderer;
         private Material _sunMaterial;
+        private Material _coronaMaterial;
         private float _nextWarnTime;
         private bool _warned;
+        private bool _oneSunLogged;
 
         private void OnEnable() => EnsureSunVisual();
 
@@ -91,6 +97,25 @@ namespace VoxelEngine.Cosmos
                 _sunMaterial.SetColor("_EmissionColor", sunColor * 2.2f);
             }
             _sunRenderer.sharedMaterial = _sunMaterial;
+
+            // Corona (9.10.0): a soft additive shell around the burning surface so the star
+            // reads as an atmosphere, not a crisp billiard ball.
+            _coronaGO = new GameObject("SunCorona");
+            _coronaGO.transform.SetParent(_sunGO.transform, false);
+            _coronaGO.transform.localPosition = Vector3.zero;
+            _coronaGO.transform.localScale = Vector3.one * coronaShellMultiplier;
+            var coronaMF = _coronaGO.AddComponent<MeshFilter>();
+            coronaMF.sharedMesh = CreateSunMesh();
+            var coronaMR = _coronaGO.AddComponent<MeshRenderer>();
+            coronaMR.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            coronaMR.receiveShadows = false;
+            Shader coronaShader = Shader.Find("VoxelEngine/QuasarGlow")
+                                ?? Shader.Find("Universal Render Pipeline/Unlit")
+                                ?? Shader.Find("Standard");
+            _coronaMaterial = new Material(coronaShader) { name = "Mat_SunCorona" };
+            _coronaMaterial.SetColor("_InnerColor", Color.Lerp(sunColor, Color.white, 0.35f));
+            _coronaMaterial.SetColor("_OuterColor", Color.Lerp(sunColor, new Color(1f, 0.4f, 0.1f), 0.55f));
+            coronaMR.sharedMaterial = _coronaMaterial;
         }
 
         private void Update()
@@ -119,6 +144,25 @@ namespace VoxelEngine.Cosmos
                     _sunGO.transform.position = sunScene;
                     _sunGO.transform.localScale = Vector3.one * (sunVisualRadiusKm * 1000f);
                 }
+            }
+
+            // Corona breathes slowly (solar wind pressure pulses).
+            if (_coronaMaterial != null)
+            {
+                float pulse = 0.85f + 0.15f * Mathf.Sin(Time.time * 0.6f)
+                            + 0.06f * Mathf.Sin(Time.time * 1.7f + 1.3f);
+                _coronaMaterial.SetFloat("_Brightness", pulse);
+            }
+
+            // ONE SUN policy (7.13.10, re-asserted 9.10.0): the simulation always runs a
+            // single star. Authored multi-sun templates are reported, never duplicated.
+            if (!_oneSunLogged && registry.Sun != null && registry.Sun.settings != null &&
+                registry.Sun.settings.sunCount > 1)
+            {
+                _oneSunLogged = true;
+                Debug.LogWarning("[SolarHazard] ONE SUN policy — the template authors " +
+                                 registry.Sun.settings.sunCount + " stars; only one is simulated. " +
+                                 "Run Setup Step 52 to normalize the asset.");
             }
 
             // ── Hazard zones (auto-scale to the system) ────────────────
@@ -157,7 +201,11 @@ namespace VoxelEngine.Cosmos
             if (dmgPerSec > 0f)
             {
                 var stats = PlayerStats.Instance != null ? PlayerStats.Instance : player.GetComponent<PlayerStats>();
-                if (stats != null) stats.TakeDamage(dmgPerSec * Time.deltaTime);
+                if (stats != null)
+                {
+                    if (t >= 0.9f) PlayerStats.SetDeathCause("VAPORIZED BY THE STAR");
+                    stats.TakeDamage(dmgPerSec * Time.deltaTime);
+                }
             }
         }
 

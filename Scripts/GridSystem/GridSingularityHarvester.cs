@@ -1,0 +1,205 @@
+// Assets/Scripts/VoxelEngine/GridSystem/GridSingularityHarvester.cs
+//
+// ╔══════════════════════════════════════════════════════════════════════╗
+// ║                SINGULARITY HARVESTER — grid block (Phase 5)           ║
+// ║                                                                       ║
+// ║  The black hole is a destination now. This heavy grid block harvests  ║
+// ║  SINGULARITY MATTER from the real singularity remnants:               ║
+// ║                                                                       ║
+// ║   • Only works in vacuum, on a powered grid.                          ║
+// ║   • Harvest rate climbs the closer the block sits to the event        ║
+// ║     horizon — the sweet spot is right outside the lethal zone.        ║
+// ║   • The quasar (the supermassive variant) yields 1.5× per unit time,  ║
+// ║     but its jets make parking there a death wish.                     ║
+// ║   • Singularity Matter buffers internally and auto-pushes into grid   ║
+// ║     cargo containers (same flow as the ship drill).                   ║
+// ║   • The mini black hole inside the block spins its accretion disc.    ║
+// ║                                                                       ║
+// ║  Item / prefab / recipe / research are authored by Voxel Engine       ║
+// ║  Setup Step 53 (non-destructive).                                     ║
+// ╚══════════════════════════════════════════════════════════════════════╝
+using Unity.Mathematics;
+using UnityEngine;
+using VoxelEngine.Cosmos;
+using VoxelEngine.Items;
+
+namespace VoxelEngine.GridSystem
+{
+    public class GridSingularityHarvester : GridBlock, IGridDataProvider
+    {
+        [Header("Singularity Harvest")]
+        [Tooltip("Horizon distance (km) within which harvesting is possible.")]
+        public float harvestRangeKm = 2500f;
+
+        [Tooltip("Singularity Matter produced per second at full efficiency.")]
+        public float harvestRatePerSecond = 0.06f;
+
+        [Tooltip("Power drawn (W) while actively harvesting.")]
+        public float powerDrawWatts = 25000f;
+
+        [Tooltip("Yield multiplier when harvesting the QUASAR (the supermassive remnant).")]
+        public float quasarMultiplier = 1.5f;
+
+        [Tooltip("The resource this block produces (wired by Setup Step 53).")]
+        public ItemDefinition producedItem;
+
+        [Tooltip("Disc spin speed of the contained mini black hole (deg/s).")]
+        public float discSpinDegPerSecond = 18f;
+
+        [Header("Buffer")]
+        [Tooltip("Small internal buffer; auto-empties into grid cargo.")]
+        public ItemContainer buffer;
+
+        public const int BUFFER_SLOTS = 4;
+
+        // ── Live state (terminal + LCD data provider) ──
+        public bool IsHarvesting { get; private set; }
+        public float Efficiency01 { get; private set; }
+        public float HorizonDistanceKm { get; private set; } = float.MaxValue;
+        public string NearestRemnant { get; private set; } = "—";
+        public string Status { get; private set; } = "Idle";
+
+        public override float PowerDraw => IsHarvesting ? powerDrawWatts : 0f;
+        public override float ContentMass => buffer != null ? MassUtil.ContainerMass(buffer) : 0f;
+
+        private float _accumulator;
+        private float _pushTimer;
+        private Transform _disc;
+
+        public override void OnPlaced()
+        {
+            base.OnPlaced();
+            blockName = "Singularity Harvester";
+            if (buffer == null) buffer = new ItemContainer("Singularity Matter", BUFFER_SLOTS);
+            else buffer.Resize(BUFFER_SLOTS);
+            _disc = transform.Find("SingularityDisc");
+        }
+
+        private void Update()
+        {
+            // Spin the contained mini black hole's accretion disc.
+            if (_disc == null) _disc = transform.Find("SingularityDisc");
+            if (_disc != null)
+                _disc.Rotate(0f, discSpinDegPerSecond * Time.deltaTime, 0f, Space.Self);
+
+            // Always try to offload the buffer, even when not actively harvesting.
+            _pushTimer += Time.deltaTime;
+            if (_pushTimer >= 0.5f) { _pushTimer = 0f; PushToCargo(); }
+        }
+
+        private void FixedUpdate()
+        {
+            IsHarvesting = false;
+            Efficiency01 = 0f;
+
+            if (!Enabled) { Status = "Disabled"; return; }
+            if (Grid == null) { Status = "No Grid"; return; }
+            if (!AtmosphereManager.IsInSpace(transform.position)) { Status = "Requires vacuum"; return; }
+            if (!Grid.HasPower) { Status = "No Power"; return; }
+
+            var registry = CosmicRegistry.Instance;
+            var origin = SpaceOrigin.Instance;
+            if (registry == null || !registry.IsReady || origin == null) { Status = "No star map"; return; }
+
+            double3 cosmic = origin.GetCosmicKm(transform.position);
+
+            // Nearest singularity remnant (black hole preferred order is irrelevant —
+            // closest horizon distance wins; the quasar applies its own multiplier).
+            SingularityInstance nearest = null;
+            double nearestR = double.MaxValue;
+            if (registry.Singularities != null)
+            {
+                for (int i = 0; i < registry.Singularities.Count; i++)
+                {
+                    var s = registry.Singularities[i];
+                    if (s == null) continue;
+                    double r = s.HorizonDistanceKm(cosmic);
+                    if (r < nearestR) { nearestR = r; nearest = s; }
+                }
+            }
+
+            if (nearest == null || nearestR >= harvestRangeKm)
+            {
+                HorizonDistanceKm = float.MaxValue;
+                NearestRemnant = "—";
+                Status = "No singularity in range";
+                return;
+            }
+
+            HorizonDistanceKm = (float)nearestR;
+            NearestRemnant = nearest.DisplayName;
+
+            // Danger = reward: efficiency climbs from 25% at the range edge to 100%
+            // at the horizon — the best yield sits right outside the lethal zone.
+            Efficiency01 = Mathf.Clamp01(0.25f + 0.75f * (1f - (float)nearestR / harvestRangeKm));
+            float multiplier = nearest.kind == SingularityKind.Quasar ? quasarMultiplier : 1f;
+
+            if (producedItem == null)
+            {
+                Status = "No output item (run Step 53)";
+                return;
+            }
+            if (IsBufferFull())
+            {
+                Status = "Buffer full — connect cargo";
+                return;
+            }
+
+            IsHarvesting = true;
+            Status = $"Harvesting {nearest.DisplayName} ({HorizonDistanceKm:0} km to horizon)";
+
+            _accumulator += harvestRatePerSecond * Efficiency01 * multiplier * Time.fixedDeltaTime;
+            if (_accumulator >= 1f)
+            {
+                int units = Mathf.FloorToInt(_accumulator);
+                var leftover = buffer.Insert(new ItemStack(producedItem, units));
+                _accumulator = Mathf.Max(0f, _accumulator - units) + (leftover != null ? leftover.count : 0);
+            }
+        }
+
+        private bool IsBufferFull()
+        {
+            if (buffer == null) return true;
+            for (int i = 0; i < buffer.Size; i++)
+            {
+                var slot = buffer.GetSlot(i);
+                if (slot == null || slot.IsEmpty) return false;
+            }
+            return true;
+        }
+
+        // Empty the buffer into the nearest cargo container on the grid (ship-drill flow).
+        private void PushToCargo()
+        {
+            if (buffer == null || Grid == null || GridItemNetwork.Instance == null) return;
+            var cargos = GridItemNetwork.Instance.GetConnectedContainers(Grid);
+            if (cargos.Count == 0) return;
+
+            for (int i = 0; i < buffer.Size; i++)
+            {
+                var s = buffer.GetSlot(i);
+                if (s == null || s.IsEmpty || s.item == null) continue;
+                var moving = new ItemStack(s.item, s.count);
+                foreach (var cargo in cargos)
+                {
+                    if (cargo?.container == null) continue;
+                    moving = cargo.container.Insert(moving);
+                    if (moving == null || moving.IsEmpty) break;
+                }
+                int moved = s.count - (moving?.count ?? 0);
+                if (moved > 0) buffer.Remove(s.item, moved);
+            }
+        }
+
+        // ── LCD data provider ─────────────────────────────────────
+        public string SourceName => blockName;
+        public string DataCategory => "Singularity";
+        public string GetDisplayData()
+        {
+            string range = HorizonDistanceKm >= float.MaxValue
+                ? "— km"
+                : $"{HorizonDistanceKm:0} km to horizon";
+            return $"SINGULARITY HARVESTER\n{Status}\nEfficiency {Efficiency01 * 100f:0}%\nRange {range}\nTarget {NearestRemnant}";
+        }
+    }
+}

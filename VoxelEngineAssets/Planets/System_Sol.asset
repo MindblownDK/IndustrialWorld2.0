@@ -37,10 +37,51 @@ MonoBehaviour:
   - {fileID: 11400000, guid: c0e64b82a2f5af045ad883001fee1689, type: 2}
   asteroidFields:
   - {fileID: 11400000, guid: 0bdb06df4cd0803458ab7581ae9d089a, type: 2}
-  quasar:
+  blackHole:
     enabled: 1
+    configured: 1
+    gravitationalParamKm3S2: 80000
+    maxAccelMps2: 900
+    eventHorizonRadiusKm: 40
+    distanceFromStarKm: {x: 400000, y: 600000}
+    warningRadiusKm: 6000
+    lethalRadiusKm: 1600
+    tidalDamagePerSecond: 35
+    standoffArrivalKm: 12000
+    discAxis: {x: 0, y: 1, z: 0}
+    discInnerRadiusFactor: 1.5
+    discOuterRadiusKm: 300
+    discSpeed: 0.35
+    brightness: 1.6
+    coreColor: {r: 1, g: 0.96, b: 0.86, a: 1}
+    midColor: {r: 1, g: 0.55, b: 0.16, a: 1}
+    outerColor: {r: 0.62, g: 0.1, b: 0.04, a: 1}
+    photonRingBrightness: 2.2
+  quasar:
+    enabled: 0
+    realBody: 1
+    configured: 1
+    gravitationalParamKm3S2: 500000
+    maxAccelMps2: 1200
+    eventHorizonRadiusKm: 60
+    distanceFromStarKm: {x: 800000, y: 1200000}
+    warningRadiusKm: 8000
+    lethalRadiusKm: 2200
+    tidalDamagePerSecond: 40
+    standoffArrivalKm: 15000
+    discAxis: {x: 0, y: 0, z: 1}
+    discInnerRadiusFactor: 1.5
+    discOuterRadiusKm: 450
+    discSpeed: 0.22
+    jetLengthKm: 3200
+    jetCoreRadiusKm: 130
+    jetDamagePerSecond: 45
+    jetVisualWidthKm: 60
+    brightness: 1.4
     coreColor: {r: 0.62, g: 0.82, b: 1, a: 1}
     jetColor: {r: 0.4, g: 0.6, b: 1, a: 0.9}
-    brightness: 1.4
+    midColor: {r: 0.85, g: 0.55, b: 0.25, a: 1}
+    outerColor: {r: 0.45, g: 0.12, b: 0.06, a: 1}
+    photonRingBrightness: 2.4
     skyDirection: {x: 0.3, y: 0.4, z: 1}
     apparentSize: 1.2

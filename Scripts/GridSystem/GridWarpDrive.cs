@@ -44,6 +44,9 @@ namespace VoxelEngine.GridSystem
         [Tooltip("Half-angle (deg) of the planet target-acquisition cone from the pilot's aim.")]
         public float targetConeDeg = 14f;
 
+        [Tooltip("Half-angle (deg) of the singularity lock cone — aim directly at the black hole or quasar beacon to jump to its standoff corridor.")]
+        public float singularityLockConeDeg = 4f;
+
         [Tooltip("Arrival altitude above the target planet's surface (km).")]
         public float arrivalAltitudeKm = 90f;
 
@@ -137,6 +140,7 @@ namespace VoxelEngine.GridSystem
             double3 gridCosmic = origin.GetCosmicKm(transform.position);
             double3 destination = gridCosmic + CosmicRegistry.ToDouble3(aimDir) * jumpRangeKm;
             BodyInstance targetPlanet = null;
+            SingularityInstance targetSingularity = null;
 
             // Planet acquisition: nearest body inside the aim cone within 20 000 km.
             BodyInstance nearest = null;
@@ -162,6 +166,47 @@ namespace VoxelEngine.GridSystem
                 }
             }
 
+            // Singularity lock (Phase 5): aim at the black hole / quasar beacon (any range,
+            // narrow cone) to jump to its standoff corridor — the deep-space remnant is a
+            // real destination, not a skybox ornament.
+            if (targetPlanet == null && registry.Singularities != null)
+            {
+                double bestAngle = singularityLockConeDeg;
+                for (int i = 0; i < registry.Singularities.Count; i++)
+                {
+                    var s = registry.Singularities[i];
+                    if (s == null) continue;
+                    double3 toS = s.positionKmD - gridCosmic;
+                    double d = math.length(toS);
+                    if (d < 2d) continue;
+                    double angleDeg = AngleDeg(CosmicRegistry.ToDouble3(aimDir), toS);
+                    if (angleDeg <= bestAngle) { bestAngle = angleDeg; targetSingularity = s; }
+                }
+                if (targetSingularity != null)
+                {
+                    double3 toS = targetSingularity.positionKmD - gridCosmic;
+                    double3 fromSing = -math.normalizesafe(toS, new double3(0d, 1d, 0d));
+                    // Arrive on the near side (home side) of the remnant, at the authored
+                    // standoff from the horizon, pulled gently into the equatorial plane so
+                    // quasar jets are never on the arrival line.
+                    double3 arrivalDir = fromSing;
+                    Vector3 axis = targetSingularity.discAxis.sqrMagnitude > 0.001f
+                        ? targetSingularity.discAxis.normalized
+                        : Vector3.up;
+                    double3 axisD = new double3(axis.x, axis.y, axis.z);
+                    double align = math.dot(arrivalDir, axisD);
+                    if (math.abs(align) > 0.85d)
+                    {
+                        double3 proj = arrivalDir - axisD * align;
+                        double3 projN = math.normalizesafe(proj, axisD);
+                        arrivalDir = math.normalize(projN * 0.85d + axisD * math.sign(align) * math.sqrt(1d - 0.85d * 0.85d));
+                    }
+                    double standoff = targetSingularity.eventHorizonKm
+                                      + System.Math.Max(500d, targetSingularity.standoffArrivalKm);
+                    destination = targetSingularity.positionKmD + arrivalDir * standoff;
+                }
+            }
+
             // ── Execute: floating-origin teleport ─────────────────
             origin.TeleportCosmic(destination);
             origin.SetFrame(targetPlanet != null ? ResolveSceneBody(registry, targetPlanet) : null);
@@ -182,7 +227,9 @@ namespace VoxelEngine.GridSystem
 
             string targetName = targetPlanet != null
                 ? $"{targetPlanet.DisplayName} orbit ({arrivalAltitudeKm:0} km altitude)"
-                : $"{jumpRangeKm:0} km straight ahead";
+                : targetSingularity != null
+                    ? $"{targetSingularity.DisplayName} standoff ({(int)targetSingularity.standoffArrivalKm:0} km from horizon)"
+                    : $"{jumpRangeKm:0} km straight ahead";
             BuildFeedbackHud.Show("Warp Jump", $"Arrived: {targetName}", null, new Color(0.55f, 0.85f, 1f));
             Debug.Log($"[GridWarpDrive] Warp to {targetName} at {destination} km.");
             return true;

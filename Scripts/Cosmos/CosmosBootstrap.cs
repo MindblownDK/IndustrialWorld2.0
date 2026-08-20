@@ -241,7 +241,7 @@ namespace VoxelEngine.Cosmos
             var sunLightGO = new GameObject("SunLightController");
             sunLightGO.AddComponent<SunLightController>();
 
-            // ── Background quasar (Phase 5) ──
+            // ── Background quasar (legacy backdrop) ──
             var quasarGO = new GameObject("Quasar");
             var quasar = quasarGO.AddComponent<QuasarRenderer>();
             var activeSolarSystem = ResolveSolarSystemTemplate();
@@ -249,7 +249,10 @@ namespace VoxelEngine.Cosmos
                 quasar.settings = activeSolarSystem.quasar;
             // ONE sun only (7.13.10): with a real star in the system the quasar's bright
             // core reads as a second sun — disable it. Systems without a sun keep it.
-            if (activeSolarSystem != null && activeSolarSystem.sun != null)
+            // Phase 5 (9.10.0): a REAL quasar body fully replaces the pinned backdrop.
+            if (activeSolarSystem != null &&
+                (activeSolarSystem.sun != null ||
+                 (activeSolarSystem.quasar != null && activeSolarSystem.quasar.realBody)))
                 quasar.settings.enabled = false;
 
             // ── Asteroid field (Phase 5 visual belt) ──
@@ -307,6 +310,26 @@ namespace VoxelEngine.Cosmos
             // ── Solar hazard: the star warns before it kills (no more random sun deaths) ──
             var sunHazardGO = new GameObject("SolarHazard");
             sunHazardGO.AddComponent<SolarHazard>();
+
+            // ── Singularity remnants (Phase 5): real black hole & quasar bodies ──
+            if (registry.Singularities != null && registry.Singularities.Count > 0)
+            {
+                var beaconsGO = new GameObject("SingularityBeacons");
+                beaconsGO.AddComponent<SingularityBeacons>();
+                var hazard2GO = new GameObject("SingularityHazard");
+                hazard2GO.AddComponent<SingularityHazard>();
+                for (int i = 0; i < registry.Singularities.Count; i++)
+                {
+                    var sing = registry.Singularities[i];
+                    if (sing == null) continue;
+                    var singGO = new GameObject("Singularity_" + sing.DisplayName);
+                    var renderer = singGO.AddComponent<SingularityRenderer>();
+                    renderer.instance = sing;
+                }
+                Debug.Log($"[CosmosBootstrap] Singularity remnants active: {registry.Singularities.Count} " +
+                          $"(black hole {(registry.BlackHole != null ? "yes" : "no")}, " +
+                          $"quasar {(registry.Quasar != null ? "yes" : "no")}).");
+            }
 
             // Activate radial gravity for the whole game + wind personality.
             _streamingBody = body;
@@ -483,6 +506,23 @@ namespace VoxelEngine.Cosmos
             {
                 double sunDistM = math.length(registry.Sun.positionKmD - camCosmic) * 1000d;
                 needed = math.max(needed, math.min(sunDistM + 100000d, maxFarClipMeters));
+            }
+
+            // 4) SINGULARITY REMNANTS (Phase 5) — when inside the real-render window the
+            //    horizon, accretion disc and jets must not be culled. Extent covers the
+            //    disc + halo (and jets for the quasar).
+            if (registry.Singularities != null)
+            {
+                for (int i = 0; i < registry.Singularities.Count; i++)
+                {
+                    var s = registry.Singularities[i];
+                    if (s == null) continue;
+                    double dKm = math.length(s.positionKmD - camCosmic);
+                    if (dKm > 65000d) continue;
+                    double extentKm = math.max(s.discOuterRadiusKm * 3d,
+                        s.kind == SingularityKind.Quasar ? s.jetLengthKm * 1.2d : 0d);
+                    needed = math.max(needed, (dKm + extentKm) * 1000d + 5000d);
+                }
             }
 
             if (needed > 1000d)

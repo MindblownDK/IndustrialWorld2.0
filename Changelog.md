@@ -1,9 +1,84 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.9.0-dev`
+**Current Version:** `9.11.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.11.0-dev] Singularity Harvest — Mining the Event Horizon (Phase 5, Part 2)
+
+**Type:** MINOR — new block + resource + recipe + research; save-compatible (no schema change).
+
+#### 🕳️ 1. The Singularity Harvester — a grid block that mines the black hole
+- **The black hole is now a resource node.** The new Large grid block harvests **Singularity Matter** while within 2,500 km of a singularity's event horizon.
+- **Danger = reward:** yield climbs from 25% at the range edge to 100% at the horizon — the best parking spot sits right outside the lethal zone. The **quasar pays 1.5×** (the supermassive remnant), but its jets make loitering there a death wish.
+- **Honest production flow:** requires vacuum + grid power (25 kW), buffers internally (4 slots), and auto-pushes into connected grid cargo containers (same flow as the ship drill). Stalls cleanly with status readouts ("No singularity in range", "Buffer full — connect cargo", …).
+- **LCD data provider** (`IGridDataProvider`): live efficiency %, km-to-horizon and target remnant on grid screens.
+
+#### 🎨 2. The block looks the part
+A grand containment block with a **real mini black hole inside**: pure-black lensed horizon sphere (SingularityHorizon shader), a **spinning accretion disc** (BlackHoleAccretionDisc shader — the block rotates it at runtime), glowing cyan containment coils, dark metallic frame cage and amber collector tips.
+
+#### ⚗️ 3. Singularity Matter
+A new stackable endgame resource (`item_singularity_matter`) — "exotic matter skimmed from a real event horizon". Reserved for the highest-tier constructions: the future **Star Crafter** (planet/star-system authoring) is designed to consume it.
+
+#### 🛠️ 4. Setup Step 53 (non-destructive)
+`Tools ▸ Voxel Engine ▸ Voxel Engine Setup ▸ 53. Build Singularity Harvester` authors the full chain — resource item, prefab (procedural visuals, rebuilt only when missing), Grid Blocks catalogue item, expensive Assembler recipe (60 Steel Plate + 20 Adv. Circuit + 12 Uranium + 8 Lithium + 10 Platinum), and **tier-8 research after Warp Drive**. Existing authored balance (rates, power, recipe inputs, research costs) is never overwritten; broken links are re-wired.
+
+#### ✅ Static delivery checks
+- All touched sources parse clean (tree-sitter C#); no save-format changes; no new shaders needed (reuses the Phase 5 singularity shaders).
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile, run **Setup Step 53** (after Step 52). Console + dialog report what was created.
+2. Research unlocks: verify "Singularity Harvester" appears in the research tree (tier 8, after Warp Drive) and the recipe appears in the Assembler.
+3. Build the block on a powered ship with a cargo container. In space away from the black hole: terminal reads "No singularity in range".
+4. Warp to the black hole standoff, fly inside 2,500 km: the block starts harvesting — Singularity Matter fills cargo. Park closer to the horizon (carefully!): the rate visibly climbs.
+5. Check the visual: the contained black hole glows, the accretion disc spins, coils shine.
+6. Optional: hover near the quasar — 1.5× yield (and jet danger).
+7. Confirm existing saves load unchanged.
+
+### [9.10.0-dev] Event Horizon — Real Black Hole & Quasar Bodies (Phase 5)
+
+**Type:** MINOR — new deep-space systems; save-compatible (layout is seed-derived, no schema change).
+
+#### 🕳️ 1. Real singularity remnants (not skybox ornaments)
+- **Real positions:** the black hole and the quasar are genuine cosmic bodies seeded far beyond the outermost planet (400,000–600,000 km and 800,000–1,200,000 km from the star, in well-separated directions). They are always AT that location — nothing follows the player.
+- **Real physics:** both contribute their inverse-square pull to the N-body gravity field (`μ = 80,000 / 500,000 km³/s²`, sim-stability capped). The pull is felt from ~4,000 km out and becomes inescapable well before the horizon.
+- **Quasar vs black hole:** two different body types. The quasar is the supermassive variant — bigger mass, bigger horizon, and TWO relativistic polar jets along the disc axis that shear anything crossing them.
+
+#### 💀 2. Approaching one is an event
+- **HUD warning ladder** (`GRAVITY SHEAR RISING` → `SPACETIME SHEAR — CRITICAL` → `EVENT HORIZON — NO ESCAPE`) with live km-to-horizon readouts.
+- **Tidal damage** ramps steeply inside the lethal band; **camera squeeze + shake** rise with the shear.
+- **Crush death at the horizon:** `COMPRESSED BY THE SINGULARITY` on the death screen (new hazard death-cause line), normal respawn anchors.
+- **Quasar jets:** separate, faster `SHEARED BY A QUASAR JET` damage inside the beams.
+
+#### 🎨 3. Honest visuals at every range
+- **Far:** direction-pinned beacons projected in the TRUE cosmic direction with the body's real angular size (boosted to a navigation minimum) — the disc tilt matches the real disc axis, so what you see is what you get.
+- **Near (60,000 km window):** the real geometry takes over — pure-black event-horizon sphere with a lensed fresnel rim (`SingularityHorizon`), a swirling polar-UV accretion disc with Doppler beaming + photon ring (`BlackHoleAccretionDisc`), a billboarded glow halo, and quasar jets flowing along the real disc axis.
+
+#### 🚀 4. Travel: warp-drive singularity lock
+Aim the ship at a remnant's beacon (4° cone) and the Warp Drive jumps to its standoff corridor — arrival is nudged into the equatorial plane so quasar jets are never on the arrival line. Everything closer is flown for real.
+
+#### ☀️ 5. Sun & solar hazard polish
+- **One sun, always:** the simulation runs a single star; authored multi-sun templates are reported and Step 52 normalizes the assets to `sunCount = 1`.
+- **Corona shell:** the sun now wears a slow-breathing additive corona (solar-wind pulses) instead of a crisp billiard-ball edge.
+- **Solar death cause:** `VAPORIZED BY THE STAR` on the death screen.
+- The legacy quasar backdrop stays disabled whenever a star exists (it read as a second sun) and is fully replaced by the real quasar body.
+
+#### 🛠️ 6. Setup Step 52 (non-destructive)
+`Tools ▸ Voxel Engine ▸ Voxel Engine Setup ▸ 52. Author Singularity Remnants` creates missing black-hole/quasar settings on every `SolarSystemTemplate`, initializes them ONCE (`configured` flag — authored physics/colors/distances are never overwritten), and normalizes multi-sun templates. Re-runnable, idempotent.
+
+#### ✅ Static delivery checks
+- All touched sources parse clean (tree-sitter C#); two new shaders (accretion disc, horizon) are additive/opaque and depth-correct; no save-format changes.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile, then run **Setup Step 52** (Tools ▸ Voxel Engine ▸ Voxel Engine Setup). It reports created/initialized counts in the console.
+2. Load a world, get a ship with a Warp Drive into space. Look around: two new distant beacons (orange = black hole, blue = quasar) at fixed directions.
+3. Aim directly at a beacon and warp — you should arrive ~12,000 km from the horizon with the hole visible and pulling you gently.
+4. Fly closer: watch the beacon crossfade into the real horizon/disc; disc tilts, spins, shows the photon ring; the far side passes behind the horizon sphere.
+5. Drift toward the hole: HUD warnings, rising camera squeeze, damage ramp, then crush death — death screen must read `COMPRESSED BY THE SINGULARITY`.
+6. Quasar: fly through a polar jet from the side — jet shear damage; the beams render along the disc axis.
+7. Sun: corona visible around the disc; ONE sun everywhere; flying into the corona still warns then vaporizes.
+8. Confirm existing saves load unchanged (no schema change).
 
 ### [9.9.0-dev] Living Ground — Terrain Material Overhaul & Wind-Swept Grass (Beauty Pass, Part 2)
 
