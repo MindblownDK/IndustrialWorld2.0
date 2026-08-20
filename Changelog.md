@@ -1,9 +1,24 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.12.0-dev`
+**Current Version:** `9.12.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.12.1-dev] Compile Recovery — Random Ambiguity & Singularity Serialization
+
+**Type:** PATCH — Unity compile fixes for the 9.12.0 delivery; no behaviour change.
+
+#### 🛠️ Compiler fixes
+- **CS0104 ('Random' ambiguous):** `GridSingularityHarvester` imports both `Unity.Mathematics` and `UnityEngine` — the exotic-drop roll now uses the fully-qualified `UnityEngine.Random.value`.
+- **UAC1001 (serialization analyzer):** `SingularityInstance` lacked `[Serializable]`, so the `SingularityRenderer.instance` field was flagged as skipped by serialization. The runtime POD is now marked `[System.Serializable]` (it is assigned at runtime by CosmosBootstrap either way — this silences the analyzer correctly).
+
+#### ✅ Static delivery checks
+- Both sources parse clean (tree-sitter C#); no other ambiguous `Random` usages in the touched files.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile — console clean.
+2. Continue the 9.12.0 checklist (beacon approach, seamless crossfade, lensed horizon, antimatter/dark matter flow).
 
 ### [9.12.0-dev] Bent Light & Exotic Matter (Phase 5, Part 3)
 

@@ -181,7 +181,7 @@ namespace VoxelEngine.GridSystem
                 float chance = isQuasar ? darkMatterDropChance : antimatterDropChance;
                 int exoticCount = 0;
                 for (int i = 0; i < units && exotic != null; i++)
-                    if (Random.value < chance) exoticCount++;
+                    if (UnityEngine.Random.value < chance) exoticCount++;
                 if (exoticCount > 0 && exotic != null)
                     buffer.Insert(new ItemStack(exotic, exoticCount));
             }

@@ -877,6 +877,7 @@ namespace VoxelEngine.Cosmos
     /// Deliberately NOT a BodyInstance: singularities never become the scene reference
     /// frame (no streaming world), so the frame selection logic stays untouched.
     /// </summary>
+    [System.Serializable]
     public class SingularityInstance
     {
         public SingularityKind kind;
