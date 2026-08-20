@@ -5,16 +5,23 @@
 // ║                                                                      ║
 // ║  The black sphere at the heart of a singularity: pure void that      ║
 // ║  writes depth (the far side of the accretion disc passes behind it)  ║
-// ║  and shows only a thin FRESNEL RIM — lensed light wrapping the       ║
-// ║  horizon. The rim tint comes from the surrounding disc glow.         ║
+// ║  and shows GRAVITATIONAL LENSING — a bent-light photon ring that     ║
+// ║  hugs the silhouette, strongest where the disc plane crosses the     ║
+// ║  horizon (light from the far side of the disc bent around the hole,  ║
+// ║  exactly like the real deal). Plus a faint fresnel rim wrapping the  ║
+// ║  sphere.                                                             ║
 // ╚══════════════════════════════════════════════════════════════════════╝
 Shader "VoxelEngine/SingularityHorizon"
 {
     Properties
     {
-        _RimColor    ("Rim Colour",       Color) = (1.0, 0.55, 0.25, 1)
-        _RimStrength ("Rim Strength",     Range(0, 3)) = 1.1
-        _RimPower    ("Rim Sharpness",    Range(0.5, 8)) = 2.2
+        _RimColor     ("Rim Colour",      Color) = (1.0, 0.55, 0.25, 1)
+        _RimStrength  ("Rim Strength",    Range(0, 3)) = 0.35
+        _RimPower     ("Rim Sharpness",   Range(0.5, 8)) = 2.2
+        _LensColor    ("Lensed Ring Colour", Color) = (1.0, 0.95, 0.85, 1)
+        _LensStrength ("Lensing Strength", Range(0, 6)) = 1.8
+        _LensWidth    ("Lensing Band Width", Range(0.02, 0.6)) = 0.12
+        _DiscAxisOS   ("Disc Axis (object space)", Vector) = (0, 1, 0, 0)
     }
 
     SubShader
@@ -39,6 +46,10 @@ Shader "VoxelEngine/SingularityHorizon"
                 float4 _RimColor;
                 float  _RimStrength;
                 float  _RimPower;
+                float4 _LensColor;
+                float  _LensStrength;
+                float  _LensWidth;
+                float4 _DiscAxisOS;
             CBUFFER_END
 
             struct Attributes
@@ -53,6 +64,7 @@ Shader "VoxelEngine/SingularityHorizon"
                 float4 positionCS : SV_POSITION;
                 float3 normalWS   : TEXCOORD0;
                 float3 positionWS : TEXCOORD1;
+                float3 positionOS : TEXCOORD2;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
@@ -64,6 +76,9 @@ Shader "VoxelEngine/SingularityHorizon"
                 OUT.positionWS = TransformObjectToWorld(IN.positionOS.xyz);
                 OUT.positionCS = TransformObjectToHClip(IN.positionOS.xyz);
                 OUT.normalWS   = TransformObjectToWorldNormal(IN.normalOS);
+                // The mesh is a unit sphere centred at its pivot — position IS the
+                // object-space direction (the horizon GameObject is never rotated).
+                OUT.positionOS = IN.positionOS.xyz;
                 return OUT;
             }
 
@@ -73,10 +88,24 @@ Shader "VoxelEngine/SingularityHorizon"
 
                 float3 viewDir = normalize(GetCameraPositionWS() - IN.positionWS);
                 float fresnel = pow(1.0 - saturate(dot(IN.normalWS, viewDir)), _RimPower);
-                float3 rim = _RimColor.rgb * fresnel * _RimStrength;
 
-                // The body of the horizon is pure void; only the lensed rim shows.
-                return half4(rim, 1.0);
+                // ── Gravitational lensing: light bent around the hole ──
+                // The lensed ring is the silhouette rim weighted by how close the
+                // fragment lies to the ACCRETION DISC PLANE: the far side of the disc,
+                // bent over and under the horizon, reads as a bright ring hugging the
+                // hole's equator — the classic "black spot with light bending around".
+                float3 dirOS = normalize(IN.positionOS);
+                float3 axisOS = normalize(_DiscAxisOS.xyz + 1e-4);
+                float plane = dot(dirOS, axisOS);                 // -1..1, 0 = disc plane
+                float lens = exp(-(plane * plane) / max(1e-4, _LensWidth * _LensWidth));
+
+                float ring = fresnel * (_RimStrength + _LensStrength * lens);
+
+                float3 col = _RimColor.rgb * fresnel * _RimStrength
+                           + _LensColor.rgb * fresnel * _LensStrength * lens;
+
+                // The body of the horizon is pure void; only the lensed light shows.
+                return half4(col, 1.0);
             }
             ENDHLSL
         }

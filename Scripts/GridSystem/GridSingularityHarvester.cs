@@ -43,6 +43,21 @@ namespace VoxelEngine.GridSystem
         [Tooltip("The resource this block produces (wired by Setup Step 53).")]
         public ItemDefinition producedItem;
 
+        [Header("Exotic Matter")]
+        [Tooltip("Rare drop: harvested from BLACK HOLES. Containment-class — needs a Containment Vault.")]
+        public ItemDefinition antimatterItem;
+
+        [Tooltip("Rare drop: harvested from QUASARS. Containment-class — needs a Containment Vault.")]
+        public ItemDefinition darkMatterItem;
+
+        [Range(0f, 1f)]
+        [Tooltip("Chance per produced unit of Singularity Matter that the black hole also yields 1 antimatter.")]
+        public float antimatterDropChance = 0.10f;
+
+        [Range(0f, 1f)]
+        [Tooltip("Chance per produced unit of Singularity Matter that the quasar also yields 1 dark matter.")]
+        public float darkMatterDropChance = 0.08f;
+
         [Tooltip("Disc spin speed of the contained mini black hole (deg/s).")]
         public float discSpinDegPerSecond = 18f;
 
@@ -65,6 +80,7 @@ namespace VoxelEngine.GridSystem
         private float _accumulator;
         private float _pushTimer;
         private Transform _disc;
+        private bool _rareBlocked;
 
         public override void OnPlaced()
         {
@@ -72,6 +88,9 @@ namespace VoxelEngine.GridSystem
             blockName = "Singularity Harvester";
             if (buffer == null) buffer = new ItemContainer("Singularity Matter", BUFFER_SLOTS);
             else buffer.Resize(BUFFER_SLOTS);
+            // The harvester's own buffer is containment-grade: it produces antimatter/dark
+            // matter and must be able to hold them until a vault takes them.
+            buffer.allowContainment = true;
             _disc = transform.Find("SingularityDisc");
         }
 
@@ -154,7 +173,21 @@ namespace VoxelEngine.GridSystem
                 int units = Mathf.FloorToInt(_accumulator);
                 var leftover = buffer.Insert(new ItemStack(producedItem, units));
                 _accumulator = Mathf.Max(0f, _accumulator - units) + (leftover != null ? leftover.count : 0);
+
+                // Exotic matter: black holes shed ANTIMATTER, quasars shed DARK MATTER.
+                // Rolled per produced unit — the rarest loot in the system.
+                bool isQuasar = nearest.kind == SingularityKind.Quasar;
+                ItemDefinition exotic = isQuasar ? darkMatterItem : antimatterItem;
+                float chance = isQuasar ? darkMatterDropChance : antimatterDropChance;
+                int exoticCount = 0;
+                for (int i = 0; i < units && exotic != null; i++)
+                    if (Random.value < chance) exoticCount++;
+                if (exoticCount > 0 && exotic != null)
+                    buffer.Insert(new ItemStack(exotic, exoticCount));
             }
+
+            if (_rareBlocked)
+                Status = "No containment vault — exotic matter buffered";
         }
 
         private bool IsBufferFull()
@@ -168,12 +201,17 @@ namespace VoxelEngine.GridSystem
             return true;
         }
 
-        // Empty the buffer into the nearest cargo container on the grid (ship-drill flow).
+        // Empty the buffer into grid containers. Ordinary matter goes to any cargo;
+        // containment-class items (antimatter/dark matter) are REFUSED by plain cargo
+        // and only the Containment Vault accepts them — so the same push loop works:
+        // rejected stacks simply stay in the buffer.
         private void PushToCargo()
         {
             if (buffer == null || Grid == null || GridItemNetwork.Instance == null) return;
             var cargos = GridItemNetwork.Instance.GetConnectedContainers(Grid);
             if (cargos.Count == 0) return;
+
+            bool exoticStuck = false;
 
             for (int i = 0; i < buffer.Size; i++)
             {
@@ -188,7 +226,11 @@ namespace VoxelEngine.GridSystem
                 }
                 int moved = s.count - (moving?.count ?? 0);
                 if (moved > 0) buffer.Remove(s.item, moved);
+                if (moving != null && !moving.IsEmpty && s.item.requiresContainment)
+                    exoticStuck = true;
             }
+
+            _rareBlocked = exoticStuck;
         }
 
         // ── LCD data provider ─────────────────────────────────────
@@ -199,7 +241,17 @@ namespace VoxelEngine.GridSystem
             string range = HorizonDistanceKm >= float.MaxValue
                 ? "— km"
                 : $"{HorizonDistanceKm:0} km to horizon";
-            return $"SINGULARITY HARVESTER\n{Status}\nEfficiency {Efficiency01 * 100f:0}%\nRange {range}\nTarget {NearestRemnant}";
+            int exotic = 0;
+            if (buffer != null)
+            {
+                for (int i = 0; i < buffer.Size; i++)
+                {
+                    var s = buffer.GetSlot(i);
+                    if (s != null && !s.IsEmpty && s.item != null && s.item.requiresContainment)
+                        exotic += s.count;
+                }
+            }
+            return $"SINGULARITY HARVESTER\n{Status}\nEfficiency {Efficiency01 * 100f:0}%\nRange {range}\nTarget {NearestRemnant}\nExotic buffered {exotic}";
         }
     }
 }

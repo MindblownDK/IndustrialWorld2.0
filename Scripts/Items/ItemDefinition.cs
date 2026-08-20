@@ -21,6 +21,13 @@ namespace VoxelEngine.Items
         [Tooltip("Free-form category for filtering in the crafting list. Examples: Resources, Tools, Building, Power, Stations.")]
         public string category    = "Misc";
 
+        /// <summary>
+        /// True for exotic matter that MUST live in containment-grade storage on grids:
+        /// plain cargo containers refuse it (ItemContainer.Allowed gate); the Containment
+        /// Vault, machines and the player inventory accept it.
+        /// </summary>
+        public bool requiresContainment = false;
+
         [Header("Visuals")]
         [Tooltip("Optional 3D prefab to show when this item is held in hand (viewmodel).")]
         public GameObject viewmodelPrefab;

@@ -1,9 +1,44 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.11.0-dev`
+**Current Version:** `9.12.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.12.0-dev] Bent Light & Exotic Matter (Phase 5, Part 3)
+
+**Type:** MINOR — new resources, storage block and canisters + two field-reported visual bugs fixed. Save-compatible.
+
+#### 🐛 1. Beacon approach fix (field report: "the beacon moves away")
+The old beacon projected at a fixed 9 km ahead of the camera — flying toward it never closed the gap. The projection now CONVERGES: far away it pins at 62,000 km (a star-like direction pin — warp-lock to travel), and inside the pin cap it sits at the REAL remaining distance, so flying toward the black hole genuinely approaches it.
+
+#### 🐛 2. Remnant visibility fix (field report: "can't see the black hole / quasar")
+Two root causes fixed:
+- **Far-clip culling:** the camera far plane never guaranteed coverage of the beacon projection, so a small far clip hid the remnants. `EnsureCameraFarClip` now always covers the 62,000 km pin (+ margin) whenever singularities exist.
+- **Invisible handoff gap:** the beacon faded out at 48,000 km but the real geometry only appeared at 60,000 km — a 12,000 km band where the remnant vanished. The real-render window is now 62,000 km and the beacon crossfades between 50,000–62,000 km: no gap, ever. The quasar beacon is also slightly larger (it is the beacon of the two).
+
+#### 🌀 3. Real gravitational lensing
+The horizon shader now renders a **bent-light photon ring**: light hugs the silhouette, strongest where the accretion-disc plane crosses the horizon — the far side of the disc visibly bends over and under the hole, exactly like the real thing. (Face-on, the ring wraps the whole silhouette.)
+
+#### ⚗️ 4. Exotic matter — the black hole and quasar now pay differently
+- **Antimatter** (black holes) and **Dark Matter** (quasars): rare containment-class drops from the Singularity Harvester (10% / 8% per produced unit, tunable on the prefab).
+- **Containment-class storage that makes sense:** plain grid cargo REFUSES exotic matter (`requiresContainment` item flag + `ItemContainer` gate). The new **Containment Vault** grid block is the only grid storage built for it — armoured, hazard-striped, violet containment ring, LCD data provider. The harvester buffers the rare drops until a vault takes them ("No containment vault — exotic matter buffered").
+- **Portable canisters:** Antimatter Canister / Dark Matter Canister (Assembler: 8 matter + circuit + glass) — the safe, stackable way to carry exotic matter off-grid. Both are earmarked for the **Star Crafter / World Engine** recipes and future exotic crafts.
+
+#### 🛠️ 5. Setup Step 54 (non-destructive)
+`Tools ▸ Voxel Engine ▸ Voxel Engine Setup ▸ 54. Build Containment Systems` authors: the two exotic resources, the vault prefab/item/recipe, the two canisters + recipes, the "Exotic Containment" research node (tier 8, after Singularity Harvester), and wires the harvester prefab's exotic-drop fields (only when null). Re-runnable, idempotent.
+
+#### ✅ Static delivery checks
+- All touched sources parse clean (tree-sitter C#); lensed-ring shader is additive-free (depth-correct, writes depth); no save-format changes.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile, run **Step 54** (after Steps 52–53).
+2. In space: BOTH remnants must be visible from anywhere — especially the quasar with its blue jets. Fly straight at the black hole beacon: it must now genuinely approach (no more "running away").
+3. Approach through 62,000 km: the beacon crossfades into the real geometry with NO invisible gap.
+4. Close-up: the horizon reads as a **black spot with light bending around it** — bright ring hugging the hole where the disc plane crosses, fainter rim elsewhere.
+5. Research "Exotic Containment" → build a Containment Vault + harvester. Harvest at the black hole: Singularity Matter to cargo, Antimatter appears in the vault (not in plain cargo — verify cargo refuses it). Repeat at the quasar for Dark Matter.
+6. Craft the two canisters at the Assembler.
+7. Confirm existing saves load unchanged.
 
 ### [9.11.0-dev] Singularity Harvest — Mining the Event Horizon (Phase 5, Part 2)
 

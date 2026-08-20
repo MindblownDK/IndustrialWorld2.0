@@ -502,6 +502,20 @@ namespace VoxelEngine.EditorTools
                 "Re-runnable. Idempotent. Run after Step 52 (the black hole must exist to harvest it).");
             AddWizardButton(scroll, "53. Build Singularity Harvester (Resource, Prefab, Item, Recipe, Research — Non-Destructive)", () => VoxelEngine.EditorTools.SingularityHarvesterSetup.RunStep53(), 56);
 
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
+                "Step 54 (Phase 5) builds CONTAINMENT SYSTEMS for exotic matter (non-destructive):\n" +
+                "  • Antimatter (rare drop from black holes) + Dark Matter (rare drop from quasars)\n" +
+                "  • Containment-class storage: plain cargo REFUSES exotic matter — only the\n" +
+                "    Containment Vault accepts it (armoured, hazard-marked, violet containment ring)\n" +
+                "  • Portable canisters: Antimatter Canister / Dark Matter Canister (Assembler) —\n" +
+                "    the safe, stackable way to carry exotic matter; required for the future\n" +
+                "    Star Crafter / World Engine\n" +
+                "  • Research: Exotic Containment (tier 8) after Singularity Harvester\n" +
+                "  • Wires the harvester prefab's exotic-drop fields (only when null)\n" +
+                "Re-runnable. Idempotent. Run after Steps 52–53.");
+            AddWizardButton(scroll, "54. Build Containment Systems (Antimatter, Dark Matter, Vault, Canisters — Non-Destructive)", () => VoxelEngine.EditorTools.SingularityContainmentSetup.RunStep54(), 56);
+
             AddSpacer(scroll, 20);
         }
 

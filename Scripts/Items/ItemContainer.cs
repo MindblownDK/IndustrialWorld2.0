@@ -53,10 +53,21 @@ namespace VoxelEngine.Items
         /// Null means "no extra limit". Set by the owning block.</summary>
         [NonSerialized] public Func<ItemDefinition, int, int> AcceptFilter;
 
+        /// <summary>
+        /// True when this container may hold containment-class items (antimatter, dark
+        /// matter — items flagged <see cref="ItemDefinition.requiresContainment"/>).
+        /// Default true (player inventory, machines, buffers). Plain grid cargo sets it
+        /// false; the Containment Vault re-enables it.
+        /// </summary>
+        [NonSerialized] public bool allowContainment = true;
+
         private int Allowed(ItemDefinition item, int wanted)
         {
             if (item == null || wanted <= 0) return 0;
             int allowed = wanted;
+
+            // Containment-class items only enter containers that are built to hold them.
+            if (item.requiresContainment && !allowContainment) return 0;
 
             float unitMass = Mathf.Max(0.0001f, item.massPerUnit);
             float remaining = RemainingWeightKg;

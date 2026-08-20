@@ -29,8 +29,9 @@ namespace VoxelEngine.Cosmos
         [Tooltip("The registry instance this renderer visualises (assigned by CosmosBootstrap).")]
         public SingularityInstance instance;
 
-        [Tooltip("Within this cosmic distance (km) the real geometry renders; beyond it the beacons carry the view.")]
-        public float renderWindowKm = 60000f;
+        [Tooltip("Within this cosmic distance (km) the real geometry renders; beyond it the beacons carry the view. " +
+                 "Must match the beacon pin cap so the crossfade has no invisible gap.")]
+        public float renderWindowKm = 62000f;
 
         // ── Layer objects ──
         private GameObject _horizonGO, _discGO, _haloGO, _jet1GO, _jet2GO;
@@ -157,6 +158,17 @@ namespace VoxelEngine.Cosmos
                     ? instance.quasarSettings.coreColor * 0.85f
                     : instance.blackHoleSettings != null ? instance.blackHoleSettings.midColor * 0.9f : new Color(1f, 0.5f, 0.2f);
                 _horizonMat.SetColor("_RimColor", rim);
+                // Gravitational lensing: the bent-light ring hugs the silhouette where the
+                // disc plane crosses the horizon — light visibly "bends around" the hole.
+                // Object space == world space here (the horizon sphere is never rotated).
+                if (_horizonMat.HasProperty("_DiscAxisOS"))
+                    _horizonMat.SetVector("_DiscAxisOS", new Vector4(axis.x, axis.y, axis.z, 0f));
+                if (_horizonMat.HasProperty("_LensColor"))
+                    _horizonMat.SetColor("_LensColor", isQuasar && instance.quasarSettings != null
+                        ? instance.quasarSettings.coreColor
+                        : instance.blackHoleSettings != null ? instance.blackHoleSettings.coreColor : Color.white);
+                if (_horizonMat.HasProperty("_LensStrength"))
+                    _horizonMat.SetFloat("_LensStrength", isQuasar ? 2.2f : 1.8f);
             }
         }
 

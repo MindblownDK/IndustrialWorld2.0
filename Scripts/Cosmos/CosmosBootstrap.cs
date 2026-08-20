@@ -508,18 +508,23 @@ namespace VoxelEngine.Cosmos
                 needed = math.max(needed, math.min(sunDistM + 100000d, maxFarClipMeters));
             }
 
-            // 4) SINGULARITY REMNANTS (Phase 5) — when inside the real-render window the
-            //    horizon, accretion disc and jets must not be culled. Extent covers the
-            //    disc + halo (and jets for the quasar).
-            if (registry.Singularities != null)
+            // 4) SINGULARITY REMNANTS (Phase 5) — the direction-pinned beacons are
+            //    projected at min(real distance, 62,000 km): guarantee the far clip
+            //    always covers that projection so the black hole / quasar beacons are
+            //    NEVER culled by a small far plane (the "can't see them" bug). When
+            //    inside the real-render window, the real horizon, halo and jets are
+            //    covered as well.
+            if (registry.Singularities != null && registry.Singularities.Count > 0)
             {
+                const double beaconPinM = 62000000d;
+                needed = math.max(needed, beaconPinM + 6000000d);
                 for (int i = 0; i < registry.Singularities.Count; i++)
                 {
                     var s = registry.Singularities[i];
                     if (s == null) continue;
                     double dKm = math.length(s.positionKmD - camCosmic);
                     if (dKm > 65000d) continue;
-                    double extentKm = math.max(s.discOuterRadiusKm * 3d,
+                    double extentKm = math.max(s.discOuterRadiusKm * 5.2d,
                         s.kind == SingularityKind.Quasar ? s.jetLengthKm * 1.2d : 0d);
                     needed = math.max(needed, (dKm + extentKm) * 1000d + 5000d);
                 }

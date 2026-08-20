@@ -38,6 +38,9 @@ namespace VoxelEngine.GridSystem
             if (container == null) container = new ItemContainer("Cargo", slots);
             else container.Resize(slots);
             container.OverrideMaxWeightKg = maxMassKg;
+            // Plain cargo holds ordinary matter only — containment-class items
+            // (antimatter, dark matter) require a Containment Vault.
+            container.allowContainment = false;
             ApplyFilter();
             if (Grid != null && GridItemNetwork.Instance != null)
                 GridItemNetwork.Instance.RegisterContainer(Grid, this);
@@ -56,7 +59,7 @@ namespace VoxelEngine.GridSystem
             ApplyFilter();
         }
 
-        public void ApplyFilter()
+        public virtual void ApplyFilter()
         {
             if (container == null) return;
             container.AcceptFilter = MaxAcceptable;
@@ -71,7 +74,7 @@ namespace VoxelEngine.GridSystem
             return Mathf.Clamp(Mathf.FloorToInt(free / item.massPerUnit), 0, wanted);
         }
 
-        private bool MatchesFilter(ItemDefinition item)
+        protected virtual bool MatchesFilter(ItemDefinition item)
         {
             if (item == null) return false;
             string q = (itemFilter ?? "").Trim();
@@ -92,8 +95,8 @@ namespace VoxelEngine.GridSystem
 
         // -- IGridDataProvider -----------------------------------------
         public string SourceName => blockName;
-        public string DataCategory => "Inventory";
-        public string GetDisplayData()
+        public virtual string DataCategory => "Inventory";
+        public virtual string GetDisplayData()
         {
             int itemCount = 0;
             if (container != null)

@@ -24,8 +24,16 @@ namespace VoxelEngine.Cosmos
         [Tooltip("Minimum apparent angular radius (rad) a singularity is displayed at (~0.008 ≈ 0.46°).")]
         public float minApparentAngularRadians = 0.008f;
 
-        [Tooltip("Scene distance (m) of the direction-pinned billboard. Inside the camera far clip, far enough to read as a sky object.")]
-        public float beaconSceneDistance = 9000f;
+        [Tooltip("Minimum apparent angular radius (rad) for the QUASAR (it is the beacon of the two).")]
+        public float quasarMinApparentAngularRadians = 0.010f;
+
+        [Tooltip("Far-distance pin cap (km). Beyond this the beacon is a true direction pin (like a star); " +
+                 "inside it the beacon sits at the REAL remaining distance, so flying toward it genuinely " +
+                 "approaches it, and the handoff to real geometry is seamless.")]
+        public float pinCapKm = 62000f;
+
+        [Tooltip("The beacon crossfades into the real geometry between pinCapKm and this fade-in distance (km).")]
+        public float realGeometryFadeInKm = 50000f;
 
         [Tooltip("Seconds between refreshes.")]
         public float refreshInterval = 0.25f;
@@ -96,25 +104,35 @@ namespace VoxelEngine.Cosmos
                 double distKm = math.length(toSing);
                 if (distKm < 1d || double.IsNaN(distKm)) { b.go.SetActive(false); continue; }
 
-                // Beacon projects in the TRUE direction at a fixed scene distance.
+                // Beacon projects in the TRUE direction. Its scene distance CONVERGES:
+                // far away it pins at pinCapKm (a star-like direction pin — warp-lock to
+                // travel), inside the pin cap it sits at the real remaining distance, so
+                // flying toward it actually approaches it (the old fixed 9 km pin made it
+                // appear to run away forever).
                 Vector3 dir = (Vector3)(float3)(toSing / distKm);
                 if (float.IsNaN(dir.x)) { b.go.SetActive(false); continue; }
 
                 // Fade band: the beacon hands over to the real geometry inside the render
-                // window — it starts fading at window − 12,000 km and is fully gone when
-                // the real horizon/disc/halo are completely visible (no blink-out band).
-                float realWindowKm = 60000f;
-                float fade = Mathf.Clamp01(((float)distKm - (realWindowKm - 12000f)) / 12000f);
+                // window — it fades between pinCapKm and realGeometryFadeInKm, and the
+                // real horizon/disc/halo appear at pinCapKm, so there is no gap where the
+                // remnant is invisible (the old band hid the beacon before the real
+                // geometry appeared).
+                float fade = Mathf.Clamp01(((float)distKm - realGeometryFadeInKm)
+                                           / Mathf.Max(1f, pinCapKm - realGeometryFadeInKm));
                 if (fade <= 0.001f) { b.go.SetActive(false); continue; }
                 b.go.SetActive(true);
 
-                Vector3 beaconPos = _viewer.position + dir * beaconSceneDistance;
+                float sceneDistM = (float)math.min(distKm, pinCapKm) * 1000f;
+                Vector3 beaconPos = _viewer.position + dir * sceneDistM;
                 b.go.transform.position = beaconPos;
 
-                // Real angular radius, boosted to the navigation minimum.
+                // Real angular radius, boosted to the navigation minimum (the boost fades
+                // as the real geometry grows, so the crossfade never doubles the size).
+                bool isQuasar = b.instance.kind == SingularityKind.Quasar;
+                float minAngular = isQuasar ? quasarMinApparentAngularRadians : minApparentAngularRadians;
                 float angular = (float)(b.instance.eventHorizonKm / distKm);
-                float shown = Mathf.Max(angular, minApparentAngularRadians);
-                float size = shown * beaconSceneDistance * 2f;
+                float shown = Mathf.Max(angular, minAngular);
+                float size = shown * sceneDistM * 2f;
 
                 // Disc tilt matches the REAL disc axis projected into the view plane.
                 Vector3 axis = b.instance.discAxis.sqrMagnitude > 0.001f ? b.instance.discAxis.normalized : Vector3.up;
@@ -131,7 +149,6 @@ namespace VoxelEngine.Cosmos
                 b.discGO.transform.localScale = new Vector3(size * 1.9f, size * 1.9f, 1f) * fade;
 
                 // ── Jets (quasar only), stretched along the projected axis ──
-                bool isQuasar = b.instance.kind == SingularityKind.Quasar;
                 if (isQuasar && b.jet1GO != null)
                 {
                     float jLen = size * 2.6f;
