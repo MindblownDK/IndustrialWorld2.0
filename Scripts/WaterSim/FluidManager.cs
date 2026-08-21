@@ -21,10 +21,10 @@ namespace VoxelEngine.WaterSim
         public static FluidManager Instance { get; private set; }
 
         [Header("Simulation")]
-        [Tooltip("Ticks per second for chunk sleep tracking.")]
-        public float tickRate = 4f;
-        [Tooltip("Max chunks to process CPU sync per tick.")]
-        public int maxChunksPerTick = 2;
+        [Tooltip("Fluid ticks per second. 9.16.0 flow remake: 10 Hz with an immediate edit-wake — dig a hole next to water and it pours in the same frame.")]
+        public float tickRate = 10f;
+        [Tooltip("Max chunks to simulate per tick. Edits always step their chunks synchronously; this budget only shapes the follow-up wave.")]
+        public int maxChunksPerTick = 8;
         [Tooltip("Chunks within this radius of the player are active.")]
         public int activeRadius = 4;
         [Tooltip("Compute solver iterations dispatched per rendered frame.")]
@@ -39,10 +39,6 @@ namespace VoxelEngine.WaterSim
 
         private readonly HashSet<Vector3Int> _activeChunks = new();
         private readonly Queue<Vector3Int> _workQueue = new();
-        // Runtime marker for player/bucket-placed water. It lets a local legacy-water cleanup
-        // distinguish deliberate placed liquid from the old cave-fill generation bug.
-        private readonly HashSet<Vector3Int> _playerPlacedLiquid = new();
-        private IVoxelWorld _placementWorld;
         private float _timer;
         private int _simulationStep;
 
@@ -278,7 +274,6 @@ namespace VoxelEngine.WaterSim
             int budget = maxChunksPerTick;
             int processed = 0;
             int simulationStep = ++_simulationStep;
-            var toRemove = new List<Vector3Int>();
 
             int queueSize = _workQueue.Count;
             for (int q = 0; q < queueSize && processed < budget; q++)
@@ -290,70 +285,116 @@ namespace VoxelEngine.WaterSim
                     continue;
                 }
 
-                world.CompleteGenJobForChunk(chunk);
-                world.CompleteMeshJobForChunk(chunk);
-
-                var changed = new NativeArray<int>(1, Allocator.TempJob);
-                bool didChange;
-                try
-                {
-                    int downX = 0, downY = -1, downZ = 0;
-                    Vector3Int chunkCenterVoxel = chunk.coord * VoxelConstants.CHUNK_SIZE + new Vector3Int(
-                        VoxelConstants.CHUNK_SIZE / 2,
-                        VoxelConstants.CHUNK_SIZE / 2,
-                        VoxelConstants.CHUNK_SIZE / 2);
-                    Vector3 radialDown = PlanetWaterUtility.LocalGravityDirection(chunkCenterVoxel);
-                    if (Mathf.Abs(radialDown.x) > Mathf.Abs(radialDown.y) && Mathf.Abs(radialDown.x) > Mathf.Abs(radialDown.z))
-                    {
-                        downX = radialDown.x >= 0f ? 1 : -1; downY = 0; downZ = 0;
-                    }
-                    else if (Mathf.Abs(radialDown.z) > Mathf.Abs(radialDown.y))
-                    {
-                        downZ = radialDown.z >= 0f ? 1 : -1; downX = 0; downY = 0;
-                    }
-                    else
-                    {
-                        downY = radialDown.y >= 0f ? 1 : -1; downX = 0; downZ = 0;
-                    }
-
-                    var job = new FluidSimJob
-                    {
-                        voxels     = chunk.voxels,
-                        chunkSize  = VoxelConstants.CHUNK_SIZE,
-                        chunkSizeP = VoxelConstants.CHUNK_SIZE_P,
-                        downX      = downX,
-                        downY      = downY,
-                        downZ      = downZ,
-                        changed    = changed,
-                        simulationStep = simulationStep
-                    };
-                    job.Run();
-                    didChange = changed[0] != 0;
-                }
-                finally
-                {
-                    if (changed.IsCreated) changed.Dispose();
-                }
-
-                if (didChange)
-                {
-                    FlushPaddingFlowsToNeighbours(world, chunk);
-                    _workQueue.Enqueue(coord);
-                    chunk.isDirty = true;
-                    WakeNeighbour(world, coord + new Vector3Int(1, 0, 0));
-                    WakeNeighbour(world, coord + new Vector3Int(-1, 0, 0));
-                    WakeNeighbour(world, coord + new Vector3Int(0, 0, 1));
-                    WakeNeighbour(world, coord + new Vector3Int(0, 0, -1));
-                    WakeNeighbour(world, coord + new Vector3Int(0, -1, 0));
-                    WakeNeighbour(world, coord + new Vector3Int(0, 1, 0));
-                    WaterMeshBuilder.Schedule(chunk);
-                }
-                else toRemove.Add(coord);
+                if (StepChunkNow(world, coord, chunk, simulationStep))
+                    _workQueue.Enqueue(coord);   // still flowing — keep it hot
+                else
+                    _activeChunks.Remove(coord);  // settled — sleep until woken by an edit
 
                 processed++;
             }
+        }
 
-            foreach (var c in toRemove) _activeChunks.Remove(c);
+        /// <summary>
+        /// Runs ONE synchronous fluid step for a chunk (gravity, spread, density layering)
+        /// and propagates the result: cross-border flush, neighbour wake-up, dirty flag and
+        /// mesh schedule. Returns true when any liquid moved, so callers can keep the chunk
+        /// queued or sleep it.
+        /// </summary>
+        private bool StepChunkNow(IVoxelWorld world, Vector3Int coord, Chunk chunk, int simulationStep)
+        {
+            world.CompleteGenJobForChunk(chunk);
+            world.CompleteMeshJobForChunk(chunk);
+
+            var changed = new NativeArray<int>(1, Allocator.TempJob);
+            bool didChange;
+            try
+            {
+                int downX = 0, downY = -1, downZ = 0;
+                Vector3Int chunkCenterVoxel = coord * VoxelConstants.CHUNK_SIZE + new Vector3Int(
+                    VoxelConstants.CHUNK_SIZE / 2,
+                    VoxelConstants.CHUNK_SIZE / 2,
+                    VoxelConstants.CHUNK_SIZE / 2);
+                Vector3 radialDown = PlanetWaterUtility.LocalGravityDirection(chunkCenterVoxel);
+                if (Mathf.Abs(radialDown.x) > Mathf.Abs(radialDown.y) && Mathf.Abs(radialDown.x) > Mathf.Abs(radialDown.z))
+                {
+                    downX = radialDown.x >= 0f ? 1 : -1; downY = 0; downZ = 0;
+                }
+                else if (Mathf.Abs(radialDown.z) > Mathf.Abs(radialDown.y))
+                {
+                    downZ = radialDown.z >= 0f ? 1 : -1; downX = 0; downY = 0;
+                }
+                else
+                {
+                    downY = radialDown.y >= 0f ? 1 : -1; downX = 0; downZ = 0;
+                }
+
+                var job = new FluidSimJob
+                {
+                    voxels     = chunk.voxels,
+                    chunkSize  = VoxelConstants.CHUNK_SIZE,
+                    chunkSizeP = VoxelConstants.CHUNK_SIZE_P,
+                    downX      = downX,
+                    downY      = downY,
+                    downZ      = downZ,
+                    changed    = changed,
+                    simulationStep = simulationStep
+                };
+                job.Run();
+                didChange = changed[0] != 0;
+            }
+            finally
+            {
+                if (changed.IsCreated) changed.Dispose();
+            }
+
+            if (didChange)
+            {
+                FlushPaddingFlowsToNeighbours(world, chunk);
+                chunk.isDirty = true;
+                WakeNeighbour(world, coord + new Vector3Int(1, 0, 0));
+                WakeNeighbour(world, coord + new Vector3Int(-1, 0, 0));
+                WakeNeighbour(world, coord + new Vector3Int(0, 0, 1));
+                WakeNeighbour(world, coord + new Vector3Int(0, 0, -1));
+                WakeNeighbour(world, coord + new Vector3Int(0, -1, 0));
+                WakeNeighbour(world, coord + new Vector3Int(0, 1, 0));
+                WaterMeshBuilder.Schedule(chunk);
+            }
+            return didChange;
+        }
+
+        /// <summary>
+        /// Voxel-edit wake (9.16.0 flow remake). The voxel editor calls this after ANY
+        /// terrain change — mining or building. Every affected chunk gets an immediate
+        /// synchronous fluid step, so liquids react the SAME frame: dig a trench next to a
+        /// lake and the water pours in right away; place blocks in a pool and the surface
+        /// re-levels instantly. The follow-up wave continues at the regular tick rate.
+        /// </summary>
+        public void NotifyVoxelEdited(Vector3Int centerWorldVoxel, int radius)
+        {
+            var world = ActiveWorld.Current;
+            if (world == null) return;
+
+            const int cs = VoxelConstants.CHUNK_SIZE;
+            Vector3Int chunkCenter = new Vector3Int(
+                Mathf.FloorToInt(centerWorldVoxel.x / (float)cs),
+                Mathf.FloorToInt(centerWorldVoxel.y / (float)cs),
+                Mathf.FloorToInt(centerWorldVoxel.z / (float)cs));
+            // Liquid can't travel further than one chunk in a single step, so the synchronous
+            // neighbourhood is clamped: 3×3×3 for normal edits, 5×5×5 for massive brushes.
+            int chunkR = Mathf.Clamp(Mathf.CeilToInt(Mathf.Max(1, radius) / (float)cs), 1, 2);
+
+            int simulationStep = ++_simulationStep;
+            for (int z = -chunkR; z <= chunkR; z++)
+            for (int y = -chunkR; y <= chunkR; y++)
+            for (int x = -chunkR; x <= chunkR; x++)
+            {
+                var coord = chunkCenter + new Vector3Int(x, y, z);
+                if (!world.TryGetChunk(coord, out var chunk) || chunk == null || !chunk.isGenerated) continue;
+                if (StepChunkNow(world, coord, chunk, simulationStep)) MarkActive(coord);
+            }
+
+            // The next regular tick fires immediately so the flow wave keeps pace with edits.
+            _timer = 1f / Mathf.Max(0.1f, tickRate);
         }
 
         private void WakeNeighbour(IVoxelWorld world, Vector3Int coord)
@@ -423,38 +464,6 @@ namespace VoxelEngine.WaterSim
             WaterMeshBuilder.Schedule(target);
         }
 
-        private void EnsurePlacementWorld(IVoxelWorld world)
-        {
-            if (object.ReferenceEquals(_placementWorld, world)) return;
-            _placementWorld = world;
-            _playerPlacedLiquid.Clear();
-        }
-
-        /// <summary>
-        /// Removes legacy auto-generated water around a freshly mined dry cave. Real ocean basins
-        /// and bucket/pump-placed liquid are preserved. New SphereDensity output no longer creates
-        /// this water; this is a local migration repair for already-generated terrain.
-        /// </summary>
-        public void PruneLegacyDryCaveWater(Vector3Int center, int radius = 2)
-        {
-            var world = ActiveWorld.Current;
-            if (world is not SphereWorld sphere || sphere.body == null) return;
-            EnsurePlacementWorld(world);
-            radius = Mathf.Clamp(radius, 1, 6);
-            for (int z = -radius; z <= radius; z++)
-            for (int y = -radius; y <= radius; y++)
-            for (int x = -radius; x <= radius; x++)
-            {
-                var cell = center + new Vector3Int(x, y, z);
-                if ((cell - center).sqrMagnitude > radius * radius) continue;
-                if (_playerPlacedLiquid.Contains(cell) || sphere.IsNaturalOceanBasinAt(cell)) continue;
-                Voxel voxel = world.GetVoxelWorld(cell);
-                if (!FluidMaterialUtility.Matches(voxel, LiquidType.Water)) continue;
-                world.SetVoxelWorld(cell, Voxel.Empty, remesh: true);
-                _playerPlacedLiquid.Remove(cell);
-            }
-        }
-
         public void PlaceWater(Vector3Int worldVoxel, byte level = 255) => PlaceLiquid(worldVoxel, LiquidType.Water, level);
         public void PlaceOil(Vector3Int worldVoxel, byte level = 255) => PlaceLiquid(worldVoxel, LiquidType.CrudeOil, level);
 
@@ -462,7 +471,6 @@ namespace VoxelEngine.WaterSim
         {
             var world = ActiveWorld.Current;
             if (world == null || !TryGetChunkAndLocal(world, worldVoxel, out var coord, out var ch, out int lx, out int ly, out int lz)) return;
-            EnsurePlacementWorld(world);
 
             world.CompleteGenJobForChunk(ch);
             world.CompleteMeshJobForChunk(ch);
@@ -472,7 +480,6 @@ namespace VoxelEngine.WaterSim
 
             FluidMaterialUtility.SetLiquid(ref v, liquid, level);
             ch.SetVoxelLocal(lx, ly, lz, v);
-            _playerPlacedLiquid.Add(worldVoxel);
             ch.isDirty = true;
             MarkActive(coord);
             WaterMeshBuilder.Schedule(ch);
@@ -516,12 +523,7 @@ namespace VoxelEngine.WaterSim
 
             byte drained = v.waterLevel < maxLevel ? v.waterLevel : maxLevel;
             v.waterLevel = (byte)(v.waterLevel - drained);
-            if (v.waterLevel == 0)
-            {
-                FluidMaterialUtility.ClearLiquid(ref v);
-                EnsurePlacementWorld(world);
-                _playerPlacedLiquid.Remove(worldVoxel);
-            }
+            if (v.waterLevel == 0) FluidMaterialUtility.ClearLiquid(ref v);
             ch.SetVoxelLocal(lx, ly, lz, v);
             ch.isDirty = true;
             MarkActive(coord);

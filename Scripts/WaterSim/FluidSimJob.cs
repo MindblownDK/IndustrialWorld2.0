@@ -56,13 +56,14 @@ namespace VoxelEngine.WaterSim
         private const byte CoolantMat     = (byte)MaterialId.CoolantLiquid;
 
         // Per-liquid flow constants (kept in sync with LiquidPhysics for the editor/tools).
-        private const int FuelMaxFall    = 150;  private const int FuelStep    = 48;  private const byte FuelRank    = 0;
-        private const int RefinedMaxFall = 120;  private const int RefinedStep = 24;  private const byte RefinedRank = 1;
-        private const int MgoMaxFall     = 110;  private const int MgoStep     = 20;  private const byte MgoRank     = 2;
-        private const int WaterMaxFall   = 255;  private const int WaterStep   = 64;  private const byte WaterRank   = 3;
-        private const int CoolantMaxFall = 200;  private const int CoolantStep = 56;  private const byte CoolantRank = 4;
-        private const int HfoMaxFall     = 24;   private const int HfoStep     = 2;   private const byte HfoRank     = 5;
-        private const int CrudeMaxFall   = 20;   private const int CrudeStep   = 1;   private const byte CrudeRank   = 6;
+        // 9.16.0 flow remake: horizontal steps raised so flow fronts advance ~1 cell/tick.
+        private const int FuelMaxFall    = 150;  private const int FuelStep    = 80;  private const byte FuelRank    = 0;
+        private const int RefinedMaxFall = 120;  private const int RefinedStep = 48;  private const byte RefinedRank = 1;
+        private const int MgoMaxFall     = 110;  private const int MgoStep     = 40;  private const byte MgoRank     = 2;
+        private const int WaterMaxFall   = 255;  private const int WaterStep   = 96;  private const byte WaterRank   = 3;
+        private const int CoolantMaxFall = 200;  private const int CoolantStep = 84;  private const byte CoolantRank = 4;
+        private const int HfoMaxFall     = 24;   private const int HfoStep     = 4;   private const byte HfoRank     = 5;
+        private const int CrudeMaxFall   = 20;   private const int CrudeStep   = 2;   private const byte CrudeRank   = 6;
 
         private const int LayerSwapStride = 8;   // full-cell density swaps pulse at 1/8 of fluid ticks
 
@@ -214,7 +215,10 @@ namespace VoxelEngine.WaterSim
             int diff = source.waterLevel - n.waterLevel;
             if (diff <= 1) return;
 
-            int transfer = diff / 2;
+            // 9.16.0 flow remake — transfer everything the cap allows (was diff/2, which
+            // made spreading crawl). Keeping the diff-1 form guarantees monotonic
+            // convergence: no ping-pong oscillation between neighbours.
+            int transfer = diff - 1;
             if (transfer > maxStep) transfer = maxStep;
             if (transfer <= 0) return;
 

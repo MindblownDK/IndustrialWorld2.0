@@ -29,13 +29,15 @@ namespace VoxelEngine.WaterSim
         public const int HfoMaxFall       = 24;
         public const int CrudeMaxFall     = 20;
 
-        public const int FuelHorizontalStep      = 48;
-        public const int RefinedHorizontalStep   = 24;
-        public const int MgoHorizontalStep       = 20;
-        public const int WaterHorizontalStep     = 64;
-        public const int CoolantHorizontalStep   = 56;
-        public const int HfoHorizontalStep       = 2;
-        public const int CrudeHorizontalStep     = 1;
+        // 9.16.0 flow remake — spread steps raised so water runs like water: the flow
+        // front advances a full cell per tick and pools re-level within a second of an edit.
+        public const int FuelHorizontalStep      = 80;
+        public const int RefinedHorizontalStep   = 48;
+        public const int MgoHorizontalStep       = 40;
+        public const int WaterHorizontalStep     = 96;
+        public const int CoolantHorizontalStep   = 84;
+        public const int HfoHorizontalStep       = 4;
+        public const int CrudeHorizontalStep     = 2;
 
         // Density layering ranks (0 = lightest, 6 = heaviest).
         public const byte RankLiquidFuel  = 0;

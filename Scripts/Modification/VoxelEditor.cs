@@ -114,8 +114,12 @@ namespace VoxelEngine.Modification
             // Trigger one remesh pass for affected chunks.
             if (result.changed)
             {
-                if (subtract && world is VoxelEngine.Cosmos.SphereWorld)
-                    VoxelEngine.WaterSim.FluidManager.Instance?.PruneLegacyDryCaveWater(center, r + 1);
+                // 9.16.0 flow remake — terrain edits now WAKE the liquid sim instead of
+                // pruning it. The old legacy dry-cave prune used to run here and DELETED
+                // surrounding lake/stream water on every mining operation; it is gone.
+                // Mining next to water now makes the water rush into the new space the
+                // same frame, and building in a pool re-levels it instantly.
+                VoxelEngine.WaterSim.FluidManager.Instance?.NotifyVoxelEdited(center, r + 1);
                 // Mark a coarse 2-chunk radius around the brush dirty to be safe.
                 int cs = VoxelConstants.CHUNK_SIZE;
                 Vector3Int chunkCenter = new Vector3Int(

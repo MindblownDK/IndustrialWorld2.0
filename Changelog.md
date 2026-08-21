@@ -27,7 +27,13 @@ The voxel format kept ONE fluid byte + a material byte that could only express w
 The bucket (now "Liquid Bucket", Step 56) scoops ANY of the 7 liquids, places what it holds, and — new — **right-click a liquid tank to fill the bucket from the tank network or pour it back in** (100 L per bucket, type-checked). The tank exchange is fully feedback-toasted.
 
 #### 🌍 6. The fake ocean sphere is gone — ALL water is real generated voxel liquid
-The old quadtree sea shell (GpuOceanEngine) that wrapped every body at sea radius is **removed**: `CosmosBootstrap` no longer creates it, and the component self-disables if a legacy scene/prefab still carries it. Oceans now render exclusively from the **generated voxel ocean basins** (SphereDensity fills basins below sea level with real water cells), meshed by the same WaterMeshBuilder as lakes, seeps, buckets and pumps — flow, waves, foam, wakes and bucket scooping work on the open ocean exactly like anywhere else. Water is now Minecraft-real: it exists where the voxels say it exists, and nowhere else.
+The old quadtree sea shell (GpuOceanEngine) that wrapped every body at sea radius is **removed**: `CosmosBootstrap` no longer creates it, and the component self-disables if a legacy scene/prefab still carries it. Oceans now render exclusively from the **generated voxel ocean basins** (SphereDensity fills basins below sea level with real water cells), meshed by the same WaterMeshBuilder as lakes, seeps, buckets and pumps — flow, waves, foam, wakes and bucket scooping work on the open ocean exactly like anywhere else. Water is now truly voxel-real: it exists where the voxels say it exists, and nowhere else.
+
+#### 💧 7. Water flows like water (flow remake)
+Two real bugs killed the old feel, both fixed:
+- **Mining used to DESTROY water.** Every pickaxe/drill/demolisher hit ran a "legacy dry-cave prune" that deleted surrounding lake/stream/pool water. The prune is gone — mining into water now makes it pour into the new space the same frame.
+- **Flow used to crawl.** The sim ticked at 4 Hz with a 2-chunk budget and halving horizontal transfer. Now: **10 Hz, 8 chunks/tick**, raised per-liquid spread steps (water 96/cell-tick), non-halving transfer — a dug trench fills in about a second, water pours down shafts in a wave, and a pool re-levels instantly when you drop a block in it.
+- **Edits wake the sim directly** (`FluidManager.NotifyVoxelEdited`): mining or building runs an immediate synchronous fluid step on every affected chunk — liquids react on the same frame the world changes.
 
 #### ✅ Static delivery checks
 - All touched sources parse clean (tree-sitter C#); no save-format changes; no other-game names; no TODOs.
