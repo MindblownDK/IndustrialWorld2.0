@@ -33,6 +33,7 @@ namespace VoxelEngine.GridSystem.UI
                 case GridGasTank gt:        return GasTankPanel(gt, slot);
                 case GridH2O2Generator h2:  return MakeScrollable(H2O2Panel(h2, slot));
                 case GridBattery bat:       return BatteryPanel(bat, slot);
+                case GridContainmentVault cv: return MakeScrollable(ContainmentVaultPanel(cv, slot));
                 case GridCargoContainer cc: return CargoPanel(cc, slot);
                 case GridWeapon gw:         return MakeScrollable(WeaponPanel(gw, slot));
                 case GridRefinery rf:       return MakeScrollable(ProcessorPanel("⚗ Ship Refinery", rf.Current, rf.Progress01, rf.PowerDraw, rf.knownRecipes, rf.Grid, rf.selectedRecipe, r => rf.selectedRecipe = r));
@@ -523,6 +524,302 @@ namespace VoxelEngine.GridSystem.UI
             p.Add(T.SmallButton("🛰  Open Ship Terminal",
                 () => VoxelEngine.UI.GameUIController.Instance?.OpenGridTerminal(cc.Grid), T.AccentCyan));
             return p;
+        }
+
+        // ── CONTAINMENT VAULT ───────────────────────────────────────────────
+        // The flagship panel of the Phase 5 exotic-matter loop: a live black-hole
+        // visual, the containment pressure gauge with its stable band, power and
+        // annihilation warnings — premium sci-fi, LCD-scanned like every machine.
+        private static VisualElement ContainmentVaultPanel(GridContainmentVault cv, MachineUIs.SlotBuilder slot)
+        {
+            if (cv.container == null) cv.OnPlaced();
+            var p = T.MachinePanel();
+            p.style.width = 470;
+
+            string status = cv.FieldStatus;
+            Color statusColor = cv.FieldStatus switch
+            {
+                "ANNIHILATION" => T.AccentRed,
+                "CRITICAL"     => T.AccentRed,
+                "LOW PRESSURE" => T.AccentAmber,
+                "NO POWER"     => T.AccentAmber,
+                _              => T.AccentGreen,
+            };
+            var (hdr, _, _, _) = T.HeaderRow("◉ Containment Vault", status, statusColor);
+            p.Add(hdr);
+            p.Add(T.AccentDivider(T.AccentPurple));
+
+            // ── The contained singularity (live) ──
+            var coreBox = new VisualElement();
+            coreBox.style.height = 168;
+            coreBox.style.alignItems = Align.Center;
+            coreBox.style.justifyContent = Justify.Center;
+            coreBox.style.marginTop = 4;
+            coreBox.style.marginBottom = 6;
+            coreBox.pickingMode = PickingMode.Ignore;
+            p.Add(coreBox);
+
+            // Warm accretion glow behind everything (generated radial texture).
+            var glow = new VisualElement();
+            glow.style.position = Position.Absolute;
+            glow.style.width = 150;
+            glow.style.height = 150;
+            glow.style.backgroundImage = new StyleBackground(Background.FromTexture2D(GlowTexture()));
+            glow.pickingMode = PickingMode.Ignore;
+            coreBox.Add(glow);
+
+            // Lensed photon ring: three nested ellipses (bloom layering).
+            var ringOuter = Ellipse(172, 62, new Color(1f, 0.55f, 0.22f, 0.16f), 2);
+            var ringMid   = Ellipse(164, 56, new Color(1f, 0.62f, 0.28f, 0.38f), 3);
+            var ringHot   = Ellipse(156, 50, new Color(1f, 0.86f, 0.68f, 0.85f), 2);
+            coreBox.Add(ringOuter); coreBox.Add(ringMid); coreBox.Add(ringHot);
+
+            // The void itself.
+            var core = new VisualElement();
+            core.style.position = Position.Absolute;
+            core.style.width = 64;
+            core.style.height = 64;
+            core.style.backgroundColor = new StyleColor(new Color(0.005f, 0.004f, 0.008f, 1f));
+            UITheme.Radius(core, 32f);
+            UITheme.Border(core, 1, new Color(0.55f, 0.16f, 0.10f, 0.55f));
+            core.pickingMode = PickingMode.Ignore;
+            coreBox.Add(core);
+
+            // Orbiting hot-spots (animated along the disc ellipse).
+            var spotA = SpotDot(); var spotB = SpotDot(); var spotC = SpotDot();
+            coreBox.Add(spotA); coreBox.Add(spotB); coreBox.Add(spotC);
+
+            // Violet containment field rings.
+            var fieldOuter = Ellipse(196, 74, new Color(0.58f, 0.34f, 0.95f, 0.22f), 1);
+            var fieldInner = Ellipse(184, 66, new Color(0.58f, 0.34f, 0.95f, 0.34f), 1);
+            coreBox.Add(fieldOuter); coreBox.Add(fieldInner);
+
+            // ── Pressure gauge with the stable band ──
+            p.Add(GridUIHelpers.SectionTitle("Containment Pressure"));
+            var track = new VisualElement();
+            track.style.height = 18;
+            track.style.marginTop = 2;
+            track.style.backgroundColor = new StyleColor(new Color(0.04f, 0.045f, 0.065f));
+            UITheme.Radius(track, 4f);
+            UITheme.Border(track, 1, T.BorderDim);
+            track.style.overflow = Overflow.Hidden;
+            track.pickingMode = PickingMode.Ignore;
+            p.Add(track);
+
+            float target = Mathf.Max(1f, cv.targetPressure);
+            // Stable band (green).
+            var band = new VisualElement();
+            band.style.position = Position.Absolute;
+            band.style.top = 2; band.style.bottom = 2;
+            band.style.left = new StyleLength(new Length(Mathf.Clamp01(cv.stablePressureMin / target) * 100f, LengthUnit.Percent));
+            band.style.width = new StyleLength(new Length(Mathf.Clamp01((cv.stablePressureMax - cv.stablePressureMin) / target) * 100f, LengthUnit.Percent));
+            band.style.backgroundColor = new StyleColor(new Color(0.22f, 0.78f, 0.42f, 0.16f));
+            band.pickingMode = PickingMode.Ignore;
+            track.Add(band);
+            // Critical line.
+            var critLine = new VisualElement();
+            critLine.style.position = Position.Absolute;
+            critLine.style.top = 0; critLine.style.bottom = 0;
+            critLine.style.left = new StyleLength(new Length(Mathf.Clamp01(cv.criticalPressure / target) * 100f, LengthUnit.Percent));
+            critLine.style.width = 2;
+            critLine.style.backgroundColor = new StyleColor(new Color(0.82f, 0.22f, 0.18f, 0.7f));
+            critLine.pickingMode = PickingMode.Ignore;
+            track.Add(critLine);
+            // Pressure marker.
+            var marker = new VisualElement();
+            marker.style.position = Position.Absolute;
+            marker.style.top = 1; marker.style.bottom = 1;
+            marker.style.width = 3;
+            marker.style.left = new StyleLength(new Length(50f, LengthUnit.Percent));
+            marker.style.backgroundColor = new StyleColor(new Color(0.55f, 0.9f, 1f, 0.95f));
+            marker.pickingMode = PickingMode.Ignore;
+            track.Add(marker);
+
+            var pressureText = T.Muted($"Pressure {cv.Pressure:0.0} · Target {target:0} · Stable {cv.stablePressureMin:0}–{cv.stablePressureMax:0}");
+            pressureText.style.marginTop = 3;
+            p.Add(pressureText);
+
+            // ── Warning banner (live) ──
+            var warn = new Label();
+            warn.style.marginTop = 4;
+            warn.style.paddingTop = 5;
+            warn.style.paddingBottom = 5;
+            warn.style.paddingLeft = 8;
+            warn.style.paddingRight = 8;
+            warn.style.fontSize = 10;
+            warn.style.unityFontStyleAndWeight = FontStyle.Bold;
+            warn.style.letterSpacing = 1.4f;
+            warn.style.unityTextAlign = TextAnchor.MiddleCenter;
+            warn.style.backgroundColor = new StyleColor(new Color(0.16f, 0.04f, 0.04f, 0.9f));
+            UITheme.Radius(warn, 6f);
+            UITheme.Border(warn, 1, new Color(0.82f, 0.22f, 0.18f, 0.6f));
+            warn.style.color = new Color(1f, 0.35f, 0.25f);
+            warn.style.display = DisplayStyle.None;
+            p.Add(warn);
+
+            p.Add(T.Spacer(6));
+
+            // ── Live stats ──
+            int am = 0, dm = 0;
+            if (cv.container != null)
+                for (int i = 0; i < cv.container.Size; i++)
+                {
+                    var st = cv.container.GetSlot(i);
+                    if (st == null || st.IsEmpty || st.item == null) continue;
+                    if (st.item.itemId != null && st.item.itemId.IndexOf("antimatter", System.StringComparison.OrdinalIgnoreCase) >= 0) am += st.count;
+                    else if (st.item.itemId != null && st.item.itemId.IndexOf("dark", System.StringComparison.OrdinalIgnoreCase) >= 0) dm += st.count;
+                }
+            p.Add(T.StatRow("⚡", "Field Power", PowerFormat.Watts(cv.PowerDraw), cv.Grid != null && cv.Grid.HasPower ? T.AccentCyan : T.AccentAmber));
+            p.Add(T.StatRow("◉", "Exotic Load", $"{cv.ExoticUnits} units", T.AccentPurple));
+            p.Add(T.StatRow("💠", "Antimatter", $"{am}", new Color(1f, 0.4f, 0.7f)));
+            p.Add(T.StatRow("🌌", "Dark Matter", $"{dm}", new Color(0.55f, 0.35f, 0.95f)));
+            p.Add(T.Spacer(4));
+
+            p.Add(GridUIHelpers.SectionTitle("Contained Matter"));
+            var invScroll = new ScrollView(ScrollViewMode.Vertical);
+            VoxelEngine.UI.UITheme.StyleScroller(invScroll);
+            invScroll.style.maxHeight = 200;
+            invScroll.style.flexShrink = 1;
+            invScroll.contentContainer.style.width = Length.Percent(100);
+            var grid = T.SlotGrid(6);
+            if (cv.container != null)
+                for (int i = 0; i < cv.container.Size; i++)
+                    grid.Add(slot(cv.container, i, cv.container.GetSlot(i), false, true));
+            invScroll.Add(grid);
+            p.Add(invScroll);
+
+            p.Add(T.Spacer(6));
+            p.Add(T.SmallButton("🛰  Open Ship Terminal",
+                () => VoxelEngine.UI.GameUIController.Instance?.OpenGridTerminal(cv.Grid), T.AccentCyan));
+
+            // ── Live animation loop ──
+            float shownPressure = cv.Pressure;
+            var spots = new[] { spotA, spotB, spotC };
+            p.schedule.Execute(() => AnimateVaultPanel(p, cv, spots, marker, warn, pressureText, ref shownPressure))
+                .Every(80);
+            return p;
+        }
+
+        private static void AnimateVaultPanel(VisualElement p, GridContainmentVault cv,
+            VisualElement[] spots, VisualElement marker, Label warn, Label pressureText, ref float shownPressure)
+        {
+            if (p == null || !p.IsAttachedToPanel()) return;
+            float t = Time.unscaledTime;
+
+            // ── Orbiting hot-spots along the disc ellipse ──
+            const float ax = 76f, bx = 26f;   // ellipse radii
+            for (int i = 0; i < spots.Length; i++)
+            {
+                var s = spots[i];
+                if (s == null) continue;
+                float phase = t * (0.9f + i * 0.45f) + i * 2.1f;
+                float ca = Mathf.Cos(phase), sa = Mathf.Sin(phase);
+                s.style.left = (84 + ax * ca) - 4f;
+                s.style.top = (84 + bx * sa) - 4f;
+                // Front of the disc (lower half) glows brighter — the tilted-disc read.
+                float front = Mathf.Clamp01(sa * 0.85f + 0.55f);
+                s.style.backgroundColor = new StyleColor(new Color(1f, 0.72f, 0.38f, 0.35f + 0.6f * front));
+            }
+
+            // ── Pressure marker (smoothed) ──
+            if (marker != null && cv != null)
+            {
+                shownPressure = Mathf.MoveTowards(shownPressure, cv.Pressure, 9f * Time.unscaledDeltaTime);
+                float target = Mathf.Max(1f, cv.targetPressure);
+                marker.style.left = new StyleLength(new Length(Mathf.Clamp01(shownPressure / target) * 100f, LengthUnit.Percent));
+                marker.style.backgroundColor = new StyleColor(
+                    cv.Pressure < cv.criticalPressure ? new Color(1f, 0.25f, 0.2f, 0.95f)
+                    : cv.Pressure < cv.stablePressureMin ? new Color(1f, 0.7f, 0.25f, 0.95f)
+                    : new Color(0.55f, 0.95f, 1f, 0.95f));
+                if (pressureText != null)
+                    pressureText.text = $"Pressure {cv.Pressure:0.0} · Target {target:0} · Stable {cv.stablePressureMin:0}–{cv.stablePressureMax:0}";
+            }
+
+            // ── Warning banner (pulsing when the field degrades) ──
+            if (warn != null && cv != null)
+            {
+                bool danger = cv.Pressure < cv.stablePressureMin;
+                if (danger)
+                {
+                    warn.style.display = DisplayStyle.Flex;
+                    bool critical = cv.Pressure < cv.criticalPressure;
+                    warn.text = critical
+                        ? "⚠ CONTAINMENT FIELD FAILING — EXOTIC MATTER AT RISK"
+                        : "⚠ CONTAINMENT PRESSURE BELOW STABLE RANGE";
+                    float pulse = 0.55f + 0.45f * Mathf.Abs(Mathf.Sin(t * (critical ? 5.5f : 3f)));
+                    warn.style.color = new Color(1f, 0.3f, 0.22f, pulse);
+                    warn.style.backgroundColor = new StyleColor(new Color(0.16f, 0.03f, 0.03f, 0.55f + 0.4f * pulse));
+                }
+                else
+                {
+                    warn.style.display = DisplayStyle.None;
+                }
+            }
+        }
+
+        private static VisualElement SpotDot()
+        {
+            var dot = new VisualElement();
+            dot.style.position = Position.Absolute;
+            dot.style.width = 8;
+            dot.style.height = 8;
+            UITheme.Radius(dot, 4f);
+            dot.style.backgroundColor = new StyleColor(new Color(1f, 0.75f, 0.4f, 0.9f));
+            dot.pickingMode = PickingMode.Ignore;
+            return dot;
+        }
+
+        private static VisualElement Ellipse(float width, float height, Color borderColor, float borderWidth)
+        {
+            var el = new VisualElement();
+            el.style.position = Position.Absolute;
+            el.style.width = width;
+            el.style.height = height;
+            el.style.borderTopWidth = borderWidth;
+            el.style.borderBottomWidth = borderWidth;
+            el.style.borderLeftWidth = borderWidth;
+            el.style.borderRightWidth = borderWidth;
+            el.style.borderTopColor = new StyleColor(borderColor);
+            el.style.borderBottomColor = new StyleColor(borderColor);
+            el.style.borderLeftColor = new StyleColor(borderColor);
+            el.style.borderRightColor = new StyleColor(borderColor);
+            el.style.borderTopLeftRadius = width / 2f;
+            el.style.borderTopRightRadius = width / 2f;
+            el.style.borderBottomLeftRadius = width / 2f;
+            el.style.borderBottomRightRadius = width / 2f;
+            el.pickingMode = PickingMode.Ignore;
+            return el;
+        }
+
+        private static Texture2D _glowTex;
+        private static Texture2D GlowTexture()
+        {
+            if (_glowTex != null) return _glowTex;
+            const int S = 96;
+            _glowTex = new Texture2D(S, S, TextureFormat.RGBA32, false)
+            {
+                name = "VaultGlowTex",
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp,
+            };
+            var px = new Color32[S * S];
+            Color inner = new Color(1f, 0.62f, 0.28f);
+            Color outer = new Color(0.36f, 0.17f, 0.72f);
+            for (int y = 0; y < S; y++)
+            {
+                for (int x = 0; x < S; x++)
+                {
+                    float dx = (x + 0.5f) / S - 0.5f;
+                    float dy = (y + 0.5f) / S - 0.5f;
+                    float d = Mathf.Sqrt(dx * dx + dy * dy) * 2f;
+                    float a = Mathf.Pow(Mathf.Clamp01(1f - d), 2.1f);
+                    Color c = Color.Lerp(outer, inner, Mathf.Clamp01(1f - d * 2.4f));
+                    px[y * S + x] = new Color(c.r, c.g, c.b, a);
+                }
+            }
+            _glowTex.SetPixels32(px);
+            _glowTex.Apply(false, false);
+            return _glowTex;
         }
 
         // ── GATLING WEAPON (ammo) ───────────────────────────────────────────────

@@ -96,6 +96,11 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
             float4 _VoxelTerrainBodyCenter;
             float _VoxelTerrainIsPlanet;
 
+            // Published by SphereWorld: sea-level radius (metres) — drives the wet
+            // waterline band (9.9.0). Declared as a plain global because it is set
+            // via Shader.SetGlobalFloat, not via the material block.
+            float _VoxelSeaRadius;
+
             // Single-surface handshake — see VoxelTerrainURP for details.
             float4 _VoxelBubbleCenterWS;
             float  _VoxelBubbleCutoutRadius;

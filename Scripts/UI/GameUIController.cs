@@ -1148,6 +1148,7 @@ namespace VoxelEngine.UI
             HotbarItemNameHud.EnsureMounted(_hudLayer);
             WorldInspectionHud.EnsureMounted(_hudLayer);
             BuildFeedbackHud.EnsureMounted(_hudLayer);
+            CockpitAlertHud.EnsureMounted(_hudLayer);
             VoxelEngine.Weather.WeatherHud.EnsureMounted(_hudLayer);
             GravityPullHud.EnsureMounted(_hudLayer);
             VoxelEngine.GridSystem.GridPilotHud.EnsureMounted(_hudLayer);

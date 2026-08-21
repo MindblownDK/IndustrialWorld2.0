@@ -107,12 +107,39 @@ namespace VoxelEngine.EditorTools
                 if (vault == null) vault = root.AddComponent<GridContainmentVault>();
 
                 vault.blockName = "Containment Vault";
-                if (vault.slots <= 0) vault.slots = 12;
-                if (vault.maxMassKg <= 0f) vault.maxMassKg = 50000f;
+                if (vault.slots <= 0) vault.slots = 24;
+                if (vault.maxMassKg <= 0f) vault.maxMassKg = 120000f;
+                // Grand-vault upgrade (9.13.0): the original step-54 generated vault was
+                // 12 slots / 50 t — the new flagship is bigger. Bump only when the prefab
+                // still carries those original generated values.
+                if (vault.slots == 12) vault.slots = 24;
+                if (Mathf.Abs(vault.maxMassKg - 50000f) < 1f) vault.maxMassKg = 120000f;
 
-                // Visuals are rebuilt ONLY when the prefab has no visual yet.
-                if (root.transform.childCount == 0 && root.GetComponent<MeshFilter>() == null)
+                // Containment field tuning (set only when at script defaults so designer
+                // balance tweaks always survive re-runs).
+                if (vault.basePowerDrawWatts <= 0f) vault.basePowerDrawWatts = 12000f;
+                if (vault.wattsPerStoredUnit <= 0f) vault.wattsPerStoredUnit = 200f;
+                if (vault.targetPressure <= 0f) vault.targetPressure = 70f;
+                if (vault.stablePressureMin <= 0f) vault.stablePressureMin = 55f;
+                if (vault.stablePressureMax <= 0f) vault.stablePressureMax = 85f;
+                if (vault.criticalPressure <= 0f) vault.criticalPressure = 32f;
+                if (vault.pressureResponsePerSec <= 0f) vault.pressureResponsePerSec = 14f;
+                if (vault.pressureDecayPerSec <= 0f) vault.pressureDecayPerSec = 10f;
+                if (vault.annihilatePerSecAtZero <= 0f) vault.annihilatePerSecAtZero = 0.25f;
+                if (vault.discSpinDegPerSecond <= 0f) vault.discSpinDegPerSecond = 14f;
+                if (vault.ringSpinDegPerSecond <= 0f) vault.ringSpinDegPerSecond = 9f;
+
+                // Visuals: built when missing, UPGRADED when the prefab still carries the
+                // original 9.12 step-54 generated visual (Hull present, no CoreDisc).
+                // Designer-customised geometry is never touched.
+                bool hasOldVisual = root.transform.Find("Hull") != null && root.transform.Find("CoreDisc") == null;
+                if (root.transform.childCount == 0 && root.GetComponent<MeshFilter>() == null || hasOldVisual)
+                {
+                    var children = new System.Collections.Generic.List<Transform>();
+                    foreach (Transform child in root.transform) children.Add(child);
+                    foreach (var child in children) Object.DestroyImmediate(child.gameObject);
                     BuildVaultVisuals(root);
+                }
 
                 var bcol = root.GetComponent<BoxCollider>();
                 if (bcol == null) bcol = root.AddComponent<BoxCollider>();
@@ -290,55 +317,168 @@ namespace VoxelEngine.EditorTools
             }
         }
 
-        // ── Vault visuals (prefab content only) ────────────────────
+        // ── Vault visuals (prefab content only) — the GRAND vault ──
+        // Full-cell (2.5 m) containment monument: pedestal, four field pylons,
+        // a central column holding the contained black hole (lensed horizon +
+        // spinning accretion disc), two counter-rotating containment rings,
+        // hazard stripes and a live status light bar driven by the vault script.
         private static void BuildVaultVisuals(GameObject root)
         {
-            Material hullMat  = MakeColoredMat("Mat_VaultHull", new Color(0.10f, 0.105f, 0.13f), emissive: false, metallic: 0.75f);
-            Material plateMat = MakeColoredMat("Mat_VaultPlates", new Color(0.16f, 0.17f, 0.20f), emissive: false, metallic: 0.8f);
-            Material stripeMat = MakeColoredMat("Mat_VaultStripe", new Color(0.95f, 0.62f, 0.10f), emissive: true, metallic: 0.4f);
-            Material ringMat   = MakeColoredMat("Mat_VaultRing", new Color(0.62f, 0.30f, 0.95f), emissive: true, metallic: 0.5f);
+            Material hullMat    = MakeColoredMat("Mat_VaultHull", new Color(0.10f, 0.105f, 0.13f), emissive: false, metallic: 0.75f);
+            Material plateMat   = MakeColoredMat("Mat_VaultPlates", new Color(0.16f, 0.17f, 0.20f), emissive: false, metallic: 0.8f);
+            Material stripeMat  = MakeColoredMat("Mat_VaultStripe", new Color(0.95f, 0.62f, 0.10f), emissive: true, metallic: 0.4f);
+            Material ringMat    = MakeColoredMat("Mat_VaultRing", new Color(0.62f, 0.30f, 0.95f), emissive: true, metallic: 0.5f);
+            Material pylonMat   = MakeColoredMat("Mat_VaultPylon", new Color(0.13f, 0.14f, 0.17f), emissive: false, metallic: 0.7f);
+            Material pylonTip   = MakeColoredMat("Mat_VaultPylonTip", new Color(0.55f, 0.30f, 0.95f), emissive: true, metallic: 0.5f);
+            Material statusMat  = MakeColoredMat("Mat_VaultStatus", new Color(0.25f, 0.9f, 0.45f), emissive: true, metallic: 0.3f);
 
-            // Main hull.
-            var hull = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            hull.name = "Hull";
-            hull.transform.SetParent(root.transform, false);
-            hull.transform.localScale = new Vector3(1.5f, 1.3f, 1.5f);
-            hull.GetComponent<Renderer>().sharedMaterial = hullMat;
-            Object.DestroyImmediate(hull.GetComponent<Collider>());
-
-            // Armour plates (corners).
-            foreach (var corner in new[] { new Vector3(-0.62f, 0.42f, -0.62f), new Vector3(0.62f, 0.42f, -0.62f),
-                                           new Vector3(-0.62f, 0.42f, 0.62f), new Vector3(0.62f, 0.42f, 0.62f) })
+            // Contained singularity shaders (shipped with the Phase 5 code).
+            Material horizonMat = MakeShaderMat("Mat_VaultHorizon", "VoxelEngine/SingularityHorizon");
+            Material discMat = MakeShaderMat("Mat_VaultCoreDisc", "VoxelEngine/BlackHoleAccretionDisc");
+            if (discMat != null)
             {
-                var plate = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                plate.name = "ArmourPlate";
-                plate.transform.SetParent(root.transform, false);
-                plate.transform.localScale = new Vector3(0.24f, 0.16f, 0.24f);
-                plate.transform.localPosition = corner;
-                plate.GetComponent<Renderer>().sharedMaterial = plateMat;
-                Object.DestroyImmediate(plate.GetComponent<Collider>());
+                discMat.SetColor("_CoreColor", new Color(1.0f, 0.90f, 0.76f));
+                discMat.SetColor("_MidColor", new Color(0.95f, 0.45f, 0.16f));
+                discMat.SetColor("_OuterColor", new Color(0.55f, 0.10f, 0.06f));
+                discMat.SetFloat("_Brightness", 1.35f);
             }
 
-            // Hazard stripes on the top face.
-            for (int i = 0; i < 3; i++)
+            // Pedestal.
+            var pedestal = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            pedestal.name = "Pedestal";
+            pedestal.transform.SetParent(root.transform, false);
+            pedestal.transform.localScale = new Vector3(1.82f, 0.20f, 1.82f);
+            pedestal.transform.localPosition = new Vector3(0f, -1.12f, 0f);
+            pedestal.GetComponent<Renderer>().sharedMaterial = hullMat;
+            Object.DestroyImmediate(pedestal.GetComponent<Collider>());
+
+            // Top cap.
+            var topCap = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            topCap.name = "TopCap";
+            topCap.transform.SetParent(root.transform, false);
+            topCap.transform.localScale = new Vector3(1.70f, 0.16f, 1.70f);
+            topCap.transform.localPosition = new Vector3(0f, 1.12f, 0f);
+            topCap.GetComponent<Renderer>().sharedMaterial = plateMat;
+            Object.DestroyImmediate(topCap.GetComponent<Collider>());
+
+            // Four field pylons with glowing tips.
+            foreach (var corner in new[] { new Vector3(-0.86f, 0f, -0.86f), new Vector3(0.86f, 0f, -0.86f),
+                                           new Vector3(-0.86f, 0f, 0.86f), new Vector3(0.86f, 0f, 0.86f) })
+            {
+                var pylon = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                pylon.name = "FieldPylon";
+                pylon.transform.SetParent(root.transform, false);
+                pylon.transform.localScale = new Vector3(0.16f, 2.24f, 0.16f);
+                pylon.transform.localPosition = corner;
+                pylon.GetComponent<Renderer>().sharedMaterial = pylonMat;
+                Object.DestroyImmediate(pylon.GetComponent<Collider>());
+
+                var tip = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                tip.name = "PylonTip";
+                tip.transform.SetParent(root.transform, false);
+                tip.transform.localScale = Vector3.one * 0.13f;
+                tip.transform.localPosition = corner + new Vector3(0f, 1.18f, 0f);
+                tip.GetComponent<Renderer>().sharedMaterial = pylonTip;
+                Object.DestroyImmediate(tip.GetComponent<Collider>());
+            }
+
+            // Central containment column.
+            var column = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            column.name = "CoreColumn";
+            column.transform.SetParent(root.transform, false);
+            column.transform.localScale = new Vector3(0.82f, 0.55f, 0.82f);
+            column.GetComponent<Renderer>().sharedMaterial = hullMat;
+            Object.DestroyImmediate(column.GetComponent<Collider>());
+
+            // The contained event horizon.
+            var horizon = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            horizon.name = "CoreHorizon";
+            horizon.transform.SetParent(root.transform, false);
+            horizon.transform.localScale = Vector3.one * 0.62f;
+            horizon.GetComponent<Renderer>().sharedMaterial = horizonMat;
+            Object.DestroyImmediate(horizon.GetComponent<Collider>());
+
+            // Accretion disc — spins at runtime via GridContainmentVault.
+            var disc = new GameObject("CoreDisc");
+            disc.transform.SetParent(root.transform, false);
+            disc.transform.localRotation = Quaternion.Euler(72f, 0f, 0f);
+            disc.transform.localScale = Vector3.one * 1.42f;
+            var discMF = disc.AddComponent<MeshFilter>();
+            discMF.sharedMesh = CreateDiscAnnulus(48);
+            var discMR = disc.AddComponent<MeshRenderer>();
+            discMR.sharedMaterial = discMat;
+            discMR.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            discMR.receiveShadows = false;
+
+            // Counter-rotating containment rings (runtime-driven).
+            var ringA = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            ringA.name = "ContainmentRingA";
+            ringA.transform.SetParent(root.transform, false);
+            ringA.transform.localScale = new Vector3(1.92f, 0.045f, 1.92f);
+            ringA.transform.localRotation = Quaternion.Euler(78f, 0f, 0f);
+            ringA.GetComponent<Renderer>().sharedMaterial = ringMat;
+            Object.DestroyImmediate(ringA.GetComponent<Collider>());
+
+            var ringB = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            ringB.name = "ContainmentRingB";
+            ringB.transform.SetParent(root.transform, false);
+            ringB.transform.localScale = new Vector3(2.12f, 0.03f, 2.12f);
+            ringB.GetComponent<Renderer>().sharedMaterial = ringMat;
+            Object.DestroyImmediate(ringB.GetComponent<Collider>());
+
+            // Hazard stripes on the pedestal front.
+            for (int i = 0; i < 4; i++)
             {
                 var stripe = GameObject.CreatePrimitive(PrimitiveType.Cube);
                 stripe.name = "HazardStripe";
                 stripe.transform.SetParent(root.transform, false);
-                stripe.transform.localScale = new Vector3(0.34f, 0.02f, 1.32f);
-                stripe.transform.localPosition = new Vector3(-0.45f + i * 0.45f, 0.66f, 0f);
+                stripe.transform.localScale = new Vector3(0.26f, 0.03f, 1.60f);
+                stripe.transform.localPosition = new Vector3(-0.62f + i * 0.42f, -0.99f, 0f);
                 stripe.GetComponent<Renderer>().sharedMaterial = stripeMat;
                 Object.DestroyImmediate(stripe.GetComponent<Collider>());
             }
 
-            // Containment ring around the hull (violet).
-            var ring = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            ring.name = "ContainmentRing";
-            ring.transform.SetParent(root.transform, false);
-            ring.transform.localScale = new Vector3(1.62f, 0.06f, 1.62f);
-            ring.transform.localPosition = new Vector3(0f, -0.12f, 0f);
-            ring.GetComponent<Renderer>().sharedMaterial = ringMat;
-            Object.DestroyImmediate(ring.GetComponent<Collider>());
+            // Live status light bar (colour driven by the vault script at runtime).
+            var status = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            status.name = "StatusLight";
+            status.transform.SetParent(root.transform, false);
+            status.transform.localScale = new Vector3(1.34f, 0.07f, 0.07f);
+            status.transform.localPosition = new Vector3(0f, -0.97f, 0.92f);
+            status.GetComponent<Renderer>().sharedMaterial = statusMat;
+            Object.DestroyImmediate(status.GetComponent<Collider>());
+        }
+
+        // Flat annulus with polar UVs for the BlackHoleAccretionDisc shader (x = radius, y = angle).
+        private static Mesh CreateDiscAnnulus(int segments)
+        {
+            const float InnerFraction = 0.30f;
+            var verts = new List<Vector3>();
+            var uvs = new List<Vector2>();
+            var tris = new List<int>();
+
+            for (int i = 0; i <= segments; i++)
+            {
+                float angle = (i / (float)segments) * Mathf.PI * 2f;
+                float ca = Mathf.Cos(angle), sa = Mathf.Sin(angle);
+                verts.Add(new Vector3(ca * InnerFraction, 0f, sa * InnerFraction));
+                verts.Add(new Vector3(ca, 0f, sa));
+                uvs.Add(new Vector2(0f, i / (float)segments));
+                uvs.Add(new Vector2(1f, i / (float)segments));
+            }
+            for (int i = 0; i < segments; i++)
+            {
+                int a = i * 2, b = a + 1, c = a + 2, d = a + 3;
+                tris.Add(a); tris.Add(b); tris.Add(d);
+                tris.Add(a); tris.Add(d); tris.Add(c);
+            }
+
+            var mesh = new Mesh { name = "VaultCoreDiscMesh" };
+            mesh.vertices = verts.ToArray();
+            mesh.uv = uvs.ToArray();
+            mesh.triangles = tris.ToArray();
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            return mesh;
         }
 
         // ── Helpers ────────────────────────────────────────────────
@@ -373,6 +513,23 @@ namespace VoxelEngine.EditorTools
                 AssetDatabase.CreateAsset(asset, path);
             }
             return asset;
+        }
+
+        private static Material MakeShaderMat(string name, string shaderName)
+        {
+            string path = MATS + "/" + name + ".mat";
+            var existing = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (existing != null) return existing;
+
+            var shader = Shader.Find(shaderName);
+            if (shader == null)
+            {
+                Debug.LogWarning($"[SingularityContainmentSetup] Shader '{shaderName}' not found — using URP/Lit fallback.");
+                shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+            }
+            var mat = new Material(shader) { name = name };
+            AssetDatabase.CreateAsset(mat, path);
+            return mat;
         }
 
         private static Material MakeColoredMat(string name, Color c, bool emissive, float metallic)

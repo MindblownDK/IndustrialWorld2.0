@@ -1,9 +1,43 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.12.1-dev`
+**Current Version:** `9.13.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.13.0-dev] The Grand Containment Vault — Powered Fields, Pressure & Cockpit Alarms (Phase 5, Part 4)
+
+**Type:** MINOR — powered containment simulation, cockpit alert channel, flagship block UI + grander block. Save-compatible.
+
+#### 🔌 1. Containment is now a POWERED process
+- The vault draws grid power that **scales with its exotic load**: 12 kW base + 200 W per stored antimatter/dark-matter unit. A loaded vault is a real grid commitment.
+- **Field pressure simulation:** pressure rises toward the 70-bar target while powered and decays at 10 bar/s when power fails — a live, honest system instead of a passive box.
+
+#### 📉 2. Pressure states, warnings everywhere
+- Field states: STABLE (55–85 bar) → LOW PRESSURE → CRITICAL (< 32 bar) → **ANNIHILATION** (0 bar: exotic matter burns away at 0.25 units/s — power loss on a loaded vault is a genuine emergency).
+- **HUD toasts** + a brand-new **cockpit alert banner** (`CockpitAlertHud`): while piloting, an amber/red pulsing strip reports which vault is failing and its live pressure vs the stable range. Only the cockpit sees it — on foot the HUD toast carries the message.
+- The block's **status light bar** glows green/amber/red live in the world, the contained black hole's disc spins and the containment rings counter-rotate.
+
+#### 🖥️ 3. The flagship machine panel (right-click the vault)
+A premium sci-fi control surface: a **live black hole visual** (lensed photon-ring bloom, three hot-spots orbiting the disc ellipse brighter on the near side, violet containment field rings, warm accretion glow), the **pressure gauge with the stable-range band + critical line** and a smoothed live marker, power/antimatter/dark-matter stat rows, a pulsing warning banner, and the contained-matter slots. Only antimatter and dark matter can enter the vault (containment-class gate).
+
+#### 🏗️ 4. The vault is GRAND now
+Step 54 rebuilds the vault as a full-cell containment monument: pedestal + top cap, four field pylons with glowing tips, central column holding the **contained black hole** (lensed horizon + spinning accretion disc), two counter-rotating violet containment rings, hazard stripes and the live status light. Capacity doubled: 24 slots / 120 t. Upgrade detection: the original generated 9.12 vault visual is replaced; designer-customised prefabs are never touched; existing authored tuning survives.
+
+#### 🐛 5. Terrain shader compile fix
+`_VoxelSeaRadius` was USED by the 9.9.0 waterline band but never DECLARED in `VoxelTerrainEnhanced` (it is published by `SphereWorld` via `SetGlobalFloat`). Declared as a plain global — the d3d11 vertex/fragment compile error is gone.
+
+#### ✅ Static delivery checks
+- All touched sources parse clean (tree-sitter C#); shader declaration matches the SphereWorld publisher; no save-format changes.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile — terrain shader error gone, console clean.
+2. Re-run **Step 54** (non-destructive): the vault prefab upgrades to the grand visual + 24 slots / 120 t. Verify the old vault in a saved ship still loads (the prefab change only affects NEW placements).
+3. Place a vault, open its panel: the black hole visual animates, pressure sits in the stable band, power reads ~12 kW.
+4. Drop antimatter + dark matter in: power draw rises per unit; plain cargo still refuses both.
+5. Cut the grid power (toggle off a reactor): pressure falls — LOW PRESSURE toast + cockpit banner while piloting, then CRITICAL, and at zero pressure the matter annihilates (watch the count drop).
+6. Check the block in-world: status light colour changes, disc spins, rings counter-rotate.
+7. Confirm existing saves load unchanged.
 
 ### [9.12.1-dev] Compile Recovery — Random Ambiguity & Singularity Serialization
 
