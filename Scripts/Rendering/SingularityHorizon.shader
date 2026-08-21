@@ -90,7 +90,9 @@ Shader "VoxelEngine/SingularityHorizon"
             {
                 UNITY_SETUP_INSTANCE_ID(IN);
 
-                float3 viewDir = normalize(GetCameraPositionWS() - IN.positionWS);
+                // _WorldSpaceCameraPos is the project-standard camera global (the
+                // field-tested terrain shader uses the same one).
+                float3 viewDir = normalize(_WorldSpaceCameraPos.xyz - IN.positionWS);
                 float fresnel = pow(1.0 - saturate(dot(IN.normalWS, viewDir)), _RimPower);
 
                 // ── Gravitational lensing: light bent around the hole ──

@@ -1744,6 +1744,9 @@ namespace VoxelEngine.Player
                 || b is VoxelEngine.GridSystem.GridBeacon
                 || b is VoxelEngine.GridSystem.GridOreDetector
                 || b is VoxelEngine.GridSystem.GridSlidingDoor
+                || b is VoxelEngine.GridSystem.GridSingularityHarvester
+                || b is VoxelEngine.GridSystem.GridContainmentVault
+                || b is VoxelEngine.GridSystem.GridLocatorBlock
                 || b is VoxelEngine.Simulation.GridLightBlock
                 || b.GetComponent<VoxelEngine.Simulation.LEDStrip>() != null;
         }

@@ -1,9 +1,43 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.14.0-dev`
+**Current Version:** `9.14.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.14.1-dev] Field-Report Fixes — Panels, Pink Shaders & the Astral Navigator (Phase 5, Part 5)
+
+**Type:** PATCH — five field-reported bugs fixed + the navigation block renamed. No save or API changes.
+
+#### 🖥️ 1. Harvester & Navigator right-click panels now open
+Root cause found in `PlayerInteractionTool.GridBlockHasUI` — a block whitelist that gates right-click interaction. It listed `GridCargoContainer` (why the vault worked — it inherits) but NOT the Singularity Harvester or the locator. Both (plus an explicit vault entry) are now on the list.
+
+#### 🟣 2. Pink horizon/disc materials repaired
+The materials were authored while the shader had a compile error — Unity keeps such materials magenta until the shader reference is reassigned (`Shader.Find` returns the broken shader, so the fallback never fires). **Steps 53 and 54 now force-rebind the shader on the generated materials every run** (designer colour tweaks survive). The horizon shader also switched `GetCameraPositionWS()` → the project-standard `_WorldSpaceCameraPos` (the only shader in the project using the former — now matches the field-tested terrain shader exactly).
+
+#### 🎯 3. Vault panel black hole perfectly centered
+The visual stage stretched to the panel's full width, so the explicitly-centered elements sat on the left. The stage is now a **fixed 168 px box, horizontally centered** — rings hug the hole, spots orbit it. Applied to the harvester panel too.
+
+#### 📜 4. No more auto-scroll while the panel live-updates
+The pressure/efficiency labels reflowed the scroll view every 80 ms (text height changes re-clamp the scroll offset). Fixed twice over: the live labels now have a **fixed height + no-wrap** (no reflow at all), and both animation loops run a **scroll-preserve guard** that restores the offset each frame unless the user is actively dragging.
+
+#### 🚨 5. Vault warnings only reach the right cockpit
+The pressure warnings are now gated to **the pilot of the vault's own grid** (`ActiveControlGrid == Grid`). A failing vault on a distant ship no longer alarms unrelated cockpits, and the banner/toast no longer flashes when you are not piloting at all.
+
+#### ✦ 6. Renamed: Star Locator → Astral Navigator
+"Star" undersold it — it pinpoints quasars, black holes, planets, moons AND the sun. All user-facing strings renamed (block, item, recipe, research, panel, wizard, LCD). Internal ids and asset paths are unchanged, so re-running Step 55 repairs in place instead of duplicating content.
+
+#### ✅ Static delivery checks
+- All touched sources parse clean (tree-sitter C#); shader matches the project-standard template; no save-format changes.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile.
+2. Re-run **Step 53** and **Step 54** — the console logs "Repairing stale shader binding…" for the harvester mats; the contained black holes are now black with lensed rims, not pink.
+3. Right-click the **Singularity Harvester** → its full panel opens (black-hole visual, efficiency gauge, buffer). Right-click the **Astral Navigator** → its panel opens (mode toggle, target cycler).
+4. Vault panel: the black hole is dead center.
+5. Scroll the vault panel while it live-updates — it stays where you leave it.
+6. Park a vault on a ship, fly a DIFFERENT ship, kill the first ship's power — no warnings anywhere. Power down the vault while piloting ITS ship → cockpit banner + toast appear.
+7. Research/recipe/item show the new name "Astral Navigator".
 
 ### [9.14.0-dev] Pressurized Canisters, Star Locator & the Grand Blocks (Phase 5, Part 5)
 

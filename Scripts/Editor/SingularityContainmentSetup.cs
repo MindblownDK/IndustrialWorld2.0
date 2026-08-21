@@ -526,10 +526,23 @@ namespace VoxelEngine.EditorTools
         private static Material MakeShaderMat(string name, string shaderName)
         {
             string path = MATS + "/" + name + ".mat";
-            var existing = AssetDatabase.LoadAssetAtPath<Material>(path);
-            if (existing != null) return existing;
-
             var shader = Shader.Find(shaderName);
+            var existing = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (existing != null)
+            {
+                // REPAIR STALE BINDINGS: materials created while the shader had a
+                // compile error stay magenta until the shader reference is reassigned.
+                // Force-rebind every run — designer colour tweaks survive.
+                if (shader != null && existing.shader != shader)
+                {
+                    Debug.LogWarning($"[SingularityContainmentSetup] Repairing stale shader binding on {name} → {shaderName}.");
+                    existing.shader = shader;
+                    EditorUtility.SetDirty(existing);
+                    AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
+                }
+                return existing;
+            }
+
             if (shader == null)
             {
                 Debug.LogWarning($"[SingularityContainmentSetup] Shader '{shaderName}' not found — using URP/Lit fallback.");

@@ -1,12 +1,12 @@
 // Assets/Scripts/VoxelEngine/Editor/SingularityLocatorSetup.cs
 //
-// Step 55 (Phase 5): STAR LOCATOR — navigation grid block authoring.
+// Step 55 (Phase 5): ASTRAL NAVIGATOR — navigation grid block authoring.
 // Non-destructive creation of:
 //
-//   • The Star Locator grid block prefab (dish + emitter + glowing ring)
+//   • The Astral Navigator grid block prefab (dish + emitter + glowing ring)
 //   • Its grid block item
 //   • Assembler recipe
-//   • "Star Locator" research node (tier 6, Logistics) — the early-game
+//   • "Astral Navigator" research node (tier 6, Logistics) — the early-game
 //     bridge to interplanetary + deep-space travel
 //
 // Re-runnable. Idempotent. Existing authored balance is preserved; only
@@ -34,7 +34,7 @@ namespace VoxelEngine.EditorTools
 
         public static void RunStep55()
         {
-            Debug.Log("[VoxelEngineSetupWindow] Step 55 — Star Locator started.");
+            Debug.Log("[VoxelEngineSetupWindow] Step 55 — Astral Navigator started.");
 
             foreach (var f in new[] { GRID_ROOT, ITEMS, PREFABS, MATS, RECIPES }) EnsureFolder(f);
 
@@ -45,7 +45,7 @@ namespace VoxelEngine.EditorTools
                 var locator = root.GetComponent<GridLocatorBlock>();
                 if (locator == null) locator = root.AddComponent<GridLocatorBlock>();
 
-                locator.blockName = "Star Locator";
+                locator.blockName = "Astral Navigator";
                 if (locator.powerDrawWatts <= 0f) locator.powerDrawWatts = 6000f;
                 if (locator.waypointMarkerSize <= 0f) locator.waypointMarkerSize = 1.4f;
 
@@ -60,7 +60,7 @@ namespace VoxelEngine.EditorTools
             // ── Item ───────────────────────────────────────────────
             var item = GetOrCreateAsset<GridBlockItem>(ITEMS + "/GItem_StarLocator.asset");
             item.itemId = "gitem_starlocator";
-            item.displayName = "Star Locator";
+            item.displayName = "Astral Navigator";
             if (string.IsNullOrEmpty(item.description))
                 item.description = "A powered navigation block that pinpoints any celestial body — planets, moons, the sun, the black hole and the quasar. Projects a real waypoint marker to fly toward; aim at the marker and engage the warp drive to jump straight to the target.";
             item.iconTint = new Color(0.20f, 0.85f, 0.95f);
@@ -79,7 +79,7 @@ namespace VoxelEngine.EditorTools
             var platinum   = LoadItem(ASSET_ROOT + "/Items/Item_Platinum.asset");
 
             var recipe = GetOrCreateAsset<RecipeDefinition>(RECIPES + "/Recipe_GStarLocator.asset");
-            recipe.displayName = "Star Locator";
+            recipe.displayName = "Astral Navigator";
             recipe.outputItem = item;
             recipe.outputCount = 1;
             recipe.requiredStation = StationTier.Assembler;
@@ -113,8 +113,8 @@ namespace VoxelEngine.EditorTools
                 {
                     node = ScriptableObject.CreateInstance<ResearchNode>();
                     node.nodeId = "res_starlocator";
-                    node.displayName = "Star Locator";
-                    node.description = "Unlocks the Star Locator grid block — pinpoints planets, moons, the sun, the black hole and the quasar, and projects a warp-lockable waypoint. The bridge to real interplanetary and deep-space travel.";
+                    node.displayName = "Astral Navigator";
+                    node.description = "Unlocks the Astral Navigator grid block — pinpoints planets, moons, the sun, the black hole and the quasar, and projects a warp-lockable waypoint. The bridge to real interplanetary and deep-space travel.";
                     node.category = ResearchCategory.Environment;
                     node.subCategory = ResearchSubCategory.Logistics;
                     node.tier = 6;
@@ -137,13 +137,13 @@ namespace VoxelEngine.EditorTools
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
 
-            EditorUtility.DisplayDialog("Voxel Engine — Star Locator",
-                "Star Locator wired (non-destructive):\n\n" +
-                "• Grid block: Star Locator (powered navigation — 6 kW)\n" +
+            EditorUtility.DisplayDialog("Voxel Engine — Astral Navigator",
+                "Astral Navigator wired (non-destructive):\n\n" +
+                "• Grid block: Astral Navigator (powered navigation — 6 kW)\n" +
                 "• AUTO tracks the nearest body; SPECIFIC locks a target (panel ◀ ▶)\n" +
                 "• Projects a true waypoint marker; aim at it + warp drive = jump\n" +
                 "• Targets: black hole, quasar, sun, every planet and moon\n" +
-                "• Research: Star Locator (tier 6, Logistics)",
+                "• Research: Astral Navigator (tier 6, Logistics)",
                 "OK");
         }
 

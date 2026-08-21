@@ -178,8 +178,13 @@ namespace VoxelEngine.GridSystem
                 _annihilateAccumulator = 0f;
             }
 
-            // ── Warnings: HUD toast + cockpit banner ──
-            if (danger || IsAnnihilating)
+            // ── Warnings: cockpit banner + HUD toast ──
+            // ONLY the pilot of THIS vault's own grid sees them — a failing vault
+            // on a distant ship must never alarm an unrelated cockpit, and the
+            // banner must never flash for players who are not piloting at all.
+            bool pilotingThisGrid = VoxelEngine.GridSystem.GridCockpit.AnyPilotSeatActive
+                                    && GridCockpit.ActiveControlGrid == Grid;
+            if ((danger || IsAnnihilating) && pilotingThisGrid)
             {
                 _warnTimer -= dt;
                 if (_warnTimer <= 0f)

@@ -552,10 +552,12 @@ namespace VoxelEngine.GridSystem.UI
             p.Add(T.AccentDivider(T.AccentPurple));
 
             // ── The contained singularity (live) ──
-            // 168×168 stage; EVERY element is explicitly centred on (84, 84) so the
-            // rings hug the black hole and the orbiting spots trace the disc ellipse.
+            // FIXED 168×168 stage, horizontally centred in the panel, so the
+            // rings hug the black hole and the spots orbit it — never drifting.
             var coreBox = new VisualElement();
+            coreBox.style.width = 168;
             coreBox.style.height = 168;
+            coreBox.style.alignSelf = Align.Center;
             coreBox.style.marginTop = 4;
             coreBox.style.marginBottom = 6;
             coreBox.pickingMode = PickingMode.Ignore;
@@ -649,6 +651,9 @@ namespace VoxelEngine.GridSystem.UI
 
             var pressureText = T.Muted($"Pressure {cv.Pressure:0.0} · Target {target:0} · Stable {cv.stablePressureMin:0}–{cv.stablePressureMax:0}");
             pressureText.style.marginTop = 3;
+            pressureText.style.width = Length.Percent(100f);
+            pressureText.style.height = 14;              // fixed height: live text updates
+            pressureText.style.whiteSpace = WhiteSpace.NoWrap;   // must never reflow the scroll view
             p.Add(pressureText);
 
             // ── Warning banner (live) ──
@@ -712,12 +717,40 @@ namespace VoxelEngine.GridSystem.UI
             return p;
         }
 
+        private static Vector2 _scrollLastSeen = new Vector2(0f, float.NaN);
+
+        /// <summary>
+        /// The live animation mutates elements inside the panel's ScrollView; UI Toolkit
+        /// re-clamps the scroll offset when content reflows, which reads as "it scrolls
+        /// back up". Guard: restore the offset after each frame UNLESS the user is
+        /// actively scrolling (offset changed since we last looked).
+        /// </summary>
+        private static void PreserveScroll(VisualElement p, ref Vector2 saved)
+        {
+            var sv = p != null ? p.Q<ScrollView>() : null;
+            if (sv == null) return;
+            Vector2 current = sv.scrollOffset;
+            bool userScrolling = !float.IsNaN(_scrollLastSeen.y)
+                                 && Mathf.Abs(current.y - _scrollLastSeen.y) > 0.75f;
+            if (userScrolling)
+            {
+                _scrollLastSeen = current;   // respect the user's drag
+                return;
+            }
+            sv.scrollOffset = saved;
+            _scrollLastSeen = saved;
+        }
+
         private static void AnimateVaultPanel(VisualElement p, GridContainmentVault cv,
             VisualElement[] spots, VisualElement marker, Label warn, Label pressureText, ref float shownPressure)
         {
             // The panel may have been closed/rebuilt — stop animating detached trees.
             if (p == null || p.panel == null) return;
             float t = Time.unscaledTime;
+
+            Vector2 savedScroll = new Vector2(0f, 0f);
+            var sv = p.Q<ScrollView>();
+            if (sv != null) savedScroll = sv.scrollOffset;
 
             // ── Orbiting hot-spots along the disc ellipse ──
             const float ax = 76f, bx = 26f;   // ellipse radii
@@ -768,6 +801,8 @@ namespace VoxelEngine.GridSystem.UI
                     warn.style.display = DisplayStyle.None;
                 }
             }
+
+            PreserveScroll(p, ref savedScroll);
         }
 
         private static VisualElement SpotDot()
@@ -807,7 +842,9 @@ namespace VoxelEngine.GridSystem.UI
 
             // ── The contained black hole (live) ──
             var coreBox = new VisualElement();
+            coreBox.style.width = 168;
             coreBox.style.height = 150;
+            coreBox.style.alignSelf = Align.Center;
             coreBox.style.marginTop = 4;
             coreBox.style.marginBottom = 6;
             coreBox.pickingMode = PickingMode.Ignore;
@@ -874,6 +911,9 @@ namespace VoxelEngine.GridSystem.UI
             track.Add(effFill);
             var effText = T.Muted("Efficiency 0%");
             effText.style.marginTop = 3;
+            effText.style.width = Length.Percent(100f);
+            effText.style.height = 14;                   // fixed height: no scroll reflow
+            effText.style.whiteSpace = WhiteSpace.NoWrap;
             p.Add(effText);
 
             // ── Warning line (rare drops stuck) ──
@@ -930,6 +970,10 @@ namespace VoxelEngine.GridSystem.UI
             if (p == null || p.panel == null) return;
             float t = Time.unscaledTime;
 
+            Vector2 savedScroll = new Vector2(0f, 0f);
+            var sv = p.Q<ScrollView>();
+            if (sv != null) savedScroll = sv.scrollOffset;
+
             const float CX = 84f, CY = 75f, AX = 66f, BX = 21f;
             for (int i = 0; i < spots.Length; i++)
             {
@@ -962,6 +1006,8 @@ namespace VoxelEngine.GridSystem.UI
                 }
                 else warn.style.display = DisplayStyle.None;
             }
+
+            PreserveScroll(p, ref savedScroll);
         }
 
         // ── STAR LOCATOR ────────────────────────────────────────────────────
@@ -971,7 +1017,7 @@ namespace VoxelEngine.GridSystem.UI
             p.style.width = 460;
 
             bool tracking = loc.IsTracking;
-            var (hdr, _, _, _) = T.HeaderRow("✦ Star Locator",
+            var (hdr, _, _, _) = T.HeaderRow("✦ Astral Navigator",
                 tracking ? "TRACKING" : loc.Status.ToUpperInvariant(),
                 tracking ? T.AccentGreen : T.AccentAmber);
             p.Add(hdr);

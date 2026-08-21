@@ -1,7 +1,7 @@
 // Assets/Scripts/VoxelEngine/GridSystem/GridLocatorBlock.cs
 //
 // ╔══════════════════════════════════════════════════════════════════════╗
-// ║            STAR LOCATOR — navigation grid block (Phase 5)            ║
+// ║           ASTRAL NAVIGATOR — navigation grid block (Phase 5)         ║
 // ║                                                                      ║
 // ║  A powered grid block that pinpoints a celestial destination and     ║
 // ║  projects a TRUE waypoint marker toward it:                          ║
@@ -104,7 +104,7 @@ namespace VoxelEngine.GridSystem
         public override void OnPlaced()
         {
             base.OnPlaced();
-            blockName = "Star Locator";
+            blockName = "Astral Navigator";
         }
 
         public override void OnRemoved()
@@ -181,7 +181,7 @@ namespace VoxelEngine.GridSystem
             if (_waypoint == null)
             {
                 _waypoint = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-                _waypoint.name = $"LocatorWaypoint ({blockName})";
+                _waypoint.name = $"NavigatorWaypoint ({blockName})";
                 var col = _waypoint.GetComponent<Collider>();
                 if (col != null) Destroy(col);
                 _markerRenderer = _waypoint.GetComponent<Renderer>();
@@ -355,7 +355,7 @@ namespace VoxelEngine.GridSystem
         public string GetDisplayData()
         {
             string dist = TargetDistanceKm >= 0d ? $"{TargetDistanceKm:0} km" : "—";
-            return $"STAR LOCATOR\n{Status}\nTarget {TargetName}\nDistance {dist}\nMode {(mode == LocatorMode.Auto ? "AUTO" : "SPECIFIC")}";
+            return $"ASTRAL NAVIGATOR\n{Status}\nTarget {TargetName}\nDistance {dist}\nMode {(mode == LocatorMode.Auto ? "AUTO" : "SPECIFIC")}";
         }
     }
 }
