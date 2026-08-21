@@ -10,6 +10,10 @@
 // ║  horizon (light from the far side of the disc bent around the hole,  ║
 // ║  exactly like the real deal). Plus a faint fresnel rim wrapping the  ║
 // ║  sphere.                                                             ║
+// ║                                                                      ║
+// ║  URP notes: mirrors the proven QuasarGlow/QuasarJet template —       ║
+// ║  NO HDR blend modes and NO LOD line (the magenta-shader combo on     ║
+// ║  this project's URP version).                                        ║
 // ╚══════════════════════════════════════════════════════════════════════╝
 Shader "VoxelEngine/SingularityHorizon"
 {
@@ -99,8 +103,6 @@ Shader "VoxelEngine/SingularityHorizon"
                 float plane = dot(dirOS, axisOS);                 // -1..1, 0 = disc plane
                 float lens = exp(-(plane * plane) / max(1e-4, _LensWidth * _LensWidth));
 
-                float ring = fresnel * (_RimStrength + _LensStrength * lens);
-
                 float3 col = _RimColor.rgb * fresnel * _RimStrength
                            + _LensColor.rgb * fresnel * _LensStrength * lens;
 
@@ -110,5 +112,5 @@ Shader "VoxelEngine/SingularityHorizon"
             ENDHLSL
         }
     }
-    FallBack Off
+    Fallback "Diffuse"
 }

@@ -207,9 +207,36 @@ namespace VoxelEngine.GridSystem
                 }
             }
 
+            // Locator lock (Phase 5): a Star Locator block projects a waypoint toward
+            // any celestial destination (planet/moon/sun/singularity). Aim at the
+            // waypoint marker and jump — any range. Skipped when a planet is already
+            // targeted (direct planet lock wins).
+            BodyInstance locatorBody = null;
+            string locatorArrivalName = null;
+            if (targetPlanet == null && targetSingularity == null)
+            {
+                var locator = GridLocatorBlock.ActiveLocator;
+                if (locator != null && GridLocatorBlock.HasWaypoint && locator.Enabled
+                    && locator.Grid != null && locator.Grid.HasPower)
+                {
+                    double3 toWP = origin.GetCosmicKm(GridLocatorBlock.WaypointScenePosition) - gridCosmic;
+                    double wpDist = math.length(toWP);
+                    if (wpDist > 2d)
+                    {
+                        double wpAngle = AngleDeg(CosmicRegistry.ToDouble3(aimDir), toWP);
+                        if (wpAngle <= targetConeDeg && locator.TryGetArrival(gridCosmic, out var locArrival, out locatorBody, out locatorArrivalName))
+                        {
+                            destination = locArrival;
+                        }
+                    }
+                }
+            }
+
             // ── Execute: floating-origin teleport ─────────────────
             origin.TeleportCosmic(destination);
-            origin.SetFrame(targetPlanet != null ? ResolveSceneBody(registry, targetPlanet) : null);
+            origin.SetFrame(targetPlanet != null || locatorBody != null
+                ? ResolveSceneBody(registry, targetPlanet != null ? targetPlanet : locatorBody)
+                : null);
 
             // Arrive co-moving with the destination frame: zero scene velocity so the
             // grid hangs relative to the target (SE-style orbit arrival).
@@ -229,7 +256,9 @@ namespace VoxelEngine.GridSystem
                 ? $"{targetPlanet.DisplayName} orbit ({arrivalAltitudeKm:0} km altitude)"
                 : targetSingularity != null
                     ? $"{targetSingularity.DisplayName} standoff ({(int)targetSingularity.standoffArrivalKm:0} km from horizon)"
-                    : $"{jumpRangeKm:0} km straight ahead";
+                    : locatorArrivalName != null
+                        ? $"Locator: {locatorArrivalName}"
+                        : $"{jumpRangeKm:0} km straight ahead";
             BuildFeedbackHud.Show("Warp Jump", $"Arrived: {targetName}", null, new Color(0.55f, 0.85f, 1f));
             Debug.Log($"[GridWarpDrive] Warp to {targetName} at {destination} km.");
             return true;

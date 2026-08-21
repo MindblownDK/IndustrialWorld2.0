@@ -52,6 +52,7 @@ namespace VoxelEngine.EditorTools
             if (antimatter.maxStack <= 0) antimatter.maxStack = 50;
             if (antimatter.massPerUnit <= 0f) antimatter.massPerUnit = 2f;
             antimatter.requiresContainment = true;
+            antimatter.cannotBeCarried = true;
             antimatter.category = "Resources";
             antimatter.subcategory = ResourceCategory.Misc;
             antimatter.fuelSeconds = 0f;
@@ -66,6 +67,7 @@ namespace VoxelEngine.EditorTools
             if (darkMatter.maxStack <= 0) darkMatter.maxStack = 50;
             if (darkMatter.massPerUnit <= 0f) darkMatter.massPerUnit = 3f;
             darkMatter.requiresContainment = true;
+            darkMatter.cannotBeCarried = true;
             darkMatter.category = "Resources";
             darkMatter.subcategory = ResourceCategory.Misc;
             darkMatter.fuelSeconds = 0f;
@@ -83,6 +85,7 @@ namespace VoxelEngine.EditorTools
             amCan.iconTint = new Color(1.0f, 0.35f, 0.75f);
             if (amCan.maxStack <= 0) amCan.maxStack = 20;
             if (amCan.massPerUnit <= 0f) amCan.massPerUnit = 18f;
+            amCan.isPressurizedCanister = true;
             amCan.category = "Components";
             amCan.subcategory = ResourceCategory.Component;
             EditorUtility.SetDirty(amCan);
@@ -95,6 +98,7 @@ namespace VoxelEngine.EditorTools
             dmCan.iconTint = new Color(0.55f, 0.30f, 0.95f);
             if (dmCan.maxStack <= 0) dmCan.maxStack = 20;
             if (dmCan.massPerUnit <= 0f) dmCan.massPerUnit = 26f;
+            dmCan.isPressurizedCanister = true;
             dmCan.category = "Components";
             dmCan.subcategory = ResourceCategory.Component;
             EditorUtility.SetDirty(dmCan);
@@ -130,10 +134,13 @@ namespace VoxelEngine.EditorTools
                 if (vault.ringSpinDegPerSecond <= 0f) vault.ringSpinDegPerSecond = 9f;
 
                 // Visuals: built when missing, UPGRADED when the prefab still carries the
-                // original 9.12 step-54 generated visual (Hull present, no CoreDisc).
-                // Designer-customised geometry is never touched.
+                // original 9.12 step-54 generated visual (Hull present, no CoreDisc) or the
+                // first 9.13 grand build (CoreDisc present, small pedestal) — 9.14.0 makes
+                // both blocks bigger. Designer-customised geometry is never touched.
                 bool hasOldVisual = root.transform.Find("Hull") != null && root.transform.Find("CoreDisc") == null;
-                if (root.transform.childCount == 0 && root.GetComponent<MeshFilter>() == null || hasOldVisual)
+                var pedestalT = root.transform.Find("Pedestal");
+                bool hasSmallGrand = pedestalT != null && pedestalT.localScale.x < 1.95f;
+                if ((root.transform.childCount == 0 && root.GetComponent<MeshFilter>() == null) || hasOldVisual || hasSmallGrand)
                 {
                     var children = new System.Collections.Generic.List<Transform>();
                     foreach (Transform child in root.transform) children.Add(child);
@@ -343,12 +350,13 @@ namespace VoxelEngine.EditorTools
                 discMat.SetFloat("_Brightness", 1.35f);
             }
 
+            // ── 9.14.0 GRAND build: fills the full 2.5 m cell ──
             // Pedestal.
             var pedestal = GameObject.CreatePrimitive(PrimitiveType.Cube);
             pedestal.name = "Pedestal";
             pedestal.transform.SetParent(root.transform, false);
-            pedestal.transform.localScale = new Vector3(1.82f, 0.20f, 1.82f);
-            pedestal.transform.localPosition = new Vector3(0f, -1.12f, 0f);
+            pedestal.transform.localScale = new Vector3(2.00f, 0.22f, 2.00f);
+            pedestal.transform.localPosition = new Vector3(0f, -1.10f, 0f);
             pedestal.GetComponent<Renderer>().sharedMaterial = hullMat;
             Object.DestroyImmediate(pedestal.GetComponent<Collider>());
 
@@ -356,19 +364,19 @@ namespace VoxelEngine.EditorTools
             var topCap = GameObject.CreatePrimitive(PrimitiveType.Cube);
             topCap.name = "TopCap";
             topCap.transform.SetParent(root.transform, false);
-            topCap.transform.localScale = new Vector3(1.70f, 0.16f, 1.70f);
+            topCap.transform.localScale = new Vector3(1.88f, 0.16f, 1.88f);
             topCap.transform.localPosition = new Vector3(0f, 1.12f, 0f);
             topCap.GetComponent<Renderer>().sharedMaterial = plateMat;
             Object.DestroyImmediate(topCap.GetComponent<Collider>());
 
             // Four field pylons with glowing tips.
-            foreach (var corner in new[] { new Vector3(-0.86f, 0f, -0.86f), new Vector3(0.86f, 0f, -0.86f),
-                                           new Vector3(-0.86f, 0f, 0.86f), new Vector3(0.86f, 0f, 0.86f) })
+            foreach (var corner in new[] { new Vector3(-1.00f, 0f, -1.00f), new Vector3(1.00f, 0f, -1.00f),
+                                           new Vector3(-1.00f, 0f, 1.00f), new Vector3(1.00f, 0f, 1.00f) })
             {
                 var pylon = GameObject.CreatePrimitive(PrimitiveType.Cube);
                 pylon.name = "FieldPylon";
                 pylon.transform.SetParent(root.transform, false);
-                pylon.transform.localScale = new Vector3(0.16f, 2.24f, 0.16f);
+                pylon.transform.localScale = new Vector3(0.18f, 2.40f, 0.18f);
                 pylon.transform.localPosition = corner;
                 pylon.GetComponent<Renderer>().sharedMaterial = pylonMat;
                 Object.DestroyImmediate(pylon.GetComponent<Collider>());
@@ -376,8 +384,8 @@ namespace VoxelEngine.EditorTools
                 var tip = GameObject.CreatePrimitive(PrimitiveType.Sphere);
                 tip.name = "PylonTip";
                 tip.transform.SetParent(root.transform, false);
-                tip.transform.localScale = Vector3.one * 0.13f;
-                tip.transform.localPosition = corner + new Vector3(0f, 1.18f, 0f);
+                tip.transform.localScale = Vector3.one * 0.15f;
+                tip.transform.localPosition = corner + new Vector3(0f, 1.26f, 0f);
                 tip.GetComponent<Renderer>().sharedMaterial = pylonTip;
                 Object.DestroyImmediate(tip.GetComponent<Collider>());
             }
@@ -386,7 +394,7 @@ namespace VoxelEngine.EditorTools
             var column = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             column.name = "CoreColumn";
             column.transform.SetParent(root.transform, false);
-            column.transform.localScale = new Vector3(0.82f, 0.55f, 0.82f);
+            column.transform.localScale = new Vector3(0.90f, 0.55f, 0.90f);
             column.GetComponent<Renderer>().sharedMaterial = hullMat;
             Object.DestroyImmediate(column.GetComponent<Collider>());
 
@@ -394,7 +402,7 @@ namespace VoxelEngine.EditorTools
             var horizon = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             horizon.name = "CoreHorizon";
             horizon.transform.SetParent(root.transform, false);
-            horizon.transform.localScale = Vector3.one * 0.62f;
+            horizon.transform.localScale = Vector3.one * 0.70f;
             horizon.GetComponent<Renderer>().sharedMaterial = horizonMat;
             Object.DestroyImmediate(horizon.GetComponent<Collider>());
 
@@ -402,7 +410,7 @@ namespace VoxelEngine.EditorTools
             var disc = new GameObject("CoreDisc");
             disc.transform.SetParent(root.transform, false);
             disc.transform.localRotation = Quaternion.Euler(72f, 0f, 0f);
-            disc.transform.localScale = Vector3.one * 1.42f;
+            disc.transform.localScale = Vector3.one * 1.60f;
             var discMF = disc.AddComponent<MeshFilter>();
             discMF.sharedMesh = CreateDiscAnnulus(48);
             var discMR = disc.AddComponent<MeshRenderer>();
@@ -414,7 +422,7 @@ namespace VoxelEngine.EditorTools
             var ringA = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             ringA.name = "ContainmentRingA";
             ringA.transform.SetParent(root.transform, false);
-            ringA.transform.localScale = new Vector3(1.92f, 0.045f, 1.92f);
+            ringA.transform.localScale = new Vector3(2.20f, 0.05f, 2.20f);
             ringA.transform.localRotation = Quaternion.Euler(78f, 0f, 0f);
             ringA.GetComponent<Renderer>().sharedMaterial = ringMat;
             Object.DestroyImmediate(ringA.GetComponent<Collider>());
@@ -422,7 +430,7 @@ namespace VoxelEngine.EditorTools
             var ringB = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             ringB.name = "ContainmentRingB";
             ringB.transform.SetParent(root.transform, false);
-            ringB.transform.localScale = new Vector3(2.12f, 0.03f, 2.12f);
+            ringB.transform.localScale = new Vector3(2.42f, 0.03f, 2.42f);
             ringB.GetComponent<Renderer>().sharedMaterial = ringMat;
             Object.DestroyImmediate(ringB.GetComponent<Collider>());
 
@@ -432,8 +440,8 @@ namespace VoxelEngine.EditorTools
                 var stripe = GameObject.CreatePrimitive(PrimitiveType.Cube);
                 stripe.name = "HazardStripe";
                 stripe.transform.SetParent(root.transform, false);
-                stripe.transform.localScale = new Vector3(0.26f, 0.03f, 1.60f);
-                stripe.transform.localPosition = new Vector3(-0.62f + i * 0.42f, -0.99f, 0f);
+                stripe.transform.localScale = new Vector3(0.28f, 0.03f, 1.72f);
+                stripe.transform.localPosition = new Vector3(-0.66f + i * 0.44f, -0.98f, 0f);
                 stripe.GetComponent<Renderer>().sharedMaterial = stripeMat;
                 Object.DestroyImmediate(stripe.GetComponent<Collider>());
             }
@@ -442,8 +450,8 @@ namespace VoxelEngine.EditorTools
             var status = GameObject.CreatePrimitive(PrimitiveType.Cube);
             status.name = "StatusLight";
             status.transform.SetParent(root.transform, false);
-            status.transform.localScale = new Vector3(1.34f, 0.07f, 0.07f);
-            status.transform.localPosition = new Vector3(0f, -0.97f, 0.92f);
+            status.transform.localScale = new Vector3(1.44f, 0.07f, 0.07f);
+            status.transform.localPosition = new Vector3(0f, -0.97f, 0.96f);
             status.GetComponent<Renderer>().sharedMaterial = statusMat;
             Object.DestroyImmediate(status.GetComponent<Collider>());
         }

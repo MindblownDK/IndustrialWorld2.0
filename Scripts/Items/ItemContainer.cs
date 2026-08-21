@@ -61,6 +61,22 @@ namespace VoxelEngine.Items
         /// </summary>
         [NonSerialized] public bool allowContainment = true;
 
+        /// <summary>
+        /// True when this container may hold items a player is allowed to CARRY.
+        /// The player inventory sets this false so raw exotic matter (flagged
+        /// <see cref="ItemDefinition.cannotBeCarried"/>) can never be pocketed —
+        /// it only travels in pressurized canisters. Default true.
+        /// </summary>
+        [NonSerialized] public bool allowPlayerCarry = true;
+
+        /// <summary>
+        /// Optional merge hook for stacks that carry per-instance state in ItemStack.charge
+        /// (e.g. pressurized canisters: charge = field pressure). Invoked in the partial-stack
+        /// merge pass: (existingStack, incomingStack, addedCount) → merged charge value.
+        /// Null = plain merge (existing behaviour everywhere else).
+        /// </summary>
+        [NonSerialized] public static System.Func<ItemStack, ItemStack, int, int> MergeCharge;
+
         private int Allowed(ItemDefinition item, int wanted)
         {
             if (item == null || wanted <= 0) return 0;
@@ -68,6 +84,9 @@ namespace VoxelEngine.Items
 
             // Containment-class items only enter containers that are built to hold them.
             if (item.requiresContainment && !allowContainment) return 0;
+
+            // Raw exotic matter can never be carried by the player — canisters only.
+            if (item.cannotBeCarried && !allowPlayerCarry) return 0;
 
             float unitMass = Mathf.Max(0.0001f, item.massPerUnit);
             float remaining = RemainingWeightKg;
@@ -165,6 +184,8 @@ namespace VoxelEngine.Items
                     int space = ItemStack.MaxItemsPerStack(stack.item) - s.count;
                     if (space <= 0) continue;
                     int add = Mathf.Min(space, stack.count);
+                    // Per-instance state merge (pressurized canisters: charge = pressure).
+                    if (MergeCharge != null) s.charge = MergeCharge(s, stack, add);
                     s.count += add;
                     stack.count -= add;
                 }

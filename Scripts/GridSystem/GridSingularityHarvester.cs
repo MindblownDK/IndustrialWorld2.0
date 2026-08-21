@@ -81,6 +81,8 @@ namespace VoxelEngine.GridSystem
         private float _pushTimer;
         private Transform _disc;
         private bool _rareBlocked;
+        private Renderer[] _coilRenderers;
+        private static readonly Color CoilColor = new Color(0.20f, 0.65f, 0.90f);
 
         public override void OnPlaced()
         {
@@ -96,10 +98,30 @@ namespace VoxelEngine.GridSystem
 
         private void Update()
         {
-            // Spin the contained mini black hole's accretion disc.
+            // ── Power-driven visual drive: the contained black hole only spins and the
+            // coils only breathe while the grid actually feeds the block. ──
+            bool powered = Enabled && Grid != null && Grid.HasPower;
             if (_disc == null) _disc = transform.Find("SingularityDisc");
             if (_disc != null)
-                _disc.Rotate(0f, discSpinDegPerSecond * Time.deltaTime, 0f, Space.Self);
+                _disc.Rotate(0f, discSpinDegPerSecond * Time.deltaTime * (powered ? 1f : 0.05f), 0f, Space.Self);
+
+            if (_coilRenderers == null || _coilRenderers.Length == 0)
+            {
+                var coils = new System.Collections.Generic.List<Renderer>();
+                foreach (Transform child in transform)
+                    if (child.name == "CoilRing")
+                    {
+                        var r = child.GetComponent<Renderer>();
+                        if (r != null) coils.Add(r);
+                    }
+                _coilRenderers = coils.ToArray();
+            }
+            float glow = powered ? 1.3f + 0.5f * Mathf.Sin(Time.unscaledTime * 3.6f) : 0.18f;
+            for (int i = 0; i < _coilRenderers.Length; i++)
+            {
+                if (_coilRenderers[i] == null || _coilRenderers[i].material == null) continue;
+                _coilRenderers[i].material.color = CoilColor * glow;
+            }
 
             // Always try to offload the buffer, even when not actively harvesting.
             _pushTimer += Time.deltaTime;

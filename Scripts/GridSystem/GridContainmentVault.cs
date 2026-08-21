@@ -79,6 +79,7 @@ namespace VoxelEngine.GridSystem
 
         private Transform _coreDisc, _ringA, _ringB;
         private Renderer _statusLight;
+        private Renderer[] _pylonTips;
         private float _warnTimer;
         private float _annihilateAccumulator;
 
@@ -95,7 +96,7 @@ namespace VoxelEngine.GridSystem
 
         private void Update()
         {
-            // ── Runtime visual drive ──
+            // ── Runtime visual drive (animation only while the field has power) ──
             if (_coreDisc == null) _coreDisc = transform.Find("CoreDisc");
             if (_ringA == null) _ringA = transform.Find("ContainmentRingA");
             if (_ringB == null) _ringB = transform.Find("ContainmentRingB");
@@ -104,14 +105,36 @@ namespace VoxelEngine.GridSystem
                 var sl = transform.Find("StatusLight");
                 if (sl != null) _statusLight = sl.GetComponent<Renderer>();
             }
+            if (_pylonTips == null || _pylonTips.Length == 0)
+            {
+                var tips = new System.Collections.Generic.List<Renderer>();
+                foreach (Transform child in transform)
+                    if (child.name == "PylonTip")
+                    {
+                        var r = child.GetComponent<Renderer>();
+                        if (r != null) tips.Add(r);
+                    }
+                _pylonTips = tips.ToArray();
+            }
 
+            bool powered = Enabled && Grid != null && Grid.HasPower;
             float dt = Time.deltaTime;
-            if (_coreDisc != null) _coreDisc.Rotate(0f, discSpinDegPerSecond * dt, 0f, Space.Self);
-            if (_ringA != null) _ringA.Rotate(0f, -ringSpinDegPerSecond * dt, 0f, Space.Self);
-            if (_ringB != null) _ringB.Rotate(0f, ringSpinDegPerSecond * dt, 0f, Space.Self);
-            // Material instance per vault so every vault's light shows ITS field state.
+            float spinScale = powered ? 1f : 0.06f;   // field dies with the power
+
+            if (_coreDisc != null) _coreDisc.Rotate(0f, discSpinDegPerSecond * dt * spinScale, 0f, Space.Self);
+            if (_ringA != null) _ringA.Rotate(0f, -ringSpinDegPerSecond * dt * spinScale, 0f, Space.Self);
+            if (_ringB != null) _ringB.Rotate(0f, ringSpinDegPerSecond * dt * spinScale, 0f, Space.Self);
             if (_statusLight != null && _statusLight.material != null)
                 _statusLight.material.color = FieldLightColor();
+
+            // Pylon tips breathe violet while powered, dim when the field is down.
+            float pulse = powered ? 1.35f + 0.45f * Mathf.Sin(Time.unscaledTime * 3.1f) : 0.30f;
+            Color pylonC = new Color(0.55f, 0.30f, 0.95f) * pulse;
+            for (int i = 0; i < _pylonTips.Length; i++)
+            {
+                if (_pylonTips[i] == null || _pylonTips[i].material == null) continue;
+                _pylonTips[i].material.color = pylonC;
+            }
         }
 
         private void FixedUpdate()

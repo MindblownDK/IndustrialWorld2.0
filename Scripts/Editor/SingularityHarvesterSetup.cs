@@ -70,10 +70,19 @@ namespace VoxelEngine.EditorTools
                 if (harvester.powerDrawWatts <= 0f) harvester.powerDrawWatts = 25000f;
                 if (harvester.quasarMultiplier <= 0f) harvester.quasarMultiplier = 1.5f;
 
-                // Visuals are rebuilt ONLY when the prefab has no visual yet —
+                // Visuals are rebuilt when the prefab has no visual yet, or when it
+                // still carries the original small generated frame (9.14.0 grand upgrade) —
                 // designer-customised geometry survives re-runs.
-                if (root.transform.childCount == 0 && root.GetComponent<MeshFilter>() == null)
+                bool hasVisual = root.transform.childCount > 0 || root.GetComponent<MeshFilter>() != null;
+                var oldFrame = root.transform.Find("FrameBase");
+                bool hasOldGenerated = oldFrame != null && oldFrame.localScale.x < 1.9f;
+                if (!hasVisual || hasOldGenerated)
+                {
+                    var children = new System.Collections.Generic.List<Transform>();
+                    foreach (Transform child in root.transform) children.Add(child);
+                    foreach (var child in children) Object.DestroyImmediate(child.gameObject);
                     BuildHarvesterVisuals(root);
+                }
 
                 var bcol = root.GetComponent<BoxCollider>();
                 if (bcol == null) bcol = root.AddComponent<BoxCollider>();
@@ -208,31 +217,32 @@ namespace VoxelEngine.EditorTools
                 discMat.SetFloat("_Brightness", 1.5f);
             }
 
+            // ── 9.14.0 GRAND build: a full-cell monument (~2.2 m frame) ──
             // Base + top plates.
             var basePlate = GameObject.CreatePrimitive(PrimitiveType.Cube);
             basePlate.name = "FrameBase";
             basePlate.transform.SetParent(root.transform, false);
-            basePlate.transform.localScale = new Vector3(1.55f, 0.14f, 1.55f);
-            basePlate.transform.localPosition = new Vector3(0f, -0.52f, 0f);
+            basePlate.transform.localScale = new Vector3(2.20f, 0.18f, 2.20f);
+            basePlate.transform.localPosition = new Vector3(0f, -0.72f, 0f);
             basePlate.GetComponent<Renderer>().sharedMaterial = frameMat;
             Object.DestroyImmediate(basePlate.GetComponent<Collider>());
 
             var topPlate = GameObject.CreatePrimitive(PrimitiveType.Cube);
             topPlate.name = "FrameTop";
             topPlate.transform.SetParent(root.transform, false);
-            topPlate.transform.localScale = new Vector3(1.55f, 0.14f, 1.55f);
-            topPlate.transform.localPosition = new Vector3(0f, 0.52f, 0f);
+            topPlate.transform.localScale = new Vector3(2.20f, 0.18f, 2.20f);
+            topPlate.transform.localPosition = new Vector3(0f, 0.72f, 0f);
             topPlate.GetComponent<Renderer>().sharedMaterial = frameMat;
             Object.DestroyImmediate(topPlate.GetComponent<Collider>());
 
             // Four corner pillars.
-            foreach (var corner in new[] { new Vector3(-0.72f, 0f, -0.72f), new Vector3(0.72f, 0f, -0.72f),
-                                           new Vector3(-0.72f, 0f, 0.72f), new Vector3(0.72f, 0f, 0.72f) })
+            foreach (var corner in new[] { new Vector3(-1.00f, 0f, -1.00f), new Vector3(1.00f, 0f, -1.00f),
+                                           new Vector3(-1.00f, 0f, 1.00f), new Vector3(1.00f, 0f, 1.00f) })
             {
                 var pillar = GameObject.CreatePrimitive(PrimitiveType.Cube);
                 pillar.name = "Pillar";
                 pillar.transform.SetParent(root.transform, false);
-                pillar.transform.localScale = new Vector3(0.14f, 1.04f, 0.14f);
+                pillar.transform.localScale = new Vector3(0.18f, 1.44f, 0.18f);
                 pillar.transform.localPosition = corner;
                 pillar.GetComponent<Renderer>().sharedMaterial = frameMat;
                 Object.DestroyImmediate(pillar.GetComponent<Collider>());
@@ -242,7 +252,7 @@ namespace VoxelEngine.EditorTools
             var horizon = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             horizon.name = "SingularityHorizon";
             horizon.transform.SetParent(root.transform, false);
-            horizon.transform.localScale = Vector3.one * 0.52f;
+            horizon.transform.localScale = Vector3.one * 0.74f;
             horizon.GetComponent<Renderer>().sharedMaterial = horizonMat;
             Object.DestroyImmediate(horizon.GetComponent<Collider>());
 
@@ -250,7 +260,7 @@ namespace VoxelEngine.EditorTools
             var disc = new GameObject("SingularityDisc");
             disc.transform.SetParent(root.transform, false);
             disc.transform.localRotation = Quaternion.Euler(72f, 0f, 0f);
-            disc.transform.localScale = Vector3.one * 1.15f;
+            disc.transform.localScale = Vector3.one * 1.62f;
             var discMF = disc.AddComponent<MeshFilter>();
             discMF.sharedMesh = CreateDiscAnnulus(48);
             var discMR = disc.AddComponent<MeshRenderer>();
@@ -264,21 +274,21 @@ namespace VoxelEngine.EditorTools
                 var coil = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
                 coil.name = "CoilRing";
                 coil.transform.SetParent(root.transform, false);
-                coil.transform.localScale = new Vector3(1.32f, 0.05f, 1.32f);
-                coil.transform.localPosition = new Vector3(0f, i == 0 ? -0.10f : 0.10f, 0f);
+                coil.transform.localScale = new Vector3(1.88f, 0.06f, 1.88f);
+                coil.transform.localPosition = new Vector3(0f, i == 0 ? -0.14f : 0.14f, 0f);
                 coil.transform.localRotation = Quaternion.Euler(90f + (i == 0 ? 12f : -12f), 0f, 0f);
                 coil.GetComponent<Renderer>().sharedMaterial = coilMat;
                 Object.DestroyImmediate(coil.GetComponent<Collider>());
             }
 
             // Amber collector tips on the base plate (energy conduits).
-            foreach (var corner in new[] { new Vector3(-0.45f, -0.42f, -0.45f), new Vector3(0.45f, -0.42f, -0.45f),
-                                           new Vector3(-0.45f, -0.42f, 0.45f), new Vector3(0.45f, -0.42f, 0.45f) })
+            foreach (var corner in new[] { new Vector3(-0.64f, -0.60f, -0.64f), new Vector3(0.64f, -0.60f, -0.64f),
+                                           new Vector3(-0.64f, -0.60f, 0.64f), new Vector3(0.64f, -0.60f, 0.64f) })
             {
                 var tip = GameObject.CreatePrimitive(PrimitiveType.Sphere);
                 tip.name = "CollectorTip";
                 tip.transform.SetParent(root.transform, false);
-                tip.transform.localScale = Vector3.one * 0.12f;
+                tip.transform.localScale = Vector3.one * 0.17f;
                 tip.transform.localPosition = corner;
                 tip.GetComponent<Renderer>().sharedMaterial = tipMat;
                 Object.DestroyImmediate(tip.GetComponent<Collider>());

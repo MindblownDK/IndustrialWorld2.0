@@ -1,9 +1,62 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.13.0-dev`
+**Current Version:** `9.14.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.14.0-dev] Pressurized Canisters, Star Locator & the Grand Blocks (Phase 5, Part 5)
+
+**Type:** MINOR — portable containment pressure system, navigation block, two grander blocks, harvester UI. Save-compatible.
+
+#### 🟣 1. Magenta shader fixed
+`VoxelEngine/SingularityHorizon` carried an HDR blend mode + LOD line — the classic URP magenta combo on this project (every other Phase 5 shader already used the proven non-HDR template). Rewritten to match QuasarGlow/QuasarJet exactly (`Fallback "Diffuse"`, no HDR). The harvester's contained black hole renders again (existing materials rebind on reimport).
+
+#### 🎈 2. Pressurized canisters — carrying exotic matter is now a REAL decision
+- Raw **antimatter and dark matter can no longer be held by the player at all** (`cannotBeCarried` + the player-inventory gate). They only travel in **pressurized canisters** (Step 54 flags both canisters).
+- **Pressure lives on the stack** (`ItemStack.charge`, save-compatible): 100 at fill, bleeding ~2/s in the player inventory. On-grid storage and the Containment Vault hold pressure indefinitely.
+- **Merging canisters averages their pressure** (weighted `ItemContainer.MergeCharge` hook — zero effect on any other item).
+- HUD pocket strip shows the lowest carried canister's pressure; amber below 30, red below 15. **At zero the canister collapses — the stack is destroyed and the carrier dies: "KILLED BY CONTAINMENT COLLAPSE".**
+
+#### 🧭 3. Star Locator — set a destination, then GO there
+- New powered navigation grid block (6 kW): **AUTO** tracks the nearest body, **SPECIFIC** locks any target from the panel (◀ ▶ cycle): the black hole, the quasar, the sun, every planet and moon.
+- Projects a **true waypoint marker** (converging pin, same honest math as the singularity beacons).
+- **The warp drive reads the active locator:** aim at the waypoint and jump — planets get a 90 km orbital arrival, singularities their standoff corridor, the sun a safe 50,000 km halo.
+- Full machine panel: mode toggle, target cycler, live distance, power. Research: **Star Locator** (tier 6, Logistics) — Setup **Step 55**.
+
+#### 🏗️ 4. Both blocks are GRANDER, and they move with their power
+- **Singularity Harvester** grows to a full-cell monument (~2.2 m frame, bigger horizon + disc + coils) — and its black hole disc spins + coils breathe **only while the grid feeds it power**. It also gets its **own flagship panel**: live black-hole visual, harvest efficiency gauge, horizon distance, remnant target, buffer slots and the exotic-matter warning line.
+- **Containment Vault** grows again (2.0 m pedestal, 2.42 m containment rings, taller pylons, bigger horizon) — disc/rings now spin and the pylon tips **breathe violet only when powered**.
+- Step 53/54 upgrade the old generated visuals automatically; designer-customised prefabs are never touched.
+
+#### 🖥️ 5. Vault panel visual fixed
+The panel's black-hole rings and orbiting spots are now **explicitly centered on the black hole** (the rings hugged the top and the balls drifted left).
+
+#### ✅ Static delivery checks
+- All touched sources parse clean (tree-sitter C#); shader matches the proven project template; no save-format changes.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile — the harvester's horizon is black with a lensed rim, not magenta.
+2. Re-run **Step 53** (bigger harvester), **Step 54** (bigger vault + canister flags), then **Step 55** (locator). Old saves still load; new placements use the grand builds.
+3. Vault panel: rings + orbiting balls now perfectly around the black hole. Kill grid power: disc/rings stop, pylon tips dim — same on the harvester (disc stops, coils dim).
+4. Raw antimatter/dark matter: try dragging one into the player inventory — refused. Craft canisters instead.
+5. Carry a canister: pocket strip shows pressure falling; toasts at 30/15; at 0 the canister is destroyed and you die ("KILLED BY CONTAINMENT COLLAPSE"). Return it to a vault in time to save it (and yourself).
+6. Open the harvester panel — full live readout.
+7. Place a Star Locator, pick "Black Hole" in SPECIFIC mode, fly toward the waypoint marker, engage the warp drive → you arrive at the standoff corridor.
+
+### [9.13.1-dev] Compile Recovery — Vault Panel Detached-Tree Guard
+
+**Type:** PATCH — Unity compile fix for the 9.13.0 delivery; no behaviour change.
+
+#### 🛠️ Compiler fix
+- **CS1061 ('VisualElement' has no 'IsAttachedToPanel'):** the vault panel's animation loop used a non-existent instance member. The guard now uses the codebase-standard `panel != null` check (the same pattern used by the conveyors, shape wheels and GameUIController) — the loop simply stops animating when the panel tree is detached.
+
+#### ✅ Static delivery checks
+- Source parses clean (tree-sitter C#); no other `IsAttachedToPanel` usages remain in the codebase.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile — console clean.
+2. Continue the 9.13.0 checklist (grand vault, pressure sim, cockpit banner, panel visuals).
 
 ### [9.13.0-dev] The Grand Containment Vault — Powered Fields, Pressure & Cockpit Alarms (Phase 5, Part 4)
 

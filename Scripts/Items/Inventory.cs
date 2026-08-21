@@ -40,6 +40,9 @@ namespace VoxelEngine.Items
             if (container == null) container = new ItemContainer("Inventory", TOTAL_SIZE);
             else container.Resize(TOTAL_SIZE);
             container.UsePlayerWeightProfile = true;
+            // Raw exotic matter (antimatter/dark matter) is never carried by hand —
+            // it only travels in pressurized canisters.
+            container.allowPlayerCarry = false;
         }
 
         public float CurrentWeightKg

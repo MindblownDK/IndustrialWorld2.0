@@ -28,6 +28,20 @@ namespace VoxelEngine.Items
         /// </summary>
         public bool requiresContainment = false;
 
+        /// <summary>
+        /// True for raw exotic matter that may NEVER be carried directly — it only
+        /// travels inside pressurized canisters. The player inventory refuses it
+        /// (ItemContainer.allowPlayerCarry gate).
+        /// </summary>
+        public bool cannotBeCarried = false;
+
+        /// <summary>
+        /// True for pressurized canisters: they hold their exotic payload under a
+        /// decaying field. In the player inventory the pressure bleeds down; at zero
+        /// the canister collapses — and kills whoever carries it.
+        /// </summary>
+        public bool isPressurizedCanister = false;
+
         [Header("Visuals")]
         [Tooltip("Optional 3D prefab to show when this item is held in hand (viewmodel).")]
         public GameObject viewmodelPrefab;

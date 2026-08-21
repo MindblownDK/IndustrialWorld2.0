@@ -516,6 +516,19 @@ namespace VoxelEngine.EditorTools
                 "Re-runnable. Idempotent. Run after Steps 52–53.");
             AddWizardButton(scroll, "54. Build Containment Systems (Antimatter, Dark Matter, Vault, Canisters — Non-Destructive)", () => VoxelEngine.EditorTools.SingularityContainmentSetup.RunStep54(), 56);
 
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
+                "Step 55 (Phase 5) builds the STAR LOCATOR navigation block (non-destructive):\n" +
+                "  • Pinpoints the black hole, the quasar, the sun, every planet and moon\n" +
+                "  • AUTO tracks the nearest body; SPECIFIC locks a chosen target (panel ◀ ▶)\n" +
+                "  • Projects a true waypoint marker — aim at it and engage the warp drive\n" +
+                "    to jump straight to the target (planets: 90 km orbit, singularities:\n" +
+                "    standoff corridor, sun: safe 50,000 km halo)\n" +
+                "  • Powered navigation: 6 kW while enabled\n" +
+                "  • Research: Star Locator (tier 6, Logistics) — the early travel bridge\n" +
+                "Re-runnable. Idempotent. Run after Steps 52–54.");
+            AddWizardButton(scroll, "55. Build Star Locator (Navigation Block, Waypoint, Warp Lock — Non-Destructive)", () => VoxelEngine.EditorTools.SingularityLocatorSetup.RunStep55(), 56);
+
             AddSpacer(scroll, 20);
         }
 

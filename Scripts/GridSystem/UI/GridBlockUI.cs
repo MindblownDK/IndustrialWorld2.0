@@ -34,6 +34,8 @@ namespace VoxelEngine.GridSystem.UI
                 case GridH2O2Generator h2:  return MakeScrollable(H2O2Panel(h2, slot));
                 case GridBattery bat:       return BatteryPanel(bat, slot);
                 case GridContainmentVault cv: return MakeScrollable(ContainmentVaultPanel(cv, slot));
+                case GridSingularityHarvester sh: return MakeScrollable(HarvesterPanel(sh, slot));
+                case GridLocatorBlock loc:  return MakeScrollable(LocatorPanel(loc));
                 case GridCargoContainer cc: return CargoPanel(cc, slot);
                 case GridWeapon gw:         return MakeScrollable(WeaponPanel(gw, slot));
                 case GridRefinery rf:       return MakeScrollable(ProcessorPanel("⚗ Ship Refinery", rf.Current, rf.Progress01, rf.PowerDraw, rf.knownRecipes, rf.Grid, rf.selectedRecipe, r => rf.selectedRecipe = r));
@@ -550,20 +552,23 @@ namespace VoxelEngine.GridSystem.UI
             p.Add(T.AccentDivider(T.AccentPurple));
 
             // ── The contained singularity (live) ──
+            // 168×168 stage; EVERY element is explicitly centred on (84, 84) so the
+            // rings hug the black hole and the orbiting spots trace the disc ellipse.
             var coreBox = new VisualElement();
             coreBox.style.height = 168;
-            coreBox.style.alignItems = Align.Center;
-            coreBox.style.justifyContent = Justify.Center;
             coreBox.style.marginTop = 4;
             coreBox.style.marginBottom = 6;
             coreBox.pickingMode = PickingMode.Ignore;
             p.Add(coreBox);
+            const float CX = 84f, CY = 84f;
 
             // Warm accretion glow behind everything (generated radial texture).
             var glow = new VisualElement();
             glow.style.position = Position.Absolute;
             glow.style.width = 150;
             glow.style.height = 150;
+            glow.style.left = CX - 75f;
+            glow.style.top = CY - 75f;
             glow.style.backgroundImage = new StyleBackground(Background.FromTexture2D(GlowTexture()));
             glow.pickingMode = PickingMode.Ignore;
             coreBox.Add(glow);
@@ -572,6 +577,9 @@ namespace VoxelEngine.GridSystem.UI
             var ringOuter = Ellipse(172, 62, new Color(1f, 0.55f, 0.22f, 0.16f), 2);
             var ringMid   = Ellipse(164, 56, new Color(1f, 0.62f, 0.28f, 0.38f), 3);
             var ringHot   = Ellipse(156, 50, new Color(1f, 0.86f, 0.68f, 0.85f), 2);
+            PositionCentered(ringOuter, 172, 62, CX, CY);
+            PositionCentered(ringMid, 164, 56, CX, CY);
+            PositionCentered(ringHot, 156, 50, CX, CY);
             coreBox.Add(ringOuter); coreBox.Add(ringMid); coreBox.Add(ringHot);
 
             // The void itself.
@@ -579,6 +587,8 @@ namespace VoxelEngine.GridSystem.UI
             core.style.position = Position.Absolute;
             core.style.width = 64;
             core.style.height = 64;
+            core.style.left = CX - 32f;
+            core.style.top = CY - 32f;
             core.style.backgroundColor = new StyleColor(new Color(0.005f, 0.004f, 0.008f, 1f));
             UITheme.Radius(core, 32f);
             UITheme.Border(core, 1, new Color(0.55f, 0.16f, 0.10f, 0.55f));
@@ -592,6 +602,8 @@ namespace VoxelEngine.GridSystem.UI
             // Violet containment field rings.
             var fieldOuter = Ellipse(196, 74, new Color(0.58f, 0.34f, 0.95f, 0.22f), 1);
             var fieldInner = Ellipse(184, 66, new Color(0.58f, 0.34f, 0.95f, 0.34f), 1);
+            PositionCentered(fieldOuter, 196, 74, CX, CY);
+            PositionCentered(fieldInner, 184, 66, CX, CY);
             coreBox.Add(fieldOuter); coreBox.Add(fieldInner);
 
             // ── Pressure gauge with the stable band ──
@@ -703,7 +715,8 @@ namespace VoxelEngine.GridSystem.UI
         private static void AnimateVaultPanel(VisualElement p, GridContainmentVault cv,
             VisualElement[] spots, VisualElement marker, Label warn, Label pressureText, ref float shownPressure)
         {
-            if (p == null || !p.IsAttachedToPanel()) return;
+            // The panel may have been closed/rebuilt — stop animating detached trees.
+            if (p == null || p.panel == null) return;
             float t = Time.unscaledTime;
 
             // ── Orbiting hot-spots along the disc ellipse ──
@@ -767,6 +780,296 @@ namespace VoxelEngine.GridSystem.UI
             dot.style.backgroundColor = new StyleColor(new Color(1f, 0.75f, 0.4f, 0.9f));
             dot.pickingMode = PickingMode.Ignore;
             return dot;
+        }
+
+        private static void PositionCentered(VisualElement el, float width, float height, float cx, float cy)
+        {
+            el.style.left = cx - width / 2f;
+            el.style.top = cy - height / 2f;
+        }
+
+        // ── SINGULARITY HARVESTER ───────────────────────────────────────────
+        // The harvester finally gets its flagship panel: same live black-hole
+        // visual as the vault, plus the harvest loop — status, efficiency bar,
+        // horizon distance, power and the internal buffer.
+        private static VisualElement HarvesterPanel(GridSingularityHarvester sh, MachineUIs.SlotBuilder slot)
+        {
+            if (sh.buffer == null) sh.OnPlaced();
+            var p = T.MachinePanel();
+            p.style.width = 470;
+
+            bool active = sh.IsHarvesting;
+            var (hdr, _, _, _) = T.HeaderRow("◉ Singularity Harvester",
+                active ? "HARVESTING" : sh.Status.ToUpperInvariant(),
+                active ? T.AccentGreen : sh.Status == "No Power" ? T.AccentAmber : T.AccentDim);
+            p.Add(hdr);
+            p.Add(T.AccentDivider(T.AccentPurple));
+
+            // ── The contained black hole (live) ──
+            var coreBox = new VisualElement();
+            coreBox.style.height = 150;
+            coreBox.style.marginTop = 4;
+            coreBox.style.marginBottom = 6;
+            coreBox.pickingMode = PickingMode.Ignore;
+            p.Add(coreBox);
+            const float CX = 84f, CY = 75f;
+
+            var glow = new VisualElement();
+            glow.style.position = Position.Absolute;
+            glow.style.width = 128;
+            glow.style.height = 128;
+            glow.style.left = CX - 64f;
+            glow.style.top = CY - 64f;
+            glow.style.backgroundImage = new StyleBackground(Background.FromTexture2D(GlowTexture()));
+            glow.pickingMode = PickingMode.Ignore;
+            coreBox.Add(glow);
+
+            var ringOuter = Ellipse(148, 52, new Color(1f, 0.55f, 0.22f, 0.16f), 2);
+            var ringMid = Ellipse(140, 47, new Color(1f, 0.62f, 0.28f, 0.38f), 3);
+            var ringHot = Ellipse(134, 42, new Color(1f, 0.86f, 0.68f, 0.85f), 2);
+            PositionCentered(ringOuter, 148, 52, CX, CY);
+            PositionCentered(ringMid, 140, 47, CX, CY);
+            PositionCentered(ringHot, 134, 42, CX, CY);
+            coreBox.Add(ringOuter); coreBox.Add(ringMid); coreBox.Add(ringHot);
+
+            var core = new VisualElement();
+            core.style.position = Position.Absolute;
+            core.style.width = 52;
+            core.style.height = 52;
+            core.style.left = CX - 26f;
+            core.style.top = CY - 26f;
+            core.style.backgroundColor = new StyleColor(new Color(0.005f, 0.004f, 0.008f, 1f));
+            UITheme.Radius(core, 26f);
+            UITheme.Border(core, 1, new Color(0.55f, 0.16f, 0.10f, 0.55f));
+            core.pickingMode = PickingMode.Ignore;
+            coreBox.Add(core);
+
+            var hSpotA = SpotDot(); var hSpotB = SpotDot(); var hSpotC = SpotDot();
+            coreBox.Add(hSpotA); coreBox.Add(hSpotB); coreBox.Add(hSpotC);
+
+            // Containment coil rings (cyan — the block's real coils).
+            var coilA = Ellipse(166, 60, new Color(0.2f, 0.65f, 0.9f, 0.30f), 1);
+            var coilB = Ellipse(158, 54, new Color(0.2f, 0.65f, 0.9f, 0.42f), 1);
+            PositionCentered(coilA, 166, 60, CX, CY);
+            PositionCentered(coilB, 158, 54, CX, CY);
+            coreBox.Add(coilA); coreBox.Add(coilB);
+
+            // ── Efficiency gauge ──
+            p.Add(GridUIHelpers.SectionTitle("Harvest Efficiency"));
+            var track = new VisualElement();
+            track.style.height = 14;
+            track.style.marginTop = 2;
+            track.style.backgroundColor = new StyleColor(new Color(0.04f, 0.045f, 0.065f));
+            UITheme.Radius(track, 4f);
+            UITheme.Border(track, 1, T.BorderDim);
+            track.style.overflow = Overflow.Hidden;
+            track.pickingMode = PickingMode.Ignore;
+            p.Add(track);
+            var effFill = new VisualElement();
+            effFill.style.position = Position.Absolute;
+            effFill.style.top = 1; effFill.style.bottom = 1; effFill.style.left = 1;
+            effFill.style.width = Length.Percent(0f);
+            effFill.style.backgroundColor = new StyleColor(new Color(0.58f, 0.34f, 0.95f, 0.85f));
+            effFill.pickingMode = PickingMode.Ignore;
+            track.Add(effFill);
+            var effText = T.Muted("Efficiency 0%");
+            effText.style.marginTop = 3;
+            p.Add(effText);
+
+            // ── Warning line (rare drops stuck) ──
+            var hWarn = new Label();
+            hWarn.style.marginTop = 4;
+            hWarn.style.paddingTop = 4;
+            hWarn.style.paddingBottom = 4;
+            hWarn.style.paddingLeft = 8;
+            hWarn.style.paddingRight = 8;
+            hWarn.style.fontSize = 10;
+            hWarn.style.unityFontStyleAndWeight = FontStyle.Bold;
+            hWarn.style.letterSpacing = 1.2f;
+            hWarn.style.unityTextAlign = TextAnchor.MiddleCenter;
+            hWarn.style.backgroundColor = new StyleColor(new Color(0.16f, 0.04f, 0.04f, 0.9f));
+            UITheme.Radius(hWarn, 6f);
+            UITheme.Border(hWarn, 1, new Color(0.82f, 0.22f, 0.18f, 0.6f));
+            hWarn.style.color = new Color(1f, 0.35f, 0.25f);
+            hWarn.style.display = DisplayStyle.None;
+            p.Add(hWarn);
+
+            p.Add(T.Spacer(6));
+
+            p.Add(T.StatRow("🎯", "Status", sh.Status, active ? T.AccentGreen : T.AccentDim));
+            p.Add(T.StatRow("◉", "Remnant", sh.NearestRemnant, T.AccentPurple));
+            p.Add(T.StatRow("📏", "Horizon Distance", sh.HorizonDistanceKm >= float.MaxValue ? "—" : $"{sh.HorizonDistanceKm:0} km", T.AccentCyan));
+            p.Add(T.StatRow("⚡", "Power Draw", PowerFormat.Watts(sh.PowerDraw), sh.Grid != null && sh.Grid.HasPower ? T.AccentCyan : T.AccentAmber));
+            p.Add(T.Spacer(4));
+
+            p.Add(GridUIHelpers.SectionTitle("Internal Buffer"));
+            var invScroll = new ScrollView(ScrollViewMode.Vertical);
+            VoxelEngine.UI.UITheme.StyleScroller(invScroll);
+            invScroll.style.maxHeight = 160;
+            invScroll.style.flexShrink = 1;
+            invScroll.contentContainer.style.width = Length.Percent(100);
+            var grid = T.SlotGrid(4);
+            if (sh.buffer != null)
+                for (int i = 0; i < sh.buffer.Size; i++)
+                    grid.Add(slot(sh.buffer, i, sh.buffer.GetSlot(i), false, true));
+            invScroll.Add(grid);
+            p.Add(invScroll);
+
+            p.Add(T.Spacer(6));
+            p.Add(T.SmallButton("🛰  Open Ship Terminal",
+                () => VoxelEngine.UI.GameUIController.Instance?.OpenGridTerminal(sh.Grid), T.AccentCyan));
+
+            var hSpots = new[] { hSpotA, hSpotB, hSpotC };
+            p.schedule.Execute(() => AnimateHarvesterPanel(p, sh, hSpots, effFill, effText, hWarn)).Every(80);
+            return p;
+        }
+
+        private static void AnimateHarvesterPanel(VisualElement p, GridSingularityHarvester sh,
+            VisualElement[] spots, VisualElement effFill, Label effText, Label warn)
+        {
+            if (p == null || p.panel == null) return;
+            float t = Time.unscaledTime;
+
+            const float CX = 84f, CY = 75f, AX = 66f, BX = 21f;
+            for (int i = 0; i < spots.Length; i++)
+            {
+                var s = spots[i];
+                if (s == null) continue;
+                float phase = t * (1.1f + i * 0.5f) + i * 2.1f;
+                float ca = Mathf.Cos(phase), sa = Mathf.Sin(phase);
+                s.style.left = (CX + AX * ca) - 4f;
+                s.style.top = (CY + BX * sa) - 4f;
+                float front = Mathf.Clamp01(sa * 0.85f + 0.55f);
+                s.style.backgroundColor = new StyleColor(new Color(1f, 0.72f, 0.38f, 0.35f + 0.6f * front));
+            }
+
+            if (effFill != null && sh != null)
+            {
+                effFill.style.width = new StyleLength(new Length(Mathf.Clamp01(sh.Efficiency01) * 100f, LengthUnit.Percent));
+                if (effText != null)
+                    effText.text = $"Efficiency {sh.Efficiency01 * 100f:0}%";
+            }
+
+            if (warn != null && sh != null)
+            {
+                bool stuck = sh.Status != null && sh.Status.IndexOf("vault", System.StringComparison.OrdinalIgnoreCase) >= 0;
+                if (stuck)
+                {
+                    warn.style.display = DisplayStyle.Flex;
+                    warn.text = "⚠ EXOTIC MATTER BUFFERED — ADD A CONTAINMENT VAULT";
+                    float pulse = 0.55f + 0.45f * Mathf.Abs(Mathf.Sin(t * 3f));
+                    warn.style.color = new Color(1f, 0.3f, 0.22f, pulse);
+                }
+                else warn.style.display = DisplayStyle.None;
+            }
+        }
+
+        // ── STAR LOCATOR ────────────────────────────────────────────────────
+        private static VisualElement LocatorPanel(GridLocatorBlock loc)
+        {
+            var p = T.MachinePanel();
+            p.style.width = 460;
+
+            bool tracking = loc.IsTracking;
+            var (hdr, _, _, _) = T.HeaderRow("✦ Star Locator",
+                tracking ? "TRACKING" : loc.Status.ToUpperInvariant(),
+                tracking ? T.AccentGreen : T.AccentAmber);
+            p.Add(hdr);
+            p.Add(T.AccentDivider(T.AccentCyan));
+
+            // Target readout with a live pulse dot.
+            var targetRow = new VisualElement();
+            targetRow.style.flexDirection = FlexDirection.Row;
+            targetRow.style.alignItems = Align.Center;
+            targetRow.style.marginTop = 6;
+            var pulseDot = new VisualElement();
+            pulseDot.style.width = 10;
+            pulseDot.style.height = 10;
+            UITheme.Radius(pulseDot, 5f);
+            pulseDot.style.backgroundColor = new StyleColor(new Color(0.2f, 0.9f, 1f));
+            pulseDot.style.marginRight = 8;
+            targetRow.Add(pulseDot);
+            var targetLabel = new Label(loc.TargetName);
+            targetLabel.style.fontSize = 16;
+            targetLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            targetLabel.style.color = new Color(0.75f, 0.92f, 1f);
+            targetRow.Add(targetLabel);
+            p.Add(targetRow);
+
+            var distLabel = T.Muted(loc.TargetDistanceKm >= 0d ? $"{loc.TargetDistanceKm:0} km away" : "—");
+            p.Add(distLabel);
+            p.Add(T.Spacer(6));
+
+            // Mode toggle.
+            p.Add(GridUIHelpers.SectionTitle("Tracking Mode"));
+            var modeRow = new VisualElement();
+            modeRow.style.flexDirection = FlexDirection.Row;
+            modeRow.style.marginBottom = 6;
+            var autoBtn = T.SmallButton("◎ AUTO", () =>
+            {
+                loc.mode = GridLocatorBlock.LocatorMode.Auto;
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, loc.mode == GridLocatorBlock.LocatorMode.Auto ? T.AccentGreen : T.AccentDim);
+            autoBtn.style.marginRight = 6;
+            modeRow.Add(autoBtn);
+            var specBtn = T.SmallButton("◈ SPECIFIC", () =>
+            {
+                loc.mode = GridLocatorBlock.LocatorMode.Specific;
+                if (loc.selectedTargetIndex < 0) loc.selectedTargetIndex = 0;
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, loc.mode == GridLocatorBlock.LocatorMode.Specific ? T.AccentPurple : T.AccentDim);
+            modeRow.Add(specBtn);
+            p.Add(modeRow);
+
+            // Target cycle (SPECIFIC mode).
+            p.Add(GridUIHelpers.SectionTitle("Target Body"));
+            var cycleRow = new VisualElement();
+            cycleRow.style.flexDirection = FlexDirection.Row;
+            cycleRow.style.alignItems = Align.Center;
+            cycleRow.style.marginBottom = 6;
+            var prevBtn = T.SmallButton("◀", () => CycleTarget(loc, -1), T.AccentCyan);
+            prevBtn.style.marginRight = 8;
+            cycleRow.Add(prevBtn);
+            var selLabel = new Label(GridLocatorBlock.TargetNameAt(loc.selectedTargetIndex));
+            selLabel.style.flexGrow = 1;
+            selLabel.style.unityTextAlign = TextAnchor.MiddleCenter;
+            selLabel.style.color = new Color(0.9f, 0.95f, 1f);
+            cycleRow.Add(selLabel);
+            var nextBtn = T.SmallButton("▶", () => CycleTarget(loc, 1), T.AccentCyan);
+            nextBtn.style.marginLeft = 8;
+            cycleRow.Add(nextBtn);
+            p.Add(cycleRow);
+
+            p.Add(T.StatRow("⚡", "Power Draw", PowerFormat.Watts(loc.PowerDraw), loc.Grid != null && loc.Grid.HasPower ? T.AccentCyan : T.AccentAmber));
+            p.Add(T.StatRow("🎯", "Status", loc.Status, tracking ? T.AccentGreen : T.AccentDim));
+            p.Add(T.Muted("Aim the ship at the waypoint marker and engage the warp drive to jump to the target."));
+            p.Add(T.Spacer(6));
+            p.Add(T.SmallButton("🛰  Open Ship Terminal",
+                () => VoxelEngine.UI.GameUIController.Instance?.OpenGridTerminal(loc.Grid), T.AccentCyan));
+
+            // Live refresh of the readouts.
+            p.schedule.Execute(() =>
+            {
+                if (p == null || p.panel == null) return;
+                pulseDot.style.backgroundColor = new StyleColor(
+                    tracking ? new Color(0.2f, 0.9f, 1f, 0.55f + 0.45f * Mathf.Abs(Mathf.Sin(Time.unscaledTime * 3.4f))) : new Color(0.5f, 0.2f, 0.2f));
+                targetLabel.text = loc.TargetName;
+                distLabel.text = loc.TargetDistanceKm >= 0d ? $"{loc.TargetDistanceKm:0} km away" : "—";
+                selLabel.text = GridLocatorBlock.TargetNameAt(loc.selectedTargetIndex);
+                selLabel.style.color = loc.mode == GridLocatorBlock.LocatorMode.Specific
+                    ? new Color(0.9f, 0.95f, 1f)
+                    : new Color(0.5f, 0.55f, 0.65f);
+            }).Every(400);
+            return p;
+        }
+
+        private static void CycleTarget(GridLocatorBlock loc, int delta)
+        {
+            int count = GridLocatorBlock.TargetCount;
+            if (count <= 0) return;
+            loc.mode = GridLocatorBlock.LocatorMode.Specific;
+            int cur = loc.selectedTargetIndex < 0 ? 0 : loc.selectedTargetIndex;
+            loc.selectedTargetIndex = (cur + delta + count) % count;
         }
 
         private static VisualElement Ellipse(float width, float height, Color borderColor, float borderWidth)
