@@ -200,6 +200,31 @@ namespace VoxelEngine.Cosmos
         [HideInInspector] public int pirateOilNodeSettingsVersion;
         [HideInInspector] public bool isCanonicalPirateJackPumpWorld;
 
+        /// <summary>
+        /// 9.16.0 — industrial worlds generate natural lakes of REFINED products
+        /// (refined oil, liquid fuel, heavy fuel oil, marine gas oil) instead of
+        /// plain water. Toggle this on templates, or use a matching body name.
+        /// </summary>
+        [Tooltip("Industrial worlds generate natural fuel/refined-product lakes instead of water lakes.")]
+        public bool industrialWorld = false;
+
+        /// <summary>True for industrial worlds — by flag or by body-name keyword.</summary>
+        public bool IsIndustrialWorld
+        {
+            get
+            {
+                if (industrialWorld) return true;
+                string n = bodyName?.Trim() ?? string.Empty;
+                if (n.Length == 0) return false;
+                return n.IndexOf("Industrial", System.StringComparison.OrdinalIgnoreCase) >= 0
+                    || n.IndexOf("Factory", System.StringComparison.OrdinalIgnoreCase) >= 0
+                    || n.IndexOf("Refinery", System.StringComparison.OrdinalIgnoreCase) >= 0
+                    || n.IndexOf("Forge", System.StringComparison.OrdinalIgnoreCase) >= 0
+                    || n.IndexOf("Foundry", System.StringComparison.OrdinalIgnoreCase) >= 0
+                    || n.IndexOf("Plant", System.StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+        }
+
         /// <summary>True only for the one authored Pirate World identity.</summary>
         public bool IsPirateWorld => string.Equals(bodyName?.Trim(), "Pirate World", StringComparison.OrdinalIgnoreCase);
 

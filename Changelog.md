@@ -1,9 +1,76 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.14.1-dev`
+**Current Version:** `9.16.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.16.0-dev] Liquid Worlds — All 7 Liquids, Real Looks, Real Flow (Liquids Overhaul, Part 1)
+
+**Type:** MINOR — seven placeable liquids with per-liquid visuals & physics, industrial fuel lakes, universal bucket. Save-compatible (new voxel material values only; old saves keep their exact meaning).
+
+#### 🧪 1. All 7 liquids live in the world now
+The voxel format kept ONE fluid byte + a material byte that could only express water or crude oil. Five new save-compatible `MaterialId`s carry the rest: **Refined Oil, Liquid Fuel, Heavy Fuel Oil, Marine Gas Oil, Marine Engine Coolant** — old saves can never contain them, so nothing migrates.
+
+#### 🌊 2. Every liquid FLOWS like itself (sim overhaul)
+- **Per-liquid flow:** water pours, coolant runs watery, liquid fuel spreads fast, refined/MGO flow thin, heavy fuel oil oozes, crude barely moves — gravity throughput + spread rate per liquid in the Burst sim.
+- **Real density layering:** full cells swap vertically until heavier liquids sit below lighter ones — **fuel floats on water, water floats on crude**, and pools visibly stratify.
+
+#### ✨ 3. Every liquid LOOKS like itself (the "real textures")
+- The liquid mesh renders **7 submeshes with 7 shader profiles** (`LiquidVisualProfile`): water with foam + caustics, black glossy crude with a faint sheen, amber transparent refined oil with a **strong rainbow thin-film sheen**, bright volatile liquid fuel with fast shimmer, matte tar-like HFO, pale MGO distillate, and **emissive glowing coolant**.
+- `VoxelWaterURP` gained thin-film iridescence (view-angle hue cycling) and emission — the project-standard template, no HDR blend modes.
+
+#### 🏭 4. Industrial worlds generate fuel lakes
+`BodySettings.industrialWorld` (flag or body-name keyword: Industrial/Factory/Refinery/Forge/Foundry/Plant). On those worlds, generation-time lakes fill with **refined oil / liquid fuel / HFO / MGO** (seeded per lake) instead of water. Step 56 flags every matching template non-destructively.
+
+#### 🪣 5. The Universal Liquid Bucket
+The bucket (now "Liquid Bucket", Step 56) scoops ANY of the 7 liquids, places what it holds, and — new — **right-click a liquid tank to fill the bucket from the tank network or pour it back in** (100 L per bucket, type-checked). The tank exchange is fully feedback-toasted.
+
+#### 🌍 6. The fake ocean sphere is gone — ALL water is real generated voxel liquid
+The old quadtree sea shell (GpuOceanEngine) that wrapped every body at sea radius is **removed**: `CosmosBootstrap` no longer creates it, and the component self-disables if a legacy scene/prefab still carries it. Oceans now render exclusively from the **generated voxel ocean basins** (SphereDensity fills basins below sea level with real water cells), meshed by the same WaterMeshBuilder as lakes, seeps, buckets and pumps — flow, waves, foam, wakes and bucket scooping work on the open ocean exactly like anywhere else. Water is now Minecraft-real: it exists where the voxels say it exists, and nowhere else.
+
+#### ✅ Static delivery checks
+- All touched sources parse clean (tree-sitter C#); no save-format changes; no other-game names; no TODOs.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile; run **Step 56** (renames the bucket, flags industrial templates).
+2. Scoop from any pool: water, crude seep, refined/fuel lake — the bucket remembers and places exactly what it held.
+3. Place all 7 liquids side by side: each pools with its own colour, sheen and wave motion; fuel poured onto water visibly floats; crude poured into water sinks below it.
+4. On an industrial world (or flag a template + fresh chunks): lakes generate as rainbow-sheened fuel/refined pools.
+5. Right-click a liquid tank with an empty bucket → filled with the tank's liquid; right-click again with a full one → poured in. Wrong-liquid tanks refuse.
+6. Verify existing saves load unchanged; oceans stay water; oil seeps unchanged.
+7. Coolant pools glow in the dark; fuels shimmer with the rainbow sheen when you move around them.
+
+Next in the liquids arc: **Part 2 — the full fire system** (ignition, spreading burning fuel pools, light, damage), then **Part 3 — per-liquid player physics** (coolant scald, oil drag/sinking, fuel toxicity, water swimming).
+
+### [9.15.0-dev] Visible Worlds & Living Asteroid Fields (Roadmap: Asteroids & Planet Visibility)
+
+**Type:** MINOR — planet/moon long-range rendering + denser, clustered, drifting asteroid fields. Save-compatible.
+
+#### 🪐 1. Planets are now visible from ANYWHERE in the system
+Root causes found and fixed:
+- **Far-clip culling:** distant-body beacons sat at the body's REAL position — beyond the camera far plane, invisible. The beacons now use a **converging projection** (the honest math proven on the singularity beacons): true direction, pinned at min(real distance, 62,000 km) — always inside the guaranteed far clip.
+- **Invisible handover gap:** the beacon hid itself based on ANGULAR size, so any planet subtending more than ~0.014 rad vanished while its real LOD only rendered inside 60,000 km — a 6,000 km planet was invisible between 60,000 km and ~400,000 km. The crossfade is now **distance-based (60,000 → 80,000 km)**, matching exactly the band where the real geometry takes over, and the far clip now covers the whole band — zero invisible gap, size-continuous handover.
+
+#### 🔭 2. Distant planets look like REAL worlds
+New `VoxelEngine/DistantPlanet` shader replaces the flat coloured dot: **sun-lit day side with a soft terminator** (driven by the body→sun direction), a **dark starlit night side**, limb darkening and a **glowing atmosphere rim** for worlds with air (subtle grey rim for airless moons). Planets in the sky now read like little Earths and Jupiters, not billiard balls.
+
+#### ☄️ 3. Asteroid fields are proper belts now
+- **Twice the density** (28 → 56 live rocks) over a **far wider field** (spawn ring 1.2–14 km, despawn 30 km) — the belt is visible long before you reach it, instead of popping in around you.
+- **Cluster spawning:** 55% of spawns form real rock FAMILIES (3–6 members sharing the parent's ore 60% of the time) scattered inside a 250–900 m shell — belts look born together, not sprayed uniformly.
+- **Live drift:** every rock carries a slow through-field drift (0.4–1.2 m/s) plus its tumble — the field moves, it isn't parked.
+- Bigger size range (8–140 m radius); tighter separation (450 m) keeps it dense without overlaps.
+
+#### ✅ Static delivery checks
+- All touched sources parse clean (tree-sitter C#); the new shader matches the project's proven template (no HDR blend, no LOD, `_WorldSpaceCameraPos`, `Fallback "Diffuse"`); no save-format changes.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile.
+2. Stand in space: every planet and moon should be visible as a **shaded world disc** — day side lit, night side dark, atmospheric worlds with a glowing rim — from anywhere, including from a planet's surface.
+3. Fly toward a distant planet: its disc converges toward the real position and hands over to the real surface around 60,000 km with no pop, no gap.
+4. Fly deep space / high orbit: the asteroid field is noticeably denser, further out, clustered in families, and the rocks drift slowly. Mine one — drops/health unchanged.
+5. Warp to the black hole and back — beacons, far clip and crossfade all hold (no culled planets, no z-fighting).
+6. Confirm existing saves load unchanged.
 
 ### [9.14.1-dev] Field-Report Fixes — Panels, Pink Shaders & the Astral Navigator (Phase 5, Part 5)
 

@@ -26,28 +26,45 @@ namespace VoxelEngine.Cosmos
     {
         [Header("Spawning")]
         [Tooltip("Maximum live asteroids around the player.")]
-        public int maxAsteroids = 28;
+        public int maxAsteroids = 56;
 
         [Tooltip("Seconds between spawn attempts (in open space).")]
-        public float spawnIntervalSeconds = 5f;
+        public float spawnIntervalSeconds = 2.5f;
 
         [Tooltip("Asteroids spawn in this ring around the player (metres).")]
-        public Vector2 spawnRingMeters = new Vector2(900f, 6000f);
+        public Vector2 spawnRingMeters = new Vector2(1200f, 14000f);
 
         [Tooltip("Asteroids beyond this distance are culled (metres).")]
-        public float despawnDistanceMeters = 12000f;
+        public float despawnDistanceMeters = 30000f;
 
         [Tooltip("Minimum clearance between spawned asteroids (metres).")]
-        public float minSeparationMeters = 650f;
+        public float minSeparationMeters = 450f;
 
         [Tooltip("Asteroid radius range (metres).")]
-        public Vector2 asteroidRadiusMeters = new Vector2(12f, 90f);
+        public Vector2 asteroidRadiusMeters = new Vector2(8f, 140f);
 
         [Tooltip("Minimum altitude (m) above a body's surface before rocks appear while inside its frame — keeps the sky over bases clean while making high orbit and transfers feel populated.")]
         public float minOrbitAltitudeMeters = 12000f;
 
         [Tooltip("Cosmic cell size (km) used to seed deterministic regions.")]
         public double regionCellKm = 4096d;
+
+        [Header("Clusters")]
+        [Tooltip("Chance (0..1) that a spawn creates a CLUSTER of rocks instead of a lone rock — real belts form in families.")]
+        [Range(0f, 1f)] public float clusterChance = 0.55f;
+
+        [Tooltip("Extra rocks spawned per cluster (the cluster centre is the first rock).")]
+        public Vector2Int clusterExtraRocks = new Vector2Int(2, 5);
+
+        [Tooltip("Cluster radius range (metres) — members scatter inside this shell.")]
+        public Vector2 clusterRadiusMeters = new Vector2(250f, 900f);
+
+        [Tooltip("Chance a cluster member shares the cluster's material (ore family).")]
+        [Range(0f, 1f)] public float clusterSharedMaterialChance = 0.6f;
+
+        [Header("Drift")]
+        [Tooltip("Each rock drifts through the field at a speed in this range (m/s) — slow, alive, never orbital.")]
+        public Vector2 driftSpeedMetersPerSec = new Vector2(0.4f, 1.2f);
 
         [Header("Ore Catalogue")]
         [Tooltip("Ore material pool drawn per asteroid (bias order).")]
@@ -161,7 +178,7 @@ namespace VoxelEngine.Cosmos
             var rng = new Random(seed);
 
             int attempts = 0;
-            while (deficit > 0 && attempts < 8)
+            while (deficit > 0 && attempts < 10)
             {
                 attempts++;
                 float distance = rng.NextFloat(spawnRingMeters.x, spawnRingMeters.y);
@@ -183,14 +200,57 @@ namespace VoxelEngine.Cosmos
                 int rockSeed = rng.NextInt(1, int.MaxValue);
 
                 var asteroid = SpaceAsteroid.Spawn(pos, radius, material,
-                    ResolveDrops(material), rockSeed);
+                    ResolveDrops(material), rockSeed, RandomDrift(ref rng));
                 asteroid.transform.SetParent(transform, false);
                 origin.RegisterRoot(asteroid.transform);
                 _live.Add(asteroid);
                 deficit--;
                 if (_live.Count == 1)
                     Debug.Log($"[SpaceAsteroidField] Rocks populating open space ({Vector3.Distance(pos, viewerPos):0} m out).");
+
+                // ── Cluster spawn (9.15.0): real belts form in families. ──
+                if (rng.NextFloat() < clusterChance)
+                {
+                    int extra = rng.NextInt(clusterExtraRocks.x, clusterExtraRocks.y + 1);
+                    for (int m = 0; m < extra && deficit > 0; m++)
+                    {
+                        float cDist = rng.NextFloat(clusterRadiusMeters.x, clusterRadiusMeters.y);
+                        Vector3 cPos = pos + RandomUnitVector(ref rng) * cDist;
+                        if (HasRockNear(cPos, minSeparationMeters * 0.6f)) continue;
+                        double3 cCosmicKm = viewerCosmic + (double3)(float3)(cPos - viewerPos) / 1000d;
+                        if (IsInsidePlanet(origin, registry, cCosmicKm)) continue;
+
+                        MaterialId cMaterial = rng.NextFloat() < clusterSharedMaterialChance && orePool.Length > 0
+                            ? material
+                            : (orePool.Length > 0 ? orePool[rng.NextInt(0, orePool.Length)] : MaterialId.Stone);
+                        float cRadius = rng.NextFloat(asteroidRadiusMeters.x,
+                            Mathf.Max(asteroidRadiusMeters.x, radius * 0.8f));
+                        int cSeed = rng.NextInt(1, int.MaxValue);
+
+                        var member = SpaceAsteroid.Spawn(cPos, cRadius, cMaterial,
+                            ResolveDrops(cMaterial), cSeed, RandomDrift(ref rng));
+                        member.transform.SetParent(transform, false);
+                        origin.RegisterRoot(member.transform);
+                        _live.Add(member);
+                        deficit--;
+                    }
+                }
             }
+        }
+
+        private Vector3 RandomDrift(ref Random rng)
+        {
+            float speed = rng.NextFloat(driftSpeedMetersPerSec.x, driftSpeedMetersPerSec.y);
+            return RandomUnitVector(ref rng) * speed;
+        }
+
+        private Vector3 RandomUnitVector(ref Random rng)
+        {
+            // Uniform direction on the sphere (no polar pinching).
+            float z = rng.NextFloat(-1f, 1f);
+            float a = rng.NextFloat(0f, Mathf.PI * 2f);
+            float r = Mathf.Sqrt(Mathf.Max(0f, 1f - z * z));
+            return new Vector3(Mathf.Cos(a) * r, Mathf.Sin(a) * r, z);
         }
 
         private bool HasRockNear(Vector3 pos, float minDistance)

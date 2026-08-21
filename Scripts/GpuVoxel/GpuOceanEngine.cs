@@ -96,28 +96,13 @@ namespace VoxelEngine.GpuVoxel
 
         private void Awake()
         {
-            _desired = new NativeList<QuadNodeDesc>(512, Allocator.Persistent);
-            _emptySplitSet = new NativeParallelHashSet<QuadNodeId>(1, Allocator.Persistent);
-
-            int vcount = PATCH_VERTS * PATCH_VERTS;
-            _verts = new Vector3[vcount];
-            _normals = new Vector3[vcount];
-            _uv0 = new Vector2[vcount];
-            _uv2 = new Vector2[vcount];
-            _colors = new Color32[vcount];
-            _tris = new int[PATCH_CELLS * PATCH_CELLS * 6];
-            int t = 0;
-            for (int j = 0; j < PATCH_CELLS; j++)
-            for (int i = 0; i < PATCH_CELLS; i++)
-            {
-                int v0 = i + j * PATCH_VERTS;
-                _tris[t++] = v0;
-                _tris[t++] = v0 + PATCH_VERTS;
-                _tris[t++] = v0 + 1;
-                _tris[t++] = v0 + 1;
-                _tris[t++] = v0 + PATCH_VERTS;
-                _tris[t++] = v0 + PATCH_VERTS + 1;
-            }
+            // 9.16.0 — the fake quadtree ocean shell is REMOVED from the game. Real water
+            // now renders exclusively from generated voxel fluid cells: ocean basins below
+            // sea level, lakes, oil seeps, buckets and pumps. If a legacy scene or prefab
+            // still carries this component, it self-disables so no water sphere can ever
+            // wrap a body again. (OnDestroy remains safe: collections are initialized at
+            // declaration and native containers are IsCreated-guarded.)
+            enabled = false;
         }
 
         private void OnDestroy()

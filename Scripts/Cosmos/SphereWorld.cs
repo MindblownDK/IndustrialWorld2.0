@@ -457,7 +457,8 @@ namespace VoxelEngine.Cosmos
             VoxelEngine.Generation.OilReservoirDecorator.Tick(this);
             
             // Native water meshes are local detail only; throttle their main-thread rebuilds so
-            // initial terrain streaming remains responsive while the full ocean LOD covers afar.
+            // initial terrain streaming stays responsive while ocean chunks stream in (9.16.0:
+            // the fake ocean LOD shell is gone — all water is generated voxel fluid).
             VoxelEngine.WaterSim.WaterMeshBuilder.Pump(Mathf.Clamp(maxJobsPerFrame / 2, 1, 3));
             
             ProcessDeferredScatter();
@@ -986,8 +987,8 @@ namespace VoxelEngine.Cosmos
             if (initialSurfaceChunk)
                 VoxelEngine.Generation.OilReservoirDecorator.Decorate(p.chunk, this);
 
-            // Only chunks that actually contain generated liquid enter the expensive native
-            // water mesh queue. The full ocean LOD covers distant basins, so dry terrain chunks
+            // Only chunks that actually contain generated liquid (ocean basins below sea level,
+            // lakes, seeps) enter the expensive native water mesh queue, so dry terrain chunks
             // must never allocate a LiquidSurface object just because they streamed in.
             if (ChunkHasGeneratedLiquid(p.chunk))
                 VoxelEngine.WaterSim.WaterMeshBuilder.Schedule(p.chunk);
@@ -1134,6 +1135,22 @@ namespace VoxelEngine.Cosmos
             if (rimMin - alt0 < 2) return;
 
             int lakeAlt = alt0 + Mathf.Min(rimMin - alt0 - 1, 3);
+
+            // ── 9.16.0 industrial worlds: lakes are refined-product pools ──
+            // (rainbow-sheened fuel/oil instead of water — polluted factory worlds).
+            var lakeLiquid = VoxelEngine.Items.LiquidType.Water;
+            if (body != null && body.settings != null && body.settings.IsIndustrialWorld)
+            {
+                uint lh = h * 0x9E3779B9u;
+                lakeLiquid = (lh & 3u) switch
+                {
+                    0u => VoxelEngine.Items.LiquidType.RefinedOil,
+                    1u => VoxelEngine.Items.LiquidType.LiquidFuel,
+                    2u => VoxelEngine.Items.LiquidType.HeavyFuelOil,
+                    _  => VoxelEngine.Items.LiquidType.MarineGasOil,
+                };
+            }
+
             int filled = 0;
             for (int uu = Mathf.Max(0, cu - 7); uu <= Mathf.Min(S - 1, cu + 7); uu++)
             for (int ww = Mathf.Max(0, cw - 7); ww <= Mathf.Min(S - 1, cw + 7); ww++)
@@ -1152,7 +1169,7 @@ namespace VoxelEngine.Cosmos
                     var v = chunk.GetVoxelLocal(lx, ly, lz);
                     if (v.IsSolid || v.waterLevel > 0) continue;
                     VoxelEngine.WaterSim.FluidMaterialUtility.SetLiquid(
-                        ref v, VoxelEngine.Items.LiquidType.Water, 255);
+                        ref v, lakeLiquid, 255);
                     chunk.SetVoxelLocal(lx, ly, lz, v);
                     filled++;
                 }

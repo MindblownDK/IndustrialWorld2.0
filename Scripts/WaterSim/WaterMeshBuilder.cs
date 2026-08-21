@@ -38,6 +38,10 @@ namespace VoxelEngine.WaterSim
         private static Material _oilMat;
         private static Material _externalWaterMat;
         private static Material _externalOilMat;
+
+        // 9.16.0 — one material slot per liquid (enum order: Water, CrudeOil,
+        // RefinedOil, LiquidFuel, HeavyFuelOil, MarineGasOil, Coolant).
+        private static Material[] _liquidMats = new Material[7];
         private static readonly HashSet<Vector3Int> _sphereSurfaceCells = new();
 
         public static bool RenderingEnabled { get; set; } = true;
@@ -92,8 +96,20 @@ namespace VoxelEngine.WaterSim
             _queue.Clear();
             _queuedEpoch.Clear();
             _sphereSurfaceCells.Clear();
-            if (_waterMat != null && _waterMat != _externalWaterMat) { if (Application.isPlaying) Object.Destroy(_waterMat); else Object.DestroyImmediate(_waterMat); }
-            if (_oilMat != null && _oilMat != _externalOilMat) { if (Application.isPlaying) Object.Destroy(_oilMat); else Object.DestroyImmediate(_oilMat); }
+            // 9.16.0 — reset the whole 7-slot registry; profiles rebuild on demand.
+            for (int i = 0; i < _liquidMats.Length; i++)
+            {
+                var m = _liquidMats[i];
+                bool external = m != null && (m == _externalWaterMat || m == _externalOilMat);
+                if (m != null && !external)
+                {
+                    if (Application.isPlaying) Object.Destroy(m);
+                    else Object.DestroyImmediate(m);
+                }
+                _liquidMats[i] = null;
+            }
+            _liquidMats[0] = _externalWaterMat;
+            _liquidMats[1] = _externalOilMat;
             _waterMat = _externalWaterMat;
             _oilMat = _externalOilMat;
         }
@@ -150,14 +166,17 @@ namespace VoxelEngine.WaterSim
             _externalOilMat = oilMaterial;
 
             if (_externalWaterMat != null)
-                _waterMat = _externalWaterMat;
-            else if (previousExternalWater != null && _waterMat == previousExternalWater)
-                _waterMat = null;
+                _liquidMats[0] = _externalWaterMat;
+            else if (previousExternalWater != null && _liquidMats[0] == previousExternalWater)
+                _liquidMats[0] = null;
 
             if (oilMaterial != null)
-                _oilMat = oilMaterial;
-            else if (previousExternalOil != null && _oilMat == previousExternalOil)
-                _oilMat = null;
+                _liquidMats[1] = oilMaterial;
+            else if (previousExternalOil != null && _liquidMats[1] == previousExternalOil)
+                _liquidMats[1] = null;
+
+            _waterMat = _liquidMats[0];
+            _oilMat = _liquidMats[1];
 
             // Propagate native material changes to live liquid chunk meshes.
             RefreshLiveWaterRenderers();
@@ -175,87 +194,39 @@ namespace VoxelEngine.WaterSim
                 if (f.gameObject.name != "LiquidSurface") continue;
                 var r = f.GetComponent<MeshRenderer>();
                 if (r == null) continue;
-                if (_waterMat != null && _oilMat != null)
-                    r.sharedMaterials = new[] { _waterMat, _oilMat };
+                r.sharedMaterials = LiquidMaterialArray();
             }
+        }
+
+        /// <summary>The full 7-slot material array (built on demand).</summary>
+        public static Material[] LiquidMaterialArray()
+        {
+            EnsureMats();
+            return _liquidMats;
         }
 
         private static void EnsureMats()
         {
-            if (_externalWaterMat != null) _waterMat = _externalWaterMat;
-            if (_externalOilMat != null) _oilMat = _externalOilMat;
-            if (_waterMat != null && _oilMat != null) return;
+            if (_externalWaterMat != null) _liquidMats[0] = _externalWaterMat;
+            if (_externalOilMat != null) _liquidMats[1] = _externalOilMat;
 
             var sh = Shader.Find("VoxelEngine/VoxelWaterURP")
                   ?? Shader.Find("Universal Render Pipeline/Lit")
                   ?? Shader.Find("Standard");
 
-            if (_waterMat == null)
+            // 9.16.0 — every liquid gets its own material from its visual profile.
+            for (int i = 0; i < 7; i++)
             {
-                _waterMat = new Material(sh) { name = "VoxelWater_KWS2" };
-                ConfigureTransparent(_waterMat);
-                _waterMat.SetColor("_ShallowColor", new Color(0.10f, 0.58f, 0.86f, 0.96f));
-                _waterMat.SetColor("_DeepColor",    new Color(0.01f, 0.06f, 0.22f, 0.995f));
-                _waterMat.SetColor("_FoamColor",    new Color(0.92f, 0.96f, 1.00f, 0.88f));
-                _waterMat.SetFloat("_DeepWaveAmplitude", 0.85f);
-                _waterMat.SetFloat("_DeepWaveFrequency", 0.22f);
-                _waterMat.SetFloat("_DeepWaveSpeed", 0.55f);
-                _waterMat.SetFloat("_SecondaryWaveAmplitude", 0.35f);
-                _waterMat.SetFloat("_SecondaryWaveFrequency", 0.47f);
-                _waterMat.SetFloat("_SecondaryWaveSpeed", 0.91f);
-                _waterMat.SetFloat("_ShallowWaveAmplitude", 0.16f);
-                _waterMat.SetFloat("_ShallowWaveFrequency", 1.65f);
-                _waterMat.SetFloat("_ShallowWaveSpeed", 1.8f);
-                _waterMat.SetFloat("_ShoreBlendDistance", 2.5f);
-                _waterMat.SetFloat("_WaveChop", 0.28f);
-                _waterMat.SetFloat("_NormalScale", 2.4f);
-                _waterMat.SetFloat("_Gloss", 0.97f);
-                _waterMat.SetFloat("_FresnelPower", 4.2f);
-                _waterMat.SetFloat("_RefractionStrength", 0.045f);
-                _waterMat.SetFloat("_CausticsIntensity", 0.62f);
-                _waterMat.SetFloat("_DepthFade", 2.5f);
-                _waterMat.SetFloat("_ShoreOpaqueDepth", 1.5f);
-                _waterMat.SetFloat("_ShoreFoamWidth", 2.0f);
-                _waterMat.SetFloat("_ShoreFoamIntensity", 1.4f);
-                _waterMat.SetFloat("_SSSIntensity", 0.62f);
-                _waterMat.SetFloat("_FlowNormalStrength", 1.0f);
-                _waterMat.SetFloat("_FlowFoamStrength", 0.8f);
-                _waterMat.SetFloat("_PlanetWaveBlend", 1.0f);
-                _waterMat.SetFloat("_TideStrength", 0.22f);
+                if (_liquidMats[i] != null) continue;
+                var t = (VoxelEngine.Items.LiquidType)i;
+                var mat = new Material(sh) { name = "VoxelLiquid_" + t };
+                ConfigureTransparent(mat);
+                LiquidVisualProfile.For(t).ApplyTo(mat);
+                _liquidMats[i] = mat;
             }
 
-            if (_oilMat == null)
-            {
-                _oilMat = new Material(sh) { name = "VoxelCrudeOil_Viscous" };
-                ConfigureTransparent(_oilMat);
-                _oilMat.SetColor("_ShallowColor", new Color(0.12f, 0.085f, 0.05f, 0.90f));
-                _oilMat.SetColor("_DeepColor",    new Color(0.02f, 0.015f, 0.01f, 0.98f));
-                _oilMat.SetColor("_FoamColor",    new Color(0.35f, 0.25f, 0.12f, 0.40f));
-                _oilMat.SetFloat("_DeepWaveAmplitude", 0.04f);
-                _oilMat.SetFloat("_DeepWaveFrequency", 0.40f);
-                _oilMat.SetFloat("_DeepWaveSpeed", 0.12f);
-                _oilMat.SetFloat("_SecondaryWaveAmplitude", 0.025f);
-                _oilMat.SetFloat("_SecondaryWaveFrequency", 0.85f);
-                _oilMat.SetFloat("_SecondaryWaveSpeed", 0.08f);
-                _oilMat.SetFloat("_ShallowWaveAmplitude", 0.015f);
-                _oilMat.SetFloat("_ShallowWaveFrequency", 1.1f);
-                _oilMat.SetFloat("_ShallowWaveSpeed", 0.16f);
-                _oilMat.SetFloat("_WaveChop", 0.06f);
-                _oilMat.SetFloat("_NormalScale", 0.45f);
-                _oilMat.SetFloat("_Gloss", 1.0f);
-                _oilMat.SetFloat("_FresnelPower", 4.0f);
-                _oilMat.SetFloat("_RefractionStrength", 0.004f);
-                _oilMat.SetFloat("_CausticsIntensity", 0.0f);
-                _oilMat.SetFloat("_DepthFade", 1.8f);
-                _oilMat.SetFloat("_ShoreOpaqueDepth", 1.0f);
-                _oilMat.SetFloat("_ShoreFoamWidth", 0.5f);
-                _oilMat.SetFloat("_ShoreFoamIntensity", 0.1f);
-                _oilMat.SetFloat("_SSSIntensity", 0.0f);
-                _oilMat.SetFloat("_FlowNormalStrength", 0.3f);
-                _oilMat.SetFloat("_FlowFoamStrength", 0.2f);
-                _oilMat.SetFloat("_PlanetWaveBlend", 1.0f);
-                _oilMat.SetFloat("_TideStrength", 0.04f);
-            }
+            _waterMat = _liquidMats[0];
+            _oilMat = _liquidMats[1];
         }
 
         private static bool IsVoxelWaterCompatible(Material mat)
@@ -400,8 +371,9 @@ namespace VoxelEngine.WaterSim
             var uvs       = new List<Vector2>(S * S * 6);
             var uv2s      = new List<Vector2>(S * S * 6);
             var cols      = new List<Color>(S * S * 6);
-            var waterTris = new List<int>(S * S * 6);
-            var oilTris   = new List<int>(S * S * 6);
+            // 9.16.0 — one triangle list (submesh) per liquid; slot = (int)LiquidType.
+            var liquidTris = new List<int>[7];
+            for (int i = 0; i < 7; i++) liquidTris[i] = new List<int>(S * S * 6);
             var topVertexCache = new Dictionary<VertexKey, int>(S * S * 2);
 
             int lodStride = Mathf.Clamp(GetChunkLodStride(c), 1, 8);
@@ -411,7 +383,7 @@ namespace VoxelEngine.WaterSim
                 var cell = lodStride == 1 ? cells[u, v] : SampleLodCell(cells, u, v, lodStride, S);
                 if (!cell.has) continue;
 
-                var tris = cell.liquid == LiquidType.CrudeOil ? oilTris : waterTris;
+                var tris = liquidTris[(int)cell.liquid];
                 if (lodStride == 1)
                 {
                     AddTopConnected(c, cells, u, v, cell, dom, S, chunkVoxel, chunkUp, topVertexCache, verts, norms, uvs, uv2s, cols, tris);
@@ -435,13 +407,13 @@ namespace VoxelEngine.WaterSim
             c.waterMesh.SetUVs(0, uvs);
             c.waterMesh.SetUVs(1, uv2s);
             c.waterMesh.SetColors(cols);
-            c.waterMesh.subMeshCount = 2;
-            c.waterMesh.SetTriangles(waterTris, 0);
-            c.waterMesh.SetTriangles(oilTris, 1);
+            c.waterMesh.subMeshCount = 7;
+            for (int i = 0; i < 7; i++)
+                c.waterMesh.SetTriangles(liquidTris[i], i);
             c.waterMesh.RecalculateBounds();
 
             c.waterMeshFilter.sharedMesh = c.waterMesh;
-            c.waterMeshRenderer.sharedMaterials = new[] { _waterMat, _oilMat };
+            c.waterMeshRenderer.sharedMaterials = LiquidMaterialArray();
             c.waterMeshGO.SetActive(true);
         }
 
@@ -456,12 +428,14 @@ namespace VoxelEngine.WaterSim
 
         private static SurfaceCell SampleLodCell(SurfaceCell[,] cells, int startU, int startV, int stride, int S)
         {
-            int waterCount = 0, oilCount = 0;
-            float waterH = 0f, oilH = 0f;
-            int waterY = 0, oilY = 0;
-            Vector2 waterFlow = Vector2.zero, oilFlow = Vector2.zero;
-            bool waterBorder = false, oilBorder = false;
-            float waterTerrain = float.MaxValue, oilTerrain = float.MaxValue;
+            // 9.16.0 — per-liquid accumulation (dominant liquid wins the LOD cell).
+            var counts = new int[7];
+            var sumH = new float[7];
+            var sumY = new int[7];
+            var sumFlow = new Vector2[7];
+            var border = new bool[7];
+            var terrain = new float[7];
+            for (int i = 0; i < 7; i++) terrain[i] = float.MaxValue;
 
             int endU = Mathf.Min(startU + stride, S);
             int endV = Mathf.Min(startV + stride, S);
@@ -470,31 +444,27 @@ namespace VoxelEngine.WaterSim
             {
                 var c = cells[u, v];
                 if (!c.has) continue;
-
-                if (c.liquid == LiquidType.CrudeOil)
-                {
-                    oilCount++; oilH += c.h; oilY += c.y; oilFlow += c.flow;
-                    oilBorder |= c.bordersTerrain; oilTerrain = Mathf.Min(oilTerrain, c.terrainH);
-                }
-                else
-                {
-                    waterCount++; waterH += c.h; waterY += c.y; waterFlow += c.flow;
-                    waterBorder |= c.bordersTerrain; waterTerrain = Mathf.Min(waterTerrain, c.terrainH);
-                }
+                int liq = (int)c.liquid;
+                counts[liq]++; sumH[liq] += c.h; sumY[liq] += c.y; sumFlow[liq] += c.flow;
+                border[liq] |= c.bordersTerrain;
+                terrain[liq] = Mathf.Min(terrain[liq], c.terrainH);
             }
 
-            if (waterCount == 0 && oilCount == 0) return default;
-            bool useOil = oilCount > waterCount;
-            int count = useOil ? oilCount : waterCount;
+            int best = -1;
+            for (int i = 0; i < 7; i++)
+                if (counts[i] > 0 && (best < 0 || counts[i] > counts[best])) best = i;
+            if (best < 0) return default;
+
+            int count = counts[best];
             return new SurfaceCell
             {
                 has = true,
-                liquid = useOil ? LiquidType.CrudeOil : LiquidType.Water,
-                h = (useOil ? oilH : waterH) / Mathf.Max(1, count),
-                y = Mathf.RoundToInt((useOil ? oilY : waterY) / Mathf.Max(1f, count)),
-                flow = (useOil ? oilFlow : waterFlow) / Mathf.Max(1, count),
-                bordersTerrain = useOil ? oilBorder : waterBorder,
-                terrainH = useOil ? oilTerrain : waterTerrain
+                liquid = (LiquidType)best,
+                h = sumH[best] / Mathf.Max(1, count),
+                y = Mathf.RoundToInt(sumY[best] / Mathf.Max(1f, count)),
+                flow = sumFlow[best] / Mathf.Max(1, count),
+                bordersTerrain = border[best],
+                terrainH = terrain[best]
             };
         }
 

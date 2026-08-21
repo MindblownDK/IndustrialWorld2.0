@@ -529,6 +529,19 @@ namespace VoxelEngine.EditorTools
                 "Re-runnable. Idempotent. Run after Steps 52–54.");
             AddWizardButton(scroll, "55. Build Astral Navigator (Navigation Block, Waypoint, Warp Lock — Non-Destructive)", () => VoxelEngine.EditorTools.SingularityLocatorSetup.RunStep55(), 56);
 
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
+                "Step 56 (9.16.0) wires the LIQUIDS OVERHAUL (non-destructive):\n" +
+                "  • Renames the bucket to the UNIVERSAL Liquid Bucket — scoops/places ALL 7\n" +
+                "    liquids (water, crude, refined oil, liquid fuel, HFO, MGO, coolant);\n" +
+                "    right-click a liquid tank to fill the bucket or pour it in\n" +
+                "  • Flags industrial planet templates so their lakes generate as\n" +
+                "    refined-product pools (rainbow-sheened fuel/oil lakes)\n" +
+                "  • The 7 liquids themselves are runtime (materials, sim physics, mesh\n" +
+                "    submeshes, shader profiles) — no assets needed\n" +
+                "Re-runnable. Idempotent. Run after Steps 52–55.");
+            AddWizardButton(scroll, "56. Wire the Liquids Overhaul (Universal Bucket, Industrial Worlds — Non-Destructive)", () => VoxelEngine.EditorTools.LiquidOverhaulSetup.RunStep56(), 56);
+
             AddSpacer(scroll, 20);
         }
 

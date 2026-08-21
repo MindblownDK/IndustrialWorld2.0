@@ -37,7 +37,6 @@ Fog{
 CGPROGRAM
 #pragma surface surf BlinnPhongEditor  vertex:vert
 #pragma target 3.0
-#pragma surface surf Lambert fullforwardshadows
 
 float4 _MainColor;
 sampler2D _Diffuse;
@@ -94,6 +93,10 @@ float2 uv_SpecularMapAlphaGloss;
 			};
 
 			void vert (inout appdata_full v, out Input o) {
+	UNITY_INITIALIZE_OUTPUT(Input,o);
+	o.uv_Diffuse = v.texcoord.xy;
+	o.uv_BumpMap = v.texcoord.xy;
+	o.uv_SpecularMapAlphaGloss = v.texcoord.xy;
 float4 VertexOutputMaster0_0_NoInput = float4(0,0,0,0);
 float4 VertexOutputMaster0_1_NoInput = float4(0,0,0,0);
 float4 VertexOutputMaster0_2_NoInput = float4(0,0,0,0);

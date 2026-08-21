@@ -44,6 +44,39 @@ namespace VoxelEngine.Fluids
             WaterSim.FluidManager.Instance?.PlaceWater(v, l);
         }
 
+        /// <summary>Place any of the 7 liquids (9.16.0 — the universal bucket uses this).</summary>
+        public void PlaceLiquidAt(Vector3Int v, VoxelEngine.Items.LiquidType liquid, byte l = 255)
+        {
+            WaterSim.FluidManager.EnsureInstance();
+            WaterSim.FluidManager.Instance?.PlaceLiquid(v, liquid, l);
+        }
+
+        /// <summary>Drain any of the 7 liquids at a voxel (true when anything was taken).</summary>
+        public bool TryDrainLiquidAt(Vector3Int v, VoxelEngine.Items.LiquidType liquid)
+        {
+            WaterSim.FluidManager.EnsureInstance();
+            return WaterSim.FluidManager.Instance != null
+                && WaterSim.FluidManager.Instance.DrainLiquid(v, liquid, 255) > 0;
+        }
+
+        /// <summary>The liquid present at a voxel (Water when dry — check the level).</summary>
+        public VoxelEngine.Items.LiquidType LiquidAt(Vector3Int v)
+        {
+            WaterSim.FluidManager.EnsureInstance();
+            return WaterSim.FluidManager.Instance != null
+                ? WaterSim.FluidManager.Instance.GetLiquidType(v)
+                : VoxelEngine.Items.LiquidType.Water;
+        }
+
+        /// <summary>Liquid level at a voxel for any of the 7 liquids.</summary>
+        public byte LiquidLevelAt(Vector3Int v, VoxelEngine.Items.LiquidType liquid)
+        {
+            WaterSim.FluidManager.EnsureInstance();
+            return WaterSim.FluidManager.Instance != null
+                ? WaterSim.FluidManager.Instance.GetLiquidLevel(v, liquid)
+                : (byte)0;
+        }
+
         public bool IsOilAt(Vector3Int v)
         {
             WaterSim.FluidManager.EnsureInstance();

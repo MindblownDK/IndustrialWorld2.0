@@ -41,6 +41,15 @@ namespace VoxelEngine.Materials
         VolcanicBasalt = 26,
         CrystalGeode   = 27,
 
+        // === Liquid overhaul (9.16.0) — save-compatible new fluid materials ===
+        // Old saves only ever contain WaterLiquid (6) and CrudeOil (18); these new
+        // values simply cannot exist in them, so the format is untouched.
+        RefinedOilLiquid      = 28,   // amber refined product — lighter than water
+        LiquidFuelLiquid      = 29,   // bright volatile fuel — lightest of all
+        HeavyFuelOilLiquid    = 30,   // dark tar-like bunker fuel — dense, viscous
+        MarineGasOilLiquid    = 31,   // pale distillate — light, thin
+        CoolantLiquid         = 32,   // glowing engine coolant — slightly denser than water
+
         // === Add custom materials below this line ===
     }
 }

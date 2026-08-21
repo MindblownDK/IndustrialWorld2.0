@@ -43,6 +43,14 @@ Shader "VoxelEngine/VoxelWaterURP"
         [Header(Flow Mapping)]
         _FlowNormalStrength ("Flow Normal Strength", Range(0, 2)) = 1.0
         _FlowFoamStrength   ("Flow Foam Strength", Range(0, 2)) = 0.8
+
+        [Header(Thin-Film Iridescence - 9.16.0)]
+        _IridescenceStrength ("Iridescence Strength", Range(0, 1)) = 0.0
+        _IridescenceScale    ("Iridescence Hue Cycle", Range(0, 4)) = 1.0
+
+        [Header(Emission - 9.16.0)]
+        _EmissionColor ("Emission Colour", Color) = (0, 0, 0, 1)
+        _EmissionStrength    ("Emission Strength", Range(0, 4)) = 0.0
     }
 
     SubShader
@@ -80,6 +88,9 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float  _ShoreOpaqueDepth, _ShoreFoamWidth, _ShoreFoamIntensity;
                 float  _SSSIntensity;
                 float  _FlowNormalStrength, _FlowFoamStrength;
+                float  _IridescenceStrength, _IridescenceScale;
+                float4 _EmissionColor;
+                float  _EmissionStrength;
             CBUFFER_END
 
             // Native spherical-water context + a compact wake registry. These globals are
@@ -334,6 +345,18 @@ Shader "VoxelEngine/VoxelWaterURP"
                 col += sssColor;
                 col += caustic * float3(0.45, 0.95, 1.0);
                 col = lerp(col, _FoamColor.rgb, foam * _FoamColor.a);
+
+                // -- Thin-film iridescence (9.16.0): the rainbow sheen of refined
+                // products. The hue cycles with the view angle + surface detail so
+                // oil and fuel pools shimmer exactly like real spills. --
+                float iridT = fresnel * _IridescenceScale + detailN.y * 0.35f + screenDepth01 * 0.3f;
+                float3 irid = 0.5 + 0.5 * cos(6.28318 * (iridT + float3(0.0, 0.33, 0.67)));
+                col = lerp(col, col * irid, _IridescenceStrength * saturate(fresnel * 1.4f));
+
+                // -- Emission (9.16.0): glowing liquids (engine coolant) read even
+                // in the dark, with a slow breathing pulse. --
+                col += _EmissionColor.rgb * _EmissionStrength
+                     * (0.85 + 0.15 * sin(t * 2.1 + surfUV.x * 2.6));
 
                 float alpha = waterCol.a;
                 // Voxel-authored shallow water is intentionally clearer so beaches

@@ -101,8 +101,7 @@ namespace VoxelEngine.Items
                 if (_playerFindTimer <= 0f)
                 {
                     _playerFindTimer = 2f;
-                    _player = Object.FindFirstObjectByType<PlayerController>()
-                              ?? Object.FindAnyObjectByType<PlayerController>();
+                    _player = Object.FindAnyObjectByType<PlayerController>();
                 }
             }
             if (_player == null) { UI.CanisterPressureHud.Hide(); return; }

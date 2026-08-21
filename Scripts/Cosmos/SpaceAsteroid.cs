@@ -35,9 +35,14 @@ namespace VoxelEngine.Cosmos
         public float tumbleSpeed = 4f;
 
         private Vector3 _tumbleAxis;
+        private Vector3 _driftVelocity;
 
         public static SpaceAsteroid Spawn(Vector3 position, float radius, MaterialId material,
             ItemDefinition[] drops, int seed)
+            => Spawn(position, radius, material, drops, seed, Vector3.zero);
+
+        public static SpaceAsteroid Spawn(Vector3 position, float radius, MaterialId material,
+            ItemDefinition[] drops, int seed, Vector3 driftVelocity)
         {
             var go = new GameObject("SpaceAsteroid_" + material);
             go.transform.position = position;
@@ -51,6 +56,7 @@ namespace VoxelEngine.Cosmos
             asteroid.maxDrops = 7;
             asteroid.dropCount = 1;
             asteroid.drops = drops;
+            asteroid._driftVelocity = driftVelocity;
             asteroid.BuildMesh(seed);
             asteroid._tumbleAxis = new Vector3(
                 Mathf.Sin(seed * 12.9898f), Mathf.Cos(seed * 78.233f), Mathf.Sin(seed * 37.719f)).normalized;
@@ -117,8 +123,16 @@ namespace VoxelEngine.Cosmos
 
         private void Update()
         {
+            float dt = Time.deltaTime;
             if (tumbleSpeed > 0.01f)
-                transform.Rotate(_tumbleAxis, tumbleSpeed * Time.deltaTime, Space.World);
+                transform.Rotate(_tumbleAxis, tumbleSpeed * dt, Space.World);
+            // Gentle through-field drift (9.15.0): the belt is alive, not parked.
+            if (_driftVelocity.sqrMagnitude > 0.0001f)
+            {
+                var rb = GetComponent<Rigidbody>();
+                if (rb != null && rb.isKinematic) rb.MovePosition(rb.position + _driftVelocity * dt);
+                else transform.position += _driftVelocity * dt;
+            }
         }
 
         private static Color OreTint(MaterialId material)

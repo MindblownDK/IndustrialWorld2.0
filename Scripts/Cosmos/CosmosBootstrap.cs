@@ -71,7 +71,6 @@ namespace VoxelEngine.Cosmos
         private CelestialBody _body;
         private SphereWorld _sphereWorld;
         private VoxelEngine.GpuVoxel.GpuPlanetEngine _terrainGpu;
-        private VoxelEngine.GpuVoxel.GpuOceanEngine _oceanGpu;
         private GpuGrassRenderer _grass;
         private WaterfallSystem _waterfalls;
         private SpaceOrigin _spaceOrigin;
@@ -209,14 +208,11 @@ namespace VoxelEngine.Cosmos
             surface.terrainMaterial = terrainMaterial;
             surface.ApplyQualityBudget(GraphicsPreset.JobsPerFrame);
 
-            // ── GPU quadtree ocean — real water sphere over ocean basins only, wake
-            // and flow-map ready (shares the chunk-water material). ──
-            var oceanGO = new GameObject("GpuOcean");
-            oceanGO.transform.SetParent(_bodyGO.transform, false);
-            var ocean = oceanGO.AddComponent<VoxelEngine.GpuVoxel.GpuOceanEngine>();
-            _oceanGpu = ocean;
-            ocean.body = body;
-            ocean.viewer = viewer;
+            // ── GPU quadtree ocean (9.0.0) removed in 9.16.0 — the fake sea shell is
+            // gone. All water is now REAL generated voxel fluid: ocean basins fill below
+            // sea level in SphereDensity and render through WaterMeshBuilder, exactly
+            // like lakes, seeps, buckets and pumps. GpuOceanEngine still self-disables
+            // if a legacy scene/prefab ever instantiates it. ──
 
             // ── Space backdrop (REAL bodies only — 9.4.0) ────────────────
             // The compressed sky-proxy system is GONE: every planet/moon/sun you see is
@@ -279,7 +275,6 @@ namespace VoxelEngine.Cosmos
             // Apply the current graphics preset to the visual systems.
             world.viewDistance = GraphicsPreset.ViewDistance;
             grass.qualityDensityMul = new float[] { 0f, GraphicsPreset.GrassDensityMul * 0.5f, GraphicsPreset.GrassDensityMul, GraphicsPreset.GrassDensityMul * 1.5f };
-            if (_oceanGpu != null) _oceanGpu.ApplyQualityBudget(GraphicsPreset.LodResolution);
             waterfalls.scanRange = GraphicsPreset.WaterfallRange;
             world.maxJobsPerFrame = GraphicsPreset.JobsPerFrame;
 
@@ -402,7 +397,6 @@ namespace VoxelEngine.Cosmos
         {
             if (_sphereWorld != null) _sphereWorld.viewer = viewer;
             if (_terrainGpu != null) _terrainGpu.viewer = viewer;
-            if (_oceanGpu != null) _oceanGpu.viewer = viewer;
             if (_grass != null) _grass.viewer = viewer;
             if (_waterfalls != null) _waterfalls.viewer = viewer;
             // Every other body's surface engine must also track the real player (their
@@ -483,12 +477,13 @@ namespace VoxelEngine.Cosmos
             }
 
             // 2) Every other body whose real LOD renders (true-LOD window) — PLUS the
-            //    convergence band where the compressed sky proxy morphs toward the body's
-            //    true scene position. Without the extra margin the converging proxy would
-            //    be culled by the far plane mid-flight.
+            //    whole beacon crossfade band (60,000 → 80,000 km): the DistantBodyBeacons
+            //    hand the view to the real geometry across that band, so the far clip
+            //    must cover the body's real position the entire way (9.15.0 planet-
+            //    visibility fix — without the margin the real planet popped in late).
             if (registry.SceneBodies != null)
             {
-                double coverKm = trueLodViewKm * 1.25d;
+                double coverKm = trueLodViewKm * 1.33d;
                 for (int i = 0; i < registry.Bodies.Count; i++)
                 {
                     var b = registry.Bodies[i];
@@ -508,25 +503,31 @@ namespace VoxelEngine.Cosmos
                 needed = math.max(needed, math.min(sunDistM + 100000d, maxFarClipMeters));
             }
 
-            // 4) SINGULARITY REMNANTS (Phase 5) — the direction-pinned beacons are
-            //    projected at min(real distance, 62,000 km): guarantee the far clip
-            //    always covers that projection so the black hole / quasar beacons are
-            //    NEVER culled by a small far plane (the "can't see them" bug). When
-            //    inside the real-render window, the real horizon, halo and jets are
-            //    covered as well.
-            if (registry.Singularities != null && registry.Singularities.Count > 0)
+            // 4) DISTANT-OBJECT PINS (Phase 5, 9.15.0) — planet/moon beacons and
+            //    singularity beacons are projected at min(real distance, 62,000 km):
+            //    guarantee the far clip ALWAYS covers that projection so planets,
+            //    moons, the black hole and the quasar are visible from ANYWHERE in
+            //    the system (the "planets invisible in space" bug — beacons at the
+            //    body's real position were culled by the far plane).
+            bool anyBodies = registry.Bodies != null && registry.Bodies.Count > 0;
+            bool anySings = registry.Singularities != null && registry.Singularities.Count > 0;
+            if (anyBodies || anySings)
             {
                 const double beaconPinM = 62000000d;
                 needed = math.max(needed, beaconPinM + 6000000d);
-                for (int i = 0; i < registry.Singularities.Count; i++)
+                // Real-render window for the singularities themselves.
+                if (anySings)
                 {
-                    var s = registry.Singularities[i];
-                    if (s == null) continue;
-                    double dKm = math.length(s.positionKmD - camCosmic);
-                    if (dKm > 65000d) continue;
-                    double extentKm = math.max(s.discOuterRadiusKm * 5.2d,
-                        s.kind == SingularityKind.Quasar ? s.jetLengthKm * 1.2d : 0d);
-                    needed = math.max(needed, (dKm + extentKm) * 1000d + 5000d);
+                    for (int i = 0; i < registry.Singularities.Count; i++)
+                    {
+                        var s = registry.Singularities[i];
+                        if (s == null) continue;
+                        double dKm = math.length(s.positionKmD - camCosmic);
+                        if (dKm > 65000d) continue;
+                        double extentKm = math.max(s.discOuterRadiusKm * 5.2d,
+                            s.kind == SingularityKind.Quasar ? s.jetLengthKm * 1.2d : 0d);
+                        needed = math.max(needed, (dKm + extentKm) * 1000d + 5000d);
+                    }
                 }
             }
 
@@ -730,7 +731,6 @@ namespace VoxelEngine.Cosmos
         {
             if (_grass != null) _grass.gameObject.SetActive(enabled);
             if (_waterfalls != null) _waterfalls.gameObject.SetActive(enabled);
-            if (_oceanGpu != null) _oceanGpu.gameObject.SetActive(enabled);
         }
 
         private void MoveAuxSystemsUnder(CelestialBody targetBody)
@@ -738,18 +738,9 @@ namespace VoxelEngine.Cosmos
             if (targetBody == null) return;
             if (_grass != null) _grass.body = targetBody;
             if (_waterfalls != null) _waterfalls.body = targetBody;
-            if (_oceanGpu != null) _oceanGpu.body = targetBody;
 
             if (_grass != null) _grass.transform.SetParent(targetBody.transform, true);
             if (_waterfalls != null) _waterfalls.transform.SetParent(targetBody.transform, true);
-            if (_oceanGpu != null)
-            {
-                // The ocean sphere must sit exactly at the body core, not keep its old
-                // world offset — re-parent and re-centre, then rebuild its patches.
-                _oceanGpu.transform.SetParent(targetBody.transform, false);
-                _oceanGpu.transform.localPosition = Vector3.zero;
-                _oceanGpu.ResetAllPatches();
-            }
         }
 
         /// <summary>

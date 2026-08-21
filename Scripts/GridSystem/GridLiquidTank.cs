@@ -83,5 +83,37 @@ namespace VoxelEngine.GridSystem
             liquidType = t;
             return true;
         }
+
+        // ── Universal bucket exchange (9.16.0) ────────────────────
+        /// <summary>Litres carried by one full bucket scoop (gameplay abstraction).</summary>
+        public const float BucketLitres = 100f;
+
+        /// <summary>Fill an EMPTY bucket from this tank. The bucket remembers the liquid.</summary>
+        public bool TryFillBucket(ItemStack bucket)
+        {
+            if (bucket == null || bucket.item == null) return false;
+            if (bucket.durability > 0) return false;          // already carries liquid
+            if (stored <= 0.001f) return false;               // tank is dry
+            float take = Remove(BucketLitres);
+            if (take <= 0f) return false;
+            bucket.durability = 1;
+            bucket.payload = liquidType;
+            return true;
+        }
+
+        /// <summary>Pour a full bucket into this tank (same liquid, or any into an empty tank).</summary>
+        public bool TryEmptyBucket(ItemStack bucket)
+        {
+            if (bucket == null || bucket.item == null) return false;
+            if (bucket.durability <= 0) return false;
+            if (!(bucket.payload is LiquidType carried)) return false;
+            if (stored > 0.001f && liquidType != carried) return false;
+            if (stored + BucketLitres > capacity + 0.001f) return false;   // needs full room
+            liquidType = carried;
+            stored += BucketLitres;
+            bucket.durability = 0;
+            bucket.payload = null;
+            return true;
+        }
     }
 }

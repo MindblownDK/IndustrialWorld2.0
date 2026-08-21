@@ -558,21 +558,18 @@ namespace VoxelEngine.Player
 
             if (buildDown)
             {
-                // 0) Water Bucket placement.
+                // 0) Universal Liquid Bucket placement (9.16.0 — all 7 liquids).
                 var stackRmb = inventory.ActiveStack;
                 if (!stackRmb.IsEmpty && stackRmb.item is WaterBucket && stackRmb.durability > 0)
                 {
                     // Place the carried liquid into the fluid sim (the voxel cell stays AIR;
-                    // the liquid mesh renders it). Buckets can now carry water or crude oil.
+                    // the liquid mesh renders it).
                     var pos = world.WorldToVoxel(hit.point + hit.normal * 0.5f);
                     var existing = world.GetVoxelWorld(pos);
                     if (existing.density <= 0)
                     {
                         var carried = stackRmb.payload is VoxelEngine.Items.LiquidType lt ? lt : VoxelEngine.Items.LiquidType.Water;
-                        if (carried == VoxelEngine.Items.LiquidType.CrudeOil)
-                            VoxelEngine.Fluids.FluidSimManager.Instance?.PlaceOil(pos, 255);
-                        else
-                            VoxelEngine.Fluids.FluidSimManager.Instance?.PlaceWater(pos, 255);
+                        VoxelEngine.Fluids.FluidSimManager.Instance?.PlaceLiquidAt(pos, carried, 255);
                         stackRmb.durability = 0;
                         stackRmb.payload = null;
                         inventory.container.RaiseChanged();
@@ -961,6 +958,44 @@ namespace VoxelEngine.Player
                 // place the block instead (so you can build on existing blocks).
                 bool holdingGridBlock = IsHoldingGridBlock();
                 var gridBlock = hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>();
+
+                // Universal bucket × liquid tank (9.16.0): right-click transfers liquid —
+                // empty bucket fills from the tank, full bucket pours into it.
+                if (!holdingGridBlock && gridBlock is VoxelEngine.GridSystem.GridLiquidTank ltank
+                    && !inventory.ActiveStack.IsEmpty && inventory.ActiveStack.item is WaterBucket)
+                {
+                    var bucketStack = inventory.ActiveStack;
+                    if (bucketStack.durability > 0)
+                    {
+                        if (ltank.TryEmptyBucket(bucketStack))
+                        {
+                            VoxelEngine.UI.BuildFeedbackHud.Show("Bucket",
+                                $"Poured {VoxelEngine.GridSystem.GridLiquidTank.BucketLitres:0} L into the tank", null,
+                                new Color(0.4f, 0.8f, 1f));
+                        }
+                        else
+                        {
+                            VoxelEngine.UI.BuildFeedbackHud.Show("Bucket",
+                                "Tank is full or carries a different liquid", null, new Color(1f, 0.6f, 0.2f));
+                        }
+                    }
+                    else
+                    {
+                        if (ltank.TryFillBucket(bucketStack))
+                        {
+                            var carried = bucketStack.payload is VoxelEngine.Items.LiquidType bt ? bt : VoxelEngine.Items.LiquidType.Water;
+                            VoxelEngine.UI.BuildFeedbackHud.Show("Bucket",
+                                $"Filled with {carried.DisplayName()}", null, new Color(0.4f, 0.8f, 1f));
+                        }
+                        else
+                        {
+                            VoxelEngine.UI.BuildFeedbackHud.Show("Bucket", "Tank is empty", null, new Color(1f, 0.6f, 0.2f));
+                        }
+                    }
+                    inventory.container.RaiseChanged();
+                    return;
+                }
+
                 // Cockpit / control seats: right-click enters directly when not holding a grid block.
                 if (!holdingGridBlock && gridBlock is VoxelEngine.GridSystem.GridCockpit cockpit)
                 {
@@ -1405,34 +1440,32 @@ namespace VoxelEngine.Player
                 var hitPos = world.WorldToVoxel(hit.point - ray.direction.normalized * 0.2f);
                 bool scooped = false;
                 VoxelEngine.Items.LiquidType scoopedLiquid = VoxelEngine.Items.LiquidType.Water;
-                // Try the new fluid sim first (player-placed liquids + oceans seeded into the sim).
+                // Try the fluid sim first (any of the 7 liquids — 9.16.0 universal bucket).
                 var fsm = VoxelEngine.Fluids.FluidSimManager.Instance;
-                if (fsm != null && fsm.TryDrainWaterAt(hitPos))
+                if (fsm != null)
                 {
-                    scooped = true;
-                    scoopedLiquid = VoxelEngine.Items.LiquidType.Water;
-                }
-                else if (fsm != null && fsm.TryDrainOilAt(hitPos))
-                {
-                    scooped = true;
-                    scoopedLiquid = VoxelEngine.Items.LiquidType.CrudeOil;
-                }
-                else
-                {
-                    // Fall back: legacy WaterVoxel OR CrudeOil material in the voxel grid.
-                    var here = world.GetVoxelWorld(hitPos);
-                    if (here.material == (byte)VoxelEngine.Materials.MaterialId.WaterVoxel ||
-                        here.material == (byte)VoxelEngine.Materials.MaterialId.WaterLiquid)
+                    for (int liq = 0; liq < 7 && !scooped; liq++)
                     {
-                        world.SetVoxelWorld(hitPos, new VoxelEngine.Core.Voxel(-127, (byte)VoxelEngine.Materials.MaterialId.Air));
-                        scooped = true;
-                        scoopedLiquid = VoxelEngine.Items.LiquidType.Water;
+                        var liquid = (VoxelEngine.Items.LiquidType)liq;
+                        if (fsm.LiquidLevelAt(hitPos, liquid) > 0 && fsm.TryDrainLiquidAt(hitPos, liquid))
+                        {
+                            scooped = true;
+                            scoopedLiquid = liquid;
+                        }
                     }
-                    else if (here.material == (byte)VoxelEngine.Materials.MaterialId.CrudeOil)
+                }
+                if (!scooped)
+                {
+                    // Fall back: legacy fluid material directly in the voxel grid.
+                    var here = world.GetVoxelWorld(hitPos);
+                    var legacy = VoxelEngine.WaterSim.FluidMaterialUtility.LiquidFromMaterial(here.material);
+                    if (here.waterLevel > 0
+                        || here.material == (byte)VoxelEngine.Materials.MaterialId.WaterVoxel
+                        || VoxelEngine.WaterSim.FluidMaterialUtility.IsLiquidMaterial(here.material))
                     {
                         world.SetVoxelWorld(hitPos, new VoxelEngine.Core.Voxel(-127, (byte)VoxelEngine.Materials.MaterialId.Air));
                         scooped = true;
-                        scoopedLiquid = VoxelEngine.Items.LiquidType.CrudeOil;
+                        scoopedLiquid = legacy;
                     }
                 }
                 if (scooped)

@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: Tool_WaterBucket
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Items.WaterBucket
   itemId: water_bucket
-  displayName: Water Bucket
+  displayName: Liquid Bucket
   description: "LMB scoops a water voxel into the bucket. RMB places it elsewhere
     \u2014 and it spreads to fill holes! Use durability to track if it's filled (1
     = full, 0 = empty)."
@@ -22,6 +22,9 @@ MonoBehaviour:
   maxStack: 1
   massPerUnit: 1
   category: Fluids
+  requiresContainment: 0
+  cannotBeCarried: 0
+  isPressurizedCanister: 0
   viewmodelPrefab: {fileID: 0}
   toolType: 4
   miningTier: 1

@@ -4,14 +4,22 @@
 // data. Rebuilt with pressure-driven flow, viscosity differentiation, and clean
 // separation of simulation logic.
 //
-// Liquids:
-//   • Water (WaterLiquid) — fast, low viscosity, high throughput
-//   • Crude Oil (CrudeOil) — dense, viscous, slow fall, slow spread, sinks through water
+// Liquids (9.16.0 — the overhaul):
+//   • Water        — fast, low viscosity, high throughput
+//   • CrudeOil     — dense, viscous, slow fall, slow spread, sinks below water
+//   • RefinedOil   — light amber product: medium flow, FLOATS on water
+//   • LiquidFuel   — lightest, volatile: runs fast, floats on everything
+//   • HeavyFuelOil — tar-like bunker fuel: oozes, sinks below water
+//   • MarineGasOil — thin pale distillate: light, quick
+//   • Coolant      — watery glow-fluid: slightly denser than water
 //
 // Rules:
-//  1. Gravity: liquid falls down; oil is capped far below water throughput
-//  2. Dense oil slowly displaces full water cells downward in deterministic pulses
-//  3. Pressure equalization: horizontal flow from high to low pressure
+//  1. Gravity: liquid falls down with a per-liquid throughput cap
+//  2. Density layering: FULL cells of different liquids swap vertically until
+//     heavier liquids sit below lighter ones (fuel floats on water, water on
+//     crude) — deterministic pulse-staggered swaps
+//  3. Pressure equalization: horizontal flow from high to low pressure,
+//     per-liquid spread rate
 //  4. Micro-cleanup: tiny floating drops (< 3 level) with air below just fall
 //  5. Clean-up: empty fluid voxels reset to Air so terrain queries stay sane
 
@@ -37,17 +45,26 @@ namespace VoxelEngine.WaterSim
         public NativeArray<int> changed; // single-element array, 0 or 1
         public int simulationStep;
 
-        private const byte AirMat        = (byte)MaterialId.Air;
-        private const byte WaterMat      = (byte)MaterialId.WaterLiquid;
-        private const byte WaterVoxelMat = (byte)MaterialId.WaterVoxel;
-        private const byte OilMat        = (byte)MaterialId.CrudeOil;
+        private const byte AirMat         = (byte)MaterialId.Air;
+        private const byte WaterMat       = (byte)MaterialId.WaterLiquid;
+        private const byte WaterVoxelMat  = (byte)MaterialId.WaterVoxel;
+        private const byte OilMat         = (byte)MaterialId.CrudeOil;
+        private const byte RefinedOilMat  = (byte)MaterialId.RefinedOilLiquid;
+        private const byte FuelMat        = (byte)MaterialId.LiquidFuelLiquid;
+        private const byte HfoMat         = (byte)MaterialId.HeavyFuelOilLiquid;
+        private const byte MgoMat         = (byte)MaterialId.MarineGasOilLiquid;
+        private const byte CoolantMat     = (byte)MaterialId.CoolantLiquid;
 
-        // Viscosity parameters — oil is much more viscous than water
-        private const int WaterMaxFall        = 255;
-        private const int OilMaxFall          = 20;   // dense but viscous: sinks distinctly slower than water
-        private const int WaterHorizontalStep = 64;
-        private const int OilHorizontalStep   = 1;    // dense crude stays cohesive around its seep/funnel
-        private const int OilWaterSwapStride  = 8;    // full-cell density swaps pulse at 1/8 of fluid ticks
+        // Per-liquid flow constants (kept in sync with LiquidPhysics for the editor/tools).
+        private const int FuelMaxFall    = 150;  private const int FuelStep    = 48;  private const byte FuelRank    = 0;
+        private const int RefinedMaxFall = 120;  private const int RefinedStep = 24;  private const byte RefinedRank = 1;
+        private const int MgoMaxFall     = 110;  private const int MgoStep     = 20;  private const byte MgoRank     = 2;
+        private const int WaterMaxFall   = 255;  private const int WaterStep   = 64;  private const byte WaterRank   = 3;
+        private const int CoolantMaxFall = 200;  private const int CoolantStep = 56;  private const byte CoolantRank = 4;
+        private const int HfoMaxFall     = 24;   private const int HfoStep     = 2;   private const byte HfoRank     = 5;
+        private const int CrudeMaxFall   = 20;   private const int CrudeStep   = 1;   private const byte CrudeRank   = 6;
+
+        private const int LayerSwapStride = 8;   // full-cell density swaps pulse at 1/8 of fluid ticks
 
         public void Execute()
         {
@@ -73,17 +90,13 @@ namespace VoxelEngine.WaterSim
                 if (v.waterLevel == 0) continue;
 
                 // Solid cells with residual waterLevel — convert or clean up.
-                // If the solid block is a fluid material (WaterVoxel from old saves,
-                // or a corrupted WaterLiquid/Oil), convert it to a proper fluid voxel
-                // instead of just clearing the waterLevel (which would leave an invisible
-                // solid block or a blue terrain face).
                 if (v.IsSolid)
                 {
                     if (IsFluidMat(v.material) && v.waterLevel > 0)
                     {
                         // Convert solid fluid block → proper fluid voxel
                         byte savedLevel = v.waterLevel;
-                        byte savedMat = v.material == OilMat ? OilMat : WaterMat;
+                        byte savedMat = IsLiquidMat(v.material) ? v.material : WaterMat;
                         v.density = -1;
                         v.material = savedMat;
                         v.waterLevel = savedLevel;
@@ -99,25 +112,31 @@ namespace VoxelEngine.WaterSim
                 }
 
                 byte liquidMat = NormalizeFluidMaterial(ref v);
-                bool isOil = liquidMat == OilMat;
-                int maxFall = isOil ? OilMaxFall : WaterMaxFall;
-                int hStep   = isOil ? OilHorizontalStep : WaterHorizontalStep;
+                int maxFall, hStep;
+                byte rank;
+                LiquidStats(liquidMat, out maxFall, out hStep, out rank);
 
                 int belowI = Pad(x + downX, y + downY, z + downZ, SP);
                 var below = voxels[belowI];
 
-                // Dense crude oil sinks through water, but the one-material-per-voxel save
-                // format cannot represent a partial mix. Swap only fully occupied cells and
-                // stagger those swaps deterministically so oil descends much slower than water.
-                if (isOil && !below.IsSolid && below.waterLevel >= 250 && below.material != OilMat
-                    && v.waterLevel >= 250 && ShouldDisplaceWater(x, y, z))
+                // ── Density layering: FULL cells of different liquids swap vertically
+                // until the heavier liquid sits below (fuel floats on water, water on
+                // crude). The one-material-per-voxel save format cannot represent a
+                // partial mix, so only fully occupied cells swap, pulse-staggered so
+                // dense liquids descend slowly and deterministically. ──
+                if (below.waterLevel >= 250 && !below.IsSolid
+                    && v.waterLevel >= 250 && below.material != liquidMat
+                    && IsLiquidMat(below.material)
+                    && rank > RankOf(below.material)
+                    && ShouldLayerSwap(x, y, z))
                 {
-                    byte waterLevel = below.waterLevel;
-                    byte oilLevel = v.waterLevel;
-                    below.material = OilMat;
-                    below.waterLevel = oilLevel;
-                    v.material = WaterMat;
-                    v.waterLevel = waterLevel;
+                    byte belowLevel = below.waterLevel;
+                    byte myLevel = v.waterLevel;
+                    byte belowMat = below.material;
+                    below.material = liquidMat;
+                    below.waterLevel = myLevel;
+                    v.material = belowMat;
+                    v.waterLevel = belowLevel;
                     voxels[belowI] = below;
                     voxels[i] = v;
                     any = true;
@@ -205,19 +224,48 @@ namespace VoxelEngine.WaterSim
             voxels[ni] = n;
         }
 
-        private bool ShouldDisplaceWater(int x, int y, int z)
+        private bool ShouldLayerSwap(int x, int y, int z)
         {
             unchecked
             {
                 int hash = x * 73856093 ^ y * 19349663 ^ z * 83492791 ^ simulationStep * 265443577;
-                return (hash & (OilWaterSwapStride - 1)) == 0;
+                return (hash & (LayerSwapStride - 1)) == 0;
+            }
+        }
+
+        /// <summary>Per-liquid flow stats — Burst-safe constant switch.</summary>
+        private static void LiquidStats(byte mat, out int maxFall, out int hStep, out byte rank)
+        {
+            switch (mat)
+            {
+                case OilMat:        maxFall = CrudeMaxFall;   hStep = CrudeStep;   rank = CrudeRank;   break;
+                case RefinedOilMat: maxFall = RefinedMaxFall; hStep = RefinedStep; rank = RefinedRank; break;
+                case FuelMat:       maxFall = FuelMaxFall;    hStep = FuelStep;    rank = FuelRank;    break;
+                case HfoMat:        maxFall = HfoMaxFall;     hStep = HfoStep;     rank = HfoRank;     break;
+                case MgoMat:        maxFall = MgoMaxFall;     hStep = MgoStep;     rank = MgoRank;     break;
+                case CoolantMat:    maxFall = CoolantMaxFall; hStep = CoolantStep; rank = CoolantRank; break;
+                default:            maxFall = WaterMaxFall;   hStep = WaterStep;   rank = WaterRank;   break;   // water + legacy
+            }
+        }
+
+        private static byte RankOf(byte mat)
+        {
+            switch (mat)
+            {
+                case OilMat:        return CrudeRank;
+                case RefinedOilMat: return RefinedRank;
+                case FuelMat:       return FuelRank;
+                case HfoMat:        return HfoRank;
+                case MgoMat:        return MgoRank;
+                case CoolantMat:    return CoolantRank;
+                default:            return WaterRank;
             }
         }
 
         private static byte NormalizeFluidMaterial(ref Voxel voxel)
         {
-            if (voxel.material == OilMat) return OilMat;
-            voxel.material = WaterMat;
+            if (IsLiquidMat(voxel.material)) return voxel.material;
+            voxel.material = WaterMat;   // legacy values + frozen WaterVoxel read as water
             return WaterMat;
         }
 
@@ -227,11 +275,15 @@ namespace VoxelEngine.WaterSim
         private static bool CanShareCell(Voxel voxel, byte liquidMat)
         {
             if (voxel.waterLevel == 0) return true;
-            if (liquidMat == OilMat) return voxel.material == OilMat;
-            return voxel.material != OilMat;
+            return voxel.material == liquidMat;   // liquids never mix in one voxel
         }
 
-        private static bool IsFluidMat(byte mat) => mat == WaterMat || mat == OilMat || mat == WaterVoxelMat;
+        private static bool IsFluidMat(byte mat)
+            => IsLiquidMat(mat) || mat == WaterVoxelMat;
+
+        private static bool IsLiquidMat(byte mat)
+            => mat == WaterMat || mat == OilMat || mat == RefinedOilMat || mat == FuelMat
+            || mat == HfoMat || mat == MgoMat || mat == CoolantMat;
 
         private static int Min3(int a, int b, int c)
         {
