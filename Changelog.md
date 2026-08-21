@@ -35,6 +35,11 @@ Two real bugs killed the old feel, both fixed:
 - **Flow used to crawl.** The sim ticked at 4 Hz with a 2-chunk budget and halving horizontal transfer. Now: **10 Hz, 8 chunks/tick**, raised per-liquid spread steps (water 96/cell-tick), non-halving transfer — a dug trench fills in about a second, water pours down shafts in a wave, and a pool re-levels instantly when you drop a block in it.
 - **Edits wake the sim directly** (`FluidManager.NotifyVoxelEdited`): mining or building runs an immediate synchronous fluid step on every affected chunk — liquids react on the same frame the world changes.
 
+#### 🛠 8. Field round: mining under liquid, oil shafts, liquid surface texture
+- **Mining under liquid fixed.** The fluid definition's non-mineable flag no longer armours solid rock soaked with a fluid material — the oil-soaked casing around seeps is diggable again (`VoxelEditor`). And water/coolant now fall at half a cell per tick, so a freshly mined pocket stays visibly empty for a frame and the water reads as a **pour**, not a teleport — you can excavate under lakes and oceans and watch the water chase you down.
+- **The oil shaft is back.** The fluid sim was erasing the CrudeOil material off every SOLID soaked-rock cell (the bore/reservoir casing) to Air — pale invisible rock, gutted shaft look. The sim now preserves solid fluid-material cells and only clears stale level bytes, so the **puddle → liquid-filled shaft → liquid-filled reservoir** chain renders and reads exactly as authored.
+- **Liquid surfaces got their texture pass.** `VoxelWaterURP` gained a fine animated ripple layer, slow large-scale colour patchiness, and a per-liquid sparkle multiplier — water shimmers, fuels glitter, crude sits oily and mottled, coolant ripples with a faint glow. All procedural, no textures; per-liquid values live in `LiquidVisualProfile` (Water/Crude/Refined/Fuel/HFO/MGO/Coolant each tuned).
+
 #### ✅ Static delivery checks
 - All touched sources parse clean (tree-sitter C#); no save-format changes; no other-game names; no TODOs.
 

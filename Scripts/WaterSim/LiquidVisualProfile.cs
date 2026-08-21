@@ -50,6 +50,14 @@ namespace VoxelEngine.WaterSim
         public Color EmissionColor;
         public float EmissionStrength;      // 0 = none, >0 = glow (coolant)
 
+        // 9.16.0 surface-texture layer: per-liquid procedural detail on top of the
+        // shared wave system — slow colour patchiness, fine animated ripples, and
+        // sun-glitter sparkle.
+        public float Patchiness;        // slow large-scale brightness variation
+        public float DetailStrength;    // fine ripple normal layer
+        public float DetailScale;       // fine ripple frequency
+        public float SparkleStrength;   // glitter / sheen sparkle multiplier
+
         public static LiquidVisualProfile For(LiquidType t) => t switch
         {
             LiquidType.CrudeOil            => CrudeOil,
@@ -77,6 +85,7 @@ namespace VoxelEngine.WaterSim
             TideStrength = 0.22f,
             IridescenceStrength = 0.0f, IridescenceScale = 1.0f,
             EmissionColor = Color.black, EmissionStrength = 0f,
+            Patchiness = 0.35f, DetailStrength = 0.50f, DetailScale = 5.0f, SparkleStrength = 1.0f,
         };
 
         // ── CRUDE OIL — near-black, viscous, faint sickly sheen ────
@@ -95,6 +104,7 @@ namespace VoxelEngine.WaterSim
             TideStrength = 0.04f,
             IridescenceStrength = 0.55f, IridescenceScale = 0.8f,
             EmissionColor = Color.black, EmissionStrength = 0f,
+            Patchiness = 0.55f, DetailStrength = 0.12f, DetailScale = 2.0f, SparkleStrength = 0.50f,
         };
 
         // ── REFINED OIL — amber, transparent, strong rainbow sheen ─
@@ -113,6 +123,7 @@ namespace VoxelEngine.WaterSim
             TideStrength = 0.10f,
             IridescenceStrength = 1.0f, IridescenceScale = 1.6f,
             EmissionColor = Color.black, EmissionStrength = 0f,
+            Patchiness = 0.40f, DetailStrength = 0.30f, DetailScale = 4.0f, SparkleStrength = 1.60f,
         };
 
         // ── LIQUID FUEL — bright amber, volatile, fast shimmer ─────
@@ -131,6 +142,7 @@ namespace VoxelEngine.WaterSim
             TideStrength = 0.12f,
             IridescenceStrength = 1.0f, IridescenceScale = 2.0f,
             EmissionColor = Color.black, EmissionStrength = 0f,
+            Patchiness = 0.45f, DetailStrength = 0.40f, DetailScale = 5.0f, SparkleStrength = 2.00f,
         };
 
         // ── HEAVY FUEL OIL — tar black, matte, barely moves ────────
@@ -149,6 +161,7 @@ namespace VoxelEngine.WaterSim
             TideStrength = 0.02f,
             IridescenceStrength = 0.25f, IridescenceScale = 0.5f,
             EmissionColor = Color.black, EmissionStrength = 0f,
+            Patchiness = 0.30f, DetailStrength = 0.06f, DetailScale = 1.5f, SparkleStrength = 0.20f,
         };
 
         // ── MARINE GAS OIL — pale green-amber distillate, thin ─────
@@ -167,6 +180,7 @@ namespace VoxelEngine.WaterSim
             TideStrength = 0.1f,
             IridescenceStrength = 0.85f, IridescenceScale = 1.4f,
             EmissionColor = Color.black, EmissionStrength = 0f,
+            Patchiness = 0.40f, DetailStrength = 0.35f, DetailScale = 4.5f, SparkleStrength = 1.40f,
         };
 
         // ── COOLANT — bright cyan, emissive glow, watery motion ────
@@ -185,6 +199,7 @@ namespace VoxelEngine.WaterSim
             TideStrength = 0.15f,
             IridescenceStrength = 0.15f, IridescenceScale = 1.0f,
             EmissionColor = new Color(0.10f, 0.85f, 0.80f), EmissionStrength = 0.75f,
+            Patchiness = 0.25f, DetailStrength = 0.55f, DetailScale = 6.0f, SparkleStrength = 1.20f,
         };
 
         /// <summary>Applies this profile to a material instance (property-safe).</summary>
@@ -221,6 +236,10 @@ namespace VoxelEngine.WaterSim
             if (mat.HasProperty("_IridescenceScale")) mat.SetFloat("_IridescenceScale", IridescenceScale);
             if (mat.HasProperty("_EmissionColor")) mat.SetColor("_EmissionColor", EmissionColor);
             if (mat.HasProperty("_EmissionStrength")) mat.SetFloat("_EmissionStrength", EmissionStrength);
+            if (mat.HasProperty("_Patchiness")) mat.SetFloat("_Patchiness", Patchiness);
+            if (mat.HasProperty("_DetailStrength")) mat.SetFloat("_DetailStrength", DetailStrength);
+            if (mat.HasProperty("_DetailScale")) mat.SetFloat("_DetailScale", DetailScale);
+            if (mat.HasProperty("_SparkleStrength")) mat.SetFloat("_SparkleStrength", SparkleStrength);
         }
     }
 }

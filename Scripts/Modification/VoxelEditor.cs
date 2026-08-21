@@ -83,7 +83,12 @@ namespace VoxelEngine.Modification
                 {
                     if (v.density <= 0) continue;
                     var def = registry.Get(v.material);
-                    if (def != null && !def.isMineable) continue;
+                    // 9.16.0 — solid rock soaked with a FLUID material (oil bore/reservoir
+                    // casing, oil-soaked seep floors) is always diggable: the fluid
+                    // definition's non-mineable flag must not armour the rock around it.
+                    bool soakedRock = v.IsSolid
+                        && VoxelEngine.WaterSim.FluidMaterialUtility.IsFluidMaterial(v.material);
+                    if (def != null && !def.isMineable && !soakedRock) continue;
 
                     int newDensity = v.density - delta;
                     bool fullyRemoved = newDensity <= 0;

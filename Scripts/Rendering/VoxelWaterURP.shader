@@ -51,6 +51,12 @@ Shader "VoxelEngine/VoxelWaterURP"
         [Header(Emission - 9.16.0)]
         _EmissionColor ("Emission Colour", Color) = (0, 0, 0, 1)
         _EmissionStrength    ("Emission Strength", Range(0, 4)) = 0.0
+
+        [Header(Surface Texture - 9.16.0)]
+        _Patchiness      ("Colour Patchiness", Range(0, 1)) = 0.3
+        _DetailStrength  ("Fine Ripple Strength", Range(0, 2)) = 0.4
+        _DetailScale     ("Fine Ripple Scale", Range(0.5, 12)) = 4.0
+        _SparkleStrength ("Sparkle Strength", Range(0, 2)) = 1.0
     }
 
     SubShader
@@ -91,6 +97,7 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float  _IridescenceStrength, _IridescenceScale;
                 float4 _EmissionColor;
                 float  _EmissionStrength;
+                float  _Patchiness, _DetailStrength, _DetailScale, _SparkleStrength;
             CBUFFER_END
 
             // Native spherical-water context + a compact wake registry. These globals are
@@ -291,6 +298,17 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float3 worldDetailN = normalize(tanA * detailN.x + radialUp * detailN.y + tanB * detailN.z);
                 float3 N = normalize(lerp(radialUp, worldDetailN, 0.92));
 
+                // -- Fine ripple layer (9.16.0): a tighter animated noise octave riding on
+                // the detail normal so every liquid reads as textured, never as glass. --
+                float2 ripBase = surfUV * _DetailScale + float2(t * 0.34, -t * 0.21);
+                float ripA  = FBM6(ripBase);
+                float ripBx = FBM6(ripBase + float2(0.06 * _DetailScale, 0.0));
+                float ripBz = FBM6(ripBase + float2(0.0, 0.06 * _DetailScale));
+                float3 rippleN = normalize(float3((ripA - ripBx) * _DetailStrength * 1.6,
+                                                   1.0,
+                                                   (ripA - ripBz) * _DetailStrength * 1.6));
+                N = normalize(N + rippleN * _DetailStrength * 0.35);
+
                 float2 screenUV = i.scrPos.xy / max(i.scrPos.w, 0.0001);
                 float2 refractUV = screenUV + N.xz * _RefractionStrength;
                 float rawDepth = SampleSceneDepth(screenUV);
@@ -309,6 +327,9 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float tidalTint = saturate(tideMask) * 0.08;
                 float4 waterCol = lerp(_ShallowColor, _DeepColor, saturate(deep01 + sideDeepBoost));
                 waterCol.rgb = lerp(waterCol.rgb, waterCol.rgb * float3(0.82, 0.92, 1.08), tidalTint);
+                // -- Colour patchiness (9.16.0): slow large-scale brightness variation so
+                // broad surfaces never look like one flat fill. --
+                waterCol.rgb *= 1.0 + (FBM6(surfUV * 0.07 + t * 0.02) - 0.5) * _Patchiness;
 
                 float validDepth = step(0.05, depthDiff);
                 float shoreFoamFade = saturate(1.0 - depthDiff / (_ShoreFoamWidth * 0.7));
@@ -331,7 +352,7 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float specBroad = pow(saturate(dot(N, H)), lerp(80.0, 900.0, _Gloss)) * 0.7;
                 float specTight = pow(saturate(dot(N, H)), 2400.0) * 1.2;
                 float glitterMask = pow(saturate(FBM6(surfUV * 2.8 + t * 0.15)), 8.0);
-                float glitter = pow(saturate(dot(N, H)), 3200.0) * glitterMask * 2.5;
+                float glitter = pow(saturate(dot(N, H)), 3200.0) * glitterMask * 2.5 * _SparkleStrength;
                 float sssWrap = pow(saturate(dot(V, -L)), 3.0) * (1.0 - deep01) * _SSSIntensity;
                 float3 sssColor = mainLight.color.rgb * sssWrap * float3(0.12, 0.75, 0.55);
                 float caustic = pow(saturate(FBM(surfUV * 0.65 + N.xz * 1.8 - t * 0.18)), 3.0) * _CausticsIntensity * (1.0 - deep01);

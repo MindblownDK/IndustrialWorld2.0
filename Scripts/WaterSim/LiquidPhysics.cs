@@ -24,8 +24,8 @@ namespace VoxelEngine.WaterSim
         public const int FuelMaxFall      = 150;
         public const int RefinedMaxFall   = 120;
         public const int MgoMaxFall       = 110;
-        public const int WaterMaxFall     = 255;
-        public const int CoolantMaxFall   = 200;
+        public const int WaterMaxFall     = 128;   // half-cell/tick: the pour is visible
+        public const int CoolantMaxFall   = 128;
         public const int HfoMaxFall       = 24;
         public const int CrudeMaxFall     = 20;
 

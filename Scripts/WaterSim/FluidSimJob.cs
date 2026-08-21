@@ -57,11 +57,13 @@ namespace VoxelEngine.WaterSim
 
         // Per-liquid flow constants (kept in sync with LiquidPhysics for the editor/tools).
         // 9.16.0 flow remake: horizontal steps raised so flow fronts advance ~1 cell/tick.
+        // Water/Coolant fall at HALF a cell per tick (128) so a freshly mined pocket stays
+        // visibly empty for a frame and the pour reads as a pour, not a teleport.
         private const int FuelMaxFall    = 150;  private const int FuelStep    = 80;  private const byte FuelRank    = 0;
         private const int RefinedMaxFall = 120;  private const int RefinedStep = 48;  private const byte RefinedRank = 1;
         private const int MgoMaxFall     = 110;  private const int MgoStep     = 40;  private const byte MgoRank     = 2;
-        private const int WaterMaxFall   = 255;  private const int WaterStep   = 96;  private const byte WaterRank   = 3;
-        private const int CoolantMaxFall = 200;  private const int CoolantStep = 84;  private const byte CoolantRank = 4;
+        private const int WaterMaxFall   = 128;  private const int WaterStep   = 96;  private const byte WaterRank   = 3;
+        private const int CoolantMaxFall = 128;  private const int CoolantStep = 84;  private const byte CoolantRank = 4;
         private const int HfoMaxFall     = 24;   private const int HfoStep     = 4;   private const byte HfoRank     = 5;
         private const int CrudeMaxFall   = 20;   private const int CrudeStep   = 2;   private const byte CrudeRank   = 6;
 
@@ -95,7 +97,7 @@ namespace VoxelEngine.WaterSim
                 {
                     if (IsFluidMat(v.material) && v.waterLevel > 0)
                     {
-                        // Convert solid fluid block → proper fluid voxel
+                        // Convert solid fluid block → proper fluid voxel (legacy corruption repair)
                         byte savedLevel = v.waterLevel;
                         byte savedMat = IsLiquidMat(v.material) ? v.material : WaterMat;
                         v.density = -1;
@@ -105,10 +107,17 @@ namespace VoxelEngine.WaterSim
                         any = true;
                         continue;
                     }
-                    v.waterLevel = 0;
-                    if (IsFluidMat(v.material)) v.material = AirMat;
-                    voxels[i] = v;
-                    any = true;
+                    // 9.16.0 — solid cells carrying a FLUID material with no level are
+                    // authored SOAKED ROCK (the oil bore/reservoir casing). Keep the
+                    // material so the terrain mesh and its colliders render it; erasing
+                    // it to Air gutted the oil shaft and left pale holes. Only clear a
+                    // stale level byte, and only report a change when one existed.
+                    if (v.waterLevel != 0)
+                    {
+                        v.waterLevel = 0;
+                        voxels[i] = v;
+                        any = true;
+                    }
                     continue;
                 }
 
