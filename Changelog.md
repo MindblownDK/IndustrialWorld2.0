@@ -1,9 +1,19 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.18.0-dev`
+**Current Version:** `9.18.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.18.1-dev] Grass Renderer Compile Recovery (CS1061)
+
+**Type:** PATCH — one-line C# fix, no other changes.
+
+- 9.18.0 used `body.localToWorldMatrix` in `GpuGrassRenderer` (Update + RebuildField), but `localToWorldMatrix` is a **Transform** member, not a component member — CS1061 on lines 119 and 241. Both call sites now read `body.transform.localToWorldMatrix`. Every other `body.` usage in the file re-verified against `CelestialBody`'s actual members (`SurfaceRadius`, `transform.*`).
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile — clean.
+2. Continue the 9.18.0 checklist (meadow walk + paste the `[Grass] blades=...` console line).
 
 ### [9.18.0-dev] Real Grass Blades — The Meadow Finally Grows (field round)
 

@@ -116,7 +116,7 @@ namespace VoxelEngine.Cosmos
 
             // Floating-origin safety: if the body moved in the world (rebase/frame switch),
             // re-project the stored body-local anchors to the new world space.
-            Matrix4x4 bodyLW = body.localToWorldMatrix;
+            Matrix4x4 bodyLW = body.transform.localToWorldMatrix;
             if (_instanceCount > 0 && _matrices.IsCreated && bodyLW != _lastBodyLocalToWorld)
             {
                 for (int i = 0; i < _instanceCount; i++)
@@ -238,7 +238,7 @@ namespace VoxelEngine.Cosmos
             if (_instanceCount == 0) return;
             _localMatrices = new NativeArray<Matrix4x4>(_instanceCount, Allocator.Persistent);
             _matrices = new NativeArray<Matrix4x4>(_instanceCount, Allocator.Persistent);
-            Matrix4x4 bodyLW = body.localToWorldMatrix;
+            Matrix4x4 bodyLW = body.transform.localToWorldMatrix;
             _lastBodyLocalToWorld = bodyLW;
             for (int i = 0; i < _instanceCount; i++)
             {
