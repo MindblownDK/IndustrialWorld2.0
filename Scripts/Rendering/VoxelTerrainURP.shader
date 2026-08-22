@@ -4,6 +4,9 @@
 // Optional triplanar _BaseMap: when supplied, sampled by world-space position projected on
 // the three cardinal planes, blended by normal direction. Lets you give the whole terrain
 // a tileable rock/dirt texture without UVs (Surface Nets meshes have no UVs).
+// 9.17.0: per-material SURFACE TEXTURES — the mesher carries each vertex's dominant
+// material id in vertex-colour alpha and VoxelSurfaceTextures.hlsl renders it (stone
+// strata/cracks, sand ripples, ore glints, grass-to-soil slopes, crystal facets…).
 Shader "VoxelEngine/VoxelTerrainURP"
 {
     Properties
@@ -12,6 +15,7 @@ Shader "VoxelEngine/VoxelTerrainURP"
         _BaseMap     ("Base Map",        2D)    = "white" {}
         _BaseMap_ST  ("Tiling/Offset",   Vector) = (0.2, 0.2, 0, 0)   // x = tiles per metre
         _TexBlend    ("Texture Strength",Range(0,1)) = 0.6           // 0 = pure vertex color, 1 = pure texture * vertex
+        _SurfaceTexStrength ("Surface Texturing", Range(0,1)) = 1.0
         _Smoothness  ("Smoothness",      Range(0,1)) = 0.2
         _Metallic    ("Metallic",        Range(0,1)) = 0.0
         // Single-surface handshake (9.3.0): 1 on the GPU LOD-skin material clone.
@@ -73,11 +77,15 @@ Shader "VoxelEngine/VoxelTerrainURP"
                 float4 _BaseColor;
                 float4 _BaseMap_ST;
                 float  _TexBlend;
+                float  _SurfaceTexStrength;
                 float  _Smoothness;
                 float  _Metallic;
                 float  _BubbleCutout;
                 float  _LodRadialBias;
             CBUFFER_END
+
+            // ── 9.17.0 per-material surface texturing (shared with VoxelTerrainEnhanced) ──
+            #include "VoxelSurfaceTextures.hlsl"
 
             TEXTURE2D(_BaseMap);
             SAMPLER(sampler_BaseMap);
@@ -105,6 +113,15 @@ Shader "VoxelEngine/VoxelTerrainURP"
             float3 TerrainMappingPosition(float3 worldPos)
             {
                 return lerp(worldPos, worldPos - _VoxelTerrainBodyCenter.xyz, saturate(_VoxelTerrainIsPlanet));
+            }
+
+            // Local "up" for surface-plane textures: radial on planets, Y-up otherwise.
+            float3 TerrainUp(float3 worldPos)
+            {
+                float3 radial = worldPos - _VoxelTerrainBodyCenter.xyz;
+                float lenSq = dot(radial, radial);
+                radial = lenSq > 0.0001 ? radial * rsqrt(lenSq) : float3(0, 1, 0);
+                return normalize(lerp(float3(0, 1, 0), radial, saturate(_VoxelTerrainIsPlanet)));
             }
 
             Varyings vert(Attributes IN)
@@ -155,22 +172,43 @@ Shader "VoxelEngine/VoxelTerrainURP"
                 UNITY_SETUP_INSTANCE_ID(IN);
                 ApplyBubbleCutout(IN.positionWS);
 
+                float3 worldNormal = normalize(IN.normalWS);
+                float3 terrainUp   = TerrainUp(IN.positionWS);
+
                 float3 baseTint = _BaseColor.rgb * IN.color.rgb;
-                float3 tex = SampleTriplanar(TerrainMappingPosition(IN.positionWS), normalize(IN.normalWS), _BaseMap_ST.xy);
+                float3 tex = SampleTriplanar(TerrainMappingPosition(IN.positionWS), worldNormal, _BaseMap_ST.xy);
                 float3 albedo = lerp(baseTint, baseTint * tex, _TexBlend);
+
+                // ── PER-MATERIAL SURFACE TEXTURES (9.17.0) — material id rides the
+                // vertex-colour alpha; see VoxelSurfaceTextures.hlsl. Legacy meshes
+                // (alpha 255) fall back to the restrained generic grain. ──
+                float camDist   = distance(_WorldSpaceCameraPos, IN.positionWS);
+                float detailFade = saturate(1.0 - camDist / 140.0);
+                uint   matId        = (uint)round(IN.color.a * 255.0);
+                float3 vsxAlbedo    = float3(1, 1, 1);
+                float2 vsxGrad      = float2(0, 0);
+                float  vsxSmoothAdd = 0.0;
+                float  vsxMetalAdd  = 0.0;
+                float3 vsxEmission  = float3(0, 0, 0);
+                VsxSurface(matId, TerrainMappingPosition(IN.positionWS), terrainUp, worldNormal,
+                           detailFade, _SurfaceTexStrength, albedo,
+                           vsxAlbedo, vsxGrad, vsxSmoothAdd, vsxMetalAdd, vsxEmission);
+                albedo *= vsxAlbedo;
+                worldNormal = VsxApplyRelief(worldNormal, vsxGrad, terrainUp);
 
                 InputData inputData = (InputData)0;
                 inputData.positionWS        = IN.positionWS;
-                inputData.normalWS          = normalize(IN.normalWS);
+                inputData.normalWS          = worldNormal;
                 inputData.viewDirectionWS   = GetWorldSpaceNormalizeViewDir(IN.positionWS);
                 inputData.shadowCoord       = TransformWorldToShadowCoord(IN.positionWS);
                 inputData.fogCoord          = IN.fogCoord;
-                inputData.bakedGI           = SampleSH(inputData.normalWS);
+                inputData.bakedGI           = SampleSH(worldNormal);
 
                 SurfaceData surface = (SurfaceData)0;
                 surface.albedo     = albedo;
-                surface.metallic   = _Metallic;
-                surface.smoothness = _Smoothness;
+                surface.metallic   = saturate(_Metallic + vsxMetalAdd);
+                surface.smoothness = saturate(_Smoothness + vsxSmoothAdd);
+                surface.emission   = vsxEmission;
                 surface.alpha      = 1.0;
                 surface.occlusion  = 1.0;
                 surface.normalTS   = float3(0,0,1);
@@ -198,6 +236,7 @@ Shader "VoxelEngine/VoxelTerrainURP"
                 float4 _BaseColor;
                 float4 _BaseMap_ST;
                 float  _TexBlend;
+                float  _SurfaceTexStrength;
                 float  _Smoothness;
                 float  _Metallic;
                 float  _BubbleCutout;
@@ -248,6 +287,7 @@ Shader "VoxelEngine/VoxelTerrainURP"
                 float4 _BaseColor;
                 float4 _BaseMap_ST;
                 float  _TexBlend;
+                float  _SurfaceTexStrength;
                 float  _Smoothness;
                 float  _Metallic;
                 float  _BubbleCutout;

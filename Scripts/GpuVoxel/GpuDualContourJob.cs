@@ -223,11 +223,14 @@ namespace VoxelEngine.GpuVoxel
                 // Stable per-vertex tint jitter (matches the legacy terrain look).
                 float jitter = (noise.snoise(world * 0.7f) * 0.5f) * 0.12f;
                 Color32 baseCol = materialColors[(int)(mat & 0xFF)];
+                // 9.17.0 — alpha carries the dominant MATERIAL ID so the LOD skin gets the
+                // same per-material surface textures as the gameplay bubble once close
+                // (VoxelSurfaceTextures.hlsl). Distance fade keeps far chunks cheap.
                 Color32 col = new Color32(
                     (byte)math.clamp(baseCol.r + (int)(jitter * 255f), 0, 255),
                     (byte)math.clamp(baseCol.g + (int)(jitter * 255f), 0, 255),
                     (byte)math.clamp(baseCol.b + (int)(jitter * 255f), 0, 255),
-                    255);
+                    (byte)(mat & 0xFF));
 
                 vertScratch[vertexCount] = pos;
                 normScratch[vertexCount] = float3.zero;

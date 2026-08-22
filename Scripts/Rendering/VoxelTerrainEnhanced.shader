@@ -6,9 +6,13 @@
 // ║  Visual polish pass: makes voxel terrain look REAL instead of flat    ║
 // ║  solid color. Features:                                               ║
 // ║                                                                       ║
-// ║  • Procedural micro-detail noise (no textures needed — all generated) ║
+// ║  • PER-MATERIAL SURFACE TEXTURES (9.17.0): the mesher carries each    ║
+// ║    vertex's dominant material id in vertex-colour alpha and           ║
+// ║    VoxelSurfaceTextures.hlsl renders it — stone strata & cracks,      ║
+// ║    rippled sand, glinting ore flecks, grass clumps that blend to      ║
+// ║    soil on steep slopes, faceted crystal/ice, wet oil-rock, grain…    ║
 // ║  • Slope-aware shading: flat = brighter, steep = darker               ║
-// ║  • Procedural vertex AO baked into color for depth                    ║
+// ║  • Macro colour variation + wet glossy waterline band (9.9.0)         ║
 // ║  • Distance fog blend for atmospheric depth                           ║
 // ║  • Subtle specular variation (wet rocks vs dry dirt)                  ║
 // ║  • Full PBR lighting + shadows                                         ║
@@ -18,10 +22,9 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
     Properties
     {
         _BaseColor   ("Base Color",       Color) = (1,1,1,1)
+        _SurfaceTexStrength ("Surface Texturing", Range(0, 1)) = 1.0
         _DetailScale ("Detail Scale",     Range(0.5, 20)) = 4.0
-        _DetailStrength ("Detail Strength", Range(0, 1)) = 0.35
         _SlopeDarken ("Slope Darkening",  Range(0, 1)) = 0.35
-        _NoiseFreq   ("Noise Frequency",  Range(1, 30))  = 8.0
         _Smoothness  ("Smoothness",       Range(0, 1))   = 0.15
         _Metallic    ("Metallic",         Range(0, 1))   = 0.0
         _SpecularVar ("Specular Variation", Range(0, 1)) = 0.3
@@ -80,16 +83,18 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
 
             CBUFFER_START(UnityPerMaterial)
                 float4 _BaseColor;
+                float  _SurfaceTexStrength;
                 float  _DetailScale;
-                float  _DetailStrength;
                 float  _SlopeDarken;
-                float  _NoiseFreq;
                 float  _Smoothness;
                 float  _Metallic;
                 float  _SpecularVar;
                 float  _BubbleCutout;
                 float  _LodRadialBias;
             CBUFFER_END
+
+            // ── 9.17.0 per-material surface texturing (shared with VoxelTerrainURP) ──
+            #include "VoxelSurfaceTextures.hlsl"
 
             // Published by SphereWorld. Body-local coordinates keep terrain detail,
             // slope shading, and material variation wrapped around offset planets.
@@ -197,36 +202,41 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
                 // ── Base colour from vertex colour (material ID → colour) ──
                 float3 baseColor = _BaseColor.rgb * IN.color.rgb;
 
-                // ── Procedural micro-detail: multi-octave noise for surface texture ──
-                // This gives the terrain a rocky/grainy appearance without textures.
-                // 9.9.0: detail FADES with distance (no far shimmer) and perturbs the
-                // normal near the camera for tactile relief in direct sunlight.
+                // Camera-distance fade: full texture near, smooth far (no shimmer).
                 float camDist = distance(_WorldSpaceCameraPos, worldPos);
                 float detailFade = saturate(1.0 - camDist / 140.0);
 
-                float3 noisePos = terrainCoord * _NoiseFreq;
-                float detail = fbm3(noisePos);
-                float detail2 = fbm3(noisePos * 3.2 + 10.0);
-                float microDetail = detail * 0.6 + detail2 * 0.4;
-
-                // Apply detail as brightness modulation (darker in noise valleys).
-                float detailMod = lerp(1.0, 0.65 + microDetail * 0.7, _DetailStrength * detailFade);
-                baseColor *= detailMod;
+                // ── PER-MATERIAL SURFACE TEXTURES (9.17.0) ──────────────────────
+                // The meshers carry each vertex's dominant MATERIAL ID in the
+                // vertex-colour alpha channel; VoxelSurfaceTextures.hlsl turns it into
+                // a material-appropriate procedural texture — stone strata & hairline
+                // cracks, wind-rippled sand with bright crests, glinting metallic ore
+                // flecks (uranium breathes green), grassy clumps with blade streaks and
+                // dry patches that shed to exposed soil on steep slopes, faceted
+                // crystal & ice, wet-gloss oil-soaked rock, vertical wood grain,
+                // columnar basalt with faint warm veins… Unknown materials fall back
+                // to the classic restrained grain. Relief gradients perturb the normal
+                // so ripples, cracks and facets genuinely catch the sun.
+                uint   matId        = (uint)round(IN.color.a * 255.0);
+                float3 vsxAlbedo    = float3(1, 1, 1);
+                float2 vsxGrad      = float2(0, 0);
+                float  vsxSmoothAdd = 0.0;
+                float  vsxMetalAdd  = 0.0;
+                float3 vsxEmission  = float3(0, 0, 0);
+                VsxSurface(matId, terrainCoord, terrainUp, worldNormal, detailFade,
+                           _SurfaceTexStrength, baseColor,
+                           vsxAlbedo, vsxGrad, vsxSmoothAdd, vsxMetalAdd, vsxEmission);
+                baseColor *= vsxAlbedo;
 
                 // ── Macro variation (9.9.0): ~55 m patches break up uniform fields ──
                 float macro = fbm3(terrainCoord * 0.018);
                 baseColor *= lerp(0.93, 1.07, macro);
                 baseColor = lerp(baseColor, baseColor * float3(1.045, 1.0, 0.94), (macro - 0.5) * 0.55);
 
-                // ── Procedural detail normals (9.9.0): near-camera relief ──
-                if (detailFade > 0.01)
-                {
-                    float e = 0.35;
-                    float hX = fbm3(noisePos + float3(e, 0.0, 0.0));
-                    float hZ = fbm3(noisePos + float3(0.0, 0.0, e));
-                    float3 grad = float3(hX - detail, 0.0, hZ - detail);
-                    worldNormal = normalize(worldNormal + grad * (0.55 * _DetailStrength * detailFade));
-                }
+                // ── Surface relief (9.17.0): class-aware gradients (sand ripple slopes,
+                // crack dents, crystal facet tilts, grass blade streaks) applied in the
+                // ground tangent frame — tactile relief that responds to direct sun. ──
+                worldNormal = VsxApplyRelief(worldNormal, vsxGrad, terrainUp);
 
                 // ── Slope-aware shading: steep = darker (enhances relief) ──
                 // Support both flat world (Y-up) and spherical planets (radial-up from center)
@@ -236,10 +246,10 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
                 float slopeFactor = lerp(1.0 - _SlopeDarken, 1.0, saturate(upDot * 1.5));
                 baseColor *= slopeFactor;
 
-                // ── Specular variation: some surfaces shinier (wet rock look) ──
+                // ── Specular variation: some surfaces shinier (wet rock look) — plus the
+                // per-material gloss from 9.17.0 (wet sand crests, ore flecks, facets) ──
                 float specVar = fbm3(terrainCoord * _DetailScale * 0.5);
-                float smoothness = _Smoothness + specVar * _SpecularVar * 0.3;
-                smoothness = saturate(smoothness);
+                float smoothness = saturate(_Smoothness + specVar * _SpecularVar * 0.3 + vsxSmoothAdd);
 
                 // ── Wet waterline band (9.9.0): darker, glossier sand right at the
                 // shoreline — published by SphereWorld as _VoxelSeaRadius. ──
@@ -263,10 +273,10 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
                 SurfaceData surface = (SurfaceData)0;
                 surface.albedo              = baseColor;
                 surface.specular            = float3(0, 0, 0);
-                surface.metallic            = _Metallic;
+                surface.metallic            = saturate(_Metallic + vsxMetalAdd);
                 surface.smoothness          = smoothness;
                 surface.normalTS            = float3(0, 0, 1);
-                surface.emission            = float3(0, 0, 0);
+                surface.emission            = vsxEmission;
                 surface.occlusion           = 1.0;
                 surface.alpha               = 1.0;
                 surface.clearCoatMask       = 0.0;
@@ -294,10 +304,9 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
 
             CBUFFER_START(UnityPerMaterial)
                 float4 _BaseColor;
+                float  _SurfaceTexStrength;
                 float  _DetailScale;
-                float  _DetailStrength;
                 float  _SlopeDarken;
-                float  _NoiseFreq;
                 float  _Smoothness;
                 float  _Metallic;
                 float  _SpecularVar;
@@ -347,10 +356,9 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
 
             CBUFFER_START(UnityPerMaterial)
                 float4 _BaseColor;
+                float  _SurfaceTexStrength;
                 float  _DetailScale;
-                float  _DetailStrength;
                 float  _SlopeDarken;
-                float  _NoiseFreq;
                 float  _Smoothness;
                 float  _Metallic;
                 float  _SpecularVar;

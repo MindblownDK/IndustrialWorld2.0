@@ -1,9 +1,62 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.16.0-dev`
+**Current Version:** `9.17.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.17.0-dev] The Ground Grew a Skin — Per-Material Surface Textures (Surface-Texture Pass)
+
+**Type:** MINOR — every terrain material now renders its own procedural surface texture. Save-compatible (no voxel, chunk or save changes — the material id already lives in every voxel; it now simply reaches the shader). No prefabs, items, recipes or research are added, so **no Voxel Engine Setup step is required** — pull, recompile, play.
+
+#### 🧵 1. The material id finally reaches the shader
+Both terrain meshers — `SurfaceNetsJob` (gameplay bubble + CPU levels) and `GpuDualContourJob` (the GPU LOD skin) — always knew each surface vertex's dominant material; they only used it to look up its colour. That id is now written into the **vertex-colour ALPHA channel** (`alpha = materialId`). Nothing ever read that alpha before (verified), meshes are rebuilt from voxels at runtime and never persisted, and alpha=255 (any legacy/foreign mesh) falls back to the neutral generic grain — the channel is free real estate, used non-destructively.
+
+#### 🪨 2. Every material textures like itself (`VoxelSurfaceTextures.hlsl`)
+A new shared, self-contained HLSL library (included by BOTH terrain shaders) classifies the material id into a texture archetype and renders it procedurally — zero texture samples, zero assets, all derived from the material's own vertex colour so custom material definitions keep working:
+
+| Surface | Texturing |
+|---|---|
+| **Stone** | warped strata banding, hairline voronoi cracks with dented relief, granite speckle |
+| **Sand** | wind ripples with meandering direction — bright crests, shaded troughs, ripple-edge normals, crest gloss |
+| **Clay** | soft mottle + rare drying hairline cracks |
+| **Ice** | crystalline voronoi facets (stable per-cell tilt), high gloss, bright cell borders |
+| **All ores** (Fe/Cu/Ni/Si/Co/Ag/Au/Mg/Pt/U/Li) | darker granular matrix + **glinting metallic flecks** tinted by the ore's own colour (gold glints gold, copper glints copper); **uranium flecks breathe a faint green glow** |
+| **Coal** | matte organic streaks — deliberately never glints |
+| **Oil-soaked rock** (solid crude) | dark mottle with gravity-stretched **wet gloss streaks** |
+| **Wood** | vertical grain stretched along the trunk axis + darker knots |
+| **Grass** | organic clumps, dry yellow patches, near-camera **blade streaks** — and steep slopes **shed their turf**: the shader blends toward exposed, grained soil so cliffs finally read as dirt/rock instead of green paint |
+| **Martian dust** | softer wind ripples + broad rust-tone colour drifts |
+| **Venus ash** | settled granular layers |
+| **Acid bog** | sickly mottle with wet gloss pools |
+| **Volcanic basalt** | anisotropic **columnar fractures** + faint residual-heat veins |
+| **Crystal geode** | hard facets, high gloss, faint inner glow tinted by the crystal |
+| **Unknown/custom** | the classic restrained grain (safest possible fallback) |
+
+#### 🌄 3. Relief that catches the sun
+Each class also emits a **tangent-plane relief gradient**: sand ripples slope their crests, cracks dent inward, crystal/ice cells tilt like real facets, grass blades streak. `VsxApplyRelief` applies it in the ground tangent frame (radial up on planets), so texturing responds to direct sunlight with true shading, not just albedo noise.
+
+#### ⚡ 4. Budgeted by design
+- The per-class cost ceiling is **2–3 two-octave noise evaluations** (+ one 3×3 voronoi for the crack/facet classes) — measurably FEWER hash evaluations than the 9.9.0 shader's five 4-octave fbm samples.
+- Everything fades with camera distance (full texture < 60 m, gone by 140 m) — the far LOD skin and distant ring chunks pay ~nothing, exactly like before.
+- New material property **`_SurfaceTexStrength`** (default 1) on both terrain shaders is the single dial for the whole system; the old `_DetailStrength`/`_NoiseFreq` micro-detail knobs it replaces are retired from the Enhanced shader (serialized values in old materials are simply ignored — nothing breaks).
+
+#### 🖥 5. Both shaders, one source of truth
+`VoxelTerrainEnhanced` (the live material — CosmosBootstrap swaps the terrain asset onto it at runtime, and the GPU LOD skin is its `_BubbleCutout` clone) and `VoxelTerrainURP` (the setup-authored terrain asset / fallback) both include the same library, so the bubble, the near rings and the LOD skin texture identically. CBUFFERs stay consistent across all passes of both shaders (SRP-batcher clean). All 9.9.0 features survive: macro colour variation, slope shading, wet waterline band, specular variation, bubble cutout, LOD radial bias.
+
+#### ✅ Static delivery checks
+- Braces/parens balanced in all three HLSL sources; no stale references to removed uniform names; single include guard; both meshers carry the alpha contract; no save-format changes; no other-game names; no TODOs.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, let Unity recompile (new `VoxelSurfaceTextures.hlsl` + two edited shaders + two edited meshers — **no setup step needed, no assets authored**).
+2. Load any world: grass should clump with dry patches and fine blade streaks up close; **climbing a steep hill should show the turf blending into grained soil** on the slope faces.
+3. Find exposed stone (or dig down): strata banding + occasional hairline cracks; ore veins should show **glinting flecks** when the sun catches them (gold warm, silver bright, uranium with a faint green breath).
+4. A beach should show wind ripples in the sand with bright crests; walk an ice/crystal world for faceted glossy surfaces.
+5. Fly up/back ~150 m — the surface should settle to the smooth 9.9.0-era look with no shimmer or popping; performance should feel the same or slightly better on the near field.
+6. Optional: select `Mat_Terrain_Enhanced` (or the terrain material) — `Surface Texturing` slider can dial the whole system 0→1 live.
+7. If anything looks wrong on the LOD skin far away, screenshot the same spot near vs far.
+
+**Next on the roadmap:** Unity validation of this pass + the still-open 9.16.0 water-diagnostics toast, then the rest of the roadmap.
 
 ### [9.16.0-dev] Liquid Worlds — All 7 Liquids, Real Looks, Real Flow, Real FIRE, Real Swim (Liquids Overhaul, Parts 1–3)
 

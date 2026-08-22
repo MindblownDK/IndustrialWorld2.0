@@ -211,7 +211,7 @@ namespace VoxelEngine.Meshing
                     if (math.dot(nrm, radialUp) < 0f) nrm = -nrm;
                 }
                 normalScratch[vertexCount] = nrm;
-                colorScratch[vertexCount]  = ApplyTerrainShading(materialColors[dominantMat], local, nrm, cx, cy, cz);
+                colorScratch[vertexCount]  = ApplyTerrainShading(materialColors[dominantMat], local, nrm, cx, cy, cz, (byte)dominantMat);
 
                 cellVertexIndex[CellId(cx, cy, cz)] = vertexCount;
                 bbMin = math.min(bbMin, local);
@@ -338,8 +338,12 @@ namespace VoxelEngine.Meshing
         ///   2. NOISE VARIATION — subtle per-vertex color jitter so surfaces aren't flat solid.
         ///   3. SLOPE DARKENING — steep faces slightly darker than flat (enhances relief).
         /// All done with cheap math — no texture sampling, works on any pipeline.
+        /// 9.17.0 — the vertex colour ALPHA now carries the dominant MATERIAL ID so the
+        /// terrain shaders can texture each surface per material (VoxelSurfaceTextures.hlsl).
+        /// Alpha is never persisted (meshes are rebuilt from voxels) and nothing read it
+        /// before, so the channel is save-compatible and non-destructive.
         /// </summary>
-        private Color32 ApplyTerrainShading(Color32 baseColor, float3 localPos, float3 normal, int cx, int cy, int cz)
+        private Color32 ApplyTerrainShading(Color32 baseColor, float3 localPos, float3 normal, int cx, int cy, int cz, byte materialId)
         {
             float r = baseColor.r / 255f;
             float g = baseColor.g / 255f;
@@ -399,7 +403,7 @@ namespace VoxelEngine.Meshing
                 (byte)math.clamp(r * 255f, 0, 255),
                 (byte)math.clamp(g * 255f, 0, 255),
                 (byte)math.clamp(b * 255f, 0, 255),
-                baseColor.a);
+                materialId);   // 9.17.0: alpha = material id → per-material surface textures
         }
 
         private void AddEdge(int da, int db,
