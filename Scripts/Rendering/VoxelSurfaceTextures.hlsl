@@ -38,42 +38,45 @@
 #define VOXEL_SURFACE_TEXTURES_INCLUDED
 
 // ── Material classes ──────────────────────────────────────────────────
-#define VSX_GENERIC 0
-#define VSX_STONE   1
-#define VSX_SAND    2
-#define VSX_CLAY    3
-#define VSX_ICE     4
-#define VSX_ORE     5
-#define VSX_COAL    6
-#define VSX_OILROCK 7
-#define VSX_WOOD    8
-#define VSX_GRASS   9
-#define VSX_DUST    10
-#define VSX_ASH     11
-#define VSX_BOG     12
-#define VSX_BASALT  13
-#define VSX_CRYSTAL 14
+#define VSX_GENERIC 0.0
+#define VSX_STONE   1.0
+#define VSX_SAND    2.0
+#define VSX_CLAY    3.0
+#define VSX_ICE     4.0
+#define VSX_ORE     5.0
+#define VSX_COAL    6.0
+#define VSX_OILROCK 7.0
+#define VSX_WOOD    8.0
+#define VSX_GRASS   9.0
+#define VSX_DUST    10.0
+#define VSX_ASH     11.0
+#define VSX_BOG     12.0
+#define VSX_BASALT  13.0
+#define VSX_CRYSTAL 14.0
 
 // MaterialId byte values (must mirror VoxelEngine.Materials.MaterialId).
-int VsxClass(uint id)
+// NOTE: deliberately PURE FLOAT end to end — these shaders compile without an
+// explicit #pragma target (legacy level_9_x profiles forbid integer arithmetic),
+// and integral ids 0..255 compare exactly in float32.
+float VsxClass(float id)
 {
     // Ores first (the big family), then singles.
-    if (id == 7  || id == 8  || id == 10 || id == 11 || id == 12 ||
-        id == 13 || id == 14 || id == 15 || id == 16 || id == 17 || id == 21) return VSX_ORE;
-    if (id == 1  || id == 20) return VSX_STONE;      // Stone (+ legacy floor reads as stone)
-    if (id == 2)  return VSX_SAND;
-    if (id == 3)  return VSX_CLAY;
-    if (id == 4)  return VSX_ICE;
-    if (id == 9)  return VSX_COAL;
-    if (id == 18) return VSX_OILROCK;                // solid crude = oil-soaked rock
-    if (id == 19) return VSX_WOOD;
-    if (id == 22) return VSX_GRASS;
-    if (id == 23) return VSX_DUST;
-    if (id == 24) return VSX_ASH;
-    if (id == 25) return VSX_BOG;
-    if (id == 26) return VSX_BASALT;
-    if (id == 27) return VSX_CRYSTAL;
-    return VSX_GENERIC;                              // air never meshes; 255 = legacy → grain
+    if (id == 7.0  || id == 8.0  || id == 10.0 || id == 11.0 || id == 12.0 ||
+        id == 13.0 || id == 14.0 || id == 15.0 || id == 16.0 || id == 17.0 || id == 21.0) return VSX_ORE;
+    if (id == 1.0  || id == 20.0) return VSX_STONE;   // Stone (+ legacy floor reads as stone)
+    if (id == 2.0)  return VSX_SAND;
+    if (id == 3.0)  return VSX_CLAY;
+    if (id == 4.0)  return VSX_ICE;
+    if (id == 9.0)  return VSX_COAL;
+    if (id == 18.0) return VSX_OILROCK;               // solid crude = oil-soaked rock
+    if (id == 19.0) return VSX_WOOD;
+    if (id == 22.0) return VSX_GRASS;
+    if (id == 23.0) return VSX_DUST;
+    if (id == 24.0) return VSX_ASH;
+    if (id == 25.0) return VSX_BOG;
+    if (id == 26.0) return VSX_BASALT;
+    if (id == 27.0) return VSX_CRYSTAL;
+    return VSX_GENERIC;                               // air never meshes; 255 = legacy → grain
 }
 
 // ── Budgeted noise (one source of truth for both terrain shaders) ─────
@@ -146,7 +149,7 @@ float VsxDesat(float3 c) { return dot(c, float3(0.299, 0.587, 0.114)); }
 // gradT      : tangent-frame gradient for normal relief (albedo-driven cost only).
 // smoothAdd  : adds to smoothness.  metalAdd: adds to metallic.
 // emissionAdd: adds to emission (uranium / crystal / basalt veins — tiny values).
-void VsxSurface(uint   matId,
+void VsxSurface(float  matId,
                 float3 terrainCoord, float3 terrainUp,
                 float3 normalWS,
                 float  fade,          // 0 far → 1 near (caller's distance fade)
@@ -163,7 +166,7 @@ void VsxSurface(uint   matId,
 
     float3 p = terrainCoord;
     float3 up = terrainUp;
-    int cls = VsxClass(matId);
+    float cls = VsxClass(matId);
     // Local surface frame: pc = on-ground plane coords, h = height along local up.
     // Every "vertical" stretch (grain, streaks, blades, strata) uses h — NOT p.y —
     // so textures stay aligned with gravity all the way around a planet.
@@ -194,7 +197,7 @@ void VsxSurface(uint   matId,
         float warp  = VsxBroad(p * 0.35);
         float rp    = sin(q.x * 2.4 + warp * 3.5);
         float crest = smoothstep(0.30, 0.95, rp);
-        float trough= smoothstep(-0.30, -0.95, rp);
+        float trough = 1.0 - smoothstep(-0.95, -0.30, rp);
         float gain  = (cls == VSX_SAND) ? 1.0 : 0.7;
         albedoMul  *= 1.0 + (crest * 0.14 - trough * 0.10) * gain;
         gradT      += dir * cos(q.x * 2.4 + warp * 3.5) * crest * 0.55 * gain;
@@ -250,7 +253,7 @@ void VsxSurface(uint   matId,
             albedoMul   = lerp(albedoMul, albedoMul * (0.55 + tint * 1.55), fl * 0.85);
             smoothAdd  += fl * 0.45;
             metalAdd   += fl * 0.65;
-            if (matId == 17) emissionAdd += float3(0.02, 0.09, 0.02) * fl;   // uranium breathes green
+            if (matId == 17.0) emissionAdd += float3(0.02, 0.09, 0.02) * fl;   // uranium breathes green
         }
     }
     else if (cls == VSX_COAL)

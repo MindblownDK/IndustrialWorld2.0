@@ -217,7 +217,10 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
                 // columnar basalt with faint warm veins… Unknown materials fall back
                 // to the classic restrained grain. Relief gradients perturb the normal
                 // so ripples, cracks and facets genuinely catch the sun.
-                uint   matId        = (uint)round(IN.color.a * 255.0);
+                // Material id rides the vertex-colour alpha (0..255). PURE FLOAT on
+                // purpose: these shaders compile without an explicit target pragma and
+                // legacy profiles forbid integer arithmetic (the 9.17.1 pink fix).
+                float  matId        = floor(IN.color.a * 255.0 + 0.5);
                 float3 vsxAlbedo    = float3(1, 1, 1);
                 float2 vsxGrad      = float2(0, 0);
                 float  vsxSmoothAdd = 0.0;

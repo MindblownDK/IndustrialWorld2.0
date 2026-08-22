@@ -1,9 +1,26 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.17.0-dev`
+**Current Version:** `9.17.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.17.1-dev] Terrain Shader Pink Fix — Pure-Float Material Ids (compile recovery)
+
+**Type:** PATCH — fixes the 9.17.0 pink/magenta terrain (shader compile error). No save, API or content changes.
+
+#### 🔍 Root cause
+9.17.0 introduced the material id as **`uint`** through the shader path (`(uint)round(IN.color.a * 255.0)`, `int VsxClass(uint id)`). Both terrain shaders compile **without an explicit `#pragma target`**, so Unity uses its default legacy compilation level — and integer arithmetic/types are **not supported** there. Every terrain variant of `VoxelEngine/VoxelTerrainEnhanced` failed to compile → the whole terrain rendered magenta.
+
+#### 🔧 The fix
+- **Pure-float material ids end to end:** `floor(IN.color.a * 255.0 + 0.5)` in both shaders, `float VsxClass(float id)` with float constants, `float matId` through `VsxSurface` — ids 0..255 compare exactly in float32, and floats are legal on every shader target including the strictest legacy profile (matching how the rest of these shaders were always written).
+- Portability cleanup: the one reversed-edge `smoothstep(-0.30, -0.95, …)` became `1.0 - smoothstep(-0.95, -0.30, …)` (identical math, defined behaviour on all compilers).
+- **Offline compile validation added:** every pass of both terrain shaders (ForwardLit / ShadowCaster / DepthOnly × vertex/fragment = 12 compilation units) plus the shared include across all 29 material ids now compile clean against stubbed URP headers — 12/12 PASS. This rig caught and confirmed the fix before this release.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, let Unity recompile — the terrain must render **textured, not pink**.
+2. Re-run the 9.17.0 validation list (grass clumps/slope soil, stone strata, ore glints, sand ripples, distance fade).
+3. If ANYTHING is still pink, open the Console and send the exact `Shader error in '…'` line — it names the file/line and we fix it in one round.
 
 ### [9.17.0-dev] The Ground Grew a Skin — Per-Material Surface Textures (Surface-Texture Pass)
 

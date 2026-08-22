@@ -184,7 +184,7 @@ Shader "VoxelEngine/VoxelTerrainURP"
                 // (alpha 255) fall back to the restrained generic grain. ──
                 float camDist   = distance(_WorldSpaceCameraPos, IN.positionWS);
                 float detailFade = saturate(1.0 - camDist / 140.0);
-                uint   matId        = (uint)round(IN.color.a * 255.0);
+                float  matId        = floor(IN.color.a * 255.0 + 0.5);   // pure-float id (9.17.1 pink fix)
                 float3 vsxAlbedo    = float3(1, 1, 1);
                 float2 vsxGrad      = float2(0, 0);
                 float  vsxSmoothAdd = 0.0;
