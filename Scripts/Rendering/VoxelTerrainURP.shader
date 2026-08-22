@@ -4,9 +4,9 @@
 // Optional triplanar _BaseMap: when supplied, sampled by world-space position projected on
 // the three cardinal planes, blended by normal direction. Lets you give the whole terrain
 // a tileable rock/dirt texture without UVs (Surface Nets meshes have no UVs).
-// 9.17.0: per-material SURFACE TEXTURES — the mesher carries each vertex's dominant
+// 9.17.0: per-material SURFACE TEXTURES -- the mesher carries each vertex's dominant
 // material id in vertex-colour alpha and VoxelSurfaceTextures.hlsl renders it (stone
-// strata/cracks, sand ripples, ore glints, grass-to-soil slopes, crystal facets…).
+// strata/cracks, sand ripples, ore glints, grass-to-soil slopes, crystal facets...).
 Shader "VoxelEngine/VoxelTerrainURP"
 {
     Properties
@@ -84,7 +84,7 @@ Shader "VoxelEngine/VoxelTerrainURP"
                 float  _LodRadialBias;
             CBUFFER_END
 
-            // ── 9.17.0 per-material surface texturing (shared with VoxelTerrainEnhanced) ──
+            // -- 9.17.0 per-material surface texturing (shared with VoxelTerrainEnhanced) --
             #include "VoxelSurfaceTextures.hlsl"
 
             TEXTURE2D(_BaseMap);
@@ -93,11 +93,11 @@ Shader "VoxelEngine/VoxelTerrainURP"
             float4 _VoxelTerrainBodyCenter;
             float _VoxelTerrainIsPlanet;
 
-            // ── Single-surface handshake (9.1.0) ──────────────────────────
+            // -- Single-surface handshake (9.1.0) --------------------------
             // The GPU quadtree LOD skin sets _BubbleCutout = 1 on its material clone.
             // Inside the gameplay bubble's meshed+collider ball (globals published by
             // SphereWorld) its fragments are clipped, so mined holes and tunnels show
-            // the REAL edited voxels — never a phantom LOD surface behind them.
+            // the REAL edited voxels -- never a phantom LOD surface behind them.
             float4 _VoxelBubbleCenterWS;       // global
             float  _VoxelBubbleCutoutRadius;   // global (0 = disabled)
 
@@ -152,7 +152,7 @@ Shader "VoxelEngine/VoxelTerrainURP"
                 return OUT;
             }
 
-            // Triplanar sampling — projects the world position onto 3 cardinal planes and
+            // Triplanar sampling -- projects the world position onto 3 cardinal planes and
             // blends by normal direction, giving a UV-free texture mapping.
             float3 SampleTriplanar(float3 worldPos, float3 worldNormal, float2 tiling)
             {
@@ -179,9 +179,9 @@ Shader "VoxelEngine/VoxelTerrainURP"
                 float3 tex = SampleTriplanar(TerrainMappingPosition(IN.positionWS), worldNormal, _BaseMap_ST.xy);
                 float3 albedo = lerp(baseTint, baseTint * tex, _TexBlend);
 
-                // ── PER-MATERIAL SURFACE TEXTURES (9.17.0) — material id rides the
+                // -- PER-MATERIAL SURFACE TEXTURES (9.17.0) -- material id rides the
                 // vertex-colour alpha; see VoxelSurfaceTextures.hlsl. Legacy meshes
-                // (alpha 255) fall back to the restrained generic grain. ──
+                // (alpha 255) fall back to the restrained generic grain. --
                 float camDist   = distance(_WorldSpaceCameraPos, IN.positionWS);
                 float detailFade = saturate(1.0 - camDist / 140.0);
                 float  matId        = floor(IN.color.a * 255.0 + 0.5);   // pure-float id (9.17.1 pink fix)

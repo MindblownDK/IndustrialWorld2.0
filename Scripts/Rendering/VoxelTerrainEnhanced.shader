@@ -1,22 +1,22 @@
 // Assets/Scripts/VoxelEngine/Rendering/VoxelTerrainEnhanced.shader
 //
-// ╔══════════════════════════════════════════════════════════════════════╗
-// ║              ENHANCED VOXEL TERRAIN SHADER                            ║
-// ║                                                                       ║
-// ║  Visual polish pass: makes voxel terrain look REAL instead of flat    ║
-// ║  solid color. Features:                                               ║
-// ║                                                                       ║
-// ║  • PER-MATERIAL SURFACE TEXTURES (9.17.0): the mesher carries each    ║
-// ║    vertex's dominant material id in vertex-colour alpha and           ║
-// ║    VoxelSurfaceTextures.hlsl renders it — stone strata & cracks,      ║
-// ║    rippled sand, glinting ore flecks, grass clumps that blend to      ║
-// ║    soil on steep slopes, faceted crystal/ice, wet oil-rock, grain…    ║
-// ║  • Slope-aware shading: flat = brighter, steep = darker               ║
-// ║  • Macro colour variation + wet glossy waterline band (9.9.0)         ║
-// ║  • Distance fog blend for atmospheric depth                           ║
-// ║  • Subtle specular variation (wet rocks vs dry dirt)                  ║
-// ║  • Full PBR lighting + shadows                                         ║
-// ╚══════════════════════════════════════════════════════════════════════╝
+// +======================================================================+
+// |              ENHANCED VOXEL TERRAIN SHADER                            |
+// |                                                                       |
+// |  Visual polish pass: makes voxel terrain look REAL instead of flat    |
+// |  solid color. Features:                                               |
+// |                                                                       |
+// |  * PER-MATERIAL SURFACE TEXTURES (9.17.0): the mesher carries each    |
+// |    vertex's dominant material id in vertex-colour alpha and           |
+// |    VoxelSurfaceTextures.hlsl renders it -- stone strata & cracks,      |
+// |    rippled sand, glinting ore flecks, grass clumps that blend to      |
+// |    soil on steep slopes, faceted crystal/ice, wet oil-rock, grain...    |
+// |  * Slope-aware shading: flat = brighter, steep = darker               |
+// |  * Macro colour variation + wet glossy waterline band (9.9.0)         |
+// |  * Distance fog blend for atmospheric depth                           |
+// |  * Subtle specular variation (wet rocks vs dry dirt)                  |
+// |  * Full PBR lighting + shadows                                         |
+// +======================================================================+
 Shader "VoxelEngine/VoxelTerrainEnhanced"
 {
     Properties
@@ -93,7 +93,7 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
                 float  _LodRadialBias;
             CBUFFER_END
 
-            // ── 9.17.0 per-material surface texturing (shared with VoxelTerrainURP) ──
+            // -- 9.17.0 per-material surface texturing (shared with VoxelTerrainURP) --
             #include "VoxelSurfaceTextures.hlsl"
 
             // Published by SphereWorld. Body-local coordinates keep terrain detail,
@@ -101,12 +101,12 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
             float4 _VoxelTerrainBodyCenter;
             float _VoxelTerrainIsPlanet;
 
-            // Published by SphereWorld: sea-level radius (metres) — drives the wet
+            // Published by SphereWorld: sea-level radius (metres) -- drives the wet
             // waterline band (9.9.0). Declared as a plain global because it is set
             // via Shader.SetGlobalFloat, not via the material block.
             float _VoxelSeaRadius;
 
-            // Single-surface handshake — see VoxelTerrainURP for details.
+            // Single-surface handshake -- see VoxelTerrainURP for details.
             float4 _VoxelBubbleCenterWS;
             float  _VoxelBubbleCutoutRadius;
 
@@ -132,7 +132,7 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
                 return normalize(lerp(float3(0, 1, 0), radial, saturate(_VoxelTerrainIsPlanet)));
             }
 
-            // ── Procedural noise (hash-based value noise + FBM) ──
+            // -- Procedural noise (hash-based value noise + FBM) --
             float hash31(float3 p)
             {
                 p = frac(p * 0.3183099 + 0.1);
@@ -199,22 +199,22 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
                 float3 terrainCoord = TerrainCoordinate(worldPos);
                 float3 terrainUp = TerrainUp(worldPos);
 
-                // ── Base colour from vertex colour (material ID → colour) ──
+                // -- Base colour from vertex colour (material ID -> colour) --
                 float3 baseColor = _BaseColor.rgb * IN.color.rgb;
 
                 // Camera-distance fade: full texture near, smooth far (no shimmer).
                 float camDist = distance(_WorldSpaceCameraPos, worldPos);
                 float detailFade = saturate(1.0 - camDist / 140.0);
 
-                // ── PER-MATERIAL SURFACE TEXTURES (9.17.0) ──────────────────────
+                // -- PER-MATERIAL SURFACE TEXTURES (9.17.0) ----------------------
                 // The meshers carry each vertex's dominant MATERIAL ID in the
                 // vertex-colour alpha channel; VoxelSurfaceTextures.hlsl turns it into
-                // a material-appropriate procedural texture — stone strata & hairline
+                // a material-appropriate procedural texture -- stone strata & hairline
                 // cracks, wind-rippled sand with bright crests, glinting metallic ore
                 // flecks (uranium breathes green), grassy clumps with blade streaks and
                 // dry patches that shed to exposed soil on steep slopes, faceted
                 // crystal & ice, wet-gloss oil-soaked rock, vertical wood grain,
-                // columnar basalt with faint warm veins… Unknown materials fall back
+                // columnar basalt with faint warm veins... Unknown materials fall back
                 // to the classic restrained grain. Relief gradients perturb the normal
                 // so ripples, cracks and facets genuinely catch the sun.
                 // Material id rides the vertex-colour alpha (0..255). PURE FLOAT on
@@ -231,17 +231,17 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
                            vsxAlbedo, vsxGrad, vsxSmoothAdd, vsxMetalAdd, vsxEmission);
                 baseColor *= vsxAlbedo;
 
-                // ── Macro variation (9.9.0): ~55 m patches break up uniform fields ──
+                // -- Macro variation (9.9.0): ~55 m patches break up uniform fields --
                 float macro = fbm3(terrainCoord * 0.018);
                 baseColor *= lerp(0.93, 1.07, macro);
                 baseColor = lerp(baseColor, baseColor * float3(1.045, 1.0, 0.94), (macro - 0.5) * 0.55);
 
-                // ── Surface relief (9.17.0): class-aware gradients (sand ripple slopes,
+                // -- Surface relief (9.17.0): class-aware gradients (sand ripple slopes,
                 // crack dents, crystal facet tilts, grass blade streaks) applied in the
-                // ground tangent frame — tactile relief that responds to direct sun. ──
+                // ground tangent frame -- tactile relief that responds to direct sun. --
                 worldNormal = VsxApplyRelief(worldNormal, vsxGrad, terrainUp);
 
-                // ── Slope-aware shading: steep = darker (enhances relief) ──
+                // -- Slope-aware shading: steep = darker (enhances relief) --
                 // Support both flat world (Y-up) and spherical planets (radial-up from center)
                 float radialUpDot = abs(dot(worldNormal, terrainUp));
                 float flatUpDot = abs(worldNormal.y);
@@ -249,13 +249,13 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
                 float slopeFactor = lerp(1.0 - _SlopeDarken, 1.0, saturate(upDot * 1.5));
                 baseColor *= slopeFactor;
 
-                // ── Specular variation: some surfaces shinier (wet rock look) — plus the
-                // per-material gloss from 9.17.0 (wet sand crests, ore flecks, facets) ──
+                // -- Specular variation: some surfaces shinier (wet rock look) -- plus the
+                // per-material gloss from 9.17.0 (wet sand crests, ore flecks, facets) --
                 float specVar = fbm3(terrainCoord * _DetailScale * 0.5);
                 float smoothness = saturate(_Smoothness + specVar * _SpecularVar * 0.3 + vsxSmoothAdd);
 
-                // ── Wet waterline band (9.9.0): darker, glossier sand right at the
-                // shoreline — published by SphereWorld as _VoxelSeaRadius. ──
+                // -- Wet waterline band (9.9.0): darker, glossier sand right at the
+                // shoreline -- published by SphereWorld as _VoxelSeaRadius. --
                 if (_VoxelSeaRadius > 1.0 && _VoxelTerrainIsPlanet > 0.5)
                 {
                     float rWS = distance(worldPos, _VoxelTerrainBodyCenter.xyz);
@@ -264,7 +264,7 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
                     smoothness = saturate(smoothness + wet * 0.35);
                 }
 
-                // ── Full PBR lighting ──
+                // -- Full PBR lighting --
                 InputData inputData = (InputData)0;
                 inputData.positionWS        = worldPos;
                 inputData.normalWS          = worldNormal;
@@ -292,7 +292,7 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
             ENDHLSL
         }
 
-        // ── Shadow caster pass ──
+        // -- Shadow caster pass --
         Pass
         {
             Name "ShadowCaster"
@@ -345,7 +345,7 @@ Shader "VoxelEngine/VoxelTerrainEnhanced"
             ENDHLSL
         }
 
-        // ── Depth only pass ──
+        // -- Depth only pass --
         Pass
         {
             Name "DepthOnly"

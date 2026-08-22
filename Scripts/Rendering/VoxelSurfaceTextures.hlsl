@@ -1,43 +1,43 @@
 // Assets/Scripts/VoxelEngine/Rendering/VoxelSurfaceTextures.hlsl
 //
-// ╔══════════════════════════════════════════════════════════════════════╗
-// ║              PER-MATERIAL SURFACE TEXTURING (9.17.0)                 ║
-// ║                                                                       ║
-// ║  Shared procedural texturing library for BOTH terrain shaders        ║
-// ║  (VoxelTerrainEnhanced — the live material — and VoxelTerrainURP).   ║
-// ║                                                                       ║
-// ║  The meshers (SurfaceNetsJob + GpuDualContourJob) encode the         ║
-// ║  dominant MATERIAL ID of every surface vertex into the vertex        ║
-// ║  colour ALPHA channel. This library turns that id into a real,       ║
-// ║  material-appropriate surface texture — computed procedurally,       ║
-// ║  zero texture samples, budgeted noise, camera-distance faded:        ║
-// ║                                                                       ║
-// ║    Stone   — strata banding, hairline cracks, granite speckle        ║
-// ║    Sand    — wind ripples with bright crests + ripple normals        ║
-// ║    Clay    — soft mottle + rare drying cracks                        ║
-// ║    Ice     — crystalline facets, glossy sheen                        ║
-// ║    Ores    — rock matrix + glinting metallic flecks (Uranium glows)  ║
-// ║    Coal    — matte organic streaks                                   ║
-// ║    OilRock — dark soaked mottle with wet gloss streaks               ║
-// ║    Wood    — vertical grain                                          ║
-// ║    Grass   — organic clumps, blade streaks, dry patches,             ║
-// ║              and steep slopes blend to exposed soil                  ║
-// ║    Dust    — fine wind ripples + broad colour drifts                 ║
-// ║    Ash     — soft settled granular layers                            ║
-// ║    Bog     — sickly mottle with wet gloss pools                      ║
-// ║    Basalt  — angular columnar fractures + faint warm veins           ║
-// ║    Crystal — hard facets, high gloss, faint inner glow               ║
-// ║    Generic — restrained grain (unknown / future materials)           ║
-// ║                                                                       ║
-// ║  Everything derives its tint from the material's own vertex colour — ║
-// ║  no game palette is hardcoded, custom material definitions keep      ║
-// ║  working, and alpha=255 (legacy meshes) falls back to Generic.       ║
-// ╚══════════════════════════════════════════════════════════════════════╝
+// +======================================================================+
+// |              PER-MATERIAL SURFACE TEXTURING (9.17.0)                 |
+// |                                                                       |
+// |  Shared procedural texturing library for BOTH terrain shaders        |
+// |  (VoxelTerrainEnhanced -- the live material -- and VoxelTerrainURP).   |
+// |                                                                       |
+// |  The meshers (SurfaceNetsJob + GpuDualContourJob) encode the         |
+// |  dominant MATERIAL ID of every surface vertex into the vertex        |
+// |  colour ALPHA channel. This library turns that id into a real,       |
+// |  material-appropriate surface texture -- computed procedurally,       |
+// |  zero texture samples, budgeted noise, camera-distance faded:        |
+// |                                                                       |
+// |    Stone   -- strata banding, hairline cracks, granite speckle        |
+// |    Sand    -- wind ripples with bright crests + ripple normals        |
+// |    Clay    -- soft mottle + rare drying cracks                        |
+// |    Ice     -- crystalline facets, glossy sheen                        |
+// |    Ores    -- rock matrix + glinting metallic flecks (Uranium glows)  |
+// |    Coal    -- matte organic streaks                                   |
+// |    OilRock -- dark soaked mottle with wet gloss streaks               |
+// |    Wood    -- vertical grain                                          |
+// |    Grass   -- organic clumps, blade streaks, dry patches,             |
+// |              and steep slopes blend to exposed soil                  |
+// |    Dust    -- fine wind ripples + broad colour drifts                 |
+// |    Ash     -- soft settled granular layers                            |
+// |    Bog     -- sickly mottle with wet gloss pools                      |
+// |    Basalt  -- angular columnar fractures + faint warm veins           |
+// |    Crystal -- hard facets, high gloss, faint inner glow               |
+// |    Generic -- restrained grain (unknown / future materials)           |
+// |                                                                       |
+// |  Everything derives its tint from the material's own vertex colour -- |
+// |  no game palette is hardcoded, custom material definitions keep      |
+// |  working, and alpha=255 (legacy meshes) falls back to Generic.       |
+// +======================================================================+
 
 #ifndef VOXEL_SURFACE_TEXTURES_INCLUDED
 #define VOXEL_SURFACE_TEXTURES_INCLUDED
 
-// ── Material classes ──────────────────────────────────────────────────
+// -- Material classes --------------------------------------------------
 #define VSX_GENERIC 0.0
 #define VSX_STONE   1.0
 #define VSX_SAND    2.0
@@ -55,7 +55,7 @@
 #define VSX_CRYSTAL 14.0
 
 // MaterialId byte values (must mirror VoxelEngine.Materials.MaterialId).
-// NOTE: deliberately PURE FLOAT end to end — these shaders compile without an
+// NOTE: deliberately PURE FLOAT end to end -- these shaders compile without an
 // explicit #pragma target (legacy level_9_x profiles forbid integer arithmetic),
 // and integral ids 0..255 compare exactly in float32.
 float VsxClass(float id)
@@ -76,10 +76,10 @@ float VsxClass(float id)
     if (id == 25.0) return VSX_BOG;
     if (id == 26.0) return VSX_BASALT;
     if (id == 27.0) return VSX_CRYSTAL;
-    return VSX_GENERIC;                               // air never meshes; 255 = legacy → grain
+    return VSX_GENERIC;                               // air never meshes; 255 = legacy -> grain
 }
 
-// ── Budgeted noise (one source of truth for both terrain shaders) ─────
+// -- Budgeted noise (one source of truth for both terrain shaders) -----
 float VsxHash13(float3 p)
 {
     p = frac(p * 0.1031 + 0.33);
@@ -103,7 +103,7 @@ float VsxVnoise3(float3 p)
              lerp(VsxHash13(i + float3(0,1,1)),   VsxHash13(i + float3(1,1,1)), f.x), f.y),
         f.z);
 }
-// Two octaves — the deliberate cost ceiling for hot fragment work.
+// Two octaves -- the deliberate cost ceiling for hot fragment work.
 float VsxNoise3(float3 p)
 {
     return VsxVnoise3(p) * 0.65 + VsxVnoise3(p * 2.13 + 7.7) * 0.35;
@@ -125,7 +125,7 @@ float2 VsxPlaneCoord(float3 p, float3 up)
     return float2(dot(p, t1), dot(p, t2));
 }
 
-// 2D voronoi (3×3) — F1 distance + its cell hash. Cracks, facets, columns.
+// 2D voronoi (3x3) -- F1 distance + its cell hash. Cracks, facets, columns.
 void VsxVoronoi2(float2 p, out float f1, out float cellHash)
 {
     float2 cell = floor(p);
@@ -141,18 +141,18 @@ void VsxVoronoi2(float2 p, out float f1, out float cellHash)
     }
 }
 
-// Desaturate helper (grass → soil blend keeps the world palette coherent).
+// Desaturate helper (grass -> soil blend keeps the world palette coherent).
 float VsxDesat(float3 c) { return dot(c, float3(0.299, 0.587, 0.114)); }
 
-// ── The pass ──────────────────────────────────────────────────────────
+// -- The pass ----------------------------------------------------------
 // albedoMul  : multiplies the current base colour.
 // gradT      : tangent-frame gradient for normal relief (albedo-driven cost only).
 // smoothAdd  : adds to smoothness.  metalAdd: adds to metallic.
-// emissionAdd: adds to emission (uranium / crystal / basalt veins — tiny values).
+// emissionAdd: adds to emission (uranium / crystal / basalt veins -- tiny values).
 void VsxSurface(float  matId,
                 float3 terrainCoord, float3 terrainUp,
                 float3 normalWS,
-                float  fade,          // 0 far → 1 near (caller's distance fade)
+                float  fade,          // 0 far -> 1 near (caller's distance fade)
                 float  strength,      // user strength 0..1
                 float3 baseRgb,
                 out float3 albedoMul,
@@ -168,7 +168,7 @@ void VsxSurface(float  matId,
     float3 up = terrainUp;
     float cls = VsxClass(matId);
     // Local surface frame: pc = on-ground plane coords, h = height along local up.
-    // Every "vertical" stretch (grain, streaks, blades, strata) uses h — NOT p.y —
+    // Every "vertical" stretch (grain, streaks, blades, strata) uses h -- NOT p.y --
     // so textures stay aligned with gravity all the way around a planet.
     float2 pc = VsxPlaneCoord(p, up);
     float  h  = dot(p, up);
@@ -190,17 +190,18 @@ void VsxSurface(float  matId,
     else if (cls == VSX_SAND || cls == VSX_DUST)
     {
         // Wind ripples: parallel ridges, direction meandering over a few metres.
-        float drift = VsxBroad(p * 0.045);
-        float ang   = drift * 6.2831;
-        float2 dir  = float2(cos(ang), sin(ang));
-        float2 q    = pc * float2x2(dir.x, -dir.y, dir.y, dir.x);   // rotate into ripple space
-        float warp  = VsxBroad(p * 0.35);
-        float rp    = sin(q.x * 2.4 + warp * 3.5);
+        float drift  = VsxBroad(p * 0.045);
+        float ang    = drift * 6.2831;
+        float2 dir   = float2(cos(ang), sin(ang));
+        float qpar   = dot(pc, dir);          // coordinate along the ripple direction
+        float warp   = VsxBroad(p * 0.35);
+        float ripple = qpar * 2.4 + warp * 3.5;
+        float rp     = sin(ripple);
         float crest = smoothstep(0.30, 0.95, rp);
         float trough = 1.0 - smoothstep(-0.95, -0.30, rp);
         float gain  = (cls == VSX_SAND) ? 1.0 : 0.7;
         albedoMul  *= 1.0 + (crest * 0.14 - trough * 0.10) * gain;
-        gradT      += dir * cos(q.x * 2.4 + warp * 3.5) * crest * 0.55 * gain;
+        gradT      += dir * cos(ripple) * crest * 0.55 * gain;
         smoothAdd  += crest * 0.06;
         if (cls == VSX_DUST)
         {
@@ -248,7 +249,7 @@ void VsxSurface(float  matId,
         float fl = step(0.72, VsxVnoise3(p * 6.5));
         if (fl > 0.0)
         {
-            // Brighten toward the ore's own saturated colour → glint reads as the ore.
+            // Brighten toward the ore's own saturated colour -> glint reads as the ore.
             float3 tint = normalize(max(baseRgb, float3(0.04, 0.04, 0.04))) * (0.45 + 0.55 * m);
             albedoMul   = lerp(albedoMul, albedoMul * (0.55 + tint * 1.55), fl * 0.85);
             smoothAdd  += fl * 0.45;
@@ -258,7 +259,7 @@ void VsxSurface(float  matId,
     }
     else if (cls == VSX_COAL)
     {
-        // Matte, streaky, organic — never glints.
+        // Matte, streaky, organic -- never glints.
         float streak = VsxNoise3(float3(pc.x * 2.8, h * 0.22, pc.y * 2.8));
         albedoMul *= 0.82 + 0.34 * streak;
         albedoMul *= 0.97 + 0.06 * VsxBroad(p * 4.0);
@@ -296,7 +297,8 @@ void VsxSurface(float  matId,
         // darkened, fixed earthy anchor) so cliffs read as dirt/rock.
         float slope = 1.0 - saturate(dot(normalWS, up));
         float soil  = smoothstep(0.30, 0.62, slope);
-        float3 soilTone = lerp(VsxDesat(baseRgb) * 0.72, float3(0.34, 0.26, 0.18), 0.55);
+        float lum   = VsxDesat(baseRgb) * 0.72;
+        float3 soilTone = lerp(float3(lum, lum, lum), float3(0.34, 0.26, 0.18), float3(0.55, 0.55, 0.55));
         // Recolour: replace hue with soil tone where steep (baseRgb-relative so
         // custom grass colours still set the overall mood).
         float3 soilMul = soilTone / max(max(baseRgb.r, max(baseRgb.g, baseRgb.b)), 0.06);
@@ -331,7 +333,7 @@ void VsxSurface(float  matId,
         float vein = smoothstep(0.80, 0.97, VsxBroad(p * 0.7));
         emissionAdd += float3(0.055, 0.016, 0.004) * vein; // faint residual heat
     }
-    else // VSX_GENERIC — restrained grain so unknown materials still sit quietly.
+    else // VSX_GENERIC -- restrained grain so unknown materials still sit quietly.
     {
         float g = VsxNoise3(p * 3.0);
         albedoMul *= 0.93 + 0.14 * g;

@@ -1,9 +1,28 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.17.1-dev`
+**Current Version:** `9.17.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.17.2-dev] Terrain Shader Pink Fix Round 2 — Dot-Product Ripples + Pure-ASCII Shaders (compile recovery)
+
+**Type:** PATCH — fixes the two remaining 9.17.1 shader errors (Unity console: `type mismatch at VoxelSurfaceTextures.hlsl(196)` and the `Parse error … expecting TVAL_ID or TVAL_VARREF at line 47`). No save, API or content changes.
+
+#### 🔍 What broke
+1. **`type mismatch at hlsl(196)`** — the sand-ripple rotation used a vector × matrix expression (`pc * float2x2(...)`) that Unity's d3d11 compiler rejects in this context. Only the projection along the ripple direction was ever used, so the matrix was pointless anyway.
+2. **`Parse error: unexpected $undefined`** — the ShaderLab lexer choking on a character. All three files carried typographic/box-drawing characters (header box art, dashes, ellipses, arrows) in comments; some lexer paths in Unity's import pipeline don't tolerate them reliably.
+
+#### 🔧 The fix
+- **Ripples without matrices:** `float qpar = dot(pc, dir)` — the same ripple phase, gradient and crest math expressed as one dot product. Cheaper than the matrix too.
+- **Grass→soil tone hardened:** the one mixed scalar/vector `lerp` now uses explicit `float3` constructors (defensive — some compiler profiles are picky about implicit promotion).
+- **Pure ASCII everywhere:** every non-ASCII character in `VoxelSurfaceTextures.hlsl`, `VoxelTerrainEnhanced.shader` and `VoxelTerrainURP.shader` was replaced (box art → `+=-|`, `—` → `--`, `…` → `...`, `→` → `->`, `•` → `*`); zero non-ASCII bytes remain in any of the three files, so no lexer anywhere in the pipeline has anything to choke on.
+- **Re-validated:** all 12 compilation units (both shaders × 3 passes × vertex/fragment, each including the real library) plus the library standalone across all 29 material ids compile clean — 13/13 PASS.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, let Unity recompile and reimport the three shader files.
+2. Terrain must now render textured — no pink, no console shader errors.
+3. If ANY error line remains in the Console, send it exactly as before — file + line number and we close it in one round.
 
 ### [9.17.1-dev] Terrain Shader Pink Fix — Pure-Float Material Ids (compile recovery)
 
