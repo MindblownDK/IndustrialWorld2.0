@@ -45,7 +45,8 @@ namespace VoxelEngine.Items
             // Tools track wear. Jetpacks start on EMPTY tanks — fuel/charge must
             // come from real sources (H₂ tanks, batteries, cells, world docks)
             // instead of materialising a full pack out of thin air.
-            this.durability = item is ToolItem t ? t.maxDurability : 0;
+            // 9.16.0 — liquid canisters also start EMPTY (durability stores millilitres).
+            this.durability = item is LiquidCanister ? 0 : (item is ToolItem t ? t.maxDurability : 0);
             this.charge     = 0;
         }
 

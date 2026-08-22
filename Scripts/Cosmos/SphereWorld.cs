@@ -183,13 +183,17 @@ namespace VoxelEngine.Cosmos
             VoxelEngine.Fluids.FluidSimManager.EnsureInstance();
 
             if (materialRegistry == null) materialRegistry = Resources.Load<MaterialRegistry>("MaterialRegistry");
-            // Robust fallback: if no MaterialRegistry is resolvable, create an empty one so the
-            // world still renders (GetColor falls back to MaterialRegistry.DefaultColor).
+            // 9.16.0 field round — when the authored registry cannot be resolved (missing
+            // asset, broken GUID reference, never assigned), fall back to a registry that
+            // carries a runtime definition for EVERY known material — names, colours,
+            // hardness and mining tiers mirror the authored defaults. The inspection HUD,
+            // mining rules and material names keep working exactly as authored.
             if (materialRegistry == null)
             {
-                Debug.LogWarning("[SphereWorld] No MaterialRegistry found — creating an empty fallback " +
-                                 "(colors use built-in defaults). Assign a MaterialRegistry for full fidelity.");
-                materialRegistry = ScriptableObject.CreateInstance<MaterialRegistry>();
+                Debug.LogWarning("[SphereWorld] No MaterialRegistry found — building the built-in runtime " +
+                                 "fallback (names/hardness/tiers mirror the authored defaults). Assign the " +
+                                 "authored MaterialRegistry asset for designer overrides.");
+                materialRegistry = MaterialRegistry.CreateRuntimeFallback();
             }
             if (terrainMaterial == null)  terrainMaterial  = Resources.Load<Material>("Mat_Terrain");
             if (terrainMaterial == null)

@@ -77,42 +77,36 @@ namespace VoxelEngine.GridSystem
         public void Drain() => stored = 0f;
 
         /// <summary>Change the carried liquid — only allowed when empty.</summary>
-        public bool SetLiquidType(LiquidType t)
-        {
+        public bool SetLiquidType(LiquidType t)        {
             if (stored > 0.001f) return false;
             liquidType = t;
             return true;
         }
 
-        // ── Universal bucket exchange (9.16.0) ────────────────────
-        /// <summary>Litres carried by one full bucket scoop (gameplay abstraction).</summary>
-        public const float BucketLitres = 100f;
-
-        /// <summary>Fill an EMPTY bucket from this tank. The bucket remembers the liquid.</summary>
-        public bool TryFillBucket(ItemStack bucket)
+        // ── Liquid canister exchange (9.16.0) ─────────────────────
+        /// <summary>Pour one canister click (0.5 L) into this tank. Same liquid, or any into
+        /// an empty tank. The canister must carry liquid.</summary>
+        public bool TryPourCanister(ItemStack can)
         {
-            if (bucket == null || bucket.item == null) return false;
-            if (bucket.durability > 0) return false;          // already carries liquid
-            if (stored <= 0.001f) return false;               // tank is dry
-            float take = Remove(BucketLitres);
-            if (take <= 0f) return false;
-            bucket.durability = 1;
-            bucket.payload = liquidType;
+            if (can == null || !(can.item is VoxelEngine.Items.LiquidCanister)) return false;
+            var carried = VoxelEngine.Items.LiquidCanister.CarriedLiquid(can);
+            if (carried == null) return false;
+            if (stored > 0.001f && liquidType != carried.Value) return false;
+            if (stored + VoxelEngine.Items.LiquidCanister.LitresPerClick > capacity + 0.001f) return false;
+            liquidType = carried.Value;
+            stored += VoxelEngine.Items.LiquidCanister.LitresPerClick;
+            VoxelEngine.Items.LiquidCanister.RemoveMl(can, VoxelEngine.Items.LiquidCanister.PerClickMl);
             return true;
         }
 
-        /// <summary>Pour a full bucket into this tank (same liquid, or any into an empty tank).</summary>
-        public bool TryEmptyBucket(ItemStack bucket)
+        /// <summary>Draw one canister click (0.5 L) out of this tank into an empty canister.</summary>
+        public bool TryFillCanister(ItemStack can)
         {
-            if (bucket == null || bucket.item == null) return false;
-            if (bucket.durability <= 0) return false;
-            if (!(bucket.payload is LiquidType carried)) return false;
-            if (stored > 0.001f && liquidType != carried) return false;
-            if (stored + BucketLitres > capacity + 0.001f) return false;   // needs full room
-            liquidType = carried;
-            stored += BucketLitres;
-            bucket.durability = 0;
-            bucket.payload = null;
+            if (can == null || !(can.item is VoxelEngine.Items.LiquidCanister)) return false;
+            if (!VoxelEngine.Items.LiquidCanister.IsEmpty(can)) return false;
+            if (stored < VoxelEngine.Items.LiquidCanister.LitresPerClick) return false;
+            stored -= VoxelEngine.Items.LiquidCanister.LitresPerClick;
+            VoxelEngine.Items.LiquidCanister.AddMl(can, liquidType, VoxelEngine.Items.LiquidCanister.PerClickMl);
             return true;
         }
     }

@@ -118,7 +118,7 @@ namespace VoxelEngine.EditorTools
             AddWizardButton(scroll, "5. Build Tiered Building Content (10 player-scale families x 4 tiers + Hammer)", BuildTieredContent, 40);
             AddWizardButton(scroll, "6. Build Power Content (4 wire tiers + Generator + Battery + Light)", BuildPowerContent, 40);
             AddWizardButton(scroll, "7. Build Research Content (Tech tree + Science packs + Research Lab)", BuildResearchContent, 40);
-            AddWizardButton(scroll, "8. Build Native Spherical Fluid Content (buckets, pool pumps, tanks, pipes, wakes)", BuildFluidContent, 48);
+            AddWizardButton(scroll, "8. Build Native Spherical Fluid Content (canister, pool pumps, tanks, pipes, wakes)", BuildFluidContent, 48);
 
             AddSpacer(scroll, 6);
             AddInfo(scroll,
@@ -532,15 +532,28 @@ namespace VoxelEngine.EditorTools
             AddSpacer(scroll, 6);
             AddInfo(scroll,
                 "Step 56 (9.16.0) wires the LIQUIDS OVERHAUL (non-destructive):\n" +
-                "  • Renames the bucket to the UNIVERSAL Liquid Bucket — scoops/places ALL 7\n" +
-                "    liquids (water, crude, refined oil, liquid fuel, HFO, MGO, coolant);\n" +
-                "    right-click a liquid tank to fill the bucket or pour it in\n" +
+                "  • Renames the bucket to the LIQUID CANISTER (10 L, one liquid at a time):\n" +
+                "    RMB a liquid pool to scoop 0.5 L/click until full, LMB pours 0.5 L/click\n" +
+                "    into the world; RMB a liquid tank or water pump to pour in, RMB an\n" +
+                "    infinity jack pump to fill with crude oil\n" +
                 "  • Flags industrial planet templates so their lakes generate as\n" +
                 "    refined-product pools (rainbow-sheened fuel/oil lakes)\n" +
                 "  • The 7 liquids themselves are runtime (materials, sim physics, mesh\n" +
                 "    submeshes, shader profiles) — no assets needed\n" +
                 "Re-runnable. Idempotent. Run after Steps 52–55.");
-            AddWizardButton(scroll, "56. Wire the Liquids Overhaul (Universal Bucket, Industrial Worlds — Non-Destructive)", () => VoxelEngine.EditorTools.LiquidOverhaulSetup.RunStep56(), 56);
+            AddWizardButton(scroll, "56. Wire the Liquids Overhaul (Liquid Canister, Industrial Worlds — Non-Destructive)", () => VoxelEngine.EditorTools.LiquidOverhaulSetup.RunStep56(), 56);
+
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
+                "Step 57 (9.16.0) wires the FIRE SYSTEM (non-destructive):\n" +
+                "  • Creates the IGNITER tool — RMB a flammable liquid pool to set it\n" +
+                "    alight (liquid fuel, refined oil, MGO, crude oil, heavy fuel oil)\n" +
+                "  • Crafted at the Crafting Bench: 2 iron + 1 copper\n" +
+                "  • Fires burn fuel down, spread across pools, glow and flicker with\n" +
+                "    real light, and burn players who walk in; water/coolant quench them\n" +
+                "  • The sim, visuals, lights and FireURP shader are runtime — no assets\n" +
+                "Re-runnable. Idempotent. Run after Steps 52–56.");
+            AddWizardButton(scroll, "57. Wire the Fire System (Igniter Tool — Non-Destructive)", () => VoxelEngine.EditorTools.FireSystemSetup.RunStep57(), 48);
 
             AddSpacer(scroll, 20);
         }
@@ -3048,7 +3061,7 @@ namespace VoxelEngine.EditorTools
         }
 
         // ============================================================
-        //          STEP 8 - FLUID CONTENT (water bucket, tank, pump, pipes)
+        //          STEP 8 - FLUID CONTENT (liquid canister, tank, pump, pipes)
         // ============================================================
         private void BuildFluidContent()
         {
@@ -3075,22 +3088,38 @@ namespace VoxelEngine.EditorTools
                 return;
             }
 
-            // ---- 1) Water Bucket item ----
+            // ---- 1) Liquid Canister item (9.16.0 — replaces the Water Bucket; the class
+            //          was renamed on the same file so the asset GUID survives) ----
             string bucketPath = $"{itemsFolder}/Tool_WaterBucket.asset";
-            var bucket = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.WaterBucket>(bucketPath);
+            var bucket = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.LiquidCanister>(bucketPath);
+            bool bucketCreated = bucket == null;
             if (bucket == null)
             {
-                bucket = ScriptableObject.CreateInstance<VoxelEngine.Items.WaterBucket>();
+                bucket = ScriptableObject.CreateInstance<VoxelEngine.Items.LiquidCanister>();
                 AssetDatabase.CreateAsset(bucket, bucketPath);
             }
-            bucket.itemId       = "water_bucket";
-            bucket.displayName  = "Water Bucket";
-            bucket.description  = "LMB scoops water or crude oil into the bucket. RMB places the carried liquid into the native voxel simulation. Durability tracks filled state (1 = full, 0 = empty).";
-            bucket.iconTint     = new Color(0.20f, 0.50f, 0.85f);
+            bucket.itemId       = "water_bucket";   // stable id — old saves keep resolving
+            if (bucketCreated || string.IsNullOrEmpty(bucket.displayName)
+                || bucket.displayName == "Water Bucket" || bucket.displayName == "Liquid Bucket")
+            {
+                bucket.displayName = "Liquid Canister";
+            }
+            if (bucketCreated || string.IsNullOrEmpty(bucket.description)
+                || bucket.description.IndexOf("scoops water or crude oil", System.StringComparison.OrdinalIgnoreCase) >= 0
+                || bucket.description.IndexOf("bucket", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                bucket.description = "A 10 L canister that holds ONE liquid at a time. RMB on a liquid pool to scoop 0.5 L per click (again and again until full). LMB pours 0.5 L into the world. RMB a liquid tank or water pump to pour the liquid in, and RMB an infinity jack pump to fill the canister with crude oil.";
+            }
+            if (bucketCreated)
+            {
+                bucket.iconTint      = new Color(0.20f, 0.50f, 0.85f);
+                bucket.category      = "Fluids";
+            }
             bucket.maxStack     = 1;
-            bucket.maxDurability= 1;
+            // Serialized maxDurability MUST match the canister capacity (legacy bucket
+            // assets carry 1 = one scoop) — durability now stores millilitres.
+            bucket.maxDurability = VoxelEngine.Items.LiquidCanister.CapacityMl;
             bucket.toolType     = VoxelEngine.Items.ToolType.Other;
-            bucket.category     = "Fluids";
             EditorUtility.SetDirty(bucket);
 
             // ---- 2) Tank prefab(s) ----
@@ -3229,7 +3258,7 @@ namespace VoxelEngine.EditorTools
             var recipeRegistry = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeRegistry>($"{ASSET_ROOT}/RecipeRegistry.asset");
             if (recipeRegistry == null) { EditorUtility.DisplayDialog("Voxel Engine", "Run Step 4 first.", "OK"); return; }
 
-            AddRecipe("Recipe_WaterBucket", "Water Bucket", bucket, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)ironIngot, 3));
+            AddRecipe("Recipe_WaterBucket", "Liquid Canister", bucket, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)ironIngot, 3));
             AddRecipe("Recipe_TankSolid", "Water Tank (Solid)", bTankSolid, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)ironIngot, 6));
             AddRecipe("Recipe_TankGlass", "Water Tank (Glass)", bTankGlass, 1, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)ironIngot, 4), ((VoxelEngine.Items.ItemDefinition)copperIngot, 4));
             AddRecipe("Recipe_PipeSolid", "Liquid Pipe (Solid) x4 · 0.5 m", bPipeSolid, 4, VoxelEngine.Crafting.StationTier.CraftingBench, ((VoxelEngine.Items.ItemDefinition)copperIngot, 1));

@@ -167,6 +167,7 @@ namespace VoxelEngine.Player
             // Ensure water/equipment trackers exist for movement-state checks.
             if (GetComponent<PlayerWaterState>() == null) gameObject.AddComponent<PlayerWaterState>();
             if (GetComponent<PlayerEquipment>() == null) gameObject.AddComponent<PlayerEquipment>();
+            if (GetComponent<LiquidContactEffects>() == null) gameObject.AddComponent<LiquidContactEffects>();
             _smoothedEyeHeight = standEyeHeight;
 
             if (cameraPivot == null)
@@ -527,7 +528,7 @@ namespace VoxelEngine.Player
                 if (hasSwimInput) swimDir.Normalize();
 
                 // ── Swim speed (slower than walking, doubled while sprinting) ─
-                float swimSpeed = walkSpeed * 0.65f;
+                float swimSpeed = walkSpeed * 0.65f * waterState.SwimSpeedScale; // per-liquid drag (9.16.0 Part 3)
                 if (sprintHeld) swimSpeed *= 1.4f;
                 Vector3 wishVel = swimDir * swimSpeed;
                 if (!hasSwimInput) wishVel = -radialUp * 0.85f;
@@ -539,6 +540,9 @@ namespace VoxelEngine.Player
                 // vertical input, add a small sinking bias instead of hovering frozen.
                 if (hasSwimInput && !wantsUp && !wantsDown)
                     _velocity -= radialUp * (0.35f * dt);
+
+                // Per-liquid buoyancy bias: oils sink, light fuel floats (9.16.0 Part 3).
+                _velocity -= radialUp * (waterState.BuoyancyBias * dt);
 
                 // Hard caps along vertical/radial axis so swimming is always controllable
                 float vertSpd = Vector3.Dot(_velocity, radialUp);

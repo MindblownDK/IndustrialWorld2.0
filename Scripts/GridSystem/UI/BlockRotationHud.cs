@@ -20,9 +20,15 @@ namespace VoxelEngine.GridSystem.UI
 
         public static void EnsureMounted(VisualElement uiRoot)
         {
+            if (uiRoot == null) return;
             if (_root == uiRoot && _box != null && _box.parent == uiRoot) return;
             _root = uiRoot;
             if (_box != null) _box.RemoveFromHierarchy();
+
+            // 9.16.0 field round — remount builds a FRESH box; reset the visibility
+            // state so the rebuilt box is shown by the next tick (same stale-state
+            // bug class as the top-left inspection card).
+            _visible = false;
 
             _box = new VisualElement { name = "BlockRotationHud" };
             _box.style.position = Position.Absolute;
@@ -165,22 +171,58 @@ namespace VoxelEngine.GridSystem.UI
         public static void Tick()
         {
             if (_box == null) return;
+            // 9.16.0 field round — self-heal an orphaned box after a UI-layer rebuild
+            // (same failure class the inspection card had): re-attach and let the
+            // normal tick cycle show it again.
+            if (_box.parent == null && _root != null && _root.panel != null)
+            {
+                _root.Add(_box);
+                _visible = false;
+            }
 
             bool gridBlock = GridBuilder.HoldingGridBlock;
             bool staticBlock = VoxelEngine.Building.BuildSystem.HoldingBlock;
-            bool show = (gridBlock || staticBlock) && !VoxelEngine.UI.UIState.IsBlocking;
+
+            string heldName = gridBlock ? GridBuilder.HeldBlockName
+                : (staticBlock ? VoxelEngine.Building.BuildSystem.HeldBlockName : null);
+            Vector3Int steps = gridBlock ? GridBuilder.RotationSteps
+                : VoxelEngine.Building.BuildSystem.RotationSteps;
+
+            // 9.16.0 field round — fallback: resolve the held item DIRECTLY from the
+            // live inventory, so the display keeps working even while the builders'
+            // statics lag after a world reload.
+            if (!gridBlock && !staticBlock && TryResolveHeldDirect(out heldName))
+                steps = Vector3Int.zero;
+
+            bool show = heldName != null && !VoxelEngine.UI.UIState.IsBlocking;
 
             _box.style.display = show ? DisplayStyle.Flex : DisplayStyle.None;
             if (show)
             {
-                string heldName = gridBlock ? GridBuilder.HeldBlockName : VoxelEngine.Building.BuildSystem.HeldBlockName;
-                Vector3Int steps = gridBlock ? GridBuilder.RotationSteps : VoxelEngine.Building.BuildSystem.RotationSteps;
                 if (_nameLabel != null) _nameLabel.text = "▣ " + heldName;
                 UpdateCube(steps);
             }
 
             if (show != _visible)
                 _visible = show;
+        }
+
+        /// <summary>Ground-truth "is the player holding a placeable block?" — reads the
+        /// live inventory, independent of GridBuilder/BuildSystem update state.</summary>
+        private static VoxelEngine.Items.Inventory _inventoryCache;
+
+        private static bool TryResolveHeldDirect(out string name)
+        {
+            name = null;
+            if (_inventoryCache == null)
+                _inventoryCache = Object.FindAnyObjectByType<VoxelEngine.Items.Inventory>();
+            if (_inventoryCache == null || _inventoryCache.ActiveStack.IsEmpty
+                || _inventoryCache.ActiveStack.item == null) return false;
+            var item = _inventoryCache.ActiveStack.item;
+            if (item is GridBlockItem gbi) { name = gbi.displayName; return true; }
+            if (item is VoxelEngine.Items.BlockItem bi && bi.placedPrefab != null)
+            { name = bi.displayName; return true; }
+            return false;
         }
     }
 }

@@ -53,6 +53,11 @@ namespace VoxelEngine.Player
         // Shielding can protect it without changing other damage types.
         private float _radiationTimer;
         private float _radiationDps;
+        // Caustic damage-over-time (liquid fuel on skin, 9.16.0 Part 3); mitigated
+        // by worn armor at apply time. Kept separate from burn so heavy plate does
+        // not escalate it the way heated metal escalates fire damage.
+        private float _causticTimer;
+        private float _causticDps;
         public float baseMaxStamina     = 100f;
         public float baseDamage         = 5f;     // bare-hand contribution
         public float baseSprintMultiplier = 1.6f;
@@ -176,6 +181,17 @@ namespace VoxelEngine.Player
                 Health = Mathf.Max(0f, Health - effective * Time.deltaTime);
                 OnStatsChanged?.Invoke();
                 if (_burnTimer <= 0f) _burnDps = 0f;
+                if (Health <= 0f) Die();
+            }
+
+            // Caustic: liquid-fuel skin damage (9.16.0 Part 3). Armor mitigation is
+            // baked in when the effect is applied.
+            if (_causticTimer > 0f)
+            {
+                _causticTimer -= Time.deltaTime;
+                Health = Mathf.Max(0f, Health - _causticDps * Time.deltaTime);
+                OnStatsChanged?.Invoke();
+                if (_causticTimer <= 0f) _causticDps = 0f;
                 if (Health <= 0f) Die();
             }
 
@@ -328,6 +344,18 @@ namespace VoxelEngine.Player
             if (dps <= 0f || duration <= 0f) return;
             _burnDps   = Mathf.Max(_burnDps, dps);
             _burnTimer = Mathf.Max(_burnTimer, duration);
+            OnStatsChanged?.Invoke();
+        }
+
+        /// <summary>Apply a caustic damage-over-time effect (liquid fuel on skin — 9.16.0
+        /// Part 3). Mitigated by worn armor; unlike burns it never escalates with plate.
+        /// Refreshes/extends an active caustic effect.</summary>
+        public void ApplyCaustic(float dps, float duration)
+        {
+            if (dps <= 0f || duration <= 0f) return;
+            if (equippedArmor != null) dps *= (1f - equippedArmor.damageReduction);
+            _causticDps   = Mathf.Max(_causticDps, dps);
+            _causticTimer = Mathf.Max(_causticTimer, duration);
             OnStatsChanged?.Invoke();
         }
 

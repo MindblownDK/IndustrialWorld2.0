@@ -37,6 +37,20 @@ namespace VoxelEngine.Maritime
         public override float ContentMass => Buffer * LiquidType.Water.DensityKgPerL();
         public float Fill01 => bufferCapacity > 0f ? Mathf.Clamp01(Buffer / bufferCapacity) : 0f;
 
+        /// <summary>9.16.0 — pour one canister click (0.5 L) into the marine pump's internal
+        /// buffer. Marine pumps handle water only.</summary>
+        public bool TryPourCanister(ItemStack can)
+        {
+            if (can == null || !(can.item is VoxelEngine.Items.LiquidCanister)) return false;
+            var carried = VoxelEngine.Items.LiquidCanister.CarriedLiquid(can);
+            if (carried == null || carried.Value != LiquidType.Water) return false;
+            float space = bufferCapacity - Buffer;
+            if (space < VoxelEngine.Items.LiquidCanister.LitresPerClick) return false;
+            Buffer += VoxelEngine.Items.LiquidCanister.LitresPerClick;
+            VoxelEngine.Items.LiquidCanister.RemoveMl(can, VoxelEngine.Items.LiquidCanister.PerClickMl);
+            return true;
+        }
+
         public override void OnPlaced()
         {
             base.OnPlaced();

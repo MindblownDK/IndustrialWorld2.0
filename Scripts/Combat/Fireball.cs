@@ -66,6 +66,9 @@ namespace VoxelEngine.Combat
                         d.TakeDamage(new DamageEvent { amount = damage, type = DamageType.Fire,
                             point = hit.point, direction = step.normalized, source = _owner });
                 }
+                // 9.16.0 fire system — a fireball splashing into a flammable pool sets it alight.
+                var aw = VoxelEngine.Core.ActiveWorld.Current;
+                if (aw != null) VoxelEngine.Fire.FireManager.TryIgniteAt(aw.WorldToVoxel(hit.point));
                 Destroy(gameObject);
                 return;
             }

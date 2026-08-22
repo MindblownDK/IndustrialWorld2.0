@@ -56,6 +56,14 @@ namespace VoxelEngine.UI
             _uiRoot = uiRoot;
             if (_card != null) _card.RemoveFromHierarchy();
 
+            // 9.16.0 field round — a remount builds a FRESH card at opacity 0. If the
+            // static _visible flag survives from the old card (world reload, UI layer
+            // rebuild), Show() early-returns and the new card never fades in — the
+            // "works on first load, gone after reload" bug. Reset the visibility state
+            // so the rebuilt card is shown by the next probe.
+            _visible = false;
+            _lastSignature = null;
+
             _card = new VisualElement { name = "WorldInspectionHud" };
             _card.style.position = Position.Absolute;
             _card.style.left = 16;
@@ -189,7 +197,17 @@ namespace VoxelEngine.UI
 
         public static void Tick()
         {
-            if (_card == null || _card.parent == null) return;
+            if (_card == null) return;
+            // 9.16.0 field round — self-heal an orphaned card (its UI root was rebuilt
+            // and the card detached). Re-attach to the last known live root and let the
+            // normal probe cycle fade it back in.
+            if (_card.parent == null && _uiRoot != null && _uiRoot.panel != null)
+            {
+                _uiRoot.Add(_card);
+                _visible = false;
+                _lastSignature = null;
+            }
+            if (_card.parent == null) return;
             if (_hoveredItem != null && !_hoveredItem.IsEmpty)
             {
                 ShowInventoryItem(_hoveredItem);
@@ -505,13 +523,15 @@ namespace VoxelEngine.UI
                 : voxel.material;
             var definition = world.MaterialRegistry?.Get(materialByte);
             var materialId = (MaterialId)materialByte;
+            // 9.16.0 field round — the material name ALWAYS resolves: authored display
+            // name first, then the built-in name table (a registry can never be anonymous).
             info.title = definition != null && !string.IsNullOrWhiteSpace(definition.displayName)
                 ? definition.displayName
-                : materialId.ToString();
+                : MaterialRegistry.DefaultDisplayName(materialId);
             info.detail = "VOXEL MATERIAL";
             info.status = definition != null
                 ? $"Hardness: {definition.hardness:0.0} · Mining tier: {definition.miningTier}"
-                : $"Material ID: {(byte)materialId}";
+                : $"Hardness: {MaterialRegistry.DefaultHardnessSafe(materialId):0.0} · Mining tier: {MaterialRegistry.DefaultMiningTierSafe(materialId)}";
             return true;
         }
 

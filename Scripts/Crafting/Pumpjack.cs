@@ -176,6 +176,19 @@ namespace VoxelEngine.Crafting
             return true;
         }
 
+        /// <summary>9.16.0 — fill a liquid canister with one click (0.5 L) of crude oil
+        /// straight from this jack pump's infinite reservoir node. The node never drains,
+        /// so filling the canister costs nothing but power (unpowered jacks refuse). Works
+        /// for an empty canister and tops up one already carrying crude oil.</summary>
+        public bool TryFillCanister(ItemStack can)
+        {
+            if (can == null || !(can.item is VoxelEngine.Items.LiquidCanister)) return false;
+            if (_power != null && !_power.IsPowered) return false;
+            if (!FindInfinitePirateOil(out _)) return false;
+            return VoxelEngine.Items.LiquidCanister.AddMl(can, VoxelEngine.Items.LiquidType.CrudeOil,
+                VoxelEngine.Items.LiquidCanister.PerClickMl);
+        }
+
         private bool FindInfinitePirateOil(out Vector3Int oilVoxel)
         {
             oilVoxel = default;

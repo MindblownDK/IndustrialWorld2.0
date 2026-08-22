@@ -211,7 +211,7 @@ namespace VoxelEngine.Cosmos
             // ── GPU quadtree ocean (9.0.0) removed in 9.16.0 — the fake sea shell is
             // gone. All water is now REAL generated voxel fluid: ocean basins fill below
             // sea level in SphereDensity and render through WaterMeshBuilder, exactly
-            // like lakes, seeps, buckets and pumps. GpuOceanEngine still self-disables
+            // like lakes, seeps, canisters and pumps. GpuOceanEngine still self-disables
             // if a legacy scene/prefab ever instantiates it. ──
 
             // ── Space backdrop (REAL bodies only — 9.4.0) ────────────────

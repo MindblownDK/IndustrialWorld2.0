@@ -65,6 +65,20 @@ namespace VoxelEngine.Fluids
         public string SourceStatus => !_hasSource ? "No pool detected"
             : (_sourceInfinite ? "∞ Infinite pool" : $"Finite pool: {_sourceLitres:0} L ({_sourceVoxels} voxels)");
 
+        /// <summary>9.16.0 — pour one canister click (0.5 L) into the pump's internal buffer.
+        /// Pumps accept only their configured liquid type.</summary>
+        public bool TryPourCanister(ItemStack can)
+        {
+            if (can == null || !(can.item is VoxelEngine.Items.LiquidCanister)) return false;
+            var carried = VoxelEngine.Items.LiquidCanister.CarriedLiquid(can);
+            if (carried == null || carried.Value != liquidType) return false;
+            float space = internalCapacityLitres - internalLitres;
+            if (space < VoxelEngine.Items.LiquidCanister.LitresPerClick) return false;
+            internalLitres += VoxelEngine.Items.LiquidCanister.LitresPerClick;
+            VoxelEngine.Items.LiquidCanister.RemoveMl(can, VoxelEngine.Items.LiquidCanister.PerClickMl);
+            return true;
+        }
+
         /// <summary>Pool fill relative to infinite threshold (0..1+). UI progress bar.</summary>
         public float PoolInfiniteProgress => _sourceVoxels > 0
             ? Mathf.Clamp01((float)_sourceVoxels / infiniteVoxelThreshold)

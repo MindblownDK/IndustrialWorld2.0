@@ -33,6 +33,11 @@ namespace VoxelEngine.Combat
 
             var hz = go.AddComponent<FireWallHazard>();
             hz.duration = dur; hz.burnDps = dps; hz.radius = radius;
+
+            // 9.16.0 fire system — a fire wall raised over flammable liquid ignites it,
+            // so an Ifrit ambush on an industrial world can torch whole fuel lakes.
+            var aw = VoxelEngine.Core.ActiveWorld.Current;
+            if (aw != null) VoxelEngine.Fire.FireManager.TryIgniteAt(aw.WorldToVoxel(pos));
             return hz;
         }
 

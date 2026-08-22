@@ -86,12 +86,37 @@ namespace VoxelEngine.Player
                 if (weather != null && weather.IsPrecipitating && !weather.IsSnowBiome)
                     rainIntensity = weather.Intensity;
 
-                float totalDensity = baseFogDensity + maxRainFogBoost * rainIntensity;
-                Color tint = Color.Lerp(underwaterTint, rainTint, rainIntensity * 0.6f);
+                // 9.16.0 Part 3 — per-liquid underwater look: crude is black murk with a
+                // razor-thin view, coolant glows teal, oils and fuel are amber/brown.
+                // Water keeps the classic blue. Rain still darkens whatever liquid you're in.
+                float liquidDensity = baseFogDensity;
+                float liquidFarClip = underwaterFarClip;
+                Color liquidTint = underwaterTint;
+                if (_waterState != null)
+                {
+                    switch (_waterState.Liquid)
+                    {
+                        case VoxelEngine.Items.LiquidType.CrudeOil:
+                            liquidTint = new Color(0.020f, 0.016f, 0.012f); liquidDensity = 0.085f; liquidFarClip = 12f; break;
+                        case VoxelEngine.Items.LiquidType.HeavyFuelOil:
+                            liquidTint = new Color(0.030f, 0.020f, 0.014f); liquidDensity = 0.075f; liquidFarClip = 14f; break;
+                        case VoxelEngine.Items.LiquidType.RefinedOil:
+                            liquidTint = new Color(0.100f, 0.050f, 0.020f); liquidDensity = 0.055f; liquidFarClip = 24f; break;
+                        case VoxelEngine.Items.LiquidType.MarineGasOil:
+                            liquidTint = new Color(0.120f, 0.090f, 0.035f); liquidDensity = 0.050f; liquidFarClip = 26f; break;
+                        case VoxelEngine.Items.LiquidType.LiquidFuel:
+                            liquidTint = new Color(0.130f, 0.090f, 0.020f); liquidDensity = 0.040f; liquidFarClip = 30f; break;
+                        case VoxelEngine.Items.LiquidType.MarineEngineCoolant:
+                            liquidTint = new Color(0.030f, 0.260f, 0.240f); liquidDensity = 0.038f; liquidFarClip = 46f; break;
+                    }
+                }
+
+                float totalDensity = liquidDensity + maxRainFogBoost * rainIntensity;
+                Color tint = Color.Lerp(liquidTint, rainTint, rainIntensity * 0.6f);
 
                 _cam.backgroundColor  = tint;
                 _cam.clearFlags       = CameraClearFlags.SolidColor;
-                _cam.farClipPlane     = underwaterFarClip;
+                _cam.farClipPlane     = liquidFarClip;
                 RenderSettings.fog    = true;
                 RenderSettings.fogMode    = FogMode.Exponential;
                 RenderSettings.fogColor   = tint;

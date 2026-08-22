@@ -5,9 +5,9 @@
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
 
-### [9.16.0-dev] Liquid Worlds — All 7 Liquids, Real Looks, Real Flow (Liquids Overhaul, Part 1)
+### [9.16.0-dev] Liquid Worlds — All 7 Liquids, Real Looks, Real Flow, Real FIRE, Real Swim (Liquids Overhaul, Parts 1–3)
 
-**Type:** MINOR — seven placeable liquids with per-liquid visuals & physics, industrial fuel lakes, universal bucket. Save-compatible (new voxel material values only; old saves keep their exact meaning).
+**Type:** MINOR — seven placeable liquids with per-liquid visuals & physics, industrial fuel lakes, liquid canister, full fire system, per-liquid player physics. Save-compatible (new voxel material values only; old saves keep their exact meaning).
 
 #### 🧪 1. All 7 liquids live in the world now
 The voxel format kept ONE fluid byte + a material byte that could only express water or crude oil. Five new save-compatible `MaterialId`s carry the rest: **Refined Oil, Liquid Fuel, Heavy Fuel Oil, Marine Gas Oil, Marine Engine Coolant** — old saves can never contain them, so nothing migrates.
@@ -23,8 +23,9 @@ The voxel format kept ONE fluid byte + a material byte that could only express w
 #### 🏭 4. Industrial worlds generate fuel lakes
 `BodySettings.industrialWorld` (flag or body-name keyword: Industrial/Factory/Refinery/Forge/Foundry/Plant). On those worlds, generation-time lakes fill with **refined oil / liquid fuel / HFO / MGO** (seeded per lake) instead of water. Step 56 flags every matching template non-destructively.
 
-#### 🪣 5. The Universal Liquid Bucket
+#### 🪣 5. The Universal Liquid Bucket — superseded by §9
 The bucket (now "Liquid Bucket", Step 56) scoops ANY of the 7 liquids, places what it holds, and — new — **right-click a liquid tank to fill the bucket from the tank network or pour it back in** (100 L per bucket, type-checked). The tank exchange is fully feedback-toasted.
+> **Replaced in the same release** — Thomas field-tested the bucket and asked for a proper **Liquid Canister** instead. See §9: the bucket item is gone, the canister takes over with its own rules.
 
 #### 🌍 6. The fake ocean sphere is gone — ALL water is real generated voxel liquid
 The old quadtree sea shell (GpuOceanEngine) that wrapped every body at sea radius is **removed**: `CosmosBootstrap` no longer creates it, and the component self-disables if a legacy scene/prefab still carries it. Oceans now render exclusively from the **generated voxel ocean basins** (SphereDensity fills basins below sea level with real water cells), meshed by the same WaterMeshBuilder as lakes, seeps, buckets and pumps — flow, waves, foam, wakes and bucket scooping work on the open ocean exactly like anywhere else. Water is now truly voxel-real: it exists where the voxels say it exists, and nowhere else.
@@ -40,19 +41,76 @@ Two real bugs killed the old feel, both fixed:
 - **The oil shaft is back.** The fluid sim was erasing the CrudeOil material off every SOLID soaked-rock cell (the bore/reservoir casing) to Air — pale invisible rock, gutted shaft look. The sim now preserves solid fluid-material cells and only clears stale level bytes, so the **puddle → liquid-filled shaft → liquid-filled reservoir** chain renders and reads exactly as authored.
 - **Liquid surfaces got their texture pass.** `VoxelWaterURP` gained a fine animated ripple layer, slow large-scale colour patchiness, and a per-liquid sparkle multiplier — water shimmers, fuels glitter, crude sits oily and mottled, coolant ripples with a faint glow. All procedural, no textures; per-liquid values live in `LiquidVisualProfile` (Water/Crude/Refined/Fuel/HFO/MGO/Coolant each tuned).
 
+#### 🫙 9. The bucket is retired — the LIQUID CANISTER takes over (field round)
+Thomas field-tested the bucket and called it: **remove the bucket, give us a liquid canister.** The bucket item is gone; in its place, the **Liquid Canister** — a 10 L tank that holds ONE liquid at a time.
+
+- **The item:** the old bucket asset became the canister in place (same file GUID, same `water_bucket` itemId, same recipe id) — old saves load untouched, and a legacy full bucket (durability 1) reads as a full 10 L canister on first touch. The item is renamed "Liquid Canister" non-destructively (items step + Step 56 rewrite only bucket-era names/descriptions; the serialized capacity migrates to 10 000 ml).
+- **RMB on a liquid pool scoops 500 ml per click** — click repeatedly until full. The first scoop fixes the canister's liquid; afterwards it only accepts the SAME liquid (RMB on another liquid pool refuses with a toast).
+- **LMB pours 500 ml per click into the world** (air cells only) — 20 clicks empty a full canister into voxel cells the fluid sim renders and flows.
+- **RMB on a liquid tank** pours 500 ml in (type-checked); an **empty canister draws 500 ml back out** of the tank instead.
+- **RMB on a water pump** pours 500 ml into its internal buffer (only the pump's configured liquid); the **marine pump** accepts water the same way.
+- **RMB on an infinity jack pump fills the canister with crude oil** (500 ml/click) straight from its infinite reservoir node — the node never drains; the jack only needs power, and a canister already holding crude tops up.
+- Durability now stores **millilitres**, so the durability bar doubles as a fill meter; new canisters start EMPTY; every exchange is toast-fed through BuildFeedbackHud.
+
+#### 🔥 10. Part 2 — the full FIRE system (fuel burns, spreads, glows, hurts)
+The second act of the liquids overhaul: flammable liquids now actually catch fire.
+
+- **Flammability is per-liquid.** Liquid fuel is the most volatile, then refined oil, MGO, crude oil, heavy fuel oil. **Water and engine coolant never burn — they put fires out:** flood a burning cell and the flame dies the instant the cell's liquid stops being flammable.
+- **Fires EAT the pool.** Every burning cell drains fuel levels through the fluid sim, so a fire literally consumes the liquid it sits on — the sim keeps pouring neighbours into the emptied cell, and those catch ring by ring. Burn speeds follow the liquid: fuel blazes through a cell in ~30 s, HFO smoulders for minutes per cell.
+- **Fires SPREAD.** A hot flame ignites adjacent flammable cells with a per-liquid chance — a fuel lake goes up fast, an HFO pond crawls. A global burning-cell cap keeps runaway spreads bounded.
+- **Ignition:** the new **IGNITER** tool (Step 57, Crafting Bench, 2 iron + 1 copper, 64 sparks) — RMB a flammable pool to light it. **Ifrit fireballs and fire walls now ignite fuel pools on splash** — a fire spirit on an industrial world can torch a whole lake.
+- **Light & visuals:** one dynamic mesh of crossed-quad flame columns sitting on the liquid's real surface height (oriented to the planet's radial up), animated by a new procedural `VoxelEngine/FireURP` shader — world-space noise tongues, white-hot cores, per-flame flicker — plus a pool of 6 shadowless point lights snapped to the flames nearest the camera. No textures, no particles, nothing spawned per flame.
+- **Damage:** standing in the flames applies the armour-mitigated BURN (the same status the Ifrit's fireballs inflict) at 12 DPS while in contact.
+- **Transient by design:** fire state is runtime-only — nothing new is saved, and a save loaded mid-fire simply has no fire.
+
+#### 🏊 11. Part 3 — per-liquid player physics (swim, sink, scald, dissolve)
+The third and final act of the liquids overhaul: every liquid now treats your body differently.
+
+- **The player knows what they are swimming in.** `PlayerWaterState` now reports the dominant liquid at the body (feet/waist/head voxels — the cells it was already sampling) alongside the existing swim state.
+- **Per-liquid swim physics** (inside the existing 3D swim model): water swims as always; **coolant swims fine (1.05×) while it scalds you**; refined oil and MGO drag (0.65×/0.70×) and sink you slowly; **crude oil is thick tar — 0.40× speed with a strong 1.05 m/s sink; HFO is near-molasses at 0.30×**; **liquid fuel floats you (upward bias) while it eats your skin**.
+- **Coolant SCALDS** — body contact applies the armour-ESCALATING burn (heated metal hurts more; Heat Tolerance modules help), 10 DPS while touching.
+- **Liquid fuel is CAUSTIC** — a new armour-mitigated `ApplyCaustic` DoT on PlayerStats (8 DPS); unlike burns, heavy plate never makes it worse. Both tick on ANY body contact — wading a shallow puddle already counts.
+- **Drowning already worked and still applies** — every liquid blocks breathing (oxygen reserve), so a deep oil tank is a slow, dragging grave and a fuel pool is a floating chemical bath.
+- **Per-liquid underwater look** (`UnderwaterEffect`): water stays classic blue; **crude is black murk with a 12 m view**, HFO near-black brown, refined/MGO amber, fuel pale amber, **coolant glows teal**. Rain still darkens whichever liquid you are in.
+- Feedback toasts on first contact ("Scalding hot coolant!", "Caustic fuel is eating your skin!") and again every few seconds while you stay in.
+
+#### 🔧 12. Field round — materials always resolve + water diagnostics
+Two field reports addressed:
+
+- **The inspection HUD stopped showing material names.** Root cause: the world's `MaterialRegistry` reference broke (the asset lives outside any Resources folder, so the runtime `Resources.Load` fallback never fired) and the world silently built an EMPTY registry — every voxel material became anonymous, so the top-left card fell back to raw enum names and lost hardness/mineability. Fixed three ways, all non-destructive: the fallback now builds a **complete built-in registry** (runtime definitions for every material — names, colours, hardness and mining tiers mirroring the authored defaults, fluids marked non-mineable); the HUD itself now falls back to a built-in name table so a material can **never** be anonymous; and **Step 57 now self-repairs the assets** (recreates the missing registry, tops up missing material definitions, force-rebinds every scene world's registry reference — the same force-rebind pattern as Steps 53/54).
+- **Water diagnostics.** `FluidManager` now logs ONE console line per world load — `[WaterDiagnostics] liquidCellsNear/liquidCellsFar/waterMeshesNear` — which distinguishes the three ways water can vanish: never generated, being drained by the sim, or generated but never meshed. One paste of that line localizes a water bug instantly.
+- **Inspection HUD "works on first load, gone after reload" fixed.** Root cause: a UI-layer remount (world reload / UI refresh) builds a FRESH card at opacity 0, but the static `_visible` flag survived from the old card — `Show()` early-returned and the new card could never fade back in. The remount now resets the visibility state, and `Tick()` self-heals an orphaned card by re-attaching it to its last known live root.
+- **Top-right block display (BlockRotationHud) hardened the same way** — remount state reset, orphan self-heal, plus a ground-truth fallback that resolves the held placeable block directly from the live inventory, so the display no longer depends on the GridBuilder/BuildSystem statics surviving a world reload.
+- **Water diagnostics upgraded with a FIELD probe.** The first diagnostic only sampled chunks near the viewer — which is always LAND at spawn, so it could never see the ocean. It now also evaluates the planet's own noise field over 1024 directions (`oceanCols=…/1024` — how much of the planet is ocean BY DESIGN, no chunk streaming involved) plus a wide ±20-chunk scan of every generated chunk. Interpretation: `oceanCols=0` → the planet's field has no ocean basins (sea-level/template tuning); `oceanCols>0` but `boxWater=0` → basins exist but no water was generated nearby; `boxWater>0` but `nearMeshes=0` → water exists but never meshes/renders.
+
 #### ✅ Static delivery checks
 - All touched sources parse clean (tree-sitter C#); no save-format changes; no other-game names; no TODOs.
 
 #### Manual Unity steps (Thomas)
-1. Pull `Dev`, recompile; run **Step 56** (renames the bucket, flags industrial templates).
-2. Scoop from any pool: water, crude seep, refined/fuel lake — the bucket remembers and places exactly what it held.
-3. Place all 7 liquids side by side: each pools with its own colour, sheen and wave motion; fuel poured onto water visibly floats; crude poured into water sinks below it.
-4. On an industrial world (or flag a template + fresh chunks): lakes generate as rainbow-sheened fuel/refined pools.
-5. Right-click a liquid tank with an empty bucket → filled with the tank's liquid; right-click again with a full one → poured in. Wrong-liquid tanks refuse.
-6. Verify existing saves load unchanged; oceans stay water; oil seeps unchanged.
-7. Coolant pools glow in the dark; fuels shimmer with the rainbow sheen when you move around them.
+1. Pull `Dev`, recompile; run **Step 56** (renames the bucket → Liquid Canister, migrates its capacity to 10 000 ml, flags industrial templates) and **Step 57** (creates the Igniter + its recipe).
+2. Craft/pick up the canister: RMB a water pool 20× — it fills to 10 L (the durability bar doubles as the fill meter). RMB the pool again with a full canister → "Full — left-click to pour" toast.
+3. Fill it with water, then RMB a crude-oil seep → refused with a toast (one liquid at a time). LMB the water out onto dry ground, then scoop crude fine.
+4. LMB a full canister onto open ground 20× → a 10 L puddle forms, flows and levels in the sim; RMB the puddle to take it back.
+5. RMB a liquid tank with a full canister → 0.5 L pours in per click; empty the canister and RMB the tank → 0.5 L draws back out. Wrong-liquid tanks refuse.
+6. RMB a water pump with its matching liquid → pours into the pump buffer (pump UI level rises); RMB an infinity jack pump with an empty canister → fills with crude oil, the node never drains.
+7. Verify existing saves load unchanged; a legacy save's full bucket appears as a full 10 L canister; oceans stay water; oil seeps unchanged.
+8. Craft the **Igniter** (2 iron + 1 copper) and RMB a fuel or refined-oil lake: it catches immediately — flames sit on the surface, flicker, cast real moving light, and the fire spreads outward while the pool level visibly drops.
+9. Walk into the flames — the armour-mitigated burn ticks; step out and it fades. Pour water (canister LMB) onto a burning cell — the flame dies where the water lands.
+10. Try each flammable liquid (fuel races, HFO crawls) and confirm water/coolant pools never ignite. Spawn an Ifrit near a fuel lake — its fireballs and fire walls torch the pool on contact.
+11. Light a fire, save, reload — the fire is gone by design (transient, nothing saved).
+12. Swim in water (unchanged), then in each oil: crude drags hard and sinks you, HFO worst of all, refined/MGO milder — all block breathing. Swimming up out of a deep oil pit should be a real struggle.
+13. Walk into coolant — scald ticks with armour escalation (heavy plate burns WORSE, Heat Tolerance helps); wading a shallow puddle already scalds. Swim under coolant — the camera turns glowing teal.
+14. Step into liquid fuel — caustic ticks (armour mitigates), you float, and the underwater view is pale amber. Pour fuel on the ground, light it, and walk in: caustic + burn + drowning stack exactly as they should.
+15. Verify existing saves load unchanged; all Part-3 state is runtime-only.
+16. Run **Step 57 again** — it now also self-repairs the material registry (recreates it if missing, tops up material definitions, re-binds scene worlds).
+17. Aim at terrain: the top-left card must show the material's real name + hardness/mining tier again (and water/ores show their proper names, never "Material ID: N").
+18. Load a world and paste the single `[WaterDiagnostics]` console line — it tells us whether the water was never generated, is being drained, or is generated but never meshed. Also paste any red console errors.
+19. **Water: the diagnostics now also pop as an on-screen toast ~2 s after the world loads** ("Water Diagnostics: waterNear=… waterFar=… oilNear=… oilFar=… meshesNear=… seaLevel=… rendering=…") — screenshot that toast and send it, no console needed.
+20. **HUD reload check:** load a world (card works), then load ANOTHER world (or respawn/reload the save) — the card must now keep working on every reload, not just the first.
+21. **Water — one screenshot settles it:** load a world and screenshot the NEW "Water Diagnostics" toast (~2 s after load, repeats ~8 s). It now reads `oceanCols=…/1024 nearWater=… boxWater=… boxOil=… nearMeshes=… seaLevel=… rendering=…`. Send that picture and I'll know exactly which layer to fix.
+22. **Top-right block display:** hold a placeable block — the ROTATE PLACEMENT card must appear top-right, now even after reloads.
 
-Next in the liquids arc: **Part 2 — the full fire system** (ignition, spreading burning fuel pools, light, damage), then **Part 3 — per-liquid player physics** (coolant scald, oil drag/sinking, fuel toxicity, water swimming).
+**The Liquids Overhaul is complete** — Parts 1–3 plus every field round (ocean shell removal, flow remake, mining under liquid, oil shafts, liquid surface texture, the canister, fire, player physics) shipped in 9.16.0-dev. Next on the roadmap: the **surface-texture pass**, then the rest of the roadmap.
 
 ### [9.15.0-dev] Visible Worlds & Living Asteroid Fields (Roadmap: Asteroids & Planet Visibility)
 

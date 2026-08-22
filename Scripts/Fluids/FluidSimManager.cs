@@ -59,6 +59,15 @@ namespace VoxelEngine.Fluids
                 && WaterSim.FluidManager.Instance.DrainLiquid(v, liquid, 255) > 0;
         }
 
+        /// <summary>Drain up to <paramref name="maxLevel"/> of a liquid at a voxel (9.16.0 — the
+        /// liquid canister scoops 13 levels per 500 ml click). True when anything was taken.</summary>
+        public bool TryDrainLiquidLevelAt(Vector3Int v, VoxelEngine.Items.LiquidType liquid, byte maxLevel)
+        {
+            WaterSim.FluidManager.EnsureInstance();
+            return WaterSim.FluidManager.Instance != null
+                && WaterSim.FluidManager.Instance.DrainLiquid(v, liquid, maxLevel) > 0;
+        }
+
         /// <summary>The liquid present at a voxel (Water when dry — check the level).</summary>
         public VoxelEngine.Items.LiquidType LiquidAt(Vector3Int v)
         {

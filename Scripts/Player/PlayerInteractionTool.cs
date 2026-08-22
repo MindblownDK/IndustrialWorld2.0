@@ -558,21 +558,195 @@ namespace VoxelEngine.Player
 
             if (buildDown)
             {
-                // 0) Universal Liquid Bucket placement (9.16.0 — all 7 liquids).
+                // 0) Liquid Canister RMB (9.16.0 — the bucket's replacement). The canister
+                //    exchanges liquid with the infinity jack pump, the water pump, the marine
+                //    pump and grid liquid tanks, and scoops from liquid pools. Any other
+                //    target falls through to the normal handlers untouched.
                 var stackRmb = inventory.ActiveStack;
-                if (!stackRmb.IsEmpty && stackRmb.item is WaterBucket && stackRmb.durability > 0)
+                if (!stackRmb.IsEmpty && stackRmb.item is LiquidCanister)
                 {
-                    // Place the carried liquid into the fluid sim (the voxel cell stays AIR;
-                    // the liquid mesh renders it).
-                    var pos = world.WorldToVoxel(hit.point + hit.normal * 0.5f);
-                    var existing = world.GetVoxelWorld(pos);
-                    if (existing.density <= 0)
+                    if (!IsHoldingGridBlock())
                     {
-                        var carried = stackRmb.payload is VoxelEngine.Items.LiquidType lt ? lt : VoxelEngine.Items.LiquidType.Water;
-                        VoxelEngine.Fluids.FluidSimManager.Instance?.PlaceLiquidAt(pos, carried, 255);
-                        stackRmb.durability = 0;
-                        stackRmb.payload = null;
-                        inventory.container.RaiseChanged();
+                        // (a) Infinity jack pump — fills the canister from the infinite
+                        //     crude node (never drains; power must be on).
+                        var canJack = hit.collider.GetComponentInParent<VoxelEngine.Crafting.Pumpjack>();
+                        if (canJack != null)
+                        {
+                            if (canJack.TryFillCanister(stackRmb))
+                                VoxelEngine.UI.BuildFeedbackHud.Show("Canister",
+                                    $"Filled with {VoxelEngine.Items.LiquidType.CrudeOil.DisplayName()}", null,
+                                    new Color(0.4f, 0.8f, 1f));
+                            else
+                                VoxelEngine.UI.BuildFeedbackHud.Show("Canister",
+                                    "The jack pump only fills crude oil into a matching canister", null,
+                                    new Color(1f, 0.6f, 0.2f));
+                            inventory.container.RaiseChanged();
+                            return;
+                        }
+
+                        // (b) World water pump — pour one click into its internal buffer.
+                        var canPump = hit.collider.GetComponentInParent<VoxelEngine.Fluids.WaterPump>();
+                        if (canPump != null)
+                        {
+                            var pumpCarried = VoxelEngine.Items.LiquidCanister.CarriedLiquid(stackRmb);
+                            if (pumpCarried != null && pumpCarried.Value != canPump.liquidType)
+                                VoxelEngine.UI.BuildFeedbackHud.Show("Canister",
+                                    $"The pump only accepts {canPump.liquidType.DisplayName()}", null,
+                                    new Color(1f, 0.6f, 0.2f));
+                            else if (canPump.TryPourCanister(stackRmb))
+                                VoxelEngine.UI.BuildFeedbackHud.Show("Canister", "Poured into the pump", null,
+                                    new Color(0.4f, 0.8f, 1f));
+                            else
+                                VoxelEngine.UI.BuildFeedbackHud.Show("Canister", "Pump buffer is full", null,
+                                    new Color(1f, 0.6f, 0.2f));
+                            inventory.container.RaiseChanged();
+                            return;
+                        }
+
+                        // (c) Marine water pump (ships) — water only.
+                        var canMarine = hit.collider.GetComponentInParent<VoxelEngine.Maritime.GridMarineWaterPump>();
+                        if (canMarine != null)
+                        {
+                            if (canMarine.TryPourCanister(stackRmb))
+                                VoxelEngine.UI.BuildFeedbackHud.Show("Canister", "Poured into the marine pump", null,
+                                    new Color(0.4f, 0.8f, 1f));
+                            else
+                                VoxelEngine.UI.BuildFeedbackHud.Show("Canister",
+                                    "The marine pump only accepts water", null, new Color(1f, 0.6f, 0.2f));
+                            inventory.container.RaiseChanged();
+                            return;
+                        }
+
+                        // (d) Grid liquid tank — pour one click in; an EMPTY canister draws
+                        //     one click of the tank's liquid instead.
+                        var canTank = hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridLiquidTank>();
+                        if (canTank != null)
+                        {
+                            if (VoxelEngine.Items.LiquidCanister.CarriedLiquid(stackRmb) != null)
+                            {
+                                if (canTank.TryPourCanister(stackRmb))
+                                    VoxelEngine.UI.BuildFeedbackHud.Show("Canister", "Poured into the tank", null,
+                                        new Color(0.4f, 0.8f, 1f));
+                                else
+                                    VoxelEngine.UI.BuildFeedbackHud.Show("Canister",
+                                        "Tank is full or carries a different liquid", null,
+                                        new Color(1f, 0.6f, 0.2f));
+                            }
+                            else
+                            {
+                                if (canTank.TryFillCanister(stackRmb))
+                                    VoxelEngine.UI.BuildFeedbackHud.Show("Canister",
+                                        $"Filled with {canTank.liquidType.DisplayName()}", null,
+                                        new Color(0.4f, 0.8f, 1f));
+                                else
+                                    VoxelEngine.UI.BuildFeedbackHud.Show("Canister", "Tank is empty", null,
+                                        new Color(1f, 0.6f, 0.2f));
+                            }
+                            inventory.container.RaiseChanged();
+                            return;
+                        }
+                    }
+
+                    // (e) World target: RMB on a liquid pool scoops one click (500 ml) — the
+                    //     first scoop fixes the canister's liquid, later scoops must match.
+                    {
+                        var carriedCan = VoxelEngine.Items.LiquidCanister.CarriedLiquid(stackRmb);
+                        var posCan = world.WorldToVoxel(hit.point + hit.normal * 0.5f);
+                        VoxelEngine.Items.LiquidType? poolLiquid = carriedCan;
+                        byte poolLevel = 0;
+                        var fsmCan = VoxelEngine.Fluids.FluidSimManager.Instance;
+                        if (fsmCan != null)
+                        {
+                            if (poolLiquid == null)
+                            {
+                                for (int liq = 0; liq < 7; liq++)
+                                {
+                                    var cand = (VoxelEngine.Items.LiquidType)liq;
+                                    byte lv = fsmCan.LiquidLevelAt(posCan, cand);
+                                    if (lv > 0) { poolLiquid = cand; poolLevel = lv; break; }
+                                }
+                            }
+                            else
+                            {
+                                poolLevel = fsmCan.LiquidLevelAt(posCan, poolLiquid.Value);
+                            }
+                        }
+                        if (poolLiquid != null && poolLevel > 0)
+                        {
+                            if (VoxelEngine.Items.LiquidCanister.IsFull(stackRmb))
+                            {
+                                if (Time.time >= _nextHit)
+                                {
+                                    VoxelEngine.UI.BuildFeedbackHud.Show("Canister", "Full — left-click to pour",
+                                        null, new Color(1f, 0.6f, 0.2f));
+                                    _nextHit = Time.time + 0.3f;
+                                }
+                                return;
+                            }
+                            byte takeLv = (byte)Mathf.Min(poolLevel, (byte)VoxelEngine.Items.LiquidCanister.LevelsPerClick);
+                            if (fsmCan != null && fsmCan.TryDrainLiquidLevelAt(posCan, poolLiquid.Value, takeLv))
+                            {
+                                int mlCan = Mathf.Min(VoxelEngine.Items.LiquidCanister.PerClickMl,
+                                    Mathf.RoundToInt(takeLv * VoxelEngine.Items.LiquidCanister.MlPerCellLevel));
+                                VoxelEngine.Items.LiquidCanister.AddMl(stackRmb, poolLiquid.Value, mlCan);
+                                inventory.container.RaiseChanged();
+                                if (Time.time >= _nextHit)
+                                {
+                                    VoxelEngine.UI.BuildFeedbackHud.Show("Canister",
+                                        $"Scooped {poolLiquid.Value.DisplayName()}", null,
+                                        new Color(0.4f, 0.8f, 1f));
+                                    _nextHit = Time.time + 0.3f;
+                                }
+                            }
+                            return;
+                        }
+                        if (carriedCan != null && fsmCan != null)
+                        {
+                            // Refuse only when ANOTHER liquid occupies this cell; a dry cell
+                            // falls through so the click can reach the normal handlers.
+                            bool otherLiquid = false;
+                            for (int liq = 0; liq < 7; liq++)
+                            {
+                                var cand = (VoxelEngine.Items.LiquidType)liq;
+                                if (cand == carriedCan.Value) continue;
+                                if (fsmCan.LiquidLevelAt(posCan, cand) > 0) { otherLiquid = true; break; }
+                            }
+                            if (otherLiquid)
+                            {
+                                if (Time.time >= _nextHit)
+                                {
+                                    VoxelEngine.UI.BuildFeedbackHud.Show("Canister",
+                                        $"Already carries {carriedCan.Value.DisplayName()} — pour it out first", null,
+                                        new Color(1f, 0.6f, 0.2f));
+                                    _nextHit = Time.time + 0.3f;
+                                }
+                                return;
+                            }
+                        }
+                        // Dry cell: fall through untouched.
+                    }
+                }
+
+                // 0b) Fire Igniter RMB (9.16.0 fire system) — sparks a flammable liquid cell.
+                var stackIgn = inventory.ActiveStack;
+                if (!stackIgn.IsEmpty && stackIgn.item is FireIgniter)
+                {
+                    var posIgn = world.WorldToVoxel(hit.point + hit.normal * 0.5f);
+                    var posIgn2 = world.WorldToVoxel(hit.point);
+                    bool ignited = VoxelEngine.Fire.FireManager.TryIgniteAt(posIgn)
+                                || (posIgn2 != posIgn && VoxelEngine.Fire.FireManager.TryIgniteAt(posIgn2));
+                    if (ignited)
+                    {
+                        VoxelEngine.UI.BuildFeedbackHud.Show("Igniter", "The fuel catches fire!",
+                            null, new Color(1f, 0.55f, 0.15f));
+                        ConsumeDurability(stackIgn);
+                        _nextHit = Time.time + 0.25f;
+                    }
+                    else if (Time.time >= _nextHit)
+                    {
+                        VoxelEngine.UI.BuildFeedbackHud.Show("Igniter", "Nothing flammable there",
+                            null, new Color(1f, 0.6f, 0.2f));
+                        _nextHit = Time.time + 0.3f;
                     }
                     return;
                 }
@@ -958,43 +1132,6 @@ namespace VoxelEngine.Player
                 // place the block instead (so you can build on existing blocks).
                 bool holdingGridBlock = IsHoldingGridBlock();
                 var gridBlock = hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>();
-
-                // Universal bucket × liquid tank (9.16.0): right-click transfers liquid —
-                // empty bucket fills from the tank, full bucket pours into it.
-                if (!holdingGridBlock && gridBlock is VoxelEngine.GridSystem.GridLiquidTank ltank
-                    && !inventory.ActiveStack.IsEmpty && inventory.ActiveStack.item is WaterBucket)
-                {
-                    var bucketStack = inventory.ActiveStack;
-                    if (bucketStack.durability > 0)
-                    {
-                        if (ltank.TryEmptyBucket(bucketStack))
-                        {
-                            VoxelEngine.UI.BuildFeedbackHud.Show("Bucket",
-                                $"Poured {VoxelEngine.GridSystem.GridLiquidTank.BucketLitres:0} L into the tank", null,
-                                new Color(0.4f, 0.8f, 1f));
-                        }
-                        else
-                        {
-                            VoxelEngine.UI.BuildFeedbackHud.Show("Bucket",
-                                "Tank is full or carries a different liquid", null, new Color(1f, 0.6f, 0.2f));
-                        }
-                    }
-                    else
-                    {
-                        if (ltank.TryFillBucket(bucketStack))
-                        {
-                            var carried = bucketStack.payload is VoxelEngine.Items.LiquidType bt ? bt : VoxelEngine.Items.LiquidType.Water;
-                            VoxelEngine.UI.BuildFeedbackHud.Show("Bucket",
-                                $"Filled with {carried.DisplayName()}", null, new Color(0.4f, 0.8f, 1f));
-                        }
-                        else
-                        {
-                            VoxelEngine.UI.BuildFeedbackHud.Show("Bucket", "Tank is empty", null, new Color(1f, 0.6f, 0.2f));
-                        }
-                    }
-                    inventory.container.RaiseChanged();
-                    return;
-                }
 
                 // Cockpit / control seats: right-click enters directly when not holding a grid block.
                 if (!holdingGridBlock && gridBlock is VoxelEngine.GridSystem.GridCockpit cockpit)
@@ -1428,53 +1565,43 @@ namespace VoxelEngine.Player
 
             var stack = inventory.ActiveStack;
 
-            // Water Bucket: LMB scoops one water cell. Only works if the bucket is EMPTY.
-            if (!stack.IsEmpty && stack.item is WaterBucket wb)
+            // Liquid Canister: LMB pours one click (500 ml) into the world (9.16.0 — the
+            // bucket's replacement; scooping happens on RMB).
+            if (!stack.IsEmpty && stack.item is LiquidCanister)
             {
-                if (stack.durability > 0)
+                var carried = VoxelEngine.Items.LiquidCanister.CarriedLiquid(stack);
+                if (carried == null)
                 {
-                    Debug.Log("[Bucket] Already full — place the water first before scooping more.");
-                    _nextHit = Time.time + 0.3f;
+                    if (Time.time >= _nextHit)
+                    {
+                        VoxelEngine.UI.BuildFeedbackHud.Show("Canister", "Empty — right-click a liquid to scoop",
+                            null, new Color(1f, 0.6f, 0.2f));
+                        _nextHit = Time.time + 0.3f;
+                    }
                     return;
                 }
-                var hitPos = world.WorldToVoxel(hit.point - ray.direction.normalized * 0.2f);
-                bool scooped = false;
-                VoxelEngine.Items.LiquidType scoopedLiquid = VoxelEngine.Items.LiquidType.Water;
-                // Try the fluid sim first (any of the 7 liquids — 9.16.0 universal bucket).
-                var fsm = VoxelEngine.Fluids.FluidSimManager.Instance;
-                if (fsm != null)
+                var pos = world.WorldToVoxel(hit.point + hit.normal * 0.5f);
+                var existing = world.GetVoxelWorld(pos);
+                if (existing.density > 0)
                 {
-                    for (int liq = 0; liq < 7 && !scooped; liq++)
+                    if (Time.time >= _nextHit)
                     {
-                        var liquid = (VoxelEngine.Items.LiquidType)liq;
-                        if (fsm.LiquidLevelAt(hitPos, liquid) > 0 && fsm.TryDrainLiquidAt(hitPos, liquid))
-                        {
-                            scooped = true;
-                            scoopedLiquid = liquid;
-                        }
+                        VoxelEngine.UI.BuildFeedbackHud.Show("Canister", "Blocked — pour onto an open cell",
+                            null, new Color(1f, 0.6f, 0.2f));
+                        _nextHit = Time.time + 0.3f;
                     }
+                    return;
                 }
-                if (!scooped)
+                VoxelEngine.Fluids.FluidSimManager.Instance?.PlaceLiquidAt(pos, carried.Value,
+                    (byte)VoxelEngine.Items.LiquidCanister.LevelsPerClick);
+                VoxelEngine.Items.LiquidCanister.RemoveMl(stack, VoxelEngine.Items.LiquidCanister.PerClickMl);
+                inventory.container.RaiseChanged();
+                if (Time.time >= _nextHit)
                 {
-                    // Fall back: legacy fluid material directly in the voxel grid.
-                    var here = world.GetVoxelWorld(hitPos);
-                    var legacy = VoxelEngine.WaterSim.FluidMaterialUtility.LiquidFromMaterial(here.material);
-                    if (here.waterLevel > 0
-                        || here.material == (byte)VoxelEngine.Materials.MaterialId.WaterVoxel
-                        || VoxelEngine.WaterSim.FluidMaterialUtility.IsLiquidMaterial(here.material))
-                    {
-                        world.SetVoxelWorld(hitPos, new VoxelEngine.Core.Voxel(-127, (byte)VoxelEngine.Materials.MaterialId.Air));
-                        scooped = true;
-                        scoopedLiquid = legacy;
-                    }
+                    VoxelEngine.UI.BuildFeedbackHud.Show("Canister", $"Poured {carried.Value.DisplayName()}",
+                        null, new Color(0.4f, 0.8f, 1f));
+                    _nextHit = Time.time + 0.3f;
                 }
-                if (scooped)
-                {
-                    stack.durability = 1;
-                    stack.payload = scoopedLiquid;
-                    inventory.container.RaiseChanged();
-                }
-                _nextHit = Time.time + 0.3f;
                 return;
             }
 

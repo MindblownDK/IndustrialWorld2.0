@@ -38,6 +38,10 @@ namespace VoxelEngine.WaterSim
         private int _computeFrameCounter;
 
         private readonly HashSet<Vector3Int> _activeChunks = new();
+        private IVoxelWorld _diagWorld;        // one-shot water diagnostics per world load
+        private bool _diagPending;
+        private float _diagAt;
+        private bool _diagToast2Done = true;
         private readonly Queue<Vector3Int> _workQueue = new();
         private float _timer;
         private int _simulationStep;
@@ -267,7 +271,37 @@ namespace VoxelEngine.WaterSim
             _timer -= interval;
 
             var world = ActiveWorld.Current;
-            if (world == null) return;
+            if (world == null) { _diagPending = false; _diagToast2Done = true; return; }
+
+            // 9.16.0 field round — one console line + one on-screen toast per world
+            // load describing the state of the world's water (generation vs sim vs
+            // mesh). Delayed 2 s so the HUD layer exists when the toast fires.
+            if (world != _diagWorld)
+            {
+                _diagWorld = world;
+                _diagPending = true;
+                _diagAt = Time.time;
+                _diagToast2Done = false;
+            }
+            if (_diagPending && Time.time >= _diagAt + 2f)
+            {
+                _diagPending = false;
+                WaterDiagnostics.LogWorldState(world, world.Viewer, out string summary);
+                if (summary.Length > 0)
+                    VoxelEngine.UI.BuildFeedbackHud.Show("Water Diagnostics", summary,
+                        null, new Color(0.3f, 0.75f, 1f));
+            }
+            else if (!_diagPending && !_diagToast2Done && Time.time >= _diagAt + 8f)
+            {
+                _diagToast2Done = true;   // one repeat toast in case the HUD missed the first
+                if (_diagWorld != null)
+                {
+                    WaterDiagnostics.LogWorldState(_diagWorld, _diagWorld.Viewer, out string summary2);
+                    if (summary2.Length > 0)
+                        VoxelEngine.UI.BuildFeedbackHud.Show("Water Diagnostics", summary2,
+                            null, new Color(0.3f, 0.75f, 1f));
+                }
+            }
 
             RefillSprings(world);
 
