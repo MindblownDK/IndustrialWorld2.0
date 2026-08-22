@@ -274,7 +274,7 @@ namespace VoxelEngine.Cosmos
 
             // Apply the current graphics preset to the visual systems.
             world.viewDistance = GraphicsPreset.ViewDistance;
-            grass.qualityDensityMul = new float[] { 0f, GraphicsPreset.GrassDensityMul * 0.5f, GraphicsPreset.GrassDensityMul, GraphicsPreset.GrassDensityMul * 1.5f };
+            grass.qualityDensityMul = new float[] { 0.35f, GraphicsPreset.GrassDensityMul * 0.6f, GraphicsPreset.GrassDensityMul, GraphicsPreset.GrassDensityMul * 1.5f };
             waterfalls.scanRange = GraphicsPreset.WaterfallRange;
             world.maxJobsPerFrame = GraphicsPreset.JobsPerFrame;
 

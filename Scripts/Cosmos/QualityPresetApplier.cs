@@ -59,8 +59,8 @@ namespace VoxelEngine.Cosmos
             {
                 grass.qualityDensityMul = new float[]
                 {
-                    GraphicsPreset.GrassDensityMul * 0f,    // Low
-                    GraphicsPreset.GrassDensityMul * 0.5f,   // Mid
+                    GraphicsPreset.GrassDensityMul * 0.35f,  // Low - sparse but visible (9.18.0)
+                    GraphicsPreset.GrassDensityMul * 0.6f,   // Mid
                     GraphicsPreset.GrassDensityMul * 1f,     // High
                     GraphicsPreset.GrassDensityMul * 1.5f,   // Ultra
                 };

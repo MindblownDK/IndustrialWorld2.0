@@ -46,10 +46,11 @@ namespace VoxelEngine.Cosmos
             _                 => 8,
         };
 
-        /// <summary>Grass density multiplier (0 = off) per tier.</summary>
+        /// <summary>Grass density multiplier per tier. 9.18.0: Low no longer disables grass
+        /// outright - a sparse but visible field (0 = off caused "bald planet" reports).</summary>
         public static float GrassDensityMul => Current switch
         {
-            GraphicsTier.Low  => 0f,
+            GraphicsTier.Low  => 0.45f,
             GraphicsTier.Mid  => 0.6f,
             GraphicsTier.High => 1.2f,
             _                 => 1.8f,

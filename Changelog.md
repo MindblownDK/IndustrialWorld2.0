@@ -1,9 +1,43 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.17.2-dev`
+**Current Version:** `9.18.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.18.0-dev] Real Grass Blades — The Meadow Finally Grows (field round)
+
+**Type:** MINOR — the GPU grass field now renders actual curved, shadowed, wind-blown blades, and the three bugs that made the ground look bald are fixed. Save-compatible; no content/assets authored — **no Voxel Engine Setup step required**.
+
+#### 🔍 Why the ground was smooth (three real bugs)
+1. **Grass was OFF by quality.** Unity quality level 0–1 maps to the Low tier and `GraphicsPreset.GrassDensityMul` returned **0** for Low — the field builder exited with zero blades. If the editor ran at default quality, grass was simply never built.
+2. **Even on higher tiers the draw call threw.** `Graphics.RenderMeshInstanced` accepts at most **1023 instances per call**; the renderer passed one array of up to ~7800 matrices — an exception killed the draw every frame.
+3. **The blade was a flat 2-triangle quad** — even when it rendered it read as cardboard, not grass.
+
+#### 🌿 Real blades (the upgrade)
+- **New tapered blade mesh:** 4 levels narrowing to a pointed tip with a baked forward lean — 7 verts / 5 tris, curved silhouette by construction.
+- **Curved motion in the shader:** height-squared wind bend plus a constant lean along the blade's facing — blades **arc** instead of shearing as flat cards.
+- **Rounded shading:** normals ease toward the surface up along the blade and flip toward the viewer in the fragment — blades read as solid stalks from every side.
+- **Root ambient occlusion** darkens each blade base so it grounds into the terrain.
+- **Per-blade hue variation** from a stable body-local hash — the meadow mixes lush and dry blades instead of one flat green.
+- **Real main-light shadows** (`_MAIN_LIGHT_SHADOWS` + soft): grass under buildings/trees now goes dark with the terrain around it.
+- **Edge fade:** blades curl back into the ground over the last 8 m of the field radius, so the grass ring edge never pops while walking.
+
+#### 🔧 The fixes
+- **Batched instancing:** one big instance buffer rendered in slices of 1000 per `RenderMeshInstanced` call — thousands of blades, zero exceptions.
+- **Floating-origin safety:** blade anchors are stored **body-local** and re-projected to world space whenever the body's local-to-world matrix changes (rebase/frame switch) — the field can no longer be stranded in stale world coordinates.
+- **Quality floor:** Low = 0.35× (sparse but visible) instead of 0, Mid 0.6×, High 1.0×, Ultra 1.5× — applied consistently in `GraphicsPreset`, `CosmosBootstrap` and `QualityPresetApplier`.
+- **Defaults raised:** 2.2 blades/m² base density, 3600 surface samples, 0.65 m blade height — a proper meadow on High/Ultra.
+- **Field diagnostic:** one console line per rebuild — `[Grass] blades=N density=X.XX/m2 tier=High range=70m` — if grass ever vanishes again, that line tells us why in one paste.
+- All shader sources stay pure ASCII (9.17.2 rule); the grass shader compiles clean in the offline rig (vert+frag PASS).
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile, load a world on a grass biome (Plains/Forest).
+2. Walk around — you should now wade through **curved green blades** that sway with gusts, mix lush/dry hues, sit in real shadow under structures, and fade into the ground ~70 m out instead of popping.
+3. Paste the `[Grass] blades=...` console line once (it tells us density + tier — if blades=0, the line says which gate stopped it).
+4. Check your editor quality level (Edit > Project Settings > Quality): Low now shows sparse grass, High/Ultra a full meadow.
+5. Optional: while playing, select the `GrassRenderer` object and tweak `baseDensity` / `bladeHeight` live — the field rebuilds as you walk.
+6. Mining a grass block should remove its blades (surface sample no longer finds grass there).
 
 ### [9.17.2-dev] Terrain Shader Pink Fix Round 2 — Dot-Product Ripples + Pure-ASCII Shaders (compile recovery)
 
