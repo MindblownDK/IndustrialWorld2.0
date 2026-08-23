@@ -73,6 +73,8 @@ namespace VoxelEngine.Cosmos
         private NativeArray<Matrix4x4> _matrices;        // world-space projection
         private int _instanceCount;
         private bool _built;
+        private int _lastEditVersion = -1;
+        private float _lastRebuildTime;
 
         // Render params (reused - no per-frame GC).
         private RenderParams _renderParams;
@@ -106,11 +108,27 @@ namespace VoxelEngine.Cosmos
         {
             if (body == null || viewer == null || grassBladeMesh == null || grassMaterial == null) return;
 
+            // 9.18.2 - PLAYER EDITS rebuild the field: mining grass (or the ground under
+            // it) must remove its blades immediately, not when the player next walks 12 m.
+            // Bumped once per edit batch by VoxelEditor; rate-limited so a drilling spree
+            // cannot rebuild more than ~1.6 times per second.
+            var sphere = SphereWorld.Instance;
+            if (sphere != null && sphere.PlayerEditVersion != _lastEditVersion
+                && Time.unscaledTime - _lastRebuildTime >= 0.6f)
+            {
+                _lastEditVersion = sphere.PlayerEditVersion;
+                RebuildField();
+                _lastRebuildPos = viewer.position;
+                _lastRebuildTime = Time.unscaledTime;
+                _built = true;
+            }
+
             // Rebuild when the viewer has moved enough.
             if (Vector3.Distance(viewer.position, _lastRebuildPos) > rebuildThreshold || !_built)
             {
                 RebuildField();
                 _lastRebuildPos = viewer.position;
+                _lastRebuildTime = Time.unscaledTime;
                 _built = true;
             }
 
@@ -221,7 +239,9 @@ namespace VoxelEngine.Cosmos
                         + localTangentB * rng.NextFloat(-step * 0.5f, step * 0.5f);
                     // BODY-LOCAL anchor (9.18.0): world projection happens in Update, so a
                     // floating-origin rebase can never strand blades in stale coordinates.
-                    Vector3 anchorLocal = stableSurfaceLocal + localJitter + radialUpLocal * 0.35f;
+                    // 9.18.2: roots are PLANTED 2 cm into the ground (the old +35 cm lift
+                    // held the whole field visibly above the terrain surface).
+                    Vector3 anchorLocal = stableSurfaceLocal + localJitter - radialUpLocal * 0.02f;
                     Quaternion rotationLocal = Quaternion.FromToRotation(Vector3.up, terrainNormalLocal);
                     rotationLocal = Quaternion.AngleAxis(rng.NextFloat(0f, 360f), terrainNormalLocal) * rotationLocal;
                     float height = bladeHeight * (1f + rng.NextFloat(-heightVariance, heightVariance));

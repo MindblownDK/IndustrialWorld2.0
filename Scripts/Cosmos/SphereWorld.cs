@@ -87,6 +87,16 @@ namespace VoxelEngine.Cosmos
         // ---- Singleton access (parallels VoxelWorld.Instance) ----
         public static SphereWorld Instance { get; private set; }
 
+        /// <summary>
+        /// 9.18.2 - increments once per PLAYER edit batch (mining swing / build), NOT per
+        /// voxel and NOT for fluid-sim or generation writes. Visual systems that cache
+        /// surface state (the GPU grass field) poll this to rebuild exactly when the
+        /// player has actually changed the terrain near them.
+        /// </summary>
+        public int PlayerEditVersion { get; private set; }
+
+        public void NotifyPlayerEdit() => PlayerEditVersion++;
+
         /// <summary>Sea level in body-local voxel space (for scatter placement).</summary>
         public int SeaLevel => body != null ? Mathf.RoundToInt(body.genParams.seaRadius / VoxelConstants.VOXEL_SIZE) : 96;
 
@@ -1630,7 +1640,9 @@ namespace VoxelEngine.Cosmos
 
                 localVoxel = probe;
                 surfaceMaterial = voxel.material;
-                localSurface = radialUp * surfaceRadius + radialUp * 0.06f;
+                // 9.18.2 - roots sit 5 cm BELOW the analytic surface: blades are PLANTED
+                // in the ground (the old +6 cm lift made the whole field float).
+                localSurface = radialUp * (surfaceRadius - 0.05f);
                 return true;
             }
             return false;

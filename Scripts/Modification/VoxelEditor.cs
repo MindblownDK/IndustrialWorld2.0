@@ -125,6 +125,10 @@ namespace VoxelEngine.Modification
                 // Mining next to water now makes the water rush into the new space the
                 // same frame, and building in a pool re-levels it instantly.
                 VoxelEngine.WaterSim.FluidManager.Instance?.NotifyVoxelEdited(center, r + 1);
+                // 9.18.2 - one bump per player edit batch: the GPU grass field (and any
+                // other surface-caching visual) rebuilds exactly when the player changes
+                // terrain, instead of waiting for them to walk 12 m.
+                VoxelEngine.Cosmos.SphereWorld.Instance?.NotifyPlayerEdit();
                 // Mark a coarse 2-chunk radius around the brush dirty to be safe.
                 int cs = VoxelConstants.CHUNK_SIZE;
                 Vector3Int chunkCenter = new Vector3Int(

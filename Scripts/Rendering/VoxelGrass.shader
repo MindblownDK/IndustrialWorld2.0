@@ -54,8 +54,6 @@ Shader "VoxelEngine/VoxelGrass"
             #pragma vertex   vert
             #pragma fragment frag
             #pragma multi_compile_instancing
-            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
-            #pragma multi_compile _ _SHADOWS_SOFT
             #pragma multi_compile_fog
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
@@ -196,22 +194,26 @@ Shader "VoxelEngine/VoxelGrass"
 
             half4 frag(Varyings IN) : SV_Target
             {
-                // Two-sided blade: flip the normal toward the viewer so both faces shade.
+                // 9.18.2 - the 9.18.0 shadow-coord sampling path rendered BLACK in the
+                // field (attenuation zeroed outside regular mesh draws). Real grass is
+                // translucent anyway: shade with a WRAPPED diffuse around a normal eased
+                // toward the surface up, flip the normal toward the viewer for two-sided
+                // blades, and keep a small ambient floor so a blade can never go black.
                 float3 viewDir = GetWorldSpaceNormalizeViewDir(IN.positionWS);
                 float3 normal = normalize(IN.normalWS);
-                if (dot(normal, viewDir) < 0.0) normal = -normal;
+                if (dot(normal, viewDir) < 0.0) normal = -normal;   // two-sided
 
-                // Main light WITH real shadow attenuation - grass under buildings and
-                // inside tree shade now goes dark with the terrain around it.
-                float4 shadowCoord = TransformWorldToShadowCoord(IN.positionWS);
-                Light mainLight = GetMainLight(shadowCoord);
-                float NdotL = saturate(dot(normal, mainLight.direction));
+                float3 grassUp = GrassUp(IN.positionWS);
+                float3 shadeNormal = normalize(normal + grassUp * 0.65);  // translucent blade
+                Light mainLight = GetMainLight();
+                float ndl = dot(shadeNormal, mainLight.direction);
+                float wrap = saturate((ndl + 0.35) / 1.35);          // wrapped - never pitch dark
 
-                float3 ambient = SampleSH(normal) * 0.6;
-                float3 diffuse = mainLight.color * NdotL * mainLight.shadowAttenuation;
+                float3 ambient = SampleSH(grassUp) * 0.55 + float3(0.10, 0.12, 0.08);
+                float3 diffuse = mainLight.color * wrap;
 
                 float3 finalColor = IN.color * (ambient + diffuse);
-                finalColor = MixFog(finalColor, IN.fogCoord);
+                finalColor = MixFog(saturate(finalColor), IN.fogCoord);
 
                 return half4(finalColor, 1.0);
             }

@@ -182,24 +182,49 @@ namespace VoxelEngine.GridSystem.UI
 
             bool gridBlock = GridBuilder.HoldingGridBlock;
             bool staticBlock = VoxelEngine.Building.BuildSystem.HoldingBlock;
-
-            string heldName = gridBlock ? GridBuilder.HeldBlockName
-                : (staticBlock ? VoxelEngine.Building.BuildSystem.HeldBlockName : null);
             Vector3Int steps = gridBlock ? GridBuilder.RotationSteps
                 : VoxelEngine.Building.BuildSystem.RotationSteps;
 
-            // 9.16.0 field round — fallback: resolve the held item DIRECTLY from the
-            // live inventory, so the display keeps working even while the builders'
-            // statics lag after a world reload.
-            if (!gridBlock && !staticBlock && TryResolveHeldDirect(out heldName))
-                steps = Vector3Int.zero;
+            // 9.18.2 field round — the name used to flicker away while mining:
+            // 1. resolve from the LIVE inventory FIRST (ground truth, immune to the
+            //    builders' statics lagging a frame during interactions),
+            // 2. treat empty builder names as "no name" (never show a blank card),
+            // 3. fall back to the asset name when a displayName is authored empty.
+            string heldName = null;
+            if (TryResolveHeldDirect(out heldName))
+            {
+                steps = gridBlock ? GridBuilder.RotationSteps
+                    : VoxelEngine.Building.BuildSystem.RotationSteps;
+            }
+            else if (gridBlock && !string.IsNullOrEmpty(GridBuilder.HeldBlockName))
+            {
+                heldName = GridBuilder.HeldBlockName;
+                steps = GridBuilder.RotationSteps;
+            }
+            else if (staticBlock && !string.IsNullOrEmpty(VoxelEngine.Building.BuildSystem.HeldBlockName))
+            {
+                heldName = VoxelEngine.Building.BuildSystem.HeldBlockName;
+                steps = VoxelEngine.Building.BuildSystem.RotationSteps;
+            }
 
             bool show = heldName != null && !VoxelEngine.UI.UIState.IsBlocking;
+
+            // 9.18.2 - brief holdover: bridge one-frame resolution flickers (e.g. while
+            // mining with a block held) instead of blinking the card off and on.
+            if (!show && _lastName != null && heldName == null
+                && !VoxelEngine.UI.UIState.IsBlocking
+                && Time.unscaledTime - _lastShownAt < 0.75f)
+            {
+                heldName = _lastName;
+                show = true;
+            }
 
             _box.style.display = show ? DisplayStyle.Flex : DisplayStyle.None;
             if (show)
             {
-                if (_nameLabel != null) _nameLabel.text = "▣ " + heldName;
+                _lastName = heldName;
+                _lastShownAt = Time.unscaledTime;
+                if (_nameLabel != null) _nameLabel.text = "\u25A3 " + heldName;
                 UpdateCube(steps);
             }
 
@@ -210,6 +235,8 @@ namespace VoxelEngine.GridSystem.UI
         /// <summary>Ground-truth "is the player holding a placeable block?" — reads the
         /// live inventory, independent of GridBuilder/BuildSystem update state.</summary>
         private static VoxelEngine.Items.Inventory _inventoryCache;
+        private static string _lastName;
+        private static float _lastShownAt;
 
         private static bool TryResolveHeldDirect(out string name)
         {
@@ -219,9 +246,16 @@ namespace VoxelEngine.GridSystem.UI
             if (_inventoryCache == null || _inventoryCache.ActiveStack.IsEmpty
                 || _inventoryCache.ActiveStack.item == null) return false;
             var item = _inventoryCache.ActiveStack.item;
-            if (item is GridBlockItem gbi) { name = gbi.displayName; return true; }
+            if (item is GridBlockItem gbi)
+            {
+                name = !string.IsNullOrEmpty(gbi.displayName) ? gbi.displayName : gbi.name;
+                return true;
+            }
             if (item is VoxelEngine.Items.BlockItem bi && bi.placedPrefab != null)
-            { name = bi.displayName; return true; }
+            {
+                name = !string.IsNullOrEmpty(bi.displayName) ? bi.displayName : bi.name;
+                return true;
+            }
             return false;
         }
     }

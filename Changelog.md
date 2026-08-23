@@ -1,9 +1,35 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.18.1-dev`
+**Current Version:** `9.18.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.18.2-dev] Meadow Field Round — Planted, Green, and Minable (+ HUD name fix)
+
+**Type:** PATCH — three field fixes from Thomas's report plus the top-right card name fix. No save changes, no content.
+
+#### 🌱 1. Grass no longer floats
+The surface sample sat the anchor **6 cm above** the analytic surface and the anchor added **another 35 cm radial lift** — the whole field hovered visibly (two stacked offsets, one from the 9.9.0 era). Both are gone: the sample now sits **5 cm below** the surface and the anchor tucks roots a further 2 cm in — blades are *planted* in the terrain (7 cm of buried root, invisible at blade scale, guarantees contact everywhere on the sphere).
+
+#### 💚 2. Grass is no longer black
+9.18.0's frag sampled the main-light shadow map (`TransformWorldToShadowCoord` + `shadowAttenuation`) — outside regular mesh draws that attenuation zeroed and every blade went black. Replaced with **translucent grass shading**: the normal eases toward the surface up, a **wrapped diffuse** (`(NdotL + 0.35) / 1.35`) lights both faces of every blade, the viewer-flip stays two-sided, and a small green-tinted ambient floor means a blade mathematically cannot render black. Shadow pragmas removed (the wrapped look also reads better than the shadowed attempt).
+
+#### ⛏️ 3. Mining now removes the grass
+The field only rebuilt when the player walked 12 m — mined-out grass lingered. New **`SphereWorld.PlayerEditVersion`** counter (bumped **once per player edit batch** by `VoxelEditor`, deliberately NOT by fluid-sim/generation writes, so a flowing river cannot trigger rebuild storms) — the grass renderer polls it and rebuilds within 0.6 s of your pickaxe swing. Dig a grass block away, its blades vanish; dig the ground under a tuft, the tuft goes with it.
+
+#### 🏷️ 4. Top-right card name no longer disappears while mining
+`BlockRotationHud` (the ROTATE PLACEMENT card) flickered its name off during mining: the name came from builder statics that can lag a frame during interactions, and an empty-string name showed a blank card. Now: the **live inventory is the primary source** (ground truth, frame-accurate), builder statics are fallbacks with empty-string guards, an authored-empty `displayName` falls back to the asset name, and a 0.75 s holdover bridges any one-frame resolution flicker instead of blinking. Panels (`UIState.IsBlocking`) still hide the card immediately.
+
+#### ✅ Checks
+Grass shader compiles clean in the offline rig (vert+frag PASS, pure ASCII); all touched C# files brace-balanced; no save-format changes.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile, load a grass-biome world.
+2. Blades should now **touch the ground**, be **green** (lit from the sun side, never black), sway in gusts, and mix lush/dry hues.
+3. Mine a grass voxel — its blades disappear within ~0.5 s. Mine the ground under a tuft — the tuft vanishes too.
+4. Hold a placeable block and mine around you — the top-right card must keep showing the block's name without blinking.
+5. Optional: watch one `[Grass] blades=...` line appear on each rebuild (walking + mining) and confirm the count is stable.
 
 ### [9.18.1-dev] Grass Renderer Compile Recovery (CS1061)
 
