@@ -555,6 +555,19 @@ namespace VoxelEngine.EditorTools
                 "Re-runnable. Idempotent. Run after Steps 52–56.");
             AddWizardButton(scroll, "57. Wire the Fire System (Igniter Tool — Non-Destructive)", () => VoxelEngine.EditorTools.FireSystemSetup.RunStep57(), 48);
 
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
+                "Step 58 (9.19.0) wires the WEATHER & CLIMATE system (non-destructive):\n" +
+                "  • Authors a themed weather profile on every planet/moon (version-gated):\n" +
+                "    desert = wind & dust, ice = snow & blizzard, ocean = heavy rain, airless = calm\n" +
+                "  • Weather is auto-disabled on bodies with no atmosphere (vacuum moons stay clear)\n" +
+                "  • Storms roll in per planet: rain/snow particles, fog, sun darkening, synced\n" +
+                "    thunder + lightning, and procedural audio (no audio files needed)\n" +
+                "  • Ensures a single _Weather controller in the scene; reused if present\n" +
+                "  • The sim, particles, audio, fog and lightning are runtime — no assets needed\n" +
+                "Re-runnable. Idempotent. Authored climate values are never overwritten.");
+            AddWizardButton(scroll, "58. Wire the Weather & Climate System (Per-Planet Storms — Non-Destructive)", () => VoxelEngine.EditorTools.WeatherSystemSetup.RunStep58(), 56);
+
             AddSpacer(scroll, 20);
         }
 

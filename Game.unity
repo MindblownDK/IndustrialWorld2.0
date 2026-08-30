@@ -937,6 +937,107 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1267250220
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1267250225}
+  - component: {fileID: 1267250224}
+  - component: {fileID: 1267250223}
+  - component: {fileID: 1267250222}
+  - component: {fileID: 1267250221}
+  m_Layer: 0
+  m_Name: _Weather
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1267250221
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1267250220}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 96696e8afa9454841a12dd36251ca010, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Weather.WeatherLighting
+  rainFogColor: {r: 0.45, g: 0.5, b: 0.58, a: 1}
+  heavyRainFogColor: {r: 0.35, g: 0.4, b: 0.48, a: 1}
+  snowFogColor: {r: 0.75, g: 0.78, b: 0.82, a: 1}
+  blizzardFogColor: {r: 0.8, g: 0.82, b: 0.85, a: 1}
+  overcastFogColor: {r: 0.55, g: 0.58, b: 0.64, a: 1}
+  overcastFogDensity: 0.006
+  rainFogDensity: 0.015
+  heavyFogDensity: 0.03
+  snowFogDensity: 0.01
+  blizzardFogDensity: 0.045
+  flashDuration: 0.18
+  flashIntensityScale: 4
+--- !u!114 &1267250222
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1267250220}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2ae875df2c0b95649934c9e4f383feff, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Weather.WeatherAudio
+--- !u!114 &1267250223
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1267250220}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9978cd00cc39aa74282fff95d5f4f304, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Weather.WeatherParticles
+--- !u!114 &1267250224
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1267250220}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9e8c8acf8b9dfb448b778ac8b2f3a39d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Weather.WeatherManager
+  minStateDuration: 60
+  maxStateDuration: 300
+  transitionDuration: 15
+  firstChangeDelayMin: 10
+  firstChangeDelayMax: 22
+  playerCamera: {fileID: 0}
+--- !u!4 &1267250225
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1267250220}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1321117567
 GameObject:
   m_ObjectHideFlags: 0
@@ -1408,3 +1509,4 @@ SceneRoots:
   - {fileID: 475213176}
   - {fileID: 200235773}
   - {fileID: 1019278974}
+  - {fileID: 1267250225}

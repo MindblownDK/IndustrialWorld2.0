@@ -1,9 +1,86 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.18.2-dev`
+**Current Version:** `9.19.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.19.1-dev] Weather Field Fixes — Radial Rain on Spherical Worlds, Real Rain Streaks & Always-On Rain Audio
+
+**Type:** PATCH — fixes for Thomas's first field test of 9.19.0. No save or content changes; re-run of Step 58 not required.
+
+#### 🌍 1. Rain now falls toward the planet core (spherical worlds)
+The particle stack was authored for a flat world: the rain slab sat 25 m along **world +Y** and drops accelerated along **world −Y** gravity. On a sphere that is only correct at one spot — everywhere else the rain came **from the side**. Fixed:
+- `WeatherManager` now rotates the whole weather frame every frame so its local **+Y = radial up** (`CelestialBody.UpAt`), like the rest of the game's radial systems. The rain/snow/splash emitters are children of that frame, so "above" is always *radially* above you.
+- Rain, snow and splash no longer use world gravity at all (`gravityModifier = 0`). Each system drives its fall through the **Velocity-over-Lifetime module in Local space** (rotated by the transform): rain at 18–28 m/s along local −Y = straight toward the core. Drops still simulate in world space, so they stay planted in the world instead of gliding with you.
+- Splash now puffs radially up from the ground; snow falls radially with its wind drift intact.
+
+#### 🌧️ 2. Rain actually looks like rain
+The old streaks were ~3–10 cm — invisible specks. Now:
+- **Long thin streaks:** render length scale 3 → **14** with a slimmer drop size (1.5–4 cm wide) — proper falling streaks.
+- **Denser:** max emission 3000 → **4200** drops/s, longer particle lifetime so the shaft of rain passes the camera.
+- **Brighter:** higher alpha and a colder blue-grey tint on both drop colour and material.
+
+#### 🔊 3. Rain audio no longer dies when you walk around
+The audio sources were always 2D ambient — the real culprit was the **"under a roof?" probe**: it sampled a **world-Y voxel column** above the player. On a sphere that column slices through the planet as you move, so ordinary terrain read as "cave ceiling" → the game decided you were indoors → the outdoor downpour crossfaded to a ~14 % muffled whisper. That is why the rain "stopped" a short walk from where it started. Fixed:
+- The roof raycast and the cave-ceiling voxel samples now run **along the radial up direction** of the current body — muffle only engages under an actual roof or inside an actual cave, anywhere on the sphere.
+- The weather controller also re-resolves `Camera.main` lazily every frame, so the weather frame (and its audio) can never get stranded at spawn if the camera wasn't available at Start.
+
+#### ✅ Checks
+All touched files pass the offline C# lexer balance check; no save-format, API or content changes; Step 58 assets unchanged.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile — no setup step needed.
+2. Stand anywhere on a temperate world and let it rain: drops must now fall **straight down toward your feet** (toward the planet core), not sideways — including far from spawn, on hills, and near the "equator" of the planet.
+3. Look up through the rain: thin bright streaks, visibly denser in heavy rain.
+4. **Walk a few hundred metres while it rains — the rain audio must keep playing at full volume the whole way.** Step under a built roof: it should gently muffle to the cozy indoor mix; step back out: it brightens again.
+5. Walk into a cave: muffled. Back out: bright. Any hillside or slope outdoors must stay at full outdoor volume.
+
+### [9.19.0-dev] Weather & Climate Foundations — Per-Planet Storms, Atmosphere Gating & Synced Lightning
+
+**Type:** MINOR — a new save-compatible system (no save-format change). The full weather simulation already existed as dormant code; this version activates it, makes it per-planet, and wires it through the non-destructive setup workflow. Bumps GameVersion from 9.9.0 → 9.19.0 (the constant had drifted ~9 versions behind the changelog; it now tracks the head again).
+
+#### 🌦️ What was actually wrong (why the roadmap said “❌ MISSING”)
+The entire `VoxelEngine.Weather` stack was **dead code**: `WeatherManager` was never placed in any scene and never created by any bootstrap, so `WeatherManager.Instance` was always `null`. Every consumer (sky-fog yield, solar-panel output, underwater FX, ambience, music) null-guarded it and silently did nothing. `WeatherLighting` was also orphaned — never instantiated, and its thunder→flash path was never wired.
+
+#### 🌍 Per-planet climate (`WeatherClimateProfile`)
+- New additive, version-gated `[Serializable]` profile on `BodySettings.weather`: precipitation mode (Auto/Rain/Snow/None), storm chance, sun-darkening, storm wind & fog multipliers, a readable light floor, and thunder frequency.
+- **Atmosphere gating:** weather auto-disables on airless/vacuum bodies (`BodySettings.WeatherAllowed` = toggle AND `HasAtmosphere`). Moons, asteroids, and deep space stay permanently calm.
+- Themed presets (Temperate / Desert / Tundra / Ocean / Airless) applied per body by the new setup step.
+
+#### ⚡ Activated & completed the system
+- `CosmosBootstrap` now creates the `_Weather` controller (idempotent — reuses any scene-placed one) and applies the active body's climate at both body-activation hooks (home spawn + planet transition).
+- `WeatherManager.Start` now also attaches `WeatherLighting` (was missing) and dedups all sub-components so the setup step can pre-add them for inspector tuning without runtime duplicates.
+- **Thunder unified:** one scheduler fires `OnThunder`; the audio rumble and the lightning flash both subscribe, so they always strike together.
+- **Non-fighting lighting:** `WeatherLighting` now publishes a sun-intensity scale + ambient tint that `SunLightController` applies as a clean multiplier (neutral 1.0/white when clear), plus a synced lightning flash — weather never fights the day/night cycle. It owns rain/snow fog only while active and non-clear; the moment weather clears, `PlanetSkyController` retakes the fog (unchanged behaviour on calm/airless worlds).
+
+#### 🌦️ Weather actually shows up (cycle tuning)
+The first build left a freshly entered world in `Clear` for up to 5 minutes and then gave each roll only ~22% odds of rain — so in practice **it never rained**. Fixed:
+- **Short first cycle:** on arrival at a weather-allowed body the first weather change now happens within ~10–22 s (not minutes), and it is **guaranteed to be a visible weather move** (Overcast or LightRain on temperate worlds, Snow/Overcast on frozen, Overcast on desert) — never a re-roll of Clear.
+- **Livelier cycle odds:** Clear → Overcast/Rain now progresses ~70% of the time; Overcast tips into rain ~55%; rain persists and escalates to heavy via the body's storm chance. Rain is the common case, not a rare exception.
+- **Desert correctness:** `precipitation = None` worlds (desert/ash) now truly never rain or snow — wind & overcast only (a latent bug where they could still roll LightRain is closed).
+- **Diagnostics:** one `[Weather] ApplyBody …` line on every body switch (reports `active`, `atmosphere`, `weatherEnabled`, `precip`, and the first-change countdown) and one `[Weather] A -> B` line per state change — so if a specific world stays calm, that log says exactly why.
+
+#### 🛠️ Setup Step 58 (non-destructive)
+New `Tools ▸ Voxel Engine ▸ Voxel Engine Setup ▸ 58. Wire the Weather & Climate System`:
+- Authors themed climate profiles on every existing planet/moon (version-gated — hand-tuned worlds are never overwritten; airless bodies flagged calm).
+- Ensures a single `_Weather` controller in the active scene (reused/connected if present).
+- No prefabs/items/recipes/research are needed — the sim, particles, procedural audio, fog and lightning are all runtime.
+
+#### ✅ Checks
+All touched C# files brace/paren/bracket balanced in an offline check; additive data only (no save-schema, no public-API removal); neutral weather modifiers default to no-op so existing clear skies are byte-for-byte unchanged when weather is clear or absent.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile — clean.
+2. Run **Tools ▸ Voxel Engine ▸ Setup Wizard ▸ Step 58** (author climate profiles + ensure the `_Weather` controller). It is safe to re-run.
+3. Press Play on a temperate world: weather should begin within **~10–22 seconds** (watch the console for `[Weather] ApplyBody … firstChangeIn~Ns` then `[Weather] Clear -> Overcast/LightRain`). An overcast → light/heavy rain cycle should roll in (rain particles, splash, darker sun + fog, procedural rain audio, occasional thunder + sky flash). If the ApplyBody line shows `active=False`, paste it — that means that world has no atmosphere and weather is correctly disabled.
+4. Fly/warp to a snow/ice world: precipitation should read as **snow** (and blizzards in storms). On an **ocean** world: heavier, more frequent rain.
+5. Go to an **airless moon** or **deep space**: weather must be completely absent (no particles, no fog, no audio).
+6. Step under a roof mid-rain: the rain should crossfade to a muffled “cozy” indoor mix.
+7. Optional: select the `_Weather` object and tune `WeatherLighting` fog colours / flash intensity, or a planet template's `Body → Weather` profile.
+
+#### Status
+Roadmap **Weather system** moves from ❌ MISSING → 🛠️ **WORKING ON** (foundations shipped, pending Unity validation by Thomas). Open follow-ups: cloud-cover visual layer, wind-driven sand/ash storms on desert worlds, and weather persistence across saves.
 
 ### [9.18.2-dev] Meadow Field Round — Planted, Green, and Minable (+ HUD name fix)
 

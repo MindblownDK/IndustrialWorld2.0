@@ -29,7 +29,7 @@ namespace VoxelEngine.Weather
         private ParticleSystem _splashPS;
         private ParticleSystem.EmissionModule _splashEmission;
 
-        private const int MAX_RAIN_RATE = 3000;
+        private const int MAX_RAIN_RATE = 4200;
         private const int MAX_SNOW_RATE = 1500;
         private const int MAX_SPLASH_RATE = 500;
 
@@ -84,8 +84,8 @@ namespace VoxelEngine.Weather
                 _snowEmission.rateOverTime = 0;
             }
 
-            // Adjust rain stretch by intensity (heavier = longer streaks).
-            _rainMain.startSize = new ParticleSystem.MinMaxCurve(0.02f, 0.04f + intensity * 0.03f);
+            // Adjust rain streak thickness by intensity (heavier = slightly thicker streaks).
+            _rainMain.startSize = new ParticleSystem.MinMaxCurve(0.015f, 0.035f + intensity * 0.03f);
         }
 
         // ── Particle System Builders ─────────────────────────────────
@@ -99,16 +99,24 @@ namespace VoxelEngine.Weather
             var ps = go.AddComponent<ParticleSystem>();
             var main = ps.main;
             main.loop = true;
-            main.startLifetime = new ParticleSystem.MinMaxCurve(0.8f, 1.4f);
-            main.startSpeed = new ParticleSystem.MinMaxCurve(18f, 28f);
-            main.startSize = new ParticleSystem.MinMaxCurve(0.02f, 0.05f);
+            main.startLifetime = new ParticleSystem.MinMaxCurve(1.1f, 1.7f);
+            main.startSpeed = 0f;                       // motion comes from velocityOverLifetime (radial)
+            main.startSize = new ParticleSystem.MinMaxCurve(0.015f, 0.04f);
             main.startColor = new ParticleSystem.MinMaxGradient(
-                new Color(0.70f, 0.75f, 0.85f, 0.30f),
-                new Color(0.80f, 0.85f, 0.92f, 0.45f));
-            main.maxParticles = 8000;
+                new Color(0.62f, 0.70f, 0.84f, 0.38f),
+                new Color(0.78f, 0.84f, 0.94f, 0.55f));
+            main.maxParticles = 12000;
             main.simulationSpace = ParticleSystemSimulationSpace.World;
-            main.gravityModifier = 1.5f;
+            main.gravityModifier = 0f;                  // world gravity is world -Y — wrong on a sphere
             _rainMain = main;
+
+            // Fall along the emitter's LOCAL -Y. WeatherManager rotates this transform every
+            // frame so local -Y points at the planet core → rain falls radially on spherical
+            // worlds. World simulation space keeps drops pinned in the world (not glued to you).
+            var vel = ps.velocityOverLifetime;
+            vel.enabled = true;
+            vel.space = ParticleSystemSimulationSpace.Local;
+            vel.y = new ParticleSystem.MinMaxCurve(-28f, -18f);
 
             // Shape: large box above player
             var shape = ps.shape;
@@ -118,9 +126,9 @@ namespace VoxelEngine.Weather
             // Renderer: stretch
             var renderer = go.GetComponent<ParticleSystemRenderer>();
             renderer.renderMode = ParticleSystemRenderMode.Stretch;
-            renderer.velocityScale = 0.08f;
-            renderer.lengthScale = 3f;
-            renderer.material = CreateParticleMaterial(new Color(0.75f, 0.80f, 0.90f, 0.35f));
+            renderer.velocityScale = 0f;
+            renderer.lengthScale = 14f;                 // long, thin rain streaks
+            renderer.material = CreateParticleMaterial(new Color(0.70f, 0.77f, 0.90f, 0.45f));
             renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             renderer.receiveShadows = false;
 
@@ -150,14 +158,14 @@ namespace VoxelEngine.Weather
             var main = ps.main;
             main.loop = true;
             main.startLifetime = new ParticleSystem.MinMaxCurve(4f, 8f);
-            main.startSpeed = new ParticleSystem.MinMaxCurve(1.5f, 3f);
+            main.startSpeed = 0f;                       // motion comes from velocityOverLifetime (radial)
             main.startSize = new ParticleSystem.MinMaxCurve(0.05f, 0.15f);
             main.startColor = new ParticleSystem.MinMaxGradient(
                 new Color(0.92f, 0.95f, 1.0f, 0.7f),
                 new Color(1.0f, 1.0f, 1.0f, 0.9f));
             main.maxParticles = 5000;
             main.simulationSpace = ParticleSystemSimulationSpace.World;
-            main.gravityModifier = 0.15f;
+            main.gravityModifier = 0f;                  // world gravity is world -Y — wrong on a sphere
             main.startRotation = new ParticleSystem.MinMaxCurve(0, Mathf.PI * 2);
             _snowMain = main;
 
@@ -165,9 +173,12 @@ namespace VoxelEngine.Weather
             shape.shapeType = ParticleSystemShapeType.Box;
             shape.scale = new Vector3(35f, 1f, 35f);
 
-            // Velocity over lifetime for wind drift.
+            // Velocity over lifetime: local -Y = toward the planet core (radial fall), plus
+            // horizontal wind drift. WeatherManager keeps this transform radial-up aligned.
             var vel = ps.velocityOverLifetime;
             vel.enabled = true;
+            vel.space = ParticleSystemSimulationSpace.Local;
+            vel.y = new ParticleSystem.MinMaxCurve(-2.8f, -1.2f);
             vel.x = new ParticleSystem.MinMaxCurve(-2f, 2f);
             vel.z = new ParticleSystem.MinMaxCurve(-1f, 1f);
 
@@ -217,14 +228,20 @@ namespace VoxelEngine.Weather
             var main = ps.main;
             main.loop = true;
             main.startLifetime = new ParticleSystem.MinMaxCurve(0.15f, 0.35f);
-            main.startSpeed = new ParticleSystem.MinMaxCurve(1f, 3f);
+            main.startSpeed = 0f;                       // motion comes from velocityOverLifetime (radial)
             main.startSize = new ParticleSystem.MinMaxCurve(0.03f, 0.08f);
             main.startColor = new ParticleSystem.MinMaxGradient(
                 new Color(0.80f, 0.85f, 0.95f, 0.30f),
                 new Color(0.90f, 0.92f, 0.97f, 0.50f));
             main.maxParticles = 2000;
             main.simulationSpace = ParticleSystemSimulationSpace.World;
-            main.gravityModifier = 0.8f;
+            main.gravityModifier = 0f;                  // world gravity is world -Y — wrong on a sphere
+
+            // Splash: a short radial puff (local +Y = away from the planet core).
+            var vel = ps.velocityOverLifetime;
+            vel.enabled = true;
+            vel.space = ParticleSystemSimulationSpace.Local;
+            vel.y = new ParticleSystem.MinMaxCurve(0.6f, 2.4f);
 
             var shape = ps.shape;
             shape.shapeType = ParticleSystemShapeType.Box;

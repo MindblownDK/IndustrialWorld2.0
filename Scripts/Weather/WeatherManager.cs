@@ -1,14 +1,22 @@
 // Assets/Scripts/VoxelEngine/Weather/WeatherManager.cs
 //
-// Central weather controller. Drives rain/snow particles, ambient audio,
-// surface-hit sounds, and lighting changes. Attaches to a manager GO in the scene.
+// Central weather controller. Drives rain/snow particles, ambient audio, surface-hit
+// sounds, fog, sun darkening and lightning through its sub-systems.
 //
-// Weather cycles through Clear → Overcast → Rain → HeavyRain → Clear etc.
-// In tundra/snowy biomes, precipitation becomes snow instead of rain.
+// Weather is per-planet: each celestial body's BodySettings.weather (a WeatherClimateProfile)
+// decides whether weather is active at all (airless bodies are always calm), what falls from
+// the sky, how stormy it is, and how hard storms hit. ApplyBody() is called by the cosmic
+// bootstrap whenever a body becomes the player's home world.
+//
+// Weather cycles through Clear → Overcast → Rain → HeavyRain → Clear (or the snow/blizzard
+// equivalents in cold biomes / on frozen worlds). Thunder is unified here: a single scheduler
+// fires OnThunder, which the audio and lightning sub-systems both honour so the flash and the
+// rumble are always in sync.
 
 using UnityEngine;
 using VoxelEngine.Biomes;
 using VoxelEngine.Core;
+using VoxelEngine.Cosmos;
 
 namespace VoxelEngine.Weather
 {
@@ -19,15 +27,22 @@ namespace VoxelEngine.Weather
         public static WeatherManager Instance { get; private set; }
 
         [Header("Timing")]
-        [Tooltip("Minimum seconds a weather state lasts.")]
-        public float minStateDuration = 60f;
-        [Tooltip("Maximum seconds a weather state lasts.")]
-        public float maxStateDuration = 300f;
+        [Tooltip("Minimum seconds a weather state lasts (after the first cycle).")]
+        public float minStateDuration = 45f;
+        [Tooltip("Maximum seconds a weather state lasts (after the first cycle).")]
+        public float maxStateDuration = 150f;
         [Tooltip("Seconds to blend between weather states.")]
-        public float transitionDuration = 15f;
+        public float transitionDuration = 12f;
+
+        [Header("First Cycle")]
+        [Tooltip("On a weather-allowed body the FIRST weather change happens within this window, " +
+                 "so you actually see weather soon after arriving instead of waiting minutes for a roll.")]
+        public float firstChangeDelayMin = 10f;
+        [Tooltip("Max seconds before the first weather change on arrival.")]
+        public float firstChangeDelayMax = 22f;
 
         [Header("References")]
-        [Tooltip("The player's camera transform (particles follow this).")]
+        [Tooltip("The player's camera transform (particles follow this). Auto-found if null.")]
         public Transform playerCamera;
 
         // Current state
@@ -40,19 +55,40 @@ namespace VoxelEngine.Weather
         /// <summary>Current precipitation intensity (0 = none, 1 = max).</summary>
         public float Intensity { get; private set; }
 
-        /// <summary>True if the current biome is a cold/snowy biome.</summary>
+        /// <summary>True if the current biome is a cold/snowy biome (or the body forces snow).</summary>
         public bool IsSnowBiome { get; private set; }
 
         /// <summary>True if it's currently precipitating (rain or snow).</summary>
-        public bool IsPrecipitating => Intensity > 0.05f;
+        public bool IsPrecipitating => IsWeatherActive && Intensity > 0.05f;
+
+        /// <summary>
+        /// True only while standing on a body that is allowed to have weather (designer toggle on
+        /// AND it has an atmosphere). On airless moons / in deep space this is false and weather
+        /// collapses to Clear so nothing renders or modulates the scene.
+        /// </summary>
+        public bool IsWeatherActive { get; private set; }
+
+        /// <summary>The active body's climate profile (null → safe Earth-like defaults).</summary>
+        public WeatherClimateProfile Profile { get; private set; }
+
+        /// <summary>
+        /// Fired on every thunder strike during a storm. The audio sub-system plays the rumble and
+        /// the lightning sub-system flashes the sky, both from this single source so they stay synced.
+        /// </summary>
+        public event System.Action OnThunder;
 
         private float _stateTimer;
         private float _nextStateChange;
         private float _biomeCheckTimer;
+        private float _thunderTimer;
+        private float _nextThunder = 25f;
+        private BodySettings _lastAppliedSettings;
+        private bool _pendingFirstCycle;
 
         // Sub-systems (created as children)
         private WeatherParticles _particles;
         private WeatherAudio _audio;
+        private WeatherLighting _lighting;
 
         private void Awake()
         {
@@ -68,20 +104,90 @@ namespace VoxelEngine.Weather
                 if (cam != null) playerCamera = cam.transform;
             }
 
-            // Create sub-systems.
-            _particles = gameObject.AddComponent<WeatherParticles>();
-            _audio = gameObject.AddComponent<WeatherAudio>();
+            // Create sub-systems (idempotent: reused if the setup step pre-added them for
+            // inspector tuning, so we never stack duplicate particle/audio/lighting comps).
+            _particles = GetComponent<WeatherParticles>() ?? gameObject.AddComponent<WeatherParticles>();
+            _audio     = GetComponent<WeatherAudio>()     ?? gameObject.AddComponent<WeatherAudio>();
+            _lighting  = GetComponent<WeatherLighting>()  ?? gameObject.AddComponent<WeatherLighting>();
 
             _nextStateChange = Random.Range(minStateDuration, maxStateDuration);
         }
 
+        /// <summary>
+        /// Apply the active body's climate personality. Called by the cosmic bootstrap when a body
+        /// becomes the player's home world (and on every planet transition). Mirrors WindField.ApplyBody.
+        /// </summary>
+        public void ApplyBody(BodySettings body)
+        {
+            _lastAppliedSettings = body;
+
+            if (body == null)
+            {
+                Profile = null;
+                IsWeatherActive = false;
+                _pendingFirstCycle = false;
+                ForceWeather(WeatherState.Clear);
+                Debug.Log("[Weather] ApplyBody: no active body — weather off.");
+                return;
+            }
+
+            Profile = body.weather ?? WeatherClimateProfile.Default();
+            IsWeatherActive = body.WeatherAllowed;
+
+            // A body that forces a precipitation type wins over biome sampling.
+            if (Profile.precipitation == WeatherClimateProfile.Precipitation.Snow) IsSnowBiome = true;
+            else if (Profile.precipitation == WeatherClimateProfile.Precipitation.Rain) IsSnowBiome = false;
+
+            if (!IsWeatherActive)
+            {
+                // Collapsing to Clear on a calm body keeps deep space / airless moons pristine.
+                _pendingFirstCycle = false;
+                ForceWeather(WeatherState.Clear);
+            }
+            else
+            {
+                // Kick off a SHORT first cycle so weather is actually visible soon after arrival.
+                // Without this a fresh world can sit in Clear for several minutes before the first
+                // random roll, which reads as "it never rains".
+                _pendingFirstCycle = true;
+                _stateTimer = 0f;
+                _nextStateChange = Random.Range(firstChangeDelayMin, firstChangeDelayMax);
+            }
+
+            Debug.Log($"[Weather] ApplyBody '{body.bodyName}': active={IsWeatherActive} " +
+                      $"atmosphere={body.HasAtmosphere} weatherEnabled={Profile.weatherEnabled} " +
+                      $"precip={Profile.precipitation} snowBiome={IsSnowBiome}" +
+                      (IsWeatherActive ? $" firstChangeIn~{_nextStateChange:F0}s" : ""));
+        }
+
         private void Update()
         {
-            // Follow camera.
+            // Re-resolve the active body each frame so leaving a body (or loading one without an
+            // explicit ApplyBody call) still gates weather correctly.
+            ResolveActiveBody();
+
+            // Follow camera (re-resolve lazily in case it was not available at Start).
+            if (playerCamera == null)
+            {
+                var cam = Camera.main;
+                if (cam != null) playerCamera = cam.transform;
+            }
             if (playerCamera != null)
                 transform.position = playerCamera.position;
 
-            // Check biome every 2 seconds.
+            // Orient the weather frame to the body's RADIAL up. On spherical worlds "down" is
+            // toward the planet core, not world -Y — without this, the rain slab is only truly
+            // "above" you near one spot on the sphere and rain falls sideways everywhere else.
+            var activeBody = GravityProvider.ActiveBody;
+            if (activeBody != null)
+            {
+                Vector3 up = activeBody.UpAt(transform.position);
+                Vector3 fwd = playerCamera != null ? playerCamera.forward : transform.forward;
+                Vector3.OrthoNormalize(ref up, ref fwd);
+                transform.rotation = Quaternion.LookRotation(fwd, up);
+            }
+
+            // Check biome every 2 seconds (only meaningful when precipitation is Auto).
             _biomeCheckTimer += Time.deltaTime;
             if (_biomeCheckTimer >= 2f)
             {
@@ -103,29 +209,54 @@ namespace VoxelEngine.Weather
             // Update intensity based on current/target blend.
             float fromIntensity = GetIntensity(CurrentState);
             float toIntensity = GetIntensity(TargetState);
-            Intensity = Mathf.Lerp(fromIntensity, toIntensity, TransitionProgress);
+            Intensity = IsWeatherActive ? Mathf.Lerp(fromIntensity, toIntensity, TransitionProgress) : 0f;
 
-            // State timer — pick next weather.
-            _stateTimer += Time.deltaTime;
-            if (_stateTimer >= _nextStateChange)
+            // State timer — pick next weather (only when weather is actually active).
+            if (IsWeatherActive)
             {
-                _stateTimer = 0f;
-                _nextStateChange = Random.Range(minStateDuration, maxStateDuration);
-                PickNextState();
+                _stateTimer += Time.deltaTime;
+                if (_stateTimer >= _nextStateChange)
+                {
+                    _stateTimer = 0f;
+                    _nextStateChange = Random.Range(minStateDuration, maxStateDuration);
+                    PickNextState();
+                }
+
+                ScheduleThunder();
             }
+            else if (TargetState != WeatherState.Clear)
+            {
+                ForceWeather(WeatherState.Clear);
+            }
+        }
+
+        private void ResolveActiveBody()
+        {
+            // Re-apply climate only when the active body's settings reference actually changes
+            // (body switch / first resolution). ApplyBody reads WeatherAllowed at apply time.
+            var body = GravityProvider.ActiveBody;
+            var settings = body != null ? body.settings : null;
+            if (ReferenceEquals(settings, _lastAppliedSettings)) return;
+            _lastAppliedSettings = settings;
+            ApplyBody(settings);
         }
 
         private void CheckBiome()
         {
-            var world = VoxelEngine.Core.ActiveWorld.Current;
+            var profile = Profile ?? WeatherClimateProfile.Default();
+
+            // A forced precipitation type always wins.
+            if (profile.precipitation == WeatherClimateProfile.Precipitation.Snow) { IsSnowBiome = true; return; }
+            if (profile.precipitation == WeatherClimateProfile.Precipitation.Rain) { IsSnowBiome = false; return; }
+            if (profile.precipitation == WeatherClimateProfile.Precipitation.None) { IsSnowBiome = false; return; }
+
+            // Auto: sample temperature from biome noise.
+            var world = ActiveWorld.Current;
             if (world == null || world.Viewer == null) return;
             var pos = world.Viewer.position;
             int wx = Mathf.FloorToInt(pos.x);
             int wz = Mathf.FloorToInt(pos.z);
-
-            // Sample temperature from biome noise.
-            var climate = BiomePicker.SampleClimate(
-                world.Seed, wx, wz);
+            var climate = BiomePicker.SampleClimate(world.Seed, wx, wz);
             IsSnowBiome = climate.x < 0.25f; // cold biomes
         }
 
@@ -134,36 +265,101 @@ namespace VoxelEngine.Weather
             CurrentState = TargetState;
             TransitionProgress = 0f;
 
+            var profile = Profile ?? WeatherClimateProfile.Default();
+            float overcast = profile.overcastBias;
+            float storm = Mathf.Clamp01(profile.stormChance);
             float roll = Random.value;
-            if (IsSnowBiome)
+
+            bool noPrecip = profile.precipitation == WeatherClimateProfile.Precipitation.None;
+            bool snow = IsSnowBiome || profile.precipitation == WeatherClimateProfile.Precipitation.Snow;
+
+            // First cycle on arrival: guarantee a VISIBLE weather move so a freshly entered
+            // world does not read as "clear forever". Never re-rolls Clear here.
+            if (_pendingFirstCycle)
             {
-                // Snow biomes: clear → snow → blizzard cycle.
-                if (CurrentState == WeatherState.Clear || CurrentState == WeatherState.Overcast)
-                    TargetState = roll < 0.4f ? WeatherState.Snow : (roll < 0.7f ? WeatherState.Overcast : WeatherState.Clear);
-                else if (CurrentState == WeatherState.Snow)
-                    TargetState = roll < 0.3f ? WeatherState.Blizzard : (roll < 0.6f ? WeatherState.Clear : WeatherState.Snow);
+                _pendingFirstCycle = false;
+                if (noPrecip)
+                    TargetState = WeatherState.Overcast;
+                else if (snow)
+                    TargetState = roll < 0.6f ? WeatherState.Snow : WeatherState.Overcast;
                 else
-                    TargetState = roll < 0.5f ? WeatherState.Snow : WeatherState.Clear;
+                    TargetState = roll < 0.65f ? WeatherState.LightRain : WeatherState.Overcast;
+                LogStateChange("first cycle");
+                return;
+            }
+
+            // Desert / ash worlds: wind & overcast only — NEVER rain or snow.
+            if (noPrecip)
+            {
+                TargetState = roll < Mathf.Clamp01(overcast + 0.3f) ? WeatherState.Overcast : WeatherState.Clear;
+                LogStateChange();
+                return;
+            }
+
+            if (snow)
+            {
+                // Snow biomes: clear/overcast -> snow -> blizzard, scaled by storm chance.
+                if (CurrentState == WeatherState.Clear || CurrentState == WeatherState.Overcast)
+                    TargetState = roll < 0.55f ? WeatherState.Snow
+                                : (roll < Mathf.Clamp01(overcast + 0.25f) ? WeatherState.Overcast : WeatherState.Clear);
+                else if (CurrentState == WeatherState.Snow)
+                    TargetState = roll < storm ? WeatherState.Blizzard
+                                : (roll < 0.70f ? WeatherState.Snow : WeatherState.Clear);
+                else // Blizzard
+                    TargetState = roll < 0.5f ? WeatherState.Blizzard : WeatherState.Snow;
             }
             else
             {
-                // Normal biomes: clear → overcast → rain cycle.
+                // Temperate biomes: clear -> overcast -> rain -> heavy rain.
+                // Tuned to actually progress into precipitation most cycles.
                 if (CurrentState == WeatherState.Clear)
-                    TargetState = roll < 0.35f ? WeatherState.Overcast : (roll < 0.55f ? WeatherState.LightRain : WeatherState.Clear);
+                    TargetState = roll < 0.40f ? WeatherState.Overcast
+                                : (roll < 0.70f ? WeatherState.LightRain : WeatherState.Clear);
                 else if (CurrentState == WeatherState.Overcast)
-                    TargetState = roll < 0.4f ? WeatherState.LightRain : (roll < 0.6f ? WeatherState.Clear : WeatherState.Overcast);
+                    TargetState = roll < 0.55f ? WeatherState.LightRain
+                                : (roll < 0.80f ? WeatherState.Overcast : WeatherState.Clear);
                 else if (CurrentState == WeatherState.LightRain)
-                    TargetState = roll < 0.35f ? WeatherState.HeavyRain : (roll < 0.65f ? WeatherState.Overcast : WeatherState.LightRain);
-                else
-                    TargetState = roll < 0.5f ? WeatherState.LightRain : WeatherState.Overcast;
+                    TargetState = roll < storm ? WeatherState.HeavyRain
+                                : (roll < 0.75f ? WeatherState.LightRain : WeatherState.Overcast);
+                else // HeavyRain
+                    TargetState = roll < 0.45f ? WeatherState.HeavyRain
+                                : (roll < 0.85f ? WeatherState.LightRain : WeatherState.Overcast);
             }
+
+            LogStateChange();
+        }
+
+        private void LogStateChange(string tag = "")
+        {
+            Debug.Log($"[Weather] {CurrentState} -> {TargetState} (intensity~{GetIntensity(TargetState):F2})"
+                      + (string.IsNullOrEmpty(tag) ? "" : $" [{tag}]"));
+        }
+
+        /// <summary>Schedule synced thunder strikes during heavy precipitation.</summary>
+        private void ScheduleThunder()
+        {
+            bool heavyPrecip = TargetState == WeatherState.HeavyRain || TargetState == WeatherState.Blizzard
+                            || CurrentState == WeatherState.HeavyRain || CurrentState == WeatherState.Blizzard;
+            if (!heavyPrecip || Intensity < 0.6f) return;
+
+            var profile = Profile ?? WeatherClimateProfile.Default();
+            if (profile.thunderFrequency <= 0.001f) return;
+
+            _thunderTimer += Time.deltaTime;
+            if (_thunderTimer < _nextThunder) return;
+
+            _thunderTimer = 0f;
+            // Higher thunder frequency → shorter, more regular gaps.
+            float baseGap = Mathf.Lerp(40f, 10f, profile.thunderFrequency);
+            _nextThunder = Random.Range(baseGap * 0.6f, baseGap * 1.6f);
+            OnThunder?.Invoke();
         }
 
         private float GetIntensity(WeatherState state) => state switch
         {
             WeatherState.Clear      => 0f,
             WeatherState.Overcast   => 0f,
-            WeatherState.LightRain  => 0.4f,
+            WeatherState.LightRain  => 0.5f,
             WeatherState.HeavyRain  => 1.0f,
             WeatherState.Snow       => 0.5f,
             WeatherState.Blizzard   => 1.0f,
@@ -176,7 +372,7 @@ namespace VoxelEngine.Weather
             CurrentState = state;
             TargetState = state;
             TransitionProgress = 1f;
-            Intensity = GetIntensity(state);
+            Intensity = IsWeatherActive ? GetIntensity(state) : 0f;
         }
 
         private void OnDestroy()

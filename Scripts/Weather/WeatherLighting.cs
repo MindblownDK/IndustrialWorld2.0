@@ -1,179 +1,180 @@
 // Assets/Scripts/VoxelEngine/Weather/WeatherLighting.cs
 //
-// Adjusts the scene's directional light and fog based on weather state.
-// Darkens during rain, adds fog during heavy weather, lightning flash during thunder.
+// Makes the scene FEEL like the weather. It owns three things, all non-destructive:
+//
+//   1. SUN DARKENING — publishes a sun-intensity scale + ambient tint that
+//      SunLightController multiplies into its day/night light. Weather never writes the
+//      sun directly, so it can never fight the star/day-night controller. Clear weather
+//      (and airless bodies) publish neutral 1.0 / white → zero effect.
+//   2. RAIN & SNOW FOG — owns RenderSettings fog while weather is active and non-clear.
+//      PlanetSkyController yields fog to weather whenever the target state isn't Clear,
+//      so the two never collide; the moment weather clears, the sky retakes the fog.
+//   3. LIGHTNING — on every WeatherManager.OnThunder strike it flashes the sun scale +
+//      ambient for a fraction of a second. Because the flash rides the same multiplier
+//      the sun already uses, it lights the whole scene correctly with no extra lights.
 
 using UnityEngine;
 
 namespace VoxelEngine.Weather
 {
     /// <summary>
-    /// Modifies scene lighting to match the current weather.
-    /// Automatically finds the directional light in the scene.
+    /// Publishes weather-driven lighting modifiers and owns weather fog. Attach alongside
+    /// <see cref="WeatherManager"/> (it is created automatically by the manager).
     /// </summary>
     [RequireComponent(typeof(WeatherManager))]
     public class WeatherLighting : MonoBehaviour
     {
-        [Header("Light")]
-        [Tooltip("If null, auto-finds the first directional light.")]
-        public Light directionalLight;
+        // ── Live modifiers read by SunLightController (neutral when weather is clear/absent) ──
+        /// <summary>Multiplier applied to the sun directional light intensity. 1 = unchanged.</summary>
+        public static float SunIntensityScale { get; private set; } = 1f;
+        /// <summary>Component-wise multiplier applied to RenderSettings.ambientLight. White = unchanged.</summary>
+        public static Color AmbientScale { get; private set; } = Color.white;
+        /// <summary>True while weather is actively reshaping lighting (used for diagnostics).</summary>
+        public static bool Modulating { get; private set; }
 
-        [Header("Clear Sky")]
-        public float clearIntensity = 1.0f;
-        public Color clearAmbient = new Color(0.55f, 0.62f, 0.72f);
-        public Color clearFogColor = new Color(0.70f, 0.80f, 0.90f);
-
-        [Header("Rain")]
-        public float rainIntensity = 0.35f;
-        public Color rainAmbient = new Color(0.30f, 0.33f, 0.40f);
-        public Color rainFogColor = new Color(0.45f, 0.50f, 0.58f);
-        public float rainFogDensity = 0.015f;
-
-        [Header("Heavy Rain")]
-        public float heavyRainIntensity = 0.20f;
+        [Header("Storm Fog Colours")]
+        public Color rainFogColor     = new Color(0.45f, 0.50f, 0.58f);
         public Color heavyRainFogColor = new Color(0.35f, 0.40f, 0.48f);
-        public float heavyFogDensity = 0.030f;
-
-        [Header("Snow")]
-        public float snowIntensity = 0.50f;
-        public Color snowAmbient = new Color(0.55f, 0.58f, 0.65f);
-        public Color snowFogColor = new Color(0.75f, 0.78f, 0.82f);
-        public float snowFogDensity = 0.008f;
-
-        [Header("Blizzard")]
-        public float blizzardIntensity = 0.25f;
+        public Color snowFogColor     = new Color(0.75f, 0.78f, 0.82f);
         public Color blizzardFogColor = new Color(0.80f, 0.82f, 0.85f);
-        public float blizzardFogDensity = 0.045f;
+        public Color overcastFogColor = new Color(0.55f, 0.58f, 0.64f);
+
+        [Header("Storm Fog Density (authored peaks, scaled by the profile)")]
+        [Range(0f, 0.05f)] public float overcastFogDensity = 0.006f;
+        [Range(0f, 0.05f)] public float rainFogDensity     = 0.015f;
+        [Range(0f, 0.05f)] public float heavyFogDensity     = 0.030f;
+        [Range(0f, 0.05f)] public float snowFogDensity     = 0.010f;
+        [Range(0f, 0.05f)] public float blizzardFogDensity = 0.045f;
 
         [Header("Lightning Flash")]
-        public float flashDuration = 0.15f;
-        public float flashIntensity = 3.0f;
+        [Tooltip("Seconds the sun flare holds on a thunder strike.")]
+        public float flashDuration = 0.18f;
+        [Tooltip("Peak sun-intensity scale during the flash (stacks on the storm-darkened base).")]
+        public float flashIntensityScale = 4.0f;
 
-        private float _baseFogDensity;
-        private bool _fogWasEnabled;
-        private Color _originalAmbient;
+        private WeatherManager _wm;
         private float _flashTimer;
 
-        private void Start()
+        // Fog ownership bookkeeping (mirrors PlanetSkyController's own/restore pattern).
+        private bool _ownsFog;
+        private bool _savedFog;
+        private float _savedFogDensity;
+        private Color _savedFogColor;
+        private FogMode _savedFogMode;
+
+        private void OnEnable()
         {
-            if (directionalLight == null)
-            {
-                var lights = FindObjectsByType<Light>(FindObjectsInactive.Exclude);
-                foreach (var l in lights)
-                    if (l.type == LightType.Directional) { directionalLight = l; break; }
-            }
-
-            _baseFogDensity = RenderSettings.fogDensity;
-            _fogWasEnabled = RenderSettings.fog;
-            _originalAmbient = RenderSettings.ambientLight;
-        }
-
-        private void Update()
-        {
-            var wm = WeatherManager.Instance;
-            if (wm == null || directionalLight == null) return;
-
-            float intensity = wm.Intensity;
-            var state = wm.TargetState;
-            bool isSnow = wm.IsSnowBiome;
-
-            // Target values based on weather state.
-            float targetLightIntensity;
-            Color targetAmbient;
-            Color targetFog;
-            float targetFogDensity;
-            bool enableFog;
-
-            Color themedClearAmbient = clearAmbient;
-            Color themedClearFog = clearFogColor;
-            var sky = VoxelEngine.Cosmos.PlanetSkyController.Instance;
-            if (sky != null)
-            {
-                themedClearAmbient = sky.CurrentPalette.AmbientDay;
-                themedClearFog = sky.CurrentPalette.GroundFog;
-            }
-
-            switch (state)
-            {
-                case WeatherState.HeavyRain:
-                    targetLightIntensity = heavyRainIntensity;
-                    targetAmbient = rainAmbient;
-                    targetFog = heavyRainFogColor;
-                    targetFogDensity = heavyFogDensity;
-                    enableFog = true;
-                    break;
-                case WeatherState.LightRain:
-                    targetLightIntensity = rainIntensity;
-                    targetAmbient = rainAmbient;
-                    targetFog = rainFogColor;
-                    targetFogDensity = rainFogDensity;
-                    enableFog = true;
-                    break;
-                case WeatherState.Overcast:
-                    targetLightIntensity = Mathf.Lerp(clearIntensity, rainIntensity, 0.5f);
-                    targetAmbient = Color.Lerp(themedClearAmbient, rainAmbient, 0.4f);
-                    targetFog = Color.Lerp(themedClearFog, rainFogColor, 0.55f);
-                    targetFogDensity = 0.005f;
-                    enableFog = true;
-                    break;
-                case WeatherState.Snow:
-                    targetLightIntensity = snowIntensity;
-                    targetAmbient = snowAmbient;
-                    targetFog = snowFogColor;
-                    targetFogDensity = snowFogDensity;
-                    enableFog = true;
-                    break;
-                case WeatherState.Blizzard:
-                    targetLightIntensity = blizzardIntensity;
-                    targetAmbient = snowAmbient;
-                    targetFog = blizzardFogColor;
-                    targetFogDensity = blizzardFogDensity;
-                    enableFog = true;
-                    break;
-                default: // Clear
-                    targetLightIntensity = clearIntensity;
-                    targetAmbient = clearAmbient;
-                    targetFog = clearFogColor;
-                    targetFogDensity = 0f;
-                    enableFog = false;
-                    break;
-            }
-
-            float blend = Time.deltaTime * 0.5f; // slow blend
-
-            // Lightning flash
-            if (_flashTimer > 0f)
-            {
-                _flashTimer -= Time.deltaTime;
-                float flashT = Mathf.Clamp01(_flashTimer / flashDuration);
-                directionalLight.intensity = Mathf.Lerp(targetLightIntensity, flashIntensity, flashT);
-            }
-            else
-            {
-                directionalLight.intensity = Mathf.Lerp(directionalLight.intensity, targetLightIntensity, blend);
-            }
-
-            RenderSettings.ambientLight = Color.Lerp(RenderSettings.ambientLight, targetAmbient, blend);
-            RenderSettings.fog = enableFog || intensity > 0.1f;
-            RenderSettings.fogColor = Color.Lerp(RenderSettings.fogColor, targetFog, blend);
-            RenderSettings.fogDensity = Mathf.Lerp(RenderSettings.fogDensity, targetFogDensity, blend);
-            RenderSettings.fogMode = FogMode.Exponential;
-        }
-
-        /// <summary>Trigger a lightning flash (called from WeatherManager on thunder).</summary>
-        public void TriggerFlash()
-        {
-            _flashTimer = flashDuration;
+            _wm = GetComponent<WeatherManager>();
+            if (_wm != null) _wm.OnThunder += HandleThunder;
         }
 
         private void OnDisable()
         {
-            // Restore original settings.
-            if (directionalLight != null)
-                directionalLight.intensity = clearIntensity;
-            RenderSettings.fog = _fogWasEnabled;
-            RenderSettings.fogDensity = _baseFogDensity;
-            RenderSettings.ambientLight = _originalAmbient;
+            if (_wm != null) _wm.OnThunder -= HandleThunder;
+            ReleaseFog();
+            SunIntensityScale = 1f;
+            AmbientScale = Color.white;
+            Modulating = false;
+        }
+
+        private void Update()
+        {
+            if (_wm == null) _wm = WeatherManager.Instance;
+            if (_wm == null)
+            {
+                ReleaseFog();
+                SunIntensityScale = Mathf.MoveTowards(SunIntensityScale, 1f, Time.deltaTime * 2f);
+                AmbientScale = Color.Lerp(AmbientScale, Color.white, Time.deltaTime * 2f);
+                Modulating = false;
+                return;
+            }
+
+            var profile = _wm.Profile ?? WeatherClimateProfile.Default();
+            WeatherState state = _wm.TargetState;
+            bool nonClear = _wm.IsWeatherActive && state != WeatherState.Clear;
+
+            float sunScaleTarget = 1f;
+            Color ambientTintTarget = Color.white;
+            bool wantFog = false;
+            Color fogColorTarget = rainFogColor;
+            float fogDensityTarget = 0f;
+
+            if (nonClear)
+            {
+                // Storm darkening scales smoothly with precipitation intensity.
+                float darken = Mathf.Clamp01(profile.stormDarkening) * _wm.Intensity;
+                sunScaleTarget = Mathf.Lerp(1f, Mathf.Clamp01(profile.stormLightFloor), darken);
+                Color stormAmbientTint = new Color(0.55f, 0.60f, 0.68f, 1f);
+                ambientTintTarget = Color.Lerp(Color.white, stormAmbientTint, darken);
+
+                switch (state)
+                {
+                    case WeatherState.HeavyRain:
+                        fogColorTarget = heavyRainFogColor; fogDensityTarget = heavyFogDensity; wantFog = true; break;
+                    case WeatherState.LightRain:
+                        fogColorTarget = rainFogColor; fogDensityTarget = rainFogDensity; wantFog = true; break;
+                    case WeatherState.Overcast:
+                        fogColorTarget = overcastFogColor; fogDensityTarget = overcastFogDensity; wantFog = true; break;
+                    case WeatherState.Snow:
+                        fogColorTarget = snowFogColor; fogDensityTarget = snowFogDensity; wantFog = true; break;
+                    case WeatherState.Blizzard:
+                        fogColorTarget = blizzardFogColor; fogDensityTarget = blizzardFogDensity; wantFog = true; break;
+                }
+                fogDensityTarget *= Mathf.Max(0f, profile.stormFogScale);
+            }
+
+            // Lightning flash rides the same multiplier the sun already applies.
+            if (_flashTimer > 0f)
+            {
+                _flashTimer -= Time.deltaTime;
+                float f = Mathf.Clamp01(_flashTimer / Mathf.Max(0.01f, flashDuration));
+                sunScaleTarget = Mathf.Max(sunScaleTarget, Mathf.Lerp(1f, flashIntensityScale, f));
+                ambientTintTarget = Color.Lerp(ambientTintTarget, new Color(2.2f, 2.2f, 2.6f, 1f), f);
+            }
+
+            // Ease the published modifiers toward their targets (slow, organic blend).
+            float blend = Time.deltaTime * 1.5f;
+            SunIntensityScale = Mathf.Lerp(SunIntensityScale, sunScaleTarget, blend);
+            AmbientScale = Color.Lerp(AmbientScale, ambientTintTarget, blend);
+            Modulating = nonClear || _flashTimer > 0f || SunIntensityScale < 0.999f;
+
+            // Fog ownership: only write while weather is actively non-clear; otherwise hand
+            // fog back to PlanetSkyController (which owns it whenever the state is Clear).
+            if (wantFog)
+            {
+                if (!_ownsFog) CaptureFog();
+                RenderSettings.fog = true;
+                RenderSettings.fogMode = FogMode.Exponential;
+                RenderSettings.fogColor = Color.Lerp(RenderSettings.fogColor, fogColorTarget, Time.deltaTime * 0.5f);
+                RenderSettings.fogDensity = Mathf.Lerp(RenderSettings.fogDensity, fogDensityTarget, Time.deltaTime * 0.5f);
+            }
+            else
+            {
+                ReleaseFog();
+            }
+        }
+
+        /// <summary>Called by the manager's thunder event — fires a synced sky flash.</summary>
+        private void HandleThunder() => _flashTimer = flashDuration;
+
+        private void CaptureFog()
+        {
+            if (_ownsFog) return;
+            _savedFog = RenderSettings.fog;
+            _savedFogDensity = RenderSettings.fogDensity;
+            _savedFogColor = RenderSettings.fogColor;
+            _savedFogMode = RenderSettings.fogMode;
+            _ownsFog = true;
+        }
+
+        private void ReleaseFog()
+        {
+            if (!_ownsFog) return;
+            RenderSettings.fog = _savedFog;
+            RenderSettings.fogDensity = _savedFogDensity;
+            RenderSettings.fogColor = _savedFogColor;
+            RenderSettings.fogMode = _savedFogMode;
+            _ownsFog = false;
         }
     }
 }

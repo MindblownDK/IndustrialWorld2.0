@@ -151,6 +151,12 @@ namespace VoxelEngine.Cosmos
                 surfaceAmbient += new Color(0.01f, 0.02f, 0.05f, 1f) * (1f - dayFactor);
             RenderSettings.ambientLight = Color.Lerp(surfaceAmbient, new Color(0.012f, 0.014f, 0.022f, 1f), spaceBlend);
             RenderSettings.ambientIntensity = Mathf.Lerp(Mathf.Lerp(0.25f, 1f, dayFactor), 0.12f, spaceBlend);
+
+            // Apply live weather modifiers (storm darkening / lightning flash). These publish
+            // neutral 1.0 / white when weather is clear or absent, so calm skies are unchanged
+            // and weather can never fight the day/night cycle above.
+            sunLight.intensity *= VoxelEngine.Weather.WeatherLighting.SunIntensityScale;
+            RenderSettings.ambientLight *= VoxelEngine.Weather.WeatherLighting.AmbientScale;
         }
     }
 }

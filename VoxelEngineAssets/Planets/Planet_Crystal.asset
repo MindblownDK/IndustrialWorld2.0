@@ -25,6 +25,17 @@ MonoBehaviour:
     radiationLevel: 0
     windStrength: 1
     windGustiness: 0.4
+    weather:
+      weatherEnabled: 1
+      precipitation: 0
+      overcastBias: 0.45
+      stormChance: 0.35
+      stormDarkening: 0.6
+      stormWindMultiplier: 1.6
+      stormFogScale: 1
+      stormLightFloor: 0.18
+      thunderFrequency: 0.6
+      profileVersion: 1
     waterLevel: 96
     waterVolume: 1
     surfaceMode: 0
@@ -148,6 +159,7 @@ MonoBehaviour:
     infiniteOilNodeChance: 0.025
     pirateOilNodeSettingsVersion: 1
     isCanonicalPirateJackPumpWorld: 0
+    industrialWorld: 0
   solarSystem: {fileID: 11400000, guid: 9bb2dbc7a9af8df42b2c57567cac00f6, type: 2}
   distanceFromSun: 0
   orbitalDistanceKm: {x: 1500, y: 6000}

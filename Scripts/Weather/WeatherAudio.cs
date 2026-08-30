@@ -35,8 +35,7 @@ namespace VoxelEngine.Weather
         private AudioClip _windClip;
         private AudioClip _indoorClip;
 
-        private float _thunderTimer;
-        private float _nextThunder;
+        private WeatherManager _wm;
         private bool _isUnderRoof;
         private float _indoorBlend;   // smoothed 0 (outside) → 1 (sheltered)
         private float _roofCheckTimer;
@@ -66,7 +65,23 @@ namespace VoxelEngine.Weather
             _wind         = CreateSource(_windClip, true, 0f);
             _indoorMuffle = CreateSource(_indoorClip, true, 0f);
 
-            _nextThunder = Random.Range(15f, 45f);
+            _wm = GetComponent<WeatherManager>();
+            if (_wm != null) _wm.OnThunder += HandleThunder;
+        }
+
+        private void OnDestroy()
+        {
+            if (_wm != null) _wm.OnThunder -= HandleThunder;
+        }
+
+        /// <summary>Play a thunder rumble, synced with the lightning flash via WeatherManager.OnThunder.</summary>
+        private void HandleThunder()
+        {
+            if (_thunder == null) return;
+            float intensity = _wm != null ? Mathf.Max(0.6f, _wm.Intensity) : 1f;
+            _thunder.volume = Random.Range(0.15f, 0.45f) * intensity;
+            _thunder.pitch = Random.Range(0.7f, 1.1f);
+            _thunder.Play();
         }
 
         private void Update()
@@ -148,19 +163,8 @@ namespace VoxelEngine.Weather
                 _groundPatter.volume = Mathf.Lerp(_groundPatter.volume, 0f, Time.deltaTime * 2f);
             }
 
-            // ── Thunder ──
-            if (isRain && intensity > 0.6f)
-            {
-                _thunderTimer += Time.deltaTime;
-                if (_thunderTimer >= _nextThunder)
-                {
-                    _thunderTimer = 0f;
-                    _nextThunder = Random.Range(10f, 40f);
-                    _thunder.volume = Random.Range(0.15f, 0.45f) * intensity;
-                    _thunder.pitch = Random.Range(0.7f, 1.1f);
-                    _thunder.Play();
-                }
-            }
+            // (Thunder is fired centrally by WeatherManager.OnThunder — see HandleThunder —
+            //  so the rumble and the lightning flash always strike together.)
 
             // ── Wind (snow/blizzard) ──
             if (isSnow && intensity > 0.05f)
@@ -214,27 +218,33 @@ namespace VoxelEngine.Weather
 
         private bool CheckUnderRoof()
         {
-            // Check 1: Raycast up for building pieces (roof/foundation).
-            if (Physics.Raycast(transform.position, Vector3.up, out var hit, 10f))
+            // Radial "up" on the current body. On spherical worlds up is AWAY FROM THE CORE,
+            // not world +Y — a world-Y probe slices through the planet as you walk around the
+            // sphere, falsely reading "under roof" and muffling the rain into silence.
+            var body = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
+            Vector3 up = body != null ? body.UpAt(transform.position) : Vector3.up;
+
+            // Check 1: Raycast along radial up for building pieces (roof/foundation).
+            if (Physics.Raycast(transform.position, up, out var hit, 10f))
             {
                 var tiered = hit.collider.GetComponentInParent<PlacedTieredBlock>();
                 var placed = hit.collider.GetComponentInParent<Building.PlacedBlock>();
                 if (tiered != null || placed != null) return true;
             }
 
-            // Check 2: Are we underground in a cave? Check if there's solid terrain above.
+            // Check 2: Are we underground in a cave? Sample voxels ALONG the radial up
+            // direction (a vertical voxel column is only correct at one spot on a sphere).
             var world = VoxelEngine.Core.ActiveWorld.Current;
             if (world != null)
             {
-                var pos = world.WorldToVoxel(transform.position);
-                // Check several blocks above for solid terrain (cave ceiling).
                 int solidAbove = 0;
-                for (int dy = 2; dy <= 8; dy++)
+                for (int step = 2; step <= 8; step++)
                 {
-                    var v = world.GetVoxelWorld(new UnityEngine.Vector3Int(pos.x, pos.y + dy, pos.z));
+                    Vector3 sample = transform.position + up * (step * 1.5f);
+                    var v = world.GetVoxelWorld(world.WorldToVoxel(sample));
                     if (v.density > 0) solidAbove++;
                 }
-                // If 3+ of 7 blocks above are solid, we're in a cave.
+                // If 3+ of 7 samples above are solid, we're in a cave.
                 if (solidAbove >= 3) return true;
             }
 

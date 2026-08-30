@@ -76,6 +76,7 @@ namespace VoxelEngine.Cosmos
         private SpaceOrigin _spaceOrigin;
         private SpaceAsteroidField _asteroidField;
         private WindField _wind;
+        private VoxelEngine.Weather.WeatherManager _weather;
         private bool _awaitingViewerSurfacePlacement;
 
         /// <summary>The body the streaming systems currently follow (null = deep space).</summary>
@@ -229,6 +230,15 @@ namespace VoxelEngine.Cosmos
             var skyGO = new GameObject("PlanetSky");
             skyGO.AddComponent<PlanetSkyController>();
 
+            // Weather controller (Step 58): per-planet storms, rain/snow, lightning & fog.
+            // Reused if the scene already holds one (e.g. placed via the Voxel Engine Setup step).
+            _weather = FindAnyObjectByType<VoxelEngine.Weather.WeatherManager>();
+            if (_weather == null)
+            {
+                var weatherGO = new GameObject("_Weather");
+                _weather = weatherGO.AddComponent<VoxelEngine.Weather.WeatherManager>();
+            }
+
             // ── Live quality preset applier (Phase 7) ──
             var qpaGO = new GameObject("QualityPresetApplier");
             qpaGO.AddComponent<QualityPresetApplier>();
@@ -345,6 +355,8 @@ namespace VoxelEngine.Cosmos
 
             _wind = FindAnyObjectByType<WindField>();
             if (_wind != null) _wind.ApplyBody(body.settings);
+            if (_weather == null) _weather = FindAnyObjectByType<VoxelEngine.Weather.WeatherManager>();
+            if (_weather != null) _weather.ApplyBody(body.settings);
 
             // Real-space frame events: switching bodies must re-target the streamer.
             SpaceOrigin.OnFrameChanged += HandleFrameChange;
@@ -715,6 +727,8 @@ namespace VoxelEngine.Cosmos
                 SetAuxSystemsEnabled(!isBelt);
                 GravityProvider.ActiveBody = newBody;
                 if (_wind != null) _wind.ApplyBody(newBody.settings);
+                if (_weather == null) _weather = FindAnyObjectByType<VoxelEngine.Weather.WeatherManager>();
+                if (_weather != null) _weather.ApplyBody(newBody.settings);
                 // Make sure the entered body's surface engine tracks the real viewer.
                 var enteredSurface = newBody.GetComponentInChildren<VoxelEngine.GpuVoxel.GpuPlanetEngine>(true);
                 if (enteredSurface != null) enteredSurface.viewer = viewer;

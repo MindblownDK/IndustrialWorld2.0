@@ -5,6 +5,7 @@ using UnityEngine;
 using VoxelEngine.Biomes;
 using VoxelEngine.Generation;     // OreLayer
 using VoxelEngine.Materials;
+using VoxelEngine.Weather;
 
 namespace VoxelEngine.Cosmos
 {
@@ -111,6 +112,16 @@ namespace VoxelEngine.Cosmos
         [Range(0f, 1f)]
         [Tooltip("How strongly the wind surges over time (0 = steady, 1 = very gusty).")]
         public float windGustiness = 0.4f;
+
+        // ── Weather (Step 58) ─────────────────────────────────────
+        [Tooltip("Per-body weather personality: storms, precipitation, wind & fog. Auto-disabled on airless bodies.")]
+        public WeatherClimateProfile weather = new WeatherClimateProfile();
+
+        /// <summary>
+        /// True only when this body may have live weather: the designer toggle is on AND the
+        /// body actually has an atmosphere to hold clouds. Vacuum moons are always calm.
+        /// </summary>
+        public bool WeatherAllowed => weather != null && weather.weatherEnabled && HasAtmosphere;
 
         // ── Hydrosphere ───────────────────────────────────────────
         [Header("Hydrosphere")]
@@ -331,6 +342,7 @@ namespace VoxelEngine.Cosmos
                 temperature          = 15f,
                 windStrength         = 1f,
                 windGustiness        = 0.4f,
+                weather              = WeatherClimateProfile.Default(),
                 waterLevel           = 96,
                 waterVolume          = 1f,
                 surfaceMode          = SurfaceMode.SolidSurface,
