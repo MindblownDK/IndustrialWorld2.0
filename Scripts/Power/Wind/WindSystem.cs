@@ -64,7 +64,10 @@ namespace VoxelEngine.Power.Wind
             // Smooth realistic wind speed oscillation + gusts
             float baseSpeed = baseWindSpeed + Mathf.Sin(_timer * 0.7f) * windVariation * 0.6f;
             float gust = Mathf.PerlinNoise(_timer * 0.3f, 12.4f) * windVariation * 1.2f - windVariation * 0.3f;
-            _currentWindSpeed = Mathf.Clamp(baseSpeed + gust, 2f, 28f);
+            // Weather couples into turbine wind: a storm (WeatherManager.WindMultiplier > 1)
+            // spins turbines faster and produces more power; calm weather leaves wind as-is.
+            _currentWindSpeed = Mathf.Clamp(
+                (baseSpeed + gust) * Weather.WeatherManager.WindMultiplier, 2f, 45f);
 
             // Slight direction drift (realistic)
             float dirDrift = Mathf.Sin(_timer * 0.15f) * 12f;

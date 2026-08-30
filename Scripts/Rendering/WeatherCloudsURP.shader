@@ -59,7 +59,7 @@ Shader "VoxelEngine/WeatherCloudsURP"
             Varyings vert(Attributes input)
             {
                 Varyings output;
-                output.positionCS = TransformObjectToHclip(input.positionOS.xyz);
+                output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
                 output.color = input.color;
                 output.uv = TRANSFORM_TEX(input.uv, _MainTex);
                 output.polarY = input.polar.y;

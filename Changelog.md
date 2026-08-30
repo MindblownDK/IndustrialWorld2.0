@@ -1,9 +1,72 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.20.0-dev`
+**Current Version:** `9.21.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.21.0-dev] Weather-Driven Wind — Storms Now Power the Grid & Sway the World
+
+**Type:** MINOR — new save-compatible behaviour (weather couples into the wind simulation). No save-schema, API or content changes; no setup step required.
+
+#### What this delivers
+Until now the wind that spins wind turbines lived in its own `WindSystem` and was **completely weather-blind** — a blizzard produced exactly the same turbine output as a calm day. Meanwhile the ambient `WindField` (which drives grass sway, particle drift and wind audio) had a reserved "weather multiplier" hook that was never wired. This release closes that gap: **weather now drives wind**, so a storm means more power *and* a world that visibly and audibly reacts.
+
+#### 🌬️ How it works
+- `WeatherManager` publishes a live `static WindMultiplier` (1 = calm), smoothed every frame so it eases up and down with the precipitation intensity — it never snaps.
+  - **Clear** → 1.0
+  - **Overcast** → a mild breeze (up to +25 % of the body's storm-wind headroom)
+  - **Light rain / snow** → meaningful wind (up to +55 %)
+  - **Heavy rain / blizzard** → full gale (1.0 × `stormWindMultiplier`, e.g. 1.6 × on the default temperate profile, up to 2.2 × on desert worlds)
+  - It rides the existing `Intensity` ramp, so the wind swells *with* the rain rather than ahead of it, and returns to 1.0 when weather clears or the controller is torn down.
+- **Wind turbines** (`WindSystem`) now multiply their live wind speed by that multiplier, so rotor RPM *and* output climb in a storm. Because turbine degradation already scales with load, a storm both produces more power **and** wears the drivetrain faster — satisfying the roadmap's "wind speed → turbine output and degradation" in one coupling.
+- **Ambient wind field** (`WindField`) now multiplies its `Current` by the same multiplier, so grass blades lean harder, snow/rain drift further, and the wind audio reads the gale.
+
+#### Notes
+- **Solar panels already responded to weather** (`GridSolarPanel` multiplies output by weather state: Overcast 0.5×, LightRain 0.3×, HeavyRain 0.1×, Snow 0.4×, Blizzard 0.05×) — no change needed there; this release is the missing wind half of the weather↔power coupling.
+- The wind-speed clamp ceiling on turbines was raised 28 → 45 m/s so storm gusts actually push beyond calm-day max instead of slamming into the old ceiling.
+
+#### Files
+- **Edited:** `Scripts/Weather/WeatherManager.cs` (new `WindMultiplier` + `UpdateWindMultiplier`) · `Scripts/Cosmos/WindField.cs` (applies the multiplier) · `Scripts/Power/Wind/WindSystem.cs` (applies the multiplier, raised clamp) · `Scripts/Core/GameVersion.cs` → `9.21.0-dev`
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile — **no setup step needed**.
+2. Build a complete wind turbine, note its calm-day output in the turbine UI.
+3. Let a **heavy rain / blizzard** roll in (or use the weather force-test) → turbine RPM and output should climb noticeably above calm-day levels, then settle back when it clears.
+4. In a storm, watch grass / snow / rain drift — they should lean and travel harder with the gale.
+5. Over a long storm, turbine part condition should tick down slightly faster than in calm weather (it degrades with load).
+
+### [9.20.1-dev] Weather Shader Hotfix — Pink Sky Circle & Invisible Rain/Snow Resolved
+
+**Type:** PATCH — fixes a compile error in the two new weather shaders shipped in 9.20.0-dev. No save, API or content changes; no setup step required.
+
+#### What Thomas reported (and what was actually wrong)
+1. *"The sky is pink — there is a pink circle in the sky."* — That circle is the **cloud dome**. Its shader was failing to compile, so Unity rendered the dome's default magenta "shader error" colour.
+2. *"Rain and snow don't look like rain or snow — or anything."* — The rain/snow/splash particles share the second broken shader, so they rendered magenta (or invisible) instead of as falling streaks/flakes.
+
+Both shaders failed on the same one-character bug: a case-sensitive typo in the URP vertex transform.
+
+```
+Shader error in 'VoxelEngine/WeatherCloudsURP': undeclared identifier 'TransformObjectToHclip'
+Shader error in 'VoxelEngine/WeatherParticlesURP': undeclared identifier 'TransformObjectToHclip'
+```
+
+HLSL identifiers are case-sensitive — the correct URP helper is **`TransformObjectToHClip`** (capital `Cli`). Every other shader in `Scripts/Rendering` used the correct casing; only the two new weather shaders had the typo, which is why the bug appeared exactly when the weather stack went live in 9.20.0-dev.
+
+#### 🔧 The fix
+- `Scripts/Rendering/WeatherCloudsURP.shader` line 62: `TransformObjectToHclip` → `TransformObjectToHClip`
+- `Scripts/Rendering/WeatherParticlesURP.shader` line 50: `TransformObjectToHclip` → `TransformObjectToHClip`
+
+After the fix the weather stack renders as designed: the grey cloud deck covers the sky, rain streaks fall from it, snow flakes drift down, and lightning flashes light the clouds from within.
+
+#### Files
+- **Edited:** `Scripts/Rendering/WeatherCloudsURP.shader` · `Scripts/Rendering/WeatherParticlesURP.shader` · `Scripts/Core/GameVersion.cs` → `9.20.1-dev`
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile — **no setup step needed**.
+2. Let it rain and **look up**: the pink circle is gone; a grey cloud deck now covers the sky and rain streaks fall from it. No magenta anywhere in the sky.
+3. In a snow biome: pale clouds and drifting white flakes (no magenta particles).
+4. Console should show no `Shader error in 'VoxelEngine/WeatherCloudsURP'` or `WeatherParticlesURP` lines.
 
 ### [9.20.0-dev] Weather Immersion — Cloud Deck, Visible Rain & True 3D Weather Audio
 

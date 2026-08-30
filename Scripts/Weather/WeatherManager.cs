@@ -55,6 +55,14 @@ namespace VoxelEngine.Weather
         /// <summary>Current precipitation intensity (0 = none, 1 = max).</summary>
         public float Intensity { get; private set; }
 
+        /// <summary>
+        /// Live multiplier weather applies to wind (1 = calm). Storms drive it up to the
+        /// body's stormWindMultiplier. Consumed by <see cref="VoxelEngine.Cosmos.WindField"/>
+        /// (grass / particles / audio) and by <see cref="VoxelEngine.Power.Wind.WindSystem"/>
+        /// (wind turbines), so a storm visibly AND mechanically means more wind.
+        /// </summary>
+        public static float WindMultiplier { get; private set; } = 1f;
+
         /// <summary>True if the current biome is a cold/snowy biome (or the body forces snow).</summary>
         public bool IsSnowBiome { get; private set; }
 
@@ -212,6 +220,8 @@ namespace VoxelEngine.Weather
             float fromIntensity = GetIntensity(CurrentState);
             float toIntensity = GetIntensity(TargetState);
             Intensity = IsWeatherActive ? Mathf.Lerp(fromIntensity, toIntensity, TransitionProgress) : 0f;
+
+            UpdateWindMultiplier();
 
             // State timer — pick next weather (only when weather is actually active).
             if (IsWeatherActive)
@@ -392,6 +402,46 @@ namespace VoxelEngine.Weather
             _ => 0f
         };
 
+        /// <summary>
+        /// Weather → wind coupling. Publishes a smoothed wind multiplier so a storm means
+        /// more wind for turbines and the ambient wind field, easing up and down with the
+        /// precipitation intensity (never snapping). Calm / no-weather eases back to 1.
+        /// </summary>
+        private void UpdateWindMultiplier()
+        {
+            if (!IsWeatherActive || Intensity <= 0.001f)
+            {
+                WindMultiplier = Mathf.Lerp(WindMultiplier, 1f, Time.deltaTime * 0.5f);
+                return;
+            }
+
+            var profile = Profile ?? WeatherClimateProfile.Default();
+            float stormBoost = Mathf.Max(0f, profile.stormWindMultiplier - 1f);
+
+            float target;
+            switch (TargetState)
+            {
+                case WeatherState.HeavyRain:
+                case WeatherState.Blizzard:
+                    target = 1f + stormBoost;                 // full gale at full intensity
+                    break;
+                case WeatherState.LightRain:
+                case WeatherState.Snow:
+                    target = 1f + stormBoost * 0.55f;         // meaningful but not full storm wind
+                    break;
+                case WeatherState.Overcast:
+                    target = 1f + stormBoost * 0.25f;         // a breeze under a grey sky
+                    break;
+                default:
+                    target = 1f;
+                    break;
+            }
+
+            // Intensity already ramps 0.5 → 1.0 for light → heavy precipitation, so the
+            // wind eases up WITH the rain rather than jumping ahead of it.
+            WindMultiplier = Mathf.Lerp(WindMultiplier, Mathf.Lerp(1f, target, Intensity), Time.deltaTime * 0.5f);
+        }
+
         /// <summary>Force a specific weather state (for testing / console commands).</summary>
         public void ForceWeather(WeatherState state)
         {
@@ -404,6 +454,7 @@ namespace VoxelEngine.Weather
         private void OnDestroy()
         {
             if (Instance == this) Instance = null;
+            WindMultiplier = 1f;   // never leave stale storm wind behind when the controller is torn down
         }
     }
 }

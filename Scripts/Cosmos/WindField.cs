@@ -45,7 +45,7 @@ namespace VoxelEngine.Cosmos
         private void Update()
         {
             _time += Time.deltaTime;
-            Current = Sample(_time) * strength;
+            Current = Sample(_time) * strength * Weather.WeatherManager.WindMultiplier;
         }
 
         /// <summary>

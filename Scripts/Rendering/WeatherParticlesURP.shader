@@ -47,7 +47,7 @@ Shader "VoxelEngine/WeatherParticlesURP"
             Varyings vert(Attributes input)
             {
                 Varyings output;
-                output.positionCS = TransformObjectToHclip(input.positionOS.xyz);
+                output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
                 output.color = input.color;
                 output.fogCoord = ComputeFogFactor(output.positionCS.z);
                 return output;
