@@ -1,9 +1,34 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.21.1-dev`
+**Current Version:** `9.21.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.21.2-dev] Rain Rendered as Real Falling Streaks (Billboard Rewrite)
+
+**Type:** PATCH — replaces the broken Stretch-mode rain renderer with a Billboard streak renderer. No save, API or content changes; no setup step required.
+
+#### What Thomas reported (and what was actually wrong)
+*"Still only droplets on the surface, not actual rain fall."* — Two rounds of tuning the **Stretch** render mode (`velocityScale`, `lengthScale`, drop width) did not fix it. The tell was that the **splash** system — which uses the ordinary **Billboard** render mode — has always been visible, while the rain system using **Stretch** never was. Stretch-mode streak rendering was simply unreliable in this URP setup, so no amount of parameter tuning would make the streaks appear.
+
+#### 🌧️ The fix — stop fighting Stretch, bake the streak into the billboard
+- **Rain is now a Billboard renderer** (the same proven path the splash already uses) with the streak length carried by the particle itself:
+  - A procedural **vertical streak texture** (bright spine, soft sides, soft tips) is generated at runtime and assigned to the rain material — a plain billboard becomes a falling rain line.
+  - `WeatherParticlesURP` shader now samples `_MainTex`, so each system can carry its own shape (streak for rain, soft dot for snow, plain white for splash). Backward compatible — the white default reproduces the old flat billboard exactly.
+  - Rain uses **3D start size**: ~5–7 cm wide × **1.6–2.4 m tall** (taller in heavy rain), so every drop is a long, clearly visible vertical streak.
+- **Snow** now uses a soft round flake texture instead of a hard-edged square, so flakes read as soft dots.
+- Textures are owned and destroyed with the component (no leaks on repeated setup runs).
+
+#### Files
+- **Edited:** `Scripts/Weather/WeatherParticles.cs` (billboard + 3D size + streak/dot textures) · `Scripts/Rendering/WeatherParticlesURP.shader` (`_MainTex` sampling) · `Scripts/Core/GameVersion.cs` → `9.21.2-dev`
+- The edited shader remains pure ASCII.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile — **no setup step needed**.
+2. Let it rain and **look up**: you should now see long thin streaks falling from the sky toward your feet — real rain, not just splashes at your feet.
+3. In a snow biome: soft round flakes drifting down (no hard squares).
+4. Heavy rain should read denser with slightly longer, thicker streaks.
 
 ### [9.21.1-dev] Visible Rain Streaks & Real Storm Darkening
 

@@ -2,7 +2,7 @@
 //
 // Procedurally creates rain and snow particle systems.
 // Follows the player camera. Adjusts emission rate based on WeatherManager.Intensity.
-// Rain = stretched particles falling fast. Snow = small round particles floating down.
+// Rain = long billboard streaks falling fast. Snow = small round particles floating down.
 
 using UnityEngine;
 
@@ -29,15 +29,28 @@ namespace VoxelEngine.Weather
         private ParticleSystem _splashPS;
         private ParticleSystem.EmissionModule _splashEmission;
 
+        // Procedural shape textures (rain streak + soft snow dot). Owned here and
+        // destroyed with the component so repeated setup runs never leak them.
+        private Texture2D _rainStreakTex;
+        private Texture2D _snowDotTex;
+
         private const int MAX_RAIN_RATE = 4200;
         private const int MAX_SNOW_RATE = 1500;
         private const int MAX_SPLASH_RATE = 500;
 
         private void Start()
         {
+            _rainStreakTex = GenerateStreakTexture();
+            _snowDotTex = GenerateSoftDotTexture();
             _rainPS = CreateRainSystem();
             _snowPS = CreateSnowSystem();
             _splashPS = CreateSplashSystem();
+        }
+
+        private void OnDestroy()
+        {
+            if (_rainStreakTex != null) Destroy(_rainStreakTex);
+            if (_snowDotTex != null) Destroy(_snowDotTex);
         }
 
         private void Update()
@@ -84,8 +97,9 @@ namespace VoxelEngine.Weather
                 _snowEmission.rateOverTime = 0;
             }
 
-            // Adjust rain streak thickness by intensity (heavier = slightly thicker streaks).
-            _rainMain.startSize = new ParticleSystem.MinMaxCurve(0.04f, 0.08f + intensity * 0.04f);
+            // Adjust rain streak thickness/length by intensity (heavier = thicker, longer).
+            _rainMain.startSizeX = new ParticleSystem.MinMaxCurve(0.04f, 0.07f + intensity * 0.03f);
+            _rainMain.startSizeY = new ParticleSystem.MinMaxCurve(1.6f, 2.0f + intensity * 0.8f);
         }
 
         // ── Particle System Builders ─────────────────────────────────
@@ -101,7 +115,13 @@ namespace VoxelEngine.Weather
             main.loop = true;
             main.startLifetime = new ParticleSystem.MinMaxCurve(1.4f, 2.0f);
             main.startSpeed = 0f;                       // motion comes from velocityOverLifetime (radial)
-            main.startSize = new ParticleSystem.MinMaxCurve(0.04f, 0.10f);
+            // 3D start size: thin (X) and LONG (Y). The streak length is baked into the
+            // billboard's height via a vertical streak texture, so rain reads as falling
+            // lines without relying on Stretch render mode (which is unreliable in URP).
+            main.startSize3D = true;
+            main.startSizeX = new ParticleSystem.MinMaxCurve(0.04f, 0.07f);
+            main.startSizeY = new ParticleSystem.MinMaxCurve(1.6f, 2.4f);
+            main.startSizeZ = new ParticleSystem.MinMaxCurve(0.04f, 0.07f);
             main.startColor = new ParticleSystem.MinMaxGradient(
                 new Color(0.72f, 0.78f, 0.90f, 0.55f),
                 new Color(0.92f, 0.95f, 1.00f, 0.85f));
@@ -123,15 +143,13 @@ namespace VoxelEngine.Weather
             shape.shapeType = ParticleSystemShapeType.Box;
             shape.scale = new Vector3(40f, 1f, 40f);
 
-            // Renderer: stretch. NOTE: velocityScale MUST be > 0 or Unity renders
-            // Stretch-mode particles unstretched — a zero velocityScale collapses every
-            // streak to a point, which is why rain read as "nothing from above" and only
-            // the billboard splash on the ground was visible.
+            // Renderer: BILLBOARD with a vertical streak texture. Stretch mode proved
+            // unreliable (velocityScale tweaks left rain invisible across two rounds), so
+            // the streak length is baked into the texture + 3D start size instead — the
+            // same bulletproof billboard path the (visible) splash system already uses.
             var renderer = go.GetComponent<ParticleSystemRenderer>();
-            renderer.renderMode = ParticleSystemRenderMode.Stretch;
-            renderer.velocityScale = 0.12f;             // streak length = speed × 0.12 ≈ 2.4 m at 20 m/s
-            renderer.lengthScale = 1.0f;                // thin, camera-visible streaks
-            renderer.material = CreateParticleMaterial(new Color(0.85f, 0.89f, 0.97f, 0.90f));
+            renderer.renderMode = ParticleSystemRenderMode.Billboard;
+            renderer.material = CreateParticleMaterial(new Color(0.85f, 0.89f, 0.97f, 0.90f), _rainStreakTex);
             renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             renderer.receiveShadows = false;
 
@@ -196,7 +214,7 @@ namespace VoxelEngine.Weather
 
             var renderer = go.GetComponent<ParticleSystemRenderer>();
             renderer.renderMode = ParticleSystemRenderMode.Billboard;
-            renderer.material = CreateParticleMaterial(new Color(0.97f, 0.98f, 1.00f, 0.95f));
+            renderer.material = CreateParticleMaterial(new Color(0.97f, 0.98f, 1.00f, 0.95f), _snowDotTex);
             renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             renderer.receiveShadows = false;
 
@@ -262,9 +280,9 @@ namespace VoxelEngine.Weather
             return ps;
         }
 
-        // ── Material ─────────────────────────────────────────────────
+        // ── Material & Textures ───────────────────────────────────────
 
-        private static Material CreateParticleMaterial(Color color)
+        private static Material CreateParticleMaterial(Color color, Texture2D shape = null)
         {
             // Project-authored transparent particle shader (fog-aware, true alpha blend).
             var shader = Shader.Find("VoxelEngine/WeatherParticlesURP")
@@ -274,8 +292,67 @@ namespace VoxelEngine.Weather
             var mat = new Material(shader) { name = "WeatherParticleMat" };
             if (mat.HasProperty("_TintColor")) mat.SetColor("_TintColor", color);
             if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", color);
+            if (shape != null && mat.HasProperty("_MainTex")) mat.SetTexture("_MainTex", shape);
             mat.color = color;
             return mat;
+        }
+
+        /// <summary>
+        /// Vertical rain-streak alpha. Bright down the spine, soft on the sides, fading
+        /// out at both tips so the streak has no hard caps. Stretched tall by the 3D
+        /// start size, this turns an ordinary billboard into a falling rain line.
+        /// </summary>
+        private static Texture2D GenerateStreakTexture(int size = 16)
+        {
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false)
+            {
+                name = "WeatherRainStreak",
+                wrapMode = TextureWrapMode.Clamp,
+                filterMode = FilterMode.Bilinear
+            };
+            var px = new Color[size * size];
+            for (int y = 0; y < size; y++)
+            {
+                float v = (y + 0.5f) / size;
+                float endFade = Mathf.Clamp01(Mathf.Min(v, 1f - v) * 3.2f);   // soft tips
+                for (int x = 0; x < size; x++)
+                {
+                    float u = (x + 0.5f) / size;
+                    float dx = (u - 0.5f) * 2f;                                 // -1..1
+                    float cross = Mathf.Clamp01(1f - dx * dx * 7f);             // bright spine
+                    px[y * size + x] = new Color(1f, 1f, 1f, cross * endFade);
+                }
+            }
+            tex.SetPixels(px);
+            tex.Apply(false, false);
+            return tex;
+        }
+
+        /// <summary>Soft round snowflake alpha — bright centre fading to a clean edge.</summary>
+        private static Texture2D GenerateSoftDotTexture(int size = 16)
+        {
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false)
+            {
+                name = "WeatherSnowDot",
+                wrapMode = TextureWrapMode.Clamp,
+                filterMode = FilterMode.Bilinear
+            };
+            var px = new Color[size * size];
+            for (int y = 0; y < size; y++)
+            {
+                float v = (y + 0.5f) / size;
+                for (int x = 0; x < size; x++)
+                {
+                    float u = (x + 0.5f) / size;
+                    float dx = (u - 0.5f) * 2f;
+                    float dy = (v - 0.5f) * 2f;
+                    float d = Mathf.Sqrt(dx * dx + dy * dy);
+                    px[y * size + x] = new Color(1f, 1f, 1f, Mathf.Clamp01(1f - d * 2.2f));
+                }
+            }
+            tex.SetPixels(px);
+            tex.Apply(false, false);
+            return tex;
         }
     }
 }
