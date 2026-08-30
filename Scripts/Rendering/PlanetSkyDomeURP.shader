@@ -55,6 +55,11 @@ Shader "VoxelEngine/PlanetSkyDomeURP"
                 float _Dust;
             CBUFFER_END
 
+            // Weather darkening - published by WeatherLighting via Shader.SetGlobalFloat
+            // (0 = clear sky, up to ~0.6 in a heavy storm). Dims the whole sky so a storm
+            // visibly darkens the screen even though the sky dome itself is unlit.
+            float _VoxelWeatherDarken;
+
             struct Attributes
             {
                 float4 positionOS : POSITION;
@@ -137,6 +142,12 @@ Shader "VoxelEngine/PlanetSkyDomeURP"
 
                 float3 vacuum = float3(0.002, 0.004, 0.012);
                 color = lerp(color, vacuum, saturate(_SpaceBlend));
+
+                // Storm darkening: dims the sky toward a brooding grey-blue, fading out
+                // with altitude so orbit/space is never weather-affected.
+                float weatherDim = _VoxelWeatherDarken * (1.0 - saturate(_SpaceBlend));
+                color *= 1.0 - weatherDim * 0.62;
+
                 return half4(color, 1);
             }
             ENDHLSL

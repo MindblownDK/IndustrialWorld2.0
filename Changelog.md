@@ -1,9 +1,35 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.21.0-dev`
+**Current Version:** `9.21.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.21.1-dev] Visible Rain Streaks & Real Storm Darkening
+
+**Type:** PATCH — fixes two visual regressions in the weather stack. No save, API or content changes; no setup step required.
+
+#### What Thomas reported (and what was actually wrong)
+1. *"Rain is only visible on the ground — no actual rain from above."* — The rain particles were configured for **Stretch** render mode but with `velocityScale = 0`. In Unity a zero `velocityScale` renders Stretch-mode particles **unstretched** (every streak collapses to a point), so the 1.5–4 cm drops were effectively invisible specks falling from the emitter. The only thing you could see was the **billboard splash** system puffing at ground level — hence "rain only on the ground."
+2. *"When it's raining the screen isn't getting darker."* — The sun and ambient *were* being darkened (`WeatherLighting` → `SunLightController`), but the **sky dome is unlit** and was never touched by weather, so the brightest thing on screen — the sky — stayed full blue. The scene therefore never read as "it got darker" even though the terrain light dropped.
+
+#### 🌧️ 1. Rain you can actually see falling
+- `velocityScale` raised 0 → **0.12** so Stretch mode actually stretches: a drop falling at ~20 m/s now renders as a ~2.4 m long streak instead of an invisible point (`lengthScale` corrected 14 → 1.0).
+- Drop width raised 1.5–4 cm → **4–10 cm** (and up to ~12 cm in heavy rain) so streaks are thick enough to read on screen.
+
+#### 🌫️ 2. The sky now darkens with the storm
+- `WeatherLighting` publishes the same storm-darkening factor it already applies to the sun as a global shader float **`_VoxelWeatherDarken`** (0 = clear, up to ~0.6 in a heavy storm).
+- `PlanetSkyDomeURP` multiplies the sky colour by it, fading out with altitude so orbit/space is never weather-affected. A heavy storm now dims the sky toward a brooding grey-blue *in step with* the sun, so the whole screen visibly darkens — and clears back as the rain stops.
+
+#### Files
+- **Edited:** `Scripts/Weather/WeatherParticles.cs` (stretch + width) · `Scripts/Weather/WeatherLighting.cs` (publishes `_VoxelWeatherDarken`) · `Scripts/Rendering/PlanetSkyDomeURP.shader` (reads + applies it) · `Scripts/Core/GameVersion.cs` → `9.21.1-dev`
+- The edited shader remains pure ASCII (zero non-ASCII bytes).
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile — **no setup step needed**.
+2. Let it rain and **look up**: thin bright streaks should now fall from the sky toward your feet, visibly denser in heavy rain (not just splashes at your feet).
+3. Watch the sky as a storm rolls in: it should darken toward grey-blue, and the whole scene should feel dimmer; when it clears, the sky brightens back up.
+4. If the screen *still* doesn't darken enough, check the post-processing volume: **Auto Exposure / Eye Adaptation** will fight scene darkening — lower its range or disable it so the storm reads.
 
 ### [9.21.0-dev] Weather-Driven Wind — Storms Now Power the Grid & Sway the World
 

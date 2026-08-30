@@ -85,7 +85,7 @@ namespace VoxelEngine.Weather
             }
 
             // Adjust rain streak thickness by intensity (heavier = slightly thicker streaks).
-            _rainMain.startSize = new ParticleSystem.MinMaxCurve(0.015f, 0.035f + intensity * 0.03f);
+            _rainMain.startSize = new ParticleSystem.MinMaxCurve(0.04f, 0.08f + intensity * 0.04f);
         }
 
         // ── Particle System Builders ─────────────────────────────────
@@ -101,7 +101,7 @@ namespace VoxelEngine.Weather
             main.loop = true;
             main.startLifetime = new ParticleSystem.MinMaxCurve(1.4f, 2.0f);
             main.startSpeed = 0f;                       // motion comes from velocityOverLifetime (radial)
-            main.startSize = new ParticleSystem.MinMaxCurve(0.015f, 0.04f);
+            main.startSize = new ParticleSystem.MinMaxCurve(0.04f, 0.10f);
             main.startColor = new ParticleSystem.MinMaxGradient(
                 new Color(0.72f, 0.78f, 0.90f, 0.55f),
                 new Color(0.92f, 0.95f, 1.00f, 0.85f));
@@ -123,11 +123,14 @@ namespace VoxelEngine.Weather
             shape.shapeType = ParticleSystemShapeType.Box;
             shape.scale = new Vector3(40f, 1f, 40f);
 
-            // Renderer: stretch
+            // Renderer: stretch. NOTE: velocityScale MUST be > 0 or Unity renders
+            // Stretch-mode particles unstretched — a zero velocityScale collapses every
+            // streak to a point, which is why rain read as "nothing from above" and only
+            // the billboard splash on the ground was visible.
             var renderer = go.GetComponent<ParticleSystemRenderer>();
             renderer.renderMode = ParticleSystemRenderMode.Stretch;
-            renderer.velocityScale = 0f;
-            renderer.lengthScale = 14f;                 // long, thin rain streaks
+            renderer.velocityScale = 0.12f;             // streak length = speed × 0.12 ≈ 2.4 m at 20 m/s
+            renderer.lengthScale = 1.0f;                // thin, camera-visible streaks
             renderer.material = CreateParticleMaterial(new Color(0.85f, 0.89f, 0.97f, 0.90f));
             renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             renderer.receiveShadows = false;

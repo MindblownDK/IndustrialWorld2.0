@@ -24,6 +24,9 @@ namespace VoxelEngine.Weather
     [RequireComponent(typeof(WeatherManager))]
     public class WeatherLighting : MonoBehaviour
     {
+        /// <summary>Global shader float that dims the sky dome during storms (0 = clear sky).</summary>
+        private static readonly int IdWeatherDarken = Shader.PropertyToID("_VoxelWeatherDarken");
+
         // ── Live modifiers read by SunLightController (neutral when weather is clear/absent) ──
         /// <summary>Multiplier applied to the sun directional light intensity. 1 = unchanged.</summary>
         public static float SunIntensityScale { get; private set; } = 1f;
@@ -75,6 +78,7 @@ namespace VoxelEngine.Weather
             SunIntensityScale = 1f;
             AmbientScale = Color.white;
             Modulating = false;
+            Shader.SetGlobalFloat(IdWeatherDarken, 0f);   // never leave a stale storm sky
         }
 
         private void Update()
@@ -86,6 +90,7 @@ namespace VoxelEngine.Weather
                 SunIntensityScale = Mathf.MoveTowards(SunIntensityScale, 1f, Time.deltaTime * 2f);
                 AmbientScale = Color.Lerp(AmbientScale, Color.white, Time.deltaTime * 2f);
                 Modulating = false;
+                Shader.SetGlobalFloat(IdWeatherDarken, 0f);
                 return;
             }
 
@@ -98,11 +103,12 @@ namespace VoxelEngine.Weather
             bool wantFog = false;
             Color fogColorTarget = rainFogColor;
             float fogDensityTarget = 0f;
+            float darken = 0f;
 
             if (nonClear)
             {
                 // Storm darkening scales smoothly with precipitation intensity.
-                float darken = Mathf.Clamp01(profile.stormDarkening) * _wm.Intensity;
+                darken = Mathf.Clamp01(profile.stormDarkening) * _wm.Intensity;
                 sunScaleTarget = Mathf.Lerp(1f, Mathf.Clamp01(profile.stormLightFloor), darken);
                 Color stormAmbientTint = new Color(0.55f, 0.60f, 0.68f, 1f);
                 ambientTintTarget = Color.Lerp(Color.white, stormAmbientTint, darken);
@@ -137,6 +143,11 @@ namespace VoxelEngine.Weather
             SunIntensityScale = Mathf.Lerp(SunIntensityScale, sunScaleTarget, blend);
             AmbientScale = Color.Lerp(AmbientScale, ambientTintTarget, blend);
             Modulating = nonClear || _flashTimer > 0f || SunIntensityScale < 0.999f;
+
+            // Sky darkening: publish the same storm factor so the sky dome dims in step
+            // with the sun. The sky is the brightest thing on screen, so without this the
+            // scene never reads as "it got darker" even though the terrain light dropped.
+            Shader.SetGlobalFloat(IdWeatherDarken, darken);
 
             // Fog ownership: only write while weather is actively non-clear; otherwise hand
             // fog back to PlanetSkyController (which owns it whenever the state is Clear).
