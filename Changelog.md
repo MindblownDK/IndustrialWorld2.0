@@ -1,9 +1,32 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.21.2-dev`
+**Current Version:** `9.21.3-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.21.3-dev] Rain Rebuilt on the Proven Particle Path (Procedural Billboard Streaks)
+
+**Type:** PATCH — rewrites the rain renderer to use the project's proven particle rendering path instead of the texture/Stretch approaches that left rain invisible. No save, API or content changes; no setup step required.
+
+#### What was wrong
+Three rounds of tuning (Stretch mode → texture billboard) still left rain invisible. The reference was hiding in plain sight: the **`SpaceDustRenderer`** — the one particle system in the project that is known to render correctly — draws its shape **procedurally from the billboard UV in the fragment shader**, with no texture at all, and sets up its material explicitly (render queue, ZWrite off, Cull off, `allowOcclusionWhenDynamic = false`). The weather particles had drifted onto a different, less-proven path (texture sampling + Stretch mode).
+
+#### 🌧️ The fix — match SpaceDust's proven path exactly
+- `WeatherParticlesURP` now draws particle shapes **procedurally from the billboard UV** (zero texture sampling): `_ShapeMode 0` = soft round dot (snow/splash), `_ShapeMode 1` = vertical streak (rain). Nothing to mis-bind, nothing to stretch.
+- Rain = **Billboard + 3D start size** (thin 5–7 cm × tall 1.8–2.8 m) with `_ShapeMode 1`, so each particle is a long vertical streak; the streak is drawn in-shader (bright spine, soft edges, soft tips).
+- Snow = Billboard soft dot (`_ShapeMode 0`); splash unchanged (soft dot).
+- Every renderer now sets `allowOcclusionWhenDynamic = false` and the material sets `renderQueue = 3020`, `ZWrite = 0`, `Cull = Off` — mirroring `SpaceDustRenderer.CreateMaterial()`.
+- Added a **throttled console diagnostic** (`[Weather] Rain: playing=… alive=… rate=… shader=… emitter=…`) that prints every 6 s while it rains — paste it back if rain is *still* missing and we'll see exactly what the system is doing.
+
+#### Files
+- **Edited:** `Scripts/Weather/WeatherParticles.cs` (procedural path + material setup + diagnostic) · `Scripts/Rendering/WeatherParticlesURP.shader` (procedural dot/streak, no texture) · `Scripts/Core/GameVersion.cs` → `9.21.3-dev`
+- The edited shader remains pure ASCII.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile — **no setup step needed**.
+2. Let it rain and **look up**: long thin streaks should now fall from the sky toward your feet.
+3. If rain is still missing, open the **Console** during rain and paste me the line starting with `[Weather] Rain:` — it reports whether the system is playing, how many particles are alive, the resolved shader name, and the emitter position, which pins the cause immediately.
 
 ### [9.21.2-dev] Rain Rendered as Real Falling Streaks (Billboard Rewrite)
 

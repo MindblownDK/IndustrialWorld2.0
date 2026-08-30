@@ -2,7 +2,13 @@
 //
 // Procedurally creates rain and snow particle systems.
 // Follows the player camera. Adjusts emission rate based on WeatherManager.Intensity.
-// Rain = long billboard streaks falling fast. Snow = small round particles floating down.
+// Rain = long thin billboard streaks falling fast. Snow = small round flakes drifting
+// down. Splash = brief ground puffs where rain lands.
+//
+// Rendering follows the project's PROVEN particle path (see SpaceDustRenderer): every
+// system is a Billboard with the shape drawn procedurally in the shader from the
+// billboard UV. No textures to mis-bind, no Stretch mode — the same robust path the
+// always-visible splash system uses.
 
 using UnityEngine;
 
@@ -29,10 +35,8 @@ namespace VoxelEngine.Weather
         private ParticleSystem _splashPS;
         private ParticleSystem.EmissionModule _splashEmission;
 
-        // Procedural shape textures (rain streak + soft snow dot). Owned here and
-        // destroyed with the component so repeated setup runs never leak them.
-        private Texture2D _rainStreakTex;
-        private Texture2D _snowDotTex;
+        // Diagnostic throttle (a single clean console line while it's raining).
+        private float _diagTimer;
 
         private const int MAX_RAIN_RATE = 4200;
         private const int MAX_SNOW_RATE = 1500;
@@ -40,17 +44,9 @@ namespace VoxelEngine.Weather
 
         private void Start()
         {
-            _rainStreakTex = GenerateStreakTexture();
-            _snowDotTex = GenerateSoftDotTexture();
             _rainPS = CreateRainSystem();
             _snowPS = CreateSnowSystem();
             _splashPS = CreateSplashSystem();
-        }
-
-        private void OnDestroy()
-        {
-            if (_rainStreakTex != null) Destroy(_rainStreakTex);
-            if (_snowDotTex != null) Destroy(_snowDotTex);
         }
 
         private void Update()
@@ -97,9 +93,25 @@ namespace VoxelEngine.Weather
                 _snowEmission.rateOverTime = 0;
             }
 
-            // Adjust rain streak thickness/length by intensity (heavier = thicker, longer).
-            _rainMain.startSizeX = new ParticleSystem.MinMaxCurve(0.04f, 0.07f + intensity * 0.03f);
-            _rainMain.startSizeY = new ParticleSystem.MinMaxCurve(1.6f, 2.0f + intensity * 0.8f);
+            // Heavier rain = slightly longer, thicker streaks.
+            _rainMain.startSizeY = new ParticleSystem.MinMaxCurve(1.8f, 2.2f + intensity * 0.9f);
+            _rainMain.startSizeX = new ParticleSystem.MinMaxCurve(0.05f, 0.07f + intensity * 0.03f);
+
+            // Ground-truth diagnostic while it rains: paste this line back if rain
+            // is still missing so we can see exactly what the system is doing.
+            if (intensity > 0.01f)
+            {
+                _diagTimer += Time.deltaTime;
+                if (_diagTimer >= 6f)
+                {
+                    _diagTimer = 0f;
+                    var psr = _rainPS.GetComponent<ParticleSystemRenderer>();
+                    Debug.Log($"[Weather] Rain: playing={_rainPS.isPlaying} alive={_rainPS.particleCount} " +
+                              $"rate={_rainEmission.rateOverTime.constant:F0} intensity={intensity:F2} " +
+                              $"shader='{(psr.material != null ? psr.material.shader.name : "NULL")}' " +
+                              $"emitter={_rainPS.transform.position}");
+                }
+            }
         }
 
         // ── Particle System Builders ─────────────────────────────────
@@ -113,18 +125,18 @@ namespace VoxelEngine.Weather
             var ps = go.AddComponent<ParticleSystem>();
             var main = ps.main;
             main.loop = true;
+            main.playOnAwake = false;
             main.startLifetime = new ParticleSystem.MinMaxCurve(1.4f, 2.0f);
             main.startSpeed = 0f;                       // motion comes from velocityOverLifetime (radial)
-            // 3D start size: thin (X) and LONG (Y). The streak length is baked into the
-            // billboard's height via a vertical streak texture, so rain reads as falling
-            // lines without relying on Stretch render mode (which is unreliable in URP).
+            // 3D start size: thin (X/Z) and TALL (Y). The streak shape itself is drawn
+            // procedurally in the shader, so a tall thin billboard reads as a rain line.
             main.startSize3D = true;
-            main.startSizeX = new ParticleSystem.MinMaxCurve(0.04f, 0.07f);
-            main.startSizeY = new ParticleSystem.MinMaxCurve(1.6f, 2.4f);
-            main.startSizeZ = new ParticleSystem.MinMaxCurve(0.04f, 0.07f);
+            main.startSizeX = new ParticleSystem.MinMaxCurve(0.05f, 0.07f);
+            main.startSizeY = new ParticleSystem.MinMaxCurve(1.8f, 2.4f);
+            main.startSizeZ = new ParticleSystem.MinMaxCurve(0.05f, 0.07f);
             main.startColor = new ParticleSystem.MinMaxGradient(
-                new Color(0.72f, 0.78f, 0.90f, 0.55f),
-                new Color(0.92f, 0.95f, 1.00f, 0.85f));
+                new Color(0.80f, 0.85f, 0.95f, 0.75f),
+                new Color(0.95f, 0.97f, 1.00f, 0.95f));
             main.maxParticles = 12000;
             main.simulationSpace = ParticleSystemSimulationSpace.World;
             main.gravityModifier = 0f;                  // world gravity is world -Y — wrong on a sphere
@@ -143,28 +155,25 @@ namespace VoxelEngine.Weather
             shape.shapeType = ParticleSystemShapeType.Box;
             shape.scale = new Vector3(40f, 1f, 40f);
 
-            // Renderer: BILLBOARD with a vertical streak texture. Stretch mode proved
-            // unreliable (velocityScale tweaks left rain invisible across two rounds), so
-            // the streak length is baked into the texture + 3D start size instead — the
-            // same bulletproof billboard path the (visible) splash system already uses.
             var renderer = go.GetComponent<ParticleSystemRenderer>();
             renderer.renderMode = ParticleSystemRenderMode.Billboard;
-            renderer.material = CreateParticleMaterial(new Color(0.85f, 0.89f, 0.97f, 0.90f), _rainStreakTex);
             renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             renderer.receiveShadows = false;
+            renderer.allowOcclusionWhenDynamic = false; // moving system — never let culling hide it
+            renderer.sharedMaterial = CreateParticleMaterial(
+                new Color(0.90f, 0.93f, 0.98f, 0.95f), 1f /* streak */);
 
             _rainEmission = ps.emission;
             _rainEmission.rateOverTime = 0;
 
-            // Color over lifetime: quick fade-in, strong hold, quick fade-out — streaks
-            // must stay BRIGHT through their whole fall to read against the sky.
+            // Color over lifetime: visible almost immediately, strong hold, fade at the end.
             var col = ps.colorOverLifetime;
             col.enabled = true;
             var gradient = new Gradient();
             gradient.SetKeys(
                 new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
-                new[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(0.65f, 0.08f),
-                        new GradientAlphaKey(0.90f, 0.75f), new GradientAlphaKey(0f, 1f) });
+                new[] { new GradientAlphaKey(0.45f, 0f), new GradientAlphaKey(0.95f, 0.12f),
+                        new GradientAlphaKey(0.95f, 0.70f), new GradientAlphaKey(0f, 1f) });
             col.color = gradient;
 
             return ps;
@@ -179,12 +188,13 @@ namespace VoxelEngine.Weather
             var ps = go.AddComponent<ParticleSystem>();
             var main = ps.main;
             main.loop = true;
+            main.playOnAwake = false;
             main.startLifetime = new ParticleSystem.MinMaxCurve(4f, 8f);
             main.startSpeed = 0f;                       // motion comes from velocityOverLifetime (radial)
-            main.startSize = new ParticleSystem.MinMaxCurve(0.05f, 0.15f);
+            main.startSize = new ParticleSystem.MinMaxCurve(0.08f, 0.18f);
             main.startColor = new ParticleSystem.MinMaxGradient(
-                new Color(0.92f, 0.95f, 1.0f, 0.7f),
-                new Color(1.0f, 1.0f, 1.0f, 0.9f));
+                new Color(0.92f, 0.95f, 1.0f, 0.75f),
+                new Color(1.0f, 1.0f, 1.0f, 0.95f));
             main.maxParticles = 5000;
             main.simulationSpace = ParticleSystemSimulationSpace.World;
             main.gravityModifier = 0f;                  // world gravity is world -Y — wrong on a sphere
@@ -214,9 +224,11 @@ namespace VoxelEngine.Weather
 
             var renderer = go.GetComponent<ParticleSystemRenderer>();
             renderer.renderMode = ParticleSystemRenderMode.Billboard;
-            renderer.material = CreateParticleMaterial(new Color(0.97f, 0.98f, 1.00f, 0.95f), _snowDotTex);
             renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             renderer.receiveShadows = false;
+            renderer.allowOcclusionWhenDynamic = false;
+            renderer.sharedMaterial = CreateParticleMaterial(
+                new Color(0.97f, 0.98f, 1.00f, 0.95f), 0f /* dot */);
 
             _snowEmission = ps.emission;
             _snowEmission.rateOverTime = 0;
@@ -227,8 +239,8 @@ namespace VoxelEngine.Weather
             var g = new Gradient();
             g.SetKeys(
                 new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
-                new[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(0.8f, 0.15f),
-                        new GradientAlphaKey(0.8f, 0.7f), new GradientAlphaKey(0f, 1f) });
+                new[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(0.85f, 0.15f),
+                        new GradientAlphaKey(0.85f, 0.7f), new GradientAlphaKey(0f, 1f) });
             col.color = g;
 
             // Size over lifetime — grow slightly then shrink (snowflake tumble).
@@ -249,6 +261,7 @@ namespace VoxelEngine.Weather
             var ps = go.AddComponent<ParticleSystem>();
             var main = ps.main;
             main.loop = true;
+            main.playOnAwake = false;
             main.startLifetime = new ParticleSystem.MinMaxCurve(0.15f, 0.35f);
             main.startSpeed = 0f;                       // motion comes from velocityOverLifetime (radial)
             main.startSize = new ParticleSystem.MinMaxCurve(0.03f, 0.08f);
@@ -271,8 +284,9 @@ namespace VoxelEngine.Weather
 
             var renderer = go.GetComponent<ParticleSystemRenderer>();
             renderer.renderMode = ParticleSystemRenderMode.Billboard;
-            renderer.material = CreateParticleMaterial(new Color(0.90f, 0.93f, 0.98f, 0.55f));
+            renderer.material = CreateParticleMaterial(new Color(0.90f, 0.93f, 0.98f, 0.55f), 0f /* dot */);
             renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            renderer.allowOcclusionWhenDynamic = false;
 
             _splashEmission = ps.emission;
             _splashEmission.rateOverTime = 0;
@@ -280,11 +294,15 @@ namespace VoxelEngine.Weather
             return ps;
         }
 
-        // ── Material & Textures ───────────────────────────────────────
+        // ── Material ─────────────────────────────────────────────────
 
-        private static Material CreateParticleMaterial(Color color, Texture2D shape = null)
+        /// <summary>
+        /// Builds a weather particle material on the project's proven particle shader and
+        /// mirrors the SpaceDustRenderer material setup (explicit render queue, ZWrite off,
+        /// cull off) so the material can never be hidden by depth or winding.
+        /// </summary>
+        private static Material CreateParticleMaterial(Color color, float shapeMode)
         {
-            // Project-authored transparent particle shader (fog-aware, true alpha blend).
             var shader = Shader.Find("VoxelEngine/WeatherParticlesURP")
                       ?? Shader.Find("Universal Render Pipeline/Particles/Unlit")
                       ?? Shader.Find("Particles/Standard Unlit")
@@ -292,67 +310,12 @@ namespace VoxelEngine.Weather
             var mat = new Material(shader) { name = "WeatherParticleMat" };
             if (mat.HasProperty("_TintColor")) mat.SetColor("_TintColor", color);
             if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", color);
-            if (shape != null && mat.HasProperty("_MainTex")) mat.SetTexture("_MainTex", shape);
+            if (mat.HasProperty("_ShapeMode")) mat.SetFloat("_ShapeMode", shapeMode);
             mat.color = color;
+            mat.renderQueue = 3020;
+            if (mat.HasProperty("_ZWrite")) mat.SetInt("_ZWrite", 0);
+            if (mat.HasProperty("_Cull")) mat.SetInt("_Cull", (int)UnityEngine.Rendering.CullMode.Off);
             return mat;
-        }
-
-        /// <summary>
-        /// Vertical rain-streak alpha. Bright down the spine, soft on the sides, fading
-        /// out at both tips so the streak has no hard caps. Stretched tall by the 3D
-        /// start size, this turns an ordinary billboard into a falling rain line.
-        /// </summary>
-        private static Texture2D GenerateStreakTexture(int size = 16)
-        {
-            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false)
-            {
-                name = "WeatherRainStreak",
-                wrapMode = TextureWrapMode.Clamp,
-                filterMode = FilterMode.Bilinear
-            };
-            var px = new Color[size * size];
-            for (int y = 0; y < size; y++)
-            {
-                float v = (y + 0.5f) / size;
-                float endFade = Mathf.Clamp01(Mathf.Min(v, 1f - v) * 3.2f);   // soft tips
-                for (int x = 0; x < size; x++)
-                {
-                    float u = (x + 0.5f) / size;
-                    float dx = (u - 0.5f) * 2f;                                 // -1..1
-                    float cross = Mathf.Clamp01(1f - dx * dx * 7f);             // bright spine
-                    px[y * size + x] = new Color(1f, 1f, 1f, cross * endFade);
-                }
-            }
-            tex.SetPixels(px);
-            tex.Apply(false, false);
-            return tex;
-        }
-
-        /// <summary>Soft round snowflake alpha — bright centre fading to a clean edge.</summary>
-        private static Texture2D GenerateSoftDotTexture(int size = 16)
-        {
-            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false)
-            {
-                name = "WeatherSnowDot",
-                wrapMode = TextureWrapMode.Clamp,
-                filterMode = FilterMode.Bilinear
-            };
-            var px = new Color[size * size];
-            for (int y = 0; y < size; y++)
-            {
-                float v = (y + 0.5f) / size;
-                for (int x = 0; x < size; x++)
-                {
-                    float u = (x + 0.5f) / size;
-                    float dx = (u - 0.5f) * 2f;
-                    float dy = (v - 0.5f) * 2f;
-                    float d = Mathf.Sqrt(dx * dx + dy * dy);
-                    px[y * size + x] = new Color(1f, 1f, 1f, Mathf.Clamp01(1f - d * 2.2f));
-                }
-            }
-            tex.SetPixels(px);
-            tex.Apply(false, false);
-            return tex;
         }
     }
 }
