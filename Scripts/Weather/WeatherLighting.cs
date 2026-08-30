@@ -40,11 +40,11 @@ namespace VoxelEngine.Weather
         public Color overcastFogColor = new Color(0.55f, 0.58f, 0.64f);
 
         [Header("Storm Fog Density (authored peaks, scaled by the profile)")]
-        [Range(0f, 0.05f)] public float overcastFogDensity = 0.006f;
-        [Range(0f, 0.05f)] public float rainFogDensity     = 0.015f;
-        [Range(0f, 0.05f)] public float heavyFogDensity     = 0.030f;
-        [Range(0f, 0.05f)] public float snowFogDensity     = 0.010f;
-        [Range(0f, 0.05f)] public float blizzardFogDensity = 0.045f;
+        [Range(0f, 0.05f)] public float overcastFogDensity = 0.0045f;
+        [Range(0f, 0.05f)] public float rainFogDensity     = 0.007f;
+        [Range(0f, 0.05f)] public float heavyFogDensity     = 0.012f;
+        [Range(0f, 0.05f)] public float snowFogDensity     = 0.006f;
+        [Range(0f, 0.05f)] public float blizzardFogDensity = 0.028f;
 
         [Header("Lightning Flash")]
         [Tooltip("Seconds the sun flare holds on a thunder strike.")]
@@ -154,8 +154,9 @@ namespace VoxelEngine.Weather
             }
         }
 
-        /// <summary>Called by the manager's thunder event — fires a synced sky flash.</summary>
-        private void HandleThunder() => _flashTimer = flashDuration;
+        /// <summary>Called by the manager's thunder event — fires a synced sky flash
+        /// (the rumble itself is delayed by the audio to honour the speed of sound).</summary>
+        private void HandleThunder(Vector3 strikePosition) => _flashTimer = flashDuration;
 
         private void CaptureFog()
         {

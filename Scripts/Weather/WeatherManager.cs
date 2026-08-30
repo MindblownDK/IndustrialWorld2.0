@@ -75,7 +75,7 @@ namespace VoxelEngine.Weather
         /// Fired on every thunder strike during a storm. The audio sub-system plays the rumble and
         /// the lightning sub-system flashes the sky, both from this single source so they stay synced.
         /// </summary>
-        public event System.Action OnThunder;
+        public event System.Action<Vector3> OnThunder;
 
         private float _stateTimer;
         private float _nextStateChange;
@@ -89,6 +89,7 @@ namespace VoxelEngine.Weather
         private WeatherParticles _particles;
         private WeatherAudio _audio;
         private WeatherLighting _lighting;
+        private WeatherClouds _clouds;
 
         private void Awake()
         {
@@ -109,6 +110,7 @@ namespace VoxelEngine.Weather
             _particles = GetComponent<WeatherParticles>() ?? gameObject.AddComponent<WeatherParticles>();
             _audio     = GetComponent<WeatherAudio>()     ?? gameObject.AddComponent<WeatherAudio>();
             _lighting  = GetComponent<WeatherLighting>()  ?? gameObject.AddComponent<WeatherLighting>();
+            _clouds    = GetComponent<WeatherClouds>()    ?? gameObject.AddComponent<WeatherClouds>();
 
             _nextStateChange = Random.Range(minStateDuration, maxStateDuration);
         }
@@ -352,7 +354,31 @@ namespace VoxelEngine.Weather
             // Higher thunder frequency → shorter, more regular gaps.
             float baseGap = Mathf.Lerp(40f, 10f, profile.thunderFrequency);
             _nextThunder = Random.Range(baseGap * 0.6f, baseGap * 1.6f);
-            OnThunder?.Invoke();
+            OnThunder?.Invoke(PickStrikePosition());
+        }
+
+        /// <summary>
+        /// World position of this strike (up in the cloud band, random bearing and distance).
+        /// The audio uses it for direction and speed-of-sound delay; the lighting flashes
+        /// instantly regardless.
+        /// </summary>
+        private Vector3 PickStrikePosition()
+        {
+            Vector3 anchor = transform.position;
+            Vector3 up = Vector3.up;
+            var body = GravityProvider.ActiveBody;
+            if (body != null) up = body.UpAt(anchor);
+
+            // Random bearing on the tangent plane.
+            Vector3 tangent = Random.insideUnitSphere;
+            tangent -= up * Vector3.Dot(tangent, up);
+            if (tangent.sqrMagnitude < 1e-4f) tangent = Vector3.ProjectOnPlane(Random.insideUnitSphere, up);
+            tangent.Normalize();
+
+            float dist = Random.Range(600f, 3000f);
+            float elev = Random.Range(18f, 55f) * Mathf.Deg2Rad;
+            Vector3 dir = (tangent * Mathf.Cos(elev) + up * Mathf.Sin(elev)).normalized;
+            return anchor + dir * dist;
         }
 
         private float GetIntensity(WeatherState state) => state switch

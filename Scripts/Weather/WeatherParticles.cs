@@ -94,17 +94,17 @@ namespace VoxelEngine.Weather
         {
             var go = new GameObject("RainParticles");
             go.transform.SetParent(transform, false);
-            go.transform.localPosition = Vector3.up * 25f;
+            go.transform.localPosition = Vector3.up * 32f;
 
             var ps = go.AddComponent<ParticleSystem>();
             var main = ps.main;
             main.loop = true;
-            main.startLifetime = new ParticleSystem.MinMaxCurve(1.1f, 1.7f);
+            main.startLifetime = new ParticleSystem.MinMaxCurve(1.4f, 2.0f);
             main.startSpeed = 0f;                       // motion comes from velocityOverLifetime (radial)
             main.startSize = new ParticleSystem.MinMaxCurve(0.015f, 0.04f);
             main.startColor = new ParticleSystem.MinMaxGradient(
-                new Color(0.62f, 0.70f, 0.84f, 0.38f),
-                new Color(0.78f, 0.84f, 0.94f, 0.55f));
+                new Color(0.72f, 0.78f, 0.90f, 0.55f),
+                new Color(0.92f, 0.95f, 1.00f, 0.85f));
             main.maxParticles = 12000;
             main.simulationSpace = ParticleSystemSimulationSpace.World;
             main.gravityModifier = 0f;                  // world gravity is world -Y — wrong on a sphere
@@ -128,21 +128,22 @@ namespace VoxelEngine.Weather
             renderer.renderMode = ParticleSystemRenderMode.Stretch;
             renderer.velocityScale = 0f;
             renderer.lengthScale = 14f;                 // long, thin rain streaks
-            renderer.material = CreateParticleMaterial(new Color(0.70f, 0.77f, 0.90f, 0.45f));
+            renderer.material = CreateParticleMaterial(new Color(0.85f, 0.89f, 0.97f, 0.90f));
             renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             renderer.receiveShadows = false;
 
             _rainEmission = ps.emission;
             _rainEmission.rateOverTime = 0;
 
-            // Color over lifetime: fade in then out.
+            // Color over lifetime: quick fade-in, strong hold, quick fade-out — streaks
+            // must stay BRIGHT through their whole fall to read against the sky.
             var col = ps.colorOverLifetime;
             col.enabled = true;
             var gradient = new Gradient();
             gradient.SetKeys(
                 new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
-                new[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(0.5f, 0.1f),
-                        new GradientAlphaKey(0.5f, 0.8f), new GradientAlphaKey(0f, 1f) });
+                new[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(0.65f, 0.08f),
+                        new GradientAlphaKey(0.90f, 0.75f), new GradientAlphaKey(0f, 1f) });
             col.color = gradient;
 
             return ps;
@@ -192,7 +193,7 @@ namespace VoxelEngine.Weather
 
             var renderer = go.GetComponent<ParticleSystemRenderer>();
             renderer.renderMode = ParticleSystemRenderMode.Billboard;
-            renderer.material = CreateParticleMaterial(new Color(0.95f, 0.97f, 1.0f, 0.80f));
+            renderer.material = CreateParticleMaterial(new Color(0.97f, 0.98f, 1.00f, 0.95f));
             renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             renderer.receiveShadows = false;
 
@@ -249,7 +250,7 @@ namespace VoxelEngine.Weather
 
             var renderer = go.GetComponent<ParticleSystemRenderer>();
             renderer.renderMode = ParticleSystemRenderMode.Billboard;
-            renderer.material = CreateParticleMaterial(new Color(0.85f, 0.88f, 0.95f, 0.25f));
+            renderer.material = CreateParticleMaterial(new Color(0.90f, 0.93f, 0.98f, 0.55f));
             renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
 
             _splashEmission = ps.emission;
@@ -262,21 +263,15 @@ namespace VoxelEngine.Weather
 
         private static Material CreateParticleMaterial(Color color)
         {
-            // Try URP particle shaders first, then fallback.
-            var shader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
-            if (shader == null) shader = Shader.Find("Particles/Standard Unlit");
-            if (shader == null) shader = Shader.Find("Sprites/Default");
-            var mat = new Material(shader);
-            mat.color = color;
+            // Project-authored transparent particle shader (fog-aware, true alpha blend).
+            var shader = Shader.Find("VoxelEngine/WeatherParticlesURP")
+                      ?? Shader.Find("Universal Render Pipeline/Particles/Unlit")
+                      ?? Shader.Find("Particles/Standard Unlit")
+                      ?? Shader.Find("Sprites/Default");
+            var mat = new Material(shader) { name = "WeatherParticleMat" };
+            if (mat.HasProperty("_TintColor")) mat.SetColor("_TintColor", color);
             if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", color);
-
-            // Set blend mode to additive for soft rain look.
-            if (mat.HasProperty("_Surface"))
-            {
-                mat.SetFloat("_Surface", 1f); // Transparent
-                mat.SetFloat("_Blend", 0f);   // Alpha
-            }
-            mat.renderQueue = 3000;
+            mat.color = color;
             return mat;
         }
     }

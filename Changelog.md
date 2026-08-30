@@ -1,9 +1,54 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.19.1-dev`
+**Current Version:** `9.20.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.20.0-dev] Weather Immersion — Cloud Deck, Visible Rain & True 3D Weather Audio
+
+**Type:** MINOR — new save-compatible features (cloud sky layer, spatial audio system, two new project shaders) plus field fixes from the 9.19.1 round. No save-format or content changes; no setup step required (everything is generated at runtime).
+
+#### What Thomas reported (and what was actually wrong)
+1. *"Rain is only on the ground, no actual rain from above, and the sky is clear."* — Two causes. (a) The rain material was built on URP's particle shader with runtime surface flags that don't reliably take effect, leaving faint short streaks that vanish against a bright sky. (b) There was simply **no cloud layer at all** — the sky stayed clear blue while it poured, so rain had nothing to fall *from* and nothing dark to read against. Storm fog was also thick enough (0.03 exponential ≈ 33 m visibility) to eat the rain shaft.
+2. *"Rain on metal and rain indoor sound the same — and neither sounds like rain at all."* — The old mixer fired a fixed **baseline metal-ping bed whenever you were under ANY roof** (caves and wood houses included), so indoors always sounded like the same tin roof. Every source was 2D mono noise loops with no spatial behaviour at all, and thunder played instantly with no direction.
+
+#### ☁️ 1. The sky finally has clouds (new `WeatherClouds` + `WeatherCloudsURP` shader)
+- **Two nested cloud domes** (inner detail deck + outer parallax deck) hover radially overhead at ~150 m / ~280 m, following the player. A tileable procedural fBm cloud texture scrolls across them with the wind — faster in storms — while the far deck lags behind for parallax depth.
+- **Coverage tells the weather story:** wisps on Clear, 72 % on Overcast, full cover in Heavy Rain/Blizzard; snow skies stay pale while rain skies go storm-dark. Everything eases in and out — no pops.
+- **Lightning flashes light up the cloud deck from within** on every strike.
+- Spherical-world safe and **yaw-free**: the domes align to radial up but never spin when you turn the camera. Soft rim fade dissolves the dome edge into the horizon haze. Deliberately un-fogged — the storm fog lives at ground level, the cloud deck is the sky.
+- Material transparency now comes from a **project-authored URP shader** (`WeatherCloudsURP`), not URP ShaderGUI flag hacks.
+
+#### 🌧️ 2. Rain you can actually see
+- New dedicated particle shader **`WeatherParticlesURP`** (true alpha blend, fog-aware so distant rain fades into the haze like the world does) replaces the URP-particle-shader flag approach for rain, snow and splash.
+- Streaks are **brighter and hold their brightness** through the whole fall (new colour-over-lifetime curve, higher alpha, whiter tint) — against the new dark cloud deck they finally read as falling rain.
+- Emission slab raised 25 m → 32 m with longer drop lifetimes, so the shaft falls from the cloud base down past the camera.
+- **Storm fog softened** (new defaults: rain 0.015 → 0.007, heavy 0.030 → 0.012, blizzard 0.045 → 0.028) — weather now feels like rain, not a fog wall. (Fresh scenes get the new defaults automatically; if an existing scene still carries old serialized values, lower the *Storm Fog Density* sliders on its WeatherLighting.)
+
+#### 🔊 3. Proper 3D immersive audio (`WeatherAudio` fully rewritten)
+- **Outdoor rain bed — now actually rain:** a wide stereo loop mixing a pink-noise downpour body, ~640 individual droplet transients per second with random pan, and heavier ground splats around you. Decorrelated channels give the bed real width. All loops are crossfade-looped — no more clicks at the wrap point.
+- **Sheltered indoor mix:** the outdoor bed low-passes through the walls (real `AudioLowPassFilter`, 22 kHz → 750 Hz) while the indoor bed takes over — rain beyond the walls, deep structure shudder, and settling drips with a little pitch sag. Crossfades are smooth and positional: step under a roof and the world closes around you.
+- **Rain on metal / wood — 3D and material-correct:** a positional 3D source sits at your **actual roof point above you** (the shelter raycast hit) and patters with inharmonic tin-roof ping partials when your roof is Iron/Steel, dull wooden knocks when it's Wood, from the nearest wooden/metal structure's direction when you're outside near one. In a **cave neither plays** — just the muffled bed. The old "always some metal pings indoors" baseline is gone.
+- **Wind:** gusting stereo wind for blizzards (and a whisper under heavy rain), hushed when you take shelter.
+
+#### ⛈️ 4. Thunder with physics
+- Every strike now has a **world position** (up in the cloud band, random bearing, 600–3 000 m away). The lightning flash is instant — and the **rumble arrives speed-of-sound late** (343 m/s: 2–7 s), **from the strike's direction**, with near strikes cracking and distant ones just rolling. Indoors it arrives muffled.
+
+#### Files
+- **New:** `Scripts/Weather/WeatherClouds.cs` · `Scripts/Rendering/WeatherCloudsURP.shader` · `Scripts/Rendering/WeatherParticlesURP.shader`
+- **Rewritten:** `Scripts/Weather/WeatherAudio.cs`
+- **Edited:** `WeatherManager.cs` (creates the cloud subsystem; `OnThunder` now carries the strike position; new `PickStrikePosition`) · `WeatherParticles.cs` (new shader + brighter streaks + higher slab) · `WeatherLighting.cs` (thunder signature, softer fog defaults) · `GameVersion.cs` → 9.20.0-dev
+- Both new shaders are pure ASCII (zero non-ASCII bytes). All touched C# passes the offline lexer balance check. Thunder subscribers (`WeatherAudio`, `WeatherLighting`, `WeatherClouds`) all use the new `Action<Vector3>` signature.
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile — **no setup step needed** (clouds, meshes, textures, materials and audio are all generated at runtime; the two new shaders import automatically like the rest of `Scripts/Rendering`).
+2. Let it rain and **look up**: a grey cloud deck now covers the sky, moving with the wind, and rain streaks fall from it toward your feet. Sky should no longer be clear during rain.
+3. In Heavy Rain, look toward the horizon: hazy grey — but you can still see terrain and rain past ~70 m (no fog wall).
+4. **Audio — outdoors:** rain should sound like rain (individual drops, not static hiss). Walk near a metal building: pattering comes **from its direction**. Near wood: dull knocks.
+5. **Audio — indoors:** step under an Iron/Steel roof → loud tin-roof pinging **from above you**, muffled. Under a Wood roof → wooden knocks. In a cave → no pattering, just muffled rain and drips. Step back out — it opens up again.
+6. **Thunder:** when lightning flashes, count — the rumble should arrive seconds later **from the direction of the flash**, louder and sharper for close strikes, a low roll for far ones.
+7. Snow/blizzard: pale cloud deck + gusting wind; sheltered = wind hushed.
 
 ### [9.19.1-dev] Weather Field Fixes — Radial Rain on Spherical Worlds, Real Rain Streaks & Always-On Rain Audio
 
