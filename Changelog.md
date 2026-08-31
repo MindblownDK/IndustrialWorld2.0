@@ -1,9 +1,37 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.21.3-dev`
+**Current Version:** `9.21.4-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.21.4-dev] Weather Diagnostics — Pinpointing Why Rain Isn't Showing
+
+**Type:** PATCH — diagnostic instrumentation only (plus the 9.21.3 renderer rewrite carried forward). No save, API or content changes; no setup step required.
+
+#### Why this round is diagnostics
+The previous diagnostic only printed **while it was raining** (`intensity > 0.01`). When it "never runs", that itself is the signal — but it didn't say *why*. Weather only produces rain/snow when **`IsWeatherActive`** is true, and that requires the body to have an **atmosphere** (`WeatherAllowed = weatherEnabled && HasAtmosphere`) — an airless moon or vacuum world is calm by design. The silent gating hid all of that.
+
+#### 🔎 What was added
+- **`[Weather] Manager heartbeat`** — `WeatherManager` now logs its full state every 8 s: `active`, `state`, `intensity`, `snow`, `body`, `atmosphere`, `weatherEnabled`, `precip`. This tells us immediately whether weather is active on your body.
+- **`[Weather] Rain heartbeat`** — `WeatherParticles` now logs every 5 s *unconditionally*: whether the manager exists, whether the rain system exists/playing/alive, its particle count, resolved shader name, and emitter position.
+- **`[Weather] WeatherParticles created …`** — logged once at Start, proving the component is alive and its three systems were built.
+- **`[Weather] Rain: WeatherManager.Instance is NULL …`** — a one-shot warning if the manager can't be found.
+
+#### How to read the result (paste any of these back)
+1. **No `Manager heartbeat` at all** → weather isn't running; check that `CosmosBootstrap` created the `_Weather` controller.
+2. **`active=False`** → you're on an airless/vacuum body (weather is disabled there by design) or `weatherEnabled` is off for that body.
+3. **`active=True` but `intensity=0.00` and `state=Clear`/`Overcast`** → weather is cycling but hasn't reached precipitation yet (wait ~30–40 s, or watch for `[Weather] Clear -> LightRain`).
+4. **`active=True`, `intensity>0` but `Rain heartbeat` shows `alive=0` or `shader='…'` wrong** → genuine particle/render issue, and the shader name will say which.
+
+#### Files
+- **Edited:** `Scripts/Weather/WeatherManager.cs` (manager heartbeat) · `Scripts/Weather/WeatherParticles.cs` (unconditional heartbeat + Start log + null-manager warning) · `Scripts/Core/GameVersion.cs` → `9.21.4-dev`
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile — **no setup step needed**.
+2. Play on your **home planet** (temperate, has an atmosphere) and open the **Console**.
+3. Let it run ~30–60 s. Two heartbeat lines should be printing every 5–8 s.
+4. Paste me the last `[Weather] Manager heartbeat:` and `[Weather] Rain heartbeat:` lines — they will pin the exact cause, and I'll fix it from there rather than guess again.
 
 ### [9.21.3-dev] Rain Rebuilt on the Proven Particle Path (Procedural Billboard Streaks)
 

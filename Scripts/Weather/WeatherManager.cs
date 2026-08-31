@@ -90,6 +90,7 @@ namespace VoxelEngine.Weather
         private float _biomeCheckTimer;
         private float _thunderTimer;
         private float _nextThunder = 25f;
+        private float _heartbeatTimer;
         private BodySettings _lastAppliedSettings;
         private bool _pendingFirstCycle;
 
@@ -214,6 +215,22 @@ namespace VoxelEngine.Weather
                     TransitionProgress = 1f;
                     CurrentState = TargetState;
                 }
+            }
+
+            // Lightweight heartbeat — full weather state every 8 s so a missing/absent
+            // weather effect can be diagnosed from the console alone. Remove after sign-off.
+            _heartbeatTimer += Time.deltaTime;
+            if (_heartbeatTimer >= 8f)
+            {
+                _heartbeatTimer = 0f;
+                var body = GravityProvider.ActiveBody;
+                var settings = body != null ? body.settings : null;
+                Debug.Log($"[Weather] Manager heartbeat: active={IsWeatherActive} " +
+                          $"state={CurrentState}->{TargetState} intensity={Intensity:F2} " +
+                          $"snow={IsSnowBiome} body={(body != null ? body.DisplayName : "none")} " +
+                          $"atmosphere={(settings != null ? settings.HasAtmosphere : false)} " +
+                          $"weatherEnabled={(Profile != null ? Profile.weatherEnabled : false)} " +
+                          $"precip={(Profile != null ? Profile.precipitation.ToString() : "?")}");
             }
 
             // Update intensity based on current/target blend.

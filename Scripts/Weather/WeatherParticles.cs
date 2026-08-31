@@ -35,8 +35,9 @@ namespace VoxelEngine.Weather
         private ParticleSystem _splashPS;
         private ParticleSystem.EmissionModule _splashEmission;
 
-        // Diagnostic throttle (a single clean console line while it's raining).
+        // Diagnostic throttle + one-shot "manager missing" warning.
         private float _diagTimer;
+        private bool _warnedNoManager;
 
         private const int MAX_RAIN_RATE = 4200;
         private const int MAX_SNOW_RATE = 1500;
@@ -47,12 +48,21 @@ namespace VoxelEngine.Weather
             _rainPS = CreateRainSystem();
             _snowPS = CreateSnowSystem();
             _splashPS = CreateSplashSystem();
+            Debug.Log($"[Weather] WeatherParticles created: rain={(_rainPS != null)} snow={(_snowPS != null)} splash={(_splashPS != null)}");
         }
 
         private void Update()
         {
             var wm = WeatherManager.Instance;
-            if (wm == null) return;
+            if (wm == null)
+            {
+                if (!_warnedNoManager)
+                {
+                    _warnedNoManager = true;
+                    Debug.LogWarning("[Weather] Rain: WeatherManager.Instance is NULL — weather particles cannot run.");
+                }
+                return;
+            }
 
             bool isSnow = wm.IsSnowBiome &&
                 (wm.CurrentState == WeatherState.Snow || wm.CurrentState == WeatherState.Blizzard ||
@@ -97,20 +107,21 @@ namespace VoxelEngine.Weather
             _rainMain.startSizeY = new ParticleSystem.MinMaxCurve(1.8f, 2.2f + intensity * 0.9f);
             _rainMain.startSizeX = new ParticleSystem.MinMaxCurve(0.05f, 0.07f + intensity * 0.03f);
 
-            // Ground-truth diagnostic while it rains: paste this line back if rain
-            // is still missing so we can see exactly what the system is doing.
-            if (intensity > 0.01f)
+            // UNCONDITIONAL heartbeat — logs every 5 s no matter what the weather is doing,
+            // so we can see the full state (active? state? intensity? particles alive?)
+            // instead of silently printing nothing when it isn't raining.
+            _diagTimer += Time.deltaTime;
+            if (_diagTimer >= 5f)
             {
-                _diagTimer += Time.deltaTime;
-                if (_diagTimer >= 6f)
-                {
-                    _diagTimer = 0f;
-                    var psr = _rainPS.GetComponent<ParticleSystemRenderer>();
-                    Debug.Log($"[Weather] Rain: playing={_rainPS.isPlaying} alive={_rainPS.particleCount} " +
-                              $"rate={_rainEmission.rateOverTime.constant:F0} intensity={intensity:F2} " +
-                              $"shader='{(psr.material != null ? psr.material.shader.name : "NULL")}' " +
-                              $"emitter={_rainPS.transform.position}");
-                }
+                _diagTimer = 0f;
+                var psr = _rainPS != null ? _rainPS.GetComponent<ParticleSystemRenderer>() : null;
+                Debug.Log($"[Weather] Rain heartbeat: active={wm.IsWeatherActive} " +
+                          $"state={wm.CurrentState}->{wm.TargetState} intensity={intensity:F2} " +
+                          $"snow={wm.IsSnowBiome} rainPS={(_rainPS != null)} " +
+                          $"playing={(_rainPS != null && _rainPS.isPlaying)} " +
+                          $"alive={(_rainPS != null ? _rainPS.particleCount : 0)} " +
+                          $"shader='{(psr != null && psr.material != null ? psr.material.shader.name : "NULL")}' " +
+                          $"emitter={(_rainPS != null ? _rainPS.transform.position : Vector3.zero)}");
             }
         }
 
