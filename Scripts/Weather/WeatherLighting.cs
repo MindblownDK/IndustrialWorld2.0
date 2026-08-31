@@ -96,7 +96,9 @@ namespace VoxelEngine.Weather
 
             var profile = _wm.Profile ?? WeatherClimateProfile.Default();
             WeatherState state = _wm.TargetState;
-            bool nonClear = _wm.IsWeatherActive && state != WeatherState.Clear;
+            // Above the cloud deck the storm is below you: no darkening, and above all no fog.
+            float proximity = Mathf.Clamp01(_wm.SurfaceProximity);
+            bool nonClear = _wm.IsWeatherActive && state != WeatherState.Clear && proximity > 0.02f;
 
             float sunScaleTarget = 1f;
             Color ambientTintTarget = Color.white;
@@ -108,7 +110,7 @@ namespace VoxelEngine.Weather
             if (nonClear)
             {
                 // Storm darkening scales smoothly with precipitation intensity.
-                darken = Mathf.Clamp01(profile.stormDarkening) * _wm.Intensity;
+                darken = Mathf.Clamp01(profile.stormDarkening) * _wm.Intensity * proximity;
                 sunScaleTarget = Mathf.Lerp(1f, Mathf.Clamp01(profile.stormLightFloor), darken);
                 Color stormAmbientTint = new Color(0.55f, 0.60f, 0.68f, 1f);
                 ambientTintTarget = Color.Lerp(Color.white, stormAmbientTint, darken);
@@ -126,7 +128,7 @@ namespace VoxelEngine.Weather
                     case WeatherState.Blizzard:
                         fogColorTarget = blizzardFogColor; fogDensityTarget = blizzardFogDensity; wantFog = true; break;
                 }
-                fogDensityTarget *= Mathf.Max(0f, profile.stormFogScale);
+                fogDensityTarget *= Mathf.Max(0f, profile.stormFogScale) * proximity;
             }
 
             // Lightning flash rides the same multiplier the sun already applies.

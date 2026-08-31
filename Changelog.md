@@ -1,9 +1,45 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.23.0-dev`
+**Current Version:** `9.23.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.23.1-dev] Weather Stays On The Planet — Short Rain Streaks + Altitude Gate
+
+**Type:** PATCH — fixes rain reading as sideways warp-streaks and weather following the player into space. No save, API or content changes; no setup step required.
+
+#### What was reported
+1. *"Rain falls sideways and not down."*
+2. *"When it rains on the spawn planet and I fly to space it still rains in space."*
+
+#### 🌧️ 1 — The streaks were far too long
+The drops were falling correctly (radially toward the core), but each streak was **1.6–2.6 m long**. Two things go wrong at that length:
+- At 3–10 m from the camera a 2.6 m line covers a quarter of the screen, and with thousands of them converging on the zenith vanishing point the result reads as a warp-speed starfield, not rain.
+- A velocity-aligned billboard whose velocity points near the view direction (looking up at falling rain) becomes edge-on, and the longer the quad the further that degenerate sliver smears across the screen — which is exactly the radial "sideways" pattern in the screenshot.
+
+Streaks are now **0.45–0.80 m** (up to ~1.1 m in a downpour) and slightly thinner, and the emitter box widened from 40 m to 56 m so drops arrive from a broader volume instead of a small patch overhead. Same velocity alignment, so rain still falls straight down on any face of the sphere — it just looks like rain now.
+
+#### 🚀 2 — Weather is a property of the planet, not of the player
+The rain emitter, weather audio and storm fog all keyed off the raw weather intensity, and they follow the camera — so climbing to orbit took the storm with you.
+
+Weather is now split into two clearly separate values:
+- **`Intensity`** — the *planet's* weather. Unchanged, and used by the cloud shells, so a storm keeps raging on the world while you watch it from orbit.
+- **`SurfaceProximity` / `LocalIntensity`** — how much of that weather actually reaches *you*. Proximity is 1 below the cloud base, eases through the deck and is 0 above it, using the exact same cloud-altitude formula the visible shell is built from (`PlanetCloudLayer.CloudAltitudeFor`), so the rain stops precisely at the deck you can see. It also eases rather than snaps, so flying up through the ceiling fades the rain out over the crossing instead of cutting it.
+
+Everything that should be local now rides it: rain, splashes, snow, the weather soundscape, the surface-hit layer, storm fog and storm sun-darkening. `IsPrecipitating` means "on the player" (so the underwater and rain-fog effects behave), and the new `IsPlanetPrecipitating` means "on the world".
+
+The rain heartbeat now logs `planet=` and `proximity=` alongside the local intensity, so "why is it not raining here" is answerable from one line.
+
+#### Files
+- **Edited:** `Scripts/Weather/WeatherManager.cs` (SurfaceProximity / LocalIntensity / IsPlanetPrecipitating) · `Scripts/Weather/WeatherParticles.cs` (short streaks, wider emitter, local intensity, richer heartbeat) · `Scripts/Weather/WeatherAudio.cs` (local intensity) · `Scripts/Weather/WeatherLighting.cs` (fog + darkening fade out above the deck) · `Scripts/Weather/PlanetCloudLayer.cs` (shared cloud-altitude helper) · `Scripts/Core/GameVersion.cs` → `9.23.1-dev`
+
+#### Manual Unity steps
+1. Pull `Dev`, recompile — **no setup step needed**.
+2. **Ctrl+Alt+R** on the surface: short, vertical, believable streaks. Look straight up — they shorten toward dots, no radial warp lines.
+3. Fly straight up: rain, splashes and rain audio fade out as you pass the cloud deck, and storm fog lifts with them.
+4. From orbit, look back at the planet — the storm is still there on the world, wrapped around it.
+5. Descend again: everything fades back in as you drop through the deck.
 
 ### [9.23.0-dev] Planetary Cloud Shells — Clouds Wrapped Around the World
 

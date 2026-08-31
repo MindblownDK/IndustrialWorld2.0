@@ -143,7 +143,7 @@ namespace VoxelEngine.Weather
             Vector3 dir = toStrike / dist;
 
             float delay = Mathf.Clamp(dist / 343f, 0.3f, 6.5f);   // light first, sound later
-            float intensity = _wm != null ? Mathf.Max(0.55f, _wm.Intensity) : 1f;
+            float intensity = _wm != null ? Mathf.Max(0.55f, _wm.LocalIntensity) : 1f;
             StartCoroutine(ThunderAfter(delay, dir, dist, intensity));
         }
 
@@ -178,7 +178,7 @@ namespace VoxelEngine.Weather
 
             if (_listener == null && wm.playerCamera != null) _listener = wm.playerCamera;
 
-            float intensity = wm.Intensity;
+            float intensity = wm.LocalIntensity;   // silent once you are above the cloud deck
             bool isSnow = wm.IsSnowBiome &&
                           (wm.CurrentState == WeatherState.Snow ||
                            wm.CurrentState == WeatherState.Blizzard ||

@@ -53,8 +53,22 @@ namespace VoxelEngine.Weather
         /// <summary>0 = fully previous state, 1 = fully target state.</summary>
         public float TransitionProgress { get; private set; } = 1f;
 
-        /// <summary>Current precipitation intensity (0 = none, 1 = max).</summary>
+        /// <summary>
+        /// Planet-wide precipitation intensity (0 = none, 1 = max). This is the WEATHER of the
+        /// world and stays valid no matter where the player is — the cloud shells use it so a
+        /// storm still rages on the planet while you watch it from orbit.
+        /// </summary>
         public float Intensity { get; private set; }
+
+        /// <summary>
+        /// How much of the weather reaches the PLAYER: 1 under the cloud deck, easing to 0 as
+        /// you climb through it and 0 above it. Rain, splashes, weather audio and storm fog all
+        /// ride this, so flying to space leaves the weather behind on the planet where it belongs.
+        /// </summary>
+        public float SurfaceProximity { get; private set; } = 1f;
+
+        /// <summary>Precipitation actually falling on the player = Intensity × SurfaceProximity.</summary>
+        public float LocalIntensity { get; private set; }
 
         /// <summary>
         /// Live multiplier weather applies to wind (1 = calm). Storms drive it up to the
@@ -67,8 +81,11 @@ namespace VoxelEngine.Weather
         /// <summary>True if the current biome is a cold/snowy biome (or the body forces snow).</summary>
         public bool IsSnowBiome { get; private set; }
 
-        /// <summary>True if it's currently precipitating (rain or snow).</summary>
-        public bool IsPrecipitating => IsWeatherActive && Intensity > 0.05f;
+        /// <summary>True if precipitation is currently reaching the player (rain or snow).</summary>
+        public bool IsPrecipitating => IsWeatherActive && LocalIntensity > 0.05f;
+
+        /// <summary>True if the planet is precipitating, whether or not the player is under it.</summary>
+        public bool IsPlanetPrecipitating => IsWeatherActive && Intensity > 0.05f;
 
         /// <summary>
         /// True only while standing on a body that is allowed to have weather (designer toggle on
@@ -249,6 +266,9 @@ namespace VoxelEngine.Weather
             float toIntensity = GetIntensity(TargetState);
             Intensity = IsWeatherActive ? Mathf.Lerp(fromIntensity, toIntensity, TransitionProgress) : 0f;
 
+            UpdateSurfaceProximity();
+            LocalIntensity = Intensity * SurfaceProximity;
+
             UpdateWindMultiplier();
 
             // State timer — pick next weather (only when weather is actually active and the
@@ -325,6 +345,31 @@ namespace VoxelEngine.Weather
 
             Debug.Log($"[Weather] DEBUG: held {TargetState} (Ctrl+Alt+W). " +
                       $"active={IsWeatherActive} intensity={Intensity:F2} snow={IsSnowBiome}");
+        }
+
+        /// <summary>
+        /// Fades the weather out as the player climbs through the cloud deck. Above the deck
+        /// there is nothing left to fall on you: no rain, no splashes, no rain audio, no storm
+        /// fog — while the planet below keeps its weather.
+        /// </summary>
+        private void UpdateSurfaceProximity()
+        {
+            var body = GravityProvider.ActiveBody;
+            if (!IsWeatherActive || body == null || playerCamera == null)
+            {
+                SurfaceProximity = Mathf.MoveTowards(SurfaceProximity, IsWeatherActive ? 1f : 0f,
+                                                     Time.deltaTime * 2f);
+                return;
+            }
+
+            float surface = Mathf.Max(50f, body.SurfaceRadius);
+            float altitude = Vector3.Distance(playerCamera.position, body.transform.position) - surface;
+            float deck = PlanetCloudLayer.CloudAltitudeFor(surface);
+
+            // Full weather up to the cloud base, gone once you are clearly above the deck.
+            float target = 1f - Mathf.Clamp01((altitude - deck * 0.85f) / Mathf.Max(1f, deck * 0.45f));
+            SurfaceProximity = Mathf.MoveTowards(SurfaceProximity, Mathf.Clamp01(target),
+                                                 Time.deltaTime * 1.5f);
         }
 
         private void ResolveActiveBody()

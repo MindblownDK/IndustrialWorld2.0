@@ -71,7 +71,9 @@ namespace VoxelEngine.Weather
                 (wm.CurrentState == WeatherState.Snow || wm.CurrentState == WeatherState.Blizzard ||
                  wm.TargetState == WeatherState.Snow || wm.TargetState == WeatherState.Blizzard);
 
-            float intensity = wm.Intensity;
+            // LocalIntensity is the planet's precipitation scaled by how far the player is
+            // under the cloud deck — above the deck it is 0, so it never rains in space.
+            float intensity = wm.LocalIntensity;
 
             // Rain
             if (!isSnow && intensity > 0.01f)
@@ -107,9 +109,9 @@ namespace VoxelEngine.Weather
             }
 
             // Heavier rain = slightly thicker, longer streaks.
-            _rainMain.startSizeX = new ParticleSystem.MinMaxCurve(0.05f, 0.07f + intensity * 0.03f);
-            _rainMain.startSizeZ = new ParticleSystem.MinMaxCurve(0.05f, 0.07f + intensity * 0.03f);
-            _rainMain.startSizeY = new ParticleSystem.MinMaxCurve(1.5f, 2.2f + intensity * 0.8f);
+            _rainMain.startSizeX = new ParticleSystem.MinMaxCurve(0.045f, 0.06f + intensity * 0.025f);
+            _rainMain.startSizeZ = new ParticleSystem.MinMaxCurve(0.045f, 0.06f + intensity * 0.025f);
+            _rainMain.startSizeY = new ParticleSystem.MinMaxCurve(0.45f, 0.75f + intensity * 0.35f);
 
             // UNCONDITIONAL heartbeat — logs every 5 s no matter what the weather is doing,
             // so we can see the full state (active? state? intensity? particles alive?)
@@ -121,6 +123,7 @@ namespace VoxelEngine.Weather
                 var psr = _rainPS != null ? _rainPS.GetComponent<ParticleSystemRenderer>() : null;
                 Debug.Log($"[Weather] Rain heartbeat: active={wm.IsWeatherActive} " +
                           $"state={wm.CurrentState}->{wm.TargetState} intensity={intensity:F2} " +
+                          $"planet={wm.Intensity:F2} proximity={wm.SurfaceProximity:F2} " +
                           $"snow={wm.IsSnowBiome} rainPS={(_rainPS != null)} " +
                           $"playing={(_rainPS != null && _rainPS.isPlaying)} " +
                           $"alive={(_rainPS != null ? _rainPS.particleCount : 0)} " +
@@ -147,9 +150,9 @@ namespace VoxelEngine.Weather
             // (billboard alignment is Velocity). All three curves share the two-constant mode —
             // Unity rejects mixed curve modes and silently drops the module if they differ.
             main.startSize3D = true;
-            main.startSizeX = new ParticleSystem.MinMaxCurve(0.05f, 0.08f);
-            main.startSizeY = new ParticleSystem.MinMaxCurve(1.6f, 2.6f);
-            main.startSizeZ = new ParticleSystem.MinMaxCurve(0.05f, 0.08f);
+            main.startSizeX = new ParticleSystem.MinMaxCurve(0.045f, 0.07f);
+            main.startSizeY = new ParticleSystem.MinMaxCurve(0.45f, 0.80f);
+            main.startSizeZ = new ParticleSystem.MinMaxCurve(0.045f, 0.07f);
             main.startColor = new ParticleSystem.MinMaxGradient(
                 new Color(0.80f, 0.85f, 0.95f, 0.75f),
                 new Color(0.95f, 0.97f, 1.00f, 0.95f));
@@ -175,7 +178,7 @@ namespace VoxelEngine.Weather
             // Shape: large box above player
             var shape = ps.shape;
             shape.shapeType = ParticleSystemShapeType.Box;
-            shape.scale = new Vector3(40f, 1f, 40f);
+            shape.scale = new Vector3(56f, 1f, 56f);
 
             var renderer = go.GetComponent<ParticleSystemRenderer>();
             // Billboard (the proven path) aligned to VELOCITY: the quad's up axis follows the

@@ -58,12 +58,20 @@ namespace VoxelEngine.Weather
         /// <summary>World radius of the shell (body surface + cloud altitude).</summary>
         public float ShellRadius => _shellRadius;
 
+        /// <summary>
+        /// Cloud-base altitude above a body's surface, in metres. Shared with
+        /// <see cref="WeatherManager"/> so the point where rain stops falling on the player is
+        /// exactly the deck they can see above them.
+        /// </summary>
+        public static float CloudAltitudeFor(float surfaceRadius) =>
+            Mathf.Clamp(Mathf.Max(50f, surfaceRadius) * 0.05f, 450f, 5000f);
+
         internal static PlanetCloudLayer Create(CelestialBody body, Mesh sphere, Texture3D noise, Shader shader)
         {
             if (body == null || sphere == null || noise == null || shader == null) return null;
 
             float surface = Mathf.Max(50f, body.SurfaceRadius);
-            float altitude = Mathf.Clamp(surface * 0.05f, 450f, 5000f);
+            float altitude = CloudAltitudeFor(surface);
             float radius = surface + altitude;
 
             var go = new GameObject("CloudShell");
