@@ -636,7 +636,7 @@ with amber/cyan accents). Shown both on right-click AND in the ship terminal.
 - `GridMasterTerminal.cs` — maritime blocks categorized + live quick-status in terminal list.
 - `GameVersion.cs` — 2.18.6 to 2.18.7.
 
-### Engine UI specifics (per Thomas's request)
+### Engine UI specifics (per the request)
 - **Small Engine**: no tank — shows a solid-fuel burn-rate bar instead, with remaining seconds.
 - **Medium/Giant Engine**: fuel tank gauge (shows fuel name + L), exhaust gas tank gauge.
 - **Exhaust gas full** → engine stops. Warning pill shows "EXHAUST BACKING UP".
@@ -769,7 +769,7 @@ Every mesh rebuilt with more detail and named animation pivots:
 
 ---
 
-## [2.18.11] — Split Multi-Class Files (FINAL missing-script fix) 
+## [2.18.11] — Split Multi-Class Files (FINAL missing-script fix)
 
 **Type:** PATCH — critical structural fix.
 

@@ -2,7 +2,7 @@
 //
 // Per-planet seed table for world creation.
 //
-// Design intent (per Thomas): when creating / cloning a world the player can set a CUSTOM SEED
+// Design intent: when creating / cloning a world the player can set a CUSTOM SEED
 // for every planet in the chosen solar system. A number is randomized for each planet from the
 // start, the player can edit any of them, and that number is what generates (and re-generates,
 // deterministically, on every load) that planet. Seeds are NEVER re-randomised after creation —

@@ -2466,7 +2466,7 @@ namespace VoxelEngine.UI
             allModules.style.marginBottom = 4;
             screen.Add(allModules);
 
-            // Thomas asked for the add-on to stay open as one connected console.
+            // The add-on stays open as one connected console by design.
             // A scroll-safe stack keeps every real equipment slot visible without
             // forcing a tab swap or hiding a drag/drop destination.
             var content = new ScrollView(ScrollViewMode.Vertical) { name = "EquipmentAddonContent" };

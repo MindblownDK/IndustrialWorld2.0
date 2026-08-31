@@ -1,15 +1,60 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.21.6-dev`
+**Current Version:** `9.22.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.22.0-dev] Real Rain Clouds — Horizon-Fitted Volumetric Cloud Ceiling
+
+**Type:** MINOR — replaces the cloud sky with a new horizon-fitted, lit, world-anchored cloud ceiling. Save-compatible, no API surface removed, no setup step required.
+
+#### What was reported
+*"Rain works, but the sky just looks like a round circle instead of a cloud that actually looks like a rain cloud."*
+
+#### Why it looked like a circle (three separate causes)
+1. **The deck literally ended overhead.** The old cloud domes were spherical caps of radius 320 m / 540 m sitting 150 m / 280 m above the player, capped at 82° from the zenith. Doing the trigonometry, the rim landed at roughly **31° elevation** — a disc covering only the top third of the sky, with a soft fade around its edge. From the ground that reads as exactly one thing: a round circle of cloud hanging above you.
+2. **Polar UVs pinched at the zenith.** UVs were `(theta, phi)`, so every texture row converged on a single point straight overhead. The result was a radial rosette / pinwheel right at the point the player looks when checking the weather — reinforcing the "circle" read.
+3. **Coverage was faked with opacity.** Weather changes just faded the whole layer's alpha up and down. A uniformly semi-transparent sheet has no silhouette, no gaps and no depth, so it never resembled a cloud — it looked like tinted glass.
+
+#### ☁️ The rebuild — a ceiling, not a disc
+
+**Horizon-fitted geometry.** Each layer is now generated in **view-elevation space**: a ring at elevation `e` is placed at `height / sin(e)` — exactly where a flat cloud layer at that altitude actually sits — clamped to a maximum sight distance, with rings packed toward the horizon (power bias 2.6) where the detail matters. The final ring is pushed to **−5° elevation, below the eye line**, so the deck runs continuously from the zenith out past the horizon and dissolves into the haze. There is no rim to see any more, from any camera angle.
+
+**Two real decks.** A low rain ceiling at 240 m (5.2 km sight distance, ~1150 m per cloud tile) and a high deck at 820 m (11 km, ~3400 m per tile) that is paler, thinner and lags in coverage — the sky now has depth instead of one flat sheet.
+
+**Planar, world-anchored UVs.** Texture coordinates are planar world metres, so the zenith pinch is gone entirely. The UV offset is driven by wind **and** counter-driven by the player's own horizontal movement, so clouds stay pinned to the world: walking gives honest parallax between the two decks instead of a sky that slides along with you. Offsets wrap to `[0,1)` so precision never drifts in a long session, and teleports / floating-origin shifts are rejected so the sky can never smear.
+
+**Coverage instead of opacity.** The shader remaps cloud density through a coverage threshold (0.86 → 0.06). Clear weather leaves only the densest cores — a few lazy wisps with open sky between them. Heavy rain lets nearly everything through as a solid, unbroken storm ceiling. The states now differ in **shape**, not just in transparency.
+
+**Cloud shapes that read as cloud.** The procedural noise is now billow fBm (each octave folded around its midpoint), which produces the rounded cauliflower lobes real clouds have instead of smooth grey hills, then contrast-shaped so the gaps stay genuinely open. A second, faster-scrolling high-frequency octave **erodes** the mass in the fragment shader, so edges tear apart, shapes evolve as they drift, and the tiling never becomes visible.
+
+**Actual lighting.** A normal is derived from the density gradient and lit by the URP main light with a wrapped lambert term, so lumps have **dark rain-bellies and bright sunlit crowns** — the single biggest reason the old flat tint never looked like weather. Thin borders get a forward-scattering glow so ragged edges glow instead of fading to grey mush, the deck thickens toward the horizon (longer sight line = more optical depth), and the vertex stage puffs the underside along the layer normal so the ceiling is lumpy rather than a perfectly flat plane.
+
+**Storm mood.** Belly and crown colours are separate and interpolate with precipitation intensity: fair-weather clouds are bright with a soft grey underside; a heavy storm drives the belly to near-charcoal `(0.20, 0.22, 0.27)` while the crown stays lit. Snow worlds keep their pale palette. The far edge blends into whatever haze the scene is currently using — weather fog while `WeatherLighting` owns fog, the sky's own fog otherwise — so the ceiling and the horizon are always the same colour.
+
+**Lightning still flashes through the deck**, now as a tinted internal pulse scaled by storm intensity rather than a flat white wash.
+
+#### Performance
+Two layers, ~4k vertices each, 4 texture taps per pixel, one 256² RGBA texture shared by both decks, shadows / light probes / reflection probes / motion vectors all disabled, fixed generous mesh bounds so the camera-parented decks are never wrongly frustum-culled, and both layers are deactivated entirely when coverage is below 2% (clear skies cost nothing).
+
+#### Files
+- **Rewritten:** `Scripts/Rendering/WeatherCloudsURP.shader` (coverage remap, detail erosion, gradient lighting, forward-scatter edges, vertex puff, horizon haze blend)
+- **Rewritten:** `Scripts/Weather/WeatherClouds.cs` (horizon-fitted mesh generation, two-deck system, world-anchored drift, billow noise, storm palette)
+- **Edited:** `Scripts/Core/GameVersion.cs` → `9.22.0-dev`
+
+#### Manual Unity steps
+1. Pull `Dev` and let Unity recompile — **no setup step, no prefab, no scene change needed** (the decks are created by `WeatherManager` at runtime).
+2. Enter Play Mode and wait for (or force) rain. Look straight up: no circle, no pinwheel — a continuous lumpy ceiling that runs down to the horizon in every direction.
+3. Walk / fly around: clouds stay anchored to the world and the two decks parallax against each other.
+4. Compare states — Clear shows scattered wisps with open sky, Overcast a broken deck, Heavy Rain a solid dark ceiling.
+5. Wait for thunder: the flash should pulse through the deck in sync with the rumble.
 
 ### [9.21.6-dev] Rain Stays Vertical — Velocity-Aligned Streaks
 
 **Type:** PATCH — aligns rain streaks to their fall velocity instead of the camera. No save, API or content changes; no setup step required.
 
-#### What Thomas reported (and what was actually wrong)
+#### What was reported (and what was actually wrong)
 *"Almost perfect, but when I look up the rain looks sideways — it's affected by where I look."* — The rain renderer used **Billboard** mode, which turns every quad to face the camera. A tall thin streak therefore tilted with the camera: looking horizontally it read as a vertical streak, but looking up the quad lay flat and the streak appeared **sideways**.
 
 #### 🌧️ The fix — stretch along velocity
@@ -25,7 +70,7 @@ This also removes the 3D start-size hack and is spherical-world correct (velocit
 #### Files
 - **Edited:** `Scripts/Weather/WeatherParticles.cs` (rain → Stretch mode + scalar width) · `Scripts/Core/GameVersion.cs` → `9.21.6-dev`
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, recompile — **no setup step needed**.
 2. Let it rain and look around: streaks stay vertical at any pitch; looking straight up they shorten toward dots (natural), never sideways.
 3. Confirm the `[Weather] Rain heartbeat` still shows `playing=True` and a healthy `alive=` count.
@@ -34,7 +79,7 @@ This also removes the 3D start-size hack and is spherical-world correct (velocit
 
 **Type:** PATCH — fixes the mixed-mode velocity curve error that froze rain in the sky, and ducks the weather audio when a UI panel is open. No save, API or content changes; no setup step required.
 
-#### What Thomas reported (and what was actually wrong)
+#### What was reported (and what was actually wrong)
 1. *`Particle Velocity curves must all be in the same mode`* + *"rain is only in the sky and not actually falling down."* — One bug explains both. The rain and splash systems set only the **Y** velocity curve as a two-constant range (`MinMaxCurve(-28,-18)`), while **X** and **Z** kept their default single-constant mode. Unity requires all three axes to share one curve mode; the mismatch made the velocity module throw every frame and **fail outright**, so every particle stayed frozen exactly where it spawned — rain streaks parked at the 32 m emitter, splash parked at the ground. That's precisely "rain in the sky + particles on the surface, nothing moving."
 2. *"Rain sounds should lower in volume when in inventory or any UI."* — The weather soundscape ignored the UI entirely.
 
@@ -47,7 +92,7 @@ This also removes the 3D start-size hack and is spherical-world correct (velocit
 #### Files
 - **Edited:** `Scripts/Weather/WeatherParticles.cs` (same-mode velocity curves on rain + splash) · `Scripts/Weather/WeatherAudio.cs` (UI-duck factor) · `Scripts/Core/GameVersion.cs` → `9.21.5-dev`
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, recompile — **no setup step needed**.
 2. Let it rain and **look up**: streaks should now fall from the sky to your feet (no more "frozen in the sky"), and the `Particle Velocity curves` error should be gone from the console.
 3. Open your **inventory (or any terminal/pause menu)** while it rains → the rain/roof/wind audio should drop to a quiet background; close it → it comes back up.
@@ -75,7 +120,7 @@ The previous diagnostic only printed **while it was raining** (`intensity > 0.01
 #### Files
 - **Edited:** `Scripts/Weather/WeatherManager.cs` (manager heartbeat) · `Scripts/Weather/WeatherParticles.cs` (unconditional heartbeat + Start log + null-manager warning) · `Scripts/Core/GameVersion.cs` → `9.21.4-dev`
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, recompile — **no setup step needed**.
 2. Play on your **home planet** (temperate, has an atmosphere) and open the **Console**.
 3. Let it run ~30–60 s. Two heartbeat lines should be printing every 5–8 s.
@@ -99,7 +144,7 @@ Three rounds of tuning (Stretch mode → texture billboard) still left rain invi
 - **Edited:** `Scripts/Weather/WeatherParticles.cs` (procedural path + material setup + diagnostic) · `Scripts/Rendering/WeatherParticlesURP.shader` (procedural dot/streak, no texture) · `Scripts/Core/GameVersion.cs` → `9.21.3-dev`
 - The edited shader remains pure ASCII.
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, recompile — **no setup step needed**.
 2. Let it rain and **look up**: long thin streaks should now fall from the sky toward your feet.
 3. If rain is still missing, open the **Console** during rain and paste me the line starting with `[Weather] Rain:` — it reports whether the system is playing, how many particles are alive, the resolved shader name, and the emitter position, which pins the cause immediately.
@@ -108,7 +153,7 @@ Three rounds of tuning (Stretch mode → texture billboard) still left rain invi
 
 **Type:** PATCH — replaces the broken Stretch-mode rain renderer with a Billboard streak renderer. No save, API or content changes; no setup step required.
 
-#### What Thomas reported (and what was actually wrong)
+#### What was reported (and what was actually wrong)
 *"Still only droplets on the surface, not actual rain fall."* — Two rounds of tuning the **Stretch** render mode (`velocityScale`, `lengthScale`, drop width) did not fix it. The tell was that the **splash** system — which uses the ordinary **Billboard** render mode — has always been visible, while the rain system using **Stretch** never was. Stretch-mode streak rendering was simply unreliable in this URP setup, so no amount of parameter tuning would make the streaks appear.
 
 #### 🌧️ The fix — stop fighting Stretch, bake the streak into the billboard
@@ -123,7 +168,7 @@ Three rounds of tuning (Stretch mode → texture billboard) still left rain invi
 - **Edited:** `Scripts/Weather/WeatherParticles.cs` (billboard + 3D size + streak/dot textures) · `Scripts/Rendering/WeatherParticlesURP.shader` (`_MainTex` sampling) · `Scripts/Core/GameVersion.cs` → `9.21.2-dev`
 - The edited shader remains pure ASCII.
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, recompile — **no setup step needed**.
 2. Let it rain and **look up**: you should now see long thin streaks falling from the sky toward your feet — real rain, not just splashes at your feet.
 3. In a snow biome: soft round flakes drifting down (no hard squares).
@@ -133,7 +178,7 @@ Three rounds of tuning (Stretch mode → texture billboard) still left rain invi
 
 **Type:** PATCH — fixes two visual regressions in the weather stack. No save, API or content changes; no setup step required.
 
-#### What Thomas reported (and what was actually wrong)
+#### What was reported (and what was actually wrong)
 1. *"Rain is only visible on the ground — no actual rain from above."* — The rain particles were configured for **Stretch** render mode but with `velocityScale = 0`. In Unity a zero `velocityScale` renders Stretch-mode particles **unstretched** (every streak collapses to a point), so the 1.5–4 cm drops were effectively invisible specks falling from the emitter. The only thing you could see was the **billboard splash** system puffing at ground level — hence "rain only on the ground."
 2. *"When it's raining the screen isn't getting darker."* — The sun and ambient *were* being darkened (`WeatherLighting` → `SunLightController`), but the **sky dome is unlit** and was never touched by weather, so the brightest thing on screen — the sky — stayed full blue. The scene therefore never read as "it got darker" even though the terrain light dropped.
 
@@ -149,7 +194,7 @@ Three rounds of tuning (Stretch mode → texture billboard) still left rain invi
 - **Edited:** `Scripts/Weather/WeatherParticles.cs` (stretch + width) · `Scripts/Weather/WeatherLighting.cs` (publishes `_VoxelWeatherDarken`) · `Scripts/Rendering/PlanetSkyDomeURP.shader` (reads + applies it) · `Scripts/Core/GameVersion.cs` → `9.21.1-dev`
 - The edited shader remains pure ASCII (zero non-ASCII bytes).
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, recompile — **no setup step needed**.
 2. Let it rain and **look up**: thin bright streaks should now fall from the sky toward your feet, visibly denser in heavy rain (not just splashes at your feet).
 3. Watch the sky as a storm rolls in: it should darken toward grey-blue, and the whole scene should feel dimmer; when it clears, the sky brightens back up.
@@ -179,7 +224,7 @@ Until now the wind that spins wind turbines lived in its own `WindSystem` and wa
 #### Files
 - **Edited:** `Scripts/Weather/WeatherManager.cs` (new `WindMultiplier` + `UpdateWindMultiplier`) · `Scripts/Cosmos/WindField.cs` (applies the multiplier) · `Scripts/Power/Wind/WindSystem.cs` (applies the multiplier, raised clamp) · `Scripts/Core/GameVersion.cs` → `9.21.0-dev`
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, recompile — **no setup step needed**.
 2. Build a complete wind turbine, note its calm-day output in the turbine UI.
 3. Let a **heavy rain / blizzard** roll in (or use the weather force-test) → turbine RPM and output should climb noticeably above calm-day levels, then settle back when it clears.
@@ -190,7 +235,7 @@ Until now the wind that spins wind turbines lived in its own `WindSystem` and wa
 
 **Type:** PATCH — fixes a compile error in the two new weather shaders shipped in 9.20.0-dev. No save, API or content changes; no setup step required.
 
-#### What Thomas reported (and what was actually wrong)
+#### What was reported (and what was actually wrong)
 1. *"The sky is pink — there is a pink circle in the sky."* — That circle is the **cloud dome**. Its shader was failing to compile, so Unity rendered the dome's default magenta "shader error" colour.
 2. *"Rain and snow don't look like rain or snow — or anything."* — The rain/snow/splash particles share the second broken shader, so they rendered magenta (or invisible) instead of as falling streaks/flakes.
 
@@ -212,7 +257,7 @@ After the fix the weather stack renders as designed: the grey cloud deck covers 
 #### Files
 - **Edited:** `Scripts/Rendering/WeatherCloudsURP.shader` · `Scripts/Rendering/WeatherParticlesURP.shader` · `Scripts/Core/GameVersion.cs` → `9.20.1-dev`
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, recompile — **no setup step needed**.
 2. Let it rain and **look up**: the pink circle is gone; a grey cloud deck now covers the sky and rain streaks fall from it. No magenta anywhere in the sky.
 3. In a snow biome: pale clouds and drifting white flakes (no magenta particles).
@@ -222,7 +267,7 @@ After the fix the weather stack renders as designed: the grey cloud deck covers 
 
 **Type:** MINOR — new save-compatible features (cloud sky layer, spatial audio system, two new project shaders) plus field fixes from the 9.19.1 round. No save-format or content changes; no setup step required (everything is generated at runtime).
 
-#### What Thomas reported (and what was actually wrong)
+#### What was reported (and what was actually wrong)
 1. *"Rain is only on the ground, no actual rain from above, and the sky is clear."* — Two causes. (a) The rain material was built on URP's particle shader with runtime surface flags that don't reliably take effect, leaving faint short streaks that vanish against a bright sky. (b) There was simply **no cloud layer at all** — the sky stayed clear blue while it poured, so rain had nothing to fall *from* and nothing dark to read against. Storm fog was also thick enough (0.03 exponential ≈ 33 m visibility) to eat the rain shaft.
 2. *"Rain on metal and rain indoor sound the same — and neither sounds like rain at all."* — The old mixer fired a fixed **baseline metal-ping bed whenever you were under ANY roof** (caves and wood houses included), so indoors always sounded like the same tin roof. Every source was 2D mono noise loops with no spatial behaviour at all, and thunder played instantly with no direction.
 
@@ -254,7 +299,7 @@ After the fix the weather stack renders as designed: the grey cloud deck covers 
 - **Edited:** `WeatherManager.cs` (creates the cloud subsystem; `OnThunder` now carries the strike position; new `PickStrikePosition`) · `WeatherParticles.cs` (new shader + brighter streaks + higher slab) · `WeatherLighting.cs` (thunder signature, softer fog defaults) · `GameVersion.cs` → 9.20.0-dev
 - Both new shaders are pure ASCII (zero non-ASCII bytes). All touched C# passes the offline lexer balance check. Thunder subscribers (`WeatherAudio`, `WeatherLighting`, `WeatherClouds`) all use the new `Action<Vector3>` signature.
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, recompile — **no setup step needed** (clouds, meshes, textures, materials and audio are all generated at runtime; the two new shaders import automatically like the rest of `Scripts/Rendering`).
 2. Let it rain and **look up**: a grey cloud deck now covers the sky, moving with the wind, and rain streaks fall from it toward your feet. Sky should no longer be clear during rain.
 3. In Heavy Rain, look toward the horizon: hazy grey — but you can still see terrain and rain past ~70 m (no fog wall).
@@ -265,7 +310,7 @@ After the fix the weather stack renders as designed: the grey cloud deck covers 
 
 ### [9.19.1-dev] Weather Field Fixes — Radial Rain on Spherical Worlds, Real Rain Streaks & Always-On Rain Audio
 
-**Type:** PATCH — fixes for Thomas's first field test of 9.19.0. No save or content changes; re-run of Step 58 not required.
+**Type:** PATCH — fixes for the first field test of 9.19.0. No save or content changes; re-run of Step 58 not required.
 
 #### 🌍 1. Rain now falls toward the planet core (spherical worlds)
 The particle stack was authored for a flat world: the rain slab sat 25 m along **world +Y** and drops accelerated along **world −Y** gravity. On a sphere that is only correct at one spot — everywhere else the rain came **from the side**. Fixed:
@@ -287,7 +332,7 @@ The audio sources were always 2D ambient — the real culprit was the **"under a
 #### ✅ Checks
 All touched files pass the offline C# lexer balance check; no save-format, API or content changes; Step 58 assets unchanged.
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, recompile — no setup step needed.
 2. Stand anywhere on a temperate world and let it rain: drops must now fall **straight down toward your feet** (toward the planet core), not sideways — including far from spawn, on hills, and near the "equator" of the planet.
 3. Look up through the rain: thin bright streaks, visibly denser in heavy rain.
@@ -328,7 +373,7 @@ New `Tools ▸ Voxel Engine ▸ Voxel Engine Setup ▸ 58. Wire the Weather & Cl
 #### ✅ Checks
 All touched C# files brace/paren/bracket balanced in an offline check; additive data only (no save-schema, no public-API removal); neutral weather modifiers default to no-op so existing clear skies are byte-for-byte unchanged when weather is clear or absent.
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, recompile — clean.
 2. Run **Tools ▸ Voxel Engine ▸ Setup Wizard ▸ Step 58** (author climate profiles + ensure the `_Weather` controller). It is safe to re-run.
 3. Press Play on a temperate world: weather should begin within **~10–22 seconds** (watch the console for `[Weather] ApplyBody … firstChangeIn~Ns` then `[Weather] Clear -> Overcast/LightRain`). An overcast → light/heavy rain cycle should roll in (rain particles, splash, darker sun + fog, procedural rain audio, occasional thunder + sky flash). If the ApplyBody line shows `active=False`, paste it — that means that world has no atmosphere and weather is correctly disabled.
@@ -338,11 +383,11 @@ All touched C# files brace/paren/bracket balanced in an offline check; additive 
 7. Optional: select the `_Weather` object and tune `WeatherLighting` fog colours / flash intensity, or a planet template's `Body → Weather` profile.
 
 #### Status
-Roadmap **Weather system** moves from ❌ MISSING → 🛠️ **WORKING ON** (foundations shipped, pending Unity validation by Thomas). Open follow-ups: cloud-cover visual layer, wind-driven sand/ash storms on desert worlds, and weather persistence across saves.
+Roadmap **Weather system** moves from ❌ MISSING → 🛠️ **WORKING ON** (foundations shipped, pending Unity validation). Open follow-ups: cloud-cover visual layer, wind-driven sand/ash storms on desert worlds, and weather persistence across saves.
 
 ### [9.18.2-dev] Meadow Field Round — Planted, Green, and Minable (+ HUD name fix)
 
-**Type:** PATCH — three field fixes from Thomas's report plus the top-right card name fix. No save changes, no content.
+**Type:** PATCH — three field fixes from the report plus the top-right card name fix. No save changes, no content.
 
 #### 🌱 1. Grass no longer floats
 The surface sample sat the anchor **6 cm above** the analytic surface and the anchor added **another 35 cm radial lift** — the whole field hovered visibly (two stacked offsets, one from the 9.9.0 era). Both are gone: the sample now sits **5 cm below** the surface and the anchor tucks roots a further 2 cm in — blades are *planted* in the terrain (7 cm of buried root, invisible at blade scale, guarantees contact everywhere on the sphere).
@@ -359,7 +404,7 @@ The field only rebuilt when the player walked 12 m — mined-out grass lingered.
 #### ✅ Checks
 Grass shader compiles clean in the offline rig (vert+frag PASS, pure ASCII); all touched C# files brace-balanced; no save-format changes.
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, recompile, load a grass-biome world.
 2. Blades should now **touch the ground**, be **green** (lit from the sun side, never black), sway in gusts, and mix lush/dry hues.
 3. Mine a grass voxel — its blades disappear within ~0.5 s. Mine the ground under a tuft — the tuft vanishes too.
@@ -372,7 +417,7 @@ Grass shader compiles clean in the offline rig (vert+frag PASS, pure ASCII); all
 
 - 9.18.0 used `body.localToWorldMatrix` in `GpuGrassRenderer` (Update + RebuildField), but `localToWorldMatrix` is a **Transform** member, not a component member — CS1061 on lines 119 and 241. Both call sites now read `body.transform.localToWorldMatrix`. Every other `body.` usage in the file re-verified against `CelestialBody`'s actual members (`SurfaceRadius`, `transform.*`).
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, recompile — clean.
 2. Continue the 9.18.0 checklist (meadow walk + paste the `[Grass] blades=...` console line).
 
@@ -402,7 +447,7 @@ Grass shader compiles clean in the offline rig (vert+frag PASS, pure ASCII); all
 - **Field diagnostic:** one console line per rebuild — `[Grass] blades=N density=X.XX/m2 tier=High range=70m` — if grass ever vanishes again, that line tells us why in one paste.
 - All shader sources stay pure ASCII (9.17.2 rule); the grass shader compiles clean in the offline rig (vert+frag PASS).
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, recompile, load a world on a grass biome (Plains/Forest).
 2. Walk around — you should now wade through **curved green blades** that sway with gusts, mix lush/dry hues, sit in real shadow under structures, and fade into the ground ~70 m out instead of popping.
 3. Paste the `[Grass] blades=...` console line once (it tells us density + tier — if blades=0, the line says which gate stopped it).
@@ -424,7 +469,7 @@ Grass shader compiles clean in the offline rig (vert+frag PASS, pure ASCII); all
 - **Pure ASCII everywhere:** every non-ASCII character in `VoxelSurfaceTextures.hlsl`, `VoxelTerrainEnhanced.shader` and `VoxelTerrainURP.shader` was replaced (box art → `+=-|`, `—` → `--`, `…` → `...`, `→` → `->`, `•` → `*`); zero non-ASCII bytes remain in any of the three files, so no lexer anywhere in the pipeline has anything to choke on.
 - **Re-validated:** all 12 compilation units (both shaders × 3 passes × vertex/fragment, each including the real library) plus the library standalone across all 29 material ids compile clean — 13/13 PASS.
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, let Unity recompile and reimport the three shader files.
 2. Terrain must now render textured — no pink, no console shader errors.
 3. If ANY error line remains in the Console, send it exactly as before — file + line number and we close it in one round.
@@ -441,7 +486,7 @@ Grass shader compiles clean in the offline rig (vert+frag PASS, pure ASCII); all
 - Portability cleanup: the one reversed-edge `smoothstep(-0.30, -0.95, …)` became `1.0 - smoothstep(-0.95, -0.30, …)` (identical math, defined behaviour on all compilers).
 - **Offline compile validation added:** every pass of both terrain shaders (ForwardLit / ShadowCaster / DepthOnly × vertex/fragment = 12 compilation units) plus the shared include across all 29 material ids now compile clean against stubbed URP headers — 12/12 PASS. This rig caught and confirmed the fix before this release.
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, let Unity recompile — the terrain must render **textured, not pink**.
 2. Re-run the 9.17.0 validation list (grass clumps/slope soil, stone strata, ore glints, sand ripples, distance fade).
 3. If ANYTHING is still pink, open the Console and send the exact `Shader error in '…'` line — it names the file/line and we fix it in one round.
@@ -488,7 +533,7 @@ Each class also emits a **tangent-plane relief gradient**: sand ripples slope th
 #### ✅ Static delivery checks
 - Braces/parens balanced in all three HLSL sources; no stale references to removed uniform names; single include guard; both meshers carry the alpha contract; no save-format changes; no other-game names; no TODOs.
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, let Unity recompile (new `VoxelSurfaceTextures.hlsl` + two edited shaders + two edited meshers — **no setup step needed, no assets authored**).
 2. Load any world: grass should clump with dry patches and fine blade streaks up close; **climbing a steep hill should show the turf blending into grained soil** on the slope faces.
 3. Find exposed stone (or dig down): strata banding + occasional hairline cracks; ore veins should show **glinting flecks** when the sun catches them (gold warm, silver bright, uranium with a faint green breath).
@@ -519,7 +564,7 @@ The voxel format kept ONE fluid byte + a material byte that could only express w
 
 #### 🪣 5. The Universal Liquid Bucket — superseded by §9
 The bucket (now "Liquid Bucket", Step 56) scoops ANY of the 7 liquids, places what it holds, and — new — **right-click a liquid tank to fill the bucket from the tank network or pour it back in** (100 L per bucket, type-checked). The tank exchange is fully feedback-toasted.
-> **Replaced in the same release** — Thomas field-tested the bucket and asked for a proper **Liquid Canister** instead. See §9: the bucket item is gone, the canister takes over with its own rules.
+> **Replaced in the same release** — the team field-tested the bucket and asked for a proper **Liquid Canister** instead. See §9: the bucket item is gone, the canister takes over with its own rules.
 
 #### 🌍 6. The fake ocean sphere is gone — ALL water is real generated voxel liquid
 The old quadtree sea shell (GpuOceanEngine) that wrapped every body at sea radius is **removed**: `CosmosBootstrap` no longer creates it, and the component self-disables if a legacy scene/prefab still carries it. Oceans now render exclusively from the **generated voxel ocean basins** (SphereDensity fills basins below sea level with real water cells), meshed by the same WaterMeshBuilder as lakes, seeps, buckets and pumps — flow, waves, foam, wakes and bucket scooping work on the open ocean exactly like anywhere else. Water is now truly voxel-real: it exists where the voxels say it exists, and nowhere else.
@@ -536,7 +581,7 @@ Two real bugs killed the old feel, both fixed:
 - **Liquid surfaces got their texture pass.** `VoxelWaterURP` gained a fine animated ripple layer, slow large-scale colour patchiness, and a per-liquid sparkle multiplier — water shimmers, fuels glitter, crude sits oily and mottled, coolant ripples with a faint glow. All procedural, no textures; per-liquid values live in `LiquidVisualProfile` (Water/Crude/Refined/Fuel/HFO/MGO/Coolant each tuned).
 
 #### 🫙 9. The bucket is retired — the LIQUID CANISTER takes over (field round)
-Thomas field-tested the bucket and called it: **remove the bucket, give us a liquid canister.** The bucket item is gone; in its place, the **Liquid Canister** — a 10 L tank that holds ONE liquid at a time.
+the team field-tested the bucket and called it: **remove the bucket, give us a liquid canister.** The bucket item is gone; in its place, the **Liquid Canister** — a 10 L tank that holds ONE liquid at a time.
 
 - **The item:** the old bucket asset became the canister in place (same file GUID, same `water_bucket` itemId, same recipe id) — old saves load untouched, and a legacy full bucket (durability 1) reads as a full 10 L canister on first touch. The item is renamed "Liquid Canister" non-destructively (items step + Step 56 rewrite only bucket-era names/descriptions; the serialized capacity migrates to 10 000 ml).
 - **RMB on a liquid pool scoops 500 ml per click** — click repeatedly until full. The first scoop fixes the canister's liquid; afterwards it only accepts the SAME liquid (RMB on another liquid pool refuses with a toast).
@@ -580,7 +625,7 @@ Two field reports addressed:
 #### ✅ Static delivery checks
 - All touched sources parse clean (tree-sitter C#); no save-format changes; no other-game names; no TODOs.
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, recompile; run **Step 56** (renames the bucket → Liquid Canister, migrates its capacity to 10 000 ml, flags industrial templates) and **Step 57** (creates the Igniter + its recipe).
 2. Craft/pick up the canister: RMB a water pool 20× — it fills to 10 L (the durability bar doubles as the fill meter). RMB the pool again with a full canister → "Full — left-click to pour" toast.
 3. Fill it with water, then RMB a crude-oil seep → refused with a toast (one liquid at a time). LMB the water out onto dry ground, then scoop crude fine.
@@ -627,7 +672,7 @@ New `VoxelEngine/DistantPlanet` shader replaces the flat coloured dot: **sun-lit
 #### ✅ Static delivery checks
 - All touched sources parse clean (tree-sitter C#); the new shader matches the project's proven template (no HDR blend, no LOD, `_WorldSpaceCameraPos`, `Fallback "Diffuse"`); no save-format changes.
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, recompile.
 2. Stand in space: every planet and moon should be visible as a **shaded world disc** — day side lit, night side dark, atmospheric worlds with a glowing rim — from anywhere, including from a planet's surface.
 3. Fly toward a distant planet: its disc converges toward the real position and hands over to the real surface around 60,000 km with no pop, no gap.
@@ -660,7 +705,7 @@ The pressure warnings are now gated to **the pilot of the vault's own grid** (`A
 #### ✅ Static delivery checks
 - All touched sources parse clean (tree-sitter C#); shader matches the project-standard template; no save-format changes.
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, recompile.
 2. Re-run **Step 53** and **Step 54** — the console logs "Repairing stale shader binding…" for the harvester mats; the contained black holes are now black with lensed rims, not pink.
 3. Right-click the **Singularity Harvester** → its full panel opens (black-hole visual, efficiency gauge, buffer). Right-click the **Astral Navigator** → its panel opens (mode toggle, target cycler).
@@ -699,7 +744,7 @@ The panel's black-hole rings and orbiting spots are now **explicitly centered on
 #### ✅ Static delivery checks
 - All touched sources parse clean (tree-sitter C#); shader matches the proven project template; no save-format changes.
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, recompile — the harvester's horizon is black with a lensed rim, not magenta.
 2. Re-run **Step 53** (bigger harvester), **Step 54** (bigger vault + canister flags), then **Step 55** (locator). Old saves still load; new placements use the grand builds.
 3. Vault panel: rings + orbiting balls now perfectly around the black hole. Kill grid power: disc/rings stop, pylon tips dim — same on the harvester (disc stops, coils dim).
@@ -718,7 +763,7 @@ The panel's black-hole rings and orbiting spots are now **explicitly centered on
 #### ✅ Static delivery checks
 - Source parses clean (tree-sitter C#); no other `IsAttachedToPanel` usages remain in the codebase.
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, recompile — console clean.
 2. Continue the 9.13.0 checklist (grand vault, pressure sim, cockpit banner, panel visuals).
 
@@ -747,7 +792,7 @@ Step 54 rebuilds the vault as a full-cell containment monument: pedestal + top c
 #### ✅ Static delivery checks
 - All touched sources parse clean (tree-sitter C#); shader declaration matches the SphereWorld publisher; no save-format changes.
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, recompile — terrain shader error gone, console clean.
 2. Re-run **Step 54** (non-destructive): the vault prefab upgrades to the grand visual + 24 slots / 120 t. Verify the old vault in a saved ship still loads (the prefab change only affects NEW placements).
 3. Place a vault, open its panel: the black hole visual animates, pressure sits in the stable band, power reads ~12 kW.
@@ -767,7 +812,7 @@ Step 54 rebuilds the vault as a full-cell containment monument: pedestal + top c
 #### ✅ Static delivery checks
 - Both sources parse clean (tree-sitter C#); no other ambiguous `Random` usages in the touched files.
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, recompile — console clean.
 2. Continue the 9.12.0 checklist (beacon approach, seamless crossfade, lensed horizon, antimatter/dark matter flow).
 
@@ -797,7 +842,7 @@ The horizon shader now renders a **bent-light photon ring**: light hugs the silh
 #### ✅ Static delivery checks
 - All touched sources parse clean (tree-sitter C#); lensed-ring shader is additive-free (depth-correct, writes depth); no save-format changes.
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, recompile, run **Step 54** (after Steps 52–53).
 2. In space: BOTH remnants must be visible from anywhere — especially the quasar with its blue jets. Fly straight at the black hole beacon: it must now genuinely approach (no more "running away").
 3. Approach through 62,000 km: the beacon crossfades into the real geometry with NO invisible gap.
@@ -828,7 +873,7 @@ A new stackable endgame resource (`item_singularity_matter`) — "exotic matter 
 #### ✅ Static delivery checks
 - All touched sources parse clean (tree-sitter C#); no save-format changes; no new shaders needed (reuses the Phase 5 singularity shaders).
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, recompile, run **Setup Step 53** (after Step 52). Console + dialog report what was created.
 2. Research unlocks: verify "Singularity Harvester" appears in the research tree (tier 8, after Warp Drive) and the recipe appears in the Assembler.
 3. Build the block on a powered ship with a cargo container. In space away from the black hole: terminal reads "No singularity in range".
@@ -871,7 +916,7 @@ Aim the ship at a remnant's beacon (4° cone) and the Warp Drive jumps to its st
 #### ✅ Static delivery checks
 - All touched sources parse clean (tree-sitter C#); two new shaders (accretion disc, horizon) are additive/opaque and depth-correct; no save-format changes.
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, recompile, then run **Setup Step 52** (Tools ▸ Voxel Engine ▸ Voxel Engine Setup). It reports created/initialized counts in the console.
 2. Load a world, get a ship with a Warp Drive into space. Look around: two new distant beacons (orange = black hole, blue = quasar) at fixed directions.
 3. Aim directly at a beacon and warp — you should arrive ~12,000 km from the horizon with the hole visible and pulling you gently.
@@ -898,7 +943,7 @@ Aim the ship at a remnant's beacon (4° cone) and the Warp Drive jumps to its st
 #### ✅ Static delivery checks
 - All sources parse clean (tree-sitter C#); shader edits confined to the Enhanced forward pass; version synchronized to 9.9.0-dev.
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, recompile (existing worlds fine — all visual).
 2. Walk on grass/rock in sunlight: close-up grain must have real relief (light/shadow across the detail), fading clean into the distance.
 3. Look across a plain: subtle large patches of colour variation instead of one uniform green.
@@ -926,7 +971,7 @@ Part 2: terrain material overhaul (triplanar macro+detail layering, biome-blende
 #### ✅ Static delivery checks
 - All sources parse clean (tree-sitter C#); version synchronized to 9.8.0-dev.
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, recompile (existing worlds fine).
 2. Watch a full sunrise→noon→sunset on the surface: warmer sunset ramp, softer dawn shadows, night with faint blue moonlight.
 3. Fly straight up: the sky light fades into harsh space light as you leave the atmosphere — and in deep space the sun STILL lights your ship (it used to freeze).
@@ -949,7 +994,7 @@ At the waterline the continent mask evaluates near ~0.6 (the smoothstep midpoint
 #### ✅ Static delivery checks
 - All sources parse clean (tree-sitter C#); version synchronized to 9.7.7-dev.
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, recompile, FRESH region/world (previous craters are baked into saved chunks).
 2. Seep: level pond at every latitude, crater mouth open, NO see-through slivers around the rim, shaft + reservoir liquid below.
 3. Beach: dig inland a few metres — dry. Chunk-scale test: also try a spot ~20–30 m inland.
@@ -967,7 +1012,7 @@ The liquid top plane was built perpendicular to the chunk's dominant CARDINAL ax
 #### ✅ Static delivery checks
 - WaterMeshBuilder parses clean; correction clamped to ±0.9 voxel so streams can never runaway-level; version synchronized to 9.7.6-dev.
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, recompile, revisit a seep (fresh region): the oil surface must lie LEVEL with the horizon inside its crater, matching the planet's curvature — no tilt at any latitude.
 2. Check lakes and spring pools the same way: level surfaces, softly rounded edges.
 3. Streams on slopes should still follow the hillside, just smoother.
@@ -1002,7 +1047,7 @@ Generated sea water filled ANY column whose surface pokes below sea−1 — incl
 #### ✅ Static delivery checks
 - All sources parse clean (tree-sitter C#); CPU-only gate (no GPU parity impact); version synchronized to 9.7.4-dev.
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, recompile, fresh world / unexplored region.
 2. Seep: oil surface sunk INSIDE the crater (no plate above the rim); mine the pond floor: liquid oil shaft inside dark casing all the way down; reservoir interior is a liquid crude pool.
 3. Dig on a beach a few metres inland: dry sand and rock — no hidden water lens. Ocean-side digging at the waterline may still meet the sea itself, which is correct.
@@ -1024,7 +1069,7 @@ At the reported site the radial up is ≈ (0.55, −0.29, 0.72) → rounds to st
 #### ✅ Static delivery checks
 - Decorator parses clean; version synchronized to 9.7.3-dev.
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, recompile, fresh world (or an unexplored region far from previous seep tests).
 2. Fly to a `Seep basin at …` log site: a level dark pond sunk INTO the ground, intact rim, no holes, no floating plates, no see-through terrain anywhere around it.
 3. Mine the dark pond floor → shaft → reservoir.
@@ -1043,7 +1088,7 @@ Every tarp incarnation traced back to one design: the seep placed a LIQUID FILM 
 #### ✅ Static delivery checks
 - Decorator parses clean; unused film writer removed; version synchronized to 9.7.2-dev.
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, recompile — **FRESH WORLD is mandatory for this test**: old worlds carry the floating slabs and film cells inside their saved chunks forever (Decorate re-runs on load are idempotent and cannot remove already-saved geometry).
 2. Find a seep via the `Seep basin at …` console line: it must be a dark pond sitting INSIDE a visible crater, level with the dent, zero floating geometry from any angle.
 3. Mine at the pond bottom: dark oil rock leads down the shaft to the reservoir.
@@ -1066,7 +1111,7 @@ Lake chance 1.2% → 3.5% of fresh dip-bearing chunks, and both lakes and spring
 #### ✅ Static delivery checks
 - All sources parse clean (tree-sitter C#); version synchronized to 9.7.1-dev.
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, recompile, FRESH world (the dune tarp in an old world is baked into saved chunks).
 2. Find an oil seep (`[OilReservoirDecorator]` site log): it must be a small dark pond IN the ground — no floating black slabs anywhere on slopes. Mine under it: recoloured oil rock leads down to the reservoir.
 3. Watch the console for `Lake formed` / `Spring placed` lines and fly to the coordinates: lakes sit IN their dips, streams lie ON the hillside.
@@ -1088,7 +1133,7 @@ Seep puddles were a surface film. Interior puddle cells now sink one voxel — t
 #### ✅ Static delivery checks
 - All sources parse clean (tree-sitter C#); no save-schema change; version synchronized to 9.7.0-dev.
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, recompile. Existing worlds: already-visited saved chunks keep their old water placement; fresh areas / fresh worlds show everything below.
 2. Revisit a spring stream on a slope: the water must LIE ON the hillside — no more raised tarp, no dark floating sheet.
 3. Explore for lakes: dips in the terrain above sea level should hold small ponds/tarns. Drain one by mining the rim — the water flows out downhill and stays drained.
@@ -1113,7 +1158,7 @@ The GPU ocean patches' reserved UV2 flow channel goes LIVE:
 #### ✅ Static delivery checks
 - All sources parse clean (tree-sitter C#); no save-schema change; version synchronized to 9.6.0-dev.
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, recompile — existing worlds fine (springs appear as their chunks (re)load).
 2. Hike uphill and look for a spring: water should visibly RUN downhill, pool in terrain dips, and keep flowing while you watch (the source refills). Mine a channel next to a stream — the water should follow it.
 3. Bury a spring with the build tool: it must go dormant (no water through solid).
@@ -1125,7 +1170,7 @@ The GPU ocean patches' reserved UV2 flow channel goes LIVE:
 **Type:** PATCH — the chunk-border mining ghost and the guard's teleport misfire (which was poisoning saves).
 
 #### ⛏️ 1. Mining ghost walls at CHUNK BORDERS (the "-215/-216 stacked colliders" log)
-Deep digging works since 9.5.4 — except exactly at chunk boundaries, where Thomas's log showed two chunks' colliders stacked over pure-air data. Root cause: every chunk keeps a 1-voxel PADDED copy of its neighbours' border voxels, but `SetVoxelWorld` only wrote the owner. The neighbour then remeshed from its STALE padding and faithfully rebuilt the OLD surface strip along the border — a ghost wall one voxel wide at every chunk face the player dug through.
+Deep digging works since 9.5.4 — except exactly at chunk boundaries, where the reported log showed two chunks' colliders stacked over pure-air data. Root cause: every chunk keeps a 1-voxel PADDED copy of its neighbours' border voxels, but `SetVoxelWorld` only wrote the owner. The neighbour then remeshed from its STALE padding and faithfully rebuilt the OLD surface strip along the border — a ghost wall one voxel wide at every chunk face the player dug through.
 - Border edits now WRITE THROUGH into every adjacent chunk's padded cell — faces, edges AND corners (the old remesh triggers were cardinal-only; corner seams are covered now too) — before the neighbour remeshes. Neighbours are marked modified so the padding persists consistently.
 
 #### 🛡️ 2. Depenetration guard vs. teleports ("tunnelled 1182 m at ~10914 m/s")
@@ -1135,7 +1180,7 @@ Respawns/loads/warps move the viewer hundreds of metres in one 0.2 s sample — 
 #### ✅ Static delivery checks
 - All sources parse clean (tree-sitter C#); version synchronized to 9.5.5-dev.
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, fresh world.
 2. Dig a long tunnel straight through several chunk borders (32 m spacing) — no more walls that refuse to break; the `[Mining]` line should never fire. If it does, send it — note it now lists ALL colliders below.
 3. Respawn/load repeatedly: no more guard warnings about impossible speeds, no "poisoned save" rejections caused by it.
@@ -1146,7 +1191,7 @@ Respawns/loads/warps move the viewer hundreds of metres in one 0.2 s sample — 
 **Type:** PATCH — the definitive mining fix (root cause confirmed by fresh-world logs) + respawn health/grounding + load-position assurance.
 
 #### ⛏️ 1. THE 0.5 m mining wall — a MeshCollider that never re-baked
-Thomas's fresh-world log (`rayHit='Chunk_249_-39_-25'`, voxel data = pure Air behind the collider) eliminated every environmental suspect and left only one: the chunk's OWN collider disagreeing with its OWN data. Root cause, in one line:
+the fresh-world log (`rayHit='Chunk_249_-39_-25'`, voxel data = pure Air behind the collider) eliminated every environmental suspect and left only one: the chunk's OWN collider disagreeing with its OWN data. Root cause, in one line:
 `if (meshCollider.sharedMesh != mesh) meshCollider.sharedMesh = mesh;`
 Chunks REUSE a single Mesh object for every remesh — so after a mining edit, the reference is unchanged, the guard skips the assignment and **the MeshCollider keeps the ORIGINAL surface bake forever**. You dug real holes in the data and the visuals while standing on the launch-day ghost surface — which also blocked the next swing's raycast (probes read Air → "Swing changed no voxels"). Mesh-completion now force re-bakes (null-cycle the reference) whenever content changed; the per-frame collider window refresh keeps the cheap reference guard. **This was the 0.5 m wall since 9.0.**
 
@@ -1162,7 +1207,7 @@ Cross-session frame drift can restore the on-foot player at a stale altitude ("l
 #### ✅ Static delivery checks
 - All sources parse clean (tree-sitter C#); both mesh-completion collider paths force re-bake; version synchronized to 9.5.4-dev.
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, recompile — fresh world.
 2. **Mine.** Down, sideways, deep, through overhangs — the wall is gone (the collider now follows every edit). This one I'm confident in: your log pointed at the exact line.
 3. Die → World Spawn: full health, solid ground underfoot, no fall-through.
@@ -1170,7 +1215,7 @@ Cross-session frame drift can restore the on-foot player at a stale altitude ("l
 
 ### [9.5.3-dev] The Logs Spoke — Stale-Era Chunk Rejection, Healed Death-Screen Respawn & One Save Per World
 
-**Type:** PATCH — three fixes pinpointed by Thomas's diagnostics. No API change; stale pre-9.5 chunk edits regenerate fresh (intended heal).
+**Type:** PATCH — three fixes pinpointed by the reported diagnostics. No API change; stale pre-9.5 chunk edits regenerate fresh (intended heal).
 
 #### 🧾 What the logs proved
 - `[Mining] rayHit='Chunk_…' voxel(density=-38, mat=Air) collidersBelow:'Chunk_…'@0.50m` — the pickaxe hit a REAL bubble-chunk collider whose surface sits ~1.4 m above voxel data that says AIR. Mesh and data can only disagree like that across SAVE ERAS: chunks saved before 9.5 (gradient-approximated field, metres off) sitting next to freshly regenerated exact-field chunks. That's the unmineable "top layer", and it's also the "respawned onto a floating chunk in the air" — the old spawn-area chunks literally float above the rebuilt terrain.
@@ -1188,7 +1233,7 @@ Per-body chunk stores move from sibling `VoxelWorlds/<world>_<planet>` folders i
 #### ✅ Static delivery checks
 - All sources parse clean (tree-sitter C#); version synchronized to 9.5.3-dev.
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, recompile, load your existing world — expect `[RegionFile] … stale …` warnings once per old region: that is the heal working.
 2. Mine at your old spawn area: the floating-island/unmineable zones must be gone (terrain regenerates consistent), and digging must continue arbitrarily deep. Any `[Mining]` line that still appears — send it.
 3. Die → death screen → World Spawn: must land ON the planet surface (watch `[PlayerSpawner] Respawn parked/complete`).
@@ -1213,7 +1258,7 @@ Bubble budgets raised (outstanding requests 40→64, generation concurrency 8→
 #### ✅ Static delivery checks
 - All sources parse clean (tree-sitter C#); version synchronized to 9.5.2-dev.
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, recompile.
 2. Mine down. If ANYTHING still stops you, copy the `[Mining] Swing changed no voxels…` console line into the chat — it names the blocker outright (collider names included).
 3. Die (with and without bed): watch `[PlayerSpawner] Respawn parked at… / complete at…` — a world respawn must end on the planet, guaranteed by the final clamp.
@@ -1238,7 +1283,7 @@ The open-ocean patches shared the chunk-water material 1:1, whose full wave/tide
 #### ✅ Static delivery checks
 - All sources parse clean (tree-sitter C#); version synchronized to 9.5.1-dev.
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, recompile.
 2. Mine straight down: past 0.5 m, past 5 m, keep going — nothing may ever stop the descent again (check `bubble=` in the `[GpuPlanetEngine:…]` log if it does).
 3. Fresh-world flyover: the thin between-chunk gaps must be gone.
@@ -1270,7 +1315,7 @@ Per-body engine telemetry every 15 s: `[GpuPlanetEngine:<Body>] nodes/ready/buil
 #### ✅ Static delivery checks
 - All sources parse clean (tree-sitter C#); lattice arrays disposed on every completion/teardown path; version synchronized to 9.5.0-dev.
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, recompile. Existing saves work — but chunks you already visited were generated with the OLD approximation and stay as saved if modified; unmodified areas regenerate exact. For the cleanest check, use a fresh world.
 2. Fly along ridged mountains while chunks stream in: NO gaps may appear at generation time any more.
 3. Mine straight down 30+ m: solid rock the whole way (ores included); no voids except real caves; and yes — with patience you can now dig clean through the planet.
@@ -1304,7 +1349,7 @@ The 9.3 km/m fix plus the NaN guards make rocks actually appear (900–6,000 m r
 #### ✅ Static delivery checks
 - All sources parse clean (tree-sitter C#); zero references to the deleted proxy system; version synchronized to 9.4.0-dev.
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, recompile.
 2. Console must be free of the `splitSet` exception; oceans must be water again.
 3. Watch the 30 s `[CosmosBootstrap] Bodies:` line — every planet should show a real distance. **If any says `NaN!` or an error names a body/orbit, send me those lines — they are the last piece of the puzzle.**
@@ -1346,7 +1391,7 @@ New `VoxelEngine/StarSurfaceURP`: fully procedural animated plasma surface — d
 #### ✅ Static delivery checks
 - All touched sources parse clean (tree-sitter C#); both terrain shaders keep identical per-pass CBUFFER layouts; version synchronized to 9.3.0-dev.
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, recompile. Saves keep working.
 2. Mine deep + tunnel: no wall, no phantom ground, and NO shimmer when looking at the ground.
 3. Watch the console 3 s diagnostics: `handshake: meshedR=…` should sit around 150–250 m while standing on terrain. If it reads 0, send me that log line.
@@ -1388,7 +1433,7 @@ Minable rocks were exclusive to the deep-space star frame — most flights never
 #### ✅ Static delivery checks
 - All touched sources parse clean (tree-sitter C#); version synchronized to 9.2.0-dev.
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, recompile — existing saves keep working.
 2. Mine straight down 10+ m and tunnel sideways — no floor, no phantom walls at any depth.
 3. Fly full speed into the planet from orbit — you must land ON terrain (coarse at worst), never inside it.
@@ -1416,7 +1461,7 @@ The original Phase-2 plan ("move mining/persistence onto the GPU engine, 64³ bu
 #### ✅ Static delivery checks
 - All touched sources parse clean (tree-sitter C#); cutout declared + applied in both terrain shaders; version synchronized to 9.1.0-dev.
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, recompile (existing 9.0.x saves keep working — MINOR).
 2. In Play Mode, mine straight down and sideways into a hillside: the tunnel must stay OPEN — no phantom floor/wall appearing behind mined voxels, and you can walk through freely.
 3. Look at the horizon while walking: no double-surface shimmer in the near field; terrain past the bubble edge unchanged.
@@ -1470,7 +1515,7 @@ The 7.x/8.x ladder (impostor + 5-level voxel LOD rings + gradient-corrected chun
 #### ✅ Static delivery checks
 - All new/modified sources parse clean (tree-sitter C#); zero remaining references to the deleted LOD classes; version synchronized to 9.0.0-dev.
 
-#### Manual Unity steps (Thomas)
+#### Manual Unity steps
 1. Pull `Dev`, let Unity import `Scripts/GpuVoxel/` (the compute shader lives in `Scripts/GpuVoxel/Resources/PlanetFieldGpu.compute` — the engine loads it by name, no wiring needed).
 2. **Fresh save required:** delete `<persistentDataPath>/VoxelWorlds/` (all worlds) — the new field regenerates every planet.
 3. Enter Play Mode: within ~1–2 s the six coarse face shells should appear, then refine top-down toward your position. Verify: no gaps/slabs at any distance, mountains have sharp ridgelines, oceans end at real coastlines (no water over land).
@@ -1483,7 +1528,7 @@ The 7.x/8.x ladder (impostor + 5-level voxel LOD rings + gradient-corrected chun
 **Type:** PATCH — restores correct spherical planet generation; no save-schema or public API change.
 
 #### 🌍 The real cause of the "flat layers" planet
-The 7.20.0 chunk-column caching evaluated the surface column **once per chunk at the chunk centre** and reused that single surface radius for every voxel of the chunk. On the 1 m gameplay bubble (32 m chunks) the error was invisible — but on the LOD levels (4 m / 8 m rings, the whole-planet FULL shell at 8–16 m voxels, and MID/FAR shells up to 16 km chunks) every chunk rendered as a **flat slab at its own centre height**. Adjacent chunks sat at different heights, so the planet read as **flat terrain layers stacked on each other with visible gaps between them** — exactly what Thomas reported, and not the flat world at all (the 8.0.0 removal was still correct, just not the culprit).
+The 7.20.0 chunk-column caching evaluated the surface column **once per chunk at the chunk centre** and reused that single surface radius for every voxel of the chunk. On the 1 m gameplay bubble (32 m chunks) the error was invisible — but on the LOD levels (4 m / 8 m rings, the whole-planet FULL shell at 8–16 m voxels, and MID/FAR shells up to 16 km chunks) every chunk rendered as a **flat slab at its own centre height**. Adjacent chunks sat at different heights, so the planet read as **flat terrain layers stacked on each other with visible gaps between them** — exactly what was reported, and not the flat world at all (the 8.0.0 removal was still correct, just not the culprit).
 
 #### 🧭 The fix — first-order gradient correction
 - `SphereDensity.ChunkColumn` now carries the **chunk-centre direction** and a **surface gradient** (∂surfaceRadius/∂dir) sampled with 7 column evaluations per chunk (centre + 2 slope probes + 4 gradient probes over a ~36 m baseline).
@@ -1523,7 +1568,7 @@ The 7.20.0 chunk-column caching evaluated the surface column **once per chunk at
 
 #### 🪐 Why (the flat layers bug)
 The legacy flat `VoxelWorld` (heightmap generator: `ChunkHeightJob` + `ChunkGenJob` + `NoiseUtility`) was still able to pollute the spherical planet:
-- The HOME body's chunk save folder was deliberately shared with the flat world's save folder (`<worldName>`). Old flat-era chunk saves therefore loaded straight into the spherical world and rendered as **flat terrain layers stacked on each other with visible gaps between them** — exactly the broken planet generation Thomas reported.
+- The HOME body's chunk save folder was deliberately shared with the flat world's save folder (`<worldName>`). Old flat-era chunk saves therefore loaded straight into the spherical world and rendered as **flat terrain layers stacked on each other with visible gaps between them** — exactly the broken planet generation was reported.
 - The flat world code paths still existed (bootstrap disable logic, editor references, drill fallback) even though the game is planets-only.
 
 #### 🗑️ Removed (flat world, fully)
@@ -1600,7 +1645,7 @@ The legacy flat `VoxelWorld` (heightmap generator: `ChunkHeightJob` + `ChunkGenJ
 - Existing sky overrides, display colours, runtime material properties, balance values, and custom content remain untouched on reruns.
 
 #### ✅ Static delivery checks
-- Modified C# syntax, shader structure, runtime bootstrap wiring, eclipse/dust source assertions, Step 51 idempotency, version synchronization, sparse-workspace exclusions, and diff whitespace are validated locally. Unity compile and Play Mode visual validation remain pending from Thomas.
+- Modified C# syntax, shader structure, runtime bootstrap wiring, eclipse/dust source assertions, Step 51 idempotency, version synchronization, sparse-workspace exclusions, and diff whitespace are validated locally. Unity compile and Play Mode visual validation remain pending.
 
 #### Manual Unity steps
 1. Let Unity finish compiling on the `Dev` branch.
@@ -1629,7 +1674,7 @@ The legacy flat `VoxelWorld` (heightmap generator: `ChunkHeightJob` + `ChunkGenJ
 
 #### ✅ Validation
 - Version/documentation synchronization, C# syntax parsing, shader structure/property checks, setup idempotency assertions, forbidden-folder absence, and sparse-checkout deletion safety were validated locally.
-- Thomas confirmed the planet-specific horizon works in Unity on the `Dev` branch.
+- Unity testing confirmed the planet-specific horizon works in Unity on the `Dev` branch.
 
 #### Manual Unity steps
 1. Let Unity finish compiling on the `Dev` branch.
@@ -2295,7 +2340,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 - **Full Coastline Ocean LOD Triangles:** Upgraded `PlanetOceanLodRenderer.cs` to keep coastal triangles (`!ocean[a] && !ocean[b] && !ocean[c]`) and set `_CutoutRadius` to `0f`, preventing gaps between the ocean LOD and coastal land.
 
 #### 📺 Top-Left LCD World Inspection HUD & Voxel Name Resolution
-- **Top-Left Relocation:** Relocated `WorldInspectionHud` to the top-left (`left = 16`, `top = 18`, removed `right`) per Thomas's feedback, styled as a Tektronix phosphor LCD terminal.
+- **Top-Left Relocation:** Relocated `WorldInspectionHud` to the top-left (`left = 16`, `top = 18`, removed `right`) per review feedback, styled as a Tektronix phosphor LCD terminal.
 - **Guaranteed Target Name Display:** Upgraded `TryDescribeVoxel` and `TryResolve` so aiming at any block, terrain voxel (Dirt, Grass, Sand, Stone, Clay), tree, or machine always resolves and displays the target's name, hardness, and mining tier without blank titles.
 
 #### ✅ Static delivery checks
@@ -2371,7 +2416,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 
 #### ✅ Static delivery checks
 - Parsed terrain, streaming, meshing, water, player, HUD, material, celestial, and setup C# sources with Tree-sitter.
-- Ran targeted collider/HUD/mining/terrain/oil/version/sparse-workspace assertions locally. Unity compile and Play Mode validation remain pending from Thomas.
+- Ran targeted collider/HUD/mining/terrain/oil/version/sparse-workspace assertions locally. Unity compile and Play Mode validation remain pending.
 
 ---
 
@@ -2398,7 +2443,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 
 #### ✅ Static delivery checks
 - Parsed the modified streaming, meshing, water, terrain-LOD, scatter, player-spawn, and setup C# sources with Tree-sitter.
-- Ran targeted throughput/version/sparse-workspace assertions. Unity compilation and Play Mode validation remain pending from Thomas.
+- Ran targeted throughput/version/sparse-workspace assertions. Unity compilation and Play Mode validation remain pending.
 
 ---
 
@@ -2430,7 +2475,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 
 #### ✅ Static delivery checks
 - Parsed the updated performance/spawn/world-generation C# sources with Tree-sitter and ran targeted source, padded-coordinate, version, and sparse-workspace assertions.
-- Unity compilation and Play Mode validation remain pending from Thomas; no runtime confirmation is claimed.
+- Unity compilation and Play Mode validation remain pending; no runtime confirmation is claimed.
 
 ---
 
@@ -2461,7 +2506,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 
 #### ✅ Static delivery checks
 - Parsed the modified spherical-world, water, scatter, oil, celestial, setup, and version C# sources with Tree-sitter and ran targeted source/sparse-workspace assertions locally.
-- Unity compilation and Play Mode validation remain pending from Thomas; this entry does not claim Unity confirmation.
+- Unity compilation and Play Mode validation remain pending; this entry does not claim Unity confirmation.
 
 ---
 
@@ -2496,7 +2541,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 - Camera far-clip sizing and bootstrap diagnostics now use the actual generated body centre/radius.
 
 #### ✅ Static delivery checks
-- Source parsing and targeted planet-scale/LOD/water/HUD regression assertions are run locally. Unity compilation and Play Mode validation remain pending from Thomas.
+- Source parsing and targeted planet-scale/LOD/water/HUD regression assertions are run locally. Unity compilation and Play Mode validation remain pending.
 
 ---
 
@@ -2512,7 +2557,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 - Raised the held-item HUD layout revision and added a document-wide raw-item-id scrub. Legacy labels such as `dirt_item` are removed both on initial mount and selection changes, leaving only the intended **Dirt** display label.
 
 #### ✅ Static delivery checks
-- Source parsing and targeted LOD/HUD/real-water regression assertions are run locally. Unity compilation and Play Mode validation remain pending from Thomas.
+- Source parsing and targeted LOD/HUD/real-water regression assertions are run locally. Unity compilation and Play Mode validation remain pending.
 
 ---
 
@@ -2529,7 +2574,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 - The inset terrain LOD now fills every unstreamed region at ground, flight, and orbit while real voxel chunks naturally occlude it near the player. Terrain and ocean therefore share a continuous full-planet LOD hierarchy instead of a square loaded island.
 
 #### ✅ Static delivery checks
-- Source parsing and targeted ocean/terrain LOD, real-water, dirt, mining, oil, and regression assertions are run locally. Unity compilation and Play Mode validation remain pending from Thomas.
+- Source parsing and targeted ocean/terrain LOD, real-water, dirt, mining, oil, and regression assertions are run locally. Unity compilation and Play Mode validation remain pending.
 
 ---
 
@@ -2552,7 +2597,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 - Increased the tapering funnel mouth to match the puddle and reduced crude lateral spread to one voxel step, keeping dense oil cohesive as it descends into the deep reservoir.
 
 #### ✅ Static delivery checks
-- Source parsing and targeted real-water/LOD/dirt/oil regression assertions are run locally. Unity compilation and Play Mode validation remain pending from Thomas.
+- Source parsing and targeted real-water/LOD/dirt/oil regression assertions are run locally. Unity compilation and Play Mode validation remain pending.
 
 ---
 
@@ -2571,7 +2616,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 - Restricted generated water to real ocean basins, repaired legacy dry-cave water locally as a player mines, and lets real local liquid trigger swim/escape and mining correctly.
 
 #### ✅ Static delivery checks
-- Source parsing and targeted spherical-terrain/LOD/mining/water regression assertions are run locally. Unity compilation and Play Mode validation remain pending from Thomas.
+- Source parsing and targeted spherical-terrain/LOD/mining/water regression assertions are run locally. Unity compilation and Play Mode validation remain pending.
 
 ---
 
@@ -2594,7 +2639,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 - Added a small local migration cleanup when mining removes terrain: old auto-generated dry-cave water around that excavation is cleared while real ocean basins and current-session player-placed liquid are preserved.
 
 #### ✅ Static delivery checks
-- Source parsing and targeted regression assertions are run locally. Unity compilation and Play Mode validation remain pending from Thomas.
+- Source parsing and targeted regression assertions are run locally. Unity compilation and Play Mode validation remain pending.
 
 ---
 
@@ -2620,7 +2665,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 - Buckets, pumps, tanks, pipes, and the refinery share the same voxel-liquid types. The Pirate-only Jack Pump infinite-node gate remains unchanged.
 
 #### ✅ Static delivery checks
-- Source parsing and native-water/oil/pump regression assertions are run locally. Unity compilation and Play Mode validation remain pending from Thomas.
+- Source parsing and native-water/oil/pump regression assertions are run locally. Unity compilation and Play Mode validation remain pending.
 
 ---
 
@@ -2642,7 +2687,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 - The first migration applies intended default rates while later setup runs preserve deliberate custom finite-seep rates on custom worlds.
 
 #### ✅ Static delivery checks
-- Source parsing and targeted regression assertions are run locally. Unity compilation and Play Mode validation remain pending from Thomas.
+- Source parsing and targeted regression assertions are run locally. Unity compilation and Play Mode validation remain pending.
 
 ---
 
@@ -2665,7 +2710,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 - Added concise runtime diagnostics for Pirate oil configuration and the first created sites to make Unity feedback actionable.
 
 #### ✅ Static delivery checks
-- Source parsing and targeted regression assertions are run locally. Unity compilation and Play Mode validation remain pending from Thomas.
+- Source parsing and targeted regression assertions are run locally. Unity compilation and Play Mode validation remain pending.
 
 ---
 
@@ -2694,7 +2739,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 - Step 20 also writes the rare head into newly rebuilt Pirate ruins.
 
 #### ✅ Static delivery checks
-- Revised source parses cleanly locally. Unity compilation and Play Mode validation remain pending from Thomas.
+- Revised source parses cleanly locally. Unity compilation and Play Mode validation remain pending.
 
 ---
 
@@ -2713,7 +2758,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 - Corrected related player swim depth, water LOD, depth sampling, and oil visual anchor calculations to use world-to-body-local conversion.
 
 #### ✅ Static delivery checks
-- Revised source parses cleanly locally. Unity compilation and Play Mode validation remain pending from Thomas.
+- Revised source parses cleanly locally. Unity compilation and Play Mode validation remain pending.
 
 ---
 
@@ -2732,7 +2777,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 - This resolves the reported `CS0103` / `CS1061` errors in `GridEntity` and `GridPilotHud`.
 
 #### ✅ Static delivery checks
-- Revised C# source parses cleanly locally. Unity compilation and Play Mode validation remain pending from Thomas.
+- Revised C# source parses cleanly locally. Unity compilation and Play Mode validation remain pending.
 
 ---
 
@@ -2762,7 +2807,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 - Hardened the held-item readout cleanup across the entire UI document and removed its prefixed hotbar-slot number.
 
 #### ✅ Static delivery checks
-- Revised source parses cleanly and targeted structural/regression checks pass locally. Unity/Play Mode validation remains pending from Thomas; no runtime validation is claimed here.
+- Revised source parses cleanly and targeted structural/regression checks pass locally. Unity/Play Mode validation remains pending; no runtime validation is claimed here.
 
 ---
 
@@ -2786,7 +2831,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 - Rebuilt Recipe Browser into a two-screen **RECIPE ARCHIVE**: output index, filters, recipes, dependency tree, material plan, and method cards now share the same recessed LCD language.
 
 #### ✅ Static delivery checks
-- C# syntax and targeted structural assertions pass locally. Unity/Play Mode visual validation remains pending from Thomas; no runtime validation is claimed here.
+- C# syntax and targeted structural assertions pass locally. Unity/Play Mode visual validation remains pending; no runtime validation is claimed here.
 
 ---
 
@@ -3213,10 +3258,10 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 
 **Type:** PATCH — validation/documentation status update, save-compatible.
 
-- Thomas confirmed the Armor Station and Armor Upgrade Station workflow works in Unity.
+- Unity testing confirmed the Armor Station and Armor Upgrade Station workflow works in Unity.
 - Validation covers focused station recipes, timed upgrade installation, per-piece armor state, anvil presentation, equipment interaction, and persistence flow.
 - The armor-workstation implementation is now Unity-validated; broader radiation, heat, and life-support roadmap systems remain separate open scope.
-- Thomas also confirmed the 6.80.3 mountain-footing and dry-spawn safety behavior works in Unity.
+- the team also confirmed the 6.80.3 mountain-footing and dry-spawn safety behavior works in Unity.
 
 ---
 
@@ -3397,7 +3442,7 @@ reference to the sprite silently nulls out. Names/descriptions still work, so it
 
 **Type:** PATCH — bugfix/polish (UI), save-compatible.
 
-#### 🐛 What Thomas saw
+#### 🐛 What the team saw
 - Item icons showed perfectly in inventory but **no crafter UI ever drew them** — Assembler/Crusher/
   Quarry recipe cards, Oil Refinery & Chemical Plant recipe books, the Recipe Browser, and the
   Crafting Terminal all rendered text rows with a plain colored dot. There was no icon code there at all.
@@ -3830,7 +3875,7 @@ fixed slot sizes.
 
 **Type:** PATCH — art/content, save-compatible. Zero C# changes.
 
-#### ♻️ Remade icon (Thomas feedback)
+#### ♻️ Remade icon (the team feedback)
 - 🗄️ `block_storagedrawer` (Survival) — now a **single drawer front with one big clean white label panel** (thin dark frame + small knob below), drawer-mod style: the stored item can be shown on that white face in-game
 
 #### 💳 Drawer upgrade chip family — 6 icons from 1 master, stripe hue matched to each asset's `iconTint`
@@ -3886,7 +3931,7 @@ Same component, three sizes: art is pixel-identical per part and **icon scale = 
 
 **Type:** PATCH — art/content, save-compatible. Zero C# changes.
 
-#### ♻️ Remade icon (Thomas feedback)
+#### ♻️ Remade icon (the team feedback)
 - 🏠 `build_roof` (Tiered) — no more gable triangle: now a clean **single-slope shed roof** — one flat terracotta shingle plane on a simple wedge with fascia board, matching the rest of the build family
 
 #### 🗄️ New storage family icons (5, oak + steel design language)
@@ -3965,10 +4010,10 @@ Every piece you'd snap together into a starter base, instantly readable at slot 
 
 **Type:** PATCH — art/content, save-compatible. Zero C# changes.
 
-#### 🧹 Workspace maintenance (per Thomas)
-- Cleared all previously delivered icon PNGs from the workspace copy after Thomas downloaded them (git/local copies are the source of truth for him; sprite `.meta` files and all `icon:` asset bindings remain untouched, so nothing unbinds). New batches continue here.
+#### 🧹 Workspace maintenance (per the team)
+- Cleared all previously delivered icon PNGs from the workspace copy after they were downloaded (git/local copies are the source of truth for him; sprite `.meta` files and all `icon:` asset bindings remain untouched, so nothing unbinds). New batches continue here.
 
-#### 🚀 Thruster icon family established (Thomas feedback)
+#### 🚀 Thruster icon family established (the team feedback)
 All thrusters now share one design language — **dark octagonal armored housing + exposed engine bell nozzle**, differentiated by size and flame/plasma color:
 
 - 🔷 `gitem_hydrothruster_large` — REMADE: proper large rocket thruster, huge flared bell with bright cyan hydrogen burn, turbopump ring + feed pipes
@@ -3998,7 +4043,7 @@ Five icons generated right before a session interruption (mortar explosive base,
 
 **Type:** PATCH — art/content, save-compatible. Zero C# changes.
 
-#### ♻️ Remade icon (Thomas feedback)
+#### ♻️ Remade icon (the team feedback)
 - 🧲 `gitem_landinggear` (GridSystem) — rebuilt as a classic magnetic lock-gear: chunky light-grey armored mount block with a big round segmented magnetic disc underneath and a warning-yellow ring accent. The runner-up design (a square mag-pad) was too good to waste, so it became `block_stationarydockingport` (Industrial) — bonus icon!
 
 #### 🎨 Disk tier family via hue-shift (identical art, tier = color, matched to each asset's `iconTint`)
@@ -4076,7 +4121,7 @@ High-visibility handheld set — weapons and tools you stare at in hand and hotb
 
 **Type:** PATCH — art/content, save-compatible. Zero C# changes.
 
-#### 🎨 Splitter tier family unified (Thomas feedback)
+#### 🎨 Splitter tier family unified (the team feedback)
 All three conveyor splitters now share **one identical base design** (warm-grey steel cube, four black rubber belts with rollers, one belt end exiting each side, no arrows) and differ **only by tier color**, taken straight from each asset's own `iconTint`:
 
 - 🟢 `block_conveyorsplittermk1` — green accent ring + corner lights
@@ -4149,7 +4194,7 @@ Ten-tile coverage continues — now **123 / 398** itemIds carry premium hand-tun
 - 💡 `block_light` (Factory) — dark industrial light block with one bright warm lamp face
 - 💥 `block_giant_shell_turret` (Combat) — massive artillery dome turret with one very long elevated heavy barrel
 
-#### ♻️ Remade icons (3, Thomas feedback)
+#### ♻️ Remade icons (3, the team feedback)
 - 🔀 `splittermk2` — compact square conveyor junction: now a clean cube with **exactly 4 belts (one per side)**; the stray down-belt and all painted arrows are gone
 - ⛏️ `block_quarry` — rebuilt as a **stationary cubic frame block** with a front gantry carrying three drill augers; no wheels, no cab
 - 🌀 `block_hydrogenengine` — rebuilt as a proper hydrogen engine: chunky gunmetal block whose face is **one large circular turbine intake** with visible fan blades and a cyan accent ring
@@ -6770,7 +6815,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 - The Item-intake port gives the Crude engine a color-coded item-pipe connection point; solid-fuel delivery follows the existing item-network rules.
 
 **Roadmap Status:**
-- Vehicle power foundations: **🛠️ WORKING ON** — propellers, ports, connectivity and pipe-visual performance overhauled. Thomas to validate fuel→engine→shaft→propeller end-to-end.
+- Vehicle power foundations: **🛠️ WORKING ON** — propellers, ports, connectivity and pipe-visual performance overhauled. Still to validate in Unity: fuel→engine→shaft→propeller end-to-end.
 
 **Files touched:**
 - `Scripts/Maritime/MaritimeMeshBuilder.cs` — propeller blades scale with cell + double-sided material; static fuel/coolant/oxygen/item ports removed (exhaust + shaft kept); `DoubleSided` helper; `Version` 23 → 24.
@@ -6841,7 +6886,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 - Variable service ports are a **Medium (HFO V8)** and **Giant (MGO V12)** feature — the liquid-fuelled tiers that take piped fuel/coolant/oxygen. The Crude Inline-4 (solid fuel) is unaffected.
 
 **Roadmap Status:**
-- Vehicle power foundations: **🛠️ WORKING ON** — connectivity, port snapping, exhaust orientation and propellers overhauled. Thomas to validate the full fuel→engine→shaft→propeller chain end-to-end.
+- Vehicle power foundations: **🛠️ WORKING ON** — connectivity, port snapping, exhaust orientation and propellers overhauled. Still to validate in Unity: the full fuel→engine→shaft→propeller chain end-to-end.
 
 **Files touched:**
 - `Scripts/Maritime/MaritimeVariablePorts.cs` — **NEW**: `PortService`, `VariablePortRecord`, `MaritimeVariablePorts` component (caps, color-coded port objects, save capture/rebuild) + `MaritimePortPlanner` (shared geometry + service resolution).
@@ -6898,7 +6943,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 6. **Shift-Click** — Confirmed the code path exists and should work. Test by opening an engine panel (right-click on the engine), then shift-click a module in the module slots — it should transfer to player inventory. The `QuickTransfer` fallback at step 4 routes any non-player-container source to the player's inventory.
 
 **Roadmap Status:**
-- Vehicle power foundations: **🛠️ WORKING ON** — oxygen/fuel/pipe connectivity fixed. Thomas should validate end-to-end.
+- Vehicle power foundations: **🛠️ WORKING ON** — oxygen/fuel/pipe connectivity fixed. Unity validation should cover end-to-end.
 - Cable performance: **✅ COMPLETED** — caching mitigates the frame-rate sink.
 
 **Files touched:**
@@ -6942,7 +6987,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 6. **GAS/LIQUID Network SetDirty on Pipe Placement** — Added calls to `GridLiquidNetwork.Instance.SetDirty()` and `GridGasNetwork.Instance.SetDirty()` in `BuildSystem.PlaceOnDetailLattice` so the cache clears whenever a pipe is placed or removed.
 
 **Roadmap Status:**
-- Vehicle power foundations: **🛠️ WORKING ON** — oxygen and fuel now flow correctly. Thomas should validate the full engine power chain end-to-end.
+- Vehicle power foundations: **🛠️ WORKING ON** — oxygen and fuel now flow correctly. Unity validation should cover the full engine power chain end-to-end.
 - Cable performance: **🛠️ WORKING ON** — ConnectedTanks caching mitigates the primary frame-rate sink.
 
 **Files touched:**
@@ -6977,7 +7022,7 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 
 2. **Pipe Port Snap — Pipes No Longer Inside Engines (Issue 2)** — `SeatAnchorOutsideMachineShell` in `BuildSystem.cs` now uses a **full cell offset** (0.5 m for Detail) instead of a half-cell offset when positioning pipes snapped to maritime ports. This guarantees the pipe hub clears the engine body even on deep-buried ports (MGO fuel/coolant/O₂ ports can sit several metres inside the hull).
 
-3. **Turbocharger Snapping and Effects (Issue 6)** — 
+3. **Turbocharger Snapping and Effects (Issue 6)** —
    - Made `GetTurboAttachmentLocalOffset()` and `TransformLocalSlotOffsetToGrid()` in `GridMaritimeEngine` **public** so `GridBuilder` can compute turbo attachment cells.
    - Added `TrySnapTurboToEngine()` — when holding a turbo block without hitting an exact turbo cell, the builder scans the aimed engine's available turbo slots and snaps to the nearest free one.
    - Physical turbo blocks now apply ALL HighFlowTurbocharger module effects: +10% RPM cap per connected turbo, +10% fuel use per turbo, and smoke velocity multiplier.
@@ -7223,9 +7268,9 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 
 **Changed:**
 - Synced `Roadmap.md` header to 6.14.6-dev and the current local date.
-- Added explicit roadmap maintenance rules: never remove planned roadmap content during status passes; update only status markers, evidence notes, dates, version pointers, and immediate-next-step labels/order unless Thomas explicitly asks otherwise.
+- Added explicit roadmap maintenance rules: never remove planned roadmap content during status passes; update only status markers, evidence notes, dates, version pointers, and immediate-next-step labels/order unless the team explicitly asks otherwise.
 - Normalized Current State Snapshot status labels to the standard roadmap convention (`WORKING ON`, `PARTIALLY COMPLETE`, `COMPLETED`, `MISSING`) and fixed a malformed markdown table separator.
-- Promoted roadmap rows to **COMPLETED** where the roadmap/changelog already recorded Thomas validation: conveyor belts/chutes, grid/static lighting + LED strips, configurable grid screens, and camera block live feeds. Broader milestone rows remain **WORKING ON** where open tasks still exist.
+- Promoted roadmap rows to **COMPLETED** where the roadmap/changelog already recorded Unity validation: conveyor belts/chutes, grid/static lighting + LED strips, configurable grid screens, and camera block live feeds. Broader milestone rows remain **WORKING ON** where open tasks still exist.
 - Marked old splitter/funnel immediate-next-step validations as **COMPLETED** and appended the current active focus: 6.14.x pipe/port validation, vehicle power foundations validation, Step 5 Size-V5 two-run validation, and the safer centralized transport tick migration plan.
 
 **Files touched (pull these):**
@@ -7383,7 +7428,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 
 **Fixed:**
 - **CS0126 compile error** in `GridBuilder.TryApplyMaritimePortSnap` (line 1020): a valueless `return;` inside the new `bool`-returning port-snap path broke the build on 6.13.0-dev. Now returns `false` so the placement simply falls back to normal rules when the port axis can't be resolved.
-- **All CS0618 deprecated-find warnings swept repo-wide** (same warning class Thomas pasted, plus the identical sites that would surface right after): 
+- **All CS0618 deprecated-find warnings swept repo-wide** (same warning class that was reported, plus the identical sites that would surface right after):
   - `GridLightBlock`, `LEDStrip`, `GridSlidingDoor` (motion sensors): `FindObjectsByType<T>(FindObjectsInactive.Exclude, FindObjectsSortMode.None)` → the non-deprecated `(FindObjectsInactive)` overload. `None` never sorted, so order/behaviour is unchanged.
   - `CrestWaterSetupUtility` (5 direct calls) + reflection helper: now resolves the non-deprecated `FindObjectsByType(Type, FindObjectsInactive)` overload — identical results, no obsolete enum reference.
   - `CrestFlowSampler`, `WaterMeshBuilder`: same overload migration.
@@ -7937,7 +7982,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 - Factory transport scope is now explicitly guarded in the roadmap: **only conveyor belts receive planned factory placement/shape variants**.
 - Conveyor chutes are documented as a **single straight transport form only**.
 - Funnels are also explicitly kept **single-variant** in the roadmap notes so future setup/content passes do not accidentally create funnel variants.
-- Synced roadmap/version surfaces after Thomas validated the 6.4.6-dev placement pass as working perfectly.
+- Synced roadmap/version surfaces after Unity validation covered the 6.4.6-dev placement pass as working perfectly.
 - Updated immediate-next-step guidance to move on from placement validation and keep focus on factory throughput and remaining roadmap execution.
 
 **Manual Unity Steps:**
@@ -8284,7 +8329,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 - Pooled visuals retain the existing shared material and per-item color property-block rendering, with no gameplay or transfer behavior changes.
 
 **Roadmap Status:**
-- Pooled physical world items: **🛠️ WORKING ON → ✅ COMPLETED** — validated by Thomas.
+- Pooled physical world items: **🛠️ WORKING ON → ✅ COMPLETED** — validated in Unity.
 - Item entity system remains **🛠️ WORKING ON** pending Unity validation of shared conveyor visuals and later simulation-tick expansion.
 
 **Manual Unity Steps:**
@@ -8307,8 +8352,8 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 - The pool persists across scene transitions while inactive entities remain hidden under its dedicated runtime root.
 
 **Roadmap Status:**
-- Unified movable-grid persistence: **🟡 PARTIALLY COMPLETE → ✅ COMPLETED** — validated by Thomas.
-- Item entity system: **🟡 PARTIALLY COMPLETE → 🛠️ WORKING ON** — physical world-item pooling implemented; subsequently **validated by Thomas and promoted to complete for its scope in 5.71.0-dev**. Conveyor visual pooling remains the active next step.
+- Unified movable-grid persistence: **🟡 PARTIALLY COMPLETE → ✅ COMPLETED** — validated in Unity.
+- Item entity system: **🟡 PARTIALLY COMPLETE → 🛠️ WORKING ON** — physical world-item pooling implemented; subsequently **validated in Unity and promoted to complete for its scope in 5.71.0-dev**. Conveyor visual pooling remains the active next step.
 
 **Manual Unity Steps:**
 1. Let Unity compile and confirm the runtime banner reports `5.70.0-dev`.
@@ -8339,7 +8384,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 - Blocks with no runtime source item are safely skipped with a descriptive Unity Console warning instead of corrupting the rest of the grid save.
 
 **Roadmap Status:**
-- Unified movable-grid persistence: **🛠️ WORKING ON → 🟡 PARTIALLY COMPLETE** at delivery; subsequently **validated by Thomas and promoted to ✅ COMPLETED in 5.70.0-dev**.
+- Unified movable-grid persistence: **🛠️ WORKING ON → 🟡 PARTIALLY COMPLETE** at delivery; subsequently **validated in Unity and promoted to ✅ COMPLETED in 5.70.0-dev**.
 - Unified Grid placement: **🛠️ WORKING ON → 🟡 PARTIALLY COMPLETE**.
 
 **Manual Unity Steps:**
@@ -8358,7 +8403,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 
 **Type:** PATCH — validated roadmap-status promotion and version synchronization only (no save schema, runtime behavior, prefab, item, recipe, research, throughput, HP, mass, power, or visual changes)
 
-**Validated by Thomas:**
+**validated in Unity:**
 - Existing Item, Gas, and Liquid pipe items use the unified 0.5 m Detail placement workflow without duplicate pipe content.
 - Grid and world pipe links work from one through five cells.
 - Pipe alignment is independent of endpoint rotation.
@@ -8390,7 +8435,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 - Automatic ghost `PipeVisualBuilder` ticking remains disabled; explicit target/position changes drive deterministic preview rebuilds.
 
 **Roadmap Status:**
-- Stable existing topology and live ghost refresh remain **🛠️ WORKING ON** pending Thomas validation.
+- Stable existing topology and live ghost refresh remain **🛠️ WORKING ON** pending Unity validation.
 
 **Manual Unity Steps:**
 1. Let Unity recompile; no setup rerun is required.
@@ -8405,7 +8450,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 **Type:** PATCH — placement-preview and ghost-simulation safety corrections only (no save schema, prefab, item, recipe, research, throughput, HP, mass, power, or wrench behavior changes)
 
 **Validated:**
-- Thomas confirmed pipe visual direction and rotation-independent inline connection behavior are correct.
+- Unity testing confirmed pipe visual direction and rotation-independent inline connection behavior are correct.
 
 **Fixed / Improved:**
 - Pipe ghosts now draw a complete prospective connection to the nearest compatible inline pipe within five cells on Grid and world placement.
@@ -8418,7 +8463,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 - Preview target changes rebuild only when necessary, avoiding per-frame visual reconstruction.
 
 **Roadmap Status:**
-- Pipe ghost-link preview and flow isolation remain **🛠️ WORKING ON** pending Thomas validation.
+- Pipe ghost-link preview and flow isolation remain **🛠️ WORKING ON** pending Unity validation.
 - Liquid five-cell post-placement connection requires revalidation after ghost topology isolation.
 
 **Manual Unity Steps:**
@@ -8434,7 +8479,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 **Type:** PATCH — pipe alignment/connectivity correction only (no save schema, prefab, item, recipe, research, throughput, HP, mass, power, or wrench behavior changes)
 
 **Validated:**
-- Thomas confirmed pipe visual arms now extend in the correct direction.
+- Unity testing confirmed pipe visual arms now extend in the correct direction.
 
 **Fixed / Improved:**
 - Fixed valid five-cell links failing when four Detail/world cells were empty between the two endpoint pipes.
@@ -8446,7 +8491,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 - Five-cell maximum, diagonal rejection, visual direction, and wrench disconnect behavior remain unchanged.
 
 **Roadmap Status:**
-- Rotation-independent five-cell pipe links remain **🛠️ WORKING ON** pending Thomas validation with four empty cells between differently rotated pipes.
+- Rotation-independent five-cell pipe links remain **🛠️ WORKING ON** pending Unity validation with four empty cells between differently rotated pipes.
 
 **Manual Unity Steps:**
 1. Let Unity recompile; no setup rerun is required.
@@ -8474,7 +8519,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 - Added Unity metadata for `Changelog.md`.
 
 **Roadmap Status:**
-- Five-cell pipe links remain **🛠️ WORKING ON** pending Thomas validation of corrected visual direction on Grid and world placement.
+- Five-cell pipe links remain **🛠️ WORKING ON** pending Unity validation of corrected visual direction on Grid and world placement.
 
 **Manual Unity Steps:**
 1. Let Unity recompile; no Voxel Engine Setup rerun is required for this runtime visual-direction patch.
@@ -8487,7 +8532,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 **Type:** MINOR — new save-compatible pipe connection range and matching visual spans (no save schema, duplicate content, recipe cost, throughput, HP, mass, or power changes)
 
 **Validated:**
-- Thomas confirmed the existing Item/Gas/Liquid pipe items now place perfectly through the 0.5 m Detail lattice.
+- Unity testing confirmed the existing Item/Gas/Liquid pipe items now place perfectly through the 0.5 m Detail lattice.
 
 **Added / Changed:**
 - Item, Gas, and Liquid pipes can connect across up to five cells on one cardinal axis without requiring a pipe in every intermediate cell.
@@ -8503,7 +8548,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 
 **Roadmap Status:**
 - Existing pipe Detail placement is validated.
-- Five-cell Item/Gas/Liquid links remain **🛠️ WORKING ON** pending Thomas's Grid and world-placement validation.
+- Five-cell Item/Gas/Liquid links remain **🛠️ WORKING ON** pending the Grid and world-placement validation.
 
 **Manual Unity Steps:**
 1. Let Unity compile; no prefab regeneration is required for runtime connection code.
@@ -8536,7 +8581,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 **Type:** MINOR — new save-compatible placement mode for existing pipe items (no duplicate pipe items/recipes, no save schema migration)
 
 **Validated / Clarified:**
-- Thomas confirmed the rest of the 5.66.0-dev unified Grid work functions correctly, including unified screen sources.
+- Unity testing confirmed the rest of the 5.66.0-dev unified Grid work functions correctly, including unified screen sources.
 - The project intentionally has one existing Item Pipe, one existing Gas Pipe family, and one existing Liquid Pipe family. Separate Detail/Grid pipe items are not wanted and are not created.
 
 **Added / Changed:**
@@ -8554,7 +8599,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 
 **Roadmap Status:**
 - Unified Grid screen sources: **✅ COMPLETED**.
-- Unified pipe placement and networks: **🛠️ WORKING ON** pending Thomas validation.
+- Unified pipe placement and networks: **🛠️ WORKING ON** pending Unity validation.
 - Unified movable-grid persistence remains open.
 
 **Manual Unity Steps:**
@@ -8573,7 +8618,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 **Type:** MINOR — new save-compatible cross-scale topology and screen-address foundation (legacy Structural screen addresses remain compatible)
 
 **Validated:**
-- Thomas confirmed Detail-on-Structural placement, lattice rendering, ghosts, collision, and physical-size labels now work perfectly.
+- Unity testing confirmed Detail-on-Structural placement, lattice rendering, ghosts, collision, and physical-size labels now work perfectly.
 
 **Added / Improved:**
 - Added `UnifiedGridTopology`, a shared physical adjacency service for the one-Grid architecture.
@@ -8591,7 +8636,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 
 **Roadmap Status:**
 - Unified Grid placement remains **🛠️ WORKING ON**.
-- Unified grid networks and screens are **🛠️ WORKING ON** pending Thomas's cross-scale Unity validation.
+- Unified grid networks and screens are **🛠️ WORKING ON** pending the cross-scale Unity validation.
 - Unified movable-grid persistence remains the primary completion gate.
 
 **Manual Unity Steps:**
@@ -8626,7 +8671,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 - Existing custom names are preserved and receive only the requested physical-size suffix.
 
 **Roadmap Status:**
-- Unified Grid placement remains **🛠️ WORKING ON** pending Thomas validation that the lattice, ghost, and placement now complete without an exception.
+- Unified Grid placement remains **🛠️ WORKING ON** pending Unity validation that the lattice, ghost, and placement now complete without an exception.
 
 **Manual Unity Steps:**
 1. Let Unity recompile; the old runtime `GridPrecisionLatticePreview` object will be discarded when Play Mode restarts.
@@ -8685,7 +8730,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 **Type:** MINOR — new save-compatible mixed-grid construction foundation (no existing save schema fields changed)
 
 **Validated:**
-- Thomas confirmed all six grid shapes, textured meshes, collision, ghosts, and final wheel slice alignment work correctly.
+- Unity testing confirmed all six grid shapes, textured meshes, collision, ghosts, and final wheel slice alignment work correctly.
 - Grid Shape Variants are promoted to **✅ COMPLETED**.
 
 **Added:**
@@ -8730,7 +8775,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 **Type:** PATCH — radial-wheel positioning/readability correction only (no save schema, public API, prefab, recipe, item, research, balance, or runtime mesh changes)
 
 **Validated:**
-- Thomas confirmed the functional grid variants, collision, opacity, and textures now work perfectly.
+- Unity testing confirmed the functional grid variants, collision, opacity, and textures now work perfectly.
 
 **Fixed / Improved:**
 - Fixed the actual remaining wheel layout cause: segment content was positioned at each segment's starting angle, which is exactly where the black separator gap is drawn.
@@ -8741,7 +8786,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 
 **Roadmap Status:**
 - Structural grid meshes/textures are validated.
-- Grid shape variants remain **🛠️ WORKING ON** only until Thomas confirms the corrected wheel slice alignment.
+- Grid shape variants remain **🛠️ WORKING ON** only until Unity testing confirms the corrected wheel slice alignment.
 
 **Manual Unity Steps:**
 1. Let Unity recompile; no Voxel Engine Setup rerun is required for this UI positioning patch.
@@ -8765,7 +8810,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 - Increased wheel backdrop opacity slightly so world geometry does not visually compete with the selector.
 
 **Roadmap Status:**
-- Grid shape variants remain **🛠️ WORKING ON** pending Thomas validation of opaque textured faces and corrected wheel fit.
+- Grid shape variants remain **🛠️ WORKING ON** pending Unity validation of opaque textured faces and corrected wheel fit.
 
 **Manual Unity Steps:**
 1. Let Unity recompile; no setup rerun is required because this patch changes runtime mesh/UV and UI layout code only.
@@ -8838,7 +8883,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 **Roadmap Status:**
 - Factory Foundations, Production Lines, Power/Vehicles/Combat, and Logistics 2.0 remain **🛠️ WORKING ON**.
 - Living Worlds and later roadmap releases remain **🟡 PARTIALLY COMPLETE** until their named systems, non-destructive setup steps, and Unity validation gates are complete.
-- Large-grid doors remain **🛠️ WORKING ON** pending Thomas's 5.62.4-dev validation pass.
+- Large-grid doors remain **🛠️ WORKING ON** pending the 5.62.4-dev validation pass.
 
 **Manual Unity Steps:**
 1. Open the Unity project containing this repository as its `Assets` folder and let scripts recompile.
@@ -8859,7 +8904,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 - Door closed positions are cached once and all moving generated details animate from those cached positions, preventing infinite drift.
 
 **Roadmap Status:**
-- Large-grid doors remain **🛠️ WORKING ON** pending Thomas validation that panels/details move together and doors open fully.
+- Large-grid doors remain **🛠️ WORKING ON** pending Unity validation that panels/details move together and doors open fully.
 
 **Manual Unity Steps:**
 1. Let Unity recompile.
@@ -8900,7 +8945,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 - Side-face placement still works normally and keeps the door mounted on the selected side face.
 
 **Roadmap Status:**
-- Large-grid doors remain **🛠️ WORKING ON** pending Thomas validation of upright edge placement and visuals.
+- Large-grid doors remain **🛠️ WORKING ON** pending Unity validation of upright edge placement and visuals.
 
 **Manual Unity Steps:**
 1. Let Unity recompile.
@@ -8922,7 +8967,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 - Added extra guide rails beside the panels to make the sliding/vault assembly look more intentional and premium.
 
 **Roadmap Status:**
-- Large-grid doors remain **🛠️ WORKING ON** pending Thomas validation of the new no-gap visuals.
+- Large-grid doors remain **🛠️ WORKING ON** pending Unity validation of the new no-gap visuals.
 
 **Manual Unity Steps:**
 1. Let Unity recompile.
@@ -8941,7 +8986,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 **Added / Changed:**
 - Rebuilt Step 17 grid door generation into large-grid-only door content.
 - Added three large-grid door variants:
-  - **Large Sci-Fi Sliding Door** — single-panel premium sliding door inspired by Thomas's reference.
+  - **Large Sci-Fi Sliding Door** — single-panel premium sliding door inspired by the reference.
   - **Large Double Sliding Door** — two-panel sliding door with synchronized motion activation.
   - **Heavy Vault Door** — reinforced heavy-duty vault door with very high integrity, slower motion, and higher moving power draw.
 - Removed the small-grid door from Step 17 generation/recipe registration because it is not needed. Existing old assets are left on disk for compatibility, but the setup registry no longer registers the old small-grid recipe.
@@ -8950,7 +8995,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 - `GridBuilder` now detects door items and orients them to the clicked grid face before placement, so doors snap/face correctly on block edges.
 
 **Roadmap Status:**
-- Grid doors remain **🛠️ WORKING ON** pending Thomas validation of the new large-only variants, edge snapping, and motion behavior.
+- Grid doors remain **🛠️ WORKING ON** pending Unity validation of the new large-only variants, edge snapping, and motion behavior.
 - Airtight/pressure integration remains future work.
 
 **Manual Unity Steps:**
@@ -9013,7 +9058,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 - The placement failure message now clearly reports when the LED path is blocked.
 
 **Roadmap Status:**
-- Corner-to-corner LED strip placement remains **🛠️ WORKING ON** pending Thomas validation of path blocking/reservation behavior and endpoint visuals.
+- Corner-to-corner LED strip placement remains **🛠️ WORKING ON** pending Unity validation of path blocking/reservation behavior and endpoint visuals.
 
 **Manual Unity Steps:**
 1. Let Unity recompile.
@@ -9051,7 +9096,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 - Added group LED effect controls in Ship Control group pages: **Sync FX**, **Chase**, **Pulse**, and **Static** for LED strip groups/categories.
 
 **Roadmap Status:**
-- Corner-to-corner LED strip placement remains **🛠️ WORKING ON** pending Thomas validation of pre-place edge ghost, path reservation, end caps, even segmented brightness, full-length motion activation, clean chase, and grouped sync.
+- Corner-to-corner LED strip placement remains **🛠️ WORKING ON** pending Unity validation of pre-place edge ghost, path reservation, end caps, even segmented brightness, full-length motion activation, clean chase, and grouped sync.
 
 **Manual Unity Steps:**
 1. Let Unity recompile.
@@ -9077,7 +9122,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 - Wake Chase setting is persisted through `SavedLightingConfig`.
 
 **Roadmap Status:**
-- Corner-to-corner LED strip placement remains **🛠️ WORKING ON** pending Thomas validation of edge snap, matching ghost, even brightness, clean-strip chase, and wake chase.
+- Corner-to-corner LED strip placement remains **🛠️ WORKING ON** pending Unity validation of edge snap, matching ghost, even brightness, clean-strip chase, and wake chase.
 
 **Manual Unity Steps:**
 1. Let Unity recompile.
@@ -9100,7 +9145,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 - Full-length collider remains active so right-click config works from the middle/end of stretched strips.
 
 **Roadmap Status:**
-- Corner-to-corner LED strip placement remains **🛠️ WORKING ON** pending Thomas validation of edge snapping, closer surface placement, and length-based item cost.
+- Corner-to-corner LED strip placement remains **🛠️ WORKING ON** pending Unity validation of edge snapping, closer surface placement, and length-based item cost.
 
 **Manual Unity Steps:**
 1. Let Unity recompile.
@@ -9124,7 +9169,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 - Long stretched LED strips can now be right-clicked from anywhere along their visual length to open config.
 
 **Roadmap Status:**
-- Corner-to-corner LED strip placement remains **🛠️ WORKING ON** pending Thomas validation of top/side snapping and full-length interaction.
+- Corner-to-corner LED strip placement remains **🛠️ WORKING ON** pending Unity validation of top/side snapping and full-length interaction.
 
 **Manual Unity Steps:**
 1. Let Unity recompile.
@@ -9151,7 +9196,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 - This is the placement foundation. The stretched LED strip is anchored as one grid block at the first selected cell while its visuals extend toward the second point. Full multi-cell occupancy/reservation validation is planned as a follow-up so very long strips can reserve every crossed grid cell if desired.
 
 **Roadmap Status:**
-- Grid/static lighting and LED strips remain **🛠️ WORKING ON** pending Thomas's Unity validation of corner placement, ghost preview, and save/load of stretched strips.
+- Grid/static lighting and LED strips remain **🛠️ WORKING ON** pending Unity validation of corner placement, ghost preview, and save/load of stretched strips.
 
 **Manual Unity Steps:**
 1. Let Unity recompile.
@@ -9220,7 +9265,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 - Text still uses depth testing against world geometry, so the previous "text visible through ground/blocks" issue remains addressed without self-occluding the display.
 
 **Roadmap Status:**
-- Grid screens remain **✅ COMPLETED** once Thomas validates screen text/feed visibility again.
+- Grid screens remain **✅ COMPLETED** once Unity validation confirms screen text/feed visibility again.
 
 **Manual Unity Steps:**
 1. Let Unity recompile.
@@ -9296,7 +9341,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 - Grid doors are not yet authored as grid blocks in the current repository, so the motion-sensor UI was added to lights first. The same motion-activation pattern is ready to be applied when grid doors/airtight doors are added in the later life-support/building pass.
 
 **Roadmap Status:**
-- Grid lighting remains **🛠️ WORKING ON** while Thomas validates collapsed data types, hidden source filtering, clean/segmented LED mode, chase animation, and motion activation.
+- Grid lighting remains **🛠️ WORKING ON** while Unity validation confirms collapsed data types, hidden source filtering, clean/segmented LED mode, chase animation, and motion activation.
 - Next planned implementation target remains runtime persistence for tuned spotlight/LED settings, then corner-to-corner LED strip placement.
 
 **Manual Unity Steps:**
@@ -9321,7 +9366,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 - This keeps future utility components lightweight: they can expose screen data without needing a new `GridBlock` subclass.
 
 **Roadmap Status:**
-- Ship Control data-type toggles and LED config from 5.55.0-dev remain ready for Thomas validation.
+- Ship Control data-type toggles and LED config from 5.55.0-dev remain ready for Unity validation.
 - Grid/static lighting remains **🛠️ WORKING ON**. Next planned implementation target: runtime persistence for tuned spotlight/LED settings, then corner-to-corner LED placement.
 
 **Manual Unity Steps:**
@@ -9352,7 +9397,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 - LED strip config uses the existing runtime `SetLength(float meters)` foundation, preparing for the future corner-to-corner placement tool.
 
 **Roadmap Status:**
-- Grid lighting remains **🛠️ WORKING ON** while Thomas validates data-type toggles and LED strip config.
+- Grid lighting remains **🛠️ WORKING ON** while Unity validation confirms data-type toggles and LED strip config.
 - Grid/static lighting and LED strips remain **🛠️ WORKING ON**; next planned step is persistence for tuned spotlight/LED settings, then corner-to-corner LED placement.
 
 **Manual Unity Steps:**
@@ -9384,7 +9429,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 - Dual-output spotlights use the same config and apply changes to all beam lights through the existing multi-light control path.
 
 **Roadmap Status:**
-- Grid lighting remains **🛠️ WORKING ON** while Thomas validates right-click config and terminal labels.
+- Grid lighting remains **🛠️ WORKING ON** while Unity validation confirms right-click config and terminal labels.
 - Grid/static lighting and LED strips remain **🛠️ WORKING ON**; runtime persistence for customized light settings is still pending.
 
 **Manual Unity Steps:**
@@ -9406,7 +9451,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
   - **Large Dual Grid Spotlight** — large-grid two-beam flood spotlight.
   - **Large Grid LED Strip** — larger segmented grid LED strip.
 - Existing small grid spotlight item is renamed to **Small Grid Spotlight** with a clearer description.
-- Spotlights are inspired by Thomas's reference: rugged lamp cans, black bezels, hot lenses, grille bars, body/mount details, and dual-output variants where applicable.
+- Spotlights are inspired by the reference: rugged lamp cans, black bezels, hot lenses, grille bars, body/mount details, and dual-output variants where applicable.
 - `GridLightBlock` now controls every non-status child `Light`, so dual-output prefabs can use two synchronized beam lights without unmanaged stray lights.
 - `LEDStrip` visual generation rebuilt into a more realistic segmented strip:
   - dark backing rail, lit diffuser, individual diode segments, configurable width/length/segment count.
@@ -9448,7 +9493,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 - Runtime indicator now updates live: configured light color when online, red when unpowered, muted grey when disabled.
 
 **Roadmap Status:**
-- Grid screens / displays: **🛠️ WORKING ON → ✅ COMPLETED** after Thomas validated the camera feed/config fixes.
+- Grid screens / displays: **🛠️ WORKING ON → ✅ COMPLETED** after Unity validation covered the camera feed/config fixes.
 - Grid lighting: **❌ MISSING → 🟡 PARTIALLY COMPLETE** based on repository audit plus this power/data-provider polish.
 - 4.5.0 Grid/static lighting and LED strips remain **🟡 PARTIALLY COMPLETE** pending full lighting configuration UX and Unity validation.
 
@@ -9471,7 +9516,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 - Updated the frontmost-panel fallback comment so it matches the Unity-safe implementation.
 
 **Roadmap Status:**
-- Grid screens / displays remain **🛠️ WORKING ON** pending Thomas's Unity validation after compile succeeds.
+- Grid screens / displays remain **🛠️ WORKING ON** pending Unity validation after compile succeeds.
 
 **Manual Unity Steps:**
 1. Let Unity recompile.
@@ -9493,7 +9538,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 - Screen camera feed now also uses a dedicated runtime quad in front of the screen surface with culling disabled, making the live video path independent of cube-face UV/culling quirks.
 
 **Roadmap Status:**
-- Grid screens / displays remain **🛠️ WORKING ON** until Thomas validates live feed, screen config layering, power mode, and camera identity in Unity.
+- Grid screens / displays remain **🛠️ WORKING ON** until Unity validation confirms live feed, screen config layering, power mode, and camera identity in Unity.
 - Camera block live feed remains **🛠️ WORKING ON** pending this validation pass.
 
 **Manual Unity Steps:**
@@ -9519,7 +9564,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 - Custom Text input styling now forces a dark editor field with bright readable text across the TextField internals, fixing white-on-white unreadable input.
 
 **Roadmap Status:**
-- Grid screens / displays remain **🛠️ WORKING ON** until Thomas validates live feed, appearance controls, and custom text in Unity.
+- Grid screens / displays remain **🛠️ WORKING ON** until Unity validation confirms live feed, appearance controls, and custom text in Unity.
 - Camera block live feed remains **🛠️ WORKING ON** pending this Unity validation pass.
 
 **Manual Unity Steps:**
@@ -9547,7 +9592,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 **Setup Wizard (Non-Destructive):**
 - Step 19 now refreshes generated screen visuals and the camera prefab while preserving custom non-generated child objects.
 - Step 19 now repairs required item/prefab/recipe/registry links without resetting existing stack sizes, mass, hit points, recipe costs, crafting times, unlock flags, or authored tuning.
-- Camera prefab remade through Step 19 with a boxy warm-alloy housing, dark lens stack, bolted front flange, side mount ears, lower rail, glass highlight, and physical status LED/light inspired by Thomas's reference image.
+- Camera prefab remade through Step 19 with a boxy warm-alloy housing, dark lens stack, bolted front flange, side mount ears, lower rail, glass highlight, and physical status LED/light inspired by the reference image.
 
 **Roadmap Status:**
 - 4.8.0 Logistics 2.0, Screens & Trajectory: **🛠️ WORKING ON**.
@@ -10362,7 +10407,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 **Type:** MINOR — new save-compatible power connector blocks plus UI/interaction fixes
 
 **Validated:**
-- Thomas confirmed the recipe graph validator now reports `0` errors and `0` warnings.
+- Unity testing confirmed the recipe graph validator now reports `0` errors and `0` warnings.
 
 **Fixed / Improved:**
 - Crusher and Assembler interaction now opens their machine UI so recipes can be selected.
@@ -10392,7 +10437,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 - Panel shows per-minute produced/consumed/net rates plus session totals for tracked items.
 
 **Validation:**
-- Thomas confirmed the recipe graph is down to `0` errors after the repair workflow.
+- Unity testing confirmed the recipe graph is down to `0` errors after the repair workflow.
 
 **Roadmap Continued — 4.6.0 Production Lines:**
 - Recipe graph validation moved to **COMPLETED**.
@@ -10502,7 +10547,7 @@ Maritime subsystem → **2.26.4** (see `Scripts/Maritime/CHANGELOG.md`).
 **Type:** MINOR — new save-compatible factory runtime persistence plus construction snapping/visual fixes
 
 **Validated:**
-- Thomas confirmed the `3.75 m` Size-V4 construction scale, exact Foundation neighbor spacing, and player-away Door swing work correctly in Unity.
+- Unity testing confirmed the `3.75 m` Size-V4 construction scale, exact Foundation neighbor spacing, and player-away Door swing work correctly in Unity.
 
 **Fixed / Improved:**
 - Foundation deck planks now overlap subtly and cover the complete perimeter structure, removing top seams and visible lower-frame overflow.
