@@ -1,9 +1,34 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.21.5-dev`
+**Current Version:** `9.21.6-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.21.6-dev] Rain Stays Vertical — Velocity-Aligned Streaks
+
+**Type:** PATCH — aligns rain streaks to their fall velocity instead of the camera. No save, API or content changes; no setup step required.
+
+#### What Thomas reported (and what was actually wrong)
+*"Almost perfect, but when I look up the rain looks sideways — it's affected by where I look."* — The rain renderer used **Billboard** mode, which turns every quad to face the camera. A tall thin streak therefore tilted with the camera: looking horizontally it read as a vertical streak, but looking up the quad lay flat and the streak appeared **sideways**.
+
+#### 🌧️ The fix — stretch along velocity
+Rain now uses **Stretch** render mode, which elongates each particle **along its fall velocity** instead of facing the camera. Because the fall velocity is the radial-down direction, the streak's long axis is the fall direction itself:
+- Looking horizontally → vertical streaks (unchanged).
+- Looking up → streaks foreshorten to short marks/dots, exactly like real rain seen from below — never a flat sideways line.
+- The streak length is driven by `velocityScale 0.10` × fall speed (~1.8–2.8 m), and the streak width is the scalar start size (5–8 cm, slightly thicker in heavy rain).
+
+This also removes the 3D start-size hack and is spherical-world correct (velocity is radial, so streaks align to the local "down" on any face of the planet).
+
+*Note:* Stretch mode was tried before and appeared invisible, but that was the velocity-curve bug fixed in 9.21.5 — with zero velocity there was nothing to stretch along. Now that velocity works, Stretch renders correctly.
+
+#### Files
+- **Edited:** `Scripts/Weather/WeatherParticles.cs` (rain → Stretch mode + scalar width) · `Scripts/Core/GameVersion.cs` → `9.21.6-dev`
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile — **no setup step needed**.
+2. Let it rain and look around: streaks stay vertical at any pitch; looking straight up they shorten toward dots (natural), never sideways.
+3. Confirm the `[Weather] Rain heartbeat` still shows `playing=True` and a healthy `alive=` count.
 
 ### [9.21.5-dev] Rain Finally Falls — Velocity-Curve Fix + UI Audio Ducking
 

@@ -103,9 +103,8 @@ namespace VoxelEngine.Weather
                 _snowEmission.rateOverTime = 0;
             }
 
-            // Heavier rain = slightly longer, thicker streaks.
-            _rainMain.startSizeY = new ParticleSystem.MinMaxCurve(1.8f, 2.2f + intensity * 0.9f);
-            _rainMain.startSizeX = new ParticleSystem.MinMaxCurve(0.05f, 0.07f + intensity * 0.03f);
+            // Heavier rain = slightly thicker streaks (length comes from stretch × velocity).
+            _rainMain.startSize = new ParticleSystem.MinMaxCurve(0.05f, 0.07f + intensity * 0.03f);
 
             // UNCONDITIONAL heartbeat — logs every 5 s no matter what the weather is doing,
             // so we can see the full state (active? state? intensity? particles alive?)
@@ -139,12 +138,12 @@ namespace VoxelEngine.Weather
             main.playOnAwake = false;
             main.startLifetime = new ParticleSystem.MinMaxCurve(1.4f, 2.0f);
             main.startSpeed = 0f;                       // motion comes from velocityOverLifetime (radial)
-            // 3D start size: thin (X/Z) and TALL (Y). The streak shape itself is drawn
-            // procedurally in the shader, so a tall thin billboard reads as a rain line.
-            main.startSize3D = true;
-            main.startSizeX = new ParticleSystem.MinMaxCurve(0.05f, 0.07f);
-            main.startSizeY = new ParticleSystem.MinMaxCurve(1.8f, 2.4f);
-            main.startSizeZ = new ParticleSystem.MinMaxCurve(0.05f, 0.07f);
+            // Stretch mode stretches each particle ALONG its fall velocity, so the streak's
+            // long axis is the fall direction (radial-down on a sphere) and it never rotates
+            // with the camera. The scalar start size is the streak WIDTH; the length comes
+            // from velocityScale × fall speed. (A camera-facing Billboard was what made rain
+            // look sideways when looking up.)
+            main.startSize = new ParticleSystem.MinMaxCurve(0.05f, 0.08f);
             main.startColor = new ParticleSystem.MinMaxGradient(
                 new Color(0.80f, 0.85f, 0.95f, 0.75f),
                 new Color(0.95f, 0.97f, 1.00f, 0.95f));
@@ -173,7 +172,12 @@ namespace VoxelEngine.Weather
             shape.scale = new Vector3(40f, 1f, 40f);
 
             var renderer = go.GetComponent<ParticleSystemRenderer>();
-            renderer.renderMode = ParticleSystemRenderMode.Billboard;
+            // Stretch along velocity — the streak's long axis IS the fall direction, so rain
+            // stays vertical regardless of camera pitch (looking up foreshortens it to a dot
+            // like real rain, instead of a camera-facing billboard lying flat sideways).
+            renderer.renderMode = ParticleSystemRenderMode.Stretch;
+            renderer.velocityScale = 0.10f;             // 18–28 m/s fall → ~1.8–2.8 m streaks
+            renderer.lengthScale = 1f;
             renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             renderer.receiveShadows = false;
             renderer.allowOcclusionWhenDynamic = false; // moving system — never let culling hide it
