@@ -1,89 +1,55 @@
 // Assets/Scripts/VoxelEngine/Weather/WeatherClouds.cs
 //
-// The visible SKY half of the weather: a horizon-fitted, world-anchored cloud
-// ceiling that hovers radially overhead and follows the player. Coverage, colour
-// and drift are driven by WeatherManager so the sky tells the same story as the
-// rain — wisps on Clear, a brooding rain-belly ceiling on storms — plus a bright
-// pulse through the deck on every thunder strike.
+// Cloud coordinator. It owns no geometry of its own any more: it builds the shared
+// cloud volume + icosphere and hands one PlanetCloudLayer to every atmospheric body
+// in the system, then feeds them their weather every frame.
 //
-// Geometry note (this is what makes it read as SKY and not as a disc):
-// each layer's mesh is built in VIEW-ELEVATION space. A ring at elevation e sits
-// at distance height / sin(e) — exactly where a flat layer at that height would
-// be — clamped to a maximum sight distance, and the rim ring is pushed a few
-// degrees BELOW the eye line. The ceiling therefore runs continuously from the
-// zenith down past the horizon and dissolves into the haze, instead of ending in
-// a circular edge somewhere overhead.
+//   • The home world's shell is driven by the live WeatherManager state — clear sky,
+//     scattered cloud, overcast, dark raining deck, black storm ceiling, lightning.
+//   • Every other atmospheric world runs on its own WeatherClimateProfile, so when you
+//     look at a planet from orbit it already wears the sky its climate implies, and
+//     that sky keeps evolving while you watch.
+//   • Airless bodies never get a shell at all.
 //
-// Spherical-world safe: the layers align to the active body's radial up (never
-// world axes), yaw-free so turning the camera never spins the sky, and the
-// texture is anchored to the world so walking gives real parallax between decks.
+// Nothing here follows the camera: fly to space and the clouds stay wrapped around the
+// planet where they belong.
 
+using System.Collections.Generic;
 using UnityEngine;
+using VoxelEngine.Cosmos;
 
 namespace VoxelEngine.Weather
 {
     /// <summary>
-    /// Builds and drives the weather cloud ceiling. Created automatically by
+    /// Builds and drives the per-planet cloud shells. Created automatically by
     /// <see cref="WeatherManager"/> — no prefab or setup step required.
     /// </summary>
     [RequireComponent(typeof(WeatherManager))]
     public class WeatherClouds : MonoBehaviour
     {
-        [Header("Low Deck (the rain ceiling)")]
-        [Tooltip("Height of the low rain deck above the player, in metres.")]
-        public float lowerHeight = 240f;
-        [Tooltip("Furthest the low deck is drawn before it melts into the haze, in metres.")]
-        public float lowerViewDistance = 5200f;
-        [Tooltip("Metres of world per cloud texture tile on the low deck (bigger = bigger clouds).")]
-        public float lowerCloudScale = 1150f;
-
-        [Header("High Deck (parallax + depth)")]
-        [Tooltip("Height of the high deck above the player, in metres.")]
-        public float upperHeight = 820f;
-        [Tooltip("Furthest the high deck is drawn, in metres.")]
-        public float upperViewDistance = 11000f;
-        [Tooltip("Metres of world per cloud texture tile on the high deck.")]
-        public float upperCloudScale = 3400f;
-
-        [Header("Behaviour")]
+        [Header("Blending")]
         [Tooltip("How fast cloud coverage eases between weather states (0..1 per second).")]
-        public float coverageBlendSpeed = 0.09f;
-        [Tooltip("Calm cloud drift speed in metres per second (scales up in wind).")]
-        public float driftSpeed = 5.5f;
+        public float coverageBlendSpeed = 0.10f;
+        [Tooltip("Seconds between rescans for newly streamed-in celestial bodies.")]
+        public float bodyScanInterval = 2f;
 
-        // Shader property ids (cached — these are written every frame).
-        private static readonly int IdTint       = Shader.PropertyToID("_TintColor");
-        private static readonly int IdBase       = Shader.PropertyToID("_BaseColor");
-        private static readonly int IdTop        = Shader.PropertyToID("_TopColor");
-        private static readonly int IdHorizon    = Shader.PropertyToID("_HorizonColor");
-        private static readonly int IdCoverage   = Shader.PropertyToID("_Coverage");
-        private static readonly int IdOpacity    = Shader.PropertyToID("_Opacity");
-        private static readonly int IdFlash      = Shader.PropertyToID("_Flash");
-        private static readonly int IdDetailOff  = Shader.PropertyToID("_DetailOffset");
-        private static readonly int IdEdgeSoft   = Shader.PropertyToID("_EdgeSoftness");
-        private static readonly int IdRelief     = Shader.PropertyToID("_Relief");
-        private static readonly int IdPuff       = Shader.PropertyToID("_Puff");
-        private static readonly int IdDetailTile = Shader.PropertyToID("_DetailScale");
+        [Header("Volume Quality")]
+        [Tooltip("Resolution of the procedural 3D cloud volume (64 = 1 MB, plenty).")]
+        [Range(32, 96)] public int volumeResolution = 64;
+        [Tooltip("Icosphere subdivisions for the shell mesh (5 = 20k tris, shared by all bodies).")]
+        [Range(3, 6)] public int shellSubdivisions = 5;
 
         private WeatherManager _wm;
-        private Deck _low;
-        private Deck _high;
-        private Texture2D _cloudTex;
-        private float _coverage;
+        private Mesh _sphere;
+        private Texture3D _volume;
+        private Shader _shader;
         private float _flash;
-        private Vector3 _lastWorldPos;
-        private bool _hasLastPos;
+        private float _scanTimer;
+        private bool _ready;
 
-        /// <summary>One cloud layer: mesh, material and its own world-anchored UV offset.</summary>
-        private sealed class Deck
-        {
-            public Transform Root;
-            public Material Mat;
-            public Mesh Mesh;
-            public float UvPerMetre;
-            public Vector2 Offset;
-            public Vector2 DetailOffset;
-        }
+        private readonly Dictionary<CelestialBody, PlanetCloudLayer> _layers =
+            new Dictionary<CelestialBody, PlanetCloudLayer>();
+        private readonly List<CelestialBody> _stale = new List<CelestialBody>();
 
         private void OnEnable()
         {
@@ -94,368 +60,280 @@ namespace VoxelEngine.Weather
         private void OnDisable()
         {
             if (_wm != null) _wm.OnThunder -= HandleThunder;
-            SetDecksActive(false);
+            foreach (var layer in _layers.Values)
+                if (layer != null) layer.Hide();
         }
 
         private void OnDestroy()
         {
-            DestroyDeck(_low);
-            DestroyDeck(_high);
-            if (_cloudTex != null) Destroy(_cloudTex);
-        }
-
-        private static void DestroyDeck(Deck deck)
-        {
-            if (deck == null) return;
-            if (deck.Root != null) Destroy(deck.Root.gameObject);
-            if (deck.Mesh != null) Destroy(deck.Mesh);
-            if (deck.Mat != null) Destroy(deck.Mat);
+            foreach (var layer in _layers.Values)
+                if (layer != null) Destroy(layer.gameObject);
+            _layers.Clear();
+            if (_sphere != null) Destroy(_sphere);
+            if (_volume != null) Destroy(_volume);
         }
 
         private void Start()
         {
-            var shader = Shader.Find("VoxelEngine/WeatherCloudsURP");
-            if (shader == null)
+            _shader = Shader.Find("VoxelEngine/WeatherCloudsURP");
+            if (_shader == null)
             {
-                Debug.LogWarning("[Weather] WeatherCloudsURP shader not found — cloud sky disabled.");
+                Debug.LogWarning("[Weather] WeatherCloudsURP shader not found — planetary clouds disabled.");
                 enabled = false;
                 return;
             }
 
-            _cloudTex = GenerateCloudTexture(256);
-
-            _low = CreateDeck("WeatherCloudDeck_Low", shader,
-                              lowerHeight, lowerViewDistance, lowerCloudScale,
-                              detailTiling: 4.6f, relief: 16f, puff: 38f, edgeSoftness: 0.20f);
-            _high = CreateDeck("WeatherCloudDeck_High", shader,
-                               upperHeight, upperViewDistance, upperCloudScale,
-                               detailTiling: 3.1f, relief: 8f, puff: 70f, edgeSoftness: 0.30f);
-        }
-
-        private Deck CreateDeck(string deckName, Shader shader, float height, float viewDistance,
-                                float cloudScale, float detailTiling, float relief, float puff,
-                                float edgeSoftness)
-        {
-            float uvPerMetre = 1f / Mathf.Max(1f, cloudScale);
-
-            var go = new GameObject(deckName);
-            go.transform.SetParent(transform, false);
-            go.transform.localPosition = Vector3.zero;
-
-            var mesh = GenerateLayerMesh(height, viewDistance, uvPerMetre);
-            go.AddComponent<MeshFilter>().sharedMesh = mesh;
-
-            var mat = new Material(shader) { name = deckName + "_Mat" };
-            mat.mainTexture = _cloudTex;
-            mat.SetFloat(IdOpacity, 0f);
-            mat.SetFloat(IdCoverage, 0f);
-            mat.SetFloat(IdDetailTile, detailTiling);
-            mat.SetFloat(IdRelief, relief);
-            mat.SetFloat(IdPuff, puff);
-            mat.SetFloat(IdEdgeSoft, edgeSoftness);
-
-            var renderer = go.AddComponent<MeshRenderer>();
-            renderer.sharedMaterial = mat;
-            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            renderer.receiveShadows = false;
-            renderer.lightProbeUsage = UnityEngine.Rendering.LightProbeUsage.Off;
-            renderer.reflectionProbeUsage = UnityEngine.Rendering.ReflectionProbeUsage.Off;
-            renderer.motionVectorGenerationMode = MotionVectorGenerationMode.ForceNoMotion;
-
-            go.SetActive(false);
-            return new Deck { Root = go.transform, Mat = mat, Mesh = mesh, UvPerMetre = uvPerMetre };
+            _sphere = BuildIcosphere(shellSubdivisions);
+            _volume = BuildCloudVolume(volumeResolution);
+            _ready = _sphere != null && _volume != null;
+            Debug.Log($"[Weather] Cloud volume {volumeResolution}³ and shell mesh " +
+                      $"({_sphere.vertexCount} verts) built — planetary cloud shells online.");
         }
 
         private void Update()
         {
-            if (_low == null || _high == null) return;
-            var wm = WeatherManager.Instance;
-            if (wm == null) return;
+            if (!_ready) return;
 
-            // ── Coverage target from the weather story ──
-            float targetCoverage = 0f;
-            if (wm.IsWeatherActive)
-            {
-                switch (wm.TargetState)
-                {
-                    case WeatherState.Clear:     targetCoverage = 0.16f; break; // a few lazy wisps
-                    case WeatherState.Overcast:  targetCoverage = 0.74f; break;
-                    case WeatherState.LightRain: targetCoverage = 0.88f; break;
-                    case WeatherState.HeavyRain: targetCoverage = 1.00f; break;
-                    case WeatherState.Snow:      targetCoverage = 0.84f; break;
-                    case WeatherState.Blizzard:  targetCoverage = 1.00f; break;
-                }
-            }
-
-            _coverage = Mathf.MoveTowards(_coverage, targetCoverage, coverageBlendSpeed * Time.deltaTime);
-
-            // Lightning brightens the deck from within (decays fast — keep decaying even
-            // while the deck is faded out so an old flash can't linger).
             if (_flash > 0f) _flash = Mathf.Max(0f, _flash - Time.deltaTime * 2.4f);
 
-            bool visible = _coverage > 0.02f;
-            SetDecksActive(visible);
-            if (!visible) { _hasLastPos = false; return; }
+            _scanTimer -= Time.deltaTime;
+            if (_scanTimer <= 0f)
+            {
+                _scanTimer = Mathf.Max(0.5f, bodyScanInterval);
+                ScanBodies();
+            }
 
-            // ── Colour: bright fair-weather cloud → heavy storm belly, snow stays pale ──
-            bool snow = wm.IsSnowBiome;
-            float storm = Mathf.Clamp01(wm.Intensity);
+            var wm = WeatherManager.Instance;
+            CelestialBody home = GravityProvider.ActiveBody;
+            Color haze = RenderSettings.fog ? RenderSettings.fogColor : new Color(0.62f, 0.68f, 0.76f);
+            float windScale = Mathf.Clamp(WeatherManager.WindMultiplier, 0.5f, 6f);
 
-            Color calmBelly  = snow ? new Color(0.72f, 0.75f, 0.81f) : new Color(0.62f, 0.65f, 0.72f);
-            Color stormBelly = snow ? new Color(0.52f, 0.56f, 0.63f) : new Color(0.20f, 0.22f, 0.27f);
-            Color calmCrown  = snow ? new Color(0.98f, 0.99f, 1.00f) : new Color(1.00f, 0.99f, 0.96f);
-            Color stormCrown = snow ? new Color(0.86f, 0.89f, 0.94f) : new Color(0.55f, 0.58f, 0.66f);
+            foreach (var pair in _layers)
+            {
+                var body = pair.Key;
+                var layer = pair.Value;
+                if (body == null || layer == null) continue;
 
-            Color belly = Color.Lerp(calmBelly, stormBelly, storm);
-            Color crown = Color.Lerp(calmCrown, stormCrown, storm);
+                bool isHome = wm != null && body == home && wm.IsWeatherActive;
+                float coverage, storm;
+                bool snow;
 
-            // Blend the deck into whatever haze the scene is actually using so the far
-            // edge is invisible: weather fog when it owns fog, otherwise the sky's fog.
-            Color haze = RenderSettings.fog
-                ? RenderSettings.fogColor
-                : Color.Lerp(new Color(0.62f, 0.68f, 0.76f), belly, 0.5f);
-
-            ApplyDeckLook(_low, belly, crown, haze, _coverage, 0.98f, storm);
-            // The high deck is thinner, paler and lags on coverage — it reads as distance.
-            ApplyDeckLook(_high, Color.Lerp(belly, crown, 0.35f), crown, haze,
-                          _coverage * 0.85f, 0.62f, storm);
-
-            // ── World-anchored drift: wind moves the deck, walking gives parallax ──
-            UpdateDrift(storm);
+                if (isHome)
+                {
+                    coverage = HomeCoverage(wm.TargetState);
+                    storm = HomeStorm(wm.TargetState) * Mathf.Max(0.35f, wm.Intensity + 0.35f);
+                    snow = wm.IsSnowBiome;
+                    layer.Tick(coverage, storm, snow, _flash, haze, coverageBlendSpeed, windScale);
+                }
+                else
+                {
+                    AmbientClimate(body, out coverage, out storm, out snow);
+                    // A world you are not standing on still lives: its cells drift and its
+                    // storms build and fade on a slow, deterministic cycle.
+                    layer.Tick(coverage, storm, snow, 0f,
+                               new Color(0.70f, 0.76f, 0.84f), coverageBlendSpeed * 0.6f, 1f);
+                }
+            }
         }
 
-        private void ApplyDeckLook(Deck deck, Color belly, Color crown, Color haze,
-                                   float coverage, float opacity, float storm)
+        // ── Weather → sky mapping ────────────────────────────────────
+
+        private static float HomeCoverage(WeatherState state) => state switch
         {
-            if (deck?.Mat == null) return;
+            WeatherState.Clear     => 0.12f,   // a few lazy fair-weather wisps
+            WeatherState.Overcast  => 0.64f,
+            WeatherState.LightRain => 0.80f,
+            WeatherState.HeavyRain => 0.96f,   // solid ceiling, horizon to horizon
+            WeatherState.Snow      => 0.74f,
+            WeatherState.Blizzard  => 0.96f,
+            _ => 0.12f
+        };
 
-            Color tint = Color.white;
-            if (_flash > 0f) tint += new Color(0.55f, 0.60f, 0.75f) * _flash;
-
-            deck.Mat.SetColor(IdTint, tint);
-            deck.Mat.SetColor(IdBase, belly);
-            deck.Mat.SetColor(IdTop, crown);
-            deck.Mat.SetColor(IdHorizon, haze);
-            deck.Mat.SetFloat(IdCoverage, coverage);
-            deck.Mat.SetFloat(IdOpacity, Mathf.Clamp01(Mathf.SmoothStep(0f, 1f, coverage * 3.2f)) * opacity);
-            deck.Mat.SetFloat(IdFlash, _flash * (0.35f + 0.35f * storm));
-        }
+        private static float HomeStorm(WeatherState state) => state switch
+        {
+            WeatherState.Clear     => 0f,
+            WeatherState.Overcast  => 0.20f,
+            WeatherState.LightRain => 0.55f,
+            WeatherState.HeavyRain => 1.00f,   // black rain-belly
+            WeatherState.Snow      => 0.40f,
+            WeatherState.Blizzard  => 0.90f,
+            _ => 0f
+        };
 
         /// <summary>
-        /// Scrolls each deck's UVs by (a) the wind and (b) the player's own horizontal
-        /// movement, so the clouds stay pinned to the world instead of sliding along with
-        /// the camera. The two decks move at different rates → honest parallax.
+        /// Sky for a world the player is not standing on, from its climate personality.
+        /// Slowly oscillates on a deterministic per-body cycle so distant planets are alive.
         /// </summary>
-        private void UpdateDrift(float storm)
+        private static void AmbientClimate(CelestialBody body, out float coverage, out float storm, out bool snow)
         {
-            Quaternion rot = DeckRotation();
-            Vector3 pos = transform.position;
-            Vector3 delta = _hasLastPos ? pos - _lastWorldPos : Vector3.zero;
-            _lastWorldPos = pos;
-            _hasLastPos = true;
+            var settings = body != null ? body.settings : null;
+            var profile = settings != null ? settings.weather : null;
 
-            // Ignore teleports / floating-origin shifts: a huge jump would smear the sky.
-            if (delta.sqrMagnitude > 40000f) delta = Vector3.zero;
+            if (settings == null || !settings.HasAtmosphere || profile == null || !profile.weatherEnabled)
+            {
+                coverage = 0f; storm = 0f; snow = false;
+                return;
+            }
 
-            Vector3 localDelta = Quaternion.Inverse(rot) * delta;
-            Vector2 travel = new Vector2(localDelta.x, localDelta.z);
+            float seed = settings.bodyName != null ? (settings.bodyName.GetHashCode() & 0xFFFF) * 0.01f : 3.7f;
+            float cycle = Mathf.Sin(Time.time * 0.012f + seed) * 0.5f + 0.5f;
 
-            Vector3 windWorld = Vector3.zero;
-            var wind = VoxelEngine.Cosmos.WindField.Instance;
-            if (wind != null) windWorld = wind.Direction;
-            if (windWorld.sqrMagnitude < 0.0001f) windWorld = rot * Vector3.forward;
-
-            Vector3 windLocal = Quaternion.Inverse(rot) * windWorld;
-            Vector2 windDir = new Vector2(windLocal.x, windLocal.z);
-            if (windDir.sqrMagnitude > 0.0001f) windDir.Normalize();
-
-            float speed = driftSpeed * (1f + 2.2f * storm);
-            Vector2 windMetres = windDir * (speed * Time.deltaTime);
-
-            AdvanceDeck(_low, windMetres, travel, 1f);
-            AdvanceDeck(_high, windMetres, travel, 0.55f);   // far deck lags behind
+            coverage = Mathf.Clamp01(0.22f + profile.overcastBias * 0.55f + (cycle - 0.5f) * 0.24f);
+            storm = Mathf.Clamp01(profile.stormChance * (0.35f + cycle * 0.55f));
+            snow = profile.precipitation == WeatherClimateProfile.Precipitation.Snow;
         }
 
-        private static void AdvanceDeck(Deck deck, Vector2 windMetres, Vector2 travelMetres, float windScale)
+        // ── Body tracking ────────────────────────────────────────────
+
+        private void ScanBodies()
         {
-            if (deck?.Mat == null) return;
+            var registry = CosmicRegistry.Instance;
+            if (registry != null)
+            {
+                foreach (var pair in registry.SceneBodies)
+                    TryRegister(pair.Value);
+            }
 
-            deck.Offset += (windMetres * windScale - travelMetres) * deck.UvPerMetre;
-            deck.Offset = Wrap(deck.Offset);
-            deck.Mat.mainTextureOffset = deck.Offset;
+            // The home body is guaranteed even if the registry has not published it yet.
+            TryRegister(GravityProvider.ActiveBody);
 
-            // The erosion octave crawls slightly faster and sideways, so cloud shapes
-            // evolve and dissolve instead of sliding rigidly across the sky.
-            deck.DetailOffset += new Vector2(windMetres.y * -0.8f, windMetres.x * 0.8f) * deck.UvPerMetre * 3.2f
-                                 + (windMetres * windScale * 0.35f - travelMetres) * deck.UvPerMetre * 4.6f;
-            deck.DetailOffset = Wrap(deck.DetailOffset);
-            deck.Mat.SetVector(IdDetailOff, new Vector4(deck.DetailOffset.x, deck.DetailOffset.y, 0f, 0f));
+            _stale.Clear();
+            foreach (var pair in _layers)
+                if (pair.Key == null || pair.Value == null) _stale.Add(pair.Key);
+            foreach (var key in _stale)
+            {
+                if (key != null && _layers.TryGetValue(key, out var layer) && layer != null)
+                    Destroy(layer.gameObject);
+                _layers.Remove(key);
+            }
         }
 
-        /// <summary>Keeps UV offsets in [0,1) so float precision never degrades over a long session.</summary>
-        private static Vector2 Wrap(Vector2 v) =>
-            new Vector2(v.x - Mathf.Floor(v.x), v.y - Mathf.Floor(v.y));
-
-        /// <summary>
-        /// Keep the decks radial-up aligned but YAW-FREE: the parent weather frame rotates
-        /// with the camera, and a sky that spins when you turn your head would feel wrong.
-        /// </summary>
-        private void LateUpdate()
+        private void TryRegister(CelestialBody body)
         {
-            if (_low?.Root == null) return;
-            Quaternion rot = DeckRotation();
-            _low.Root.rotation = rot;
-            if (_high?.Root != null) _high.Root.rotation = rot;
-        }
+            if (body == null || _layers.ContainsKey(body)) return;
 
-        private Quaternion DeckRotation() => Quaternion.FromToRotation(Vector3.up, RadialUp());
+            var settings = body.settings;
+            // No air, no clouds. Vacuum moons and asteroids stay pristine.
+            if (settings == null || !settings.HasAtmosphere) return;
+
+            var layer = PlanetCloudLayer.Create(body, _sphere, _volume, _shader);
+            if (layer == null) return;
+
+            _layers[body] = layer;
+            Debug.Log($"[Weather] Cloud shell created for '{body.DisplayName}' " +
+                      $"at radius {layer.ShellRadius:F0} m.");
+        }
 
         private void HandleThunder(Vector3 strikePosition) => _flash = 1f;
-
-        private void SetDecksActive(bool active)
-        {
-            SetDeckActive(_low, active);
-            SetDeckActive(_high, active);
-        }
-
-        private static void SetDeckActive(Deck deck, bool active)
-        {
-            if (deck?.Root != null && deck.Root.gameObject.activeSelf != active)
-                deck.Root.gameObject.SetActive(active);
-        }
-
-        private Vector3 RadialUp()
-        {
-            var body = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
-            return body != null ? body.UpAt(transform.position) : Vector3.up;
-        }
 
         // ── Procedural assets ────────────────────────────────────────
 
         /// <summary>
-        /// Horizon-fitted cloud layer: rings are placed by VIEW ELEVATION (dense near the
-        /// horizon, sparse at the zenith) at the distance a flat layer of the given height
-        /// would actually occupy, clamped to <paramref name="viewDistance"/>. The final ring
-        /// sits below the eye line so the deck never shows a circular edge. UVs are planar
-        /// world metres — no polar pinch at the zenith.
+        /// Unit icosphere — no poles, no UV seam, evenly distributed triangles. Shared by
+        /// every shell (each body just scales its transform), so this is built exactly once.
         /// </summary>
-        private static Mesh GenerateLayerMesh(float height, float viewDistance, float uvPerMetre)
+        private static Mesh BuildIcosphere(int subdivisions)
         {
-            const int rings = 40;                 // zenith → below the horizon
-            const int segs = 96;                  // around
-            const float rimElevationDeg = -5f;    // last ring dips under the eye line
-            const float bias = 2.6f;              // pack rings toward the horizon
-
-            height = Mathf.Max(1f, height);
-            viewDistance = Mathf.Max(height * 3f, viewDistance);
-            float sinLimit = height / viewDistance;
-
-            int vertsPerRing = segs + 1;
-            var verts = new Vector3[(rings + 1) * vertsPerRing];
-            var uv = new Vector2[verts.Length];
-            var uv2 = new Vector2[verts.Length];
-
-            int vi = 0;
-            for (int r = 0; r <= rings; r++)
+            float t = (1f + Mathf.Sqrt(5f)) * 0.5f;
+            var verts = new List<Vector3>
             {
-                float t = (float)r / rings;
-                float elevDeg = r == rings
-                    ? rimElevationDeg
-                    : Mathf.Lerp(90f, rimElevationDeg, 1f - Mathf.Pow(1f - t, bias));
+                new Vector3(-1,  t,  0), new Vector3( 1,  t,  0), new Vector3(-1, -t,  0), new Vector3( 1, -t,  0),
+                new Vector3( 0, -1,  t), new Vector3( 0,  1,  t), new Vector3( 0, -1, -t), new Vector3( 0,  1, -t),
+                new Vector3( t,  0, -1), new Vector3( t,  0,  1), new Vector3(-t,  0, -1), new Vector3(-t,  0,  1)
+            };
+            for (int i = 0; i < verts.Count; i++) verts[i] = verts[i].normalized;
 
-                float elev = elevDeg * Mathf.Deg2Rad;
-                float sinE = Mathf.Sin(elev);
-                float cosE = Mathf.Cos(elev);
-                float dist = sinE > sinLimit ? height / sinE : viewDistance;
+            var faces = new List<int>
+            {
+                0,11,5, 0,5,1, 0,1,7, 0,7,10, 0,10,11,
+                1,5,9, 5,11,4, 11,10,2, 10,7,6, 7,1,8,
+                3,9,4, 3,4,2, 3,2,6, 3,6,8, 3,8,9,
+                4,9,5, 2,4,11, 6,2,10, 8,6,7, 9,8,1
+            };
 
-                for (int s = 0; s <= segs; s++)
+            var midpoints = new Dictionary<long, int>();
+            int steps = Mathf.Clamp(subdivisions, 1, 6);
+            for (int s = 0; s < steps; s++)
+            {
+                var next = new List<int>(faces.Count * 4);
+                for (int f = 0; f < faces.Count; f += 3)
                 {
-                    float theta = 2f * Mathf.PI * s / segs;
-                    var p = new Vector3(cosE * Mathf.Sin(theta) * dist,
-                                        sinE * dist,
-                                        cosE * Mathf.Cos(theta) * dist);
-                    verts[vi] = p;
-                    uv[vi] = new Vector2(p.x, p.z) * uvPerMetre;
-                    uv2[vi] = new Vector2(t, 0f);
-                    vi++;
+                    int a = faces[f], b = faces[f + 1], c = faces[f + 2];
+                    int ab = Midpoint(a, b, verts, midpoints);
+                    int bc = Midpoint(b, c, verts, midpoints);
+                    int ca = Midpoint(c, a, verts, midpoints);
+                    next.Add(a); next.Add(ab); next.Add(ca);
+                    next.Add(b); next.Add(bc); next.Add(ab);
+                    next.Add(c); next.Add(ca); next.Add(bc);
+                    next.Add(ab); next.Add(bc); next.Add(ca);
                 }
+                faces = next;
             }
 
-            var tris = new int[rings * segs * 6];
-            int ti = 0;
-            for (int r = 0; r < rings; r++)
-            {
-                for (int s = 0; s < segs; s++)
-                {
-                    int a = r * vertsPerRing + s;
-                    int b = a + 1;
-                    int c = a + vertsPerRing;
-                    int d = c + 1;
-                    tris[ti++] = a; tris[ti++] = c; tris[ti++] = b;
-                    tris[ti++] = b; tris[ti++] = c; tris[ti++] = d;
-                }
-            }
-
-            var mesh = new Mesh { name = "WeatherCloudLayer" };
-            if (verts.Length > 65000) mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
-            mesh.vertices = verts;
-            mesh.uv = uv;
-            mesh.uv2 = uv2;
-            mesh.triangles = tris;
-            // The deck rides the camera, so a generous fixed bound keeps it from being
-            // frustum-culled by a stale bounding volume.
-            mesh.bounds = new Bounds(Vector3.zero, Vector3.one * (viewDistance * 4f));
+            var mesh = new Mesh { name = "CloudShellIcosphere" };
+            if (verts.Count > 65000) mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+            mesh.SetVertices(verts);
+            mesh.SetTriangles(faces, 0);
+            mesh.SetNormals(verts.ToArray());       // unit sphere: position IS the normal
+            mesh.bounds = new Bounds(Vector3.zero, Vector3.one * 2.2f);
             return mesh;
         }
 
-        /// <summary>
-        /// Tileable cloud noise, seamless in both axes.
-        ///   A = billowy cloud MASS (rounded lobes with real gaps — cumulus, not fog),
-        ///   R = fast erosion detail (tears the mass edges apart in the shader),
-        ///   G = mid-frequency variance (subtle internal brightness breakup),
-        ///   B = 1.
-        /// </summary>
-        private static Texture2D GenerateCloudTexture(int size)
+        private static int Midpoint(int a, int b, List<Vector3> verts, Dictionary<long, int> cache)
         {
-            float[] mass = Fbm(size, seed: 90210, basePeriod: 3, octaves: 5, gain: 0.52f, billow: true);
-            float[] detail = Fbm(size, seed: 1337, basePeriod: 8, octaves: 4, gain: 0.58f, billow: true);
-            float[] variance = Fbm(size, seed: 4242, basePeriod: 5, octaves: 3, gain: 0.5f, billow: false);
+            long key = a < b ? ((long)a << 32) | (uint)b : ((long)b << 32) | (uint)a;
+            if (cache.TryGetValue(key, out int existing)) return existing;
+            var mid = ((verts[a] + verts[b]) * 0.5f).normalized;
+            verts.Add(mid);
+            int index = verts.Count - 1;
+            cache[key] = index;
+            return index;
+        }
 
-            var pixels = new Color[size * size];
+        /// <summary>
+        /// Tileable 3D cloud volume — the whole reason the sphere has no poles, no seams and
+        /// no UV pinch: density is a function of the body-local direction, sampled in 3D.
+        ///   A = billowy cloud mass (rounded lobes with real gaps),
+        ///   R = fast erosion detail (tears the mass edges apart in the shader),
+        ///   G/B = reserved, kept at 1.
+        /// </summary>
+        private static Texture3D BuildCloudVolume(int size)
+        {
+            size = Mathf.Clamp(size, 32, 96);
+            float[] mass = Fbm3D(size, seed: 90210, basePeriod: 2, octaves: 4, gain: 0.52f, billow: true);
+            float[] detail = Fbm3D(size, seed: 1337, basePeriod: 4, octaves: 3, gain: 0.58f, billow: true);
+
+            var pixels = new Color32[size * size * size];
             for (int i = 0; i < pixels.Length; i++)
             {
-                // Contrast the mass so lobes stay rounded and the gaps stay open —
+                // Contrast the mass so lobes stay rounded and gaps stay genuinely open —
                 // a flat fBm ramp is what makes procedural clouds look like grey soup.
                 float m = Mathf.Clamp01(mass[i]);
-                m = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((m - 0.18f) / 0.64f));
-                m = Mathf.Pow(m, 1.15f);
-
-                pixels[i] = new Color(Mathf.Clamp01(detail[i]),
-                                      Mathf.Clamp01(variance[i]),
-                                      1f,
-                                      m);
+                m = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((m - 0.20f) / 0.62f));
+                pixels[i] = new Color32((byte)(Mathf.Clamp01(detail[i]) * 255f), 255, 255,
+                                        (byte)(m * 255f));
             }
 
-            var tex = new Texture2D(size, size, TextureFormat.RGBA32, true)
+            var tex = new Texture3D(size, size, size, TextureFormat.RGBA32, true)
             {
-                name = "WeatherCloudTexture",
+                name = "CloudVolume",
                 wrapMode = TextureWrapMode.Repeat,
                 filterMode = FilterMode.Bilinear,
-                anisoLevel = 8
+                anisoLevel = 4
             };
-            tex.SetPixels(pixels);
+            tex.SetPixels32(pixels);
             tex.Apply(true, true);
             return tex;
         }
 
         /// <summary>
-        /// Seamless value-noise fBm on a wrapped lattice. <paramref name="billow"/> folds each
-        /// octave around its midpoint, which produces the rounded, cauliflower-like lobes real
+        /// Seamless 3D value-noise fBm on a wrapped lattice. <paramref name="billow"/> folds
+        /// each octave around its midpoint, producing the rounded cauliflower lobes real
         /// clouds have instead of smooth hills.
         /// </summary>
-        private static float[] Fbm(int size, int seed, int basePeriod, int octaves, float gain, bool billow)
+        private static float[] Fbm3D(int size, int seed, int basePeriod, int octaves, float gain, bool billow)
         {
-            var result = new float[size * size];
+            var result = new float[size * size * size];
             var rnd = new System.Random(seed);
             int period = Mathf.Max(2, basePeriod);
             float amplitude = 0.5f;
@@ -463,28 +341,40 @@ namespace VoxelEngine.Weather
 
             for (int o = 0; o < octaves; o++)
             {
-                var lattice = new float[period * period];
+                int p = period;
+                var lattice = new float[p * p * p];
                 for (int i = 0; i < lattice.Length; i++) lattice[i] = (float)rnd.NextDouble();
 
-                for (int y = 0; y < size; y++)
+                for (int z = 0; z < size; z++)
                 {
-                    float fy = (float)y / size * period;
-                    int y0 = (int)fy;
-                    float ty = Smooth01(fy - y0);
-                    int y1 = (y0 + 1) % period;
-                    int rowA = y0 * period, rowB = y1 * period;
-
-                    for (int x = 0; x < size; x++)
+                    float fz = (float)z / size * p;
+                    int z0 = (int)fz; float tz = Smooth01(fz - z0); int z1 = (z0 + 1) % p;
+                    for (int y = 0; y < size; y++)
                     {
-                        float fx = (float)x / size * period;
-                        int x0 = (int)fx;
-                        float tx = Smooth01(fx - x0);
-                        int x1 = (x0 + 1) % period;
+                        float fy = (float)y / size * p;
+                        int y0 = (int)fy; float ty = Smooth01(fy - y0); int y1 = (y0 + 1) % p;
+                        int rowIndex = (z * size + y) * size;
+                        for (int x = 0; x < size; x++)
+                        {
+                            float fx = (float)x / size * p;
+                            int x0 = (int)fx; float tx = Smooth01(fx - x0); int x1 = (x0 + 1) % p;
 
-                        float v = Mathf.Lerp(Mathf.Lerp(lattice[rowA + x0], lattice[rowA + x1], tx),
-                                             Mathf.Lerp(lattice[rowB + x0], lattice[rowB + x1], tx), ty);
-                        if (billow) v = 1f - Mathf.Abs(v * 2f - 1f);
-                        result[y * size + x] += v * amplitude;
+                            float c000 = lattice[(z0 * p + y0) * p + x0];
+                            float c100 = lattice[(z0 * p + y0) * p + x1];
+                            float c010 = lattice[(z0 * p + y1) * p + x0];
+                            float c110 = lattice[(z0 * p + y1) * p + x1];
+                            float c001 = lattice[(z1 * p + y0) * p + x0];
+                            float c101 = lattice[(z1 * p + y0) * p + x1];
+                            float c011 = lattice[(z1 * p + y1) * p + x0];
+                            float c111 = lattice[(z1 * p + y1) * p + x1];
+
+                            float v = Mathf.Lerp(
+                                Mathf.Lerp(Mathf.Lerp(c000, c100, tx), Mathf.Lerp(c010, c110, tx), ty),
+                                Mathf.Lerp(Mathf.Lerp(c001, c101, tx), Mathf.Lerp(c011, c111, tx), ty), tz);
+
+                            if (billow) v = 1f - Mathf.Abs(v * 2f - 1f);
+                            result[rowIndex + x] += v * amplitude;
+                        }
                     }
                 }
 

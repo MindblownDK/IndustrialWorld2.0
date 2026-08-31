@@ -1,9 +1,69 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.22.0-dev`
+**Current Version:** `9.23.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.23.0-dev] Planetary Cloud Shells — Clouds Wrapped Around the World
+
+**Type:** MINOR — replaces the camera-following cloud deck with real cloud shells wrapped around every atmospheric body, and puts rain back on the proven render path. Save-compatible, no setup step required.
+
+#### What was reported
+1. *"The edges have stretched clouds down to the planet."*
+2. *"Make sure the clouds look good from above the planet also."*
+3. *"When the player flies to space the clouds follow — we want the clouds wrapped around atmospheric planets, and dynamic: black clouds raining, clear clouds, no clouds, storm and everything."*
+4. *"Rain doesn't work, it doesn't rain."*
+
+#### Why the curtains appeared
+The 9.22.0 deck was still a **camera-parented layer**. Its rings were placed at `height / sin(e)` and clamped to a maximum sight distance, so every ring past that clamp collapsed onto the same cylinder of geometry while the mesh kept dropping toward −5°. That final band is a near-vertical wall whose planar UVs barely change across it — the texture smears down it, producing exactly the pale curtains hanging to the ground in the screenshot. Any camera-locked deck has this problem somewhere: it must end, and wherever it ends you see the seam.
+
+#### 🌍 The fix — stop faking the sky, wrap the planet
+
+Clouds are now a **real spherical shell per body**, parented to the celestial body itself:
+
+- **One shell per atmospheric world.** Radius = surface radius + a cloud altitude of 5% of the body radius (clamped 450 m – 5 km). Airless moons and asteroids get no shell at all, ever.
+- **Standing on the surface you are inside the shell** — the ceiling curves down to the horizon on its own, because that is what a real cloud layer does on a sphere. There is no rim, no clamp, no curtain, nothing to smear: the geometry simply has no edge.
+- **In orbit you are outside it** — cloud bands wrapped over the planet, thickening naturally at the limb because grazing sight lines cross more cloud.
+- **Flying up no longer drags the sky with you.** The shell is parented to the body, so it inherits the body's rotation and every floating-origin shift for free and stays exactly where it belongs.
+
+**No poles, no seams, no UV pinch.** Density is sampled from a tileable procedural **3D volume** (64³, built once at startup) in **body-local space** — a function of direction, not of a UV chart. That removes the entire class of sphere-mapping artefacts by construction.
+
+**Geometry:** a shared unit **icosphere** (subdivision 5, ~10k verts, no pole convergence) scaled per body. One mesh, one volume texture, shared by every planet in the system.
+
+**Volumetric feel:** a short 4-step march along the view ray through the shell thickness gives genuine parallax and puffiness from *both* sides, and a second high-frequency octave erodes the mass so edges tear instead of blurring.
+
+**Dynamic weather across the whole planet.** A large-scale weather-cell field decides *where* the sky is clear, overcast or stormy, and it drifts — so you can watch a storm band move in rather than the whole sky changing brightness at once. On top of that:
+- **Home world:** driven live by `WeatherManager` — Clear = scattered wisps (12% coverage), Overcast = a broken grey deck (64%), Light Rain = 80%, Heavy Rain / Blizzard = a solid 96% ceiling. Storm strength drives the underside from soft grey down to near-black `(0.13, 0.14, 0.18)`, so **a raining sky is genuinely a black sky**. Lightning pulses through the deck in sync with the thunder event.
+- **Every other atmospheric world:** driven by its own `WeatherClimateProfile` (overcast bias, storm chance, snow) on a slow deterministic cycle, so a planet seen from orbit already wears the sky its climate implies — and keeps evolving while you watch it.
+
+**Lighting:** the density gradient produces a normal that is lit by the URP main light — dark rain-bellies, bright sunlit crowns, forward-scattering glow on thin edges — with the balance shifting automatically depending on whether you are under the deck or above it. Near the horizon the shell melts into the live fog colour, and everything below the eye plane is faded out so the far side of the shell can never show through the ground.
+
+#### 🌧️ Rain back on the proven path
+Rain was switched to **Stretch** render mode in 9.21.6. Stretch depends on the renderer's own velocity read-back, and with the fall velocity coming from `velocityOverLifetime` in **local** space it produced nothing on screen — which is why it stopped raining. Rain is now a normal **Billboard** (the same path the always-visible splash system uses) with **alignment set to Velocity**: the quad's long axis follows the fall direction, so streaks stay vertical at any camera pitch and foreshorten to short marks when you look straight up, exactly like real rain — but on a render path we know always draws. Streak width and length are 3D start sizes that scale with intensity (all three curves in matching two-constant mode, so the module can never be rejected).
+
+#### 🎛️ Weather test hotkeys (developer only)
+- **Ctrl+Alt+W** — step through Clear → Overcast → Light Rain → Heavy Rain → Snow → Blizzard → back to the automatic cycle. While held, the random state timer is paused so the forced sky sticks (a held storm still thunders).
+- **Ctrl+Alt+R** — jump straight to a full storm (Blizzard in snow biomes).
+Both log the resulting state, intensity and whether weather is active on this body, so a "nothing happens" case is diagnosable in one keypress. A forced sky is released automatically when you change planet.
+
+#### Performance
+One 64³ RGBA volume (1 MB) and one icosphere shared by every body; ~8 texture taps per cloud pixel; shadows, light probes, reflection probes and motion vectors all off; a shell hides itself entirely below 2% coverage; bodies are rescanned only every 2 seconds. The volume is generated once at startup.
+
+#### Files
+- **Added:** `Scripts/Weather/PlanetCloudLayer.cs` (one cloud shell per celestial body)
+- **Rewritten:** `Scripts/Weather/WeatherClouds.cs` (shell coordinator, shared icosphere + 3D cloud volume, per-body climate skies)
+- **Rewritten:** `Scripts/Rendering/WeatherCloudsURP.shader` (3D-volume cloud shell: view-ray march, weather cells, gradient lighting, inside/outside shading, horizon fade)
+- **Edited:** `Scripts/Weather/WeatherParticles.cs` (rain → velocity-aligned Billboard, 3D streak sizing) · `Scripts/Weather/WeatherManager.cs` (manual weather hold + debug hotkeys) · `Scripts/Core/GameVersion.cs` → `9.23.0-dev`
+
+#### Manual Unity steps
+1. Pull `Dev` and let Unity recompile — **no setup step, no prefab, no scene change**. Shells are created at runtime for every atmospheric body.
+2. Enter Play Mode. Watch the console for `Cloud volume 64³ and shell mesh ... built` and one `Cloud shell created for '<planet>'` line per atmospheric world.
+3. Press **Ctrl+Alt+R** on the surface: the sky should darken to a black raining ceiling and rain should fall within a second or two. Confirm the `[Weather] Rain heartbeat` line shows `playing=True` with a healthy `alive=` count.
+4. Look at the horizon in every direction — no curtains, no rim, no circle; the ceiling curves down and melts into the haze.
+5. Press **Ctrl+Alt+W** a few times to step through every state and watch coverage change shape (not just brightness).
+6. Fly to orbit: the clouds must **stay on the planet** and read as bands wrapped over the surface, thickening at the limb. Check a second atmospheric planet from a distance — it should have its own sky.
+7. Fly back down through the deck: it should fade past you smoothly rather than pop.
 
 ### [9.22.0-dev] Real Rain Clouds — Horizon-Fitted Volumetric Cloud Ceiling
 

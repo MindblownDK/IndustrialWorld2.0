@@ -7,8 +7,11 @@
 //
 // Rendering follows the project's PROVEN particle path (see SpaceDustRenderer): every
 // system is a Billboard with the shape drawn procedurally in the shader from the
-// billboard UV. No textures to mis-bind, no Stretch mode — the same robust path the
-// always-visible splash system uses.
+// billboard UV. Rain additionally sets the billboard ALIGNMENT to Velocity, so the quad's
+// long axis is the fall direction (radial-down on a sphere) while still being a normal
+// camera-facing billboard — vertical streaks at any camera pitch, on the render path we
+// know always draws. Stretch mode is deliberately NOT used: it depends on the renderer's
+// own velocity read-back and rendered nothing in practice.
 
 using UnityEngine;
 
@@ -103,8 +106,10 @@ namespace VoxelEngine.Weather
                 _snowEmission.rateOverTime = 0;
             }
 
-            // Heavier rain = slightly thicker streaks (length comes from stretch × velocity).
-            _rainMain.startSize = new ParticleSystem.MinMaxCurve(0.05f, 0.07f + intensity * 0.03f);
+            // Heavier rain = slightly thicker, longer streaks.
+            _rainMain.startSizeX = new ParticleSystem.MinMaxCurve(0.05f, 0.07f + intensity * 0.03f);
+            _rainMain.startSizeZ = new ParticleSystem.MinMaxCurve(0.05f, 0.07f + intensity * 0.03f);
+            _rainMain.startSizeY = new ParticleSystem.MinMaxCurve(1.5f, 2.2f + intensity * 0.8f);
 
             // UNCONDITIONAL heartbeat — logs every 5 s no matter what the weather is doing,
             // so we can see the full state (active? state? intensity? particles alive?)
@@ -138,12 +143,13 @@ namespace VoxelEngine.Weather
             main.playOnAwake = false;
             main.startLifetime = new ParticleSystem.MinMaxCurve(1.4f, 2.0f);
             main.startSpeed = 0f;                       // motion comes from velocityOverLifetime (radial)
-            // Stretch mode stretches each particle ALONG its fall velocity, so the streak's
-            // long axis is the fall direction (radial-down on a sphere) and it never rotates
-            // with the camera. The scalar start size is the streak WIDTH; the length comes
-            // from velocityScale × fall speed. (A camera-facing Billboard was what made rain
-            // look sideways when looking up.)
-            main.startSize = new ParticleSystem.MinMaxCurve(0.05f, 0.08f);
+            // 3D start size: X/Z = streak WIDTH, Y = streak LENGTH along the fall direction
+            // (billboard alignment is Velocity). All three curves share the two-constant mode —
+            // Unity rejects mixed curve modes and silently drops the module if they differ.
+            main.startSize3D = true;
+            main.startSizeX = new ParticleSystem.MinMaxCurve(0.05f, 0.08f);
+            main.startSizeY = new ParticleSystem.MinMaxCurve(1.6f, 2.6f);
+            main.startSizeZ = new ParticleSystem.MinMaxCurve(0.05f, 0.08f);
             main.startColor = new ParticleSystem.MinMaxGradient(
                 new Color(0.80f, 0.85f, 0.95f, 0.75f),
                 new Color(0.95f, 0.97f, 1.00f, 0.95f));
@@ -172,12 +178,11 @@ namespace VoxelEngine.Weather
             shape.scale = new Vector3(40f, 1f, 40f);
 
             var renderer = go.GetComponent<ParticleSystemRenderer>();
-            // Stretch along velocity — the streak's long axis IS the fall direction, so rain
-            // stays vertical regardless of camera pitch (looking up foreshortens it to a dot
-            // like real rain, instead of a camera-facing billboard lying flat sideways).
-            renderer.renderMode = ParticleSystemRenderMode.Stretch;
-            renderer.velocityScale = 0.10f;             // 18–28 m/s fall → ~1.8–2.8 m streaks
-            renderer.lengthScale = 1f;
+            // Billboard (the proven path) aligned to VELOCITY: the quad's up axis follows the
+            // fall direction, so streaks stay vertical at any camera pitch and foreshorten to
+            // short marks when you look straight up — exactly like real rain from below.
+            renderer.renderMode = ParticleSystemRenderMode.Billboard;
+            renderer.alignment = ParticleSystemRenderSpace.Velocity;
             renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             renderer.receiveShadows = false;
             renderer.allowOcclusionWhenDynamic = false; // moving system — never let culling hide it

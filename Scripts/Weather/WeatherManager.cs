@@ -14,6 +14,7 @@
 // rumble are always in sync.
 
 using UnityEngine;
+using UnityEngine.InputSystem;
 using VoxelEngine.Biomes;
 using VoxelEngine.Core;
 using VoxelEngine.Cosmos;
@@ -76,6 +77,12 @@ namespace VoxelEngine.Weather
         /// </summary>
         public bool IsWeatherActive { get; private set; }
 
+        /// <summary>
+        /// True while a state was forced by hand (debug hotkey / console). The random state
+        /// timer is paused so the forced sky is not rolled away a few seconds later.
+        /// </summary>
+        public bool IsManuallyHeld => _manualHold;
+
         /// <summary>The active body's climate profile (null → safe Earth-like defaults).</summary>
         public WeatherClimateProfile Profile { get; private set; }
 
@@ -91,6 +98,7 @@ namespace VoxelEngine.Weather
         private float _thunderTimer;
         private float _nextThunder = 25f;
         private float _heartbeatTimer;
+        private bool _manualHold;
         private BodySettings _lastAppliedSettings;
         private bool _pendingFirstCycle;
 
@@ -131,6 +139,7 @@ namespace VoxelEngine.Weather
         public void ApplyBody(BodySettings body)
         {
             _lastAppliedSettings = body;
+            _manualHold = false;   // a forced test sky never survives a planet change
 
             if (body == null)
             {
@@ -198,6 +207,8 @@ namespace VoxelEngine.Weather
                 transform.rotation = Quaternion.LookRotation(fwd, up);
             }
 
+            HandleDebugHotkeys();
+
             // Check biome every 2 seconds (only meaningful when precipitation is Auto).
             _biomeCheckTimer += Time.deltaTime;
             if (_biomeCheckTimer >= 2f)
@@ -240,8 +251,9 @@ namespace VoxelEngine.Weather
 
             UpdateWindMultiplier();
 
-            // State timer — pick next weather (only when weather is actually active).
-            if (IsWeatherActive)
+            // State timer — pick next weather (only when weather is actually active and the
+            // sky is not being held by hand for testing).
+            if (IsWeatherActive && !_manualHold)
             {
                 _stateTimer += Time.deltaTime;
                 if (_stateTimer >= _nextStateChange)
@@ -253,10 +265,66 @@ namespace VoxelEngine.Weather
 
                 ScheduleThunder();
             }
-            else if (TargetState != WeatherState.Clear)
+            else if (!IsWeatherActive && TargetState != WeatherState.Clear)
             {
                 ForceWeather(WeatherState.Clear);
             }
+            else if (IsWeatherActive && _manualHold)
+            {
+                ScheduleThunder();   // a held storm still thunders
+            }
+        }
+
+        /// <summary>
+        /// Developer hotkeys (Ctrl+Alt): W steps through every weather state and then back to
+        /// the automatic cycle, R jumps straight to a full storm. Nothing is bound in normal
+        /// play, so this can never fire by accident.
+        /// </summary>
+        private void HandleDebugHotkeys()
+        {
+            var kb = Keyboard.current;
+            if (kb == null) return;
+            bool chord = (kb.leftCtrlKey.isPressed || kb.rightCtrlKey.isPressed)
+                      && (kb.leftAltKey.isPressed || kb.rightAltKey.isPressed);
+            if (!chord) return;
+
+            if (kb.rKey.wasPressedThisFrame)
+            {
+                _manualHold = true;
+                ForceWeather(IsSnowBiome ? WeatherState.Blizzard : WeatherState.HeavyRain);
+                Debug.Log($"[Weather] DEBUG: forced {TargetState} (Ctrl+Alt+R). " +
+                          $"active={IsWeatherActive} intensity={Intensity:F2}");
+                return;
+            }
+
+            if (!kb.wKey.wasPressedThisFrame) return;
+
+            // Clear → Overcast → LightRain → HeavyRain → Snow → Blizzard → automatic.
+            if (!_manualHold)
+            {
+                _manualHold = true;
+                ForceWeather(WeatherState.Clear);
+            }
+            else
+            {
+                switch (TargetState)
+                {
+                    case WeatherState.Clear:     ForceWeather(WeatherState.Overcast); break;
+                    case WeatherState.Overcast:  ForceWeather(WeatherState.LightRain); break;
+                    case WeatherState.LightRain: ForceWeather(WeatherState.HeavyRain); break;
+                    case WeatherState.HeavyRain: ForceWeather(WeatherState.Snow); break;
+                    case WeatherState.Snow:      ForceWeather(WeatherState.Blizzard); break;
+                    default:
+                        _manualHold = false;
+                        _stateTimer = 0f;
+                        _nextStateChange = Random.Range(firstChangeDelayMin, firstChangeDelayMax);
+                        Debug.Log("[Weather] DEBUG: released to the automatic cycle (Ctrl+Alt+W).");
+                        return;
+                }
+            }
+
+            Debug.Log($"[Weather] DEBUG: held {TargetState} (Ctrl+Alt+W). " +
+                      $"active={IsWeatherActive} intensity={Intensity:F2} snow={IsSnowBiome}");
         }
 
         private void ResolveActiveBody()
