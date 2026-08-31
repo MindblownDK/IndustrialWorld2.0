@@ -73,6 +73,10 @@ namespace VoxelEngine.Weather
         private float _roofCheckTimer;
         private float _surfaceScanTimer;
 
+        // Smoothed UI-duck factor: full-screen panels (inventory, terminals, pause)
+        // lower the whole weather soundscape so it doesn't compete with the UI.
+        private float _uiDuck = 1f;
+
         private const int SR = 44100;
 
         // ── Lifecycle ─────────────────────────────────────────────────
@@ -207,14 +211,19 @@ namespace VoxelEngine.Weather
 
             float k = Time.deltaTime * 3f;
 
+            // ── UI duck: any full-screen panel (inventory, terminal, pause) eases the
+            // weather bed down so the UI reads clearly over the storm. ──
+            float uiTarget = VoxelEngine.UI.UIState.IsBlocking ? 0.25f : 1f;
+            _uiDuck = Mathf.Lerp(_uiDuck, uiTarget, Time.deltaTime * 5f);
+
             // ── Rain beds: outdoor downpour ↔ sheltered interior ──
             // (gated by isRain — snow gets wind + the sheltered bed, never the rain bed)
             float outdoorTarget = isRain ? intensity * (0.80f * outside + 0.16f * inside) : 0f;
             float indoorTarget = isRain
                 ? intensity * 0.85f * inside
                 : (isSnow ? intensity * 0.30f * inside : 0f);   // blizzard sheltered bed
-            _outdoor.volume = Mathf.Lerp(_outdoor.volume, outdoorTarget, k);
-            _indoor.volume = Mathf.Lerp(_indoor.volume, indoorTarget, k);
+            _outdoor.volume = Mathf.Lerp(_outdoor.volume, outdoorTarget * _uiDuck, k);
+            _indoor.volume = Mathf.Lerp(_indoor.volume, indoorTarget * _uiDuck, k);
             _outdoorLp.cutoffFrequency = Mathf.Lerp(22000f, 750f, inside);   // walls eat the highs
             _outdoor.pitch = Mathf.Lerp(1f, 0.93f, inside);
 
@@ -229,8 +238,8 @@ namespace VoxelEngine.Weather
             float woodNearVol = _woodAmount * intensity * 0.38f * outside;
             float woodVol = Mathf.Max(woodRoofVol, woodNearVol);
 
-            _metal.volume = Mathf.Lerp(_metal.volume, isRain ? metalVol : 0f, k);
-            _wood.volume = Mathf.Lerp(_wood.volume, isRain ? woodVol : 0f, k);
+            _metal.volume = Mathf.Lerp(_metal.volume, (isRain ? metalVol : 0f) * _uiDuck, k);
+            _wood.volume = Mathf.Lerp(_wood.volume, (isRain ? woodVol : 0f) * _uiDuck, k);
             _metalLp.cutoffFrequency = Mathf.Lerp(22000f, 1500f, inside);    // heard through the roof
             _woodLp.cutoffFrequency = Mathf.Lerp(22000f, 1200f, inside);
             _thunderLp.cutoffFrequency = Mathf.Lerp(22000f, 1800f, inside);
@@ -248,7 +257,7 @@ namespace VoxelEngine.Weather
             if (isSnow && intensity > 0.05f) windTarget = intensity * 0.50f;
             else if (isRain) windTarget = intensity * 0.10f;
             windTarget *= 1f - 0.55f * inside;                     // walls hush the wind too
-            _wind.volume = Mathf.Lerp(_wind.volume, windTarget, k);
+            _wind.volume = Mathf.Lerp(_wind.volume, windTarget * _uiDuck, k);
 
             // ── Play states (volumes carry the fade; silent sources cost nothing) ──
             if (isRain || (isSnow && inside > 0.05f))

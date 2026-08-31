@@ -1,9 +1,32 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.21.4-dev`
+**Current Version:** `9.21.5-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.21.5-dev] Rain Finally Falls — Velocity-Curve Fix + UI Audio Ducking
+
+**Type:** PATCH — fixes the mixed-mode velocity curve error that froze rain in the sky, and ducks the weather audio when a UI panel is open. No save, API or content changes; no setup step required.
+
+#### What Thomas reported (and what was actually wrong)
+1. *`Particle Velocity curves must all be in the same mode`* + *"rain is only in the sky and not actually falling down."* — One bug explains both. The rain and splash systems set only the **Y** velocity curve as a two-constant range (`MinMaxCurve(-28,-18)`), while **X** and **Z** kept their default single-constant mode. Unity requires all three axes to share one curve mode; the mismatch made the velocity module throw every frame and **fail outright**, so every particle stayed frozen exactly where it spawned — rain streaks parked at the 32 m emitter, splash parked at the ground. That's precisely "rain in the sky + particles on the surface, nothing moving."
+2. *"Rain sounds should lower in volume when in inventory or any UI."* — The weather soundscape ignored the UI entirely.
+
+#### 🌧️ 1. Rain now falls
+- Rain and splash velocity modules set **X, Y and Z** explicitly as two-constant curves (`0..0` for X/Z, the fall/puff range for Y), so all three axes share one mode and the module works. Drops now accelerate down from the 32 m emitter toward the ground and splashes puff up from the surface.
+
+#### 🔊 2. Weather audio ducks under the UI
+- `WeatherAudio` now reads `UIState.IsBlocking` (the project's single source of truth for "a full-screen panel is open" — inventory, terminals, pause) and eases the whole weather soundscape down to ~25 % while it's open, recovering when the UI closes. Applies to the rain beds, metal/wood surface pattering and wind.
+
+#### Files
+- **Edited:** `Scripts/Weather/WeatherParticles.cs` (same-mode velocity curves on rain + splash) · `Scripts/Weather/WeatherAudio.cs` (UI-duck factor) · `Scripts/Core/GameVersion.cs` → `9.21.5-dev`
+
+#### Manual Unity steps (Thomas)
+1. Pull `Dev`, recompile — **no setup step needed**.
+2. Let it rain and **look up**: streaks should now fall from the sky to your feet (no more "frozen in the sky"), and the `Particle Velocity curves` error should be gone from the console.
+3. Open your **inventory (or any terminal/pause menu)** while it rains → the rain/roof/wind audio should drop to a quiet background; close it → it comes back up.
+4. The `[Weather] Manager heartbeat` / `[Weather] Rain heartbeat` lines can stay for now — once you're happy I'll strip them in a cleanup patch.
 
 ### [9.21.4-dev] Weather Diagnostics — Pinpointing Why Rain Isn't Showing
 

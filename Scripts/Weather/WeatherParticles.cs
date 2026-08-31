@@ -156,10 +156,16 @@ namespace VoxelEngine.Weather
             // Fall along the emitter's LOCAL -Y. WeatherManager rotates this transform every
             // frame so local -Y points at the planet core → rain falls radially on spherical
             // worlds. World simulation space keeps drops pinned in the world (not glued to you).
+            // NOTE: all three axes must share ONE curve mode or Unity throws
+            // "Particle Velocity curves must all be in the same mode" and the module fails
+            // (which froze every drop at the emitter — the "rain won't fall" bug). X/Z are
+            // explicit two-constant zeros so they match Y's two-constant range.
             var vel = ps.velocityOverLifetime;
             vel.enabled = true;
             vel.space = ParticleSystemSimulationSpace.Local;
+            vel.x = new ParticleSystem.MinMaxCurve(0f, 0f);
             vel.y = new ParticleSystem.MinMaxCurve(-28f, -18f);
+            vel.z = new ParticleSystem.MinMaxCurve(0f, 0f);
 
             // Shape: large box above player
             var shape = ps.shape;
@@ -284,10 +290,13 @@ namespace VoxelEngine.Weather
             main.gravityModifier = 0f;                  // world gravity is world -Y — wrong on a sphere
 
             // Splash: a short radial puff (local +Y = away from the planet core).
+            // Same-mode velocity curves as rain (explicit zero X/Z) so the module is valid.
             var vel = ps.velocityOverLifetime;
             vel.enabled = true;
             vel.space = ParticleSystemSimulationSpace.Local;
+            vel.x = new ParticleSystem.MinMaxCurve(0f, 0f);
             vel.y = new ParticleSystem.MinMaxCurve(0.6f, 2.4f);
+            vel.z = new ParticleSystem.MinMaxCurve(0f, 0f);
 
             var shape = ps.shape;
             shape.shapeType = ParticleSystemShapeType.Box;
