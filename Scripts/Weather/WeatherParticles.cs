@@ -6,12 +6,13 @@
 // down. Splash = brief ground puffs where rain lands.
 //
 // Rendering follows the project's PROVEN particle path (see SpaceDustRenderer): every
-// system is a Billboard with the shape drawn procedurally in the shader from the
-// billboard UV. Rain additionally sets the billboard ALIGNMENT to Velocity, so the quad's
-// long axis is the fall direction (radial-down on a sphere) while still being a normal
-// camera-facing billboard — vertical streaks at any camera pitch, on the render path we
-// know always draws. Stretch mode is deliberately NOT used: it depends on the renderer's
-// own velocity read-back and rendered nothing in practice.
+// system is a plain camera-facing Billboard with the shape drawn procedurally in the
+// shader from the billboard UV. The rain STREAK direction is not left to Unity: the
+// world-space fall vector is published as a global (_WeatherFallDir) and the shader draws
+// the streak along its screen projection. Unity's Velocity alignment puts the quad's X
+// axis on the velocity while the shader draws along V — a 90° mismatch that rendered rain
+// as horizontal slashes. Stretch mode is not used either: it depends on the renderer's own
+// velocity read-back and rendered nothing in practice.
 
 using UnityEngine;
 
@@ -38,9 +39,21 @@ namespace VoxelEngine.Weather
         private ParticleSystem _splashPS;
         private ParticleSystem.EmissionModule _splashEmission;
 
+        // World-space velocity modules — rewritten every frame from the body's radial down.
+        private ParticleSystem.VelocityOverLifetimeModule _rainVel;
+        private ParticleSystem.VelocityOverLifetimeModule _snowVel;
+        private ParticleSystem.VelocityOverLifetimeModule _splashVel;
+        private Vector3 _fallDir = Vector3.down;
+
         // Diagnostic throttle + one-shot "manager missing" warning.
         private float _diagTimer;
         private bool _warnedNoManager;
+
+        private static readonly int IdFallDir = Shader.PropertyToID("_WeatherFallDir");
+
+        private const float RAIN_FALL_SPEED = 23f;   // m/s straight down the radial
+        private const float SNOW_FALL_SPEED = 2.2f;
+        private const float SPLASH_SPEED = 1.6f;
 
         private const int MAX_RAIN_RATE = 4200;
         private const int MAX_SNOW_RATE = 1500;
@@ -66,6 +79,8 @@ namespace VoxelEngine.Weather
                 }
                 return;
             }
+
+            ApplyFallDirection(wm);
 
             bool isSnow = wm.IsSnowBiome &&
                 (wm.CurrentState == WeatherState.Snow || wm.CurrentState == WeatherState.Blizzard ||
@@ -96,22 +111,22 @@ namespace VoxelEngine.Weather
                 _snowEmission.rateOverTime = intensity * MAX_SNOW_RATE;
                 if (!_snowPS.isPlaying) _snowPS.Play();
 
-                // Blizzard: stronger wind
-                var vel = _snowPS.velocityOverLifetime;
-                vel.enabled = true;
+                // Blizzard: stronger horizontal drive, applied along the SURFACE TANGENT so a
+                // blizzard blows across the ground instead of tilting the fall off the radial.
                 float windStr = wm.CurrentState == WeatherState.Blizzard ? 8f : 2f;
-                vel.x = new ParticleSystem.MinMaxCurve(-windStr, windStr * 0.5f);
-                vel.z = new ParticleSystem.MinMaxCurve(-windStr * 0.5f, windStr);
+                Vector3 gust = Tangent(_fallDir) * windStr;
+                Vector3 snowVelocity = _fallDir * SNOW_FALL_SPEED + gust;
+                _snowVel.x = new ParticleSystem.MinMaxCurve(snowVelocity.x);
+                _snowVel.y = new ParticleSystem.MinMaxCurve(snowVelocity.y);
+                _snowVel.z = new ParticleSystem.MinMaxCurve(snowVelocity.z);
             }
             else
             {
                 _snowEmission.rateOverTime = 0;
             }
 
-            // Heavier rain = slightly thicker, longer streaks.
-            _rainMain.startSizeX = new ParticleSystem.MinMaxCurve(0.045f, 0.06f + intensity * 0.025f);
-            _rainMain.startSizeZ = new ParticleSystem.MinMaxCurve(0.045f, 0.06f + intensity * 0.025f);
-            _rainMain.startSizeY = new ParticleSystem.MinMaxCurve(0.45f, 0.75f + intensity * 0.35f);
+            // Heavier rain = longer streaks.
+            _rainMain.startSize = new ParticleSystem.MinMaxCurve(0.55f, 0.85f + intensity * 0.35f);
 
             // UNCONDITIONAL heartbeat — logs every 5 s no matter what the weather is doing,
             // so we can see the full state (active? state? intensity? particles alive?)
@@ -128,8 +143,56 @@ namespace VoxelEngine.Weather
                           $"playing={(_rainPS != null && _rainPS.isPlaying)} " +
                           $"alive={(_rainPS != null ? _rainPS.particleCount : 0)} " +
                           $"shader='{(psr != null && psr.material != null ? psr.material.shader.name : "NULL")}' " +
+                          $"fallDir={_fallDir} " +
                           $"emitter={(_rainPS != null ? _rainPS.transform.position : Vector3.zero)}");
             }
+        }
+
+        /// <summary>
+        /// Writes the world-space fall vector into every weather system. Rain and snow travel
+        /// along the active body's radial DOWN at the player's position, splashes along its
+        /// radial UP. Reading the direction straight from the body (instead of inheriting the
+        /// emitter's rotation) is what guarantees rain falls to the ground under your feet on
+        /// every face of a spherical world, at any camera angle.
+        /// </summary>
+        private void ApplyFallDirection(WeatherManager wm)
+        {
+            Vector3 anchor = wm.playerCamera != null ? wm.playerCamera.position : transform.position;
+            var body = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
+            Vector3 up = body != null ? body.UpAt(anchor) : Vector3.up;
+            if (up.sqrMagnitude < 1e-6f) up = Vector3.up;
+            up.Normalize();
+
+            // Written every frame (the modules are structs — no allocation, no GC) so the fall
+            // direction is always the CURRENT radial down, even while walking around the sphere.
+            Vector3 down = -up;
+            _fallDir = down;
+
+            // Publish the fall direction for the particle shader's streak orientation.
+            Shader.SetGlobalVector(IdFallDir, new Vector4(down.x, down.y, down.z, 0f));
+
+            Vector3 rain = down * RAIN_FALL_SPEED;
+            _rainVel.x = new ParticleSystem.MinMaxCurve(rain.x);
+            _rainVel.y = new ParticleSystem.MinMaxCurve(rain.y);
+            _rainVel.z = new ParticleSystem.MinMaxCurve(rain.z);
+
+            Vector3 snow = down * SNOW_FALL_SPEED;
+            _snowVel.x = new ParticleSystem.MinMaxCurve(snow.x);
+            _snowVel.y = new ParticleSystem.MinMaxCurve(snow.y);
+            _snowVel.z = new ParticleSystem.MinMaxCurve(snow.z);
+
+            Vector3 splash = up * SPLASH_SPEED;
+            _splashVel.x = new ParticleSystem.MinMaxCurve(splash.x);
+            _splashVel.y = new ParticleSystem.MinMaxCurve(splash.y);
+            _splashVel.z = new ParticleSystem.MinMaxCurve(splash.z);
+        }
+
+        /// <summary>A stable horizontal direction on the surface tangent plane (for gusts).</summary>
+        private static Vector3 Tangent(Vector3 fallDir)
+        {
+            Vector3 reference = Mathf.Abs(fallDir.y) > 0.95f ? Vector3.right : Vector3.up;
+            Vector3 t = Vector3.Cross(fallDir, reference);
+            return t.sqrMagnitude < 1e-6f ? Vector3.forward : t.normalized;
         }
 
         // ── Particle System Builders ─────────────────────────────────
@@ -146,13 +209,11 @@ namespace VoxelEngine.Weather
             main.playOnAwake = false;
             main.startLifetime = new ParticleSystem.MinMaxCurve(1.4f, 2.0f);
             main.startSpeed = 0f;                       // motion comes from velocityOverLifetime (radial)
-            // 3D start size: X/Z = streak WIDTH, Y = streak LENGTH along the fall direction
-            // (billboard alignment is Velocity). All three curves share the two-constant mode —
-            // Unity rejects mixed curve modes and silently drops the module if they differ.
-            main.startSize3D = true;
-            main.startSizeX = new ParticleSystem.MinMaxCurve(0.045f, 0.07f);
-            main.startSizeY = new ParticleSystem.MinMaxCurve(0.45f, 0.80f);
-            main.startSizeZ = new ParticleSystem.MinMaxCurve(0.045f, 0.07f);
+            // Square quad: it is the CANVAS the shader draws the streak into, so its size is
+            // the streak length (the width is a shader constant). A scalar size keeps the
+            // billboard perfectly camera-facing and free of any alignment ambiguity.
+            main.startSize3D = false;
+            main.startSize = new ParticleSystem.MinMaxCurve(0.55f, 0.95f);
             main.startColor = new ParticleSystem.MinMaxGradient(
                 new Color(0.80f, 0.85f, 0.95f, 0.75f),
                 new Color(0.95f, 0.97f, 1.00f, 0.95f));
@@ -161,19 +222,19 @@ namespace VoxelEngine.Weather
             main.gravityModifier = 0f;                  // world gravity is world -Y — wrong on a sphere
             _rainMain = main;
 
-            // Fall along the emitter's LOCAL -Y. WeatherManager rotates this transform every
-            // frame so local -Y points at the planet core → rain falls radially on spherical
-            // worlds. World simulation space keeps drops pinned in the world (not glued to you).
-            // NOTE: all three axes must share ONE curve mode or Unity throws
-            // "Particle Velocity curves must all be in the same mode" and the module fails
-            // (which froze every drop at the emitter — the "rain won't fall" bug). X/Z are
-            // explicit two-constant zeros so they match Y's two-constant range.
-            var vel = ps.velocityOverLifetime;
-            vel.enabled = true;
-            vel.space = ParticleSystemSimulationSpace.Local;
-            vel.x = new ParticleSystem.MinMaxCurve(0f, 0f);
-            vel.y = new ParticleSystem.MinMaxCurve(-28f, -18f);
-            vel.z = new ParticleSystem.MinMaxCurve(0f, 0f);
+            // Fall direction is written in WORLD space every frame from the body's radial DOWN
+            // (see ApplyFallDirection). It is deliberately NOT the emitter's local -Y any more:
+            // that depended on the weather frame's rotation, which is rebuilt each frame from
+            // the camera forward and degenerates when you look straight up/down — the exact
+            // case where rain appeared to fall off to the side toward the core.
+            // All three axes are single CONSTANT curves (one shared curve mode, which Unity
+            // requires) so every drop falls along the same exact vector.
+            _rainVel = ps.velocityOverLifetime;
+            _rainVel.enabled = true;
+            _rainVel.space = ParticleSystemSimulationSpace.World;
+            _rainVel.x = new ParticleSystem.MinMaxCurve(0f);
+            _rainVel.y = new ParticleSystem.MinMaxCurve(-RAIN_FALL_SPEED);
+            _rainVel.z = new ParticleSystem.MinMaxCurve(0f);
 
             // Shape: large box above player
             var shape = ps.shape;
@@ -181,11 +242,10 @@ namespace VoxelEngine.Weather
             shape.scale = new Vector3(56f, 1f, 56f);
 
             var renderer = go.GetComponent<ParticleSystemRenderer>();
-            // Billboard (the proven path) aligned to VELOCITY: the quad's up axis follows the
-            // fall direction, so streaks stay vertical at any camera pitch and foreshorten to
-            // short marks when you look straight up — exactly like real rain from below.
+            // Plain camera-facing billboard — the streak inside it is oriented by the shader
+            // from the global fall direction, so no renderer alignment mode can rotate it.
             renderer.renderMode = ParticleSystemRenderMode.Billboard;
-            renderer.alignment = ParticleSystemRenderSpace.Velocity;
+            renderer.alignment = ParticleSystemRenderSpace.View;
             renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             renderer.receiveShadows = false;
             renderer.allowOcclusionWhenDynamic = false; // moving system — never let culling hide it
@@ -234,14 +294,15 @@ namespace VoxelEngine.Weather
             shape.shapeType = ParticleSystemShapeType.Box;
             shape.scale = new Vector3(35f, 1f, 35f);
 
-            // Velocity over lifetime: local -Y = toward the planet core (radial fall), plus
-            // horizontal wind drift. WeatherManager keeps this transform radial-up aligned.
-            var vel = ps.velocityOverLifetime;
-            vel.enabled = true;
-            vel.space = ParticleSystemSimulationSpace.Local;
-            vel.y = new ParticleSystem.MinMaxCurve(-2.8f, -1.2f);
-            vel.x = new ParticleSystem.MinMaxCurve(-2f, 2f);
-            vel.z = new ParticleSystem.MinMaxCurve(-1f, 1f);
+            // Snow falls along the same world-space radial down as rain (written every frame),
+            // with the swirl coming from the noise module rather than per-axis randomness —
+            // per-axis ranges would tilt the fall direction differently for every flake.
+            _snowVel = ps.velocityOverLifetime;
+            _snowVel.enabled = true;
+            _snowVel.space = ParticleSystemSimulationSpace.World;
+            _snowVel.x = new ParticleSystem.MinMaxCurve(0f);
+            _snowVel.y = new ParticleSystem.MinMaxCurve(-SNOW_FALL_SPEED);
+            _snowVel.z = new ParticleSystem.MinMaxCurve(0f);
 
             // Noise for gentle swirl.
             var noise = ps.noise;
@@ -301,14 +362,14 @@ namespace VoxelEngine.Weather
             main.simulationSpace = ParticleSystemSimulationSpace.World;
             main.gravityModifier = 0f;                  // world gravity is world -Y — wrong on a sphere
 
-            // Splash: a short radial puff (local +Y = away from the planet core).
-            // Same-mode velocity curves as rain (explicit zero X/Z) so the module is valid.
-            var vel = ps.velocityOverLifetime;
-            vel.enabled = true;
-            vel.space = ParticleSystemSimulationSpace.Local;
-            vel.x = new ParticleSystem.MinMaxCurve(0f, 0f);
-            vel.y = new ParticleSystem.MinMaxCurve(0.6f, 2.4f);
-            vel.z = new ParticleSystem.MinMaxCurve(0f, 0f);
+            // Splash: a short puff along the body's radial UP, written in world space every
+            // frame like rain so it kicks away from the ground on every face of the sphere.
+            _splashVel = ps.velocityOverLifetime;
+            _splashVel.enabled = true;
+            _splashVel.space = ParticleSystemSimulationSpace.World;
+            _splashVel.x = new ParticleSystem.MinMaxCurve(0f);
+            _splashVel.y = new ParticleSystem.MinMaxCurve(SPLASH_SPEED);
+            _splashVel.z = new ParticleSystem.MinMaxCurve(0f);
 
             var shape = ps.shape;
             shape.shapeType = ParticleSystemShapeType.Box;

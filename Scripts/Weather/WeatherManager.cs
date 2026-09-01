@@ -124,6 +124,7 @@ namespace VoxelEngine.Weather
         private WeatherAudio _audio;
         private WeatherLighting _lighting;
         private WeatherClouds _clouds;
+        private WeatherSeaState _seaState;
 
         private void Awake()
         {
@@ -145,6 +146,7 @@ namespace VoxelEngine.Weather
             _audio     = GetComponent<WeatherAudio>()     ?? gameObject.AddComponent<WeatherAudio>();
             _lighting  = GetComponent<WeatherLighting>()  ?? gameObject.AddComponent<WeatherLighting>();
             _clouds    = GetComponent<WeatherClouds>()    ?? gameObject.AddComponent<WeatherClouds>();
+            _seaState  = GetComponent<WeatherSeaState>()  ?? gameObject.AddComponent<WeatherSeaState>();
 
             _nextStateChange = Random.Range(minStateDuration, maxStateDuration);
         }
@@ -220,7 +222,13 @@ namespace VoxelEngine.Weather
             {
                 Vector3 up = activeBody.UpAt(transform.position);
                 Vector3 fwd = playerCamera != null ? playerCamera.forward : transform.forward;
+                // Looking straight up or down makes forward parallel to up, and OrthoNormalize
+                // then yields a degenerate basis — which silently tipped the whole weather frame
+                // (and with it the emitter box) onto its side. Pick a safe reference instead.
+                if (Mathf.Abs(Vector3.Dot(fwd.normalized, up.normalized)) > 0.985f)
+                    fwd = playerCamera != null ? playerCamera.up : Vector3.Cross(up, Vector3.right);
                 Vector3.OrthoNormalize(ref up, ref fwd);
+                if (fwd.sqrMagnitude < 1e-6f) fwd = Vector3.Cross(up, Vector3.right).normalized;
                 transform.rotation = Quaternion.LookRotation(fwd, up);
             }
 

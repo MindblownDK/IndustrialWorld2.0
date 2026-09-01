@@ -100,6 +100,26 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float  _Patchiness, _DetailStrength, _DetailScale, _SparkleStrength;
             CBUFFER_END
 
+            // ── Weather → sea state (globals published by WeatherSeaState) ──
+            // 0 = glass calm, 1 = full storm sea. The swell also leans into the wind.
+            float  _WeatherSeaState;
+            float4 _WeatherWindDirWS;
+
+            float SeaAmp()   { return 1.0 + saturate(_WeatherSeaState) * 1.45; }   // wave height
+            float SeaSpeed() { return 1.0 + saturate(_WeatherSeaState) * 0.35; }   // waves run harder
+            float SeaChop(float chop) { return saturate(chop * (1.0 + saturate(_WeatherSeaState) * 1.10)); }
+            float SeaFoam()  { return 1.0 + saturate(_WeatherSeaState) * 1.80; }   // whitecaps
+
+            /// Blends an authored wave bearing toward the wind as the sea builds.
+            float2 SeaDir(float2 authored, float2 windDir)
+            {
+                float w = saturate(_WeatherSeaState) * 0.75;
+                float2 d = lerp(normalize(authored), windDir, w);
+                float len = length(d);
+                return len > 0.0001 ? d / len : normalize(authored);
+            }
+
+
             // Native spherical-water context + a compact wake registry. These globals are
             // written by PlanetWaterRendererBootstrap / NativeWaterWakeSystem and deliberately
             // avoid a dependency on an external ocean renderer or flat XZ wake texture.
@@ -202,10 +222,17 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float2 uv = float2(dot(worldPos, tangentA), dot(worldPos, tangentB));
                 float tide = 1.0 + tideMask * _TideStrength;
 
+                // Storm response: taller, faster, choppier swell running with the wind.
+                float seaAmp = SeaAmp();
+                float seaSpeed = SeaSpeed();
+                float seaChop = SeaChop(_WaveChop);
+                float2 windUV = float2(dot(_WeatherWindDirWS.xyz, tangentA), dot(_WeatherWindDirWS.xyz, tangentB));
+                windUV = dot(windUV, windUV) > 0.0001 ? normalize(windUV) : float2(1.0, 0.0);
+
                 float3 deep = 0;
-                deep += Gerstner(uv, float2( 1.00,  0.23), deepAmp * tide, _DeepWaveFrequency, _DeepWaveSpeed, _WaveChop, t);
-                deep += Gerstner(uv, float2(-0.42,  0.91), _SecondaryWaveAmplitude * tide, _SecondaryWaveFrequency, _SecondaryWaveSpeed, _WaveChop, t);
-                deep += Gerstner(uv, float2( 0.18, -0.98), _SecondaryWaveAmplitude * 0.45 * tide, _SecondaryWaveFrequency * 2.4, _SecondaryWaveSpeed * 0.9, _WaveChop, t);
+                deep += Gerstner(uv, SeaDir(float2( 1.00,  0.23), windUV), deepAmp * tide * seaAmp, _DeepWaveFrequency, _DeepWaveSpeed * seaSpeed, seaChop, t);
+                deep += Gerstner(uv, SeaDir(float2(-0.42,  0.91), windUV), _SecondaryWaveAmplitude * tide * seaAmp, _SecondaryWaveFrequency, _SecondaryWaveSpeed * seaSpeed, seaChop, t);
+                deep += Gerstner(uv, SeaDir(float2( 0.18, -0.98), windUV), _SecondaryWaveAmplitude * 0.45 * tide * seaAmp, _SecondaryWaveFrequency * 2.4, _SecondaryWaveSpeed * 0.9 * seaSpeed, seaChop, t);
 
                 float shallowPhase = dot(uv, normalize(float2(0.7, -0.3))) * _ShallowWaveFrequency + t * _ShallowWaveSpeed;
                 float shallow = sin(shallowPhase) * _ShallowWaveAmplitude;
@@ -248,9 +275,15 @@ Shader "VoxelEngine/VoxelWaterURP"
                     float t = _Time.y;
                     float deepAmp = _DeepWaveAmplitude * topFacing;
                     float3 flatW = 0;
-                    flatW += Gerstner(worldPos.xz, float2( 1.00,  0.23), deepAmp, _DeepWaveFrequency, _DeepWaveSpeed, _WaveChop, t);
-                    flatW += Gerstner(worldPos.xz, float2(-0.42,  0.91), _SecondaryWaveAmplitude, _SecondaryWaveFrequency, _SecondaryWaveSpeed, _WaveChop, t);
-                    flatW += Gerstner(worldPos.xz, float2( 0.18, -0.98), _SecondaryWaveAmplitude * 0.45, _SecondaryWaveFrequency * 2.4, _SecondaryWaveSpeed * 0.9, _WaveChop, t);
+                    float seaAmpF = SeaAmp();
+                    float seaSpeedF = SeaSpeed();
+                    float seaChopF = SeaChop(_WaveChop);
+                    float2 windXZ = _WeatherWindDirWS.xz;
+                    windXZ = dot(windXZ, windXZ) > 0.0001 ? normalize(windXZ) : float2(1.0, 0.0);
+
+                    flatW += Gerstner(worldPos.xz, SeaDir(float2( 1.00,  0.23), windXZ), deepAmp * seaAmpF, _DeepWaveFrequency, _DeepWaveSpeed * seaSpeedF, seaChopF, t);
+                    flatW += Gerstner(worldPos.xz, SeaDir(float2(-0.42,  0.91), windXZ), _SecondaryWaveAmplitude * seaAmpF, _SecondaryWaveFrequency, _SecondaryWaveSpeed * seaSpeedF, seaChopF, t);
+                    flatW += Gerstner(worldPos.xz, SeaDir(float2( 0.18, -0.98), windXZ), _SecondaryWaveAmplitude * 0.45 * seaAmpF, _SecondaryWaveFrequency * 2.4, _SecondaryWaveSpeed * 0.9 * seaSpeedF, seaChopF, t);
                     float3 planetW = PlanetWave(worldPos, radialUp, i.uv2, deepAmp, shoreAtten, tideMask, t);
                     float3 w = lerp(flatW, planetW, _PlanetWaveBlend);
                     posOS += w;
@@ -334,7 +367,10 @@ Shader "VoxelEngine/VoxelWaterURP"
                 float validDepth = step(0.05, depthDiff);
                 float shoreFoamFade = saturate(1.0 - depthDiff / (_ShoreFoamWidth * 0.7));
                 float shoreFoam = shoreFoamFade * validDepth * _ShoreFoamIntensity * saturate(1.0 - shoreAtten) * 0.45;
-                float crest = saturate((FBM(surfUV * 0.25 + t * 0.08) - 0.62) * 3.5) * saturate(_DeepWaveAmplitude * 1.5);
+                // Whitecaps: a storm sea breaks far more often than a calm one.
+                float crestThreshold = lerp(0.62, 0.44, saturate(_WeatherSeaState));
+                float crest = saturate((FBM(surfUV * 0.25 + t * 0.08) - crestThreshold) * 3.5)
+                            * saturate(_DeepWaveAmplitude * 1.5 * SeaFoam());
                 float lace = FBM(surfUV * 0.85 + float2(t * 0.12, -t * 0.08));
                 float crestFoam = crest * lace * 0.35;
                 float flowFoam = saturate(flowSpeed - 1.2) * _FlowFoamStrength * 0.4;

@@ -298,6 +298,7 @@ namespace VoxelEngine.GridSystem
             if (_touchingIce) _lastIceContactTime = Time.time;
             UpdateThrust();
             ApplyAtmosphericDrag();
+            ApplyWeatherWind();
             UpdateDampeners();
             UpdateWheels();
             ApplyGravity();
@@ -356,10 +357,10 @@ namespace VoxelEngine.GridSystem
             AtmosphereSample atmosphere = CurrentAtmosphere;
             if (!atmosphere.HasAtmosphere || atmosphere.AirDensity <= 0.0001f) return;
 
-            Vector3 windVelocity = WindField.Instance != null
-                ? WindField.Instance.Current * atmosphere.Density01
-                : Vector3.zero;
-            Vector3 relativeVelocity = _rb.linearVelocity - windVelocity;
+            // Drag resists the grid's OWN motion through the air. The wind's push is applied
+            // separately in ApplyWeatherWind (at a sail centre above the centre of mass, so a
+            // gale can heel a hull); folding wind in here as well would double-count it.
+            Vector3 relativeVelocity = _rb.linearVelocity;
             float speedSq = relativeVelocity.sqrMagnitude;
             if (speedSq <= 0.0025f) return;
 
@@ -371,6 +372,70 @@ namespace VoxelEngine.GridSystem
             const float DragCoefficient = 0.85f;
             float dragForce = 0.5f * atmosphere.AirDensity * speedSq * DragCoefficient * frontalArea;
             _rb.AddForce(-relativeVelocity.normalized * dragForce, ForceMode.Force);
+        }
+
+        /// <summary>
+        /// Weather wind pushing on the hull. A storm shoves anything that is not tied down —
+        /// but the force is a real aerodynamic force, so <see cref="ForceMode.Force"/> divides
+        /// it by the grid's mass: a light scout skitters across the pad while a loaded freighter
+        /// barely leans. Locked landing gear or a docked port anchors the grid completely.
+        ///
+        /// The force is applied at a sail centre ABOVE the centre of mass, so wind also heels
+        /// and slowly weathervanes a hull instead of sliding it like a brick, and a floating
+        /// grid additionally rides the wind-driven surface current.
+        /// </summary>
+        private void ApplyWeatherWind()
+        {
+            if (_rb == null || _rb.isKinematic) return;
+            if (HasStationaryLock()) return;                      // tied down: the storm cannot move it
+
+            var wind = WindField.Instance;
+            if (wind == null) return;
+
+            AtmosphereSample atmosphere = CurrentAtmosphere;
+            if (!atmosphere.HasAtmosphere || atmosphere.AirDensity <= 0.0001f) return;
+
+            // Wind blows ACROSS the surface: strip the radial component so a gust never
+            // lifts or slams a grid straight down on a spherical world.
+            Vector3 up = GravityProvider.GetUp(transform.position);
+            Vector3 windVelocity = Vector3.ProjectOnPlane(wind.Current, up) * atmosphere.Density01;
+            float windSpeed = windVelocity.magnitude;
+            if (windSpeed < 0.25f) return;
+
+            Vector3 windDir = windVelocity / windSpeed;
+            float cellSize = gridSize.CellSize();
+
+            // Sail area from the block budget — the same stable estimate the drag model uses,
+            // so a big ship catches proportionally more wind than a two-block hopper.
+            float sailArea = Mathf.Max(1f, cellSize * cellSize * 0.32f) * Mathf.Max(1f, BlockCount * 0.26f);
+            const float SailCoefficient = 0.9f;
+            float force = 0.5f * atmosphere.AirDensity * windSpeed * windSpeed * SailCoefficient * sailArea;
+
+            // Hard ceiling at a fraction of the grid's weight: weather can rock, drag and drift
+            // a ship, but a gust must never fling one into orbit.
+            force = Mathf.Min(force, _rb.mass * 4.5f);
+
+            Vector3 sailCentre = _rb.worldCenterOfMass + up * (cellSize * 0.55f);
+            _rb.AddForceAtPosition(windDir * force, sailCentre, ForceMode.Force);
+
+            // Gust buffeting: a light, bounded torque so a parked ship visibly shivers and
+            // slowly weathervanes in a storm instead of standing perfectly still.
+            float gust = Mathf.Clamp01((windSpeed - 4f) / 12f);
+            if (gust > 0.001f)
+            {
+                Vector3 buffet = Vector3.Cross(up, windDir) * (force * cellSize * 0.05f * gust);
+                _rb.AddTorque(buffet, ForceMode.Force);
+            }
+
+            // Floating grids also ride the wind-driven surface current — this is what makes a
+            // moored-but-unlocked boat drift downwind on a stormy sea.
+            float submergence = VoxelEngine.Maritime.WaterProbeSystem.GetSubmergence(
+                _rb.worldCenterOfMass - up * (cellSize * 0.5f), cellSize * 0.6f);
+            if (submergence > 0.05f)
+            {
+                float current = Mathf.Min(force * 0.6f * submergence, _rb.mass * 2.5f);
+                _rb.AddForce(windDir * current, ForceMode.Force);
+            }
         }
 
         private bool HasManualThrustInput()

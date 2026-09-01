@@ -1,9 +1,124 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.23.1-dev`
+**Current Version:** `9.24.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.24.0-dev] The Storm Pushes Back — Wind On Grids, Weather-Driven Seas
+
+**Type:** MINOR — weather now acts on physics: wind shoves unanchored grids (mass-correct) and storms build the sea. Save-compatible, no setup step required.
+
+#### 🚢 Wind moves grids — and mass decides how much
+Wind was only ever a term inside the drag equation, which quietly cancelled itself out and produced no believable push. Grids now get a dedicated aerodynamic wind force:
+
+- **Anchored means anchored.** A locked landing gear or a docked port skips the force entirely — a tied-down ship does not budge in a gale.
+- **Weight matters, exactly as physics says it should.** The force is a real Newton figure (`0.5 · ρ · v² · Cd · sailArea`) applied with `ForceMode.Force`, so acceleration is force ÷ mass: a light scout skitters across the pad while a loaded freighter merely leans. Sail area scales with the block budget, so a big hull catches proportionally more wind.
+- **It heels, it doesn't slide.** The force is applied at a sail centre **above** the centre of mass, so wind rolls and slowly weathervanes a hull instead of shoving it like a brick. A bounded gust torque above ~4 m/s makes parked ships visibly shiver in a storm.
+- **Across the surface, never through it.** The wind vector is projected onto the local tangent plane, so on a spherical world a gust can never lift a grid off the ground or slam it down.
+- **Hard safety ceiling.** The total push is capped at a fraction of the grid's own weight, so weather can rock, drag and drift a ship but can never fling one into orbit.
+- Air density gates everything: on a thin-atmosphere world the same storm barely tugs, and in vacuum there is no wind force at all.
+- Drag was simplified to resist the grid's own motion only, so the push is counted exactly once.
+
+#### 🌊 Storms build the sea
+A new global sea state drives every water surface in the game:
+
+- **`WeatherSeaState`** publishes `_WeatherSeaState` (0 = glass calm → 1 = storm sea) and `_WeatherWindDirWS`. It reads the **planet's** weather, not the player's altitude, so an ocean is still stormy while you watch it from a mountain or from orbit.
+- **Seas have inertia.** They build over ~90 seconds and take ~150 seconds to lie down again, with separate rates — a squall that just arrived still finds a calm sea, and the swell keeps rolling long after the wind drops. The ocean feels like it has weight instead of snapping between states.
+- **The water answers.** Wave amplitude rises up to ×2.45, waves run up to 35% faster, chop more than doubles, the swell leans up to 75% into the wind direction, and the whitecap threshold drops so a storm sea breaks constantly. Coastal water, pools, lakes and the distant ocean LOD all read the same globals, so the whole planet's water changes together.
+- **Floating grids ride it.** A grid sitting in water also picks up the wind-driven surface current, so a moored-but-unlocked boat drifts downwind in a storm.
+
+#### Files
+- **Added:** `Scripts/Weather/WeatherSeaState.cs` (sea-state publisher with build/decay inertia)
+- **Edited:** `Scripts/GridSystem/GridEntity.cs` (`ApplyWeatherWind`, drag no longer double-counts wind) · `Scripts/Weather/WeatherManager.cs` (creates the sea-state sub-system) · `Scripts/Rendering/VoxelWaterURP.shader` (sea-state wave height/speed/chop/direction + whitecaps) · `Scripts/Rendering/PlanetOceanLodURP.shader` (distant ocean swells with the storm) · `Scripts/Core/GameVersion.cs` → `9.24.0-dev`
+
+#### Manual Unity steps
+1. Pull `Dev`, recompile — **no setup step, no prefab, no scene change**.
+2. Park a **small** grid on open ground with the landing gear **unlocked** and press **Ctrl+Alt+R**. It should shiver, heel and slowly drift downwind.
+3. Lock the landing gear: it must go completely still.
+4. Repeat with a large, heavy grid — the same storm should barely lean it. That difference is the mass term doing its job.
+5. Stand by an ocean and force a storm: over the next minute or two the swell should visibly grow, speed up, lean into the wind and start breaking into whitecaps — then take longer to settle when you force Clear again.
+6. Put a boat on the water unlocked and watch it drift downwind.
+
+#### Note on the rain streaks
+The screenshot in this round is the same one from before the **9.23.3** build. That release is the one that fixes the visual: the drops were already moving correctly toward the core, but Unity's velocity alignment rotates the quad's X axis onto the velocity while the particle shader draws its streak along V — a 90° mismatch that painted correctly-falling rain as horizontal slashes. In 9.23.3 the streak is oriented in-shader from the projected fall vector, so the mark and the motion come from the same vector. Please re-test on this build; if anything is still off, the `[Weather] Rain heartbeat` line now prints the exact `fallDir=` in use.
+
+### [9.23.3-dev] Rain Streaks Point Where The Rain Falls — Shader-Oriented Streaks
+
+**Type:** PATCH — the rain streak is now drawn along the screen projection of the true fall direction instead of relying on Unity's renderer alignment. No save, API or content changes; no setup step required.
+
+#### What was reported
+*"Almost, but the rain is still falling sideways down toward the planet."* — with a screenshot showing long, near-horizontal slashes across an overcast sky viewed from the ground.
+
+#### Root cause — a 90° mismatch between Unity and our shader
+9.23.2 fixed the *motion*: the drops genuinely travel along the body's radial down now. What was still wrong was the *drawing*.
+
+- Our particle shader draws the streak along the quad's **V (vertical) axis** — narrow in `p.x`, faded tips in `p.y`.
+- Unity's `ParticleSystemRenderSpace.Velocity` alignment orients the quad's **X axis** along the velocity.
+
+So the quad was correctly rotated to the fall direction and the streak was then drawn *across* it. Rain falling straight down was rendered as a horizontal slash — the drops moved down while the marks lay sideways, which is exactly what the screenshot shows. The 3D start size made it worse: the long axis of the quad was also the wrong one.
+
+#### The fix — orient the streak ourselves, in the shader
+Rain goes back to a plain **camera-facing billboard** (`alignment = View`, the proven path, no alignment mode to get wrong) with a **square quad** that is simply the canvas the streak is drawn into. The direction is then unambiguous:
+
+- `WeatherParticles` publishes the world-space fall vector as a global, `_WeatherFallDir`, every frame — the same vector the particles actually move along.
+- The shader projects it onto the billboard plane using the view-matrix rows (`camRight`, `camUp`), normalises it, and draws the streak along that 2D direction with a thin soft spine and faded tips.
+- The projection's **length** drives the streak length, so when you look straight along the rain (up at it, or down at it) the streak foreshortens toward a short mark — physically what happens — instead of smearing across the screen.
+
+Because both the motion and the mark now come from the same vector, they cannot disagree: whatever direction the drops fall, the streaks point that way on screen, at any camera angle, anywhere on the sphere.
+
+Streak length is the quad size (0.55–0.95 m, up to ~1.2 m in a downpour) and the width is a shader constant (~8 cm), so heavier rain reads as longer streaks rather than fatter ones.
+
+#### Files
+- **Edited:** `Scripts/Rendering/WeatherParticlesURP.shader` (streak oriented by the projected global fall direction, with foreshortening) · `Scripts/Weather/WeatherParticles.cs` (camera-facing billboard, square quad, publishes `_WeatherFallDir`) · `Scripts/Core/GameVersion.cs` → `9.23.3-dev`
+
+#### Manual Unity steps
+1. Pull `Dev`, recompile — **no setup step needed**.
+2. **Ctrl+Alt+R** and look at the horizon: streaks are vertical, top to bottom.
+3. Pitch the camera up and down through the whole range — streaks stay aligned with the fall and shorten toward marks when you look straight along the rain. No horizontal slashes at any angle.
+4. Walk to a different part of the planet and repeat — the streaks follow the local down.
+
+### [9.23.2-dev] Rain Falls Straight Down — World-Space Radial Fall Vector
+
+**Type:** PATCH — rain, snow and splashes now read their direction straight from the planet instead of inheriting the weather frame's rotation. No save, API or content changes; no setup step required.
+
+#### What was reported
+*"The rain is falling to the side, down toward the planet's core."*
+
+#### Root cause — the emitter frame could tip over
+Rain fell along the **emitter's local −Y**, and that local axis came from the weather frame's rotation, rebuilt every frame as:
+
+```
+up  = body.UpAt(position)
+fwd = camera.forward
+Vector3.OrthoNormalize(ref up, ref fwd)
+rotation = LookRotation(fwd, up)
+```
+
+When the camera looks nearly straight up or straight down — exactly what you do to inspect rain — `forward` becomes parallel to `up`. `OrthoNormalize` cannot build a basis from two parallel vectors, so it returns a degenerate/near-zero forward, and `LookRotation` falls back to an arbitrary orientation. The whole weather frame tipped, taking local −Y with it, and every drop set off sideways across the sky toward the planet — while the emitter box tilted with it, so the rain also arrived from the wrong side. It looked like the drops were being pulled toward the core because they were: local −Y had rotated into a chord through the planet rather than the radial.
+
+#### The fix — the direction comes from the body, not from the transform
+The fall vector is now written directly in **world space**, recomputed every frame from the active body's radial direction at the player:
+
+- **Rain:** `-UpAt(camera)` × 23 m/s — the exact radial down under your feet, on any face of the sphere.
+- **Snow:** the same radial down at 2.2 m/s, with blizzard gusts applied along the **surface tangent** (a gale blows across the ground instead of tilting the fall off the radial), and the swirl left to the noise module.
+- **Splashes:** the radial **up** at 1.6 m/s, so puffs kick away from the ground everywhere.
+
+All three axes are single constant curves — one shared curve mode, which Unity requires — so every drop travels the same exact vector with no per-axis randomness to skew it. The modules are structs, so rewriting them each frame costs nothing and the direction tracks you as you walk around the planet.
+
+The weather frame's rotation is also hardened for its remaining users (emitter box orientation, lightning bearings): when the camera forward is within 1° of the radial, a safe reference vector is substituted before ortho-normalising, and a zero result falls back to a valid tangent. The frame can no longer tip at any camera angle.
+
+The rain heartbeat now logs `fallDir=`, so the actual world-space fall vector is visible in one line.
+
+#### Files
+- **Edited:** `Scripts/Weather/WeatherParticles.cs` (world-space radial fall for rain/snow/splash, tangent gusts, fallDir diagnostics) · `Scripts/Weather/WeatherManager.cs` (degenerate-basis guard on the weather frame) · `Scripts/Core/GameVersion.cs` → `9.23.2-dev`
+
+#### Manual Unity steps
+1. Pull `Dev`, recompile — **no setup step needed**.
+2. **Ctrl+Alt+R**, then look horizontally, straight up and straight down: drops always travel toward your feet, never across the sky.
+3. Walk or fly a long way around the planet (or to another face of it) and check again — the fall direction follows the surface.
+4. In the console, `[Weather] Rain heartbeat` should show a `fallDir=` that is the opposite of your local up.
+5. Splashes should kick upward off the ground wherever you stand.
 
 ### [9.23.1-dev] Weather Stays On The Planet — Short Rain Streaks + Altitude Gate
 

@@ -3,8 +3,18 @@
 // rides the vertex colour; _TintColor is the per-system base tint. Particle shape
 // is drawn procedurally from the billboard UV (same approach as SpaceDustURP, the
 // project's proven particle path): _ShapeMode 0 draws a soft round dot (snow /
-// splash), 1 draws a vertical streak (rain). No texture sampling, so there is
-// nothing to mis-bind. Fog is applied so distant rain fades into the storm haze.
+// splash), 1 draws a rain streak. No texture sampling, so there is nothing to
+// mis-bind. Fog is applied so distant rain fades into the storm haze.
+//
+// RAIN DIRECTION: the quad stays a plain camera-facing billboard and the STREAK is
+// drawn along the screen projection of the global world-space fall direction
+// (_WeatherFallDir, published by WeatherParticles every frame). Unity's own
+// velocity alignment orients the quad's X axis along the velocity while this shader
+// draws its streak along V — a 90° mismatch that rendered rain as horizontal
+// slashes. Projecting the fall vector ourselves removes the ambiguity completely:
+// the streak is always along the true fall direction on screen, and it foreshortens
+// to a dot when the rain falls straight toward or away from the camera, which is
+// exactly what real rain does when you look along it.
 Shader "VoxelEngine/WeatherParticlesURP"
 {
     Properties
@@ -35,6 +45,10 @@ Shader "VoxelEngine/WeatherParticlesURP"
                 float4 _TintColor;
                 float _ShapeMode;
             CBUFFER_END
+
+            // Global (Shader.SetGlobalVector from WeatherParticles): world-space unit vector
+            // the precipitation is falling along. Deliberately outside the per-material buffer.
+            float4 _WeatherFallDir;
 
             struct Attributes
             {
@@ -70,9 +84,22 @@ Shader "VoxelEngine/WeatherParticlesURP"
                 float radius = length(p);
                 float dotAlpha = pow(saturate(1.0 - radius), 1.8);
 
-                // Vertical streak (rain): bright spine, soft horizontal edges, soft tips.
-                float edgeX = 1.0 - smoothstep(0.0, 0.4, abs(p.x));
-                float tipY  = 1.0 - smoothstep(0.7, 1.0, abs(p.y));
+                // Rain streak: drawn along the screen projection of the world fall direction.
+                float3 fall = _WeatherFallDir.xyz;
+                float3 camRight = UNITY_MATRIX_V[0].xyz;   // view-matrix rows are the camera basis
+                float3 camUp    = UNITY_MATRIX_V[1].xyz;
+                float2 proj = float2(dot(fall, camRight), dot(fall, camUp));
+                float projLen = length(proj);
+                float2 dir = projLen > 1e-4 ? proj / projLen : float2(0.0, 1.0);
+                float2 perp = float2(-dir.y, dir.x);
+
+                float along = dot(p, dir);
+                float across = dot(p, perp);
+
+                // Looking along the fall axis foreshortens the streak toward a short mark.
+                float halfLen = max(0.22, projLen);
+                float edgeX = 1.0 - smoothstep(0.0, 0.16, abs(across));
+                float tipY  = 1.0 - smoothstep(halfLen * 0.55, halfLen, abs(along));
                 float streakAlpha = edgeX * tipY;
 
                 float shape = lerp(dotAlpha, streakAlpha, saturate(_ShapeMode));

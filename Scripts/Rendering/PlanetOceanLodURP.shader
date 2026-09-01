@@ -42,6 +42,10 @@ Shader "VoxelEngine/PlanetOceanLodURP"
                 float _WaveTime;
             CBUFFER_END
 
+            // Weather → sea state (global, published by WeatherSeaState): the distant ocean
+            // swells with the same storm that is churning the water at your feet.
+            float _WeatherSeaState;
+
             struct Attributes
             {
                 float4 positionOS : POSITION;
@@ -70,7 +74,9 @@ Shader "VoxelEngine/PlanetOceanLodURP"
                 Varyings output;
                 float3 worldPos = TransformObjectToWorld(input.positionOS.xyz);
                 float3 up = BodyUp(worldPos);
-                float wave = sin(dot(worldPos - _BodyCenter.xyz, float3(0.017, 0.023, 0.013)) + _WaveTime * 0.55) * _WaveAmplitude;
+                float seaAmp = 1.0 + saturate(_WeatherSeaState) * 1.45;
+                float wave = sin(dot(worldPos - _BodyCenter.xyz, float3(0.017, 0.023, 0.013))
+                                 + _WaveTime * (0.55 + saturate(_WeatherSeaState) * 0.25)) * _WaveAmplitude * seaAmp;
                 worldPos += up * wave;
                 output.positionWS = worldPos;
                 output.normalWS = up;
