@@ -2,25 +2,23 @@
 // (rain streaks, snow flakes, splash puffs). The particle colour over lifetime
 // rides the vertex colour; _TintColor is the per-system base tint. Particle shape
 // is drawn procedurally from the billboard UV (same approach as SpaceDustURP, the
-// project's proven particle path): _ShapeMode 0 draws a soft round dot (snow /
-// splash), 1 draws a rain streak. No texture sampling, so there is nothing to
-// mis-bind. Fog is applied so distant rain fades into the storm haze.
+// project's proven particle path): _ShapeMode 0 draws an antialiased snowflake /
+// soft frost puff, 1 draws a directional rain streak. No texture sampling, so there
+// is zero texture bandwidth overhead. Fog is applied so distant precipitation fades
+// smoothly into the storm haze.
 //
 // RAIN DIRECTION: the quad stays a plain camera-facing billboard and the STREAK is
 // drawn along the screen projection of the global world-space fall direction
-// (_WeatherFallDir, published by WeatherParticles every frame). Unity's own
-// velocity alignment orients the quad's X axis along the velocity while this shader
-// draws its streak along V — a 90° mismatch that rendered rain as horizontal
-// slashes. Projecting the fall vector ourselves removes the ambiguity completely:
-// the streak is always along the true fall direction on screen, and it foreshortens
-// to a dot when the rain falls straight toward or away from the camera, which is
-// exactly what real rain does when you look along it.
+// (_WeatherFallDir, published by WeatherParticles).
+//
+// PERFORMANCE: Early alpha-clip rejects invisible fragments before complex blending,
+// maximizing GPU rasterization framerates during torrential downpours and blizzards.
 Shader "VoxelEngine/WeatherParticlesURP"
 {
     Properties
     {
         _TintColor ("Tint", Color) = (1, 1, 1, 1)
-        _ShapeMode ("Shape (0 = dot, 1 = streak)", Float) = 0
+        _ShapeMode ("Shape (0 = snowflake/puff, 1 = streak)", Float) = 0
     }
 
     SubShader
@@ -47,7 +45,7 @@ Shader "VoxelEngine/WeatherParticlesURP"
             CBUFFER_END
 
             // Global (Shader.SetGlobalVector from WeatherParticles): world-space unit vector
-            // the precipitation is falling along. Deliberately outside the per-material buffer.
+            // the precipitation is falling along.
             float4 _WeatherFallDir;
 
             struct Attributes
@@ -79,12 +77,16 @@ Shader "VoxelEngine/WeatherParticlesURP"
             {
                 // Billboard UV spans 0..1 across the quad; remap so 0,0 is the centre.
                 float2 p = input.uv * 2.0 - 1.0;
-
-                // Soft round dot (snow / splash).
                 float radius = length(p);
-                float dotAlpha = pow(saturate(1.0 - radius), 1.8);
 
-                // Rain streak: drawn along the screen projection of the world fall direction.
+                // ── Procedural Antialiased Snowflake / Soft Frost Puff (ShapeMode 0) ──
+                // Core crystal density + soft feathered perimeter for delicate fluttering flakes.
+                float flakeCore = saturate(1.0 - radius * 1.5);
+                float flakeSoft = pow(saturate(1.0 - radius), 1.6);
+                float flakeAlpha = saturate(flakeSoft * 0.75 + flakeCore * 0.55);
+
+                // ── Procedural Rain Streak (ShapeMode 1) ──
+                // Drawn along the screen projection of the world fall direction.
                 float3 fall = _WeatherFallDir.xyz;
                 float3 camRight = UNITY_MATRIX_V[0].xyz;   // view-matrix rows are the camera basis
                 float3 camUp    = UNITY_MATRIX_V[1].xyz;
@@ -96,14 +98,16 @@ Shader "VoxelEngine/WeatherParticlesURP"
                 float along = dot(p, dir);
                 float across = dot(p, perp);
 
-                // Looking along the fall axis foreshortens the streak toward a short mark.
+                // Looking along the fall axis foreshortens the streak naturally toward a drop mark.
                 float halfLen = max(0.22, projLen);
                 float edgeX = 1.0 - smoothstep(0.0, 0.16, abs(across));
                 float tipY  = 1.0 - smoothstep(halfLen * 0.55, halfLen, abs(along));
                 float streakAlpha = edgeX * tipY;
 
-                float shape = lerp(dotAlpha, streakAlpha, saturate(_ShapeMode));
-                half alpha = shape * input.color.a * _TintColor.a;
+                float shape = lerp(flakeAlpha, streakAlpha, saturate(_ShapeMode));
+                half alpha = (half)(shape * input.color.a * _TintColor.a);
+
+                // Early clip for maximum fillrate performance during heavy precipitation.
                 clip(alpha - 0.003);
 
                 half3 rgb = input.color.rgb * _TintColor.rgb;

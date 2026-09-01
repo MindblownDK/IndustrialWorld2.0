@@ -950,6 +950,8 @@ GameObject:
   - component: {fileID: 1267250223}
   - component: {fileID: 1267250222}
   - component: {fileID: 1267250221}
+  - component: {fileID: 1267250227}
+  - component: {fileID: 1267250226}
   m_Layer: 0
   m_Name: _Weather
   m_TagString: Untagged
@@ -1038,6 +1040,38 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1267250226
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1267250220}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2aac929d05504fdbb24fbcac35458093, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Weather.WeatherSeaState
+  buildSeconds: 90
+  calmSeconds: 150
+  precipitationWeight: 0.55
+  windWeight: 0.65
+--- !u!114 &1267250227
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1267250220}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7465c178150d1754d915aaeaaec63bd7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Weather.WeatherClouds
+  coverageBlendSpeed: 0.1
+  bodyScanInterval: 2
+  volumeResolution: 64
+  shellSubdivisions: 5
 --- !u!1 &1321117567
 GameObject:
   m_ObjectHideFlags: 0

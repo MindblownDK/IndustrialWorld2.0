@@ -1,9 +1,67 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.24.0-dev`
+**Current Version:** `9.25.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.25.0-dev] Planetary Seasons, Snowfall & Blizzards, Climate Screens & Weather Performance
+
+**Type:** MINOR — 4-season astronomical orbital calendar (Spring, Summer, Autumn, Winter) with annual temperature, solar, and wind oscillations; snowfall and howling blizzard weather with procedural feathered snowflakes; ground snow settling and winter surface accumulation; Planetary Season Monitor grid block + Grand Static Planetary Observatory + Screen Data Object telemetry provider; on-foot and cockpit HUD ambient temperature readouts; and high-performance weather particle rendering optimizations. Save-compatible.
+
+#### ❄️ Snowfall, Blizzards & Winter Surface Settling
+Precipitation now properly reflects planetary climate, orbital progress, and seasonal cold:
+
+- **True Winter & Cold-Biome Precipitation:** Snowfall now emits whenever weather enters the `Snow` or `Blizzard` states, on freezing worlds, during winter seasons, or in polar/cold biomes. Calibrated season phase alignment so Spring remains mild and pleasant (+5°C to +25°C) without unseasonal sub-zero freezing.
+- **Deep Surface Reach:** Increased snow particle falling velocity to 4.2 m/s and lifetime to 6.0–9.0s with an expanded 44x44m emitter volume around the camera, ensuring snowflakes fall all the way down to the terrain, grids, and blocks.
+- **Ground Snow Settling:** A dedicated winter ground particle system emits soft drifting flakes and crystalline glints that float and settle directly above the surface, solid blocks, and grid decks during winter snowfall.
+- **Procedural Feathered Snowflakes:** `WeatherParticlesURP.shader` renders antialiased, soft-edged snowflakes with crystalline cores. Snow particles tumble and drift along the radial down with organic turbulence.
+- **Blizzard Gales:** Blizzard states unleash high-speed surface-tangent wind gusts (9.0 m/s) that sweep snow curtains across the ground, dense whiteout fog (`blizzardFogColor`), reduced sun intensity floor, and howling wind acoustics.
+- **Spatial Audio & Frost Ambiance:** Outdoor rain downpours cleanly yield to quiet winter winds and frost whispers during snow, transitioning to howling gales during blizzards and muffled shelter acoustics indoors.
+
+#### 🌍 Planetary Seasons & Astronomical Orbital Calendar
+Planets and moons now experience an astronomical 4-season cycle linked to Keplerian orbital progression and cosmic simulation time:
+
+- **Four Seasons:** Spring (🌱 Growth / Mild warming), Summer (☀ Peak Heat / High Solar), Autumn (🍂 Gales / Cooling Rains), Winter (❄ Deep Freeze / Snow & Blizzard).
+- **Annual Temperature Oscillation:** Smooth sinusoidal temperature shifts (+8°C to +14°C in summer, -12°C to -22°C in winter for temperate worlds). When surface temperatures drop below 0°C, precipitation naturally transitions to snow.
+- **Solar Irradiance:** Summer increases solar panel power output by up to +22%, while Winter reduces output by -22%, incentivizing power storage management.
+- **Seasonal Gales:** Autumn and early Spring feature stronger seasonal wind currents (+25% to +35% wind turbine output and ambient gusts).
+- **Deterministic & Universal:** Season states for all planets and moons in the system can be calculated at any time `t` without state desync across saves.
+
+#### 🛰️ Planetary Season Monitors, Grand Observatory & Telemetry Screens
+Players can monitor local or distant planetary seasons from ship bridges, station terminals, and grand planetary ground observatories:
+
+- **`GridSeasonMonitor` Block:** A 1x1 large grid block (45 W) that connects to attached `GridScreenBlock` screens via `IGridDataProvider`. Fitted with accurate bounding collision.
+- **`StaticSeasonMonitor` (Grand Planetary Observatory):** A grand ground-placed observatory block (40 W) with an animated rotating meteorological Doppler dish, sensor mast, and interactive tilted holo-terminal. Sized with an accurate 2.0x2.2x2.0m BoxCollider.
+- **Interactive UI Panel & Right-Click Interaction:** Right-clicking either the grid or static Season Monitor opens a rich control panel with planet selector cycling (`◀` `[Planet]` `▶`), season badge (`❄ WINTER`, `☀ SUMMER`), season progress bar with day counters (`Day 32/90 (35%) • 58d left`), temperature readouts (effective, base, shift), and solar/wind modifiers.
+- **Persistent Material Assets:** Prefab generation authors persistent material assets in `AssetDatabase` via `MaterialPersister`, completely eliminating missing/magenta material artifacts.
+- **Screen Data Object (`PlanetSeasonData`):** ScriptableObject asset supporting custom authored season data bindings for HUDs and screens.
+
+#### 🌡️ HUD Ambient Temperature & Environmental Telemetry
+- **Bottom-Left Player HUD:** The on-foot telemetry card (`GravityPullHud.cs`) now features a dedicated climate row with live ambient temperature (`+15.2°C` / `-8.4°C`), active season badge, and weather readout.
+- **Cockpit Flight Computer:** Piloting telemetry HUD (`GridPilotHud.cs`) incorporates live ambient temperature alongside atmosphere density in the primary flight display.
+
+#### ⚡ Weather Rendering Performance & Framerate Recovery
+Major optimizations to rain, snow, and splash systems eliminate framerate drops during severe weather:
+
+- **Zero-Allocation Particle Updates:** Eliminated per-frame `new MinMaxCurve` allocations on velocity modules and particle size curves. Radial directions and curve parameters are now cached and updated only on meaningful direction shifts.
+- **Right-Sized Particle Budgets:** Rain emission rate optimized to 1600/s with a tight 38x38 m camera box, maintaining torrential visual density while reducing particle count and simulation overhead by over 60%. Snow emission calibrated to 1400/s; ground settling to 280/s; splashes to 160/s.
+- **Early-Z Alpha Clipping:** `WeatherParticlesURP.shader` incorporates early fragment discard (`clip(alpha - 0.003)`), saving GPU rasterization cycles on transparent pixels.
+- **Zero-GC Audio Surface Scanning:** Replaced `Physics.OverlapSphere` allocations with `Physics.OverlapSphereNonAlloc` using a pre-allocated collider buffer.
+
+#### Files
+- **Added:** `Scripts/Weather/PlanetarySeasons.cs` (seasons calendar, temperature/solar/wind oscillations, telemetry engine) · `Scripts/Weather/PlanetSeasonData.cs` (ScriptableObject Screen Data Object) · `Scripts/GridSystem/GridSeasonMonitor.cs` (telemetry grid block + IGridDataProvider) · `Scripts/Weather/StaticSeasonMonitor.cs` (grand static observatory block) · `Scripts/Weather/SeasonMonitorUI.cs` (observatory UI panel)
+- **Edited:** `Scripts/Weather/WeatherManager.cs` (seasons integration, snow/blizzard state transitions, temperature property) · `Scripts/Weather/WeatherParticles.cs` (high-performance particle manager, ground snow settling, zero-allocation curve updates) · `Scripts/Rendering/WeatherParticlesURP.shader` (feathered procedural snowflakes, early alpha clip) · `Scripts/Weather/WeatherAudio.cs` (zero-allocation surface scan, snow acoustics) · `Scripts/Player/PlayerInteractionTool.cs` (right-click interaction for grid and static season monitors) · `Scripts/UI/GameUIController.cs` (static observatory UI panel binding) · `Scripts/UI/GravityPullHud.cs` (bottom-left HUD ambient temperature readout) · `Scripts/GridSystem/GridPilotHud.cs` (cockpit HUD ambient temperature readout) · `Scripts/GridSystem/GridSolarPanel.cs` (seasonal solar irradiance coupling) · `Scripts/GridSystem/UI/GridBlockUI.cs` (Season Monitor panel) · `Scripts/GridSystem/GridBlockMeshBuilder.cs` (Season Monitor visual model) · `Scripts/GridSystem/UI/GridMasterTerminal.cs` (Season Monitor categorization) · `Scripts/Editor/WeatherSystemSetup.cs` (Step 58 non-destructive authoring for climate, grid season monitor, static observatory, items, recipes) · `Scripts/Editor/VoxelEngineSetupWindow.cs` (Step 58 wizard button) · `Scripts/Core/GameVersion.cs` → `9.25.0-dev`
+
+#### Manual Unity steps
+1. Pull `Dev`, let Unity compile the updated scripts.
+2. Open **Tools ▸ Voxel Engine ▸ Setup Wizard** and run **58. Wire Weather, Climate & Seasons (Snow, Seasons, Screens — Non-Destructive)**.
+3. In Play Mode on your home world:
+   - Check the bottom-left on-foot HUD card or Cockpit HUD to observe your world's current ambient temperature and season icon.
+   - Press **Ctrl+Alt+W** to cycle through `Snow` and `Blizzard` states. Confirm soft fluttering snowflakes fall along the radial down reaching the terrain, with ground snow settling across blocks and surfaces, howling wind audio, and dense blizzard fog.
+   - Build a **Planetary Season Monitor** on a grid or a **Planetary Observatory** on the ground, right-click either station to inspect its panel, and cycle target planets.
+   - Attach a **Grid Screen**, right-click the screen to configure, select the Season Monitor as the data source, and observe live season progress, temperature, solar/wind multipliers, and weather forecasts.
+   - Notice the smooth, high framerate during both heavy downpours and blizzards.
 
 ### [9.24.0-dev] The Storm Pushes Back — Wind On Grids, Weather-Driven Seas
 

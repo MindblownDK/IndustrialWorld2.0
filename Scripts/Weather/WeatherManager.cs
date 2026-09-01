@@ -1,7 +1,7 @@
 // Assets/Scripts/VoxelEngine/Weather/WeatherManager.cs
 //
 // Central weather controller. Drives rain/snow particles, ambient audio, surface-hit
-// sounds, fog, sun darkening and lightning through its sub-systems.
+// sounds, fog, sun darkening, lightning, and planetary seasons through its sub-systems.
 //
 // Weather is per-planet: each celestial body's BodySettings.weather (a WeatherClimateProfile)
 // decides whether weather is active at all (airless bodies are always calm), what falls from
@@ -9,9 +9,9 @@
 // bootstrap whenever a body becomes the player's home world.
 //
 // Weather cycles through Clear → Overcast → Rain → HeavyRain → Clear (or the snow/blizzard
-// equivalents in cold biomes / on frozen worlds). Thunder is unified here: a single scheduler
-// fires OnThunder, which the audio and lightning sub-systems both honour so the flash and the
-// rumble are always in sync.
+// equivalents in cold biomes / during winter seasons / on frozen worlds). Thunder is unified here:
+// a single scheduler fires OnThunder, which the audio and lightning sub-systems both honour so
+// the flash and the rumble are always in sync.
 
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -53,6 +53,12 @@ namespace VoxelEngine.Weather
         /// <summary>0 = fully previous state, 1 = fully target state.</summary>
         public float TransitionProgress { get; private set; } = 1f;
 
+        /// <summary>Current ambient surface temperature of the world in °C.</summary>
+        public float CurrentTemperature => PlanetarySeasons.GetCurrentTemperature();
+
+        /// <summary>Current planetary seasons telemetry snapshot.</summary>
+        public PlanetSeasonInfo CurrentSeasonInfo => PlanetarySeasons.GetCurrentSeasonInfo();
+
         /// <summary>
         /// Planet-wide precipitation intensity (0 = none, 1 = max). This is the WEATHER of the
         /// world and stays valid no matter where the player is — the cloud shells use it so a
@@ -71,14 +77,13 @@ namespace VoxelEngine.Weather
         public float LocalIntensity { get; private set; }
 
         /// <summary>
-        /// Live multiplier weather applies to wind (1 = calm). Storms drive it up to the
-        /// body's stormWindMultiplier. Consumed by <see cref="VoxelEngine.Cosmos.WindField"/>
-        /// (grass / particles / audio) and by <see cref="VoxelEngine.Power.Wind.WindSystem"/>
-        /// (wind turbines), so a storm visibly AND mechanically means more wind.
+        /// Live multiplier weather applies to wind (1 = calm). Storms and seasonal gales drive it up.
+        /// Consumed by <see cref="VoxelEngine.Cosmos.WindField"/> (grass / particles / audio)
+        /// and by <see cref="VoxelEngine.Power.Wind.WindSystem"/> (wind turbines).
         /// </summary>
         public static float WindMultiplier { get; private set; } = 1f;
 
-        /// <summary>True if the current biome is a cold/snowy biome (or the body forces snow).</summary>
+        /// <summary>True if the current biome / season is cold/snowy (or the body forces snow).</summary>
         public bool IsSnowBiome { get; private set; }
 
         /// <summary>True if precipitation is currently reaching the player (rain or snow).</summary>
@@ -142,11 +147,16 @@ namespace VoxelEngine.Weather
 
             // Create sub-systems (idempotent: reused if the setup step pre-added them for
             // inspector tuning, so we never stack duplicate particle/audio/lighting comps).
-            _particles = GetComponent<WeatherParticles>() ?? gameObject.AddComponent<WeatherParticles>();
-            _audio     = GetComponent<WeatherAudio>()     ?? gameObject.AddComponent<WeatherAudio>();
-            _lighting  = GetComponent<WeatherLighting>()  ?? gameObject.AddComponent<WeatherLighting>();
-            _clouds    = GetComponent<WeatherClouds>()    ?? gameObject.AddComponent<WeatherClouds>();
-            _seaState  = GetComponent<WeatherSeaState>()  ?? gameObject.AddComponent<WeatherSeaState>();
+            _particles = GetComponent<WeatherParticles>();
+            if (_particles == null) _particles = gameObject.AddComponent<WeatherParticles>();
+            _audio = GetComponent<WeatherAudio>();
+            if (_audio == null) _audio = gameObject.AddComponent<WeatherAudio>();
+            _lighting = GetComponent<WeatherLighting>();
+            if (_lighting == null) _lighting = gameObject.AddComponent<WeatherLighting>();
+            _clouds = GetComponent<WeatherClouds>();
+            if (_clouds == null) _clouds = gameObject.AddComponent<WeatherClouds>();
+            _seaState = GetComponent<WeatherSeaState>();
+            if (_seaState == null) _seaState = gameObject.AddComponent<WeatherSeaState>();
 
             _nextStateChange = Random.Range(minStateDuration, maxStateDuration);
         }
@@ -186,8 +196,6 @@ namespace VoxelEngine.Weather
             else
             {
                 // Kick off a SHORT first cycle so weather is actually visible soon after arrival.
-                // Without this a fresh world can sit in Clear for several minutes before the first
-                // random roll, which reads as "it never rains".
                 _pendingFirstCycle = true;
                 _stateTimer = 0f;
                 _nextStateChange = Random.Range(firstChangeDelayMin, firstChangeDelayMax);
@@ -222,9 +230,6 @@ namespace VoxelEngine.Weather
             {
                 Vector3 up = activeBody.UpAt(transform.position);
                 Vector3 fwd = playerCamera != null ? playerCamera.forward : transform.forward;
-                // Looking straight up or down makes forward parallel to up, and OrthoNormalize
-                // then yields a degenerate basis — which silently tipped the whole weather frame
-                // (and with it the emitter box) onto its side. Pick a safe reference instead.
                 if (Mathf.Abs(Vector3.Dot(fwd.normalized, up.normalized)) > 0.985f)
                     fwd = playerCamera != null ? playerCamera.up : Vector3.Cross(up, Vector3.right);
                 Vector3.OrthoNormalize(ref up, ref fwd);
@@ -234,7 +239,7 @@ namespace VoxelEngine.Weather
 
             HandleDebugHotkeys();
 
-            // Check biome every 2 seconds (only meaningful when precipitation is Auto).
+            // Check biome and seasonal climate every 2 seconds.
             _biomeCheckTimer += Time.deltaTime;
             if (_biomeCheckTimer >= 2f)
             {
@@ -253,20 +258,18 @@ namespace VoxelEngine.Weather
                 }
             }
 
-            // Lightweight heartbeat — full weather state every 8 s so a missing/absent
-            // weather effect can be diagnosed from the console alone. Remove after sign-off.
+            // Diagnostic heartbeat (throttled).
             _heartbeatTimer += Time.deltaTime;
-            if (_heartbeatTimer >= 8f)
+            if (_heartbeatTimer >= 10f)
             {
                 _heartbeatTimer = 0f;
                 var body = GravityProvider.ActiveBody;
                 var settings = body != null ? body.settings : null;
-                Debug.Log($"[Weather] Manager heartbeat: active={IsWeatherActive} " +
+                var season = PlanetarySeasons.GetCurrentSeasonInfo();
+                Debug.Log($"[Weather] Heartbeat: active={IsWeatherActive} " +
                           $"state={CurrentState}->{TargetState} intensity={Intensity:F2} " +
-                          $"snow={IsSnowBiome} body={(body != null ? body.DisplayName : "none")} " +
-                          $"atmosphere={(settings != null ? settings.HasAtmosphere : false)} " +
-                          $"weatherEnabled={(Profile != null ? Profile.weatherEnabled : false)} " +
-                          $"precip={(Profile != null ? Profile.precipitation.ToString() : "?")}");
+                          $"snow={IsSnowBiome} season={season.SeasonName} ({season.effectiveTemperature:F1}°C) " +
+                          $"body={(body != null ? body.DisplayName : "none")}");
             }
 
             // Update intensity based on current/target blend.
@@ -305,8 +308,7 @@ namespace VoxelEngine.Weather
 
         /// <summary>
         /// Developer hotkeys (Ctrl+Alt): W steps through every weather state and then back to
-        /// the automatic cycle, R jumps straight to a full storm. Nothing is bound in normal
-        /// play, so this can never fire by accident.
+        /// the automatic cycle, R jumps straight to a full storm.
         /// </summary>
         private void HandleDebugHotkeys()
         {
@@ -357,8 +359,7 @@ namespace VoxelEngine.Weather
 
         /// <summary>
         /// Fades the weather out as the player climbs through the cloud deck. Above the deck
-        /// there is nothing left to fall on you: no rain, no splashes, no rain audio, no storm
-        /// fog — while the planet below keeps its weather.
+        /// there is nothing left to fall on you.
         /// </summary>
         private void UpdateSurfaceProximity()
         {
@@ -382,8 +383,6 @@ namespace VoxelEngine.Weather
 
         private void ResolveActiveBody()
         {
-            // Re-apply climate only when the active body's settings reference actually changes
-            // (body switch / first resolution). ApplyBody reads WeatherAllowed at apply time.
             var body = GravityProvider.ActiveBody;
             var settings = body != null ? body.settings : null;
             if (ReferenceEquals(settings, _lastAppliedSettings)) return;
@@ -400,14 +399,29 @@ namespace VoxelEngine.Weather
             if (profile.precipitation == WeatherClimateProfile.Precipitation.Rain) { IsSnowBiome = false; return; }
             if (profile.precipitation == WeatherClimateProfile.Precipitation.None) { IsSnowBiome = false; return; }
 
-            // Auto: sample temperature from biome noise.
+            // Check planetary seasonal temperature: freezing temperature enforces snow
+            var seasonInfo = PlanetarySeasons.GetCurrentSeasonInfo();
+            if (seasonInfo.isFreezing)
+            {
+                IsSnowBiome = true;
+                return;
+            }
+
+            // Auto: sample temperature from biome noise, modulated by seasonal temperature offset.
             var world = ActiveWorld.Current;
-            if (world == null || world.Viewer == null) return;
+            if (world == null || world.Viewer == null)
+            {
+                IsSnowBiome = seasonInfo.effectiveTemperature < 2f;
+                return;
+            }
+
             var pos = world.Viewer.position;
             int wx = Mathf.FloorToInt(pos.x);
             int wz = Mathf.FloorToInt(pos.z);
             var climate = BiomePicker.SampleClimate(world.Seed, wx, wz);
-            IsSnowBiome = climate.x < 0.25f; // cold biomes
+            float seasonalTempShift = seasonInfo.seasonalTemperatureOffset / 50f;
+            float effectiveTempFraction = Mathf.Clamp01(climate.x + seasonalTempShift);
+            IsSnowBiome = effectiveTempFraction < 0.28f; // cold biomes / cold season
         }
 
         private void PickNextState()
@@ -416,15 +430,16 @@ namespace VoxelEngine.Weather
             TransitionProgress = 0f;
 
             var profile = Profile ?? WeatherClimateProfile.Default();
+            var seasonInfo = PlanetarySeasons.GetCurrentSeasonInfo();
             float overcast = profile.overcastBias;
-            float storm = Mathf.Clamp01(profile.stormChance);
+            float storm = Mathf.Clamp01(profile.stormChance + seasonInfo.stormChanceModifier);
             float roll = Random.value;
 
             bool noPrecip = profile.precipitation == WeatherClimateProfile.Precipitation.None;
-            bool snow = IsSnowBiome || profile.precipitation == WeatherClimateProfile.Precipitation.Snow;
+            bool snow = IsSnowBiome || profile.precipitation == WeatherClimateProfile.Precipitation.Snow || seasonInfo.isFreezing;
 
             // First cycle on arrival: guarantee a VISIBLE weather move so a freshly entered
-            // world does not read as "clear forever". Never re-rolls Clear here.
+            // world does not read as "clear forever".
             if (_pendingFirstCycle)
             {
                 _pendingFirstCycle = false;
@@ -448,7 +463,7 @@ namespace VoxelEngine.Weather
 
             if (snow)
             {
-                // Snow biomes: clear/overcast -> snow -> blizzard, scaled by storm chance.
+                // Snow / winter: clear/overcast -> snow -> blizzard, scaled by storm chance.
                 if (CurrentState == WeatherState.Clear || CurrentState == WeatherState.Overcast)
                     TargetState = roll < 0.55f ? WeatherState.Snow
                                 : (roll < Mathf.Clamp01(overcast + 0.25f) ? WeatherState.Overcast : WeatherState.Clear);
@@ -461,7 +476,6 @@ namespace VoxelEngine.Weather
             else
             {
                 // Temperate biomes: clear -> overcast -> rain -> heavy rain.
-                // Tuned to actually progress into precipitation most cycles.
                 if (CurrentState == WeatherState.Clear)
                     TargetState = roll < 0.40f ? WeatherState.Overcast
                                 : (roll < 0.70f ? WeatherState.LightRain : WeatherState.Clear);
@@ -485,7 +499,7 @@ namespace VoxelEngine.Weather
                       + (string.IsNullOrEmpty(tag) ? "" : $" [{tag}]"));
         }
 
-        /// <summary>Schedule synced thunder strikes during heavy precipitation.</summary>
+        /// <summary>Schedule synced thunder strikes during heavy precipitation (rain or blizzard).</summary>
         private void ScheduleThunder()
         {
             bool heavyPrecip = TargetState == WeatherState.HeavyRain || TargetState == WeatherState.Blizzard
@@ -499,17 +513,11 @@ namespace VoxelEngine.Weather
             if (_thunderTimer < _nextThunder) return;
 
             _thunderTimer = 0f;
-            // Higher thunder frequency → shorter, more regular gaps.
             float baseGap = Mathf.Lerp(40f, 10f, profile.thunderFrequency);
             _nextThunder = Random.Range(baseGap * 0.6f, baseGap * 1.6f);
             OnThunder?.Invoke(PickStrikePosition());
         }
 
-        /// <summary>
-        /// World position of this strike (up in the cloud band, random bearing and distance).
-        /// The audio uses it for direction and speed-of-sound delay; the lighting flashes
-        /// instantly regardless.
-        /// </summary>
         private Vector3 PickStrikePosition()
         {
             Vector3 anchor = transform.position;
@@ -517,7 +525,6 @@ namespace VoxelEngine.Weather
             var body = GravityProvider.ActiveBody;
             if (body != null) up = body.UpAt(anchor);
 
-            // Random bearing on the tangent plane.
             Vector3 tangent = Random.insideUnitSphere;
             tangent -= up * Vector3.Dot(tangent, up);
             if (tangent.sqrMagnitude < 1e-4f) tangent = Vector3.ProjectOnPlane(Random.insideUnitSphere, up);
@@ -541,43 +548,32 @@ namespace VoxelEngine.Weather
         };
 
         /// <summary>
-        /// Weather → wind coupling. Publishes a smoothed wind multiplier so a storm means
-        /// more wind for turbines and the ambient wind field, easing up and down with the
-        /// precipitation intensity (never snapping). Calm / no-weather eases back to 1.
+        /// Weather + Seasons → wind coupling. Publishes a smoothed wind multiplier.
         /// </summary>
         private void UpdateWindMultiplier()
         {
+            var seasonInfo = PlanetarySeasons.GetCurrentSeasonInfo();
+            float seasonalBase = seasonInfo.windMultiplier;
+
             if (!IsWeatherActive || Intensity <= 0.001f)
             {
-                WindMultiplier = Mathf.Lerp(WindMultiplier, 1f, Time.deltaTime * 0.5f);
+                WindMultiplier = Mathf.Lerp(WindMultiplier, seasonalBase, Time.deltaTime * 0.5f);
                 return;
             }
 
             var profile = Profile ?? WeatherClimateProfile.Default();
             float stormBoost = Mathf.Max(0f, profile.stormWindMultiplier - 1f);
 
-            float target;
-            switch (TargetState)
+            float target = TargetState switch
             {
-                case WeatherState.HeavyRain:
-                case WeatherState.Blizzard:
-                    target = 1f + stormBoost;                 // full gale at full intensity
-                    break;
-                case WeatherState.LightRain:
-                case WeatherState.Snow:
-                    target = 1f + stormBoost * 0.55f;         // meaningful but not full storm wind
-                    break;
-                case WeatherState.Overcast:
-                    target = 1f + stormBoost * 0.25f;         // a breeze under a grey sky
-                    break;
-                default:
-                    target = 1f;
-                    break;
-            }
+                WeatherState.HeavyRain or WeatherState.Blizzard => 1f + stormBoost,
+                WeatherState.LightRain or WeatherState.Snow => 1f + stormBoost * 0.55f,
+                WeatherState.Overcast => 1f + stormBoost * 0.25f,
+                _ => 1f
+            };
 
-            // Intensity already ramps 0.5 → 1.0 for light → heavy precipitation, so the
-            // wind eases up WITH the rain rather than jumping ahead of it.
-            WindMultiplier = Mathf.Lerp(WindMultiplier, Mathf.Lerp(1f, target, Intensity), Time.deltaTime * 0.5f);
+            target *= seasonalBase;
+            WindMultiplier = Mathf.Lerp(WindMultiplier, Mathf.Lerp(seasonalBase, target, Intensity), Time.deltaTime * 0.5f);
         }
 
         /// <summary>Force a specific weather state (for testing / console commands).</summary>
@@ -592,7 +588,7 @@ namespace VoxelEngine.Weather
         private void OnDestroy()
         {
             if (Instance == this) Instance = null;
-            WindMultiplier = 1f;   // never leave stale storm wind behind when the controller is torn down
+            WindMultiplier = 1f;
         }
     }
 }

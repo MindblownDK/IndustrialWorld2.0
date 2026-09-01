@@ -179,11 +179,11 @@ namespace VoxelEngine.Weather
             if (_listener == null && wm.playerCamera != null) _listener = wm.playerCamera;
 
             float intensity = wm.LocalIntensity;   // silent once you are above the cloud deck
-            bool isSnow = wm.IsSnowBiome &&
-                          (wm.CurrentState == WeatherState.Snow ||
-                           wm.CurrentState == WeatherState.Blizzard ||
-                           wm.TargetState == WeatherState.Snow ||
-                           wm.TargetState == WeatherState.Blizzard);
+            bool isSnow = wm.IsSnowBiome ||
+                          wm.CurrentState == WeatherState.Snow ||
+                          wm.CurrentState == WeatherState.Blizzard ||
+                          wm.TargetState == WeatherState.Snow ||
+                          wm.TargetState == WeatherState.Blizzard;
             bool isRain = !isSnow && intensity > 0.02f;
 
             // Shelter probe (cheap; every 0.4 s).
@@ -230,11 +230,12 @@ namespace VoxelEngine.Weather
             // ── 3D surface pattering ──
             // Rain on YOUR roof (from the actual roof point above you) or on the
             // nearest metal/wood structures (from their direction, fading with distance).
-            float metalRoofVol = _roofIsMetal ? intensity * 0.80f : 0f;
+            // When in a cave, built roof patter does not play.
+            float metalRoofVol = (_roofIsMetal && !_inCave) ? intensity * 0.80f : 0f;
             float metalNearVol = _metalAmount * intensity * 0.55f * outside;
             float metalVol = Mathf.Max(metalRoofVol, metalNearVol);
 
-            float woodRoofVol = _roofIsWood ? intensity * 0.60f : 0f;
+            float woodRoofVol = (_roofIsWood && !_inCave) ? intensity * 0.60f : 0f;
             float woodNearVol = _woodAmount * intensity * 0.38f * outside;
             float woodVol = Mathf.Max(woodRoofVol, woodNearVol);
 
@@ -247,9 +248,9 @@ namespace VoxelEngine.Weather
             // Keep the 3D hosts at the surfaces they voice.
             Vector3 upNow = RadialUp();
             Vector3 fallback = ListenerPos() + upNow * 3f;
-            _metalHost.position = _roofIsMetal ? _roofPoint + upNow * 0.4f
+            _metalHost.position = (_roofIsMetal && !_inCave) ? _roofPoint + upNow * 0.4f
                              : (_metalAmount > 0.01f ? _metalPoint : fallback);
-            _woodHost.position = _roofIsWood ? _roofPoint + upNow * 0.4f
+            _woodHost.position = (_roofIsWood && !_inCave) ? _roofPoint + upNow * 0.4f
                             : (_woodAmount > 0.01f ? _woodPoint : fallback);
 
             // ── Wind: blizzards howl, storms whisper ──
@@ -321,6 +322,8 @@ namespace VoxelEngine.Weather
             }
         }
 
+        private static readonly Collider[] _surfaceColliders = new Collider[48];
+
         /// <summary>Scan nearby placed structures for metal/wood (amount + closest point).</summary>
         private void ScanSurfaceMaterials()
         {
@@ -329,9 +332,10 @@ namespace VoxelEngine.Weather
             Vector3 bestMetal = pos, bestWood = pos;
             float bestMetalD = float.MaxValue, bestWoodD = float.MaxValue;
 
-            var hits = Physics.OverlapSphere(pos, 14f);
-            foreach (var col in hits)
+            int hitCount = Physics.OverlapSphereNonAlloc(pos, 14f, _surfaceColliders);
+            for (int i = 0; i < hitCount; i++)
             {
+                var col = _surfaceColliders[i];
                 if (col == null) continue;
                 var tiered = col.GetComponentInParent<PlacedTieredBlock>();
                 if (tiered == null) continue;

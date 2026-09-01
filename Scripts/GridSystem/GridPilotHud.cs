@@ -762,6 +762,9 @@ namespace VoxelEngine.GridSystem
             if (_environmentLabel != null)
             {
                 bool deepSpace = GravityProvider.IsDeepSpace;
+                var season = VoxelEngine.Weather.PlanetarySeasons.GetCurrentSeasonInfo();
+                string sign = season.effectiveTemperature >= 0f ? "+" : "";
+                string tempStr = $"{sign}{season.effectiveTemperature:F1}°C";
                 Color environmentColor = deepSpace
                     ? new Color(0.70f, 0.52f, 1.00f)
                     : environment.Band switch
@@ -772,7 +775,7 @@ namespace VoxelEngine.GridSystem
                     };
                 _environmentLabel.text = deepSpace
                     ? "DEEP SPACE · 0% AIR"
-                    : $"{environment.Label} · {environment.Density01 * 100f:0}% AIR";
+                    : $"{environment.Label} · {environment.Density01 * 100f:0}% AIR · {tempStr}";
                 _environmentLabel.style.color = new StyleColor(environmentColor);
             }
             UpdateGravityReadout(grid);

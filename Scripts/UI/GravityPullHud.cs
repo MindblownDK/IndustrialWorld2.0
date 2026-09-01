@@ -34,6 +34,8 @@ namespace VoxelEngine.UI
         private static Label _vectorLabel;
         private static Label _surfaceValueLabel;
         private static Label _surfaceStateLabel;
+        private static Label _tempLabel;
+        private static Label _climateLabel;
 
         private static PlayerController _player;
         private static float _nextPlayerSearchAt;
@@ -112,6 +114,7 @@ namespace VoxelEngine.UI
 
             BuildLcd(main);
             BuildReferenceColumn(main);
+            BuildClimateRow();
         }
 
         private static void BuildLcd(VisualElement parent)
@@ -275,6 +278,36 @@ namespace VoxelEngine.UI
             column.Add(_surfaceStateLabel);
         }
 
+        private static void BuildClimateRow()
+        {
+            var row = new VisualElement { name = "ClimateInstrumentRow" };
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.justifyContent = Justify.SpaceBetween;
+            row.style.alignItems = Align.Center;
+            row.style.marginTop = 4;
+            row.style.paddingTop = 3;
+            row.style.borderTopWidth = 1;
+            row.style.borderTopColor = new StyleColor(new Color(LcdFrame.r, LcdFrame.g, LcdFrame.b, 0.40f));
+            row.pickingMode = PickingMode.Ignore;
+            _card.Add(row);
+
+            _tempLabel = new Label("+15.0°C");
+            _tempLabel.style.fontSize = 8;
+            _tempLabel.style.letterSpacing = 0.6f;
+            _tempLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _tempLabel.style.color = new StyleColor(LcdInk);
+            _tempLabel.pickingMode = PickingMode.Ignore;
+            row.Add(_tempLabel);
+
+            _climateLabel = new Label("🌱 SPRING");
+            _climateLabel.style.fontSize = 7;
+            _climateLabel.style.letterSpacing = 0.8f;
+            _climateLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _climateLabel.style.color = new StyleColor(new Color(LcdInk.r, LcdInk.g, LcdInk.b, 0.80f));
+            _climateLabel.pickingMode = PickingMode.Ignore;
+            row.Add(_climateLabel);
+        }
+
         private static Label SmallCaption(string text)
         {
             var label = new Label(text);
@@ -342,6 +375,22 @@ namespace VoxelEngine.UI
             _surfaceValueLabel.style.color = new StyleColor(ink);
             T.Border(_lcdBorder, 1f, new Color(ink.r, ink.g, ink.b, 0.70f));
             T.Border(_card, 1f, new Color(ink.r, ink.g, ink.b, 0.35f));
+
+            var season = VoxelEngine.Weather.PlanetarySeasons.GetCurrentSeasonInfo();
+            string tempSign = season.effectiveTemperature >= 0f ? "+" : "";
+            if (_tempLabel != null)
+            {
+                _tempLabel.text = $"{tempSign}{season.effectiveTemperature:F1}°C";
+                Color tempColor = season.isFreezing ? new Color(0.45f, 0.85f, 1f) : ink;
+                _tempLabel.style.color = new StyleColor(tempColor);
+            }
+            if (_climateLabel != null)
+            {
+                string weatherStr = VoxelEngine.Weather.WeatherManager.Instance != null && VoxelEngine.Weather.WeatherManager.Instance.IsWeatherActive
+                    ? VoxelEngine.Weather.WeatherManager.Instance.CurrentState.ToString().ToUpperInvariant()
+                    : season.forecastPrecipitation.ToUpperInvariant();
+                _climateLabel.text = $"{season.SeasonIcon} {season.SeasonName.ToUpperInvariant()} · {weatherStr}";
+            }
 
             for (int i = 0; i < _surfaceSegments.Length; i++)
             {

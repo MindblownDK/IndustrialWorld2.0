@@ -36,6 +36,7 @@ namespace VoxelEngine.GridSystem.UI
                 case GridContainmentVault cv: return MakeScrollable(ContainmentVaultPanel(cv, slot));
                 case GridSingularityHarvester sh: return MakeScrollable(HarvesterPanel(sh, slot));
                 case GridLocatorBlock loc:  return MakeScrollable(LocatorPanel(loc));
+                case GridSeasonMonitor sm:  return MakeScrollable(SeasonMonitorPanel(sm));
                 case GridCargoContainer cc: return CargoPanel(cc, slot);
                 case GridWeapon gw:         return MakeScrollable(WeaponPanel(gw, slot));
                 case GridRefinery rf:       return MakeScrollable(ProcessorPanel("⚗ Ship Refinery", rf.Current, rf.Progress01, rf.PowerDraw, rf.knownRecipes, rf.Grid, rf.selectedRecipe, r => rf.selectedRecipe = r));
@@ -1116,6 +1117,185 @@ namespace VoxelEngine.GridSystem.UI
             loc.mode = GridLocatorBlock.LocatorMode.Specific;
             int cur = loc.selectedTargetIndex < 0 ? 0 : loc.selectedTargetIndex;
             loc.selectedTargetIndex = (cur + delta + count) % count;
+        }
+
+        // ── PLANETARY SEASON MONITOR ────────────────────────────────────────
+        private static VisualElement SeasonMonitorPanel(GridSeasonMonitor sm)
+        {
+            var p = T.MachinePanel();
+            p.style.width = 470;
+
+            bool online = sm.IsOnline;
+            var (hdr, _, _, _) = T.HeaderRow("🛰 Season Monitor",
+                online ? "ONLINE" : "OFFLINE",
+                online ? T.AccentGreen : T.AccentAmber);
+            p.Add(hdr);
+            p.Add(T.AccentDivider(T.AccentCyan));
+            p.Add(T.Spacer(6));
+
+            // Target Planet section
+            p.Add(GridUIHelpers.SectionTitle("Target Celestial Body"));
+            var modeRow = new VisualElement();
+            modeRow.style.flexDirection = FlexDirection.Row;
+            modeRow.style.marginBottom = 6;
+
+            var autoBtn = T.SmallButton("◎ AUTO / LOCAL", () =>
+            {
+                sm.mode = GridSeasonMonitor.MonitorMode.AutoCurrentPlanet;
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, sm.mode == GridSeasonMonitor.MonitorMode.AutoCurrentPlanet ? T.AccentGreen : T.AccentDim);
+            autoBtn.style.marginRight = 6;
+            modeRow.Add(autoBtn);
+
+            var specBtn = T.SmallButton("◈ SPECIFIC PLANET", () =>
+            {
+                sm.mode = GridSeasonMonitor.MonitorMode.SpecificPlanet;
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, sm.mode == GridSeasonMonitor.MonitorMode.SpecificPlanet ? T.AccentCyan : T.AccentDim);
+            modeRow.Add(specBtn);
+            p.Add(modeRow);
+
+            // Planet Cycle Row
+            var cycleRow = new VisualElement();
+            cycleRow.style.flexDirection = FlexDirection.Row;
+            cycleRow.style.alignItems = Align.Center;
+            cycleRow.style.marginBottom = 8;
+
+            var prevBtn = T.SmallButton("◀", () => { sm.CycleTarget(-1); VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel(); }, T.AccentCyan);
+            prevBtn.style.marginRight = 8;
+            cycleRow.Add(prevBtn);
+
+            var targetLabel = new Label(sm.TargetName);
+            targetLabel.style.flexGrow = 1;
+            targetLabel.style.unityTextAlign = TextAnchor.MiddleCenter;
+            targetLabel.style.fontSize = 12;
+            targetLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            targetLabel.style.color = new StyleColor(new Color(0.9f, 0.95f, 1f));
+            cycleRow.Add(targetLabel);
+
+            var nextBtn = T.SmallButton("▶", () => { sm.CycleTarget(1); VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel(); }, T.AccentCyan);
+            nextBtn.style.marginLeft = 8;
+            cycleRow.Add(nextBtn);
+            p.Add(cycleRow);
+
+            // Live Season Card
+            var info = sm.CurrentSeasonInfo;
+            var seasonCard = new VisualElement();
+            seasonCard.style.backgroundColor = new StyleColor(new Color(0.08f, 0.10f, 0.14f, 0.90f));
+            seasonCard.style.borderTopWidth = 1;
+            seasonCard.style.borderBottomWidth = 1;
+            seasonCard.style.borderLeftWidth = 1;
+            seasonCard.style.borderRightWidth = 1;
+            seasonCard.style.borderTopColor = new StyleColor(new Color(0.18f, 0.40f, 0.60f, 0.45f));
+            seasonCard.style.borderBottomColor = new StyleColor(new Color(0.18f, 0.40f, 0.60f, 0.45f));
+            seasonCard.style.borderLeftColor = new StyleColor(new Color(0.18f, 0.40f, 0.60f, 0.45f));
+            seasonCard.style.borderRightColor = new StyleColor(new Color(0.18f, 0.40f, 0.60f, 0.45f));
+            seasonCard.style.borderTopLeftRadius = 6;
+            seasonCard.style.borderTopRightRadius = 6;
+            seasonCard.style.borderBottomLeftRadius = 6;
+            seasonCard.style.borderBottomRightRadius = 6;
+            seasonCard.style.paddingLeft = 10;
+            seasonCard.style.paddingRight = 10;
+            seasonCard.style.paddingTop = 8;
+            seasonCard.style.paddingBottom = 8;
+            seasonCard.style.marginBottom = 8;
+
+            var seasonHeaderRow = new VisualElement();
+            seasonHeaderRow.style.flexDirection = FlexDirection.Row;
+            seasonHeaderRow.style.justifyContent = Justify.SpaceBetween;
+            seasonHeaderRow.style.alignItems = Align.Center;
+
+            var seasonTitle = new Label($"{info.SeasonIcon} {info.SeasonName.ToUpperInvariant()}");
+            seasonTitle.style.fontSize = 14;
+            seasonTitle.style.unityFontStyleAndWeight = FontStyle.Bold;
+            seasonTitle.style.color = new StyleColor(info.currentSeason switch
+            {
+                VoxelEngine.Weather.Season.Summer => new Color(1f, 0.85f, 0.35f),
+                VoxelEngine.Weather.Season.Winter => new Color(0.45f, 0.85f, 1f),
+                VoxelEngine.Weather.Season.Autumn => new Color(1f, 0.60f, 0.30f),
+                _ => new Color(0.40f, 0.95f, 0.55f)
+            });
+            seasonHeaderRow.Add(seasonTitle);
+
+            var yearBadge = new Label($"Year {info.currentYear} • Day {info.dayOfYear}/{info.totalDaysInYear}");
+            yearBadge.style.fontSize = 10;
+            yearBadge.style.color = new StyleColor(new Color(0.65f, 0.70f, 0.80f));
+            seasonHeaderRow.Add(yearBadge);
+            seasonCard.Add(seasonHeaderRow);
+
+            // Progress bar
+            var barTrack = new VisualElement();
+            barTrack.style.height = 8;
+            barTrack.style.backgroundColor = new StyleColor(new Color(0.04f, 0.05f, 0.07f));
+            barTrack.style.borderTopLeftRadius = 4;
+            barTrack.style.borderTopRightRadius = 4;
+            barTrack.style.borderBottomLeftRadius = 4;
+            barTrack.style.borderBottomRightRadius = 4;
+            barTrack.style.marginTop = 6;
+            barTrack.style.marginBottom = 4;
+
+            var barFill = new VisualElement();
+            barFill.style.height = Length.Percent(100);
+            barFill.style.width = Length.Percent(Mathf.Clamp01(info.seasonProgress) * 100f);
+            barFill.style.backgroundColor = new StyleColor(info.currentSeason switch
+            {
+                VoxelEngine.Weather.Season.Summer => new Color(1f, 0.85f, 0.35f),
+                VoxelEngine.Weather.Season.Winter => new Color(0.45f, 0.85f, 1f),
+                VoxelEngine.Weather.Season.Autumn => new Color(1f, 0.60f, 0.30f),
+                _ => new Color(0.40f, 0.95f, 0.55f)
+            });
+            barFill.style.borderTopLeftRadius = 4;
+            barFill.style.borderTopRightRadius = 4;
+            barFill.style.borderBottomLeftRadius = 4;
+            barFill.style.borderBottomRightRadius = 4;
+            barTrack.Add(barFill);
+            seasonCard.Add(barTrack);
+
+            var progressLabel = new Label($"Day {info.seasonDay}/{info.daysInSeason} ({Mathf.RoundToInt(info.seasonProgress * 100f)}%) • {info.daysRemainingInSeason} days until {info.NextSeasonName}");
+            progressLabel.style.fontSize = 10;
+            progressLabel.style.color = new StyleColor(new Color(0.70f, 0.75f, 0.85f));
+            seasonCard.Add(progressLabel);
+            p.Add(seasonCard);
+
+            // Stats rows
+            p.Add(GridUIHelpers.SectionTitle("Climate Telemetry"));
+            string tempSign = info.effectiveTemperature >= 0f ? "+" : "";
+            string offsetSign = info.seasonalTemperatureOffset >= 0f ? "+" : "";
+            var tempStat = T.StatRow("🌡", "Surface Temp", $"{tempSign}{info.effectiveTemperature:F1}°C (Shift {offsetSign}{info.seasonalTemperatureOffset:F1}°C)",
+                info.isFreezing ? new Color(0.45f, 0.85f, 1f) : new Color(0.95f, 0.80f, 0.40f));
+            p.Add(tempStat);
+
+            var solarStat = T.StatRow("☀", "Solar Irradiance", $"{Mathf.RoundToInt(info.solarMultiplier * 100f)}%",
+                info.solarMultiplier >= 1.0f ? T.AccentGreen : T.AccentAmber);
+            p.Add(solarStat);
+
+            var windStat = T.StatRow("💨", "Wind Multiplier", $"{Mathf.RoundToInt(info.windMultiplier * 100f)}%",
+                info.windMultiplier > 1.05f ? T.AccentCyan : T.TextSecondary);
+            p.Add(windStat);
+
+            var forecastStat = T.StatRow("☁", "Forecast", $"{info.forecastPrecipitation} (Orbit {info.orbitalPhaseDegrees:F0}°)",
+                info.forecastPrecipitation switch { "Snow" or "Blizzard" => new Color(0.5f, 0.85f, 1f), "Rain" or "Heavy Rain" => T.AccentCyan, _ => T.AccentGold });
+            p.Add(forecastStat);
+
+            p.Add(T.StatRow("⚡", "Power Draw", PowerFormat.Watts(sm.PowerDraw), sm.IsOnline ? T.AccentCyan : T.AccentAmber));
+
+            p.Add(T.Spacer(6));
+            p.Add(T.ActionButton("Open Ship Terminal",
+                () => VoxelEngine.UI.GameUIController.Instance?.OpenGridTerminal(sm.Grid), T.AccentCyan));
+
+            // Live periodic refresh
+            p.schedule.Execute(() =>
+            {
+                if (p == null || p.panel == null) return;
+                var live = sm.CurrentSeasonInfo;
+                targetLabel.text = sm.TargetName;
+                seasonTitle.text = $"{live.SeasonIcon} {live.SeasonName.ToUpperInvariant()}";
+                yearBadge.text = $"Year {live.currentYear} • Day {live.dayOfYear}/{live.totalDaysInYear}";
+                barFill.style.width = Length.Percent(Mathf.Clamp01(live.seasonProgress) * 100f);
+                progressLabel.text = $"Day {live.seasonDay}/{live.daysInSeason} ({Mathf.RoundToInt(live.seasonProgress * 100f)}%) • {live.daysRemainingInSeason} days until {live.NextSeasonName}";
+            }).Every(400);
+
+            return p;
         }
 
         private static VisualElement Ellipse(float width, float height, Color borderColor, float borderWidth)

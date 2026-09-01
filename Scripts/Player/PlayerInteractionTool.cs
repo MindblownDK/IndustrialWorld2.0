@@ -1191,6 +1191,10 @@ namespace VoxelEngine.Player
                 var powerstation = hit.collider.GetComponentInParent<VoxelEngine.Storage.Powerstation>();
                 if (powerstation != null) { UI.GameUIController.Instance?.OpenMachine(powerstation); return; }
 
+                // Grand static Season Monitor observatory.
+                var staticSeasonMonitor = hit.collider.GetComponentInParent<VoxelEngine.Weather.StaticSeasonMonitor>();
+                if (staticSeasonMonitor != null) { UI.GameUIController.Instance?.OpenMachine(staticSeasonMonitor); return; }
+
                 var electric = hit.collider.GetComponentInParent<ElectricFurnace>();
                 if (electric != null) { UI.GameUIController.Instance?.OpenElectricFurnace(electric); return; }
 
@@ -1907,6 +1911,7 @@ namespace VoxelEngine.Player
                 || b is VoxelEngine.GridSystem.GridSingularityHarvester
                 || b is VoxelEngine.GridSystem.GridContainmentVault
                 || b is VoxelEngine.GridSystem.GridLocatorBlock
+                || b is VoxelEngine.GridSystem.GridSeasonMonitor
                 || b is VoxelEngine.Simulation.GridLightBlock
                 || b.GetComponent<VoxelEngine.Simulation.LEDStrip>() != null;
         }

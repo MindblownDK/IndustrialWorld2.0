@@ -17,7 +17,7 @@ namespace VoxelEngine.GridSystem
             Armor, Cockpit, Thruster, Battery, Cargo, Drill, Grinder, Refinery,
             Weapon, DockingPort, Wheel, LandingGear, SolarPanel, Reactor,
             LiquidTank, GasTank, H2O2, HydrogenEngine, ChemicalPlant, Glass, Demolisher, ItemPipe,
-            GasPipe, LiquidPipe, Gyroscope, Beacon, OreDetector, Generic
+            GasPipe, LiquidPipe, Gyroscope, Beacon, OreDetector, SeasonMonitor, Generic
         }
 
         private static Shader Lit => Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
@@ -69,6 +69,7 @@ namespace VoxelEngine.GridSystem
                 case Style.Gyroscope:    BuildGyroscope(root, cs, body, metal, glow); break;
                 case Style.Beacon:      BuildBeacon(root, cs, body, metal, glow); break;
                 case Style.OreDetector: BuildOreDetector(root, cs, body, metal, glow); break;
+                case Style.SeasonMonitor: BuildSeasonMonitor(root, cs, body, metal, glow); break;
                 default:                 BuildArmor(root, cs, body, metal); break;
             }
         }
@@ -375,6 +376,27 @@ namespace VoxelEngine.GridSystem
             Cyl(dishPivot, metal, new Vector3(0, 0, cs * 0.12f), cs * 0.03f, cs * 0.2f).transform.localRotation = Quaternion.Euler(30, 0, 0);
             // Status indicator.
             Sphere(r, glow, new Vector3(cs * 0.3f, -cs * 0.15f, cs * 0.3f), cs * 0.03f);
+        }
+
+        private static void BuildSeasonMonitor(GameObject r, float cs, Material body, Material metal, Material glow)
+        {
+            // Base pedestal housing
+            Box(r, body, new Vector3(0, -cs * 0.22f, 0), new Vector3(cs * 0.85f, cs * 0.32f, cs * 0.85f));
+            // Central climate telemetry core
+            var core = Cyl(r, metal, new Vector3(0, cs * 0.05f, 0), cs * 0.18f, cs * 0.30f);
+            // Angled holo-screen panel
+            var screenFrame = Box(r, metal, new Vector3(0, cs * 0.18f, -cs * 0.10f), new Vector3(cs * 0.50f, cs * 0.28f, cs * 0.06f));
+            screenFrame.transform.localRotation = Quaternion.Euler(-25f, 0, 0);
+            var screenFace = Box(screenFrame, glow, new Vector3(0, 0, -0.04f), new Vector3(cs * 0.44f, cs * 0.22f, 0.02f));
+            // Atmospheric sensor antenna pylons
+            Cyl(r, metal, new Vector3(-cs * 0.30f, cs * 0.15f, cs * 0.25f), cs * 0.025f, cs * 0.40f);
+            Cyl(r, metal, new Vector3(cs * 0.30f, cs * 0.15f, cs * 0.25f), cs * 0.025f, cs * 0.40f);
+            Sphere(r, glow, new Vector3(-cs * 0.30f, cs * 0.35f, cs * 0.25f), cs * 0.05f);
+            Sphere(r, glow, new Vector3(cs * 0.30f, cs * 0.35f, cs * 0.25f), cs * 0.05f);
+            // Corner mounting studs
+            float e = cs * 0.38f, s = cs * 0.08f;
+            foreach (var c in Corners(e))
+                Box(r, metal, new Vector3(c.x, -cs * 0.15f, c.z), new Vector3(s, s, s));
         }
 
         // ── primitive helpers ─────────────────────────────────────────────────────

@@ -1075,6 +1075,8 @@ namespace VoxelEngine.GridSystem.UI
             if (block is GridCockpit) return "Cockpits";
             if (block is GridBeacon) return "Beacons";
             if (block is GridOreDetector) return "Ore Detectors";
+            if (block is GridSeasonMonitor) return "Season Monitors";
+            if (block is GridLocatorBlock) return "Astral Navigators";
             if (block is GridSlidingDoor) return "Grid Doors";
             if (block is VoxelEngine.Simulation.GridLightBlock) return "Spotlights";
             if (block.GetComponent<VoxelEngine.Simulation.LEDStrip>() != null) return "LED Strips";

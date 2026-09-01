@@ -90,6 +90,7 @@ namespace VoxelEngine.UI
         private VoxelEngine.Storage.DiskManipulator    _openDiskManipulator;
         private VoxelEngine.Storage.NASBlock           _openNAS;
         private VoxelEngine.Storage.Powerstation       _openPowerstation;
+        private VoxelEngine.Weather.StaticSeasonMonitor _openStaticSeasonMonitor;
         private VoxelEngine.Storage.StorageDrawer      _openStorageDrawer;
         private VoxelEngine.Storage.StorageDrawerController _openDrawerController;
         private VoxelEngine.Storage.StorageItemDisplayBlock _openItemDisplay;
@@ -777,7 +778,7 @@ namespace VoxelEngine.UI
             _openStorageTerminal = null; _openServerRack = null;
             _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter = null; _openExporter = null;
-            _openDiskManipulator = null; _openNAS = null; _openPowerstation = null;
+            _openDiskManipulator = null; _openNAS = null; _openPowerstation = null; _openStaticSeasonMonitor = null;
             _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
             _openCrusher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
             _openVoltageStation = null;
@@ -875,6 +876,8 @@ namespace VoxelEngine.UI
                 case VoxelEngine.Storage.Powerstation ps:
                     _openPowerstation = ps; ps.EnsureContainers();
                     WatchContainer(ps.psuSlots); break;
+                case VoxelEngine.Weather.StaticSeasonMonitor ssm:
+                    _openStaticSeasonMonitor = ssm; break;
                 case VoxelEngine.Storage.StorageDrawer sd:
                     _openStorageDrawer = sd; sd.EnsureContainers();
                     WatchContainer(sd.upgradeSlots); break;
@@ -1234,7 +1237,7 @@ namespace VoxelEngine.UI
                     _openGasTank != null || _openWaterPump != null || _openBiofarm != null || _openWindTurbine != null || _openStorageTerminal != null || _openServerRack != null ||
                     _openPatternTerminal != null || _openCraftTerminal != null || _openImporter != null ||
                     _openExporter != null || _openDiskManipulator != null || _openNAS != null ||
-                    _openPowerstation != null || _openStorageDrawer != null ||
+                    _openPowerstation != null || _openStaticSeasonMonitor != null || _openStorageDrawer != null ||
                     _openDrawerController != null || _openItemDisplay != null ||
                     _openCrusher != null || _openAssembler != null || _openFunnel != null || _openSplitter != null ||
                     _openPumpjack != null || _openDefense != null || _openArmorUpgradeStation != null;
@@ -1252,7 +1255,7 @@ namespace VoxelEngine.UI
                     _openGasTank != null || _openWaterPump != null || _openBiofarm != null || _openWindTurbine != null || _openStorageTerminal != null || _openServerRack != null ||
                     _openPatternTerminal != null || _openCraftTerminal != null || _openImporter != null ||
                     _openExporter != null || _openDiskManipulator != null || _openNAS != null ||
-                    _openPowerstation != null || _openStorageDrawer != null ||
+                    _openPowerstation != null || _openStaticSeasonMonitor != null || _openStorageDrawer != null ||
                     _openDrawerController != null || _openItemDisplay != null ||
                     _openCrusher != null || _openAssembler != null || _openFunnel != null || _openSplitter != null ||
                     _openPumpjack != null || _openDefense != null || _openArmorUpgradeStation != null;
@@ -1296,6 +1299,7 @@ namespace VoxelEngine.UI
                 else if (_openDiskManipulator  != null) _contentLayer.Add(VoxelEngine.Storage.StorageUI.BuildDiskManipulatorPanel(_openDiskManipulator, BuildSlot));
                 else if (_openNAS              != null) _contentLayer.Add(VoxelEngine.Storage.StorageUI.BuildNASPanel(_openNAS, BuildSlot));
                 else if (_openPowerstation     != null) _contentLayer.Add(BuildPowerstationPanel(_openPowerstation));
+                else if (_openStaticSeasonMonitor != null) _contentLayer.Add(VoxelEngine.Weather.SeasonMonitorUI.BuildPanel(_openStaticSeasonMonitor));
                 else if (_openStorageDrawer   != null) _contentLayer.Add(VoxelEngine.Storage.StorageUI.BuildDrawerPanel(_openStorageDrawer, BuildSlot));
                 else if (_openDrawerController!= null) { var mp = VoxelEngine.Storage.StorageUI.BuildDrawerControllerPanel(_openDrawerController); _contentLayer.Add(mp); AppendItemPorts(mp, _openDrawerController); }
                 else if (_openItemDisplay     != null) _contentLayer.Add(VoxelEngine.Storage.StorageUI.BuildItemDisplayPanel(_openItemDisplay, BuildSlot));
@@ -2414,7 +2418,7 @@ namespace VoxelEngine.UI
                    _openWindTurbine != null || _openStorageTerminal != null || _openServerRack != null ||
                    _openPatternTerminal != null || _openCraftTerminal != null || _openImporter != null ||
                    _openExporter != null || _openDiskManipulator != null || _openNAS != null ||
-                   _openPowerstation != null || _openStorageDrawer != null || _openDrawerController != null ||
+                   _openPowerstation != null || _openStaticSeasonMonitor != null || _openStorageDrawer != null || _openDrawerController != null ||
                    _openItemDisplay != null || _openCrusher != null || _openAssembler != null ||
                    _openFunnel != null || _openSplitter != null || _openGridBlock != null ||
                    _openOilRefinery != null || _openPumpjack != null || _openChemPlant != null || _openStation != null ||

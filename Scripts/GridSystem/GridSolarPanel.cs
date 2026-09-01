@@ -56,7 +56,7 @@ namespace VoxelEngine.GridSystem
                     sunDot *= 0.1f; // shadowed by a nearby object
             }
 
-            // Weather affects output.
+            // Weather & Planetary Seasons affect solar output.
             var wm = Weather.WeatherManager.Instance;
             float weatherMult = 1f;
             if (wm != null)
@@ -72,7 +72,10 @@ namespace VoxelEngine.GridSystem
                 };
             }
 
-            _currentOutput = maxOutput * sunDot * weatherMult;
+            var season = Weather.PlanetarySeasons.GetCurrentSeasonInfo();
+            float seasonSolarMult = season.solarMultiplier;
+
+            _currentOutput = maxOutput * sunDot * weatherMult * seasonSolarMult;
         }
 
         /// <summary>
