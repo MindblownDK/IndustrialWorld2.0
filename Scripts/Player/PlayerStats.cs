@@ -87,6 +87,8 @@ namespace VoxelEngine.Player
         public bool RequiresLifeSupport => CurrentOxygenEnvironment != OxygenEnvironment.Breathable;
         public bool IsVacuumExposure => CurrentOxygenEnvironment == OxygenEnvironment.Vacuum;
         public string LifeSupportStatus { get; private set; } = "BREATHABLE";
+        /// <summary>True while a sealed, pressurised room is supplying the air.</summary>
+        public bool InPressurisedRoom { get; private set; }
 
         public event Action OnStatsChanged;
 
@@ -157,7 +159,7 @@ namespace VoxelEngine.Player
             {
                 OxygenEnvironment.Underwater => hasSealedKit ? "SUBMERGED · SEALED" : "SUBMERGED · HOLDING BREATH",
                 OxygenEnvironment.Vacuum => hasSealedKit ? "VACUUM · LIFE SUPPORT" : "VACUUM · NO LIFE SUPPORT",
-                _ => "BREATHABLE",
+                _ => InPressurisedRoom ? "ROOM PRESSURISED" : "BREATHABLE",
             };
 
             // Poison: damage-over-time that bypasses armor (Manticore venom, etc.).
@@ -208,6 +210,16 @@ namespace VoxelEngine.Player
             bool underwater = waterState != null
                 && (waterState.IsHeadUnderwater || (waterState.IsSwimming && waterState.WaterDepth > 0.90f));
             if (underwater) return OxygenEnvironment.Underwater;
+
+            // A pressurised sealed room overrides the hostile outside atmosphere:
+            // standing inside a charged base or ship compartment is breathable even in
+            // hard vacuum. This is the single authority shared with HUDs and vents.
+            if (VoxelEngine.Pressure.RoomAtmosphereService.IsBreathableAt(transform.position))
+            {
+                InPressurisedRoom = true;
+                return OxygenEnvironment.Breathable;
+            }
+            InPressurisedRoom = false;
 
             var body = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
             if (body == null || body.settings == null) return OxygenEnvironment.Breathable;

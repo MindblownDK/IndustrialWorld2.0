@@ -1233,6 +1233,22 @@ namespace VoxelEngine.Persistence
                     }
                 }
 
+                // Sealed-room pressure: only the oxygen charge is stored. Room shapes
+                // are re-solved from the restored hull, so a rebuilt ship stays valid.
+                var pressure = grid.GetComponent<VoxelEngine.Pressure.GridPressureSystem>();
+                if (pressure != null)
+                {
+                    foreach (var room in pressure.Rooms)
+                    {
+                        if (room == null || room.OxygenLitres <= 0.01f) continue;
+                        entry.roomCharges.Add(new SavedRoomCharge
+                        {
+                            anchor = room.Anchor,
+                            oxygenLitres = room.OxygenLitres
+                        });
+                    }
+                }
+
                 save.grids.Add(entry);
             }
         }
@@ -1297,6 +1313,25 @@ namespace VoxelEngine.Persistence
                         links.Add(new VoxelEngine.Maritime.MechanicalBeltLink(savedBelt.endpointA, savedBelt.endpointB));
                     }
                     VoxelEngine.Maritime.MechanicalBeltNetwork.GetOrAdd(grid)?.RestoreLinks(links);
+                }
+
+                if (savedGrid.roomCharges != null && savedGrid.roomCharges.Count > 0)
+                {
+                    var pressure = VoxelEngine.Pressure.GridPressureSystem.For(grid);
+                    if (pressure != null)
+                    {
+                        pressure.Solve();
+                        foreach (var charge in savedGrid.roomCharges)
+                        {
+                            if (charge == null) continue;
+                            foreach (var room in pressure.Rooms)
+                            {
+                                if (room == null || room.Anchor != charge.anchor) continue;
+                                room.OxygenLitres = Mathf.Clamp(charge.oxygenLitres, 0f, room.CapacityLitres);
+                                break;
+                            }
+                        }
+                    }
                 }
 
                 grid.RecalculateMass();
@@ -2295,7 +2330,16 @@ namespace VoxelEngine.Persistence
             // Additive 6.81.0: logical shaft-to-shaft belt links. Old saves omit
             // the collection and continue to restore with no belts.
             public List<SavedMechanicalBelt> mechanicalBelts = new();
+            // Additive 9.27.0: oxygen charge of each sealed room, keyed by the room's
+            // anchor cell. Old saves omit the collection and restore as vacuum, which
+            // a running Air Vent refills — no save break.
+            public List<SavedRoomCharge> roomCharges = new();
             public List<SavedGridBlock> blocks = new();
+        }
+        [Serializable] private class SavedRoomCharge
+        {
+            public Vector3Int anchor;
+            public float oxygenLitres;
         }
         [Serializable] private class SavedMechanicalBelt
         {

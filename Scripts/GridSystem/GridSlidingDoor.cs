@@ -8,8 +8,12 @@ using UnityEngine;
 
 namespace VoxelEngine.GridSystem
 {
-    public class GridSlidingDoor : GridBlock, IGridDataProvider
+    public class GridSlidingDoor : GridBlock, IGridDataProvider, VoxelEngine.Pressure.IAirtightBlock
     {
+        [Header("Airtight")]
+        [Tooltip("When true this door forms an airtight bulkhead while fully closed.")]
+        public bool airtight = true;
+
         [Header("Door")]
         public Transform leftPanel;
         public Transform rightPanel;
@@ -40,6 +44,12 @@ namespace VoxelEngine.GridSystem
 
         public bool IsOpen => _targetOpen;
         public bool IsMoving { get; private set; }
+
+        /// <summary>Airtight bulkhead only while fully shut — a moving or open panel
+        /// vents the compartment, which is exactly the tension we want players to feel.</summary>
+        public bool SealsAir => airtight && !_panelsOpen;
+
+        private bool _panelsOpen;
         public bool HasPower => Enabled && Grid != null && Grid.HasPower;
         public override float PowerDraw => Enabled ? (IsMoving ? movingWatts : idleWatts) : 0f;
 
@@ -81,6 +91,15 @@ namespace VoxelEngine.GridSystem
             if (!HasPower) wantsOpen = false;
 
             AnimatePanels(wantsOpen);
+
+            // Sealing state flips the instant the panels leave their closed pose, and
+            // the room solver is only poked on that transition (never per frame).
+            bool panelsOpen = wantsOpen || IsMoving;
+            if (panelsOpen != _panelsOpen)
+            {
+                _panelsOpen = panelsOpen;
+                if (airtight) VoxelEngine.Pressure.GridPressureSystem.MarkDirty(this);
+            }
         }
 
         private void CachePanels()

@@ -54,6 +54,7 @@ namespace VoxelEngine.GridSystem.UI
                 case GridBiofarm bio:      return MakeScrollable(BiofarmPanel(bio, slot));
                 case GridCryobed cryo:      return MakeScrollable(CryobedPanel(cryo));
                 case GridSlidingDoor door:  return SlidingDoorPanel(door);
+                case VoxelEngine.Pressure.GridAirVent vent: return MakeScrollable(AirVentPanel(vent));
                 case VoxelEngine.Simulation.GridLightBlock gl: return GridLightPanel(gl);
                 default:                    return GenericPanel(block);
             }
@@ -2091,6 +2092,97 @@ namespace VoxelEngine.GridSystem.UI
             if (block.PowerDraw > 0)   p.Add(T.StatRow("⚡", "Power Use", PowerFormat.Watts(block.PowerDraw), T.AccentGold));
             if (block.PowerOutput > 0) p.Add(T.StatRow("🔌", "Power Out", PowerFormat.Watts(block.PowerOutput), T.AccentGreen));
             return p;
+        }
+
+        // ── AIR VENT / ROOM PRESSURE ─────────────────────────────────────────
+        private static VisualElement AirVentPanel(VoxelEngine.Pressure.GridAirVent vent)
+        {
+            var p = T.MachinePanel();
+            p.style.width = 440;
+
+            var room = vent.ServicedRoom;
+            bool online = vent.HasPower;
+            string state = !vent.Enabled ? "OFF" : !online ? "NO POWER" : vent.Status;
+            Color stateColor = !vent.Enabled ? T.AccentDim
+                : !online ? T.AccentRed
+                : vent.IsWorking ? T.AccentCyan : T.AccentGreen;
+
+            var (hdr, _, _, _) = T.HeaderRow("◉ " + vent.SourceName, state, stateColor);
+            p.Add(hdr);
+            p.Add(T.AccentDivider(T.AccentCyan));
+            p.Add(T.Spacer(4));
+
+            // Live room telemetry.
+            p.Add(GridUIHelpers.SectionTitle("Sealed Compartment"));
+            if (room == null)
+            {
+                p.Add(T.Muted("No sealed room detected. Enclose the vent with airtight blocks and keep every door shut to form a pressure hull."));
+            }
+            else
+            {
+                Color pressureColor = room.IsBreathable ? T.AccentGreen
+                    : room.PressureAtm > 0.02f ? T.AccentAmber : T.AccentRed;
+
+                p.Add(T.StatRow("◈", "Status", room.StatusLabel, pressureColor));
+                p.Add(T.StatRow("⇡", "Pressure", $"{room.PressureAtm * 100f:0} %", pressureColor));
+                p.Add(T.StatRow("▣", "Volume", $"{room.VolumeM3:0} m³", T.AccentCyan));
+                p.Add(T.StatRow("O₂", "Oxygen", $"{room.OxygenLitres:0} / {room.CapacityLitres:0} L", T.AccentBlue));
+
+                var (bar, fill) = T.ProgressBar(room.Fill01, pressureColor, 8, true);
+                bar.style.marginTop = 4;
+                bar.style.marginBottom = 6;
+                p.Add(bar);
+
+                // Live refresh keeps the gauge honest while the vent charges the room.
+                p.schedule.Execute(() =>
+                {
+                    if (p.panel == null || vent == null) return;
+                    var live = vent.ServicedRoom;
+                    if (live == null) return;
+                    fill.style.width = Length.Percent(Mathf.Clamp01(live.Fill01) * 100f);
+                }).Every(200);
+            }
+
+            p.Add(T.Spacer(6));
+            p.Add(GridUIHelpers.SectionTitle("Vent Mode"));
+
+            var modeRow = Row();
+            modeRow.Add(ModeButton(vent, VoxelEngine.Pressure.VentMode.Pressurise, "⬆ PRESSURISE", T.AccentGreen));
+            modeRow.Add(ModeButton(vent, VoxelEngine.Pressure.VentMode.Depressurise, "⬇ DEPRESSURISE", T.AccentAmber));
+            modeRow.Add(ModeButton(vent, VoxelEngine.Pressure.VentMode.Idle, "❙❙ IDLE", T.AccentDim));
+            p.Add(modeRow);
+            p.Add(T.Spacer(6));
+
+            p.Add(GridUIHelpers.SectionTitle("Tuning"));
+            p.Add(SliderRow("Target Pressure", vent.targetPressureAtm, 0.2f, 1.2f,
+                v => vent.targetPressureAtm = v, "0.2 atm", "1.2 atm"));
+            p.Add(SliderRow("Flow Rate", vent.flowLitresPerSecond, 4f, 80f,
+                v => vent.flowLitresPerSecond = v, "4 L/s", "80 L/s"));
+
+            p.Add(T.Spacer(4));
+            var powerRow = Row();
+            powerRow.Add(T.SmallButton(vent.Enabled ? "Turn OFF" : "Turn ON", () =>
+            {
+                vent.Enabled = !vent.Enabled;
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, vent.Enabled ? T.AccentRed : T.AccentGreen));
+            p.Add(powerRow);
+
+            p.Add(T.Spacer(4));
+            p.Add(T.Muted("Pressurising draws oxygen from the grid gas network. Depressurising pumps the room back into your tanks before a spacewalk."));
+            return p;
+        }
+
+        private static Button ModeButton(VoxelEngine.Pressure.GridAirVent vent,
+            VoxelEngine.Pressure.VentMode mode, string label, Color accent)
+        {
+            var btn = T.SmallButton(label, () =>
+            {
+                vent.mode = mode;
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, vent.mode == mode ? accent : T.BgSlot);
+            btn.style.marginRight = 6;
+            return btn;
         }
 
         private static VisualElement Row()

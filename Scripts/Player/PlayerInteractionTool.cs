@@ -1999,6 +1999,7 @@ namespace VoxelEngine.Player
                 || b is VoxelEngine.GridSystem.GridContainmentVault
                 || b is VoxelEngine.GridSystem.GridLocatorBlock
                 || b is VoxelEngine.GridSystem.GridSeasonMonitor
+                || b is VoxelEngine.Pressure.GridAirVent
                 || b is VoxelEngine.Simulation.GridLightBlock
                 || b.GetComponent<VoxelEngine.Simulation.LEDStrip>() != null;
         }

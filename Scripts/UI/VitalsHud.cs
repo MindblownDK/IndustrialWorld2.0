@@ -21,12 +21,14 @@ namespace VoxelEngine.UI
         private static Label _hpVal, _h2Val, _hungerVal, _oxyVal, _pwrVal;
         private static Label _oxyCode;
         private static VisualElement _pwrRow;
+        private static VisualElement _roomRow;
+        private static Label _roomLabel;
 
         private static float _prevHp, _prevH2, _prevHunger, _prevOxy, _prevPwr;
 
         // Used by the held paint monitor so it clears this larger instrument chassis.
         // Compacted in 7.13.3: tighter rows, same information, less screen space.
-        public const float TOTAL_HEIGHT = 142f;
+        public const float TOTAL_HEIGHT = 161f;
 
         public static void EnsureMounted(VisualElement uiRoot)
         {
@@ -75,8 +77,69 @@ namespace VoxelEngine.UI
             _pwrSegments = powerRow.segments;
             _pwrVal = powerRow.value;
             _pwrRow.style.display = DisplayStyle.None;
+            BuildRoomRow();
 
             _prevHp = _prevH2 = _prevHunger = _prevOxy = _prevPwr = -1f;
+        }
+
+        /// <summary>Sealed-room pressure strip. Hidden entirely when the player is not
+        /// standing in a detected compartment, so the HUD stays quiet outdoors.</summary>
+        private static void BuildRoomRow()
+        {
+            _roomRow = new VisualElement { name = "VitalLcd_ROOM" };
+            _roomRow.style.height = 16;
+            _roomRow.style.marginTop = 3;
+            _roomRow.style.paddingLeft = 5;
+            _roomRow.style.paddingRight = 5;
+            _roomRow.style.flexDirection = FlexDirection.Row;
+            _roomRow.style.alignItems = Align.Center;
+            _roomRow.style.justifyContent = Justify.SpaceBetween;
+            _roomRow.pickingMode = PickingMode.Ignore;
+            LcdHudTheme.ApplyScreen(_roomRow, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.85f), 1f);
+
+            var code = new Label("ROOM");
+            code.style.fontSize = 8;
+            code.style.letterSpacing = 1f;
+            code.style.unityFontStyleAndWeight = FontStyle.Bold;
+            code.style.color = new StyleColor(T.TextMuted);
+            code.pickingMode = PickingMode.Ignore;
+            _roomRow.Add(code);
+
+            _roomLabel = new Label("—");
+            _roomLabel.style.fontSize = 8;
+            _roomLabel.style.letterSpacing = 0.6f;
+            _roomLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _roomLabel.style.color = new StyleColor(LcdHudTheme.Phosphor);
+            _roomLabel.pickingMode = PickingMode.Ignore;
+            _roomRow.Add(_roomLabel);
+
+            _roomRow.style.display = DisplayStyle.None;
+            _container.Add(_roomRow);
+        }
+
+        private static void TickRoomRow()
+        {
+            if (_roomRow == null || _roomLabel == null) return;
+
+            var player = PlayerStats.Instance;
+            var room = player != null
+                ? VoxelEngine.Pressure.RoomAtmosphereService.RoomAt(player.transform.position)
+                : null;
+
+            if (room == null)
+            {
+                if (_roomRow.style.display != DisplayStyle.None)
+                    _roomRow.style.display = DisplayStyle.None;
+                return;
+            }
+
+            if (_roomRow.style.display != DisplayStyle.Flex)
+                _roomRow.style.display = DisplayStyle.Flex;
+
+            Color tone = room.IsBreathable ? LcdHudTheme.Phosphor
+                : room.PressureAtm > 0.02f ? T.AccentAmber : T.AccentRed;
+            _roomLabel.text = $"{room.StatusLabel}  {room.PressureAtm * 100f:0}%";
+            _roomLabel.style.color = new StyleColor(tone);
         }
 
         private static void BuildHeader()
@@ -129,6 +192,7 @@ namespace VoxelEngine.UI
             if (_oxyCode != null) _oxyCode.style.color = new StyleColor(oxygenColor);
 
             TickPowerRow();
+            TickRoomRow();
         }
 
         private static (VisualElement[] segments, Label value, Label code) AddVitalRow(string code, Color signalColor)

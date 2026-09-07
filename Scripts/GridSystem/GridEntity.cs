@@ -614,6 +614,8 @@ namespace VoxelEngine.GridSystem
             // Tell pipe visuals the topology changed so they rebuild their arms
             // (event-driven — no continuous polling).
             VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged(block.transform.position);
+            // A new hull block can close (or open) a sealed compartment.
+            GetComponent<VoxelEngine.Pressure.GridPressureSystem>()?.MarkDirty();
         }
 
         public void RemoveBlock(Vector3Int gridPos)
@@ -630,6 +632,9 @@ namespace VoxelEngine.GridSystem
             // remaining belt take-offs before the next drivetrain graph rebuild.
             GetComponent<VoxelEngine.Maritime.MechanicalBeltNetwork>()?.NotifyGridTopologyChanged();
             VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged(formerPosition);
+
+            // Removing a wall can breach a room — re-solve pressure.
+            GetComponent<VoxelEngine.Pressure.GridPressureSystem>()?.MarkDirty();
 
             if (_blocks.Count == 0 && (PrecisionAttachments == null || PrecisionAttachments.Count == 0))
                 Destroy(gameObject);

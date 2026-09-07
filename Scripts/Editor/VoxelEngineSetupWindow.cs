@@ -578,6 +578,19 @@ namespace VoxelEngine.EditorTools
                 "Re-runnable. Idempotent. Authored tuning and custom components are never overwritten.");
             AddWizardButton(scroll, "59. Build Geological Prospecting Tools (Scanner, Screen Telemetry, Spherical Ore Detection — Non-Destructive)", () => VoxelEngine.EditorTools.ProspectingSetup.RunStep59(), 56);
 
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
+                "Step 60 (9.27.0) wires AIRTIGHT ROOMS, PRESSURE & AIR VENTS (non-destructive):\n" +
+                "  • Authors the AIR VENT grid block in Large and Small sizes (prefab, item, recipe)\n" +
+                "  • Vents pressurise or depressurise the sealed room they face using grid O\u2082\n" +
+                "  • Marks every existing sliding / vault door prefab AIRTIGHT so already-built\n" +
+                "    ships and bases gain pressure hulls without being rebuilt\n" +
+                "  • Sealed rooms are detected automatically; a pressurised room is breathable\n" +
+                "    without a sealed suit, even in hard vacuum\n" +
+                "  • Recipes registered and linked to the Grid Utilities research node\n" +
+                "Re-runnable. Idempotent. Slide tuning, power draws and balance values are preserved.");
+            AddWizardButton(scroll, "60. Wire Airtight Rooms, Pressure & Air Vents (Sealed Rooms, Vents, Bulkhead Doors \u2014 Non-Destructive)", () => VoxelEngine.EditorTools.AirtightSystemSetup.RunStep60(), 56);
+
             AddSpacer(scroll, 20);
         }
 

@@ -1,9 +1,42 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.26.0-dev`
+**Current Version:** `9.27.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.27.0-dev] Airtight Rooms, Pressure Simulation & Air Vents
+
+**Type:** MINOR — Full Pressure & Airtight Service: automatic sealed-room detection per grid, per-room oxygen and pressure simulation, airtight bulkhead doors, the Air Vent block in Large and Small grid sizes, breathable pressurised interiors in hard vacuum, a live suit-HUD room pressure strip, additive save/restore of room charge, and Step 60 Setup Wizard authoring. Save-compatible.
+
+#### 🫧 Pressure & Airtight Service
+Every grid can now hold real atmosphere, and the game finally rewards building a proper hull:
+- **Automatic Room Detection:** `GridPressureSystem` runs a bounded flood fill over the empty cells of a grid. A fill that escapes the hull shell is a breach, so an unfinished compartment simply never holds pressure — no error states, no half-built special cases.
+- **Per-Room Physics:** Each `GridRoom` tracks its cell set, volume in m³, oxygen litres, and derived pressure in atmospheres. Rooms report `PRESSURISED`, `LOW PRESSURE`, `VACUUM` or `BREACHED`.
+- **Event-Driven & Coalesced:** Placing or removing a hull block, or a door changing seal state, marks the grid dirty; at most one solve runs per settle window. No per-frame scanning anywhere in the system.
+- **Charge Survives Edits:** Oxygen is carried forward across re-solves by room anchor, so welding a wall on the far side of a ship never dumps the pressure of an unrelated compartment. Breached rooms bleed down instead of snapping to zero.
+
+#### 🚪 Airtight Bulkhead Doors
+- **Seals Only When Shut:** `GridSlidingDoor` now implements `IAirtightBlock` — it forms an airtight bulkhead only while fully closed. A moving or open panel vents the compartment, which is exactly the tension we want players to feel when a motion-sensor door cycles during a hull breach.
+- **Non-Destructive Retrofit:** Step 60 flips the `airtight` flag on every existing sliding and vault door prefab, so already-built ships and bases gain pressure hulls without being rebuilt. Slide distance, speed, motion tuning and power draws are preserved verbatim.
+- **Rule Authority:** `PressureRules` is the single place deciding what seals. Structural hull, glass, tanks and machinery seal; thrusters, wheels, landing gear, drills, grinders, pistons, solar panels, beacons, weapons and pipe conduits do not.
+
+#### ◉ Air Vent Block (Large + Small Grid)
+- **Three Modes:** `PRESSURISE` draws oxygen from the grid gas network into the room until the target pressure is met; `DEPRESSURISE` recovers the room's oxygen back into your tanks before a spacewalk; `IDLE` holds state on standby power.
+- **Faces Its Room:** The vent services the room its intake faces, so a vent set into a bulkhead charges the compartment in front of it rather than the corridor behind it, with neighbour-cell fallback.
+- **Conservation-Safe:** Oxygen a full room cannot accept is returned straight to the tanks, so the vent can never destroy gas through rounding.
+- **Premium Panel:** Live pressure gauge with a 5 Hz animated fill bar, volume and O₂ litre readouts, colour-graded status, mode buttons with active-state accents, and target-pressure/flow-rate sliders.
+- **Screen Telemetry:** Implements `IGridDataProvider` under "Life Support", so `GridScreenBlock` LCD monitors display live compartment pressure across a ship or base.
+
+#### 🌬 Breathable Interiors & Suit HUD
+- **Vacuum Shelter:** `RoomAtmosphereService` is the single authority answering "is the air here breathable?". Standing inside a charged compartment is breathable without a sealed helmet and tank — even on an airless moon — and the life-support status reads `ROOM PRESSURISED`.
+- **Live HUD Strip:** The suit monitor gains a `ROOM` LCD row showing compartment status and pressure percentage, colour-graded from phosphor green through amber to red. It hides itself entirely when the player is not inside a detected room, so the HUD stays quiet outdoors.
+
+#### 💾 Persistence
+- **Additive Save Schema:** Room oxygen charge is saved per grid keyed by room anchor cell. Room shapes are re-solved from the restored hull, so a rebuilt ship always restores to a valid state, and older saves simply restore as vacuum that a running vent refills. No save break.
+
+#### ⚙️ Setup Wizard Step 60
+- **Non-Destructive Authoring:** Step 60 in `Tools -> Voxel Engine -> Voxel Engine Setup` creates the Air Vent prefabs, grid items, persistent materials and recipes, marks existing doors airtight, registers the recipes in `RecipeRegistry` and links them to the Grid Utilities research node. Existing balance values, power production figures and authored tuning are never overwritten.
 
 ### [9.26.0-dev] Geological Prospecting Tools, Spherical Ore Detection & LCD Telemetry Screens
 

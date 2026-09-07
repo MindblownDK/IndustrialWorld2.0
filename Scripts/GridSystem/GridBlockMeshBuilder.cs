@@ -17,7 +17,7 @@ namespace VoxelEngine.GridSystem
             Armor, Cockpit, Thruster, Battery, Cargo, Drill, Grinder, Refinery,
             Weapon, DockingPort, Wheel, LandingGear, SolarPanel, Reactor,
             LiquidTank, GasTank, H2O2, HydrogenEngine, ChemicalPlant, Glass, Demolisher, ItemPipe,
-            GasPipe, LiquidPipe, Gyroscope, Beacon, OreDetector, SeasonMonitor, Generic
+            GasPipe, LiquidPipe, Gyroscope, Beacon, OreDetector, SeasonMonitor, AirVent, Generic
         }
 
         private static Shader Lit => Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
@@ -70,6 +70,7 @@ namespace VoxelEngine.GridSystem
                 case Style.Beacon:      BuildBeacon(root, cs, body, metal, glow); break;
                 case Style.OreDetector: BuildOreDetector(root, cs, body, metal, glow); break;
                 case Style.SeasonMonitor: BuildSeasonMonitor(root, cs, body, metal, glow); break;
+                case Style.AirVent:      BuildAirVent(root, cs, body, metal, glow); break;
                 default:                 BuildArmor(root, cs, body, metal); break;
             }
         }
@@ -397,6 +398,25 @@ namespace VoxelEngine.GridSystem
             float e = cs * 0.38f, s = cs * 0.08f;
             foreach (var c in Corners(e))
                 Box(r, metal, new Vector3(c.x, -cs * 0.15f, c.z), new Vector3(s, s, s));
+        }
+
+        private static void BuildAirVent(GameObject r, float cs, Material body, Material metal, Material glow)
+        {
+            // Recessed bulkhead plate — the vent is a sealed wall element, so the body
+            // fills the cell and only the intake face is cut away.
+            Box(r, body, V0, new Vector3(cs * 0.98f, cs * 0.98f, cs * 0.30f));
+            Box(r, metal, new Vector3(0, 0, -cs * 0.16f), new Vector3(cs * 0.74f, cs * 0.74f, cs * 0.06f));
+
+            // Louvre slats across the intake.
+            for (int i = -2; i <= 2; i++)
+                Box(r, metal, new Vector3(0, i * cs * 0.14f, -cs * 0.20f),
+                    new Vector3(cs * 0.66f, cs * 0.045f, cs * 0.05f));
+
+            // Corner bolts + status indicator.
+            float e = cs * 0.40f, sz = cs * 0.07f;
+            foreach (var c in Corners(e))
+                Box(r, metal, new Vector3(c.x, c.z, -cs * 0.15f), new Vector3(sz, sz, sz));
+            Sphere(r, glow, new Vector3(cs * 0.30f, -cs * 0.32f, -cs * 0.20f), cs * 0.08f);
         }
 
         // ── primitive helpers ─────────────────────────────────────────────────────

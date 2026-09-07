@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `9.26.0-dev`  
-**Roadmap Version:** `9.26.0-dev`  
+**Current Version:** `9.27.0-dev`  
+**Roadmap Version:** `9.27.0-dev`  
 **Date:** 2026-09-07
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -83,7 +83,7 @@ The design goal is a seamless blend of:
 | Radiation system | 🟡 PARTIALLY COMPLETE | **6.80.0-dev:** ambient celestial-body radiation, Radiation Shielding modules, and Hazmat sealing are implemented for armor. Reactor waste, fallout zones, geiger UX, and full ecology effects remain open. |
 | Heat system | 🟡 PARTIALLY COMPLETE | **6.80.0-dev:** environmental heat and burn mitigation are wired to Heat Tolerance modules. Atmospheric entry, block thermal simulation, engine heat, and heatshields remain open. |
 | Oxygen / life support | 🛠️ WORKING ON | Underwater reserve equipment already exists; **7.4.0-dev** activates vacuum/airless-body oxygen drain, sealed helmet+tank protection, armor oxygen-efficiency integration, and live hazard feedback. **7.5.0-dev** now resolves this against the same profile-driven air density used by flight and is Unity-validated. Airtight rooms, vents, and refillable suit-tank simulation remain open. |
-| Airtight systems | ❌ MISSING | No airtight doors, vents, or pressurized rooms |
+| Airtight systems | ✅ COMPLETED | **9.27.0-dev:** Full Pressure & Airtight Service. `GridPressureSystem` flood-fills sealed rooms per grid (breach detection, oxygen charge, per-room pressure in atm), `PressureRules`/`IAirtightBlock` decide what seals, sliding & vault doors are airtight bulkheads only while fully shut, the Air Vent block (Large + Small) pressurises/depressurises the room it faces from the grid gas network, `RoomAtmosphereService` makes a pressurised room breathable without a sealed suit even in hard vacuum, the suit HUD gains a live ROOM pressure strip, and room oxygen charge is additively saved/restored. Step 60 authors all content non-destructively. |
 | Fall damage | ✅ COMPLETED | **6.25.0-dev:** Player fall damage tracks downward impact speed along local gravity. **6.80.0-dev:** Impact Padding upgrades reduce the resulting hard-landing damage per worn armor piece. |
 | Painting / finishes | ✅ COMPLETED | **6.71.0-dev:** Paint Tool + 15 cosmetic finishes for static/grid blocks, HUD swatch, inspection readout, additive save/restore, Step 46 authoring. |
 | Armor crafting/upgrades | 🟡 PARTIALLY COMPLETE | **6.80.4-dev:** Unity validation confirmed the dedicated Armor Station, anvil-style Armor Upgrade Station, module crafting, timed installation (30s at T1 through 150s at T5/Hazmat), per-piece state, equipment interaction, and additive save/load. **7.3.2-dev** adds tier-gated module capacity/grade rules (T1→1 slot/T1 through T6→6 slots/T5; Hazmat T5+) pending Unity validation. Step 48 authors all content non-destructively. Remaining: broader reactor/re-entry/heated-room hazard systems. |
@@ -1043,10 +1043,10 @@ Statuses are evidence-based and move forward only after code/content review and 
    - Hot biomes and volcanic areas deal heat damage without protection.
    - Heat tolerance armor upgrades allow longer exposure.
 
-10. **Airtight Doors and Vents**
+10. **Airtight Doors and Vents** — ✅ COMPLETED (9.27.0-dev)
     - Sliding futuristic doors for grid bases.
-    - Airtight variants seal rooms for pressurization.
-    - Vents pump oxygen in or out of sealed spaces.
+    - Airtight variants seal rooms for pressurization (doors seal only while fully closed).
+    - Vents pump oxygen in or out of sealed spaces (PRESSURISE / DEPRESSURISE / IDLE).
 
 11. **Mythical Enemies & Bosses**
     - **Aerial:** Griffins and Rocs disrupt formations, carry targets, and create wind hazards.
@@ -1174,10 +1174,10 @@ Statuses are evidence-based and move forward only after code/content review and 
     - Atmospheric density curves per planet.
     - Sky shader parameters driven by `PlanetDefinition`.
 
-28. **Pressure & Airtight Service**
-    - Detects sealed rooms using grid blocks and airtight doors.
-    - Tracks oxygen level per room.
-    - Vents add or remove oxygen.
+28. **Pressure & Airtight Service** — ✅ COMPLETED (9.27.0-dev)
+    - Detects sealed rooms using grid blocks and airtight doors (bounded flood fill, breach-aware, event-driven re-solve).
+    - Tracks oxygen level and pressure per room; charge is carried across hull edits and saves.
+    - Vents add or remove oxygen against the grid gas network.
 
 29. **Pollution Service**
     - Deterministic chunk/cell emissions, spread, decay, filtration, contamination, source attribution, and reduced-rate distant simulation.
