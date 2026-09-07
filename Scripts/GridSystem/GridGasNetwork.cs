@@ -64,6 +64,14 @@ namespace VoxelEngine.GridSystem
             return false;
         }
 
+        // ── DESIGN RULE (9.27.0) ──────────────────────────────────────────────
+        // Gas on a grid moves through PIPES ONLY. There is no grid-wide gas pool.
+        // The three grid-wide helpers below bypass pipe topology, have no callers,
+        // and are retained purely so any old serialized reference still compiles.
+        // Use the endpoint-based DrawGasFor / FillGasFor / AvailableGasFor instead,
+        // which walk the actual pipe network out of a block's own gas ports.
+
+        [System.Obsolete("Gas moves through pipes only. Use AvailableGasFor(block, ...) so the pipe topology is respected.")]
         public float AvailableGas(GridEntity grid, Gas.GasType type, bool includeStockpile = false)
         {
             if (grid == null || type == Gas.GasType.None) return 0f;
@@ -120,6 +128,7 @@ namespace VoxelEngine.GridSystem
             return filled;
         }
 
+        [System.Obsolete("Gas moves through pipes only. Use DrawGasFor(block, ...) so the pipe topology is respected.")]
         public float DrawGas(GridEntity grid, Gas.GasType type, float litres, bool includeStockpile = false)
         {
             if (grid == null || type == Gas.GasType.None || litres <= 0f) return 0f;
@@ -134,6 +143,7 @@ namespace VoxelEngine.GridSystem
             return drawn;
         }
 
+        [System.Obsolete("Gas moves through pipes only. Use FillGasFrom(block, ...) so the pipe topology is respected.")]
         public float FillGas(GridEntity grid, Gas.GasType type, float litres)
         {
             if (grid == null || type == Gas.GasType.None || litres <= 0f) return 0f;

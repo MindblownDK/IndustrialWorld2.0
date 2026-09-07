@@ -1,12 +1,30 @@
 // Assets/Scripts/VoxelEngine/Pressure/PressureRules.cs
 //
-// Single place that decides which grid blocks hold air. Keeping the rule here means
-// the room solver, the vent, the HUD and the editor tooling can never disagree.
+// Single place that decides which grid blocks hold air, and what the surrounding
+// planet is offering. Keeping the rules here means the room solver, the vent, the
+// HUD and the editor tooling can never disagree.
 
+using UnityEngine;
+using VoxelEngine.Cosmos;
 using VoxelEngine.GridSystem;
 
 namespace VoxelEngine.Pressure
 {
+    /// <summary>What the planet outside the hull is offering at a given point.</summary>
+    public readonly struct AmbientAir
+    {
+        /// <summary>Outside pressure in atmospheres (0 = hard vacuum).</summary>
+        public readonly float PressureAtm;
+        /// <summary>True when that outside pressure is actually breathable oxygen.</summary>
+        public readonly bool IsOxygenBearing;
+
+        public AmbientAir(float pressureAtm, bool oxygenBearing)
+        {
+            PressureAtm = Mathf.Clamp(pressureAtm, 0f, 1.5f);
+            IsOxygenBearing = oxygenBearing;
+        }
+    }
+
     public static class PressureRules
     {
         /// <summary>Standard breathable pressure of a fully charged room (atm).</summary>
@@ -17,6 +35,29 @@ namespace VoxelEngine.Pressure
 
         /// <summary>Litres of oxygen required per cubic metre for nominal pressure.</summary>
         public const float LitresPerCubicMetre = 21f;
+
+        /// <summary>Oxygen litres one occupant consumes per second at nominal pressure.</summary>
+        public const float OxygenLitresPerOccupantPerSecond = 0.35f;
+
+        /// <summary>
+        /// Samples the planet's atmosphere at a world position. A world with real air
+        /// pressure equalises open rooms for free — a hull only matters where the sky
+        /// is hostile, which is exactly where the tension belongs.
+        /// </summary>
+        public static AmbientAir SampleAmbient(Vector3 worldPosition)
+        {
+            var sample = AtmosphereManager.Sample(worldPosition);
+            if (sample.IsInSpace || sample.AirDensity <= 0f) return new AmbientAir(0f, false);
+
+            // Density01 is already referenced to Earth-like sea level, so it maps
+            // directly onto our atmospheres scale.
+            float atm = Mathf.Clamp(sample.Density01, 0f, 1.5f);
+
+            var body = GravityProvider.ActiveBody;
+            bool oxygen = body != null && body.settings != null && body.settings.HasOxygen;
+
+            return new AmbientAir(atm, oxygen);
+        }
 
         /// <summary>
         /// True when this block forms an airtight wall. Blocks implementing

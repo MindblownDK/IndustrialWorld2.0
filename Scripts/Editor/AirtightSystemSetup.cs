@@ -180,6 +180,10 @@ namespace VoxelEngine.EditorTools
             if (vent.BlockMass <= 0f) vent.BlockMass = mass;
             if (vent.maxHP <= 0f) vent.maxHP = hp;
 
+            // Gas ports: without these a gas pipe has nothing to magnet onto, so the
+            // vent could never be plumbed. Oxygen reaches a vent ONLY through pipes.
+            EnsureGasPorts(root, size);
+
             var prefabAsset = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
             if (existing) PrefabUtility.UnloadPrefabContents(root);
             else Object.DestroyImmediate(root);
@@ -238,6 +242,80 @@ namespace VoxelEngine.EditorTools
             }
             EditorUtility.SetDirty(recipe);
             recipes.Add(recipe);
+        }
+
+        /// <summary>
+        /// Authors the six cardinal gas ports a pipe can snap to. Ports are named with
+        /// the shared <c>Port_GasIO</c> prefix so the existing gas topology, pipe visual
+        /// builder and wrench tooling all recognise them with no special-casing.
+        /// </summary>
+        private static void EnsureGasPorts(GameObject root, GridSize size)
+        {
+            const string prefix = "Port_GasIO";
+            float cs = size.CellSize();
+            float half = cs * 0.5f;
+            float depth = cs * 0.16f;
+
+            Material mat = GetOrCreatePortMaterial();
+
+            var ports = new (string name, Vector3 pos, Vector3 euler, Vector3 outward)[]
+            {
+                (prefix + "_N",      new Vector3(0f, 0f, -depth), new Vector3(90f, 0f, 0f), Vector3.back),
+                (prefix + "_S",      new Vector3(0f, 0f,  depth), new Vector3(90f, 0f, 0f), Vector3.forward),
+                (prefix + "_E",      new Vector3( half * 0.92f, 0f, 0f), new Vector3(0f, 0f, 90f), Vector3.right),
+                (prefix + "_W",      new Vector3(-half * 0.92f, 0f, 0f), new Vector3(0f, 0f, 90f), Vector3.left),
+                (prefix + "_Top",    new Vector3(0f,  half * 0.92f, 0f), Vector3.zero,             Vector3.up),
+                (prefix + "_Bottom", new Vector3(0f, -half * 0.92f, 0f), new Vector3(180f, 0f, 0f), Vector3.down),
+            };
+
+            foreach (var (name, pos, euler, outward) in ports)
+            {
+                var existing = root.transform.Find(name);
+                GameObject port;
+                if (existing != null)
+                {
+                    port = existing.gameObject;      // preserve any hand-moved port
+                }
+                else
+                {
+                    port = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                    port.name = name;
+                    port.transform.SetParent(root.transform, false);
+                    port.transform.localScale = new Vector3(cs * 0.10f, cs * 0.022f, cs * 0.10f);
+                    var col = port.GetComponent<Collider>();
+                    if (col != null) Object.DestroyImmediate(col);
+                    var renderer = port.GetComponent<Renderer>();
+                    if (renderer != null && mat != null) renderer.sharedMaterial = mat;
+                    port.transform.localPosition = pos;
+                    port.transform.localRotation = Quaternion.Euler(euler);
+                }
+
+                var facing = port.GetComponent<VoxelEngine.Maritime.MaritimePortFacing>();
+                if (facing == null) facing = port.AddComponent<VoxelEngine.Maritime.MaritimePortFacing>();
+                facing.localOutward = outward;
+            }
+        }
+
+        private static Material GetOrCreatePortMaterial()
+        {
+            EnsureFolder(MATS);
+            const string matPath = MATS + "/AirVent_GasPortMarker.mat";
+            var mat = AssetDatabase.LoadAssetAtPath<Material>(matPath);
+            if (mat != null) return mat;
+
+            var color = new Color(0.45f, 0.85f, 1.0f, 1f);
+            var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+            mat = new Material(shader) { name = "AirVent_GasPortMarker", color = color };
+            if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", color);
+            if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", 0.5f);
+            if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.75f);
+            if (mat.HasProperty("_EmissionColor"))
+            {
+                mat.EnableKeyword("_EMISSION");
+                mat.SetColor("_EmissionColor", color * 0.45f);
+            }
+            AssetDatabase.CreateAsset(mat, matPath);
+            return AssetDatabase.LoadAssetAtPath<Material>(matPath);
         }
 
         private static ItemDefinition FindItem(string assetName)

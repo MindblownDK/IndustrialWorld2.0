@@ -2127,6 +2127,14 @@ namespace VoxelEngine.GridSystem.UI
                 p.Add(T.StatRow("⇡", "Pressure", $"{room.PressureAtm * 100f:0} %", pressureColor));
                 p.Add(T.StatRow("▣", "Volume", $"{room.VolumeM3:0} m³", T.AccentCyan));
                 p.Add(T.StatRow("O₂", "Oxygen", $"{room.OxygenLitres:0} / {room.CapacityLitres:0} L", T.AccentBlue));
+                p.Add(T.StatRow("☍", "Outside", room.Ambient.IsOxygenBearing
+                        ? $"{room.Ambient.PressureAtm * 100f:0} % breathable"
+                        : room.Ambient.PressureAtm > 0.01f
+                            ? $"{room.Ambient.PressureAtm * 100f:0} % inert"
+                            : "vacuum",
+                    room.Ambient.IsOxygenBearing ? T.AccentGreen : T.AccentDim));
+                p.Add(T.StatRow("☺", "Occupants", room.Occupants.ToString(),
+                    room.Occupants > 0 ? T.AccentAmber : T.TextSecondary));
 
                 var (bar, fill) = T.ProgressBar(room.Fill01, pressureColor, 8, true);
                 bar.style.marginTop = 4;
@@ -2169,7 +2177,7 @@ namespace VoxelEngine.GridSystem.UI
             p.Add(powerRow);
 
             p.Add(T.Spacer(4));
-            p.Add(T.Muted("Pressurising draws oxygen from the grid gas network. Depressurising pumps the room back into your tanks before a spacewalk."));
+            p.Add(T.Muted("Oxygen reaches this vent through GAS PIPES only — run a pipe from an oxygen tank to one of the vent's gas ports. Depressurising pumps the room back into those tanks before a spacewalk."));
             return p;
         }
 

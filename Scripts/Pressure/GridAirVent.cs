@@ -104,17 +104,19 @@ namespace VoxelEngine.Pressure
 
             float wanted = Mathf.Min(deficit, Mathf.Max(0f, flowLitresPerSecond) * dt);
             var network = GridGasNetwork.Instance;
-            float drawn = network != null
-                ? network.DrawGasFor(this, Gas.GasType.Oxygen, wanted)
-                : 0f;
+            if (network == null || !network.HasPipes(Grid)) { Status = "No Gas Pipe"; return; }
 
-            if (drawn <= 0.0001f) { Status = "No O₂ Supply"; return; }
+            // Strictly piped: DrawGasFor walks the gas-pipe topology out of this block's
+            // own ports, so a vent with nothing plugged into it gets nothing.
+            float drawn = network.DrawGasFor(this, Gas.GasType.Oxygen, wanted);
+
+            if (drawn <= 0.0001f) { Status = "No Piped O₂"; return; }
 
             float accepted = room.AddOxygen(drawn);
             // Anything the room could not take goes straight back to the tanks so the
             // vent can never destroy oxygen through rounding.
             float surplus = drawn - accepted;
-            if (surplus > 0.0001f && network != null)
+            if (surplus > 0.0001f)
                 network.FillGasFrom(this, Gas.GasType.Oxygen, surplus);
 
             IsWorking = accepted > 0.0001f;
@@ -128,9 +130,9 @@ namespace VoxelEngine.Pressure
 
             float wanted = Mathf.Min(room.OxygenLitres, Mathf.Max(0f, flowLitresPerSecond) * dt);
             var network = GridGasNetwork.Instance;
-            float stored = network != null
-                ? network.FillGasFrom(this, Gas.GasType.Oxygen, wanted)
-                : 0f;
+            if (network == null || !network.HasPipes(Grid)) { Status = "No Gas Pipe"; return; }
+
+            float stored = network.FillGasFrom(this, Gas.GasType.Oxygen, wanted);
 
             if (stored <= 0.0001f) { Status = "Tanks Full"; return; }
 

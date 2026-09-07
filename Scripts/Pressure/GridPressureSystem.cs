@@ -26,7 +26,9 @@ namespace VoxelEngine.Pressure
         public const int MaxRoomCells = 4096;
 
         private const float SettleSeconds = 0.25f;
-        private const float LeakAtmPerSecond = 0.05f;
+        private const float AmbientRefreshSeconds = 1.0f;
+        private const float OccupancyRefreshSeconds = 0.5f;
+        private const float EqualiseAtmPerSecond = 0.02f;
 
         private GridEntity _grid;
         private readonly List<GridRoom> _rooms = new();
@@ -34,6 +36,8 @@ namespace VoxelEngine.Pressure
         private readonly Dictionary<Vector3Int, float> _carriedOxygen = new();
         private bool _dirty = true;
         private float _dirtyAt;
+        private float _ambientTimer;
+        private float _occupancyTimer;
 
         public IReadOnlyList<GridRoom> Rooms => _rooms;
         public int SealedRoomCount
@@ -77,17 +81,92 @@ namespace VoxelEngine.Pressure
         private void Update()
         {
             if (_dirty && Time.unscaledTime - _dirtyAt >= SettleSeconds) Solve();
-            TickLeaks(Time.deltaTime);
+
+            float dt = Time.deltaTime;
+            _ambientTimer -= dt;
+            if (_ambientTimer <= 0f)
+            {
+                _ambientTimer = AmbientRefreshSeconds;
+                RefreshAmbient();
+            }
+
+            TickOccupancy(dt);
         }
 
-        private void TickLeaks(float dt)
+        /// <summary>Re-samples the planet outside. A ship that flies from a breathable
+        /// world into orbit must see its open rooms lose ambient air as it climbs.</summary>
+        private void RefreshAmbient()
         {
-            if (dt <= 0f) return;
+            if (_rooms.Count == 0) return;
+            var ambient = PressureRules.SampleAmbient(transform.position);
+            for (int i = 0; i < _rooms.Count; i++)
+                if (_rooms[i] != null) _rooms[i].Ambient = ambient;
+        }
+
+        /// <summary>Counts the players breathing in each room and burns the matching
+        /// oxygen. More occupants drain a compartment proportionally faster.</summary>
+        private void TickOccupancy(float dt)
+        {
+            if (dt <= 0f || _rooms.Count == 0) return;
+
+            _occupancyTimer -= dt;
+            if (_occupancyTimer <= 0f)
+            {
+                _occupancyTimer = OccupancyRefreshSeconds;
+                RecountOccupants();
+            }
+
             for (int i = 0; i < _rooms.Count; i++)
             {
                 var room = _rooms[i];
-                if (room.IsSealed || room.OxygenLitres <= 0f) continue;
-                room.RemoveOxygen(room.CapacityLitres * LeakAtmPerSecond * dt);
+                if (room == null || !room.IsSealed) continue;
+                if (room.Occupants <= 0 || room.OxygenLitres <= 0f) continue;
+
+                // Metabolic draw scales linearly with the number of people inside.
+                room.RemoveOxygen(PressureRules.OxygenLitresPerOccupantPerSecond
+                                  * room.Occupants * dt);
+            }
+
+            TickAmbientEqualisation(dt);
+        }
+
+        /// <summary>
+        /// No hull is perfect. A sealed room slowly equalises toward the planet outside,
+        /// which means a base on a breathable world stays livable on its own, while the
+        /// same base in vacuum bleeds down and genuinely needs a vent keeping it charged.
+        /// </summary>
+        private void TickAmbientEqualisation(float dt)
+        {
+            for (int i = 0; i < _rooms.Count; i++)
+            {
+                var room = _rooms[i];
+                if (room == null || !room.IsSealed) continue;
+
+                float targetLitres = room.Ambient.IsOxygenBearing
+                    ? room.Ambient.PressureAtm * room.CapacityLitres
+                    : 0f;
+
+                float delta = targetLitres - room.OxygenLitres;
+                if (Mathf.Abs(delta) < 0.01f) continue;
+
+                float step = room.CapacityLitres * EqualiseAtmPerSecond * dt;
+                room.OxygenLitres += Mathf.Clamp(delta, -step, step);
+                room.OxygenLitres = Mathf.Clamp(room.OxygenLitres, 0f, room.CapacityLitres);
+            }
+        }
+
+        private void RecountOccupants()
+        {
+            for (int i = 0; i < _rooms.Count; i++)
+                if (_rooms[i] != null) _rooms[i].Occupants = 0;
+
+            var players = Object.FindObjectsByType<VoxelEngine.Player.PlayerController>(
+                FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            for (int i = 0; i < players.Length; i++)
+            {
+                if (players[i] == null) continue;
+                var room = RoomAtWorldNoSolve(players[i].transform.position);
+                if (room != null) room.Occupants++;
             }
         }
 
@@ -98,6 +177,13 @@ namespace VoxelEngine.Pressure
         {
             if (_grid == null) return null;
             if (_dirty) Solve();
+            return _cellToRoom.TryGetValue(_grid.WorldToGrid(worldPosition), out var room) ? room : null;
+        }
+
+        /// <summary>Room lookup that never triggers a solve (used inside the tick loop).</summary>
+        private GridRoom RoomAtWorldNoSolve(Vector3 worldPosition)
+        {
+            if (_grid == null) return null;
             return _cellToRoom.TryGetValue(_grid.WorldToGrid(worldPosition), out var room) ? room : null;
         }
 
@@ -143,6 +229,8 @@ namespace VoxelEngine.Pressure
             var visited = new HashSet<Vector3Int>();
             var queue = new Queue<Vector3Int>();
             float cellSize = _grid.gridSize.CellSize();
+            var ambient = PressureRules.SampleAmbient(transform.position);
+            _ambientTimer = AmbientRefreshSeconds;
 
             for (int x = min.x; x <= max.x; x++)
             for (int y = min.y; y <= max.y; y++)
@@ -179,11 +267,22 @@ namespace VoxelEngine.Pressure
                     }
                 }
 
+                // An open fill IS the outside world, not a room. The player standing
+                // there simply breathes the planet through the normal atmosphere path.
                 if (open || room.Cells.Count == 0) continue;
 
-                room.Reset(true, cellSize);
+                room.Reset(true, cellSize, ambient);
+
+                // A room that was already sealed on the previous solve keeps its charge
+                // (a hull edit elsewhere must not vent it). A room that is newly sealed
+                // keeps whatever air it just trapped: on an oxygen world that is a full
+                // planetary charge, in vacuum it is nothing. This is also what makes
+                // opening a door vent the compartment — it stops being sealed, loses its
+                // carry-forward entry, and re-seeds from ambient when shut again.
                 if (_carriedOxygen.TryGetValue(room.Anchor, out float carried))
                     room.OxygenLitres = Mathf.Clamp(carried, 0f, room.CapacityLitres);
+                else
+                    room.SeedFromAmbient();
 
                 _rooms.Add(room);
                 foreach (var c in room.Cells) _cellToRoom[c] = room;

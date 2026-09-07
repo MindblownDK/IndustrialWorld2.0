@@ -1,9 +1,33 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.27.0-dev`
+**Current Version:** `9.27.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.27.1-dev] Ambient Room Pressure, Crew Oxygen Draw & Pipe-Only Vent Supply
+
+**Type:** PATCH — Corrects three behaviours in the airtight system: rooms now equalise with the planet's own atmosphere instead of always starting at vacuum, oxygen consumption scales with the number of occupants breathing in a compartment, and the Air Vent is supplied strictly through gas pipes with the grid-wide gas pool retired. No save touch, no API break.
+
+#### 🌍 Ambient Planetary Pressure
+A hull now only matters where the sky is actually hostile, which is exactly where the tension belongs:
+- **Rooms Inherit The Planet:** New `PressureRules.SampleAmbient()` reads the local atmosphere (pressure in atm plus whether it is oxygen-bearing) from `AtmosphereManager` and the active celestial body. On a breathable world a freshly built room is immediately at planetary pressure and livable.
+- **Newly Sealed Rooms Keep Their Air:** `GridRoom.SeedFromAmbient()` charges a compartment with the air it trapped the moment the hull closed. Sealing a room on an oxygen world starts it full; sealing one in vacuum starts it empty.
+- **Opening A Door Really Vents It:** An open compartment stops being a sealed room, loses its carry-forward charge, and re-seeds from ambient when shut again. On a breathable planet that is a free instant refill; in vacuum it is a genuine loss.
+- **Slow Equalisation:** No hull is perfect. Sealed rooms drift toward the outside pressure at 2%/s, so a base on a breathable world stays livable unattended, while the same base in vacuum bleeds down and truly needs a vent keeping it charged.
+- **Altitude Aware:** Ambient is re-sampled once per second, so a ship flying from a breathable surface up into orbit watches its margins shrink as it climbs.
+- **Honest Status Labels:** Open rooms now read `OPEN · AMBIENT` or `OPEN · NO AIR` rather than being mislabelled as breached.
+
+#### 👥 Crew-Scaled Oxygen Consumption
+- **Per-Occupant Draw:** Each player standing in a sealed room burns `0.35 L/s` of its oxygen. Two crew drain a compartment twice as fast, so cabin sizing and vent throughput became real engineering decisions.
+- **Cheap Occupancy Tracking:** Occupants are recounted twice a second against the existing cell→room map — no per-frame scene scans.
+- **UI Feedback:** The vent panel gained an `Occupants` readout, and the suit HUD `ROOM` strip appends a `×N` crew badge whenever the air is being shared.
+
+#### 🔧 Pipe-Only Gas Supply (Vent Fix)
+- **Gas Ports Authored:** The Air Vent prefabs previously had no gas ports, so a pipe had nothing to magnet onto. Step 60 now authors six cardinal `Port_GasIO` ports (with `MaritimePortFacing` outward vectors and a persistent emissive marker material) on both the Large and Small vent, matching the convention used by every other gas block.
+- **Strictly Piped:** The vent now refuses to run without a gas pipe. It reports `No Gas Pipe` when unplumbed and `No Piped O₂` when the connected pipe run reaches no oxygen, drawing exclusively through the pipe topology out of its own ports.
+- **Grid Gas Pool Retired:** The three grid-wide `AvailableGas` / `DrawGas` / `FillGas` helpers that bypassed pipe topology are marked `[Obsolete]` with a documented design rule: **on grids, gas and liquid move through pipes only — electricity is the sole networked resource.** They had no callers; the attribute stops the pattern from returning.
+- **Port Preservation:** Re-running Step 60 keeps any hand-moved port exactly where you put it and only refreshes its facing vector.
 
 ### [9.27.0-dev] Airtight Rooms, Pressure Simulation & Air Vents
 

@@ -138,7 +138,9 @@ namespace VoxelEngine.UI
 
             Color tone = room.IsBreathable ? LcdHudTheme.Phosphor
                 : room.PressureAtm > 0.02f ? T.AccentAmber : T.AccentRed;
-            _roomLabel.text = $"{room.StatusLabel}  {room.PressureAtm * 100f:0}%";
+            // Crew count is only worth the pixels when someone else is sharing the air.
+            string crew = room.Occupants > 1 ? $"  ×{room.Occupants}" : string.Empty;
+            _roomLabel.text = $"{room.StatusLabel}  {room.PressureAtm * 100f:0}%{crew}";
             _roomLabel.style.color = new StyleColor(tone);
         }
 
