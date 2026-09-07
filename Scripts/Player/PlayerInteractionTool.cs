@@ -751,6 +751,15 @@ namespace VoxelEngine.Player
                     return;
                 }
 
+                // 0c) Geological Prospecting Scanner RMB — sub-surface acoustic radar probe.
+                var stackScan = inventory.ActiveStack;
+                if (!stackScan.IsEmpty && stackScan.item is ProspectingScanner scanner)
+                {
+                    PerformProspectingScan(scanner, hit.point, world, stackScan);
+                    _nextHit = Time.time + 0.45f;
+                    return;
+                }
+
                 // Eat food if holding a FoodItem.
                 var eatStack = inventory.ActiveStack;
                 if (!eatStack.IsEmpty && eatStack.item is VoxelEngine.Farming.FoodItem food)
@@ -1875,6 +1884,84 @@ namespace VoxelEngine.Player
             foreach (char c in name)
                 if (char.IsLetterOrDigit(c)) sb.Append(char.ToLowerInvariant(c));
             return sb.ToString();
+        }
+
+        private void PerformProspectingScan(ProspectingScanner scanner, Vector3 hitPoint, VoxelEngine.Core.IVoxelWorld world, ItemStack stack)
+        {
+            if (world == null || scanner == null) return;
+
+            var body = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
+            Vector3 up = body != null ? body.UpAt(hitPoint) : Vector3.up;
+            if (up.sqrMagnitude < 1e-4f) up = Vector3.up;
+            Vector3 down = -up.normalized;
+            Vector3 tangent = Vector3.Cross(down, Mathf.Abs(down.y) > 0.9f ? Vector3.right : Vector3.up).normalized;
+            Vector3 bitangent = Vector3.Cross(down, tangent).normalized;
+
+            float maxDepth = scanner.scanDepthMeters;
+            float scanRad = scanner.scanRadiusMeters;
+
+            var detected = new System.Collections.Generic.Dictionary<Materials.MaterialId, (float closestDepth, int count)>();
+            var seen = new System.Collections.Generic.HashSet<Vector3Int>();
+
+            for (float d = 1f; d <= maxDepth; d += 1f)
+            {
+                float radiusAtDepth = Mathf.Lerp(1.5f, scanRad, d / maxDepth);
+                for (float u = -radiusAtDepth; u <= radiusAtDepth; u += 1.25f)
+                {
+                    for (float v = -radiusAtDepth; v <= radiusAtDepth; v += 1.25f)
+                    {
+                        if (u * u + v * v > radiusAtDepth * radiusAtDepth) continue;
+
+                        Vector3 samplePos = hitPoint + down * d + tangent * u + bitangent * v;
+                        Vector3Int vp = world.WorldToVoxel(samplePos);
+                        if (seen.Contains(vp)) continue;
+                        seen.Add(vp);
+
+                        var voxel = world.GetVoxelWorld(vp);
+                        if (voxel.IsSolid && GridSystem.GridOreDetector.IsOre(voxel.material))
+                        {
+                            var matId = (Materials.MaterialId)voxel.material;
+                            if (!detected.ContainsKey(matId))
+                            {
+                                detected[matId] = (d, 1);
+                            }
+                            else
+                            {
+                                var existing = detected[matId];
+                                detected[matId] = (Mathf.Min(existing.closestDepth, d), existing.count + 1);
+                            }
+                        }
+                    }
+                }
+            }
+
+            ConsumeDurability(stack);
+
+            if (detected.Count == 0)
+            {
+                UI.BuildFeedbackHud.Show("Prospector", "No ore deposits within 24m depth.", scanner.icon, UI.UITheme.TextMuted);
+                return;
+            }
+
+            // Find closest / richest deposit
+            Materials.MaterialId bestMat = Materials.MaterialId.Air;
+            float minDepth = 999f;
+            int maxCount = 0;
+            foreach (var kv in detected)
+            {
+                if (kv.Value.closestDepth < minDepth)
+                {
+                    minDepth = kv.Value.closestDepth;
+                    bestMat = kv.Key;
+                    maxCount = kv.Value.count;
+                }
+            }
+
+            string oreName = GridSystem.GridOreDetector.OreDisplayName(bestMat);
+            Color oreColor = GridSystem.GridOreDetector.OreDisplayColor(bestMat);
+            string extra = detected.Count > 1 ? $" (+{detected.Count - 1} other veins)" : "";
+
+            UI.BuildFeedbackHud.Show($"Prospector: {oreName}", $"{minDepth:0.0}m below • {maxCount} voxels{extra}", scanner.icon, oreColor);
         }
 
         // Which grid blocks open an interaction panel on the Interact key. Pure

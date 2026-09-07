@@ -25,6 +25,7 @@ using VoxelEngine.Cosmos;
 using VoxelEngine.Crafting;
 using VoxelEngine.GridSystem;
 using VoxelEngine.Items;
+using VoxelEngine.Power;
 using VoxelEngine.Research;
 using VoxelEngine.Weather;
 
@@ -254,10 +255,15 @@ namespace VoxelEngine.EditorTools
 
             var staticMonitor = staticRoot.GetComponent<StaticSeasonMonitor>();
             if (staticMonitor == null) staticMonitor = staticRoot.AddComponent<StaticSeasonMonitor>();
-            staticMonitor.powerDrawWatts = 40f;
+            staticMonitor.powerDrawWatts = 400f;
             staticMonitor.mode = StaticSeasonMonitor.MonitorMode.AutoCurrentPlanet;
             staticMonitor.dishRotationSpeed = 30f;
             staticMonitor.screenDataObject = localSeasonData;
+
+            var powerConsumer = staticRoot.GetComponent<PowerConsumer>();
+            if (powerConsumer == null) powerConsumer = staticRoot.AddComponent<PowerConsumer>();
+            powerConsumer.wattsPerSecond = 400f;
+            powerConsumer.connectRadius = 4.0f;
 
             var staticPrefabAsset = PrefabUtility.SaveAsPrefabAsset(staticRoot, staticPrefabPath);
             if (existingStaticPrefab) PrefabUtility.UnloadPrefabContents(staticRoot);

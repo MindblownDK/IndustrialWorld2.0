@@ -569,6 +569,15 @@ namespace VoxelEngine.EditorTools
                 "Re-runnable. Idempotent. Authored climate values are never overwritten.");
             AddWizardButton(scroll, "58. Wire Weather, Climate & Seasons (Snow, Seasons, Screens — Non-Destructive)", () => VoxelEngine.EditorTools.WeatherSystemSetup.RunStep58(), 56);
 
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
+                "Step 59 (9.26.0) builds GEOLOGICAL PROSPECTING TOOLS & SPHERICAL ORE DETECTION (non-destructive):\n" +
+                "  • Handheld Geological Prospecting Scanner tool (Tool_ProspectingScanner.asset) + Crafting recipe\n" +
+                "  • Probes subterranean voxel layers (up to 24m) along the planet's radial down vector\n" +
+                "  • Grid Ore Detector spherical-safe radial coreward scanning and IGridDataProvider LCD screen telemetry\n" +
+                "Re-runnable. Idempotent. Authored tuning and custom components are never overwritten.");
+            AddWizardButton(scroll, "59. Build Geological Prospecting Tools (Scanner, Screen Telemetry, Spherical Ore Detection — Non-Destructive)", () => VoxelEngine.EditorTools.ProspectingSetup.RunStep59(), 56);
+
             AddSpacer(scroll, 20);
         }
 

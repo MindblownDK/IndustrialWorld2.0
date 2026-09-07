@@ -98,51 +98,51 @@ namespace VoxelEngine.Weather
             Vector3 down = ResolveRadialDown(wm);
             ApplyFallDirection(down);
 
+            float intensity = wm.LocalIntensity;
             var profile = wm.Profile ?? WeatherClimateProfile.Default();
             var seasonInfo = PlanetarySeasons.GetCurrentSeasonInfo();
 
             // Precipitation state determination:
-            // Explicit rain state always remains rain
-            bool isExplicitRain = profile.precipitation == WeatherClimateProfile.Precipitation.Rain
-                               || wm.CurrentState == WeatherState.LightRain
+            bool isExplicitRain = wm.CurrentState == WeatherState.LightRain
                                || wm.CurrentState == WeatherState.HeavyRain
                                || wm.TargetState == WeatherState.LightRain
                                || wm.TargetState == WeatherState.HeavyRain;
 
-            // Snow state determination:
-            // 1) Weather state is Snow or Blizzard
-            // 2) Active body forces snow (WeatherClimateProfile.Precipitation.Snow)
-            // 3) Biome is a cold snow biome (when not forced rain)
-            // 4) Current seasonal temperature is freezing (when not forced rain)
-            bool isSnow = !isExplicitRain && (
-                wm.IsSnowBiome
-                || wm.CurrentState == WeatherState.Snow
-                || wm.CurrentState == WeatherState.Blizzard
-                || wm.TargetState == WeatherState.Snow
-                || wm.TargetState == WeatherState.Blizzard
-                || profile.precipitation == WeatherClimateProfile.Precipitation.Snow
-                || (profile.precipitation == WeatherClimateProfile.Precipitation.Auto && seasonInfo.isFreezing)
-            );
+            bool isExplicitSnow = wm.CurrentState == WeatherState.Snow
+                               || wm.CurrentState == WeatherState.Blizzard
+                               || wm.TargetState == WeatherState.Snow
+                               || wm.TargetState == WeatherState.Blizzard;
 
-            float intensity = wm.LocalIntensity;
+            bool isRainState = isExplicitRain || (!isExplicitSnow && profile.precipitation == WeatherClimateProfile.Precipitation.Rain);
+            bool isSnowState = isExplicitSnow || (!isExplicitRain && (
+                profile.precipitation == WeatherClimateProfile.Precipitation.Snow
+                || (wm.IsSnowBiome && intensity > 0.01f)
+                || (profile.precipitation == WeatherClimateProfile.Precipitation.Auto && seasonInfo.isFreezing && intensity > 0.01f)
+            ));
+
+            bool isPrecip = intensity > 0.01f && (wm.CurrentState != WeatherState.Clear && wm.CurrentState != WeatherState.Overcast || wm.TargetState != WeatherState.Clear && wm.TargetState != WeatherState.Overcast);
+            bool isRain = isPrecip && isRainState && !isExplicitSnow;
+            bool isSnow = isPrecip && isSnowState && !isExplicitRain;
+
+            float intensityVal = intensity;
             bool isBlizzard = wm.CurrentState == WeatherState.Blizzard || wm.TargetState == WeatherState.Blizzard;
 
             // ── 1) Rain System ──────────────────────────────────────────
-            if (!isSnow && intensity > 0.01f)
+            if (isRain && intensityVal > 0.01f)
             {
-                if (Mathf.Abs(_lastRainIntensity - intensity) > 0.02f)
+                if (Mathf.Abs(_lastRainIntensity - intensityVal) > 0.02f)
                 {
-                    _lastRainIntensity = intensity;
-                    _rainEmission.rateOverTime = intensity * MAX_RAIN_RATE;
+                    _lastRainIntensity = intensityVal;
+                    _rainEmission.rateOverTime = intensityVal * MAX_RAIN_RATE;
                 }
                 if (!_rainPS.isPlaying) _rainPS.Play();
 
                 // Splashes during rain
-                _splashEmission.rateOverTime = intensity * MAX_SPLASH_RATE;
+                _splashEmission.rateOverTime = intensityVal * MAX_SPLASH_RATE;
                 if (!_splashPS.isPlaying) _splashPS.Play();
 
                 // Dynamic streak elongation for heavy rain
-                float targetStreak = 0.55f + intensity * 0.35f;
+                float targetStreak = 0.55f + intensityVal * 0.35f;
                 if (Mathf.Abs(_lastStreakSize - targetStreak) > 0.05f)
                 {
                     _lastStreakSize = targetStreak;
@@ -155,18 +155,19 @@ namespace VoxelEngine.Weather
                 {
                     _lastRainIntensity = 0f;
                     _rainEmission.rateOverTime = 0;
-                    _splashEmission.rateOverTime = 0;
+                    if (!isBlizzard) _splashEmission.rateOverTime = 0;
                 }
+                if (_rainPS.isPlaying && !isRain) _rainPS.Stop(true, ParticleSystemStopBehavior.StopEmitting);
             }
 
             // ── 2) Snow System ──────────────────────────────────────────
-            if (isSnow && intensity > 0.01f)
+            if (isSnow && intensityVal > 0.01f)
             {
-                if (Mathf.Abs(_lastSnowIntensity - intensity) > 0.02f)
+                if (Mathf.Abs(_lastSnowIntensity - intensityVal) > 0.02f)
                 {
-                    _lastSnowIntensity = intensity;
-                    _snowEmission.rateOverTime = intensity * MAX_SNOW_RATE;
-                    _snowGroundEmission.rateOverTime = intensity * MAX_SNOW_GROUND_RATE;
+                    _lastSnowIntensity = intensityVal;
+                    _snowEmission.rateOverTime = intensityVal * MAX_SNOW_RATE;
+                    _snowGroundEmission.rateOverTime = intensityVal * MAX_SNOW_GROUND_RATE;
                 }
                 if (!_snowPS.isPlaying) _snowPS.Play();
                 if (!_snowGroundPS.isPlaying) _snowGroundPS.Play();
@@ -190,9 +191,9 @@ namespace VoxelEngine.Weather
                 }
 
                 // Snow mist during heavy blizzards
-                if (isBlizzard && intensity > 0.4f)
+                if (isBlizzard && intensityVal > 0.4f)
                 {
-                    _splashEmission.rateOverTime = intensity * 50f;
+                    _splashEmission.rateOverTime = intensityVal * 50f;
                     if (!_splashPS.isPlaying) _splashPS.Play();
                 }
             }
@@ -203,6 +204,27 @@ namespace VoxelEngine.Weather
                     _lastSnowIntensity = 0f;
                     _snowEmission.rateOverTime = 0;
                     _snowGroundEmission.rateOverTime = 0;
+                }
+                if (_snowPS.isPlaying && !isSnow) _snowPS.Stop(true, ParticleSystemStopBehavior.StopEmitting);
+                if (_snowGroundPS.isPlaying && !isSnow)
+                {
+                    _snowGroundPS.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+                    _snowGroundPS.Clear();
+                }
+            }
+
+            // Immediate cleanup on completely clear weather
+            if (!isPrecip || intensityVal <= 0.005f)
+            {
+                if (_snowGroundPS.isPlaying || _snowGroundPS.particleCount > 0)
+                {
+                    _snowGroundPS.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+                    _snowGroundPS.Clear();
+                }
+                if (_splashPS.isPlaying && !isRain && !isBlizzard)
+                {
+                    _splashPS.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+                    _splashPS.Clear();
                 }
             }
 

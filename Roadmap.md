@@ -1,9 +1,9 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `9.25.0-dev`  
-**Roadmap Version:** `9.25.0-dev`  
-**Date:** 2026-09-01
+**Current Version:** `9.26.0-dev`  
+**Roadmap Version:** `9.26.0-dev`  
+**Date:** 2026-09-07
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
@@ -1084,8 +1084,12 @@ Statuses are evidence-based and move forward only after code/content review and 
     - Flak cannon block.
     - Requires power and ammunition.
 
-15. **Prospecting Tools**
-   - Ore detector, terrain scanner, sample drill.
+15. **Prospecting Tools & Geological Scanning**
+   - **Handheld Geological Prospecting Scanner (`ProspectingScanner`):** Field acoustic radar probe tool. Right-clicking the ground sends an acoustic wave up to 24 meters into subterranean voxels along the active planetary radial down vector, reporting nearest mineral vein depth and volume via color-coded HUD feedback. (Implemented 9.26.0-dev)
+   - **Spherical-Safe Radial Ore Detector (`GridOreDetector`):** Large grid scanning array projecting subterranean cones coreward on spherical planets and curved celestial bodies via `GravityProvider.ActiveBody.UpAt()`. (Implemented 9.26.0-dev)
+   - **Screen Telemetry Integration (`IGridDataProvider`):** Grid Ore Detectors broadcast live geological scan telemetry directly to connected `GridScreenBlock` LCD monitors. (Implemented 9.26.0-dev)
+   - **Step 59 Setup Wizard:** Non-destructive generation of scanner tool items, craft bench recipes, and registration. (Implemented 9.26.0-dev)
+   - Terrain core drill and acoustic seismic survey rig. (Upcoming)
 
 16. **Pollution & Industrial Threat Director**
    - Chunk/cell pollution accumulation for air, soil, and water.

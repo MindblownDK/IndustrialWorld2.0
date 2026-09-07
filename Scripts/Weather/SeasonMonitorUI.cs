@@ -16,15 +16,41 @@ namespace VoxelEngine.Weather
             var p = T.MachinePanel();
             p.style.width = 470;
 
+            bool isPowered = sm != null && sm.IsPowered;
             bool online = sm != null && sm.IsOnline;
+
             var (hdr, _, _, _) = T.HeaderRow("🔭 Planetary Observatory",
-                online ? "ACTIVE" : "OFFLINE",
-                online ? T.AccentGreen : T.AccentAmber);
+                isPowered ? "ONLINE" : "NO POWER",
+                isPowered ? T.AccentGreen : T.AccentAmber);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentCyan));
+            p.Add(T.AccentDivider(isPowered ? T.AccentCyan : T.AccentAmber));
             p.Add(T.Spacer(6));
 
             if (sm == null) return p;
+
+            if (!isPowered)
+            {
+                var warnBanner = new VisualElement();
+                warnBanner.style.backgroundColor = new StyleColor(new Color(0.35f, 0.20f, 0.05f, 0.85f));
+                warnBanner.style.borderTopWidth = 1; warnBanner.style.borderBottomWidth = 1;
+                warnBanner.style.borderLeftWidth = 1; warnBanner.style.borderRightWidth = 1;
+                warnBanner.style.borderTopColor = new StyleColor(T.AccentAmber);
+                warnBanner.style.borderBottomColor = new StyleColor(T.AccentAmber);
+                warnBanner.style.borderLeftColor = new StyleColor(T.AccentAmber);
+                warnBanner.style.borderRightColor = new StyleColor(T.AccentAmber);
+                warnBanner.style.borderTopLeftRadius = 4; warnBanner.style.borderTopRightRadius = 4;
+                warnBanner.style.borderBottomLeftRadius = 4; warnBanner.style.borderBottomRightRadius = 4;
+                warnBanner.style.paddingLeft = 8; warnBanner.style.paddingRight = 8;
+                warnBanner.style.paddingTop = 6; warnBanner.style.paddingBottom = 6;
+                warnBanner.style.marginBottom = 8;
+
+                var warnLabel = new Label("⚠ OBSERVATORY OFFLINE — REQUIRES 400 W BASE POWER");
+                warnLabel.style.fontSize = 10;
+                warnLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+                warnLabel.style.color = new StyleColor(T.AccentAmber);
+                warnBanner.Add(warnLabel);
+                p.Add(warnBanner);
+            }
 
             // Target Planet section
             p.Add(SectionTitle("Target Celestial Body"));
@@ -164,15 +190,15 @@ namespace VoxelEngine.Weather
             pwrRow.style.justifyContent = Justify.SpaceBetween;
             pwrRow.style.alignItems = Align.Center;
 
-            var pwrLabel = new Label("⚡ Power Draw: 40 W");
+            var pwrLabel = new Label(isPowered ? "⚡ Power Draw: 400 W (Grid Online)" : "⚡ Power Draw: 400 W (NO POWER)");
             pwrLabel.style.fontSize = 10;
-            pwrLabel.style.color = new StyleColor(new Color(0.60f, 0.65f, 0.75f));
+            pwrLabel.style.color = new StyleColor(isPowered ? new Color(0.60f, 0.65f, 0.75f) : T.AccentAmber);
             pwrRow.Add(pwrLabel);
 
-            var statusLabel = new Label("METEOROLOGICAL DOPPLER RADAR ONLINE");
+            var statusLabel = new Label(isPowered ? "METEOROLOGICAL DOPPLER RADAR ONLINE" : "RADAR DISH STANDBY (OFFLINE)");
             statusLabel.style.fontSize = 9;
             statusLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
-            statusLabel.style.color = new StyleColor(T.AccentGreen);
+            statusLabel.style.color = new StyleColor(isPowered ? T.AccentGreen : T.AccentAmber);
             pwrRow.Add(statusLabel);
             p.Add(pwrRow);
 

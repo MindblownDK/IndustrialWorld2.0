@@ -50,7 +50,7 @@ namespace VoxelEngine.GridSystem.UI
                 case GridDrill dr:          return MakeScrollable(DrillPanel(dr, slot));
                 case GridElectricFurnace ef: return MakeScrollable(FurnacePanel(ef, slot));
                 case GridBeacon bc:         return BeaconPanel(bc);
-                case GridOreDetector od:    return OreDetectorPanel(od);
+                case GridOreDetector od:    return MakeScrollable(OreDetectorPanel(od));
                 case GridBiofarm bio:      return MakeScrollable(BiofarmPanel(bio, slot));
                 case GridCryobed cryo:      return MakeScrollable(CryobedPanel(cryo));
                 case GridSlidingDoor door:  return SlidingDoorPanel(door);

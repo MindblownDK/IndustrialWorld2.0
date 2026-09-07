@@ -1,9 +1,31 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.25.0-dev`
+**Current Version:** `9.26.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.26.0-dev] Geological Prospecting Tools, Spherical Ore Detection & LCD Telemetry Screens
+
+**Type:** MINOR — Handheld Geological Prospecting Scanner tool for on-foot sub-surface acoustic radar surveying; spherical-safe radial coreward scanning for the Grid Ore Detector block; `IGridDataProvider` telemetry integration routing subterranean deposit readouts to `GridScreenBlock` LCD monitors; and Step 59 Setup Wizard authoring. Save-compatible.
+
+#### 📡 Handheld Geological Prospecting Scanner
+Field prospectors now have dedicated acoustic scanning gear for surveying mineral wealth on foot across any terrain:
+- **Acoustic Sub-Surface Sonar:** Equipping the Geological Prospecting Scanner (`Tool_ProspectingScanner.asset`) and right-clicking any voxel or terrain surface fires a focused acoustic radar wave down along the planet's radial down vector.
+- **24-Meter Deep Scan:** Probes subterranean voxel layers up to 24 meters deep across a conical survey volume, identifying solid mineral deposits (Iron, Copper, Coal, Nickel, Silicon, Cobalt, Silver, Gold, Magnesium, Platinum, Uranium).
+- **Rich Color-Coded HUD Feedback:** Displays instant telemetry badges via `BuildFeedbackHud.Show()` with mineral name, depth in meters, voxel volume, and ore-specific chromatic tint.
+- **Crafting Recipe:** Crafted at the Crafting Bench (2 Iron, 2 Copper, 1 Silicon/Circuit). Has 120 survey pings per tool.
+
+#### 🌐 Spherical-Safe Radial Ore Detector
+- **Coreward Radial Scan:** Updated `GridOreDetector.cs` to resolve celestial body radial down vectors dynamically using `GravityProvider.ActiveBody.UpAt(pos)`. Scan cones project accurately coreward into the planetary crust regardless of ship orientation or planetary latitude on spherical worlds.
+- **Scrollable UI:** Machine control panels now use `MakeScrollable` so extensive deposit lists never clip beyond screen bounds.
+
+#### 📺 LCD Screen Telemetry (`IGridDataProvider`)
+- **Live Screen Integration:** `GridOreDetector` implements `IGridDataProvider`, allowing `GridScreenBlock` monitors on ships and bases to display live subterranean geological radar telemetry, including deposit counts, depth, and ore types.
+- **Category & Source:** Tagged under "Prospecting" / "Ore Detector" in the grid block telemetry system.
+
+#### ⚙️ Setup Wizard Step 59
+- **Non-Destructive Authoring:** Step 59 in `Tools -> Voxel Engine -> Voxel Engine Setup` generates the scanner tool asset and crafting recipe while preserving custom balance tuning, existing materials, and research links.
 
 ### [9.25.0-dev] Planetary Seasons, Snowfall & Blizzards, Climate Screens & Weather Performance
 
@@ -32,7 +54,8 @@ Planets and moons now experience an astronomical 4-season cycle linked to Kepler
 Players can monitor local or distant planetary seasons from ship bridges, station terminals, and grand planetary ground observatories:
 
 - **`GridSeasonMonitor` Block:** A 1x1 large grid block (45 W) that connects to attached `GridScreenBlock` screens via `IGridDataProvider`. Fitted with accurate bounding collision.
-- **`StaticSeasonMonitor` (Grand Planetary Observatory):** A grand ground-placed observatory block (40 W) with an animated rotating meteorological Doppler dish, sensor mast, and interactive tilted holo-terminal. Sized with an accurate 2.0x2.2x2.0m BoxCollider.
+- **`StaticSeasonMonitor` (Grand Planetary Observatory):** A grand ground-placed observatory block (400 W) with an animated rotating meteorological Doppler dish, sensor mast, and interactive tilted holo-terminal. Sized with an accurate 2.0x2.2x2.0m BoxCollider and fully gated by `PowerConsumer` base electrical power.
+- **Audio & Particle State Gating:** Fixed weather state gating in `WeatherAudio.cs` and `WeatherParticles.cs` so explicit `LightRain` and `HeavyRain` states always play pristine rain audio beds and emit rain streaks regardless of biome noise. When weather shifts to `Clear`, all precipitation particles (including winter ground snow settling flakes) and audio beds are immediately cleared and muted.
 - **Interactive UI Panel & Right-Click Interaction:** Right-clicking either the grid or static Season Monitor opens a rich control panel with planet selector cycling (`◀` `[Planet]` `▶`), season badge (`❄ WINTER`, `☀ SUMMER`), season progress bar with day counters (`Day 32/90 (35%) • 58d left`), temperature readouts (effective, base, shift), and solar/wind modifiers.
 - **Persistent Material Assets:** Prefab generation authors persistent material assets in `AssetDatabase` via `MaterialPersister`, completely eliminating missing/magenta material artifacts.
 - **Screen Data Object (`PlanetSeasonData`):** ScriptableObject asset supporting custom authored season data bindings for HUDs and screens.

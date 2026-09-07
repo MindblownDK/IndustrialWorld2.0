@@ -179,12 +179,19 @@ namespace VoxelEngine.Weather
             if (_listener == null && wm.playerCamera != null) _listener = wm.playerCamera;
 
             float intensity = wm.LocalIntensity;   // silent once you are above the cloud deck
-            bool isSnow = wm.IsSnowBiome ||
-                          wm.CurrentState == WeatherState.Snow ||
-                          wm.CurrentState == WeatherState.Blizzard ||
-                          wm.TargetState == WeatherState.Snow ||
-                          wm.TargetState == WeatherState.Blizzard;
-            bool isRain = !isSnow && intensity > 0.02f;
+
+            bool isExplicitRain = wm.CurrentState == WeatherState.LightRain ||
+                                  wm.CurrentState == WeatherState.HeavyRain ||
+                                  wm.TargetState == WeatherState.LightRain ||
+                                  wm.TargetState == WeatherState.HeavyRain;
+
+            bool isExplicitSnow = wm.CurrentState == WeatherState.Snow ||
+                                  wm.CurrentState == WeatherState.Blizzard ||
+                                  wm.TargetState == WeatherState.Snow ||
+                                  wm.TargetState == WeatherState.Blizzard;
+
+            bool isSnow = isExplicitSnow || (!isExplicitRain && wm.IsSnowBiome && intensity > 0.02f);
+            bool isRain = isExplicitRain || (!isSnow && intensity > 0.02f);
 
             // Shelter probe (cheap; every 0.4 s).
             _roofCheckTimer += Time.deltaTime;
