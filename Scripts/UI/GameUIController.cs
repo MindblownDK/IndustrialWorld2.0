@@ -857,6 +857,7 @@ namespace VoxelEngine.UI
                     else if (gb is VoxelEngine.GridSystem.GridElectricFurnace gef) { if (gef.inputC == null) gef.OnPlaced(); WatchContainer(gef.inputC); WatchContainer(gef.outputC); }
                     else if (gb is VoxelEngine.GridSystem.GridGasTank ggt) { ggt.EnsureContainers(); WatchContainer(ggt.PortableSlot); }
                     else if (gb is VoxelEngine.GridSystem.GridBattery gridBattery) { gridBattery.EnsureContainers(); WatchContainer(gridBattery.ChargeSlot); }
+                    else if (gb is VoxelEngine.Pressure.GridAirVent airVent && airVent.fullBlock) { airVent.EnsureContainers(); WatchContainer(airVent.SuitDock); }
                     break;
                 case VoxelEngine.Storage.StorageTerminal st2: _openStorageTerminal = st2; break;
                 case VoxelEngine.Storage.PatternTerminal pt2: _openPatternTerminal = pt2; break;
@@ -5286,9 +5287,19 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                 openGridGas.EnsureContainers();
                 openGasDock = openGridGas.PortableSlot;
             }
+            // Same QoL for a full-block Ventilation Unit: shift-click an oxygen tank to dock it.
+            bool oxygenDock = false;
+            if (openGasDock == null && _openGridBlock is VoxelEngine.Pressure.GridAirVent openVent && openVent.fullBlock)
+            {
+                openVent.EnsureContainers();
+                openGasDock = openVent.SuitDock;
+                oxygenDock = true;
+            }
             if (sourceC == inventory.container && openGasDock != null)
             {
-                bool dockable = VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(srcStack.item)
+                bool dockable = oxygenDock
+                    ? VoxelEngine.Items.OxygenTankItem.IsOxygenTank(srcStack)
+                    : VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(srcStack.item)
                     || (srcStack.item is JetpackItem jpg && jpg.UsesHydrogenEffective);
                 if (dockable)
                 {
@@ -5565,6 +5576,11 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                 case VoxelEngine.GridSystem.GridGasTank gridGas:
                     gridGas.EnsureContainers();
                     return gridGas.PortableSlot;
+                // Full-block ventilation unit: oxygen tanks dock here to be refilled
+                // from the piped gas network (the slot's AcceptFilter guards the type).
+                case VoxelEngine.Pressure.GridAirVent airVent when airVent.fullBlock:
+                    airVent.EnsureContainers();
+                    return airVent.SuitDock;
                 case VoxelEngine.GridSystem.GridWeapon weapon:
                     return weapon.ammo;
                 case VoxelEngine.GridSystem.GridH2O2Generator h2:

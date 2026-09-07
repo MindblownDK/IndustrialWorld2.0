@@ -1,9 +1,77 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.27.1-dev`
+**Current Version:** `9.29.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.29.0-dev] Block Thermal Simulation, Atmospheric Entry & Ablative Heat Shields
+
+**Type:** MINOR — Adds a new save-compatible system: every hull block now tracks a real temperature, atmospheric entry can burn a ship apart, and ablative Heat Shields are what let you survive it. Existing saves load unchanged; ships without shields simply need shallower entries.
+
+#### 🌡️ Block Thermal Simulation
+
+- New `VoxelEngine.Thermal` namespace: `ThermalRules`, `GridThermalSystem`, `ThermalService`, `GridHeatshield` and `IHeatshieldBlock`.
+- `GridThermalSystem` attaches per grid and gives every block a temperature in °C driven by three sources — planetary ambient, atmospheric entry heating, and running thrusters.
+- Blocks **slew** toward their target temperature instead of snapping, so thermal mass is real: a steep re-entry is a commitment you cannot undo by throttling up. Cooling runs 1.6× faster than heating so a hull that survives actually recovers.
+- Above **800 °C** blocks take thermal damage, ramping to 26 HP/s at white heat.
+- Cold blocks are dropped from the tracking table and the solve runs on a 0.25 s interval, so a fleet of idle ships costs almost nothing.
+- `ThermalRules.AmbientTemperatureC` blends the planet's mean surface temperature toward −270 °C as air thins, so the hull sees the void in orbit and the planet on the ground.
+- A sealed, powered compartment is climate-controlled to 21 °C, so interior blocks don't freeze solid just because the ship is in orbit.
+
+#### 🔥 Atmospheric Entry
+
+- Entry heating scales with local air density and roughly the **square of speed**, from 220 m/s up to a 1750 °C stagnation temperature at 2600 m/s. A shallow entry through thin air is survivable; a steep fast one is not.
+- Heat is applied by **facing**: blocks on the leading face take the full load, sheltered blocks behind the hull take 35%.
+- Player hazard integration — `PlayerHazardService.HeatDamagePerSecond(position, true)` now adds up to 5 HP/s while you ride a burning hull, so re-entry threatens the crew and not just the ship. Armor Heat Tolerance still applies.
+
+#### 🛡️ Ablative Heat Shields
+
+- New `GridHeatshield` block (Large + Small). An intact shield passes only **12%** of incident entry heat, protecting itself *and* the block directly in the cell upstream of the airflow.
+- Shields burn a finite **ablator charge** (1000 units Large / 320 Small) instead of hull HP. Once spent, the shield remains as structure but no longer protects and overflow heat becomes real damage — a re-entry vehicle is a consumable to be serviced between drops.
+- `Refill(units)` restores charge, and ablator state is saved/restored additively (`hasHeatshieldState`), so a spent shield stays spent and legacy saves keep their full prefab charge.
+- New `Heatshield` mesh style: a tiled ablator face with a shallow dome, edge retention strips and a status lamp on the cold side.
+- Block telemetry reports temperature, thermal band and ablator percentage.
+
+#### 🚀 Engine Heat
+
+- Running thrusters heat themselves by up to 620 °C at full throttle and bleed up to 240 °C into directly adjacent blocks, scaled by `ThrustFraction` — burying an engine inside a hull now has a cost.
+
+#### 🖥️ HUD
+
+- The vitals HUD gains a **HULL** strip that stays hidden during normal flight and appears the moment the ship heats up, showing band (`WARM`/`HOT`/`CRITICAL`), peak temperature and a `RE-ENTRY` marker, colour-shifting from amber to red.
+
+#### 🛠️ Setup
+
+- **Step 61** authors the two Heat Shield blocks non-destructively and adds `GridThermalSystem` to every existing grid prefab, so already-built ships gain thermal simulation without being rebuilt. Recipes route through the Assembler and the `res_grid_utilities` research node.
+
+### [9.28.0-dev] Refillable Suit Tanks & the Full-Block Ventilation Unit
+
+**Type:** MINOR — Adds a new save-compatible system: oxygen tanks now hold a real, per-instance, refillable reserve, and a full-cell Ventilation Unit block services every compartment it touches and refills a docked tank. Existing saves load unchanged; legacy tanks read as full.
+
+#### 🫁 Refillable Suit-Tank Simulation
+
+- `OxygenTankItem` gains `capacityLitres` (600 L default) and `litresPerSecond` (1.2 L/s), plus per-instance helpers `IsOxygenTank`, `CapacityLitres`, `StoredLitres`, `SetStoredLitres`, `Fill01`, `AddLitres` and `TakeLitres`.
+- The reserve is stored per stack in `ItemStack.durability` as `litres + 1`, so it rides along with the existing save format with no migration. A `durability` of `0` marks a pre-9.28 stack and reads back as **FULL** — no one loses air on upgrade.
+- `PlayerEquipment` exposes `SuitTankLitres`, `SuitTankCapacityLitres`, `SuitTankFill01`, `SuitTankEmpty`, `ConsumeSuitOxygen(dt)` and `RefillSuitOxygen(litres)`. Tank burn is scaled by the helmet and armor oxygen-efficiency multipliers, so life-support upgrades now literally extend your air.
+- `HasBreathingKit` additionally requires gas in the tank: a sealed helmet with a dry bottle no longer protects you.
+- `PlayerStats` burns the tank whenever life support is actually carrying the player (vacuum or submerged) and refills it at 6 L/s from breathable air, so walking back into a pressurised room tops you off.
+- The vitals HUD gains a **TNK** strip that appears only while a tank is equipped and shifts amber then red as the reserve drains.
+- New life-support statuses `SUBMERGED · TANK EMPTY` and `VACUUM · TANK EMPTY` distinguish "no kit" from "kit, but out of air".
+
+#### 🏭 Ventilation Unit (Full-Block Chassis)
+
+- The Air Vent gained a `fullBlock` chassis flag. A panel vent stays a thin wall insert servicing the one room it faces; a Ventilation Unit fills an entire cell.
+- A full-block unit services **every sealed compartment touching it** rather than a single face. Pressurisation is shared across rooms in proportion to each one's deficit, so a whole deck comes up to pressure together instead of one room at a time.
+- Depressurisation drains all serviced rooms into the piped tanks, and any gas no room can accept is returned to the network — the vent can never create or destroy oxygen through rounding.
+- Adds a **suit-tank dock**: slot a portable oxygen tank into the unit and it refills at 40 L/s from the gas pipes. Shift-clicking a tank from your inventory docks it. The dock is filtered to oxygen tanks only, and its contents are saved and restored with the world.
+- New `AirVentFull` mesh style: a chunky cell housing with twin recessed intake grilles, side service panels, a plumbing manifold and a lit dock alcove. The fan spine eases up to speed and coasts back down based on whether the unit is really moving gas.
+- Block telemetry now reports aggregate pressure, volume, compartments served and docked-tank charge.
+
+#### 🛠️ Setup & Balance
+
+- Step 60 authors four blocks non-destructively (create-if-missing, preserve authored values): the existing Air Vent (Large/Small) plus `Grid_VentilationUnit_Large` (`gitem_vent_unit_large`, 140 kg, 900 HP, 90 L/s, 180 W active) and `Grid_VentilationUnit_Small` (`gitem_vent_unit_small`, 38 kg, 260 HP, 36 L/s, 70 W active).
+- Recipes route through the Assembler and the existing `res_grid_utilities` research node; both prefabs get the six `Port_GasIO` markers, since oxygen still reaches a vent only through pipes.
 
 ### [9.27.1-dev] Ambient Room Pressure, Crew Oxygen Draw & Pipe-Only Vent Supply
 

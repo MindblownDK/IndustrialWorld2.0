@@ -20,6 +20,12 @@ namespace VoxelEngine.UI
         private static VisualElement[] _hpSegments, _h2Segments, _hungerSegments, _oxySegments, _pwrSegments;
         private static Label _hpVal, _h2Val, _hungerVal, _oxyVal, _pwrVal;
         private static Label _oxyCode;
+        private static VisualElement[] _tankSegments;
+        private static Label _tankVal;
+        private static VisualElement _tankRow;
+        private static VisualElement _heatRow;
+        private static Label _heatLabel;
+        private static float _prevTank;
         private static VisualElement _pwrRow;
         private static VisualElement _roomRow;
         private static Label _roomLabel;
@@ -73,13 +79,20 @@ namespace VoxelEngine.UI
             _oxyVal = oxygenRow.value;
             _oxyCode = oxygenRow.code;
             AddGap(2);
+            // Suit reserve: only shown while an oxygen tank is actually equipped.
+            var tankRow = AddVitalRow("TNK", new Color(0.45f, 0.80f, 0.95f), out _tankRow);
+            _tankSegments = tankRow.segments;
+            _tankVal = tankRow.value;
+            _tankRow.style.display = DisplayStyle.None;
+            AddGap(2);
             var powerRow = AddVitalRow("PWR", new Color(0.64f, 0.86f, 0.44f), out _pwrRow);
             _pwrSegments = powerRow.segments;
             _pwrVal = powerRow.value;
             _pwrRow.style.display = DisplayStyle.None;
             BuildRoomRow();
+            BuildHeatRow();
 
-            _prevHp = _prevH2 = _prevHunger = _prevOxy = _prevPwr = -1f;
+            _prevHp = _prevH2 = _prevHunger = _prevOxy = _prevPwr = _prevTank = -1f;
         }
 
         /// <summary>Sealed-room pressure strip. Hidden entirely when the player is not
@@ -115,6 +128,71 @@ namespace VoxelEngine.UI
 
             _roomRow.style.display = DisplayStyle.None;
             _container.Add(_roomRow);
+        }
+
+        /// <summary>Hull thermal strip. Appears only when the ship the player is riding
+        /// actually starts heating, so it reads as an alarm rather than clutter.</summary>
+        private static void BuildHeatRow()
+        {
+            _heatRow = new VisualElement { name = "VitalLcd_HEAT" };
+            _heatRow.style.height = 16;
+            _heatRow.style.marginTop = 3;
+            _heatRow.style.paddingLeft = 5;
+            _heatRow.style.paddingRight = 5;
+            _heatRow.style.flexDirection = FlexDirection.Row;
+            _heatRow.style.alignItems = Align.Center;
+            _heatRow.style.justifyContent = Justify.SpaceBetween;
+            _heatRow.pickingMode = PickingMode.Ignore;
+            LcdHudTheme.ApplyScreen(_heatRow, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.85f), 1f);
+
+            var code = new Label("HULL");
+            code.style.fontSize = 8;
+            code.style.letterSpacing = 1f;
+            code.style.unityFontStyleAndWeight = FontStyle.Bold;
+            code.style.color = new StyleColor(T.TextMuted);
+            code.pickingMode = PickingMode.Ignore;
+            _heatRow.Add(code);
+
+            _heatLabel = new Label("—");
+            _heatLabel.style.fontSize = 8;
+            _heatLabel.style.letterSpacing = 0.6f;
+            _heatLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _heatLabel.style.color = new StyleColor(LcdHudTheme.Phosphor);
+            _heatLabel.pickingMode = PickingMode.Ignore;
+            _heatRow.Add(_heatLabel);
+
+            _heatRow.style.display = DisplayStyle.None;
+            _container.Add(_heatRow);
+        }
+
+        private static void TickHeatRow()
+        {
+            if (_heatRow == null || _heatLabel == null) return;
+
+            var player = PlayerStats.Instance;
+            var thermal = player != null
+                ? VoxelEngine.Thermal.ThermalService.NearestTo(player.transform.position, 40f)
+                : null;
+
+            // Stay hidden until the hull is at least warm — no strip during normal flight.
+            var band = thermal != null
+                ? VoxelEngine.Thermal.ThermalRules.Band(thermal.PeakTemperatureC)
+                : VoxelEngine.Thermal.ThermalBand.Nominal;
+
+            if (thermal == null || band == VoxelEngine.Thermal.ThermalBand.Nominal)
+            {
+                if (_heatRow.style.display != DisplayStyle.None)
+                    _heatRow.style.display = DisplayStyle.None;
+                return;
+            }
+
+            if (_heatRow.style.display != DisplayStyle.Flex)
+                _heatRow.style.display = DisplayStyle.Flex;
+
+            string label = VoxelEngine.Thermal.ThermalRules.BandLabel(band);
+            string entry = thermal.EntryHeatingC > 1f ? "  RE-ENTRY" : string.Empty;
+            _heatLabel.text = $"{label}  {thermal.PeakTemperatureC:0}\u00B0C{entry}";
+            _heatLabel.style.color = new StyleColor(VoxelEngine.Thermal.ThermalRules.BandColor(band));
         }
 
         private static void TickRoomRow()
@@ -193,8 +271,10 @@ namespace VoxelEngine.UI
             UpdateValue(_oxySegments, _oxyVal, stats.Oxygen, stats.MaxOxygen, ref _prevOxy, oxygenColor, false);
             if (_oxyCode != null) _oxyCode.style.color = new StyleColor(oxygenColor);
 
+            TickSuitTankRow();
             TickPowerRow();
             TickRoomRow();
+            TickHeatRow();
         }
 
         private static (VisualElement[] segments, Label value, Label code) AddVitalRow(string code, Color signalColor)
@@ -287,6 +367,33 @@ namespace VoxelEngine.UI
             if (fill > 0.50f) return nominal;
             if (fill > 0.25f) return Color.Lerp(T.AccentAmber, nominal, (fill - 0.25f) / 0.25f);
             return Color.Lerp(T.AccentRed, T.AccentAmber, fill / 0.25f);
+        }
+
+        /// <summary>
+        /// Suit oxygen reserve strip. Hidden unless a tank is equipped, and it turns
+        /// amber then red as the reserve runs down so the player gets a warning while
+        /// there is still time to get back inside.
+        /// </summary>
+        private static void TickSuitTankRow()
+        {
+            if (_tankRow == null) return;
+
+            var equipment = FindPlayerEquipment();
+            float cap = equipment != null ? equipment.SuitTankCapacityLitres : 0f;
+            if (equipment == null || cap <= 0f)
+            {
+                if (_tankRow.style.display != DisplayStyle.None)
+                    _tankRow.style.display = DisplayStyle.None;
+                _prevTank = -1f;
+                return;
+            }
+
+            if (_tankRow.style.display != DisplayStyle.Flex)
+                _tankRow.style.display = DisplayStyle.Flex;
+
+            float litres = equipment.SuitTankLitres;
+            UpdateValue(_tankSegments, _tankVal, litres, cap, ref _prevTank,
+                ResolveSignal(cap > 0f ? litres / cap : 0f, new Color(0.45f, 0.80f, 0.95f)), false);
         }
 
         /// <summary>All hydrogen the player can currently burn: portable tanks plus equipped pack fuel.</summary>

@@ -62,6 +62,19 @@ namespace VoxelEngine.EditorTools
                 new (ItemDefinition, int)[] { (ironPlate, 2), (copperWire, 2), (circuit, 1) },
                 ref created, ref preserved, recipes, items);
 
+            // ── Ventilation Unit (full-block chassis, Large + Small grid) ──────
+            // Occupies a whole cell, services every adjacent compartment and carries a
+            // suit-tank dock, so it is the hub of a proper life-support deck.
+            AuthorVent(GridSize.Large, "Grid_VentilationUnit_Large", "gitem_vent_unit_large",
+                "Ventilation Unit", 140f, 900f, 90f,
+                new (ItemDefinition, int)[] { (steelPlate, 6), (ironPlate, 8), (copperWire, 6), (circuit, 3) },
+                ref created, ref preserved, recipes, items, fullBlock: true);
+
+            AuthorVent(GridSize.Small, "Grid_VentilationUnit_Small", "gitem_vent_unit_small",
+                "Ventilation Unit (Small)", 38f, 260f, 36f,
+                new (ItemDefinition, int)[] { (steelPlate, 2), (ironPlate, 3), (copperWire, 3), (circuit, 2) },
+                ref created, ref preserved, recipes, items, fullBlock: true);
+
             // ── Retrofit existing doors as airtight bulkheads ──────────────────
             int doorsSealed = 0, doorsPreserved = 0;
             foreach (string guid in AssetDatabase.FindAssets("t:Prefab", new[] { PREFABS }))
@@ -119,6 +132,8 @@ namespace VoxelEngine.EditorTools
                 "• Air Vent blocks: " + created + " created, " + preserved + " preserved\n" +
                 "• Doors made airtight: " + doorsSealed + " (" + doorsPreserved + " already sealed)\n" +
                 "• Recipes registered and linked to Grid Utilities research\n\n" +
+                "Ventilation Units (full-block) service EVERY sealed room they touch and refill a "+
+                "docked oxygen tank — place one at a junction between compartments.\n\n" +
                 "Runtime: enclose a volume with airtight blocks and closed doors, place an Air Vent " +
                 "in the wall, feed it oxygen from the grid gas network, and set it to PRESSURISE. " +
                 "A pressurised room is breathable without a sealed suit — even in hard vacuum.\n\n" +
@@ -130,7 +145,8 @@ namespace VoxelEngine.EditorTools
             string displayName, float mass, float hp, float flow,
             (ItemDefinition item, int count)[] inputs,
             ref int created, ref int preserved,
-            List<RecipeDefinition> recipes, List<ItemDefinition> items)
+            List<RecipeDefinition> recipes, List<ItemDefinition> items,
+            bool fullBlock = false)
         {
             string prefabPath = PREFABS + "/" + prefabName + ".prefab";
             bool existing = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath) != null;
@@ -157,8 +173,9 @@ namespace VoxelEngine.EditorTools
             visuals.transform.SetParent(root.transform, false);
             try
             {
-                GridBlockMeshBuilder.Build(visuals, GridBlockMeshBuilder.Style.AirVent, size,
-                    new Color(0.30f, 0.62f, 0.78f));
+                GridBlockMeshBuilder.Build(visuals,
+                    fullBlock ? GridBlockMeshBuilder.Style.AirVentFull : GridBlockMeshBuilder.Style.AirVent,
+                    size, new Color(0.30f, 0.62f, 0.78f));
             }
             finally { GridBlockMeshBuilder.MaterialPersister = null; }
 
@@ -166,17 +183,24 @@ namespace VoxelEngine.EditorTools
             var col = root.GetComponent<BoxCollider>();
             if (col == null) col = root.AddComponent<BoxCollider>();
             col.center = Vector3.zero;
-            col.size = new Vector3(cs, cs, cs * 0.32f);
+            // The panel vent is a thin wall insert; the plant occupies the whole cell.
+            col.size = fullBlock ? new Vector3(cs, cs, cs) : new Vector3(cs, cs, cs * 0.32f);
 
             var vent = root.GetComponent<GridAirVent>();
             if (vent == null) vent = root.AddComponent<GridAirVent>();
             vent.blockName = displayName;
             vent.airtight = true;
+            vent.fullBlock = fullBlock;
+            if (fullBlock && vent.suitRefillLitresPerSecond <= 0f) vent.suitRefillLitresPerSecond = 40f;
             // Preserve authored balance: only fill in unset values.
             if (vent.flowLitresPerSecond <= 0f) vent.flowLitresPerSecond = flow;
             if (vent.targetPressureAtm <= 0f) vent.targetPressureAtm = 1.0f;
-            if (vent.activeWatts <= 0f) vent.activeWatts = size == GridSize.Large ? 60f : 25f;
-            if (vent.idleWatts <= 0f) vent.idleWatts = size == GridSize.Large ? 4f : 2f;
+            if (vent.activeWatts <= 0f)
+                vent.activeWatts = fullBlock ? (size == GridSize.Large ? 180f : 70f)
+                                             : (size == GridSize.Large ? 60f : 25f);
+            if (vent.idleWatts <= 0f)
+                vent.idleWatts = fullBlock ? (size == GridSize.Large ? 12f : 5f)
+                                           : (size == GridSize.Large ? 4f : 2f);
             if (vent.BlockMass <= 0f) vent.BlockMass = mass;
             if (vent.maxHP <= 0f) vent.maxHP = hp;
 
@@ -201,7 +225,9 @@ namespace VoxelEngine.EditorTools
 
             item.itemId = itemId;
             item.displayName = displayName;
-            item.description = "Bulkhead air vent. Pressurises or depressurises the sealed room it faces using oxygen from the grid gas network.";
+            item.description = fullBlock
+                ? "Full-cell ventilation plant. Pressurises or depressurises every sealed room touching it, and refills a docked oxygen tank from the grid gas network."
+                : "Bulkhead air vent. Pressurises or depressurises the sealed room it faces using oxygen from the grid gas network.";
             item.iconTint = new Color(0.35f, 0.75f, 0.92f);
             if (item.maxStack <= 0) item.maxStack = 99;
             if (item.massPerUnit <= 0f) item.massPerUnit = size == GridSize.Large ? 2f : 0.5f;

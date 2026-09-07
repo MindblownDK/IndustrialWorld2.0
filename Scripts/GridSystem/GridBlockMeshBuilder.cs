@@ -17,7 +17,7 @@ namespace VoxelEngine.GridSystem
             Armor, Cockpit, Thruster, Battery, Cargo, Drill, Grinder, Refinery,
             Weapon, DockingPort, Wheel, LandingGear, SolarPanel, Reactor,
             LiquidTank, GasTank, H2O2, HydrogenEngine, ChemicalPlant, Glass, Demolisher, ItemPipe,
-            GasPipe, LiquidPipe, Gyroscope, Beacon, OreDetector, SeasonMonitor, AirVent, Generic
+            GasPipe, LiquidPipe, Gyroscope, Beacon, OreDetector, SeasonMonitor, AirVent, AirVentFull, Heatshield, Generic
         }
 
         private static Shader Lit => Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
@@ -71,6 +71,8 @@ namespace VoxelEngine.GridSystem
                 case Style.OreDetector: BuildOreDetector(root, cs, body, metal, glow); break;
                 case Style.SeasonMonitor: BuildSeasonMonitor(root, cs, body, metal, glow); break;
                 case Style.AirVent:      BuildAirVent(root, cs, body, metal, glow); break;
+                case Style.AirVentFull:  BuildAirVentFull(root, cs, body, metal, glow); break;
+                case Style.Heatshield:   BuildHeatshield(root, cs, body, metal, glow); break;
                 default:                 BuildArmor(root, cs, body, metal); break;
             }
         }
@@ -417,6 +419,74 @@ namespace VoxelEngine.GridSystem
             foreach (var c in Corners(e))
                 Box(r, metal, new Vector3(c.x, c.z, -cs * 0.15f), new Vector3(sz, sz, sz));
             Sphere(r, glow, new Vector3(cs * 0.30f, -cs * 0.32f, -cs * 0.20f), cs * 0.08f);
+        }
+
+        private static void BuildAirVentFull(GameObject r, float cs, Material body, Material metal, Material glow)
+        {
+            // A complete cell of ventilation plant: chunky housing, twin intake grilles
+            // on opposite faces, a fan spine and a lit suit-dock alcove.
+            Box(r, body, V0, new Vector3(cs * 0.96f, cs * 0.96f, cs * 0.96f));
+
+            // Twin recessed intake faces (front and back).
+            foreach (float sign in new[] { -1f, 1f })
+            {
+                float z = sign * cs * 0.47f;
+                Box(r, metal, new Vector3(0, 0, z), new Vector3(cs * 0.72f, cs * 0.72f, cs * 0.05f));
+                for (int i = -2; i <= 2; i++)
+                    Box(r, metal, new Vector3(0, i * cs * 0.145f, z - sign * cs * 0.03f),
+                        new Vector3(cs * 0.64f, cs * 0.045f, cs * 0.05f));
+            }
+
+            // Fan spine running through the unit.
+            var hub = Cyl(r, metal, V0, cs * 0.16f, cs * 0.62f);
+            hub.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            hub.name = "Generated_VentFanHub";
+
+            // Side service panels + plumbing manifold.
+            Box(r, metal, new Vector3(cs * 0.49f, 0f, 0f), new Vector3(cs * 0.04f, cs * 0.60f, cs * 0.60f));
+            Box(r, metal, new Vector3(-cs * 0.49f, 0f, 0f), new Vector3(cs * 0.04f, cs * 0.60f, cs * 0.60f));
+            Cyl(r, metal, new Vector3(cs * 0.30f, cs * 0.49f, 0f), cs * 0.07f, cs * 0.16f);
+
+            // Suit-dock alcove with status glow.
+            Box(r, body, new Vector3(-cs * 0.24f, -cs * 0.30f, -cs * 0.44f),
+                new Vector3(cs * 0.30f, cs * 0.24f, cs * 0.10f));
+            Box(r, glow, new Vector3(-cs * 0.24f, -cs * 0.30f, -cs * 0.50f),
+                new Vector3(cs * 0.24f, cs * 0.18f, cs * 0.02f));
+
+            // Corner bracing on all eight corners of the cell.
+            float e = cs * 0.42f, sz = cs * 0.10f;
+            foreach (var c in Corners(e))
+                Box(r, metal, c, new Vector3(sz, sz, sz));
+        }
+
+        private static void BuildHeatshield(GameObject r, float cs, Material body, Material metal, Material glow)
+        {
+            // A thin ablative tile pack: backing plate, a slightly domed ablator face
+            // scored into tiles, and edge retention strips.
+            Box(r, metal, new Vector3(0f, 0f, cs * 0.40f), new Vector3(cs * 0.96f, cs * 0.96f, cs * 0.14f));
+
+            // Ablator tiles on the leading face.
+            const int n = 3;
+            float tile = cs * 0.29f, gap = cs * 0.305f;
+            for (int x = 0; x < n; x++)
+                for (int y = 0; y < n; y++)
+                {
+                    float px = (x - 1) * gap, py = (y - 1) * gap;
+                    // Centre tiles stand slightly proud, reading as a shallow dome.
+                    float depth = (x == 1 && y == 1) ? cs * 0.28f : cs * 0.31f;
+                    Box(r, body, new Vector3(px, py, depth), new Vector3(tile, tile, cs * 0.10f));
+                }
+
+            // Edge retention strips.
+            float h = cs * 0.46f, t = cs * 0.06f;
+            Box(r, metal, new Vector3(0f, h, cs * 0.34f), new Vector3(cs * 0.96f, t, cs * 0.22f));
+            Box(r, metal, new Vector3(0f, -h, cs * 0.34f), new Vector3(cs * 0.96f, t, cs * 0.22f));
+            Box(r, metal, new Vector3(h, 0f, cs * 0.34f), new Vector3(t, cs * 0.96f, cs * 0.22f));
+            Box(r, metal, new Vector3(-h, 0f, cs * 0.34f), new Vector3(t, cs * 0.96f, cs * 0.22f));
+
+            // Small status lamp on the cold side so you can spot a spent shield.
+            Box(r, glow, new Vector3(cs * 0.34f, -cs * 0.34f, cs * 0.31f),
+                new Vector3(cs * 0.10f, cs * 0.10f, cs * 0.02f));
         }
 
         // ── primitive helpers ─────────────────────────────────────────────────────

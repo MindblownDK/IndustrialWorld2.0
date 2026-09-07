@@ -591,6 +591,18 @@ namespace VoxelEngine.EditorTools
                 "Re-runnable. Idempotent. Slide tuning, power draws and balance values are preserved.");
             AddWizardButton(scroll, "60. Wire Airtight Rooms, Pressure & Air Vents (Sealed Rooms, Vents, Bulkhead Doors \u2014 Non-Destructive)", () => VoxelEngine.EditorTools.AirtightSystemSetup.RunStep60(), 56);
 
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
+                "Step 61 (9.29.0) wires BLOCK THERMAL SIMULATION, ATMOSPHERIC ENTRY & HEAT SHIELDS (non-destructive):\n" +
+                "  • Authors the HEAT SHIELD grid block in Large and Small sizes (prefab, item, recipe)\n" +
+                "  • Every hull block tracks a real temperature from planetary ambient, entry\n" +
+                "    heating and running thrusters; above 800 \u00B0C blocks start to burn\n" +
+                "  • Shields ablate a finite charge to protect themselves AND the block behind them\n" +
+                "  • Adds GridThermalSystem to every existing grid prefab so built ships are covered\n" +
+                "  • Recipes registered and linked to the Grid Utilities research node\n" +
+                "Re-runnable. Idempotent. Block HP, mass and power draws are preserved.");
+            AddWizardButton(scroll, "61. Wire Thermal Simulation, Atmospheric Entry & Heat Shields (Hull Heating, Ablative Shields \u2014 Non-Destructive)", () => VoxelEngine.EditorTools.ThermalSystemSetup.RunStep61(), 56);
+
             AddSpacer(scroll, 20);
         }
 

@@ -811,8 +811,55 @@ namespace VoxelEngine.Player
             if (playerStats != null) playerStats.equippedArmor = EquippedArmor;
         }
 
-        public bool HasBreathingKit => EquippedHelmet != null && EquippedHelmet.sealedHelmet && EquippedOxygenTank != null;
+        /// <summary>The equipped tank's stack, carrying its per-instance oxygen reserve.</summary>
+        public ItemStack EquippedOxygenTankStack
+        {
+            get
+            {
+                EnsureContainers();
+                return _oxygenTankSlots.GetSlot(0);
+            }
+        }
+
+        /// <summary>Litres of oxygen left in the worn tank.</summary>
+        public float SuitTankLitres => OxygenTankItem.StoredLitres(EquippedOxygenTankStack);
+
+        /// <summary>Full capacity of the worn tank in litres.</summary>
+        public float SuitTankCapacityLitres => OxygenTankItem.CapacityLitres(EquippedOxygenTankStack);
+
+        /// <summary>Fill fraction of the worn tank, for gauges.</summary>
+        public float SuitTankFill01 => OxygenTankItem.Fill01(EquippedOxygenTankStack);
+
+        /// <summary>True when a sealed helmet is paired with a tank that still has gas.</summary>
+        public bool HasBreathingKit => EquippedHelmet != null && EquippedHelmet.sealedHelmet
+            && EquippedOxygenTank != null && SuitTankLitres > 0.01f;
+
+        /// <summary>A sealed helmet + tank is worn, but the tank has run dry.</summary>
+        public bool SuitTankEmpty => EquippedHelmet != null && EquippedHelmet.sealedHelmet
+            && EquippedOxygenTank != null && SuitTankLitres <= 0.01f;
+
         public float BonusOxygen => HasBreathingKit ? Mathf.Max(0f, EquippedOxygenTank.bonusOxygen) : 0f;
+
+        /// <summary>
+        /// Burns the worn tank while life support is actually carrying the player.
+        /// Returns the litres consumed (0 when nothing is worn or the tank is dry).
+        /// </summary>
+        public float ConsumeSuitOxygen(float seconds)
+        {
+            if (seconds <= 0f) return 0f;
+            var stack = EquippedOxygenTankStack;
+            if (!OxygenTankItem.IsOxygenTank(stack)) return 0f;
+            if (EquippedHelmet == null || !EquippedHelmet.sealedHelmet) return 0f;
+
+            var tank = (OxygenTankItem)stack.item;
+            float want = Mathf.Max(0f, tank.litresPerSecond) * seconds * ArmorOxygenEfficiencyMultiplier;
+            return OxygenTankItem.TakeLitres(stack, want);
+        }
+
+        /// <summary>Refills the worn tank. Returns the litres actually accepted.</summary>
+        public float RefillSuitOxygen(float litres)
+            => OxygenTankItem.AddLitres(EquippedOxygenTankStack, litres);
+
         public float OxygenDrainMultiplier
         {
             get

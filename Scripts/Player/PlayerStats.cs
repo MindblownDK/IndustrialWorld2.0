@@ -63,6 +63,8 @@ namespace VoxelEngine.Player
         public float baseSprintMultiplier = 1.6f;
         public float baseMaxHunger      = 100f;
         public float baseMaxOxygen      = 100f;
+        /// <summary>Litres/second a worn suit tank refills at while breathing good air.</summary>
+        private const float SuitTankAmbientRefillLps = 6f;
         public int   baseBackpackSlots  = 30;     // matches Inventory.BACKPACK_SIZE
 
         [Header("Stamina")]
@@ -138,6 +140,10 @@ namespace VoxelEngine.Player
 
             if (oxygenBlocked)
             {
+                // A sealed kit only protects while the tank still holds gas. Burning
+                // the tank here is what makes refilling it a real part of the loop.
+                if (hasSealedKit) equipment.ConsumeSuitOxygen(Time.deltaTime);
+
                 float baseDrain = CurrentOxygenEnvironment == OxygenEnvironment.Vacuum ? 9f : 5f;
                 // An unsealed player loses breathable reserve rapidly in vacuum.
                 if (CurrentOxygenEnvironment == OxygenEnvironment.Vacuum && !hasSealedKit) baseDrain *= 2f;
@@ -153,12 +159,19 @@ namespace VoxelEngine.Player
             else
             {
                 Oxygen = Mathf.Min(MaxOxygen, Oxygen + Time.deltaTime * 25f); // fast recharge in breathable air
+
+                // Breathable air also trickle-refills a worn suit tank, so returning
+                // to a pressurised room or a habitable surface tops you back up.
+                if (equipment != null) equipment.RefillSuitOxygen(Time.deltaTime * SuitTankAmbientRefillLps);
             }
 
+            bool tankDry = equipment != null && equipment.SuitTankEmpty;
             LifeSupportStatus = CurrentOxygenEnvironment switch
             {
-                OxygenEnvironment.Underwater => hasSealedKit ? "SUBMERGED · SEALED" : "SUBMERGED · HOLDING BREATH",
-                OxygenEnvironment.Vacuum => hasSealedKit ? "VACUUM · LIFE SUPPORT" : "VACUUM · NO LIFE SUPPORT",
+                OxygenEnvironment.Underwater => hasSealedKit ? "SUBMERGED · SEALED"
+                    : tankDry ? "SUBMERGED · TANK EMPTY" : "SUBMERGED · HOLDING BREATH",
+                OxygenEnvironment.Vacuum => hasSealedKit ? "VACUUM · LIFE SUPPORT"
+                    : tankDry ? "VACUUM · TANK EMPTY" : "VACUUM · NO LIFE SUPPORT",
                 _ => InPressurisedRoom ? "ROOM PRESSURISED" : "BREATHABLE",
             };
 
@@ -321,7 +334,7 @@ namespace VoxelEngine.Player
         {
             bool tookDamage = false;
 
-            float heatDamage = PlayerHazardService.HeatDamagePerSecond();
+            float heatDamage = PlayerHazardService.HeatDamagePerSecond(transform.position, true);
             if (heatDamage > 0f)
             {
                 float multiplier = equipment != null ? equipment.HeatDamageMultiplier : 1f;

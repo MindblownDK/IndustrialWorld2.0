@@ -973,6 +973,14 @@ namespace VoxelEngine.Persistence
                 return SerializeContainer(gridGas.PortableSlot);
             }
 
+            // Full-block ventilation unit: persist the docked suit tank (and its reserve).
+            var airVent = go.GetComponentInChildren<VoxelEngine.Pressure.GridAirVent>();
+            if (airVent != null && airVent.fullBlock)
+            {
+                airVent.EnsureContainers();
+                return SerializeContainer(airVent.SuitDock);
+            }
+
             return null;
         }
 
@@ -1180,6 +1188,12 @@ namespace VoxelEngine.Persistence
                         savedBlock.liquidTankType = (int)liquidTankBlock.liquidType;
                         savedBlock.liquidTankStored = liquidTankBlock.stored;
                         savedBlock.liquidTankMode = (int)liquidTankBlock.mode;
+                    }
+
+                    if (block is VoxelEngine.Thermal.GridHeatshield heatshield)
+                    {
+                        savedBlock.hasHeatshieldState = true;
+                        savedBlock.heatshieldAblator = heatshield.ablatorRemaining;
                     }
 
                     if (block is GridBattery gridBattery)
@@ -1454,6 +1468,10 @@ namespace VoxelEngine.Persistence
                         restoredGridLiquid.mode = (GridTankMode)saved.liquidTankMode;
                     restoredGridLiquid.stored = Mathf.Clamp(saved.liquidTankStored, 0f, restoredGridLiquid.capacity);
                 }
+
+                if (saved.hasHeatshieldState && block is VoxelEngine.Thermal.GridHeatshield restoredShield)
+                    restoredShield.ablatorRemaining =
+                        Mathf.Clamp(saved.heatshieldAblator, 0f, restoredShield.ablatorCapacity);
 
                 if (saved.hasGridBatteryState && block is GridBattery restoredGridBattery)
                 {
@@ -2078,6 +2096,14 @@ namespace VoxelEngine.Persistence
                 return;
             }
 
+            var airVent = go.GetComponentInChildren<VoxelEngine.Pressure.GridAirVent>();
+            if (airVent != null && airVent.fullBlock)
+            {
+                airVent.EnsureContainers();
+                DeserializeInto(airVent.SuitDock, sc);
+                return;
+            }
+
             var armorUpgradeStation = go.GetComponentInChildren<VoxelEngine.Combat.ArmorUpgradeStation>(true);
             if (armorUpgradeStation != null)
             {
@@ -2378,6 +2404,10 @@ namespace VoxelEngine.Persistence
             public int liquidTankMode;
             // Additive grid-battery state. Stored charge is required for autonomous
             // dampeners to hold a restored ship still before a generator spins up.
+            // Additive heat-shield ablator charge. Legacy saves leave the flag false and
+            // keep the prefab's full charge, so old ships are never restored pre-burnt.
+            public bool hasHeatshieldState;
+            public float heatshieldAblator;
             public bool hasGridBatteryState;
             public float gridBatteryStoredWh;
             public int gridBatteryMode;
