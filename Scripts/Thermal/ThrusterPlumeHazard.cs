@@ -1,7 +1,8 @@
 // Assets/Scripts/VoxelEngine/Thermal/ThrusterPlumeHazard.cs
 //
-// Makes thruster exhaust a real hazard for everything that is NOT the firing grid
-// (the grid's own hull is solved inside GridThermalSystem):
+// Makes thruster exhaust (and, since 9.31.0, maritime exhaust stacks) a real hazard
+// for everything that is NOT the firing grid (the grid's own hull is solved inside
+// GridThermalSystem):
 //
 //   • other grids          — heat is injected into the target grid's thermal system,
 //                            so a parked ship behind your nozzles heats, glows and
@@ -155,7 +156,7 @@ namespace VoxelEngine.Thermal
                     type = DamageType.Fire,
                     point = col.bounds.center,
                     direction = plume.ExhaustDir,
-                    source = plume.Thruster != null ? plume.Thruster.gameObject : null,
+                    source = plume.Source != null ? plume.Source.gameObject : null,
                 });
             }
         }

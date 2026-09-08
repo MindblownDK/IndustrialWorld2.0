@@ -241,6 +241,14 @@ namespace VoxelEngine.UI
                        $"Brush Range:  {t.brushRadius:0.0}\n" +
                        $"Durability:   {stack.durability} / {t.maxDurability}";
             }
+            if (item is VoxelEngine.GridSystem.GridBlockItem gb)
+            {
+                // Roadmap 5.1 item 8: every grid block shows its heat tolerance.
+                float tolerance = VoxelEngine.Thermal.ThermalRules.ToleranceC(gb);
+                return $"Block HP:       {gb.blockHP:0}\n" +
+                       $"Mass:           {VoxelEngine.Items.MassFormat.Format(gb.blockMass)}\n" +
+                       $"Heat Tolerance: {tolerance:0} °C";
+            }
             if (item is BlockItem b)
             {
                 return $"Block HP:       {b.blockHealth}\n" +

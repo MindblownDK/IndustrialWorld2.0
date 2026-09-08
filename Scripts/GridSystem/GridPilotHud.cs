@@ -789,7 +789,13 @@ namespace VoxelEngine.GridSystem
                     {
                         string hullLabel = band == VoxelEngine.Thermal.ThermalBand.Critical ? "HULL BURNING"
                             : band == VoxelEngine.Thermal.ThermalBand.Hot ? "HULL HOT" : "HULL WARM";
-                        _environmentLabel.text += $" · {hullLabel} {thermal.PeakTemperatureC:0}°C";
+                        // Name the block in trouble: "HULL BURNING 640°C GLASS PANE" tells the pilot
+                        // it is the canopy failing, not the armour.
+                        var worst = thermal.WorstBlock;
+                        string worstName = worst != null && !string.IsNullOrEmpty(worst.blockName)
+                            ? $" {worst.blockName.ToUpperInvariant()}"
+                            : string.Empty;
+                        _environmentLabel.text += $" · {hullLabel} {thermal.WorstBlockTemperatureC:0}°C{worstName}";
                         _environmentLabel.style.color = new StyleColor(VoxelEngine.Thermal.ThermalRules.BandColor(band));
                     }
                 }

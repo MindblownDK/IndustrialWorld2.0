@@ -24,7 +24,7 @@ using VoxelEngine.GridSystem;
 
 namespace VoxelEngine.Maritime
 {
-    public class GridExhaustPipe : MaritimeBlockBase
+    public class GridExhaustPipe : MaritimeBlockBase, VoxelEngine.Thermal.IExhaustPlumeSource
     {
         public override MechanicalNodeType NodeType => MechanicalNodeType.ExhaustPipe;
 
@@ -148,10 +148,44 @@ namespace VoxelEngine.Maritime
         /// <summary>True if any adjacent engine is currently venting exhaust gas.</summary>
         public bool IsVenting => _venting;
 
+        // ── Heat source + exhaust plume (9.31.0) ─────────────────────────────
+        // The stack casing runs hot while gas moves through it, and the gas leaving
+        // the +Z outlet is a real (if comparatively cool) plume: it heats the hull
+        // plates it blows across, a parked ship above a funnel, or a player on deck.
+        // A seized engine belching black smoke pushes considerably more heat.
+
+        /// <summary>0..1 vent intensity resolved on the last frame (exhaust backlog against the 50-unit reference).</summary>
+        public float VentLoad01 { get; private set; }
+
+        public float SelfHeatC => VentLoad01 > 0.001f
+            ? VoxelEngine.Thermal.ThermalRules.ExhaustPipeSelfHeatC * VentLoad01 * (_anyCriticalLastFrame ? 1.35f : 1f)
+            : 0f;
+
+        public float NeighbourHeatC => VentLoad01 > 0.001f
+            ? VoxelEngine.Thermal.ThermalRules.ExhaustPipeNeighbourHeatC * VentLoad01 * (_anyCriticalLastFrame ? 1.35f : 1f)
+            : 0f;
+
+        public float PlumeLoad01 => VentLoad01;
+
+        public Vector3 PlumeOrigin
+        {
+            get
+            {
+                float cs = Grid != null ? Grid.gridSize.CellSize() : 2.5f;
+                return transform.position + transform.forward * (cs * 0.52f);
+            }
+        }
+
+        public Vector3 PlumeDirection => transform.forward;
+
+        public float PlumeScale => VoxelEngine.Thermal.ThermalRules.ExhaustPipePlumeScale * (_anyCriticalLastFrame ? 1.4f : 1f);
+
+        private bool _anyCriticalLastFrame;
+
         private void Update()
         {
             if (_needsOrient) AutoOrientToEngine();
-            if (_smokeFX == null) return;
+            if (_smokeFX == null) { VentLoad01 = 0f; return; }
 
             // Scan adjacent engines, keeping the strongest exhaust source as the
             // profile anchor while aggregating module modifiers across all of them.
@@ -201,14 +235,17 @@ namespace VoxelEngine.Maritime
             }
 
             var emission = _smokeFX.emission;
+            _anyCriticalLastFrame = anyCritical;
             if (!_venting || anchor == null)
             {
                 emission.rateOverTime = 0f;
+                VentLoad01 = 0f;
                 return;
             }
 
             var main = _smokeFX.main;
             float intensity = Mathf.Clamp01(maxExhaust / 50f);
+            VentLoad01 = intensity;
 
             // ── Tier profile ────────────────────────────────────────
             Color baseColor;

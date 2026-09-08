@@ -8,7 +8,7 @@ using VoxelEngine.Items;
 
 namespace VoxelEngine.GridSystem
 {
-    public class GridPortableReactor : GridBlock
+    public class GridPortableReactor : GridBlock, VoxelEngine.Thermal.IHeatSourceBlock
     {
         [Header("Reactor")]
         public ItemDefinition leuPelletItem;
@@ -26,6 +26,13 @@ namespace VoxelEngine.GridSystem
         public bool IsRunning { get; private set; }
 
         public override float PowerOutput => Enabled && IsRunning ? wattsOutput : 0f;
+
+        // ── Heat source (9.31.0) ─────────────────────────────────────────────
+        // The pellet reactor is shielded, so its casing stays comparatively mild, but
+        // it never stops radiating while a pellet burns: a reactor boxed into a hull
+        // with no air gap slowly cooks its neighbours.
+        public float SelfHeatC => Enabled && IsRunning ? VoxelEngine.Thermal.ThermalRules.PortableReactorSelfHeatC : 0f;
+        public float NeighbourHeatC => Enabled && IsRunning ? VoxelEngine.Thermal.ThermalRules.PortableReactorNeighbourHeatC : 0f;
 
         private float _burnTimer;
 

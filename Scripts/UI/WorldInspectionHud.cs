@@ -410,7 +410,7 @@ namespace VoxelEngine.UI
                 if (thermal != null)
                 {
                     float temp = thermal.TemperatureOf(gridBlock);
-                    var band = VoxelEngine.Thermal.ThermalRules.Band(temp);
+                    var band = VoxelEngine.Thermal.ThermalRules.Band(gridBlock, temp);
                     if (band != VoxelEngine.Thermal.ThermalBand.Nominal)
                     {
                         string thermalText = $"{VoxelEngine.Thermal.ThermalRules.BandLabel(band)} {temp:0}°C";

@@ -89,6 +89,97 @@ namespace VoxelEngine.Thermal
         /// <summary>Peak °C a running thruster adds to a directly adjacent block (conduction).</summary>
         public const float ThrusterNeighbourHeatC = 240f;
 
+        // ── Machine heat sources (IHeatSourceBlock) ────────────────────────────
+        // Peak surface temperatures (°C above ambient) of working machinery, and the
+        // share conducted into each face neighbour. Every value is a casing/surface
+        // temperature, not the process temperature inside the machine.
+
+        /// <summary>Hydrogen Engine (electric generator burning H2) casing at full output.</summary>
+        public const float HydrogenEngineSelfHeatC = 420f;
+        public const float HydrogenEngineNeighbourHeatC = 150f;
+
+        /// <summary>Portable fission reactor casing while a pellet burns. Shielded, so mild.</summary>
+        public const float PortableReactorSelfHeatC = 260f;
+        public const float PortableReactorNeighbourHeatC = 90f;
+
+        /// <summary>Electric furnace shell while smelting.</summary>
+        public const float FurnaceSelfHeatC = 560f;
+        public const float FurnaceNeighbourHeatC = 200f;
+
+        /// <summary>Maritime diesel block surface at 100 percent mechanical load. Big engines run hotter.</summary>
+        public const float MaritimeEngineSelfHeatC = 520f;
+        public const float MaritimeEngineNeighbourHeatC = 220f;
+        /// <summary>Extra self heat once a maritime engine is knocking or seized (no coolant flow, oil burning).</summary>
+        public const float MaritimeEngineFaultHeatC = 380f;
+        /// <summary>Per-tier multiplier for maritime engine surface heat: Small, Medium, Giant.</summary>
+        public static float MaritimeEngineTierScale(int tier) => tier switch
+        {
+            0 => 0.75f,
+            1 => 1.00f,
+            _ => 1.30f,
+        };
+
+        /// <summary>Maritime generator casing at full electrical output.</summary>
+        public const float MaritimeGeneratorSelfHeatC = 330f;
+        public const float MaritimeGeneratorNeighbourHeatC = 120f;
+
+        /// <summary>Exhaust stack casing while venting at full rate.</summary>
+        public const float ExhaustPipeSelfHeatC = 480f;
+        public const float ExhaustPipeNeighbourHeatC = 190f;
+        /// <summary>Exhaust stack gas stream relative to a thruster plume (much cooler, but still a hazard).</summary>
+        public const float ExhaustPipePlumeScale = 0.34f;
+
+        // ── Heat tolerance per block family ───────────────────────────────────
+        // Roadmap 5.1 item 8: every grid block has a heat tolerance shown in its
+        // description. The base threshold is steel hull plate; glass and electronics
+        // fail earlier, engines and shields are built for it. A block starts taking
+        // damage above its tolerance and burns at full rate BlockDamageSpanC above it.
+
+        /// <summary>Glass panes and windows.</summary>
+        public const float GlassToleranceC = 520f;
+        /// <summary>Screens, cameras, sensors, beacons, lights, batteries and other electronics.</summary>
+        public const float ElectronicsToleranceC = 600f;
+        /// <summary>Crew spaces: cockpits, cryobeds, helms, consoles, biofarms.</summary>
+        public const float HabitatToleranceC = 700f;
+        /// <summary>Thrusters, engines, generators, reactors, furnaces, exhaust stacks: built hot.</summary>
+        public const float MachineryToleranceC = 1100f;
+        /// <summary>Ablative heat shields while intact.</summary>
+        public const float HeatshieldToleranceC = 1900f;
+
+        /// <summary>Heat tolerance (°C) of a block: the temperature at which it starts taking damage.</summary>
+        public static float ToleranceC(GridBlock block)
+        {
+            if (block == null) return BlockDamageThresholdC;
+            if (block is IHeatshieldBlock shield) return shield.ShieldIntact ? HeatshieldToleranceC : BlockDamageThresholdC;
+            if (block is IHeatSourceBlock || block is GridThruster) return MachineryToleranceC;
+            if (block is GridGlassBlock) return GlassToleranceC;
+            if (block is GridCockpit || block is GridCryobed || block is GridBiofarm) return HabitatToleranceC;
+            if (block is GridScreenBlock || block is GridCameraBlock || block is GridBeacon
+                || block is GridOreDetector || block is GridLocatorBlock || block is GridSeasonMonitor
+                || block is GridBattery || block is GridSolarPanel || block is VoxelEngine.Simulation.GridLightBlock)
+                return ElectronicsToleranceC;
+            return BlockDamageThresholdC;
+        }
+
+        /// <summary>Short family label for panels and tooltips.</summary>
+        public static string ToleranceFamily(GridBlock block)
+        {
+            float t = ToleranceC(block);
+            if (t >= HeatshieldToleranceC) return "ABLATIVE";
+            if (t >= MachineryToleranceC) return "MACHINERY";
+            if (t >= BlockDamageThresholdC) return "STRUCTURAL";
+            if (t >= HabitatToleranceC) return "HABITAT";
+            if (t >= ElectronicsToleranceC) return "ELECTRONICS";
+            return "GLASS";
+        }
+
+        /// <summary>Heat tolerance (°C) of a grid block item, resolved from its prefab; used by inventory tooltips.</summary>
+        public static float ToleranceC(GridBlockItem item)
+        {
+            if (item == null || item.blockPrefab == null) return BlockDamageThresholdC;
+            return ToleranceC(item.blockPrefab.GetComponent<GridBlock>());
+        }
+
         // ── Thruster exhaust plume ─────────────────────────────────────────────
         // The plume is the column of hot gas leaving the nozzle. Anything standing in
         // it — the ship's own hull, a parked grid, a landing pad, the player — is
@@ -116,7 +207,8 @@ namespace VoxelEngine.Thermal
         /// <summary>Fire damage per second dealt to a creature standing in a full-power plume core.</summary>
         public const float PlumeCreatureDamagePerSecond = 9f;
 
-        /// <summary>Relative plume temperature per engine family. Ion exhaust is fast but thin.</summary>
+        /// <summary>Relative plume temperature per thruster family. Ion exhaust is fast but thin.
+        /// Exhaust stacks use <see cref="ExhaustPipePlumeScale"/> through IExhaustPlumeSource.</summary>
         public static float PlumeScale(ThrusterType type) => type switch
         {
             ThrusterType.Ion => 0.45f,
@@ -284,13 +376,21 @@ namespace VoxelEngine.Thermal
             return PlumeCoreTemperatureC * load01 * radial * axial;
         }
 
-        /// <summary>Damage per second a block takes at a given temperature.</summary>
+        /// <summary>Damage per second a block takes at a given temperature (steel-plate tolerance).</summary>
         public static float BlockDamagePerSecond(float temperatureC)
+            => BlockDamagePerSecond(temperatureC, BlockDamageThresholdC);
+
+        /// <summary>Damage per second at a given temperature for a block with the given heat tolerance.</summary>
+        public static float BlockDamagePerSecond(float temperatureC, float toleranceC)
         {
-            if (temperatureC <= BlockDamageThresholdC) return 0f;
-            float severity = Mathf.Clamp01((temperatureC - BlockDamageThresholdC) / BlockDamageSpanC);
+            if (temperatureC <= toleranceC) return 0f;
+            float severity = Mathf.Clamp01((temperatureC - toleranceC) / BlockDamageSpanC);
             return MaxBlockDamagePerSecond * severity;
         }
+
+        /// <summary>Damage per second for a specific block, honouring its family tolerance.</summary>
+        public static float BlockDamagePerSecond(GridBlock block, float temperatureC)
+            => BlockDamagePerSecond(temperatureC, ToleranceC(block));
 
         /// <summary>
         /// Effective rate at which a block moves toward its target temperature this tick.
@@ -309,12 +409,25 @@ namespace VoxelEngine.Thermal
         }
 
         public static ThermalBand Band(float temperatureC)
+            => Band(temperatureC, BlockDamageThresholdC);
+
+        /// <summary>
+        /// Band relative to a specific tolerance: CRITICAL means "taking damage now", HOT
+        /// means 60 percent of the way there (480 °C for hull plate, 660 °C for machinery,
+        /// so a thruster at full throttle reads WARM rather than alarming), WARM means too
+        /// hot to touch.
+        /// </summary>
+        public static ThermalBand Band(float temperatureC, float toleranceC)
         {
-            if (temperatureC >= BlockDamageThresholdC) return ThermalBand.Critical;
-            if (temperatureC >= 450f) return ThermalBand.Hot;
+            if (temperatureC >= toleranceC) return ThermalBand.Critical;
+            if (temperatureC >= toleranceC * 0.6f) return ThermalBand.Hot;
             if (temperatureC >= 120f) return ThermalBand.Warm;
             return ThermalBand.Nominal;
         }
+
+        /// <summary>Band for a specific block, honouring its family tolerance.</summary>
+        public static ThermalBand Band(GridBlock block, float temperatureC)
+            => Band(temperatureC, ToleranceC(block));
 
         public static string BandLabel(ThermalBand band) => band switch
         {

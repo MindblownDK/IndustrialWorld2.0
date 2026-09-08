@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace VoxelEngine.GridSystem
 {
-    public class GridHydrogenEngine : GridBlock
+    public class GridHydrogenEngine : GridBlock, VoxelEngine.Thermal.IHeatSourceBlock
     {
         [Header("Hydrogen Engine")]
         [Tooltip("Electrical output while hydrogen is available.")]
@@ -35,6 +35,12 @@ namespace VoxelEngine.GridSystem
 
         public override float PowerOutput => Enabled && IsRunning ? wattsOutput : 0f;
         public override float ContentMass => internalHydrogen * 0.05f;
+
+        // ── Heat source (9.31.0) ─────────────────────────────────────────────
+        // A burning hydrogen generator runs a hot casing; the blocks around it warm
+        // up and the engine itself shows heat glow while it runs.
+        public float SelfHeatC => Enabled && IsRunning ? VoxelEngine.Thermal.ThermalRules.HydrogenEngineSelfHeatC : 0f;
+        public float NeighbourHeatC => Enabled && IsRunning ? VoxelEngine.Thermal.ThermalRules.HydrogenEngineNeighbourHeatC : 0f;
 
         public override void OnPlaced()
         {

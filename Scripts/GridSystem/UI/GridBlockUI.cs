@@ -2109,11 +2109,17 @@ namespace VoxelEngine.GridSystem.UI
             if (block == null || block.Grid == null) return;
             var thermal = block.Grid.GetComponent<VoxelEngine.Thermal.GridThermalSystem>();
             float temp = thermal != null ? thermal.TemperatureOf(block) : VoxelEngine.Thermal.ThermalRules.FallbackAmbientC;
-            var band = VoxelEngine.Thermal.ThermalRules.Band(temp);
+            float tolerance = VoxelEngine.Thermal.ThermalRules.ToleranceC(block);
+            var band = VoxelEngine.Thermal.ThermalRules.Band(temp, tolerance);
             string label = VoxelEngine.Thermal.ThermalRules.BandLabel(band);
             panel.Add(T.StatRow("🌡", "Temperature", $"{temp:0} °C · {label}", VoxelEngine.Thermal.ThermalRules.BandColor(band)));
+            // Tolerance is per block family (9.31.0): glass and electronics fail first,
+            // hull plate at 800 °C, machinery is built hot, intact shields ablate.
             panel.Add(T.StatRow("🔥", "Heat Tolerance",
-                $"{VoxelEngine.Thermal.ThermalRules.BlockDamageThresholdC:0} °C", T.TextSecondary));
+                $"{tolerance:0} °C · {VoxelEngine.Thermal.ThermalRules.ToleranceFamily(block)}", T.TextSecondary));
+            if (block is VoxelEngine.Thermal.IHeatSourceBlock source && source.SelfHeatC > 1f)
+                panel.Add(T.StatRow("♨", "Heat Output",
+                    $"+{source.SelfHeatC:0} °C self · +{source.NeighbourHeatC:0} °C neighbours", T.AccentAmber));
         }
 
         // ── AIR VENT / ROOM PRESSURE ─────────────────────────────────────────

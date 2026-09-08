@@ -21,7 +21,7 @@ using VoxelEngine.Items;
 
 namespace VoxelEngine.Maritime
 {
-    public class GridMaritimeGenerator : MaritimeBlockBase, IGridDataProvider
+    public class GridMaritimeGenerator : MaritimeBlockBase, IGridDataProvider, VoxelEngine.Thermal.IHeatSourceBlock
     {
         public override MechanicalNodeType NodeType => MechanicalNodeType.Generator;
 
@@ -70,6 +70,32 @@ namespace VoxelEngine.Maritime
         public bool CriticalFailure { get; private set; }
         /// <summary>0..1 heat normalized against the critical point (UI bars).</summary>
         public float Heat01 => Mathf.Clamp01(TemperatureC / GridMaritimeEngine.CriticalTemperatureC);
+
+        // ── Grid heat source (9.31.0) ────────────────────────────────────────
+        // Casing heat follows electrical load; a tripped generator radiates what its
+        // windings hold until it cools below the recovery point.
+        public float SelfHeatC
+        {
+            get
+            {
+                if (!Enabled) return 0f;
+                float load = EffectiveMaxWattOutput > 0.01f ? Mathf.Clamp01(GeneratedWatts / EffectiveMaxWattOutput) : 0f;
+                float heat = VoxelEngine.Thermal.ThermalRules.MaritimeGeneratorSelfHeatC * load;
+                if (CriticalFailure) heat = Mathf.Max(heat, VoxelEngine.Thermal.ThermalRules.MaritimeGeneratorSelfHeatC * 0.6f * Heat01);
+                return heat;
+            }
+        }
+
+        public float NeighbourHeatC
+        {
+            get
+            {
+                float self = SelfHeatC;
+                if (self <= 0f) return 0f;
+                return self * (VoxelEngine.Thermal.ThermalRules.MaritimeGeneratorNeighbourHeatC
+                               / VoxelEngine.Thermal.ThermalRules.MaritimeGeneratorSelfHeatC);
+            }
+        }
         /// <summary>≥ 100°C or latched — thermal shutdown, output shaft power rejected.</summary>
         public bool IsCriticalHeat => CriticalFailure;
 

@@ -42,6 +42,25 @@ namespace VoxelEngine.Maritime
         /// <summary>True while a maritime numeric field owns keyboard input.</summary>
         public static bool IsNumericInputFocused { get; private set; }
 
+        /// <summary>
+        /// Hull-side heat of a working machine (9.31.0): what the block does to the
+        /// plates around it, as opposed to its internal coolant temperature above.
+        /// </summary>
+        private static void AddHullHeatRows(VisualElement p, GridBlock block)
+        {
+            if (block is not VoxelEngine.Thermal.IHeatSourceBlock source || block.Grid == null) return;
+            var thermal = block.Grid.GetComponent<VoxelEngine.Thermal.GridThermalSystem>();
+            float surface = thermal != null ? thermal.TemperatureOf(block) : VoxelEngine.Thermal.ThermalRules.FallbackAmbientC;
+            float tolerance = VoxelEngine.Thermal.ThermalRules.ToleranceC(block);
+            var band = VoxelEngine.Thermal.ThermalRules.Band(surface, tolerance);
+            p.Add(T.StatRow("♨", "Casing Surface",
+                $"{surface:0}°C · {VoxelEngine.Thermal.ThermalRules.BandLabel(band)} · tolerance {tolerance:0}°C",
+                VoxelEngine.Thermal.ThermalRules.BandColor(band)));
+            if (source.SelfHeatC > 1f)
+                p.Add(T.StatRow("🔥", "Heat Output",
+                    $"+{source.SelfHeatC:0}°C self · +{source.NeighbourHeatC:0}°C into neighbours", T.AccentAmber));
+        }
+
         /// <summary>Entry point — called by GridBlockUI.BuildPanel for maritime blocks.</summary>
         public static VisualElement BuildPanel(GridBlock block, MachineUIs.SlotBuilder slot = null)
         {
@@ -236,6 +255,7 @@ namespace VoxelEngine.Maritime
             p.Add(T.Muted(eng.HasThermalPerformanceUpgrade
                 ? "Performance hardware installed — high mechanical load can push this engine past the stock thermal envelope."
                 : "Stock thermal governor active — without performance hardware this engine is capped at 89°C."));
+            AddHullHeatRows(p, eng);
 
             if (eng.CriticalFailure)
             {
@@ -388,6 +408,7 @@ namespace VoxelEngine.Maritime
             p.Add(T.StatRow("🌡", "Temperature", $"{gen.TemperatureC:0}°C", heatColor));
             var (heatBar, _) = T.ProgressBar(gen.Heat01, heatColor, 6, false);
             p.Add(heatBar);
+            AddHullHeatRows(p, gen);
             if (gen.CriticalFailure)
             {
                 p.Add(T.Spacer(4));

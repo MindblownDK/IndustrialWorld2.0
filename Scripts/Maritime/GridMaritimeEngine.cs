@@ -50,7 +50,7 @@ namespace VoxelEngine.Maritime
         Giant = 2,
     }
 
-    public class GridMaritimeEngine : MaritimeBlockBase, IGridDataProvider
+    public class GridMaritimeEngine : MaritimeBlockBase, IGridDataProvider, VoxelEngine.Thermal.IHeatSourceBlock
     {
         private const string TurboAttachmentNamePrefix = "Turbo attachment point ";
         private static Material _turboAttachmentMaterial;
@@ -165,6 +165,37 @@ namespace VoxelEngine.Maritime
 
         /// <summary>0..1 engine heat normalized against the critical point (UI bars).</summary>
         public float Heat01 => Mathf.Clamp01(TemperatureC / CriticalTemperatureC);
+
+        // ── Grid heat source (9.31.0) ────────────────────────────────────────
+        // The internal coolant model above decides whether the ENGINE survives; this
+        // is what the engine does to the HULL around it. Surface heat follows real
+        // mechanical load and grows with the engine's tier; a knocking or seized engine
+        // with no coolant flow radiates far more than a healthy one.
+        public float SelfHeatC
+        {
+            get
+            {
+                if (!Enabled) return 0f;
+                float scale = VoxelEngine.Thermal.ThermalRules.MaritimeEngineTierScale((int)tier);
+                float load = IsRunning ? Mathf.Max(MechanicalLoad01, EngineSpeed01 * 0.5f) : 0f;
+                float heat = VoxelEngine.Thermal.ThermalRules.MaritimeEngineSelfHeatC * load * scale;
+                if (CriticalFailure || (IsRunning && IsOverheating))
+                    heat += VoxelEngine.Thermal.ThermalRules.MaritimeEngineFaultHeatC * scale * Mathf.Clamp01(Heat01);
+                return heat;
+            }
+        }
+
+        public float NeighbourHeatC
+        {
+            get
+            {
+                float self = SelfHeatC;
+                if (self <= 0f) return 0f;
+                float ratio = VoxelEngine.Thermal.ThermalRules.MaritimeEngineNeighbourHeatC
+                              / VoxelEngine.Thermal.ThermalRules.MaritimeEngineSelfHeatC;
+                return self * ratio;
+            }
+        }
         /// <summary>≥ 90°C — engine knocks and burns 25% more fuel for the same work.</summary>
         public bool IsOverheating => TemperatureC >= KnockingTemperatureC;
         /// <summary>≥ 100°C or latched failure — output shaft is stopped mechanically.</summary>

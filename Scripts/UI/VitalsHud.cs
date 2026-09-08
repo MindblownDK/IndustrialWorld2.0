@@ -312,9 +312,9 @@ namespace VoxelEngine.UI
                 : null;
 
             // Stay hidden until the hull is at least warm — no strip during normal flight.
-            var band = thermal != null
-                ? VoxelEngine.Thermal.ThermalRules.Band(thermal.PeakTemperatureC)
-                : VoxelEngine.Thermal.ThermalBand.Nominal;
+            // The band is the worst block judged against ITS tolerance (9.31.0), so a
+            // failing glass pane raises the alarm even while the steel is merely warm.
+            var band = thermal != null ? thermal.WorstBand : VoxelEngine.Thermal.ThermalBand.Nominal;
 
             if (thermal == null || band == VoxelEngine.Thermal.ThermalBand.Nominal)
             {
@@ -330,10 +330,16 @@ namespace VoxelEngine.UI
             string entry = thermal.EntryHeatingC > 1f ? "  RE-ENTRY" : string.Empty;
             // Trend arrow: is the hull still heating or already cooling down? A hull
             // stays hot for minutes now, so "cooling" is useful information.
-            float peak = thermal.PeakTemperatureC;
+            float peak = thermal.WorstBlockTemperatureC;
             string trend = peak > _prevHullPeak + 0.5f ? " \u25B2" : peak < _prevHullPeak - 0.5f ? " \u25BC" : string.Empty;
             _prevHullPeak = Mathf.Lerp(_prevHullPeak, peak, 0.2f);
-            _heatLabel.text = $"{label}  {peak:0}\u00B0C{trend}{entry}";
+            // Name the failing family when it is not plain hull plate ("CRITICAL 540°C GLASS").
+            var worst = thermal.WorstBlock;
+            string family = worst != null
+                && VoxelEngine.Thermal.ThermalRules.ToleranceC(worst) != VoxelEngine.Thermal.ThermalRules.BlockDamageThresholdC
+                ? "  " + VoxelEngine.Thermal.ThermalRules.ToleranceFamily(worst)
+                : string.Empty;
+            _heatLabel.text = $"{label}  {peak:0}\u00B0C{trend}{family}{entry}";
             _heatLabel.style.color = new StyleColor(VoxelEngine.Thermal.ThermalRules.BandColor(band));
         }
         private static float _prevHullPeak;

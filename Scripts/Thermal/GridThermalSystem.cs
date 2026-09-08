@@ -7,10 +7,18 @@
 //   • entry heat    — ploughing through atmosphere at speed, applied to the
 //                     leading face and attenuated by heatshields
 //   • engine heat   — running thrusters cook themselves and conduct into neighbours
+//   • machine heat  — any IHeatSourceBlock (hydrogen engines, maritime diesels and
+//                     generators, reactors, furnaces, exhaust stacks) heats itself and
+//                     its face neighbours while it works (9.31.0)
 //   • plume heat    — the exhaust column itself: any block of THIS grid standing in
-//                     a nozzle's blast is heated by the hot gas (9.30.0). Blocks of
-//                     other grids, static base blocks and the player are handled by
-//                     ThrusterPlumeHazard, which reads the same plume model.
+//                     a nozzle's or exhaust stack's blast is heated by the hot gas
+//                     (9.30.0 / 9.31.0). Blocks of other grids, static base blocks and
+//                     the player are handled by ThrusterPlumeHazard, which reads the
+//                     same plume model.
+//
+// Damage honours the block's heat tolerance family (ThermalRules.ToleranceC): glass
+// and electronics fail first, hull plate at 800 °C, machinery is built hot, intact
+// heat shields ablate instead of breaking.
 //
 // Blocks slew toward their target temperature rather than snapping, so thermal
 // mass is real: committing to a steep re-entry cannot be undone by throttling up,
@@ -43,19 +51,23 @@ namespace VoxelEngine.Thermal
         private readonly List<GridBlock> _blockSnapshot = new();
         private readonly List<PlumeSource> _plumes = new();
 
-        /// <summary>A running nozzle on this grid, cached per tick for plume queries.</summary>
+        /// <summary>A running nozzle or venting exhaust stack on this grid, cached per tick for plume queries.</summary>
         public readonly struct PlumeSource
         {
-            public readonly GridThruster Thruster;
+            /// <summary>Block emitting the plume: a GridThruster or an IExhaustPlumeSource block.</summary>
+            public readonly GridBlock Source;
             public readonly Vector3 Nozzle;
             public readonly Vector3 ExhaustDir;
             public readonly float CellSize;
             public readonly float Load01;
             public readonly float Scale;
 
-            public PlumeSource(GridThruster thruster, Vector3 nozzle, Vector3 exhaustDir, float cellSize, float load01, float scale)
+            /// <summary>The emitting thruster, or null when the plume comes from an exhaust stack.</summary>
+            public GridThruster Thruster => Source as GridThruster;
+
+            public PlumeSource(GridBlock source, Vector3 nozzle, Vector3 exhaustDir, float cellSize, float load01, float scale)
             {
-                Thruster = thruster; Nozzle = nozzle; ExhaustDir = exhaustDir;
+                Source = source; Nozzle = nozzle; ExhaustDir = exhaustDir;
                 CellSize = cellSize; Load01 = load01; Scale = scale;
             }
 
@@ -82,10 +94,20 @@ namespace VoxelEngine.Thermal
         /// <summary>Active exhaust plumes on this grid (empty when every engine is idle).</summary>
         public IReadOnlyList<PlumeSource> Plumes => _plumes;
 
-        /// <summary>True while any block is hot enough to be taking damage.</summary>
-        public bool IsBurning => PeakTemperatureC >= ThermalRules.BlockDamageThresholdC;
+        /// <summary>True while any block is hot enough to be taking damage (per its own tolerance).</summary>
+        public bool IsBurning => WorstBand == ThermalBand.Critical;
 
-        public ThermalBand Band => ThermalRules.Band(PeakTemperatureC);
+        /// <summary>Worst thermal band on the grid, judged per block against each block's tolerance.</summary>
+        public ThermalBand Band => WorstBand;
+
+        /// <summary>Worst band solved on the last tick (see <see cref="Band"/>).</summary>
+        public ThermalBand WorstBand { get; private set; } = ThermalBand.Nominal;
+
+        /// <summary>The block in the worst thermal state on the last tick, or null when everything is nominal.</summary>
+        public GridBlock WorstBlock { get; private set; }
+
+        /// <summary>Temperature of <see cref="WorstBlock"/> on the last tick.</summary>
+        public float WorstBlockTemperatureC { get; private set; } = ThermalRules.FallbackAmbientC;
 
         private void Awake() => _grid = GetComponent<GridEntity>();
 
@@ -179,6 +201,10 @@ namespace VoxelEngine.Thermal
             CollectPlumes();
 
             float peak = ambient;
+            var worstBand = ThermalBand.Nominal;
+            GridBlock worstBlock = null;
+            float worstTemperature = ambient;
+            float worstSeverity = float.NegativeInfinity;
             _scratch.Clear();
 
             // Snapshot first: burning through a block removes it from the grid's block
@@ -200,20 +226,33 @@ namespace VoxelEngine.Thermal
                 float rate = ThermalRules.SlewRate(current, target, ambient);
                 float next = Mathf.Lerp(current, target, 1f - Mathf.Exp(-rate * dt));
 
-                float burn = ThermalRules.BlockDamagePerSecond(next);
+                // Damage honours the block family: glass at 520 °C, electronics at 600 °C,
+                // hull plate at 800 °C, machinery at 1100 °C. An intact heat shield burns
+                // ablator instead of structure; the shield's own tolerance is far higher.
+                float tolerance = ThermalRules.ToleranceC(block);
                 bool destroyed = false;
-                if (burn > 0f)
+                if (block is GridHeatshield shield && shield.ShieldIntact)
                 {
-                    // Ablate shields first: that is precisely what they are for.
-                    if (block is GridHeatshield shield && shield.ShieldIntact)
-                        shield.Ablate(burn * dt);
-                    else
-                        destroyed = block.Damage(burn * dt);
+                    float shieldBurn = ThermalRules.BlockDamagePerSecond(next, ThermalRules.BlockDamageThresholdC);
+                    if (shieldBurn > 0f) shield.Ablate(shieldBurn * dt);
+                }
+                else
+                {
+                    float burn = ThermalRules.BlockDamagePerSecond(next, tolerance);
+                    if (burn > 0f) destroyed = block.Damage(burn * dt);
                 }
 
                 if (destroyed) { _scratch.Add(block); continue; }
 
                 if (next > peak) peak = next;
+                // The HUD asks "is anything on this hull failing?", which for a glass
+                // canopy happens well below the steel threshold. Track the worst band.
+                var blockBand = ThermalRules.Band(next, tolerance);
+                float severity = next - tolerance;   // how far past (or short of) failure
+                if (blockBand > worstBand || (blockBand == worstBand && blockBand != ThermalBand.Nominal && severity > worstSeverity))
+                {
+                    worstBand = blockBand; worstBlock = block; worstTemperature = next; worstSeverity = severity;
+                }
 
                 bool nearAmbient = Mathf.Abs(next - ambient) <= TrackingBandC && Mathf.Abs(target - ambient) <= TrackingBandC;
                 if (nearAmbient) _scratch.Add(block);
@@ -235,23 +274,36 @@ namespace VoxelEngine.Thermal
             _externalHeat?.Clear();
 
             PeakTemperatureC = peak;
+            WorstBand = worstBand;
+            WorstBlock = worstBlock;
+            WorstBlockTemperatureC = worstTemperature;
         }
 
-        /// <summary>Cache nozzle poses for every running thruster on this grid.</summary>
+        /// <summary>Cache nozzle poses for every running thruster and venting exhaust stack on this grid.</summary>
         private void CollectPlumes()
         {
             _plumes.Clear();
             foreach (var block in _grid.AllBlocks)
             {
-                if (block is not GridThruster thruster) continue;
-                float load = ThrusterLoad01(thruster);
-                if (load <= 0.001f) continue;
+                if (block is GridThruster thruster)
+                {
+                    float load = ThrusterLoad01(thruster);
+                    if (load <= 0.001f) continue;
 
-                float cs = thruster.EffectiveCellSize;
-                // The flame exits the block's local -forward (see GridThruster.PushDirection).
-                Vector3 exhaustDir = -thruster.transform.forward;
-                Vector3 nozzle = thruster.transform.position + exhaustDir * (cs * 0.5f);
-                _plumes.Add(new PlumeSource(thruster, nozzle, exhaustDir, cs, load, ThermalRules.PlumeScale(thruster.thrusterType)));
+                    float cs = thruster.EffectiveCellSize;
+                    // The flame exits the block's local -forward (see GridThruster.PushDirection).
+                    Vector3 exhaustDir = -thruster.transform.forward;
+                    Vector3 nozzle = thruster.transform.position + exhaustDir * (cs * 0.5f);
+                    _plumes.Add(new PlumeSource(thruster, nozzle, exhaustDir, cs, load, ThermalRules.PlumeScale(thruster.thrusterType)));
+                }
+                else if (block is IExhaustPlumeSource stack)
+                {
+                    float load = Mathf.Clamp01(stack.PlumeLoad01);
+                    if (load <= 0.001f) continue;
+                    Vector3 dir = stack.PlumeDirection;
+                    if (dir.sqrMagnitude < 0.0001f) continue;
+                    _plumes.Add(new PlumeSource(block, stack.PlumeOrigin, dir.normalized, block.EffectiveCellSize, load, stack.PlumeScale));
+                }
             }
         }
 
@@ -278,26 +330,30 @@ namespace VoxelEngine.Thermal
                 target += EntryHeatingC * transmission;
             }
 
-            // ── Engine heat ───────────────────────────────────────────────────────
+            // ── Engine and machine heat ───────────────────────────────────────────
+            // A working block heats itself; everything in a face-adjacent cell receives
+            // the conducted share. Thrusters keep their dedicated load model; every other
+            // machine reports through IHeatSourceBlock.
             float engineHeat = 0f;
             if (block is GridThruster thruster)
             {
                 float throttle = ThrusterLoad01(thruster);
                 if (throttle > 0.001f) engineHeat = ThermalRules.ThrusterPeakSelfHeatC * throttle;
             }
-            else
+            else if (block is IHeatSourceBlock source)
             {
-                engineHeat = AdjacentThrusterHeat(block);
+                engineHeat = Mathf.Max(0f, source.SelfHeatC);
             }
+            engineHeat = Mathf.Max(engineHeat, AdjacentSourceHeat(block));
 
-            // ── Plume heat: standing in another nozzle's exhaust ──────────────────
-            // A thruster is not heated by its own plume (the gas is leaving it), but it
-            // is heated by a neighbour firing straight into it.
+            // ── Plume heat: standing in a nozzle's or stack's exhaust ─────────────
+            // A source is not heated by its own plume (the gas is leaving it), but it
+            // is heated by a neighbour blowing into it.
             float plumeHeat = 0f;
             for (int i = 0; i < _plumes.Count; i++)
             {
                 var plume = _plumes[i];
-                if (ReferenceEquals(plume.Thruster, block)) continue;
+                if (ReferenceEquals(plume.Source, block)) continue;
                 float t = plume.TemperatureAt(block.transform.position);
                 if (t > plumeHeat) plumeHeat = t;
             }
@@ -351,8 +407,8 @@ namespace VoxelEngine.Thermal
                    && ahead is IHeatshieldBlock shield && shield.ShieldIntact;
         }
 
-        /// <summary>Heat conducted in from any running thruster in an adjacent cell.</summary>
-        private float AdjacentThrusterHeat(GridBlock block)
+        /// <summary>Heat conducted in from any running thruster or working machine in an adjacent cell.</summary>
+        private float AdjacentSourceHeat(GridBlock block)
         {
             if (_grid == null || block.IsPrecisionAttachment) return 0f;
 
@@ -360,10 +416,17 @@ namespace VoxelEngine.Thermal
             for (int i = 0; i < Neighbours.Length; i++)
             {
                 if (!_grid.Blocks.TryGetValue(block.GridPos + Neighbours[i], out var other)) continue;
-                if (other is not GridThruster thruster) continue;
+                if (ReferenceEquals(other, block)) continue;
 
-                float load = ThrusterLoad01(thruster);
-                if (load > 0f) hottest = Mathf.Max(hottest, ThermalRules.ThrusterNeighbourHeatC * load);
+                if (other is GridThruster thruster)
+                {
+                    float load = ThrusterLoad01(thruster);
+                    if (load > 0f) hottest = Mathf.Max(hottest, ThermalRules.ThrusterNeighbourHeatC * load);
+                }
+                else if (other is IHeatSourceBlock source)
+                {
+                    hottest = Mathf.Max(hottest, Mathf.Max(0f, source.NeighbourHeatC));
+                }
             }
             return hottest;
         }

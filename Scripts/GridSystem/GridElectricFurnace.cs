@@ -11,7 +11,7 @@ using VoxelEngine.Items;
 
 namespace VoxelEngine.GridSystem
 {
-    public class GridElectricFurnace : GridBlock
+    public class GridElectricFurnace : GridBlock, VoxelEngine.Thermal.IHeatSourceBlock
     {
         public const int INPUT_SLOTS  = 4;
         public const int OUTPUT_SLOTS = 4;
@@ -36,6 +36,12 @@ namespace VoxelEngine.GridSystem
         public float  CurrentWattage { get; private set; }
 
         public override float PowerDraw => Enabled ? CurrentWattage : 0f;
+
+        // ── Heat source (9.31.0) ─────────────────────────────────────────────
+        // A smelting furnace shell is the hottest machine surface on a ship short of
+        // a thruster. It only radiates while a batch is actually in progress.
+        public float SelfHeatC => Enabled && IsSmelting ? VoxelEngine.Thermal.ThermalRules.FurnaceSelfHeatC : 0f;
+        public float NeighbourHeatC => Enabled && IsSmelting ? VoxelEngine.Thermal.ThermalRules.FurnaceNeighbourHeatC : 0f;
         public override float ContentMass =>
             (inputC != null ? MassUtil.ContainerMass(inputC) : 0f) + (outputC != null ? MassUtil.ContainerMass(outputC) : 0f);
 

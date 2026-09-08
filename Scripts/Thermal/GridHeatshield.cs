@@ -85,7 +85,7 @@ namespace VoxelEngine.Thermal
                 : ThermalRules.FallbackAmbientC;
 
             return "HEAT SHIELD\n"
-                 + (ShieldIntact ? ThermalRules.BandLabel(ThermalRules.Band(temp)) : "ABLATED")
+                 + (ShieldIntact ? ThermalRules.BandLabel(ThermalRules.Band(this, temp)) : "ABLATED")
                  + "\nTemp " + temp.ToString("0") + " °C"
                  + "\nAblator " + (Ablator01 * 100f).ToString("0") + "%";
         }

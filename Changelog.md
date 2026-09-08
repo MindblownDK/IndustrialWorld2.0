@@ -1,9 +1,37 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.30.0-dev`
+**Current Version:** `9.31.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.31.0-dev] Machine Heat Sources, Exhaust Stack Plumes & Per-Family Heat Tolerance
+
+**Type:** MINOR - Completes Roadmap 5.1 item 8 (Heat System for Grids) on top of the 9.29 and 9.30 thermal work: every heat-producing machine now warms the hull around it, maritime exhaust stacks blow a real hot-gas plume, and every block family has its own heat tolerance shown in its description. Save-compatible; no new save fields.
+
+#### Machine Heat Sources
+
+- New `IHeatSourceBlock` contract in `VoxelEngine.Thermal`: a block reports `SelfHeatC` (surface temperature above ambient while working) and `NeighbourHeatC` (what it conducts into each face-adjacent cell). `GridThermalSystem` polls sources once per thermal tick, so machines carry no thermal bookkeeping of their own and idle machines cost nothing.
+- Implemented on: Hydrogen Engine (420 C self, 150 C neighbours while burning), Portable Reactor (260 / 90 C while a pellet burns; the casing is shielded, so mild but relentless), Electric Furnace (560 / 200 C while a batch is smelting), Maritime Engine (520 / 220 C at full mechanical load scaled by tier 0.75x Small, 1.0x Medium, 1.3x Giant, plus up to 380 C extra once knocking or seized, so a dry, seized diesel cooks the engine room), Maritime Generator (330 / 120 C at full electrical output; a tripped generator keeps radiating until it cools) and Exhaust Pipe (480 / 190 C while venting, 1.35x when a served engine is in critical heat).
+- Maritime engines keep their internal coolant model unchanged; the new numbers are what the engine does to the hull, not whether the engine survives. Both are shown in the engine and generator panels under Thermal as `Casing Surface` and `Heat Output`.
+- The generic block panel gains a `Heat Output` row for any working heat source.
+
+#### Exhaust Stack Plumes
+
+- New `IExhaustPlumeSource` extension: the Exhaust Pipe publishes `PlumeLoad01` (the same 0..1 vent intensity that drives its smoke), the +Z outlet position and direction, and a plume scale of 0.34 relative to a thruster core (1.4x while belching black critical smoke).
+- `GridThermalSystem.CollectPlumes` now gathers both running thrusters and venting stacks; `PlumeSource.Source` is the emitting block (`Thruster` remains as a convenience accessor). Stack plumes heat the ship's own plates above a funnel and, through `ThrusterPlumeHazard`, other grids, base blocks, creatures and the player on deck.
+
+#### Heat Tolerance per Block Family
+
+- `ThermalRules.ToleranceC(block)` resolves the temperature at which a block starts taking damage: Glass 520 C, Electronics 600 C (screens, cameras, beacons, detectors, locators, season monitors, batteries, solar panels, lights), Habitat 700 C (cockpits, cryobeds, biofarms), Structural 800 C (hull plate and everything else), Machinery 1100 C (thrusters, engines, generators, reactors, furnaces, exhaust stacks), Ablative 1900 C (intact heat shields; a spent shield falls back to structural).
+- The thermal solve damages each block against its own tolerance. Intact heat shields still ablate at the structural threshold, so shield charge is consumed exactly as before.
+- `ThermalRules.Band(temperature, tolerance)` judges WARM (120 C), HOT (60 percent of the way to failure) and CRITICAL (taking damage now) per block. `GridThermalSystem` publishes `WorstBand`, `WorstBlock` and `WorstBlockTemperatureC`; `Band` and `IsBurning` now use them, so a glass canopy at 530 C raises the alarm while the steel beside it is merely hot.
+- Inventory tooltips for grid block items show `Block HP`, `Mass` and `Heat Tolerance` (Roadmap item 8: "every grid block has a heat tolerance value shown in its description"). The block panel shows tolerance with its family label; the look-at HUD and the heat-shield screen telemetry use the per-block band.
+
+#### HUD
+
+- The HULL strip shows the worst block's temperature and, when it is not plain hull plate, its family (`CRITICAL 540 C GLASS`), with the trend arrow following that block.
+- The cockpit environment line names the block in trouble (`HULL BURNING 640 C GLASS PANE`).
 
 ### [9.30.0-dev] Thruster Plume Hazard, Visible Block Damage & Suit Temperature
 
