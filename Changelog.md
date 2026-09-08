@@ -1,9 +1,89 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.29.0-dev`
+**Current Version:** `9.31.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.31.1-dev] Compile & Shader Parse Fixes
+
+**Type:** PATCH — Two build blockers fixed: the missing `WorldPlumeCell` struct/field in `GridThermalSystem` (CS0246) and a Unity 6.5 ShaderLab parse error in the water shader's inspector headers. No save touch, no API change, no balance change.
+
+#### Fixes
+
+- `GridThermalSystem.cs` failed to compile (CS0246: `WorldPlumeCell` not found): the `WorldPlumeCell` readonly struct and the `_worldCells` list behind the `WorldPlumeCells` property were missing while every usage was present. Both are restored — open-air plume cells (player exhaust exposure + placed-block strikes) compile and work again.
+- `VoxelWaterURP.shader` threw `Shader error in '': Parse error: syntax error, unexpected $undefined, expecting TVAL_ID or TVAL_VARREF at line 47`: three `[Header(...)]` inspector attributes carried version numbers in their text (`Thin-Film Iridescence - 9.16.0`, `Emission - 9.16.0`, `Surface Texture - 9.16.0`), and the multi-dot `9.16.0` token sequence cannot be lexed by Unity 6.5's stricter ShaderLab parser. The version suffixes are removed from the headers (the file's comments keep the full version history); every other `[Header]` in the project is clean.
+
+### [9.31.0-dev] Heat Damage Everywhere: Base Blocks & Player Cooked, Procedural Crack Damage
+
+**Type:** MINOR — Exhaust plume damage now reaches every target type (own grid, other grids, placed base blocks AND the player), and hull damage visuals gain procedural crack overlays on top of scorch + heat glow. Save-compatible: no save schema, block HP or balance values were touched; existing saves load unchanged.
+
+#### Heat Damage Reaches Every Target
+
+- **Placed base blocks** (static `PlacedBlock` and tiered building pieces) standing in an exhaust plume are now eroded directly: a physics probe at each open plume cell applies the same per-type, distance-falloff erosion damage as grid blocks, so a ship hovering over your base chews through the landing pad roof. The plume is absorbed by the first base block it strikes — flame never passes through walls.
+- Placed blocks have no thermal simulation behind them, so the plume heat is reported straight to the visual layer: a base wall **glows blackbody hot while it is being blasted**, then cools and fades once the flame stops.
+- **The player now cooks in exhaust**: standing inside a live plume deals up to 6 HP/s at full hydrogen heat (harmless below 80 °C, scaling with plume intensity and distance falloff). The damage flows through the existing heat pipeline, so armor **Heat Tolerance modules genuinely mitigate thruster burns** — and the cockpit crew is safe inside the hull, since plumes only occupy open air.
+- Own-grid and cross-grid damage behave exactly as in 9.30.0; on-grid static blocks (which carry both components) route through the grid path so nothing is ever damaged twice.
+
+#### Procedural Crack Damage Overlay
+
+- Hull damage now **cracks visibly**: five damage stages of runtime-generated crack overlays (128×128, deterministic seeds — impact points with radiating, forking fissures that widen and multiply as damage climbs, plus chipped patches on the two worst stages). No textures or assets: everything is generated procedurally, once, and cached.
+- Cracks apply to **every damageable thing** — grid blocks, placed base blocks, tiered pieces — as a bounds-wrapped transparent shell sitting just above the surface. Hairline fractures appear from 15% damage; by ~90% the block reads as shattered.
+- One shared crack material; the stage texture is selected per renderer through a `MaterialPropertyBlock` — zero per-block material instances. Cracks render just under the additive heat-glow shell, so a burning, broken block layers glow over cracks over scorch.
+- Stage progression is fully derived from HP ratio, so cracks never desync from actual damage and restored saves show them for free.
+
+#### Visible Damage For Base Blocks
+
+- `PlacedBlock` and `PlacedTieredBlock` gain the complete hull presentation previously reserved for grid blocks: cracks + scorch as they take hits, smoke below 30% HP, heat glow while a plume blasts them, embers while burning, and a **break-apart debris burst with the structural-failure boom** when destroyed.
+- `PlacedBlock.Damage`/`PlacedTieredBlock.Damage` gained an optional `impactFx` flag (default true, so every existing caller is unaffected); continuous sources like plume erosion pass false and stay clank-free.
+- Restored saves show scars on placed base blocks too — a world-level audit sweep picks up damaged statics every 15 s.
+
+#### Architecture & Fixes
+
+- `GridHullFx` re-architected: per-grid instances still service grid blocks, while a single lazily-created world host services static placed blocks. Visual state is keyed by component, so a block that carries both `PlacedBlock` and `GridBlock` (on-grid statics) is filed under exactly one service.
+- The mid-tick block-destruction fix is confirmed in place: a block burned to death is dropped from the temperature tracking table immediately instead of lingering behind a dead reference.
+
+#### Setup
+
+- **No setup step required.** Pure runtime code — no prefabs, items, recipes or research. Existing prefabs, balance values, block HP and power draws are untouched.
+
+### [9.30.0-dev] Thruster Exhaust Plume Damage, Visible Hull Damage & Heat Glow, Slower Hull Cooling
+
+**Type:** MINOR — Extends the thermal system with a directed exhaust plume that really does destroy blocks, a full hull damage/heat visual layer (scorch, glow, smoke, embers, debris bursts) for EVERY damage source, and a much slower cooldown so hot hulls stay hot. Save-compatible: no save schema, block HP or balance values were touched; existing saves load unchanged.
+
+#### Exhaust Plume Simulation
+
+- Thruster heat is no longer a soft 240 °C glow in all six directions — the exhaust is a **directed plume** that leaves the nozzle along the engine's exhaust axis and walks up to 4 cells outward, falling off 100% / 60% / 35% / 20% with distance.
+- The **first block the flame strikes takes the full load**: up to 1350 °C of hydrogen plume heat (fast slew — direct flame impingement heats in ~2 s, not the slow conduction soak) **plus direct erosion of up to 40 HP/s** at full throttle, so a sustained blast chews through an armour block in seconds-to-tens-of-seconds. Cells around the impact point take splash heat/erosion at 40%.
+- Per-type profiles: Hydrogen runs hottest and erodes hardest, Atmospheric sits at 75% heat / 70% erosion, Ion is nearly clean at 35% heat / 15% erosion.
+- The **struck block absorbs the plume** — flame does not pass through solid hull; splash around the impact cell is the only spread.
+- Cells flanking the nozzle get a side-wash (170 °C max — warm, never burning), and every block touching a running engine still conducts a little heat (90 °C), so burying an engine in a hull keeps a mild cost without the old blanket heating.
+- **Cross-grid plume damage**: a plume that exits your grid keeps travelling and heats/erodes blocks on any other grid it hits — a hovering ship now cooks the landing pad beneath it. Toggleable via `ThermalRules.CrossGridPlumeDamage`.
+- Intact Heat Shields ablate against plume heat AND erosion before taking real damage, so a shield buys ~10 s of full-throttle hydrogen protection before it fails.
+- Latent crash fixed: burning a block to death mid-tick used to mutate the grid's block dictionary during iteration (unreachable before, since nothing could ever exceed the 800 °C threshold). The tick now iterates a snapshot and retires destroyed blocks cleanly.
+
+#### Visible Hull Damage (All Damage Sources)
+
+- New `GridHullFx` per-grid system: any block that loses HP — thruster plumes, entry heat, weapons, tools, demolishers — visibly **chars darker** the more damage it takes, via per-renderer `MaterialPropertyBlock` tints that preserve other systems' overrides (paint, screen accents).
+- Blocks below 30% HP **smoke**, with emission density scaling by damage; a hard cap of 24 live smoke emitters recycles the least-deserving one, so a burning battleship never spawns an unbounded particle field.
+- Destroyed blocks **break apart**: a debris burst of tinted, bouncing chunks (world-collided), a flash, and a new procedural `BlockBreak` structural-failure boom. Thermal destructions flare orange; impact destructions stay grey.
+- Discrete hits (weapons, tools) play a new procedural `BlockHit` metallic clank, volume-scaled by hit size and throttled; continuous sources (burn, plume erosion) stay silent so a roasting hull doesn't clank four times a second.
+- Visual state is derived, never stored: scorch follows `currentHP` and a 5-second audit sweep picks up **restored saves**, so a scarred ship reloads looking scarred. The save format is untouched.
+
+#### Visible Heat Damage
+
+- Hot blocks now **glow**. A blackbody-tinted additive shell wraps the block's full visual bounds: deep red at 420 °C, orange at the 800 °C burn threshold, yellow-white at re-entry temperatures, with a subtle flicker while actively burning — you SEE the hull heating up long before it fails, from the cockpit or from outside.
+- Burning blocks spit **embers** while above the damage threshold, on top of the damage smoke.
+- The vitals HULL strip gains an **EXHAUST** cause marker (alongside RE-ENTRY) so the pilot can tell thruster plume heat from entry heat at a glance.
+
+#### Slower Hull Cooling
+
+- Cooling rate multiplier drops from 1.6× to **0.35×** of the heating rate: a hull that survives a scorching re-entry or a sustained engine burn now stays hot for half a minute instead of snapping back in seconds. The cockpit suit-stats HULL temperature falls gradually, and the heat glow fades with it — heated metal radiates its charge away, it doesn't teleport back to ambient.
+- Every grid is now born with `GridThermalSystem` attached (via `GridEntity.Create`), so ships welded together mid-game and grids restored from save get thermal simulation without running any setup step.
+
+#### Setup
+
+- **No setup step required.** This release adds no prefabs, items, recipes or research — the plume model and all FX are pure runtime code that self-attaches. Existing prefabs, balance values, block HP and power draws are untouched.
 
 ### [9.29.0-dev] Block Thermal Simulation, Atmospheric Entry & Ablative Heat Shields
 

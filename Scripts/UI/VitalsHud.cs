@@ -190,7 +190,11 @@ namespace VoxelEngine.UI
                 _heatRow.style.display = DisplayStyle.Flex;
 
             string label = VoxelEngine.Thermal.ThermalRules.BandLabel(band);
-            string entry = thermal.EntryHeatingC > 1f ? "  RE-ENTRY" : string.Empty;
+            // Cause marker: re-entry dominates when present, otherwise an exhaust
+            // plume is what is cooking the hull right now.
+            string entry = thermal.EntryHeatingC > 1f ? "  RE-ENTRY"
+                : thermal.PlumeHeatingC > 1f ? "  EXHAUST"
+                : string.Empty;
             _heatLabel.text = $"{label}  {thermal.PeakTemperatureC:0}\u00B0C{entry}";
             _heatLabel.style.color = new StyleColor(VoxelEngine.Thermal.ThermalRules.BandColor(band));
         }

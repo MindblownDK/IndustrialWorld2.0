@@ -47,8 +47,11 @@ namespace VoxelEngine.Thermal
         /// Deliberately slow: thermal mass is what makes re-entry feel like a commitment.</summary>
         public const float ThermalResponsePerSecond = 0.18f;
 
-        /// <summary>A hull cools this much faster than it heats, so recovery is possible.</summary>
-        public const float CoolingRateMultiplier = 1.6f;
+        /// <summary>A hot hull cools at this multiple of its heating rate. Slow on
+        /// purpose (0.35x): a ship that survives a scorching entry or a sustained
+        /// engine burn stays visibly hot for a long while afterwards — heated
+        /// metal radiates its charge away gradually, it doesn't snap back.</summary>
+        public const float CoolingRateMultiplier = 0.35f;
 
         // ── Atmospheric entry ──────────────────────────────────────────────────
 
@@ -72,8 +75,43 @@ namespace VoxelEngine.Thermal
         /// <summary>Peak °C a thruster adds to itself while running at full throttle.</summary>
         public const float ThrusterPeakSelfHeatC = 620f;
 
-        /// <summary>Peak °C a running thruster adds to a directly adjacent block.</summary>
-        public const float ThrusterNeighbourHeatC = 240f;
+        // ── Thruster exhaust plume ─────────────────────────────────────────────
+        // A running engine is no longer a soft warm glow in every direction: the
+        // exhaust is a directed plume that leaves the nozzle, heats what it
+        // impinges on FAST, and erodes it. Build in your own exhaust cone and
+        // the ship will bite its own hull apart.
+
+        /// <summary>Peak °C the exhaust plume adds to the cell directly behind a
+        /// hydrogen thruster at full throttle (before distance falloff).</summary>
+        public const float ThrusterPlumePeakC = 1350f;
+
+        /// <summary>How many cells the exhaust plume reaches before dissipating.</summary>
+        public const int ThrusterPlumeLength = 4;
+
+        /// <summary>Heat retained per plume cell (index 0 = the impinged cell).</summary>
+        public static readonly float[] ThrusterPlumeFalloff = { 1f, 0.6f, 0.35f, 0.2f };
+
+        /// <summary>Peak °C bled into the cells flanking a running nozzle — the
+        /// side surfaces of the engine housing. Warm, but never burning.</summary>
+        public const float ThrusterSideWashHeatC = 170f;
+
+        /// <summary>Peak °C conducted into every block touching a running engine,
+        /// so burying a thruster inside a hull still has a (mild) cost.</summary>
+        public const float ThrusterConductionHeatC = 90f;
+
+        /// <summary>Direct flame impingement heats the struck surface much faster
+        /// than conduction can soak through a hull (per second slew rate).</summary>
+        public const float PlumeResponsePerSecond = 0.5f;
+
+        /// <summary>HP/second of direct erosion on the cell directly behind a
+        /// hydrogen thruster at full throttle (before distance falloff). This is
+        /// the mechanical sandblasting on top of the heat — sustained blasting
+        /// chews through armour in seconds-to-tens-of-seconds, not minutes.</summary>
+        public const float ThrusterPlumeErosionPerSecond = 40f;
+
+        /// <summary>Plume effects also apply to blocks on OTHER grids caught in
+        /// the exhaust cone (a hovering ship can cook the landing pad under it).</summary>
+        public const bool CrossGridPlumeDamage = true;
 
         // ── Queries ────────────────────────────────────────────────────────────
 
@@ -122,6 +160,25 @@ namespace VoxelEngine.Thermal
             return MaxBlockDamagePerSecond * severity;
         }
 
+        /// <summary>Plume heat multiplier per thruster type — burning hydrogen runs
+        /// far hotter than a fan-driven atmospheric engine; ion is nearly clean.</summary>
+        public static float PlumeHeatMultiplier(GridSystem.ThrusterType type) => type switch
+        {
+            GridSystem.ThrusterType.Hydrogen => 1.00f,
+            GridSystem.ThrusterType.Atmospheric => 0.75f,
+            GridSystem.ThrusterType.Ion => 0.35f,
+            _ => 0.75f,
+        };
+
+        /// <summary>Plume erosion multiplier per thruster type.</summary>
+        public static float PlumeErosionMultiplier(GridSystem.ThrusterType type) => type switch
+        {
+            GridSystem.ThrusterType.Hydrogen => 1.00f,
+            GridSystem.ThrusterType.Atmospheric => 0.70f,
+            GridSystem.ThrusterType.Ion => 0.15f,
+            _ => 0.70f,
+        };
+
         public static ThermalBand Band(float temperatureC)
         {
             if (temperatureC >= BlockDamageThresholdC) return ThermalBand.Critical;
@@ -149,5 +206,24 @@ namespace VoxelEngine.Thermal
         /// <summary>Glow strength 0..1 used to drive emissive hull shading during entry.</summary>
         public static float GlowIntensity01(float temperatureC)
             => Mathf.Clamp01((temperatureC - 320f) / 1100f);
+
+        /// <summary>Temperature at which a block's heat glow shell first appears.</summary>
+        public const float GlowVisibleC = 420f;
+
+        /// <summary>
+        /// Blackbody glow colour for a block temperature: deep red as the glow
+        /// first appears, orange at the burn threshold, yellow-white at re-entry
+        /// temperatures. Alpha is 1 — callers scale it by glow intensity.
+        /// </summary>
+        public static Color GlowColor(float temperatureC)
+        {
+            float t = Mathf.Clamp01((temperatureC - GlowVisibleC) / 1300f);
+
+            if (t < 0.35f)
+                return Color.Lerp(new Color(0.45f, 0.03f, 0.01f), new Color(1f, 0.18f, 0.02f), t / 0.35f);
+            if (t < 0.70f)
+                return Color.Lerp(new Color(1f, 0.18f, 0.02f), new Color(1f, 0.55f, 0.10f), (t - 0.35f) / 0.35f);
+            return Color.Lerp(new Color(1f, 0.55f, 0.10f), new Color(1f, 0.93f, 0.78f), (t - 0.70f) / 0.30f);
+        }
     }
 }

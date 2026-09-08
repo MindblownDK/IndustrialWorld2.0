@@ -25,7 +25,7 @@ namespace VoxelEngine.Building.Tiered
         }
 
         /// <summary>Apply damage from a tool. Returns true if destroyed.</summary>
-        public bool Damage(int amount, int toolTier, Inventory recipient)
+        public bool Damage(int amount, int toolTier, Inventory recipient, bool impactFx = true)
         {
             // Tool tier check: weaker tools do nothing.
             if (toolTier < definition.GetStats(tier).miningTier) return false;
@@ -33,10 +33,13 @@ namespace VoxelEngine.Building.Tiered
             hp -= amount;
             if (hp <= 0)
             {
+                VoxelEngine.GridSystem.GridHullFx.SpawnDestructionBurst(this);
                 RefundOnDestroy(recipient);
                 Destroy(gameObject);
                 return true;
             }
+
+            VoxelEngine.GridSystem.GridHullFx.NotifyDamaged(this, amount, impactFx);
             return false;
         }
 

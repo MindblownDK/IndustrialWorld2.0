@@ -59,12 +59,22 @@ namespace VoxelEngine.GridSystem
         /// <summary>Called when removed from a grid.</summary>
         public virtual void OnRemoved() { }
 
-        /// <summary>Apply damage. Returns true if destroyed.</summary>
-        public bool Damage(float amount)
+        /// <summary>Apply damage (with impact feedback). Returns true if destroyed.</summary>
+        public bool Damage(float amount) => Damage(amount, impactFx: true);
+
+        /// <summary>
+        /// Apply damage. Returns true if destroyed. Pass impactFx=false for
+        /// continuous sources (thermal burn, exhaust plume erosion) so each
+        /// simulation tick doesn't trigger impact clanks — discrete hits do.
+        /// Either way the hull scorch/heat visuals pick the block up.
+        /// </summary>
+        public bool Damage(float amount, bool impactFx)
         {
             currentHP -= amount;
             if (currentHP <= 0)
             {
+                // Burst while the transform is still valid, then dismantle.
+                GridHullFx.SpawnDestructionBurst(this);
                 if (Grid != null)
                 {
                     if (IsPrecisionAttachment)
@@ -74,6 +84,7 @@ namespace VoxelEngine.GridSystem
                 }
                 return true;
             }
+            GridHullFx.NotifyDamaged(this, amount, impactFx);
             return false;
         }
 

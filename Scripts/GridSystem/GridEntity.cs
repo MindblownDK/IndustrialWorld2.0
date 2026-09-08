@@ -1421,6 +1421,12 @@ namespace VoxelEngine.GridSystem
             rb.angularDamping = 1.5f;
             var entity = go.AddComponent<GridEntity>();
             entity.gridSize = size;
+            // Every grid is born with thermal simulation. The component is inert
+            // and effectively free until the hull actually heats up, and this is
+            // the single factory behind player-built and save-restored grids —
+            // so a ship welded together mid-game cooks under its own thrusters
+            // just like a prefab-authored one.
+            go.AddComponent<VoxelEngine.Thermal.GridThermalSystem>();
             return entity;
         }
     }

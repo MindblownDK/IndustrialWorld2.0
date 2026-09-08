@@ -17,11 +17,13 @@ namespace VoxelEngine.Building
         public int       Hp = 100;
         public bool      onGrid = true;
 
-        public void Damage(int amount, Inventory recipient)
+        public void Damage(int amount, Inventory recipient, bool impactFx = true)
         {
             Hp -= amount;
             if (Hp <= 0)
             {
+                // Break-apart burst while the transform is still valid.
+                VoxelEngine.GridSystem.GridHullFx.SpawnDestructionBurst(this);
                 DrainInventoriesToPlayerThenWorld(recipient);
                 var customDrop = GetComponentInChildren<ICustomBlockDrop>();
                 if (customDrop != null)
@@ -39,6 +41,12 @@ namespace VoxelEngine.Building
                     gridBlock.Grid.GetComponent<VoxelEngine.GridSystem.GridPrecisionAttachmentLayer>()?.RemoveBlock(gridBlock.PrecisionGridPos);
                 else
                     Destroy(gameObject);
+            }
+            else
+            {
+                // Scorch/crack/smoke feedback. impactFx=false for continuous
+                // sources (thruster plume) so per-tick damage doesn't clank.
+                VoxelEngine.GridSystem.GridHullFx.NotifyDamaged(this, amount, impactFx);
             }
         }
 

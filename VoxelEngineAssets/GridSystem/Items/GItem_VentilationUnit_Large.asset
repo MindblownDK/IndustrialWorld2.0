@@ -1,0 +1,32 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e230da79876505a41b25678102c74c13, type: 3}
+  m_Name: GItem_VentilationUnit_Large
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.GridSystem.GridBlockItem
+  itemId: gitem_vent_unit_large
+  displayName: Ventilation Unit
+  description: Full-cell ventilation plant. Pressurises or depressurises every sealed
+    room touching it, and refills a docked oxygen tank from the grid gas network.
+  icon: {fileID: 0}
+  iconTint: {r: 0.35, g: 0.75, b: 0.92, a: 1}
+  maxStack: 900
+  massPerUnit: 1
+  category: Grid
+  requiresContainment: 0
+  cannotBeCarried: 0
+  isPressurizedCanister: 0
+  viewmodelPrefab: {fileID: 0}
+  gridSize: 1
+  blockPrefab: {fileID: 5612522201777400094, guid: 6efd477be69070f4abc83cb06784e203, type: 3}
+  blockMass: 100
+  blockHP: 200
+  supportsShapeVariants: 0

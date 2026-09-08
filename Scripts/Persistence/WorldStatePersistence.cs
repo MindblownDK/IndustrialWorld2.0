@@ -1313,6 +1313,11 @@ namespace VoxelEngine.Persistence
                 grid.HydrogenStored = Mathf.Max(0f, savedGrid.hydrogenStored);
                 grid.OxygenStored = Mathf.Max(0f, savedGrid.oxygenStored);
 
+                // Hull FX self-attaches on first damage while playing, but a
+                // restored save needs it up front so already-scarred blocks are
+                // picked up by its damage audit instead of looking pristine.
+                VoxelEngine.GridSystem.GridHullFx.For(grid);
+
                 // Structural blocks must be present before Detail blocks can restore
                 // their host-cell relationship and attached pipe topology.
                 RestoreGridBlocks(grid, savedGrid.blocks, false);

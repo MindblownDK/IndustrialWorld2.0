@@ -20,6 +20,13 @@ namespace VoxelEngine.Player
         /// through an atmospheric entry.</summary>
         public const float MaxHullHeatDamagePerSecond = 5f;
 
+        /// <summary>Exhaust plume heat below this is harmless to a suited player.</summary>
+        public const float ExhaustHarmlessC = 80f;
+
+        /// <summary>Damage per second while standing inside a full-intensity
+        /// thruster exhaust plume (scales down with plume heat).</summary>
+        public const float MaxExhaustHeatDamagePerSecond = 6f;
+
         public static float HeatDamagePerSecond() => HeatDamagePerSecond(Vector3.zero, false);
 
         /// <summary>
@@ -49,6 +56,16 @@ namespace VoxelEngine.Player
                     float over = thermal.PeakTemperatureC - ThermalRules.BlockDamageThresholdC;
                     float severity = Mathf.Clamp01(over / ThermalRules.BlockDamageSpanC);
                     dps += MaxHullHeatDamagePerSecond * severity;
+                }
+
+                // Standing inside a live exhaust plume cooks the player directly —
+                // armor Heat Tolerance still mitigates the final damage.
+                float exhaust = ThermalService.ExhaustHeatAt(worldPosition);
+                if (exhaust > ExhaustHarmlessC)
+                {
+                    float severity = Mathf.Clamp01(
+                        (exhaust - ExhaustHarmlessC) / (ThermalRules.ThrusterPlumePeakC - ExhaustHarmlessC));
+                    dps += MaxExhaustHeatDamagePerSecond * severity;
                 }
             }
 

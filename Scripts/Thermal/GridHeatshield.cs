@@ -61,7 +61,7 @@ namespace VoxelEngine.Thermal
             float covered = ablatorRemaining / AblatorPerDamage;
             ablatorRemaining = 0f;
             float overflow = thermalLoad - covered;
-            if (overflow > 0f) Damage(overflow);
+            if (overflow > 0f) Damage(overflow, impactFx: false);
         }
 
         /// <summary>Restores ablator charge. Returns the units actually accepted.</summary>
