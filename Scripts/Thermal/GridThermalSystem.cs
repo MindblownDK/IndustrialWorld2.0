@@ -52,7 +52,7 @@ namespace VoxelEngine.Thermal
         // ── Exhaust plume maps (rebuilt every tick) ───────────────────────────
         private readonly Dictionary<GridBlock, PlumeLoad> _plume = new();     // direct impingement on this grid
         private readonly Dictionary<GridBlock, float> _wash = new();          // nozzle side wash + conduction
-        private readonly Dictionary<GridBlock, PlumeLoad> _external = new();  // plumes arriving from other grids
+        private readonly Dictionary<GridBlock, ExternalPlume> _external = new(); // plumes arriving from other grids
         private readonly List<WorldPlumeCell> _worldCells = new();            // open-air plume cells (player exposure)
 
         private struct PlumeLoad
@@ -396,7 +396,8 @@ namespace VoxelEngine.Thermal
                 float cs = _grid.gridSize.CellSize();
                 for (int i = 1; i <= ThermalRules.ThrusterPlumeLength; i++)
                 {
-                    float falloff = ThermalRules.PlumeFalloff(i - 1);
+                    int fi = Mathf.Clamp(i - 1, 0, ThermalRules.ThrusterPlumeFalloff.Length - 1);
+                    float falloff = ThermalRules.ThrusterPlumeFalloff[fi];
                     Vector3Int cell = thruster.GridPos + step * i;
 
                     if (_grid.Blocks.TryGetValue(cell, out var struck) && struck != null)

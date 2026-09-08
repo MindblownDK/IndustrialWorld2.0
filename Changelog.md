@@ -1,9 +1,20 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.31.1-dev`
+**Current Version:** `9.31.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.31.2-dev] Thermal Compile Fixes & FindObjects Deprecation Cleanup
+
+**Type:** PATCH — Fixes five compile errors in `GridThermalSystem` (mistyped dictionary + wrong member name) and clears the Unity 6.5 `FindObjectsSortMode` deprecation warnings. No save touch, no API change, no balance change.
+
+#### Fixes
+
+- `GridThermalSystem._external` was declared as `Dictionary<GridBlock, PlumeLoad>` but stores `ExternalPlume` values (which carry the injection timestamp) — producing CS1061 (`PlumeLoad` has no `Time`) at every read site and CS0029 in `InjectPlume`. The dictionary is now correctly typed `Dictionary<GridBlock, ExternalPlume>`, so cross-grid plume injection, expiry pruning and the HUD's EXHAUST marker compile and work.
+- The plume falloff lookup called a non-existent `ThermalRules.PlumeFalloff(i)` (CS0117); the actual balance surface is the `ThrusterPlumeFalloff` array. Now indexed as `ThrusterPlumeFalloff[clamped index]`, with a bounds clamp so shortening the array during tuning can never throw.
+- `GridPressureSystem.RecountOccupants` used the deprecated `FindObjectsByType<T>(FindObjectsInactive, FindObjectsSortMode)` overload (CS0618 on Unity 6.5). Switched to the recommended `FindObjectsByType<T>(FindObjectsInactive)` — the only occurrence in the project.
+- Every `ThermalRules` member referenced across `GridThermalSystem`, `GridHullFx`, `PlayerHazardService`, `ThermalService` and `VitalsHud` is verified to exist — no other dangling references remain.
 
 ### [9.31.1-dev] Compile & Shader Parse Fixes
 

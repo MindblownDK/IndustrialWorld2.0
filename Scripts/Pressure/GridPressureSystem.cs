@@ -161,7 +161,7 @@ namespace VoxelEngine.Pressure
                 if (_rooms[i] != null) _rooms[i].Occupants = 0;
 
             var players = Object.FindObjectsByType<VoxelEngine.Player.PlayerController>(
-                FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+                FindObjectsInactive.Exclude);
             for (int i = 0; i < players.Length; i++)
             {
                 if (players[i] == null) continue;
