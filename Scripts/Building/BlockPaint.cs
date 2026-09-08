@@ -50,6 +50,7 @@ namespace VoxelEngine.Building
                 var ren = renderers[r];
                 if (ren == null) continue;
                 if (ren is ParticleSystemRenderer || ren is TrailRenderer || ren is LineRenderer) continue;
+                if (VoxelEngine.Thermal.BlockDamageVisual.IsGeneratedOverlay(ren)) continue;   // crack/heat shell keeps its own shader
                 var shared = ren.sharedMaterials;
                 if (shared == null || shared.Length == 0) continue;
                 _cachedRenderers.Add(ren);

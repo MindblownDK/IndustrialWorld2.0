@@ -330,16 +330,42 @@ namespace VoxelEngine.Player
             OnStatsChanged?.Invoke();
         }
 
+        /// <summary>Suit thermal model (9.30.0). Created on demand so legacy player prefabs work unchanged.</summary>
+        public VoxelEngine.Thermal.PlayerSuitThermal SuitThermal
+        {
+            get
+            {
+                if (_suitThermal == null) _suitThermal = VoxelEngine.Thermal.PlayerSuitThermal.For(this);
+                return _suitThermal;
+            }
+        }
+        private VoxelEngine.Thermal.PlayerSuitThermal _suitThermal;
+
         private void ApplyEnvironmentalHazards(PlayerEquipment equipment)
         {
             bool tookDamage = false;
 
-            float heatDamage = PlayerHazardService.HeatDamagePerSecond(transform.position, true);
+            // Planetary heat (volcanic worlds) is still an instantaneous hazard; hull and
+            // plume heat now flow through the suit model below, which has real inertia.
+            float heatDamage = PlayerHazardService.HeatDamagePerSecond();
             if (heatDamage > 0f)
             {
                 float multiplier = equipment != null ? equipment.HeatDamageMultiplier : 1f;
                 Health = Mathf.Max(0f, Health - heatDamage * multiplier * Time.deltaTime);
                 tookDamage = true;
+            }
+
+            var suit = SuitThermal;
+            if (suit != null)
+            {
+                float suitDps = suit.Tick(Time.deltaTime);
+                if (suitDps > 0f)
+                {
+                    Health = Mathf.Max(0f, Health - suitDps * Time.deltaTime);
+                    tookDamage = true;
+                    if (Health <= 0f)
+                        SetDeathCause(suit.IsCold ? "FROZE IN A COLD SUIT" : "COOKED INSIDE THE SUIT");
+                }
             }
 
             float radiationDamage = PlayerHazardService.RadiationDamagePerSecond();

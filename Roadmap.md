@@ -1,9 +1,9 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `9.29.0-dev`  
-**Roadmap Version:** `9.29.0-dev`  
-**Date:** 2026-09-07
+**Current Version:** `9.30.0-dev`  
+**Roadmap Version:** `9.30.0-dev`  
+**Date:** 2026-09-08
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
@@ -78,10 +78,10 @@ The design goal is a seamless blend of:
 | Camera / trajectory tools | 🛠️ WORKING ON | Basic camera foundations exist. **7.8.0-dev** adds a cockpit coast-path orbital solver/readout for tangential versus circular velocity and periapsis/apoapsis diagnostics, Unity-validated; trajectory rendering, zoom-to-trajectory, and orbit-map controls remain open. |
 | UI theming | ✅ COMPLETED | Theme definitions, 10 enriched assets, runtime USS variables, Interface tab controls, copy/import/reset, and theme override support are implemented and documented. |
 | Research UI | 🛠️ WORKING ON | Spatial pan/zoom canvas with era labels, glowing connectors, zoom controls, and bottom detail panel (5.41.0-dev) |
-| Damage / destruction | 🛠️ WORKING ON | **6.26.0-dev:** Player death flow now has a premium death screen and selectable respawn anchors. **9.30.0-dev** adds the visible-damage layer for grid blocks: any damage source chars and smokes blocks, hot blocks glow with embers, and destroyed blocks break apart with debris, flash and sound. **9.31.0-dev** extends it everywhere with procedural 5-stage crack overlays and full visuals (scorch, smoke, glow, debris bursts) for placed base blocks and tiered pieces too. Full grid-destruction cascades remain open. |
+| Damage / destruction | 🛠️ WORKING ON | **6.26.0-dev:** Player death flow now has a premium death screen and selectable respawn anchors. Grid/static block destruction remains open. |
 | Weapons / combat | 🟡 PARTIALLY COMPLETE | Personal weapons (sword/pistol/rifle/grenade), mythical roster + Roc, bombs, full base defense network (Auto/Artillery/Flame/Mortar/Giant/AA/Energy) + ammo logistics (6.57–6.68). Missiles, grid weapons parity, and conserve-ammo UI remain open. |
 | Radiation system | 🟡 PARTIALLY COMPLETE | **6.80.0-dev:** ambient celestial-body radiation, Radiation Shielding modules, and Hazmat sealing are implemented for armor. Reactor waste, fallout zones, geiger UX, and full ecology effects remain open. |
-| Heat system | ✅ COMPLETED | **6.80.0-dev:** environmental heat and burn mitigation are wired to Heat Tolerance modules. **9.29.0-dev** closes the rest: `GridThermalSystem` gives every block a real temperature (planetary ambient blended toward deep space with altitude, climate-controlled sealed cabins, slow thermal slew with faster cooling), atmospheric entry heats by speed² × air density and by facing, running thrusters cook themselves and their neighbours, blocks burn above 800 °C, and ablative `GridHeatshield` blocks spend a finite charge to protect themselves and the block upstream. HUD gains a HULL thermal strip; ablator state is saved additively; Step 61 authors it all non-destructively. **9.30.0-dev** makes heat a real threat and a real spectacle: thruster exhaust is now a directed plume (up to 4 cells, per-type heat + HP erosion, cross-grid strikes) that genuinely destroys blocks it blasts, every damage source visibly chars and smokes blocks, hot blocks glow blackbody red-to-white with embers while burning, destroyed blocks break apart with debris and a bang, hull cooling is 0.35× the heating rate so hot ships stay hot, and all grids (built or restored) are born with thermal simulation — no setup step, save-compatible. **9.31.0-dev** completes the target matrix: plume damage also erodes placed base blocks (which glow while blasted and cool afterwards) and cooks the player standing in the flame (mitigated by Heat Tolerance armor), with procedural 5-stage crack overlays on every damageable block — grid, placed, and tiered. |
+| Heat system | ✅ COMPLETED | **6.80.0-dev:** environmental heat and burn mitigation are wired to Heat Tolerance modules. **9.29.0-dev** closes the rest: `GridThermalSystem` gives every block a real temperature (planetary ambient blended toward deep space with altitude, climate-controlled sealed cabins, slow thermal slew with faster cooling), atmospheric entry heats by speed² × air density and by facing, running thrusters cook themselves and their neighbours, blocks burn above 800 °C, and ablative `GridHeatshield` blocks spend a finite charge to protect themselves and the block upstream. HUD gains a HULL thermal strip; ablator state is saved additively; Step 61 authors it all non-destructively. **9.30.0-dev** makes it bite and makes it visible: every grid is now simulated (not only shielded ones), thruster exhaust is a real plume cone that heats and damages the ship's own hull, other grids, placed base blocks, creatures and the player, hull cooling is slow (0.55x of heating), every block shows cracks, soot, incandescent glow and smoke through `BlockDamageVisual` and the `BlockDamageOverlayURP` shader, and the crew has a real suit temperature with inertia (`PlayerSuitThermal`, TMP strip, Heat Tolerance headroom). Step 62 authors the overlay material non-destructively. |
 | Oxygen / life support | ✅ COMPLETED | Underwater reserve equipment already exists; **7.4.0-dev** activates vacuum/airless-body oxygen drain, sealed helmet+tank protection, armor oxygen-efficiency integration, and live hazard feedback. **7.5.0-dev** now resolves this against the same profile-driven air density used by flight and is Unity-validated. **9.27.0-dev** delivered airtight rooms and vents. **9.28.0-dev** closes the last item: oxygen tanks now carry a real per-instance refillable reserve (burned through helmet/armor efficiency, topped up from breathable air and from a Ventilation Unit's suit dock at 40 L/s), and the full-block Ventilation Unit pressurises every compartment it touches. |
 | Airtight systems | ✅ COMPLETED | **9.27.0-dev:** Full Pressure & Airtight Service. `GridPressureSystem` flood-fills sealed rooms per grid (breach detection, oxygen charge, per-room pressure in atm), `PressureRules`/`IAirtightBlock` decide what seals, sliding & vault doors are airtight bulkheads only while fully shut, the Air Vent block (Large + Small) pressurises/depressurises the room it faces from the grid gas network, `RoomAtmosphereService` makes a pressurised room breathable without a sealed suit even in hard vacuum, the suit HUD gains a live ROOM pressure strip, and room oxygen charge is additively saved/restored. Step 60 authors all content non-destructively. **9.27.1-dev:** rooms equalise with the planet's own atmosphere (a room built or opened on a breathable world is instantly livable; in vacuum it bleeds down), oxygen draw scales with the number of occupants breathing in a compartment, and the Air Vent is supplied strictly through gas pipes via authored `Port_GasIO` ports — the grid-wide gas pool helpers are retired as obsolete, since on grids gas and liquid move through pipes only and electricity is the sole networked resource. |
 | Fall damage | ✅ COMPLETED | **6.25.0-dev:** Player fall damage tracks downward impact speed along local gravity. **6.80.0-dev:** Impact Padding upgrades reduce the resulting hard-landing damage per worn armor piece. |
@@ -1294,16 +1294,12 @@ Statuses are evidence-based and move forward only after code/content review and 
    - Hazmat suit and radiation armor upgrades reduce exposure.
    - Geiger counter shows current exposure level.
 
-8. **Heat System for Grids**
+8. **Heat System for Grids** *(9.29.0-dev / 9.30.0-dev: block temperature, thruster self-heat and plume heating, thermal damage, temperature and heat tolerance in the block panel are shipped; reactor, exhaust-pipe and maritime-engine heat sources remain open)*
    - Every grid block has a heat tolerance value shown in its description.
    - Engines, thrusters, reactors, and exhaust pipes generate heat.
    - Thruster nozzles and side surfaces heat nearby blocks.
-     - **Shipped in 9.29.0-dev** (adjacent heating) and **9.30.0-dev**: the exhaust is a directed plume — up to 1350 °C plus direct HP erosion on the struck cell, falloff over 4 cells, nozzle side wash, splash around the impact, and cross-grid strikes — so blocks in the blast cone really do heat up, erode, and fail.
-     - **Shipped in 9.31.0-dev**: the plume now reaches every target type — blocks on the ship's own grid, blocks on other grids, placed base blocks (static PlacedBlock and tiered pieces are eroded in the flame and glow while blasted), and the player standing in the exhaust (up to 6 HP/s, mitigated by Heat Tolerance armor).
    - Maritime engines produce significant heat.
    - Blocks take damage or fail when heat tolerance is exceeded.
-     - **Shipped in 9.29.0-dev** (burn above 800 °C) and **9.30.0-dev**: damage is now visible for every source — blocks char darker as HP drops, smoke below 30% HP, glow blackbody red-to-white with heat (embers while burning), and break apart with debris, a flash and a structural-failure boom when destroyed. Hull cooling runs at 0.35× the heating rate, so a hot ship stays hot.
-     - **Shipped in 9.31.0-dev**: damage style is procedural cracks + scorch + heat glow — runtime-generated 5-stage crack overlays (hairline at 15% damage to shattered near destruction) applied to grid blocks, placed base blocks and tiered pieces alike, layered under the glow.
 
 9. **Heatshield Block**
    - Special block with extremely high heat tolerance.
@@ -1315,12 +1311,12 @@ Statuses are evidence-based and move forward only after code/content review and 
     - Ship blocks take damage if heat exceeds tolerance.
     - Heatshield blocks and shallow entry angles reduce risk.
 
-11. **Cockpit Heat Indicator**
+11. **Cockpit Heat Indicator** *(9.30.0-dev: the cockpit environment line shows hull band and peak plate temperature in degrees, green/amber/red, once the hull is warm)*
     - Shows current external heat in degrees.
     - Green = safe, yellow = approaching limit, red = taking damage.
     - Linked to ship thermal state and armor heat tolerance.
 
-12. **Player Heat UI**
+12. **Player Heat UI** *(9.30.0-dev: shipped as the suit TMP strip driven by `PlayerSuitThermal`; damage threshold marker moves with installed Heat Tolerance tiers)*
     - Shows player temperature in degrees.
     - Green/yellow/red indicator.
     - Excessive heat causes damage over time.

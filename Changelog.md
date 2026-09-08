@@ -1,100 +1,54 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.31.2-dev`
+**Current Version:** `9.30.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
 
-### [9.31.2-dev] Thermal Compile Fixes & FindObjects Deprecation Cleanup
+### [9.30.0-dev] Thruster Plume Hazard, Visible Block Damage & Suit Temperature
 
-**Type:** PATCH — Fixes five compile errors in `GridThermalSystem` (mistyped dictionary + wrong member name) and clears the Unity 6.5 `FindObjectsSortMode` deprecation warnings. No save touch, no API change, no balance change.
-
-#### Fixes
-
-- `GridThermalSystem._external` was declared as `Dictionary<GridBlock, PlumeLoad>` but stores `ExternalPlume` values (which carry the injection timestamp) — producing CS1061 (`PlumeLoad` has no `Time`) at every read site and CS0029 in `InjectPlume`. The dictionary is now correctly typed `Dictionary<GridBlock, ExternalPlume>`, so cross-grid plume injection, expiry pruning and the HUD's EXHAUST marker compile and work.
-- The plume falloff lookup called a non-existent `ThermalRules.PlumeFalloff(i)` (CS0117); the actual balance surface is the `ThrusterPlumeFalloff` array. Now indexed as `ThrusterPlumeFalloff[clamped index]`, with a bounds clamp so shortening the array during tuning can never throw.
-- `GridPressureSystem.RecountOccupants` used the deprecated `FindObjectsByType<T>(FindObjectsInactive, FindObjectsSortMode)` overload (CS0618 on Unity 6.5). Switched to the recommended `FindObjectsByType<T>(FindObjectsInactive)` — the only occurrence in the project.
-- Every `ThermalRules` member referenced across `GridThermalSystem`, `GridHullFx`, `PlayerHazardService`, `ThermalService` and `VitalsHud` is verified to exist — no other dangling references remain.
-
-### [9.31.1-dev] Compile & Shader Parse Fixes
-
-**Type:** PATCH — Two build blockers fixed: the missing `WorldPlumeCell` struct/field in `GridThermalSystem` (CS0246) and a Unity 6.5 ShaderLab parse error in the water shader's inspector headers. No save touch, no API change, no balance change.
+**Type:** MINOR - Adds new save-compatible systems on top of the 9.29 thermal simulation and fixes the three problems we hit while testing it: thrusters never damaged the blocks they fired at, damage of any kind was invisible, and the suit temperature shown in the cockpit fell back to nominal within seconds. Existing saves load unchanged; no new save fields were introduced.
 
 #### Fixes
 
-- `GridThermalSystem.cs` failed to compile (CS0246: `WorldPlumeCell` not found): the `WorldPlumeCell` readonly struct and the `_worldCells` list behind the `WorldPlumeCells` property were missing while every usage was present. Both are restored — open-air plume cells (player exhaust exposure + placed-block strikes) compile and work again.
-- `VoxelWaterURP.shader` threw `Shader error in '': Parse error: syntax error, unexpected $undefined, expecting TVAL_ID or TVAL_VARREF at line 47`: three `[Header(...)]` inspector attributes carried version numbers in their text (`Thin-Film Iridescence - 9.16.0`, `Emission - 9.16.0`, `Surface Texture - 9.16.0`), and the multi-dot `9.16.0` token sequence cannot be lexed by Unity 6.5's stricter ShaderLab parser. The version suffixes are removed from the headers (the file's comments keep the full version history); every other `[Header]` in the project is clean.
+- Thruster exhaust now damages blocks. Root cause: `GridThermalSystem` was only attached to a grid the moment a Heat Shield was placed on it, so ordinary ships were never simulated at all, and the 9.29 engine model only warmed the thruster itself and its six neighbours to at most 240 C, far below the 800 C damage threshold. `GridEntity.Awake` now auto-attaches the thermal system to every grid (the same pattern the maritime system uses) and thrusters have a real exhaust plume (below).
+- Suit temperature no longer collapses within seconds of leaving a hot spot. The old hull hazard was an instantaneous damage lookup with no thermal inertia; `PlayerSuitThermal` (below) replaces it. Hull plate itself also cooled 1.6 times faster than it heated; the multiplier is now 0.55 with a boost only in the last 160 C above ambient, so a hull that came in glowing stays too hot to touch for minutes and still settles to ambient eventually.
+- `GridBlock.Damage` ignores non-positive amounts, and the thermal solve snapshots the block list before iterating so burning a block off the grid no longer mutates the collection it is walking.
+- The thermal solve now purges entries for blocks dismantled between ticks instead of carrying destroyed references.
+- `GridPressureSystem.RecountOccupants` uses the current `FindObjectsByType<T>(FindObjectsInactive)` overload; the `FindObjectsSortMode` overload is deprecated in Unity 6.5 and produced two compiler warnings on every build.
 
-### [9.31.0-dev] Heat Damage Everywhere: Base Blocks & Player Cooked, Procedural Crack Damage
+#### Thruster Plume Hazard
 
-**Type:** MINOR — Exhaust plume damage now reaches every target type (own grid, other grids, placed base blocks AND the player), and hull damage visuals gain procedural crack overlays on top of scorch + heat glow. Save-compatible: no save schema, block HP or balance values were touched; existing saves load unchanged.
+- `ThermalRules.PlumeTemperatureAt` models the exhaust as a cone: 1450 C at the nozzle exit at full throttle, six cells of reach scaling with load, a 16 degree half-angle, a hot core over the first 22 percent and a smooth decay to the tip. Ion exhaust runs at 0.45x, Hydrogen at 1.10x, Atmospheric engines lose plume energy as the air thins.
+- Own hull: `GridThermalSystem` collects every running nozzle each tick (`Plumes`) and any block of the same grid standing in the cone is driven toward the plume temperature. An engine is not heated by its own plume, only by a neighbour firing into it. Heat Shields shrug off plume gas the same way they shrug off entry gas. Stacked sources no longer add naively: the hottest stream dominates and the rest contribute a quarter.
+- Everything else: new `ThrusterPlumeHazard` bootstraps itself at scene load, ticks at 5 Hz and overlaps a capsule along each active plume. Blocks of other grids receive heat through `GridThermalSystem.AddExternalHeat`, static placed blocks and tiered building pieces get a `PlacedBlockHeat` component that slews, glows, cracks and loses HP through the block's own `Damage` path (drops and inventories behave exactly as if a tool had broken it), creatures take Fire damage through `IDamageable`, and the plume temperature felt by the player is published to the suit model. Idle engines cost nothing.
 
-#### Heat Damage Reaches Every Target
+#### Visible Block Damage, Scorch, Heat Glow and Smoke
 
-- **Placed base blocks** (static `PlacedBlock` and tiered building pieces) standing in an exhaust plume are now eroded directly: a physics probe at each open plume cell applies the same per-type, distance-falloff erosion damage as grid blocks, so a ship hovering over your base chews through the landing pad roof. The plume is absorbed by the first base block it strikes — flame never passes through walls.
-- Placed blocks have no thermal simulation behind them, so the plume heat is reported straight to the visual layer: a base wall **glows blackbody hot while it is being blasted**, then cools and fades once the flame stops.
-- **The player now cooks in exhaust**: standing inside a live plume deals up to 6 HP/s at full hydrogen heat (harmless below 80 °C, scaling with plume intensity and distance falloff). The damage flows through the existing heat pipeline, so armor **Heat Tolerance modules genuinely mitigate thruster burns** — and the cockpit crew is safe inside the hull, since plumes only occupy open air.
-- Own-grid and cross-grid damage behave exactly as in 9.30.0; on-grid static blocks (which carry both components) route through the grid path so nothing is ever damaged twice.
+- New `BlockDamageVisual` component attaches lazily the first time a block is hurt or heated, so pristine blocks stay free. It builds a thin overlay shell (one `Generated_DamageOverlay` child per authored mesh renderer) and drives it with a `MaterialPropertyBlock`, so hundreds of scorched blocks still batch and no per-block material instances are created.
+- New `VoxelEngine/BlockDamageOverlayURP` shader draws, without textures: world-anchored Voronoi cracks that widen from hairlines to open fractures as HP is lost (a per-cell mask keeps a lightly damaged plate to a few isolated fractures instead of a web), soot that follows the cracks and then spreads across the face after the block has been hot, and incandescent glow that ramps dull red, orange, yellow to white heat from about 450 C to 1550 C. Cracks glow before faces because the metal is thinnest there, edges get a fresnel lift and the glow shimmers.
+- A generated smoke and ember particle system plays while a block is hot or burning and stops when it cools.
+- Cracks bloom quickly on a hit and heal slowly on repair; glow eases so the 0.25 s thermal ticks are invisible. Soot is permanent for the life of the block.
+- Every damage source now reports: `GridBlock.Damage`, the new `GridBlock.Repair`, `PlacedBlock.Damage`, `PlacedTieredBlock.Damage`, thermal burn and plume heat. `GridBlock.RefreshDamageVisual` and the persistence layer restore cracks from saved HP for grid blocks, placed blocks and tiered pieces, so a battered ship or base still looks battered after a reload.
+- Paint, texturizer and shape-variant tooling skip the generated overlay renderers so the shell keeps its own shader and follows authored renderers when a shape variant hides them.
 
-#### Procedural Crack Damage Overlay
+#### Suit Temperature (Roadmap 5.1 item 12)
 
-- Hull damage now **cracks visibly**: five damage stages of runtime-generated crack overlays (128×128, deterministic seeds — impact points with radiating, forking fissures that widen and multiply as damage climbs, plus chipped patches on the two worst stages). No textures or assets: everything is generated procedurally, once, and cached.
-- Cracks apply to **every damageable thing** — grid blocks, placed base blocks, tiered pieces — as a bounds-wrapped transparent shell sitting just above the surface. Hairline fractures appear from 15% damage; by ~90% the block reads as shattered.
-- One shared crack material; the stage texture is selected per renderer through a `MaterialPropertyBlock` — zero per-block material instances. Cracks render just under the additive heat-glow shell, so a burning, broken block layers glow over cracks over scorch.
-- Stage progression is fully derived from HP ratio, so cracks never desync from actual damage and restored saves show them for free.
+- New `PlayerSuitThermal` gives the crew a real suit temperature with inertia. Its environment target is assembled from planetary and altitude ambient, the hottest hull plate within 4.5 m of the player, any thruster plume the player is standing in, and the climate-controlled cabin if a sealed, powered room surrounds them.
+- The suit slews toward that target slowly (heating 0.045/s, cooling 0.018/s), cooling is boosted 2.2x inside a live cabin and 3.5x in water, and a sealed suit insulates in both directions. In a comfortable environment the suit regulates toward 37 C.
+- Damage begins at 46 C and ramps quadratically to 6 HP/s; each installed Heat Tolerance tier adds 4 C of headroom on top of the existing damage multiplier. Below 28 C the crew takes cold damage. New death causes read `COOKED INSIDE THE SUIT` and `FROZE IN A COLD SUIT`.
+- `PlayerHazardService.HeatDamagePerSecond()` is now ambient-only (volcanic worlds); the position-aware overload remains for callers that want the raw hull number, and `PlayerStats` no longer double-applies hull heat.
 
-#### Visible Damage For Base Blocks
+#### HUD and Telemetry
 
-- `PlacedBlock` and `PlacedTieredBlock` gain the complete hull presentation previously reserved for grid blocks: cracks + scorch as they take hits, smoke below 30% HP, heat glow while a plume blasts them, embers while burning, and a **break-apart debris burst with the structural-failure boom** when destroyed.
-- `PlacedBlock.Damage`/`PlacedTieredBlock.Damage` gained an optional `impactFx` flag (default true, so every existing caller is unaffected); continuous sources like plume erosion pass false and stay clank-free.
-- Restored saves show scars on placed base blocks too — a world-level audit sweep picks up damaged statics every 15 s.
-
-#### Architecture & Fixes
-
-- `GridHullFx` re-architected: per-grid instances still service grid blocks, while a single lazily-created world host services static placed blocks. Visual state is keyed by component, so a block that carries both `PlacedBlock` and `GridBlock` (on-grid statics) is filed under exactly one service.
-- The mid-tick block-destruction fix is confirmed in place: a block burned to death is dropped from the temperature tracking table immediately instead of lingering behind a dead reference.
-
-#### Setup
-
-- **No setup step required.** Pure runtime code — no prefabs, items, recipes or research. Existing prefabs, balance values, block HP and power draws are untouched.
-
-### [9.30.0-dev] Thruster Exhaust Plume Damage, Visible Hull Damage & Heat Glow, Slower Hull Cooling
-
-**Type:** MINOR — Extends the thermal system with a directed exhaust plume that really does destroy blocks, a full hull damage/heat visual layer (scorch, glow, smoke, embers, debris bursts) for EVERY damage source, and a much slower cooldown so hot hulls stay hot. Save-compatible: no save schema, block HP or balance values were touched; existing saves load unchanged.
-
-#### Exhaust Plume Simulation
-
-- Thruster heat is no longer a soft 240 °C glow in all six directions — the exhaust is a **directed plume** that leaves the nozzle along the engine's exhaust axis and walks up to 4 cells outward, falling off 100% / 60% / 35% / 20% with distance.
-- The **first block the flame strikes takes the full load**: up to 1350 °C of hydrogen plume heat (fast slew — direct flame impingement heats in ~2 s, not the slow conduction soak) **plus direct erosion of up to 40 HP/s** at full throttle, so a sustained blast chews through an armour block in seconds-to-tens-of-seconds. Cells around the impact point take splash heat/erosion at 40%.
-- Per-type profiles: Hydrogen runs hottest and erodes hardest, Atmospheric sits at 75% heat / 70% erosion, Ion is nearly clean at 35% heat / 15% erosion.
-- The **struck block absorbs the plume** — flame does not pass through solid hull; splash around the impact cell is the only spread.
-- Cells flanking the nozzle get a side-wash (170 °C max — warm, never burning), and every block touching a running engine still conducts a little heat (90 °C), so burying an engine in a hull keeps a mild cost without the old blanket heating.
-- **Cross-grid plume damage**: a plume that exits your grid keeps travelling and heats/erodes blocks on any other grid it hits — a hovering ship now cooks the landing pad beneath it. Toggleable via `ThermalRules.CrossGridPlumeDamage`.
-- Intact Heat Shields ablate against plume heat AND erosion before taking real damage, so a shield buys ~10 s of full-throttle hydrogen protection before it fails.
-- Latent crash fixed: burning a block to death mid-tick used to mutate the grid's block dictionary during iteration (unreachable before, since nothing could ever exceed the 800 °C threshold). The tick now iterates a snapshot and retires destroyed blocks cleanly.
-
-#### Visible Hull Damage (All Damage Sources)
-
-- New `GridHullFx` per-grid system: any block that loses HP — thruster plumes, entry heat, weapons, tools, demolishers — visibly **chars darker** the more damage it takes, via per-renderer `MaterialPropertyBlock` tints that preserve other systems' overrides (paint, screen accents).
-- Blocks below 30% HP **smoke**, with emission density scaling by damage; a hard cap of 24 live smoke emitters recycles the least-deserving one, so a burning battleship never spawns an unbounded particle field.
-- Destroyed blocks **break apart**: a debris burst of tinted, bouncing chunks (world-collided), a flash, and a new procedural `BlockBreak` structural-failure boom. Thermal destructions flare orange; impact destructions stay grey.
-- Discrete hits (weapons, tools) play a new procedural `BlockHit` metallic clank, volume-scaled by hit size and throttled; continuous sources (burn, plume erosion) stay silent so a roasting hull doesn't clank four times a second.
-- Visual state is derived, never stored: scorch follows `currentHP` and a 5-second audit sweep picks up **restored saves**, so a scarred ship reloads looking scarred. The save format is untouched.
-
-#### Visible Heat Damage
-
-- Hot blocks now **glow**. A blackbody-tinted additive shell wraps the block's full visual bounds: deep red at 420 °C, orange at the 800 °C burn threshold, yellow-white at re-entry temperatures, with a subtle flicker while actively burning — you SEE the hull heating up long before it fails, from the cockpit or from outside.
-- Burning blocks spit **embers** while above the damage threshold, on top of the damage smoke.
-- The vitals HULL strip gains an **EXHAUST** cause marker (alongside RE-ENTRY) so the pilot can tell thruster plume heat from entry heat at a glance.
-
-#### Slower Hull Cooling
-
-- Cooling rate multiplier drops from 1.6× to **0.35×** of the heating rate: a hull that survives a scorching re-entry or a sustained engine burn now stays hot for half a minute instead of snapping back in seconds. The cockpit suit-stats HULL temperature falls gradually, and the heat glow fades with it — heated metal radiates its charge away, it doesn't teleport back to ambient.
-- Every grid is now born with `GridThermalSystem` attached (via `GridEntity.Create`), so ships welded together mid-game and grids restored from save get thermal simulation without running any setup step.
+- The vitals HUD gains a permanent TMP strip: a thermometer that fills from the cold end, a red marker at the real damage threshold that moves right as Heat Tolerance tiers are installed, band colouring (cyan when cold, amber when warm, red when critical), a pulse while damage is being taken, and a source tag (`PLUME`, `ENTRY`, `HULL`) when the heat is not ambient. `VitalsHud.TOTAL_HEIGHT` grew from 161 to 184 so the paint and feedback HUDs keep their offsets.
+- The HULL strip shows a rising or falling trend arrow.
+- The cockpit environment line appends `HULL WARM / HOT / BURNING` with the peak plate temperature in degrees and recolours to the thermal band (Roadmap 5.1 item 11).
+- Block panels show `Temperature` with band and `Heat Tolerance` (800 C), and the integrity value is coloured by structural loss (Roadmap 5.1 item 8). The look-at inspection HUD appends the live temperature of any warm grid block or heated base block.
 
 #### Setup
 
-- **No setup step required.** This release adds no prefabs, items, recipes or research — the plume model and all FX are pure runtime code that self-attaches. Existing prefabs, balance values, block HP and power draws are untouched.
+- Step 62 (`BlockDamageVisualSetup`) creates `Assets/Resources/VoxelEngineRuntime/BlockDamageOverlay.mat` from the overlay shader so the effect survives standalone builds (the runtime falls back to `Shader.Find` in the editor), repairs only a broken shader link if the material already exists, and re-verifies `GridThermalSystem` on every grid prefab. Nothing authored is overwritten.
 
 ### [9.29.0-dev] Block Thermal Simulation, Atmospheric Entry & Ablative Heat Shields
 

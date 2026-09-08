@@ -71,29 +71,5 @@ namespace VoxelEngine.Thermal
         /// <summary>Ambient temperature (°C) a player at this position is exposed to.</summary>
         public static float AmbientAt(Vector3 worldPosition)
             => ThermalRules.AmbientTemperatureC(worldPosition);
-
-        /// <summary>
-        /// Peak exhaust-plume heat (°C) at a world position — how hot it is to
-        /// stand in a live thruster flame right now. 0 when no plume reaches.
-        /// </summary>
-        public static float ExhaustHeatAt(Vector3 worldPosition)
-        {
-            float best = 0f;
-            for (int i = 0; i < Systems.Count; i++)
-            {
-                var s = Systems[i];
-                if (s == null) continue;
-
-                var cells = s.WorldPlumeCells;
-                for (int c = 0; c < cells.Count; c++)
-                {
-                    var cell = cells[c];
-                    float r = cell.Radius;
-                    if ((cell.Pos - worldPosition).sqrMagnitude <= r * r && cell.HeatC > best)
-                        best = cell.HeatC;
-                }
-            }
-            return best;
-        }
     }
 }

@@ -4,6 +4,7 @@
 // instead of generic rounded colour pills: practical labels, phosphor segments,
 // and a quiet physical chassis in the bottom-right corner.
 
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UIElements;
 using VoxelEngine.Items;
@@ -25,6 +26,10 @@ namespace VoxelEngine.UI
         private static VisualElement _tankRow;
         private static VisualElement _heatRow;
         private static Label _heatLabel;
+        private static VisualElement _suitRow;
+        private static Label _suitLabel, _suitCode;
+        private static VisualElement _suitTrack, _suitFill, _suitMarker;
+        private static float _suitPulse;
         private static float _prevTank;
         private static VisualElement _pwrRow;
         private static VisualElement _roomRow;
@@ -34,7 +39,8 @@ namespace VoxelEngine.UI
 
         // Used by the held paint monitor so it clears this larger instrument chassis.
         // Compacted in 7.13.3: tighter rows, same information, less screen space.
-        public const float TOTAL_HEIGHT = 161f;
+        // 9.30.0: +23 for the always-visible suit temperature strip.
+        public const float TOTAL_HEIGHT = 184f;
 
         public static void EnsureMounted(VisualElement uiRoot)
         {
@@ -90,6 +96,7 @@ namespace VoxelEngine.UI
             _pwrVal = powerRow.value;
             _pwrRow.style.display = DisplayStyle.None;
             BuildRoomRow();
+            BuildSuitRow();
             BuildHeatRow();
 
             _prevHp = _prevH2 = _prevHunger = _prevOxy = _prevPwr = _prevTank = -1f;
@@ -128,6 +135,136 @@ namespace VoxelEngine.UI
 
             _roomRow.style.display = DisplayStyle.None;
             _container.Add(_roomRow);
+        }
+
+        /// <summary>
+        /// Suit temperature strip (9.30.0, roadmap item 12). Always visible: a thin
+        /// thermometer bar with a cold-to-hot gradient, a marker for the armor-raised
+        /// damage threshold, and a readout in degrees. Green in the comfort band,
+        /// amber approaching the limit, red and pulsing while the crew is cooking.
+        /// </summary>
+        private static void BuildSuitRow()
+        {
+            _suitRow = new VisualElement { name = "VitalLcd_SUIT" };
+            _suitRow.style.height = 20;
+            _suitRow.style.marginTop = 3;
+            _suitRow.style.paddingLeft = 5;
+            _suitRow.style.paddingRight = 5;
+            _suitRow.style.flexDirection = FlexDirection.Row;
+            _suitRow.style.alignItems = Align.Center;
+            _suitRow.pickingMode = PickingMode.Ignore;
+            LcdHudTheme.ApplyScreen(_suitRow, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.85f), 1f);
+            LcdHudTheme.AddAnimatedScanlines(_suitRow, 2, 4f, 10f);
+
+            _suitCode = new Label("TMP");
+            _suitCode.style.width = 27;
+            _suitCode.style.fontSize = 8;
+            _suitCode.style.letterSpacing = 0.85f;
+            _suitCode.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _suitCode.style.unityTextAlign = TextAnchor.MiddleLeft;
+            _suitCode.style.color = new StyleColor(LcdHudTheme.Phosphor);
+            _suitCode.pickingMode = PickingMode.Ignore;
+            _suitRow.Add(_suitCode);
+
+            // Thermometer track: a dim tube with a fill that grows from the cold end.
+            _suitTrack = new VisualElement();
+            _suitTrack.style.flexGrow = 1;
+            _suitTrack.style.height = 7;
+            _suitTrack.style.marginRight = 6;
+            _suitTrack.style.backgroundColor = new StyleColor(LcdHudTheme.SegmentOff);
+            _suitTrack.style.borderTopLeftRadius = _suitTrack.style.borderTopRightRadius = 3;
+            _suitTrack.style.borderBottomLeftRadius = _suitTrack.style.borderBottomRightRadius = 3;
+            _suitTrack.style.overflow = Overflow.Hidden;
+            _suitTrack.pickingMode = PickingMode.Ignore;
+            _suitRow.Add(_suitTrack);
+
+            _suitFill = new VisualElement();
+            _suitFill.style.position = Position.Absolute;
+            _suitFill.style.left = 0;
+            _suitFill.style.top = 0;
+            _suitFill.style.bottom = 0;
+            _suitFill.style.width = Length.Percent(50);
+            _suitFill.style.backgroundColor = new StyleColor(LcdHudTheme.Phosphor);
+            _suitFill.pickingMode = PickingMode.Ignore;
+            _suitFill.style.transitionProperty = new List<StylePropertyName> { "width", "background-color" };
+            _suitFill.style.transitionDuration = new List<TimeValue> { new TimeValue(0.35f, TimeUnit.Second), new TimeValue(0.25f, TimeUnit.Second) };
+            _suitFill.style.transitionTimingFunction = new List<EasingFunction> { new EasingFunction(EasingMode.EaseOutCubic), new EasingFunction(EasingMode.EaseInOutSine) };
+            _suitTrack.Add(_suitFill);
+
+            // Threshold marker: where damage starts. Moves right as Heat Tolerance tiers are installed.
+            _suitMarker = new VisualElement();
+            _suitMarker.style.position = Position.Absolute;
+            _suitMarker.style.top = -1;
+            _suitMarker.style.bottom = -1;
+            _suitMarker.style.width = 2;
+            _suitMarker.style.left = Length.Percent(78);
+            _suitMarker.style.backgroundColor = new StyleColor(T.AccentRed);
+            _suitMarker.pickingMode = PickingMode.Ignore;
+            _suitTrack.Add(_suitMarker);
+
+            _suitLabel = new Label("37\u00B0C");
+            _suitLabel.style.width = 48;
+            _suitLabel.style.fontSize = 9;
+            _suitLabel.style.letterSpacing = 0.35f;
+            _suitLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _suitLabel.style.unityTextAlign = TextAnchor.MiddleRight;
+            _suitLabel.style.color = new StyleColor(LcdHudTheme.Phosphor);
+            _suitLabel.pickingMode = PickingMode.Ignore;
+            _suitRow.Add(_suitLabel);
+
+            _container.Add(_suitRow);
+        }
+
+        private static void TickSuitRow()
+        {
+            if (_suitRow == null || _suitLabel == null) return;
+            var stats = PlayerStats.Instance;
+            var suit = stats != null ? stats.SuitThermal : null;
+            if (suit == null) return;
+
+            // Bar spans 5 °C (frozen) .. threshold + 20 °C (lethal), so the red marker
+            // always sits at the real damage point regardless of installed tolerance.
+            const float low = 5f;
+            float threshold = suit.DamageThresholdC;
+            float high = threshold + 20f;
+            float t = suit.SuitTemperatureC;
+            float fill = Mathf.Clamp01((t - low) / Mathf.Max(1f, high - low));
+            float markerAt = Mathf.Clamp01((threshold - low) / Mathf.Max(1f, high - low));
+
+            var band = suit.Band;
+            Color signal = band switch
+            {
+                VoxelEngine.Thermal.ThermalBand.Critical => T.AccentRed,
+                VoxelEngine.Thermal.ThermalBand.Hot => Color.Lerp(T.AccentAmber, T.AccentRed, 0.5f),
+                VoxelEngine.Thermal.ThermalBand.Warm => T.AccentAmber,
+                _ => suit.IsCold ? new Color(0.45f, 0.85f, 1f) : LcdHudTheme.Phosphor,
+            };
+
+            // Pulse while actually taking damage so the strip reads as an alarm.
+            if (suit.CurrentDamagePerSecond > 0f)
+            {
+                _suitPulse += Time.unscaledDeltaTime * 6f;
+                float pulse = 0.72f + 0.28f * Mathf.Sin(_suitPulse);
+                signal = Color.Lerp(signal * 0.55f, signal, pulse);
+            }
+            else _suitPulse = 0f;
+
+            _suitFill.style.width = Length.Percent(fill * 100f);
+            _suitFill.style.backgroundColor = new StyleColor(signal);
+            _suitMarker.style.left = Length.Percent(markerAt * 100f);
+            _suitLabel.style.color = new StyleColor(signal);
+            _suitCode.style.color = new StyleColor(signal);
+
+            string source = band == VoxelEngine.Thermal.ThermalBand.Nominal && !suit.IsCold
+                ? string.Empty
+                : suit.DominantSource switch
+                {
+                    "PLUME" => " PLUME",
+                    "RE-ENTRY" => " ENTRY",
+                    "HULL" => " HULL",
+                    _ => string.Empty,
+                };
+            _suitLabel.text = $"{t:0}\u00B0C{source}";
         }
 
         /// <summary>Hull thermal strip. Appears only when the ship the player is riding
@@ -190,14 +327,16 @@ namespace VoxelEngine.UI
                 _heatRow.style.display = DisplayStyle.Flex;
 
             string label = VoxelEngine.Thermal.ThermalRules.BandLabel(band);
-            // Cause marker: re-entry dominates when present, otherwise an exhaust
-            // plume is what is cooking the hull right now.
-            string entry = thermal.EntryHeatingC > 1f ? "  RE-ENTRY"
-                : thermal.PlumeHeatingC > 1f ? "  EXHAUST"
-                : string.Empty;
-            _heatLabel.text = $"{label}  {thermal.PeakTemperatureC:0}\u00B0C{entry}";
+            string entry = thermal.EntryHeatingC > 1f ? "  RE-ENTRY" : string.Empty;
+            // Trend arrow: is the hull still heating or already cooling down? A hull
+            // stays hot for minutes now, so "cooling" is useful information.
+            float peak = thermal.PeakTemperatureC;
+            string trend = peak > _prevHullPeak + 0.5f ? " \u25B2" : peak < _prevHullPeak - 0.5f ? " \u25BC" : string.Empty;
+            _prevHullPeak = Mathf.Lerp(_prevHullPeak, peak, 0.2f);
+            _heatLabel.text = $"{label}  {peak:0}\u00B0C{trend}{entry}";
             _heatLabel.style.color = new StyleColor(VoxelEngine.Thermal.ThermalRules.BandColor(band));
         }
+        private static float _prevHullPeak;
 
         private static void TickRoomRow()
         {
@@ -278,6 +417,7 @@ namespace VoxelEngine.UI
             TickSuitTankRow();
             TickPowerRow();
             TickRoomRow();
+            TickSuitRow();
             TickHeatRow();
         }
 

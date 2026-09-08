@@ -603,6 +603,17 @@ namespace VoxelEngine.EditorTools
                 "Re-runnable. Idempotent. Block HP, mass and power draws are preserved.");
             AddWizardButton(scroll, "61. Wire Thermal Simulation, Atmospheric Entry & Heat Shields (Hull Heating, Ablative Shields \u2014 Non-Destructive)", () => VoxelEngine.EditorTools.ThermalSystemSetup.RunStep61(), 56);
 
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
+                "Step 62 (9.30.0) wires VISIBLE BLOCK DAMAGE, THRUSTER PLUME HAZARD & SUIT TEMPERATURE (non-destructive):\n" +
+                "  \u2022 Creates the Resources/VoxelEngineRuntime/BlockDamageOverlay material (procedural cracks,\n" +
+                "    soot and incandescent glow shell drawn over any damaged or hot block)\n" +
+                "  \u2022 Re-verifies GridThermalSystem on every grid prefab\n" +
+                "  \u2022 Runtime: thruster plumes heat/damage own hull, other grids, base blocks, creatures and the\n" +
+                "    player; hull cooling is slow; the suit has a real temperature (TMP strip in Suit Status)\n" +
+                "Re-runnable. Idempotent. Block HP, mass, power draws and authored material tweaks are preserved.");
+            AddWizardButton(scroll, "62. Wire Visible Block Damage, Thruster Plume Hazard & Suit Temperature (Cracks, Glow, Plumes \u2014 Non-Destructive)", () => VoxelEngine.EditorTools.BlockDamageVisualSetup.RunStep62(), 56);
+
             AddSpacer(scroll, 20);
         }
 

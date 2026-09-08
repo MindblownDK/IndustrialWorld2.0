@@ -263,6 +263,13 @@ namespace VoxelEngine.GridSystem
             if (GetComponent<VoxelEngine.Maritime.MaritimePropulsionSystem>() == null)
                 gameObject.AddComponent<VoxelEngine.Maritime.MaritimePropulsionSystem>();
 
+            // Auto-attach the thermal simulation so EVERY grid heats from its own thruster
+            // plumes, atmospheric entry and neighbouring exhaust. Previously only grids that
+            // had a heat shield placed on them were simulated, so a thruster firing into a
+            // plain hull never damaged anything. Idle grids cost nothing (sim early-outs).
+            if (GetComponent<VoxelEngine.Thermal.GridThermalSystem>() == null)
+                gameObject.AddComponent<VoxelEngine.Thermal.GridThermalSystem>();
+
             _prevVelocity = _rb.linearVelocity;
         }
 
@@ -1421,12 +1428,6 @@ namespace VoxelEngine.GridSystem
             rb.angularDamping = 1.5f;
             var entity = go.AddComponent<GridEntity>();
             entity.gridSize = size;
-            // Every grid is born with thermal simulation. The component is inert
-            // and effectively free until the hull actually heats up, and this is
-            // the single factory behind player-built and save-restored grids —
-            // so a ship welded together mid-game cooks under its own thrusters
-            // just like a prefab-authored one.
-            go.AddComponent<VoxelEngine.Thermal.GridThermalSystem>();
             return entity;
         }
     }

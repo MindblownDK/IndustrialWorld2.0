@@ -3,6 +3,10 @@
 // Lightweight environmental hazard source used by the armor upgrade hooks. It
 // deliberately reads existing celestial-body settings so heat/radiation protection
 // is useful now without coupling the armor system to future reactor or room systems.
+//
+// 9.30.0: hull and plume heat moved into PlayerSuitThermal, which has real thermal
+// inertia. The position-aware overload is kept for callers that want a raw "how hot
+// is the hull under me" number, but PlayerStats no longer double-applies it.
 
 using UnityEngine;
 using VoxelEngine.Cosmos;
@@ -17,21 +21,16 @@ namespace VoxelEngine.Player
         public const float MaxHeatDamagePerSecond = 3f;
 
         /// <summary>Extra damage per second taken while riding a hull that is burning
-        /// through an atmospheric entry.</summary>
+        /// through an atmospheric entry (raw hull hazard, not suit-mediated).</summary>
         public const float MaxHullHeatDamagePerSecond = 5f;
 
-        /// <summary>Exhaust plume heat below this is harmless to a suited player.</summary>
-        public const float ExhaustHarmlessC = 80f;
-
-        /// <summary>Damage per second while standing inside a full-intensity
-        /// thruster exhaust plume (scales down with plume heat).</summary>
-        public const float MaxExhaustHeatDamagePerSecond = 6f;
-
+        /// <summary>Ambient planetary heat only (volcanic worlds), no hull contribution.</summary>
         public static float HeatDamagePerSecond() => HeatDamagePerSecond(Vector3.zero, false);
 
         /// <summary>
-        /// Ambient planetary heat, plus the heat of a burning hull the player is standing
-        /// on. Passing a position lets a re-entry cook the crew, not just the ship.
+        /// Ambient planetary heat, plus — when <paramref name="usePosition"/> is set — the
+        /// raw heat of a burning hull the player is standing on. PlayerStats uses the
+        /// ambient-only form and lets PlayerSuitThermal handle the hull with inertia.
         /// </summary>
         public static float HeatDamagePerSecond(Vector3 worldPosition, bool usePosition)
         {
@@ -40,7 +39,7 @@ namespace VoxelEngine.Player
             var body = GravityProvider.ActiveBody;
             if (body != null && body.settings != null)
             {
-                float temperature = body.settings.temperature;
+                float temperature = ThermalRules.SurfaceTemperatureC(body);
                 if (temperature > HeatDamageThresholdC)
                 {
                     float severity = Mathf.Clamp01((temperature - HeatDamageThresholdC) / HeatRampSpanC);
@@ -56,16 +55,6 @@ namespace VoxelEngine.Player
                     float over = thermal.PeakTemperatureC - ThermalRules.BlockDamageThresholdC;
                     float severity = Mathf.Clamp01(over / ThermalRules.BlockDamageSpanC);
                     dps += MaxHullHeatDamagePerSecond * severity;
-                }
-
-                // Standing inside a live exhaust plume cooks the player directly —
-                // armor Heat Tolerance still mitigates the final damage.
-                float exhaust = ThermalService.ExhaustHeatAt(worldPosition);
-                if (exhaust > ExhaustHarmlessC)
-                {
-                    float severity = Mathf.Clamp01(
-                        (exhaust - ExhaustHarmlessC) / (ThermalRules.ThrusterPlumePeakC - ExhaustHarmlessC));
-                    dps += MaxExhaustHeatDamagePerSecond * severity;
                 }
             }
 

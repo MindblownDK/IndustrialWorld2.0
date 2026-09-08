@@ -26,6 +26,7 @@ namespace VoxelEngine.Building
             var renderers = GetComponentsInChildren<Renderer>(true);
             foreach (var r in renderers)
             {
+                if (VoxelEngine.Thermal.BlockDamageVisual.IsGeneratedOverlay(r)) continue;   // crack/heat shell keeps its own shader
                 if (overrideMaterial != null)
                 {
                     var arr = new Material[r.sharedMaterials.Length];

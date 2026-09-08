@@ -1,8 +1,9 @@
 // Assets/Scripts/VoxelEngine/Thermal/ThermalRules.cs
 //
-// Central balance surface for block thermal simulation and atmospheric entry.
-// Everything that decides "how hot is it here" lives in one file so flight,
-// hull damage, HUD and FX can never disagree about the temperature model.
+// Central balance surface for block thermal simulation, atmospheric entry, thruster
+// plumes, visible damage and suit temperature. Everything that decides "how hot is
+// it here" and "what does hot look like" lives in one file so flight, hull damage,
+// HUD, FX and the player hazard model can never disagree about the temperature model.
 
 using UnityEngine;
 using VoxelEngine.Cosmos;
@@ -43,15 +44,25 @@ namespace VoxelEngine.Thermal
         /// <summary>Peak HP/second a block loses while glowing white-hot.</summary>
         public const float MaxBlockDamagePerSecond = 26f;
 
-        /// <summary>How fast a block slews toward its target temperature (per second).
+        /// <summary>How fast a block slews toward a HOTTER target (per second).
         /// Deliberately slow: thermal mass is what makes re-entry feel like a commitment.</summary>
         public const float ThermalResponsePerSecond = 0.18f;
 
-        /// <summary>A hot hull cools at this multiple of its heating rate. Slow on
-        /// purpose (0.35x): a ship that survives a scorching entry or a sustained
-        /// engine burn stays visibly hot for a long while afterwards — heated
-        /// metal radiates its charge away gradually, it doesn't snap back.</summary>
-        public const float CoolingRateMultiplier = 0.35f;
+        /// <summary>
+        /// Cooling rate relative to heating. Steel radiates slowly: a hull that came in
+        /// glowing should still be too hot to touch minutes later, not seconds. 9.30.0
+        /// lowered this from 1.6x (which emptied a 1500 °C hull in ~20 s) to 0.55x.
+        /// </summary>
+        public const float CoolingRateMultiplier = 0.55f;
+
+        /// <summary>
+        /// Extra cooling applied while a block is only mildly warm. Radiative loss falls
+        /// with temperature, so the last hundred degrees would otherwise linger for ages.
+        /// </summary>
+        public const float WarmBlockCoolingBoost = 1.8f;
+
+        /// <summary>Below this temperature above ambient the extra cooling boost applies.</summary>
+        public const float WarmBlockCoolingBandC = 160f;
 
         // ── Atmospheric entry ──────────────────────────────────────────────────
 
@@ -75,57 +86,109 @@ namespace VoxelEngine.Thermal
         /// <summary>Peak °C a thruster adds to itself while running at full throttle.</summary>
         public const float ThrusterPeakSelfHeatC = 620f;
 
+        /// <summary>Peak °C a running thruster adds to a directly adjacent block (conduction).</summary>
+        public const float ThrusterNeighbourHeatC = 240f;
+
         // ── Thruster exhaust plume ─────────────────────────────────────────────
-        // A running engine is no longer a soft warm glow in every direction: the
-        // exhaust is a directed plume that leaves the nozzle, heats what it
-        // impinges on FAST, and erodes it. Build in your own exhaust cone and
-        // the ship will bite its own hull apart.
+        // The plume is the column of hot gas leaving the nozzle. Anything standing in
+        // it — the ship's own hull, a parked grid, a landing pad, the player — is
+        // heated by radiation and convection, falling off with distance and off-axis.
 
-        /// <summary>Peak °C the exhaust plume adds to the cell directly behind a
-        /// hydrogen thruster at full throttle (before distance falloff).</summary>
-        public const float ThrusterPlumePeakC = 1350f;
+        /// <summary>Stagnation temperature (°C) of the exhaust at the nozzle exit, full throttle.</summary>
+        public const float PlumeCoreTemperatureC = 1450f;
 
-        /// <summary>How many cells the exhaust plume reaches before dissipating.</summary>
-        public const int ThrusterPlumeLength = 4;
+        /// <summary>Plume reach in cells along the nozzle axis at full throttle.</summary>
+        public const float PlumeLengthCells = 6f;
 
-        /// <summary>Heat retained per plume cell (index 0 = the impinged cell).</summary>
-        public static readonly float[] ThrusterPlumeFalloff = { 1f, 0.6f, 0.35f, 0.2f };
+        /// <summary>Half-angle of the plume cone in degrees.</summary>
+        public const float PlumeHalfAngleDeg = 16f;
 
-        /// <summary>Peak °C bled into the cells flanking a running nozzle — the
-        /// side surfaces of the engine housing. Warm, but never burning.</summary>
-        public const float ThrusterSideWashHeatC = 170f;
+        /// <summary>Distance (m) between the nozzle and a target below which the plume is at full core temperature.</summary>
+        public const float PlumeCoreLengthFraction = 0.22f;
 
-        /// <summary>Peak °C conducted into every block touching a running engine,
-        /// so burying a thruster inside a hull still has a (mild) cost.</summary>
-        public const float ThrusterConductionHeatC = 90f;
+        /// <summary>
+        /// Plume heat fraction reaching a target that is a static world block (concrete
+        /// pads, hangar walls). Static blocks are heavier than hull plate, so the same
+        /// plume takes longer to bite.
+        /// </summary>
+        public const float PlumeStaticBlockTransmission = 0.85f;
 
-        /// <summary>Direct flame impingement heats the struck surface much faster
-        /// than conduction can soak through a hull (per second slew rate).</summary>
-        public const float PlumeResponsePerSecond = 0.5f;
+        /// <summary>Fire damage per second dealt to a creature standing in a full-power plume core.</summary>
+        public const float PlumeCreatureDamagePerSecond = 9f;
 
-        /// <summary>HP/second of direct erosion on the cell directly behind a
-        /// hydrogen thruster at full throttle (before distance falloff). This is
-        /// the mechanical sandblasting on top of the heat — sustained blasting
-        /// chews through armour in seconds-to-tens-of-seconds, not minutes.</summary>
-        public const float ThrusterPlumeErosionPerSecond = 40f;
+        /// <summary>Relative plume temperature per engine family. Ion exhaust is fast but thin.</summary>
+        public static float PlumeScale(ThrusterType type) => type switch
+        {
+            ThrusterType.Ion => 0.45f,
+            ThrusterType.Hydrogen => 1.10f,
+            _ => 1f,
+        };
 
-        /// <summary>Plume effects also apply to blocks on OTHER grids caught in
-        /// the exhaust cone (a hovering ship can cook the landing pad under it).</summary>
-        public const bool CrossGridPlumeDamage = true;
+        // ── Player / suit ─────────────────────────────────────────────────────
+
+        /// <summary>Resting suit temperature (°C) the body regulates toward.</summary>
+        public const float SuitRestingTemperatureC = 37f;
+
+        /// <summary>Suit temperature above which the crew starts taking heat damage.</summary>
+        public const float SuitDamageThresholdC = 46f;
+
+        /// <summary>Span above the threshold that reaches maximum suit heat damage.</summary>
+        public const float SuitDamageSpanC = 34f;
+
+        /// <summary>Peak HP/second lost at the top of the suit-heat ramp (before armor).</summary>
+        public const float SuitMaxHeatDamagePerSecond = 6f;
+
+        /// <summary>Degrees of extra safe headroom every Heat Tolerance module tier buys.</summary>
+        public const float SuitToleranceHeadroomPerTierC = 4f;
+
+        /// <summary>Suit temperature below which cold starts to bite.</summary>
+        public const float SuitColdThresholdC = 28f;
+
+        /// <summary>Span below the cold threshold that reaches maximum cold damage.</summary>
+        public const float SuitColdSpanC = 20f;
+
+        /// <summary>Peak HP/second lost when the suit is frozen through.</summary>
+        public const float SuitMaxColdDamagePerSecond = 2.5f;
+
+        /// <summary>
+        /// How fast the suit heats toward a hotter environment (per second). Slow: a suit
+        /// is an insulated pressure vessel, and heating takes tens of seconds, not frames.
+        /// </summary>
+        public const float SuitHeatingRatePerSecond = 0.045f;
+
+        /// <summary>
+        /// How fast the suit sheds heat once out of the hazard (per second). Deliberately
+        /// SLOWER than heating: the crew was cooked and the suit holds it. 9.30.0 replaces
+        /// the previous instant-reset behaviour the team flagged as "cools too fast".
+        /// </summary>
+        public const float SuitCoolingRatePerSecond = 0.018f;
+
+        /// <summary>Extra cooling multiplier while the suit is in an active life-support room.</summary>
+        public const float SuitCabinCoolingBoost = 2.2f;
+
+        /// <summary>Extra cooling multiplier while submerged in liquid.</summary>
+        public const float SuitSubmergedCoolingBoost = 3.5f;
+
+        /// <summary>
+        /// Fraction of the surrounding hull's temperature excess that reaches a player
+        /// standing on it. Hull plate radiates onto the crew but a suit is not welded to it.
+        /// </summary>
+        public const float SuitHullCoupling = 0.06f;
+
+        /// <summary>Fraction of a thruster plume's temperature felt by a player standing in it.</summary>
+        public const float SuitPlumeCoupling = 0.14f;
 
         // ── Queries ────────────────────────────────────────────────────────────
 
         /// <summary>
         /// Ambient temperature at a world position. Inside an atmosphere the planet's
-        /// mean surface temperature dominates and thins toward deep space with altitude;
-        /// in vacuum the hull sees the cold sink directly.
+        /// seasonal surface temperature dominates and thins toward deep space with
+        /// altitude; in vacuum the hull sees the cold sink directly.
         /// </summary>
         public static float AmbientTemperatureC(Vector3 worldPosition)
         {
             var body = GravityProvider.ActiveBody;
-            float surfaceC = body != null && body.settings != null
-                ? body.settings.temperature
-                : FallbackAmbientC;
+            float surfaceC = SurfaceTemperatureC(body);
 
             var sample = AtmosphereManager.Sample(worldPosition);
             if (sample.IsInSpace || !sample.HasAtmosphere || sample.AirDensity <= 0f)
@@ -134,6 +197,40 @@ namespace VoxelEngine.Thermal
             // Air carries the planet's heat; as it thins the hull sees more of the void.
             return Mathf.Lerp(DeepSpaceTemperatureC, surfaceC, Mathf.Clamp01(sample.Density01));
         }
+
+        /// <summary>
+        /// Current surface temperature of a body including the seasonal swing, so a
+        /// winter night on an ice moon really is colder than its mean.
+        /// </summary>
+        public static float SurfaceTemperatureC(CelestialBody body)
+        {
+            if (body == null || body.settings == null) return FallbackAmbientC;
+
+            // Seasons change over minutes, but this is asked by every grid, every hot
+            // base block and the suit several times a second, so cache for one second.
+            float now = Time.unscaledTime;
+            if (ReferenceEquals(body, s_surfaceCacheBody) && now - s_surfaceCacheTime < 1f)
+                return s_surfaceCacheC;
+
+            float result;
+            try
+            {
+                result = VoxelEngine.Weather.PlanetarySeasons.GetSeasonInfo(body).effectiveTemperature;
+            }
+            catch
+            {
+                result = body.settings.temperature;
+            }
+
+            s_surfaceCacheBody = body;
+            s_surfaceCacheTime = now;
+            s_surfaceCacheC = result;
+            return result;
+        }
+
+        private static CelestialBody s_surfaceCacheBody;
+        private static float s_surfaceCacheTime = -10f;
+        private static float s_surfaceCacheC = FallbackAmbientC;
 
         /// <summary>
         /// Stagnation temperature (°C) added by ploughing through air at speed. Scales
@@ -152,6 +249,41 @@ namespace VoxelEngine.Thermal
             return PeakEntryTemperatureC * t * t * Mathf.Clamp01(sample.Density01);
         }
 
+        /// <summary>
+        /// Temperature (°C above ambient) the exhaust plume delivers at a point, given the
+        /// nozzle exit position, the direction the exhaust travels, the cell size of the
+        /// engine and its 0..1 load. Zero when the point is outside the cone.
+        /// </summary>
+        public static float PlumeTemperatureAt(Vector3 nozzle, Vector3 exhaustDir, float cellSize,
+            float load01, Vector3 point)
+        {
+            if (load01 <= 0.001f) return 0f;
+
+            Vector3 offset = point - nozzle;
+            float along = Vector3.Dot(offset, exhaustDir);
+            if (along <= 0f) return 0f;
+
+            float reach = PlumeLengthCells * cellSize * Mathf.Lerp(0.45f, 1f, load01);
+            if (along >= reach) return 0f;
+
+            // Off-axis falloff: full heat on the axis, zero at the cone edge. The cone
+            // starts with the nozzle radius so a block flush against the exit is inside.
+            float radiusAt = cellSize * 0.35f + along * Mathf.Tan(PlumeHalfAngleDeg * Mathf.Deg2Rad);
+            float lateral = (offset - exhaustDir * along).magnitude;
+            if (lateral >= radiusAt) return 0f;
+            float radial = 1f - (lateral / radiusAt);
+            radial = radial * radial * (3f - 2f * radial);   // smoothstep
+
+            // Axial falloff: a hot core, then a smooth decay to the plume tip.
+            float core = reach * PlumeCoreLengthFraction;
+            float axial = along <= core
+                ? 1f
+                : 1f - Mathf.Clamp01((along - core) / Mathf.Max(0.01f, reach - core));
+            axial *= axial;
+
+            return PlumeCoreTemperatureC * load01 * radial * axial;
+        }
+
         /// <summary>Damage per second a block takes at a given temperature.</summary>
         public static float BlockDamagePerSecond(float temperatureC)
         {
@@ -160,24 +292,21 @@ namespace VoxelEngine.Thermal
             return MaxBlockDamagePerSecond * severity;
         }
 
-        /// <summary>Plume heat multiplier per thruster type — burning hydrogen runs
-        /// far hotter than a fan-driven atmospheric engine; ion is nearly clean.</summary>
-        public static float PlumeHeatMultiplier(GridSystem.ThrusterType type) => type switch
+        /// <summary>
+        /// Effective rate at which a block moves toward its target temperature this tick.
+        /// Heating is quick relative to cooling; the last stretch of cooling is boosted
+        /// so a hull settles to ambient instead of hovering warm forever.
+        /// </summary>
+        public static float SlewRate(float current, float target, float ambient)
         {
-            GridSystem.ThrusterType.Hydrogen => 1.00f,
-            GridSystem.ThrusterType.Atmospheric => 0.75f,
-            GridSystem.ThrusterType.Ion => 0.35f,
-            _ => 0.75f,
-        };
+            if (target >= current) return ThermalResponsePerSecond;
 
-        /// <summary>Plume erosion multiplier per thruster type.</summary>
-        public static float PlumeErosionMultiplier(GridSystem.ThrusterType type) => type switch
-        {
-            GridSystem.ThrusterType.Hydrogen => 1.00f,
-            GridSystem.ThrusterType.Atmospheric => 0.70f,
-            GridSystem.ThrusterType.Ion => 0.15f,
-            _ => 0.70f,
-        };
+            float rate = ThermalResponsePerSecond * CoolingRateMultiplier;
+            float excess = current - ambient;
+            if (excess < WarmBlockCoolingBandC)
+                rate *= Mathf.Lerp(WarmBlockCoolingBoost, 1f, Mathf.Clamp01(excess / WarmBlockCoolingBandC));
+            return rate;
+        }
 
         public static ThermalBand Band(float temperatureC)
         {
@@ -203,27 +332,52 @@ namespace VoxelEngine.Thermal
             _ => new Color(0.55f, 0.85f, 0.95f),
         };
 
-        /// <summary>Glow strength 0..1 used to drive emissive hull shading during entry.</summary>
+        /// <summary>Glow strength 0..1 used to drive emissive hull shading. Starts as a
+        /// dull red at ~450 °C and saturates to white heat around 1550 °C.</summary>
         public static float GlowIntensity01(float temperatureC)
-            => Mathf.Clamp01((temperatureC - 320f) / 1100f);
-
-        /// <summary>Temperature at which a block's heat glow shell first appears.</summary>
-        public const float GlowVisibleC = 420f;
+            => Mathf.Clamp01((temperatureC - 450f) / 1100f);
 
         /// <summary>
-        /// Blackbody glow colour for a block temperature: deep red as the glow
-        /// first appears, orange at the burn threshold, yellow-white at re-entry
-        /// temperatures. Alpha is 1 — callers scale it by glow intensity.
+        /// Incandescent colour of hot steel: dull red, through orange and yellow, to a
+        /// white-blue at the top of the range. Used by the hull glow overlay and HUD.
         /// </summary>
-        public static Color GlowColor(float temperatureC)
+        public static Color IncandescentColor(float glow01)
         {
-            float t = Mathf.Clamp01((temperatureC - GlowVisibleC) / 1300f);
+            glow01 = Mathf.Clamp01(glow01);
+            if (glow01 < 0.35f)
+                return Color.Lerp(new Color(0.55f, 0.03f, 0.01f), new Color(1.00f, 0.18f, 0.02f), glow01 / 0.35f);
+            if (glow01 < 0.75f)
+                return Color.Lerp(new Color(1.00f, 0.18f, 0.02f), new Color(1.00f, 0.62f, 0.12f), (glow01 - 0.35f) / 0.40f);
+            return Color.Lerp(new Color(1.00f, 0.62f, 0.12f), new Color(1.00f, 0.95f, 0.85f), (glow01 - 0.75f) / 0.25f);
+        }
 
-            if (t < 0.35f)
-                return Color.Lerp(new Color(0.45f, 0.03f, 0.01f), new Color(1f, 0.18f, 0.02f), t / 0.35f);
-            if (t < 0.70f)
-                return Color.Lerp(new Color(1f, 0.18f, 0.02f), new Color(1f, 0.55f, 0.10f), (t - 0.35f) / 0.35f);
-            return Color.Lerp(new Color(1f, 0.55f, 0.10f), new Color(1f, 0.93f, 0.78f), (t - 0.70f) / 0.30f);
+        // ── Suit queries ──────────────────────────────────────────────────────
+
+        /// <summary>Heat damage per second for a suit temperature, before armor multipliers.</summary>
+        public static float SuitHeatDamagePerSecond(float suitTemperatureC, int heatToleranceTier)
+        {
+            float threshold = SuitDamageThresholdC + SuitToleranceHeadroomPerTierC * Mathf.Max(0, heatToleranceTier);
+            if (suitTemperatureC <= threshold) return 0f;
+            float severity = Mathf.Clamp01((suitTemperatureC - threshold) / SuitDamageSpanC);
+            return SuitMaxHeatDamagePerSecond * severity * severity;
+        }
+
+        /// <summary>Cold damage per second for a suit temperature.</summary>
+        public static float SuitColdDamagePerSecond(float suitTemperatureC)
+        {
+            if (suitTemperatureC >= SuitColdThresholdC) return 0f;
+            float severity = Mathf.Clamp01((SuitColdThresholdC - suitTemperatureC) / SuitColdSpanC);
+            return SuitMaxColdDamagePerSecond * severity;
+        }
+
+        /// <summary>Coarse band for the suit strip: cold, nominal, warm, hot, critical.</summary>
+        public static ThermalBand SuitBand(float suitTemperatureC, int heatToleranceTier)
+        {
+            float threshold = SuitDamageThresholdC + SuitToleranceHeadroomPerTierC * Mathf.Max(0, heatToleranceTier);
+            if (suitTemperatureC >= threshold) return ThermalBand.Critical;
+            if (suitTemperatureC >= threshold - 4f) return ThermalBand.Hot;
+            if (suitTemperatureC >= SuitRestingTemperatureC + 2.5f) return ThermalBand.Warm;
+            return ThermalBand.Nominal;
         }
     }
 }

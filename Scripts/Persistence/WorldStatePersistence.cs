@@ -1313,11 +1313,6 @@ namespace VoxelEngine.Persistence
                 grid.HydrogenStored = Mathf.Max(0f, savedGrid.hydrogenStored);
                 grid.OxygenStored = Mathf.Max(0f, savedGrid.oxygenStored);
 
-                // Hull FX self-attaches on first damage while playing, but a
-                // restored save needs it up front so already-scarred blocks are
-                // picked up by its damage audit instead of looking pristine.
-                VoxelEngine.GridSystem.GridHullFx.For(grid);
-
                 // Structural blocks must be present before Detail blocks can restore
                 // their host-cell relationship and attached pipe topology.
                 RestoreGridBlocks(grid, savedGrid.blocks, false);
@@ -1451,6 +1446,8 @@ namespace VoxelEngine.Persistence
                 // OnPlaced initializes defaults, so reapply persisted state afterwards.
                 block.currentHP = saved.currentHP > 0f ? saved.currentHP : block.maxHP;
                 block.Enabled = saved.enabled;
+                // A battered hull reloads battered: cracks are derived from saved HP.
+                block.RefreshDamageVisual();
                 if (saved.paintFinish != 0)
                 {
                     var gp = block.GetComponent<VoxelEngine.Building.BlockPaint>() ?? block.gameObject.AddComponent<VoxelEngine.Building.BlockPaint>();
@@ -1621,6 +1618,8 @@ namespace VoxelEngine.Persistence
                 var pb = go.GetComponent<PlacedBlock>();
                 if (pb == null) pb = go.AddComponent<PlacedBlock>();
                 pb.Item = blockItem; pb.Hp = sb.hp;
+                // A battered base still looks battered after a reload (9.30.0).
+                VoxelEngine.Thermal.BlockDamageVisual.ReportDamage(pb, pb.Damage01);
                 var conveyor = go.GetComponentInChildren<VoxelEngine.Simulation.ConveyorBelt>(true);
                 if (conveyor != null && sb.hasExplicitConveyorShape
                     && System.Enum.IsDefined(typeof(VoxelEngine.Simulation.ConveyorShape), sb.conveyorShape))
@@ -2040,6 +2039,9 @@ namespace VoxelEngine.Persistence
                 if (pb == null) pb = go.AddComponent<PlacedTieredBlock>();
                 pb.Initialize(def, (BuildTier)ps.tier);
                 pb.hp = ps.hp > 0 ? ps.hp : pb.hp;
+                // Cracks from the saved HP (9.30.0).
+                int maxHp = Mathf.Max(1, def.GetStats((BuildTier)ps.tier).hp);
+                VoxelEngine.Thermal.BlockDamageVisual.ReportDamage(pb, 1f - Mathf.Clamp01(pb.hp / (float)maxHp));
             }
         }
 

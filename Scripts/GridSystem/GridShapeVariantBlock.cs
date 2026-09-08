@@ -69,7 +69,8 @@ namespace VoxelEngine.GridSystem
             _authoredColliders.Clear();
 
             foreach (var renderer in GetComponentsInChildren<Renderer>(true))
-                if (renderer != null && renderer.transform.name != GeneratedRootName)
+                if (renderer != null && renderer.transform.name != GeneratedRootName
+                    && !VoxelEngine.Thermal.BlockDamageVisual.IsGeneratedOverlay(renderer))
                     _authoredRenderers.Add(renderer);
 
             foreach (var collider in GetComponentsInChildren<Collider>(true))

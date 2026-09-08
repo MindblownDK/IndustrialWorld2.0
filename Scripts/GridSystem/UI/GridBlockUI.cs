@@ -2087,11 +2087,33 @@ namespace VoxelEngine.GridSystem.UI
             var (hdr, _, _, _) = T.HeaderRow(block.blockName, "INFO", T.AccentCyan);
             p.Add(hdr);
             p.Add(T.AccentDivider());
-            p.Add(T.StatRow("❤", "Integrity", $"{block.currentHP:0} / {block.maxHP:0}", T.AccentGreen));
+            p.Add(T.StatRow("❤", "Integrity", $"{block.currentHP:0} / {block.maxHP:0}", IntegrityColor(block)));
             p.Add(T.StatRow("⚖", "Mass", MassFormat.Format(block.TotalMass), T.AccentCyan));
             if (block.PowerDraw > 0)   p.Add(T.StatRow("⚡", "Power Use", PowerFormat.Watts(block.PowerDraw), T.AccentGold));
             if (block.PowerOutput > 0) p.Add(T.StatRow("🔌", "Power Out", PowerFormat.Watts(block.PowerOutput), T.AccentGreen));
+            AddThermalRow(p, block);
             return p;
+        }
+
+        /// <summary>Integrity value colour: green when sound, amber when cracked, red when failing.</summary>
+        private static Color IntegrityColor(GridBlock block)
+        {
+            float d = block.Damage01;
+            return d < 0.25f ? T.AccentGreen : d < 0.6f ? T.AccentAmber : T.AccentRed;
+        }
+
+        /// <summary>Block temperature and thermal band (9.30.0). Roadmap 5.1 item 8:
+        /// "every grid block has a heat tolerance value shown in its description".</summary>
+        private static void AddThermalRow(VisualElement panel, GridBlock block)
+        {
+            if (block == null || block.Grid == null) return;
+            var thermal = block.Grid.GetComponent<VoxelEngine.Thermal.GridThermalSystem>();
+            float temp = thermal != null ? thermal.TemperatureOf(block) : VoxelEngine.Thermal.ThermalRules.FallbackAmbientC;
+            var band = VoxelEngine.Thermal.ThermalRules.Band(temp);
+            string label = VoxelEngine.Thermal.ThermalRules.BandLabel(band);
+            panel.Add(T.StatRow("🌡", "Temperature", $"{temp:0} °C · {label}", VoxelEngine.Thermal.ThermalRules.BandColor(band)));
+            panel.Add(T.StatRow("🔥", "Heat Tolerance",
+                $"{VoxelEngine.Thermal.ThermalRules.BlockDamageThresholdC:0} °C", T.TextSecondary));
         }
 
         // ── AIR VENT / ROOM PRESSURE ─────────────────────────────────────────

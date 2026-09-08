@@ -403,6 +403,20 @@ namespace VoxelEngine.UI
                 info.showHealth = gridBlock.maxHP > 0f;
                 info.health01 = gridBlock.maxHP > 0f ? Mathf.Clamp01(gridBlock.currentHP / gridBlock.maxHP) : 0f;
                 info.healthText = $"{Mathf.Max(0f, gridBlock.currentHP):0}/{gridBlock.maxHP:0}";
+
+                // Live temperature once the plate is warm (9.30.0): lets the crew read
+                // a landing pad or hull section before touching it.
+                var thermal = gridBlock.Grid != null ? gridBlock.Grid.GetComponent<VoxelEngine.Thermal.GridThermalSystem>() : null;
+                if (thermal != null)
+                {
+                    float temp = thermal.TemperatureOf(gridBlock);
+                    var band = VoxelEngine.Thermal.ThermalRules.Band(temp);
+                    if (band != VoxelEngine.Thermal.ThermalBand.Nominal)
+                    {
+                        string thermalText = $"{VoxelEngine.Thermal.ThermalRules.BandLabel(band)} {temp:0}°C";
+                        info.status = string.IsNullOrEmpty(info.status) ? thermalText : $"{info.status} · {thermalText}";
+                    }
+                }
                 return true;
             }
 
@@ -427,6 +441,16 @@ namespace VoxelEngine.UI
                     ? "PLACED BLOCK"
                     : placedBlock.Item.category.ToUpperInvariant();
                 info.status = DescribePower(placedBlock.gameObject);
+                var heat = placedBlock.GetComponent<VoxelEngine.Thermal.PlacedBlockHeat>();
+                if (heat != null)
+                {
+                    var band = VoxelEngine.Thermal.ThermalRules.Band(heat.TemperatureC);
+                    if (band != VoxelEngine.Thermal.ThermalBand.Nominal)
+                    {
+                        string thermalText = $"{VoxelEngine.Thermal.ThermalRules.BandLabel(band)} {heat.TemperatureC:0}°C";
+                        info.status = string.IsNullOrEmpty(info.status) ? thermalText : $"{info.status} · {thermalText}";
+                    }
+                }
                 var pf = placedBlock.GetComponent<BlockPaint>();
                 if (pf != null && pf.Finish != PaintFinishId.None)
                     info.status = string.IsNullOrEmpty(info.status)

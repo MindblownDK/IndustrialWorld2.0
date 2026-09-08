@@ -3,25 +3,25 @@
 // Per-grid block thermal simulation. One component per GridEntity tracks a
 // temperature for every block, driven by four sources:
 //
-//   • ambient      — the planet's air (or the cold of space)
-//   • entry heat   — ploughing through atmosphere at speed, applied to the
-//                    leading face and attenuated by heatshields
-//   • engine heat  — running thrusters cook themselves and conduct a little
-//                    heat into the hull they are buried in
-//   • exhaust plume — the directed flame leaving each nozzle: it impinges on
-//                    the first block in its path (fast response, real erosion),
-//                    splashes sideways around the impact, and reaches anything
-//                    beyond the grid too — blocks on OTHER grids, placed base
-//                    blocks (eroded directly) and the player (cooked via the
-//                    open-air cells registered along the plume's path)
+//   • ambient       — the planet's air (or the cold of space)
+//   • entry heat    — ploughing through atmosphere at speed, applied to the
+//                     leading face and attenuated by heatshields
+//   • engine heat   — running thrusters cook themselves and conduct into neighbours
+//   • plume heat    — the exhaust column itself: any block of THIS grid standing in
+//                     a nozzle's blast is heated by the hot gas (9.30.0). Blocks of
+//                     other grids, static base blocks and the player are handled by
+//                     ThrusterPlumeHazard, which reads the same plume model.
 //
 // Blocks slew toward their target temperature rather than snapping, so thermal
-// mass is real: committing to a steep re-entry cannot be undone by throttling up.
+// mass is real: committing to a steep re-entry cannot be undone by throttling up,
+// and a hull that came in glowing stays too hot to touch for minutes (9.30.0 slowed
+// cooling to 0.55x of heating; it used to bleed off in seconds).
+//
+// Every tracked block also feeds BlockDamageVisual so heat is visible as glow and
+// structural loss is visible as cracks, on the ship and from the cockpit.
 
 using System.Collections.Generic;
 using UnityEngine;
-using VoxelEngine.Building;
-using VoxelEngine.Building.Tiered;
 using VoxelEngine.GridSystem;
 
 namespace VoxelEngine.Thermal
@@ -32,56 +32,39 @@ namespace VoxelEngine.Thermal
         /// <summary>How often the (relatively expensive) target pass runs, in seconds.</summary>
         private const float ResolveInterval = 0.25f;
 
-        /// <summary>Blocks colder than this are dropped from the table to keep it small.</summary>
-        private const float TrackingFloorC = 60f;
-
-        /// <summary>External plume injections older than this are considered stale.</summary>
-        private const float ExternalPlumeExpiry = 1f;
+        /// <summary>Blocks within this many °C of ambient are dropped from the table.</summary>
+        private const float TrackingBandC = 45f;
 
         private GridEntity _grid;
         private float _resolveTimer;
-        private GridHullFx _fx;
 
         private readonly Dictionary<GridBlock, float> _temperatures = new();
         private readonly List<GridBlock> _scratch = new();
+        private readonly List<GridBlock> _blockSnapshot = new();
+        private readonly List<PlumeSource> _plumes = new();
 
-        // Snapshot of the block set each tick: destroying a burned block mutates
-        // the grid's dictionary mid-iteration otherwise.
-        private readonly List<GridBlock> _tickBlocks = new();
-
-        // ── Exhaust plume maps (rebuilt every tick) ───────────────────────────
-        private readonly Dictionary<GridBlock, PlumeLoad> _plume = new();     // direct impingement on this grid
-        private readonly Dictionary<GridBlock, float> _wash = new();          // nozzle side wash + conduction
-        private readonly Dictionary<GridBlock, ExternalPlume> _external = new(); // plumes arriving from other grids
-        private readonly List<WorldPlumeCell> _worldCells = new();            // open-air plume cells (player exposure)
-
-        private struct PlumeLoad
+        /// <summary>A running nozzle on this grid, cached per tick for plume queries.</summary>
+        public readonly struct PlumeSource
         {
-            public float HeatC;            // °C added to the block's target
-            public float ErosionPerSecond; // HP/s of direct mechanical erosion
-        }
+            public readonly GridThruster Thruster;
+            public readonly Vector3 Nozzle;
+            public readonly Vector3 ExhaustDir;
+            public readonly float CellSize;
+            public readonly float Load01;
+            public readonly float Scale;
 
-        private struct ExternalPlume
-        {
-            public float HeatC;
-            public float ErosionPerSecond;
-            public float Time;
-        }
-
-        /// <summary>An open-air cell of a live exhaust plume, in world space.
-        /// Used to cook the player when they stand in the flame.</summary>
-        public readonly struct WorldPlumeCell
-        {
-            public readonly Vector3 Pos;
-            public readonly float HeatC;
-            public readonly float Radius;
-
-            public WorldPlumeCell(Vector3 pos, float heatC, float radius)
+            public PlumeSource(GridThruster thruster, Vector3 nozzle, Vector3 exhaustDir, float cellSize, float load01, float scale)
             {
-                Pos = pos;
-                HeatC = heatC;
-                Radius = radius;
+                Thruster = thruster; Nozzle = nozzle; ExhaustDir = exhaustDir;
+                CellSize = cellSize; Load01 = load01; Scale = scale;
             }
+
+            /// <summary>Plume temperature (°C above ambient) delivered at a world point.</summary>
+            public float TemperatureAt(Vector3 point)
+                => ThermalRules.PlumeTemperatureAt(Nozzle, ExhaustDir, CellSize, Load01, point) * Scale;
+
+            /// <summary>Farthest world distance from the nozzle the plume can reach.</summary>
+            public float Reach => ThermalRules.PlumeLengthCells * CellSize * Mathf.Lerp(0.45f, 1f, Load01);
         }
 
         /// <summary>Hottest block temperature on the grid this tick, in °C.</summary>
@@ -90,25 +73,21 @@ namespace VoxelEngine.Thermal
         /// <summary>Entry-heating stagnation temperature the grid is currently seeing.</summary>
         public float EntryHeatingC { get; private set; }
 
-        /// <summary>Peak exhaust-plume heat applied this tick (HUD marker).</summary>
-        public float PlumeHeatingC { get; private set; }
+        /// <summary>Ambient the grid solved against on the last tick.</summary>
+        public float AmbientC { get; private set; } = ThermalRules.FallbackAmbientC;
 
-        /// <summary>Open-air cells occupied by live exhaust plumes this tick.
-        /// The player hazard model uses these to cook anyone standing in a flame.</summary>
-        public IReadOnlyList<WorldPlumeCell> WorldPlumeCells => _worldCells;
+        /// <summary>Number of blocks currently above ambient enough to be tracked.</summary>
+        public int TrackedBlockCount => _temperatures.Count;
+
+        /// <summary>Active exhaust plumes on this grid (empty when every engine is idle).</summary>
+        public IReadOnlyList<PlumeSource> Plumes => _plumes;
 
         /// <summary>True while any block is hot enough to be taking damage.</summary>
         public bool IsBurning => PeakTemperatureC >= ThermalRules.BlockDamageThresholdC;
 
         public ThermalBand Band => ThermalRules.Band(PeakTemperatureC);
 
-        /// <summary>The grid this system simulates.</summary>
-        public GridEntity Grid => _grid != null ? _grid : (_grid = GetComponent<GridEntity>());
-
-        private void Awake()
-        {
-            _grid = GetComponent<GridEntity>();
-        }
+        private void Awake() => _grid = GetComponent<GridEntity>();
 
         private void OnEnable() => ThermalService.Register(this);
         private void OnDisable() => ThermalService.Unregister(this);
@@ -126,36 +105,52 @@ namespace VoxelEngine.Thermal
         public float TemperatureOf(GridBlock block)
         {
             if (block == null) return ThermalRules.FallbackAmbientC;
-            return _temperatures.TryGetValue(block, out float t)
-                ? t
-                : ThermalRules.AmbientTemperatureC(transform.position);
+            return _temperatures.TryGetValue(block, out float t) ? t : AmbientC;
         }
 
         /// <summary>
-        /// Another grid's thruster plume hit one of our blocks. Refreshed every
-        /// tick while the flame keeps hitting; expires shortly after it stops.
+        /// Hottest tracked block temperature within <paramref name="radius"/> of a point.
+        /// Used by the suit model so a player standing on a cold wing is not cooked by a
+        /// glowing nose cone forty metres away.
         /// </summary>
-        public void InjectPlume(GridBlock block, float heatC, float erosionPerSecond)
+        public float HottestTemperatureNear(Vector3 worldPoint, float radius)
         {
-            if (block == null || heatC <= 0f) return;
-
-            if (_external.TryGetValue(block, out var cur))
+            float best = AmbientC;
+            float r2 = radius * radius;
+            foreach (var kv in _temperatures)
             {
-                cur.HeatC = Mathf.Max(cur.HeatC, heatC);
-                cur.ErosionPerSecond = Mathf.Max(cur.ErosionPerSecond, erosionPerSecond);
-                cur.Time = Time.time;
-                _external[block] = cur;
+                var block = kv.Key;
+                if (block == null) continue;
+                if ((block.transform.position - worldPoint).sqrMagnitude > r2) continue;
+                if (kv.Value > best) best = kv.Value;
             }
-            else
-            {
-                _external[block] = new ExternalPlume
-                {
-                    HeatC = heatC,
-                    ErosionPerSecond = erosionPerSecond,
-                    Time = Time.time,
-                };
-            }
+            return best;
         }
+
+        /// <summary>Temperature above ambient any of this grid's plumes deliver at a point.</summary>
+        public float PlumeTemperatureAt(Vector3 worldPoint)
+        {
+            float hottest = 0f;
+            for (int i = 0; i < _plumes.Count; i++)
+            {
+                float t = _plumes[i].TemperatureAt(worldPoint);
+                if (t > hottest) hottest = t;
+            }
+            return hottest;
+        }
+
+        /// <summary>
+        /// Injects external heat into a block (another ship's plume, a fire, a weapon).
+        /// The value is a target temperature above ambient and lasts for this tick only.
+        /// </summary>
+        public void AddExternalHeat(GridBlock block, float temperatureAboveAmbientC)
+        {
+            if (block == null || temperatureAboveAmbientC <= 0f) return;
+            _externalHeat ??= new Dictionary<GridBlock, float>();
+            _externalHeat.TryGetValue(block, out float existing);
+            if (temperatureAboveAmbientC > existing) _externalHeat[block] = temperatureAboveAmbientC;
+        }
+        private Dictionary<GridBlock, float> _externalHeat;
 
         private void FixedUpdate()
         {
@@ -174,106 +169,98 @@ namespace VoxelEngine.Thermal
         {
             Vector3 origin = transform.position;
             float ambient = ThermalRules.AmbientTemperatureC(origin);
+            AmbientC = ambient;
 
             Vector3 velocity = _grid.Body != null ? _grid.Body.linearVelocity : Vector3.zero;
             float speed = velocity.magnitude;
             EntryHeatingC = ThermalRules.EntryHeatingC(origin, speed);
             Vector3 travel = speed > 0.01f ? velocity / speed : Vector3.zero;
 
-            BuildPlumeMaps(dt);
-
-            // Peak plume load this tick — drives the HUD's EXHAUST cause marker.
-            float plumePeak = 0f;
-            foreach (var kv in _plume) plumePeak = Mathf.Max(plumePeak, kv.Value.HeatC);
-            foreach (var kv in _external) plumePeak = Mathf.Max(plumePeak, kv.Value.HeatC);
-            PlumeHeatingC = plumePeak;
+            CollectPlumes();
 
             float peak = ambient;
-            _tickBlocks.Clear();
-            foreach (var block in _grid.AllBlocks)
-                if (block != null) _tickBlocks.Add(block);
+            _scratch.Clear();
 
-            for (int i = 0; i < _tickBlocks.Count; i++)
+            // Snapshot first: burning through a block removes it from the grid's block
+            // dictionary, which must not happen while that dictionary is being enumerated.
+            _blockSnapshot.Clear();
+            foreach (var block in _grid.AllBlocks) _blockSnapshot.Add(block);
+
+            for (int b = 0; b < _blockSnapshot.Count; b++)
             {
-                var block = _tickBlocks[i];
+                var block = _blockSnapshot[b];
                 if (block == null) continue;
 
-                float target = TargetTemperature(block, ambient, travel, out float response, out float plumeHeat);
+                float target = TargetTemperature(block, ambient, travel);
 
-                // Slew toward the target. Cooling is deliberately slower than
-                // heating now — a hull that survives entry stays hot for a while,
-                // which is exactly what makes the glow and the HUD strip readable.
+                // Slew toward the target. Heating is comparatively quick; cooling is slow
+                // (steel radiates poorly) with a boost in the last warm band so a hull
+                // eventually settles to ambient instead of hovering lukewarm forever.
                 float current = _temperatures.TryGetValue(block, out float t) ? t : ambient;
-                bool cooling = target < current;
-                float rate = cooling
-                    ? ThermalRules.ThermalResponsePerSecond * ThermalRules.CoolingRateMultiplier
-                    : response;
+                float rate = ThermalRules.SlewRate(current, target, ambient);
                 float next = Mathf.Lerp(current, target, 1f - Mathf.Exp(-rate * dt));
 
-                // ── Thermal burn damage ────────────────────────────────────────
-                bool destroyed = false;
                 float burn = ThermalRules.BlockDamagePerSecond(next);
+                bool destroyed = false;
                 if (burn > 0f)
                 {
                     // Ablate shields first: that is precisely what they are for.
-                    if (block is IHeatshieldBlock shield && shield.ShieldIntact)
-                        (block as GridHeatshield)?.Ablate(burn * dt);
+                    if (block is GridHeatshield shield && shield.ShieldIntact)
+                        shield.Ablate(burn * dt);
                     else
-                        destroyed = block.Damage(burn * dt, impactFx: false);
+                        destroyed = block.Damage(burn * dt);
                 }
 
-                // ── Exhaust plume erosion (direct flame sandblasting) ──────────
-                if (!destroyed)
-                {
-                    float erosion = plumeHeat > 0f ? PlumeErosionOf(block) : 0f;
-                    if (erosion > 0f)
-                    {
-                        if (block is IHeatshieldBlock shield && shield.ShieldIntact)
-                            (block as GridHeatshield)?.Ablate(erosion * dt);
-                        else
-                            destroyed = block.Damage(erosion * dt, impactFx: false);
-                    }
-                }
-
-                // A destroyed block leaves the grid this frame — drop it from the
-                // tracking table so the entry can't linger behind a dead reference.
-                if (destroyed)
-                {
-                    _temperatures.Remove(block);
-                    continue;
-                }
+                if (destroyed) { _scratch.Add(block); continue; }
 
                 if (next > peak) peak = next;
 
-                if (next <= TrackingFloorC && target <= TrackingFloorC) _scratch.Add(block);
+                bool nearAmbient = Mathf.Abs(next - ambient) <= TrackingBandC && Mathf.Abs(target - ambient) <= TrackingBandC;
+                if (nearAmbient) _scratch.Add(block);
                 else _temperatures[block] = next;
 
-                // Feed the heat glow visuals (hot blocks shine; cooled ones fade).
-                if (_fx == null && next >= ThermalRules.GlowVisibleC) _fx = GridHullFx.For(_grid);
-                if (_fx != null)
-                {
-                    if (next >= ThermalRules.GlowVisibleC || _fx.HasState(block))
-                        _fx.ReportTemperature(block, next);
-                }
+                // Visible heat: glow from ~450 °C upward. Reporting a cooled block once
+                // more with "no glow" lets its visual fade out and go to sleep.
+                BlockDamageVisual.ReportTemperature(block, next);
             }
 
-            // Drop cold blocks so the table only carries what matters.
+            // Drop cold (or destroyed) blocks so the table only carries what matters,
+            // plus anything dismantled since the last tick (a destroyed Unity object
+            // still hashes by instance id, so Remove finds the stale entry).
+            foreach (var kv in _temperatures)
+                if (kv.Key == null) _scratch.Add(kv.Key);
             for (int i = 0; i < _scratch.Count; i++) _temperatures.Remove(_scratch[i]);
             _scratch.Clear();
+            _blockSnapshot.Clear();
+            _externalHeat?.Clear();
 
             PeakTemperatureC = peak;
         }
 
+        /// <summary>Cache nozzle poses for every running thruster on this grid.</summary>
+        private void CollectPlumes()
+        {
+            _plumes.Clear();
+            foreach (var block in _grid.AllBlocks)
+            {
+                if (block is not GridThruster thruster) continue;
+                float load = ThrusterLoad01(thruster);
+                if (load <= 0.001f) continue;
+
+                float cs = thruster.EffectiveCellSize;
+                // The flame exits the block's local -forward (see GridThruster.PushDirection).
+                Vector3 exhaustDir = -thruster.transform.forward;
+                Vector3 nozzle = thruster.transform.position + exhaustDir * (cs * 0.5f);
+                _plumes.Add(new PlumeSource(thruster, nozzle, exhaustDir, cs, load, ThermalRules.PlumeScale(thruster.thrusterType)));
+            }
+        }
+
         /// <summary>
-        /// Steady-state temperature this block is being driven toward right now,
-        /// plus the slew rate that applies (direct plume impingement is fast).
+        /// Steady-state temperature this block is being driven toward right now.
         /// </summary>
-        private float TargetTemperature(GridBlock block, float ambient, Vector3 travel,
-            out float responsePerSecond, out float plumeHeat)
+        private float TargetTemperature(GridBlock block, float ambient, Vector3 travel)
         {
             float target = ambient;
-            responsePerSecond = ThermalRules.ThermalResponsePerSecond;
-            plumeHeat = 0f;
 
             // ── Entry heating, weighted by how much this block faces the airflow ──
             if (EntryHeatingC > 0.01f && travel.sqrMagnitude > 0.01f)
@@ -292,34 +279,41 @@ namespace VoxelEngine.Thermal
             }
 
             // ── Engine heat ───────────────────────────────────────────────────────
+            float engineHeat = 0f;
             if (block is GridThruster thruster)
             {
                 float throttle = ThrusterLoad01(thruster);
-                if (throttle > 0.001f) target += ThermalRules.ThrusterPeakSelfHeatC * throttle;
+                if (throttle > 0.001f) engineHeat = ThermalRules.ThrusterPeakSelfHeatC * throttle;
+            }
+            else
+            {
+                engineHeat = AdjacentThrusterHeat(block);
             }
 
-            // ── Exhaust plume: directed, fast, erosive ────────────────────────────
-            if (_plume.TryGetValue(block, out var ownPlume))
+            // ── Plume heat: standing in another nozzle's exhaust ──────────────────
+            // A thruster is not heated by its own plume (the gas is leaving it), but it
+            // is heated by a neighbour firing straight into it.
+            float plumeHeat = 0f;
+            for (int i = 0; i < _plumes.Count; i++)
             {
-                target += ownPlume.HeatC;
-                plumeHeat = ownPlume.HeatC;
-                if (ownPlume.HeatC >= 80f)
-                    responsePerSecond = ThermalRules.PlumeResponsePerSecond;
-            }
-            else if (_wash.TryGetValue(block, out float wash))
-            {
-                target += wash;
+                var plume = _plumes[i];
+                if (ReferenceEquals(plume.Thruster, block)) continue;
+                float t = plume.TemperatureAt(block.transform.position);
+                if (t > plumeHeat) plumeHeat = t;
             }
 
-            // ── Plume arriving from another grid's thrusters ──────────────────────
-            if (_external.TryGetValue(block, out var ext)
-                && Time.time - ext.Time <= ExternalPlumeExpiry)
-            {
-                target += ext.HeatC;
-                plumeHeat = Mathf.Max(plumeHeat, ext.HeatC);
-                if (ext.HeatC >= 80f)
-                    responsePerSecond = ThermalRules.PlumeResponsePerSecond;
-            }
+            // Heat shields shrug off plume gas the same way they shrug off entry gas.
+            if (plumeHeat > 0f && block is IHeatshieldBlock shieldBlock && shieldBlock.ShieldIntact)
+                plumeHeat *= shieldBlock.HeatTransmission;
+
+            float external = 0f;
+            _externalHeat?.TryGetValue(block, out external);
+
+            // Sources do not simply add; the hottest gas stream dominates and the others
+            // top it up a little, which keeps stacked engines from producing silly numbers.
+            float hottest = Mathf.Max(engineHeat, Mathf.Max(plumeHeat, external));
+            float rest = engineHeat + plumeHeat + external - hottest;
+            target += hottest + rest * 0.25f;
 
             // ── Pressurised cabins are climate controlled ─────────────────────────
             // A sealed, powered room holds shirt-sleeve conditions, so interior blocks
@@ -330,250 +324,6 @@ namespace VoxelEngine.Thermal
 
             return target;
         }
-
-        /// <summary>Erosion rate currently applied to a block by any plume source.</summary>
-        private float PlumeErosionOf(GridBlock block)
-        {
-            float erosion = 0f;
-            if (_plume.TryGetValue(block, out var own)) erosion = own.ErosionPerSecond;
-            if (_external.TryGetValue(block, out var ext)
-                && Time.time - ext.Time <= ExternalPlumeExpiry)
-                erosion = Mathf.Max(erosion, ext.ErosionPerSecond);
-            return erosion;
-        }
-
-        // ── Plume construction ────────────────────────────────────────────────
-
-        /// <summary>
-        /// Walk every running thruster's exhaust cone and record what the flame
-        /// hits: direct impingement on the first block in the path (with splash
-        /// around the impact), side wash beside the nozzle, and mild conduction
-        /// into every touching block. Plumes that exit the grid keep travelling
-        /// and can hit blocks on other grids, placed base blocks — and the
-        /// player, via the open-air cells registered along the way.
-        /// </summary>
-        private void BuildPlumeMaps(float dt)
-        {
-            _plume.Clear();
-            _wash.Clear();
-            _worldCells.Clear();
-            PruneExternal();
-
-            foreach (var block in _grid.AllBlocks)
-            {
-                if (block is not GridThruster thruster) continue;
-
-                float load = ThrusterLoad01(thruster);
-                if (load <= 0.01f) continue;
-
-                // Detail-lattice engines are sub-cell machinery; their exhaust is
-                // not a structural-scale flame, so they only conduct.
-                float conduction = ThermalRules.ThrusterConductionHeatC * load;
-                foreach (var n in Neighbours)
-                {
-                    if (_grid.Blocks.TryGetValue(thruster.GridPos + n, out var touched) && touched != null)
-                        MaxAssign(_wash, touched, conduction);
-                }
-                if (thruster.IsPrecisionAttachment) continue;
-
-                Vector3Int step = GridStepFor(-thruster.transform.forward);
-                if (step == Vector3Int.zero) continue;
-
-                float heat = ThermalRules.ThrusterPlumePeakC
-                           * ThermalRules.PlumeHeatMultiplier(thruster.thrusterType) * load;
-                float erosion = ThermalRules.ThrusterPlumeErosionPerSecond
-                              * ThermalRules.PlumeErosionMultiplier(thruster.thrusterType) * load;
-
-                // Nozzle side wash: the cells flanking the housing run warm.
-                float sideWash = Mathf.Max(ThermalRules.ThrusterSideWashHeatC * load, conduction);
-                foreach (var lateral in LateralsOf(step))
-                {
-                    if (_grid.Blocks.TryGetValue(thruster.GridPos + lateral, out var flank) && flank != null)
-                        MaxAssign(_wash, flank, sideWash);
-                }
-
-                // The plume itself: step out along the exhaust axis.
-                float cs = _grid.gridSize.CellSize();
-                for (int i = 1; i <= ThermalRules.ThrusterPlumeLength; i++)
-                {
-                    int fi = Mathf.Clamp(i - 1, 0, ThermalRules.ThrusterPlumeFalloff.Length - 1);
-                    float falloff = ThermalRules.ThrusterPlumeFalloff[fi];
-                    Vector3Int cell = thruster.GridPos + step * i;
-
-                    if (_grid.Blocks.TryGetValue(cell, out var struck) && struck != null)
-                    {
-                        // Direct impingement — the flame splashes around the struck cell.
-                        MaxAssignPlume(_plume, struck, heat * falloff, erosion * falloff);
-                        foreach (var lateral in LateralsOf(step))
-                        {
-                            if (_grid.Blocks.TryGetValue(cell + lateral, out var splashed) && splashed != null)
-                                MaxAssignPlume(_plume, splashed, heat * falloff * 0.4f, erosion * falloff * 0.35f);
-                        }
-                        break;   // the struck block absorbs the plume
-                    }
-
-                    // Empty on this grid — the plume continues into open space.
-                    // Register the open cell so the player hazard model can cook
-                    // anyone standing in the flame, then see what it strikes.
-                    if (ThermalRules.CrossGridPlumeDamage)
-                    {
-                        _worldCells.Add(new WorldPlumeCell(
-                            _grid.GridToWorld(cell), heat * falloff, cs * 0.75f));
-
-                        if (TryStrikePlumeTarget(cell, heat * falloff, erosion * falloff, dt))
-                            break;
-                    }
-                }
-            }
-        }
-
-        private void PruneExternal()
-        {
-            if (_external.Count == 0) return;
-            _scratchExternal.Clear();
-            foreach (var kv in _external)
-                if (Time.time - kv.Value.Time > ExternalPlumeExpiry || kv.Key == null)
-                    _scratchExternal.Add(kv.Key);
-            for (int i = 0; i < _scratchExternal.Count; i++) _external.Remove(_scratchExternal[i]);
-            _scratchExternal.Clear();
-        }
-
-        private readonly List<GridBlock> _scratchExternal = new();
-
-        /// <summary>Project a plume cell into world space and resolve what the
-        /// flame strikes beyond this grid: a block on another grid (its thermal
-        /// system takes the load) or a placed base block (eroded directly).
-        /// Returns true when the plume has been absorbed by a target.</summary>
-        private bool TryStrikePlumeTarget(Vector3Int ownCell, float heatC, float erosion, float dt)
-        {
-            if (heatC <= 0f) return false;
-            Vector3 world = _grid.GridToWorld(ownCell);
-
-            var systems = ThermalService.All;
-            for (int i = 0; i < systems.Count; i++)
-            {
-                var other = systems[i];
-                if (other == null || other == this) continue;
-
-                var otherGrid = other.Grid;
-                if (otherGrid == null) continue;
-
-                var cell = otherGrid.WorldToGrid(world);
-                if (!otherGrid.Blocks.TryGetValue(cell, out var victim) || victim == null) continue;
-
-                other.InjectPlume(victim, heatC, erosion);
-                return true;
-            }
-
-            return StrikePlacedBlocks(world, heatC, erosion, dt);
-        }
-
-        /// <summary>Scratch buffer for the plume → placed-block overlap probe.</summary>
-        private static readonly Collider[] PlumeOverlapHits = new Collider[24];
-
-        /// <summary>
-        /// Erode any placed base blocks (static PlacedBlock / tiered building
-        /// pieces) occupying the plume cell. On-grid statics are skipped — they
-        /// carry a GridBlock and already take the plume through the grid path.
-        /// </summary>
-        private bool StrikePlacedBlocks(Vector3 world, float heatC, float erosion, float dt)
-        {
-            float half = _grid.gridSize.CellSize() * 0.45f;
-            int n = Physics.OverlapBoxNonAlloc(world, Vector3.one * half, PlumeOverlapHits,
-                Quaternion.identity, ~0, QueryTriggerInteraction.Ignore);
-
-            bool any = false;
-            for (int i = 0; i < n; i++)
-            {
-                var col = PlumeOverlapHits[i];
-                if (col == null) continue;
-
-                var placed = col.GetComponentInParent<PlacedBlock>();
-                if (placed != null)
-                {
-                    if (!placed.onGrid)
-                    {
-                        ApplyPlumeToPlaced(placed, heatC, erosion, dt);
-                        any = true;
-                    }
-                    continue;
-                }
-
-                var tiered = col.GetComponentInParent<PlacedTieredBlock>();
-                if (tiered != null)
-                {
-                    ApplyPlumeToTiered(tiered, heatC, erosion, dt);
-                    any = true;
-                }
-            }
-            return any;
-        }
-
-        private static void ApplyPlumeToPlaced(PlacedBlock placed, float heatC, float erosion, float dt)
-        {
-            int dmg = Mathf.RoundToInt(erosion * dt);
-            if (dmg < 1 && erosion > 0.25f) dmg = 1;
-            if (dmg >= 1) placed.Damage(dmg, null, impactFx: false);
-
-            // No thermal simulation behind static blocks — report the plume heat
-            // directly so the block glows while it is being blasted, then decays.
-            GridHullFx.ReportPlacedTemperature(placed, heatC);
-        }
-
-        private static void ApplyPlumeToTiered(PlacedTieredBlock tiered, float heatC, float erosion, float dt)
-        {
-            int dmg = Mathf.RoundToInt(erosion * dt);
-            if (dmg < 1 && erosion > 0.25f) dmg = 1;
-            if (dmg >= 1) tiered.Damage(dmg, 99, null, impactFx: false);
-
-            GridHullFx.ReportPlacedTemperature(tiered, heatC);
-        }
-
-        private static void MaxAssign(Dictionary<GridBlock, float> map, GridBlock block, float value)
-        {
-            map.TryGetValue(block, out float cur);
-            if (value > cur) map[block] = value;
-        }
-
-        private static void MaxAssignPlume(Dictionary<GridBlock, PlumeLoad> map, GridBlock block,
-            float heat, float erosion)
-        {
-            map.TryGetValue(block, out var cur);
-            if (heat > cur.HeatC || erosion > cur.ErosionPerSecond)
-            {
-                cur.HeatC = Mathf.Max(cur.HeatC, heat);
-                cur.ErosionPerSecond = Mathf.Max(cur.ErosionPerSecond, erosion);
-                map[block] = cur;
-            }
-        }
-
-        /// <summary>Map a world direction onto the grid's dominant cell axis.</summary>
-        private Vector3Int GridStepFor(Vector3 worldDir)
-        {
-            Vector3 local = _grid.transform.InverseTransformDirection(worldDir);
-            Vector3 a = new(Mathf.Abs(local.x), Mathf.Abs(local.y), Mathf.Abs(local.z));
-
-            if (a.x >= a.y && a.x >= a.z)
-                return new Vector3Int(local.x >= 0f ? 1 : -1, 0, 0);
-            if (a.y >= a.z)
-                return new Vector3Int(0, local.y >= 0f ? 1 : -1, 0);
-            return new Vector3Int(0, 0, local.z >= 0f ? 1 : -1);
-        }
-
-        /// <summary>The four cell steps perpendicular to an axis-aligned step.</summary>
-        private static Vector3Int[] LateralsOf(Vector3Int step)
-        {
-            if (step.x != 0) return LateralsX;
-            if (step.y != 0) return LateralsY;
-            return LateralsZ;
-        }
-
-        private static readonly Vector3Int[] LateralsX =
-            { new(0, 1, 0), new(0, -1, 0), new(0, 0, 1), new(0, 0, -1) };
-        private static readonly Vector3Int[] LateralsY =
-            { new(1, 0, 0), new(-1, 0, 0), new(0, 0, 1), new(0, 0, -1) };
-        private static readonly Vector3Int[] LateralsZ =
-            { new(1, 0, 0), new(-1, 0, 0), new(0, 1, 0), new(0, -1, 0) };
 
         /// <summary>0..1 — how squarely this block faces the direction of travel.</summary>
         private float LeadingFaceExposure(GridBlock block, Vector3 travel)
@@ -601,11 +351,31 @@ namespace VoxelEngine.Thermal
                    && ahead is IHeatshieldBlock shield && shield.ShieldIntact;
         }
 
+        /// <summary>Heat conducted in from any running thruster in an adjacent cell.</summary>
+        private float AdjacentThrusterHeat(GridBlock block)
+        {
+            if (_grid == null || block.IsPrecisionAttachment) return 0f;
+
+            float hottest = 0f;
+            for (int i = 0; i < Neighbours.Length; i++)
+            {
+                if (!_grid.Blocks.TryGetValue(block.GridPos + Neighbours[i], out var other)) continue;
+                if (other is not GridThruster thruster) continue;
+
+                float load = ThrusterLoad01(thruster);
+                if (load > 0f) hottest = Mathf.Max(hottest, ThermalRules.ThrusterNeighbourHeatC * load);
+            }
+            return hottest;
+        }
+
         /// <summary>0..1 load of a thruster, used as its heat driver.</summary>
-        private static float ThrusterLoad01(GridThruster thruster)
+        public static float ThrusterLoad01(GridThruster thruster)
         {
             if (thruster == null || !thruster.Enabled || !thruster.IsOperational) return 0f;
-            return Mathf.Clamp01(thruster.ThrustFraction);
+            float load = Mathf.Clamp01(thruster.ThrustFraction);
+            // Atmospheric engines lose authority (and exhaust energy) as the air thins.
+            if (thruster.thrusterType == ThrusterType.Atmospheric) load *= thruster.AtmosphericEfficiency;
+            return load;
         }
 
         private static readonly Vector3Int[] Neighbours =

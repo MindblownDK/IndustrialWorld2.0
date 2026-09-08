@@ -59,22 +59,16 @@ namespace VoxelEngine.GridSystem
         /// <summary>Called when removed from a grid.</summary>
         public virtual void OnRemoved() { }
 
-        /// <summary>Apply damage (with impact feedback). Returns true if destroyed.</summary>
-        public bool Damage(float amount) => Damage(amount, impactFx: true);
+        /// <summary>0..1 structural loss (0 = pristine, 1 = destroyed).</summary>
+        public float Damage01 => maxHP > 0f ? Mathf.Clamp01(1f - currentHP / maxHP) : 0f;
 
-        /// <summary>
-        /// Apply damage. Returns true if destroyed. Pass impactFx=false for
-        /// continuous sources (thermal burn, exhaust plume erosion) so each
-        /// simulation tick doesn't trigger impact clanks — discrete hits do.
-        /// Either way the hull scorch/heat visuals pick the block up.
-        /// </summary>
-        public bool Damage(float amount, bool impactFx)
+        /// <summary>Apply damage. Returns true if destroyed.</summary>
+        public bool Damage(float amount)
         {
+            if (amount <= 0f) return false;
             currentHP -= amount;
             if (currentHP <= 0)
             {
-                // Burst while the transform is still valid, then dismantle.
-                GridHullFx.SpawnDestructionBurst(this);
                 if (Grid != null)
                 {
                     if (IsPrecisionAttachment)
@@ -84,8 +78,28 @@ namespace VoxelEngine.GridSystem
                 }
                 return true;
             }
-            GridHullFx.NotifyDamaged(this, amount, impactFx);
+            // Every source of harm — weapons, collisions, heat, plumes — now leaves a
+            // visible mark: cracks widen with structural loss (9.30.0).
+            VoxelEngine.Thermal.BlockDamageVisual.ReportDamage(this, Damage01);
             return false;
+        }
+
+        /// <summary>Restore hit points (welders, repair bays). Cracks heal as HP returns.</summary>
+        public void Repair(float amount)
+        {
+            if (amount <= 0f || maxHP <= 0f) return;
+            currentHP = Mathf.Min(maxHP, currentHP + amount);
+            VoxelEngine.Thermal.BlockDamageVisual.ReportDamage(this, Damage01);
+        }
+
+        /// <summary>
+        /// Push the current HP into the damage visual. Save restore and setup tooling
+        /// call this after overwriting <see cref="currentHP"/> so a reloaded, battered
+        /// ship still looks battered.
+        /// </summary>
+        public void RefreshDamageVisual()
+        {
+            VoxelEngine.Thermal.BlockDamageVisual.ReportDamage(this, Damage01);
         }
 
         /// <summary>Create a visible block with mesh and material.</summary>

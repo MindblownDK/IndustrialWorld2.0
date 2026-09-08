@@ -777,6 +777,22 @@ namespace VoxelEngine.GridSystem
                     ? "DEEP SPACE · 0% AIR"
                     : $"{environment.Label} · {environment.Density01 * 100f:0}% AIR · {tempStr}";
                 _environmentLabel.style.color = new StyleColor(environmentColor);
+
+                // Cockpit hull heat indicator (roadmap 5.1 item 11): green / yellow / red
+                // with the hottest plate in degrees. Only appended once the hull is warm so
+                // ordinary flight keeps the clean environment line.
+                var thermal = grid.GetComponent<VoxelEngine.Thermal.GridThermalSystem>();
+                if (thermal != null)
+                {
+                    var band = thermal.Band;
+                    if (band != VoxelEngine.Thermal.ThermalBand.Nominal)
+                    {
+                        string hullLabel = band == VoxelEngine.Thermal.ThermalBand.Critical ? "HULL BURNING"
+                            : band == VoxelEngine.Thermal.ThermalBand.Hot ? "HULL HOT" : "HULL WARM";
+                        _environmentLabel.text += $" · {hullLabel} {thermal.PeakTemperatureC:0}°C";
+                        _environmentLabel.style.color = new StyleColor(VoxelEngine.Thermal.ThermalRules.BandColor(band));
+                    }
+                }
             }
             UpdateGravityReadout(grid);
             UpdateTrajectoryReadout(grid);

@@ -54,10 +54,6 @@ namespace VoxelEngine.FX
         UiClick,
         UiHover,
 
-        // ── Hull damage ONE-SHOTS ──────────────────────────────────
-        BlockHit,          // a grid block takes a discrete hit — metallic clank
-        BlockBreak,        // a grid block breaks apart — structural failure
-
         // ── Ambience LOOPS ─────────────────────────────────────────
         AmbDayBirds,
         AmbNightCrickets,
@@ -164,10 +160,6 @@ namespace VoxelEngine.FX
                 case Sfx.Pickup:           return OneShot("Pickup",      0.18f, Pickup);
                 case Sfx.UiClick:          return OneShot("UiClick",     0.09f, UiClick);
                 case Sfx.UiHover:          return OneShot("UiHover",     0.06f, UiHover);
-
-                // Hull damage
-                case Sfx.BlockHit:         return OneShot("BlockHit",    0.22f, d => MineImpact(d, 420f, 0.50f, 0.30f));
-                case Sfx.BlockBreak:       return OneShot("BlockBreak",  0.50f, BlockBreak);
 
                 // Ambience
                 case Sfx.AmbDayBirds:      return Loop("Birds",     6f, AmbDayBirds);
@@ -478,26 +470,6 @@ namespace VoxelEngine.FX
                             + Mathf.Sin(2f * Mathf.PI * f0 * 5.4f * t) * 0.15f;
                 float hit = (i < n * 0.05f) ? Random.Range(-1f, 1f) * 0.5f : 0f;
                 d[i] = (clang * env) + hit * Mathf.Exp(-i / (n * 0.03f));
-            }
-        }
-
-        // Structural failure: a low hollow boom as the frame lets go, followed by
-        // a wash of debris noise as the block comes apart.
-        private static void BlockBreak(float[] d)
-        {
-            int n = d.Length;
-            float lp = 0f;
-            for (int i = 0; i < n; i++)
-            {
-                float t = (float)i / SAMPLE_RATE;
-                float env = Mathf.Exp(-i / (n * 0.30f));
-                float boom = Mathf.Sin(2f * Mathf.PI * 68f * t) * 0.85f
-                           + Mathf.Sin(2f * Mathf.PI * 136f * t) * 0.35f
-                           + Mathf.Sin(2f * Mathf.PI * 270f * t) * 0.15f;
-                float white = Random.Range(-1f, 1f);
-                lp = lp * 0.55f + white * 0.45f;
-                float debris = lp * 0.75f * Mathf.Exp(-i / (n * 0.13f));
-                d[i] = (boom + debris) * env;
             }
         }
 

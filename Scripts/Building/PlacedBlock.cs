@@ -17,37 +17,44 @@ namespace VoxelEngine.Building
         public int       Hp = 100;
         public bool      onGrid = true;
 
-        public void Damage(int amount, Inventory recipient, bool impactFx = true)
+        /// <summary>0..1 structural loss derived from the authored block health.</summary>
+        public float Damage01
+        {
+            get
+            {
+                int max = Item != null ? Item.blockHealth : 0;
+                if (max <= 0) return 0f;
+                return Mathf.Clamp01(1f - Hp / (float)max);
+            }
+        }
+
+        public void Damage(int amount, Inventory recipient)
         {
             Hp -= amount;
-            if (Hp <= 0)
+            if (Hp > 0)
             {
-                // Break-apart burst while the transform is still valid.
-                VoxelEngine.GridSystem.GridHullFx.SpawnDestructionBurst(this);
-                DrainInventoriesToPlayerThenWorld(recipient);
-                var customDrop = GetComponentInChildren<ICustomBlockDrop>();
-                if (customDrop != null)
-                {
-                    // A custom drop (e.g. ruin salvage / chest wood) is honoured even when Item is null.
-                    var stack = customDrop.CreateBlockDrop(Item);
-                    GiveToPlayerThenDrop(stack, recipient, transform.position + Vector3.up * 0.6f);
-                }
-                else if (Item != null)
-                {
-                    GiveToPlayerThenDrop(new ItemStack(Item, 1), recipient, transform.position + Vector3.up * 0.6f);
-                }
-                var gridBlock = GetComponent<VoxelEngine.GridSystem.GridBlock>();
-                if (gridBlock != null && gridBlock.IsPrecisionAttachment && gridBlock.Grid != null)
-                    gridBlock.Grid.GetComponent<VoxelEngine.GridSystem.GridPrecisionAttachmentLayer>()?.RemoveBlock(gridBlock.PrecisionGridPos);
-                else
-                    Destroy(gameObject);
+                // Visible cracks for every hit that does not finish the block (9.30.0).
+                VoxelEngine.Thermal.BlockDamageVisual.ReportDamage(this, Damage01);
+                return;
             }
+
+            DrainInventoriesToPlayerThenWorld(recipient);
+            var customDrop = GetComponentInChildren<ICustomBlockDrop>();
+            if (customDrop != null)
+            {
+                // A custom drop (e.g. ruin salvage / chest wood) is honoured even when Item is null.
+                var stack = customDrop.CreateBlockDrop(Item);
+                GiveToPlayerThenDrop(stack, recipient, transform.position + Vector3.up * 0.6f);
+            }
+            else if (Item != null)
+            {
+                GiveToPlayerThenDrop(new ItemStack(Item, 1), recipient, transform.position + Vector3.up * 0.6f);
+            }
+            var gridBlock = GetComponent<VoxelEngine.GridSystem.GridBlock>();
+            if (gridBlock != null && gridBlock.IsPrecisionAttachment && gridBlock.Grid != null)
+                gridBlock.Grid.GetComponent<VoxelEngine.GridSystem.GridPrecisionAttachmentLayer>()?.RemoveBlock(gridBlock.PrecisionGridPos);
             else
-            {
-                // Scorch/crack/smoke feedback. impactFx=false for continuous
-                // sources (thruster plume) so per-tick damage doesn't clank.
-                VoxelEngine.GridSystem.GridHullFx.NotifyDamaged(this, amount, impactFx);
-            }
+                Destroy(gameObject);
         }
 
         private void DrainInventoriesToPlayerThenWorld(Inventory recipient)
