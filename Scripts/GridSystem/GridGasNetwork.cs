@@ -95,6 +95,32 @@ namespace VoxelEngine.GridSystem
             return total;
         }
 
+        /// <summary>
+        /// Whether this block's own gas run reaches storage at all, whatever is in it. It is
+        /// how an engine tells "plumbed but empty" (a fault to fix) apart from "never plumbed"
+        /// (free to breathe the room): the difference is whether a line ends here, not what the
+        /// line holds. `type` may be GasType.None to ask about any gas.
+        /// </summary>
+        public bool HasStorageFor(GridBlock endpoint, Gas.GasType type)
+        {
+            if (endpoint == null) return false;
+            foreach (var tank in CachedTanks(endpoint, type, forOutput: true, includeStockpile: true))
+                if (tank != null && tank.Enabled) return true;
+            // A cryobed on an oxygen line is storage too, even when it is charged to the brim.
+            if (type == Gas.GasType.Oxygen)
+                foreach (var _ in ConnectedCryobeds(endpoint)) return true;
+            return false;
+        }
+
+        /// <summary>True when a vent reachable from this endpoint can destroy gas right now.</summary>
+        public bool HasVentFor(GridBlock endpoint, Gas.GasType type)
+        {
+            if (endpoint == null || endpoint.Grid == null || type == Gas.GasType.None) return false;
+            foreach (var block in ConnectedEndpoints(endpoint))
+                if (block is VoxelEngine.Gas.GasVent vent && vent.Enabled && vent.Accepts(type)) return true;
+            return false;
+        }
+
         public float DrawGasFor(GridBlock consumer, Gas.GasType type, float litres, bool includeStockpile = false)
         {
             if (consumer == null || type == Gas.GasType.None || litres <= 0f) return 0f;
@@ -125,7 +151,125 @@ namespace VoxelEngine.GridSystem
                     filled += cryobed.AddOxygen(litres - filled);
                 }
             }
+            // ── Vent over (9.32.0) ────────────────────────────────────────────
+            // Whatever no tank wanted goes down the vent run and out of the ship.
+            // This is what makes exhaust a disposable product instead of a
+            // storage obligation: plumb a run to a GasVent and it is gone.
+            if (producer.Grid != null && filled < litres)
+                filled += DumpToVents(producer, type, litres - filled);
             return filled;
+        }
+
+        /// <summary>
+        /// Pushes gas straight out of the vents reachable from this endpoint, ignoring tanks.
+        /// A producer that already wrote into its own tank uses this for the overflow, so a
+        /// disposal line works even when the run carries no vessel at all.
+        /// </summary>
+        public float DumpGas(GridBlock endpoint, Gas.GasType type, float litres) => DumpToVents(endpoint, type, litres);
+
+        /// <summary>Pushes gas out of the network through every vent reachable from this
+        /// endpoint. Returns how much was actually destroyed (it can be all of it).</summary>
+        private float DumpToVents(GridBlock endpoint, Gas.GasType type, float litres)
+        {
+            if (litres <= 0.0001f) return 0f;
+            float dumped = 0f;
+            foreach (var block in ConnectedEndpoints(endpoint))
+            {
+                if (dumped >= litres) break;
+                if (block is VoxelEngine.Gas.GasVent vent && vent.Enabled)
+                    dumped += vent.Accept(type, litres - dumped);
+            }
+            return dumped;
+        }
+
+        /// <summary>
+        /// Every non-pipe block reachable from this endpoint through its pipe run: the same
+        /// walk the fill/draw paths use, exposed for vent and tap queries. The pipe graph is
+        /// collected first and the scan runs over the grid afterwards, which keeps the
+        /// traversal in one place (ConnectedGasPipes) instead of three.
+        /// </summary>
+        public IEnumerable<GridBlock> ConnectedEndpoints(GridBlock endpoint)
+        {
+            var grid = endpoint != null ? endpoint.Grid : null;
+            if (grid == null) yield break;
+
+            var pipes = CollectGasPipes(endpoint);
+            if (pipes.Count == 0) yield break;
+
+            float detail = GridSize.Small.CellSize();
+            foreach (var block in grid.AllBlocks)
+            {
+                if (block == null || block == endpoint || IsGasPipe(block)) continue;
+                if (!block.Enabled) continue;
+                bool linked = block is VoxelEngine.Gas.GasVent;   // a vent is a plain box:
+                foreach (var pipe in pipes)                        // centre proximity is enough
+                {
+                    if (!linked && !IsTankPortWithinDetailLink(grid, pipe, block,
+                            VoxelEngine.Maritime.MaritimePorts.GasPrefixes, detail)) continue;
+                    if (linked && !BlocksAreGasLinked(block, pipe, detail)) continue;
+                    yield return block;
+                    break;
+                }
+            }
+        }
+
+        /// <summary>Breadth-first sweep of the pipe run touching this endpoint. Every gas
+        /// consumer walk needs the same set, so it lives here once.</summary>
+        private List<GridBlock> CollectGasPipes(GridBlock endpoint)
+        {
+            var grid = endpoint != null ? endpoint.Grid : null;
+            if (grid == null) return new List<GridBlock>();
+
+            float cs = grid.gridSize.CellSize();
+            var seeds = new List<GridBlock>(4);
+            foreach (var adjacent in UnifiedGridTopology.AdjacentBlocks(grid, endpoint))
+                if (IsGasPipe(adjacent)) seeds.Add(adjacent);
+            foreach (var pipe in grid.AllBlocks)
+                if (IsGasPipe(pipe) && BlocksAreGasLinked(endpoint, pipe, cs)) seeds.Add(pipe);
+            return CollectGasPipesFrom(grid, endpoint, seeds);
+        }
+
+        /// <summary>
+        /// The same sweep with the caller's own seed pipes — used by an exhaust tap, which
+        /// may only ride the run ANCHORED to its stack and must never reach into a neighbouring
+        /// oxygen line just because the two runs happen to pass each other.
+        /// </summary>
+        public List<GridBlock> CollectGasPipesFrom(GridEntity grid, GridBlock endpoint, List<GridBlock> seedPipes)
+        {
+            var pipes = new List<GridBlock>();
+            if (grid == null || seedPipes == null || seedPipes.Count == 0) return pipes;
+
+            float cs = grid.gridSize.CellSize();
+            var visited = new HashSet<GridBlock>();
+            var queue = new Queue<GridBlock>();
+
+            void Seed(GridBlock pipe)
+            {
+                if (pipe == null || !IsGasPipe(pipe)) return;
+                if (endpoint != null && WrenchBlacklist.IsBlocked(endpoint.gameObject, pipe.gameObject)) return;
+                if (visited.Add(pipe)) queue.Enqueue(pipe);
+            }
+
+            for (int i = 0; i < seedPipes.Count; i++) Seed(seedPipes[i]);
+
+            while (queue.Count > 0)
+            {
+                var from = queue.Dequeue();
+                pipes.Add(from);
+                foreach (var adjacent in UnifiedGridTopology.AdjacentBlocks(grid, from))
+                {
+                    if (!IsGasPipe(adjacent)) continue;
+                    if (WrenchBlacklist.IsBlocked(from.gameObject, adjacent.gameObject)) continue;
+                    if (visited.Add(adjacent)) queue.Enqueue(adjacent);
+                }
+                foreach (var pipe in ProximityPipes(grid, from, cs))
+                {
+                    if (!AreDetailPipesCardinalLinked(grid, from, pipe)) continue;
+                    if (WrenchBlacklist.IsBlocked(from.gameObject, pipe.gameObject)) continue;
+                    if (visited.Add(pipe)) queue.Enqueue(pipe);
+                }
+            }
+            return pipes;
         }
 
         [System.Obsolete("Gas moves through pipes only. Use DrawGasFor(block, ...) so the pipe topology is respected.")]

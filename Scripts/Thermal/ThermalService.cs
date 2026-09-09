@@ -7,6 +7,7 @@
 
 using System.Collections.Generic;
 using UnityEngine;
+using VoxelEngine.GridSystem;
 
 namespace VoxelEngine.Thermal
 {
@@ -71,5 +72,30 @@ namespace VoxelEngine.Thermal
         /// <summary>Ambient temperature (°C) a player at this position is exposed to.</summary>
         public static float AmbientAt(Vector3 worldPosition)
             => ThermalRules.AmbientTemperatureC(worldPosition);
+
+        /// <summary>
+        /// The sealed volume a block is standing in, or null when it can see the sky.
+        /// Sources ask this to decide whether their waste heat has anywhere to go.
+        /// </summary>
+        public static VoxelEngine.Pressure.GridRoom ConcealedSpaceOf(GridBlock block)
+        {
+            if (block == null || block.Grid == null) return null;
+            var thermal = block.Grid.GetComponent<GridThermalSystem>();
+            return thermal != null ? thermal.ConcealedSpaceOf(block) : null;
+        }
+
+        /// <summary>
+        /// Reports waste power (kJ/s) from a running machine into the compartment around
+        /// it. Outdoors this costs nothing at all — the sky is a free heatsink, which is
+        /// the whole reason ventilation matters (roadmap 5.1 item 14).
+        /// </summary>
+        public static void ReportWasteHeat(GridBlock block, float kilojoulesPerSecond)
+        {
+            if (block == null || block.Grid == null || kilojoulesPerSecond <= 0f) return;
+            var room = ConcealedSpaceOf(block);
+            if (room == null) return;
+            var pressure = block.Grid.GetComponent<VoxelEngine.Pressure.GridPressureSystem>();
+            if (pressure != null) pressure.InjectWasteHeat(block.transform.position, kilojoulesPerSecond);
+        }
     }
 }

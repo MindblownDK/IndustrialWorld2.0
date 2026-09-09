@@ -55,6 +55,8 @@ namespace VoxelEngine.GridSystem.UI
                 case GridCryobed cryo:      return MakeScrollable(CryobedPanel(cryo));
                 case GridSlidingDoor door:  return SlidingDoorPanel(door);
                 case VoxelEngine.Pressure.GridAirVent vent: return MakeScrollable(AirVentPanel(vent));
+                case VoxelEngine.Pressure.GridExhaustScrubber scrub: return MakeScrollable(ScrubberPanel(scrub));
+                case VoxelEngine.Gas.GasVent gv: return MakeScrollable(VentDumpPanel(gv));
                 case VoxelEngine.Simulation.GridLightBlock gl: return GridLightPanel(gl);
                 default:                    return GenericPanel(block);
             }
@@ -2120,6 +2122,214 @@ namespace VoxelEngine.GridSystem.UI
             if (block is VoxelEngine.Thermal.IHeatSourceBlock source && source.SelfHeatC > 1f)
                 panel.Add(T.StatRow("♨", "Heat Output",
                     $"+{source.SelfHeatC:0} °C self · +{source.NeighbourHeatC:0} °C neighbours", T.AccentAmber));
+            AddCompartmentRows(panel, block);
+        }
+
+        /// <summary>
+        /// What the concealed space around this block is doing to it (roadmap 5.1 item 14).
+        /// Only appears for blocks that are actually welded into a volume — under an open
+        /// hatch there is nothing to report, which is the point of the system.
+        /// </summary>
+        private static void AddCompartmentRows(VisualElement panel, GridBlock block)
+        {
+            if (panel == null || block == null || block.Grid == null) return;
+            var pressure = block.Grid.GetComponent<VoxelEngine.Pressure.GridPressureSystem>();
+            var room = pressure != null ? pressure.RoomAtCell(block.GridPos) : null;
+            if (room == null || !room.IsSealed) return;
+
+            var band = room.Band;
+            var color = VoxelEngine.Thermal.ThermalRules.BandColor(band);
+            panel.Add(T.StatRow("🏠", "Compartment Air",
+                $"{room.AirTemperatureC:0} °C · {VoxelEngine.Thermal.ThermalRules.RoomBandLabel(band)}", color));
+            if (room.ExhaustLoad01 > 0.02f)
+                panel.Add(T.StatRow("💨", "Trapped Exhaust",
+                    $"{room.ExhaustLoad01 * 100f:0}% · {room.ExhaustHeatC:0} °C of stream",
+                    room.ExhaustLoad01 > 0.5f ? T.AccentRed : T.AccentAmber));
+            if (room.IsOverheating)
+                panel.Add(T.Muted("This volume cannot clear its own heat. Vent the room, open a hatch, or fit an Exhaust Scrubber — the space destroys what is inside it at "
+                    + $"{VoxelEngine.Thermal.ThermalRules.RoomDamageHeatC:0} °C above the outside air."));
+        }
+
+        // ── EXHAUST SCRUBBER ─────────────────────────────────────────────────
+        private static VisualElement ScrubberPanel(VoxelEngine.Pressure.GridExhaustScrubber scrub)
+        {
+            var p = T.MachinePanel();
+            p.style.width = 440;
+
+            var room = scrub.ServicedRoom;
+            bool online = scrub.HasPower;
+            string state = !scrub.Enabled ? "OFF" : !online ? "NO POWER" : scrub.Status;
+            Color stateColor = !scrub.Enabled ? T.AccentDim
+                : !online ? T.AccentRed
+                : scrub.IsWorking ? T.AccentAmber : T.AccentGreen;
+
+            var (hdr, _, _, _) = T.HeaderRow("◈ " + scrub.SourceName, state, stateColor);
+            p.Add(hdr);
+            p.Add(T.AccentDivider(T.AccentAmber));
+            p.Add(T.Spacer(4));
+
+            p.Add(GridUIHelpers.SectionTitle("Sealed Compartment"));
+            if (room == null)
+            {
+                p.Add(T.Muted("No sealed room detected. Enclose the scrubber with airtight blocks and keep every door shut — an open engine bay needs no scrubber."));
+            }
+            else
+            {
+                var band = room.Band;
+                p.Add(T.StatRow("🌡", "Air Temperature",
+                    $"{room.AirTemperatureC:0} °C · {VoxelEngine.Thermal.ThermalRules.RoomBandLabel(band)}",
+                    VoxelEngine.Thermal.ThermalRules.BandColor(band)));
+                p.Add(T.StatRow("💨", "Trapped Exhaust", $"{room.ExhaustLoad01 * 100f:0}%",
+                    room.ExhaustLoad01 > 0.5f ? T.AccentRed : T.AccentAmber));
+                p.Add(T.StatRow("O₂", "Oxygen", $"{room.OxygenLitres:0} / {room.CapacityLitres:0} L",
+                    room.IsBreathable ? T.AccentBlue : T.AccentRed));
+                p.Add(T.StatRow("◻", "Volume", $"{room.Cells.Count} cells · {room.VolumeM3:0} m³", T.TextSecondary));
+
+                var (bar, fill) = T.ProgressBar(Mathf.Clamp01(room.RoomRiseC
+                    / VoxelEngine.Thermal.ThermalRules.RoomMaxRiseC),
+                    VoxelEngine.Thermal.ThermalRules.BandColor(band), 8, true);
+                bar.style.marginTop = 4;
+                bar.style.marginBottom = 6;
+                p.Add(bar);
+
+                p.Add(T.Muted(room.RoomRiseC < 2f && room.ExhaustHeatC < 5f
+                    ? "Compartment is clear. The unit idles and draws no work."
+                    : $"Clearing {room.RoomRiseC:0} °C of trapped heat at {scrub.HeatExtractionCPerSecond:0} °C/s."));
+
+                // Live refresh keeps the gauge honest while the unit works.
+                p.schedule.Execute(() =>
+                {
+                    if (p.panel == null || scrub == null) return;
+                    var live = scrub.ServicedRoom;
+                    if (live == null) return;
+                    fill.style.width = Length.Percent(Mathf.Clamp01(live.RoomRiseC
+                        / VoxelEngine.Thermal.ThermalRules.RoomMaxRiseC) * 100f);
+                }).Every(200);
+            }
+
+            p.Add(T.Spacer(6));
+            p.Add(GridUIHelpers.SectionTitle("Scrub Mode"));
+            var modeRow = Row();
+            modeRow.Add(ScrubModeButton(scrub, VoxelEngine.Pressure.ScrubMode.Scrub, "⬇ SCRUB", T.AccentCyan));
+            modeRow.Add(ScrubModeButton(scrub, VoxelEngine.Pressure.ScrubMode.Idle, "❙❙ IDLE", T.AccentDim));
+            p.Add(modeRow);
+            p.Add(T.Spacer(6));
+
+            p.Add(GridUIHelpers.SectionTitle("Tuning"));
+            p.Add(SliderRow("Air Changes / Minute", scrub.airChangesPerMinute, 1f, 60f,
+                v => scrub.airChangesPerMinute = v, "1 ACP", "60 ACP"));
+            p.Add(SliderRow("Scrub Efficiency", scrub.scrubEfficiency, 0.2f, 1f,
+                v => scrub.scrubEfficiency = v, "20 %", "100 %"));
+
+            p.Add(T.Spacer(4));
+            var powerRow = Row();
+            powerRow.Add(T.SmallButton(scrub.Enabled ? "Turn OFF" : "Turn ON", () =>
+            {
+                scrub.Enabled = !scrub.Enabled;
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }));
+            p.Add(powerRow);
+            p.Add(T.StatRow("⚡", "Power Use", PowerFormat.Watts(scrub.PowerDraw), T.AccentGold));
+
+            p.Add(T.Spacer(4));
+            p.Add(T.Muted("Heat and foul gas leave overboard; the vacated air volume is replaced from the gas "
+                + "network through the vent ports. On an airless world with no piped oxygen, scrubbing also "
+                + "lowers room pressure — cool a compartment and you may need the Air Vent to hold it up."));
+            return p;
+        }
+
+        // ── GAS VENT (dump end of a run) ──────────────────────────────────────
+        private static VisualElement VentDumpPanel(VoxelEngine.Gas.GasVent vent)
+        {
+            var p = T.MachinePanel();
+            p.style.width = 440;
+
+            bool open2 = vent.IsOpen;
+            string state = !vent.Enabled ? "OFF" : !open2 ? "SHUT"
+                : vent.HasPower ? "EXTRACTING" : "DRAFT ONLY";
+            Color stateColor = !vent.Enabled ? T.AccentDim
+                : !open2 ? T.AccentDim
+                : vent.HasPower ? T.AccentGreen : T.AccentAmber;
+
+            var (hdr, _, _, _) = T.HeaderRow("◈ " + vent.SourceName, state, stateColor);
+            p.Add(hdr);
+            p.Add(T.AccentDivider(T.AccentCyan));
+            p.Add(T.Spacer(4));
+
+            p.Add(GridUIHelpers.SectionTitle("Disposal"));
+            p.Add(T.StatRow("↯", "Flow Out", $"{vent.CurrentFlow:0} L/s", T.AccentCyan));
+            var (bar, fill) = T.ProgressBar(vent.Flow01, T.AccentCyan, 8, true);
+            bar.style.marginTop = 4; bar.style.marginBottom = 6;
+            p.Add(bar);
+            p.Add(T.StatRow("∑", "Destroyed", $"{vent.TotalDumped:0} L", T.TextSecondary));
+            p.Add(T.StatRow("◍", "Last Gas",
+                vent.LastGas == VoxelEngine.Gas.GasType.None ? "—" : vent.LastGas.ToString(), T.AccentAmber));
+
+            var room = VoxelEngine.Pressure.GridPressureSystem.ConcealedRoom(vent);
+            p.Add(T.Spacer(6));
+            p.Add(GridUIHelpers.SectionTitle("Terminus"));
+            p.Add(T.Muted(room == null
+                ? "Open to space: everything this vent takes is gone for good and the run stays clear."
+                : $"Set into a sealed compartment ({room.Cells.Count} cells): the gas is moved out of the pipes and into this room's air — exhaust will foul it, oxygen will help it."));
+
+            p.schedule.Execute(() =>
+            {
+                if (p.panel == null || vent == null) return;
+                fill.style.width = Length.Percent(Mathf.Clamp01(vent.Flow01) * 100f);
+            }).Every(200);
+
+            p.Add(T.Spacer(6));
+            p.Add(GridUIHelpers.SectionTitle("Louvres"));
+            var modeRow = Row();
+            modeRow.Add(VentModeButton(vent, true, "OPEN", T.AccentGreen));
+            modeRow.Add(VentModeButton(vent, false, "SHUT", T.AccentDim));
+            p.Add(modeRow);
+            p.Add(T.Spacer(6));
+
+            p.Add(GridUIHelpers.SectionTitle("Tuning"));
+            p.Add(SliderRow("Draft Flow (unpowered)", vent.draftFlowLitresPerSecond, 0f, 500f,
+                v => vent.draftFlowLitresPerSecond = v, "0 L/s", "500 L/s"));
+            p.Add(SliderRow("Extractor Flow", vent.forcedFlowLitresPerSecond, 10f, 12000f,
+                v => vent.forcedFlowLitresPerSecond = v, "10 L/s", "12 000 L/s"));
+
+            p.Add(T.Spacer(4));
+            var powerRow = Row();
+            powerRow.Add(T.SmallButton(vent.Enabled ? "Turn OFF" : "Turn ON", () =>
+            {
+                vent.Enabled = !vent.Enabled;
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }));
+            p.Add(powerRow);
+            p.Add(T.StatRow("⚡", "Power Use", PowerFormat.Watts(vent.PowerDraw), T.AccentGold));
+
+            p.Add(T.Spacer(4));
+            p.Add(T.Muted("Storage first, disposal second: a tank on the run is filled before the vent sees any "
+                + "gas, so a line that ends in a tank never leaks to the wind. A power cut drops the unit to its "
+                + "draft rate instead of trapping the exhaust — the engine keeps running, the plume just thickens."));
+            return p;
+        }
+
+        private static Button VentModeButton(VoxelEngine.Gas.GasVent vent, bool open, string label, Color accent)
+        {
+            var btn = T.SmallButton(label, () =>
+            {
+                vent.open = open;
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, vent.open == open ? accent : T.BgSlot);
+            btn.style.marginRight = 6;
+            return btn;
+        }
+
+        private static Button ScrubModeButton(VoxelEngine.Pressure.GridExhaustScrubber scrub,
+            VoxelEngine.Pressure.ScrubMode mode, string label, Color accent)
+        {
+            var btn = T.SmallButton(label, () =>
+            {
+                scrub.mode = mode;
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, scrub.mode == mode ? accent : T.BgSlot);
+            btn.style.marginRight = 6;
+            return btn;
         }
 
         // ── AIR VENT / ROOM PRESSURE ─────────────────────────────────────────

@@ -569,7 +569,18 @@ namespace VoxelEngine.Building
                 if (targetBlock is not VoxelEngine.GridSystem.GridGasTank
                     && targetBlock is not VoxelEngine.GridSystem.GridCryobed
                     && targetBlock is not VoxelEngine.GridSystem.GridBiofarm
-                    && targetBlock is not VoxelEngine.GridSystem.GridH2O2Generator) return false;
+                    && targetBlock is not VoxelEngine.GridSystem.GridH2O2Generator
+                    && targetBlock is not VoxelEngine.Maritime.GridExhaustPipe) return false;
+                if (targetBlock is VoxelEngine.Maritime.GridExhaustPipe
+                    && VoxelEngine.Maritime.MaritimeVariablePorts.GasRunAtCap(targetBlock,
+                        VoxelEngine.GridSystem.GridTankVariablePorts.PrefixFor(VoxelEngine.GridSystem.GridTankPortFamily.Gas)))
+                {
+                    feedback = "Exhaust gas tap already connected (max 1)";
+                    s_portCapBlocked = true;
+                    s_portCapReason = feedback;
+                    s_portCapPipeFamily = "Gas";
+                    return false;
+                }
                 tankFamily = VoxelEngine.GridSystem.GridTankPortFamily.Gas;
             }
             else return false;

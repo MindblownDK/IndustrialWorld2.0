@@ -61,6 +61,69 @@ namespace VoxelEngine.Maritime
                     $"+{source.SelfHeatC:0}°C self · +{source.NeighbourHeatC:0}°C into neighbours", T.AccentAmber));
         }
 
+        /// <summary>
+        /// What the compartment around this machine is doing to it, and what the machine
+        /// is doing back (roadmap 5.1 item 14). Nothing is printed for a block under an
+        /// open sky: a machine that can shed its heat into the planet has no engine room
+        /// problem, and the panel should not pretend otherwise.
+        /// </summary>
+        private static void AddEngineRoomRows(VisualElement p, GridMaritimeEngine eng)
+        {
+            if (p == null || eng == null) return;
+            var room = VoxelEngine.Pressure.GridPressureSystem.ConcealedRoom(eng);
+            if (room == null) return;
+
+            p.Add(T.Spacer(4));
+            p.Add(GridUIHelpers.SectionTitle("Engine Room"));
+
+            var band = room.Band;
+            p.Add(T.StatRow("🏠", "Compartment Air",
+                $"room air {room.AirTemperatureC:0}°C  ·  {VoxelEngine.Thermal.ThermalRules.RoomBandLabel(band)}",
+                VoxelEngine.Thermal.ThermalRules.BandColor(band)));
+            p.Add(T.StatRow("🫁", "Combustion Air", eng.AirSourceLabel,
+                eng.OxygenStarved ? T.AccentRed : eng.DrawsRoomAir ? T.AccentAmber : T.AccentCyan));
+
+            if (!eng.AirIndependent)
+            {
+                float perSecond = eng.RoomOxygenDemandPerSecond * GridMaritimeEngine.ThermalRoomOxygenDebit;
+                string burn = perSecond > 0.001f
+                    ? $"{perSecond:0.0} L/s of room air"
+                    : "not drinking the room";
+                p.Add(T.StatRow("O₂", "Room Draw", burn,
+                    eng.DrawsRoomAir ? T.AccentAmber : T.TextSecondary));
+            }
+
+            if (eng.ConcealedVent01 > 0.02f)
+                p.Add(T.StatRow("💨", "Trapped Exhaust",
+                    $"{eng.ConcealedVent01 * 100f:0}% of the stack's gas stays in this volume  ·  back-pressure −{eng.ConcealedVent01 * 25f:0}%",
+                    T.AccentRed));
+
+            if (room.IsOverheating)
+                p.Add(T.Muted("This volume is cooking. The space destroys what is inside it: clear it with an Exhaust Scrubber, open a hatch, or shut the engine down before the plates around it fail."));
+            else if (eng.DrawsRoomAir)
+                p.Add(T.Muted("Feeding on the room's own air. It works — until the room does not. Pipe oxygen in, fit a Closed-Cycle AIP module, or ventilate."));
+        }
+
+        /// <summary>Compartment readout for machinery with no combustion air of its own.</summary>
+        private static void AddEngineRoomRows(VisualElement p, GridBlock block)
+        {
+            if (p == null || block == null) return;
+            var room = VoxelEngine.Pressure.GridPressureSystem.ConcealedRoom(block);
+            if (room == null) return;
+
+            p.Add(T.Spacer(4));
+            p.Add(GridUIHelpers.SectionTitle("Engine Room"));
+            var band = room.Band;
+            p.Add(T.StatRow("🏠", "Compartment Air",
+                $"room air {room.AirTemperatureC:0}°C  ·  {VoxelEngine.Thermal.ThermalRules.RoomBandLabel(band)}",
+                VoxelEngine.Thermal.ThermalRules.BandColor(band)));
+            if (room.ExhaustLoad01 > 0.02f)
+                p.Add(T.StatRow("💨", "Trapped Exhaust", $"{room.ExhaustLoad01 * 100f:0}%",
+                    room.ExhaustLoad01 > 0.5f ? T.AccentRed : T.AccentAmber));
+            if (room.IsOverheating)
+                p.Add(T.Muted("The compartment cannot clear its own heat. Vent it, or the room will destroy what is inside it."));
+        }
+
         /// <summary>Entry point — called by GridBlockUI.BuildPanel for maritime blocks.</summary>
         public static VisualElement BuildPanel(GridBlock block, MachineUIs.SlotBuilder slot = null)
         {
@@ -181,18 +244,87 @@ namespace VoxelEngine.Maritime
                 }
             }
 
-            // ── Oxygen supply (combustion air) ────────────────────────
-            p.Add(GridUIHelpers.SectionTitle("Oxygen"));
+            // ── Combustion air: one intake, three possible sources ────
+            p.Add(GridUIHelpers.SectionTitle("Combustion Air"));
             if (eng.AirIndependent)
             {
-                p.Add(T.Muted("CLOSED-CYCLE AIP active — oxygen loop is closed, no external air supply needed."));
+                p.Add(T.Muted("CLOSED-CYCLE AIP active — the oxygen loop is closed, no external air is burned and no atmosphere is required."));
             }
             else
             {
                 Color o2Color = eng.OxygenFill01 > 0.25f ? T.AccentCyan : T.AccentRed;
                 var (o2Bar, _) = T.ProgressBar(eng.OxygenFill01, o2Color, 8, true);
                 p.Add(o2Bar);
-                p.Add(T.Muted("Combustion air (sips O₂). Feed the Port_OxygenInput via gas pipes from an oxygen tank/electrolyser — or fit a Closed-Cycle AIP module to never need air again."));
+
+                string intake = eng.StarvedOnPipedLine ? "PIPED LINE EMPTY — STRICT" : eng.AirSource switch
+                {
+                    VoxelEngine.Thermal.AirSource.PipedOxygen => "PIPED O₂ — no penalty, the line owns the intake",
+                    VoxelEngine.Thermal.AirSource.RoomAir     => "ROOM AIR — 10% down on torque, and it drinks the compartment",
+                    VoxelEngine.Thermal.AirSource.Atmosphere  => $"OPEN INTAKE — {(1f - eng.AirQuality01) * 100f:0}% down, thin air out here",
+                    VoxelEngine.Thermal.AirSource.ClosedCycle  => "CLOSED LOOP",
+                    _                                         => "NO AIR — the engine will stop",
+                };
+                Color intakeColor = eng.AirSource switch
+                {
+                    VoxelEngine.Thermal.AirSource.PipedOxygen  => T.AccentGreen,
+                    VoxelEngine.Thermal.AirSource.RoomAir      => T.AccentAmber,
+                    VoxelEngine.Thermal.AirSource.Atmosphere   => T.AccentCyan,
+                    VoxelEngine.Thermal.AirSource.ClosedCycle  => T.AccentDim,
+                    _                                          => T.AccentRed,
+                };
+                p.Add(T.StatRow("🌬", "Intake", intake, eng.StarvedOnPipedLine ? T.AccentRed : intakeColor));
+
+                // ── Starved-line policy: hold to the pipe, or fall back to free air ──
+                var fbRow = Row();
+                fbRow.Add(T.SmallButton("FALLBACK ON", () =>
+                {
+                    eng.allowAirFallbackOnStarvedLine = true;
+                    VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+                }, eng.allowAirFallbackOnStarvedLine ? T.AccentCyan : T.BgSlot));
+                fbRow.Add(T.SmallButton("STRICT", () =>
+                {
+                    eng.allowAirFallbackOnStarvedLine = false;
+                    VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+                }, !eng.allowAirFallbackOnStarvedLine ? T.AccentRed : T.BgSlot));
+                fbRow.Add(T.Muted(eng.allowAirFallbackOnStarvedLine
+                    ? "empty line → room/planet air"
+                    : "empty line → engine stops"));
+                p.Add(fbRow);
+                p.Add(T.Muted(eng.allowAirFallbackOnStarvedLine
+                    ? "When the piped oxygen runs out this engine drops back to whatever air it can reach and keeps "
+                        + "running at that source's cost. Convenient on a ship whose supply is not yet trustworthy; "
+                        + "the room still pays for it. Switch to STRICT if you want the engine to refuse any other "
+                        + "intake than the one you plumbed."
+                    : "STRICT: a plumbed line owns the intake absolutely. If it runs empty the engine stops with "
+                        + "O2 LINE EMPTY instead of quietly eating the compartment's air — which is the behaviour a "
+                        + "sealed engine room wants, because room air there is the crew's breath."));
+
+                p.Add(T.Muted(eng.AirSource switch
+                {
+                    VoxelEngine.Thermal.AirSource.PipedOxygen =>
+                        "A gas line is plumbed to Port_OxygenInput, so the engine breathes that line and nothing else — "
+                        + "neither the compartment nor the sky. It is the only arrangement that runs at full torque, and "
+                        + "it keeps a sealed engine room from being eaten alive. What happens when the line runs dry is "
+                        + "your call: the policy row below either falls back to free air or stops the engine.",
+                    VoxelEngine.Thermal.AirSource.RoomAir =>
+                        "The bay is sealed and nothing is piped in, so the engine is burning the compartment's own air. "
+                        + "It works at reduced torque until the room runs out. Pipe oxygen into Port_OxygenInput, or fit a "
+                        + "Closed-Cycle AIP module, and the room stops being the fuel tank.",
+                    VoxelEngine.Thermal.AirSource.Atmosphere =>
+                        "The intake side of the block faces open sky, so the engine breathes the planet directly. Leave a hole "
+                        + "in the wall there for the air to reach it — weld the bay shut and the intake closes. Raw atmosphere "
+                        + "burns less cleanly than piped oxygen; the thinner the world, the worse it gets.",
+                    VoxelEngine.Thermal.AirSource.ClosedCycle =>
+                        "Nothing is being drawn from around the block.",
+                    _ =>
+                        "No air: the engine has no intake at all. It needs a pipe on Port_OxygenInput, an open cell on its "
+                        + "intake side on a planet with breath in it, or a compartment with oxygen left to burn.",
+                }));
+
+                if (eng.OxygenStarved)
+                    p.Add(T.Muted(eng.DrawsAtmosphereAir
+                        ? "INTAKE BLOCKED — the cell in front of the intake is no longer open. The run continues on the buffer, then stops."
+                        : "NO COMBUSTION AIR — nothing to burn. The run continues on the buffer, then stops."));
             }
 
             p.Add(T.Spacer(6));
@@ -206,7 +338,7 @@ namespace VoxelEngine.Maritime
             }
             else if (eng.ExhaustFill01 >= 0.8f)
             {
-                var warn = T.StatusPill("⚠ EXHAUST BACKING UP — VENT FASTER!", T.AccentRed);
+                var warn = T.StatusPill("⚠ EXHAUST BACKING UP — VENT OR DUMP IT", T.AccentRed);
                 p.Add(warn.pill);
                 p.Add(T.Spacer(4));
             }
@@ -256,6 +388,7 @@ namespace VoxelEngine.Maritime
                 ? "Performance hardware installed — high mechanical load can push this engine past the stock thermal envelope."
                 : "Stock thermal governor active — without performance hardware this engine is capped at 89°C."));
             AddHullHeatRows(p, eng);
+            AddEngineRoomRows(p, eng);
 
             if (eng.CriticalFailure)
             {
@@ -409,6 +542,7 @@ namespace VoxelEngine.Maritime
             var (heatBar, _) = T.ProgressBar(gen.Heat01, heatColor, 6, false);
             p.Add(heatBar);
             AddHullHeatRows(p, gen);
+            AddEngineRoomRows(p, (GridBlock)gen);
             if (gen.CriticalFailure)
             {
                 p.Add(T.Spacer(4));
@@ -833,6 +967,19 @@ namespace VoxelEngine.Maritime
 
             p.Add(T.StatRow("🌫", "Smoke Rate", $"{ex.smokeRate:0}/s", T.AccentAmber));
             p.Add(T.StatRow("💨", "Status", ex.IsVenting ? "Venting gas from adjacent engine(s)" : "No active engines adjacent", T.TextSecondary));
+
+            // Roadmap 5.1 item 14: where the gas goes matters as much as how much there is.
+            if (ex.ConcealedVent01 > 0.02f)
+            {
+                p.Add(T.StatRow("🏥", "Venting Into",
+                    $"{ex.ConcealedVent01 * 100f:0}% trapped in a sealed compartment", T.AccentRed));
+                var sroom = ex.ServedRoom;
+                if (sroom != null)
+                    p.Add(T.StatRow("🔥", "Room Air",
+                        $"{sroom.AirTemperatureC:0} °C  ·  {VoxelEngine.Thermal.ThermalRules.RoomBandLabel(sroom.Band)}",
+                        VoxelEngine.Thermal.ThermalRules.BandColor(sroom.Band)));
+                p.Add(T.Muted("The plume stopped at the bulkhead. The room keeps the heat, the casing runs hotter, and the engine it serves feels back-pressure — this funnel needs an exhaust scrubber, or the space needs an opening."));
+            }
 
             p.Add(T.Spacer(6));
             p.Add(T.Muted("Every engine requires at least one adjacent exhaust pipe. " +

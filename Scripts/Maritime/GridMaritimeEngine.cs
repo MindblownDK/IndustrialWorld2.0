@@ -36,6 +36,7 @@
 using UnityEngine;
 using VoxelEngine.GridSystem;
 using VoxelEngine.Items;
+using VoxelEngine.Thermal;
 
 namespace VoxelEngine.Maritime
 {
@@ -119,6 +120,9 @@ namespace VoxelEngine.Maritime
         [Tooltip("How fast the buffer refills from a connected oxygen gas supply (units/s).")]
         public float oxygenRefillRate = 12f;
 
+        [Tooltip("When the piped oxygen line runs empty: fall back to whatever air the engine can reach (the compartment, or the planet through an open intake side) at that source's cost. Off keeps the engine true to the line: it stalls and tells you the line is empty.")]
+        public bool allowAirFallbackOnStarvedLine = true;
+
         /// <summary>Live oxygen reserve, fed through the engine's Port_OxygenInput.</summary>
         public float OxygenBuffer { get; private set; }
         public float OxygenFill01 => oxygenBufferCapacity > 0f ? Mathf.Clamp01(OxygenBuffer / oxygenBufferCapacity) : 0f;
@@ -128,7 +132,47 @@ namespace VoxelEngine.Maritime
         public bool AirIndependent => AipModuleCount > 0;
         public bool RequiresExternalOxygen => !AirIndependent;
         /// <summary>Oxygen available for combustion this tick.</summary>
-        public bool HasOxygen => !RequiresExternalOxygen || OxygenBuffer > 0.01f;
+        /// <summary>
+        /// Whether combustion can happen THIS frame: a charge in the buffer, or a live
+        /// intake that can feed it. A plumbed line that has run dry deliberately does not
+        /// qualify — the engine will not quietly switch to the room's air — and neither does
+        /// a sealed room with nothing left to burn or an intake that has been walled in.
+        /// </summary>
+        public bool HasOxygen => !RequiresExternalOxygen || OxygenBuffer > 0.01f
+                                 || _air.Source == VoxelEngine.Thermal.AirSource.RoomAir
+                                 || _air.Source == VoxelEngine.Thermal.AirSource.Atmosphere
+                                 || _air.Source == VoxelEngine.Thermal.AirSource.ClosedCycle
+                                 || (_air.PipeConnected && _pipeCanFeed);
+
+        // ── Combustion air and waste heat in a CONCEALED SPACE (roadmap 5.1 item 14) ──
+        // A diesel in an open engine bay breathes the planet and sheds its waste heat
+        // into the sky. Weld the bay shut and both of those stop being free: the room's
+        // air becomes the intake, and the room's air is what keeps the block hot.
+
+        /// <summary>Where the combustion air is coming from this tick (piped / room / atmosphere / closed loop).</summary>
+        public VoxelEngine.Thermal.AirSource AirSource => _air.Source;
+        /// <summary>True while this engine is taking its combustion air out of the compartment around it.</summary>
+        public bool DrawsRoomAir => _air.Source == VoxelEngine.Thermal.AirSource.RoomAir;
+        /// <summary>True while the engine breathes the planet through its open intake side.</summary>
+        public bool DrawsAtmosphereAir => _air.Source == VoxelEngine.Thermal.AirSource.Atmosphere;
+        /// <summary>True when a gas line is plumbed to the oxygen port — it then owns the intake exclusively.</summary>
+        public bool PipedSupplyConnected => _air.PipeConnected;
+        /// <summary>True while the plumbed line itself is dry and the strict setting is on:
+        /// the intake is not missing, the supply behind it is.</summary>
+        public bool StarvedOnPipedLine => _air.StarvedOnLine;
+        /// <summary>True when the compartment this engine stands in still has air to burn.</summary>
+        public bool RoomAirAvailable => _air.RoomHasAir || _air.Source == VoxelEngine.Thermal.AirSource.ClosedCycle;
+        /// <summary>0..1 output quality of the current air source: 1 = piped, down to 0.75 = raw atmosphere.</summary>
+        public float AirQuality01 => _air.Quality01;
+        private VoxelEngine.Thermal.CombustionAir _air;
+        /// <summary>Oxygen litres this engine is expected to take out of the room air per second.</summary>
+        public float RoomOxygenDemandPerSecond { get; private set; }
+        /// <summary>0..1 how much of the exhaust this engine makes has nowhere to go (blocked-in stack).</summary>
+        public float ConcealedVent01 { get; private set; }
+        /// <summary>°C the compartment air is holding this block's casing at, above the planetary ambient.</summary>
+        public float ThermalExposureC { get; private set; }
+        /// <summary>Where the combustion air is coming from, for panels and screens.</summary>
+        public string AirSourceLabel => _air.Label;
 
         [Header("Thermal Management")]
         [Tooltip("Heat generated per second at full throttle (°C/s) before module bonuses.")]
@@ -417,7 +461,8 @@ namespace VoxelEngine.Maritime
                     break;
             }
             FuelBuffer = Mathf.Min(FuelBuffer, fuelBufferCapacity);
-            if (TemperatureC < AmbientTemperatureC) TemperatureC = AmbientTemperatureC;
+            if (TemperatureC < AmbientTemperatureC + ThermalExposureC)
+                TemperatureC = AmbientTemperatureC + ThermalExposureC;
             EnsureSolidFuelInput();
             EnsureModuleSlots();
             EnsureTurboAttachmentMarkers();
@@ -772,6 +817,11 @@ namespace VoxelEngine.Maritime
                 float overChoke = (ExhaustFill01 - exhaustChokeThreshold) / (1f - exhaustChokeThreshold);
                 exhaustPenalty = 1f - overChoke * 0.7f; // lose up to 70% power near full
             }
+            // A stack that vents into a sealed compartment pushes against its own gas:
+            // real back-pressure, cured by an exhaust scrubber or an open hatch.
+            if (ConcealedVent01 > 0.001f)
+                exhaustPenalty -= ConcealedVent01 * 0.25f;
+            exhaustPenalty = Mathf.Clamp(exhaustPenalty, 0.05f, 1f);
 
             IsRunning = FuelBuffer > 0.01f && requestedThrottle > 0.01f;
             float effectiveFuel = IsRunning ? FuelFill01 * requestedThrottle * exhaustPenalty : 0f;
@@ -783,7 +833,10 @@ namespace VoxelEngine.Maritime
             float torqueCurve = TorqueCurveAtSpeed(speedStressTerm);
             float turboRpmBonus = ConnectedTurboCount * 0.10f; // +10% RPM cap per connected turbo
             float turboFuelPenalty = 1f + ConnectedTurboCount * 0.10f; // +10% fuel use per turbo
-            node.MaxTorque = maxTorque * TurboBoostTotal * ModuleOutputMultiplier * torqueCurve;
+            // Air quality: piped oxygen is a perfect supply, room air is lean, a raw
+            // atmosphere intake runs down with density (roadmap 5.1 item 14).
+            node.MaxTorque = maxTorque * TurboBoostTotal * ModuleOutputMultiplier * torqueCurve
+                            * AirQuality01;
             node.MaxRPM = maxRPM * (ModuleSpeedCapMultiplier + turboRpmBonus);
             node.OutputMultiplier = 1f;
             // Apply turbo fuel penalty to the consumption multiplier for honest ETA display
@@ -1007,7 +1060,12 @@ namespace VoxelEngine.Maritime
             // the 89°C safe limit. Installing a performance module or turbo deliberately
             // removes that safety ceiling so high load can create real thermal risk.
             float thermalCeiling = HasThermalPerformanceUpgrade ? MaxTemperatureC : 89f;
-            TemperatureC = Mathf.Clamp(TemperatureC + net * dt, AmbientTemperatureC, thermalCeiling);
+            // The compartment air is the floor: the internal dissipation model can shed
+            // heat into a room that is already scorching, but it can never cool below it.
+            float floorC = Mathf.Max(AmbientTemperatureC, AmbientTemperatureC + ThermalExposureC);
+            TemperatureC = Mathf.Clamp(TemperatureC + net * dt, floorC, Mathf.Max(floorC, thermalCeiling));
+
+            TickConcealedSpaceThermal(loadActive);
 
             // Critical mechanical failure at 100°C — shaft stops, heavy black smoke,
             // and the engine SEIZES: it needs spare-parts repairs to ever run again.
@@ -1016,6 +1074,39 @@ namespace VoxelEngine.Maritime
                 CriticalFailure = true;
                 NeedsRepair = true;
             }
+        }
+
+        // ══════════════════════════════════════════════════════════════
+        //  CONCEALED SPACE — what a running engine does to the volume around it.
+        //  Nothing is bookkept here if the block can see the sky: the waste heat of a
+        //  machine under an open hatch is simply gone, which is exactly the design
+        //  point of item 14 (engine rooms need ventilation, not just a pipe).
+        // ══════════════════════════════════════════════════════════════
+        private void TickConcealedSpaceThermal(bool loadActive)
+        {
+            if (!loadActive)
+            {
+                ThermalService.ReportWasteHeat(this, 0f);
+                return;
+            }
+
+            float waste = ThermalRules.RoomEngineWasteKJperS
+                          * ThermalRules.MaritimeEngineTierScale((int)tier)
+                          * Mathf.Clamp01(Mathf.Max(MechanicalLoad01, Heat01));
+            // A flowing Super-Cooler Jacket pulls heat out of the block and has to put
+            // it somewhere: with the sea water gone, that somewhere is the room.
+            if (RadiatorCoolingActive)
+                waste += ThermalRules.RoomRadiatorKJperS * RadiatorModuleCount * Mathf.Clamp01(Heat01 + 0.25f);
+
+            ThermalService.ReportWasteHeat(this, waste);
+        }
+
+        /// <summary>Set by the exhaust pipe this engine vents through: how much of the
+        /// stream is trapped by the compartment around the stack (0..1).</summary>
+        public void SetThermalExposure(float trappedFraction01, float thermalExposureC)
+        {
+            ConcealedVent01 = Mathf.Clamp01(trappedFraction01);
+            ThermalExposureC = Mathf.Max(0f, thermalExposureC);
         }
 
         // ══════════════════════════════════════════════════════════════
@@ -1031,34 +1122,121 @@ namespace VoxelEngine.Maritime
 
         private void TickOxygen(float dt, float requestedThrottle)
         {
-            if (AirIndependent)
+            // A gas line reaching this engine's oxygen port is resolved once per refill
+            // window; it is the one input that changes only when the player builds.
+            _pipeScanTimer -= dt;
+            if (_pipeScanTimer <= 0f)
             {
-                OxygenStarved = false;
-                return;
+                _pipeScanTimer = 0.5f;
+                var gasNet = Grid != null ? GridGasNetwork.Instance : null;
+                // Strictly this engine's own run: a gas pipe two decks away that was never
+                // brought to Port_OxygenInput must not be able to starve the engine on purpose.
+                // "Can feed" is the second half of the test — a line that reaches storage but
+                // finds no oxygen in it is a fault, while no line at all is a free pass to the
+                // room or the sky.
+                _pipeConnected = gasNet != null && gasNet.HasStorageFor(this, VoxelEngine.Gas.GasType.Oxygen);
+                _pipeCanFeed = _pipeConnected
+                    && gasNet.AvailableGasFor(this, VoxelEngine.Gas.GasType.Oxygen) > 0.01f;
             }
 
-            // Burn oxygen with the fuel actually consumed this tick.
-            if (IsRunning && requestedThrottle > 0.01f)
-                OxygenBuffer = Mathf.Max(0f, OxygenBuffer
-                    - fuelConsumptionRate * requestedThrottle * oxygenPerFuelUnit * dt);
+            _air = VoxelEngine.Thermal.CombustionAirRules.Resolve(this, AirIndependent,
+                _pipeConnected, _pipeCanFeed, OxygenBuffer > 0.01f, allowAirFallbackOnStarvedLine);
 
-            // Refill from the grid gas network (pipe-connected tanks only — no cheating without pipes).
+            // ── Burn ────────────────────────────────────────────────────────────
+            float burned = IsRunning && requestedThrottle > 0.01f
+                ? fuelConsumptionRate * requestedThrottle * oxygenPerFuelUnit * dt
+                : 0f;
+            if (burned > 0f)
+            {
+                OxygenBuffer = Mathf.Max(0f, OxygenBuffer - burned);
+                // Only a room-fed engine debits the compartment. Piped and atmospheric
+                // engines leave the volume's air exactly as it was.
+                if (_air.Source == VoxelEngine.Thermal.AirSource.RoomAir && _air.Room != null)
+                    _air.Room.RemoveOxygen(burned * ThermalRoomOxygenDebit);
+            }
+
+            // What the burn rate would cost the compartment per second, so the panel can
+            // warn while there is still air to notice the warning about.
+            RoomOxygenDemandPerSecond = requestedThrottle > 0.01f
+                ? fuelConsumptionRate * requestedThrottle * oxygenPerFuelUnit
+                : 0f;
+
+            // ── Refill, in strict source priority ───────────────────────────────
             if (OxygenBuffer < oxygenBufferCapacity - 0.01f)
             {
                 float want = Mathf.Min(oxygenBufferCapacity - OxygenBuffer, oxygenRefillRate * dt);
-                float drawn = 0f;
 
-                if (Grid != null && GridGasNetwork.Instance != null)
+                switch (_air.Source)
                 {
-                    // ONLY pipe-connected draw — player MUST use gas pipes to feed oxygen.
-                    drawn = GridGasNetwork.Instance.DrawGasFor(this, VoxelEngine.Gas.GasType.Oxygen, want);
-                }
+                    case VoxelEngine.Thermal.AirSource.PipedOxygen:
+                    {
+                        // A plumbed line is the only intake allowed here, so it is also
+                        // the only thing that can fill the buffer.
+                        if (GridGasNetwork.Instance != null)
+                        {
+                            float drawn = GridGasNetwork.Instance
+                                .DrawGasFor(this, VoxelEngine.Gas.GasType.Oxygen, want);
+                            OxygenBuffer = Mathf.Min(oxygenBufferCapacity, OxygenBuffer + drawn);
+                        }
+                        break;
+                    }
 
-                OxygenBuffer = Mathf.Min(oxygenBufferCapacity, OxygenBuffer + drawn);
+                    case VoxelEngine.Thermal.AirSource.RoomAir:
+                    {
+                        // No pipe at all: the compartment is the intake.
+                        float took = _air.Room != null ? _air.Room.DrawCombustionOxygen(want) : 0f;
+                        OxygenBuffer = Mathf.Min(oxygenBufferCapacity, OxygenBuffer + took);
+                        break;
+                    }
+
+                    case VoxelEngine.Thermal.AirSource.Atmosphere:
+                    {
+                        // An open intake side needs no pump and no tanks — the planet is
+                        // pushing air in. It only buys a few seconds of buffer, which is
+                        // what makes a blocked intake visibly different without turning
+                        // the engine into a compressor.
+                        OxygenBuffer = Mathf.Min(oxygenBufferCapacity, OxygenBuffer + want);
+                        break;
+                    }
+
+                    default:
+                    {
+                        // Nothing usable out there. If a line is plumbed, that line is the
+                        // only thing allowed to fill this buffer: a starved supply is a
+                        // fault to fix, never a licence to eat the room's air.
+                        if (_pipeConnected && GridGasNetwork.Instance != null)
+                        {
+                            float drawn = GridGasNetwork.Instance
+                                .DrawGasFor(this, VoxelEngine.Gas.GasType.Oxygen, want);
+                            OxygenBuffer = Mathf.Min(oxygenBufferCapacity, OxygenBuffer + drawn);
+                        }
+                        break;
+                    }
+                }
+            }
+            else if (_pipeConnected && GridGasNetwork.Instance != null && _pipeCanFeed)
+            {
+                // Buffer full and a line plumbed: keep drawing nothing. The pipe is not
+                // a bypass for the room rule, and the room rule is not a bypass for the pipe.
+                _air = new VoxelEngine.Thermal.CombustionAir(
+                    AirIndependent ? VoxelEngine.Thermal.AirSource.ClosedCycle
+                                   : VoxelEngine.Thermal.AirSource.PipedOxygen,
+                    _air.Room, _air.RoomHasAir, _air.AtmosphereHasAir, true, 1f);
             }
 
-            OxygenStarved = RequiresExternalOxygen && OxygenBuffer <= 0.01f;
+            OxygenStarved = RequiresExternalOxygen
+                            && _air.Source == VoxelEngine.Thermal.AirSource.None
+                            && OxygenBuffer <= 0.01f;
         }
+
+        private bool _pipeConnected;
+        private float _pipeScanTimer;
+        private bool _pipeCanFeed;
+
+        /// <summary>Multiplier turning a litre of buffered oxygen into litres taken from
+        /// the compartment: room air is far leaner than a piped tank, so an engine running
+        /// on it fouls and empties the space quickly.</summary>
+        public const float ThermalRoomOxygenDebit = 24f;
 
         // ══════════════════════════════════════════════════════════════
         //  TORQUE CURVE + EMERGENCY REPAIR
@@ -1211,10 +1389,12 @@ namespace VoxelEngine.Maritime
                 CriticalFailure ? "CRITICAL HEAT — SHAFT STOPPED" :
                 IsOverstressShutdown ? "OVERSTRESSED — SHAFT STOPPED" :
                 IsOverheating ? "KNOCKING — OVERHEATING" :
-                OxygenStarved ? "OXYGEN STARVED" :
+                OxygenStarved ? (StarvedOnPipedLine ? "O2 LINE EMPTY"
+                                    : DrawsAtmosphereAir ? "INTAKE BLOCKED" : "NO COMBUSTION AIR") :
                 IsRunning ? "RUNNING" :
                 !HasExhaust ? "NO EXHAUST" :
                 (RequiresExternalOxygen && !HasOxygen) ? "NO OXYGEN" : "IDLE";
+            string air = AirIndependent ? "CLOSED CYCLE" : $"AIR {AirSourceLabel}";
             string fuel = fuelKind == MaritimeFuelKind.Liquid
                 ? $"FUEL {FuelFill01 * 100f:0}% ({FuelBuffer:0} L)"
                 : $"FUEL {FuelFill01 * 100f:0}% (≈{FormatDuration(EstimatedFuelSecondsRemaining)})";
@@ -1225,7 +1405,7 @@ namespace VoxelEngine.Maritime
                 $"{fuel}\n" +
                 $"HEAT {Heat01 * 100f:0}% ({TemperatureC:0}°C)\n" +
                 $"EXHAUST {ExhaustFill01 * 100f:0}%\n" +
-                (AirIndependent ? "OXYGEN CLOSED-LOOP (AIP)" : $"OXYGEN {OxygenFill01 * 100f:0}%");
+                (AirIndependent ? "OXYGEN CLOSED-LOOP (AIP)" : $"OXYGEN {OxygenFill01 * 100f:0}% · {air}");
         }
     }
 }

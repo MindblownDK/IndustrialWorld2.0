@@ -1175,7 +1175,22 @@ namespace VoxelEngine.Persistence
                         container = TryFindContainer(block.gameObject)
                     };
 
-                    if (block is GridGasTank gasTankBlock)
+                    if (block is VoxelEngine.Gas.GasVent ventBlock)
+                    {
+                        // Louvre position and the lifetime counter are the only two things
+                        // a vent remembers; the gas itself is already gone.
+                        savedBlock.hasGasVentState = true;
+                        savedBlock.gasVentOpen = ventBlock.open;
+                        savedBlock.gasVentDumped = ventBlock.TotalDumped;
+                    }
+                    else if (block is VoxelEngine.Maritime.GridMaritimeEngine airModeEngine)
+                    {
+                        // Which policy the engine follows when its plumbed line runs dry is a
+                        // player decision, so it survives a reload like any other setting.
+                        savedBlock.hasEngineAirModeState = true;
+                        savedBlock.engineAirFallback = airModeEngine.allowAirFallbackOnStarvedLine;
+                    }
+                    else if (block is GridGasTank gasTankBlock)
                     {
                         savedBlock.hasGasTankState = true;
                         savedBlock.gasTankType = (int)gasTankBlock.gasType;
@@ -1247,18 +1262,25 @@ namespace VoxelEngine.Persistence
                     }
                 }
 
-                // Sealed-room pressure: only the oxygen charge is stored. Room shapes
-                // are re-solved from the restored hull, so a rebuilt ship stays valid.
+                // Sealed-room atmosphere: the oxygen charge plus whatever heat and foul
+                // gas the volume has trapped (9.32.0). Room shapes are re-solved from the
+                // restored hull, so a rebuilt ship stays valid.
                 var pressure = grid.GetComponent<VoxelEngine.Pressure.GridPressureSystem>();
                 if (pressure != null)
                 {
                     foreach (var room in pressure.Rooms)
                     {
-                        if (room == null || room.OxygenLitres <= 0.01f) continue;
+                        if (room == null) continue;
+                        bool hasCharge = room.OxygenLitres > 0.01f;
+                        bool hasAtmosphere = room.IsSealed
+                            && (room.HeatLoadC > 0.01f || room.ExhaustHeatC > 0.01f);
+                        if (!hasCharge && !hasAtmosphere) continue;
                         entry.roomCharges.Add(new SavedRoomCharge
                         {
                             anchor = room.Anchor,
-                            oxygenLitres = room.OxygenLitres
+                            oxygenLitres = room.OxygenLitres,
+                            heatLoadC = room.IsSealed ? room.HeatLoadC : 0f,
+                            exhaustLoadC = room.IsSealed ? room.ExhaustHeatC : 0f
                         });
                     }
                 }
@@ -1342,6 +1364,12 @@ namespace VoxelEngine.Persistence
                             {
                                 if (room == null || room.Anchor != charge.anchor) continue;
                                 room.OxygenLitres = Mathf.Clamp(charge.oxygenLitres, 0f, room.CapacityLitres);
+                                // Legacy saves leave both at zero: a room that never
+                                // stored an atmosphere loads as a room that has none.
+                                room.HeatLoadC = Mathf.Clamp(charge.heatLoadC, 0f,
+                                    VoxelEngine.Thermal.ThermalRules.RoomMaxRiseC);
+                                room.ExhaustHeatC = Mathf.Clamp(charge.exhaustLoadC, 0f,
+                                    VoxelEngine.Thermal.ThermalRules.RoomExhaustReferenceC);
                                 break;
                             }
                         }
@@ -1453,7 +1481,15 @@ namespace VoxelEngine.Persistence
                     var gp = block.GetComponent<VoxelEngine.Building.BlockPaint>() ?? block.gameObject.AddComponent<VoxelEngine.Building.BlockPaint>();
                     gp.Finish = (VoxelEngine.Building.PaintFinishId)saved.paintFinish;
                 }
-                if (saved.hasGasTankState && block is GridGasTank restoredGridGas)
+                if (saved.hasEngineAirModeState
+                    && block is VoxelEngine.Maritime.GridMaritimeEngine restoredEngine)
+                    restoredEngine.allowAirFallbackOnStarvedLine = saved.engineAirFallback;
+                else if (saved.hasGasVentState && block is VoxelEngine.Gas.GasVent restoredVent)
+                {
+                    restoredVent.open = saved.gasVentOpen;
+                    restoredVent.TotalDumped = Mathf.Max(0f, saved.gasVentDumped);
+                }
+                else if (saved.hasGasTankState && block is GridGasTank restoredGridGas)
                 {
                     if (System.Enum.IsDefined(typeof(VoxelEngine.Gas.GasType), saved.gasTankType))
                         restoredGridGas.gasType = (VoxelEngine.Gas.GasType)saved.gasTankType;
@@ -2366,6 +2402,7 @@ namespace VoxelEngine.Persistence
             // Additive 9.27.0: oxygen charge of each sealed room, keyed by the room's
             // anchor cell. Old saves omit the collection and restore as vacuum, which
             // a running Air Vent refills — no save break.
+            // Additive 9.32.0: the same records also carry trapped heat and foul gas.
             public List<SavedRoomCharge> roomCharges = new();
             public List<SavedGridBlock> blocks = new();
         }
@@ -2373,6 +2410,10 @@ namespace VoxelEngine.Persistence
         {
             public Vector3Int anchor;
             public float oxygenLitres;
+            /// <summary>°C of waste heat the compartment has baked in, above the outside air.</summary>
+            public float heatLoadC;
+            /// <summary>°C of trapped exhaust stream held in the compartment air.</summary>
+            public float exhaustLoadC;
         }
         [Serializable] private class SavedMechanicalBelt
         {
@@ -2401,6 +2442,15 @@ namespace VoxelEngine.Persistence
             public float cryobedOxygen;
             // Additive grid-tank state. Legacy saves leave these flags false and
             // preserve prefab defaults; current saves retain type, amount, and mode.
+            // Additive gas-vent state (9.32.0). Legacy saves leave the flag false and the
+            // vent restores from its prefab default: louvres open, counter at zero.
+            // Additive engine combustion-air policy (9.32.0). A legacy save has no flag and
+            // the engine keeps its forgiving default: fall back to free air on a dry line.
+            public bool hasEngineAirModeState;
+            public bool engineAirFallback = true;
+            public bool hasGasVentState;
+            public bool gasVentOpen = true;
+            public float gasVentDumped;
             public bool hasGasTankState;
             public int gasTankType;
             public float gasTankStored;

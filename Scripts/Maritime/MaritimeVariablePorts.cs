@@ -148,6 +148,30 @@ namespace VoxelEngine.Maritime
         /// Inline-4 (Small, solid-fuel) takes only oxygen + item intake; the liquid
         /// HFO V8 (Medium) and MGO V12 (Giant) take fuel + coolant + oxygen. Exhaust
         /// always uses the engine's authored exhaust collector(s).</summary>
+        /// <summary>
+        /// Gas runs are one per host block. A tank is happy sharing a manifold, but an
+        /// exhaust tap is a single capture line: a second pipe on the same flange would
+        /// split the stream across two runs and the plume thinning would stop making sense.
+        /// Pass <paramref name="gasPrefix"/> (the tank port family's prefix) to avoid the
+        /// call sites depending on this class's private plumbing.
+        /// </summary>
+        public static bool GasRunAtCap(UnityEngine.Component host, string gasPrefix)
+        {
+            if (host == null) return false;
+            int found = 0;
+            var t = host.transform;
+            for (int i = 0; i < t.childCount; i++)
+            {
+                var child = t.GetChild(i);
+                if (child == null) continue;
+                if (child.name.StartsWith("Port_ExhaustGasIO", System.StringComparison.Ordinal)
+                    || (!string.IsNullOrEmpty(gasPrefix)
+                        && child.name.StartsWith(gasPrefix, System.StringComparison.Ordinal))) found++;
+                if (found > 1) return true;
+            }
+            return false;
+        }
+
         public static bool IsServiceAllowed(EngineTier tier, PortService s)
         {
             switch (tier)

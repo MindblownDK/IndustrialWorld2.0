@@ -129,6 +129,94 @@ namespace VoxelEngine.Thermal
         /// <summary>Exhaust stack gas stream relative to a thruster plume (much cooler, but still a hazard).</summary>
         public const float ExhaustPipePlumeScale = 0.34f;
 
+        // ── Concealed spaces: engine rooms, sealed voids, blocked-in machinery ────
+        // Roadmap 5.1 item 14. A volume that cannot exchange gas with the sky keeps
+        // whatever is pumped into it. These rules decide how fast it cooks, what the
+        // crew and the machinery feel, and what the scrubber has to work against.
+        // The model is deliberately power-based (kJ/s into an air capacity in kJ/K) so
+        // a big engine in a closet genuinely outclasses a small one in a hangar.
+
+        /// <summary>Heat capacity of trapped air, kJ per kelvin per cubic metre of volume.</summary>
+        public const float RoomHeatKJPerKPerM3 = 1.2f;
+
+        /// <summary>How hard the hull of a compartment takes waste heat back out of the air, kJ/s per °C of rise.</summary>
+        public const float RoomHullLossKJperSPerK = 18f;
+
+        /// <summary>Waste power one maritime engine at full load dumps into the air around it, kJ/s. Scaled by tier.</summary>
+        public const float RoomEngineWasteKJperS = 26f;
+
+        /// <summary>Temperature rise a full-rate exhaust stream drives into an enclosed space before the hull gives any back.</summary>
+        public const float RoomExhaustRisePerLoadC = 95f;
+
+        /// <summary>How fast trapped exhaust saturates toward the source stream temperature (per second).</summary>
+        public const float RoomExhaustFillRate = 0.30f;
+
+        /// <summary>Stream temperature that reads as completely foul air, and the ceiling for trapped exhaust.</summary>
+        public const float RoomExhaustReferenceC = 700f;
+
+        /// <summary>Foul-air level at which the crew starts complaining (0..1 of the reference).</summary>
+        public const float RoomFoulAirReferenceC = 340f;
+
+        /// <summary>Rise above outside air at which a compartment starts damaging what is inside it.</summary>
+        public const float RoomDamageHeatC = 260f;
+
+        /// <summary>Hard ceiling on how far a compartment can bake, so feedback loops stay bounded.</summary>
+        public const float RoomMaxRiseC = 520f;
+
+        /// <summary>Radiator heat (from the Super-Cooler Jackets) dumped into the room, kJ/s at full load.</summary>
+        public const float RoomRadiatorKJperS = 24f;
+
+        /// <summary>Fraction of the room's rise above ambient that interior blocks are pulled toward.</summary>
+        public const float RoomAirTransmission = 0.45f;
+
+        /// <summary>How fast a compartment's air temperature slews toward what its contents are driving (per second).</summary>
+        public const float RoomAirCouplingPerSecond = 0.22f;
+
+        /// <summary>Below this room pressure there is no combustion air left, and engines stop.</summary>
+        public const float CombustionAirMinAtm = 0.30f;
+
+        /// <summary>Combustion never takes the crew's last breath: air below this stays untouched.</summary>
+        public const float CombustionAirReserveAtm = 0.35f;
+
+        /// <summary>Oxygen litres burned per litre of fuel at full throttle. Engines foul a room far faster than crew breathe it.</summary>
+        public const float CombustionOxygenPerFuelLitre = 6f;
+
+        /// <summary>Rise above ambient at which a shirt-sleeve compartment stops being survivable in a suit.</summary>
+        public const float RoomSuitDangerRiseC = 95f;
+
+        /// <summary>Rise above ambient at which the compartment is simply described as hot.</summary>
+        public const float RoomSuitWarmRiseC = 35f;
+
+        /// <summary>Room air temperature a suit is pulled toward, before the hull plate underfoot is considered.</summary>
+        public static float RoomSuitContribution(VoxelEngine.Pressure.GridRoom room)
+        {
+            if (room == null || !room.IsSealed) return 0f;
+            return room.RoomRiseC * 0.85f;
+        }
+
+        /// <summary>Band for a compartment, judged on how far above outside air it has baked plus how foul the air is.</summary>
+        public static ThermalBand RoomBand(float riseC, float exhaust01)
+        {
+            float rise = Mathf.Max(riseC, exhaust01 * RoomDamageHeatC);
+            if (rise >= RoomDamageHeatC) return ThermalBand.Critical;
+            if (rise >= RoomSuitDangerRiseC) return ThermalBand.Hot;
+            if (rise >= RoomSuitWarmRiseC) return ThermalBand.Warm;
+            return ThermalBand.Nominal;
+        }
+
+        /// <summary>Temperature rise a venting exhaust stack drives into a sealed space at this load.</summary>
+        public static float TrappedExhaustRiseC(float load01)
+            => RoomExhaustRisePerLoadC * Mathf.Clamp01(load01);
+
+        /// <summary>Short HUD/panel label for how bad a compartment has become.</summary>
+        public static string RoomBandLabel(ThermalBand band) => band switch
+        {
+            ThermalBand.Critical => "COOKING",
+            ThermalBand.Hot => "UNCOMFORTABLE",
+            ThermalBand.Warm => "STUFFY",
+            _ => "CLEAR",
+        };
+
         // ── Heat tolerance per block family ───────────────────────────────────
         // Roadmap 5.1 item 8: every grid block has a heat tolerance shown in its
         // description. The base threshold is steel hull plate; glass and electronics

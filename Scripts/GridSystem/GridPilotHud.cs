@@ -798,6 +798,51 @@ namespace VoxelEngine.GridSystem
                         _environmentLabel.text += $" · {hullLabel} {thermal.WorstBlockTemperatureC:0}°C{worstName}";
                         _environmentLabel.style.color = new StyleColor(VoxelEngine.Thermal.ThermalRules.BandColor(band));
                     }
+
+                    // A hull can read nominal while the volume welded around an engine is
+                    // baking (roadmap 5.1 item 14), so the compartment gets its own line.
+                    var roomBand = thermal.WorstRoomBand;
+                    if (roomBand != VoxelEngine.Thermal.ThermalBand.Nominal)
+                    {
+                        string roomLabel = roomBand == VoxelEngine.Thermal.ThermalBand.Critical ? "ENGINE ROOM COOKING"
+                            : roomBand == VoxelEngine.Thermal.ThermalBand.Hot ? "ENGINE ROOM HOT" : "ENGINE ROOM STUFFY";
+                        _environmentLabel.text += $" · {roomLabel} {thermal.WorstRoomAirC:0}°C";
+                        if (thermal.WorstRoomExhaust01 > 0.25f)
+                            _environmentLabel.text += $" · EXHAUST {thermal.WorstRoomExhaust01 * 100f:0}%";
+                        // The hull's own alarm wins the colour if it is already raised;
+                        // otherwise the crew sees the room's tone.
+                        if (band == VoxelEngine.Thermal.ThermalBand.Nominal)
+                            _environmentLabel.style.color = new StyleColor(
+                                VoxelEngine.Thermal.ThermalRules.BandColor(roomBand));
+                    }
+                }
+
+                // Combustion air is the newest way a ship loses its engines, so it earns a
+                // word on the environment line: the pilot sees the room filling with gas or
+                // an intake welded shut before the shafts simply go quiet.
+                foreach (var block in grid.AllBlocks)
+                {
+                    if (block is not VoxelEngine.Maritime.GridMaritimeEngine eng || !eng.Enabled) continue;
+                    if (eng.AirIndependent) continue;
+                    if (eng.OxygenStarved)
+                    {
+                        _environmentLabel.text += eng.DrawsAtmosphereAir
+                            ? " · ENGINE AIR INTAKE BLOCKED"
+                            : " · ENGINES OUT OF AIR";
+                        _environmentLabel.style.color = new StyleColor(T.AccentRed);
+                        break;
+                    }
+                    if (!eng.IsRunning) continue;
+                    if (eng.DrawsRoomAir)
+                    {
+                        _environmentLabel.text += " · ENGINE AIR: ROOM";
+                        break;
+                    }
+                    if (eng.DrawsAtmosphereAir && eng.AirQuality01 < 0.86f)
+                    {
+                        _environmentLabel.text += $" · ENGINE AIR: THIN {eng.AirQuality01 * 100f:0}%";
+                        break;
+                    }
                 }
             }
             UpdateGravityReadout(grid);

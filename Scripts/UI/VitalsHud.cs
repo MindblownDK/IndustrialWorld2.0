@@ -367,7 +367,20 @@ namespace VoxelEngine.UI
                 : room.PressureAtm > 0.02f ? T.AccentAmber : T.AccentRed;
             // Crew count is only worth the pixels when someone else is sharing the air.
             string crew = room.Occupants > 1 ? $"  ×{room.Occupants}" : string.Empty;
-            _roomLabel.text = $"{room.StatusLabel}  {room.PressureAtm * 100f:0}%{crew}";
+            string text = $"{room.StatusLabel}  {room.PressureAtm * 100f:0}%{crew}";
+
+            // A volume that cannot clear its own atmosphere (roadmap 5.1 item 14): the
+            // compartment line reports heat and foul gas, because a pressurised room that
+            // is slowly cooking you is precisely the case pressure alone cannot describe.
+            if (room.IsSealed && room.RoomRiseC >= VoxelEngine.Thermal.ThermalRules.RoomSuitWarmRiseC)
+            {
+                text += $"  {room.AirTemperatureC:0}\u00B0C {VoxelEngine.Thermal.ThermalRules.RoomBandLabel(room.Band).ToUpperInvariant()}";
+                if (room.ExhaustLoad01 > 0.05f)
+                    text += $"  GAS {room.ExhaustLoad01 * 100f:0}%";
+                tone = VoxelEngine.Thermal.ThermalRules.BandColor(room.Band);
+            }
+
+            _roomLabel.text = text;
             _roomLabel.style.color = new StyleColor(tone);
         }
 

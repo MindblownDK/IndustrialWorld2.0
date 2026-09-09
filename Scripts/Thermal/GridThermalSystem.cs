@@ -10,6 +10,10 @@
 //   • machine heat  — any IHeatSourceBlock (hydrogen engines, maritime diesels and
 //                     generators, reactors, furnaces, exhaust stacks) heats itself and
 //                     its face neighbours while it works (9.31.0)
+//   • room air      — a block sealed inside a compartment is standing in that
+//                     compartment's air, and it cannot radiate into a sky it cannot
+//                     see. Engine rooms therefore hold their heat long after the
+//                     machinery has stopped (9.32.0, roadmap item 14)
 //   • plume heat    — the exhaust column itself: any block of THIS grid standing in
 //                     a nozzle's or exhaust stack's blast is heated by the hot gas
 //                     (9.30.0 / 9.31.0). Blocks of other grids, static base blocks and
@@ -45,6 +49,7 @@ namespace VoxelEngine.Thermal
 
         private GridEntity _grid;
         private float _resolveTimer;
+        private VoxelEngine.Pressure.GridPressureSystem _pressure;
 
         private readonly Dictionary<GridBlock, float> _temperatures = new();
         private readonly List<GridBlock> _scratch = new();
@@ -109,6 +114,47 @@ namespace VoxelEngine.Thermal
         /// <summary>Temperature of <see cref="WorstBlock"/> on the last tick.</summary>
         public float WorstBlockTemperatureC { get; private set; } = ThermalRules.FallbackAmbientC;
 
+        // ── Concealed spaces (roadmap 5.1 item 14) ──────────────────────────────
+        // A hull can read nominal while the volume welded around an engine is slowly
+        // baking, so the worst COMPARTMENT is published apart from the worst block: the
+        // HUD and the panels need to say "the engine room is the problem".
+
+        /// <summary>Band of the worst sealed compartment on this grid this tick.</summary>
+        public ThermalBand WorstRoomBand { get; private set; } = ThermalBand.Nominal;
+
+        /// <summary>Temperature rise above outside air in that compartment, °C.</summary>
+        public float WorstRoomRiseC { get; private set; }
+
+        /// <summary>Air temperature of that compartment, °C.</summary>
+        public float WorstRoomAirC { get; private set; } = ThermalRules.FallbackAmbientC;
+
+        /// <summary>0..1 how foul the air in that compartment has become.</summary>
+        public float WorstRoomExhaust01 { get; private set; }
+
+        /// <summary>True while a sealed volume on this grid is hot enough to damage what is inside it.</summary>
+        public bool RoomOverheating => WorstRoomBand == ThermalBand.Critical;
+
+        /// <summary>Compartment cell → its own atmosphere, rebuilt once per thermal tick.</summary>
+        private readonly Dictionary<Vector3Int, RoomAir> _roomAir = new();
+
+        /// <summary>Block → the sealed volume it is standing in, rebuilt with the air table.</summary>
+        private readonly Dictionary<GridBlock, VoxelEngine.Pressure.GridRoom> _blockRooms = new();
+
+        /// <summary>A tracked compartment's air, as the blocks inside it experience it.</summary>
+        private readonly struct RoomAir
+        {
+            /// <summary>°C above exterior ambient that interior blocks are pulled toward.</summary>
+            public readonly float RiseC;
+            /// <summary>0..1 cooling suppression: a wall of still air does not let heat escape.</summary>
+            public readonly float CoolingPenalty;
+
+            public RoomAir(float riseC, float coolingPenalty)
+            {
+                RiseC = riseC;
+                CoolingPenalty = coolingPenalty;
+            }
+        }
+
         private void Awake() => _grid = GetComponent<GridEntity>();
 
         private void OnEnable() => ThermalService.Register(this);
@@ -129,6 +175,10 @@ namespace VoxelEngine.Thermal
             if (block == null) return ThermalRules.FallbackAmbientC;
             return _temperatures.TryGetValue(block, out float t) ? t : AmbientC;
         }
+
+        /// <summary>Temperature of whatever occupies a grid cell (ambient when untracked).</summary>
+        public float TemperatureAt(Vector3Int cell)
+            => _grid != null && _grid.Blocks.TryGetValue(cell, out var block) ? TemperatureOf(block) : AmbientC;
 
         /// <summary>
         /// Hottest tracked block temperature within <paramref name="radius"/> of a point.
@@ -199,6 +249,7 @@ namespace VoxelEngine.Thermal
             Vector3 travel = speed > 0.01f ? velocity / speed : Vector3.zero;
 
             CollectPlumes();
+            RefreshRoomAir(ambient);
 
             float peak = ambient;
             var worstBand = ThermalBand.Nominal;
@@ -217,13 +268,19 @@ namespace VoxelEngine.Thermal
                 var block = _blockSnapshot[b];
                 if (block == null) continue;
 
-                float target = TargetTemperature(block, ambient, travel);
+                _roomAir.TryGetValue(block.GridPos, out var air);
+                float localAmbient = ambient + air.RiseC;
+                float target = TargetTemperature(block, localAmbient, travel);
 
                 // Slew toward the target. Heating is comparatively quick; cooling is slow
                 // (steel radiates poorly) with a boost in the last warm band so a hull
                 // eventually settles to ambient instead of hovering lukewarm forever.
-                float current = _temperatures.TryGetValue(block, out float t) ? t : ambient;
-                float rate = ThermalRules.SlewRate(current, target, ambient);
+                float current = _temperatures.TryGetValue(block, out float t) ? t : localAmbient;
+                float rate = ThermalRules.SlewRate(current, target, localAmbient);
+                // A block boxed in by a compartment cools through still air rather than
+                // open sky, so it holds its heat considerably longer.
+                if (air.CoolingPenalty > 0f && target < current)
+                    rate *= Mathf.Lerp(1f, 0.4f, air.CoolingPenalty);
                 float next = Mathf.Lerp(current, target, 1f - Mathf.Exp(-rate * dt));
 
                 // Damage honours the block family: glass at 520 °C, electronics at 600 °C,
@@ -254,7 +311,8 @@ namespace VoxelEngine.Thermal
                     worstBand = blockBand; worstBlock = block; worstTemperature = next; worstSeverity = severity;
                 }
 
-                bool nearAmbient = Mathf.Abs(next - ambient) <= TrackingBandC && Mathf.Abs(target - ambient) <= TrackingBandC;
+                bool nearAmbient = Mathf.Abs(next - localAmbient) <= TrackingBandC
+                                   && Mathf.Abs(target - localAmbient) <= TrackingBandC;
                 if (nearAmbient) _scratch.Add(block);
                 else _temperatures[block] = next;
 
@@ -277,6 +335,84 @@ namespace VoxelEngine.Thermal
             WorstBand = worstBand;
             WorstBlock = worstBlock;
             WorstBlockTemperatureC = worstTemperature;
+        }
+
+        /// <summary>
+        /// Rebuilds the compartment air table for this tick. Rooms are only asked for
+        /// their atmosphere through the pressure service that is already attached, so a
+        /// grid with no sealed volumes costs a single dictionary clear.
+        /// </summary>
+        private void RefreshRoomAir(float ambient)
+        {
+            _roomAir.Clear();
+            _blockRooms.Clear();
+            if (_grid == null) return;
+            _pressure ??= _grid.GetComponent<VoxelEngine.Pressure.GridPressureSystem>();
+            if (_pressure == null) return;
+
+            var rooms = _pressure.Rooms;
+            for (int i = 0; i < rooms.Count; i++)
+            {
+                var room = rooms[i];
+                if (room == null || !room.IsSealed) continue;
+
+                float rise = Mathf.Max(0f, room.AirTemperatureC - ambient);
+                foreach (var cell in room.Cells)
+                {
+                    if (rise >= 8f)   // below this there is nothing worth coupling a block to
+                    {
+                        float penalty = Mathf.Clamp01(rise / ThermalRules.RoomDamageHeatC);
+                        _roomAir[cell] = new RoomAir(rise * ThermalRules.RoomAirTransmission, penalty);
+                    }
+                    if (_grid.Blocks.TryGetValue(cell, out var member) && member != null)
+                        _blockRooms[member] = room;
+                }
+            }
+        }
+
+        /// <summary>
+        /// The sealed compartment a block occupies, or null when it can see the sky.
+        /// Sources ask this to decide whether their waste heat has anywhere to go.
+        /// </summary>
+        public VoxelEngine.Pressure.GridRoom ConcealedSpaceOf(GridBlock block)
+        {
+            if (block == null) return null;
+            if (_blockRooms.TryGetValue(block, out var room)) return room;
+            // The table is rebuilt once per thermal tick; before the first one lands
+            // (placement, restore) resolve the same room lazily so a machine's very
+            // first frame in a closed space is not silently counted as outdoors.
+            _pressure ??= _grid != null ? _grid.GetComponent<VoxelEngine.Pressure.GridPressureSystem>() : null;
+            return _pressure != null ? _pressure.RoomAtCell(block.GridPos) : null;
+        }
+
+        /// <summary>
+        /// Called by the pressure service after it has solved its compartments, so the
+        /// HUD never has to walk a grid to answer "is a room cooking?".
+        /// </summary>
+        public void PublishRoomWorst(IReadOnlyList<VoxelEngine.Pressure.GridRoom> rooms)
+        {
+            var band = ThermalBand.Nominal;
+            float rise = 0f, air = AmbientC, exhaust = 0f;
+            for (int i = 0; i < rooms.Count; i++)
+            {
+                var room = rooms[i];
+                if (room == null || !room.IsSealed) continue;
+                var b = room.Band;
+                if (b == ThermalBand.Nominal) continue;
+                float severity = room.RoomRiseC - ThermalRules.RoomSuitWarmRiseC;
+                if (b > band || (b == band && severity > rise))
+                {
+                    band = b;
+                    rise = severity;
+                    air = room.AirTemperatureC;
+                    exhaust = room.ExhaustLoad01;
+                }
+            }
+
+            WorstRoomBand = band;
+            WorstRoomRiseC = Mathf.Max(0f, rise);
+            WorstRoomAirC = air;
+            WorstRoomExhaust01 = exhaust;
         }
 
         /// <summary>Cache nozzle poses for every running thruster and venting exhaust stack on this grid.</summary>

@@ -15,6 +15,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using VoxelEngine.GridSystem;
+using VoxelEngine.Thermal;
 
 namespace VoxelEngine.Pressure
 {
@@ -30,14 +31,23 @@ namespace VoxelEngine.Pressure
         private const float OccupancyRefreshSeconds = 0.5f;
         private const float EqualiseAtmPerSecond = 0.02f;
 
+        /// <summary>How often the concealed-atmosphere solve runs (matches the thermal tick).</summary>
+        private const float ThermalInterval = 0.25f;
+
+        /// <summary>Air that leaks through a hull by itself, as a fraction of the banked rise per second.</summary>
+        private const float AtmosphereLeakPerSecond = 0.05f;
+
         private GridEntity _grid;
         private readonly List<GridRoom> _rooms = new();
         private readonly Dictionary<Vector3Int, GridRoom> _cellToRoom = new();
         private readonly Dictionary<Vector3Int, float> _carriedOxygen = new();
+        private readonly Dictionary<Vector3Int, float> _carriedHeat = new();
+        private readonly Dictionary<Vector3Int, float> _carriedExhaust = new();
         private bool _dirty = true;
         private float _dirtyAt;
         private float _ambientTimer;
         private float _occupancyTimer;
+        private float _thermalTimer;
 
         public IReadOnlyList<GridRoom> Rooms => _rooms;
         public int SealedRoomCount
@@ -91,6 +101,7 @@ namespace VoxelEngine.Pressure
             }
 
             TickOccupancy(dt);
+            TickAtmosphere(dt);
         }
 
         /// <summary>Re-samples the planet outside. A ship that flies from a breathable
@@ -99,8 +110,120 @@ namespace VoxelEngine.Pressure
         {
             if (_rooms.Count == 0) return;
             var ambient = PressureRules.SampleAmbient(transform.position);
+            float exterior = ThermalRules.AmbientTemperatureC(transform.position);
             for (int i = 0; i < _rooms.Count; i++)
-                if (_rooms[i] != null) _rooms[i].Ambient = ambient;
+            {
+                var room = _rooms[i];
+                if (room == null) continue;
+                room.Ambient = ambient;
+                room.ExteriorTemperatureC = exterior;
+                if (!room.IsSealed)
+                {
+                    // Open to the sky: the air inside simply IS the air outside.
+                    room.TemperatureC = exterior;
+                    room.HeatLoadC = 0f;
+                    room.ExhaustHeatC = 0f;
+                }
+            }
+        }
+
+        // ══════════════════════════════════════════════════════════════════════
+        //  CONCEALED ATMOSPHERE — heat and exhaust trapped inside a volume
+        //  (roadmap 5.1 item 14). Sources restate their contribution every round;
+        //  the solve turns that into a temperature the hull can argue with.
+        // ══════════════════════════════════════════════════════════════════════
+        private void TickAtmosphere(float dt)
+        {
+            _thermalTimer -= dt;
+            if (_thermalTimer > 0f || _rooms.Count == 0) return;
+            _thermalTimer = ThermalInterval;
+
+            var thermal = _grid != null ? _grid.GetComponent<GridThermalSystem>() : null;
+            float exterior = ThermalRules.AmbientTemperatureC(transform.position);
+            float step = Mathf.Min(dt, ThermalInterval);
+
+            for (int i = 0; i < _rooms.Count; i++)
+            {
+                var room = _rooms[i];
+                if (room == null) continue;
+                room.ExteriorTemperatureC = exterior;
+                if (!room.IsSealed) continue;
+
+                // Where did the room's waste heat go? Into its own hull, and out
+                // through whatever leaks the pressure solver measured.
+                float hullLoss = HullAverageTemperature(room, thermal);
+                float lossKJperS = Mathf.Max(0f, room.TemperatureC - hullLoss)
+                                   * ThermalRules.RoomHullLossKJperSPerK;
+                float leakKJperS = room.HeatLoadC * AtmosphereLeakPerSecond * room.HeatCapacityKJperK;
+
+                // Bake the trapped heat in. Rising is capped so a runaway engine room
+                // settles at its damage band instead of climbing forever.
+                room.HeatLoadC = Mathf.Clamp(
+                    room.HeatLoadC + (room.PendingWasteKJperS - lossKJperS - leakKJperS) * step
+                    / room.HeatCapacityKJperK,
+                    0f, ThermalRules.RoomMaxRiseC);
+
+                // Air temperature = trapped heat, plus the rise the working machinery is
+                // driving right now. Interior blocks are coupled to the second part at a
+                // fraction, so the loop can never lift itself indefinitely.
+                float riseTarget = room.PendingWasteKJperS
+                                   / (ThermalRules.RoomHullLossKJperSPerK * 0.5f
+                                      + room.HeatCapacityKJperK * 0.02f);
+                float target = exterior + room.HeatLoadC
+                               + Mathf.Min(Mathf.Max(0f, riseTarget), ThermalRules.RoomMaxRiseC);
+                room.TemperatureC = Mathf.Max(exterior + room.HeatLoadC,
+                    Mathf.Lerp(room.TemperatureC, target,
+                        1f - Mathf.Exp(-ThermalRules.RoomAirCouplingPerSecond * step)));
+
+                // Foul gas saturates toward what the sources are holding it at, and falls
+                // back as soon as they stop: the room is never told what the sources are not saying.
+                // An idle volume with no source in it is not told anything, so it simply
+                // falls back toward clean air under the natural leak below.
+                float exhaustTarget = room.ExhaustReporters > 0
+                    ? room.ExhaustSumC / Mathf.Max(1, room.ExhaustReporters)
+                    : 0f;
+                room.ExhaustHeatC = Mathf.Lerp(room.ExhaustHeatC, exhaustTarget,
+                    1f - Mathf.Exp(-ThermalRules.RoomExhaustFillRate * step));
+                room.ExhaustSumC = 0f;
+                room.ExhaustReporters = 0;
+                // Trapped gas also dissipates on its own through whatever the hull leaks.
+                room.ExhaustHeatC = Mathf.Max(0f, room.ExhaustHeatC
+                    - room.ExhaustHeatC * AtmosphereLeakPerSecond * step);
+                room.ExhaustHeatC = Mathf.Clamp(room.ExhaustHeatC, 0f, ThermalRules.RoomExhaustReferenceC);
+
+                // Sources restate every round; the average of what they said is the
+                // room's load until the next round says otherwise.
+                room.PendingWasteKJperS = room.ReportedWasteKJperS;
+                room.ReportedWasteKJperS = 0f;
+                room.ReportedSources = 0;
+            }
+
+            // A grid with no sealed volume still needs its rooms tracked against the sky.
+            if (thermal != null) thermal.PublishRoomWorst(_rooms);
+        }
+
+        /// <summary>Mean temperature of the blocks enclosing a volume: what the air can
+        /// actually shed heat to. Falls back to exterior air when nothing is hot yet.</summary>
+        private float HullAverageTemperature(GridRoom room, GridThermalSystem thermal)
+        {
+            if (thermal == null || room == null) return room.ExteriorTemperatureC;
+
+            float sum = 0f;
+            int count = 0;
+            foreach (var cell in room.Cells)
+            {
+                for (int d = 0; d < Neighbours.Length; d++)
+                {
+                    if (room.Contains(cell + Neighbours[d])) continue;
+                    if (!_grid.Blocks.TryGetValue(cell + Neighbours[d], out var wall)) continue;
+                    sum += thermal.TemperatureOf(wall);
+                    count++;
+                }
+            }
+
+            return count > 0
+                ? sum / count
+                : room.ExteriorTemperatureC;
         }
 
         /// <summary>Counts the players breathing in each room and burns the matching
@@ -184,6 +307,49 @@ namespace VoxelEngine.Pressure
         {
             if (_grid == null) return null;
             return _cellToRoom.TryGetValue(_grid.WorldToGrid(worldPosition), out var room) ? room : null;
+        }
+
+        /// <summary>Room covering a grid cell, or null when the cell is not inside a volume.</summary>
+        public GridRoom RoomAtCell(Vector3Int cell)
+        {
+            if (_dirty) Solve();
+            return _cellToRoom.TryGetValue(cell, out var room) ? room : null;
+        }
+
+        /// <summary>
+        /// The sealed volume a block is standing in, when there is one. Sources use this
+        /// to decide whether their waste heat has anywhere to go.
+        /// </summary>
+        public static GridRoom ConcealedRoom(GridBlock block)
+        {
+            if (block == null || block.Grid == null) return null;
+            var system = block.Grid.GetComponent<GridPressureSystem>();
+            if (system == null) return null;
+            var room = system.RoomAtWorld(block.transform.position);
+            return room != null && room.IsSealed ? room : null;
+        }
+
+        /// <summary>
+        /// Pushes waste heat (kJ/s) into the concealed volume at this position. A no-op
+        /// outdoors, which is exactly the point: the sky is the cheapest heatsink there is.
+        /// </summary>
+        public void InjectWasteHeat(Vector3 worldPosition, float kilojoulesPerSecond)
+        {
+            if (_dirty) Solve();
+            if (_cellToRoom.TryGetValue(_grid.WorldToGrid(worldPosition), out var room))
+                room.ReportWasteHeat(kilojoulesPerSecond);
+        }
+
+        /// <summary>
+        /// Restates the hot gas a stack is releasing in the concealed volume at this
+        /// position. Sources call it every round even with nothing to report, so the
+        /// room's foul air decays honestly instead of holding the last engine's number.
+        /// </summary>
+        public void InjectExhaust(Vector3 worldPosition, float streamTemperatureC)
+        {
+            if (_dirty) Solve();
+            if (_cellToRoom.TryGetValue(_grid.WorldToGrid(worldPosition), out var room))
+                room.ReportExhaust(streamTemperatureC);
         }
 
         /// <summary>True when a sealed, charged room covers this world position.</summary>
@@ -283,6 +449,18 @@ namespace VoxelEngine.Pressure
                 else
                     room.SeedFromAmbient();
 
+                // Atmosphere carries over on the same anchor rule as the oxygen charge:
+                // a hull edit somewhere else must not undo an engine room that is
+                // already hot, but a volume that stopped being sealed starts clean.
+                if (_carriedHeat.TryGetValue(room.Anchor, out float carriedHeat))
+                {
+                    room.HeatLoadC = Mathf.Clamp(carriedHeat, 0f, ThermalRules.RoomMaxRiseC);
+                    room.TemperatureC = Mathf.Max(room.TemperatureC, room.ExteriorTemperatureC + room.HeatLoadC);
+                }
+                if (_carriedExhaust.TryGetValue(room.Anchor, out float carriedExhaust))
+                    room.ExhaustHeatC = Mathf.Clamp(carriedExhaust, 0f, ThermalRules.RoomExhaustReferenceC);
+                room.ExteriorTemperatureC = ThermalRules.AmbientTemperatureC(transform.position);
+
                 _rooms.Add(room);
                 foreach (var c in room.Cells) _cellToRoom[c] = room;
             }
@@ -291,10 +469,17 @@ namespace VoxelEngine.Pressure
         private void CarryOxygenForward()
         {
             _carriedOxygen.Clear();
+            _carriedHeat.Clear();
+            _carriedExhaust.Clear();
             for (int i = 0; i < _rooms.Count; i++)
             {
                 var room = _rooms[i];
                 if (room.OxygenLitres > 0f) _carriedOxygen[room.Anchor] = room.OxygenLitres;
+                // Only sealed volumes bank heat and foul air. A compartment that is no
+                // longer sealed had its atmosphere vented, and that is the end of it.
+                if (!room.IsSealed) continue;
+                if (room.HeatLoadC > 0.01f) _carriedHeat[room.Anchor] = room.HeatLoadC;
+                if (room.ExhaustHeatC > 0.01f) _carriedExhaust[room.Anchor] = room.ExhaustHeatC;
             }
         }
 

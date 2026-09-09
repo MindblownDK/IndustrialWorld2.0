@@ -17,7 +17,7 @@ namespace VoxelEngine.GridSystem
             Armor, Cockpit, Thruster, Battery, Cargo, Drill, Grinder, Refinery,
             Weapon, DockingPort, Wheel, LandingGear, SolarPanel, Reactor,
             LiquidTank, GasTank, H2O2, HydrogenEngine, ChemicalPlant, Glass, Demolisher, ItemPipe,
-            GasPipe, LiquidPipe, Gyroscope, Beacon, OreDetector, SeasonMonitor, AirVent, AirVentFull, Heatshield, Generic
+            GasPipe, LiquidPipe, Gyroscope, Beacon, OreDetector, SeasonMonitor, AirVent, AirVentFull, Heatshield, ExhaustScrubber, GasVent, Generic
         }
 
         private static Shader Lit => Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
@@ -73,6 +73,8 @@ namespace VoxelEngine.GridSystem
                 case Style.AirVent:      BuildAirVent(root, cs, body, metal, glow); break;
                 case Style.AirVentFull:  BuildAirVentFull(root, cs, body, metal, glow); break;
                 case Style.Heatshield:   BuildHeatshield(root, cs, body, metal, glow); break;
+                case Style.ExhaustScrubber: BuildExhaustScrubber(root, cs, body, metal, glow); break;
+                case Style.GasVent:      BuildGasVent(root, cs, body, metal, glow); break;
                 default:                 BuildArmor(root, cs, body, metal); break;
             }
         }
@@ -457,6 +459,97 @@ namespace VoxelEngine.GridSystem
             float e = cs * 0.42f, sz = cs * 0.10f;
             foreach (var c in Corners(e))
                 Box(r, metal, c, new Vector3(sz, sz, sz));
+        }
+
+        private static void BuildExhaustScrubber(GameObject r, float cs, Material body, Material metal, Material glow)
+        {
+            // Industrial air-handling plant: a louvered intake, a scroll housing, a
+            // fan spine that the runtime can spin, and a discharge duct that points
+            // outboard. Reads as machinery that MOVES air rather than a vent grille.
+            Box(r, body, V0, new Vector3(cs * 0.92f, cs * 0.92f, cs * 0.70f));
+
+            // Intake bellmouth on the -Z face, louvred so it reads as an air opening.
+            Box(r, metal, new Vector3(0f, 0f, -cs * 0.40f), new Vector3(cs * 0.74f, cs * 0.74f, cs * 0.06f));
+            for (int i = -3; i <= 3; i++)
+                Box(r, metal, new Vector3(0f, i * cs * 0.095f, -cs * 0.45f),
+                    new Vector3(cs * 0.66f, cs * 0.035f, cs * 0.05f));
+
+            // Scroll housing: the snail-shell of the machine, offset to one side.
+            var scroll = Cyl(r, metal, new Vector3(cs * 0.14f, 0f, cs * 0.06f), cs * 0.30f, cs * 0.30f);
+            scroll.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            scroll.name = "Generated_ScrubberScroll";
+
+            // Discharge duct rising out of the housing to the outboard face.
+            Box(r, metal, new Vector3(cs * 0.14f, cs * 0.30f, cs * 0.22f), new Vector3(cs * 0.20f, cs * 0.30f, cs * 0.20f));
+            Box(r, body, new Vector3(cs * 0.14f, cs * 0.46f, cs * 0.22f), new Vector3(cs * 0.26f, cs * 0.06f, cs * 0.26f));
+
+            // Fan spine — the runtime spins this while the unit is actually working.
+            var hub = Cyl(r, metal, new Vector3(-cs * 0.02f, 0f, -cs * 0.10f), cs * 0.15f, cs * 0.46f);
+            hub.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            hub.name = "Generated_VentFanHub";
+
+            // Filter bank on the far side: what actually eats the soot.
+            Box(r, body, new Vector3(0f, 0f, cs * 0.32f), new Vector3(cs * 0.62f, cs * 0.62f, cs * 0.10f));
+            for (int i = -1; i <= 1; i++)
+                Box(r, metal, new Vector3(i * cs * 0.20f, 0f, cs * 0.38f), new Vector3(cs * 0.16f, cs * 0.58f, cs * 0.04f));
+
+            // Status strip: lit while the machine is clearing the room.
+            Box(r, glow, new Vector3(-cs * 0.46f, cs * 0.30f, -cs * 0.10f), new Vector3(cs * 0.03f, cs * 0.30f, cs * 0.05f));
+
+            // Frame feet and corner bracing.
+            Box(r, metal, new Vector3(0f, -cs * 0.47f, 0f), new Vector3(cs * 0.80f, cs * 0.06f, cs * 0.80f));
+            float e = cs * 0.40f, sz = cs * 0.09f;
+            foreach (var c in Corners(e))
+                Box(r, metal, c, new Vector3(sz, sz, sz));
+        }
+
+        private static void BuildGasVent(GameObject r, float cs, Material body, Material metal, Material glow)
+        {
+            // A discharge sleeve, not a fan unit: a short barrel through the hull, a
+            // rain-flap hood on the outboard end, the extractor's impeller in the middle
+            // and a flame screen on the inboard face. Small footprint — this block is
+            // where a gas run ends, it should never cost more space than the pipe that
+            // feeds it.
+            var barrel = Cyl(r, metal, V0, cs * 0.30f, cs * 0.86f);
+            barrel.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            barrel.name = "Generated_VentBarrel";
+
+            // Inboard mounting collar with the pipe flange, on the +Z (inside) face.
+            var collar = Cyl(r, body, new Vector3(0f, 0f, cs * 0.42f), cs * 0.40f, cs * 0.10f);
+            collar.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+
+            // Impeller — spun by GasVent while the extractor runs.
+            var hub = Cyl(r, body, V0, cs * 0.06f, cs * 0.30f);
+            hub.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            hub.name = "Generated_VentFanHub";
+            for (int i = 0; i < 4; i++)
+            {
+                var blade = Box(r, metal, new Vector3(0f, 0f, 0f), new Vector3(cs * 0.22f, cs * 0.02f, cs * 0.12f));
+                blade.transform.SetParent(hub.transform, false);
+                blade.transform.localPosition = new Vector3(0f, 0f, 0f);
+                blade.transform.localRotation = Quaternion.Euler(0f, i * 90f, 22f);
+                blade.transform.localPosition = new Vector3(Mathf.Cos(i * Mathf.PI * 0.5f) * cs * 0.13f,
+                                                            Mathf.Sin(i * Mathf.PI * 0.5f) * cs * 0.13f, 0f);
+            }
+
+            // Rain flap and discharge cowl on the outboard (-Z) end.
+            var cowl = Cyl(r, body, new Vector3(0f, 0f, -cs * 0.46f), cs * 0.36f, cs * 0.14f);
+            cowl.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            Box(r, metal, new Vector3(0f, cs * 0.20f, -cs * 0.54f), new Vector3(cs * 0.62f, cs * 0.04f, cs * 0.26f));
+
+            // Louvre screen: gas gets out, the compartment does not get a clear view of
+            // the sky through the machinery.
+            for (int i = -2; i <= 2; i++)
+                Box(r, metal, new Vector3(0f, i * cs * 0.11f, cs * 0.30f),
+                    new Vector3(cs * 0.44f, cs * 0.035f, cs * 0.03f));
+
+            // Status strip: lit while the extractor is actually pulling.
+            Box(r, glow, new Vector3(cs * 0.33f, 0f, cs * 0.18f), new Vector3(cs * 0.03f, cs * 0.20f, cs * 0.05f));
+
+            // Frame brackets that tie the sleeve to the hull.
+            float e = cs * 0.34f, sz = cs * 0.075f;
+            foreach (var c in Corners(e))
+                Box(r, metal, new Vector3(c.x, c.y, cs * 0.36f), new Vector3(sz, sz, sz));
         }
 
         private static void BuildHeatshield(GameObject r, float cs, Material body, Material metal, Material glow)

@@ -1,9 +1,74 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.31.0-dev`
+**Current Version:** `9.32.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.32.0-dev] Engine Room Atmosphere: Concealed Spaces Hold Heat, Exhaust and Combustion Air
+
+**Type:** MINOR - Closes Roadmap 5.1 item 14 on top of the 9.29 to 9.31 thermal work. Sealed volumes now own an atmosphere of their own: waste heat and trapped exhaust accumulate inside them, an engine picks its combustion air from exactly one of three intakes, and a bulkhead grille unit can pump a cooked room overboard. A new gas vent makes exhaust a disposable product instead of a storage obligation. Save-compatible; the room record grows two additive fields, the block record one, and legacy saves load unchanged. Step 63 authors it all non-destructively.
+
+**GitHub title:** `[9.32.0-dev] Engine room atmosphere: combustion air sources, gas vent disposal, exhaust hookup fixes`
+
+#### Trapped Compartment Atmosphere
+
+- `GridRoom` gained what a volume actually holds besides oxygen: `HeatLoadC` (waste heat baked in, degrees above the outside air), `ExhaustHeatC` (how much hot gas the space is sitting in) and `TemperatureC` (the air the crew and the machinery inside are standing in). An open compartment banks none of it and simply mirrors the planet.
+- The solve is energy based rather than a hand-tuned multiplier: waste power in kJ/s against a heat capacity of 1.2 kJ/K per cubic metre of volume, with the enclosing hull taken as the heatsink. A big engine in a closet therefore genuinely outclasses the same engine in a hangar, and a hangar is not free either, it is merely slower.
+- The air couples back into `GridThermalSystem`: a block inside a sealed volume is pulled toward its own compartment, and a block inside a hot volume cools through still air instead of open sky (up to 60 percent slower). That is what makes a blocked-in machine room a real hazard rather than a readout.
+- Heat can never feed itself: exhaust saturates against a reference stream temperature and the room's rise is capped, so a runaway engine room settles into its damage band instead of climbing forever.
+- Opening a hatch or cutting a wall genuinely vents a cooked room. A volume that is no longer sealed banks no atmosphere at all, so the relief is immediate and free, exactly as it should be.
+
+#### Exhaust Goes Somewhere
+
+- Running machinery reports into the room it stands in through `ThermalService.ReportWasteHeat`: maritime engines by tier and load, Super-Cooler Radiator Jackets that are flowing (the sea water took the heat, the room keeps it), furnaces, reactors and generators. Outdoors the same call costs nothing, because the sky is a free heatsink and that is precisely the design point.
+- An exhaust stack terminating inside a sealed volume stops blowing a plume: `GridExhaustPipe.TickConcealedSpace` measures how much of the stream has nowhere to go, the room swallows it, the casing runs up to 45 percent hotter, and the plume is suppressed by the trapped share so the gas does not heat the ship twice.
+- Back-pressure is real: `SetThermalExposure` hands the trapped fraction to every engine the stack serves, costing up to 25 percent of output before the scrubber or the hatch relieves it.
+
+#### Combustion Air: One Intake, Three Sources
+
+- `CombustionAirRules` (in `Scripts/Thermal/IHeatSourceBlock.cs`) is now the single contract every heat source resolves through, and it grants exactly one intake per machine, in strict priority: a plumbed gas line, then the sealed compartment's own air, then the planet through an open intake side. A machine never quietly substitutes one for another.
+- **Piped O2 (no penalty).** A gas line reaching the engine's oxygen port owns the intake exclusively, and what happens when that line runs dry is now a player decision. The engine panel's `Combustion Air` section carries a **FALLBACK ON / STRICT** switch: on, a starved line falls back to the room or the open intake at that source's own cost; off, the engine holds to the pipe, stalls, and reads `O2 LINE EMPTY` on both the panel and the engine's own status line, because a plumbed supply is a deliberate arrangement and a dry one is a fault to fix. Strict mode is what a sealed engine room wants, since the room's air there is the crew's breath. The setting is per-engine, serialized additively on the block record (`hasEngineAirModeState`, default forgiving so an existing ship behaves exactly as it did before the option existed), and it is decided inside the shared rule (`CombustionAirRules.Resolve`), not bolted onto the engine, so a machine that grows an intake later inherits the same policy for free.
+- **Room air (10 percent down).** The compartment around a sealed engine is an intake of last resort. It burns lean, and life support still outranks power: `DrawCombustionOxygen` refuses to pull a sealed volume under the crew's breathable reserve, and room air is debited hard (24 litres of compartment air per litre of buffered oxygen), so a sealed engine room of about 40 m3 is breathable for roughly five minutes with a diesel running in it before the room is both stuffy and starved. Below 0.30 atm nothing burns at all.
+- **Open intake (up to 25 percent down).** With no pipe and no sealed room, the engine breathes the planet, but only through a real hole: the cell directly in front of the block's facing side must hold no structure and no part of anyone's pressure hull. Wall the bay in and the intake closes on the spot, which is what turns the choice into a build decision instead of a menu. Quality scales with the world's air pressure between 0.75 and 1.0, so a thin planet costs real power.
+- The resolved quality multiplies `node.MaxTorque` directly, so it shows up as a shaft that will not pull its load rather than a mystery in the numbers, and a Closed-Cycle AIP module still skips air entirely.
+
+#### Exhaust Scrubber
+
+- New grid block in both chassis: a bulkhead `Scrubber Grille` that services the room it faces, and a full-cell `Exhaust Scrubber` that services every compartment touching it, runs the capture line and spins its fan at the rate it is working.
+- It moves the compartment's air at a configurable number of air changes per minute, taking heat and foul gas with it. Overboard means overboard: the heat is gone, but so is the volume of air, which is refilled from piped oxygen if there is any. On an airless world with no feed line, scrubbing a room cools it and depressurises it at the same time, so the Air Vent from 9.27.0 still has a job.
+- The full-block unit banks the gas it pulled out of the room as storable `ExhaustGas` through the same grid pipe network the 6.12.0 gas tap uses, and returns whatever the tanks cannot accept instead of destroying it.
+
+#### Gas Vent: Exhaust Becomes Disposable
+
+- New grid block in both chassis: `Vent Sleeve (Small)`, a hull sleeve with a louvre and a flame screen, and `Gas Vent (Large)`, an industrial discharge endpoint with an extractor. Both carry the same six-way `Port_GasIO` flanges as a tank, so a run terminates in a vent exactly the way it starts at a tank.
+- Unpowered it still clears the line by draft (40 L/s on the large unit, 14 on the sleeve): gas is never trapped by a power cut, the fan just stops helping. Powered it runs the extractor at up to 1400 L/s and the impeller spins at the rate it is actually pulling.
+- Storage is charged before disposal: `FillGasFrom` fills every tank the run reaches and only hands the remainder to a vent, so a line that passes a tank never leaks to the wind, and a run whose tanks are full spills into the vent instead of refusing to produce at all. That is the missing answer to "I piped my stack into a line and the engine still chokes".
+- A vent set into a sealed compartment moves gas into that room instead of overboard: oxygen tops the room up, exhaust fouls it. Outdoors, the call costs nothing, because the sky is the cheapest heatsink there is.
+- The block is a one-way sink. Drawing from a run that ends in a vent loses nothing to the vent, so a disposal line can share a manifold with a storage line without draining it.
+
+#### Exhaust Hookups
+
+- A pipe can now be snapped onto an exhaust stack whether or not the engine is venting. `GridExhaustPipe` was missing from the gas allow-list in both `TryGetGridTankVariablePortSnap` copies and in `IsMatchingTankBlockForPipe`, so the flange was only ever grabbable mid-puff; the tap scan also ran inside the venting branch and bailed out whenever the classic `GasNetwork` singleton was absent, which is every ship. It now runs on its own 0.5 s clock, resolves grid storage through `GridGasNetwork`, and stays alive on a cold stack so a disposal line can be built before anything starts.
+- A stack tap takes exactly one gas run (`MaritimeVariablePorts.GasRunAtCap`), reported as `Exhaust gas tap already connected (max 1)` with the usual red collar, because splitting one exhaust stream across two lines makes the plume thinning meaningless.
+- Gas port names the player installs on a stack (`Port_GasIO*`) are read as taps too, so a port fitted with the pipe tool is a first-class hookup point rather than decoration.
+- A tap will not hijack a line: the new `GridGasTank.AddTyped` refuses a foreign gas instead of adopting it, so an oxygen run that has just emptied itself cannot be quietly refilled with exhaust by a passing stack. Empty vessels still adopt a type on the ordinary fill path, which is how tanks have always been loaded.
+- A stack's tap fills tanks first and only then dumps the overflow to the run's vent, and a line with no tank at all is served straight from the tap, so both the storage and the disposal arrangement work from the same pipe.
+
+#### Feedback and Readouts
+
+- Engine panel: the `Combustion Air` section names the live intake (`PIPED O2`, `ROOM AIR`, `OPEN INTAKE`, `NO AIR`), shows the exact output penalty it is costing, and explains in one paragraph how to change it. `Engine Room` above it carries compartment air, room draw in litres per second and trapped exhaust with its back-pressure cost. Generator and pipe panels carry the same compartment readout, and the generic block panel reports it for any machine welded into a volume.
+- Engine screen telemetry gained an `AIR` line next to oxygen, and the pilot HUD's environment line says `ENGINES OUT OF AIR`, `ENGINE AIR INTAKE BLOCKED`, `ENGINE AIR: ROOM` or `ENGINE AIR: THIN nn%` rather than letting the shafts quietly go quiet.
+- New `Gas Vent` panel: flow out, a live gauge, litres destroyed, the last gas handled, which compartment it terminates in, louvre Open/Shut, both flow sliders and its power use.
+- Vitals: the compartment line now reads pressure plus band, air temperature and trapped gas; the suit stops treating a sealed room as automatically comfortable and takes the room's own rise when the cabin is cooking, reporting `ENGINE ROOM` as the dominant source.
+- Pilot HUD: the environment line gains `ENGINE ROOM HOT / COOKING` with air temperature and exhaust percentage, because a hull can read nominal while the volume around the engine is destroying the ship from the inside.
+- `GridThermalSystem` publishes `WorstRoomBand`, `WorstRoomAirC`, `WorstRoomRiseC` and `WorstRoomExhaust01`, so no HUD has to walk a grid or know about the pressure service to answer "is a room cooking?".
+
+#### Persistence
+
+- Additive per-room fields on the existing 9.27.0 room charge record (anchor keyed, same carry-across-rebuild rule as the oxygen charge): `heatLoadC` and `exhaustLoadC`. Legacy saves have no atmosphere for a room, which is exactly right, and nothing about the schema changed.
+- Additive gas-vent state on the block record (`hasGasVentState`, `gasVentOpen`, `gasVentDumped`): louvre position and the lifetime counter survive a reload, and a legacy save restores the vent from its prefab default with the louvres open.
+- Gas pipes snapped onto an exhaust stack ride the existing variable-port record path, so a disposal run rebuilt by the room solver is restored exactly as it was placed.
 
 ### [9.31.0-dev] Machine Heat Sources, Exhaust Stack Plumes & Per-Family Heat Tolerance
 

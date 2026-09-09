@@ -614,6 +614,32 @@ namespace VoxelEngine.EditorTools
                 "Re-runnable. Idempotent. Block HP, mass, power draws and authored material tweaks are preserved.");
             AddWizardButton(scroll, "62. Wire Visible Block Damage, Thruster Plume Hazard & Suit Temperature (Cracks, Glow, Plumes \u2014 Non-Destructive)", () => VoxelEngine.EditorTools.BlockDamageVisualSetup.RunStep62(), 56);
 
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
+                "Step 63 (9.32.0) wires ENGINE ROOM (CONCEALED-SPACE) ATMOSPHERE & HEAT (non-destructive):\n" +
+                "  \u2022 Authors the EXHAUST SCRUBBER grid block in Large and Small sizes (prefab, item, recipe)\n" +
+                "  \u2022 Authors the GAS VENT (large) and VENT SLEEVE (small): the end of a gas run, which is\n" +
+                "    what makes exhaust disposable instead of a storage obligation — unpowered it still clears\n" +
+                "    the line by draft, powered it runs the extractor\n" +
+                "  \u2022 Engine combustion air becomes a three-way choice: piped O\u2082 (full power, and the engine\n" +
+                "    then takes air from nowhere else), a hole to the sky on a breathable planet (minus a little\n" +
+                "    power, blocked the moment you enclose it), or the room's own air (worst of the three)\n" +
+                "  \u2022 A dry oxygen line is now a choice on the engine panel: FALLBACK ON drops back to room or\n" +
+                "    planet air at that source's cost, STRICT holds the engine to the pipe and stalls it\n" +
+                "  \u2022 An exhaust stack's gas tap is now live whether or not anything is venting, and a pipe can\n" +
+                "    be snapped onto the stack or onto a player-installed gas port there (one run per stack)\n" +
+                "  \u2022 Sealed volumes now track their own atmosphere: trapped waste heat and accumulated exhaust\n" +
+                "  \u2022 Blocked-in exhaust stacks dump their heat into the room, run hotter and give the engine\n" +
+                "    back-pressure; engines drink the room's oxygen when no pipe feeds them and stall when it is gone\n" +
+                "  \u2022 A scrubber pumps heat and foul gas overboard, refills the volume from piped oxygen and banks\n" +
+                "    the captured gas as industrial ExhaustGas; an open hatch clears a cooked room for free\n" +
+                "  \u2022 Adds GridPressureSystem (and re-verifies GridThermalSystem) to every existing grid prefab so\n" +
+                "    already-built ships have compartments to track\n" +
+                "  \u2022 Compartment atmosphere is saved additively with the room oxygen charge; legacy saves load clean\n" +
+                "  \u2022 Recipes registered and linked to the Grid Utilities research node\n" +
+                "Re-runnable. Idempotent. Flow rates, power draws, block HP, mass and authored balance are preserved.");
+            AddWizardButton(scroll, "63. Wire Engine Room Atmosphere & Heat (Concealed Spaces, Exhaust Trapping, Scrubbers \u2014 Non-Destructive)", () => VoxelEngine.EditorTools.EngineRoomAtmosphereSetup.RunStep63(), 62);
+
             AddSpacer(scroll, 20);
         }
 

@@ -864,8 +864,11 @@ namespace VoxelEngine.GridSystem
 
         private static bool IsMatchingTankBlockForPipe(GridBlock block, PipeFamily family)
         {
+            // The exhaust stack's gas tap is a tank-side endpoint like any other: without
+            // it a capture line can only be built while the stack is actively venting.
             return (family == PipeFamily.Liquid && (block is GridLiquidTank || block is GridBiofarm || block is GridH2O2Generator))
-                || (family == PipeFamily.Gas && (block is GridGasTank || block is GridCryobed || block is GridBiofarm || block is GridH2O2Generator));
+                || (family == PipeFamily.Gas && (block is GridGasTank || block is GridCryobed || block is GridBiofarm
+                                                 || block is GridH2O2Generator || block is VoxelEngine.Maritime.GridExhaustPipe));
         }
 
         private bool TryGetGridTankVariablePortSnap(GridEntity grid, GridBlock targetBlock,
@@ -896,7 +899,17 @@ namespace VoxelEngine.GridSystem
                 if (targetBlock is not GridGasTank
                     && targetBlock is not GridCryobed
                     && targetBlock is not GridBiofarm
-                    && targetBlock is not GridH2O2Generator) return false;
+                    && targetBlock is not GridH2O2Generator
+                    && targetBlock is not VoxelEngine.Maritime.GridExhaustPipe) return false;
+                if (targetBlock is VoxelEngine.Maritime.GridExhaustPipe
+                    && MaritimeVariablePorts.GasRunAtCap(targetBlock, GridTankVariablePorts.PrefixFor(GridTankPortFamily.Gas)))
+                {
+                    feedback = "Exhaust gas tap already connected (max 1)";
+                    s_portCapBlocked = true;
+                    s_portCapReason = feedback;
+                    s_portCapPipeFamily = "Gas";
+                    return false;
+                }
                 tankFamily = GridTankPortFamily.Gas;
             }
             else return false;

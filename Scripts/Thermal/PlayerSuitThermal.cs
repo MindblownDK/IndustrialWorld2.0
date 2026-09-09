@@ -135,6 +135,17 @@ namespace VoxelEngine.Thermal
         }
 
         private bool _inCabin;
+        private float _roomRiseC;
+        private float _roomFoul01;
+
+        /// <summary>°C the sealed volume around the crew is holding them above the outside air.</summary>
+        public float RoomRiseC => _roomRiseC;
+
+        /// <summary>0..1 how foul the air in the crew's compartment has become.</summary>
+        public float RoomExhaust01 => _roomFoul01;
+
+        /// <summary>True while the crew are standing in a compartment that cannot clear its heat.</summary>
+        public bool InHotCompartment => _roomRiseC >= ThermalRules.RoomSuitDangerRiseC;
 
         private void RefreshEnvironment()
         {
@@ -143,13 +154,24 @@ namespace VoxelEngine.Thermal
             float env = ambient;
             string source = "AMBIENT";
 
-            // Sealed, charged room: climate control wins over the outside.
+            // Sealed, charged room: climate control wins over the outside — until the
+            // room itself starts holding heat it cannot lose (roadmap 5.1 item 14). A
+            // cooked compartment is warmer than any cabin setpoint, and the suit feels
+            // the air it is actually standing in.
             var room = VoxelEngine.Pressure.RoomAtmosphereService.RoomAt(pos);
             _inCabin = room != null && room.IsBreathable;
+            _roomRiseC = room != null && room.IsSealed ? room.RoomRiseC : 0f;
+            _roomFoul01 = room != null && room.IsSealed ? room.ExhaustLoad01 : 0f;
             if (_inCabin)
             {
                 env = ThermalRules.CabinTemperatureC;
                 source = "CABIN";
+            }
+
+            if (_roomRiseC > ThermalRules.RoomSuitWarmRiseC)
+            {
+                float felt = ThermalRules.AmbientTemperatureC(pos) + ThermalRules.RoomSuitContribution(room);
+                if (felt > env) { env = felt; source = "ENGINE ROOM"; }
             }
 
             // Hull plate around the player.

@@ -21,6 +21,7 @@
 
 using UnityEngine;
 using VoxelEngine.GridSystem;
+using VoxelEngine.Thermal;
 
 namespace VoxelEngine.Maritime
 {
@@ -58,11 +59,18 @@ namespace VoxelEngine.Maritime
         private bool _venting;
         private float _puffPhase;
         // Gas-tap capture state (rescan at 2 Hz; the captured share thins the plume).
-        private VoxelEngine.Gas.GasTank _gasTapTank;
+        private VoxelEngine.Gas.GasTank _gasTapTank;          // classic world tank
+        private GridGasTank _gasTapGridTank;                   // shipboard vessel
+        private readonly System.Collections.Generic.List<GridBlock> _gasTapSeeds = new(6);
         private float _gasTapScanTimer;
         private Transform _gasTapPort;
-        /// <summary>True while the gas tap routes captured exhaust into a gas network.</summary>
-        public bool IsCapturingGas => _gasTapTank != null;
+        /// <summary>True while the tap has a run to pour into — a shipboard vessel or,
+        /// on a world build, a classic gas tank. The plume thins out either way.</summary>
+        public bool IsCapturingGas => _gasTapTank != null || _gasTapGridTank != null;
+
+        /// <summary>0..1 share of the stream the connected gas network is taking away this frame.
+        /// Captured gas is gas the compartment never has to swallow.</summary>
+        public float CapturedShare01 { get; private set; }
 
         private static readonly Vector3Int[] Faces =
         {
@@ -157,15 +165,37 @@ namespace VoxelEngine.Maritime
         /// <summary>0..1 vent intensity resolved on the last frame (exhaust backlog against the 50-unit reference).</summary>
         public float VentLoad01 { get; private set; }
 
+        /// <summary>0..1 how much of this stack's gas is trapped by the compartment around it.
+        /// Venting into a sealed volume means the stream has nowhere to go, so the plume
+        /// collapses into the room instead of rising off the stack (roadmap 5.1 item 14).</summary>
+        public float ConcealedVent01 { get; private set; }
+
+        /// <summary>Temperature rise the trapped stream is holding the room's air at, °C above ambient.</summary>
+        public float TrappedRiseC { get; private set; }
+
+        /// <summary>True while this stack is venting into a volume that cannot clear it.</summary>
+        public bool IsVentingIntoConcealedSpace => ConcealedVent01 > 0.15f;
+
+        /// <summary>The sealed volume this stack is dumping into, if any.</summary>
+        public VoxelEngine.Pressure.GridRoom ServedRoom => _servedRoom;
+        private VoxelEngine.Pressure.GridRoom _servedRoom;
+
+        // NOTE: the casing's own climb is expressed directly on SelfHeatC/NeighbourHeatC
+        // below (up to +45 percent while the stream is blocked in) — the gas is still
+        // arriving and it has nowhere to go, so there is no flow left to cool it.
+
         public float SelfHeatC => VentLoad01 > 0.001f
-            ? VoxelEngine.Thermal.ThermalRules.ExhaustPipeSelfHeatC * VentLoad01 * (_anyCriticalLastFrame ? 1.35f : 1f)
+            ? ThermalRules.ExhaustPipeSelfHeatC * VentLoad01 * (_anyCriticalLastFrame ? 1.35f : 1f)
+              * (1f + 0.45f * ConcealedVent01)
             : 0f;
 
         public float NeighbourHeatC => VentLoad01 > 0.001f
-            ? VoxelEngine.Thermal.ThermalRules.ExhaustPipeNeighbourHeatC * VentLoad01 * (_anyCriticalLastFrame ? 1.35f : 1f)
+            ? ThermalRules.ExhaustPipeNeighbourHeatC * VentLoad01 * (_anyCriticalLastFrame ? 1.35f : 1f)
+              * (1f + 0.45f * ConcealedVent01)
             : 0f;
 
-        public float PlumeLoad01 => VentLoad01;
+        // A trapped stream does not blow a plume — the gas stops at the nearest bulkhead.
+        public float PlumeLoad01 => VentLoad01 * (1f - ConcealedVent01);
 
         public Vector3 PlumeOrigin
         {
@@ -240,6 +270,12 @@ namespace VoxelEngine.Maritime
             {
                 emission.rateOverTime = 0f;
                 VentLoad01 = 0f;
+                // A stopped stack must still say so: compartments only hold what
+                // their sources keep restating.
+                UpdateConcealedSpace(0f, false, 0f);
+                // The run stays scannable even while nothing vents, so a line built
+                // onto a cold stack is recognised the moment it is finished.
+                ScanGasTap();
                 return;
             }
 
@@ -301,48 +337,192 @@ namespace VoxelEngine.Maritime
             //    the stream as storable ExhaustGas and the plume thins out. ──
             TickGasTap(anchor);
 
+            // ── Where does the gas actually go? (roadmap 5.1 item 14) ──────────
+            // Run last so it reads this frame's intensity and this frame's capture
+            // rate rather than the previous one's.
+            UpdateConcealedSpace(VentLoad01, anyCritical, CapturedShare01);
+
             // High-Flow Turbochargers — higher exhaust velocity.
             main.startSpeed = new ParticleSystem.MinMaxCurve(1.5f * speed, 3f * speed);
             var velOverLife = _smokeFX.velocityOverLifetime;
             velOverLife.y = new ParticleSystem.MinMaxCurve(1f * speed, 2.5f * speed);
 
-            emission.rateOverTime = _gasTapTank != null ? rate * 0.45f : rate;
+            emission.rateOverTime = IsCapturingGas ? rate * 0.45f : rate;
             main.startColor = baseColor;
         }
 
-        // ── Exhaust-gas tap ───────────────────────────────────────────
-        /// <summary>Push the captured share of the exhaust stream into whichever gas
-        /// network is hooked onto the Port_ExhaustGasIO tap. Storage-backed capture thins
-        /// the visible smoke; when no network/tank accepts the gas, everything vents.</summary>
-        private void TickGasTap(GridMaritimeEngine anchor)
+        // ── Concealed space (roadmap 5.1 item 14) ─────────────────────
+        /// <summary>
+        /// Decides whether the gas leaving this stack can escape. A funnel under an open
+        /// sky is free; the same funnel welded into an engine room is a heater. Whatever
+        /// the room swallows, the plume loses — the casing runs hotter, the room fills
+        /// with foul gas, and the engines this stack serves feel back-pressure.
+        /// </summary>
+        /// <param name="load01">This frame's vent intensity (0 when the stack is idle).</param>
+        /// <param name="anyCritical">True while a served engine is in critical heat.</param>
+        /// <param name="captured01">Share of the stream a gas network is taking away.</param>
+        private void UpdateConcealedSpace(float load01, bool anyCritical, float captured01)
         {
-            if (VoxelEngine.Gas.GasNetwork.Instance == null) { _gasTapTank = null; return; }
+            _servedRoom = VoxelEngine.Pressure.GridPressureSystem.ConcealedRoom(this);
 
-            _gasTapScanTimer -= Time.deltaTime;
-            if (_gasTapScanTimer <= 0f)
+            // Whatever a pipe network is carrying away is by definition not trapped in
+            // here, so capture relieves the room as surely as an open hatch does.
+            float escape = load01 * Mathf.Clamp01(captured01);
+            float trapped = Mathf.Clamp01(load01 - escape);
+
+            float trappedScale = 0f;
+            if (_servedRoom != null && trapped > 0.001f)
             {
-                _gasTapScanTimer = 0.5f;
-                if (_gasTapTank == null || _gasTapTank.capacity - _gasTapTank.storedAmount <= 0.01f)
+                float size = Mathf.Max(1f, _servedRoom.Cells.Count);
+                float openness = Mathf.Clamp01(size / 220f);
+                trappedScale = Mathf.Lerp(0.15f, 1f, 1f - openness) * trapped;
+            }
+            ConcealedVent01 = trappedScale;
+            TrappedRiseC = ThermalRules.TrappedExhaustRiseC(trapped * (anyCritical ? 1.2f : 1f));
+
+            if (_servedRoom != null)
+            {
+                var pressure = Grid != null ? Grid.GetComponent<VoxelEngine.Pressure.GridPressureSystem>() : null;
+                if (pressure != null)
                 {
-                    _gasTapTank = null;
-                    float cs = Grid != null ? Grid.gridSize.CellSize() : 2.5f;
-                    if (_gasTapPort == null)
-                        _gasTapPort = MaritimePorts.FindNearest(transform, s_gasTapPortPrefix, transform.position);
-                    Vector3 origin = _gasTapPort != null ? _gasTapPort.position : transform.position;
-                    _gasTapTank = VoxelEngine.Gas.GasNetwork.Instance.FindTankNear(
-                        origin, VoxelEngine.Gas.GasType.ExhaustGas, forOutput: false, searchDist: cs * 2.0f,
-                        corridorStep: cs, seedFilter: IsTapAnchoredPipe);
+                    // Restated every frame, including with nothing to report: the room's
+                    // air is the average of what its stacks are saying right now.
+                    pressure.InjectExhaust(transform.position, trapped > 0.001f ? TrappedRiseC : 0f);
+                    // The share of the stream's heat that the air keeps, on top of what
+                    // the casing already conducts into its neighbours.
+                    pressure.InjectWasteHeat(transform.position,
+                        ThermalRules.RoomExhaustRisePerLoadC * trapped * 0.35f);
                 }
             }
 
-            if (_gasTapTank == null || anchor == null) return;
-            float feed = gasTapFeedRate * Time.deltaTime;
-            if (feed <= 0f) return;
-            float accepted = _gasTapTank.TryAdd(VoxelEngine.Gas.GasType.ExhaustGas, feed);
-            if (accepted <= 0.0001f) _gasTapTank = null; // full / wrong gas — rescan next window
+            // Hand the back-pressure and the room's ambient floor to every engine served.
+            float exposure = _servedRoom != null
+                ? _servedRoom.RoomRiseC * ThermalRules.RoomAirTransmission
+                : 0f;
+            foreach (var eng in _foundEngines)
+            {
+                if (eng == null || eng.Grid != Grid) continue;
+                eng.SetThermalExposure(trappedScale, load01 > 0.001f ? exposure : 0f);
+            }
         }
 
-        private static readonly string[] s_gasTapPortPrefix = { "Port_ExhaustGasIO" };
+        // ── Exhaust-gas tap ───────────────────────────────────────────
+        // The tap used to live inside the venting branch, which meant a line snapped
+        // onto a cold stack was invisible: no pipes, no tank, and no way to build the
+        // disposal run before starting the engine. It now scans on its own clock,
+        // whether or not anything is venting, and it feeds whenever a sink answers.
+        private void TickGasTap(GridMaritimeEngine anchor)
+        {
+            ScanGasTap();
+            if (!IsCapturingGas || anchor == null) { CapturedShare01 = 0f; return; }
+
+            float feed = gasTapFeedRate * Time.deltaTime;
+            if (feed <= 0f) { CapturedShare01 = 0f; return; }
+
+            // Expose the share the line is taking so the concealed-space pass can
+            // subtract it instead of charging the room for gas already piped away.
+            float accepted = 0f;
+            if (_gasTapGridTank != null)
+                accepted = _gasTapGridTank.AddTyped(VoxelEngine.Gas.GasType.ExhaustGas, feed);
+            if (_gasTapTank != null && accepted < feed - 0.0001f)
+                accepted += _gasTapTank.TryAdd(VoxelEngine.Gas.GasType.ExhaustGas, feed - accepted);
+
+            // Nothing a shipboard tank could hold? Hand it to the vent at the far end
+            // of this same run. Storage first, disposal second — a tank is worth more
+            // than thin air, and a line that ends in a vent never fills one anyway.
+            if (Grid != null && accepted < feed - 0.0001f
+                && Grid.TryGetComponent(out GridGasNetwork dumpNetwork))
+                accepted += Mathf.Min(feed - accepted, dumpNetwork.DumpGas(
+                    this, VoxelEngine.Gas.GasType.ExhaustGas, feed - accepted));
+
+            CapturedShare01 = feed > 0.0001f ? Mathf.Clamp01(accepted / feed) : 0f;
+            if (accepted <= 0.0001f)
+            {
+                _gasTapTank = null;
+                _gasTapGridTank = null;   // full / wrong gas / unplugged — rescan next window
+                CapturedShare01 = 0f;
+            }
+        }
+
+        /// <summary>Re-locate the sink behind the tap twice a second. Never returns early
+        /// for want of a network: a grid run lives in GridGasNetwork, and the classic
+        /// world tank network is consulted only as a fallback for shipless builds.</summary>
+        private void ScanGasTap()
+        {
+            _gasTapScanTimer -= Time.deltaTime;
+            if (_gasTapScanTimer > 0f) return;
+            _gasTapScanTimer = 0.5f;
+
+            if (HasTapSink()) return;
+            _gasTapTank = null;
+            _gasTapGridTank = null;
+
+            if (_gasTapPort == null)
+                _gasTapPort = MaritimePorts.FindNearest(transform, s_gasTapPortPrefix, transform.position);
+            Vector3 origin = _gasTapPort != null ? _gasTapPort.position : transform.position;
+            float cs = Grid != null ? Grid.gridSize.CellSize() : 2.5f;
+
+            // Shipboard: any pipe of the run anchored to THIS stack. The anchor rule is
+            // what keeps a passing oxygen line from being flooded with exhaust.
+            if (Grid != null && Grid.TryGetComponent(out GridGasNetwork network))
+            {
+                CollectTapAnchoredPipes();
+                if (_gasTapSeeds.Count > 0)
+                {
+                    var pipes = network.CollectGasPipesFrom(Grid, this, _gasTapSeeds);
+                    for (int i = 0; i < pipes.Count; i++)
+                    {
+                        foreach (var block in UnifiedGridTopology.AdjacentBlocks(Grid, pipes[i]))
+                        {
+                            if (block is not GridGasTank tank || !tank.Enabled) continue;
+                            if (!tank.CanAccept(VoxelEngine.Gas.GasType.ExhaustGas)) continue;   // typed: never hijacks an oxygen vessel
+                            _gasTapGridTank = tank;
+                            return;
+                        }
+                    }
+                }
+            }
+
+            // Classic world tanks (planet builds with no grid gas service).
+            var legacy = VoxelEngine.Gas.GasNetwork.Instance;
+            if (legacy != null)
+                _gasTapTank = legacy.FindTankNear(origin, VoxelEngine.Gas.GasType.ExhaustGas, forOutput: false,
+                    searchDist: cs * 2.0f, corridorStep: cs, seedFilter: IsTapAnchoredPipe);
+        }
+
+        /// <summary>True while a previously found sink is still worth pouring into.</summary>
+        private bool HasTapSink()
+        {
+            if (_gasTapGridTank != null && _gasTapGridTank.Enabled
+                && _gasTapGridTank.CanAccept(VoxelEngine.Gas.GasType.ExhaustGas)) return true;
+            if (_gasTapTank != null && _gasTapTank.capacity - _gasTapTank.storedAmount > 0.01f) return true;
+            // A vent-only run stores nothing, so it must be re-probed rather than cached:
+            // keeping the seeds lets the feed pass reach the vent every frame.
+            return _gasTapSeeds.Count > 0 && Grid != null
+                && Grid.TryGetComponent(out GridGasNetwork n) && n.HasVentFor(this, VoxelEngine.Gas.GasType.ExhaustGas);
+        }
+
+        /// <summary>Pipes snapped straight onto this stack — the legal seeds for the tap.</summary>
+        private void CollectTapAnchoredPipes()
+        {
+            _gasTapSeeds.Clear();
+            if (Grid == null) return;
+            foreach (var block in Grid.AllBlocks)
+            {
+                if (block == null || block == this) continue;
+                if (block.GetComponentInChildren<VoxelEngine.Gas.GasPipe>(true) == null) continue;
+                if (!IsTapAnchoredPipe(block.GetComponentInChildren<VoxelEngine.Gas.GasPipe>(true))) continue;
+                _gasTapSeeds.Add(block);
+            }
+        }
+
+        // The stack's own tap flange plus any player-added gas port, so a line built
+        // onto a port installed with the pipe tool is recognised too.
+        private static readonly string[] s_gasTapPortPrefix =
+        {
+            "Port_ExhaustGasIO",
+            GridTankVariablePorts.PrefixFor(GridTankPortFamily.Gas),
+        };
 
         /// <summary>Exhaust capture only flows through pipes ANCHORED TO THIS exhaust
         /// pipe (the dedicated capture run): an oxygen supply line that merely runs
@@ -351,7 +531,13 @@ namespace VoxelEngine.Maritime
         private bool IsTapAnchoredPipe(VoxelEngine.Gas.GasPipe pipe)
         {
             if (pipe == null) return false;
-            var block = pipe.GetComponentInParent<GridBlock>();
+            return IsTapAnchoredBlock(pipe.GetComponentInParent<GridBlock>());
+        }
+
+        /// <summary>Same rule for a block found by topology rather than by component.</summary>
+        private bool IsTapAnchoredBlock(GridBlock block)
+        {
+            if (block == null) return false;
             if (block == null) return false;
             return block.IsPrecisionAttachment
                 ? block.PrecisionHostGridPos == GridPos

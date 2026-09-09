@@ -39,6 +39,19 @@ namespace VoxelEngine.Pressure
         /// <summary>Oxygen litres one occupant consumes per second at nominal pressure.</summary>
         public const float OxygenLitresPerOccupantPerSecond = 0.35f;
 
+        /// <summary>Room pressure below which there is no longer enough air to burn fuel in.</summary>
+        public static float CombustionAirMinAtm => VoxelEngine.Thermal.ThermalRules.CombustionAirMinAtm;
+
+        /// <summary>Air below this stays untouched: an engine never takes a crew's last breath.</summary>
+        public static float CombustionAirReserveAtm => VoxelEngine.Thermal.ThermalRules.CombustionAirReserveAtm;
+
+        /// <summary>
+        /// True when the air in a volume can support combustion at all. A sealed room
+        /// needs its own charge; an open one borrows the planet, exactly like breathing.
+        /// </summary>
+        public static bool SupportsCombustion(GridRoom room)
+            => room != null && room.CombustionAirAtm >= CombustionAirMinAtm;
+
         /// <summary>
         /// Samples the planet's atmosphere at a world position. A world with real air
         /// pressure equalises open rooms for free — a hull only matters where the sky

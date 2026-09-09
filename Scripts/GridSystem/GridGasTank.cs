@@ -80,6 +80,29 @@ namespace VoxelEngine.GridSystem
             return take;
         }
 
+        /// <summary>
+        /// Fill for a producer that does NOT own this tank's content — an exhaust tap above
+        /// all. Unlike Add it never adopts the gas type of an empty vessel, so a line that
+        /// happens to have drained its oxygen cannot be quietly refilled with exhaust.
+        /// </summary>
+        public float AddTyped(VoxelEngine.Gas.GasType type, float litres)
+        {
+            if (!CanAccept(type) || litres <= 0f) return 0f;
+            float space = Mathf.Max(0f, capacity - stored);
+            float take = Mathf.Min(space, litres);
+            stored += take;
+            return take;
+        }
+
+        /// <summary>True when this vessel could take that gas right now: matching content
+        /// (or an unadopted empty vessel on the ordinary fill path) and free capacity.</summary>
+        public bool CanAccept(VoxelEngine.Gas.GasType type, bool adoptIfEmpty = false)
+        {
+            if (!Enabled || type == VoxelEngine.Gas.GasType.None) return false;
+            if (gasType != type && !(adoptIfEmpty && stored <= 0.001f)) return false;
+            return capacity - stored > 0.01f;
+        }
+
         public float Draw(float litres, bool ignoreStockpile = false)
         {
             if (!ignoreStockpile && mode == GridTankMode.Stockpile) return 0f;
