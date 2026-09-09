@@ -1,11 +1,15 @@
 // Assets/Scripts/VoxelEngine/Editor/DebugSpawnerWindow.cs
 //
 // Developer tool — quickly fill the player's inventory with whole categories of
-// items for in-editor playtesting. Open via Tools ▸ Debug (Spawner).
+// items and grant research for in-editor playtesting. Open via Tools ▸ Debug
+// (Spawner).
 //
-// Requires Play Mode (there must be a live Inventory in the scene). Each button
-// scans the project's ItemDefinition assets, filters by category, and adds a few
-// of each to the active player's inventory.
+// Requires Play Mode (there must be a live Inventory and ResearchManager in the
+// scene). Each spawn button scans the project's ItemDefinition assets, filters by
+// category, and adds a few of each to the active player's inventory. The Research
+// section drives ResearchManager.UnlockAll / MaxAllRanks / ResetAllRanks so a
+// tester can reach any gated content (and any repeatable upgrade cap) instantly,
+// then hand the tree back to a fresh state with one button.
 
 #if UNITY_EDITOR
 using System.Collections.Generic;
@@ -14,6 +18,7 @@ using UnityEditor;
 using UnityEngine;
 using VoxelEngine.Items;
 using VoxelEngine.GridSystem;
+using VoxelEngine.Research;
 
 namespace VoxelEngine.EditorTools
 {
@@ -33,11 +38,11 @@ namespace VoxelEngine.EditorTools
         private void OnGUI()
         {
             EditorGUILayout.Space(6);
-            EditorGUILayout.LabelField("🧪 Debug Item Spawner", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("🧪 Debug Spawner & Research", EditorStyles.boldLabel);
 
             EditorGUILayout.HelpBox(
-                "Spawns items straight into the active player's Inventory for testing.\n" +
-                "Enter Play Mode first — a live Inventory must exist in the scene.",
+                "Spawns items into the active player's Inventory and grants research for testing.\n" +
+                "Enter Play Mode first — a live Inventory / ResearchManager must exist in the scene.",
                 Application.isPlaying ? MessageType.Info : MessageType.Warning);
 
             _countPerItem = Mathf.Max(1, EditorGUILayout.IntField("Count per item", _countPerItem));
@@ -78,6 +83,18 @@ namespace VoxelEngine.EditorTools
 
                 if (GUILayout.Button("🛠️  Spawn All TOOLS"))
                     SpawnByCategory("Tools");
+
+                EditorGUILayout.Space(10);
+                EditorGUILayout.LabelField("Research (testing)", EditorStyles.miniBoldLabel);
+
+                if (GUILayout.Button("🔓  Unlock ALL Research (rank 1)", GUILayout.Height(32)))
+                    UnlockAllResearch(maxRanks: false);
+
+                if (GUILayout.Button("🏆  MAX ALL Research (repeatables to cap)", GUILayout.Height(32)))
+                    UnlockAllResearch(maxRanks: true);
+
+                if (GUILayout.Button("🔄  Relock ALL Research (fresh save)", GUILayout.Height(30)))
+                    RelockAllResearch();
 
                 EditorGUILayout.Space(10);
                 if (GUILayout.Button("✨  Spawn EVERYTHING", GUILayout.Height(30)))
@@ -145,6 +162,44 @@ namespace VoxelEngine.EditorTools
                    "BUILDING");
 
         private void SpawnAll() => Give(AllItems(), "ALL");
+
+        // ── research (testing) helpers ────────────────────────────────────────
+        /// <summary>
+        /// The ResearchManager is a runtime singleton created by the research scene
+        /// bootstrap; it may exist before the player spawns, so we search for it
+        /// directly rather than through the inventory. In Play Mode its unlock map
+        /// is session-scoped (SaveToDisk is a stub), so relock restores a fresh
+        /// tree for the next test run.
+        /// </summary>
+        private static ResearchManager FindResearchManager()
+        {
+            var rm = ResearchManager.Instance;
+            if (rm == null)
+                rm = Object.FindAnyObjectByType<ResearchManager>();
+            if (rm == null)
+                EditorUtility.DisplayDialog("Debug Spawner",
+                    "No ResearchManager found in the scene. Enter Play Mode first.", "OK");
+            return rm;
+        }
+
+        private void UnlockAllResearch(bool maxRanks)
+        {
+            var rm = FindResearchManager();
+            if (rm == null) return;
+            int changed = maxRanks ? rm.MaxAllRanks() : rm.UnlockAll();
+            Debug.Log($"[DebugSpawner] Research {(maxRanks ? "maxed" : "unlocked")}: {changed} node(s) set.");
+            if (changed == 0)
+                EditorUtility.DisplayDialog("Debug Spawner",
+                    "All research nodes were already at their target rank.", "OK");
+        }
+
+        private void RelockAllResearch()
+        {
+            var rm = FindResearchManager();
+            if (rm == null) return;
+            int changed = rm.ResetAllRanks();
+            Debug.Log($"[DebugSpawner] Research relocked: {changed} node(s) reset.");
+        }
     }
 }
 #endif

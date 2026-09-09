@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `9.37.0-dev`  
-**Roadmap Version:** `9.37.0-dev`  
+**Current Version:** `9.37.1-dev`  
+**Roadmap Version:** `9.37.1-dev`  
 **Date:** 2026-09-09
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -44,6 +44,10 @@
   SCAN (tier 4), CENTRE OF MASS (tier 5) — authored non-destructively by Setup Step 68; a locked
   press says which node unlocks the mode, in one line. Open: Unity validation of the pass budget on
   dense hulls and the 24-block degrade readout on very large ships.
+- **9.37.1-dev** (dev tool, changelog-only round): Tools ▸ Debug (Spawner) gained a Research
+  section — unlock all (rank 1), max all (repeatable upgrades to their cap) and relock all —
+  driven by `ResearchManager.UnlockAll` / `MaxAllRanks` / `ResetAllRanks`, so testing any
+  research-gated content starts from one click.
 
 ### 9.36.0-dev — The Static Refuel Pad
 - A ground base is not a grid, and 9.35.0-dev could only refuel between two grids. `StaticRefuelPad` is a

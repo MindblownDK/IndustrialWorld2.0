@@ -189,6 +189,88 @@ namespace VoxelEngine.Research
             return baseCount * (rank + 1);
         }
 
+        // ============================================================
+        //                    DEBUG / DEV TESTING HELPERS
+        // ============================================================
+        /// <summary>
+        /// Dev convenience driven by Tools ▸ Debug (Spawner): unlocks every node in
+        /// the tree at rank 1. Repeatable upgrade nodes stay at rank 1 — use
+        /// MaxAllRanks() to take them to their cap. Fires OnChanged once, so
+        /// PlayerStats recomputes live; the Research screen rebuilds when it opens.
+        /// Testing only: normal progression goes through the Research Lab.
+        /// </summary>
+        public int UnlockAll()
+        {
+            return SetRanksTo(maxRanks: false);
+        }
+
+        /// <summary>
+        /// Dev convenience driven by Tools ▸ Debug (Spawner): takes every node
+        /// straight to its maxRanks cap, so the repeatable upgrade nodes (HP,
+        /// damage, stamina, sprint, inventory) read as fully stacked. Implies
+        /// UnlockAll() for every node.
+        /// </summary>
+        public int MaxAllRanks()
+        {
+            return SetRanksTo(maxRanks: true);
+        }
+
+        /// <summary>
+        /// Dev convenience driven by Tools ▸ Debug (Spawner): clears every rank, so
+        /// a test session can start from a fresh tree again without leaving the
+        /// editor. Fires OnChanged once so live stats drop back to base values.
+        /// </summary>
+        public int ResetAllRanks()
+        {
+            if (_nodeRanks.Count == 0) return 0;
+            int changed = _nodeRanks.Count;
+            _nodeRanks.Clear();
+
+            // Drop any in-flight lab research without its own event: the single
+            // OnChanged below already repaints every listener.
+            if (ActiveResearch != null)
+            {
+                ActiveResearch = null;
+                ActiveProgress01 = 0f;
+                ActiveHasCost = false;
+            }
+
+            Debug.Log("[Research] Debug reset cleared " + changed + " node rank(s).");
+            OnChanged?.Invoke();
+            return changed;
+        }
+
+        private int SetRanksTo(bool maxRanks)
+        {
+            if (tree == null) return 0;
+
+            int changed = 0;
+            foreach (var n in tree.nodes)
+            {
+                if (n == null || string.IsNullOrEmpty(n.nodeId)) continue;
+                int target = maxRanks ? Mathf.Max(1, n.maxRanks) : 1;
+                int rank = GetRank(n);
+                if (rank >= target) continue;
+                _nodeRanks[n.nodeId] = target;
+                changed++;
+            }
+            if (changed == 0) return 0;
+
+            // A node mid-research must not tick past its cap afterwards; drop it
+            // without its own event — the single OnChanged below repaints everyone.
+            if (ActiveResearch != null && GetRank(ActiveResearch) >= ActiveResearch.maxRanks)
+            {
+                ActiveResearch = null;
+                ActiveProgress01 = 0f;
+                ActiveHasCost = false;
+            }
+
+            Debug.Log("[Research] Debug unlock set " + changed + " node(s) to "
+                + (maxRanks ? "max rank." : "rank 1."));
+            OnChanged?.Invoke();
+            return changed;
+        }
+
         public bool IsRecipeUnlocked(RecipeDefinition recipe)
         {
             if (recipe == null) return false;

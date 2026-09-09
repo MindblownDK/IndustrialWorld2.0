@@ -1,9 +1,30 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.37.0-dev`
+**Current Version:** `9.37.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.37.1-dev] Debug Spawner Research Section — Unlock, Max or Relock the Whole Tree in Play Mode
+
+**Type:** PATCH — a dev-tool convenience, not a content round. The 9.37.0 inspector overlay and every research-gated system before it are only as testable as the effort it takes to reach them; this round puts the whole tree one click away in the existing debug spawner, so a tester can open any gated content immediately and hand the tree back to a fresh state afterwards. No save data, balance or gameplay code is touched: the new hooks are reached only from the editor window and only while in Play Mode.
+
+**GitHub title:** `[9.37.1-dev] Debug Spawner: unlock, max or relock the whole research tree from the editor`
+
+**Added**
+
+- `Scripts/Editor/DebugSpawnerWindow.cs` — a new "Research (testing)" section in Tools ▸ Debug (Spawner) with three buttons: **Unlock ALL Research (rank 1)** unlocks every node in the tree, **MAX ALL Research** additionally drives the repeatable upgrade nodes (HP, damage, stamina, sprint, inventory slots) straight to their rank cap so a test character reads as fully stacked, and **Relock ALL Research** clears every rank to hand the tree back to a fresh state between test runs. Buttons are gated on Play Mode like the rest of the window, each reports how many nodes changed in the console, and a no-op press says so in a dialog instead of pretending.
+- `Scripts/Research/ResearchManager.cs` — three dev hooks: `UnlockAll()` (rank 1 across the tree), `MaxAllRanks()` (every node to its `maxRanks` cap), and `ResetAllRanks()` (clear every rank). All three fire the existing `OnChanged` event exactly once, so `PlayerStats` recalculates live (an unlock-all also applies every stat upgrade and flight immediately) and any in-flight lab research that would now sit past its cap is dropped cleanly instead of ticking into an impossible state. Normal progression still goes through the Research Lab untouched.
+
+**Notes for the tester**
+
+- Research state in Play Mode is session-scoped while `ResearchManager.SaveToDisk` remains a persistence stub, so the Relock button genuinely returns the tree to its pre-test state; nothing written here survives a reload, by design.
+- The Research screen builds its tree when it opens, so close and reopen it (or toggle its hotkey) after unlocking to see every card lit; player stats and recipe gates update immediately through the event.
+- Ruins blueprint unlocks are a separate find-in-the-world system and are intentionally not part of "unlock all research": the button grants the lab tree, not exploration rewards.
+
+**Deliberately not in this round**
+
+- No change to game balance, research costs, the Research UI, save format or the setup wizard; the next content round still starts at Setup Step 69.
 
 ### [9.37.0-dev] The Grid Inspector Overlay: Heat, Damage and Centre of Mass on Anything You Can Look At
 
