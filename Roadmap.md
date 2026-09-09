@@ -1,11 +1,58 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `9.31.0-dev`  
-**Roadmap Version:** `9.31.0-dev`  
-**Date:** 2026-09-08
+**Current Version:** `9.34.0-dev`  
+**Roadmap Version:** `9.34.0-dev`  
+**Date:** 2026-09-09
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
+
+### How this roadmap is written (rule for every future edit)
+
+1. **No changelog prose in the roadmap.** A table cell or an item line carries a version tag and at
+   most one clause about *what* shipped. The narrative, the reasoning and the numbers live in
+   `Changelog.md` only — if a sentence here would read the same in the changelog, it does not belong
+   here.
+2. **One `Recently Done` block at the top of this file**, newest round first, three short lines per
+   round, describing the state of the code rather than the story of reaching it.
+3. **Open scope stays in plain sight.** Anything deliberately deferred is written as its own open
+   item with the version that deferred it named — never as a paragraph buried inside a completed row.
+4. **Non-obvious balance rules are stated where they bind** (in the section they govern), so they
+   survive a status row being summarised.
+5. **A shipped feature is a struck-through item** with `*(version)*`, and its design section keeps a
+   one-line status note pointing at the code and the setup step that authors it.
+
+---
+
+## 0. Recently Done
+
+### 9.34.0-dev — Route Book & Range Calculator
+- `Scripts/Navigation/`: route model, `GridRoutePlanner` costing, `RouteBook` shelf on the ship, the
+  `GridRouteRecorder` block (Large + Small) and its panel. Setup Step 65 authors prefabs, items,
+  recipes and the Grid Utilities research link.
+- A saved point is a cosmic position **plus an offset from the body it rides**, so a route recorded
+  above a moon is still above that moon eight hours later. Routes are named, reversed and edited.
+- **Open:** no autopilot — nothing flies a recorded route; no star-map rendering of routes; the
+  Coordinate Jump Drive still has no destination-select UI to hand a body to the book (5.1 item 15).
+- Fixed after the first Unity pass: `RouteBook` gained its `VoxelEngine.Cosmos` import, and a plotted
+  leg now goes through `RouteBook.Append` instead of `Routes.Add` (`Routes` is a read-only view by
+  design). Waypoint editing shipped with it: `REVERSE` and per-point delete on the panel.
+
+### 9.33.0-dev — Volume-Aware Ventilation
+- One shared `VentilationRules` contract: half an air change a minute as a floor, six as a ceiling,
+  and no scaling at all without a feed line. Panels print the figure they honour; AUTO-SCALE / FIXED
+  and each scrubber's feed allowance are saved per block. Step 64 tunes existing prefabs.
+- Balance rule that binds here: **per-service port caps are Oxygen 1, Exhaust 2 on Medium/Giant.**
+  Settled in 9.32.0-dev — do not re-open it in a later round.
+
+### 9.32.0-dev — Engine Room Atmosphere & Gas Disposal
+- `GridRoom` owns the heat, exhaust and air temperature of a sealed volume; every running machine
+  reports into the room it stands in; blocked-in stacks dump their stream into the space instead of
+  the sky, and engines resolve their combustion air through `CombustionAirRules` (piped O₂ 1.00,
+  open sky on a breathable world 0.90, compartment air 0.75 rising to 1.0 as the room clears).
+- `GasVent` destroys whatever a gas run carries to it — extractor-powered, draft-only unpowered —
+  so a sealed engine room can pump foul gas overboard without a vessel large enough to hold it.
+- Step 63 authors it; right-click panels exist on the scrubber, the vent and the recorder family.
 
 ---
 
@@ -81,7 +128,11 @@ The design goal is a seamless blend of:
 | Damage / destruction | 🛠️ WORKING ON | **6.26.0-dev:** Player death flow now has a premium death screen and selectable respawn anchors. Grid/static block destruction remains open. |
 | Weapons / combat | 🟡 PARTIALLY COMPLETE | Personal weapons (sword/pistol/rifle/grenade), mythical roster + Roc, bombs, full base defense network (Auto/Artillery/Flame/Mortar/Giant/AA/Energy) + ammo logistics (6.57–6.68). Missiles, grid weapons parity, and conserve-ammo UI remain open. |
 | Radiation system | 🟡 PARTIALLY COMPLETE | **6.80.0-dev:** ambient celestial-body radiation, Radiation Shielding modules, and Hazmat sealing are implemented for armor. Reactor waste, fallout zones, geiger UX, and full ecology effects remain open. |
-| Heat system | ✅ COMPLETED | **6.80.0-dev:** environmental heat and burn mitigation are wired to Heat Tolerance modules. **9.29.0-dev** closes the rest: `GridThermalSystem` gives every block a real temperature (planetary ambient blended toward deep space with altitude, climate-controlled sealed cabins, slow thermal slew with faster cooling), atmospheric entry heats by speed² × air density and by facing, running thrusters cook themselves and their neighbours, blocks burn above 800 °C, and ablative `GridHeatshield` blocks spend a finite charge to protect themselves and the block upstream. HUD gains a HULL thermal strip; ablator state is saved additively; Step 61 authors it all non-destructively. **9.30.0-dev** makes it bite and makes it visible: every grid is now simulated (not only shielded ones), thruster exhaust is a real plume cone that heats and damages the ship's own hull, other grids, placed base blocks, creatures and the player, hull cooling is slow (0.55x of heating), every block shows cracks, soot, incandescent glow and smoke through `BlockDamageVisual` and the `BlockDamageOverlayURP` shader, and the crew has a real suit temperature with inertia (`PlayerSuitThermal`, TMP strip, Heat Tolerance headroom). Step 62 authors the overlay material non-destructively. **9.31.0-dev** closes item 8: every heat-producing machine (`IHeatSourceBlock`: hydrogen engines, portable reactors, furnaces, maritime engines by tier and fault state, generators, exhaust stacks) warms itself and its neighbours, exhaust stacks blow a real plume, and every block family has its own heat tolerance (glass 520, electronics 600, habitat 700, structural 800, machinery 1100, ablative 1900) shown in tooltips and panels, with the HUD reporting the worst block by its own tolerance. **9.32.0-dev** finishes item 14 and closes the last open heat line: sealed volumes own an atmosphere (`GridRoom` heat, exhaust and air temperature, energy-based against the volume's own heat capacity and hull), every running machine reports into the room around it, blocked-in exhaust stacks dump their stream into the space (plume suppressed, casing +45 percent, up to −25 percent engine output from back-pressure), engines sip the room's oxygen and stall below 0.30 atm, the new `GridExhaustScrubber` pumps heat and foul gas overboard and banks the captured gas as `ExhaustGas`, and compartment atmosphere is saved additively with the room oxygen charge. Step 63 authors it non-destructively. |
+| Heat system | ✅ COMPLETED | **6.80.0-dev** burn mitigation wired to Heat Tolerance modules; **9.29.0-dev** block temperature, entry heating, thruster self-heat, ablative `GridHeatshield`; **9.30.0-dev** every grid simulated, plume heating, hull damage visuals, suit temperature; **9.31.0-dev** `IHeatSourceBlock` for every machine and per-family heat tolerances; **9.32.0-dev** concealed-space heat and exhaust, `GridExhaustScrubber`, `GasVent` (Step 63); **9.33.0-dev** volume-aware flow (Step 64); **9.34.0-dev** heat is priced into a route by the same grid load a trip bills. Full notes: `Changelog.md`. |
+| Grid inspector overlay (heat / damage / centre of mass) | ❌ MISSING | Design written for 4.8: one rebindable hotkey, three modes, research-gated in sequence. See `Grid Inspector Overlay`. |
+| Crude fractionation & flare disposal | ❌ MISSING | Design written for the petroleum era: six fractions plus LPG from the column, every fraction spent in a recipe it beats, `FlareStack` as the run terminator with real heat and air cost. See `Crude Fractionation, Product Use & Flare Disposal`. |
+| Asphalt roads | ❌ MISSING | Design written for the petroleum era: terrain surface from bitumen plus aggregate, movement/traction/routing bonuses, wear and grading rules. See `Asphalt Roads`. |
+| Engine Works (custom engine builder) | ❌ MISSING | Design written for the maritime/engine line: configuration, cylinders, bore/stroke, intake, fuel, compression, cooling, gearing and governor, with craft cost scaling into artefacts at the top. See `Engine Works`. |
 | Oxygen / life support | ✅ COMPLETED | Underwater reserve equipment already exists; **7.4.0-dev** activates vacuum/airless-body oxygen drain, sealed helmet+tank protection, armor oxygen-efficiency integration, and live hazard feedback. **7.5.0-dev** now resolves this against the same profile-driven air density used by flight and is Unity-validated. **9.27.0-dev** delivered airtight rooms and vents. **9.28.0-dev** closes the last item: oxygen tanks now carry a real per-instance refillable reserve (burned through helmet/armor efficiency, topped up from breathable air and from a Ventilation Unit's suit dock at 40 L/s), and the full-block Ventilation Unit pressurises every compartment it touches. |
 | Airtight systems | ✅ COMPLETED | **9.27.0-dev:** Full Pressure & Airtight Service. `GridPressureSystem` flood-fills sealed rooms per grid (breach detection, oxygen charge, per-room pressure in atm), `PressureRules`/`IAirtightBlock` decide what seals, sliding & vault doors are airtight bulkheads only while fully shut, the Air Vent block (Large + Small) pressurises/depressurises the room it faces from the grid gas network, `RoomAtmosphereService` makes a pressurised room breathable without a sealed suit even in hard vacuum, the suit HUD gains a live ROOM pressure strip, and room oxygen charge is additively saved/restored. Step 60 authors all content non-destructively. **9.27.1-dev:** rooms equalise with the planet's own atmosphere (a room built or opened on a breathable world is instantly livable; in vacuum it bleeds down), oxygen draw scales with the number of occupants breathing in a compartment, and the Air Vent is supplied strictly through gas pipes via authored `Port_GasIO` ports — the grid-wide gas pool helpers are retired as obsolete, since on grids gas and liquid move through pipes only and electricity is the sole networked resource. |
 | Fall damage | ✅ COMPLETED | **6.25.0-dev:** Player fall damage tracks downward impact speed along local gravity. **6.80.0-dev:** Impact Padding upgrades reduce the resulting hard-landing damage per worn armor piece. |
@@ -429,9 +480,138 @@ Crusader factories require automated defenses that integrate with production and
 - Petrification-resistant mirror or flash ammunition can interrupt Basilisk-class gaze mechanics.
 - Specialized ammunition requires research and local resources but never invalidates standard ammunition entirely.
 
+### Engine Works — Custom Engine Builder Block
+
+A machine that builds the engine the player specified instead of the engine a recipe offers. The
+interesting part is not the UI: it is that every choice the player makes has to survive contact with
+the same heat, air, fuel and mass rules the rest of the game already enforces.
+
+1. **The parameters, and what each one really changes**
+   - **Configuration** — inline, V, W, radial, boxer, opposed, turbine. Configuration is a geometry
+     choice with consequences: V and W banks give more cylinders in a shorter block (more power per
+     metre, wider, harder to cool on one side); radial is compact and heavy at the front; boxer is
+     low and flat, which is what a hull ring actually wants; turbine is a different law entirely —
+     continuous heat, no idling, and it eats air.
+   - **Cylinder count** — the boring-looking dial that is the main power control, with diminishing
+     returns past the point where the block can breathe.
+   - **Bore and stroke** — square, overbore, oversquare. Overbore revs and makes power up high and
+     drinks air; oversquare makes torque at low revs, which is what a loaded hauler wants and what a
+     planing hull does not care about.
+   - **Displacement** — the product of the above, shown as a number the player can see and compare,
+     and the thing the intake has to feed.
+   - **Intake volume (L)** — how much air the engine can drink per cycle. This is the knob that ties
+     the engine to the atmosphere work: an engine built to breathe hard needs either a big pipe run
+     or a lot of room, and `CombustionAirRules` then decides what it actually gets.
+   - **Fuel** — gasoline, kerosene, diesel, marine gas oil, heavy fuel oil, LPG, hydrogen. The fuel
+     list is deliberately the fractionation output list, so the column and the engine shop are one
+     decision, not two.
+   - **Compression ratio** — the risk dial: more output, more heat, and a hard ceiling set by the
+     fuel's octane. Diesel at a gasoline ratio is fine; gasoline at a diesel ratio is a hole in the
+     piston crown.
+   - **Cooling** — air, raw water loop, or closed loop with coolant. Air is free and cannot cope with
+     a big engine; water cools superbly and needs a line and an outlet; closed loop needs
+     `MarineEngineCoolant` and a radiator that can dump the heat it collects.
+   - **Reduction gearing and output direction** — where the power goes and how fast the shaft turns;
+     also what lets a built engine drive a thruster, a wheel, a belt or a generator.
+   - **Governor and idle target** — the player's answer to "how much does it burn doing nothing",
+     which is the same number the route book bills as standing load.
+   - **Tune intent** — economy / balanced / performance / continuous-duty, which biases the balance
+     sheet and the wear rate without overriding the physical choices.
+
+2. **The balance sheet (this is the machine's actual output)**
+   - Before anything is built, the block shows what the specification means: power and torque across
+     the rev band, specific fuel consumption, air demand at full throttle, heat rejection at full
+     throttle, mass, size in cells, wear rate, and the tolerance it will be held to.
+   - A spec that cannot work is refused with the reason named — starved of air, overheating at this
+     compression with this fuel, no coolant path, intake bigger than the block's own volume, more
+     power than the chosen gearing can carry — and every refusal points at the dial to turn.
+   - A built engine is a real `GridBlock` afterwards: it heats itself and its neighbours, it reports
+     waste heat into the room, it can be piped, gutted and rebuilt. Nothing about it is a stat sheet
+     pretending to be a machine.
+
+3. **Progression by parts, and by artefacts at the top**
+   - Craft cost is a function of the specification, not a flat recipe: block, crank, camshafts or
+     turbine discs, heads, liners, bearings, injection, the cooling loop and the control parts, each
+     counted by how much of it this engine needs. Bigger and better means more items, and the item
+     list is what makes a home-built engine feel like an engine.
+   - Past the large end, the design requires **artefacts**: recovered exotic bearings, a relic
+     turbine disc, a crucible part from a ruin or a boss. Not a gate for its own sake — it is the
+     game's way of saying the very best crankshaft is a thing you find, then learn to copy.
+   - Research gates the *dials*, not the machine: an early shop lets a player build a small inline
+     four on gasoline with air cooling, and V banks, turbine geometry, high compression and closed
+     loops unlock as the tech tree opens. A player who finds the parts before the theory can still
+     build a crude version of it.
+   - Reuse beats rebuild: an existing engine can be stripped for parts, and a stripped engine's
+     blocks are worth most of what they cost. A player editing their own design should never feel
+     taxed for thinking.
+
+4. **Settled for the first round**
+   - First round is the **reciprocating family plus a design template library**: inline, V, W, radial
+     and boxer with cylinders, bore and stroke, intake, compression, cooling, gearing and governor, and
+     a library that saves, names and hands over a design. The turbine branch waits for its own round —
+     it wants its own air and heat behaviour, not a borrowed one.
+   - A design is **both an item and save data**: the item is how a colony or a trader gives you one,
+     the save data is how your shop remembers the seven versions you tried. A design that only lives in
+     the shop would not survive being interesting.
+
+5. **Still open**
+   - Whether a built engine can be reverse-engineered back into a design (recommended: yes, slowly —
+     that is the reason to go looking at wrecks).
+   - Whether the turbine branch shares the heat and fuel plumbing with reciprocating engines or gets
+     its own rules — it must share the *heat* rules at minimum, or it becomes a free cheat on cooling.
+   - How loud this is in the world: an engine shop is a place a base is built around, and the
+     artefact ceiling may need a second source to keep it from being a single-ruin dependency.
+
+### Grid Inspector Overlay (Heat · Damage · Centre of Mass)
+
+A single togglable world overlay that lets the player read the three things they currently have to
+open a panel for, right on the blocks they are looking at. It is a viewing mode, not a new HUD: it
+changes what the existing block visuals mean, never what the ship does.
+
+1. **Three modes, one hotkey cycle**
+   - `HEAT`: every block tinted by how far it sits through its own heat tolerance, using the existing
+     per-family tolerance data rather than a second scale. The worst plate on screen gets a marker so
+     the eye lands on the problem, not on the pretty part.
+   - `DAMAGE`: block integrity as a ramp from intact to lost, with the fraction of the block's own
+     `maxHP` as the only input. Reads correctly on a shielded hull plate and on a glass panel.
+   - `CENTRE OF MASS`: a ball at the grid's mass centre, sized by total mass and coloured by how far
+     the centre sits from the thrust line. This is the view that makes ship design teachable: the
+     player sees why the stern swings out when the drive is off-axis.
+   - The hotkey cycles off → heat → damage → centre of mass, and is **rebindable in Settings**
+     alongside the existing bindings. Each mode is also selectable from the overlay itself.
+
+2. **Rendering rules (zero bloat)**
+   - One shared overlay pass per mode, driven by per-block material property data; no per-block
+     GameObjects, no per-frame allocation, no new scene objects while the overlay is off.
+   - Blocks keep their own damage decals underneath: the overlay tints, it does not replace
+     `BlockDamageVisual` — the two are meant to read as one picture.
+   - Cost of a frame in overlay mode must be within the existing block-render budget; if it is not,
+     the mode degrades to the 24 nearest blocks rather than dropping frames.
+
+3. **Progression gate**
+   - The overlay is a research unlock, not a settings toggle. The three modes are unlocked in
+     sequence by their own nodes so the reader tier follows the machinery tier: damage first
+     (structural awareness), heat second (engine-room awareness), centre of mass last (ship design).
+   - An attempt to use the hotkey with nothing researched says why, in one line, and does nothing else.
+
+4. **Settled for the first round**
+   - Order of work: this ships **before** the petroleum chain and the Engine Works, one feature per
+     round, each with its own version, changelog and setup step.
+   - The overlay draws on **any** grid, on wreckage and on base blocks — the interesting use is
+     inspecting something the player is not standing in.
+   - Three research nodes, one per mode, in the order damage, then heat, then centre of mass.
+
+5. **Still open**
+   - Whether the centre-of-mass ball is drawn for an unboarded grid, and whether the thrust line is
+     drawn beside it. It should be: the gap between the two is the whole point of the mode.
+
 ### Grid Route Recorder & Energy Calculator
 
 Grid ships can record, calculate, validate, and automate repeatable routes.
+
+*(1 and 2 shipped in 9.34.0-dev — `Scripts/Navigation/GridRoute*.cs` and `RouteBook.cs`, authored by
+Setup Step 65. Item 3, the Grid Autopilot, is deliberately not in that round: the recorder costs a
+flight and records one, it does not fly it.)*
 
 1. **Manual Route Calculation**
    - Select `Calculate Route To` and choose a discovered planet, moon, station, base, asteroid field, or waypoint.
@@ -449,6 +629,121 @@ Grid ships can record, calculate, validate, and automate repeatable routes.
    - Autopilot pauses and alerts the player if mass, damage, power, fuel, territory, weather, or route obstruction makes the plan unsafe.
    - Cargo schedules can trigger loading, unloading, charging, refueling, and return journeys.
    - Rogue Crusader territory and hostile encounters can cause avoidance, retreat, escort requests, or player intervention.
+
+### Crude Fractionation, Product Use & Flare Disposal
+
+Crude oil stops being one number and becomes a column of products. The point is not realism for its
+own sake: it is that a player who wants the light end must also carry the heavy end, and the heavy
+end is worth something too.
+
+1. **The distillation column (upgrade of the existing refinery, not a new machine)**
+   - `OilRefinery` grows from two fixed fluid tanks to one input tank plus **one tank per fraction**
+     (six output tanks, each typed, each readable by a pipe run). The recipe shape already supports
+     multiple `fluidOutputs`; only the machine's tank set has to follow.
+   - One batch of crude yields the realistic ladder, per 100 L of crude, and the fractions add up to
+     the input with a small gas loss to the flare line:
+
+     | Fraction | Per 100 L crude | LiquidType | What it is for |
+     |---|---|---|---|
+     | LPG | 2 L | `LPG` | cooking and heating, canister fill, chemical plant feedstock |
+     | Naphtha | 8 L | `Naphtha` | plastics and solvents — the chemical plant's preferred feed |
+     | Kerosene | 12 L | `Kerosene` | jet and turbine fuel, lamps, the small-engine band |
+     | Diesel | 26 L | `Diesel` | land vehicles, gensets, pumps, mid maritime engines |
+     | Gasoline | 18 L | `Gasoline` | fast, light, dangerous: small craft and personal engines |
+     | Heavy fuel oil | 32 L | `HeavyFuelOil` (exists) | big maritime engines, boilers, the flare stack's best feed |
+     | Loss to gas | 2 L | — | off-gas, only if the column is not hooked to a flare or vent |
+
+   - Each fraction gets its own `LiquidType`, its own density, its own burn value and its own freezing
+     point, so the number on the tank gauge means something. Density and burn value drive mass,
+     pipe flow and engine output; a cold planet makes waxing a real problem.
+   - The column is not "one recipe": fractions shift with the recipe the player picks (a light-sweet
+     crude behaves differently from a heavy one), so oil sites are worth surveying. `OilSiteSampler`
+     is where the assay comes from — a world that produces mostly heavies is a refining world, not a
+     junk world.
+
+2. **Products have to be spent, or the column is a pipe with extra steps**
+   - Every fraction is a crafting ingredient somewhere it is genuinely better than anything else:
+     kerosene in lamps and turbines, naphtha in plastics and solvents, gasoline in fast light
+     engines, LPG in canisters and heating, diesel in land logistics, heavy oil in bunkers and
+     boilers. Asphalt (below) is the sink for what nobody wants.
+   - Maritime engines keep their existing per-engine `liquidFuel` field and gain a real preference:
+     a big engine on light fuel runs hot and inefficient, a small one on heavy fuel cokes and
+     starves. The fuel a player can burn is therefore a function of the column they built.
+   - Recipes that consumed `RefinedOil` keep working through a conversion step, so an old base does
+     not wake up broken; the new fractions are simply better, and progression gets a little slower on
+     purpose — that is the point of the change.
+
+3. **Flare stack (disposal, with a reward for piping it properly)**
+   - Burns excess light liquids and gases: the off-gas the column cannot hold, surplus LPG, and
+     fuel nobody has an engine for. Destroys what arrives, like `GasVent` does for gas, so it is a
+     run terminator and not a storage device.
+   - A flare is *not* free disposal: it consumes oxygen from the room it stands in and it dumps its
+     heat into the compartment it is mounted through, exactly like every other `IHeatSourceBlock`.
+     A flare inside a sealed base is a mistake, and the panels say so.
+   - A **waste-heat recovery** attachment converts the burn into power at a poor-but-honest efficiency,
+     which is the whole reason a player builds a flare next to a boiler house instead of on a cliff.
+   - Sizing: a small vent-flare for a deckhouse and a full tower for a refinery. A flare that is fed
+     more than it can burn back-pressures the line, and the line then refuses the feed — the same
+     discipline the ventilation ladder already teaches.
+   - Burning it is one choice of three for the light end: flare it, burn it in a genset, or sell it.
+     Only the flare destroys it outright, so it is the last resort and reads like one.
+   - **A flare fouls its neighbourhood**: it lifts the local pollution signature as well as the room
+     heat, so a stack beside a farm, a colony wall or a hunting ground has a consequence the world
+     reacts to and not only a thermodynamic one. The waste-heat recovery attachment burns cleaner and
+     hotter — it trades pollution for power, and both prices are shown on the panel.
+
+4. **Open**
+   - Whether fractions are stored in dedicated tank blocks per type or in one selectable tank that
+     reports its contents. Default: one tank, typed at placement, like the gas tanks.
+   - Whether gasoline is worth its power despite a real explosion risk. Default: yes, and a hot
+     spill of it becomes a hazard the fire system can already handle.
+
+### Asphalt Roads
+
+A cheap surface the player lays on terrain to make the world move faster and cleaner. The idea is
+one sentence: **a road is the difference between walking a route and being able to run a schedule on it.**
+
+1. **Material and craft**
+   - Made from the heavy end of the column plus aggregate: bitumen from residue, plus sand and
+     gravel. A road is therefore literally how a refinery spends what it does not want.
+   - Placed like a `PlacedBlock` on terrain, snapped to the voxel surface, with a small set of shapes
+     (straight, bend, junction, crossing, ramp for slopes) so a road follows the ground instead of
+     fighting it. A hand-laid strip must feel as good as a paved straight.
+   - Repair is a can of the same material, so a bombed-out colony road is a chore and not a loss.
+
+2. **What a road is actually worth**
+   - Player and creatures move faster and cost less stamina on it; carried weight stops mattering as
+     much, so a portage across a range becomes a walk.
+   - Vehicles get their own bonus: better traction on slopes, less rolling resistance, no bogging in
+     rain or mud. The terrain speed penalties that already exist should stop applying on asphalt.
+   - Wheels, conveyor lines and drone routes follow it: the road is a *routing* surface, and it is
+     the natural place to hang the pathfinding that autopilot and delivery drones still do not have.
+     A player who paved their logistics corridor should get the smarter traffic for it.
+   - Lighting along it: a road is where a player wants lamps, and lamp spacing along a road should be
+     a thing the game notices (safety at night, no spawns on lit ground).
+
+3. **Rules that keep it from being free**
+   - Roads wear: they need a maintenance material at a rate that is annoying, not punishing, and a
+     road under heavy traffic wears faster. This is what keeps a paved world from being a one-off
+     chore and turns it into an upkeep economy.
+   - Grading matters. Laying asphalt on rough ground either costs more material or is refused until
+     the player levels the strip — the ground truth of the voxel terrain must not be bypassed.
+   - A road does not run through a wall, a body, or water without a culvert or a bridge: the same
+     volume discipline pipes already use.
+
+4. **Settled for the first round**
+   - First round is **surface plus the drag-to-pave tool**: lay a run by dragging, repair it with the
+     same material, keep the movement, traction and wear rules. Block-by-block placement stays as the
+     fallback for one culvert or a patched bend.
+   - The road **network** object (a name, a connected-run trace, a traffic readout) is deliberately held
+     back: it is the hook autopilot and drone scheduling want, and it should arrive with the routing it
+     feeds rather than as an empty register.
+   - The pave tool ships with the surface, not with the network: a player holding the material should be
+     able to pave without having earned a traffic system.
+
+5. **Still open**
+   - Whether wear is tracked per block or per run. Per run is cheaper to simulate; per block reads
+     better on a half-repaired road.
 
 ### Coordinate Jump Drive
 
@@ -1322,7 +1617,7 @@ Statuses are evidence-based and move forward only after code/content review and 
     - Excessive heat causes damage over time.
     - Heat tolerance armor upgrades raise the safe threshold.
 
-14. **Concealed-Space Atmosphere & Exhaust Simulation** *(shipped 9.32.0-dev on the 6.12.0 foundation: `GridRoom` tracks trapped waste heat and exhaust as its own atmosphere, `ThermalService.ReportWasteHeat` feeds it from every running machine, a blocked-in exhaust stack dumps its stream into the volume instead of the sky, an engine resolves its combustion air through one shared `CombustionAirRules` contract — piped O₂, compartment air, or an open intake side on a breathable world — and the new `GridExhaustScrubber` pumps heat and foul gas overboard while the new `GasVent` destroys the gas at the end of a run)*
+14. **Concealed-Space Atmosphere & Exhaust Simulation** *(shipped 9.32.0-dev on the 6.12.0 foundation: `GridRoom` tracks trapped waste heat and exhaust as its own atmosphere, `ThermalService.ReportWasteHeat` feeds it from every running machine, a blocked-in exhaust stack dumps its stream into the volume instead of the sky, an engine resolves its combustion air through one shared `CombustionAirRules` contract — piped O₂, compartment air, or an open intake side on a breathable world — and the new `GridExhaustScrubber` pumps heat and foul gas overboard while the new `GasVent` destroys the gas at the end of a run — with the follow-up round's hookups and readouts shipped too, and the deferred ventilation balance closed by 9.33.0-dev)*
     - Enclosed/concealed volumes (engine rooms, tanks, caves sealed by blocks) track their own gas composition. *(done: `GridRoom.HeatLoadC` / `ExhaustHeatC` / `TemperatureC`, solved energy-first against the volume's own heat capacity and hull)*
     - Exhaust gas pumped into a concealed space **heats the space up**; beyond a threshold it damages and destroys surrounding blocks (engine rooms need ventilation, not just a pipe). *(done: the compartment's air is what the blocks inside it slew toward, and `ThermalRules.RoomDamageHeatC` at 260 °C above the outside air is where the volume starts consuming its own contents; plumes are suppressed and stacks superheat when blocked in)*
     - Burning engines **deplete the room's oxygen**; below the critical O₂ fraction engines stall (no combustion air) and the player **cannot breathe** inside the space (links into the player oxygen/breathing system). *(done for engines: `GridRoom.DrawCombustionOxygen`, `PressureRules.SupportsCombustion`, stall below `CombustionAirMinAtm`; the suffocation path stays on the existing 9.27.0 breathable-room rule, which the engine can never push under)*
@@ -1634,7 +1929,10 @@ For each version, these are the high-level Unity tasks you will perform manually
 6. Add camera block that feeds render texture to screens.
 7. Add trajectory camera rig and predicted path renderer.
 8. Build star map UI with orbit lines and body labels.
-9. Build route recording, waypoint editing, destination calculation, ship capability report, and Autopilot controls.
+9. ~~Build route recording, waypoint editing, destination calculation, ship capability report, and
+   Autopilot controls.~~ *(9.34.0-dev: recording, waypoint capture, destination calculation, the
+   capability report and the panel are shipped; the Autopilot controls remain open on purpose — a
+   route can be costed and flown by hand, nothing flies it yet)*
 10. Add cargo-stop actions for docking, loading, unloading, charging, refueling, waiting, and return trips.
 11. Configure input bindings for trajectory toggle, star map, route calculation, and Autopilot override.
 12. **Run setup wizard step (non-destructive)**
@@ -1694,10 +1992,30 @@ For each version, these are the high-level Unity tasks you will perform manually
 12. ~~Build cockpit heat indicator UI.~~ *(9.30.0-dev hull line; 9.32.0-dev adds the engine room line)*
 13. ~~Build player heat UI with green/yellow/red indicator.~~ *(9.30.0-dev suit strip; 9.32.0-dev reports the crew's compartment on the same panel)*
 14. ~~Implement atmospheric entry heat simulation.~~ *(9.29.0-dev; concealed-space exhaust and room heat closed by 9.32.0-dev, Step 63)*
-15. Build coordinate Jump Drive prefab, charge/range calculator, safe-arrival validation, destination UI, and Autopilot route integration.
+14b. ~~Grid Route Recorder & Energy Calculator: manual route calculation and recorded routes.~~ *(9.34.0-dev, Step 65 — distance, travel time, gravity wells, atmosphere segments, required thrust, power and hydrogen use, reserve margin and named warnings, with routes saved as waypoint lists on the grid. Autopilot remains open.)*
+15. Build coordinate Jump Drive prefab, charge/range calculator, safe-arrival validation, destination UI, and Autopilot route integration. *(prefab, charge/range maths and safe-arrival validation shipped earlier with `GridWarpDrive`; the destination-select UI and Autopilot legs remain — 9.34.0-dev ships the route book the destination picker will hand its selections to)*
 16. Build empire dashboard UI.
 17. **Run setup wizard step (non-destructive)**
     - Step 22 for planetary bases, exo-alloys, nuclear, radiation, and heat systems.
+    - Step 63 (9.32.0-dev) authors the engine room atmosphere set, Step 64 (9.33.0-dev) tunes its
+      ventilation against compartment volume, and Step 65 (9.34.0-dev) authors the Route Recorder and
+      Nav Plotter for the route book; all three are re-runnable and preserve authored balance.
+18. Ship the **Grid Inspector Overlay** (heat / damage / centre of mass): one shared overlay pass,
+    three modes on one rebindable hotkey, three research nodes in sequence.
+19. Refit `OilRefinery` into a **fractionating column**: one input tank plus one typed tank per
+    fraction, per-world crude assays from `OilSiteSampler`, and `LiquidType` entries for LPG, naphtha,
+    kerosene, diesel and gasoline with density, burn value and freezing point.
+20. Spend the fractions: recipes and engine fuel preferences per fraction, with `RefinedOil` recipes
+    kept alive through a conversion step so an old base does not wake up broken.
+21. Author the **Flare Stack** (small + tower) as a gas/liquid run terminator with oxygen draw, room
+    heat and an optional waste-heat recovery attachment.
+22. Author **asphalt roads** as terrain-placed surface blocks (straight, bend, junction, crossing,
+    ramp) with movement, traction and wear rules, then the road *network* readout that autopilot and
+    drone routing hang on.
+23. Author the **Engine Works** block: parameter set, balance sheet, refusal reasons, craft cost by
+    specification, artefact requirements at the large end, and template storage.
+24. **Run setup wizard step (non-destructive)** for 18–23 as each ships; the next free step number
+    after Step 65 is 66.
 
 ### For 5.2.0 (Architect Era)
 

@@ -17,7 +17,7 @@ namespace VoxelEngine.GridSystem
             Armor, Cockpit, Thruster, Battery, Cargo, Drill, Grinder, Refinery,
             Weapon, DockingPort, Wheel, LandingGear, SolarPanel, Reactor,
             LiquidTank, GasTank, H2O2, HydrogenEngine, ChemicalPlant, Glass, Demolisher, ItemPipe,
-            GasPipe, LiquidPipe, Gyroscope, Beacon, OreDetector, SeasonMonitor, AirVent, AirVentFull, Heatshield, ExhaustScrubber, GasVent, Generic
+            GasPipe, LiquidPipe, Gyroscope, Beacon, OreDetector, SeasonMonitor, AirVent, AirVentFull, Heatshield, ExhaustScrubber, GasVent, RouteRecorder, Generic
         }
 
         private static Shader Lit => Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
@@ -68,6 +68,7 @@ namespace VoxelEngine.GridSystem
                 case Style.LiquidPipe:   BuildPipe(root, cs, Mat(new Color(0.3f, 0.55f, 0.9f), 0.6f, 0.5f)); break;
                 case Style.Gyroscope:    BuildGyroscope(root, cs, body, metal, glow); break;
                 case Style.Beacon:      BuildBeacon(root, cs, body, metal, glow); break;
+                case Style.RouteRecorder: BuildRouteRecorder(root, cs, body, metal, glow); break;
                 case Style.OreDetector: BuildOreDetector(root, cs, body, metal, glow); break;
                 case Style.SeasonMonitor: BuildSeasonMonitor(root, cs, body, metal, glow); break;
                 case Style.AirVent:      BuildAirVent(root, cs, body, metal, glow); break;
@@ -360,6 +361,29 @@ namespace VoxelEngine.GridSystem
                 Box(r, metal, new Vector3(Mathf.Cos(a) * cs * 0.25f, -cs * 0.3f, Mathf.Sin(a) * cs * 0.25f),
                     new Vector3(cs * 0.03f, cs * 0.15f, cs * 0.03f));
             }
+        }
+
+        // ── ROUTE RECORDER ──────────────────────────────────────────────────────
+        // A nav deck in a box: console, dish, and the little lamp that tells the crew a
+        // capture is running. Deliberately low profile so it can live under a bridge window.
+        private static void BuildRouteRecorder(GameObject r, float cs, Material body, Material metal, Material glow)
+        {
+            // Deck plate and console housing.
+            Box(r, metal, new Vector3(0, -cs * 0.42f, 0), new Vector3(cs * 0.86f, cs * 0.06f, cs * 0.86f));
+            Box(r, body, new Vector3(0, -cs * 0.16f, cs * 0.22f), new Vector3(cs * 0.72f, cs * 0.46f, cs * 0.22f));
+            // Screen, tilted toward the operator.
+            var screen = Box(r, glow, new Vector3(0, -cs * 0.04f, cs * 0.10f), new Vector3(cs * 0.52f, cs * 0.22f, cs * 0.02f));
+            screen.transform.localRotation = Quaternion.Euler(-18f, 0f, 0f);
+            // Plotting dish on a short mast behind the console.
+            var mast = Cyl(r, metal, new Vector3(0, cs * 0.16f, -cs * 0.16f), cs * 0.025f, cs * 0.34f);
+            var dish = Cyl(r, metal, new Vector3(0, cs * 0.34f, -cs * 0.16f), cs * 0.19f, cs * 0.03f);
+            dish.transform.localRotation = Quaternion.Euler(58f, 0f, 0f);
+            Sphere(r, glow, new Vector3(0, cs * 0.37f, -cs * 0.12f), cs * 0.035f);
+            // Recorder lamp: the "a run is being written down" signal.
+            Box(r, glow, new Vector3(cs * 0.30f, cs * 0.08f, cs * 0.22f), new Vector3(cs * 0.08f, cs * 0.04f, cs * 0.08f));
+            // Conduit stubs into the deck.
+            for (int i = -1; i <= 1; i += 2)
+                Cyl(r, metal, new Vector3(i * cs * 0.28f, -cs * 0.40f, -cs * 0.20f), cs * 0.03f, cs * 0.10f);
         }
 
         // ── ORE DETECTOR ────────────────────────────────────────────────────────

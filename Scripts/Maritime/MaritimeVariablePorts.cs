@@ -37,6 +37,8 @@ namespace VoxelEngine.Maritime
     /// <summary>The engine service categories a pipe can hook into.</summary>
     public enum PortService : byte
     {
+        /// <summary>"any service" — accepted by the proximity queries, never installed.</summary>
+        None = 255,
         Fuel = 0,
         Coolant = 1,
         Oxygen = 2,
@@ -148,28 +150,62 @@ namespace VoxelEngine.Maritime
         /// Inline-4 (Small, solid-fuel) takes only oxygen + item intake; the liquid
         /// HFO V8 (Medium) and MGO V12 (Giant) take fuel + coolant + oxygen. Exhaust
         /// always uses the engine's authored exhaust collector(s).</summary>
+
         /// <summary>
-        /// Gas runs are one per host block. A tank is happy sharing a manifold, but an
-        /// exhaust tap is a single capture line: a second pipe on the same flange would
-        /// split the stream across two runs and the plume thinning would stop making sense.
-        /// Pass <paramref name="gasPrefix"/> (the tank port family's prefix) to avoid the
-        /// call sites depending on this class's private plumbing.
+        /// Which service a gas pipe takes on when it is snapped to an engine surface. The
+        /// family alone cannot answer this any more than the liquid family could: a gas line
+        /// may be an oxygen feed OR the far end of an exhaust run, and wiring the wrong one
+        /// silently starves the engine. Priority is (1) the fitting the player actually
+        /// aimed at, (2) what the run they are extending carries, (3) the oxygen feed.
         /// </summary>
-        public static bool GasRunAtCap(UnityEngine.Component host, string gasPrefix)
+        public static PortService ResolveGasService(GridEntity grid, GridMaritimeEngine engine,
+            MaritimeVariablePorts vports, Vector3 hitPoint, float reach)
         {
-            if (host == null) return false;
-            int found = 0;
-            var t = host.transform;
-            for (int i = 0; i < t.childCount; i++)
+            // 1 — a pipe dropped on this engine's own exhaust-output flange is a gas run
+            // pointing OUT (the tap arrangement, and the only way to lead exhaust away
+            // from an engine that has no stack of its own).
+            var tapPort = VoxelEngine.Maritime.MaritimePorts.FindNearest(engine.transform,
+                new[] { "Port_ExhaustOutput" }, hitPoint, reach);
+            if (tapPort != null) return PortService.Exhaust;
+
+            // 2 — an installed variable port at the aim point keeps its own service.
+            var aimed = FindInstalledPortNear(engine, hitPoint, reach);
+            if (aimed != null) return ServiceOf(aimed);
+
+            // 3 — read the run being extended.
+            var net = VoxelEngine.GridSystem.GridGasNetwork.Instance;
+            var seed = MaritimePortPlanner.FindNearestPipe(grid, hitPoint, isGas: true);
+            if (net != null && seed != null)
             {
-                var child = t.GetChild(i);
-                if (child == null) continue;
-                if (child.name.StartsWith("Port_ExhaustGasIO", System.StringComparison.Ordinal)
-                    || (!string.IsNullOrEmpty(gasPrefix)
-                        && child.name.StartsWith(gasPrefix, System.StringComparison.Ordinal))) found++;
-                if (found > 1) return true;
+                if (net.AvailableGasFor(seed, VoxelEngine.Gas.GasType.ExhaustGas, true) > 0.001f
+                    && net.AvailableGasFor(seed, VoxelEngine.Gas.GasType.Oxygen) <= 0.001f)
+                    return PortService.Exhaust;
+                if (net.AvailableGasFor(seed, VoxelEngine.Gas.GasType.Oxygen, true) > 0.001f
+                    && net.AvailableGasFor(seed, VoxelEngine.Gas.GasType.ExhaustGas) <= 0.001f)
+                    return PortService.Oxygen;
             }
-            return false;
+
+            return PortService.Oxygen;
+        }
+
+        /// <summary>The nearest player-installed port of any service at a world point.</summary>
+        public static Transform FindInstalledPortNear(GridMaritimeEngine engine, Vector3 worldPoint, float maxDistance)
+        {
+            var vports = engine != null ? engine.VariablePorts : null;
+            return vports != null ? vports.FindExistingNear(worldPoint, maxDistance, PortService.None) : null;
+        }
+
+        /// <summary>Which service an installed port carries, read off its own name.</summary>
+        public static PortService ServiceOf(Transform port)
+        {
+            if (port == null) return PortService.Oxygen;
+            string n = port.name;
+            if (n.StartsWith(PrefixFor(PortService.Exhaust), System.StringComparison.Ordinal)) return PortService.Exhaust;
+            if (n.StartsWith(PrefixFor(PortService.Fuel), System.StringComparison.Ordinal)) return PortService.Fuel;
+            if (n.StartsWith(PrefixFor(PortService.Coolant), System.StringComparison.Ordinal)) return PortService.Coolant;
+            if (n.StartsWith(PrefixFor(PortService.Item), System.StringComparison.Ordinal)) return PortService.Item;
+            if (n.StartsWith(PrefixFor(PortService.Oxygen), System.StringComparison.Ordinal)) return PortService.Oxygen;
+            return PortService.Oxygen;
         }
 
         public static bool IsServiceAllowed(EngineTier tier, PortService s)
@@ -177,10 +213,14 @@ namespace VoxelEngine.Maritime
             switch (tier)
             {
                 case EngineTier.Small:
-                    return s == PortService.Oxygen || s == PortService.Item;
+                    // The Crude engine takes no liquid feeds, but exhaust routing is not a
+                    // feed: without it the smallest engine could never be plumbed into a
+                    // disposal line, which is exactly what the gas vent is for.
+                    return s == PortService.Oxygen || s == PortService.Item || s == PortService.Exhaust;
                 case EngineTier.Medium:
                 case EngineTier.Giant:
-                    return s == PortService.Fuel || s == PortService.Coolant || s == PortService.Oxygen;
+                    return s == PortService.Fuel || s == PortService.Coolant
+                        || s == PortService.Oxygen || s == PortService.Exhaust;
                 default:
                     return false;
             }
@@ -202,6 +242,51 @@ namespace VoxelEngine.Maritime
         /// <summary>The transform of an already-installed dynamic port of this
         /// service, or null. Used so a second pipe of the same service re-snaps to
         /// the existing port instead of spawning a duplicate.</summary>
+        /// <summary>Nearest installed port to a world point, whatever it carries (pass
+        /// <see cref="PortService.None"/>). Used so aiming AT a free port extends its run
+        /// instead of being refused as "already connected".</summary>
+        public Transform FindExistingNear(Vector3 worldPoint, float maxDistance,
+            PortService s = PortService.None)
+        {
+            Transform best = null;
+            float bestDist = maxDistance * maxDistance;
+            for (int i = 0; i < _runtimePorts.Count; i++)
+            {
+                var t = _runtimePorts[i];
+                if (t == null) continue;
+                if (s != PortService.None && !t.name.StartsWith(PrefixFor(s), System.StringComparison.Ordinal)) continue;
+                float d = (t.position - worldPoint).sqrMagnitude;
+                if (d < bestDist) { bestDist = d; best = t; }
+            }
+            return best;
+        }
+
+        /// <summary>True when a pipe of this family already stands on the hub cell just
+        /// outside the port — i.e. the fitting is occupied and a second pipe must not be
+        /// stacked onto the same seat.</summary>
+        public static bool IsPortOccupied(Transform port, float radius)
+        {
+            if (port == null || radius <= 0.0001f) return false;
+            var facing = port.GetComponent<VoxelEngine.Maritime.MaritimePortFacing>();
+            Vector3 outward = facing != null
+                ? port.parent.TransformDirection(facing.localOutward).normalized
+                : port.transform.forward;
+            Vector3 seat = port.position + outward * (radius * 0.9f);
+            int hits = UnityEngine.Physics.OverlapSphereNonAlloc(seat, radius, s_portProbe, ~0,
+                UnityEngine.QueryTriggerInteraction.Collide);
+            for (int i = 0; i < hits; i++)
+            {
+                var col = s_portProbe[i];
+                if (col == null) continue;
+                var block = col.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>();
+                if (block == null) continue;
+                if (block.GetComponentInChildren<VoxelEngine.Gas.GasPipe>(true) != null
+                    || block.GetComponentInChildren<VoxelEngine.Fluids.WaterPipe>(true) != null) return true;
+            }
+            return false;
+        }
+        private static readonly UnityEngine.Collider[] s_portProbe = new UnityEngine.Collider[8];
+
         public Transform FindExisting(PortService s)
         {
             string prefix = PrefixFor(s);
@@ -385,7 +470,8 @@ namespace VoxelEngine.Maritime
             if (grid == null || engine == null) return plan;
 
             var vports = engine.VariablePorts;
-            PortService service = ResolveService(family, grid, vports, engine.tier, hitPointWorld);
+            float reach = detailCell * 1.5f;
+            PortService service = ResolveService(family, grid, vports, engine.tier, hitPointWorld, engine, reach);
             plan.service = service;
 
             // This engine tier doesn't offer that service (e.g. a liquid pipe on the
@@ -397,8 +483,21 @@ namespace VoxelEngine.Maritime
             // Do NOT re-snap additional pipes to it: that made multiple pipes try to
             // share one dynamic connector. Treat an existing variable service port as
             // full so the builder shows the same red over-cap feedback as engines.
-            var existing = vports.FindExisting(service);
-            if (existing != null)
+            // A player-installed variable port is a single-pipe service socket: while a pipe
+            // stands on it, a second one is refused. Aim AT the fitting to extend its run —
+            // that is a reuse, not a duplicate. An AUTHORED port (no `_V`) is not a dynamic
+            // socket at all, so a fresh run may always claim it; refusing those is what made
+            // the second gas pipe on an engine look like it "connected to oxygen instead".
+            var existing = vports.FindExistingNear(hitPointWorld, reach, service) ?? vports.FindExisting(service);
+            bool authored = existing != null && !existing.name.EndsWith("_V", System.StringComparison.Ordinal);
+            if (existing != null && !authored && MaritimeVariablePorts.IsPortOccupied(existing, detailCell))
+            {
+                FillSeatFromPort(grid, engine, existing, detailCell, ref plan);
+                plan.atCap = true;
+                return plan;
+            }
+            if (existing != null && authored && MaritimeVariablePorts.IsPortOccupied(existing, detailCell)
+                && !vports.CanAdd(service))
             {
                 FillSeatFromPort(grid, engine, existing, detailCell, ref plan);
                 plan.atCap = true;
@@ -483,12 +582,13 @@ namespace VoxelEngine.Maritime
 
         // ── Service resolution ────────────────────────────────────────
         private static PortService ResolveService(PipeFamily family, GridEntity grid,
-            MaritimeVariablePorts vports, EngineTier tier, Vector3 hitPoint)
+            MaritimeVariablePorts vports, EngineTier tier, Vector3 hitPoint,
+            GridMaritimeEngine engine, float reach)
         {
             switch (family)
             {
                 case PipeFamily.Liquid: return ResolveLiquidService(grid, vports, hitPoint);
-                case PipeFamily.Gas:    return PortService.Oxygen;
+                case PipeFamily.Gas:    return MaritimeVariablePorts.ResolveGasService(grid, engine, vports, hitPoint, reach);
                 case PipeFamily.Item:   return PortService.Item;
                 default:                return PortService.Fuel;
             }
@@ -528,7 +628,7 @@ namespace VoxelEngine.Maritime
 
         /// <summary>Nearest already-placed pipe of the family within ~3 m of the aim
         /// point — the run the player is extending. Used to read what it carries.</summary>
-        private static GridBlock FindNearestPipe(GridEntity grid, Vector3 worldPos, bool isGas)
+        public static GridBlock FindNearestPipe(GridEntity grid, Vector3 worldPos, bool isGas)
         {
             GridBlock best = null;
             float bestSq = 9f; // 3 m

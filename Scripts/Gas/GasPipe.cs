@@ -249,7 +249,11 @@ namespace VoxelEngine.Gas
         private readonly System.Collections.Generic.List<VoxelEngine.GridSystem.GridBlock> _armCandidates = new(8);
         private static readonly Collider[] s_worldProbe = new Collider[64];
 
+        // Exhaust-side fittings: the stack's capture tap and an engine's own exhaust
+        // output. Neither is a delivery target, so an arm only ever points at one when
+        // there is nothing cleaner within reach — the delivery arm on the other side wins.
         private static bool IsExhaustTapPort(Transform port)
-            => port != null && port.name.StartsWith("Port_ExhaustGasIO", System.StringComparison.Ordinal);
+            => port != null && (port.name.StartsWith("Port_ExhaustGasIO", System.StringComparison.Ordinal)
+                                || port.name.StartsWith("Port_ExhaustOutput", System.StringComparison.Ordinal));
     }
 }

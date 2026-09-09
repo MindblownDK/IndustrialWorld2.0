@@ -42,6 +42,9 @@ namespace VoxelEngine.Gas
         [Tooltip("Litres per second the extractor moves while the grid is supplying it.")]
         [Range(1f, 12000f)] public float forcedFlowLitresPerSecond = 1400f;
 
+        [Tooltip("Cap the sleeve against the compartment it opens into, so blowing a whole engine room full of exhaust in one second cannot outrun the room model. On the hull, where there is no room, it changes nothing.")]
+        public bool autoScaleFlow = true;
+
         [Header("Power")]
         [Tooltip("Standby draw for the louvre actuator and the flame screen.")]
         public float idleWatts = 3f;
@@ -72,6 +75,28 @@ namespace VoxelEngine.Gas
         /// <summary>Flow the vent can burn right now, in litres per second.</summary>
         public float RatedFlow => HasPower ? forcedFlowLitresPerSecond
                                            : Mathf.Max(0f, draftFlowLitresPerSecond);
+
+        /// <summary>The sealed compartment this sleeve opens into, if any. On the hull the
+        /// gas is simply gone, so there is nothing to scale against.</summary>
+        public GridRoom RoomSide => GridPressureSystem.ConcealedRoom(this);
+
+        /// <summary>Flow the vent really moves this tick: the rated figure, held down to what
+        /// the compartment it feeds can absorb per the shared ventilation rules.</summary>
+        public float EffectiveFlow => ResolveFlow(RoomSide);
+
+        private float ResolveFlow(GridRoom room)
+        {
+            float rated = RatedFlow;
+            if (!autoScaleFlow || room == null || !room.IsSealed) return rated;
+            float cap = room.CapacityLitres * (VentilationRules.CeilingAirChangesPerMinute / 60f);
+            return cap > 0.0001f ? Mathf.Min(rated, cap) : rated;
+        }
+
+        /// <summary>Air changes per minute this sleeve would produce in the room it feeds.</summary>
+        public float RoomAirChangesPerMinute(GridRoom room)
+            => room == null || !room.IsSealed
+                ? 0f
+                : VentilationRules.AirChangesPerMinute(EffectiveFlow, room.CapacityLitres);
 
         private Transform _fanHub;
         private float _fanSpeed;
@@ -104,8 +129,16 @@ namespace VoxelEngine.Gas
             var room = GridPressureSystem.ConcealedRoom(this);
             if (room != null)
             {
-                if (type == GasType.Oxygen) room.AddOxygen(taken);
-                else if (type == GasType.ExhaustGas) room.ReportExhaust(ExhaustStreamTemperatureC);
+                // A room-side sleeve is metered by what the compartment can absorb, so the
+                // pipe flow and the room flow are the same number and gas never piles up as
+                // an unhandled remainder. Overboard it is destroyed outright, which is the
+                // whole point of the block, so no cap applies there.
+                float roomTaken = Mathf.Min(taken, room.IsSealed ? ResolveFlow(room) * Time.deltaTime : taken);
+                if (roomTaken > 0.0001f)
+                {
+                    if (type == GasType.Oxygen) room.AddOxygen(roomTaken);
+                    else if (type == GasType.ExhaustGas) room.ReportExhaust(ExhaustStreamTemperatureC);
+                }
             }
 
             return taken;
@@ -145,7 +178,7 @@ namespace VoxelEngine.Gas
                     : RatedFlow <= 0.001f ? "Blocked"
                     : HasPower ? "Extracting" : "Draft";
             }
-            Flow01 = Mathf.Clamp01(CurrentFlow / Mathf.Max(1f, forcedFlowLitresPerSecond));
+            Flow01 = Mathf.Clamp01(CurrentFlow / Mathf.Max(1f, Mathf.Min(forcedFlowLitresPerSecond, Mathf.Max(1f, EffectiveFlow))));
 
             float target = IsExtracting ? Mathf.Lerp(90f, 900f, Flow01) : 0f;
             _fanSpeed = Mathf.Lerp(_fanSpeed, target, 1f - Mathf.Exp(-2.5f * dt));
@@ -168,8 +201,12 @@ namespace VoxelEngine.Gas
         {
             string state = !Enabled ? "DISABLED" : !open ? "SHUT"
                 : HasPower ? "EXTRACTING" : RatedFlow > 0.001f ? "DRAFT ONLY" : "BLOCKED";
+            var room = RoomSide;
+            float cap = room != null && room.IsSealed ? room.CapacityLitres : 0f;
             return $"VENT {state}\n" +
                    $"OUT {CurrentFlow:0} L/s · {TotalDumped:0} L\n" +
+                   (cap > 0f ? $"ROOM SIDE {EffectiveFlow:0} L/s · {VentilationRules.AirChangesPerMinute(EffectiveFlow, cap):0.0} ACP\n"
+                             : "OVERBOARD — no compartment\n") +
                    (LastGas != GasType.None ? $"LAST {LastGas}\n" : string.Empty) +
                    (HasPower ? "FAN ONLINE" : "NO POWER — LOUVRES OPEN");
         }

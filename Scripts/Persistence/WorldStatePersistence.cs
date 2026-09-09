@@ -1142,6 +1142,37 @@ namespace VoxelEngine.Persistence
                     hydrogenStored = grid.HydrogenStored,
                     oxygenStored = grid.OxygenStored
                 };
+
+                // Additive 9.34.0: the ship's route book. A recorded haul run is player work,
+                // so it rides the grid record rather than the recorder block's own state — the
+                // book belongs to the vessel and survives the block being moved or replaced.
+                var routeBook = grid.GetComponent<VoxelEngine.Navigation.RouteBook>();
+                if (routeBook != null && routeBook.Count > 0)
+                {
+                    var shelf = routeBook.Snapshot();
+                    for (int r = 0; r < shelf.Count; r++)
+                    {
+                        var route = shelf[r];
+                        var savedRoute = new SavedRoute { name = route.routeName, speedProfile = route.speedProfileIndex };
+                        if (route.waypoints != null)
+                        {
+                            for (int w = 0; w < route.waypoints.Count; w++)
+                            {
+                                var wp = route.waypoints[w];
+                                savedRoute.waypoints.Add(new SavedWaypoint
+                                {
+                                    xKm = wp.positionKm.x, yKm = wp.positionKm.y, zKm = wp.positionKm.z,
+                                    bodyId = wp.bodyId, label = wp.label,
+                                    // Additive: a pinned point without its offset would reload as a
+                                    // point inside the planet.
+                                    offXKm = wp.anchorOffsetKm.x, offYKm = wp.anchorOffsetKm.y,
+                                    offZKm = wp.anchorOffsetKm.z,
+                                });
+                            }
+                        }
+                        entry.routes.Add(savedRoute);
+                    }
+                }
                 if (grid.Body != null)
                 {
                     entry.velocity = grid.Body.linearVelocity;
@@ -1182,6 +1213,8 @@ namespace VoxelEngine.Persistence
                         savedBlock.hasGasVentState = true;
                         savedBlock.gasVentOpen = ventBlock.open;
                         savedBlock.gasVentDumped = ventBlock.TotalDumped;
+                        savedBlock.hasVentilationScaleState = true;
+                        savedBlock.ventilationAutoScale = ventBlock.autoScaleFlow;
                     }
                     else if (block is VoxelEngine.Maritime.GridMaritimeEngine airModeEngine)
                     {
@@ -1209,6 +1242,20 @@ namespace VoxelEngine.Persistence
                     {
                         savedBlock.hasHeatshieldState = true;
                         savedBlock.heatshieldAblator = heatshield.ablatorRemaining;
+                    }
+
+                    if (block is VoxelEngine.Pressure.GridAirVent autoVent
+                        || block is VoxelEngine.Pressure.GridExhaustScrubber autoScrub
+                        || block is VoxelEngine.Gas.GasVent autoGas)
+                    {
+                        // How hard a ventilation unit is allowed to work is a player decision
+                        // taken on the panel, and on the scrubber it doubles as the rating of a
+                        // gas line that no longer exists in the save, so both survive a reload.
+                        savedBlock.hasVentilationScaleState = true;
+                        savedBlock.ventilationAutoScale = block is VoxelEngine.Pressure.GridAirVent av
+                            ? av.autoScaleFlow : true;
+                        savedBlock.ventilationSupplyFlow = block is VoxelEngine.Pressure.GridExhaustScrubber as2
+                            ? as2.supplyFlowLitresPerSecond : 0f;
                     }
 
                     if (block is GridBattery gridBattery)
@@ -1339,6 +1386,64 @@ namespace VoxelEngine.Persistence
                 // their host-cell relationship and attached pipe topology.
                 RestoreGridBlocks(grid, savedGrid.blocks, false);
                 RestoreGridBlocks(grid, savedGrid.blocks, true);
+
+                // Route books restore onto the grid component, created here if the save has one
+                // and the ship somehow lost its recorder: losing a run because a block was
+                // uninstalled would be a worse outcome than an orphaned shelf.
+                if (savedGrid.routes != null && savedGrid.routes.Count > 0)
+                {
+                    var routeBook = VoxelEngine.Navigation.RouteBook.For(grid, create: true);
+                    if (routeBook != null)
+                    {
+                        var restored = new List<VoxelEngine.Navigation.ShipRoute>(savedGrid.routes.Count);
+                        for (int r = 0; r < savedGrid.routes.Count; r++)
+                        {
+                            var sr = savedGrid.routes[r];
+                            if (sr == null || string.IsNullOrWhiteSpace(sr.name)) continue;
+                            var route = new VoxelEngine.Navigation.ShipRoute
+                            {
+                                routeName = sr.name,
+                                speedProfileIndex = Mathf.Clamp(sr.speedProfile, 0, 2),
+                            };
+                            if (sr.waypoints != null)
+                            {
+                                for (int w = 0; w < sr.waypoints.Count; w++)
+                                {
+                                    var sw = sr.waypoints[w];
+                                    if (sw == null) continue;
+                                    var restoredWp = new VoxelEngine.Navigation.RouteWaypoint(
+                                        new Unity.Mathematics.double3(sw.xKm, sw.yKm, sw.zKm), null, sw.label);
+                                    if (!string.IsNullOrWhiteSpace(sw.bodyId))
+                                    {
+                                        // The anchor is re-derived from the offset rather than trusted
+                                        // from the record: the registry's live position is the truth,
+                                        // and a body whose own place changed shape still gets a sane
+                                        // point relative to it.
+                                        var reg = VoxelEngine.Cosmos.CosmicRegistry.Instance;
+                                        var host = VoxelEngine.Navigation.RouteWaypoint.FindBody(reg, sw.bodyId);
+                                        if (host != null)
+                                        {
+                                            restoredWp.positionKm = reg.CosmicPositionOf(host)
+                                                + new Unity.Mathematics.double3(sw.offXKm, sw.offYKm, sw.offZKm);
+                                            restoredWp.bodyId = sw.bodyId;
+                                            restoredWp.anchorOffsetKm = new Unity.Mathematics.double3(
+                                                sw.offXKm, sw.offYKm, sw.offZKm);
+                                        }
+                                        else
+                                        {
+                                            restoredWp.bodyId = sw.bodyId;
+                                            restoredWp.anchorOffsetKm = new Unity.Mathematics.double3(
+                                                sw.offXKm, sw.offYKm, sw.offZKm);
+                                        }
+                                    }
+                                    route.waypoints.Add(restoredWp);
+                                }
+                            }
+                            if (route.waypoints.Count > 0) restored.Add(route);
+                        }
+                        routeBook.Restore(restored);
+                    }
+                }
 
                 if (savedGrid.mechanicalBelts != null && savedGrid.mechanicalBelts.Count > 0)
                 {
@@ -1488,6 +1593,18 @@ namespace VoxelEngine.Persistence
                 {
                     restoredVent.open = saved.gasVentOpen;
                     restoredVent.TotalDumped = Mathf.Max(0f, saved.gasVentDumped);
+                    if (saved.hasVentilationScaleState) restoredVent.autoScaleFlow = saved.ventilationAutoScale;
+                }
+                else if (saved.hasVentilationScaleState
+                    && (block is VoxelEngine.Pressure.GridAirVent
+                        || block is VoxelEngine.Pressure.GridExhaustScrubber))
+                {
+                    // The air vent and the scrubber have no state of their own to restore, so
+                    // this is a standalone branch: only the two tuning decisions ride on it.
+                    if (block is VoxelEngine.Pressure.GridAirVent restoredAutoVent)
+                        restoredAutoVent.autoScaleFlow = saved.ventilationAutoScale;
+                    if (block is VoxelEngine.Pressure.GridExhaustScrubber restoredScrub)
+                        restoredScrub.supplyFlowLitresPerSecond = Mathf.Max(0f, saved.ventilationSupplyFlow);
                 }
                 else if (saved.hasGasTankState && block is GridGasTank restoredGridGas)
                 {
@@ -2404,6 +2521,8 @@ namespace VoxelEngine.Persistence
             // a running Air Vent refills — no save break.
             // Additive 9.32.0: the same records also carry trapped heat and foul gas.
             public List<SavedRoomCharge> roomCharges = new();
+            // Additive 9.34.0: recorded routes, in cosmic km with an optional body anchor.
+            public List<SavedRoute> routes = new();
             public List<SavedGridBlock> blocks = new();
         }
         [Serializable] private class SavedRoomCharge
@@ -2415,6 +2534,29 @@ namespace VoxelEngine.Persistence
             /// <summary>°C of trapped exhaust stream held in the compartment air.</summary>
             public float exhaustLoadC;
         }
+        [Serializable] private class SavedRoute
+        {
+            public string name;
+            public int speedProfile;
+            public List<SavedWaypoint> waypoints = new();
+        }
+
+        [Serializable] private class SavedWaypoint
+        {
+            // Cosmic positions are kilometres at solar-system scale: a float is a metre of error
+            // out here, so the record keeps the double and the waypoint model never converts.
+            public double xKm;
+            public double yKm;
+            public double zKm;
+            public string bodyId;
+            public string label;
+            // Additive 9.34.0: a pinned point is stored as an offset from the body it rides, so the
+            // record survives the body moving. A legacy record has no offset and loads as absolute.
+            public double offXKm;
+            public double offYKm;
+            public double offZKm;
+        }
+
         [Serializable] private class SavedMechanicalBelt
         {
             public Vector3Int endpointA;
@@ -2451,6 +2593,11 @@ namespace VoxelEngine.Persistence
             public bool hasGasVentState;
             public bool gasVentOpen = true;
             public float gasVentDumped;
+            // Additive ventilation tuning (9.33.0). A legacy save has no flag, and every unit
+            // keeps its prefab default, which is what it behaved as before the option existed.
+            public bool hasVentilationScaleState;
+            public bool ventilationAutoScale = true;
+            public float ventilationSupplyFlow;
             public bool hasGasTankState;
             public int gasTankType;
             public float gasTankStored;

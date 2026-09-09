@@ -43,6 +43,37 @@ namespace VoxelEngine.GridSystem
 
         public bool HasRecords => _records != null && _records.Count > 0;
 
+        /// <summary>How many ports of a family this host carries — authored flanges are
+        /// not counted, only the ones the player installed with the pipe tool (those are
+        /// the ones that get a `_V` suffix and the ones a second pipe would duplicate).</summary>
+        public int CountPorts(GridTankPortFamily family)
+        {
+            int n = 0;
+            if (_records != null)
+                for (int i = 0; i < _records.Count; i++)
+                    if (_records[i] != null && _records[i].Family == family) n++;
+            return n;
+        }
+
+        /// <summary>Nearest installed port of a family to a world point, or null. Used by
+        /// the pipe snap so that aiming AT an installed port extends its run instead of
+        /// being told the service is full.</summary>
+        public Transform FindNearestPort(GridTankPortFamily family, Vector3 worldPoint, float maxDistance)
+        {
+            if (_runtimePorts.Count == 0) return null;
+            string prefix = PrefixFor(family);
+            Transform best = null;
+            float bestDist = maxDistance * maxDistance;
+            for (int i = 0; i < _runtimePorts.Count; i++)
+            {
+                var t = _runtimePorts[i];
+                if (t == null || !t.name.StartsWith(prefix, System.StringComparison.Ordinal)) continue;
+                float d = (t.position - worldPoint).sqrMagnitude;
+                if (d < bestDist) { bestDist = d; best = t; }
+            }
+            return best;
+        }
+
         public static string PrefixFor(GridTankPortFamily family)
             => family == GridTankPortFamily.Gas ? "Port_GasIO" : "Port_LiquidIO";
 

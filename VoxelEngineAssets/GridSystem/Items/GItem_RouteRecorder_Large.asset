@@ -1,0 +1,35 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e230da79876505a41b25678102c74c13, type: 3}
+  m_Name: GItem_RouteRecorder_Large
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.GridSystem.GridBlockItem
+  itemId: gitem_routerecorder_large
+  displayName: Route Recorder
+  description: 'The ship''s navigation shelf. Bolt it to a deck and it records the
+    runs you fly, then costs each one against this ship: distance, travel time, the
+    thrust the profile asks for, the energy out of the batteries, what the grid burns
+    while you are gone, and the reserve left at the far end. A route that cannot
+    be flown says so, and names the missing resource.'
+  icon: {fileID: 0}
+  iconTint: {r: 0.58, g: 0.74, b: 0.86, a: 1}
+  maxStack: 900
+  massPerUnit: 1
+  category: Grid
+  requiresContainment: 0
+  cannotBeCarried: 0
+  isPressurizedCanister: 0
+  viewmodelPrefab: {fileID: 0}
+  gridSize: 1
+  blockPrefab: {fileID: 6265980907023940084, guid: 1e708864a821a32429898a4e2e803579, type: 3}
+  blockMass: 100
+  blockHP: 200
+  supportsShapeVariants: 0

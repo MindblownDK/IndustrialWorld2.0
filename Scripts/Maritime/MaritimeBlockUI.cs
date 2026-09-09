@@ -159,6 +159,8 @@ namespace VoxelEngine.Maritime
             foreach (var child in children) child.RemoveFromHierarchy();
 
             var scroll = new ScrollView(ScrollViewMode.Vertical);
+            // Named so the panel rebuild can carry the scroll offset back over.
+            scroll.name = "PanelScroll_" + (panel != null ? panel.name : "Machine");
             scroll.style.flexGrow = 1;
             scroll.style.marginTop = 2;
             T.StyleScroller(scroll);
@@ -260,7 +262,9 @@ namespace VoxelEngine.Maritime
                 {
                     VoxelEngine.Thermal.AirSource.PipedOxygen => "PIPED O₂ — no penalty, the line owns the intake",
                     VoxelEngine.Thermal.AirSource.RoomAir     => "ROOM AIR — 10% down on torque, and it drinks the compartment",
-                    VoxelEngine.Thermal.AirSource.Atmosphere  => $"OPEN INTAKE — {(1f - eng.AirQuality01) * 100f:0}% down, thin air out here",
+                    VoxelEngine.Thermal.AirSource.Atmosphere  => (1f - eng.AirQuality01) < 0.005f
+                        ? "OPEN INTAKE — sea level air, no penalty"
+                        : $"OPEN INTAKE — {(1f - eng.AirQuality01) * 100f:0}% down, thin air out here",
                     VoxelEngine.Thermal.AirSource.ClosedCycle  => "CLOSED LOOP",
                     _                                         => "NO AIR — the engine will stop",
                 };
@@ -273,6 +277,13 @@ namespace VoxelEngine.Maritime
                     _                                          => T.AccentRed,
                 };
                 p.Add(T.StatRow("🌬", "Intake", intake, eng.StarvedOnPipedLine ? T.AccentRed : intakeColor));
+
+                // Where the engine's own exhaust goes. A gas line clamped to the exhaust
+                // output flange pumps it into the network (tanks, a scrubber, a vent); with
+                // nothing there it simply vents overboard off the flange.
+                p.Add(T.StatRow("💨", "Exhaust out",
+                    eng.HasGasLineAtExhaustPort() ? "GAS LINE — pumped to the network" : "OVERBOARD — free vent",
+                    eng.HasGasLineAtExhaustPort() ? T.AccentCyan : T.AccentDim));
 
                 // ── Starved-line policy: hold to the pipe, or fall back to free air ──
                 var fbRow = Row();
@@ -313,7 +324,8 @@ namespace VoxelEngine.Maritime
                     VoxelEngine.Thermal.AirSource.Atmosphere =>
                         "The intake side of the block faces open sky, so the engine breathes the planet directly. Leave a hole "
                         + "in the wall there for the air to reach it — weld the bay shut and the intake closes. Raw atmosphere "
-                        + "burns less cleanly than piped oxygen; the thinner the world, the worse it gets.",
+                        + "burns less cleanly than piped oxygen and the thinner the world the worse it gets; at sea-level "
+                        + "pressure on a breathing planet there is no penalty worth naming.",
                     VoxelEngine.Thermal.AirSource.ClosedCycle =>
                         "Nothing is being drawn from around the block.",
                     _ =>

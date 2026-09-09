@@ -1,15 +1,94 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.32.0-dev`
+**Current Version:** `9.34.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.34.0-dev] The Route Book: Grid Ships Record Their Runs and Cost Them Before They Burn
+
+**Type:** MINOR - Closes roadmap 5.1 item 14's first two lines (Manual Route Calculation, Recorded Routes) on the 4.8 navigation design. Grid ships can now be told where they have been and where they intend to go, and they answer with a price: distance, travel time, the thrust the profile asks for, what the trip costs the batteries and the hydrogen tanks, and what is left of the reserve at the far end. A route the ship cannot fly is refused by name, with the missing resource stated. **Autopilot is deliberately not in this round**: a route is costed and recorded, never flown. Save-compatible: one new additive key (`routes`) on the saved grid, a legacy save simply opens with an empty book. Step 65 authors the blocks non-destructively.
+
+A recorded point is stored as *where it sits relative to the world it was written against* — cosmic position plus an anchor offset against the body the ship was standing on — so a route saved over a moon at 03:00 is still over that moon at 21:00. An earlier draft resolved a pinned point to the body's own centre, which is inside the planet: every recorded approach would have reloaded as an impact.
+
+**GitHub title:** `[9.34.0-dev] Route book: grid ships record interplanetary runs and cost distance, time, power, fuel and reserve before flying them`
+
+**Added**
+
+- `Scripts/Navigation/GridRoute.cs` — the route model: `RouteWaypoint` (cosmic kilometres, an optional body it rides, a label), `ShipRoute` (a named, editable, reversible waypoint list with a speed profile), `RouteSpeedProfile` (Economy / Standard / Sprint), `RouteLeg`, `RouteWarningCode` and `RoutePlan`, plus `RouteRules`, the single place every planning constant lives: maneuver cost, drive efficiency, the ship's standing load, the reserve a plan must leave unspent, the arrival clearance envelope, a coast leg's length and the practical cruise ceiling.
+- `Scripts/Navigation/GridRoutePlanner.cs` — the calculator. It never re-simulates an orbit and invents no figures: mass comes from `GridEntity.TotalMass`, thrust from `GetThrustByDirection()`, stored charge from the grid's own batteries, standing load from `PowerConsumed`, the hydrogen rate from each thruster's `hydrogenPerSecond` and tank contents, body positions and gravity from `CosmicRegistry`, and atmosphere depth from each `BodySettings`. Every leg measures its closest approach to every body (a foot of a perpendicular onto the leg, clamped to the segment), so gravity wells and atmosphere segments are found by geometry rather than by hope.
+- `Scripts/Navigation/RouteBook.cs` — recorded routes as a `GridEntity` component, not as block state: the shelf belongs to the ship, so a recorder can be moved, replaced or rebuilt and the runs survive. Holds `BeginRecording` / `CommitRecording` / `AbandonRecording`, spaced capture, and `Find` / `FindOrCreate` / `Remove` / `Rename` / `SetProfile` / `Snapshot` / `Restore`.
+- `Scripts/Navigation/GridRouteRecorder.cs` — the block. ROUTE RECORDER (Large) and NAV PLOTTER (Small) record the run you fly, offer "calculate route to this body" against the star map, hold the selected route, and re-cost it on a short interval while you fly. It bills power only while a capture is running; otherwise it is a read-only shelf.
+- `Scripts/Navigation/GridRouteUI.cs` — the animated panel: route book on one side, destinations on the other, per-leg rows with their own burn counts and warnings, and a reserve bar that reads the ship's own numbers.
+
+**Changed**
+
+- `RouteBook.Routes` is a read-only view and stays that way; the recorder now files a plotted leg with
+  `RouteBook.Append`, which also enforces the one-name-one-route rule.
+- Waypoint editing on the panel: `REVERSE` the whole route, or delete a single point (two points is the
+  smallest thing that is still a journey, so the shelf refuses to edit a route into something unflyable).
+- `Scripts/GridSystem/UI/GridBlockUI.cs` and `Scripts/Player/PlayerInteractionTool.cs` — right-click opens the route panel on either recorder block.
+- `Scripts/GridSystem/GridBlockMeshBuilder.cs` — a `RouteRecorder` visual style: deck plate, tilted plotter screen, short mast with the dish and the capture lamp.
+- `Scripts/Persistence/WorldStatePersistence.cs` — `SavedGrid.routes` saves each route's name, profile and waypoints (doubles in cosmic kilometres, with the body anchor and label), restored after both grid block passes so a book reloads whether the grid was rebuilt or reused.
+- `Scripts/Editor/EngineRoomAtmosphereSetup.cs` + `Scripts/Editor/VoxelEngineSetupWindow.cs` — Step 65 authors both prefabs, their grid items, their assembler recipes and the research link, idempotently, preserving any mass, HP, power or craft cost you have tuned yourself.
+
+**How it prices a route**
+
+A leg is flown as one acceleration to the profile speed, a coast, and one deceleration at the far end; delta-v is charged for the trims a long coast needs and for climbing out of a well the ship cannot coast out of, and each extra burn is billed rather than absorbed silently. Energy is what the game actually spends — the drive's rated draw for every second it is lit, and the grid's standing load for every second the trip takes, coast included. An earlier draft derived the draw from kinetic energy instead; it is the more physical formula and it is wrong here, because this game's batteries are arcade-sized on purpose and a realistic joule figure priced a 50 000 kg ship at millions of watt-hours a leg, making every route in the system illegal. The ship's own numbers are the ones that keep it a decision.
+
+Measured at the shipped defaults (150 m/s cruise ceiling, 1.30 maneuver cost, 0.72 efficiency, 25 percent reserve): a 50-tonne courier with eight 50 kN drives and a 100 kWh bank flies a 1 000 km run in 1.9 hours for 149 Wh and a 99.9 percent margin, and the same 40 000 km passage in 74 hours for 5.3 kWh at 94.7 percent. Turn the machinery up — the grid drawing 45 kW instead of the ship's 380 W standing load — and that same 40 000 km run needs 572 kWh and is refused, because the trip is the cost, not the burn. A 300-tonne hydrogen hauler with 16 engines at 10 L/s each pays 32 500 L for a 50 km hop: a 20 000 L tank is refused for anything at all, and 600 000 L makes the whole system open. Those are the levers `RouteRules` exists for.
+
+**Deliberately not in this round**
+
+- No autopilot and no flight authority: the recorder cannot take the helm, and no route is flown by machine. Roadmap item 3 stays open.
+- No star-map drawing of saved routes yet; the book and the panel are the surface for it, and the destination picker (5.1 item 15) still owns the click-a-body-to-target half.
+- No cargo-stop schedules, docking actions, weather, territory or hostile-encounter handling in the plan.
+
+### [9.33.0-dev] Ventilation Keeps Up With The Room: Volume-Aware Flow For Air Vents, Scrubbers And Gas Sleeves
+
+**Type:** MINOR - Closes the balance line 9.32.0-dev recorded as deliberately open. Every airflow figure in the game was authored as absolute litres per second, so ventilation got slower and slower relative to the compartments it serves as rooms got bigger, while the scrubber's air-change rating scaled the other way and outran the oxygen line feeding it. One shared rules class reconciles the two, the panels now print the figure they honour rather than the one they were given, and the tuning survives a reload. Save-compatible: three new additive fields, no schema change, legacy saves load at the prefab defaults. Step 64 tunes it non-destructively.
+
+**GitHub title:** `[9.33.0-dev] Volume-aware ventilation: air vents, scrubbers and gas sleeves scale with the compartment they serve`
+
+#### One Contract For Airflow
+
+- New `VentilationRules` (`Scripts/Pressure/VentilationRules.cs`) is the single place that decides how much air a ventilation block may move through a compartment of a given size: a floor of `FloorAirChangesPerMinute = 0.5` so a big room still turns over on a scale a player can perceive, a ceiling of `CeilingAirChangesPerMinute = 6` so the room model can still follow, and a requirement that the unit have a feed line at all before it is scaled up.
+- At the shipped `LitresPerCubicMetre = 21` the floor engages above about 288 m³, so every compartment players have been building so far behaves exactly as before and only genuinely large volumes are affected: a 27 m³ engine room stays at 24 L/s, a 4 000 m³ hangar moves from 24 L/s (one air change every 58 minutes) to 700 L/s (one every 2 minutes).
+- The authored litres per second stays what it always was: the number in the tooltip, the number on the plate, and the whole story for a unit with scaling switched off or with no gas line behind it. Scaling only ever raises a unit toward the room's floor rate; it never lowers one, and the room's own refill tolerance does the rest.
+- A unit with no feed line is never scaled up at all, so a grille in an empty hull cannot conjure an atmosphere, and a wall with no compartment behind it has nothing to be capped against. The first cut of this file also clamped the target to four seconds of the unit's own authored flow, which silently turned the whole exercise into a no-op (24 L/s authored, 96 L/s ceiling, forever) and it is gone: a room whose refill comes up short already charges slower and says so.
+
+#### Air Vent And Ventilation Unit
+
+- `GridAirVent.flowLitresPerSecond` was the whole rating, and 24 L/s against a room whose charge scales with volume is why a hangar took the best part of an hour to charge. `autoScaleFlow` (default on) now opens the unit up toward half an air change per minute, up to the supply clamp, and the panel prints both the litres it is moving and the resulting air changes.
+- The Flow Rate slider topped out at 80 L/s, which no hangar can reach at any setting; the scale now runs to 2 000 L/s and the honest ceiling is the shared clamp rather than the end of a slider.
+- Depressurising is metered by the same figure, so emptying a deck before a spacewalk is as volume-aware as charging it.
+- `EffectiveFlowLitresPerSecond`, `AirChangesPerMinute` and `HasPipedSupply` are public so the panel, the card and any future save-time validation read the same numbers the tick does.
+
+#### Exhaust Scrubber
+
+- The scrubber already scaled, and that was its own problem: 12 air changes per minute on a large volume demands more litres a second than an oxygen line can deliver, so the unit refilled less than it removed and reported the room as starved. `supplyFlowLitresPerSecond` (authored at 1 400 L/s by the step, `0` meaning take the rating at face value) clamps the air-change rating to the line, and the status says `Supply Limited` with the exact share of the rating being honoured.
+- Scaling never makes the unit weaker than it was authored to be: the clamp applies only when the line is the smaller number, and `LitresPerSecond` reports what is actually moving either way.
+
+#### Gas Vent And Vent Sleeve
+
+- A sleeve that blows into a sealed compartment is metered to what that compartment can absorb per `CeilingAirChangesPerMinute`, so a 12 000 L/s extractor can no longer dump a room's entire charge into the air model in one tick while the pipe flow and the room flow disagree about what happened. The consequence is deliberate and worth knowing: a large vent in a small compartment is now limited by the compartment rather than by its own rating, because `AddOxygen` already discards whatever exceeds the room's charge and the room model cannot represent more than six air changes a minute. Overboard, nothing changes at all: there is no room to outrun, and the block still destroys whatever arrives.
+- The Terminus section of the panel now names the compartment's volume and prints the room-side figure in the same units the room model uses, so "why is my engine room not clearing" is readable off one screen instead of inferred.
+
+#### Feedback And Persistence
+
+- Every affected panel shows the air-change rate it is honouring rather than the number it was handed, with an explicit `(scaled up for the room)`, `(capped by the room)`, `(pinned)` or `(line limited)` qualifier so no readout ever silently disagrees with its own slider.
+- `AUTO-SCALE` / `FIXED` switches on the air vent and the gas vent mirror the engine's `FALLBACK ON` / `STRICT` pair from 9.32.0-dev, and both states are saved: one additive `SavedGridBlock` group (`hasVentilationScaleState`, `ventilationAutoScale`, `ventilationSupplyFlow`) covers the air vent, the scrubber and the gas vent, and a legacy save has no flag, which leaves every unit at its prefab default.
+
+#### Setup
+
+- Step 64 (re-runnable, idempotent) turns the tuning on across every grid prefab carrying ventilation plant and gives the scrubber its feed-line allowance. It raises values still sitting at an Unity default and never touches a number you have edited in an inspector, so a hand-balanced flow rate survives; the dialog reports units found, units updated and units already tuned.
+
 
 ### [9.32.0-dev] Engine Room Atmosphere: Concealed Spaces Hold Heat, Exhaust and Combustion Air
 
 **Type:** MINOR - Closes Roadmap 5.1 item 14 on top of the 9.29 to 9.31 thermal work. Sealed volumes now own an atmosphere of their own: waste heat and trapped exhaust accumulate inside them, an engine picks its combustion air from exactly one of three intakes, and a bulkhead grille unit can pump a cooked room overboard. A new gas vent makes exhaust a disposable product instead of a storage obligation. Save-compatible; the room record grows two additive fields, the block record one, and legacy saves load unchanged. Step 63 authors it all non-destructively.
 
-**GitHub title:** `[9.32.0-dev] Engine room atmosphere: combustion air sources, gas vent disposal, exhaust hookup fixes`
+**GitHub title:** `[9.32.0-dev] Engine room atmosphere: combustion air, gas vent disposal, plumbed exhaust, right-click and scroll fixes`
 
 #### Trapped Compartment Atmosphere
 
@@ -50,10 +129,21 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 #### Exhaust Hookups
 
 - A pipe can now be snapped onto an exhaust stack whether or not the engine is venting. `GridExhaustPipe` was missing from the gas allow-list in both `TryGetGridTankVariablePortSnap` copies and in `IsMatchingTankBlockForPipe`, so the flange was only ever grabbable mid-puff; the tap scan also ran inside the venting branch and bailed out whenever the classic `GasNetwork` singleton was absent, which is every ship. It now runs on its own 0.5 s clock, resolves grid storage through `GridGasNetwork`, and stays alive on a cold stack so a disposal line can be built before anything starts.
-- A stack tap takes exactly one gas run (`MaritimeVariablePorts.GasRunAtCap`), reported as `Exhaust gas tap already connected (max 1)` with the usual red collar, because splitting one exhaust stream across two lines makes the plume thinning meaningless.
-- Gas port names the player installs on a stack (`Port_GasIO*`) are read as taps too, so a port fitted with the pipe tool is a first-class hookup point rather than decoration.
+- A stack tap takes exactly one gas run (`GridExhaustPipe.IsGasRunAttached`), reported as `Exhaust gas tap already connected (max 1)` with the usual red collar, because splitting one exhaust stream across two lines makes the plume thinning meaningless. The count deliberately ignores the fitting the stack prefab ships with, otherwise every stack in the world is born at its cap and nothing can ever be bolted to it.
+- A gas port the player fits to a stack (`Port_GasIO*`) is a first-class tap rather than
+  decoration: the scan accepts it, and it also counts as the stack's one allowed run, so the cap is
+  the same whether the line was bolted to the authored flange or to a port the pipe tool installed.
 - A tap will not hijack a line: the new `GridGasTank.AddTyped` refuses a foreign gas instead of adopting it, so an oxygen run that has just emptied itself cannot be quietly refilled with exhaust by a passing stack. Empty vessels still adopt a type on the ordinary fill path, which is how tanks have always been loaded.
 - A stack's tap fills tanks first and only then dumps the overflow to the run's vent, and a line with no tank at all is served straight from the tap, so both the storage and the disposal arrangement work from the same pipe.
+- The engine keeps its own exhaust outlet in the same language: `Port_ExhaustOutput` is now a gas snap target, so a gas line can be clamped to the engine flange directly with no stack at all. A line standing there makes the engine pump its buffer into the network at the same rate it would have lost overboard (`exhaustGasLinePumpRate`), and the free vent takes back exactly whatever the plumbing could not move. An engine with no stack is therefore disposable, storable and scrubbing-capable on its own.
+
+#### Right-Click, Scroll and Service Selection
+
+- Right-clicking an exhaust scrubber opens its panel. `GridBlockHasUI` never listed the block, so `ScrubberPanel` was built but unreachable, and the scrubber could only be inspected through the block info card. Gas vents were missing from the same whitelist and are in it now, and both block types can also be aimed at with the pipe tool, since a vent was previously not an accepted gas snap target at all.
+- A gas pipe snapped to an engine stops defaulting to oxygen. `MaritimeVariablePorts.ResolveGasService` answers the service the way the liquid planner already did: the fitting under the crosshair wins (`Port_ExhaustOutput` is an outlet), then the service of the installed port being extended, then the type of gas the run itself carries, and oxygen only as the last resort. Aiming at an exhaust flange and getting a second oxygen feed was the old behaviour and it was wrong.
+- A second pipe of the same service is no longer refused outright. A player-installed variable port is one pipe per socket: aiming at the fitting extends its run, aiming at the block body beside a fitted port reports the occupation and refuses. Authored ports (`Port_OxygenInput`, `Port_ExhaustOutput`, and so on) are not dynamic sockets, so they never count against the per-service cap, which is what made the second exhaust pipe look like it had been stolen by the oxygen line. Exhaust routing is allowed on every engine tier, including the Small Crude inline-four, because an outlet is not a feed.
+- Machine panels keep their scroll position. The panel is rebuilt on a timer so its gauges stay honest, and a rebuild handed back a fresh ScrollView parked at the top, which read as the panel yanking the player back up mid-scroll. Named scroll views now carry their offset across the rebuild and restate it on the next layout tick; the memory is dropped whenever a different surface opens, so a fresh panel still starts at the top.
+- The scrubber's own panel and the engine screen's live rows are unaffected by the rebuild change and keep their existing 0.25 s cadence.
 
 #### Feedback and Readouts
 
@@ -62,6 +152,12 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 - New `Gas Vent` panel: flow out, a live gauge, litres destroyed, the last gas handled, which compartment it terminates in, louvre Open/Shut, both flow sliders and its power use.
 - Vitals: the compartment line now reads pressure plus band, air temperature and trapped gas; the suit stops treating a sealed room as automatically comfortable and takes the room's own rise when the cabin is cooking, reporting `ENGINE ROOM` as the dominant source.
 - Pilot HUD: the environment line gains `ENGINE ROOM HOT / COOKING` with air temperature and exhaust percentage, because a hull can read nominal while the volume around the engine is destroying the ship from the inside.
+- An engine breathing open sky at sea level is reported as `OPEN INTAKE — sea level air, no penalty` instead of being quoted a percentage of nothing, and the exhaust section of the engine panel now says where the gas is going: `OVERBOARD — free vent` or `GAS LINE — pumped to the network`.
+- `GridMaritimeEngine.ScanGasLineAtExhaustPort` wrote `StringComparison.Ordinal` in a file with no
+  `using System;`, which is a `CS0103` at your compiler and nothing at mine; the name is fully
+  qualified, and `check/audit.py` gained a rule that no touched file may name a framework type it has
+  not imported, so that class of break is caught here from now on.
+- The environment line keeps its silence when the atmosphere is thick: `ENGINE AIR: THIN nn%` only appears below 86 percent quality, so a player on Earth never sees a penalty that does not exist.
 - `GridThermalSystem` publishes `WorstRoomBand`, `WorstRoomAirC`, `WorstRoomRiseC` and `WorstRoomExhaust01`, so no HUD has to walk a grid or know about the pressure service to answer "is a room cooking?".
 
 #### Persistence

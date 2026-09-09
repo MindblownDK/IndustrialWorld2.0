@@ -36,6 +36,9 @@ namespace VoxelEngine.Pressure
         [Tooltip("Oxygen litres moved per second at full flow.")]
         public float flowLitresPerSecond = 24f;
 
+        [Tooltip("Let the unit keep up with the compartment it serves: the flow above becomes a ceiling, and the vent opens up to it as far as the room's size and its own oxygen supply allow. Off pins the unit to the authored litres per second exactly, which is what you want for a hand-tuned build.")]
+        public bool autoScaleFlow = true;
+
         [Header("Power")]
         public float idleWatts = 4f;
         public float activeWatts = 60f;
@@ -73,6 +76,27 @@ namespace VoxelEngine.Pressure
         /// plant can hold a whole deck at pressure.
         /// </summary>
         public IReadOnlyList<GridRoom> ServicedRooms => _servicedRooms;
+
+        /// <summary>Total charge, in litres, of every compartment this unit moves air for. A
+        /// full-block plant opens onto a whole deck, so its rating is judged against all of it.</summary>
+        public float ServicedCapacityLitres => VentilationRules.CapacityLitres(_servicedRooms);
+
+        /// <summary>Litres per second this unit actually moves this tick, after the volume
+        /// floor and the supply clamp. Equal to the authored figure when scaling is off.</summary>
+        public float EffectiveFlowLitresPerSecond => VentilationRules.ResolveFlow(
+            flowLitresPerSecond, ServicedCapacityLitres, autoScaleFlow,
+            VentilationRules.SupplyLimit(flowLitresPerSecond, HasPipedSupply));
+
+        /// <summary>Air changes per minute the current flow represents for the rooms served —
+        /// the number the panel prints, so the plate and the tooltip agree.</summary>
+        public float AirChangesPerMinute =>
+            VentilationRules.AirChangesPerMinute(EffectiveFlowLitresPerSecond, ServicedCapacityLitres);
+
+        /// <summary>True when the unit is plumbed into a gas line at all. Without one there is
+        /// nothing to scale up to, and a bigger promise would only buy a redder status line.</summary>
+        public bool HasPipedSupply => VoxelEngine.GridSystem.GridGasNetwork.Instance != null
+                                      && Grid != null
+                                      && VoxelEngine.GridSystem.GridGasNetwork.Instance.HasPipes(Grid);
 
         private readonly List<GridRoom> _servicedRooms = new(6);
         private Transform _fanHub;
@@ -207,7 +231,7 @@ namespace VoxelEngine.Pressure
             }
             if (deficit <= 0.01f) { Status = "Pressurised"; return; }
 
-            float wanted = Mathf.Min(deficit, Mathf.Max(0f, flowLitresPerSecond) * dt);
+            float wanted = Mathf.Min(deficit, EffectiveFlowLitresPerSecond * dt);
             var network = GridGasNetwork.Instance;
             if (network == null || !network.HasPipes(Grid)) { Status = "No Gas Pipe"; return; }
 
@@ -254,7 +278,7 @@ namespace VoxelEngine.Pressure
             }
             if (available <= 0.01f) { Status = "Depressurised"; return; }
 
-            float wanted = Mathf.Min(available, Mathf.Max(0f, flowLitresPerSecond) * dt);
+            float wanted = Mathf.Min(available, EffectiveFlowLitresPerSecond * dt);
             var network = GridGasNetwork.Instance;
             if (network == null || !network.HasPipes(Grid)) { Status = "No Gas Pipe"; return; }
 
@@ -347,7 +371,11 @@ namespace VoxelEngine.Pressure
                  + Status + "\n"
                  + "Pressure " + (capacity > 0f ? oxygen / capacity * 100f : 0f).ToString("0") + "%\n"
                  + "Volume " + volume.ToString("0") + " m³\n"
-                 + "O₂ " + oxygen.ToString("0") + " / " + capacity.ToString("0") + " L";
+                 + "O₂ " + oxygen.ToString("0") + " / " + capacity.ToString("0") + " L"
+                 + "\nFlow " + EffectiveFlowLitresPerSecond.ToString("0") + " L/s"
+                 + " · " + VentilationRules.AirChangesPerMinute(EffectiveFlowLitresPerSecond, capacity).ToString("0.0") + " ACP"
+                 + (autoScaleFlow && EffectiveFlowLitresPerSecond > flowLitresPerSecond + 0.05f
+                    ? " (auto, " + flowLitresPerSecond.ToString("0") + " authored)" : "");
 
             if (fullBlock)
             {

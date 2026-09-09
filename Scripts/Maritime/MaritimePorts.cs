@@ -30,6 +30,7 @@ namespace VoxelEngine.Maritime
         public static readonly string[] GasPrefixes =
         {
             "Port_OxygenInput", "Port_OxygenOutput", "Port_ExhaustGasIO",
+            "Port_ExhaustOutput", // an engine's own exhaust flange: a gas run may be led off it
             "Port_GasInput", "Port_GasOutput", "Port_GasIO",
             "Port_HydrogenInput", "Port_HydrogenOutput",
         };

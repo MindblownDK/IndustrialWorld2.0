@@ -640,6 +640,48 @@ namespace VoxelEngine.EditorTools
                 "Re-runnable. Idempotent. Flow rates, power draws, block HP, mass and authored balance are preserved.");
             AddWizardButton(scroll, "63. Wire Engine Room Atmosphere & Heat (Concealed Spaces, Exhaust Trapping, Scrubbers \u2014 Non-Destructive)", () => VoxelEngine.EditorTools.EngineRoomAtmosphereSetup.RunStep63(), 62);
 
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
+                "Step 64 (9.33.0) tunes VOLUME-AWARE VENTILATION on the blocks Step 63 introduced (non-destructive):\n" +
+                "  \u2022 Every flow number in this game was authored as absolute litres per second, which is fine\n" +
+                "    in a three-by-three engine closet and useless in a converted hangar: the room's litres scale\n" +
+                "    and the fan's do not. An automatic unit now keeps up with the compartment it serves.\n" +
+                "  \u2022 AIR VENT + VENTILATION UNIT: the authored flow becomes a ceiling the unit opens up to, with\n" +
+                "    a floor of half an air change per minute so a big room still turns over, and no scaling\n" +
+                "    at all without a gas line behind it, so a grille never conjures an atmosphere\n" +
+                "  \u2022 EXHAUST SCRUBBER: its air-change rating is held down to the feed line's litres per second,\n" +
+                "    so instead of starving the room and reading \"No Piped O\u2082\" it runs slower and reads \"Supply Limited\"\n" +
+                "  \u2022 GAS VENT + VENT SLEEVE: a sleeve blowing into a sealed compartment is metered to what that\n" +
+                "    compartment can absorb; overboard nothing changes, because there is no room to outrun\n" +
+                "  \u2022 Every panel now prints the air changes per minute it is actually honouring next to the\n" +
+                "    rating it was given, and an AUTO-SCALE / FIXED switch on the two vents pins it if you prefer\n" +
+                "    the old exact litres-per-second behaviour\n" +
+                "  \u2022 The two switches are saved additively per block, so a tuned line survives a reload and a\n" +
+                "    legacy save keeps the prefab defaults\n" +
+                "Re-runnable. Idempotent. Authored flow rates, power draws and balance values are never overwritten \u2014\n" +
+                "the step only raises values still sitting at an Unity default, which cannot have come from you.");
+            AddWizardButton(scroll, "64. Tune Volume-Aware Ventilation (Air Vents, Scrubbers, Gas Sleeves \u2014 Non-Destructive)", () => VoxelEngine.EditorTools.EngineRoomAtmosphereSetup.RunStep64(), 62);
+
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
+                "Step 65 (9.34.0) authors the ROUTE BOOK & RANGE CALCULATOR (non-destructive):\n" +
+                "  \u2022 ROUTE RECORDER (large) and NAV PLOTTER (Small): a navigation shelf bolted to the deck.\n" +
+                "    It records the run you actually fly \u2014 a point is added whenever the ship has moved \u2014 and\n" +
+                "    files it under a name you can reopen at any console on the same ship\n" +
+                "  \u2022 Every saved route is costed against the ship in front of you: distance, travel time, the\n" +
+                "    speed its own thrust can hold, the energy out of the batteries, what the grid burns while\n" +
+                "    the trip is being flown, and the reserve left at the far end\n" +
+                "  \u2022 Three profiles \u2014 ECONOMY, STANDARD, SPRINT \u2014 trade the same distance against time and watts\n" +
+                "  \u2022 A route that cannot be flown is refused by name: not enough thrust, no reserve, a gravity\n" +
+                "    well this ship cannot climb out of, a leg through an atmosphere, an arrival inside the body\n" +
+                "  \u2022 Waypoints pinned to a moon or planet ride it, so a run saved above an orbiting body is\n" +
+                "    still above that body eight hours later\n" +
+                "  \u2022 Routes are saved on the GRID, not on the block: a recorded run survives the recorder being\n" +
+                "    moved, replaced or rebuilt, and a legacy ship simply opens with an empty book\n" +
+                "  \u2022 No autopilot and no warp shortcut: this costs a flight, it does not fly it\n" +
+                "Re-runnable. Idempotent. Existing prefabs, items and recipes keep their mass, HP, power and craft costs.");
+            AddWizardButton(scroll, "65. Author Route Book & Range Calculator (Recorded Runs, Route Costing \u2014 Non-Destructive)", () => VoxelEngine.EditorTools.EngineRoomAtmosphereSetup.RunStep65(), 62);
+
             AddSpacer(scroll, 20);
         }
 

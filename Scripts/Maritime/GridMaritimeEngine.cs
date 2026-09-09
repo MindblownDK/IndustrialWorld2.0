@@ -92,6 +92,10 @@ namespace VoxelEngine.Maritime
         public float exhaustGasRate = 8f;
         [Tooltip("Exhaust gas vented per second through an adjacent Exhaust Pipe.")]
         public float exhaustVentRate = 12f;
+
+        [Header("Pumped exhaust (gas line on the exhaust port)")]
+        [Tooltip("Litres per second handed to the gas network when a gas line is connected to Port_ExhaustOutput. Matched to the free vent rate so plumbing never becomes the thing that chokes the engine — it only changes where the gas goes (tanks, a scrubber, a vent overboard) instead of straight out the flange.")]
+        public float exhaustGasLinePumpRate = 12f;
         [Tooltip("At this fill ratio (0..1) the engine starts losing power from back-pressure.")]
         [Range(0.5f, 0.99f)] public float exhaustChokeThreshold = 0.8f;
 
@@ -749,18 +753,27 @@ namespace VoxelEngine.Maritime
                 ? Mathf.Max(throttle, idleThrottleFraction)
                 : throttle;
 
-            // Exhaust check — need an exhaust pipe adjacent to vent gas.
-            HasExhaust = HasAdjacentExhaust();
+            // Exhaust check — need an exhaust pipe adjacent to vent gas. A gas line clamped
+            // to the exhaust output flange counts too: it pumps the buffer into the network
+            // below instead of losing it overboard.
+            HasExhaust = HasAdjacentExhaust() || HasGasLineAtExhaustPort();
+            float pumpedThisTick = 0f;
 
             // ── Exhaust gas accumulation ────────────────────────────────
             if (IsRunning)
             {
                 ExhaustGas = Mathf.Min(exhaustGasCapacity, ExhaustGas + exhaustGasRate * requestedThrottle * dt);
             }
-            if (HasExhaust)
-            {
-                ExhaustGas = Mathf.Max(0f, ExhaustGas - exhaustVentRate * dt);
-            }
+            // ── Pumped exhaust: hand the buffer to the gas network ──────
+            // A gas line on Port_ExhaustOutput is how the player routes the engine's own
+            // exhaust — to a storage tank, a scrubber, or straight into a gas vent. It rides
+            // at the free-vent rate, so plumbing never chokes the engine; it only decides
+            // where the gas ends up. With the run full and nowhere to dump, the flange keeps
+            // venting on its own and the player simply stops collecting.
+            if (HasExhaust && ExhaustGas > 0f && IsGasLinePumpLive())
+                pumpedThisTick = PumpExhaustToGasLine(dt);
+            if (HasExhaust && ExhaustGas > pumpedThisTick)
+                ExhaustGas = Mathf.Max(0f, ExhaustGas - (exhaustVentRate * dt - pumpedThisTick));
 
             // ── Thermal model ──────────────────────────────────────────
             TickThermal(dt, requestedThrottle);
@@ -1107,6 +1120,73 @@ namespace VoxelEngine.Maritime
         {
             ConcealedVent01 = Mathf.Clamp01(trappedFraction01);
             ThermalExposureC = Mathf.Max(0f, thermalExposureC);
+        }
+
+        // ══════════════════════════════════════════════════════════════
+        //  PUMPED EXHAUST — a gas line on Port_ExhaustOutput takes the engine's own
+        //  exhaust into the grid gas network instead of losing it overboard, so it can
+        //  be stored, scrubbed, or dumped through a gas vent.
+        // ══════════════════════════════════════════════════════════════
+        private bool _gasLineAtExhaust;
+        private float _gasLineScanStamp = -999f;
+        private static readonly UnityEngine.Collider[] s_gasLineProbe = new UnityEngine.Collider[8];
+
+        /// <summary>Is a player gas pipe standing on this engine's exhaust output flange?
+        /// Proximity to the flange, not a lattice neighbour: the engines span several cells
+        /// and the port sits well out from the origin. Cached for half a second because it
+        /// is a scene-wide physics query on a block that ticks every frame.</summary>
+        public bool HasGasLineAtExhaustPort()
+        {
+            if (Time.unscaledTime - _gasLineScanStamp < 0.5f) return _gasLineAtExhaust;
+            _gasLineScanStamp = Time.unscaledTime;
+            _gasLineAtExhaust = ScanGasLineAtExhaustPort();
+            return _gasLineAtExhaust;
+        }
+
+        private bool ScanGasLineAtExhaustPort()
+        {
+            var ports = GetComponentsInChildren<Transform>(true);
+            float cs = Grid != null ? Grid.gridSize.CellSize() : 2.5f;
+            for (int i = 0; i < ports.Length; i++)
+            {
+                var t = ports[i];
+                if (t == null || t == transform) continue;
+                if (!t.name.StartsWith("Port_ExhaustOutput", System.StringComparison.Ordinal)) continue;
+                int n = UnityEngine.Physics.OverlapSphereNonAlloc(t.position, cs * 0.85f, s_gasLineProbe, ~0,
+                                                                  UnityEngine.QueryTriggerInteraction.Collide);
+                for (int k = 0; k < n; k++)
+                {
+                    var blk = s_gasLineProbe[k] != null ? s_gasLineProbe[k].GetComponentInParent<GridBlock>() : null;
+                    if (blk == null || blk == this || blk.Grid != Grid) continue;
+                    if (blk.GetComponentInChildren<VoxelEngine.Gas.GasPipe>(true) != null) return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>True when the pump can actually hand gas over right now — a tank or a
+        /// vent downstream. Shares the half-second cache with the pipe scan, so a full
+        /// network costs one skipped line and the flange keeps venting meanwhile.</summary>
+        private bool IsGasLinePumpLive()
+        {
+            if (!HasGasLineAtExhaustPort()) return false;
+            var net = VoxelEngine.GridSystem.GridGasNetwork.Instance;
+            if (net == null) return false;
+            return net.HasStorageFor(this, VoxelEngine.Gas.GasType.ExhaustGas)
+                || net.HasVentFor(this, VoxelEngine.Gas.GasType.ExhaustGas);
+        }
+
+        /// <summary>Litres of engine exhaust handed to the network this tick.</summary>
+        private float PumpExhaustToGasLine(float dt)
+        {
+            if (ExhaustGas <= 0f) return 0f;
+            var net = VoxelEngine.GridSystem.GridGasNetwork.Instance;
+            if (net == null) return 0f;
+            float amount = Mathf.Min(ExhaustGas, exhaustGasLinePumpRate * Mathf.Max(0f, dt));
+            if (amount <= 0f) return 0f;
+            float moved = net.FillGasFrom(this, VoxelEngine.Gas.GasType.ExhaustGas, amount);
+            if (moved > 0f) ExhaustGas = Mathf.Max(0f, ExhaustGas - moved);
+            return moved;
         }
 
         // ══════════════════════════════════════════════════════════════

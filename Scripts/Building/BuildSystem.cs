@@ -540,6 +540,18 @@ namespace VoxelEngine.Building
             return port != null && port.name.EndsWith("_V", System.StringComparison.Ordinal);
         }
 
+        /// <summary>True when the aim point sits on the stack's own gas tap flange (or on a
+        /// port already installed there), which always stays connectable no matter how many
+        /// runs the block carries — the player must be able to reach the fitting they aimed at.</summary>
+        private static bool AimedAtStackTap(VoxelEngine.Maritime.GridExhaustPipe stack, RaycastHit hit)
+        {
+            if (stack == null) return false;
+            float reach = GridSize.Small.CellSize() * 1.5f;
+            var near = VoxelEngine.Maritime.MaritimePorts.FindNearest(stack.transform,
+                VoxelEngine.Maritime.MaritimePorts.GasPrefixes, hit.point, reach);
+            return near != null;
+        }
+
         private static bool TryGetGridTankVariablePortSnap(GridEntity grid, GridBlock targetBlock,
             VoxelEngine.Maritime.PipeFamily pipeFamily, RaycastHit hit, bool commit, out string feedback,
             out Vector3Int precisionPos, out Vector3Int hostStructuralPos, out Vector3Int faceAxis,
@@ -570,10 +582,11 @@ namespace VoxelEngine.Building
                     && targetBlock is not VoxelEngine.GridSystem.GridCryobed
                     && targetBlock is not VoxelEngine.GridSystem.GridBiofarm
                     && targetBlock is not VoxelEngine.GridSystem.GridH2O2Generator
-                    && targetBlock is not VoxelEngine.Maritime.GridExhaustPipe) return false;
-                if (targetBlock is VoxelEngine.Maritime.GridExhaustPipe
-                    && VoxelEngine.Maritime.MaritimeVariablePorts.GasRunAtCap(targetBlock,
-                        VoxelEngine.GridSystem.GridTankVariablePorts.PrefixFor(VoxelEngine.GridSystem.GridTankPortFamily.Gas)))
+                    && targetBlock is not VoxelEngine.Maritime.GridExhaustPipe
+                    && targetBlock is not VoxelEngine.Gas.GasVent) return false;
+                if (targetBlock is VoxelEngine.Maritime.GridExhaustPipe stack
+                    && stack.IsGasRunAttached
+                    && !AimedAtStackTap(stack, hit))
                 {
                     feedback = "Exhaust gas tap already connected (max 1)";
                     s_portCapBlocked = true;

@@ -64,6 +64,29 @@ namespace VoxelEngine.Maritime
         private readonly System.Collections.Generic.List<GridBlock> _gasTapSeeds = new(6);
         private float _gasTapScanTimer;
         private Transform _gasTapPort;
+        /// <summary>
+        /// True when the player has already put a gas run on this stack (a port installed
+        /// with the pipe tool, or a gas pipe snapped directly onto the tap flange). The
+        /// authored flange itself never counts — otherwise a stack could never be hooked.
+        /// </summary>
+        public bool IsGasRunAttached
+        {
+            get
+            {
+                var tankPorts = GetComponent<GridTankVariablePorts>();
+                if (tankPorts != null && tankPorts.CountPorts(GridTankPortFamily.Gas) > 0) return true;
+                if (Grid == null) return false;
+                foreach (var block in Grid.AllBlocks)
+                {
+                    if (block == null || block == this) continue;
+                    if (block.GetComponentInChildren<VoxelEngine.Gas.GasPipe>(true) == null) continue;
+                    if (!IsTapAnchoredBlock(block)) continue;
+                    return true;
+                }
+                return false;
+            }
+        }
+
         /// <summary>True while the tap has a run to pour into — a shipboard vessel or,
         /// on a world build, a classic gas tank. The plume thins out either way.</summary>
         public bool IsCapturingGas => _gasTapTank != null || _gasTapGridTank != null;

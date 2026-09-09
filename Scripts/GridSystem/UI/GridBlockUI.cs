@@ -57,6 +57,7 @@ namespace VoxelEngine.GridSystem.UI
                 case VoxelEngine.Pressure.GridAirVent vent: return MakeScrollable(AirVentPanel(vent));
                 case VoxelEngine.Pressure.GridExhaustScrubber scrub: return MakeScrollable(ScrubberPanel(scrub));
                 case VoxelEngine.Gas.GasVent gv: return MakeScrollable(VentDumpPanel(gv));
+                case VoxelEngine.Navigation.GridRouteRecorder rr: return MakeScrollable(VoxelEngine.Navigation.GridRouteUI.BuildPanel(rr));
                 case VoxelEngine.Simulation.GridLightBlock gl: return GridLightPanel(gl);
                 default:                    return GenericPanel(block);
             }
@@ -75,6 +76,8 @@ namespace VoxelEngine.GridSystem.UI
             foreach (var child in children) child.RemoveFromHierarchy();
 
             var scroll = new ScrollView(ScrollViewMode.Vertical);
+            // Named so the panel rebuild can carry the scroll offset back over.
+            scroll.name = "PanelScroll_" + (panel != null ? panel.name : "Machine");
             scroll.style.flexGrow = 1;
             scroll.style.marginTop = 2;
             T.StyleScroller(scroll);
@@ -2220,6 +2223,17 @@ namespace VoxelEngine.GridSystem.UI
                 v => scrub.airChangesPerMinute = v, "1 ACP", "60 ACP"));
             p.Add(SliderRow("Scrub Efficiency", scrub.scrubEfficiency, 0.2f, 1f,
                 v => scrub.scrubEfficiency = v, "20 %", "100 %"));
+            // The air-change rating scales with the compartment, so on a big room it demands more
+            // than the feed line carries. Setting the line's rate here makes the unit run slower
+            // and say "Supply Limited" instead of quietly starving the room it is meant to clear.
+            p.Add(SliderRow("Feed Line Flow", scrub.supplyFlowLitresPerSecond, 0f, 12000f,
+                v => scrub.supplyFlowLitresPerSecond = v, "unlimited", "12 000 L/s"));
+            p.Add(T.StatRow("◍", "Moving",
+                $"{scrub.LitresPerSecond:0} L/s"
+                + (scrub.SupplyHeadroom01 < 0.995f
+                    ? $" · {scrub.SupplyHeadroom01 * 100f:0}% of the rating (line limited)"
+                    : " · full rating"),
+                scrub.SupplyHeadroom01 < 0.995f ? T.AccentAmber : T.AccentGreen));
 
             p.Add(T.Spacer(4));
             var powerRow = Row();
@@ -2265,12 +2279,22 @@ namespace VoxelEngine.GridSystem.UI
             p.Add(T.StatRow("◍", "Last Gas",
                 vent.LastGas == VoxelEngine.Gas.GasType.None ? "—" : vent.LastGas.ToString(), T.AccentAmber));
 
-            var room = VoxelEngine.Pressure.GridPressureSystem.ConcealedRoom(vent);
+            var room = vent.RoomSide;
             p.Add(T.Spacer(6));
             p.Add(GridUIHelpers.SectionTitle("Terminus"));
             p.Add(T.Muted(room == null
                 ? "Open to space: everything this vent takes is gone for good and the run stays clear."
-                : $"Set into a sealed compartment ({room.Cells.Count} cells): the gas is moved out of the pipes and into this room's air — exhaust will foul it, oxygen will help it."));
+                : $"Set into a sealed compartment ({room.Cells.Count} cells, {room.VolumeM3:0} m³): the gas is moved out of "
+                    + "the pipes and into this room's air — exhaust will foul it, oxygen will help it."));
+            if (room != null && room.IsSealed)
+            {
+                // The room model is what limits the sleeve, not the fan: say so in its own units.
+                float cap = room.CapacityLitres;
+                p.Add(T.StatRow("◍", "Room Metering",
+                    $"{vent.EffectiveFlow:0} L/s · {VoxelEngine.Pressure.VentilationRules.AirChangesPerMinute(vent.EffectiveFlow, cap):0.0} ACP"
+                    + (vent.EffectiveFlow < vent.RatedFlow - 0.05f ? " (capped by the room)" : " (uncapped)"),
+                    vent.EffectiveFlow < vent.RatedFlow - 0.05f ? T.AccentAmber : T.AccentGreen));
+            }
 
             p.schedule.Execute(() =>
             {
@@ -2291,6 +2315,20 @@ namespace VoxelEngine.GridSystem.UI
                 v => vent.draftFlowLitresPerSecond = v, "0 L/s", "500 L/s"));
             p.Add(SliderRow("Extractor Flow", vent.forcedFlowLitresPerSecond, 10f, 12000f,
                 v => vent.forcedFlowLitresPerSecond = v, "10 L/s", "12 000 L/s"));
+
+            var ventScaleRow = Row();
+            ventScaleRow.Add(T.SmallButton("AUTO-SCALE", () =>
+            {
+                vent.autoScaleFlow = true;
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, vent.autoScaleFlow ? T.AccentCyan : T.BgSlot));
+            ventScaleRow.Add(T.SmallButton("FIXED", () =>
+            {
+                vent.autoScaleFlow = false;
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, !vent.autoScaleFlow ? T.AccentAmber : T.BgSlot));
+            ventScaleRow.Add(T.Muted(vent.autoScaleFlow ? "held down to the room" : "rating taken exactly"));
+            p.Add(ventScaleRow);
 
             p.Add(T.Spacer(4));
             var powerRow = Row();
@@ -2402,8 +2440,35 @@ namespace VoxelEngine.GridSystem.UI
             p.Add(GridUIHelpers.SectionTitle("Tuning"));
             p.Add(SliderRow("Target Pressure", vent.targetPressureAtm, 0.2f, 1.2f,
                 v => vent.targetPressureAtm = v, "0.2 atm", "1.2 atm"));
-            p.Add(SliderRow("Flow Rate", vent.flowLitresPerSecond, 4f, 80f,
-                v => vent.flowLitresPerSecond = v, "4 L/s", "80 L/s"));
+            // The authored figure used to top out at 80 L/s, which is a closet-sized number: a
+            // hangar cannot be charged at any rate the slider could reach. The scale is wide
+            // now and the honest ceiling is the shared ventilation clamp, so the panel prints
+            // what the unit is actually moving rather than a number the block ignores.
+            p.Add(SliderRow("Flow Rate", vent.flowLitresPerSecond, 4f, 2000f,
+                v => vent.flowLitresPerSecond = v, "4 L/s", "2 000 L/s"));
+            p.Add(T.StatRow("◍", "Effective",
+                $"{vent.EffectiveFlowLitresPerSecond:0} L/s · {vent.AirChangesPerMinute:0.0} ACP"
+                + (vent.autoScaleFlow ? (vent.EffectiveFlowLitresPerSecond > vent.flowLitresPerSecond + 0.05f
+                        ? " (scaled up for the room)" : " (at authored rate)")
+                    : " (pinned)"),
+                vent.autoScaleFlow && vent.EffectiveFlowLitresPerSecond > vent.flowLitresPerSecond + 0.05f
+                    ? T.AccentCyan : T.AccentDim));
+
+            var scaleRow = Row();
+            scaleRow.Add(T.SmallButton("AUTO-SCALE", () =>
+            {
+                vent.autoScaleFlow = true;
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, vent.autoScaleFlow ? T.AccentCyan : T.BgSlot));
+            scaleRow.Add(T.SmallButton("FIXED", () =>
+            {
+                vent.autoScaleFlow = false;
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, !vent.autoScaleFlow ? T.AccentAmber : T.BgSlot));
+            scaleRow.Add(T.Muted(vent.autoScaleFlow
+                ? (vent.HasPipedSupply ? "scaling against the room" : "no gas line — pinned to the rating")
+                : "no scaling, no clamp"));
+            p.Add(scaleRow);
 
             p.Add(T.Spacer(4));
             var powerRow = Row();

@@ -1132,6 +1132,7 @@ namespace VoxelEngine.UI
 
             // ONLY the content layer is rebuilt — the HUD + tooltip layers persist
             // across refreshes so vitals/HUD never flash on scroll or container ticks.
+            SavePanelScrollOffsets();
             _contentLayer.Clear();
             _contentLayer.pickingMode = PickingMode.Ignore;
             _hudLayer.pickingMode = PickingMode.Ignore;
@@ -1322,6 +1323,55 @@ namespace VoxelEngine.UI
             {
                 _root.pickingMode = PickingMode.Ignore;
                 _root.style.backgroundColor = new StyleColor(new Color(0,0,0,0));
+            }
+
+            RestorePanelScrollOffsets();
+        }
+
+        // ── PANEL SCROLL POSITION ACROSS LIVE REBUILDS ────────────────────────
+        // The machine panel is rebuilt on a timer so its gauges stay honest, and a rebuild
+        // hands back a brand new ScrollView parked at the top — which read as "the panel
+        // yanks me back up while I scroll". Named scroll views now carry their offset over.
+        // Only views their builder opts into (by naming themselves) participate, so panels
+        // that rebuild for other reasons are untouched.
+        private static readonly System.Collections.Generic.Dictionary<string, float> s_panelScrollOffsets = new();
+        // Offsets belong to the surface they were saved from; opening a different machine (or
+        // closing the panel) drops them so a fresh panel always starts at the top.
+        private static UnityEngine.Object s_panelScrollOwner;
+
+        private void SavePanelScrollOffsets()
+        {
+            if (_contentLayer == null) return;
+            var owner = (UnityEngine.Object)_openGridBlock;
+            if (!System.Object.ReferenceEquals(s_panelScrollOwner, owner))
+            {
+                s_panelScrollOffsets.Clear();
+                s_panelScrollOwner = owner;
+            }
+            foreach (var sv in _contentLayer.Query<ScrollView>().ToList())
+            {
+                if (sv == null || string.IsNullOrEmpty(sv.name)) continue;
+                s_panelScrollOffsets[sv.name] = sv.scrollOffset.y;
+            }
+        }
+
+        private void RestorePanelScrollOffsets()
+        {
+            if (_contentLayer == null || s_panelScrollOffsets.Count == 0) return;
+            if (!System.Object.ReferenceEquals(s_panelScrollOwner, _openGridBlock)) return;
+            foreach (var sv in _contentLayer.Query<ScrollView>().ToList())
+            {
+                if (sv == null || string.IsNullOrEmpty(sv.name) || !s_panelScrollOffsets.ContainsKey(sv.name)) continue;
+                float y = s_panelScrollOffsets[sv.name];
+                if (y <= 0.5f) continue;
+                sv.scrollOffset = new Vector2(sv.scrollOffset.x, y);
+                // Layout is resolved after the add, so the real content height only exists
+                // from the next tick: restate the offset once the numbers are known.
+                sv.schedule.Execute(() =>
+                {
+                    if (sv.panel == null) return;
+                    sv.scrollOffset = new Vector2(sv.scrollOffset.x, y);
+                });
             }
         }
 

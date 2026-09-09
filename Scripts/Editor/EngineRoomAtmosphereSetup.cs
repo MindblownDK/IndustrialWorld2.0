@@ -193,6 +193,310 @@ namespace VoxelEngine.EditorTools
             Debug.Log("[VoxelEngineSetupWindow] Step 63 complete.");
         }
 
+        // ── STEP 64 — VOLUME-AWARE VENTILATION TUNING (9.33.0-dev) ──────────────
+        /// <summary>
+        /// Retrofits every grid prefab's ventilation plant with the 9.33.0-dev tuning fields and
+        /// makes sure each one is switched on. Nothing here overrides a number you have edited in
+        /// an inspector: the step only raises values that are still sitting at an Unity default,
+        /// which cannot have come from an author, so a hand-balanced flow rate survives untouched.
+        /// Re-running it after an edit is a no-op and the dialog says so.
+        /// </summary>
+        public static void RunStep64()
+        {
+            Debug.Log("[VoxelEngineSetupWindow] Step 64 — Volume-aware ventilation tuning started.");
+
+            int touched = 0, preserved = 0, units = 0;
+            foreach (string guid in AssetDatabase.FindAssets("t:Prefab", new[] { PREFABS }))
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                var asset = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+                if (asset == null) continue;
+
+                var contents = PrefabUtility.LoadPrefabContents(path);
+                try
+                {
+                    bool changed = ApplyVentilationDefaults(contents, ref units, ref touched, ref preserved);
+                    if (changed) PrefabUtility.SaveAsPrefabAsset(contents, path);
+                }
+                finally { PrefabUtility.UnloadPrefabContents(contents); }
+            }
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+
+            Debug.Log("[VoxelEngineSetupWindow] Step 64 — ventilation units touched: " + touched
+                      + ", already tuned: " + preserved + ", units found: " + units + ".");
+            EditorUtility.DisplayDialog("Voxel Engine — Volume-Aware Ventilation (Step 64)",
+                "Ventilation tuning wired.\n\n" +
+                "• Ventilation units on prefabs: " + units + "\n" +
+                "• Updated by this run: " + touched + " (" + preserved + " already tuned)\n" +
+                "  – AIR VENT + VENTILATION UNIT: auto-scale flow on, so a hangar gets a fan\n" +
+                "    that keeps up instead of one that needs an hour\n" +
+                "  – EXHAUST SCRUBBER: feed-line allowance 1 400 L/s, which is what clamps an\n" +
+                "    air-change rating to what the oxygen line can actually carry\n" +
+                "  – GAS VENT + VENT SLEEVE: room-side metering on, so blowing into a sealed\n" +
+                "    compartment cannot outrun the room model\n" +
+                "• Authored flow rates, power draws and balance values were never overwritten\n\n" +
+                "Runtime, no asset: the ventilation floor and ceiling live in\n" +
+                "Scripts/Pressure/VentilationRules.cs (half an air change a minute at minimum, six at\n" +
+                "maximum, and no scaling at all without a feed line), and every panel now prints the\n" +
+                "air-change figure it is actually honouring.", "OK");
+        }
+
+        /// <summary>Shared by Steps 63 and 64 so a freshly authored prefab and an old one end up
+        /// tuned identically. Returns true when the prefab needs saving.</summary>
+        private static bool ApplyVentilationDefaults(GameObject root, ref int units, ref int touched, ref int preserved)
+        {
+            bool changed = false;
+            foreach (var vent in root.GetComponentsInChildren<VoxelEngine.Pressure.GridAirVent>(true))
+            {
+                units++;
+                // A unit authored before this field existed reads false, which is exactly the
+                // behaviour the step exists to replace; an author's deliberate "off" is written
+                // in the prefab and therefore never equal to that default.
+                if (!vent.autoScaleFlow && vent.flowLitresPerSecond <= 24.05f)
+                {
+                    vent.autoScaleFlow = true;
+                    changed = true;
+                    touched++;
+                }
+                else preserved++;
+            }
+
+            foreach (var scrub in root.GetComponentsInChildren<VoxelEngine.Pressure.GridExhaustScrubber>(true))
+            {
+                units++;
+                if (scrub.supplyFlowLitresPerSecond <= 0.0001f)
+                {
+                    scrub.supplyFlowLitresPerSecond = 1400f;
+                    changed = true;
+                    touched++;
+                }
+                else preserved++;
+            }
+
+            foreach (var gas in root.GetComponentsInChildren<VoxelEngine.Gas.GasVent>(true))
+            {
+                units++;
+                // The key is absent for any prefab authored before 9.33.0 and a component added
+                // this session defaults to true; in both cases the intent is "on". A prefab that
+                // carries the key as false was switched to FIXED on the panel, so it stays put.
+                if (!gas.autoScaleFlow)
+                {
+                    gas.autoScaleFlow = true;
+                    changed = true;
+                    touched++;
+                }
+                else preserved++;
+            }
+            return changed;
+        }
+
+        // ── STEP 65 — ROUTE BOOK & RANGE CALCULATOR (9.34.0-dev) ────────────────
+        /// <summary>
+        /// Authors the ROUTE RECORDER in both grid sizes: prefab, grid item and assembler recipe,
+        /// linked to the same Grid Utilities node the engine-room blocks use. Non-destructive and
+        /// idempotent — an existing prefab keeps its mass, HP and power numbers, an existing item
+        /// and recipe are re-pointed but never re-costed, and a second run creates nothing new.
+        /// </summary>
+        public static void RunStep65()
+        {
+            Debug.Log("[VoxelEngineSetupWindow] Step 65 — Route book & range calculator started.");
+
+            foreach (var f in new[] { GRID_ROOT, PREFABS, MATS, ITEMS, RECIPES })
+                EnsureFolder(f);
+
+            var ironPlate  = FindItem("Item_IronPlate");
+            var steelPlate = FindItem("Item_SteelPlate");
+            var circuit    = FindItem("Item_Circuit");
+            var glass      = FindItem("Item_Glass");
+
+            var registry = AssetDatabase.LoadAssetAtPath<RecipeRegistry>(ASSET_ROOT + "/RecipeRegistry.asset");
+            var utilNode = AssetDatabase.LoadAssetAtPath<ResearchNode>(ASSET_ROOT + "/Research/Nodes/res_grid_utilities.asset");
+
+            int created = 0, preserved = 0;
+            var recipes = new List<RecipeDefinition>();
+            var items = new List<ItemDefinition>();
+
+            // Copper wire is optional content in this build order: a recipe that quietly lost an
+            // ingredient would be worse than one authored without it, so it is passed in and
+            // skipped only when the item genuinely does not exist.
+            var wire = FindItem("Item_CopperWire");
+
+            AuthorRouteRecorder(GridSize.Large, "Grid_RouteRecorder_Large", "gitem_routerecorder_large",
+                "Route Recorder", 62f, 300f, 60f,
+                new (ItemDefinition, int)[] { (steelPlate, 3), (ironPlate, 2), (circuit, 2), (glass, 1) },
+                wire, ref created, ref preserved, recipes, items);
+
+            AuthorRouteRecorder(GridSize.Small, "Grid_RouteRecorder_Small", "gitem_routerecorder_small",
+                "Nav Plotter (Small)", 14f, 90f, 24f,
+                new (ItemDefinition, int)[] { (ironPlate, 2), (circuit, 1) },
+                null, ref created, ref preserved, recipes, items);
+
+            foreach (var recipe in recipes)
+            {
+                if (recipe == null) continue;
+                if (registry != null && !registry.recipes.Contains(recipe))
+                {
+                    registry.recipes.Add(recipe);
+                    EditorUtility.SetDirty(registry);
+                }
+            }
+
+            if (utilNode != null)
+            {
+                var list = new List<RecipeDefinition>(utilNode.unlocksRecipes ?? new RecipeDefinition[0]);
+                bool changed = false;
+                foreach (var recipe in recipes)
+                    if (recipe != null && !list.Contains(recipe)) { list.Add(recipe); changed = true; }
+                if (changed)
+                {
+                    utilNode.unlocksRecipes = list.ToArray();
+                    EditorUtility.SetDirty(utilNode);
+                }
+            }
+
+            EnsureItemsPersisted(items);
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+
+            Debug.Log("[VoxelEngineSetupWindow] Step 65 complete — created " + created
+                      + ", preserved " + preserved + ".");
+            EditorUtility.DisplayDialog("Voxel Engine — Route Book & Range Calculator (Step 65)",
+                "Navigation blocks authored.\n\n" +
+                "• Assets created: " + created + " (" + preserved + " existing preserved)\n" +
+                "• ROUTE RECORDER (large) — the ship's navigation shelf: it records the run you fly,\n" +
+                "  costs a saved route against this ship's own mass, thrust and stored charge, and\n" +
+                "  lists every reason the trip is a bad idea before you burn anything\n" +
+                "• NAV PLOTTER (Small) — the same book in a deckhouse-sized block, for base ships\n" +
+                "  and small craft, where 24 W of console is all the mission costs\n" +
+                "• Recipes registered and linked to Grid Utilities research\n" +
+                "• Routes are saved with the GRID, not the block: a recorded run survives the recorder\n" +
+                "  being moved, replaced or rebuilt, and legacy ships simply start with an empty book\n\n" +
+                "Runtime: right-click the block to open the panel. Plan cost is derived from the live\n" +
+                "flight model — `GridEntity.TotalMass`, `GetThrustByDirection()`, the grid's own stored\n" +
+                "watt-hours and its current consumption — so a plan and the ship that flies it cannot\n" +
+                "disagree. Nothing here replaces flying: a route tells you what it costs, the pilot\n" +
+                "still decides whether to go.", "OK");
+        }
+
+        private static void AuthorRouteRecorder(GridSize size, string prefabName, string itemId,
+            string displayName, float mass, float hp, float recordingWatts,
+            (ItemDefinition item, int count)[] inputs, ItemDefinition extraIngredient,
+            ref int created, ref int preserved,
+            List<RecipeDefinition> recipes, List<ItemDefinition> items)
+        {
+            string prefabPath = PREFABS + "/" + prefabName + ".prefab";
+            bool existing = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath) != null;
+            var root = existing ? PrefabUtility.LoadPrefabContents(prefabPath) : new GameObject(prefabName);
+            root.name = prefabName;
+
+            for (int i = root.transform.childCount - 1; i >= 0; i--)
+            {
+                var child = root.transform.GetChild(i);
+                if (child != null && child.name.StartsWith("Generated_", System.StringComparison.Ordinal))
+                    Object.DestroyImmediate(child.gameObject);
+            }
+
+            int matIdx = 0;
+            GridBlockMeshBuilder.MaterialPersister = (mat, _) =>
+            {
+                string mp = $"{MATS}/{prefabName}_{matIdx++}.mat";
+                if (AssetDatabase.LoadAssetAtPath<Material>(mp) != null) AssetDatabase.DeleteAsset(mp);
+                AssetDatabase.CreateAsset(mat, mp);
+                return AssetDatabase.LoadAssetAtPath<Material>(mp);
+            };
+
+            var visuals = new GameObject("Generated_Visuals");
+            visuals.transform.SetParent(root.transform, false);
+            try
+            {
+                GridBlockMeshBuilder.Build(visuals, GridBlockMeshBuilder.Style.RouteRecorder, size,
+                    new Color(0.38f, 0.44f, 0.50f));
+            }
+            finally { GridBlockMeshBuilder.MaterialPersister = null; }
+
+            float cs = size.CellSize();
+            var col = root.GetComponent<BoxCollider>();
+            if (col == null) col = root.AddComponent<BoxCollider>();
+            // Console and dish only: the block is a deck fitting, not a filled cell.
+            col.center = new Vector3(0f, -cs * 0.08f, 0f);
+            col.size = new Vector3(cs * 0.84f, cs * 0.76f, cs * 0.84f);
+
+            var recorder = root.GetComponent<VoxelEngine.Navigation.GridRouteRecorder>();
+            if (recorder == null) recorder = root.AddComponent<VoxelEngine.Navigation.GridRouteRecorder>();
+            recorder.blockName = displayName;
+            if (recorder.recordingWatts <= 0f) recorder.recordingWatts = recordingWatts;
+            if (recorder.recomputeIntervalSeconds <= 0.01f) recorder.recomputeIntervalSeconds = 0.75f;
+            if (recorder.BlockMass <= 0f) recorder.BlockMass = mass;
+            if (recorder.maxHP <= 0f) recorder.maxHP = hp;
+
+            var prefabAsset = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+            if (existing) PrefabUtility.UnloadPrefabContents(root);
+            else Object.DestroyImmediate(root);
+
+            string itemPath = ITEMS + "/GItem_" + prefabName.Replace("Grid_", string.Empty) + ".asset";
+            var item = AssetDatabase.LoadAssetAtPath<GridBlockItem>(itemPath);
+            bool newItem = item == null;
+            if (newItem)
+            {
+                item = ScriptableObject.CreateInstance<GridBlockItem>();
+                AssetDatabase.CreateAsset(item, itemPath);
+                created++;
+            }
+            else preserved++;
+
+            item.itemId = itemId;
+            item.displayName = displayName;
+            item.description = size == GridSize.Large
+                ? "The ship's navigation shelf. Bolt it to a deck and it records the runs you fly, then costs each one against this ship: distance, travel time, the thrust the profile asks for, the energy out of the batteries, what the grid burns while you are gone, and the reserve left at the far end. A route that cannot be flown says so, and names the missing resource."
+                : "A plotter for a base ship or a small craft: the same route book and the same arithmetic as the full recorder, in a deckhouse fitting that bills 24 W while a capture runs.";
+            item.iconTint = new Color(0.58f, 0.74f, 0.86f);
+            if (item.maxStack <= 0) item.maxStack = 99;
+            if (item.massPerUnit <= 0f) item.massPerUnit = size == GridSize.Large ? 1.1f : 0.3f;
+            item.category = "Grid";
+            item.gridSize = size;
+            item.blockPrefab = prefabAsset;
+            if (item.blockMass <= 0f) item.blockMass = mass;
+            if (item.blockHP <= 0f) item.blockHP = hp;
+            EditorUtility.SetDirty(item);
+            items.Add(item);
+
+            string recipePath = RECIPES + "/Recipe_" + prefabName.Replace("Grid_", string.Empty) + ".asset";
+            var recipe = AssetDatabase.LoadAssetAtPath<RecipeDefinition>(recipePath);
+            bool newRecipe = recipe == null;
+            if (newRecipe)
+            {
+                recipe = ScriptableObject.CreateInstance<RecipeDefinition>();
+                AssetDatabase.CreateAsset(recipe, recipePath);
+                created++;
+            }
+            else preserved++;
+
+            recipe.displayName = displayName;
+            recipe.outputItem = item;
+            if (recipe.outputCount <= 0) recipe.outputCount = 1;
+            if (newRecipe)
+            {
+                recipe.requiredStation = StationTier.Assembler;
+                recipe.craftSeconds = size == GridSize.Large ? 6f : 3f;
+                recipe.unlockedByDefault = false;
+            }
+            if (recipe.inputs == null || recipe.inputs.Length == 0)
+            {
+                var list = new List<RecipeIngredient>();
+                foreach (var (ing, count) in inputs)
+                    if (ing != null) list.Add(new RecipeIngredient { item = ing, count = count });
+                // A recorder without wire is a box with a picture on it; only add it if the
+                // item exists in this build, so the step still completes on a stripped catalog.
+                if (extraIngredient != null) list.Add(new RecipeIngredient { item = extraIngredient, count = 1 });
+                recipe.inputs = list.ToArray();
+            }
+            EditorUtility.SetDirty(recipe);
+            recipes.Add(recipe);
+        }
+
         private static void AuthorScrubber(GridSize size, string prefabName, string itemId,
             string displayName, float mass, float hp, bool fullBlock,
             float airChanges, float activeWatts,

@@ -538,7 +538,12 @@ namespace VoxelEngine.GridSystem
                     }
                     return;
                 }
-                if (IsMatchingTankBlockForPipe(hitBlock, family))
+                // A block whose gas/liquid port is full must refuse the pipe — but only when
+                // the aim point is not on a fitting that is still free. The exhaust stack is
+                // the case that used to be impossible: its authored tap flange matched the
+                // "tank port in use" test, so nothing could ever be snapped onto it.
+                if (IsMatchingTankBlockForPipe(hitBlock, family)
+                    && !AimedAtFreeGasTap(hitBlock, family, hit))
                 {
                     HideGhost();
                     HideGhostPortRing();
@@ -862,6 +867,27 @@ namespace VoxelEngine.GridSystem
             return true;
         }
 
+        /// <summary>True when the aim point sits on the block's own gas tap flange (or on a
+        /// port already installed there), which always stays connectable no matter how many
+        /// runs the block carries — the player must be able to reach the fitting they aimed at.</summary>
+        /// <summary>True when the aim point is a gas tap that can still take the pipe: the
+        /// stack's own flange while no run hangs off it. Everything else is "occupied".</summary>
+        private static bool AimedAtFreeGasTap(GridBlock block, PipeFamily family, RaycastHit hit)
+        {
+            if (block == null || family != PipeFamily.Gas) return false;
+            if (block is not VoxelEngine.Maritime.GridExhaustPipe stack) return false;
+            return !stack.IsGasRunAttached && AimedAtStackTap(stack, hit);
+        }
+
+        private static bool AimedAtStackTap(VoxelEngine.Maritime.GridExhaustPipe stack, RaycastHit hit)
+        {
+            if (stack == null) return false;
+            float reach = GridSize.Small.CellSize() * 1.5f;
+            var near = VoxelEngine.Maritime.MaritimePorts.FindNearest(stack.transform,
+                VoxelEngine.Maritime.MaritimePorts.GasPrefixes, hit.point, reach);
+            return near != null;
+        }
+
         private static bool IsMatchingTankBlockForPipe(GridBlock block, PipeFamily family)
         {
             // The exhaust stack's gas tap is a tank-side endpoint like any other: without
@@ -900,9 +926,11 @@ namespace VoxelEngine.GridSystem
                     && targetBlock is not GridCryobed
                     && targetBlock is not GridBiofarm
                     && targetBlock is not GridH2O2Generator
-                    && targetBlock is not VoxelEngine.Maritime.GridExhaustPipe) return false;
-                if (targetBlock is VoxelEngine.Maritime.GridExhaustPipe
-                    && MaritimeVariablePorts.GasRunAtCap(targetBlock, GridTankVariablePorts.PrefixFor(GridTankPortFamily.Gas)))
+                    && targetBlock is not VoxelEngine.Maritime.GridExhaustPipe
+                    && targetBlock is not VoxelEngine.Gas.GasVent) return false;
+                if (targetBlock is VoxelEngine.Maritime.GridExhaustPipe stack
+                    && stack.IsGasRunAttached
+                    && !AimedAtStackTap(stack, hit))
                 {
                     feedback = "Exhaust gas tap already connected (max 1)";
                     s_portCapBlocked = true;

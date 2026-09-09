@@ -42,6 +42,9 @@ namespace VoxelEngine.Pressure
         [Tooltip("Fraction of the moving air that is scrubbed clean rather than merely circulated.")]
         [Range(0.2f, 1f)] public float scrubEfficiency = 0.85f;
 
+        [Tooltip("Litres per second the gas line feeding this unit can actually deliver. The air-change rating is held down to it, so a unit bolted into a hangar promises what its pipe can carry instead of sitting at \"No Piped O2\" — and it says so. Zero takes the rating at face value.")]
+        public float supplyFlowLitresPerSecond = 0f;
+
         [Tooltip("Share of the extracted heat that leaks back into the room instead of going overboard. Zero is an ideal radiator; the value exists so a scrubber can be authored as a heat pump.")]
         [Range(0f, 0.5f)] public float heatReturnFraction = 0f;
 
@@ -78,6 +81,16 @@ namespace VoxelEngine.Pressure
 
         /// <summary>°C per second this unit is currently able to pull out of the compartment.</summary>
         public float HeatExtractionCPerSecond { get; private set; }
+
+        /// <summary>Litres of compartment air the unit moves per second this round, after the
+        /// supply clamp. The panel prints it next to the rating so the two never disagree.</summary>
+        public float LitresPerSecond { get; private set; }
+
+        /// <summary>1 when the gas line can feed the rated air changes; below that, the share of
+        /// the rating the line actually carries.</summary>
+        public float SupplyHeadroom01 => _supplyScale;
+
+        private float _supplyScale = 1f;
 
         private readonly List<GridRoom> _servicedRooms = new(6);
         private Transform _fanHub;
@@ -157,6 +170,23 @@ namespace VoxelEngine.Pressure
             float efficiency = Mathf.Clamp01(scrubEfficiency);
             float flow01 = Mathf.Clamp01(Mathf.Max(0f, airChangesPerMinute) / 60f) * efficiency;
 
+            // An air-change rating scales with the room, and past a certain volume that is more
+            // air than the feed line can carry. Clamping here rather than letting the refill fail
+            // keeps the fan's promise honest: it runs slower, and the panel says why.
+            float capacity = VentilationRules.CapacityLitres(_servicedRooms);
+            _supplyScale = 1f;
+            if (supplyFlowLitresPerSecond > 0.0001f && capacity > 0.0001f)
+            {
+                float wanted = capacity * flow01;
+                if (wanted > supplyFlowLitresPerSecond)
+                {
+                    float allowed = supplyFlowLitresPerSecond / wanted;
+                    flow01 *= allowed;
+                    _supplyScale = allowed;
+                }
+            }
+            LitresPerSecond = capacity * flow01;
+
             // Rated capacity of this unit, in °C of compartment air it can clear per second.
             float maxRiseRateC = flow01 * ThermalRules.RoomMaxRiseC;
             HeatExtractionCPerSecond = maxRiseRateC;
@@ -193,6 +223,7 @@ namespace VoxelEngine.Pressure
             }
 
             if (!anyWork) { Status = "Room Clear"; return; }
+            if (_supplyScale < 0.995f) Status = "Supply Limited";
 
             IsWorking = true;
             // Over-cap capture never destroys gas: whatever the pipes could not take is
@@ -292,7 +323,9 @@ namespace VoxelEngine.Pressure
                  + "AIR " + room.AirTemperatureC.ToString("0") + " C (" + VoxelEngine.Thermal.ThermalRules.BandLabel(room.Band) + ")\n"
                  + "EXHAUST " + (room.ExhaustLoad01 * 100f).ToString("0") + "%\n"
                  + "O2 " + (room.Fill01 * 100f).ToString("0") + "%\n"
-                 + "FLOW " + airChangesPerMinute.ToString("0") + " ACP";
+                 + "FLOW " + airChangesPerMinute.ToString("0") + " ACP"
+                 + " \u00b7 " + LitresPerSecond.ToString("0") + " L/s"
+                 + (_supplyScale < 0.995f ? " (line limited)" : string.Empty);
         }
     }
 }
