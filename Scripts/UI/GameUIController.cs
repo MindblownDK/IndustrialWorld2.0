@@ -307,6 +307,7 @@ namespace VoxelEngine.UI
             CryobedConfigHud.Tick();
             InteractionHud.Tick();
             WorldInspectionHud.Tick();
+            GridInspectorHud.Tick();
             GravityPullHud.Tick();
             VoxelEngine.GridSystem.GridPilotHud.Tick();
             GrinderHud.Tick();
@@ -1170,6 +1171,7 @@ namespace VoxelEngine.UI
             CryobedConfigHud.EnsureMounted(_hudLayer);
             BombHud.EnsureMounted(_hudLayer);
             PaintHud.EnsureMounted(_hudLayer);
+            GridInspectorHud.EnsureMounted(_hudLayer);
 
             // (We poll mouse buttons in Update() — much more reliable than RegisterCallback.)
 

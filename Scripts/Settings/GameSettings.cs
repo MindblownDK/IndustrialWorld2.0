@@ -25,7 +25,8 @@ namespace VoxelEngine.Settings
         Hotbar1, Hotbar2, Hotbar3, Hotbar4, Hotbar5,
         Hotbar6, Hotbar7, Hotbar8, Hotbar9, Hotbar0,
         EnterCockpit, ExitCockpit,
-        WarpDrive
+        WarpDrive,
+        GridInspector   // the Grid Inspector Overlay hotkey (9.37.0-dev): one key walks OFF → HEAT → DAMAGE → CENTRE OF MASS
     }
 
     public static class GameSettings
@@ -52,7 +53,7 @@ namespace VoxelEngine.Settings
 
         // Bump this when default keybinds change to force a one-time migration
         // that fills in missing or invalid bindings on old saves.
-        private const int    CURRENT_VERSION = 13;
+        private const int    CURRENT_VERSION = 14;
 
         // ----- defaults -----
         public const float DEFAULT_FOV       = 75f;
@@ -158,6 +159,7 @@ namespace VoxelEngine.Settings
             InputAction.EnterCockpit    => "H",
             InputAction.ExitCockpit     => "F",
             InputAction.WarpDrive       => "N",
+            InputAction.GridInspector   => "K",
             _ => "None"
         };
 

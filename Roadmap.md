@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `9.36.0-dev`  
-**Roadmap Version:** `9.36.0-dev`  
+**Current Version:** `9.37.0-dev`  
+**Roadmap Version:** `9.37.0-dev`  
 **Date:** 2026-09-09
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,22 @@
 ---
 
 ## 0. Recently Done
+
+### 9.37.0-dev — The Grid Inspector Overlay
+- One Settings-rebindable hotkey (default K) cycles OFF → HEAT → DAMAGE → CENTRE OF MASS on the
+  construct under the crosshair — any grid, wreck or base block, or the grid under the seat while
+  piloting. `Scripts/UI/GridInspectorHud.cs` runs one shared tint pass through per-renderer
+  MaterialPropertyBlocks (original blocks captured and restored on exit, damage shells left alone),
+  degrades a construct above 240 blocks to the 24 nearest, and creates no scene objects while off.
+- DAMAGE ramps a block's own damage fraction teal → amber → red with a worst-damage readout; HEAT
+  ramps each block against its own `ThermalRules.ToleranceC` red line and pins a floating marker to
+  the worst plate; CENTRE OF MASS draws the solved mass-centre ball plus the weighted thrust line
+  and colours the ball by the offset — drawn for unboarded grids too, settling the design's last
+  open question.
+- Three nodes gate the modes in sequence — INTEGRITY SCAN (tier 3, under Grid Utilities), THERMAL
+  SCAN (tier 4), CENTRE OF MASS (tier 5) — authored non-destructively by Setup Step 68; a locked
+  press says which node unlocks the mode, in one line. Open: Unity validation of the pass budget on
+  dense hulls and the 24-block degrade readout on very large ships.
 
 ### 9.36.0-dev — The Static Refuel Pad
 - A ground base is not a grid, and 9.35.0-dev could only refuel between two grids. `StaticRefuelPad` is a
@@ -75,15 +91,6 @@
   and each scrubber's feed allowance are saved per block. Step 64 tunes existing prefabs.
 - Balance rule that binds here: **per-service port caps are Oxygen 1, Exhaust 2 on Medium/Giant.**
   Settled in 9.32.0-dev — do not re-open it in a later round.
-
-### 9.32.0-dev — Engine Room Atmosphere & Gas Disposal
-- `GridRoom` owns the heat, exhaust and air temperature of a sealed volume; every running machine
-  reports into the room it stands in; blocked-in stacks dump their stream into the space instead of
-  the sky, and engines resolve their combustion air through `CombustionAirRules` (piped O₂ 1.00,
-  open sky on a breathable world 0.90, compartment air 0.75 rising to 1.0 as the room clears).
-- `GasVent` destroys whatever a gas run carries to it — extractor-powered, draft-only unpowered —
-  so a sealed engine room can pump foul gas overboard without a vessel large enough to hold it.
-- Step 63 authors it; right-click panels exist on the scrubber, the vent and the recorder family.
 
 ## 1. Executive Vision
 
@@ -159,7 +166,7 @@ The design goal is a seamless blend of:
 | Radiation system | 🟡 PARTIALLY COMPLETE | **6.80.0-dev:** ambient celestial-body radiation, Radiation Shielding modules, and Hazmat sealing are implemented for armor. Reactor waste, fallout zones, geiger UX, and full ecology effects remain open. |
 | Heat system | ✅ COMPLETED | **6.80.0-dev** burn mitigation wired to Heat Tolerance modules; **9.29.0-dev** block temperature, entry heating, thruster self-heat, ablative `GridHeatshield`; **9.30.0-dev** every grid simulated, plume heating, hull damage visuals, suit temperature; **9.31.0-dev** `IHeatSourceBlock` for every machine and per-family heat tolerances; **9.32.0-dev** concealed-space heat and exhaust, `GridExhaustScrubber`, `GasVent` (Step 63); **9.33.0-dev** volume-aware flow (Step 64); **9.34.0-dev** heat is priced into a route by the same grid load a trip bills. Full notes: `Changelog.md`. |
 | Waymarks, named connectors & auto-run shuttle | 🛠️ WORKING ON | **9.35.0-dev**: named waymarks, `GridConnectorBlock` with the first cross-grid transfer bridge and a visible queue, and `GridRouteAutopilot` loops with armed stop conditions (Step 66). **9.36.0-dev** added the ground half: `StaticRefuelPad` (Step 67), a world-placed pad that is a metered consumer on the base's wires and a member of its fluid, gas and item runs. Open: terrain avoidance, dock-approach flying, cargo schedules, star-map rendering. |
-| Grid inspector overlay (heat / damage / centre of mass) | ❌ MISSING | Design written for 4.8: one rebindable hotkey, three modes, research-gated in sequence. See `Grid Inspector Overlay`. |
+| Grid inspector overlay (heat / damage / centre of mass) | 🛠️ WORKING ON | **9.37.0-dev** implemented the whole overlay — one shared per-renderer `MaterialPropertyBlock` tint pass, one hotkey ring OFF → HEAT → DAMAGE → CENTRE OF MASS with the three reader modes, and the three research nodes authored by Setup Step 68. Unity validation of the pass budget on dense hulls and the 24-block degrade readout is open (tracked on the 9.37.0-dev round entry); it flips to ✅ COMPLETED on validation. See `Grid Inspector Overlay`. |
 | Crude fractionation & flare disposal | ❌ MISSING | Design written for the petroleum era: six fractions plus LPG from the column, every fraction spent in a recipe it beats, `FlareStack` as the run terminator with real heat and air cost. See `Crude Fractionation, Product Use & Flare Disposal`. |
 | Asphalt roads | ❌ MISSING | Design written for the petroleum era: terrain surface from bitumen plus aggregate, movement/traction/routing bonuses, wear and grading rules. See `Asphalt Roads`. |
 | Engine Works (custom engine builder) | ❌ MISSING | Design written for the maritime/engine line: configuration, cylinders, bore/stroke, intake, fuel, compression, cooling, gearing and governor, with craft cost scaling into artefacts at the top. See `Engine Works`. |
@@ -594,6 +601,11 @@ the same heat, air, fuel and mass rules the rest of the game already enforces.
 
 ### Grid Inspector Overlay (Heat · Damage · Centre of Mass)
 
+*(shipped in 9.37.0-dev — `Scripts/UI/GridInspectorHud.cs`: the tint pass, the hotkey ring, the
+worst-block marker and the centre-of-mass ball/thrust-line markers; `GameSettings.GridInspector`
+action; Setup Step 68 authors the three research nodes. Unity validation of the pass budget on
+dense hulls and of the 24-block degrade readout on very large ships is still open.)*
+
 A single togglable world overlay that lets the player read the three things they currently have to
 open a panel for, right on the blocks they are looking at. It is a viewing mode, not a new HUD: it
 changes what the existing block visuals mean, never what the ship does.
@@ -636,8 +648,11 @@ changes what the existing block visuals mean, never what the ship does.
    - Three research nodes, one per mode, in the order damage, then heat, then centre of mass.
 
 5. **Still open**
-   - Whether the centre-of-mass ball is drawn for an unboarded grid, and whether the thrust line is
-     drawn beside it. It should be: the gap between the two is the whole point of the mode.
+   - ~~Whether the centre-of-mass ball is drawn for an unboarded grid, and whether the thrust line is
+     drawn beside it. It should be: the gap between the two is the whole point of the mode.~~ *(Settled
+     in 9.37.0-dev: both are drawn — the ball rides the grid's solved mass centre for any grid, and
+     the weighted thrust line is drawn beside it, because the gap between the two is the whole point
+     of the mode.)*
 
 ### Grid Route Recorder & Energy Calculator
 
@@ -2174,8 +2189,13 @@ For each version, these are the high-level Unity tasks you will perform manually
     - Step 63 (9.32.0-dev) authors the engine room atmosphere set, Step 64 (9.33.0-dev) tunes its
       ventilation against compartment volume, and Step 65 (9.34.0-dev) authors the Route Recorder and
       Nav Plotter for the route book; all three are re-runnable and preserve authored balance.
-18. Ship the **Grid Inspector Overlay** (heat / damage / centre of mass): one shared overlay pass,
-    three modes on one rebindable hotkey, three research nodes in sequence.
+18. ~~Ship the **Grid Inspector Overlay** (heat / damage / centre of mass): one shared overlay pass,
+    three modes on one rebindable hotkey, three research nodes in sequence.~~ *(9.37.0-dev —
+    `Scripts/UI/GridInspectorHud.cs` runs one shared per-renderer `MaterialPropertyBlock` pass that
+    tints block renderers and restores them on exit, degrading to the 24 blocks nearest the camera
+    above 240 blocks; `GameSettings` gains the `GridInspector` action, default K; Setup Step 68
+    authors INTEGRITY SCAN / THERMAL SCAN / CENTRE OF MASS under Grid Utilities. Unity validation of
+    the pass budget and the degrade readout is pending.)*
 19. Refit `OilRefinery` into a **fractionating column**: one input tank plus one typed tank per
     fraction, per-world crude assays from `OilSiteSampler`, and `LiquidType` entries for LPG, naphtha,
     kerosene, diesel and gasoline with density, burn value and freezing point.
@@ -2198,8 +2218,8 @@ For each version, these are the high-level Unity tasks you will perform manually
     `PowerConsumer` draw, and a pad that is a real member of the base's power, fluid, gas and item graphs
     rather than a block standing near them; ground rigs are served because a car here is a grid with
     wheels. Still open: the pad pumping back into a world run, and cargo schedules.)*
-26. **Run setup wizard step (non-destructive)** for 18–25 as each ships; Steps 66 and 67 are used, the
-    next free step number is 68, and each of these features takes its own step.
+26. **Run setup wizard step (non-destructive)** for 18–25 as each ships; Steps 66, 67 and 68 are used,
+    the next free step number is 69, and each of these features takes its own step.
 
 ### For 5.2.0 (Architect Era)
 

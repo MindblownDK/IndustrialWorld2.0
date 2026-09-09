@@ -1,9 +1,43 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.36.0-dev`
+**Current Version:** `9.37.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.37.0-dev] The Grid Inspector Overlay: Heat, Damage and Centre of Mass on Anything You Can Look At
+
+**Type:** MINOR — the next round of the settled order (waymarks/auto-run landed in 9.35/9.36, the inspector overlay was always next, then petroleum, asphalt and the Engine Works). It is a save-compatible viewing mode with three research gates; no save schema, chunk format or API breaks. A player opens no panel to read a ship any more: one rebindable hotkey cycles OFF → HEAT → DAMAGE → CENTRE OF MASS (locked modes are skipped; a press with nothing researched says why in one line), each mode tints the construct under the crosshair, and every tint is put back the moment the mode leaves — nothing about the ship, its damage or its heat is changed by looking at it.
+
+**GitHub title:** `[9.37.0-dev] Grid Inspector Overlay: integrity scan, thermal scan and centre-of-mass read on any grid, wreck or base block, gated by three research nodes`
+
+**Added**
+
+- `Scripts/UI/GridInspectorHud.cs` — the whole overlay. A single shared pass driven by per-renderer `MaterialPropertyBlock` data, exactly as the design required: no per-block GameObjects, no material instances, and no scene objects while the overlay is off. It targets whatever the crosshair points at — any `GridEntity`, a placed static block or a tiered building piece — so the interesting case works, which is reading a ship the player is NOT standing in; while seated in a cockpit the subject is the grid under the seat, and a subject that has been out of the crosshair for 1.5 s is released instead of being tinted from two hills away. A construct above 240 blocks degrades to the 24 blocks nearest the camera rather than dropping frames, per-renderer writes are skipped while the tint has not changed, and the damage shells from 9.30 (`Generated_DamageOverlay`) are deliberately left alone: this pass tints the block beneath, it never replaces `BlockDamageVisual`, so the two read as one picture.
+- The three reader modes. DAMAGE walks the block's own damage fraction through teal → amber → red (pristine plates keep their own look — a scan is for finding the wounded plates), and a live status line reports the worst damage on the subject. HEAT tints each block by how far it sits through its own heat tolerance using the existing `ThermalRules.ToleranceC` family data rather than a second scale (glass fails at 520 °C, machinery at 1100 °C, intact shields at 1900 °C — each block's red line is its own), warm starting at the 120 °C floor the HUD band labels already use and burning white past the damage span, with a floating marker pinned to the worst plate in view. CENTRE OF MASS draws a ball at the grid's solved mass centre sized by total mass and coloured by how far the centre sits from the thrust line — the weighted centre of thrust and the net burn direction, falling back to the grid's own forward axis through that centre for cancelling manoeuvring quads — with the thrust line drawn beside it and the offset printed in metres. The design's last open question is settled here: the ball IS drawn for an unboarded grid, and the line IS drawn beside it, because the gap between the two is the whole point of the mode.
+- Research gating, in the order the design settled: damage first (structural awareness), heat second (engine-room awareness), centre of mass last (ship design). A press with nothing researched says why in one line and does nothing else; each mode is also selectable from the overlay pill itself (DAMAGE / HEAT / C.O.M chips), and the pill fades out while machine panels or the inventory are open so its chips can never eat a click meant for them.
+- `Scripts/Editor/GridInspectorSetup.cs` — Setup Step 68 authors the three nodes non-destructively: INTEGRITY SCAN (tier 3, under Grid Utilities), THERMAL SCAN (tier 4, requires the first), CENTRE OF MASS (tier 5, requires the second). No prefab, item or recipe belongs to this round: the round is a viewing mode, and the nodes only earn the view. Existing node costs, research times, labels and descriptions are preserved on a re-run.
+
+**Changed**
+
+- `Scripts/Settings/GameSettings.cs` — new `InputAction.GridInspector`, default `K`, listed automatically in the Controls rebind panel and repaired by the same migration pass (`CURRENT_VERSION` 13 → 14); an old profile keeps every custom binding and gains only the new default.
+- `Scripts/UI/GameUIController.cs` — mounts the inspector pill with the other persistent HUDs and ticks it with them; two lines, same discipline as every other HUD so it survives panel refreshes without flashing.
+- `Scripts/Editor/VoxelEngineSetupWindow.cs` — Step 68 button and description in the setup wizard, after Step 67.
+
+**Three decisions worth the reading**
+
+1. **The scan never touches the ship.** The obvious shortcut was a second geometry pass or a per-block overlay shell, both of which the design forbids (no per-block GameObjects, one shared pass). The overlay instead drives the existing block renderers through their own material property blocks: the block's original block is captured the first time it is tinted and restored exactly on exit, and each write re-fills from the renderer so concurrent property-block writers (paint finishes, pipe flow visuals) keep their properties while the overlay is on. Glass and the generated damage shells are skipped, so a canopy does not become an opaque slab and the cracks under the tint keep reading.
+2. **Each block's red line is its own.** A heat map drawn against a single hull-plate scale would make a 620 °C hydrogen engine look innocent while a 300 °C glass canopy looked fine too — and a 700 °C cockpit would be dead before the numbers said anything. The heat ramp reuses `ThermalRules.ToleranceC`, the same per-family data the block descriptions and the HUD band labels already honour, so the view and the machinery tier can never disagree about what is hot.
+3. **The reader follows the machinery, but it is earned by research, not settings.** The three modes are three nodes in sequence — damage → heat → centre of mass — so a fresh save cannot read thermal states it has no thermal machinery to understand, and a player who has not earned a mode is told exactly which node unlocks it. Research is also what keeps the feature small: no settings screen, no options sprawl, one hotkey and three chips.
+
+**Numbers at the shipped defaults** — the warm floor is 120 °C (the same figure the HUD bands use); hot crosses at 60 % of each block's tolerance; critical is the tolerance itself, and past it the ramp burns toward white over the existing 900 °C damage span, so a plate at 1240 °C reads white-hot the same frame the thermal system starts burning it. The marker shows the worst block by severity (temperature minus its own tolerance), so a glass canopy at 480 °C outranks a thruster at 1000 °C. The centre-of-mass ball's radius scales with the cube root of the grid's mass (clamped 0.22–2.2 m), and its colour walks teal → red as the offset approaches roughly 45 % of the grid's own diagonal — a drive half a hull off-axis reads red before the ship ever tips.
+
+**Deliberately not in this round**
+
+- No terrain avoidance, no dock-approach hints, no cargo schedules and no star-map rendering — those stay open on the waymark row where 9.35/9.36 left them.
+- The petroleum chain, asphalt roads and the Engine Works remain next in the settled order.
+- The overlay does not persist anything and does not write any save state; it is a view, and a view that does not survive a reload is exactly the point.
+- `Settings/KeyRebindCapture` and the Input System asset are untouched: the inspector rides the existing per-action keybind store, like every other rebindable action, rather than adding a second binding system to keep in sync.
 
 ### [9.36.0-dev] The Static Refuel Pad: A Ground Base Can Be a Destination Too
 

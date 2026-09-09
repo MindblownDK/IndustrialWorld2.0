@@ -725,6 +725,24 @@ namespace VoxelEngine.EditorTools
                 "node offsets, item stats, recipe costs and research costs are preserved on a re-run.");
             AddWizardButton(scroll, "67. Author Static Refuel Pad (Ground Pads for Non-Grid Bases \u2014 Non-Destructive)", () => VoxelEngine.EditorTools.StaticRefuelSetup.RunStep67(), 62);
 
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
+                "Step 68 (9.37.0) authors the GRID INSPECTOR OVERLAY research (non-destructive):\n" +
+                "  \u2022 Three research nodes gate the reader modes of the inspector overlay, in the order\n" +
+                "    the design settled: INTEGRITY SCAN first (structural awareness), THERMAL SCAN second\n" +
+                "    (engine-room awareness), CENTRE OF MASS last (ship design)\n" +
+                "  \u2022 INTEGRITY SCAN \u2014 tier 3 under Grid Utilities; THERMAL SCAN \u2014 tier 4, requires the\n" +
+                "    first; CENTRE OF MASS \u2014 tier 5, requires the second\n" +
+                "  \u2022 The runtime hotkey (rebindable in Settings, default K) walks the ring OFF \u2192 HEAT \u2192 DAMAGE \u2192\n" +
+                "    CENTRE OF MASS \u2192 OFF, skipping modes whose node is still locked; a press with nothing\n" +
+                "    unlocked says which node unlocks the reader, in one line; each mode is also selectable\n" +
+                "    from the overlay pill itself\n" +
+                "  \u2022 No prefab, item or recipe in this round: the overlay is a viewing mode that tints the\n" +
+                "    existing block renderers through per-renderer material-property data and restores them\n" +
+                "    the moment it is off\n" +
+                "Re-runnable. Idempotent. Existing node costs, research times, labels and descriptions are preserved.");
+            AddWizardButton(scroll, "68. Author Grid Inspector Overlay Research (Integrity Scan, Thermal Scan, Centre of Mass \u2014 Non-Destructive)", () => VoxelEngine.EditorTools.GridInspectorSetup.RunStep68(), 62);
+
             AddSpacer(scroll, 20);
         }
 
