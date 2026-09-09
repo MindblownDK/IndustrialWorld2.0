@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `9.37.1-dev`  
-**Roadmap Version:** `9.37.1-dev`  
+**Current Version:** `9.38.0-dev`  
+**Roadmap Version:** `9.38.0-dev`  
 **Date:** 2026-09-09
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,26 @@
 
 ## 0. Recently Done
 
+### 9.38.0-dev — The Advanced Distillation Tower
+- `LiquidType` gained the six cuts the design named — LPG, Naphtha, Kerosene, Diesel, Gasoline
+  (appended at the end of the enum, so every save that stores a liquid int keeps its meaning) — each
+  with its own gauge colour and density.
+- New `AdvancedDistillationTower` machine (a big plant block, not the refinery): one auto-typed feed
+  tank plus six typed cut tanks; `TowerFluidStore` routes outputs only into cut tanks — never the
+  feed — so an over-full cut back-pressures the batch. The refinery walks back to its legacy
+  two-tank machine, and crude conversion happens ONLY on the tower; the cut typing is airtight
+  because `MachineFluidTank.SpaceFor` no longer reports phantom space on empty fixed-type tanks.
+- Setup Step 69 authors the content non-destructively: the tower prefab model (tall column + stripper,
+  six draw pipes with a coloured world sight gauge above each outlet and a crude-feed gauge — every
+  gauge in its liquid's colour, fill bars driven by the tanks), ATMOSPHERIC CUT (100 L crude →
+  2 LPG / 8 naphtha / 12 kerosene / 26 diesel / 18 gasoline / 32 heavy fuel oil; 98 L out, 2 L
+  off-gas), RE-RUN REFINED OIL (legacy-stock conversion on the tower), NAPHTHA PLASTIC (stays on the
+  refinery, better per litre), the block item, its craft recipe and the ATMOSPHERIC DISTILLATION
+  research gate (tier 5, requires Oil Refining). Every processor panel's recipe book now scrolls,
+  per-tank canister POUR/DRAW/DRAIN controls exist on all three stationary processors, and the tower
+  panel is an industrial dial board (one analog gauge per tank). The fuel ladder, off-gas line and
+  flare stack stay open items under `Crude Fractionation, Product Use & Flare Disposal`.
+
 ### 9.37.0-dev — The Grid Inspector Overlay
 - One Settings-rebindable hotkey (default K) cycles OFF → HEAT → DAMAGE → CENTRE OF MASS on the
   construct under the crosshair — any grid, wreck or base block, or the grid under the seat while
@@ -42,8 +62,8 @@
   open question.
 - Three nodes gate the modes in sequence — INTEGRITY SCAN (tier 3, under Grid Utilities), THERMAL
   SCAN (tier 4), CENTRE OF MASS (tier 5) — authored non-destructively by Setup Step 68; a locked
-  press says which node unlocks the mode, in one line. Open: Unity validation of the pass budget on
-  dense hulls and the 24-block degrade readout on very large ships.
+  press says which node unlocks the mode, in one line. Unity validation confirmed the pass budget,
+  the degrade readout and the gating.
 - **9.37.1-dev** (dev tool, changelog-only round): Tools ▸ Debug (Spawner) gained a Research
   section — unlock all (rank 1), max all (repeatable upgrades to their cap) and relock all —
   driven by `ResearchManager.UnlockAll` / `MaxAllRanks` / `ResetAllRanks`, so testing any
@@ -88,13 +108,6 @@
 - Fixed after the first Unity pass: `RouteBook` gained its `VoxelEngine.Cosmos` import, and a plotted
   leg now goes through `RouteBook.Append` instead of `Routes.Add` (`Routes` is a read-only view by
   design). Waypoint editing shipped with it: `REVERSE` and per-point delete on the panel.
-
-### 9.33.0-dev — Volume-Aware Ventilation
-- One shared `VentilationRules` contract: half an air change a minute as a floor, six as a ceiling,
-  and no scaling at all without a feed line. Panels print the figure they honour; AUTO-SCALE / FIXED
-  and each scrubber's feed allowance are saved per block. Step 64 tunes existing prefabs.
-- Balance rule that binds here: **per-service port caps are Oxygen 1, Exhaust 2 on Medium/Giant.**
-  Settled in 9.32.0-dev — do not re-open it in a later round.
 
 ## 1. Executive Vision
 
@@ -170,8 +183,8 @@ The design goal is a seamless blend of:
 | Radiation system | 🟡 PARTIALLY COMPLETE | **6.80.0-dev:** ambient celestial-body radiation, Radiation Shielding modules, and Hazmat sealing are implemented for armor. Reactor waste, fallout zones, geiger UX, and full ecology effects remain open. |
 | Heat system | ✅ COMPLETED | **6.80.0-dev** burn mitigation wired to Heat Tolerance modules; **9.29.0-dev** block temperature, entry heating, thruster self-heat, ablative `GridHeatshield`; **9.30.0-dev** every grid simulated, plume heating, hull damage visuals, suit temperature; **9.31.0-dev** `IHeatSourceBlock` for every machine and per-family heat tolerances; **9.32.0-dev** concealed-space heat and exhaust, `GridExhaustScrubber`, `GasVent` (Step 63); **9.33.0-dev** volume-aware flow (Step 64); **9.34.0-dev** heat is priced into a route by the same grid load a trip bills. Full notes: `Changelog.md`. |
 | Waymarks, named connectors & auto-run shuttle | 🛠️ WORKING ON | **9.35.0-dev**: named waymarks, `GridConnectorBlock` with the first cross-grid transfer bridge and a visible queue, and `GridRouteAutopilot` loops with armed stop conditions (Step 66). **9.36.0-dev** added the ground half: `StaticRefuelPad` (Step 67), a world-placed pad that is a metered consumer on the base's wires and a member of its fluid, gas and item runs. Open: terrain avoidance, dock-approach flying, cargo schedules, star-map rendering. |
-| Grid inspector overlay (heat / damage / centre of mass) | 🛠️ WORKING ON | **9.37.0-dev** implemented the whole overlay — one shared per-renderer `MaterialPropertyBlock` tint pass, one hotkey ring OFF → HEAT → DAMAGE → CENTRE OF MASS with the three reader modes, and the three research nodes authored by Setup Step 68. Unity validation of the pass budget on dense hulls and the 24-block degrade readout is open (tracked on the 9.37.0-dev round entry); it flips to ✅ COMPLETED on validation. See `Grid Inspector Overlay`. |
-| Crude fractionation & flare disposal | ❌ MISSING | Design written for the petroleum era: six fractions plus LPG from the column, every fraction spent in a recipe it beats, `FlareStack` as the run terminator with real heat and air cost. See `Crude Fractionation, Product Use & Flare Disposal`. |
+| Grid inspector overlay (heat / damage / centre of mass) | ✅ COMPLETED | **9.37.0-dev** shipped the whole overlay — one shared per-renderer `MaterialPropertyBlock` tint pass, one hotkey ring OFF → HEAT → DAMAGE → CENTRE OF MASS with the three reader modes, and the three research nodes authored by Setup Step 68 (Step 69 lives in the advanced-distillation-tower round). Unity validation confirmed the pass budget, the 24-block degrade readout and the research gating (9.37.1-dev added one-click research unlock/max/relock buttons to the debug spawner for exactly this kind of testing). See `Grid Inspector Overlay`. |
+| Crude fractionation & flare disposal | 🛠️ WORKING ON | **9.38.0-dev** shipped the first part: a NEW Advanced Distillation Tower plant block (the Oil Refinery stays its legacy two-tank machine — crude is converted only on the tower) with one feed tank + six typed cut tanks (LPG, naphtha, kerosene, diesel, gasoline, heavy fuel oil), coloured world sight gauges above each outlet, the atmospheric-cut ladder (100 L crude → 98 L of cuts, 2 L off-gas), the Refined Oil conversion re-run, and a naphtha-fed plastic recipe on the refinery that beats the old one per litre (Step 69; block gated by Atmospheric Distillation research). Open within the same design: spending the middle cuts on the maritime-engine fuel ladder, the off-gas line and the Flare Stack with waste-heat recovery and local pollution. See `Crude Fractionation, Product Use & Flare Disposal`. |
 | Asphalt roads | ❌ MISSING | Design written for the petroleum era: terrain surface from bitumen plus aggregate, movement/traction/routing bonuses, wear and grading rules. See `Asphalt Roads`. |
 | Engine Works (custom engine builder) | ❌ MISSING | Design written for the maritime/engine line: configuration, cylinders, bore/stroke, intake, fuel, compression, cooling, gearing and governor, with craft cost scaling into artefacts at the top. See `Engine Works`. |
 | Oxygen / life support | ✅ COMPLETED | Underwater reserve equipment already exists; **7.4.0-dev** activates vacuum/airless-body oxygen drain, sealed helmet+tank protection, armor oxygen-efficiency integration, and live hazard feedback. **7.5.0-dev** now resolves this against the same profile-driven air density used by flight and is Unity-validated. **9.27.0-dev** delivered airtight rooms and vents. **9.28.0-dev** closes the last item: oxygen tanks now carry a real per-instance refillable reserve (burned through helmet/armor efficiency, topped up from breathable air and from a Ventilation Unit's suit dock at 40 L/s), and the full-block Ventilation Unit pressurises every compartment it touches. |
@@ -825,14 +838,26 @@ spends the thing the route book was built to hold.
 
 ### Crude Fractionation, Product Use & Flare Disposal
 
+*(shipped in 9.38.0-dev, first part — `Scripts/Crafting/AdvancedDistillationTower.cs`: the dedicated
+column machine, one feed tank + six typed cut tanks + `TowerFluidStore`; `Scripts/Crafting/OilRefinery.cs`
+walked back to its legacy two-tank machine; `Scripts/Items/LiquidType.cs`: LPG/Naphtha/Kerosene/
+Diesel/Gasoline appended with densities and gauge colours; Setup Step 69 (`PetroleumColumnSetup.cs`)
+authors the tower model with its coloured world sight gauges, the Atmospheric Cut, the Refined Oil
+re-run and the naphtha plastic recipe, the block item and the Atmospheric Distillation research gate.
+Still open within this design: freezing points, per-world crude assay recipes, engine fuel
+preferences, the off-gas line and the flare stack.)*
+
 Crude oil stops being one number and becomes a column of products. The point is not realism for its
 own sake: it is that a player who wants the light end must also carry the heavy end, and the heavy
 end is worth something too.
 
-1. **The distillation column (upgrade of the existing refinery, not a new machine)**
-   - `OilRefinery` grows from two fixed fluid tanks to one input tank plus **one tank per fraction**
-     (six output tanks, each typed, each readable by a pipe run). The recipe shape already supports
-     multiple `fluidOutputs`; only the machine's tank set has to follow.
+1. **The distillation column (a dedicated new machine — decided by the 9.38 playtest)**
+   - The **Advanced Distillation Tower** is a new plant block, deliberately NOT the Oil Refinery: the
+     refinery keeps its legacy two-tank role (Refined Oil, HFO, MGO, plastics) and crude fractionation
+     happens only on the tower. The tower carries one input tank plus **one tank per fraction**
+     (six output tanks, each typed, each readable by a pipe run) and reads like a real plant — heavy
+     fuel oil draws low, LPG draws near the dome, and every outlet has a sight gauge in its liquid's
+     colour above it. The recipe shape already supports multiple `fluidOutputs`.
    - One batch of crude yields the realistic ladder, per 100 L of crude, and the fractions add up to
      the input with a small gas loss to the flare line:
 
@@ -878,6 +903,10 @@ end is worth something too.
    - Sizing: a small vent-flare for a deckhouse and a full tower for a refinery. A flare that is fed
      more than it can burn back-pressures the line, and the line then refuses the feed — the same
      discipline the ventilation ladder already teaches.
+   - Balance rule of record, settled in the 9.32.0-dev / 9.33.0-dev ventilation rounds — do not
+     re-open it here: **per-service port caps are Oxygen 1, Exhaust 2 on Medium/Giant.** A flare is
+     an Exhaust-port service, so two flares (or a flare and the ship's other exhaust service) still
+     share that cap like every other vent service.
    - Burning it is one choice of three for the light end: flare it, burn it in a genset, or sell it.
      Only the flare destroys it outright, so it is the last resort and reads like one.
    - **A flare fouls its neighbourhood**: it lifts the local pollution signature as well as the room
@@ -2200,9 +2229,14 @@ For each version, these are the high-level Unity tasks you will perform manually
     above 240 blocks; `GameSettings` gains the `GridInspector` action, default K; Setup Step 68
     authors INTEGRITY SCAN / THERMAL SCAN / CENTRE OF MASS under Grid Utilities. Unity validation of
     the pass budget and the degrade readout is pending.)*
-19. Refit `OilRefinery` into a **fractionating column**: one input tank plus one typed tank per
-    fraction, per-world crude assays from `OilSiteSampler`, and `LiquidType` entries for LPG, naphtha,
-    kerosene, diesel and gasoline with density, burn value and freezing point.
+19. ~~Convert crude into a **column of fractions** on a machine built for it.~~ *(9.38.0-dev —
+    the playtest decided the column is a dedicated plant, not a refinery refit: the NEW
+    `AdvancedDistillationTower` block carries one feed tank plus one typed tank per fraction
+    (LPG, naphtha, kerosene, diesel, gasoline, heavy fuel oil), each cut readable by its own run,
+    and the Oil Refinery keeps its legacy two-tank machine. `LiquidType` gained the five new
+    liquids with densities and gauge colours. Still open within this design: per-world crude
+    assays from `OilSiteSampler`, freezing points, and the burn-value table the fuel-ladder round
+    needs.)*
 20. Spend the fractions: recipes and engine fuel preferences per fraction, with `RefinedOil` recipes
     kept alive through a conversion step so an old base does not wake up broken.
 21. Author the **Flare Stack** (small + tower) as a gas/liquid run terminator with oxygen draw, room
@@ -2222,8 +2256,9 @@ For each version, these are the high-level Unity tasks you will perform manually
     `PowerConsumer` draw, and a pad that is a real member of the base's power, fluid, gas and item graphs
     rather than a block standing near them; ground rigs are served because a car here is a grid with
     wheels. Still open: the pad pumping back into a world run, and cargo schedules.)*
-26. **Run setup wizard step (non-destructive)** for 18–25 as each ships; Steps 66, 67 and 68 are used,
-    the next free step number is 69, and each of these features takes its own step.
+26. **Run setup wizard step (non-destructive)** for 18–25 as each ships; Steps 66–69 are used
+    (69 = 9.38.0-dev's Advanced Distillation Tower content) and each of these features takes its
+    own step.
 
 ### For 5.2.0 (Architect Era)
 

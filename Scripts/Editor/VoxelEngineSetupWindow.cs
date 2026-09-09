@@ -743,6 +743,29 @@ namespace VoxelEngine.EditorTools
                 "Re-runnable. Idempotent. Existing node costs, research times, labels and descriptions are preserved.");
             AddWizardButton(scroll, "68. Author Grid Inspector Overlay Research (Integrity Scan, Thermal Scan, Centre of Mass \u2014 Non-Destructive)", () => VoxelEngine.EditorTools.GridInspectorSetup.RunStep68(), 62);
 
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
+                "Step 69 (9.38.0) authors the ADVANCED DISTILLATION TOWER (non-destructive):\n" +
+                "  \u2022 A NEW big plant block \u2014 the Oil Refinery stays its legacy two-tank machine; crude\n" +
+                "    fractionation happens only on this tower, as the playtest decided. The model is a\n" +
+                "    distillation plant: tall main column with a dome, a stripper column, six draw pipes\n" +
+                "    (heavies low, LPG at the top) with a coloured world sight gauge ABOVE each outlet and\n" +
+                "    a crude-feed gauge on the other side; every gauge colour is its liquid's colour, and\n" +
+                "    the coloured fill rises and falls with the tank it measures\n" +
+                "  \u2022 ATMOSPHERIC CUT \u2014 100 L crude \u2192 2 LPG / 8 naphtha / 12 kerosene / 26 diesel /\n" +
+                "    18 gasoline / 32 heavy fuel oil (98 L out; the 2 L off-gas loss arrives with the\n" +
+                "    flare-disposal round)\n" +
+                "  \u2022 RE-RUN REFINED OIL \u2014 conversion cut on the tower so legacy stock stays spendable\n" +
+                "  \u2022 NAPHTHA PLASTIC stays on the refinery next to its legacy plastic recipe (better per litre)\n" +
+                "  \u2022 The tower panel shows an industrial analog dial per tank with pour / draw / drain\n" +
+                "    controls; every processor recipe book scrolls now\n" +
+                "  \u2022 Block item + craft recipe gated by ATMOSPHERIC DISTILLATION research (tier 5, requires\n" +
+                "    Oil Refining); the two distillation recipes are detached from the refinery prefab\n" +
+                "    if an earlier run of this step put them there\n" +
+                "Re-runnable. Idempotent. Existing recipes, prefab lists, tuned tank numbers, gauge wiring\n" +
+                "and research costs are preserved.");
+            AddWizardButton(scroll, "69. Author Advanced Distillation Tower Content (Atmospheric Cut, Re-Run, Naphtha Plastic \u2014 Non-Destructive)", () => VoxelEngine.EditorTools.PetroleumColumnSetup.RunStep69(), 62);
+
             AddSpacer(scroll, 20);
         }
 

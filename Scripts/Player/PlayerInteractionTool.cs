@@ -1138,6 +1138,8 @@ namespace VoxelEngine.Player
                 if (jackPump != null) { UI.GameUIController.Instance?.OpenMachine(jackPump); return; }
                 var oilRefinery = hit.collider.GetComponentInParent<VoxelEngine.Crafting.OilRefinery>();
                 if (oilRefinery != null) { UI.GameUIController.Instance?.OpenMachine(oilRefinery); return; }
+                var tower = hit.collider.GetComponentInParent<VoxelEngine.Crafting.AdvancedDistillationTower>();
+                if (tower != null) { UI.GameUIController.Instance?.OpenMachine(tower); return; }
                 var chemPlant = hit.collider.GetComponentInParent<VoxelEngine.Industrial.StationaryChemicalPlant>();
                 if (chemPlant != null) { UI.GameUIController.Instance?.OpenMachine(chemPlant); return; }
 

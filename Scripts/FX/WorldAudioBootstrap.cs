@@ -69,6 +69,9 @@ namespace VoxelEngine.FX
             foreach (var m in FindObjectsByType<OilRefinery>(FindObjectsInactive.Exclude))
                 Attach(m, Sfx.MachineHum, () => (m.IsOnline && m.Current != null) ? 1f : 0f, vol: 0.6f, dist: 20f, basePitch: 0.85f);
 
+            foreach (var m in FindObjectsByType<AdvancedDistillationTower>(FindObjectsInactive.Exclude))
+                Attach(m, Sfx.EngineRumble, () => (m.IsOnline && m.Current != null) ? 1f : 0f, vol: 0.7f, dist: 26f, basePitch: 0.55f, pitchSpread: 0.1f);
+
             foreach (var m in FindObjectsByType<Pumpjack>(FindObjectsInactive.Exclude))
                 Attach(m, Sfx.EngineRumble, () => (m.IsOnline && m.HasReservoir) ? 1f : 0f, vol: 0.6f, dist: 24f, basePitch: 0.8f, pitchSpread: 0.18f);
 

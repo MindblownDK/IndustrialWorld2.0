@@ -1,7 +1,8 @@
 // Assets/Scripts/VoxelEngine/Crafting/MachineFluidStore.cs
 //
 // IFluidStore backed by a machine's own list of MachineFluidTanks. Used by the
-// stationary Oil Refinery and Chemical Plant.
+// stationary Chemical Plant; the Oil Refinery (fractionating column) routes its
+// fluids through OilRefinery.ColumnFluidStore instead.
 
 using System.Collections.Generic;
 using VoxelEngine.Items;

@@ -1,13 +1,22 @@
 // Assets/Scripts/VoxelEngine/Crafting/OilRefinery.cs
 //
-// Industrial multi-recipe processor. Modelled on ElectricFurnace but built
-// around ProcessingRecipe (N inputs / M outputs).
+// Industrial Oil Refinery — the legacy multi-recipe processor of the refined-oil
+// era. Built around ProcessingRecipe (N inputs / M outputs): two fluid tanks
+// (an auto-typing input tank and an auto-typing output tank) plus item slots for
+// recipes that also take or make items (plastic, etc.).
 //
 // Layout:
-//   * 2 input slots
-//   * 4 output slots
+//   * 2 input slots / 4 output slots (item side)
 //   * 2 upgrade slots (Speed / Efficiency, same item type as ElectricFurnace)
+//   * 1 input fluid tank + 1 output fluid tank (both auto-type)
 //   * Co-located PowerConsumer (auto-added in Awake)
+//
+// NOTE (9.38.0-dev): crude fractionation now lives in the dedicated
+// AdvancedDistillationTower block — see Scripts/Crafting/AdvancedDistillationTower.cs.
+// The refinery keeps its legacy recipes untouched: Refine Crude Oil → Refined
+// Oil, the refined-oil plastic recipe (plus the naphtha-fed plastic recipe the
+// tower unlocks), Heavy Fuel Oil and Marine Gas Oil distillation. Old saves and
+// placed refineries keep working exactly as before.
 //
 // Behaviour:
 //   * Each tick picks the first recipe in knownRecipes where ALL inputs
@@ -42,15 +51,17 @@ namespace VoxelEngine.Crafting
         public ItemContainer upgradeC;
 
         [Header("Fluid Tanks")]
-        [Tooltip("Input fluid tank (e.g. Crude Oil) and output fluid tank (e.g. Refined Oil).")]
+        [Tooltip("Input tank. Auto-typed: adopts whatever feed liquid is poured in first (crude, refined oil, or naphtha for the plastic feed).")]
         public MachineFluidTank fluidIn  = new MachineFluidTank("Fluid In",  2000f, LiquidType.CrudeOil,   autoType: true);
+        [Tooltip("Output tank. Auto-typed: adopts whatever liquid the running recipe produces first (Refined Oil, Heavy Fuel Oil, MGO).")]
         public MachineFluidTank fluidOut = new MachineFluidTank("Fluid Out", 2000f, LiquidType.RefinedOil, autoType: true);
+
         public IReadOnlyList<MachineFluidTank> FluidTanks => new[] { fluidIn, fluidOut };
 
         [Header("Tuning")]
         [Tooltip("Base watts/s drawn while a batch is in progress. Multiplied by recipe.powerDrawMultiplier and efficiency upgrades.")]
         public float baseWattsPerSecond = 400f;
-        [Tooltip("Watts/s drawn while idle (keeps the cracking column hot).")]
+        [Tooltip("Watts/s drawn while idle.")]
         public float idleWattsPerSecond = 20f;
 
         // Runtime
@@ -58,12 +69,12 @@ namespace VoxelEngine.Crafting
         private float _progress;
         private PowerConsumer _power;
 
-        public float Progress01            => _current == null ? 0 : _progress / EffectiveBatchTime(_current);
-        public ProcessingRecipe Current    => _current;
-        public bool  IsOnline              => _power != null && _power.IsPowered;
-        public float CurrentWattage        { get; private set; }
-        public float SpeedMultiplier       { get; private set; } = 1f;
-        public float EfficiencyMultiplier  { get; private set; } = 1f;
+        public float Progress01           => _current == null ? 0 : _progress / EffectiveBatchTime(_current);
+        public ProcessingRecipe Current   => _current;
+        public bool  IsOnline             => _power != null && _power.IsPowered;
+        public float CurrentWattage       { get; private set; }
+        public float SpeedMultiplier      { get; private set; } = 1f;
+        public float EfficiencyMultiplier { get; private set; } = 1f;
 
         private void Awake()
         {
@@ -163,6 +174,7 @@ namespace VoxelEngine.Crafting
         //                           RECIPE
         // ============================================================
         private IFluidStore Fluids() => new MachineFluidStore(FluidTanks);
+
         private ItemContainer[] InArr  => new[] { inputC };
         private ItemContainer[] OutArr => new[] { outputC };
 

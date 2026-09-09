@@ -34,7 +34,10 @@ namespace VoxelEngine.Crafting
         /// <summary>How much of a given liquid this tank can still accept.</summary>
         public float SpaceFor(LiquidType type)
         {
-            if (!IsEmpty && liquid != type) return 0f;     // mismatched liquid
+            // A fixed-type tank (autoType false) only ever holds its preset liquid,
+            // even while empty; an auto-type tank accepts anything until its first
+            // fill locks the type in.
+            if (liquid != type && (!autoType || !IsEmpty)) return 0f;
             return Mathf.Max(0f, capacity - stored);
         }
 

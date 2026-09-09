@@ -1,0 +1,36 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe52eb4685f86c44d967d9cd3e4bd91a, type: 3}
+  m_Name: res_atmospheric_distillation
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Research.ResearchNode
+  nodeId: res_atmospheric_distillation
+  displayName: Atmospheric Distillation
+  description: "The tall tower that turns crude into six real products: LPG, naphtha,
+    kerosene, diesel, gasoline and heavy fuel oil \u2014 each a typed tank, each
+    worth carrying because the heavy end is worth something too. Build it on a base
+    that already refines oil."
+  iconTint: {r: 0.62, g: 0.55, b: 0.4, a: 1}
+  category: 0
+  subCategory: 4
+  tier: 5
+  column: 4
+  eraLabel: 
+  prerequisites:
+  - {fileID: 11400000, guid: abb6ed4f55bcd2e428a1d9701ff4de8c, type: 2}
+  researchSeconds: 30
+  cost: []
+  unlocksRecipes:
+  - {fileID: 11400000, guid: fccee8744cd50a846839055c29202a82, type: 2}
+  upgradeKind: 0
+  upgradePerRankAmount: 0
+  maxRanks: 1
+  costScalesWithRank: 1
