@@ -136,6 +136,7 @@ namespace VoxelEngine.Persistence
                 SavePlacedTiered(save);
                 SaveGrids(save);
                 SaveQuarries(save);
+                SaveRefuelPads(save);
                 string json = JsonUtility.ToJson(save, prettyPrint: true);
                 string temporaryPath = path + ".tmp";
                 string backupPath = path + ".previous";
@@ -1112,6 +1113,7 @@ namespace VoxelEngine.Persistence
                 RestoreGrids(save);
                 RestorePlayer(save);
                 RestoreQuarries(save);
+                RestoreRefuelPads(save);
                 Debug.Log($"[WorldState] Loaded {save.placedTiered.Count} tiered + {save.placedBlocks.Count} blocks + {save.grids.Count} movable grids from {path}");
             }
             catch (Exception ex) { Debug.LogError("[WorldState] Load failed: " + ex.Message); }
@@ -1162,7 +1164,7 @@ namespace VoxelEngine.Persistence
                                 savedRoute.waypoints.Add(new SavedWaypoint
                                 {
                                     xKm = wp.positionKm.x, yKm = wp.positionKm.y, zKm = wp.positionKm.z,
-                                    bodyId = wp.bodyId, label = wp.label,
+                                    bodyId = wp.bodyId, label = wp.label, waymarkName = wp.waymarkName,
                                     // Additive: a pinned point without its offset would reload as a
                                     // point inside the planet.
                                     offXKm = wp.anchorOffsetKm.x, offYKm = wp.anchorOffsetKm.y,
@@ -1172,6 +1174,29 @@ namespace VoxelEngine.Persistence
                         }
                         entry.routes.Add(savedRoute);
                     }
+                }
+
+                // Additive 9.35.0: the ship's armed loop. A loop that was mid-service is written down as
+                // *paused at the same leg*: the schedule survives, the flight does not resume at speed.
+                var autopilot = grid.GetComponent<VoxelEngine.Navigation.GridRouteAutopilot>();
+                if (autopilot != null && autopilot.IsArmed)
+                {
+                    entry.loops.Add(new SavedRouteLoop
+                    {
+                        routeName = autopilot.routeName ?? string.Empty,
+                        startWaymark = autopilot.startWaymark ?? string.Empty,
+                        endWaymark = autopilot.endWaymark ?? string.Empty,
+                        mode = (int)autopilot.mode,
+                        fixedRuns = autopilot.fixedRuns,
+                        runsCompleted = autopilot.RunsCompleted,
+                        targetCharge01 = autopilot.targetCharge01,
+                        targetFuel01 = autopilot.targetFuel01,
+                        targetHydrogen01 = autopilot.targetHydrogen01,
+                        minimumReserve01 = autopilot.minimumReserve01,
+                        haltOnWorstBlockHurt01 = autopilot.haltOnWorstBlockHurt01,
+                        stopWhenCargoFull = autopilot.stopWhenCargoFull,
+                        stopWhenCargoEmpty = autopilot.stopWhenCargoEmpty,
+                    });
                 }
                 if (grid.Body != null)
                 {
@@ -1413,6 +1438,8 @@ namespace VoxelEngine.Persistence
                                     if (sw == null) continue;
                                     var restoredWp = new VoxelEngine.Navigation.RouteWaypoint(
                                         new Unity.Mathematics.double3(sw.xKm, sw.yKm, sw.zKm), null, sw.label);
+                                    if (!string.IsNullOrWhiteSpace(sw.waymarkName))
+                                        restoredWp.waymarkName = sw.waymarkName;
                                     if (!string.IsNullOrWhiteSpace(sw.bodyId))
                                     {
                                         // The anchor is re-derived from the offset rather than trusted
@@ -1442,6 +1469,32 @@ namespace VoxelEngine.Persistence
                             if (route.waypoints.Count > 0) restored.Add(route);
                         }
                         routeBook.Restore(restored);
+                    }
+                }
+
+                // Additive 9.35.0: reload the armed loop. Restored *paused*, on purpose: a schedule the
+                // player set before quitting should never resume a burn on its own the moment the world
+                // loads. One button press in the panel, and the ship has its job back.
+                if (savedGrid.loops != null && savedGrid.loops.Count > 0)
+                {
+                    var savedLoop = savedGrid.loops[0];
+                    if (savedLoop != null)
+                    {
+                        var ap = grid.GetComponent<VoxelEngine.Navigation.GridRouteAutopilot>();
+                        if (ap == null) ap = grid.gameObject.AddComponent<VoxelEngine.Navigation.GridRouteAutopilot>();
+                        ap.routeName = savedLoop.routeName ?? string.Empty;
+                        ap.startWaymark = savedLoop.startWaymark ?? string.Empty;
+                        ap.endWaymark = savedLoop.endWaymark ?? string.Empty;
+                        ap.mode = (VoxelEngine.Navigation.AutoRunMode)Mathf.Clamp(savedLoop.mode, 0, 2);
+                        ap.fixedRuns = Mathf.Max(1, savedLoop.fixedRuns);
+                        ap.targetCharge01 = Mathf.Clamp01(savedLoop.targetCharge01);
+                        ap.targetFuel01 = Mathf.Clamp01(savedLoop.targetFuel01);
+                        ap.targetHydrogen01 = Mathf.Clamp01(savedLoop.targetHydrogen01);
+                        ap.minimumReserve01 = Mathf.Clamp01(savedLoop.minimumReserve01);
+                        ap.haltOnWorstBlockHurt01 = Mathf.Clamp01(savedLoop.haltOnWorstBlockHurt01);
+                        ap.stopWhenCargoFull = savedLoop.stopWhenCargoFull;
+                        ap.stopWhenCargoEmpty = savedLoop.stopWhenCargoEmpty;
+                        ap.RestorePaused(savedLoop.runsCompleted);
                     }
                 }
 
@@ -2499,6 +2552,7 @@ namespace VoxelEngine.Persistence
             public List<SavedPlacedBlock>  placedBlocks  = new();
             public List<SavedPlacedTiered> placedTiered = new();
             public List<SavedQuarry>       quarries     = new();
+            public List<SavedRefuelPad>      refuelPads   = new();   // 9.36.0-dev — the ground pads
             // Additive in 5.69.0: omitted by legacy saves and initialized by field default.
             public List<SavedGrid>          grids        = new();
         }
@@ -2523,6 +2577,10 @@ namespace VoxelEngine.Persistence
             public List<SavedRoomCharge> roomCharges = new();
             // Additive 9.34.0: recorded routes, in cosmic km with an optional body anchor.
             public List<SavedRoute> routes = new();
+            // Additive 9.35.0: armed auto-run loops. Saved on the grid because a loop is a promise the
+            // *ship* made, not block state — the pad may be rebuilt out from under it and the schedule
+            // should still reload, then fail honestly at its own reservation check rather than vanish.
+            public List<SavedRouteLoop> loops = new();
             public List<SavedGridBlock> blocks = new();
         }
         [Serializable] private class SavedRoomCharge
@@ -2541,6 +2599,23 @@ namespace VoxelEngine.Persistence
             public List<SavedWaypoint> waypoints = new();
         }
 
+        [Serializable] private class SavedRouteLoop
+        {
+            public string routeName;
+            public string startWaymark;
+            public string endWaymark;
+            public int mode;
+            public int fixedRuns = 4;
+            public int runsCompleted;
+            public float targetCharge01 = 0.9f;
+            public float targetFuel01 = 0.85f;
+            public float targetHydrogen01 = 0.85f;
+            public float minimumReserve01 = 0.25f;
+            public float haltOnWorstBlockHurt01 = 0.25f;
+            public bool stopWhenCargoFull = true;
+            public bool stopWhenCargoEmpty = false;
+        }
+
         [Serializable] private class SavedWaypoint
         {
             // Cosmic positions are kilometres at solar-system scale: a float is a metre of error
@@ -2550,6 +2625,10 @@ namespace VoxelEngine.Persistence
             public double zKm;
             public string bodyId;
             public string label;
+            // Additive 9.35.0: the name of the waymark this point stands for, when it stands for one.
+            // The position is still written as well, so a waymark whose pad was destroyed reloads as
+            // the point it was last seen at rather than vanishing from somebody else's route.
+            public string waymarkName;
             // Additive 9.34.0: a pinned point is stored as an offset from the body it rides, so the
             // record survives the body moving. A legacy record has no offset and loads as absolute.
             public double offXKm;
@@ -2838,12 +2917,101 @@ namespace VoxelEngine.Persistence
             public int drawerStoredCount;
             public List<SavedStack> drawerUpgrades = new();
         }
+        // ── Static refuel pads (9.36.0-dev) ───────────────────────────────────
+        // The pad has no block identity of its own in the save format — it is a world block, placed and
+        // destroyed by the block system, and it lives at a position. So its own state (what the player
+        // named it, what it draws, whether it is switched on) is stored by position and re-bound on load
+        // by proximity, exactly the way a quarry's depth is. A pad that was destroyed therefore loses its
+        // name and does not resurrect a ghost record, which is the same rule the waymark model runs on.
+        private void SaveRefuelPads(SaveData save)
+        {
+            var pads = FindObjectsByType<VoxelEngine.Navigation.StaticRefuelPad>(FindObjectsInactive.Exclude);
+            foreach (var pad in pads)
+            {
+                if (pad == null) continue;
+                save.refuelPads.Add(new SavedRefuelPad
+                {
+                    pos = pad.transform.position,
+                    rot = pad.transform.rotation,
+                    rotY = pad.transform.eulerAngles.y,
+                    waymarkName = pad.SavedName,
+                    enabled = pad.enabled,
+                    powerWatts = pad.powerWatts,
+                    litresPerSecond = pad.litresPerSecond,
+                    itemSlotsPerSecond = pad.itemSlotsPerSecond,
+                    // Key names kept from the first cut of the pad (additive-key rule): what they hold now
+                    // is the pad's own tank, which the base fills through the pipe graph.
+                    drumLitres = pad.TankLitres,
+                    drumType = (int)pad.TankType,
+                    // The drum's contents and its six port faces ride this entry, the way a quarry's output
+                    // rides `SavedQuarry.outputContainer`. The pad's two fluid/gas nodes do NOT need to be
+                    // listed here at all: they are a world `WaterTank` and a world `GasTank` on a placed
+                    // block, and `SavedPlacedBlock` already persists both — one owner per number.
+                    drumContainer = CapturePadDrum(pad)
+                });
+            }
+        }
+
+        private void RestoreRefuelPads(SaveData save)
+        {
+            if (save.refuelPads == null || save.refuelPads.Count == 0) return;
+            var pads = FindObjectsByType<VoxelEngine.Navigation.StaticRefuelPad>(FindObjectsInactive.Exclude);
+            foreach (var sp in save.refuelPads)
+            {
+                VoxelEngine.Navigation.StaticRefuelPad best = null;
+                float bestDist = 2f;                          // same tolerance the quarry restore uses
+                foreach (var pad in pads)
+                {
+                    if (pad == null) continue;
+                    float d = Vector3.Distance(pad.transform.position, sp.pos);
+                    if (d < bestDist) { bestDist = d; best = pad; }
+                }
+                if (best == null) continue;                   // pad gone: its waymark simply is not any more
+                best.enabled = sp.enabled;
+                best.powerWatts = sp.powerWatts;
+                best.litresPerSecond = sp.litresPerSecond;
+                best.itemSlotsPerSecond = sp.itemSlotsPerSecond;
+                best.RestoreFromSave(sp.waymarkName);
+                best.RestoreTank(sp.drumLitres, (VoxelEngine.Items.LiquidType)sp.drumType);
+                best.EnsureBuffersPublic();
+                if (sp.drumContainer != null)
+                {
+                    DeserializeInto(best.Drum, sp.drumContainer);
+                    RestorePortSnapshot(best.gameObject, sp.drumContainer);
+                }
+            }
+        }
+
         [Serializable] private class SavedQuarry
         {
             public Vector3 pos; public Quaternion rot; public float rotY;
             public int currentDepth; public int cursorX; public int cursorZ;
             public int phase; public int rangeLvl; public int speedLvl; public int effLvl; // upgrade levels
             public SavedContainer outputContainer;
+        }
+
+        [Serializable] private class SavedRefuelPad
+        {
+            public Vector3 pos; public Quaternion rot; public float rotY;
+            public string waymarkName = "";
+            public bool enabled = true;
+            public float powerWatts;
+            public float litresPerSecond;
+            public int itemSlotsPerSecond;
+            public float drumLitres;
+            public int drumType;
+            public SavedContainer drumContainer;
+        }
+
+        /// <summary>Drum items plus the pad's port-face snapshot, in the one shape the container ladder
+        /// already understands.</summary>
+        private SavedContainer CapturePadDrum(VoxelEngine.Navigation.StaticRefuelPad pad)
+        {
+            if (pad == null) return null;
+            pad.EnsureBuffersPublic();
+            var sc = SerializeContainer(pad.Drum);
+            if (sc != null) AttachPortSnapshot(pad.gameObject, sc);
+            return sc;
         }
     }
 }

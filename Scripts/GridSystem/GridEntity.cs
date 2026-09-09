@@ -95,6 +95,44 @@ namespace VoxelEngine.GridSystem
         public float   RotationPitch { get; set; }
         public float   RotationRoll { get; set; }
         public bool    DampenersOn { get; set; } = true;
+
+        // ── Autonomous flight (9.35.0-dev) ─────────────────────────────────
+        // A commanded velocity for a ship with nobody in the seat. This is NOT a fake pilot: see
+        // ApplyAutonomousFlightThrust, which is a sibling of the dampener channel and keeps
+        // `IsControlled` false on purpose. Pretending a pilot exists would have handed an unmanned
+        // shuttle the cockpit's camera, seat and tool privileges for free, and every "is somebody
+        // aboard" rule in the game would have started lying.
+        [System.ComponentModel.Browsable(false)]
+        public bool AutonomousFlightActive { get; private set; }
+
+        /// <summary>Velocity the autopilot is trying to reach, m/s, world space. Zero means "hold
+        /// station here"; the dampener rule treats a commanded stop as a hold, like a seated pilot.</summary>
+        public Vector3 AutonomousDesiredVelocity { get; private set; }
+
+        /// <summary>Who is commanding the ship, for the HUD and the panels ("AUTO RUN — smelter leg").</summary>
+        public string AutonomousFlightOwner { get; private set; }
+
+        /// <summary>Set by `GridRouteAutopilot` each tick. A command that stops being refreshed is a
+        /// destroyed commander, not a decision to hover, so a heartbeat releases the ship: see
+        /// `AUTONOMOUS_FLIGHT_STALE_SECONDS` in ApplyAutonomousFlightThrust's caller.</summary>
+        public void SetAutonomousFlight(Vector3 desiredVelocity, string owner)
+        {
+            AutonomousDesiredVelocity = desiredVelocity;
+            AutonomousFlightOwner = owner;
+            AutonomousFlightActive = true;
+            _autonomousFlightHeartbeat = Time.unscaledTime;
+        }
+
+        public void ClearAutonomousFlight()
+        {
+            if (!AutonomousFlightActive) return;
+            AutonomousFlightActive = false;
+            AutonomousDesiredVelocity = Vector3.zero;
+            AutonomousFlightOwner = null;
+        }
+
+        float _autonomousFlightHeartbeat;
+        const float AUTONOMOUS_FLIGHT_STALE_SECONDS = 0.35f;
         /// <summary>True while an unpiloted, unlocked grid is autonomously cancelling drift.</summary>
         public bool AutonomousDampenersActive { get; private set; }
         /// <summary>True while an occupied cockpit is actively cancelling all grid velocity.</summary>
@@ -445,7 +483,10 @@ namespace VoxelEngine.GridSystem
             }
         }
 
-        private bool HasManualThrustInput()
+        /// <summary>Is a human pushing keys right now? Public because the autopilot has to answer the
+        /// same question the dampeners do, and a second copy of that rule is how a ship ends up fighting
+        /// its own pilot.</summary>
+        public bool HasManualThrustInput()
         {
             return IsControlled && ThrustInput.sqrMagnitude > 0.01f;
         }
@@ -1170,6 +1211,21 @@ namespace VoxelEngine.GridSystem
             {
                 // Decay any remaining smoothed input so the ship doesn't lurch when re-entered.
                 _smoothedThrustInput = Vector3.MoveTowards(_smoothedThrustInput, Vector3.zero, THRUST_SPOOL_RATE * 2f * Time.fixedDeltaTime);
+
+                // An autopilot command outranks the dampeners: it asks for a velocity, and the
+                // dampeners then finish the job of settling the ship once that velocity is zero.
+                if (AutonomousFlightActive)
+                {
+                    // A command that stops being refreshed is a crashed or destroyed commander, not a
+                    // ship that decided to hover: release it, or the last instruction flies forever.
+                    if (Time.unscaledTime - _autonomousFlightHeartbeat > AUTONOMOUS_FLIGHT_STALE_SECONDS)
+                        ClearAutonomousFlight();
+                    else
+                    {
+                        ApplyAutonomousFlightThrust();
+                        return;
+                    }
+                }
                 ApplyAutonomousDampenerThrust();
                 return;
             }
@@ -1240,6 +1296,58 @@ namespace VoxelEngine.GridSystem
         /// braking authority whenever an unpiloted ship is left unlocked with
         /// dampeners enabled. Residual velocity is finished by UpdateDampeners.
         /// </summary>
+        /// <summary>Steers toward `AutonomousDesiredVelocity` using the same thrusters, the same
+        /// per-thruster fuel and power accounting and the same `THRUST_GAIN` the pilot's keys drive, so
+        /// an auto-run can never be better at flying than the pilot is. Authority follows the velocity
+        /// error, which means a heavy ship with a weak drive accelerates like a heavy ship with a weak
+        /// drive: the schedule bends to the physics, not the other way round.</summary>
+        private void ApplyAutonomousFlightThrust()
+        {
+            if (_rb == null) { ClearAutonomousFlight(); return; }
+
+            Vector3 velocity = _rb.linearVelocity;
+            Vector3 error = AutonomousDesiredVelocity - velocity;
+
+            // Gravity is not the autopilot's problem: a climb is expressed as a vertical velocity, and
+            // a commanded hold already has the dampener rule to settle it. Only cancel the gravity axis
+            // when the command is "stay here", which is the case where fighting it would be pointless.
+            if (AutonomousDesiredVelocity.sqrMagnitude < 0.01f)
+            {
+                Vector3 gravity = CurrentGravityAcceleration();
+                if (gravity.sqrMagnitude > 0.0001f && !ShouldDampenerHoldHover())
+                    error = Vector3.ProjectOnPlane(error, gravity.normalized);
+            }
+
+            float speedError = error.magnitude;
+            if (speedError < 0.05f)
+            {
+                AutonomousDampenersActive = true;     // settled on the command; dampeners hold it now
+                return;
+            }
+
+            Vector3 desiredDirection = error / speedError;
+            // 12 m/s is roughly the error at which a mid-size ship wants everything it has got; below
+            // that the drive eases on, which is what stops a loop sawtoothing across its own arrival
+            // envelope instead of settling into it.
+            float demand01 = Mathf.Clamp01(speedError / 12f);
+
+            Vector3 worldForce = Vector3.zero;
+            foreach (var block in AllBlocks)
+            {
+                if (block is not GridThruster thruster || !thruster.IsOperational) continue;
+                float alignment = Vector3.Dot(thruster.PushDirection.normalized, desiredDirection);
+                if (alignment <= 0.12f) continue;
+                float fraction = Mathf.Clamp01(alignment * demand01);
+                thruster.ThrustFraction = Mathf.Max(thruster.ThrustFraction, fraction);
+                float thrust = thruster.AvailableThrust(Vector3.zero, this, fraction) * fraction;
+                worldForce += thruster.PushDirection * thrust;
+            }
+
+            if (worldForce.sqrMagnitude > 0.0001f)
+                _rb.AddForce(worldForce * THRUST_GAIN, ForceMode.Force);
+            AutonomousDampenersActive = true;
+        }
+
         private void ApplyAutonomousDampenerThrust()
         {
             AutonomousDampenersActive = false;
@@ -1287,10 +1395,14 @@ namespace VoxelEngine.GridSystem
             // power/hydrogen or live generation. A seated pilot deliberately commands
             // station keeping, so pilot hold is reliable both over a planet and in vacuum.
             bool autonomous = !IsControlled;
-            if (autonomous && !AutonomousDampenersActive) return;
+            // An autopilot coasting toward a waypoint, or holding a ship at a pad, needs the same
+            // decisive station-keeping a seated pilot gets. Without this the ship drifts off its own
+            // arrival envelope and the loop never registers as having arrived.
+            if (autonomous && !AutonomousDampenersActive && !AutonomousFlightActive) return;
 
-            bool isThrusting = HasManualThrustInput();
-            bool pilotHold = IsControlled && !isThrusting;
+            bool isThrusting = HasManualThrustInput() || (AutonomousFlightActive
+                && AutonomousDesiredVelocity.sqrMagnitude > 0.01f);
+            bool pilotHold = (IsControlled || AutonomousFlightActive) && !isThrusting;
             PilotDampenerHoldActive = pilotHold;
 
             Vector3 vel = _rb.linearVelocity;

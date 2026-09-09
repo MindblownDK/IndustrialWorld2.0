@@ -682,6 +682,49 @@ namespace VoxelEngine.EditorTools
                 "Re-runnable. Idempotent. Existing prefabs, items and recipes keep their mass, HP, power and craft costs.");
             AddWizardButton(scroll, "65. Author Route Book & Range Calculator (Recorded Runs, Route Costing \u2014 Non-Destructive)", () => VoxelEngine.EditorTools.EngineRoomAtmosphereSetup.RunStep65(), 62);
 
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
+                "Step 66 (9.35.0) authors the REFUEL CONNECTOR & AUTO-RUN (non-destructive):\n" +
+                "  \u2022 REFUEL CONNECTOR (large) \u2014 a named waymark with a magnetic lock. Power, hydrogen,\n" +
+                "    liquid fuel and cargo cross between the two grids at the fitting's rating, one ship at\n" +
+                "    a time, and a mated ship is served at full rate where a hovering one gets 45 percent\n" +
+                "  \u2022 FUEL HATCH (Small) \u2014 soft capture, no lock, deliberately slower: the pad a deckhouse\n" +
+                "    or a small craft can actually afford\n" +
+                "  \u2022 AUTO-RUN PILOT research node under Grid Utilities: named ends, a target to leave at,\n" +
+                "    armed stop conditions, and the reserve rule that refuses a leg before it is started\n" +
+                "  \u2022 A loop is priced with the same call the route panel prints, so the schedule and the\n" +
+                "    arithmetic cannot disagree about what this ship can still do\n" +
+                "  \u2022 Reloaded worlds restore a loop PAUSED \u2014 a save never resumes a burn by itself\n" +
+                "  \u2022 RUN UNTIL IT RUNS OUT is offered, confirm-once: no reserve, fly until the numbers\n" +
+                "    refuse, then hold station and say why. Nothing here avoids terrain or flies a dock approach\n" +
+                "Re-runnable. Idempotent. Existing prefabs, items, recipes and research costs are preserved.");
+
+            AddWizardButton(scroll, "66. Author Refuel Connector & Auto-Run (Named Waymarks, Shuttle Loops \u2014 Non-Destructive)", () => VoxelEngine.EditorTools.NavShuttleSetup.RunStep66(), 62);
+
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
+                "Step 67 (9.36.0) authors the STATIC REFUEL PAD (non-destructive):\n" +
+                "  \u2022 A world-placed block in the Quarry's family (BlockItem + placedPrefab + PlacedBlock),\n" +
+                "    not a tiered definition: a pad is a machine you place, and it takes its tier from the\n" +
+                "    block system's own health and mining values\n" +
+                "  \u2022 Name it and it becomes a waymark, so a loop can be pointed at a ground base exactly\n" +
+                "    the way it is pointed at a station \u2014 the name is saved with the pad by position, like\n" +
+                "    a quarry's depth, and a destroyed pad loses its name instead of leaving a ghost record\n" +
+                "  \u2022 It is a real PowerConsumer on the base's wire network: 0 W while idle, its rated draw\n" +
+                "    while pumping, and it REFUSES to serve when the base cannot sustain that load rather\n" +
+                "    than trickle-charging a frigate on watts the grid does not have\n" +
+                "  \u2022 Fuel and cargo are plumbed in, not scavenged from whatever is nearby: a PadFuelTank node on\n" +
+                "    the fluid run so the base's pumps fill the pad, a PadGasTank carrying the collider\n" +
+                "    that makes it a gas endpoint, and a drum behind two port faces and the\n" +
+                "    IItemConsumer/IItemProvider API \u2014 item pipes AND belts, chutes and funnels can all\n" +
+                "    fill it or empty it, and the panel prints how many links each graph reports\n" +
+                "  \u2022 Serves ground rigs too: a car or lorry is a grid with wheels here, so a parked vehicle\n" +
+                "    takes the same queue, and a rig with no fuel tank asks for no fuel instead of hanging\n" +
+                "  \u2022 GROUND REFUEL PADS research node under Grid Utilities; Auto-Run Pilot now requires it\n" +
+                "Re-runnable. Idempotent. Pad watts, litres per second, tank and drum sizes, the six port faces,\n" +
+                "node offsets, item stats, recipe costs and research costs are preserved on a re-run.");
+            AddWizardButton(scroll, "67. Author Static Refuel Pad (Ground Pads for Non-Grid Bases \u2014 Non-Destructive)", () => VoxelEngine.EditorTools.StaticRefuelSetup.RunStep67(), 62);
+
             AddSpacer(scroll, 20);
         }
 

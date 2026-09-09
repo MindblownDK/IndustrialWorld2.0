@@ -1,0 +1,39 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9b76ccf0d2c60d942965b00c15422682, type: 3}
+  m_Name: Block_RefuelPad
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Items.BlockItem
+  itemId: block_refuel_pad
+  displayName: Refuel Pad
+  description: 'A ground refuel island for a base that is not a ship. Name it and
+    it becomes a waymark: shuttles and ground rigs fly or drive to that name, queue
+    one at a time, and take power, hydrogen, liquid fuel and cargo at the pad''s
+    rating. It is a member of the base''s own graphs: a power consumer on the wires,
+    a tank node on the pipes, a gas endpoint on the run, and a drum behind port faces
+    that belts and item pipes fill and empty. A base that cannot sustain the load
+    refuses instead of trickle-charging.'
+  icon: {fileID: 0}
+  iconTint: {r: 0.86, g: 0.62, b: 0.22, a: 1}
+  maxStack: 900
+  massPerUnit: 1
+  category: Logistics
+  requiresContainment: 0
+  cannotBeCarried: 0
+  isPressurizedCanister: 0
+  viewmodelPrefab: {fileID: 0}
+  placedPrefab: {fileID: 7121238163422108087, guid: 9056b886c8d31244f9a8625d7d1ef8a6, type: 3}
+  gridSize: {x: 1, y: 1, z: 1}
+  allowStacking: 1
+  blockHealth: 100
+  miningTier: 2
+  placedMaterial: {fileID: 0}
+  texture: {fileID: 0}

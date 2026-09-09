@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `9.34.0-dev`  
-**Roadmap Version:** `9.34.0-dev`  
+**Current Version:** `9.36.0-dev`  
+**Roadmap Version:** `9.36.0-dev`  
 **Date:** 2026-09-09
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -14,7 +14,10 @@
    `Changelog.md` only — if a sentence here would read the same in the changelog, it does not belong
    here.
 2. **One `Recently Done` block at the top of this file**, newest round first, three short lines per
-   round, describing the state of the code rather than the story of reaching it.
+   round, describing the state of the code rather than the story of reaching it. **Hard cap: five
+   rounds.** When a sixth lands, the oldest entry is deleted here — its permanent home is the
+   `Changelog.md` entry of the same version, so nothing is lost and this block never becomes the
+   changelog by another name.
 3. **Open scope stays in plain sight.** Anything deliberately deferred is written as its own open
    item with the version that deferred it named — never as a paragraph buried inside a completed row.
 4. **Non-obvious balance rules are stated where they bind** (in the section they govern), so they
@@ -26,6 +29,32 @@
 
 ## 0. Recently Done
 
+### 9.36.0-dev — The Static Refuel Pad
+- A ground base is not a grid, and 9.35.0-dev could only refuel between two grids. `StaticRefuelPad` is a
+  world-placed block (quarry family, not tiered) that names itself a waymark, queues one visitor at a
+  time, and pays for its watts as a real metered `PowerConsumer` on the base's own network — 0 W idle, and
+  it refuses a flow the base cannot sustain instead of trickle-charging a ship into a brownout.
+- The pad is a member of all four of the base's graphs — metered `PowerConsumer`, `WaterTank` node on the
+  fluid run, `GasTank` endpoint on the gas run, and a drum that item pipes, belts, chutes and funnels all
+  reach — so a base's own plumbing feeds a shuttle's tanks and nothing about a visit is scavenged. Ground
+  rigs are served for free because a car here is a grid with wheels. `IRefuelPad` is the seam the loop
+  drives, so a schedule cannot tell a station from a strip of concrete. Step 67; fixes 9.35's quarter-rate
+  transfer helpers on the way through.
+
+---
+
+### 9.35.0-dev — Named Waymarks, Refuel Pads & the Auto-Run Loop
+- `Scripts/Navigation/`: `GridWaymark` (a destination that is a live block, freezing honestly when the
+  block goes), `GridConnectorBlock` (the game's first cross-grid power / hydrogen / liquid / cargo
+  bridge, one ship at a time through a visible queue) and `GridRouteAutopilot` (the loop). Step 66.
+- A loop prices what it still has to fly with the same evaluator the panel prints, so the schedule and
+  the arithmetic cannot drift apart. Autonomy rides the dampener channel — `IsControlled` stays false.
+- **Open:** no terrain avoidance, no dock-approach flying, no cargo schedules, no jump legs; waymarks
+  are not drawn on the star map yet.
+- Fixed after the first Unity pass: `GetEntityId()` replaces the now-erroring `GetInstanceID()`, a struct
+  field got its assignment, `LiquidType` got its import, a shadowed `holdR` and a `?.` on a value type went
+  away, and the pad no longer reaches for `EditorUtility`. The audit script now catches that whole family.
+
 ### 9.34.0-dev — Route Book & Range Calculator
 - `Scripts/Navigation/`: route model, `GridRoutePlanner` costing, `RouteBook` shelf on the ship, the
   `GridRouteRecorder` block (Large + Small) and its panel. Setup Step 65 authors prefabs, items,
@@ -34,6 +63,8 @@
   above a moon is still above that moon eight hours later. Routes are named, reversed and edited.
 - **Open:** no autopilot — nothing flies a recorded route; no star-map rendering of routes; the
   Coordinate Jump Drive still has no destination-select UI to hand a body to the book (5.1 item 15).
+- All three are answered by the next round: waymarks, the named connector and the auto-run shuttle
+  (`Grid Waymarks, Named Connectors & the Auto-Run Shuttle Loop`).
 - Fixed after the first Unity pass: `RouteBook` gained its `VoxelEngine.Cosmos` import, and a plotted
   leg now goes through `RouteBook.Append` instead of `Routes.Add` (`Routes` is a read-only view by
   design). Waypoint editing shipped with it: `REVERSE` and per-point delete on the panel.
@@ -53,8 +84,6 @@
 - `GasVent` destroys whatever a gas run carries to it — extractor-powered, draft-only unpowered —
   so a sealed engine room can pump foul gas overboard without a vessel large enough to hold it.
 - Step 63 authors it; right-click panels exist on the scrubber, the vent and the recorder family.
-
----
 
 ## 1. Executive Vision
 
@@ -129,6 +158,7 @@ The design goal is a seamless blend of:
 | Weapons / combat | 🟡 PARTIALLY COMPLETE | Personal weapons (sword/pistol/rifle/grenade), mythical roster + Roc, bombs, full base defense network (Auto/Artillery/Flame/Mortar/Giant/AA/Energy) + ammo logistics (6.57–6.68). Missiles, grid weapons parity, and conserve-ammo UI remain open. |
 | Radiation system | 🟡 PARTIALLY COMPLETE | **6.80.0-dev:** ambient celestial-body radiation, Radiation Shielding modules, and Hazmat sealing are implemented for armor. Reactor waste, fallout zones, geiger UX, and full ecology effects remain open. |
 | Heat system | ✅ COMPLETED | **6.80.0-dev** burn mitigation wired to Heat Tolerance modules; **9.29.0-dev** block temperature, entry heating, thruster self-heat, ablative `GridHeatshield`; **9.30.0-dev** every grid simulated, plume heating, hull damage visuals, suit temperature; **9.31.0-dev** `IHeatSourceBlock` for every machine and per-family heat tolerances; **9.32.0-dev** concealed-space heat and exhaust, `GridExhaustScrubber`, `GasVent` (Step 63); **9.33.0-dev** volume-aware flow (Step 64); **9.34.0-dev** heat is priced into a route by the same grid load a trip bills. Full notes: `Changelog.md`. |
+| Waymarks, named connectors & auto-run shuttle | 🛠️ WORKING ON | **9.35.0-dev**: named waymarks, `GridConnectorBlock` with the first cross-grid transfer bridge and a visible queue, and `GridRouteAutopilot` loops with armed stop conditions (Step 66). **9.36.0-dev** added the ground half: `StaticRefuelPad` (Step 67), a world-placed pad that is a metered consumer on the base's wires and a member of its fluid, gas and item runs. Open: terrain avoidance, dock-approach flying, cargo schedules, star-map rendering. |
 | Grid inspector overlay (heat / damage / centre of mass) | ❌ MISSING | Design written for 4.8: one rebindable hotkey, three modes, research-gated in sequence. See `Grid Inspector Overlay`. |
 | Crude fractionation & flare disposal | ❌ MISSING | Design written for the petroleum era: six fractions plus LPG from the column, every fraction spent in a recipe it beats, `FlareStack` as the run terminator with real heat and air cost. See `Crude Fractionation, Product Use & Flare Disposal`. |
 | Asphalt roads | ❌ MISSING | Design written for the petroleum era: terrain surface from bitumen plus aggregate, movement/traction/routing bonuses, wear and grading rules. See `Asphalt Roads`. |
@@ -594,9 +624,13 @@ changes what the existing block visuals mean, never what the ship does.
      (structural awareness), heat second (engine-room awareness), centre of mass last (ship design).
    - An attempt to use the hotkey with nothing researched says why, in one line, and does nothing else.
 
-4. **Settled for the first round**
-   - Order of work: this ships **before** the petroleum chain and the Engine Works, one feature per
-     round, each with its own version, changelog and setup step.
+4. **Settled**
+   - One feature per round, each with its own version, changelog and setup step. Order, as decided
+     with the shuttle design: **waymarks + connector + auto-run first** (the next round after
+     9.34.0-dev), then the inspector overlay, then the petroleum chain, then asphalt, then the
+     Engine Works. The shuttle round goes first on purpose: it makes the route book *used* rather than
+     merely readable, and the petroleum fractions land into a fuel system that already has somewhere
+     to be spent.
    - The overlay draws on **any** grid, on wreckage and on base blocks — the interesting use is
      inspecting something the player is not standing in.
    - Three research nodes, one per mode, in the order damage, then heat, then centre of mass.
@@ -610,8 +644,145 @@ changes what the existing block visuals mean, never what the ship does.
 Grid ships can record, calculate, validate, and automate repeatable routes.
 
 *(1 and 2 shipped in 9.34.0-dev — `Scripts/Navigation/GridRoute*.cs` and `RouteBook.cs`, authored by
-Setup Step 65. Item 3, the Grid Autopilot, is deliberately not in that round: the recorder costs a
-flight and records one, it does not fly it.)*
+Setup Step 65. Item 3's first line — fly the route, stop here — shipped in 9.35.0-dev with the loop
+and the refuel pad; avoidance, dock approaches and cargo scheduling are still open.)*
+
+### Grid Waymarks, Named Connectors & the Auto-Run Shuttle Loop
+
+*(shipped in 9.35.0-dev — `Scripts/Navigation/GridWaymark.cs`, `GridConnectorBlock.cs`,
+`GridRouteAutopilot.cs`, `GridConnectorUI.cs`, authored by Setup Step 66; the sections below marked
+"Open" are still open)*
+
+A ship should be able to be *told a job* rather than flown: mark the two ends, name the place it
+refuels, tell it how full to come back, and let it run the trip until the numbers say stop. This is
+the round that turns the route book from a readout into a schedule — and it is the round that finally
+spends the thing the route book was built to hold.
+
+1. **A destination is a waymark, not only a celestial body**
+   - The book's points are today either a cosmic position or a pin to a body. A shuttle needs a third
+     kind: a **named waymark** — a connector, a base block, a beacon, or a point the player pinned and
+     called "the smelter". A waymark is a label, a position, and (when the thing it names sits on a
+     world) the body it rides, so a waymark over a moon is still over that moon at 21:00.
+   - A waymark on a *moving grid* (a shuttle's own connector, a tanker) is not frozen: it tracks the
+     source block while that source exists, and freezes to its last position with a stated reason when
+     the source is destroyed. Frozen is correct; a crashed lookup is not.
+   - Waymarks are nameable, searchable and distance-sorted. The destination picker reads the same list
+     the player maintains, so "fly to the connector" and "fly to Europa" are one interaction.
+
+2. **The connector block: what a ship and a place swap while the ship is there**
+   - A new block in the grid family, Large and Small, built on what already exists rather than beside
+     it: the item flow of `GridDockingPort` (buffer container, `IItemPortHost`), the typed dynamic port
+     model of the variable ports, and the `PortService` vocabulary already carried by engines — so a
+     connector's flanges read as the same plumbing a player learned on a maritime engine.
+   - Transfers: electric (charge toward the ship's target state of charge), hydrogen, liquid fuels
+     including the petroleum fractions, water/coolant, and items.
+   - **Honest engineering flag:** the grid has *no* cross-grid transfer today for power, liquid or gas
+     — a docked pair is a `FixedJoint` plus item buffers only. This round must introduce that one
+     shared bridge, deliberately, and every other service hangs off it. Anything else is a special case
+     invented inside the shuttle.
+   - A large connector offers the magnetic lock of a docking port: a locked shuttle transfers fast and
+     cannot drift. A small connector is a soft capture inside a marked radius: slower, forgiving, and
+     enough for a deckhouse. A loop is allowed to require the lock for high rates, and must say so on
+     the panel rather than transfer at half speed and let the player guess why.
+   - Rate is a function of the *supplying side* — production, buffer state, and how many things are
+     drawing at once — never a hard ceiling invented in a config file: the presence-not-throughput rule
+     already established for ventilation applies here too. A base that can only just feed itself makes a
+     slow shuttle, and that is a scheduling problem worth having.
+   - **Targets are per service and live on the ship's side of the transaction** (the ship owns the tank
+     being filled): state of charge, fuel litres, hydrogen, cargo fill. That is what makes the loop
+     leave: the ship departs because *its* number was met, not because the station got around to it.
+   - The connector has a name the player types, and that name is what the waymark is. Two players'
+     "SMELTER FEED" and "SMELTER RETURN" are two waymarks; the naming is the feature, not decoration.
+
+3. **The loop, and what "until it runs out" means**
+   - A loop is: outbound waymark, optional service stop at a named connector, return waymark, optional
+     service stop, repeat. Modes: continuous round trip, one way and park, or a fixed number of runs.
+   - Stop conditions the player can arm, any one of them enough: reserve low, cargo full or empty, hull
+     or block damage past a threshold, a leg that has become unsafe, or someone boarding the ship.
+   - `UNTIL IT RUNS OUT` is offered as an explicit, armed, confirm-once mode. It means exactly what it
+     says: no reserve, the ship flies until the arithmetic refuses, and then it stops where it is and
+     says why. Nobody should discover this mode by accident, and nobody should be denied it either.
+   - The reservation rule is what keeps the ordinary mode from being a rescue mission: every planned leg
+     reserves enough to finish the leg **and** reach a safe state afterwards (the reserve margin already
+     defined in `RouteRules`). When a trip is no longer possible at current mass and stored energy, the
+     shuttle completes the leg it is on, returns to the last safe waymark, and reports the reason — it
+     does not strand itself in the middle of a system to prove a schedule.
+
+4. **Autonomy, honestly scoped**
+   - `GridEntity` already writes an autonomous channel: `UpdateThrust()` returns early when nobody is
+     at the controls and runs `ApplyAutonomousDampenerThrust()` instead. That is the shape to extend —
+     a real command channel (steer, throttle limited to the route's planned speed, brake, hold, stop at
+     the waymark) — **not** a fake pilot seated in the cockpit. Faking a pilot would give an unmanned
+     shuttle the pilot's camera, seat and input privileges for free, and it would be the wrong seam.
+   - The autopilot may: hold the planned speed profile, brake for gravity wells and atmospheres using the
+     same figures the plan refused with, stop at a waymark within its arrival envelope, decelerate hard
+     when a warning appears, and yield the instant a player boards (resuming after a short settle).
+   - The autopilot may not: avoid terrain, perform a dock sequence, schedule cargo operations, reroute
+     around a hazard, or use a jump leg. Those remain open — this closes "fly the route and stop here",
+     roadmap item 3's first line, and nothing more.
+   - Autonomy is granted by the recorder block: a grid flies a loop only if it can cost one. That keeps
+     the cost function and the flight controller arguing with the same numbers, which is the entire
+     point of having built the book first.
+
+5. **Persistence & the panel**
+   - **Shipped as something smaller than the design asked for:** there is no `waymarks` list and no new
+     registry key. A waymark's label lives on the block that answers to it (`blockName`, already
+     persisted), and the live list is built by scanning sources — so a destroyed pad loses its waymark
+     by ceasing to exist rather than leaving a record nobody cleans up. Additive keys that did ship:
+     `SavedGrid.loops` (ends, mode, targets, armed stops) and `SavedWaypoint.waymarkName`. A loop that
+     was flying resumes **paused** at the same leg, never teleported and never restarted mid-leg.
+   - Right-clicking a connector opens it as a waymark: name, per-service flow, targets, which ships are
+     scheduled to visit, and what is currently preventing a transfer.
+   - Setup authors connector prefabs, items and recipes (Large and Small) linked to the Grid Utilities
+     node; the *loop* is gated behind its own research node after Grid Utilities — a shuttle is a
+     machine, and a machine should be earned. Naming is not gated: a label is not a technology.
+
+6. **Settled for the first round**
+   - This is the **next round after 9.34.0-dev**, ahead of the inspector overlay.
+   - **Arrival is by block size, and the difference is real:** the large connector is a magnetic lock
+     (the docking port's capture and `FixedJoint`) with the full rate, and a shuttle that misses the
+     approach cone holds off and tries again rather than transferring at half speed. The small connector
+     is a soft capture inside a marked radius — forgiving, slower, and enough for a deckhouse. A loop
+     that needs the rate needs the lock, and the panel states that requirement in one line instead of
+     leaving it to be inferred from a trickle.
+   - **One transfer at a time, and the queue is visible.** The connector serialises visitors: each
+     scheduled ship sees its place, the connector shows the line, and the head of the queue is the only
+     one drawing. A player who wants a hauler to wait for a passenger run gets that by watching the
+     queue and moving it, not by a priority field nobody reads.
+   - Because the queue is the throughput limit, the queue is also the honest place to put the
+     reservation check: a ship entering the queue re-prices its remaining legs, and if the wait has made
+     the trip unaffordable it leaves the queue and says so rather than sitting at the connector
+     indefinitely.
+
+7. **Open**
+   - Whether the star map draws waymarks and the active loop, and with what marker budget. (The route
+     rendering deferred in 9.34.0-dev wants to be paid here, in the same round that makes routes
+     flyable — an invisible schedule is a scary thing.)
+
+8. **Settled after the first round — the pad that is not on a grid** *(shipped in 9.36.0-dev, Step 67)*
+   - 9.35.0-dev could only refuel between two grids, which left the ordinary case unserved: a base on the
+     ground is `PowerNetwork` + `FluidNetwork` + `GasNetwork` and no `GridEntity` anywhere near them. So
+     the **static refuel pad** exists: a world-placed block in the quarry's family (BlockItem +
+     placedPrefab + `PlacedBlock`), deliberately *not* a `TieredBlockDefinition`, because a pad is a
+     machine you place and not a deck you upgrade tier by tier.
+   - **A pad is a consumer, not a conduit.** It registers as a `PowerConsumer` whose `wattsPerSecond` is
+     the demand it is actually serving — 0 W idle, rated while pumping — and the base network's own
+     all-or-nothing `IsPowered` answer gates the flow. A base that cannot sustain the load refuses and
+     logs it; it does not trickle-charge a ship on watts that do not exist.
+   - **Supply is graph membership, never proximity:** the pad carries a `WaterTank` node so the base's
+     pumps fill it through the fluid run, a `GasTank` with the collider that makes it a gas endpoint, and a
+     drum behind `PortConfig` faces for item pipes plus the `IItemConsumer`/`IItemProvider` pair for belts,
+     chutes and funnels. A block standing next to a pipe is not connected to it, and a pad that behaved that
+     way would be a pad that ignores the cable the player just ran to it.
+   - **One seam, two bodies:** `IRefuelPad` is what the loop drives, so a schedule can point at a station
+     connector or at a strip of concrete. The queue, the waymark face and the visitor rules are shared;
+     the pumping is not, because the two supplies are genuinely different problems.
+   - **Ground rigs are free:** a car or lorry here is a grid with wheels, so it takes the same service —
+     and a rig with no fuel tank asks for no fuel rather than hanging at the hose forever.
+   - **Still open on the pad:** it never pumps back into a world run (the base drives its graphs, the pad
+     only empties what it was given), and it will not reach into a visiting ship's cargo to take items —
+     unloading is a docked port's export or the drum's Output face. No pricing, no broker, no filter beyond
+     what the faces already do.
 
 1. **Manual Route Calculation**
    - Select `Calculate Route To` and choose a discovered planet, moon, station, base, asteroid field, or waypoint.
@@ -622,9 +793,12 @@ flight and records one, it does not fly it.)*
 2. **Recorded Routes**
    - A piloted journey can be recorded as waypoints, approach vectors, safe altitudes, docking actions, and speed limits.
    - Recorded paths can connect planets, stations, mining sites, and cargo docks.
-   - Routes are editable, reversible, nameable, and visible on the star map.
+   - Routes are editable, reversible, nameable, and visible on the star map. *(editable, reversible and
+     nameable shipped in 9.34.0-dev; star-map visibility is still open, see the waymark round below)*
 
-3. **Grid Autopilot**
+3. **Grid Autopilot** *(first line shipped 9.35.0-dev: hold the planned profile, brake for wells and
+   atmosphere, stop at a named waymark, service at a pad, yield to a boarding pilot — via
+   `GridEntity.ApplyAutonomousFlightThrust`. The rest of this list is open.)*
    - Enabling Autopilot lets a grid follow a validated route, manage cruise thrust, reserve braking power, avoid terrain, and perform configured docking approaches.
    - Autopilot pauses and alerts the player if mass, damage, power, fuel, territory, weather, or route obstruction makes the plan unsafe.
    - Cargo schedules can trigger loading, unloading, charging, refueling, and return journeys.
@@ -2014,8 +2188,18 @@ For each version, these are the high-level Unity tasks you will perform manually
     drone routing hang on.
 23. Author the **Engine Works** block: parameter set, balance sheet, refusal reasons, craft cost by
     specification, artefact requirements at the large end, and template storage.
-24. **Run setup wizard step (non-destructive)** for 18–23 as each ships; the next free step number
-    after Step 65 is 66.
+24. ~~Author **grid waymarks and the named connector block** (the cross-grid power/liquid/gas/item
+    bridge is the hard part; it does not exist yet), then the **auto-run shuttle loop** on top of the
+    existing autonomous thrust channel, with armed stop conditions and a reservation rule per leg.~~
+    *(9.35.0-dev, Step 66 — the bridge was the hard part, and it now exists in
+    `GridConnectorBlock`; still open: terrain avoidance, dock approaches, cargo schedules)*
+25. ~~Author the **static refuel pad** for ground bases — a waymark you place on dirt, not on a hull.~~
+    *(9.36.0-dev, Step 67: `Scripts/Navigation/StaticRefuelPad.cs`, `IRefuelPad`, metered
+    `PowerConsumer` draw, and a pad that is a real member of the base's power, fluid, gas and item graphs
+    rather than a block standing near them; ground rigs are served because a car here is a grid with
+    wheels. Still open: the pad pumping back into a world run, and cargo schedules.)*
+26. **Run setup wizard step (non-destructive)** for 18–25 as each ships; Steps 66 and 67 are used, the
+    next free step number is 68, and each of these features takes its own step.
 
 ### For 5.2.0 (Architect Era)
 

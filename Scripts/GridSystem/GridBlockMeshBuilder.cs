@@ -17,7 +17,7 @@ namespace VoxelEngine.GridSystem
             Armor, Cockpit, Thruster, Battery, Cargo, Drill, Grinder, Refinery,
             Weapon, DockingPort, Wheel, LandingGear, SolarPanel, Reactor,
             LiquidTank, GasTank, H2O2, HydrogenEngine, ChemicalPlant, Glass, Demolisher, ItemPipe,
-            GasPipe, LiquidPipe, Gyroscope, Beacon, OreDetector, SeasonMonitor, AirVent, AirVentFull, Heatshield, ExhaustScrubber, GasVent, RouteRecorder, Generic
+            GasPipe, LiquidPipe, Gyroscope, Beacon, OreDetector, SeasonMonitor, AirVent, AirVentFull, Heatshield, ExhaustScrubber, GasVent, RouteRecorder, RefuelConnector, Generic
         }
 
         private static Shader Lit => Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
@@ -69,6 +69,7 @@ namespace VoxelEngine.GridSystem
                 case Style.Gyroscope:    BuildGyroscope(root, cs, body, metal, glow); break;
                 case Style.Beacon:      BuildBeacon(root, cs, body, metal, glow); break;
                 case Style.RouteRecorder: BuildRouteRecorder(root, cs, body, metal, glow); break;
+                case Style.RefuelConnector: BuildRefuelConnector(root, cs, body, metal, glow); break;
                 case Style.OreDetector: BuildOreDetector(root, cs, body, metal, glow); break;
                 case Style.SeasonMonitor: BuildSeasonMonitor(root, cs, body, metal, glow); break;
                 case Style.AirVent:      BuildAirVent(root, cs, body, metal, glow); break;
@@ -384,6 +385,30 @@ namespace VoxelEngine.GridSystem
             // Conduit stubs into the deck.
             for (int i = -1; i <= 1; i += 2)
                 Cyl(r, metal, new Vector3(i * cs * 0.28f, -cs * 0.40f, -cs * 0.20f), cs * 0.03f, cs * 0.10f);
+        }
+
+        // ── REFUEL CONNECTOR ────────────────────────────────────────────────────
+        // A flange you can see coming in: stub, collar, and the two service lamps that say which way
+        // energy is moving. Squat and offset, because it lives on a deck edge and not in a room.
+        private static void BuildRefuelConnector(GameObject r, float cs, Material body, Material metal, Material glow)
+        {
+            Box(r, metal, new Vector3(0, -cs * 0.40f, 0), new Vector3(cs * 0.70f, cs * 0.10f, cs * 0.70f));
+            // The stub the ship's own socket mates with.
+            var stub = Cyl(r, body, new Vector3(0, -cs * 0.06f, 0), cs * 0.20f, cs * 0.58f);
+            var collar = Cyl(r, metal, new Vector3(0, cs * 0.26f, 0), cs * 0.28f, cs * 0.09f);
+            // Three fingers: a socket has to be gripped, not merely pointed at.
+            for (int i = 0; i < 3; i++)
+            {
+                float a = i * 120f * Mathf.Deg2Rad;
+                Box(r, metal, new Vector3(Mathf.Cos(a) * cs * 0.24f, cs * 0.20f, Mathf.Sin(a) * cs * 0.24f),
+                    new Vector3(cs * 0.08f, cs * 0.26f, cs * 0.08f));
+            }
+            // Service lamps: one for the flow, one for the queue.
+            Box(r, glow, new Vector3(cs * 0.30f, -cs * 0.26f, cs * 0.12f), new Vector3(cs * 0.10f, cs * 0.05f, cs * 0.05f));
+            Box(r, glow, new Vector3(-cs * 0.30f, -cs * 0.26f, cs * 0.12f), new Vector3(cs * 0.10f, cs * 0.05f, cs * 0.05f));
+            // Conduit stubs running down into the deck.
+            for (int i = -1; i <= 1; i += 2)
+                Cyl(r, metal, new Vector3(i * cs * 0.20f, -cs * 0.42f, -cs * 0.18f), cs * 0.045f, cs * 0.10f);
         }
 
         // ── ORE DETECTOR ────────────────────────────────────────────────────────

@@ -1,9 +1,137 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.34.0-dev`
+**Current Version:** `9.36.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.36.0-dev] The Static Refuel Pad: A Ground Base Can Be a Destination Too
+
+**Type:** MINOR - 9.35.0-dev solved refuelling between two grids, which quietly left the ordinary case unserved: a base on the ground is not a grid. It has `PowerNetwork`, `FluidNetwork`, `GasNetwork` and item logistics, and no `GridEntity` anywhere near them, so a shuttle had nowhere to go. This round adds the other half of the bridge — a world-placed pad in the quarry's family that names itself a waymark, runs the same one-hose queue, and is a **member of all four of the base's graphs**: a metered consumer on the wires, a tank node on the fluid run, a gas endpoint with the collider that makes it one, and a drum that item pipes, belts, chutes and funnels can all fill and empty. Save-compatible: pad state rides a new `SavedRefuelPad` list keyed by position, so a pad that was destroyed loses its name instead of resurrecting a ghost record. Step 67 authors the block, its item, its recipe and its research node non-destructively.
+
+**GitHub title:** `[9.36.0-dev] Static refuel pads: ground bases become named waymarks, and every pad is a real member of its base's wires, pipes, gas run and belts`
+
+**Added**
+
+- `Scripts/Navigation/StaticRefuelPad.cs` — the ground pad. A `PowerConsumer` whose demand is the watts it is actually serving (0 W idle, so an empty pad never looks like a running machine on the base's power graph); a `WaterTank` node for liquid fuel and a `GasTank` with a collider for hydrogen, both as children of the block so the base's own pipe runs reach them; `PortConfig` + `ItemPortRouting` plus `IItemPortHost`/`IInventoryInterface`, so item pipes push into and pull out of the drum through faces the player configures; and `IItemConsumer`/`IItemProvider`, which is the separate handshake conveyor belts, chutes and funnels use when they find a machine by collider probe. Add a waymark source, a queue of visitors found by proximity, and a transfer path that reaches into a visiting grid's own batteries, gas tanks, liquid tanks and cargo containers. `IRefuelPad` in `GridWaymark.cs` is the seam the loop now drives, so a schedule can point at a station or at a strip of concrete and not care which.
+- `Scripts/Navigation/StaticRefuelPadUI.cs` — the pad's panel: the name field that makes the waymark, what the base is being asked for, the **plumbing** section that prints how many links the fluid and power graphs actually report plus whether a gas endpoint exists, the pad tank, the hydrogen store and the drum, the queue with `UP` and the ✕ button, the pad log, and the same per-face port editor a quarry gets (`GameUIController.AppendMachinePorts`), because a pad with its own port UI would be a pad with two answers to one question.
+- `Scripts/Editor/StaticRefuelSetup.cs` — Step 67: the `RefuelPad` prefab (deck plate, hazard rim, nozzle pedestal, a collider sized to the deck so a pad you walk past is not a wall), and inside that prefab the `PadFuelTank` and `PadGasTank` nodes, the `PowerConsumer` and the six authored port faces — NegX takes items, PosX gives them back, NegZ is the cable socket. Plus the `Block_RefuelPad` block item, the assembler recipe, and the **Ground Refuel Pads** node under Grid Utilities, which Auto-Run Pilot now requires.
+- It serves ground rigs for free, because in this game a car or a lorry is a `GridEntity` with wheels: same queue, same flow, and a rig with no fuel tank asks for no fuel rather than hanging at the head of the hose forever.
+
+**Changed**
+
+- `Scripts/Navigation/GridWaymark.cs` — `IRefuelPad`, the interface the queue and the loop share. `IWaymarkSource` is unchanged, so a waymark is still a name on a live block and nothing else.
+- `Scripts/Navigation/GridConnectorBlock.cs` — implements `IRefuelPad` (`HasMagneticLock`, `SoftRate`), and the watt transfer helpers became tick-aware: `ChargeGrid(grid, wattHours, seconds)` now caps a battery by `AvailableChargeWatts(dt)`, the battery's own rule.
+- `Scripts/Navigation/GridRouteAutopilot.cs` — `ServingPad` (an `IRefuelPad`) instead of `ServingConnector`; `ServingConnector` stays as a read-only view for 9.35 callers. A ground pad has no magnetic lock, so it is served at full rate and the panel says why instead of hiding the missing penalty.
+- `Scripts/UI/GameUIController.cs`, `Scripts/Player/PlayerInteractionTool.cs` — the pad opens through the generic `OpenMachine` switch and the right-click chain, the way every other world machine does; no bespoke UI path to fall out of sync. `AppendItemPorts` gained the public `AppendMachinePorts` seam so a world block that is not a `GridBlock` can show the faces, and shows the same builder a quarry shows.
+- `Scripts/Persistence/WorldStatePersistence.cs` — `SavedRefuelPad`: name, enable flag, watts, litres per second, item rate, the pad tank's level and type (under the original `drumLitres` / `drumType` key names, which stay so a save taken before this rework still loads), and the drum's items plus the pad's six port faces in one `SavedContainer` — the shape a quarry's output already rides. Re-bound by proximity with the quarry's own 2 m tolerance. What is deliberately *not* in that record: the tank node and the gas endpoint, because `SavedPlacedBlock` already persists every world `WaterTank` and `GasTank` on a placed block, and a second writer would double the litres on load. `RestoreTank` is only a fallback for a pad placed before the prefab carried a node, so it fills a tank that is still dry and leaves any other alone.
+
+**Three decisions worth the reading**
+
+1. **A pad is a consumer, not a conduit.** The obvious shortcut was to push watts into the ship and let the base notice later. Instead the pad asks the base's `PowerNetworkManager` for exactly what it is serving, one tick early, and `IsPowered` — all-or-nothing by this engine's own rule — decides whether the flow happens at all. A base that cannot sustain 24 kW does not trickle-charge a frigate; it refuses, logs `BASE CANNOT SUSTAIN 24000 W · REFUSING`, and the shuttle holds station and says so. One tick of lag when a base runs dry is the price of never inventing energy.
+2. **Supply is membership, not proximity.** The first cut of this block scanned a sphere for a `WaterTank` and a `GasTank` and drank from them, which was wrong in a way the panel could not paper over: standing next to a pipe is not being connected to it, and a player who ran a wire, a pipe or a belt to a pad that ignored it would be right to call that a bug. The pad now owns a `WaterTank` node (registered with `FluidNetworkManager` like any other tank, and filled by the base's `WaterPump`s through the graph), a `GasTank` endpoint (a world gas tank is a member of a run because `GasPipe` probes colliders and walks their parents — the collider is the entire registration, and it also makes the pad's nozzle a place to fill a portable canister), and a drum behind port faces for pipes plus the belt-facing `IItemConsumer`/`IItemProvider` pair. Nothing in the pad reaches into somebody else's network any more: the buffers are the contract, the base fills them and a visitor empties them. Both nodes are pad children whose position is an inspector knob (`tankNodeOffset`, `gasNodeOffset`), because a `GasPipe` only links an endpoint that is nearly in line with it and within about 1.65 m — the nozzle is where the pipe should arrive, and if the run is elsewhere, the knob is the fix rather than a rebuild.
+3. **Fuel is refused, never mixed.** The pad hands over whatever its own tank holds, and the visitor's tanks of that type decide who is filled, via `GridLiquidNetwork.GetTanks(ship, type)` and the ship's own gas run for hydrogen — the same law a docked connector obeys, including its shrug: no tank of that kind on the far side means no flow, and the pad says so. Mixing a fuel nobody asked for is a story a player tells about us, and not a good one.
+
+**Numbers at the shipped defaults** (pad at 24 kW and 40 L/s, a 4 000 L tank, a 4 000 unit gas endpoint, a 6-slot drum, 2 items/s into a rig; a 50 t courier with 4 x 500 W batteries): 2 000 L of hydrogen or fuel moves in 0.8 min; 1 kWh into that bank takes 30.0 min, because the batteries — not the pad — are the bottleneck, and a 24 kW pad into 4 stock batteries only ever gets 2 kW of that (16 x 5 kW batteries are what makes the rating real). Refilling the pad's whole 4 000 L tank takes 0.6 min through one `WaterPump` — 120 L/s sustained, which is the pump's own draw rate, not its 180 L/s output burst — and a `ConveyorBelt` line fills or empties the 6-slot drum at the belt's cadence with the pad doing nothing at all. The ordering is the point: a pad runs dry at the hose, not at the supply line. A base at 200 kW generation with 20 kW already drawn serves the full 24 kW; the same pad on a base at 20 kW with 18 kW drawn refuses outright. Unloading a *ship* is still the docked port's own export, and the panel states that rather than pretending the pad can reach into a cargo hold.
+
+**Rewritten after the first Unity pass**
+
+- The pad now takes wires, cables, conveyors and pipes — that was the review, and it was right: a ground pad that
+  could only be fed by standing near a tank could not be fed at all in a base that ships its fuel along a belt,
+  because that is how the world's refineries hand anything over. See decision 2. `supplyReachMetres` is gone, and
+  with it `FindLiquidTank` / `FindGasTank` / `TopUpDrum`; the drum's `DrumLitres` / `DrumType` litres-and-a-type
+  model became a real `ItemContainer` drum (items) next to a `WaterTank` (liquid) and a `GasTank` (hydrogen).
+- `GridGasNetwork.FillGasFrom` is now the hydrogen door on the visitor's side, so a pad fills the run the ship's
+  own pipes reach rather than every tank on the grid; and the panel's "In reach" line became "Plumbing", with the
+  link counts each network reports, because "2 links" is a fact and "near a tank" was a hope.
+- Step 67 authors the nodes, faces and routing into the prefab instead of leaving them to the runtime, and stays
+  non-destructive: port faces are only written when every face is still `None`, the two nodes are only added when
+  missing, and a pad whose watts, rates, tank sizes, node offsets or faces a player retuned keeps all of it on a
+  re-run.
+
+**Fixed after the first Unity pass**
+
+- `StaticRefuelPad.Enabled` was declared without a modifier, which in C# means **private** — and the panel read it
+  on the very line that shows the pad's on/off state (CS0122). It is public now, with the reason recorded on the
+  member: a private face would leave the panel unable to show the state it had just changed.
+- `check/audit.py` gained the rule that would have caught it without a compiler. A cross-file read of a member of
+  another touched type is now resolved through the *declaring file* of that type, and a modifierless member counts
+  as private. It had to learn two things the hard way first: an attribute with its own parentheses
+  (`[Range(0.05f, 1f)] public float x`) defeats a naive field pattern, and interface / enum members are implicitly
+  public, so judging those was the other way this rule could lie. Verified both directions — with the fix reverted
+  it reports `Navigation/StaticRefuelPadUI.cs:40 — StaticRefuelPad.Enabled is not public in
+  Navigation/StaticRefuelPad.cs`, the compiler's own line; with the fix in, 0 errors across all 637 files.
+- The second pass reported CS1003 on two lines of `StaticRefuelPadUI.cs`: a `Muted(...)` message was wrapped
+  across three lines and the last two continued with a bare string literal. C# does not concatenate touching
+  literals the way C does — every line but the last needs a `+`. They have it now, and the plumbing note reads
+  as one sentence again.
+- `check/audit.py` gained rule 13 for exactly that: a source line that ends on a closed string literal,
+  followed by a line that opens one, is an error, because nothing else in the audit can see it — no bracket is
+  unbalanced and no name is misspelled. It skips verbatim and raw literals, which quote differently, and it
+  was proved the same way as rule 12: with the two `+` characters removed it names the compiler's own lines
+  (`Navigation/StaticRefuelPadUI.cs:103` and `:104`), and with them in the whole 637-file tree is quiet.
+
+**Deliberately not in this round**
+
+- The pad is a buffer, not a warehouse or a shop: a 6-slot drum that never buys, sells or filters on its own, and it will not reach into a visiting ship's cargo to take items — unloading a ship is the docking port's export or the player's own belt against the drum's Output face.
+- The pad never pumps a world run: it fills its own tank and endpoint through the graphs the base drives, and never pushes back into a pipe. Hydrogen that has to cross an unmated flange still has no route, and no fake one.
+- The inspector overlay from the settled order is still next; petroleum, asphalt and Engine Works after it.
+
+
+### [9.35.0-dev] Named Waymarks, Refuel Pads and the Auto-Run Loop: A Ship Can Be Given a Job
+
+**Type:** MINOR - Pays the open line 9.34.0-dev left on purpose. A route was costable and recordable; now it can be *run*: two named ends, a pad to refuel at, a target to leave at, and a loop that stops when the arithmetic says stop. Save-compatible: `SavedGrid.loops` and a `waymarkName` on a waypoint are additive, and a reloaded world restores a loop **paused** — a save never resumes a burn by itself. Step 66 authors the pads and the Auto-Run Pilot node non-destructively.
+
+**GitHub title:** `[9.35.0-dev] Auto-run shuttles: named waymarks, refuel connector pads with a visible queue, and loops that stop when the numbers say stop`
+
+**Added**
+
+- `Scripts/Navigation/GridWaymark.cs` — a destination that is not a planet. A waymark is a name with a live source while that source exists and a frozen position after it does. There is **no global registry and no new save key**: a connector names itself, the block's custom name is already persisted, and the list is built from live blocks — so a destroyed pad removes its waymark by ceasing to exist instead of leaving a record to clean up.
+- `Scripts/Navigation/GridConnectorBlock.cs` — the REFUEL CONNECTOR (Large) and FUEL HATCH (Small). Power, hydrogen, liquid fuel and cargo between two grids, one ship at a time, with the head of the queue served and everyone else watching. This file introduces the game's **first cross-grid transfer bridge**: before it, a docked pair was a `FixedJoint` and two item buffers and nothing else crossed.
+- `Scripts/Navigation/GridRouteAutopilot.cs` — the loop. Modes (continuous round trip / one way and park / fixed run count), targets held on the ship's side, armed stop conditions (reserve, worst-block hurt, cargo full, cargo empty), and a `RUN UNTIL IT RUNS OUT` switch that means exactly what it says.
+- `Scripts/Navigation/GridConnectorUI.cs` — the pad panel: the name field that makes a waymark, the queue with a bump and an eject, the flow the head is actually getting, and a short log.
+- `Scripts/Editor/NavShuttleSetup.cs` — Step 66: two prefabs, two items, two recipes and the Auto-Run Pilot research node hung under Grid Utilities. Its own file rather than a fourth method on the engine-room setup, because this is navigation and not atmosphere.
+
+**Changed**
+
+- `Scripts/GridSystem/GridEntity.cs` — a real autonomous channel beside the dampener one: `SetAutonomousFlight` / `ClearAutonomousFlight`, `ApplyAutonomousFlightThrust`, and a widened dampener rule so a commanded hold settles like a seated pilot's does. `IsControlled` stays **false** under autopilot, deliberately.
+- `Scripts/Navigation/GridRoute.cs` — a waypoint may now stand for a waymark by name, and a route carries the two names a loop runs between, plus `RemainingFrom` so the loop prices what it still has to fly with the evaluator the panel already uses.
+- `Scripts/Navigation/GridRouteUI.cs` — the Auto-Run section on the route panel: the two ends, the mode, the targets, the armed stops, and the hold reason when a leg is refused.
+- `Scripts/GridSystem/UI/GridBlockUI.cs`, `Scripts/Player/PlayerInteractionTool.cs`, `Scripts/GridSystem/GridBlockMeshBuilder.cs` — right-click a pad, and a `RefuelConnector` visual: deck plate, stub, three fingers, two service lamps.
+- `Scripts/Persistence/WorldStatePersistence.cs` — `SavedGrid.loops` and `SavedWaypoint.waymarkName`.
+
+**Three decisions worth the reading**
+
+1. **No ghost pilot.** `UpdateThrust()` already returned early when nobody was aboard and ran the dampeners instead; the autopilot is a sibling of that path, commanding a velocity, not a `BeginExternalControl` with a synthetic `PlayerController`. Faking a pilot would have handed an unmanned shuttle the cockpit's camera, seat, tools and every "is somebody aboard" rule for free. The pilot's keys outrank it the instant they are pressed, and a command that stops being refreshed for a third of a second is released — a dead commander is a bug, not a decision to hover.
+2. **The queue is the pad's business; the target is the ship's.** A station never tells a shuttle it is full. The ship's own `WantsPower` / `WantsFuel` / `WantsHydrogen` decide when it leaves, which is the only arrangement that stops a player blaming a refinery for a schedule they set themselves. One transfer at a time, the queue visible, and `UP` on a row instead of a priority field nobody reads.
+3. **A pad that is not mated is a slower pad, said out loud.** A large connector's magnetic lock serves at full rate; a hovering ship gets 45 percent and the panel states the number. That gap is why `A 10 km run with a 2 000 L / 1 000 L top-up` takes 6.2 minutes soft and 4.2 minutes locked at the authored rates — a real reason to build the bigger fitting, measured rather than asserted.
+
+**Numbers at the shipped defaults** (cruise ceiling 150 m/s from 9.34.0-dev, pad at 24 kW and 40 L/s, 100 kWh bank on a 50 t courier): 1 km travel 0.3 min, 10 km 1.3 min, 100 km 11.3 min, none overshooting the 4-cell envelope; a three-ship queue turns around in 6-minute slots. The reserve rule keeps its teeth: the same 1 000 km leg flies at 99.2 % margin with the ship's standing load at 380 W and is refused at 16.6 % when the machinery is running at 45 kW, so a loop that was affordable at arm time stops before the burn, not during it.
+
+**Deliberately not in this round**
+
+- Terrain avoidance, dock-approach flying, cargo scheduling, rerouting around a hazard, and jump legs — roadmap 4.8 item 3 is *first-line* closed, not closed.
+- The road *network* object still waits for the routing it feeds; and waymarks are not drawn on the star map yet, so a schedule is currently invisible from orbit.
+
+**Fixed after the first Unity pass**
+
+- `GetInstanceID()` is an error in Unity 6.5, not a warning: the connector's label and the panel's name-field cache
+  now use `GetEntityId()`, matching `GridCameraBlock` and the networks, and the pad scan moved to
+  `FindObjectsByType<GridEntity>(FindObjectsInactive.Exclude)` like `WorldStatePersistence` already does.
+- `RouteWaypoint.waymarkName` was declared without an initializer on a struct with its own constructor, so Unity
+  refused it (CS0171). The constructor now assigns it, and the autopilot's synthetic leg assigns rather than
+  object-initialises.
+- `LiquidType` needed `using VoxelEngine.Items;` in the autopilot (the fuel check reads a tank's liquid), and the
+  pad-hold branch shadowed `holdR` from its own enclosing scope (CS0136) — it now uses the one figure the arrival
+  test uses, which is also what the easing above it wanted.
+- `plan?.Warnings` was null-conditioning a `readonly struct` (CS0023): the leg check now reads `plan.IsValid`,
+  which is the same truth `GridRoutePlanner` already computed, and the reason line says so when pricing fails.
+- A runtime block has no business calling `EditorUtility.SetDirty` (the repo has never done it outside
+  `Scripts/Editor`): a pad rename persists through `WorldStatePersistence` like any other block edit.
+- `check/audit.py` gained the two rules that would have caught all of this without a Unity install: no
+  `GetInstanceID` / `FindObjectsSortMode` / `UnityEditor` outside `Scripts/Editor` (guard-aware, so a
+  legitimate `#if UNITY_EDITOR` block does not count), and no bare foreign repo enum without its `using`.
+  Run repo-wide across every file: still zero hits, so a future hit is new work and not legacy noise.
 
 ### [9.34.0-dev] The Route Book: Grid Ships Record Their Runs and Cost Them Before They Burn
 

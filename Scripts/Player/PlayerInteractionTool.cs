@@ -879,6 +879,12 @@ namespace VoxelEngine.Player
                 var quarry = hit.collider.GetComponentInParent<VoxelEngine.Transport.Quarry>();
                 if (quarry != null) { UI.GameUIController.Instance?.OpenQuarry(quarry); return; }
 
+                // A static refuel pad (9.36.0-dev) opens like any other world machine: the generic
+                // opener's switch owns its panel, so nothing here needs a bespoke path — and a right
+                // click stays free for building and mining on every other block.
+                var refuelPad = hit.collider.GetComponentInParent<VoxelEngine.Navigation.StaticRefuelPad>();
+                if (refuelPad != null) { UI.GameUIController.Instance?.OpenMachine(refuelPad); return; }
+
                 // Nuclear & Gas machines — generic opener.
                 var reactor = hit.collider.GetComponentInParent<VoxelEngine.Nuclear.ReactorCore>();
                 if (reactor != null) { UI.GameUIController.Instance?.OpenMachine(reactor); return; }
@@ -2002,7 +2008,7 @@ namespace VoxelEngine.Player
                 || b is VoxelEngine.Pressure.GridAirVent
                 || b is VoxelEngine.Pressure.GridExhaustScrubber
                 || b is VoxelEngine.Gas.GasVent
-                || b is VoxelEngine.Navigation.GridRouteRecorder
+                || b is VoxelEngine.Navigation.GridRouteRecorder || b is VoxelEngine.Navigation.GridConnectorBlock
                 || b is VoxelEngine.Simulation.GridLightBlock
                 || b.GetComponent<VoxelEngine.Simulation.LEDStrip>() != null;
         }

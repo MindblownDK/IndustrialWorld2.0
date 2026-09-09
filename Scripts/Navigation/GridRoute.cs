@@ -43,6 +43,11 @@ namespace VoxelEngine.Navigation
         /// centre, i.e. inside the planet, and every recorded approach would be an impact.</summary>
         public double3 anchorOffsetKm;
 
+        /// <summary>A named waymark this point stands for: a connector, a beacon, the smelter. When
+        /// set it wins over the stored position, because the thing it names is where it is now, and a
+        /// frozen copy of a moving pad is not a destination, it is a memory of one.</summary>
+        public string waymarkName;
+
         /// <summary>Optional pilot note — where the anchor is, which berth, whose wreck it is.</summary>
         public string label;
 
@@ -50,6 +55,8 @@ namespace VoxelEngine.Navigation
             CosmicRegistry registry = null)
         {
             label = note;
+            waymarkName = null;   // a struct constructor must assign every field; a waymark is
+                                  // written afterwards by whoever knows the player's name for it.
             if (rides == null)
             {
                 positionKm = posKm;
@@ -77,6 +84,18 @@ namespace VoxelEngine.Navigation
         /// <summary>Where this point is right now, in cosmic km, resolving its parent's motion.</summary>
         public double3 ResolvedPositionKm(CosmicRegistry registry)
         {
+            // A waymark beats everything: it is live, it is named by the player, and it knows where
+            // its block is this second. The stored position is what it degrades to when the source is
+            // gone, which is exactly the "frozen, not crashed" rule the waymark model is built on.
+            if (!string.IsNullOrEmpty(waymarkName))
+            {
+                var src = GridWaymark.FindSource(waymarkName);
+                if (src != null)
+                {
+                    var origin = SpaceOrigin.Instance;
+                    if (origin != null) return origin.GetCosmicKm(src.WaymarkWorldPosition);
+                }
+            }
             if (string.IsNullOrEmpty(bodyId) || registry == null) return positionKm;
             var body = FindBody(registry, bodyId);
             if (body == null) return positionKm;      // body gone (removed template): keep the frozen point
@@ -113,6 +132,13 @@ namespace VoxelEngine.Navigation
     {
         public string routeName = "Route";
         public List<RouteWaypoint> waypoints = new();
+
+        /// <summary>The two names a shuttle loop runs between. They are waymarks, not waypoints: a
+        /// loop is a promise to go back to a place, and a place that moves must be re-read every time,
+        /// never replayed from a recording. Either may be empty, in which case the loop runs the
+        /// recorded waypoints instead and only the return leg needs a name.</summary>
+        public string startWaymark = "";
+        public string endWaymark = "";
         public int speedProfileIndex = (int)RouteSpeedProfile.Standard;
 
         public RouteSpeedProfile Profile => (RouteSpeedProfile)Mathf.Clamp(speedProfileIndex, 0, 2);
@@ -125,6 +151,26 @@ namespace VoxelEngine.Navigation
         public void AddWaypoint(RouteWaypoint wp) { waypoints.Add(wp); }
 
         public void Clear() { waypoints.Clear(); }
+
+        /// <summary>A copy of this route from `fromIndex` onwards, with the given point bolted on the
+        /// front. This is how the autopilot prices "what I still have to fly": the plan the recorder
+        /// shows and the plan the loop refuses to fly must be produced by the same call, or the
+        /// schedule and the arithmetic drift apart and the drift is what strands ships.</summary>
+        public ShipRoute RemainingFrom(int fromIndex, RouteWaypoint at)
+        {
+            var rest = new ShipRoute
+            {
+                routeName = routeName + " (remaining)",
+                speedProfileIndex = speedProfileIndex,
+                startWaymark = startWaymark,
+                endWaymark = endWaymark,
+            };
+            if (at.positionKm.x != 0d || at.positionKm.y != 0d || at.positionKm.z != 0d
+                || !string.IsNullOrEmpty(at.waymarkName) || !string.IsNullOrEmpty(at.bodyId))
+                rest.waypoints.Add(at);
+            for (int i = Mathf.Max(0, fromIndex); i < waypoints.Count; i++) rest.waypoints.Add(waypoints[i]);
+            return rest;
+        }
 
         /// <summary>Drops one point. The shelf refuses to edit a route into something unflyable:
         /// two points is the smallest thing that is still a journey.</summary>
