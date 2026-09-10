@@ -1,0 +1,36 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 49141256dab82754d964ee6bcb7937a5, type: 3}
+  m_Name: Proc_FluidCatalyticCracking
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Crafting.ProcessingRecipe
+  displayName: Fluid Catalytic Cracking (FCC)
+  category: Cracking
+  inputs:
+  - item: {fileID: 11400000, guid: 16293ef7ee79e6b48bf85858c704b68b, type: 2}
+    count: 1
+  outputs: []
+  fluidInputs:
+  - liquid: 4
+    litres: 100
+  - liquid: 0
+    litres: 20
+  fluidOutputs:
+  - liquid: 10
+    litres: 45
+  - liquid: 11
+    litres: 30
+  - liquid: 7
+    litres: 15
+  - liquid: 8
+    litres: 5
+  secondsPerBatch: 12
+  powerDrawMultiplier: 1.4

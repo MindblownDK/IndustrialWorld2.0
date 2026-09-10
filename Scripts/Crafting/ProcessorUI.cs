@@ -151,6 +151,55 @@ namespace VoxelEngine.Crafting
             return p;
         }
 
+        // ── Catalytic Cracker & Reformer (9.40.0 / Step 71) ─────────────────
+        public static VisualElement CatalyticCrackerPanel(CatalyticCracker m, MachineUIs.SlotBuilder slot)
+        {
+            m.EnsureContainers();
+            var p = BuildShell("🔥 Catalytic Cracker & Reformer", m.IsOnline, m.Current, m.Progress01, m.CurrentWattage);
+            FixWidth(p, 520f);
+
+            var page = new ScrollView(ScrollViewMode.Vertical) { name = "CatalyticCrackerPage" };
+            page.style.marginTop = 2;
+            page.style.flexGrow = 1;
+            page.style.flexShrink = 1;
+            page.style.minHeight = 180;
+            T.StyleScroller(page);
+            p.Add(page);
+
+            // Reactor Kinetics status box
+            page.Add(GUI.SectionTitle("Reaction Kinetics & Catalyst Bed"));
+            var kinRow = new VisualElement();
+            kinRow.style.flexDirection = FlexDirection.Row;
+            kinRow.style.justifyContent = Justify.SpaceBetween;
+            kinRow.style.marginBottom = 4;
+
+            Color tempColor = m.reactorTemperatureC > 300f ? T.AccentOrange : (m.reactorTemperatureC > 100f ? T.AccentGold : T.AccentCyan);
+            kinRow.Add(T.StatRow("🌡", "Core Temp", $"{m.reactorTemperatureC:0}°C / {m.targetOperatingTempC:0}°C", tempColor));
+
+            Color catColor = m.catalystBedPercent > 50f ? T.AccentGreen : (m.catalystBedPercent > 20f ? T.AccentAmber : T.AccentRed);
+            kinRow.Add(T.StatRow("🧪", "Catalyst Bed", $"{m.catalystBedPercent:0}%", catColor));
+            page.Add(kinRow);
+
+            var (effBar, _) = T.ProgressBar(m.CrackingEfficiency01, T.AccentCyan, 8, true);
+            effBar.style.marginTop = 2; effBar.style.marginBottom = 6;
+            page.Add(T.StatRow("⚡", "Cracking Efficiency", $"{m.CrackingEfficiency01 * 100f:0}%", T.AccentCyan));
+            page.Add(effBar);
+
+            // 4 Fluid Tanks (2 Inputs + 2 Outputs)
+            FluidRow(page, m.FluidTanks, 115f, 96f);
+
+            page.Add(T.Spacer(6));
+            ItemSlots(page, "Catalysts & Feed Additives", m.inputC, slot);
+            ItemSlots(page, "Synthesised Products", m.outputC, slot);
+
+            page.Add(T.Spacer(6));
+            RecipeBook(page, m.knownRecipes, m.Current, m.Current,
+                rec => { m.SelectRecipe(rec); GameUIController.Instance?.RefreshCurrentPanel(); },
+                ownScroll: false);
+
+            return p;
+        }
+
         // ── shared building blocks ──────────────────────────────────────────────
         private static void FixWidth(VisualElement p, float px)
         {

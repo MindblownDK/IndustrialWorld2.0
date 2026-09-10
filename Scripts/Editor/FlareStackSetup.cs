@@ -120,18 +120,22 @@ namespace VoxelEngine.EditorTools
             bool isExisting = existing != null;
             var root = isExisting ? PrefabUtility.LoadPrefabContents(TOWER_PREFAB_PATH) : new GameObject("FlareStack");
 
-            var fs = root.GetComponent<FlareStack>() ?? root.AddComponent<FlareStack>();
+            var fs = root.GetComponent<FlareStack>();
+            if (fs == null) fs = root.AddComponent<FlareStack>();
             fs.maxBurnRateLitresPerSecond = 25f;
             fs.recoveryEfficiency = 0.18f;
 
-            var gen = root.GetComponent<PowerGenerator>() ?? root.AddComponent<PowerGenerator>();
+            var gen = root.GetComponent<PowerGenerator>();
+            if (gen == null) gen = root.AddComponent<PowerGenerator>();
             gen.isOn = false;
             gen.wattsPerSecond = 0f;
 
-            var pc = root.GetComponent<PortConfig>() ?? root.AddComponent<PortConfig>();
+            var pc = root.GetComponent<PortConfig>();
+            if (pc == null) pc = root.AddComponent<PortConfig>();
             pc.EnsureAllFaces();
 
-            var col = root.GetComponent<BoxCollider>() ?? root.AddComponent<BoxCollider>();
+            var col = root.GetComponent<BoxCollider>();
+            if (col == null) col = root.AddComponent<BoxCollider>();
             col.center = new Vector3(0f, 2.75f, 0f);
             col.size   = new Vector3(2.2f, 5.5f, 2.2f);
 
@@ -321,11 +325,13 @@ namespace VoxelEngine.EditorTools
             string name = size == GridSize.Large ? "Grid_FlareVent_Large" : "Grid_FlareVent_Small";
             var root = isExisting ? PrefabUtility.LoadPrefabContents(path) : new GameObject(name);
 
-            var flare = root.GetComponent<GridFlareStack>() ?? root.AddComponent<GridFlareStack>();
+            var flare = root.GetComponent<GridFlareStack>();
+            if (flare == null) flare = root.AddComponent<GridFlareStack>();
             flare.blockName = size == GridSize.Large ? "Grid Flare Vent (Large)" : "Grid Flare Vent (Small)";
 
             float cs = size.CellSize();
-            var col = root.GetComponent<BoxCollider>() ?? root.AddComponent<BoxCollider>();
+            var col = root.GetComponent<BoxCollider>();
+            if (col == null) col = root.AddComponent<BoxCollider>();
             col.center = Vector3.zero;
             col.size = Vector3.one * cs;
 

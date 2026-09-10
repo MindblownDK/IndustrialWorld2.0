@@ -780,6 +780,19 @@ namespace VoxelEngine.EditorTools
                 "Re-runnable. Idempotent.");
             AddWizardButton(scroll, "70. Author Flare Stack & Heat Recovery Content (Tower, Vents, Power Recovery \u2014 Non-Destructive)", () => VoxelEngine.EditorTools.FlareStackSetup.RunStep70(), 62);
 
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
+                "Step 71 (9.40.0) authors CATALYTIC CRACKING & DOWNSTREAM PETROCHEMICALS (non-destructive):\n" +
+                "  \u2022 Catalytic Cracker & Reformer machine: high-temperature reaction core with dynamic reactor\n" +
+                "    bed temperature, catalyst activity decay/replenishment, and 3 analog world dials\n" +
+                "  \u2022 Downstream Conversion Recipes: Fluid Catalytic Cracking (FCC: HFO \u2192 Diesel/Gasoline/LPG),\n" +
+                "    Continuous Catalytic Reforming (CCR: Naphtha \u2192 High-Octane Gasoline/LPG), Hydrocracking,\n" +
+                "    Synthetic Resin synthesis, Industrial Lubricant synthesis, and catalyst pellet syntheses\n" +
+                "  \u2022 4 New Items: Zeolite Catalyst, Platinum Catalyst Pellet, Synthetic Resin, Industrial Lubricant\n" +
+                "  \u2022 Gated under CATALYTIC CRACKING & PETROCHEMICALS research (tier 6, requires Atmospheric Distillation & Flare Disposal)\n" +
+                "Re-runnable. Idempotent.");
+            AddWizardButton(scroll, "71. Author Catalytic Cracking & Petrochemicals (Cracker, Catalysts, Polymers, Lubricants \u2014 Non-Destructive)", () => VoxelEngine.EditorTools.CatalyticCrackingSetup.RunStep71(), 62);
+
             AddSpacer(scroll, 20);
         }
 

@@ -1144,6 +1144,8 @@ namespace VoxelEngine.Player
                 if (chemPlant != null) { UI.GameUIController.Instance?.OpenMachine(chemPlant); return; }
                 var flareStack = hit.collider.GetComponentInParent<VoxelEngine.Industrial.FlareStack>();
                 if (flareStack != null) { UI.GameUIController.Instance?.OpenMachine(flareStack); return; }
+                var cracker = hit.collider.GetComponentInParent<VoxelEngine.Crafting.CatalyticCracker>();
+                if (cracker != null) { UI.GameUIController.Instance?.OpenMachine(cracker); return; }
 
                 // Grid (ship/vehicle) blocks that expose a UI panel. Cockpit is handled
                 // separately via EnterCockpit, so we skip it here.
