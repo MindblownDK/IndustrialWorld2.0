@@ -145,6 +145,11 @@ namespace VoxelEngine.Player
             var ray = shootCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0));
             bool hasHit = TryRaycastIgnoringSelf(ray, out var hit, reach);
 
+            // ── ROAD PAVER — owns its per-frame tick for the same reason the wrench and the
+            //    mechanical belt do: a held drag has to keep laying, and has to STOP the frame
+            //    LMB is released, which the button early-out below would otherwise swallow.
+            if (TryTickRoadPaver(hit, hasHit, mineHeld, buildDown)) return;
+
             // ── INTERACTION HUD (Context Prompts) ──
             if (hasHit && !VoxelEngine.UI.UIState.IsBlocking)
             {
@@ -1732,6 +1737,87 @@ namespace VoxelEngine.Player
             }
             if (!stack.IsEmpty && stack.item is ToolItem) ConsumeDurability(stack);
             _nextHit = Time.time + 1f / Mathf.Max(0.1f, rate);
+        }
+
+        // ── Road Paver ──────────────────────────────────────────────────
+        private VoxelEngine.Building.RoadPaver _roadPaver;
+        private float _nextRoadRefusalReport;
+
+        /// <summary>
+        /// LMB held lays a continuous strip of asphalt under the aim, spending hot mix as it goes
+        /// and interpolating the cells a fast sweep skips. RMB lifts one cell back and refunds the
+        /// material while the strip is still in good condition. Returns true when the paver owned
+        /// this frame, so the rest of the tool chain (mining, placing, UI) never runs underneath it.
+        /// </summary>
+        private bool TryTickRoadPaver(RaycastHit hit, bool hasHit, bool mineHeld, bool buildDown)
+        {
+            var held = inventory.ActiveStack;
+            if (held.IsEmpty || !(held.item is RoadPaverTool paver))
+            {
+                // Swapping away from the tool mid-drag must end the drag, or the preview quad and
+                // the interpolation anchor survive into whatever the player picks up next.
+                if (_roadPaver != null && _roadPaver.IsDragging) _roadPaver.EndDrag();
+                return false;
+            }
+
+            if (buildDown && Time.time >= _nextHit)
+            {
+                _roadPaver ??= new VoxelEngine.Building.RoadPaver();
+                _roadPaver.EndDrag();
+                if (hasHit && _roadPaver.TryScrape(hit, paver, inventory))
+                {
+                    GetComponent<VoxelEngine.Player.HeldToolView>()?.DoSwing();
+                    ConsumeDurability(held);
+                }
+                _nextHit = Time.time + 1f / Mathf.Max(0.1f, paver.fireRate);
+                return true;
+            }
+
+            if (mineHeld)
+            {
+                _roadPaver ??= new VoxelEngine.Building.RoadPaver();
+                if (!_roadPaver.IsDragging) _roadPaver.BeginDrag();
+
+                var block = paver.roadBlock;
+                if (block == null || block.placedPrefab == null)
+                {
+                    VoxelEngine.UI.BuildFeedbackHud.Show("Road paver", "No road block configured", null, Color.yellow);
+                    return true;
+                }
+
+                _roadPaver.TickDrag(hit, hasHit, block, paver, inventory, out int laid, out string feedback);
+
+                // No per-frame success toast: a drag lays cells every frame for as long as LMB is
+                // held, so a toast here would repaint the HUD continuously. The release branch below
+                // reports the whole gesture once. Only refusals speak while the drag is running.
+                if (laid > 0)
+                {
+                    GetComponent<VoxelEngine.Player.HeldToolView>()?.DoSwing();
+                    ConsumeDurability(held);
+                    _nextHit = Time.time + 1f / Mathf.Max(0.1f, paver.fireRate);
+                }
+
+                // Report a refusal, but throttled on its own clock: dragging along a shoreline
+                // would otherwise repaint the HUD every frame with the same sentence, and sharing
+                // `_nextHit` with the durability rate would let the two silence each other.
+                if (feedback != null && Time.time >= _nextRoadRefusalReport)
+                {
+                    VoxelEngine.UI.BuildFeedbackHud.Show("Road paver", feedback, paver.icon, Color.yellow);
+                    _nextRoadRefusalReport = Time.time + 0.35f;
+                }
+                return true;
+            }
+
+            if (_roadPaver != null && _roadPaver.IsDragging)
+            {
+                int laid = _roadPaver.LaidThisDrag;
+                _roadPaver.EndDrag();
+                if (laid > 0)
+                    VoxelEngine.UI.BuildFeedbackHud.Show("Road paved",
+                        $"{laid} cell{(laid == 1 ? "" : "s")} laid",
+                        paver.icon, new Color(0.42f, 0.85f, 0.55f));
+            }
+            return false;
         }
 
         private void ConsumeDurability(ItemStack stack)

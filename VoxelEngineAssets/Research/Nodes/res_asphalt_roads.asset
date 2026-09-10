@@ -1,0 +1,38 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe52eb4685f86c44d967d9cd3e4bd91a, type: 3}
+  m_Name: res_asphalt_roads
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Research.ResearchNode
+  nodeId: res_asphalt_roads
+  displayName: Asphalt Roads
+  description: Blow the column's heavy residue into bitumen, bind it with sand and
+    crushed aggregate, and lay it. A paved strip is faster on foot, grips better
+    under wheels and lets a route become a schedule - and it wears out under traffic,
+    so it wants repairing with the same hot mix.
+  iconTint: {r: 0.3, g: 0.3, b: 0.32, a: 1}
+  category: 0
+  subCategory: 6
+  tier: 6
+  column: 6
+  eraLabel: 
+  prerequisites:
+  - {fileID: 11400000, guid: 09667de0ef7f48e47a674d1ea9151300, type: 2}
+  researchSeconds: 45
+  cost: []
+  unlocksRecipes:
+  - {fileID: 11400000, guid: 8b177c4c104d06c4daff991ae79926fe, type: 2}
+  - {fileID: 11400000, guid: c205e16ee48cbba48b9f02ec30896ab9, type: 2}
+  - {fileID: 11400000, guid: fc4808a8b81d9f94ea8d243d1cce7e94, type: 2}
+  upgradeKind: 0
+  upgradePerRankAmount: 0
+  maxRanks: 1
+  costScalesWithRank: 1

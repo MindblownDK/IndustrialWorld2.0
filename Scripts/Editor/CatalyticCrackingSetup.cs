@@ -54,6 +54,35 @@ namespace VoxelEngine.EditorTools
         private const string PROC_ZEOLITE_PATH   = PROC_FOLDER + "/Proc_ZeoliteCatalyst.asset";
         private const string PROC_PLATINUM_PATH  = PROC_FOLDER + "/Proc_PlatinumCatalyst.asset";
 
+        // ════════════════════════════════════════════════════════════════
+        //  SENTINEL-AWARE AUTHORING
+        //
+        //  `ItemDefinition` initialises its fields to a real item, not to empty:
+        //      itemId = "iron_ore", displayName = "Iron Ore", maxStack = 900, massPerUnit = 1f
+        //  and `ResearchNode` initialises displayName = "New Research", researchSeconds = 30f.
+        //  An `IsNullOrEmpty(displayName)` or `maxStack <= 0` guard is therefore NEVER true on a
+        //  freshly created asset, so the catalysts, the polymer, the lubricant and the cracker
+        //  block all shipped displaying as "Iron Ore" at 1 kg in stacks of 900. Treat the
+        //  initialiser value as "not authored yet" and repair it on a re-run.
+        // ════════════════════════════════════════════════════════════════
+
+        private const string ITEM_NAME_SENTINEL    = "Iron Ore";
+        private const int    ITEM_STACK_SENTINEL   = 900;
+        private const float  ITEM_MASS_SENTINEL    = 1f;
+        private const float  NODE_SECONDS_SENTINEL = 30f;
+
+        private static bool UnsetName(string value)
+            => string.IsNullOrWhiteSpace(value) || value == ITEM_NAME_SENTINEL;
+
+        private static bool UnsetStack(int value)
+            => value <= 0 || value == ITEM_STACK_SENTINEL;
+
+        private static bool UnsetMass(float value)
+            => value <= 0f || Mathf.Approximately(value, ITEM_MASS_SENTINEL);
+
+        private static bool UnsetResearchSeconds(float value)
+            => value <= 0.01f || Mathf.Approximately(value, NODE_SECONDS_SENTINEL);
+
         [MenuItem("Tools/Voxel Engine/Run Step 71 (Catalytic Cracking & Petrochemicals)", priority = 71)]
         public static void RunStep71Menu() => RunStep71();
 
@@ -70,44 +99,44 @@ namespace VoxelEngine.EditorTools
             // ── 1) Downstream & Catalyst Items ──────────────────────────────
             var zeolite = GetOrCreate<ResourceItem>(ZEOLITE_ITEM_PATH, ref created, ref preserved);
             zeolite.itemId = "item_zeolite_catalyst";
-            if (string.IsNullOrEmpty(zeolite.displayName)) zeolite.displayName = "Zeolite Catalyst";
+            if (UnsetName(zeolite.displayName)) zeolite.displayName = "Zeolite Catalyst";
             zeolite.description = "Microporous aluminosilicate catalyst pellet required for fluid catalytic cracking, cracking heavy residues into light diesel and gasoline.";
             zeolite.iconTint = new Color(0.85f, 0.82f, 0.72f);
-            if (zeolite.maxStack <= 0) zeolite.maxStack = 100;
-            if (zeolite.massPerUnit <= 0f) zeolite.massPerUnit = 0.5f;
+            if (UnsetStack(zeolite.maxStack)) zeolite.maxStack = 100;
+            if (UnsetMass(zeolite.massPerUnit)) zeolite.massPerUnit = 0.5f;
             zeolite.category = "Components";
             zeolite.subcategory = ResourceCategory.Component;
             EditorUtility.SetDirty(zeolite);
 
             var platCat = GetOrCreate<ResourceItem>(PLATINUM_ITEM_PATH, ref created, ref preserved);
             platCat.itemId = "item_platinum_catalyst";
-            if (string.IsNullOrEmpty(platCat.displayName)) platCat.displayName = "Platinum Catalyst";
+            if (UnsetName(platCat.displayName)) platCat.displayName = "Platinum Catalyst";
             platCat.description = "Noble metal catalyst pellet for high-severity continuous catalytic reforming and hydrocracking.";
             platCat.iconTint = new Color(0.82f, 0.88f, 0.95f);
-            if (platCat.maxStack <= 0) platCat.maxStack = 100;
-            if (platCat.massPerUnit <= 0f) platCat.massPerUnit = 0.8f;
+            if (UnsetStack(platCat.maxStack)) platCat.maxStack = 100;
+            if (UnsetMass(platCat.massPerUnit)) platCat.massPerUnit = 0.8f;
             platCat.category = "Components";
             platCat.subcategory = ResourceCategory.Component;
             EditorUtility.SetDirty(platCat);
 
             var resin = GetOrCreate<ResourceItem>(RESIN_ITEM_PATH, ref created, ref preserved);
             resin.itemId = "item_synthetic_resin";
-            if (string.IsNullOrEmpty(resin.displayName)) resin.displayName = "Synthetic Resin";
+            if (UnsetName(resin.displayName)) resin.displayName = "Synthetic Resin";
             resin.description = "Advanced thermoset polymer resin synthesized from cracked naphtha and LPG. Used for composite armor, carbon composites, and high-tier hull parts.";
             resin.iconTint = new Color(0.40f, 0.85f, 0.75f);
-            if (resin.maxStack <= 0) resin.maxStack = 50;
-            if (resin.massPerUnit <= 0f) resin.massPerUnit = 1.2f;
+            if (UnsetStack(resin.maxStack)) resin.maxStack = 50;
+            if (UnsetMass(resin.massPerUnit)) resin.massPerUnit = 1.2f;
             resin.category = "Components";
             resin.subcategory = ResourceCategory.Component;
             EditorUtility.SetDirty(resin);
 
             var lube = GetOrCreate<ResourceItem>(LUBE_ITEM_PATH, ref created, ref preserved);
             lube.itemId = "item_industrial_lubricant";
-            if (string.IsNullOrEmpty(lube.displayName)) lube.displayName = "Industrial Lubricant";
+            if (UnsetName(lube.displayName)) lube.displayName = "Industrial Lubricant";
             lube.description = "High-shear synthetic lubricant oil refined from heavy petroleum cuts. Boosts engine efficiency, mechanical gearboxes, and turbine power.";
             lube.iconTint = new Color(0.88f, 0.58f, 0.15f);
-            if (lube.maxStack <= 0) lube.maxStack = 50;
-            if (lube.massPerUnit <= 0f) lube.massPerUnit = 1.0f;
+            if (UnsetStack(lube.maxStack)) lube.maxStack = 50;
+            if (UnsetMass(lube.massPerUnit)) lube.massPerUnit = 1.0f;
             lube.category = "Components";
             lube.subcategory = ResourceCategory.Component;
             EditorUtility.SetDirty(lube);
@@ -253,11 +282,11 @@ namespace VoxelEngine.EditorTools
 
             var block = GetOrCreate<BlockItem>(CRACKER_ITEM_PATH, ref created, ref preserved);
             block.itemId = "block_catalytic_cracker";
-            if (string.IsNullOrEmpty(block.displayName)) block.displayName = "Catalytic Cracker & Reformer";
+            if (UnsetName(block.displayName)) block.displayName = "Catalytic Cracker & Reformer";
             block.description = "Heavy industrial catalytic reactor unit. Thermally cracks heavy petroleum residues (HFO) into light transportation fuels (Diesel, Gasoline, LPG) and reforms Naphtha into synthetic resins, high-octane gasoline, and industrial lubricants.";
             block.iconTint = new Color(0.85f, 0.45f, 0.18f);
-            if (block.maxStack <= 0) block.maxStack = 5;
-            if (block.massPerUnit <= 0f) block.massPerUnit = 1200f;
+            if (UnsetStack(block.maxStack)) block.maxStack = 5;
+            if (UnsetMass(block.massPerUnit)) block.massPerUnit = 1200f;
             block.category = "Industrial";
             block.placedPrefab = prefabAsset;
             block.gridSize = Vector3Int.one;
@@ -311,7 +340,7 @@ namespace VoxelEngine.EditorTools
                 node.column = 5;
                 node.iconTint = new Color(0.92f, 0.52f, 0.20f);
             }
-            if (node.researchSeconds <= 0.01f) node.researchSeconds = 90f;
+            if (UnsetResearchSeconds(node.researchSeconds)) node.researchSeconds = 90f;
             if (node.maxRanks < 1) node.maxRanks = 1;
             if (node.cost == null || node.cost.Length == 0)
                 node.cost = new ResearchNode.ScienceCost[0];

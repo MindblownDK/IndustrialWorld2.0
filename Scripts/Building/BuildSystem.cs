@@ -262,7 +262,7 @@ namespace VoxelEngine.Building
             if (IsUnifiedPipe(block))
                 ConfigurePipeGhostConnection(block, null, pos, Mathf.Max(0.01f, gridSize));
 
-            bool valid = IsPlacementValid(pos, block);
+            bool valid = IsPlacementValid(pos, block, rot);
             ApplyGhostMaterial(_ghost, valid ? _ghostMaterialValid : _ghostMaterialInvalid);
         }
 
@@ -871,7 +871,18 @@ namespace VoxelEngine.Building
             }
 
             ComputePlacementPose(hit, block, out Vector3 pos, out Quaternion rot);
-            if (!IsPlacementValid(pos, block)) return false;
+            if (!IsPlacementValid(pos, block, rot))
+            {
+                if (VoxelEngine.Building.RoadPaver.IsRoadBlock(block))
+                {
+                    var band = VoxelEngine.Building.RoadPaver.EvaluateCell(block, pos, rot, out _);
+                    if (band != VoxelEngine.Building.AsphaltRoad.GradeBand.Smooth
+                        && band != VoxelEngine.Building.AsphaltRoad.GradeBand.Rough)
+                        VoxelEngine.UI.BuildFeedbackHud.Show("Cannot pave",
+                            VoxelEngine.Building.AsphaltRoad.DescribeSite(band), block.icon, Color.yellow);
+                }
+                return false;
+            }
 
             var go = Instantiate(block.placedPrefab, pos, rot);
             go.name = block.displayName;
@@ -879,6 +890,9 @@ namespace VoxelEngine.Building
             var placedBelt = go.GetComponentInChildren<VoxelEngine.Simulation.ConveyorBelt>(true);
             if (placedBelt != null)
                 placedBelt.SetBuildShape(ResolveConveyorBuildShape(placedBelt, hit));
+
+            var placedRoad = go.GetComponentInChildren<VoxelEngine.Building.AsphaltRoad>(true);
+            if (placedRoad != null) placedRoad.RefreshAfterPlacement();
 
             // Make sure it has a collider for future raycasts.
             if (go.GetComponentInChildren<Collider>() == null)
@@ -1138,6 +1152,12 @@ namespace VoxelEngine.Building
         private void ComputePlacementPose(RaycastHit hit, BlockItem block, out Vector3 pos, out Quaternion rot)
         {
             if (TryGetStaticPipeSnapPose(hit, block, out pos, out rot))
+                return;
+            // Roads go first among the surface snaps: a road cell anchors to the strip it is
+            // extending (so a run stays continuous around a planet) and drops onto the ground
+            // under itself rather than onto whatever the aim ray happened to hit.
+            if (VoxelEngine.Building.RoadPaver.IsRoadBlock(block)
+                && VoxelEngine.Building.RoadPaver.TryComputePose(hit, block, out pos, out rot))
                 return;
             if (TryGetFactorySnapPose(hit, block, out pos, out rot))
                 return;
@@ -1673,7 +1693,13 @@ namespace VoxelEngine.Building
             return false;
         }
 
-        private bool IsPlacementValid(Vector3 pos, BlockItem block)
+        /// <summary>
+        /// Verdict on a fully resolved placement pose. Takes the rotation as well as the position
+        /// because a road cell is judged by its own frame, not by the local surface frame: a strip
+        /// anchored to an existing road on a slope inherits that road's rotation, and grading it
+        /// against the surface rotation instead would let the ghost and the click disagree.
+        /// </summary>
+        private bool IsPlacementValid(Vector3 pos, BlockItem block, Quaternion rot)
         {
             // Never place inside the player — a proper capsule column test, not a flat
             // distance check: blocks spawning between the player's feet used to launch
@@ -1688,7 +1714,25 @@ namespace VoxelEngine.Building
             // so treating every stackable item as a thin pipe let structural blocks bury
             // existing pipes inside their volume.
             bool isThin = IsThinConduitPlacement(block);
-            float checkSize = isThin ? 0.18f : 0.42f;
+            // A road is a surface overlay, not a structure: it is 8 cm thick and it DRAPES onto the
+            // terrain, so it always overlaps the ground it was laid on. Judging it by the structural
+            // rule would refuse every placement. It is still refused on top of another placed block
+            // (allowStacking is false), and grading — not overlap — is what decides whether the
+            // ground may take it.
+            bool isSurfaceOverlay = VoxelEngine.Building.RoadPaver.IsRoadBlock(block);
+            float checkSize = isSurfaceOverlay ? 0.12f : (isThin ? 0.18f : 0.42f);
+
+            // A road is judged by its GRADE, not by its overlap: it drapes on terrain by design, so
+            // the overlap test below is relaxed for it and the ground gets the deciding word. Both
+            // the build ghost and the commit come through here, so the ghost goes red on exactly the
+            // cells the click will refuse, and the paver's own gate reads the same band.
+            if (isSurfaceOverlay)
+            {
+                var grade = VoxelEngine.Building.RoadPaver.EvaluateCell(block, pos, rot, out _);
+                if (grade != VoxelEngine.Building.AsphaltRoad.GradeBand.Smooth
+                    && grade != VoxelEngine.Building.AsphaltRoad.GradeBand.Rough)
+                    return false;
+            }
 
             var overlaps = Physics.OverlapBox(pos, Vector3.one * checkSize, Quaternion.identity);
             foreach (var col in overlaps)
@@ -1709,7 +1753,7 @@ namespace VoxelEngine.Building
                 // blocked any static overlap, so vertical pipe columns on rough ground
                 // could never be started. We now allow thin blocks to ignore static
                 // world geometry; dynamic rigidbodies still block.
-                if (isThin) continue;
+                if (isThin || isSurfaceOverlay) continue;
                 // Block placement on dynamic rigidbodies.
                 if (col.attachedRigidbody != null && !col.attachedRigidbody.isKinematic) return false;
                 // Static world geometry (terrain, rocks, trees): never bury a block
@@ -1768,7 +1812,8 @@ namespace VoxelEngine.Building
             foreach (var mb in root.GetComponentsInChildren<MonoBehaviour>(true))
             {
                 if (mb == null) continue;
-                if (mb is VoxelEngine.Simulation.IItemConsumer ||
+                if (mb is VoxelEngine.Building.AsphaltRoad ||
+                    mb is VoxelEngine.Simulation.IItemConsumer ||
                     mb is VoxelEngine.Simulation.IItemProvider ||
                     mb is VoxelEngine.Simulation.IMachine ||
                     mb is VoxelEngine.Transport.ItemPipe ||

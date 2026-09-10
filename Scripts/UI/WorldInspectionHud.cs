@@ -433,6 +433,32 @@ namespace VoxelEngine.UI
                 return true;
             }
 
+            // Asphalt reads as a road, not as a generic placed block: the shape word says what the
+            // strip is doing here, the condition says what it is worth, and the run length is shown
+            // because repair is priced by it — a player who cannot see how many cells share the wear
+            // pool cannot predict what a repair will cost. Deliberately no name and no traffic count:
+            // that is the road network readout, which the roadmap holds back until autopilot and
+            // drone routing exist to consume it.
+            var road = hit.collider.GetComponentInParent<VoxelEngine.Building.AsphaltRoad>();
+            if (road != null && road.Run != null)
+            {
+                info.title = road.GetComponent<PlacedBlock>()?.Item?.displayName ?? "Asphalt Road";
+                info.detail = road.ShapeLabel;
+                float speedBonus = road.WalkSpeedMultiplier;
+                string worth = Mathf.Approximately(speedBonus, 1f)
+                    ? "no speed bonus"
+                    : speedBonus > 1f
+                        ? $"+{Mathf.RoundToInt((speedBonus - 1f) * 100f)}% on foot"
+                        : $"{Mathf.RoundToInt((speedBonus - 1f) * 100f)}% on foot";
+                info.status = road.IsSupported
+                    ? $"{road.Run.ConditionLabel} · {worth} · {road.Run.BlockCount} cells share wear"
+                    : "UNSUPPORTED · no surface";
+                info.showHealth = true;
+                info.health01 = 1f - road.Run.Wear01;
+                info.healthText = $"SURFACE {Mathf.RoundToInt((1f - road.Run.Wear01) * 100f)}%";
+                return true;
+            }
+
             var placedBlock = hit.collider.GetComponentInParent<PlacedBlock>();
             if (placedBlock != null && placedBlock.Item != null)
             {

@@ -793,6 +793,27 @@ namespace VoxelEngine.EditorTools
                 "Re-runnable. Idempotent.");
             AddWizardButton(scroll, "71. Author Catalytic Cracking & Petrochemicals (Cracker, Catalysts, Polymers, Lubricants \u2014 Non-Destructive)", () => VoxelEngine.EditorTools.CatalyticCrackingSetup.RunStep71(), 62);
 
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
+                "Step 72 (9.41.0) authors ASPHALT ROADS (non-destructive):\n" +
+                "  \u2022 An ASPHALT ROAD block that DRAPES over the terrain (five ground samples per cell)\n" +
+                "    and AUTO-SHAPES from its neighbours \u2014 straight, bend, junction, crossing and ramp\n" +
+                "    are all one block: connected edges lose their kerb, so a run reads as one strip\n" +
+                "  \u2022 A ROAD PAVER tool: hold LMB and drag to lay a continuous run (skipped cells are\n" +
+                "    interpolated), RMB lifts one back. Block-by-block placement stays as the fallback\n" +
+                "  \u2022 Worth something: faster on foot, more drive traction and lateral grip for wheels\n" +
+                "  \u2022 Not free: PER-RUN wear from traffic (weighted by grid mass), grading that doubles\n" +
+                "    the material on rough ground and refuses ground rougher than the tolerance, and no\n" +
+                "    paving underwater or inside a wall without a culvert\n" +
+                "  \u2022 The material chain: BLOW BITUMEN (40 L Heavy Fuel Oil \u2192 4 Bitumen) on both chemical\n" +
+                "    plants, MIX HOT ASPHALT (1 Bitumen + 2 Sand + 3 Gravel \u2192 8 Asphalt) on every\n" +
+                "    assembler, then Asphalt \u2192 road block and \u2192 the paver's repair stock\n" +
+                "  \u2022 Gated under ASPHALT ROADS research (tier 6, requires Atmospheric Distillation)\n" +
+                "  \u2022 Wear is saved additively per block; legacy saves restore roads brand new\n" +
+                "Re-runnable. Idempotent. Existing block health, mining tier, stack size, mass, craft\n" +
+                "times, recipe quantities and research cost/tier/column are never reset.");
+            AddWizardButton(scroll, "72. Author Asphalt Roads Content (Road Block, Paver Tool, Bitumen + Hot Mix Chain \u2014 Non-Destructive)", () => VoxelEngine.EditorTools.AsphaltRoadSetup.RunStep72(), 62);
+
             AddSpacer(scroll, 20);
         }
 

@@ -117,17 +117,36 @@ namespace VoxelEngine.GridSystem
                 force = Mathf.Max(0f, force);
                 grid.Body.AddForceAtPosition(supportDir * force, wheelPos, ForceMode.Force);
 
+                // Asphalt under the tyre (9.41.0). Read off the collider the suspension already hit,
+                // so there is no extra probe per wheel per tick. The multipliers live on the road's
+                // run, which is the same object the player's feet read, so a worn strip loses its
+                // grip for a rig and its stride for a walker on the same curve.
+                var road = hit.collider != null ? hit.collider.GetComponentInParent<VoxelEngine.Building.AsphaltRoad>() : null;
+                if (road != null && !road.IsSupported) road = null;
+                float traction = road != null ? road.TractionMultiplier : 1f;
+                float grip     = road != null ? road.GripMultiplier     : 1f;
+
                 if (powered && Mathf.Abs(_currentThrottle) > 0.01f)
                 {
                     Vector3 driveDir = Vector3.ProjectOnPlane(forward, hit.normal).normalized;
                     if (driveDir.sqrMagnitude > 0.0001f)
-                        grid.Body.AddForceAtPosition(driveDir * _currentThrottle * driveForce, wheelPos, ForceMode.Force);
+                        grid.Body.AddForceAtPosition(driveDir * _currentThrottle * driveForce * traction, wheelPos, ForceMode.Force);
                 }
 
                 Vector3 pointVelocity = grid.Body.GetPointVelocity(wheelPos);
                 Vector3 lateral = Vector3.Project(pointVelocity, transform.right);
-                float friction = Mathf.Clamp(grid.Body.mass * 2.2f, 2500f, 45000f);
+                float friction = Mathf.Clamp(grid.Body.mass * 2.2f, 2500f, 45000f) * grip;
                 grid.Body.AddForceAtPosition(-lateral * friction, wheelPos, ForceMode.Force);
+
+                if (road != null)
+                {
+                    // Bill the run for what this tyre actually rolled, weighted by the grid's mass:
+                    // a loaded hauler shreds a road and a light buggy does not, which is the whole
+                    // reason "a road under heavy traffic wears faster" is a rule and not a flavour line.
+                    float rolled = Mathf.Abs(Vector3.Dot(pointVelocity, forward.normalized)) * Time.fixedDeltaTime;
+                    if (rolled > 0f && rolled < 4f)
+                        road.RegisterTraffic(rolled, road.WheelLoadFor(grid.Body.mass));
+                }
 
                 _lastSpringLength = currentLength;
                 UpdateVisuals(steer, grid.Body.GetPointVelocity(wheelPos), forward, radius, currentLength);

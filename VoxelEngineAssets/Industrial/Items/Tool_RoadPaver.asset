@@ -1,0 +1,41 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a720348055b9475392096376a59c9a25, type: 3}
+  m_Name: Tool_RoadPaver
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Items.RoadPaverTool
+  itemId: tool_road_paver
+  displayName: Road Paver
+  description: 'Lays the four-metre carriageway slab by dragging: hold LMB and walk
+    a line, and the road fills in under the aim. RMB lifts a slab back. Repairs a
+    worn run with the same hot mix it was laid with.'
+  icon: {fileID: 0}
+  iconTint: {r: 0.9, g: 0.62, b: 0.2, a: 1}
+  maxStack: 900
+  massPerUnit: 1
+  category: Tools
+  requiresContainment: 0
+  cannotBeCarried: 0
+  isPressurizedCanister: 0
+  viewmodelPrefab: {fileID: 0}
+  toolType: 4
+  miningTier: 1
+  strength: 60
+  brushRadius: 1.4
+  fireRate: 12
+  maxDurability: 1500
+  pavingMaterial: {fileID: 11400000, guid: 6fe09e3222591a549a253d451042e44f, type: 2}
+  roadBlock: {fileID: 11400000, guid: 9c8d00660b9c2c343be4a3958dce6f21, type: 2}
+  materialPerCell: 10
+  refundPerCell: 5
+  refundWearLimit: 0.35
+  maxCellsPerStep: 12
+  repairMaterialPerSquareMetre: 0.19

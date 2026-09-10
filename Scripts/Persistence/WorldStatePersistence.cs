@@ -325,6 +325,12 @@ namespace VoxelEngine.Persistence
                 }
                 var paint = pb.GetComponent<VoxelEngine.Building.BlockPaint>();
                 if (paint != null) entry.paintFinish = (int)paint.Finish;
+                var road = pb.GetComponentInChildren<VoxelEngine.Building.AsphaltRoad>(true);
+                if (road != null)
+                {
+                    entry.hasRoadWear = true;
+                    entry.roadWear = Mathf.Clamp01(road.SavedWear);
+                }
                 var gst = pb.GetComponentInChildren<VoxelEngine.Gas.GasTank>();
                 if (gst != null)
                 {
@@ -1858,6 +1864,14 @@ namespace VoxelEngine.Persistence
                 }
                 if (sb.container != null) RestoreContainer(go, sb.container);
                 RestoreFactoryRuntime(go, sb);
+                // Roads re-form their runs from adjacency as they come back, so the wear has to be
+                // applied AFTER the cell exists: raising, never lowering, which is what lets the
+                // last cell of a strip to restore set the condition for all of them.
+                if (sb.hasRoadWear)
+                {
+                    var restoredRoad = go.GetComponentInChildren<VoxelEngine.Building.AsphaltRoad>(true);
+                    restoredRoad?.ApplySavedWear(sb.roadWear);
+                }
                 if (sb.paintFinish != 0)
                 {
                     var paint = go.GetComponent<VoxelEngine.Building.BlockPaint>() ?? go.AddComponent<VoxelEngine.Building.BlockPaint>();
@@ -2799,6 +2813,12 @@ namespace VoxelEngine.Persistence
             // Armor Upgrade Station process state. Inputs are stored in `container`; this
             // additive record only resumes elapsed time after those inputs restore.
             public SavedArmorUpgradeStationState armorUpgradeStationState;
+            // Asphalt road wear (9.41.0). Written per block even though wear is a per-RUN number,
+            // because run identity is session-scoped and a strip can merge or split between the
+            // save and the load; on restore the run takes the worst value any of its cells reported.
+            // Additive — legacy saves leave hasRoadWear false and the road restores brand new.
+            public bool hasRoadWear;
+            public float roadWear;
         }
         [Serializable] private class SavedArmorUpgradeStationState
         {

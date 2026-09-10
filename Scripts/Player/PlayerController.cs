@@ -105,6 +105,12 @@ namespace VoxelEngine.Player
         private bool   _grounded;
         private bool   _wasGrounded;
         private bool   _onIce;
+        // Asphalt underfoot (9.41.0). Kept as a reference as well as a flag so the same probe that
+        // decides the speed bonus is the one that bills the road for the traffic — a road cannot
+        // be worn by a player who got no benefit from it, or vice versa.
+        private VoxelEngine.Building.AsphaltRoad _road;
+        private bool    _onRoad;
+        private Vector3 _lastRoadSamplePosition;
         private float  _lastAirDownSpeed;
         private float  _lastGroundedTime;
         private bool   _crouched;
@@ -407,6 +413,7 @@ namespace VoxelEngine.Player
             _wasGrounded = _grounded;
 
             _onIce = _grounded && IceFrictionUtility.IsIceBelow(transform.position + up * 0.15f, up, 0.75f);
+            UpdateRoadContact(up, dt);
             if (_grounded) _lastGroundedTime = Time.time;
             bool canCoyote = (Time.time - _lastGroundedTime) <= coyoteTime;
 
@@ -437,7 +444,11 @@ namespace VoxelEngine.Player
             if (canSprint && wish.y > 0.1f)
                 speedMul = effSprint;
 
-            float targetSpeed = walkSpeed * speedMul * PetrifySpeedMul;
+            // Asphalt is worth something on foot: the same strip that gives a rig traction gives a
+            // walker a longer stride. The number lives on the road's run, not here, so the feet and
+            // the tyres always read the same wear curve.
+            float roadMul = _onRoad ? _road.WalkSpeedMultiplier : 1f;
+            float targetSpeed = walkSpeed * speedMul * PetrifySpeedMul * roadMul;
             // Horizontal velocity lives on the local ground plane (perp to `up`).
             Vector3 horiz = Vector3.ProjectOnPlane(_velocity, up);
 
@@ -884,6 +895,43 @@ namespace VoxelEngine.Player
             return name.IndexOf("LiquidSurface", System.StringComparison.OrdinalIgnoreCase) >= 0
                    || name.IndexOf("WaterSurface", System.StringComparison.OrdinalIgnoreCase) >= 0
                    || name.IndexOf("Ocean", System.StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        /// <summary>
+        /// Resolves the asphalt underfoot and bills it for the distance actually walked this frame.
+        /// One probe serves both halves on purpose: a road that gives no speed bonus must not wear,
+        /// and a road that wears must have given the bonus, so the two can never disagree.
+        /// Mirrors the ice probe above it — same shape, same budget, no physics query.
+        /// </summary>
+        private void UpdateRoadContact(Vector3 up, float dt)
+        {
+            if (!_grounded || IsMounted || inspectorFlyToggle)
+            {
+                _onRoad = false;
+                _road = null;
+                _lastRoadSamplePosition = transform.position;
+                return;
+            }
+
+            bool found = VoxelEngine.Environment.RoadSurfaceUtility.TryGetRoadBelow(
+                transform.position + up * 0.15f, up, 0.75f, out var road);
+            _onRoad = found && road != null && road.IsSupported;
+            _road = _onRoad ? road : null;
+
+            if (!_onRoad)
+            {
+                _lastRoadSamplePosition = transform.position;
+                return;
+            }
+
+            // Bill the run for ground covered along the surface, ignoring the radial component so
+            // standing on a slope is not mistaken for walking up it.
+            Vector3 delta = transform.position - _lastRoadSamplePosition;
+            _lastRoadSamplePosition = transform.position;
+            float metres = Vector3.ProjectOnPlane(delta, up).magnitude;
+            // A teleport, a respawn or a frame hitch must not read as a kilometre of traffic.
+            if (metres > 4f || dt <= 0f) return;
+            road.RegisterTraffic(metres, road.FootLoad);
         }
 
         /// <summary>

@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `9.39.0-dev`  
-**Roadmap Version:** `9.39.0-dev`  
+**Current Version:** `9.41.0-dev`  
+**Roadmap Version:** `9.41.0-dev`  
 **Date:** 2026-09-10
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,44 @@
 ---
 
 ## 0. Recently Done
+
+### 9.41.0-dev — Asphalt Roads
+- `AsphaltRoad` is a real `PlacedBlock` cell that **drapes** the terrain through five ground samples
+  per cell (so the drape IS the ramp — no ramp shape, no terraforming), auto-shapes its aggregate
+  shoulder from a four-bit `RoadEdgeMask` neighbour mask (kerb on an unconnected edge, none on a
+  connected one), and re-probes the ground every 6 s because terrain is diggable.
+- Every touching cell joins one `RoadRun` holding a **single shared wear pool**: bands GOOD / WORN /
+  POTHOLED / BROKEN UP at 0.35 / 0.70 / 1.00 interpolate walk speed 1.30→0.88, traction 1.25→0.85 and
+  grip 1.40→0.92. `WEAR_METRES_PER_SQUARE_METRE = 22000`, a wheel loads 14x a footstep scaled by grid
+  mass. Merging takes the worst wear; `ResplitAround` re-floods and splits when a middle cell is lifted.
+  A worn run **visibly cracks**: a fracture network of branching fissures, then potholes with broken
+  rims — real geometry, draped on the same ground samples as the slab, rebuilt on eighths of wear.
+- Two cell sizes: a **4 m carriageway slab** the Road Paver lays (16x the pavement per placement,
+  10 asphalt, so a road a vehicle uses goes down fast) and the 1 m patch cell for footpaths and hand
+  placement. Wear is billed per **paved area** so both sizes wear equally per square metre.
+- `RoadPaver` is one maths path for the preview, the drag and hand placement (`TryComputePose` +
+  `EvaluateCell`), with tangent-plane interpolation bounded at 12 cells/frame and **anchor-lattice**
+  quantisation so a dragged strip lines up around a spherical world. Grade is a **slope** rule, so the
+  verdict is identical at either cell size:
+  ≤ 0.22 rise paves at 1 asphalt, ≤ 0.50 at 2, steeper is refused with a reason on screen. Repair is
+  the same asphalt priced by run wear; right-click lifts a cell and refunds only below 0.35 wear.
+  Chain: HFO 40 L → 4 bitumen → + sand 2 / gravel 3 → 8 hot mix. Step 72; `res_asphalt_roads` tier 6.
+
+### 9.40.0-dev — Catalytic Cracking & Petrochemicals  *(shipped in `839f2bb`; documented late)*
+- `CatalyticCracker` is not a batch timer with a label: a **catalyst bed** decaying 2% per batch and a
+  **reactor temperature** climbing 45 °C/s toward 520 °C both gate throughput through
+  `CrackingEfficiency01 = 0.3 + 0.7 × catalyst × temperature`, so a cold or spent reactor still runs at
+  30% instead of stopping — a machine to maintain, not to babysit. Four auto-typed fluid tanks
+  (2000/1000 L in, 2000/1000 L out), two item slots each way, three world dials and a reactor glow.
+- Seven processing recipes: FCC (HFO 100 L + water 20 L + zeolite → diesel 45 / gasoline 30 / LPG 15 /
+  naphtha 5), CCR (naphtha 80 L + platinum → gasoline 60 / LPG 20), hydrocracking (HFO 80 L + LPG 20 L +
+  platinum → diesel 50 / kerosene 35), plus synthetic resin, industrial lubricant and the two catalyst
+  syntheses that let a decayed bed be fed back up. All five conversions are also appended to the
+  Stationary and Large Chemical Plants, so the chain is reachable without the dedicated reactor.
+- `Block_CatalyticCracker` (health 2200, mining tier 3, 1200 kg) from steel plate 36 / iron gear 20 /
+  circuit 12 / glass 8 / copper wire 16; `res_catalytic_cracking` tier 6 chemistry, requires
+  Atmospheric Distillation + Flare Disposal. Step 71. **Open: no save serialisation** — bed, reactor
+  temperature and tank contents reset on reload — and resin/lubricant have no consumers yet.
 
 ### 9.39.0-dev — Flare Stack & Waste-Heat Recovery
 - Stationary industrial `FlareStack` derrick tower + Large and Small `GridFlareStack` vents as run
@@ -86,32 +124,6 @@
   section — unlock all (rank 1), max all (repeatable upgrades to their cap) and relock all —
   driven by `ResearchManager.UnlockAll` / `MaxAllRanks` / `ResetAllRanks`, so testing any
   research-gated content starts from one click.
-
-### 9.36.0-dev — The Static Refuel Pad
-- A ground base is not a grid, and 9.35.0-dev could only refuel between two grids. `StaticRefuelPad` is a
-  world-placed block (quarry family, not tiered) that names itself a waymark, queues one visitor at a
-  time, and pays for its watts as a real metered `PowerConsumer` on the base's own network — 0 W idle, and
-  it refuses a flow the base cannot sustain instead of trickle-charging a ship into a brownout.
-- The pad is a member of all four of the base's graphs — metered `PowerConsumer`, `WaterTank` node on the
-  fluid run, `GasTank` endpoint on the gas run, and a drum that item pipes, belts, chutes and funnels all
-  reach — so a base's own plumbing feeds a shuttle's tanks and nothing about a visit is scavenged. Ground
-  rigs are served for free because a car here is a grid with wheels. `IRefuelPad` is the seam the loop
-  drives, so a schedule cannot tell a station from a strip of concrete. Step 67; fixes 9.35's quarter-rate
-  transfer helpers on the way through.
-
----
-
-### 9.35.0-dev — Named Waymarks, Refuel Pads & the Auto-Run Loop
-- `Scripts/Navigation/`: `GridWaymark` (a destination that is a live block, freezing honestly when the
-  block goes), `GridConnectorBlock` (the game's first cross-grid power / hydrogen / liquid / cargo
-  bridge, one ship at a time through a visible queue) and `GridRouteAutopilot` (the loop). Step 66.
-- A loop prices what it still has to fly with the same evaluator the panel prints, so the schedule and
-  the arithmetic cannot drift apart. Autonomy rides the dampener channel — `IsControlled` stays false.
-- **Open:** no terrain avoidance, no dock-approach flying, no cargo schedules, no jump legs; waymarks
-  are not drawn on the star map yet.
-- Fixed after the first Unity pass: `GetEntityId()` replaces the now-erroring `GetInstanceID()`, a struct
-  field got its assignment, `LiquidType` got its import, a shadowed `holdR` and a `?.` on a value type went
-  away, and the pad no longer reaches for `EditorUtility`. The audit script now catches that whole family.
 
 ## 1. Executive Vision
 
@@ -188,8 +200,9 @@ The design goal is a seamless blend of:
 | Heat system | ✅ COMPLETED | **6.80.0-dev** burn mitigation wired to Heat Tolerance modules; **9.29.0-dev** block temperature, entry heating, thruster self-heat, ablative `GridHeatshield`; **9.30.0-dev** every grid simulated, plume heating, hull damage visuals, suit temperature; **9.31.0-dev** `IHeatSourceBlock` for every machine and per-family heat tolerances; **9.32.0-dev** concealed-space heat and exhaust, `GridExhaustScrubber`, `GasVent` (Step 63); **9.33.0-dev** volume-aware flow (Step 64); **9.34.0-dev** heat is priced into a route by the same grid load a trip bills. Full notes: `Changelog.md`. |
 | Waymarks, named connectors & auto-run shuttle | 🛠️ WORKING ON | **9.35.0-dev**: named waymarks, `GridConnectorBlock` with the first cross-grid transfer bridge and a visible queue, and `GridRouteAutopilot` loops with armed stop conditions (Step 66). **9.36.0-dev** added the ground half: `StaticRefuelPad` (Step 67), a world-placed pad that is a metered consumer on the base's wires and a member of its fluid, gas and item runs. Open: terrain avoidance, dock-approach flying, cargo schedules, star-map rendering. |
 | Grid inspector overlay (heat / damage / centre of mass) | ✅ COMPLETED | **9.37.0-dev** shipped the whole overlay — one shared per-renderer `MaterialPropertyBlock` tint pass, one hotkey ring OFF → HEAT → DAMAGE → CENTRE OF MASS with the three reader modes, and the three research nodes authored by Setup Step 68 (Step 69 lives in the distillation-plant round). Unity validation confirmed the pass budget, the 24-block degrade readout and the research gating (9.37.1-dev added one-click research unlock/max/relock buttons to the debug spawner for exactly this kind of testing). See `Grid Inspector Overlay`. |
-| Crude fractionation & flare disposal | 🛠️ WORKING ON | **9.38.0-dev** shipped the first part: a NEW Distillation Plant block (a wide plant hall; the Oil Refinery stays its legacy machine, and both refineries stop making refined oil / HFO / MGO) with one feed tank + six typed product tanks (LPG, naphtha, kerosene, diesel, gasoline, heavy fuel oil), an **analog world dial above every outlet and inlet** that sweeps with its tank, the atmospheric-cut ladder (100 L crude → 98 L of products, 2 L off-gas), the Refined Oil conversion re-run, and a naphtha-fed plastic recipe that beats the old one per litre (Step 69; block gated by Atmospheric Distillation research). Panel: live in-place updates (no scroll snapping), scrollable recipe books, contents-based tank captions, box sizing that follows its contents. Open within the same design: spending the middle products on the maritime-engine fuel ladder, where Refined Oil comes from now that the refineries stopped making it, the off-gas line and the Flare Stack with waste-heat recovery and local pollution. See `Crude Fractionation, Product Use & Flare Disposal`. |
-| Asphalt roads | ❌ MISSING | Design written for the petroleum era: terrain surface from bitumen plus aggregate, movement/traction/routing bonuses, wear and grading rules. See `Asphalt Roads`. |
+| Crude fractionation & flare disposal | 🛠️ WORKING ON | **9.38.0-dev** shipped the first part: a NEW Distillation Plant block (a wide plant hall; the Oil Refinery stays its legacy machine, and both refineries stop making refined oil / HFO / MGO) with one feed tank + six typed product tanks (LPG, naphtha, kerosene, diesel, gasoline, heavy fuel oil), an **analog world dial above every outlet and inlet** that sweeps with its tank, the atmospheric-cut ladder (100 L crude → 98 L of products, 2 L off-gas), the Refined Oil conversion re-run, and a naphtha-fed plastic recipe that beats the old one per litre (Step 69; block gated by Atmospheric Distillation research). Panel: live in-place updates (no scroll snapping), scrollable recipe books, contents-based tank captions, box sizing that follows its contents. Open within the same design: spending the middle products on the maritime-engine fuel ladder, where Refined Oil comes from now that the refineries stopped making it, the off-gas line and the Flare Stack with waste-heat recovery and local pollution (both now open items of their own: **9.39.0-dev** shipped the flare stack and waste-heat recovery, **9.40.0-dev** the catalytic conversion of the heavy end, **9.41.0-dev** the asphalt chain that spends it). See `Crude Fractionation, Product Use & Flare Disposal`. |
+| Asphalt roads | 🟡 PARTIALLY COMPLETE | **9.41.0-dev** shipped the surface in two cell sizes (1 m patch, 4 m carriageway) and the pave tool: `AsphaltRoad` drapes terrain and auto-shapes its shoulder from a neighbour mask, every touching cell joins one `RoadRun` sharing a single **area-weighted** wear pool (GOOD/WORN/POTHOLED/BROKEN UP driving walk speed, traction and grip), `RoadPaver` lays a continuous wide strip by drag with slope-based pricing and refusal, repair is the same asphalt priced by run wear and paved area, wheels take traction/grip from the run and stop bogging, and a worn run shows a real crack-and-pothole mesh rather than a decal (Step 72, `res_asphalt_roads`). Open: the road **network** object (name, connected-run trace, traffic readout), routing/pathfinding that prefers paved routes, lamps and roadside furniture, a culvert/bridge volume rule, and any second road tier. See `Asphalt Roads`. |
+| Catalytic cracking & petrochemicals | 🟡 PARTIALLY COMPLETE | **9.40.0-dev** shipped the `CatalyticCracker` reactor unit — catalyst bed decay and reactor temperature both gate throughput through `CrackingEfficiency01` — with FCC / CCR / hydrocracking, synthetic resin, industrial lubricant, both catalyst syntheses, four items, `Block_CatalyticCracker` and the tier-6 chemistry gate (Step 71). Open: no save serialisation for bed, temperature or tank contents; resin and lubricant have no consumers; no regenerator unit, no hydrogen plant, no grid variant. |
 | Engine Works (custom engine builder) | ❌ MISSING | Design written for the maritime/engine line: configuration, cylinders, bore/stroke, intake, fuel, compression, cooling, gearing and governor, with craft cost scaling into artefacts at the top. See `Engine Works`. |
 | Oxygen / life support | ✅ COMPLETED | Underwater reserve equipment already exists; **7.4.0-dev** activates vacuum/airless-body oxygen drain, sealed helmet+tank protection, armor oxygen-efficiency integration, and live hazard feedback. **7.5.0-dev** now resolves this against the same profile-driven air density used by flight and is Unity-validated. **9.27.0-dev** delivered airtight rooms and vents. **9.28.0-dev** closes the last item: oxygen tanks now carry a real per-instance refillable reserve (burned through helmet/armor efficiency, topped up from breathable air and from a Ventilation Unit's suit dock at 40 L/s), and the full-block Ventilation Unit pressurises every compartment it touches. |
 | Airtight systems | ✅ COMPLETED | **9.27.0-dev:** Full Pressure & Airtight Service. `GridPressureSystem` flood-fills sealed rooms per grid (breach detection, oxygen charge, per-room pressure in atm), `PressureRules`/`IAirtightBlock` decide what seals, sliding & vault doors are airtight bulkheads only while fully shut, the Air Vent block (Large + Small) pressurises/depressurises the room it faces from the grid gas network, `RoomAtmosphereService` makes a pressurised room breathable without a sealed suit even in hard vacuum, the suit HUD gains a live ROOM pressure strip, and room oxygen charge is additively saved/restored. Step 60 authors all content non-destructively. **9.27.1-dev:** rooms equalise with the planet's own atmosphere (a room built or opened on a breathable world is instantly livable; in vacuum it bleeds down), oxygen draw scales with the number of occupants breathing in a compartment, and the Air Vent is supplied strictly through gas pipes via authored `Port_GasIO` ports — the grid-wide gas pool helpers are retired as obsolete, since on grids gas and liquid move through pipes only and electricity is the sole networked resource. |
@@ -929,50 +942,106 @@ end is worth something too.
 
 ### Asphalt Roads
 
+> **Status (9.41.0-dev):** surface in two cell sizes (1 m patch + 4 m carriageway), drag-to-pave
+> tool, per-run area-weighted wear with visible cracking, movement/traction bonuses, slope-based grade
+> pricing and area-priced repair are shipped — `Scripts/Building/AsphaltRoad.cs`, `RoadRun.cs`, `AsphaltRoadMesh.cs`,
+> `RoadPaver.cs`, `Scripts/Environment/RoadSurfaceUtility.cs`, `Scripts/Items/RoadPaverTool.cs`,
+> authored by **Setup Step 72** under `res_asphalt_roads`. The road **network** object, routing that
+> prefers paved routes, lamps and culverts remain open items below. Full narrative: `Changelog.md`.
+
 A cheap surface the player lays on terrain to make the world move faster and cleaner. The idea is
 one sentence: **a road is the difference between walking a route and being able to run a schedule on it.**
 
 1. **Material and craft**
-   - Made from the heavy end of the column plus aggregate: bitumen from residue, plus sand and
-     gravel. A road is therefore literally how a refinery spends what it does not want.
-   - Placed like a `PlacedBlock` on terrain, snapped to the voxel surface, with a small set of shapes
+   - ~~Made from the heavy end of the column plus aggregate: bitumen from residue, plus sand and
+     gravel. A road is therefore literally how a refinery spends what it does not want.~~ *(9.41.0-dev —
+     `Proc_BlownBitumen` HFO 40 L → 4 bitumen; `MachineRecipe_MixAsphalt` bitumen 1 + sand 2 + gravel 3 → 8 hot mix)*
+   - ~~Placed like a `PlacedBlock` on terrain, snapped to the voxel surface, with a small set of shapes
      (straight, bend, junction, crossing, ramp for slopes) so a road follows the ground instead of
-     fighting it. A hand-laid strip must feel as good as a paved straight.
-   - Repair is a can of the same material, so a bombed-out colony road is a chore and not a loss.
+     fighting it. A hand-laid strip must feel as good as a paved straight.~~ *(9.41.0-dev — shipped
+     better than specified: there is **no shape set and no ramp shape**. The cell drapes the ground
+     through five samples, so the drape IS the ramp, and a `RoadEdgeMask` neighbour mask only decides
+     whether an edge gets a raised kerb. Shapes are read out (`ShapeLabel`), never chosen.)*
+   - ~~Repair is a can of the same material, so a bombed-out colony road is a chore and not a loss.~~
+     *(9.41.0-dev — dragging the paver along a worn run repairs the **whole run** in one gesture, priced
+     at `wear × cells × repairMaterialPerCell`; there is no separate repair item)*
 
 2. **What a road is actually worth**
-   - Player and creatures move faster and cost less stamina on it; carried weight stops mattering as
-     much, so a portage across a range becomes a walk.
-   - Vehicles get their own bonus: better traction on slopes, less rolling resistance, no bogging in
-     rain or mud. The terrain speed penalties that already exist should stop applying on asphalt.
+   - ~~Player and creatures move faster and cost less stamina on it; carried weight stops mattering as
+     much, so a portage across a range becomes a walk.~~ *(9.41.0-dev — player walk speed scales by the
+     run's `WalkSpeedMultiplier`, 1.30 at GOOD down to 0.88 broken. **Creature speed and the
+     carried-weight/stamina side are still open.**)*
+   - ~~Vehicles get their own bonus: better traction on slopes, no bogging in rain or mud, and the
+     terrain speed penalties that already exist should stop applying on asphalt.~~ *(9.41.0-dev —
+     `GridWheel` takes traction 1.25→0.85 and grip 1.40→0.92 from the run, a road under a wheel counts
+     as firm ground so it stops bogging, and the road's multipliers override the terrain term. **Less
+     rolling resistance is NOT shipped as a separate term, and weather (rain/mud/ice) does not modify
+     a road's grip — both stay open.**)*
    - Wheels, conveyor lines and drone routes follow it: the road is a *routing* surface, and it is
      the natural place to hang the pathfinding that autopilot and delivery drones still do not have.
      A player who paved their logistics corridor should get the smarter traffic for it.
+     *(**OPEN — deferred by 9.41.0-dev.** `RoadSurfaceUtility` is the query surface a router wants:
+     `QueryAt`, `IsNeighbourSlot` and `TryGetRoadBelow` are already the primitive a road-aware
+     pathfinder needs, and a `RoadRun` is already a connected trace. Nothing consumes them for routing.)*
    - Lighting along it: a road is where a player wants lamps, and lamp spacing along a road should be
      a thing the game notices (safety at night, no spawns on lit ground).
+     *(**OPEN — deferred by 9.41.0-dev.** No roadside furniture shipped at all.)*
 
 3. **Rules that keep it from being free**
-   - Roads wear: they need a maintenance material at a rate that is annoying, not punishing, and a
-     road under heavy traffic wears faster. This is what keeps a paved world from being a one-off
-     chore and turns it into an upkeep economy.
-   - Grading matters. Laying asphalt on rough ground either costs more material or is refused until
-     the player levels the strip — the ground truth of the voxel terrain must not be bypassed.
+   - ~~Roads wear: they need a maintenance material at a rate that is annoying, not punishing, and a
+     road under heavy traffic wears faster.~~ *(9.41.0-dev — `WEAR_METRES_PER_CELL = 22000` per run cell,
+     footstep load 1, wheel load 14 scaled by grid mass, so a heavy vehicle wears a strip far faster
+     than a walker. That is the upkeep economy.)*
+   - ~~Grading matters. Laying asphalt on rough ground either costs more material or is refused until
+     the player levels the strip — the ground truth of the voxel terrain must not be bypassed.~~
+     *(9.41.0-dev — `EvaluateSite` returns six bands; ≤ 0.22 rise per cell paves at 1 asphalt,
+     ≤ 0.50 at 2, and `TooRough` / `NoGround` / `Underwater` / `Buried` are refused by both the drag
+     and `BuildSystem.IsPlacementValid`, with `DescribeSite` putting the reason on screen. The terrain
+     is never modified by paving.)*
    - A road does not run through a wall, a body, or water without a culvert or a bridge: the same
-     volume discipline pipes already use.
+     volume discipline pipes already use. *(**PARTLY OPEN.** Water is refused outright (`Underwater`)
+     and buried/obstructed ground is refused (`Buried`), so nothing is paved through a body or a wall —
+     but there is **no culvert or bridge block**, so a road currently stops at water rather than
+     crossing it.)*
 
-4. **Settled for the first round**
-   - First round is **surface plus the drag-to-pave tool**: lay a run by dragging, repair it with the
+4. ~~**Settled for the first round**~~ *(all three shipped as settled in 9.41.0-dev)*
+   - ~~First round is **surface plus the drag-to-pave tool**: lay a run by dragging, repair it with the
      same material, keep the movement, traction and wear rules. Block-by-block placement stays as the
-     fallback for one culvert or a patched bend.
-   - The road **network** object (a name, a connected-run trace, a traffic readout) is deliberately held
+     fallback for one culvert or a patched bend.~~ *(done — `RoadPaver` for the drag, and a held
+     `Block_AsphaltRoad` routes through the same snap and the same grade verdict via `BuildSystem`)*
+   - ~~The road **network** object (a name, a connected-run trace, a traffic readout) is deliberately held
      back: it is the hook autopilot and drone scheduling want, and it should arrive with the routing it
-     feeds rather than as an empty register.
-   - The pave tool ships with the surface, not with the network: a player holding the material should be
-     able to pave without having earned a traffic system.
+     feeds rather than as an empty register.~~ *(held back as planned. Note that the connected-run trace
+     half now exists for free — `RoadRun` IS a connected trace with a `BlockCount` and a traffic counter —
+     so what the network object still owes is a **name** and a **cross-run readout**, not the flood fill.)*
+   - ~~The pave tool ships with the surface, not with the network: a player holding the material should be
+     able to pave without having earned a traffic system.~~ *(done — `Tool_RoadPaver` is gated by the same
+     `res_asphalt_roads` node as the block, and by nothing else)*
 
-5. **Still open**
-   - Whether wear is tracked per block or per run. Per run is cheaper to simulate; per block reads
-     better on a half-repaired road.
+5. ~~**Still open** — whether wear is tracked per block or per run.~~ **SETTLED 9.41.0-dev: per run.**
+   Per-run won on both counts the question named: it is cheaper to simulate (one float per connected
+   strip rather than one per cell) *and* it reads better on a half-repaired road, because a repair is
+   one gesture over the whole strip at a price the player can reason about, instead of a cell-by-cell
+   patch job. The cost is `RoadRun.ResplitAround` — lifting a middle cell has to re-flood the run from
+   what remains and split it into however many runs the gap created, each inheriting the wear it was
+   part of. Merging takes the worst of the two, so a worn strip joined to a new one is a worn strip.
+
+6. **Still open after 9.41.0-dev**
+   - The road **network** object: a player-given name and a traffic/condition readout across a whole
+     system. Deliberately held back again — it should arrive with the routing it feeds.
+   - **Road-aware routing.** Pathfinding, autopilot and delivery drones do not prefer paved routes.
+     `RoadSurfaceUtility` and `RoadRun` are the primitives; nothing consumes them for a route.
+   - **Creatures** do not take the walk-speed bonus; only the player and grid wheels do. Stamina and
+     carried-weight relief on pavement are not modelled at all.
+   - **Rolling resistance** is not a separate wheel term — the road only scales traction and grip.
+     Weather (rain, mud, ice) does not modify a road's grip.
+   - **Culverts and bridges**: water is refused rather than crossed. No road-side furniture either —
+     no lamps, kerbstones, signage, barriers, manholes or drains (the kerb is part of the road mesh).
+   - **One tier, one curve.** Asphalt is the only paved surface; there is no concrete, gravel or dirt
+     road and no second wear curve. No asphalt temperature, laying window, roller or compaction pass —
+     hot mix cures instantly.
+   - **Bitumen comes from Heavy Fuel Oil only.** No natural bitumen deposit, tar sands ore or
+     alternative binder.
 
 ### Coordinate Jump Drive
 
@@ -2252,9 +2321,14 @@ For each version, these are the high-level Unity tasks you will perform manually
     heat and an optional waste-heat recovery attachment.~~ *(9.39.0-dev — `Industrial/Prefabs/FlareStack.prefab`
     derrick tower and Large/Small `GridFlareStack` vents dispose of excess liquids and gases, convert
     thermal energy to electric watts via waste-heat recovery, and simulate room oxygen draw; Step 70)*
-22. Author **asphalt roads** as terrain-placed surface blocks (straight, bend, junction, crossing,
-    ramp) with movement, traction and wear rules, then the road *network* readout that autopilot and
-    drone routing hang on.
+22. ~~Author **asphalt roads** as terrain-placed surface blocks (straight, bend, junction, crossing,
+    ramp) with movement, traction and wear rules~~, then the road *network* readout that autopilot and
+    drone routing hang on. *(9.41.0-dev, Step 72 — surface, drag-to-pave, per-run wear, grade pricing,
+    movement/traction/grip and repair all shipped, but **without a shape set**: the cell drapes the
+    ground so the drape is the ramp, and a neighbour mask only decides where the kerb rises. `RoadRun`
+    already IS a connected trace with a traffic counter, so the network readout owes a name and a
+    cross-run summary, not a flood fill. Still open: the network object, road-aware routing, creature
+    and stamina bonuses, rolling resistance, culverts/bridges and lamps.)*
 23. Author the **Engine Works** block: parameter set, balance sheet, refusal reasons, craft cost by
     specification, artefact requirements at the large end, and template storage.
 24. ~~Author **grid waymarks and the named connector block** (the cross-grid power/liquid/gas/item
@@ -2267,9 +2341,10 @@ For each version, these are the high-level Unity tasks you will perform manually
     `PowerConsumer` draw, and a pad that is a real member of the base's power, fluid, gas and item graphs
     rather than a block standing near them; ground rigs are served because a car here is a grid with
     wheels. Still open: the pad pumping back into a world run, and cargo schedules.)*
-26. **Run setup wizard step (non-destructive)** for 18–25 as each ships; Steps 66–70 are used
-    (69 = 9.38.0-dev's Distillation Plant content, 70 = 9.39.0-dev's Flare Stack content) and each of these features takes its
-    own step.
+26. **Run setup wizard step (non-destructive)** for 18–25 as each ships; Steps 66–72 are used
+    (69 = 9.38.0-dev's Distillation Plant content, 70 = 9.39.0-dev's Flare Stack content,
+    71 = 9.40.0-dev's Catalytic Cracking & Petrochemicals content, 72 = 9.41.0-dev's Asphalt Roads
+    content) and each of these features takes its own step.
 
 ### For 5.2.0 (Architect Era)
 
