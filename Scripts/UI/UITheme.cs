@@ -100,7 +100,11 @@ namespace VoxelEngine.UI
             p.style.bottom   = 92;
             p.style.right    = 14;
             p.style.width    = new StyleLength(new Length(34f, LengthUnit.Percent));
-            p.style.minWidth = 280;
+            // 9.38.0: 280px was narrower than a six-slot card plus padding, so the
+            // slot boxes (and the fluid gauges) came out smaller than their own
+            // contents on smaller windows. The floor is now a width that holds a
+            // full slot row; panels that need more pin their own pixel width.
+            p.style.minWidth = 380;
             p.style.maxWidth = new StyleLength(new Length(44f, LengthUnit.Percent));
             p.style.overflow = Overflow.Hidden;
             AddScanlines(p, 6, 25f, 45f);
@@ -418,6 +422,11 @@ namespace VoxelEngine.UI
             var col = new VisualElement();
             col.style.alignItems = Align.Center;
             col.style.width      = width;
+            // 9.38.0: gauges used to be squeezed (and their value text clipped) when
+            // the panel was narrower than the row. They keep their width now and
+            // wrap to the next row instead.
+            col.style.flexShrink = 0;
+            col.style.minWidth   = width;
             col.pickingMode      = PickingMode.Ignore;
 
             var lbl = new Label(label.ToUpper());
@@ -587,6 +596,10 @@ namespace VoxelEngine.UI
             var grid = new VisualElement();
             grid.style.flexDirection  = FlexDirection.Row;
             grid.style.flexWrap       = Wrap.Wrap;
+            // 9.38.0: the slot card must never be squeezed narrower than the slots
+            // it holds (it used to shrink with the panel/screen and clip them).
+            // It wraps onto more rows instead.
+            grid.style.flexShrink     = 0;
             grid.style.paddingTop     = 5;
             grid.style.paddingBottom  = 5;
             grid.style.paddingLeft    = 5;

@@ -1,30 +1,33 @@
-// Assets/Scripts/VoxelEngine/Crafting/AdvancedDistillationTower.cs
+// Assets/Scripts/VoxelEngine/Crafting/DistillationPlant.cs
 //
-// ADVANCED DISTILLATION TOWER (9.38.0-dev) — the petroleum-era machine where
-// crude oil is actually converted. The Oil Refinery keeps its legacy role
-// (Refined Oil, Heavy Fuel Oil, MGO and the refined-oil plastic recipe); this
-// big plant is the dedicated fractionating column the design wanted as its own
-// block: one feed tank plus six typed cut tanks, so each cut is readable by its
-// own pipe run and the fractions can never mix.
+// DISTILLATION PLANT (9.38.0-dev) — the petroleum-era machine where crude oil is
+// actually converted. The Oil Refinery keeps its own role (plastics and legacy
+// stock); this wide plant hall is the dedicated fractionating plant the playtest
+// asked for by name: one feed tank plus six typed product tanks, so each product
+// is readable by its own pipe run and the fractions can never mix.
 //
 // Layout:
 //   * 2 input slots / 4 output slots (item side, for future item recipes)
-//   * 1 feed fluid tank + 6 typed fraction tanks, in FractionSpecs order.
+//   * 1 feed fluid tank + 6 typed product tanks, in FractionSpecs order.
 //     The feed is auto-typed: it adopts whichever feed liquid is poured first
 //     (crude oil for the Atmospheric Cut, refined oil for the Re-Run), and the
-//     fluid store NEVER routes outputs into it — a cut can never contaminate
+//     fluid store NEVER routes outputs into it — a product can never contaminate
 //     an empty feed tank.
-//   * 7 world sight-gauge pivots (Transform list, authored on the prefab by
-//     Setup Step 69): index 0 = feed, 1..6 = the cuts. Each pivot's localScale.y
-//     is driven by its tank's fill each frame, so the coloured columns on the
-//     tower model rise and fall with the tanks they stand for.
+//   * World analog dials (Transform list, authored on the prefab by Setup
+//     Step 69): each entry is the NEEDLE pivot of a round dial on the plant —
+//     one above every product outlet and one above each inlet. Each frame the
+//     machine rotates its needle from -135 deg (empty) to +135 deg (full), so
+//     the dials on the plant read exactly like the ones in the panel.
+//     gaugeTankIndices says which tank each dial reads (defaults to its own
+//     index; the refined-oil inlet dial points at the same feed tank as crude).
 //   * Co-located PowerConsumer (auto-added in Awake).
 //
 // Behaviour:
 //   * Each tick picks the first recipe in knownRecipes where ALL inputs are
 //     present and every output has at least one slot with space. Output liquids
-//     are routed by TowerFluidStore, which only fills typed cut tanks, so a cut
-//     that is full back-pressures the batch instead of spilling anywhere else.
+//     are routed by PlantFluidStore, which only fills typed product tanks, so a
+//     product that is full back-pressures the batch instead of spilling anywhere
+//     else.
 //   * Consumes inputs at batch start, produces outputs at batch end.
 
 using System.Collections.Generic;
@@ -38,12 +41,12 @@ namespace VoxelEngine.Crafting
     [RequireComponent(typeof(CraftingStation))]
     [RequireComponent(typeof(PortConfig))]
     [RequireComponent(typeof(ItemPortRouting))]
-    public class AdvancedDistillationTower : MonoBehaviour, IItemPortHost
+    public class DistillationPlant : MonoBehaviour, IItemPortHost
     {
         public const int INPUT_SLOTS  = 2;
         public const int OUTPUT_SLOTS = 4;
 
-        /// <summary>The column's six cuts, in fill/draw order.</summary>
+        /// <summary>The plant's six products, in fill/draw order (heaviest first).</summary>
         public static readonly (LiquidType liquid, string label, float capacityL)[] FractionSpecs =
         {
             (LiquidType.Lpg,            "LPG",             120f),
@@ -64,15 +67,17 @@ namespace VoxelEngine.Crafting
         [Header("Fluid Tanks")]
         [Tooltip("Feed tank. Auto-typed: adopts crude oil for the Atmospheric Cut or refined oil for the Re-Run cut — whichever is poured in first while empty. Output routing never fills it.")]
         public MachineFluidTank feed = new MachineFluidTank("Feed Tank", 2000f, LiquidType.CrudeOil, autoType: true);
-        [Tooltip("One typed tank per column cut, in FractionSpecs order. Ensured at runtime and authored on the prefab by Setup Step 69; never rebuilt over a tuned tank.")]
+        [Tooltip("One typed tank per product cut, in FractionSpecs order. Ensured at runtime and authored on the prefab by Setup Step 69; never rebuilt over a tuned tank.")]
         public List<MachineFluidTank> cutTanks = new();
 
-        [Header("World Sight Gauges")]
-        [Tooltip("Fill pivots on the tower model: index 0 = feed, 1..6 = the six cuts (FractionSpecs order). Each pivot's Y scale is driven by its tank's fill so the coloured sight columns rise and fall with the tanks. Authored by Setup Step 69.")]
-        public List<Transform> gaugePivots = new();
+        [Header("World Analog Dials")]
+        [Tooltip("Needle pivots of the round dials on the plant model. Index 0 = the crude inlet dial, 1..6 = the six product dials (FractionSpecs order), 7 = the refined-oil inlet dial. Authored by Setup Step 69.")]
+        public List<Transform> gaugeNeedles = new();
+        [Tooltip("Which tank each dial reads, by index into FluidTanks (0 = feed, 1..6 = the cuts). Empty = dial i reads tank i; -1 entries are skipped.")]
+        public List<int> gaugeTankIndices = new();
 
         private MachineFluidTank[] _allTanks;   // feed + 6 cuts, cached
-        private TowerFluidStore _fluidStore;
+        private PlantFluidStore _fluidStore;
 
         public IReadOnlyList<MachineFluidTank> FluidTanks => AllTanks();
 
@@ -81,6 +86,9 @@ namespace VoxelEngine.Crafting
         public float baseWattsPerSecond = 500f;
         [Tooltip("Watts/s drawn while idle (keeps the column hot).")]
         public float idleWattsPerSecond = 40f;
+
+        [Tooltip("How fast a dial needle swings to a new reading, in degrees per second. Keeps the needles from snapping.")]
+        public float needleSwingDegPerSecond = 160f;
 
         // Runtime
         private ProcessingRecipe _current;
@@ -95,11 +103,40 @@ namespace VoxelEngine.Crafting
         /// <summary>Player-selected recipe (from the UI). Null = auto-pick the first runnable.</summary>
         [System.NonSerialized] public ProcessingRecipe selectedRecipe;
 
+        /// <summary>Which tank a dial reads. Out-of-range / empty index lists fall back to the dial's own index.</summary>
+                /// <summary>Auto-find dial needle pivots in children for instances placed in existing scenes.</summary>
+        public void AutoWireGauges()
+        {
+            var wanted = new[] {
+                "Gauge_CrudeFeed", "Gauge_LPG", "Gauge_Naphtha", "Gauge_Kerosene",
+                "Gauge_Diesel", "Gauge_Gasoline", "Gauge_HeavyFuelOil", "Gauge_RefinedFeed"
+            };
+            var map = new[] { 0, 1, 2, 3, 4, 5, 6, 0 };
+            gaugeNeedles = new List<Transform>();
+            gaugeTankIndices = new List<int>();
+            var visuals = transform.Find("Visuals") ?? transform;
+            for (int i = 0; i < wanted.Length; i++)
+            {
+                var g = visuals.Find(wanted[i]);
+                var pivot = g != null ? g.Find("NeedlePivot") : null;
+                gaugeNeedles.Add(pivot);
+                gaugeTankIndices.Add(map[i]);
+            }
+        }
+
+        public int TankIndexOf(int dialIndex)
+        {
+            if (gaugeTankIndices != null && dialIndex < gaugeTankIndices.Count) return gaugeTankIndices[dialIndex];
+            return dialIndex;
+        }
+
         private void Awake()
         {
             EnsureContainers();
             if (knownRecipes == null) knownRecipes = new List<ProcessingRecipe>();
             EnsureTanks();
+            if (gaugeNeedles == null || gaugeNeedles.Count == 0 || gaugeNeedles[0] == null)
+                AutoWireGauges();
             _power = GetComponent<PowerConsumer>();
             if (_power == null) _power = gameObject.AddComponent<PowerConsumer>();
             _power.connectRadius = 2.6f;
@@ -111,7 +148,7 @@ namespace VoxelEngine.Crafting
             if (outputC == null) outputC = new ItemContainer("Outputs", OUTPUT_SLOTS);  else outputC.Resize(OUTPUT_SLOTS);
         }
 
-        /// <summary>Make sure the feed tank and the six typed cut tanks exist.
+        /// <summary>Make sure the feed tank and the six typed product tanks exist.
         /// Existing entries are kept as tuned — only missing slots are created.</summary>
         public void EnsureTanks()
         {
@@ -178,7 +215,7 @@ namespace VoxelEngine.Crafting
             CurrentWattage = wantWatts;
             if (_power != null) _power.wattsPerSecond = wantWatts;
 
-            // Drive the world sight gauges from the tanks they represent.
+            // Drive the world dials from the tanks they represent.
             UpdateGauges();
 
             if (!IsOnline) return;
@@ -191,18 +228,33 @@ namespace VoxelEngine.Crafting
                 CompleteBatch();
         }
 
+        /// <summary>
+        /// Swing every world dial needle to its tank's fill: -135 deg at empty,
+        /// +135 deg at full — the same sweep the panel dials use. Needles ease
+        /// toward the target so a filling tank reads as a moving needle rather
+        /// than a teleport.
+        /// </summary>
         private void UpdateGauges()
         {
-            if (gaugePivots == null || gaugePivots.Count == 0) return;
+            if (gaugeNeedles == null || gaugeNeedles.Count == 0 || gaugeNeedles[0] == null)
+                AutoWireGauges();
+            if (gaugeNeedles == null || gaugeNeedles.Count == 0) return;
             var tanks = AllTanks();
-            int n = Mathf.Min(gaugePivots.Count, tanks.Length);
-            for (int i = 0; i < n; i++)
+            for (int i = 0; i < gaugeNeedles.Count; i++)
             {
-                var pivot = gaugePivots[i];
-                if (pivot == null || tanks[i] == null) continue;
-                float f = Mathf.Clamp01(tanks[i].Fill01);
-                if (f < 0.001f) f = 0f;
-                pivot.localScale = new Vector3(1f, f, 1f);
+                var needle = gaugeNeedles[i];
+                if (needle == null) continue;
+                int ti = TankIndexOf(i);
+                if (ti < 0 || ti >= tanks.Length || tanks[ti] == null) continue;
+
+                float f = Mathf.Clamp01(tanks[ti].Fill01);
+                // -135° at empty (bottom-left / 7 o'clock), +135° at full (bottom-right / 5 o'clock)
+                float target = Mathf.Lerp(-135f, 135f, f);
+                float current = needle.localEulerAngles.z;
+                if (current > 180f) current -= 360f;
+                float step = Mathf.Max(1f, needleSwingDegPerSecond) * Time.deltaTime;
+                float eased = Mathf.MoveTowardsAngle(current, target, step);
+                needle.localRotation = Quaternion.Euler(0f, 0f, eased);
             }
         }
 
@@ -212,18 +264,18 @@ namespace VoxelEngine.Crafting
         // ── RECIPE ──────────────────────────────────────────────────────────
         private IFluidStore Fluids()
         {
-            if (_fluidStore == null) _fluidStore = new TowerFluidStore();
+            if (_fluidStore == null) _fluidStore = new PlantFluidStore();
             _fluidStore.Bind(AllTanks());
             return _fluidStore;
         }
 
         /// <summary>
-        /// Fluid routing for the column: the feed tank only ever supplies recipe
-        /// inputs, and outputs only ever land in the six typed cut tanks — never
-        /// back in the feed. An over-full cut therefore back-pressures the batch
-        /// instead of contaminating the feed or mixing fractions.
+        /// Fluid routing for the plant: the feed tank only ever supplies recipe
+        /// inputs, and outputs only ever land in the six typed product tanks —
+        /// never back in the feed. A full product therefore back-pressures the
+        /// batch instead of contaminating the feed or mixing fractions.
         /// </summary>
-        private sealed class TowerFluidStore : IFluidStore
+        private sealed class PlantFluidStore : IFluidStore
         {
             private MachineFluidTank _feed;
             private readonly List<MachineFluidTank> _cuts = new();

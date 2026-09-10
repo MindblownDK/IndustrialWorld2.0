@@ -745,26 +745,40 @@ namespace VoxelEngine.EditorTools
 
             AddSpacer(scroll, 6);
             AddInfo(scroll,
-                "Step 69 (9.38.0) authors the ADVANCED DISTILLATION TOWER (non-destructive):\n" +
-                "  \u2022 A NEW big plant block \u2014 the Oil Refinery stays its legacy two-tank machine; crude\n" +
-                "    fractionation happens only on this tower, as the playtest decided. The model is a\n" +
-                "    distillation plant: tall main column with a dome, a stripper column, six draw pipes\n" +
-                "    (heavies low, LPG at the top) with a coloured world sight gauge ABOVE each outlet and\n" +
-                "    a crude-feed gauge on the other side; every gauge colour is its liquid's colour, and\n" +
-                "    the coloured fill rises and falls with the tank it measures\n" +
+                "Step 69 (9.38.0) authors the DISTILLATION PLANT (non-destructive):\n" +
+                "  \u2022 A NEW wide plant-hall block \u2014 the Oil Refinery stays its legacy two-tank machine;\n" +
+                "    crude conversion happens only here. The model is a real plant: skid deck, drums,\n" +
+                "    main column with dome and platform rings, a stripper column, a stack and pipe work\n" +
+                "  \u2022 Six product outlets in a row along the front, each with an ANALOG DIAL above it \u2014\n" +
+                "    bezel and hub in that liquid's colour, a red needle that sweeps as the tank fills.\n" +
+                "    The crude and refined-oil inlets on the left end have dials of their own\n" +
                 "  \u2022 ATMOSPHERIC CUT \u2014 100 L crude \u2192 2 LPG / 8 naphtha / 12 kerosene / 26 diesel /\n" +
                 "    18 gasoline / 32 heavy fuel oil (98 L out; the 2 L off-gas loss arrives with the\n" +
                 "    flare-disposal round)\n" +
-                "  \u2022 RE-RUN REFINED OIL \u2014 conversion cut on the tower so legacy stock stays spendable\n" +
+                "  \u2022 RE-RUN REFINED OIL \u2014 conversion cut on the plant so legacy stock stays spendable\n" +
                 "  \u2022 NAPHTHA PLASTIC stays on the refinery next to its legacy plastic recipe (better per litre)\n" +
-                "  \u2022 The tower panel shows an industrial analog dial per tank with pour / draw / drain\n" +
-                "    controls; every processor recipe book scrolls now\n" +
+                "  \u2022 Fuel-chain migration: Refine Crude Oil, Distil Heavy Fuel Oil and Distil Marine Gas\n" +
+                "    Oil are detached from the standing AND the ship refinery (the assets are kept for\n" +
+                "    saves that already run them)\n" +
                 "  \u2022 Block item + craft recipe gated by ATMOSPHERIC DISTILLATION research (tier 5, requires\n" +
-                "    Oil Refining); the two distillation recipes are detached from the refinery prefab\n" +
-                "    if an earlier run of this step put them there\n" +
-                "Re-runnable. Idempotent. Existing recipes, prefab lists, tuned tank numbers, gauge wiring\n" +
+                "    Oil Refining). Existing names are renamed in place, so saves keep their blocks\n" +
+                "Re-runnable. Idempotent. Existing recipes, prefab lists, tuned tank numbers, dial wiring\n" +
                 "and research costs are preserved.");
-            AddWizardButton(scroll, "69. Author Advanced Distillation Tower Content (Atmospheric Cut, Re-Run, Naphtha Plastic \u2014 Non-Destructive)", () => VoxelEngine.EditorTools.PetroleumColumnSetup.RunStep69(), 62);
+            AddWizardButton(scroll, "69. Author Distillation Plant Content (Atmospheric Cut, Re-Run, Naphtha Plastic \u2014 Non-Destructive)", () => VoxelEngine.EditorTools.PetroleumColumnSetup.RunStep69(), 62);
+
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
+                "Step 70 (9.39.0) authors FLARE STACK & HEAT RECOVERY (non-destructive):\n" +
+                "  \u2022 A stationary Flare Stack derrick tower (5.5m tall with pilot flame and heat recovery generator)\n" +
+                "    and Grid Flare Vents (Large & Small) as run terminators for surplus gases and liquids\n" +
+                "  \u2022 Destroys excess fractions (LPG, naphtha, kerosene, diesel, gasoline, heavy fuel oil,\n" +
+                "    refined oil, crude oil) and off-gases so distillation never back-pressures\n" +
+                "  \u2022 Waste-Heat Power Recovery: converts thermal burn energy (approx 20%) into electrical\n" +
+                "    power directly onto the power grid\n" +
+                "  \u2022 Oxygen draw & casing thermal simulation: chokes if unventilated in a sealed room\n" +
+                "  \u2022 Gated under FLARE DISPOSAL & HEAT RECOVERY research (tier 5)\n" +
+                "Re-runnable. Idempotent.");
+            AddWizardButton(scroll, "70. Author Flare Stack & Heat Recovery Content (Tower, Vents, Power Recovery \u2014 Non-Destructive)", () => VoxelEngine.EditorTools.FlareStackSetup.RunStep70(), 62);
 
             AddSpacer(scroll, 20);
         }
@@ -4094,8 +4108,12 @@ namespace VoxelEngine.EditorTools
 
             var noItems = System.Array.Empty<(VoxelEngine.Items.ItemDefinition, int)>();
 
-            // Crude → Refined: 100 L crude oil (liquid) → 80 L refined oil (liquid).
-            var procRefine  = MakeProc("Proc_RefineOil", "Refine Crude Oil", "Refinery",
+            // Refine Crude Oil, Distil Heavy Fuel Oil and Distil Marine Gas Oil are
+            // LEGACY assets from here on (9.38.0-dev): the recipe assets are still
+            // authored, because a save that already runs them keeps working, but no
+            // refinery has them attached — the Distillation Plant owns crude, and
+            // Setup Step 69 detaches them from both refinery prefabs.
+            MakeProc("Proc_RefineOil", "Refine Crude Oil", "Refinery",
                 noItems, noItems, seconds: 12f, powerMul: 1f,
                 fluidIn:  new[] { (VoxelEngine.Items.LiquidType.CrudeOil,   100f) },
                 fluidOut: new[] { (VoxelEngine.Items.LiquidType.RefinedOil,  80f) });
@@ -4124,14 +4142,14 @@ namespace VoxelEngine.EditorTools
             // ════════════════════════════════════════════════════════════
             //  MARITIME FUEL CHAIN — Heavy Fuel Oil + Marine Gas Oil
             // ════════════════════════════════════════════════════════════
-            // Refinery: Refined Oil → Heavy Fuel Oil (thick bunker fuel for Medium Engines).
-            var procHeavyFuel = MakeProc("Proc_RefineHeavyFuelOil", "Distil Heavy Fuel Oil", "Refinery",
+            // Legacy: Refined Oil → Heavy Fuel Oil (kept as an asset, no longer attached).
+            MakeProc("Proc_RefineHeavyFuelOil", "Distil Heavy Fuel Oil", "Refinery",
                 noItems, noItems, seconds: 14f, powerMul: 1.15f,
                 fluidIn:  new[] { (VoxelEngine.Items.LiquidType.RefinedOil,    80f) },
                 fluidOut: new[] { (VoxelEngine.Items.LiquidType.HeavyFuelOil,  55f) });
 
-            // Refinery: Heavy Fuel Oil → Marine Gas Oil (clean high-grade distillate for Giant Diesel).
-            var procMGO = MakeProc("Proc_RefineMGO", "Distil Marine Gas Oil", "Refinery",
+            // Legacy: Heavy Fuel Oil → Marine Gas Oil (kept as an asset, no longer attached).
+            MakeProc("Proc_RefineMGO", "Distil Marine Gas Oil", "Refinery",
                 noItems, noItems, seconds: 18f, powerMul: 1.3f,
                 fluidIn:  new[] { (VoxelEngine.Items.LiquidType.HeavyFuelOil,   60f) },
                 fluidOut: new[] { (VoxelEngine.Items.LiquidType.MarineGasOil,   45f) });
@@ -4148,8 +4166,13 @@ namespace VoxelEngine.EditorTools
                 fluidIn:  new[] { (VoxelEngine.Items.LiquidType.Water,         100f) },
                 fluidOut: new[] { (VoxelEngine.Items.LiquidType.MarineEngineCoolant, 60f) });
 
-            // Attach those recipes to the OilRefinery prefab.
-            AppendOilRefineryRecipes(refineryPrefab, new List<VoxelEngine.Crafting.ProcessingRecipe> { procRefine, procPlastic, procHeavyFuel, procMGO });
+            // Attach the plastics work to the OilRefinery prefab. The naphtha-fed
+            // plastic recipe is authored by Setup Step 69 (petroleum round) and is
+            // attached here too when that step has already run.
+            var procNaphthaPlastic = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.ProcessingRecipe>($"{procRecFolder}/Proc_NaphthaPlastic.asset");
+            var refineryRecipes = new List<VoxelEngine.Crafting.ProcessingRecipe> { procPlastic };
+            if (procNaphthaPlastic != null) refineryRecipes.Add(procNaphthaPlastic);
+            AppendOilRefineryRecipes(refineryPrefab, refineryRecipes);
 
             // Attach the Chemistry recipe to the Stationary Chemical Plant prefab.
             AppendChemicalPlantRecipes(chemPlantPrefab, new List<VoxelEngine.Crafting.ProcessingRecipe> { procLiquidFuel, procSynthMGO, procCoolant });
@@ -7418,12 +7441,12 @@ root =>
 
             // -- 12) Chemical Plant (grid) — shares Chemistry ProcessingRecipes --
             string procFolder = ASSET_ROOT + "/Industrial/ProcessingRecipes";
-            var procRefineShared  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.ProcessingRecipe>($"{procFolder}/Proc_RefineOil.asset");
             var procPlasticShared = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.ProcessingRecipe>($"{procFolder}/Proc_MakePlastic.asset");
+            var procNaphthaShared = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.ProcessingRecipe>($"{procFolder}/Proc_NaphthaPlastic.asset");
             var procChemistry     = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.ProcessingRecipe>($"{procFolder}/Proc_MakeLiquidFuel.asset");
-            // Maritime fuel chain recipes (shared with stationary refinery / chem plant).
-            var procHeavyFuelShared = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.ProcessingRecipe>($"{procFolder}/Proc_RefineHeavyFuelOil.asset");
-            var procMGOShared       = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.ProcessingRecipe>($"{procFolder}/Proc_RefineMGO.asset");
+            // Chemistry shortcuts stay on the chemical plants; the refinery fuel-chain
+            // recipes (Refine Crude Oil / Heavy Fuel Oil / Marine Gas Oil) are retired
+            // in 9.38.0-dev — the Distillation Plant owns crude conversion.
             var procSynthMGOShared  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.ProcessingRecipe>($"{procFolder}/Proc_SynthesiseMGO.asset");
             var procCoolantShared   = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.ProcessingRecipe>($"{procFolder}/Proc_MarineCoolant.asset");
 
@@ -7438,8 +7461,9 @@ root =>
             var itemChem = MakeGItem("GItem_ChemicalPlant", "Ship Chemical Plant", Color.white, chemPref, VoxelEngine.GridSystem.GridSize.Large, 1100, 900);
             AddGRecipe("Recipe_GChemicalPlant", "Ship Chemical Plant", itemChem, (steelPlate, 12), (circuit, 8), (copperWire, 8));
 
-            // -- Recipe parity: grid Refinery uses the SAME ProcessingRecipe assets
-            //    as the stationary Oil Refinery (Refine Crude Oil + Synthesise Plastic).
+            // -- Recipe parity: the ship Refinery uses the SAME ProcessingRecipe assets
+            //    as the standing Oil Refinery (plastics only since 9.38.0-dev; crude
+            //    conversion moved to the Distillation Plant).
             {
                 string refPath = AssetDatabase.GetAssetPath(refineryPref);
                 var refContents = PrefabUtility.LoadPrefabContents(refPath);
@@ -7449,10 +7473,8 @@ root =>
                     if (gr != null)
                     {
                         gr.knownRecipes = new System.Collections.Generic.List<VoxelEngine.Crafting.ProcessingRecipe>();
-                        if (procRefineShared  != null) gr.knownRecipes.Add(procRefineShared);
                         if (procPlasticShared != null) gr.knownRecipes.Add(procPlasticShared);
-                        if (procHeavyFuelShared != null) gr.knownRecipes.Add(procHeavyFuelShared);
-                        if (procMGOShared       != null) gr.knownRecipes.Add(procMGOShared);
+                        if (procNaphthaShared != null) gr.knownRecipes.Add(procNaphthaShared);
                     }
                     PrefabUtility.SaveAsPrefabAsset(refContents, refPath);
                 }

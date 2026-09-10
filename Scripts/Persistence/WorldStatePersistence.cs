@@ -1241,6 +1241,14 @@ namespace VoxelEngine.Persistence
                         savedBlock.hasVentilationScaleState = true;
                         savedBlock.ventilationAutoScale = ventBlock.autoScaleFlow;
                     }
+                    else if (block is VoxelEngine.Gas.GridFlareStack flareBlock)
+                    {
+                        savedBlock.hasFlareStackState = true;
+                        savedBlock.flareStackOpen = flareBlock.open;
+                        savedBlock.flareStackRecovery = flareBlock.wasteHeatRecovery;
+                        savedBlock.flareStackGasDumped = flareBlock.TotalGasBurned;
+                        savedBlock.flareStackLiquidDumped = flareBlock.TotalLiquidBurned;
+                    }
                     else if (block is VoxelEngine.Maritime.GridMaritimeEngine airModeEngine)
                     {
                         // Which policy the engine follows when its plumbed line runs dry is a
@@ -1647,6 +1655,13 @@ namespace VoxelEngine.Persistence
                     restoredVent.open = saved.gasVentOpen;
                     restoredVent.TotalDumped = Mathf.Max(0f, saved.gasVentDumped);
                     if (saved.hasVentilationScaleState) restoredVent.autoScaleFlow = saved.ventilationAutoScale;
+                }
+                else if (saved.hasFlareStackState && block is VoxelEngine.Gas.GridFlareStack restoredFlare)
+                {
+                    restoredFlare.open = saved.flareStackOpen;
+                    restoredFlare.wasteHeatRecovery = saved.flareStackRecovery;
+                    restoredFlare.TotalGasBurned = Mathf.Max(0f, saved.flareStackGasDumped);
+                    restoredFlare.TotalLiquidBurned = Mathf.Max(0f, saved.flareStackLiquidDumped);
                 }
                 else if (saved.hasVentilationScaleState
                     && (block is VoxelEngine.Pressure.GridAirVent
@@ -2672,6 +2687,11 @@ namespace VoxelEngine.Persistence
             public bool hasGasVentState;
             public bool gasVentOpen = true;
             public float gasVentDumped;
+            public bool hasFlareStackState;
+            public bool flareStackOpen = true;
+            public bool flareStackRecovery;
+            public float flareStackGasDumped;
+            public float flareStackLiquidDumped;
             // Additive ventilation tuning (9.33.0). A legacy save has no flag, and every unit
             // keeps its prefab default, which is what it behaved as before the option existed.
             public bool hasVentilationScaleState;

@@ -1135,5 +1135,120 @@ namespace VoxelEngine.UI
             row.Add(slot(c, idx, c.GetSlot(idx), false, false));
             return row;
         }
+
+        // ════════════════════════════════════════════════════════════
+        //                      FLARE STACK (9.39)
+        // ════════════════════════════════════════════════════════════
+        public static VisualElement FlareStackPanel(VoxelEngine.Industrial.FlareStack flare, SlotBuilder slot = null)
+        {
+            if (flare == null) return T.MachinePanel();
+            var panel = T.MachinePanel();
+            panel.style.width = 460;
+
+            string status = !flare.isOpen ? "SHUT"
+                : flare.BurnLoad01 > 0.01f ? (flare.wasteHeatRecovery ? "POWER RECOVERY" : "FLARING")
+                : "PILOT (IDLE)";
+            Color statusColor = !flare.isOpen ? T.AccentDim
+                : flare.BurnLoad01 > 0.01f ? (flare.wasteHeatRecovery ? T.AccentGold : T.AccentOrange)
+                : T.AccentGreen;
+
+            panel.Add(BuildHeader("🔥", "Flare Stack", status, statusColor, T.AccentOrange));
+            panel.Add(T.AccentDivider(T.AccentOrange));
+            panel.Add(T.Spacer(4));
+
+            panel.Add(T.Subtitle("Thermal Disposal"));
+            panel.Add(T.StatRow("🔥", "Burn Load", $"{flare.BurnLoad01 * 100f:0}%", flare.BurnLoad01 > 0.01f ? T.AccentOrange : T.TextSecondary));
+            var (bar, _) = T.ProgressBar(flare.BurnLoad01, T.AccentOrange, 8, true);
+            bar.style.marginTop = 4; bar.style.marginBottom = 6;
+            panel.Add(bar);
+
+            panel.Add(T.StatRow("💧", "Burn Rate", $"{flare.CurrentBurnRate:0.0} L/s · total {flare.TotalBurnedLitres:0} L", T.AccentAmber));
+
+            // Fluid tank
+            if (flare.fluidIn != null)
+            {
+                var gaugeRow = new VisualElement();
+                gaugeRow.style.flexDirection = FlexDirection.Row;
+                gaugeRow.style.justifyContent = Justify.Center;
+                gaugeRow.style.marginTop = 6; gaugeRow.style.marginBottom = 6;
+                gaugeRow.Add(T.TankGauge(flare.fluidIn.liquid.DisplayName(), flare.fluidIn.Fill01, flare.fluidIn.liquid.Color(),
+                    $"{flare.fluidIn.stored:0} / {flare.fluidIn.capacity:0} L", 74, 120));
+                panel.Add(gaugeRow);
+            }
+
+            panel.Add(T.Spacer(6));
+            panel.Add(T.Subtitle("Target Fuel To Burn"));
+            var fuelsRow1 = new VisualElement();
+            fuelsRow1.style.flexDirection = FlexDirection.Row;
+            fuelsRow1.style.flexWrap = UnityEngine.UIElements.Wrap.Wrap;
+            fuelsRow1.style.marginTop = 2;
+
+            var allBtn = T.SmallButton("AUTO / ALL", () =>
+            {
+                flare.SelectFuel(flare.targetFuel, auto: true);
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, flare.autoSelectFuel ? T.AccentOrange : T.BgSlot);
+            allBtn.style.marginRight = 4; allBtn.style.marginBottom = 4;
+            fuelsRow1.Add(allBtn);
+
+            var availableFuels = new[]
+            {
+                (VoxelEngine.Items.LiquidType.HeavyFuelOil, "HFO"),
+                (VoxelEngine.Items.LiquidType.Diesel, "Diesel"),
+                (VoxelEngine.Items.LiquidType.Kerosene, "Kerosene"),
+                (VoxelEngine.Items.LiquidType.Gasoline, "Gasoline"),
+                (VoxelEngine.Items.LiquidType.Naphtha, "Naphtha"),
+                (VoxelEngine.Items.LiquidType.Lpg, "LPG"),
+                (VoxelEngine.Items.LiquidType.RefinedOil, "Refined"),
+                (VoxelEngine.Items.LiquidType.CrudeOil, "Crude"),
+            };
+
+            for (int i = 0; i < availableFuels.Length; i++)
+            {
+                var (lt, label) = availableFuels[i];
+                bool active = !flare.autoSelectFuel && flare.targetFuel == lt;
+                Color btnColor = active ? lt.Color() : T.BgSlot;
+                var b = T.SmallButton(label, () =>
+                {
+                    flare.SelectFuel(lt, auto: false);
+                    VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+                }, btnColor);
+                b.style.marginRight = 4; b.style.marginBottom = 4;
+                fuelsRow1.Add(b);
+            }
+            panel.Add(fuelsRow1);
+
+            panel.Add(T.Spacer(6));
+            panel.Add(T.Subtitle("Waste-Heat Power Recovery"));
+            var recRow = new VisualElement();
+            recRow.style.flexDirection = FlexDirection.Row;
+            recRow.style.alignItems = Align.Center;
+            recRow.Add(T.SmallButton(flare.wasteHeatRecovery ? "RECOVERY: ACTIVE" : "RECOVERY: OFF", () =>
+            {
+                flare.wasteHeatRecovery = !flare.wasteHeatRecovery;
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, flare.wasteHeatRecovery ? T.AccentGold : T.BgSlot));
+            recRow.Add(T.Muted(flare.wasteHeatRecovery ? "Generates electricity onto power grid" : "Flaring directly to atmosphere"));
+            panel.Add(recRow);
+
+            if (flare.wasteHeatRecovery)
+                panel.Add(T.StatRow("⚡", "Recovered Power", PowerFormat.Watts(flare.GeneratedWatts), T.AccentGold));
+
+            panel.Add(T.Spacer(6));
+            panel.Add(T.Subtitle("Controls"));
+            var ctrlRow = new VisualElement();
+            ctrlRow.style.flexDirection = FlexDirection.Row;
+            ctrlRow.style.alignItems = Align.Center;
+            ctrlRow.Add(T.SmallButton(flare.isOpen ? "FLARE: IGNITED" : "FLARE: SHUT", () =>
+            {
+                flare.isOpen = !flare.isOpen;
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, flare.isOpen ? T.AccentGreen : T.AccentDim));
+            panel.Add(ctrlRow);
+
+            panel.Add(T.Spacer(6));
+            panel.Add(T.Muted("Disposes of excess petroleum cuts and off-gases. Automatically siphons overflowing product tanks from adjacent distillation plants to keep refining lines moving."));
+            return panel;
+        }
     }
 }

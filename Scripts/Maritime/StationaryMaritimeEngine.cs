@@ -1,18 +1,20 @@
 // Assets/Scripts/VoxelEngine/Maritime/StationaryMaritimeEngine.cs
 //
 // Stationary Maritime Engine — a world-placed diesel power plant for land.
-// Burns fuel (solid items or liquid MGO/HFO) and feeds electricity directly
-// into the PowerNetwork via a PowerGenerator component.
+// Burns fuel (solid items or liquid MGO/HFO/Diesel/Kerosene/Gasoline/LPG) and feeds
+// electricity directly into the PowerNetwork via a PowerGenerator component.
 //
 //   • No shafts / gearboxes needed — simplified for stationary use.
 //   • Turbo toggle: +40% watt output (same boost ratio as the ship variant).
-//   • Place next to a chest (solid fuel) or fluid tank (liquid fuel) and connect
+//   • Place next to a chest (solid fuel) or fluid tank / plant (liquid fuel) and connect
 //     a power cable.
 //
 // The ship-variant engines (GridMaritimeEngine) use the full Burst mechanical
 // network; this stationary version is a lightweight MonoBehaviour for bases.
 
 using UnityEngine;
+using VoxelEngine.Crafting;
+using VoxelEngine.Industrial;
 using VoxelEngine.Items;
 using VoxelEngine.Power;
 
@@ -65,8 +67,11 @@ namespace VoxelEngine.Maritime
             IsRunning = FuelBuffer > 0.01f;
             _gen.isOn = IsRunning;
 
-            // Set output watts (with turbo boost).
-            _wattOutput = baseWattOutput;
+            // Set output watts (with fuel energy scaling and turbo boost).
+            float energyFactor = (fuelKind == MaritimeFuelKind.Liquid && liquidFuel.IsCombustible())
+                ? Mathf.Max(0.5f, liquidFuel.BurnEnergyMJPerL() / 38.5f)
+                : 1f;
+            _wattOutput = baseWattOutput * energyFactor;
             if (turbocharged) _wattOutput *= MechanicalNode.TurboBoost;
             _gen.wattsPerSecond = _wattOutput;
         }
@@ -93,11 +98,11 @@ namespace VoxelEngine.Maritime
         }
 
         // ── Fuel discovery (world blocks, not grid) ───────────────────
-        // These scan nearby placed blocks for fuel sources. Simple and self-contained.
+        // These scan nearby placed blocks for fuel sources.
         private float FindSolidFuel()
         {
             // Look for a nearby IGridItemStore or Building.Chest within range.
-            var colliders = Physics.OverlapSphere(transform.position, 3f);
+            var colliders = Physics.OverlapSphere(transform.position, 3.5f);
             foreach (var col in colliders)
             {
                 // Try grid cargo containers.
@@ -132,22 +137,44 @@ namespace VoxelEngine.Maritime
         private float FindLiquidFuel(float litres)
         {
             if (litres <= 0f) return 0f;
-            var colliders = Physics.OverlapSphere(transform.position, 3f);
+            var colliders = Physics.OverlapSphere(transform.position, 4.0f);
             float remaining = litres;
             foreach (var col in colliders)
             {
                 if (remaining <= 0.01f) break;
-                // World fluid tanks (Building system).
-                var tank = col.GetComponentInParent<VoxelEngine.Fluids.WaterTank>();
-                if (tank != null)
+
+                // Check DistillationPlant product tanks
+                var plant = col.GetComponentInParent<DistillationPlant>();
+                if (plant != null)
                 {
-                    // WaterTank stores water; for fuel tanks we'd need a dedicated block.
-                    // This is a hook for Part 4 when MGO/HFO world tanks are added.
-                    continue;
+                    foreach (var tank in plant.FluidTanks)
+                    {
+                        if (tank != null && tank.liquid == liquidFuel && tank.stored > 0.01f)
+                        {
+                            float take = Mathf.Min(remaining, tank.stored);
+                            tank.stored -= take;
+                            remaining -= take;
+                            if (remaining <= 0.01f) break;
+                        }
+                    }
+                }
+
+                // Check Chemical Plant / Refinery tanks
+                var chem = col.GetComponentInParent<StationaryChemicalPlant>();
+                if (chem != null)
+                {
+                    foreach (var tank in chem.FluidTanks)
+                    {
+                        if (tank != null && tank.liquid == liquidFuel && tank.stored > 0.01f)
+                        {
+                            float take = Mathf.Min(remaining, tank.stored);
+                            tank.stored -= take;
+                            remaining -= take;
+                            if (remaining <= 0.01f) break;
+                        }
+                    }
                 }
             }
-            // For now, stationary liquid-fuel engines need their buffer pre-filled
-            // via the inspector or a future fluid-pipe connection. Part 4 will wire this.
             return litres - remaining;
         }
     }

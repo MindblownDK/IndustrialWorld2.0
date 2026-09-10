@@ -117,7 +117,10 @@ namespace VoxelEngine.GridSystem
         {
             if (endpoint == null || endpoint.Grid == null || type == Gas.GasType.None) return false;
             foreach (var block in ConnectedEndpoints(endpoint))
+            {
                 if (block is VoxelEngine.Gas.GasVent vent && vent.Enabled && vent.Accepts(type)) return true;
+                if (block is VoxelEngine.Gas.GridFlareStack flare && flare.Enabled && flare.AcceptsGas(type)) return true;
+            }
             return false;
         }
 
@@ -178,6 +181,8 @@ namespace VoxelEngine.GridSystem
                 if (dumped >= litres) break;
                 if (block is VoxelEngine.Gas.GasVent vent && vent.Enabled)
                     dumped += vent.Accept(type, litres - dumped);
+                else if (block is VoxelEngine.Gas.GridFlareStack flare && flare.Enabled)
+                    dumped += flare.AcceptGas(type, litres - dumped);
             }
             return dumped;
         }
@@ -201,7 +206,7 @@ namespace VoxelEngine.GridSystem
             {
                 if (block == null || block == endpoint || IsGasPipe(block)) continue;
                 if (!block.Enabled) continue;
-                bool linked = block is VoxelEngine.Gas.GasVent;   // a vent is a plain box:
+                bool linked = block is VoxelEngine.Gas.GasVent || block is VoxelEngine.Gas.GridFlareStack;
                 foreach (var pipe in pipes)                        // centre proximity is enough
                 {
                     if (!linked && !IsTankPortWithinDetailLink(grid, pipe, block,

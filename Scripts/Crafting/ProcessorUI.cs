@@ -1,13 +1,16 @@
 // Assets/Scripts/VoxelEngine/Crafting/ProcessorUI.cs
 //
 // UI panels for the stationary fluid processors — Oil Refinery, Chemical Plant
-// and the Advanced Distillation Tower. Shows item slots, internal fluid tanks,
-// the active recipe + progress, and per-tank controls.
+// and the Distillation Plant. Shows item slots, internal fluid tanks, the active
+// recipe + progress, and per-tank controls.
 //
-// 9.38.0-dev: every panel's recipe book scrolls (a long recipe list used to
-// overflow the fixed machine panel and become unreachable), each tank row gains
-// pour / draw / drain controls that work with a liquid canister in the hand,
-// and the tower gets its own industrial panel with one analog dial per tank.
+// 9.38.0-dev: every panel's recipe book scrolls by name (a long recipe list used
+// to overflow the fixed machine panel and become unreachable), each tank row has
+// pour / draw / drain controls that work with a liquid canister in the hand, tank
+// captions name what is actually inside the tank, slot cards and gauges keep their
+// size instead of being squeezed by the panel, and the plant gets its own
+// industrial panel — one analog dial per tank, updated in place every frame so
+// the panel never has to rebuild itself under the player's scroll.
 
 using System.Collections.Generic;
 using UnityEngine;
@@ -22,6 +25,50 @@ namespace VoxelEngine.Crafting
 {
     public static class ProcessorUI
     {
+        /// <summary>
+        /// Element handles for the open Distillation Plant panel. The controller
+        /// updates these IN PLACE every frame (needle sweep, readouts, status pill,
+        /// progress bar) instead of rebuilding the panel — a rebuild re-created the
+        /// page ScrollView and threw the player back to the top while scrolling.
+        /// </summary>
+        public sealed class PlantPanelLive
+        {
+            public VisualElement root;
+            public readonly List<int> tankIndices = new();
+            public readonly List<LiquidType> captionTypes = new();
+            public readonly List<VisualElement> needles = new();
+            public readonly List<Label> values = new();
+            public VisualElement progressFill;
+            public VisualElement statusPill;
+            public Label statusLabel;
+            public Label wattLabel;
+
+            public void Reset()
+            {
+                root = null;
+                tankIndices.Clear();
+                captionTypes.Clear();
+                needles.Clear();
+                values.Clear();
+                progressFill = null;
+                statusPill = null;
+                statusLabel = null;
+                wattLabel = null;
+            }
+        }
+
+        /// <summary>
+        /// What to print on a tank's caption. An auto-typed tank that is empty has no
+        /// contents, so it must not claim a liquid it has not been given yet — it
+        /// reads "Empty" until something is poured in. Typed tanks (the plant's six
+        /// products) name their liquid, because holding that one liquid IS their job.
+        /// </summary>
+        private static string TankCaption(MachineFluidTank t)
+        {
+            if (t == null) return "Tank";
+            if (t.autoType && t.IsEmpty) return "Empty";
+            return t.liquid.DisplayName();
+        }
         // ── Oil Refinery (legacy machine — crude stays out of it since 9.38.0) ──
         public static VisualElement OilRefineryPanel(OilRefinery m, MachineUIs.SlotBuilder slot)
         {
@@ -34,7 +81,8 @@ namespace VoxelEngine.Crafting
             ItemSlots(p, "Outputs", m.outputC, slot);
             UpgradeSlots(p, "Upgrades", m.upgradeC, slot);
             RecipeBook(p, m.knownRecipes, m.Current, m.selectedRecipe,
-                rec => { m.selectedRecipe = rec; GameUIController.Instance?.RefreshCurrentPanel(); });
+                rec => { m.selectedRecipe = rec; GameUIController.Instance?.RefreshCurrentPanel(); },
+                scrollName: "RefineryRecipeBook");
             return p;
         }
 
@@ -49,42 +97,51 @@ namespace VoxelEngine.Crafting
             ItemSlots(p, "Inputs", m.inputC, slot);
             ItemSlots(p, "Outputs", m.outputC, slot);
             RecipeBook(p, m.knownRecipes, m.Current, m.selectedRecipe,
-                rec => { m.selectedRecipe = rec; GameUIController.Instance?.RefreshCurrentPanel(); });
+                rec => { m.selectedRecipe = rec; GameUIController.Instance?.RefreshCurrentPanel(); },
+                scrollName: "ChemicalPlantRecipeBook");
             return p;
         }
 
-        // ── Advanced Distillation Tower (9.38.0) — the dedicated column ──────
-        public static VisualElement DistillationTowerPanel(AdvancedDistillationTower m, MachineUIs.SlotBuilder slot)
+        // ── Distillation Plant (9.38.0) — the dedicated petroleum plant ──────
+        public static VisualElement DistillationPlantPanel(DistillationPlant m, MachineUIs.SlotBuilder slot,
+            PlantPanelLive live = null)
         {
             m.EnsureContainers();
             m.EnsureTanks();
-            var p = BuildShell("🏭 Advanced Distillation Tower", m.IsOnline, m.Current, m.Progress01, m.CurrentWattage);
-            FixWidth(p, 720f);
+            var p = BuildShell("🏭 Distillation Plant", m.IsOnline, m.Current, m.Progress01, m.CurrentWattage, live);
+            FixWidth(p, 760f);
 
-            // The plant panel is tall; everything below the header lives in a page
-            // scroll so every tank, slot and recipe stays reachable on short screens.
-            var page = new ScrollView(ScrollViewMode.Vertical);
-            page.style.maxHeight = Mathf.Max(220f, Screen.height - 210f);
+            // Everything below the header lives in a page scroll, so every dial, slot
+            // and recipe stays reachable no matter how short the window is. The scroll
+            // takes the remaining panel height (flexGrow) instead of a screen-size
+            // guess, and it carries the controller's persistent name so its offset
+            // survives the rebuilds that container changes still trigger.
+            var page = new ScrollView(ScrollViewMode.Vertical) { name = "DistillationPlantPage" };
             page.style.marginTop = 2;
+            page.style.flexGrow = 1;
+            page.style.flexShrink = 1;
+            page.style.minHeight = 180;   // never collapse to nothing on a very short window
             T.StyleScroller(page);
             p.Add(page);
 
-            page.Add(GUI.SectionTitle("Column Tanks — feed and the six cuts"));
+            page.Add(GUI.SectionTitle("Plant Tanks — feed and the six products"));
             var row = new VisualElement();
             row.style.flexDirection = FlexDirection.Row;
             row.style.flexWrap = Wrap.Wrap;
             row.style.justifyContent = Justify.Center;
 
-            var feedCell = DialCell("FEED LINE", m.feed, "Crude for the Atmospheric Cut · Refined Oil for the Re-Run", 108f);
+            // Feed first (slightly larger dial), then the six products in
+            // FractionSpecs order — heaviest last, matching the plant's pipe row.
+            var feedCell = DialCell("FEED LINE", m.feed, "Crude for the Atmospheric Cut · Refined Oil for the Re-Run", 108f, live, 0);
             feedCell.style.marginRight = 10f;
             row.Add(feedCell);
 
-            var tanks = m.FluidTanks; // feed + 6 cuts in FractionSpecs order
+            var tanks = m.FluidTanks; // feed + 6 products in FractionSpecs order
             for (int i = 1; i < tanks.Count; i++)
-                row.Add(DialCell("PRODUCT CUT", tanks[i], "Typed cut — drained and read by its own run", 92f));
+                row.Add(DialCell("PRODUCT", tanks[i], "Typed product tank — drained and read by its own run", 92f, live, i));
             page.Add(row);
             page.Add(T.Spacer(2));
-            page.Add(T.Muted("▲ Pour / ▼ Draw work with a liquid canister in your hand (one click ≈ 0.5 L). ⊘ drains the tank."));
+            page.Add(T.Muted("▲ Pour / ▼ Draw work with a liquid canister in your hand (one click ≈ 0.5 L). ⊘ drains the tank. The dials on the plant move with these tanks."));
 
             page.Add(T.Spacer(8));
             ItemSlots(page, "Item Slots", m.inputC, slot);
@@ -106,24 +163,43 @@ namespace VoxelEngine.Crafting
         }
 
         private static VisualElement BuildShell(string title, bool online,
-            ProcessingRecipe current, float progress01, float watts)
+            ProcessingRecipe current, float progress01, float watts, PlantPanelLive live = null)
         {
             var p = T.MachinePanel();
-            var (hdr, _, _, _) = T.HeaderRow(title,
+            var (hdr, _, pill, pillLabel) = T.HeaderRow(title,
                 !online ? "NO POWER" : current != null ? "PROCESSING" : "IDLE",
                 !online ? T.AccentRed : current != null ? T.AccentGreen : T.AccentAmber);
             p.Add(hdr);
             p.Add(T.AccentDivider(T.AccentCyan));
 
-            p.Add(T.StatRow("⚡", "Power Use", PowerFormat.Watts(watts), T.AccentGold));
+            var wattRow = T.StatRow("⚡", "Power Use", PowerFormat.Watts(watts), T.AccentGold);
+            p.Add(wattRow);
+            if (live != null)
+            {
+                // The live panel keeps the header + wattage honest without a rebuild.
+                live.statusPill = pill;
+                live.statusLabel = pillLabel;
+                live.wattLabel = FindValueLabel(wattRow);
+            }
             if (current != null)
             {
                 p.Add(T.StatRow("⚙", "Recipe", current.GetDisplayName(), T.AccentCyan));
-                var (bar, _) = T.ProgressBar(progress01, T.AccentGreen, 8, true);
+                var (bar, fill) = T.ProgressBar(progress01, T.AccentGreen, 8, true);
                 p.Add(bar);
+                if (live != null) live.progressFill = fill;
             }
             p.Add(T.Spacer(6));
             return p;
+        }
+
+        /// <summary>The value cell of a T.StatRow (its last label) — used by the live
+        /// panel tick to rewrite a readout without rebuilding the row.</summary>
+        private static Label FindValueLabel(VisualElement statRow)
+        {
+            if (statRow == null) return null;
+            Label last = null;
+            foreach (var l in statRow.Query<Label>().ToList()) last = l;
+            return last;
         }
 
         /// <summary>
@@ -147,8 +223,13 @@ namespace VoxelEngine.Crafting
                 col.style.marginLeft = 5;
                 col.style.marginRight = 5;
                 col.style.marginBottom = 6;
-                col.Add(T.TankGauge(t.liquid.DisplayName(), t.Fill01, t.liquid.Color(),
-                    $"{t.stored:0}/{t.capacity:0} L", gaugeWidth, gaugeHeight));
+                col.style.flexShrink = 0;
+                var gauge = T.TankGauge(TankCaption(t), t.Fill01, t.liquid.Color(),
+                    $"{t.stored:0}/{t.capacity:0} L", gaugeWidth, gaugeHeight);
+                // The caption names what is actually in the tank; the role lives in
+                // the tooltip so "Fluid In" carries a value the player cannot use.
+                gauge.tooltip = $"{t.label} — {(t.autoType && t.IsEmpty ? "empty, adopts the first liquid poured in" : t.liquid.DisplayName())}";
+                col.Add(gauge);
                 AddTankButtons(col, t);
                 row.Add(col);
             }
@@ -182,7 +263,8 @@ namespace VoxelEngine.Crafting
         /// with tick ring and a needle that sweeps -135°..+135° over the tank fill,
         /// rimmed in the liquid's own colour so feed and cuts are unmistakable.
         /// </summary>
-        private static VisualElement DialCell(string tankLabel, MachineFluidTank t, string hint, float dial = 92f)
+        private static VisualElement DialCell(string tankLabel, MachineFluidTank t, string hint, float dial = 92f,
+            PlantPanelLive live = null, int tankIndex = -1)
         {
             float fill = t.Fill01;
             var liquid = t.liquid;
@@ -197,6 +279,7 @@ namespace VoxelEngine.Crafting
             col.style.paddingLeft = 8;
             col.style.paddingRight = 8;
             col.style.backgroundColor = new StyleColor(T.BgCard);
+            col.style.flexShrink = 0;
             if (!string.IsNullOrEmpty(hint)) col.tooltip = hint;
             T.Radius(col, 8);
             col.style.borderTopWidth = col.style.borderBottomWidth =
@@ -206,8 +289,10 @@ namespace VoxelEngine.Crafting
             col.style.borderLeftColor = col.style.borderRightColor = rim;
 
             // Liquid name (big, in a lightened liquid colour) + role label (small caps).
-            var nameCol = Color.Lerp(liquidColor, Color.white, 0.30f);
-            var nameLbl = new Label(t.liquid.DisplayName().ToUpper());
+            // An empty auto-typed tank reads EMPTY: it has not adopted a liquid yet.
+            bool emptyAuto = t.autoType && t.IsEmpty;
+            var nameCol = emptyAuto ? T.TextSecondary : Color.Lerp(liquidColor, Color.white, 0.30f);
+            var nameLbl = new Label(TankCaption(t).ToUpper());
             nameLbl.style.color = new StyleColor(nameCol);
             nameLbl.style.fontSize = 11;
             nameLbl.style.unityFontStyleAndWeight = FontStyle.Bold;
@@ -307,6 +392,14 @@ namespace VoxelEngine.Crafting
             hub.pickingMode = PickingMode.Ignore;
             dialRoot.Add(hub);
 
+            // Live handles (Distillation Plant only): needle sweep + readout.
+            if (live != null)
+            {
+                live.needles.Add(needle);
+                live.tankIndices.Add(tankIndex < 0 ? 0 : tankIndex);
+                live.captionTypes.Add(t.liquid);
+            }
+
             // Digital readout under the dial.
             var val = new Label($"{t.stored:0} / {t.capacity:0} L");
             val.style.color = new StyleColor(fill <= 0.001f ? T.TextMuted : T.TextSecondary);
@@ -316,6 +409,7 @@ namespace VoxelEngine.Crafting
             val.style.marginBottom = 2;
             val.pickingMode = PickingMode.Ignore;
             col.Add(val);
+            if (live != null) live.values.Add(val);
 
             AddTankButtons(col, t);
             return col;
@@ -344,7 +438,7 @@ namespace VoxelEngine.Crafting
         /// never overflow the machine panel again (9.38.0).</summary>
         private static void RecipeBook(VisualElement p, List<ProcessingRecipe> recipes,
             ProcessingRecipe current, ProcessingRecipe selected, System.Action<ProcessingRecipe> onSelect,
-            bool ownScroll = true)
+            bool ownScroll = true, string scrollName = null)
         {
             if (recipes == null) return;
             p.Add(GUI.SectionTitle("Recipes  (click to select · Auto by default)"));
@@ -356,6 +450,9 @@ namespace VoxelEngine.Crafting
                 // recipe set can never overflow the machine panel and become
                 // unreachable — the bug the playtest screenshot showed.
                 var scroll = new ScrollView(ScrollViewMode.Vertical);
+                // A NAME is what lets GameUIController carry the scroll offset across
+                // the live panel rebuilds; an unnamed view always came back at the top.
+                if (!string.IsNullOrEmpty(scrollName)) scroll.name = scrollName;
                 scroll.style.maxHeight = 218;
                 scroll.style.marginBottom = 6;
                 T.StyleScroller(scroll, T.AccentCyan);

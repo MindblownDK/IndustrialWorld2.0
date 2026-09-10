@@ -145,6 +145,11 @@ namespace VoxelEngine.GridSystem
                     filled += tank.AddSome(type, litres - filled);
                 }
             }
+            // If tanks are full and liquid is combustible, dump surplus to reachable flare stacks
+            if (filled < litres && type.IsCombustible())
+            {
+                filled += DumpToFlares(endpoint, type, litres - filled);
+            }
             return filled;
         }
 
@@ -485,6 +490,46 @@ namespace VoxelEngine.GridSystem
         private static bool IsLiquidPipe(GridBlock block)
         {
             return block != null && block.GetComponentInChildren<VoxelEngine.Fluids.WaterPipe>(true) != null;
+        }
+
+        /// <summary>True when a flare stack reachable from this endpoint can destroy liquid right now.</summary>
+        public bool HasFlareFor(GridBlock endpoint, LiquidType type)
+        {
+            if (endpoint == null || endpoint.Grid == null || !type.IsCombustible()) return false;
+            foreach (var flare in ConnectedFlares(endpoint))
+                if (flare != null && flare.Enabled && flare.AcceptsLiquid(type)) return true;
+            return false;
+        }
+
+        public float DumpLiquid(GridBlock endpoint, LiquidType type, float litres) => DumpToFlares(endpoint, type, litres);
+
+        private float DumpToFlares(GridBlock endpoint, LiquidType type, float litres)
+        {
+            if (litres <= 0.0001f || !type.IsCombustible()) return 0f;
+            float dumped = 0f;
+            foreach (var flare in ConnectedFlares(endpoint))
+            {
+                if (dumped >= litres) break;
+                if (flare != null && flare.Enabled)
+                    dumped += flare.AcceptLiquid(type, litres - dumped);
+            }
+            return dumped;
+        }
+
+        public IEnumerable<VoxelEngine.Gas.GridFlareStack> ConnectedFlares(GridBlock endpoint)
+        {
+            var grid = endpoint != null ? endpoint.Grid : null;
+            if (grid == null) yield break;
+
+            float cs = grid.gridSize.CellSize();
+            foreach (var block in grid.AllBlocks)
+            {
+                if (block is VoxelEngine.Gas.GridFlareStack flare && flare.Enabled)
+                {
+                    if (BlocksAreLiquidLinked(endpoint, flare, cs))
+                        yield return flare;
+                }
+            }
         }
     }
 }

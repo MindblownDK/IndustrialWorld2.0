@@ -79,5 +79,48 @@ namespace VoxelEngine.Items
             LiquidType.Gasoline            => 0.74f,
             _                              => 1.0f,
         };
+
+        /// <summary>Specific combustion energy (MJ per litre) — drives generators, engines, and flare heat recovery.</summary>
+        public static float BurnEnergyMJPerL(this LiquidType t) => t switch
+        {
+            LiquidType.HeavyFuelOil        => 41.0f,
+            LiquidType.MarineGasOil        => 38.5f,
+            LiquidType.RefinedOil          => 38.0f,
+            LiquidType.LiquidFuel          => 39.0f,
+            LiquidType.CrudeOil            => 37.0f,
+            LiquidType.Diesel              => 36.5f,
+            LiquidType.Kerosene            => 35.0f,
+            LiquidType.Gasoline            => 32.5f,
+            LiquidType.Naphtha             => 31.5f,
+            LiquidType.Lpg                 => 26.0f,
+            _                              => 0f,
+        };
+
+        /// <summary>Freezing / wax-cloud point (°C). Cold planets freeze or wax heavy fractions first.</summary>
+        public static float FreezingPointC(this LiquidType t) => t switch
+        {
+            LiquidType.HeavyFuelOil        => 15f,
+            LiquidType.CrudeOil            => -5f,
+            LiquidType.Water               => 0f,
+            LiquidType.Diesel              => -12f,
+            LiquidType.RefinedOil          => -15f,
+            LiquidType.MarineGasOil        => -20f,
+            LiquidType.Naphtha             => -35f,
+            LiquidType.MarineEngineCoolant => -40f,
+            LiquidType.Gasoline            => -45f,
+            LiquidType.Kerosene            => -47f,
+            LiquidType.Lpg                 => -180f,
+            _                              => 0f,
+        };
+
+        /// <summary>True if this liquid is combustible and can be burned in engines, generators, or flare stacks.</summary>
+        public static bool IsCombustible(this LiquidType t) => t switch
+        {
+            LiquidType.HeavyFuelOil or LiquidType.MarineGasOil or LiquidType.RefinedOil
+            or LiquidType.LiquidFuel or LiquidType.CrudeOil or LiquidType.Diesel
+            or LiquidType.Kerosene or LiquidType.Gasoline or LiquidType.Naphtha
+            or LiquidType.Lpg => true,
+            _ => false,
+        };
     }
 }

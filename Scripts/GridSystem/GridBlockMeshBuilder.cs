@@ -17,7 +17,7 @@ namespace VoxelEngine.GridSystem
             Armor, Cockpit, Thruster, Battery, Cargo, Drill, Grinder, Refinery,
             Weapon, DockingPort, Wheel, LandingGear, SolarPanel, Reactor,
             LiquidTank, GasTank, H2O2, HydrogenEngine, ChemicalPlant, Glass, Demolisher, ItemPipe,
-            GasPipe, LiquidPipe, Gyroscope, Beacon, OreDetector, SeasonMonitor, AirVent, AirVentFull, Heatshield, ExhaustScrubber, GasVent, RouteRecorder, RefuelConnector, Generic
+            GasPipe, LiquidPipe, Gyroscope, Beacon, OreDetector, SeasonMonitor, AirVent, AirVentFull, Heatshield, ExhaustScrubber, GasVent, FlareVent, RouteRecorder, RefuelConnector, Generic
         }
 
         private static Shader Lit => Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
@@ -77,6 +77,7 @@ namespace VoxelEngine.GridSystem
                 case Style.Heatshield:   BuildHeatshield(root, cs, body, metal, glow); break;
                 case Style.ExhaustScrubber: BuildExhaustScrubber(root, cs, body, metal, glow); break;
                 case Style.GasVent:      BuildGasVent(root, cs, body, metal, glow); break;
+                case Style.FlareVent:    BuildFlareVent(root, cs, body, metal, glow); break;
                 default:                 BuildArmor(root, cs, body, metal); break;
             }
         }
@@ -759,6 +760,45 @@ namespace VoxelEngine.GridSystem
             if (MaterialPersister != null)
                 m = MaterialPersister(m, $"GMat_{_matCounter++}");
             return m;
+        }
+
+        private static void BuildFlareVent(GameObject r, float cs, Material body, Material metal, Material glow)
+        {
+            var barrel = Cyl(r, metal, V0, cs * 0.32f, cs * 0.88f);
+            barrel.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            barrel.name = "Generated_FlareBarrel";
+
+            var flange = Cyl(r, body, new Vector3(0f, 0f, cs * 0.44f), cs * 0.42f, cs * 0.10f);
+            flange.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+
+            for (int i = -2; i <= 2; i++)
+            {
+                var fin = Cyl(r, metal, new Vector3(0f, 0f, i * cs * 0.14f), cs * 0.40f, cs * 0.03f);
+                fin.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            }
+
+            var nozzle = Cyl(r, body, new Vector3(0f, 0f, -cs * 0.46f), cs * 0.36f, cs * 0.12f);
+            nozzle.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+
+            var coil = Cyl(r, Mat(new Color(0.9f, 0.65f, 0.2f), 0.7f, 0.5f), new Vector3(0f, 0f, -cs * 0.25f), cs * 0.38f, cs * 0.18f);
+            coil.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+
+            var tip = new GameObject("Generated_FlareTip");
+            tip.transform.SetParent(r.transform, false);
+            tip.transform.localPosition = new Vector3(0f, 0f, -cs * 0.56f);
+
+            var flameMat = glow != null ? glow : Mat(new Color(1f, 0.55f, 0.1f), 0.1f, 0.9f);
+            var flameCone = Cyl(tip, flameMat, Vector3.zero, cs * 0.18f, cs * 0.35f);
+            flameCone.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            flameCone.name = "FlameCone";
+
+            var lgo = new GameObject("FlareLight");
+            lgo.transform.SetParent(tip.transform, false);
+            var light = lgo.AddComponent<Light>();
+            light.type = LightType.Point;
+            light.color = new Color(1f, 0.6f, 0.2f);
+            light.range = cs * 6f;
+            light.intensity = 2.0f;
         }
     }
 }

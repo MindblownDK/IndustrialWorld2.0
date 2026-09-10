@@ -11,12 +11,14 @@
 //   * 1 input fluid tank + 1 output fluid tank (both auto-type)
 //   * Co-located PowerConsumer (auto-added in Awake)
 //
-// NOTE (9.38.0-dev): crude fractionation now lives in the dedicated
-// AdvancedDistillationTower block — see Scripts/Crafting/AdvancedDistillationTower.cs.
-// The refinery keeps its legacy recipes untouched: Refine Crude Oil → Refined
-// Oil, the refined-oil plastic recipe (plus the naphtha-fed plastic recipe the
-// tower unlocks), Heavy Fuel Oil and Marine Gas Oil distillation. Old saves and
-// placed refineries keep working exactly as before.
+// NOTE (9.38.0-dev): crude conversion now lives ONLY in the dedicated
+// DistillationPlant block — see Scripts/Crafting/DistillationPlant.cs. The
+// refinery is a plastics and legacy-stock machine: it runs the refined-oil
+// plastic recipe and the naphtha-fed plastic recipe the plant's research
+// unlocks. Refine Crude Oil, Distil Heavy Fuel Oil and Distil Marine Gas Oil
+// are no longer attached here (or on the ship refinery) — the recipe ASSETS are
+// kept, because saves that already hold them keep running, and Step 69 detaches
+// them from both prefabs. Old saves and placed refineries keep working.
 //
 // Behaviour:
 //   * Each tick picks the first recipe in knownRecipes where ALL inputs

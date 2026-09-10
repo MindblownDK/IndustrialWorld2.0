@@ -1138,10 +1138,12 @@ namespace VoxelEngine.Player
                 if (jackPump != null) { UI.GameUIController.Instance?.OpenMachine(jackPump); return; }
                 var oilRefinery = hit.collider.GetComponentInParent<VoxelEngine.Crafting.OilRefinery>();
                 if (oilRefinery != null) { UI.GameUIController.Instance?.OpenMachine(oilRefinery); return; }
-                var tower = hit.collider.GetComponentInParent<VoxelEngine.Crafting.AdvancedDistillationTower>();
-                if (tower != null) { UI.GameUIController.Instance?.OpenMachine(tower); return; }
+                var plant = hit.collider.GetComponentInParent<VoxelEngine.Crafting.DistillationPlant>();
+                if (plant != null) { UI.GameUIController.Instance?.OpenMachine(plant); return; }
                 var chemPlant = hit.collider.GetComponentInParent<VoxelEngine.Industrial.StationaryChemicalPlant>();
                 if (chemPlant != null) { UI.GameUIController.Instance?.OpenMachine(chemPlant); return; }
+                var flareStack = hit.collider.GetComponentInParent<VoxelEngine.Industrial.FlareStack>();
+                if (flareStack != null) { UI.GameUIController.Instance?.OpenMachine(flareStack); return; }
 
                 // Grid (ship/vehicle) blocks that expose a UI panel. Cockpit is handled
                 // separately via EnterCockpit, so we skip it here.

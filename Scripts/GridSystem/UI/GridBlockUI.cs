@@ -57,6 +57,7 @@ namespace VoxelEngine.GridSystem.UI
                 case VoxelEngine.Pressure.GridAirVent vent: return MakeScrollable(AirVentPanel(vent));
                 case VoxelEngine.Pressure.GridExhaustScrubber scrub: return MakeScrollable(ScrubberPanel(scrub));
                 case VoxelEngine.Gas.GasVent gv: return MakeScrollable(VentDumpPanel(gv));
+                case VoxelEngine.Gas.GridFlareStack fs: return MakeScrollable(FlareStackPanel(fs));
                 case VoxelEngine.Navigation.GridRouteRecorder rr: return MakeScrollable(VoxelEngine.Navigation.GridRouteUI.BuildPanel(rr));
                 case VoxelEngine.Navigation.GridConnectorBlock pad: return MakeScrollable(VoxelEngine.Navigation.GridConnectorUI.BuildPanel(pad));
                 case VoxelEngine.Simulation.GridLightBlock gl: return GridLightPanel(gl);
@@ -2345,6 +2346,101 @@ namespace VoxelEngine.GridSystem.UI
             p.Add(T.Muted("Storage first, disposal second: a tank on the run is filled before the vent sees any "
                 + "gas, so a line that ends in a tank never leaks to the wind. A power cut drops the unit to its "
                 + "draft rate instead of trapping the exhaust — the engine keeps running, the plume just thickens."));
+            return p;
+        }
+
+        
+        // ── FLARE STACK / WASTE-HEAT RECOVERY ─────────────────────────────────
+        private static VisualElement FlareStackPanel(VoxelEngine.Gas.GridFlareStack flare)
+        {
+            var p = T.MachinePanel();
+            p.style.width = 460;
+
+            string state = !flare.Enabled ? "OFF" : !flare.IsOpen ? "SHUT"
+                : flare.OxygenStarved ? "NO OXYGEN"
+                : flare.BurnLoad01 > 0.01f ? (flare.wasteHeatRecovery ? "POWER RECOVERY" : "FLARING")
+                : "PILOT FLAME";
+
+            Color stateColor = !flare.Enabled ? T.AccentDim
+                : !flare.IsOpen ? T.AccentDim
+                : flare.OxygenStarved ? T.AccentRed
+                : flare.BurnLoad01 > 0.01f ? (flare.wasteHeatRecovery ? T.AccentGold : T.AccentOrange)
+                : T.AccentGreen;
+
+            var (hdr, _, _, _) = T.HeaderRow("🔥 " + flare.SourceName, state, stateColor);
+            p.Add(hdr);
+            p.Add(T.AccentDivider(T.AccentOrange));
+            p.Add(T.Spacer(4));
+
+            p.Add(GridUIHelpers.SectionTitle("Thermal Disposal & Flaring"));
+            p.Add(T.StatRow("🔥", "Burn Load", $"{flare.BurnLoad01 * 100f:0}%", flare.BurnLoad01 > 0.01f ? T.AccentOrange : T.TextSecondary));
+            var (bar, fill) = T.ProgressBar(flare.BurnLoad01, T.AccentOrange, 8, true);
+            bar.style.marginTop = 4; bar.style.marginBottom = 6;
+            p.Add(bar);
+
+            p.Add(T.StatRow("💧", "Liquid Flare", $"{flare.CurrentLiquidFlow:0.0} L/s · total {flare.TotalLiquidBurned:0} L", T.AccentAmber));
+            if (flare.HasBurnedLiquid)
+                p.Add(T.StatRow("⚗", "Last Liquid", flare.LastLiquid.DisplayName(), flare.LastLiquid.Color()));
+
+            p.Add(T.StatRow("💨", "Gas Flare", $"{flare.CurrentGasFlow:0} L/s · total {flare.TotalGasBurned:0} L", T.AccentCyan));
+            if (flare.LastGas != VoxelEngine.Gas.GasType.None)
+                p.Add(T.StatRow("◌", "Last Gas", flare.LastGas.ToString(), T.AccentCyan));
+
+            p.schedule.Execute(() =>
+            {
+                if (p.panel == null || flare == null) return;
+                fill.style.width = Length.Percent(Mathf.Clamp01(flare.BurnLoad01) * 100f);
+            }).Every(200);
+
+            p.Add(T.Spacer(6));
+            p.Add(GridUIHelpers.SectionTitle("Waste-Heat Power Recovery"));
+            var recRow = Row();
+            recRow.Add(T.SmallButton(flare.wasteHeatRecovery ? "RECOVERY: ONLINE" : "RECOVERY: OFF", () =>
+            {
+                flare.wasteHeatRecovery = !flare.wasteHeatRecovery;
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, flare.wasteHeatRecovery ? T.AccentGold : T.BgSlot));
+            recRow.Add(T.Muted(flare.wasteHeatRecovery ? "20% thermal → electricity" : "flaring to atmosphere"));
+            p.Add(recRow);
+
+            if (flare.wasteHeatRecovery)
+                p.Add(T.StatRow("⚡", "Recovered Power", PowerFormat.Watts(flare.CurrentWattsGenerated), T.AccentGold));
+
+            p.Add(T.Spacer(6));
+            p.Add(GridUIHelpers.SectionTitle("Atmosphere & Combustion"));
+            var room = flare.RoomSide;
+            if (room != null && room.IsSealed)
+            {
+                p.Add(T.StatRow("🫁", "Compartment O₂", $"{room.CombustionAirAtm:0.00} atm",
+                    flare.OxygenStarved ? T.AccentRed : T.AccentAmber));
+                p.Add(T.StatRow("🌡", "Room Temp", $"{room.AirTemperatureC:0}°C", T.AccentRed));
+            }
+            else
+            {
+                p.Add(T.StatRow("🌐", "Intake", "Atmosphere / Open Space", T.AccentGreen));
+            }
+
+            p.Add(T.StatRow("♨", "Heat Output", $"+{flare.SelfHeatC:0}°C casing · +{flare.NeighbourHeatC:0}°C ambient", T.AccentOrange));
+
+            p.Add(T.Spacer(6));
+            p.Add(GridUIHelpers.SectionTitle("Controls"));
+            var ctrlRow = Row();
+            ctrlRow.Add(T.SmallButton(flare.open ? "FLARE: IGNITED" : "FLARE: SHUT", () =>
+            {
+                flare.open = !flare.open;
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, flare.open ? T.AccentGreen : T.AccentDim));
+
+            ctrlRow.Add(T.SmallButton(flare.Enabled ? "Turn OFF" : "Turn ON", () =>
+            {
+                flare.Enabled = !flare.Enabled;
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }));
+            p.Add(ctrlRow);
+
+            p.Add(T.Spacer(4));
+            p.Add(T.Muted("Run terminator for excess petroleum cuts and off-gases. Destroys surplus fractions "
+                + "so distillation never stops. Waste heat recovery generator converts burn energy into electric power."));
             return p;
         }
 
