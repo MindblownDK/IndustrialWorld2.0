@@ -1775,14 +1775,16 @@ namespace VoxelEngine.Player
 
         // ── Road Paver ──────────────────────────────────────────────────
         private VoxelEngine.Building.RoadPaver _roadPaver;
+        private RoadPaverTool _paverTool;
         private float _nextRoadRefusalReport;
 
         /// <summary>
-        /// The paver owns this frame whenever it is held. Click once to set the start of a road,
-        /// click again to lay the whole corridor the ghost is showing. Ctrl+scroll changes the
-        /// width in cells. RMB lifts one cell back, Ctrl+RMB lifts the entire placed section.
-        /// Hold B to pick the surface (asphalt road or stone pathway). Returns true when the paver
-        /// consumed the frame so mining, placing and UI never run underneath it.
+        /// The paver owns this frame whenever it is held. Click to set each waypoint of a route and
+        /// press the interact key to lay the whole corridor the ghost is showing. Ctrl+scroll
+        /// changes the width in cells, Ctrl+Shift+scroll the corner radius. RMB lifts one cell
+        /// back, Ctrl+RMB lifts the entire placed section. Hold B to pick the surface (asphalt road
+        /// or stone pathway). Returns true when the paver consumed the frame so mining, placing and
+        /// UI never run underneath it.
         /// </summary>
         private bool TryTickRoadPaver(RaycastHit hit, bool hasHit, bool mineDown,
                                       bool buildDown, bool buildHeld, float scrollY)
@@ -1798,6 +1800,15 @@ namespace VoxelEngine.Player
 
             _roadPaver ??= new VoxelEngine.Building.RoadPaver();
 
+            // Pick up the authored corner radius when a different paver is picked up. Tracked per
+            // tool instance so the player's Ctrl+Shift+scroll choice survives while they hold it,
+            // and a fresh tool still opens on its authored value.
+            if (!ReferenceEquals(_paverTool, paver))
+            {
+                _paverTool = paver;
+                _roadPaver.SetCornerRadius(paver.cornerRadiusCells);
+            }
+
             // Choosing a surface owns the mouse: the click that releases the wheel must not land
             // as the first click of a plan underneath it.
             if (VoxelEngine.Simulation.RoadSurfaceWheel.IsAnyOpen) return true;
@@ -1806,6 +1817,33 @@ namespace VoxelEngine.Player
             var block = kind == VoxelEngine.Building.RoadSurfaceKind.Pathway ? paver.pathBlock : paver.roadBlock;
             var material = kind == VoxelEngine.Building.RoadSurfaceKind.Pathway ? paver.pathMaterial : paver.pavingMaterial;
             int pricePerCell = kind == VoxelEngine.Building.RoadSurfaceKind.Pathway ? paver.pathMaterialPerCell : paver.materialPerCell;
+
+            // ── corner radius: Ctrl+Shift + scroll, in cells ──
+            // Checked BEFORE width so the two gestures cannot fight over one notch: Shift picks
+            // radius, plain Ctrl picks width. The radius is a request — the solver clamps it to the
+            // tightest corner the chosen width can carry without collapsing its inside lane, and the
+            // toast reports the radius actually in force so the player is never lied to.
+            if (Mathf.Abs(scrollY) > 0.01f && IsCtrlHeld() && IsShiftHeld())
+            {
+                int before = _roadPaver.CornerRadiusCells;
+                _roadPaver.SetCornerRadius(before + (scrollY > 0f ? 1 : -1));
+                if (_roadPaver.CornerRadiusCells != before)
+                {
+                    var tpl = block != null && block.placedPrefab != null
+                        ? block.placedPrefab.GetComponentInChildren<VoxelEngine.Building.AsphaltRoad>(true)
+                        : null;
+                    float cell = tpl != null ? Mathf.Max(0.1f, tpl.cellSize) : 1f;
+                    float metres = _roadPaver.EffectiveCornerRadius(cell);
+                    bool clamped = _roadPaver.CornerRadiusCells > 0
+                                   && metres > _roadPaver.CornerRadiusCells * cell + 0.001f;
+                    VoxelEngine.UI.BuildFeedbackHud.Show("Corner radius",
+                        _roadPaver.CornerRadiusCells <= 0
+                            ? "square corners"
+                            : metres.ToString("0.0") + " m" + (clamped ? "  (tightest this width allows)" : ""),
+                        block != null ? block.icon : null, Color.white);
+                }
+                return true;
+            }
 
             // ── width: Ctrl + scroll, in cells of whatever is being paved ──
             if (Mathf.Abs(scrollY) > 0.01f && IsCtrlHeld())

@@ -1,9 +1,9 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `9.42.0-dev`  
-**Roadmap Version:** `9.42.0-dev`  
-**Date:** 2026-09-10
+**Current Version:** `9.43.0-dev`  
+**Roadmap Version:** `9.43.0-dev`  
+**Date:** 2026-09-11
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
@@ -28,6 +28,23 @@
 ---
 
 ## 0. Recently Done
+
+### 9.43.0-dev — Carriageway Geometry: Real Corners, Exact Junctions
+- The paver now solves the whole clicked polyline as one **carriageway** instead of laying legs and
+  stitching them: `Scripts/Building/RoadCorridor.cs` fillets every turn to a radius, cuts the result
+  into cross-sections at even arc-length spacing, and each cell is the quad between two consecutive
+  cross-sections restricted to one lane. Because every lane shares the carriageway's cross-sections,
+  the seams are **exact in both directions by construction** — measured zero on straights, 45°/90°
+  bends, S-bends, multi-turn routes and the 4 m slab — so `FillCorners` and `FillWedges` are gone.
+- **Corners have a radius.** Ctrl+Shift+scroll sets it in cells; the solver clamps it to
+  `(halfSpan + 1) × cell`, the tightest turn that still leaves the inside lane a real lane (below it
+  the inside lane's cells become zero-area slivers and start returning concave quads). The HUD
+  reports the radius actually in force, so a clamped request is never silently honoured.
+- Cells carry their footprint as **four explicit local corners** (`hasExplicitFootprint` + `quadSW/SE/NE/NW`)
+  because a lane of a curve cannot be described by two chords centred on the cell's own axis.
+  Legacy, hand-placed and junction cells leave the flag false and take the 9.42 curve-frame path
+  unchanged, so no existing road changes shape. `SurfaceOffset` tests the real quad rather than a
+  square, so an agent in the wedge outside a curved lane is correctly off-road.
 
 ### 9.42.0-dev — Road Planner, Pathways & Surface Wheel
 - The held drag is replaced by a **polyline plan**: click the start, click each corner, press the
@@ -98,52 +115,6 @@
   freezing/waxing points (`FreezingPointC`), and combustion checks; `StationaryMaritimeEngine` and
   `GridMaritimeEngine` burn fractionated cuts with realistic energy scaling; Step 70 authors all
   content non-destructively under the FLARE DISPOSAL & HEAT RECOVERY research gate (Tier 5).
-
-### 9.38.0-dev — The Distillation Plant
-- `LiquidType` gained the products the design named — LPG, Naphtha, Kerosene, Diesel, Gasoline
-  (appended at the end of the enum, so every save that stores a liquid int keeps its meaning) — each
-  with its own gauge colour and density.
-- New `DistillationPlant` machine (a wide plant block, not the refinery): one auto-typed feed tank
-  plus six typed product tanks; `PlantFluidStore` routes outputs only into the typed tanks — never the
-  feed — so an over-full product back-pressures the batch. The product typing is airtight because
-  `MachineFluidTank.SpaceFor` no longer reports phantom space on empty fixed-type tanks.
-- The world instruments the playtest asked for: an **analog dial above every product outlet and every
-  feed inlet**, bezel and hub in the liquid's own colour, needle sweeping with the tank it reads —
-  the same instrument the panel draws, sitting on the plant.
-- Setup Step 69 authors the content non-destructively: the plant-hall model (skid, drums, main column
-  with dome and platform rings, stripper, stabiliser, pipe bridge, stack; six front outlets with
-  dials, two inlets with dials), ATMOSPHERIC CUT (100 L crude → 2 LPG / 8 naphtha / 12 kerosene /
-  26 diesel / 18 gasoline / 32 heavy fuel oil; 98 L out, 2 L off-gas), RE-RUN REFINED OIL, NAPHTHA
-  PLASTIC (on both refineries), the block item, its craft recipe and the ATMOSPHERIC DISTILLATION
-  research gate (tier 5, requires Oil Refining). Renames go through GUID-preserving moves, and the
-  block's save-facing item id is unchanged.
-- Fuel-chain retirement: Refine Crude Oil, Distil Heavy Fuel Oil and Distil Marine Gas Oil are
-  detached from the standing refinery and the ship refinery (assets kept for saves that run them).
-- Panel work: the plant panel updates in place (no timed rebuild → no scroll snapping), every
-  processor recipe book scrolls and keeps its scroll position, tank captions name the contents
-  (EMPTY when an auto-typed tank has none), and slot cards/gauges cannot be squeezed smaller than
-  their contents. The fuel ladder, off-gas line and flare stack stay open items under `Crude
-  Fractionation, Product Use & Flare Disposal`.
-
-### 9.37.0-dev — The Grid Inspector Overlay
-- One Settings-rebindable hotkey (default K) cycles OFF → HEAT → DAMAGE → CENTRE OF MASS on the
-  construct under the crosshair — any grid, wreck or base block, or the grid under the seat while
-  piloting. `Scripts/UI/GridInspectorHud.cs` runs one shared tint pass through per-renderer
-  MaterialPropertyBlocks (original blocks captured and restored on exit, damage shells left alone),
-  degrades a construct above 240 blocks to the 24 nearest, and creates no scene objects while off.
-- DAMAGE ramps a block's own damage fraction teal → amber → red with a worst-damage readout; HEAT
-  ramps each block against its own `ThermalRules.ToleranceC` red line and pins a floating marker to
-  the worst plate; CENTRE OF MASS draws the solved mass-centre ball plus the weighted thrust line
-  and colours the ball by the offset — drawn for unboarded grids too, settling the design's last
-  open question.
-- Three nodes gate the modes in sequence — INTEGRITY SCAN (tier 3, under Grid Utilities), THERMAL
-  SCAN (tier 4), CENTRE OF MASS (tier 5) — authored non-destructively by Setup Step 68; a locked
-  press says which node unlocks the mode, in one line. Unity validation confirmed the pass budget,
-  the degrade readout and the gating.
-- **9.37.1-dev** (dev tool, changelog-only round): Tools ▸ Debug (Spawner) gained a Research
-  section — unlock all (rank 1), max all (repeatable upgrades to their cap) and relock all —
-  driven by `ResearchManager.UnlockAll` / `MaxAllRanks` / `ResetAllRanks`, so testing any
-  research-gated content starts from one click.
 
 ## 1. Executive Vision
 
@@ -964,15 +935,18 @@ end is worth something too.
 
 ### Asphalt Roads
 
-> **Status (9.42.0-dev):** surface in two cell sizes (1 m patch + 4 m carriageway) **plus a cobble
+> **Status (9.43.0-dev):** surface in two cell sizes (1 m patch + 4 m carriageway) **plus a cobble
 > Stone Pathway**, a **point-to-point planner** with width control, a live ghost, whole-line refusal
 > and section removal, per-run area-weighted wear with visible cracking, movement/traction bonuses,
 > slope-based grade pricing and area-priced repair are shipped — `Scripts/Building/AsphaltRoad.cs`,
 > `RoadRun.cs`, `AsphaltRoadMesh.cs`, `RoadPaver.cs`, `Scripts/Environment/RoadSurfaceUtility.cs`,
 > `Scripts/Items/RoadPaverTool.cs`, `Scripts/Simulation/RoadSurfaceWheel.cs`, authored by
-> **Setup Step 72** under `res_asphalt_roads` (the pathway recipe is ungated on purpose). The road
-> **network** object, routing that prefers paved routes, lamps, culverts and filleted junction
-> geometry remain open items below. Full narrative: `Changelog.md`.
+> **Setup Step 72** under `res_asphalt_roads` (the pathway recipe is ungated on purpose).
+> **9.43.0-dev** replaced the leg-stitching planner with a carriageway solver
+> (`Scripts/Building/RoadCorridor.cs`) that fillets corners to a real radius and cuts the route into
+> shared cross-sections, so every lane tiles exactly; no new assets, so no new setup step. The road
+> **network** object, routing that prefers paved routes, lamps and **culverts/bridges/drawbridges**
+> remain open items below. Full narrative: `Changelog.md`.
 
 A cheap surface the player lays on terrain to make the world move faster and cleaner. The idea is
 one sentence: **a road is the difference between walking a route and being able to run a schedule on it.**
@@ -1051,7 +1025,7 @@ one sentence: **a road is the difference between walking a route and being able 
    what remains and split it into however many runs the gap created, each inheriting the wear it was
    part of. Merging takes the worst of the two, so a worn strip joined to a new one is a worn strip.
 
-6. **Still open after 9.42.0-dev**
+6. **Still open after 9.43.0-dev**
    - The road **network** object: a player-given name and a traffic/condition readout across a whole
      system. Deliberately held back again — it should arrive with the routing it feeds.
    - **Road-aware routing.** Pathfinding, autopilot and delivery drones do not prefer paved routes.
@@ -1060,8 +1034,12 @@ one sentence: **a road is the difference between walking a route and being able 
      carried-weight relief on pavement are not modelled at all.
    - **Rolling resistance** is not a separate wheel term — the road only scales traction and grip.
      Weather (rain, mud, ice) does not modify a road's grip.
-   - **Culverts and bridges**: water is refused rather than crossed. No road-side furniture either —
-     no lamps, kerbstones, signage, barriers, manholes or drains (the kerb is part of the road mesh).
+   - **Culverts and bridges** — the confirmed next round (`9.44.0-dev`). Water is refused rather
+     than crossed (`GradeBand.Underwater`; `DescribeSite` has said "needs a culvert" since 9.41.0).
+     Scope agreed with the team: **stone and iron, deliberately expensive**, a culvert for a stream
+     and a bridge on piers for a river, and **drawbridges that open so ships can pass** — a span
+     that is road when shut and waterway when open. No road-side furniture either — no lamps,
+     kerbstones, signage, barriers, manholes or drains (the kerb is part of the road mesh).
    - ~~**One tier, one curve.** Asphalt is the only paved surface~~ *(9.42.0-dev — a cobble **Stone
      Pathway** is the second surface, with its own walk curve, no vehicle handling and immunity to
      wheel wear)*; there is still no concrete, gravel or dirt road and no second wear curve. No
@@ -1070,8 +1048,11 @@ one sentence: **a road is the difference between walking a route and being able 
      frame: mitred entry/exit cross-sections, so straights keep straight kerb lines and a chain of
      bent cells tiles into one continuous arc, while junction boxes stay square like real
      intersections; per-cell corner rounding was tried first and rejected for beading every curve)*
-     What remains open: per-lane mitres on 3-wide curves (lanes currently fan off the centreline
-     mitre), and decorative junction furniture — crossings, stop lines, signage.
+     What remains open: ~~per-lane mitres on 3-wide curves~~ *(9.43.0-dev — superseded rather than
+     fixed: lanes no longer fan off a centreline mitre at all. `RoadCorridor` cuts the carriageway
+     into shared cross-sections and each lane takes its own quad between two of them, so the inside
+     and outside of a bend are correct by construction instead of by stretch factor)*, and
+     decorative junction furniture — crossings, stop lines, signage.
    - **No auto-routing.** A corridor whose ground cannot be paved is refused whole, with a reason —
      the planner never moves the road somewhere the player did not choose. If that ever changes it
      changes here, not silently in the gesture.

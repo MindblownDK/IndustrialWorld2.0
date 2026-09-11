@@ -54,6 +54,12 @@ namespace VoxelEngine.Items
                  "times cheaper to keep.")]
         public float repairMaterialPerSquareMetre = 0.19f;
 
+        [Tooltip("Corner radius the paver starts at, in cells. The player changes it with " +
+                 "Ctrl+Shift+scroll; this is only the value it opens on. The solver clamps it to " +
+                 "the tightest corner the paved width can carry without collapsing its inside " +
+                 "lane, so on a three-wide carriageway anything under two cells reads as two.")]
+        public int cornerRadiusCells = 2;
+
         public RoadPaverTool()
         {
             toolType = ToolType.Other;

@@ -321,9 +321,27 @@ namespace VoxelEngine.Building
         private readonly List<Vector3> _planOutR = new List<Vector3>(128);
         private readonly List<float> _planInM  = new List<float>(128);
         private readonly List<float> _planOutM = new List<float>(128);
-        /// <summary>Coarse pocket keys already filled this plan: the same wedge can be discovered
-        /// from two different frames at a crossing, and both must not lay a cell into it.</summary>
-        private readonly HashSet<long> _wedgeSeen = new HashSet<long>(64);
+
+        // ── Corridor solve ──────────────────────────────────────────────
+        // The planner no longer lays legs and stitches them; it solves the whole clicked polyline
+        // as one carriageway (`RoadCorridor`) and emits the cells that solve produced. Two solves
+        // happen per frame while a plan is open: the COMMITTED polyline, which is what the interact
+        // key will actually lay, and the LIVE polyline out to the cursor, which is what the ghost
+        // draws. They are kept apart because appending a live leg turns the last waypoint into a
+        // corner, and a corner changes the geometry of the cells before it — a ghost built from the
+        // live solve would promise a fillet the commit does not lay.
+        private readonly RoadCorridorBuffers _commitCorridor = new RoadCorridorBuffers();
+        private readonly RoadCorridorBuffers _liveCorridor = new RoadCorridorBuffers();
+        private readonly List<Vector3> _quadSW = new List<Vector3>(256);
+        private readonly List<Vector3> _quadSE = new List<Vector3>(256);
+        private readonly List<Vector3> _quadNE = new List<Vector3>(256);
+        private readonly List<Vector3> _quadNW = new List<Vector3>(256);
+        private readonly List<bool> _planExplicit = new List<bool>(256);
+        private readonly List<Vector3> _corridorPoints = new List<Vector3>(16);
+
+        /// <summary>Corner radius in cells. Clamped at lay time to the minimum the chosen width can
+        /// carry without collapsing its inside lane, so this is a request, not a promise.</summary>
+        private int _cornerRadiusCells = 2;
         private int _width = 1;
 
         private readonly List<Vector3> _planPos = new List<Vector3>(128);
@@ -410,27 +428,24 @@ namespace VoxelEngine.Building
         {
             _planPos.Clear(); _planRot.Clear(); _planFresh.Clear(); _planCost.Clear();
             _planInR.Clear(); _planOutR.Clear(); _planInM.Clear(); _planOutM.Clear();
-            _planTouchedRuns.Clear(); _planSeen.Clear(); _wedgeSeen.Clear();
+            _quadSW.Clear(); _quadSE.Clear(); _quadNE.Clear(); _quadNW.Clear();
+            _planTouchedRuns.Clear(); _planSeen.Clear();
             _refusal = null; _totalCost = 0;
             _commitCount = 0; _commitCost = 0; _commitRunCount = 0; _commitRefusal = null;
-            if (!_planning || block == null || _wpPos.Count == 0) return;
+            if (!_planning || block == null || _wpPos.Count == 0) { HideGhost(); return; }
 
             float cell = CellOf(block);
+            // One tangent frame for the whole corridor: a corridor is short against a planet, and
+            // `PlaceCell` re-drops every cell onto the real ground afterwards regardless.
+            Vector3 up = _wpRot[0] * Vector3.up;
 
-            // Legs CHAIN: a leg lays whole cells, so its far face lands up to half a cell short of
-            // (or past) the clicked waypoint. Starting the next leg from the raw waypoint instead
-            // of from that face is what left triangular holes at every bend. The cursor is the
-            // road, the waypoints are just where the player asked it to turn.
-            Vector3 cursor = _wpPos[0];
-            for (int i = 0; i + 1 < _wpPos.Count; i++)
-            {
-                Vector3 segUp = _wpRot[i] * Vector3.up;
-                Vector3 prevDir = i > 0 ? SegDir(_wpPos[i - 1], _wpPos[i], segUp) : Vector3.zero;
-                Vector3 nextDir = i + 2 < _wpPos.Count ? SegDir(_wpPos[i + 1], _wpPos[i + 2], segUp) : Vector3.zero;
-                cursor = BuildSegment(cursor, _wpRot[i], _wpPos[i + 1], block, cell, prevDir, nextDir);
-            }
-            FillCorners(block, cell);
-            FillWedges(block, cell);
+            // ── 1) The COMMITTED solve: only the points the player has actually clicked. ──
+            // A single waypoint has no direction yet, so it is given one cell of the frame's
+            // forward to solve against; the live solve below replaces it immediately.
+            CollectWaypoints(_corridorPoints, false);
+            if (_corridorPoints.Count == 1)
+                _corridorPoints.Add(_corridorPoints[0] + (_wpRot[0] * Vector3.forward) * cell);
+            EmitCorridor(_commitCorridor, _corridorPoints, up, block, cell, true);
 
             // Snapshot what the clicked polyline alone commits. The live leg out to the aim is a
             // PREVIEW: it leads the cursor, and if the aim happens to be at a wall or the sky its
@@ -441,17 +456,22 @@ namespace VoxelEngine.Building
             _commitRefusal = _refusal;
             _commitRunCount = _planTouchedRuns.Count;
 
-            Vector3 endPos = _wpPos[_wpPos.Count - 1];
-            if (hasHit && TryComputePose(hit, block, out var ep, out var er)) endPos = ep;
-            Vector3 liveUp = _wpRot[_wpPos.Count - 1] * Vector3.up;
-            Vector3 livePrev = _wpPos.Count > 1
-                ? SegDir(_wpPos[_wpPos.Count - 2], _wpPos[_wpPos.Count - 1], liveUp) : Vector3.zero;
-            cursor = BuildSegment(cursor, _wpRot[_wpPos.Count - 1], endPos, block, cell,
-                                  livePrev, Vector3.zero);
-            // No second wedge pass for the live leg: wedges it would discover are cells the commit
-            // will not lay, and the ghost must not promise pavement the click does not produce.
+            // ── 2) The LIVE solve: the same route continued to the cursor, for the ghost only. ──
+            // It is solved separately rather than appended, because continuing the route turns the
+            // last clicked waypoint into a corner — and a corner re-fillets the cells before it.
+            // Appending would have the commit lay geometry the ghost never showed.
+            CollectWaypoints(_corridorPoints, true);
+            if (hasHit && TryComputePose(hit, block, out var ep, out var er))
+                _corridorPoints[_corridorPoints.Count - 1] = ep;
+            if (_corridorPoints.Count >= 2)
+            {
+                RoadCorridor.Build(_liveCorridor, _corridorPoints, up, _width, cell,
+                                   _cornerRadiusCells * cell);
+                JudgeCorridor(_liveCorridor, block);
+            }
 
-            ShowGhost(cell, _refusal == null && affordable && (_commitCost > 0 || _commitRunCount > 0));
+            bool good = _refusal == null && affordable && (_commitCost > 0 || _commitRunCount > 0);
+            ShowGhost(good);
         }
 
         /// <summary>Second click. Charges once, places every fresh cell and resurfaces the runs the
@@ -492,23 +512,43 @@ namespace VoxelEngine.Building
                 var road = PlaceCell(block, _planPos[i], _planRot[i]);
                 if (road != null)
                 {
-                    road.curveInRight  = Quaternion.Inverse(_planRot[i]) * _planInR[i];
-                    road.curveOutRight = Quaternion.Inverse(_planRot[i]) * _planOutR[i];
-                    road.curveInMitre  = _planInM[i];
-                    road.curveOutMitre = _planOutM[i];
+                    if (_planExplicit[i])
+                    {
+                        // The corridor solver already cut this cell to the carriageway's shared
+                        // cross-sections, so its footprint is the finished quad. The curve frame is
+                        // cleared rather than left stale: both describe the outline and the explicit
+                        // one wins, but a stale frame would resurface the moment the quad is cleared.
+                        road.hasExplicitFootprint = true;
+                        road.quadSW = _quadSW[i]; road.quadSE = _quadSE[i];
+                        road.quadNE = _quadNE[i]; road.quadNW = _quadNW[i];
+                        road.curveInRight = Vector3.zero; road.curveOutRight = Vector3.zero;
+                        road.curveInMitre = 1f; road.curveOutMitre = 1f;
+                    }
+                    else
+                    {
+                        road.hasExplicitFootprint = false;
+                        road.curveInRight  = Quaternion.Inverse(_planRot[i]) * _planInR[i];
+                        road.curveOutRight = Quaternion.Inverse(_planRot[i]) * _planOutR[i];
+                        road.curveInMitre  = _planInM[i];
+                        road.curveOutMitre = _planOutM[i];
+                    }
                     road.RefreshAfterPlacement();
 
                     // A junction box stays SQUARE, like the reference intersections: three or more
                     // connected edges means this cell is a crossing, and a crossing mitred to one
-                    // of its arms would pinch the others.
-                    var e = road.Edges;
-                    int conn = ((e & RoadEdgeMask.North) != 0 ? 1 : 0) + ((e & RoadEdgeMask.East) != 0 ? 1 : 0)
-                             + ((e & RoadEdgeMask.South) != 0 ? 1 : 0) + ((e & RoadEdgeMask.West) != 0 ? 1 : 0);
-                    if (conn >= 3)
+                    // of its arms would pinch the others. Only for cells that carry a curve frame —
+                    // a corridor cell's quad is already the right shape for the crossing it is in.
+                    if (!road.hasExplicitFootprint)
                     {
-                        road.curveInRight = Vector3.zero; road.curveOutRight = Vector3.zero;
-                        road.curveInMitre = 1f; road.curveOutMitre = 1f;
-                        road.RefreshAfterPlacement();
+                        var e = road.Edges;
+                        int conn = ((e & RoadEdgeMask.North) != 0 ? 1 : 0) + ((e & RoadEdgeMask.East) != 0 ? 1 : 0)
+                                 + ((e & RoadEdgeMask.South) != 0 ? 1 : 0) + ((e & RoadEdgeMask.West) != 0 ? 1 : 0);
+                        if (conn >= 3)
+                        {
+                            road.curveInRight = Vector3.zero; road.curveOutRight = Vector3.zero;
+                            road.curveInMitre = 1f; road.curveOutMitre = 1f;
+                            road.RefreshAfterPlacement();
+                        }
                     }
                 }
                 laid++;
@@ -532,7 +572,8 @@ namespace VoxelEngine.Building
             _wpPos.Clear(); _wpRot.Clear();
             _planPos.Clear(); _planRot.Clear(); _planFresh.Clear(); _planCost.Clear();
             _planInR.Clear(); _planOutR.Clear(); _planInM.Clear(); _planOutM.Clear();
-            _planTouchedRuns.Clear(); _planSeen.Clear(); _wedgeSeen.Clear();
+            _quadSW.Clear(); _quadSE.Clear(); _quadNE.Clear(); _quadNW.Clear(); _planExplicit.Clear();
+            _planTouchedRuns.Clear(); _planSeen.Clear();
             _refusal = null; _totalCost = 0;
             _commitCount = 0; _commitCost = 0; _commitRunCount = 0; _commitRefusal = null;
             HideGhost();
@@ -543,176 +584,104 @@ namespace VoxelEngine.Building
         /// paving", so 3 wide on road is 12 m of carriageway and 3 wide on pathway is 3 m of cobbles.
         /// Cells already in the plan from an earlier leg are skipped, which is what lets two legs
         /// share their corner cell instead of paying for it twice.</summary>
-        private Vector3 BuildSegment(Vector3 startPos, Quaternion startRot, Vector3 endPos,
-                                     BlockItem block, float cell, Vector3 prevDir, Vector3 nextDir)
+        /// <summary>Fills <paramref name="into"/> with the clicked waypoints, plus a trailing copy
+        /// of the last one when <paramref name="withLiveSlot"/> is set so the caller can overwrite
+        /// it with the cursor position without allocating.</summary>
+        private void CollectWaypoints(List<Vector3> into, bool withLiveSlot)
         {
-            Vector3 up = startRot * Vector3.up;
-            Vector3 flat = Vector3.ProjectOnPlane(endPos - startPos, up);
-            float length = flat.magnitude;
+            into.Clear();
+            for (int i = 0; i < _wpPos.Count; i++) into.Add(_wpPos[i]);
+            if (withLiveSlot && into.Count > 0) into.Add(into[into.Count - 1]);
+        }
 
-            Vector3 fwd = startRot * Vector3.forward;
-            if (length > cell * 0.35f) fwd = Vector3.ProjectOnPlane(flat.normalized, up).normalized;
-            if (fwd.sqrMagnitude < 0.01f) fwd = startRot * Vector3.forward;
-            Vector3 right = Vector3.Cross(fwd, up);
-            if (right.sqrMagnitude < 0.01f) right = startRot * Vector3.right;
-            right = Vector3.ProjectOnPlane(right, up).normalized;
-            Quaternion rot = Quaternion.LookRotation(fwd, up);
+        /// <summary>
+        /// Solves the corridor and emits one plan cell per cell the solve produced. This replaces
+        /// the per-leg `BuildSegment` plus the `FillCorners` and `FillWedges` passes: because every
+        /// lane shares the carriageway's cross-sections, there are no seams left to chamfer or fill.
+        /// </summary>
+        private void EmitCorridor(RoadCorridorBuffers buf, List<Vector3> points, Vector3 up,
+                                  BlockItem block, float cell, bool emit)
+        {
+            RoadCorridor.Build(buf, points, up, _width, cell, _cornerRadiusCells * cell);
+            if (!emit) { JudgeCorridor(buf, block); return; }
 
-            int steps = Mathf.Max(1, Mathf.RoundToInt(length / Mathf.Max(0.05f, cell)));
-            float halfSpan = (_width - 1) * 0.5f;
-
-            // Where this leg meets a leg on a different heading, the cross-section is the MITRE
-            // bisector, stretched by 1/cos(half the turn) so the carriageway keeps its true width
-            // through the joint. That is what makes consecutive cells share an exact edge and tile
-            // into one arc; everywhere else the cross-section is just the leg's own right vector
-            // and the cell is a plain rectangle.
-            Mitre(prevDir, fwd, up, out Vector3 jointInR, out float jointInM);
-            Mitre(fwd, nextDir, up, out Vector3 jointOutR, out float jointOutM);
-            bool hasIn = prevDir.sqrMagnitude > 0.5f && Vector3.Dot(prevDir.normalized, fwd) < 0.98f;
-            bool hasOut = nextDir.sqrMagnitude > 0.5f && Vector3.Dot(fwd, nextDir.normalized) < 0.98f;
-
-            for (int i = 0; i < steps; i++)
+            for (int i = 0; i < buf.cells.Count; i++)
             {
-                Vector3 inR = (i == 0 && hasIn) ? jointInR : right;
-                float inM = (i == 0 && hasIn) ? jointInM : 1f;
-                Vector3 outR = (i == steps - 1 && hasOut) ? jointOutR : right;
-                float outM = (i == steps - 1 && hasOut) ? jointOutM : 1f;
+                var frame = buf.cells[i];
+                Vector3 pos = frame.position;
+                Quaternion rot = frame.rotation;
 
-                Vector3 centre = startPos + fwd * ((i + 0.5f) * cell);
-                for (int w = 0; w < _width; w++)
+                if (!AsphaltRoad.ProbeGround(pos, up, out float off))
                 {
-                    Vector3 lateral = centre + right * ((w - halfSpan) * cell);
-                    if (!AsphaltRoad.ProbeGround(lateral, up, out float off))
-                    { SetRefusal("No ground under part of the road"); AddCell(lateral, rot, true, 0, inR, outR, inM, outM); continue; }
-                    Vector3 pos = lateral + up * off;
-
-                    if (IsCellOccupied(pos, cell))
-                    {
-                        var existing = RoadAt(pos, cell);
-                        if (existing != null && existing.Run != null && !_planTouchedRuns.Contains(existing.Run))
-                            _planTouchedRuns.Add(existing.Run);
-                        AddCell(pos, rot, false, 0, inR, outR, inM, outM);
-                        continue;
-                    }
-
-                    var band = EvaluateCell(block, pos, rot, out int cost);
-                    if (band != AsphaltRoad.GradeBand.Smooth && band != AsphaltRoad.GradeBand.Rough)
-                    { SetRefusal(AsphaltRoad.DescribeSite(band)); AddCell(pos, rot, true, 0, inR, outR, inM, outM); continue; }
-
-                    _totalCost += cost;
-                    AddCell(pos, rot, true, cost, inR, outR, inM, outM);
+                    SetRefusal("No ground under part of the road");
+                    AddCell(pos, rot, true, 0, Vector3.zero, Vector3.zero, 1f, 1f,
+                            frame.sw, frame.se, frame.ne, frame.nw, true);
+                    continue;
                 }
-            }
+                pos += up * off;
 
-            return startPos + fwd * (steps * cell);
-        }
-
-        private static Vector3 SegDir(Vector3 a, Vector3 b, Vector3 up)
-        {
-            Vector3 d = Vector3.ProjectOnPlane(b - a, up);
-            return d.sqrMagnitude > 1e-6f ? d.normalized : Vector3.zero;
-        }
-
-        /// <summary>The mitred cross-section between two leg directions: the bisector, with the
-        /// stretch a mitre joint needs to keep the carriageway's true width through the turn.
-        /// Falls back to the first direction's perpendicular when there is no real turn.</summary>
-        private static void Mitre(Vector3 a, Vector3 b, Vector3 up, out Vector3 rightOut, out float mitre)
-        {
-            if (a.sqrMagnitude < 0.5f || b.sqrMagnitude < 0.5f)
-            {
-                Vector3 only = a.sqrMagnitude > 0.5f ? a.normalized : b.normalized;
-                rightOut = Vector3.Cross(only, up).normalized;
-                mitre = 1f;
-                return;
-            }
-            Vector3 an = a.normalized, bn = b.normalized;
-            Vector3 d = an + bn;
-            if (d.sqrMagnitude < 1e-4f) d = an;
-            d.Normalize();
-            mitre = 1f / Mathf.Max(0.62f, Vector3.Dot(d, an));
-            rightOut = Vector3.Cross(d, up).normalized;
-        }
-
-        /// <summary>Fills the wedge pockets at corners and crossings. Where two paved strips meet
-        /// at an angle — two legs of one plan, or a new road crossing an old one — the diagonal
-        /// pocket between them belongs to neither strip's cells and would stay a triangular hole
-        /// in the pavement. A diagonal slot is filled when the two cells flanking it along the
-        /// corner are paved (in the plan or already in the world), which turns crossings into
-        /// filled junction boxes and sharp corners into one continuous surface, the way the
-        /// reference intersections read.</summary>
-        private void FillWedges(BlockItem block, float cell)
-        {
-            int snapshot = _planPos.Count;
-            for (int i = 0; i < snapshot; i++)
-            {
-                Vector3 pos = _planPos[i];
-                Quaternion rot = _planRot[i];
-                Vector3 r = rot * Vector3.right;
-                Vector3 f = rot * Vector3.forward;
-
-                for (int sr = -1; sr <= 1; sr += 2)
-                for (int sf = -1; sf <= 1; sf += 2)
+                if (IsCellOccupied(pos, cell))
                 {
-                    Vector3 diag = pos + (r * sr + f * sf) * cell;
-                    if (IsCellOccupied(diag, cell) || _planSeen.Contains(KeyOf(diag))) continue;
-                    long pocket = KeyOf(diag / Mathf.Max(0.25f, cell * 0.5f));
-                    if (!_wedgeSeen.Add(pocket)) continue;
-
-                    // The two cells flanking the diagonal across the corner. Both paved means the
-                    // diagonal is the pocket of a corner, not a gap in open ground.
-                    bool a = IsPavedSlot(pos + r * sr * cell, cell);
-                    bool b = IsPavedSlot(pos + f * sf * cell, cell);
-                    if (!a || !b) continue;
-
-                    if (!AsphaltRoad.ProbeGround(diag, rot * Vector3.up, out float off)) continue;
-                    Vector3 dpos = diag + rot * Vector3.up * off;
-                    var band = EvaluateCell(block, dpos, rot, out int cost);
-                    if (band != AsphaltRoad.GradeBand.Smooth && band != AsphaltRoad.GradeBand.Rough) continue;
-                    _totalCost += cost;
-                    AddCell(dpos, rot, true, cost, Vector3.zero, Vector3.zero, 1f, 1f);
+                    var existing = RoadAt(pos, cell);
+                    if (existing != null && existing.Run != null && !_planTouchedRuns.Contains(existing.Run))
+                        _planTouchedRuns.Add(existing.Run);
+                    AddCell(pos, rot, false, 0, Vector3.zero, Vector3.zero, 1f, 1f,
+                            frame.sw, frame.se, frame.ne, frame.nw, true);
+                    continue;
                 }
-            }
-        }
 
-        private bool IsPavedSlot(Vector3 pos, float cell)
-            => IsCellOccupied(pos, cell) || _planSeen.Contains(KeyOf(pos));
+                var band = JudgeCell(block, pos, rot, out int cost, out _);
+                if (band != AsphaltRoad.GradeBand.Smooth && band != AsphaltRoad.GradeBand.Rough)
+                {
+                    SetRefusal(AsphaltRoad.DescribeSite(band));
+                    AddCell(pos, rot, true, 0, Vector3.zero, Vector3.zero, 1f, 1f,
+                            frame.sw, frame.se, frame.ne, frame.nw, true);
+                    continue;
+                }
 
-        private static long KeyOf(Vector3 pos)
-            => (long)Mathf.Round(pos.x * 8) * 1000003L
-             + (long)Mathf.Round(pos.y * 8) * 331L
-             + (long)Mathf.Round(pos.z * 8);
-
-        /// <summary>Fills the inside of every bend. Two legs meeting at a waypoint leave a one-cell
-        /// notch on the inside of the turn, and a notch is exactly what makes a bend read as two
-        /// strips that happened to touch. Adding the diagonal cell between the incoming and the
-        /// outgoing direction chamfers the corner so the run turns as one piece of road.</summary>
-        private void FillCorners(BlockItem block, float cell)
-        {
-            for (int i = 1; i + 1 < _wpPos.Count; i++)
-            {
-                Vector3 up = _wpRot[i] * Vector3.up;
-                Vector3 d1 = Vector3.ProjectOnPlane(_wpPos[i] - _wpPos[i - 1], up);
-                Vector3 d2 = Vector3.ProjectOnPlane(_wpPos[i + 1] - _wpPos[i], up);
-                if (d1.sqrMagnitude < 1e-6f || d2.sqrMagnitude < 1e-6f) continue;
-                d1.Normalize(); d2.Normalize();
-                if (Vector3.Dot(d1, d2) > 0.98f) continue;   // straight through, no bend
-
-                Vector3 inner = Vector3.ProjectOnPlane(d2 - d1, up);
-                if (inner.sqrMagnitude < 1e-6f) continue;
-                Vector3 lateral = _wpPos[i] + inner.normalized * cell;
-                if (!AsphaltRoad.ProbeGround(lateral, up, out float off)) continue;
-                Vector3 pos = lateral + up * off;
-                if (IsCellOccupied(pos, cell)) { AddCell(pos, _wpRot[i], false, 0, Vector3.zero, Vector3.zero, 1f, 1f); continue; }
-
-                var band = EvaluateCell(block, pos, _wpRot[i], out int cost);
-                if (band != AsphaltRoad.GradeBand.Smooth && band != AsphaltRoad.GradeBand.Rough) continue;
                 _totalCost += cost;
-                AddCell(pos, _wpRot[i], true, cost, Vector3.zero, Vector3.zero, 1f, 1f);
+                AddCell(pos, rot, true, cost, Vector3.zero, Vector3.zero, 1f, 1f,
+                        frame.sw, frame.se, frame.ne, frame.nw, true);
             }
         }
+
+        /// <summary>Walks a solved corridor for refusals only, without emitting cells. This is how
+        /// the live leg tints the ghost red over ground that will not take pavement while leaving
+        /// the committed plan untouched.</summary>
+        private void JudgeCorridor(RoadCorridorBuffers buf, BlockItem block)
+        {
+            if (buf == null) return;
+            Vector3 up = buf.stations.Count > 0
+                ? Vector3.Cross(buf.stations[0].right, buf.stations[0].tangent).normalized
+                : Vector3.up;
+            for (int i = 0; i < buf.cells.Count; i++)
+            {
+                var frame = buf.cells[i];
+                if (!AsphaltRoad.ProbeGround(frame.position, up, out float off))
+                { SetRefusal("No ground under part of the road"); continue; }
+                var band = JudgeCell(block, frame.position + up * off, frame.rotation, out _, out _);
+                if (band != AsphaltRoad.GradeBand.Smooth && band != AsphaltRoad.GradeBand.Rough)
+                    SetRefusal(AsphaltRoad.DescribeSite(band));
+            }
+        }
+
+        /// <summary>Asked-for corner radius, in cells. The solver clamps it to the minimum the
+        /// current width can carry, so a tight request on a wide road yields the tightest corner
+        /// that still leaves the inside lane a real lane.</summary>
+        public void SetCornerRadius(int cells) => _cornerRadiusCells = Mathf.Clamp(cells, 0, 8);
+        public int CornerRadiusCells => _cornerRadiusCells;
+
+        /// <summary>The radius actually used for the current width and cell size, in metres — what
+        /// the HUD should report, since the request and the result differ on a wide road.</summary>
+        public float EffectiveCornerRadius(float cell)
+            => RoadCorridor.MinimumRadius(_width, cell) > _cornerRadiusCells * cell
+                ? RoadCorridor.MinimumRadius(_width, cell) : _cornerRadiusCells * cell;
 
         private void AddCell(Vector3 pos, Quaternion rot, bool fresh, int cost,
-                             Vector3 inR, Vector3 outR, float inM, float outM)
+                             Vector3 inR, Vector3 outR, float inM, float outM,
+                             Vector3 qSW = default, Vector3 qSE = default,
+                             Vector3 qNE = default, Vector3 qNW = default,
+                             bool explicitQuad = false)
         {
             // Two legs of a polyline share their corner cell; the seen-set is what stops the second
             // leg from laying (and charging for) a cell the first leg already put in the plan.
@@ -720,7 +689,14 @@ namespace VoxelEngine.Building
             if (!_planSeen.Add(key)) return;
             _planPos.Add(pos); _planRot.Add(rot); _planFresh.Add(fresh); _planCost.Add(cost);
             _planInR.Add(inR); _planOutR.Add(outR); _planInM.Add(inM); _planOutM.Add(outM);
+            _quadSW.Add(qSW); _quadSE.Add(qSE); _quadNE.Add(qNE); _quadNW.Add(qNW);
+            _planExplicit.Add(explicitQuad);
         }
+
+        private static long KeyOf(Vector3 pos)
+            => (long)Mathf.Round(pos.x * 8) * 1000003L
+             + (long)Mathf.Round(pos.y * 8) * 331L
+             + (long)Mathf.Round(pos.z * 8);
 
         private void SetRefusal(string reason)
         {
@@ -870,25 +846,31 @@ namespace VoxelEngine.Building
             _ghost.SetActive(false);
         }
 
-        private void ShowGhost(float cell, bool good)
+        private void ShowGhost(bool good)
         {
             EnsureGhost();
             if (_ghost == null) return;
             _gPos.Clear(); _gNrm.Clear(); _gUv.Clear(); _gTri.Clear();
 
-            float half = cell * 0.5f * 0.96f;
-            for (int i = 0; i < _planPos.Count; i++)
+            // The ghost is drawn from the LIVE corridor's own quads rather than from squares of the
+            // committed plan, so what the player sees is the carriageway the cursor is describing —
+            // fillets, lane fan and all — sitting proud of the ground the cells will be dropped on.
+            var cells = _liveCorridor != null && _liveCorridor.cells.Count > 0
+                ? _liveCorridor.cells : _commitCorridor.cells;
+            if (cells.Count == 0) { HideGhost(); return; }
+
+            for (int i = 0; i < cells.Count; i++)
             {
-                var rot = _planRot[i];
-                Vector3 c = _planPos[i] + rot * Vector3.up * 0.09f;
-                Vector3 f = rot * Vector3.forward;
-                Vector3 r = rot * Vector3.right;
-                Vector3 n = rot * Vector3.up;
+                var frame = cells[i];
+                if (!AsphaltRoad.ProbeGround(frame.position, frame.rotation * Vector3.up, out float off))
+                    off = 0f;
+                Vector3 lift = frame.rotation * Vector3.up * (off + 0.09f);
+                Vector3 n = frame.rotation * Vector3.up;
                 int b = _gPos.Count;
-                _gPos.Add(c - f * half - r * half);
-                _gPos.Add(c - f * half + r * half);
-                _gPos.Add(c + f * half + r * half);
-                _gPos.Add(c + f * half - r * half);
+                _gPos.Add(frame.position + frame.rotation * frame.sw + lift);
+                _gPos.Add(frame.position + frame.rotation * frame.se + lift);
+                _gPos.Add(frame.position + frame.rotation * frame.ne + lift);
+                _gPos.Add(frame.position + frame.rotation * frame.nw + lift);
                 for (int v = 0; v < 4; v++) _gNrm.Add(n);
                 _gUv.Add(new Vector2(0f, 0f)); _gUv.Add(new Vector2(1f, 0f));
                 _gUv.Add(new Vector2(1f, 1f)); _gUv.Add(new Vector2(0f, 1f));

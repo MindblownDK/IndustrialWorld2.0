@@ -69,23 +69,36 @@ namespace VoxelEngine.Building
                                         HeightSampler sampleHeight, float shoulderWidth = 0.09f,
                                         float shoulderRise = 0.022f,
                                         Vector3 curveInRight = default, Vector3 curveOutRight = default,
-                                        float curveInMitre = 1f, float curveOutMitre = 1f)
+                                        float curveInMitre = 1f, float curveOutMitre = 1f,
+                                        bool explicitFootprint = false,
+                                        Vector3 exSW = default, Vector3 exSE = default,
+                                        Vector3 exNE = default, Vector3 exNW = default)
         {
             if (target == null) return;
             float half = cellSize * 0.5f;
             var sampler = sampleHeight ?? ((x, z) => 0f);
 
             // ── 0) The footprint outline ───────────────────────────────────
-            // A cell sitting on a bend carries the route's cross-section at its entry and at its
-            // exit: two mitred chords. The footprint is the quad between them, so a cell on a
-            // straight is EXACTLY the old rectangle (straight kerb lines, no scalloping) while a
-            // chain of bent cells tiles into one continuous arc — outer edge long and smooth,
-            // inner edge tight, like a real carriageway. Per-cell corner rounding was tried and
-            // rejected: it put a notch in every tile of a curve and beaded the whole road.
-            // Junction cells and hand-placed cells carry no curve frame and stay square.
+            // Three ways a cell gets its outline, in order of authority:
+            //
+            //   • EXPLICIT — the corridor solver laid this cell from a carriageway-wide station grid
+            //     and hands over the finished quad. Every lane of every cell then meets its
+            //     neighbours exactly, which no per-cell description can achieve on a curve.
+            //   • CURVE FRAME — a cell on a bend carries the route's cross-section at its entry and
+            //     at its exit: two mitred chords. The footprint is the quad between them, so a cell
+            //     on a straight is EXACTLY the old rectangle (straight kerb lines, no scalloping)
+            //     while a chain of bent cells tiles into one continuous arc — outer edge long and
+            //     smooth, inner edge tight, like a real carriageway. Per-cell corner rounding was
+            //     tried and rejected: it put a notch in every tile of a curve and beaded the whole
+            //     road.
+            //   • SQUARE — junction cells and hand-placed cells carry neither and stay square.
             Vector3 sw, se, ne, nw;
             bool curved = curveInRight.sqrMagnitude > 0.5f && curveOutRight.sqrMagnitude > 0.5f;
-            if (curved)
+            if (explicitFootprint)
+            {
+                sw = exSW; se = exSE; ne = exNE; nw = exNW;
+            }
+            else if (curved)
             {
                 Vector3 ein  = new Vector3(0f, 0f, -half);
                 Vector3 eout = new Vector3(0f, 0f,  half);

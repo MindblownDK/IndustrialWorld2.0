@@ -78,6 +78,20 @@ namespace VoxelEngine.Building
         [HideInInspector] public float curveInMitre = 1f;
         [HideInInspector] public float curveOutMitre = 1f;
 
+        [Header("Explicit Footprint")]
+        /// <summary>Set by the corridor solver (`RoadCorridor`) on cells it laid from a shared
+        /// station grid. When true the four corners below ARE the cell's footprint, in local space,
+        /// and the curve frame above is ignored.
+        ///
+        /// This exists because a lane of a curved carriageway cannot be described by two chords
+        /// centred on the cell's own axis: its entry and exit faces are chords of the whole
+        /// carriageway's cross-sections, so they sit off-axis and skew against the cell. Giving the
+        /// solver four explicit corners lets every lane of every cell meet its neighbours exactly.
+        ///
+        /// Legacy and hand-placed cells leave this false and take the curve-frame path unchanged.</summary>
+        [HideInInspector] public bool hasExplicitFootprint;
+        [HideInInspector] public Vector3 quadSW, quadSE, quadNE, quadNW;
+
         [Header("Cell")]
         [Tooltip("Edge length of one road cell in metres. Matches the BlockItem's gridSize so a " +
                  "paved strip lands on the same lattice as every other placed block.")]
@@ -669,7 +683,8 @@ namespace VoxelEngine.Building
             _sampler ??= LocalGroundHeight;
             AsphaltRoadMesh.BuildSurface(_surfaceMesh, cellSize, thickness, Edges, _sampler,
                                          shoulderWidth, shoulderRise,
-                                         curveInRight, curveOutRight, curveInMitre, curveOutMitre);
+                                         curveInRight, curveOutRight, curveInMitre, curveOutMitre,
+                                         hasExplicitFootprint, quadSW, quadSE, quadNE, quadNW);
             BuildWearMesh(Run?.Wear01 ?? 0f);
 
             _surfaceFilter.sharedMesh = _surfaceMesh;
@@ -746,9 +761,40 @@ namespace VoxelEngine.Building
             float lx = Vector3.Dot(delta, transform.right);
             float lz = Vector3.Dot(delta, transform.forward);
             float half = cellSize * 0.5f;
-            if (Mathf.Abs(lx) > half || Mathf.Abs(lz) > half) return float.NaN;
+
+            if (hasExplicitFootprint)
+            {
+                // A corridor cell is a trapezoid, not a square, so the square test would report a
+                // player standing in the wedge outside a curved lane as being on the road (and drop
+                // one standing in the wedge inside it). Test the actual quad instead: inside when
+                // the point keeps the same winding against all four edges.
+                if (!InsideQuad(lx, lz)) return float.NaN;
+            }
+            else if (Mathf.Abs(lx) > half || Mathf.Abs(lz) > half) return float.NaN;
+
             float surface = LocalGroundHeight(lx, lz) + thickness;
             return Vector3.Dot(delta, up) - surface;
+        }
+
+        /// <summary>Local-space point-in-quad for the explicit footprint. Uses the same vertex
+        /// order the mesh is wound in, so the winding test and the render agree.</summary>
+        private bool InsideQuad(float lx, float lz)
+        {
+            bool positive = false, negative = false;
+            Vector3 a = quadSW, b = quadSE, c = quadNE, d = quadNW;
+            Cross2(a, b, lx, lz, ref positive, ref negative);
+            Cross2(b, c, lx, lz, ref positive, ref negative);
+            Cross2(c, d, lx, lz, ref positive, ref negative);
+            Cross2(d, a, lx, lz, ref positive, ref negative);
+            return !(positive && negative);
+        }
+
+        private static void Cross2(Vector3 p, Vector3 q, float lx, float lz,
+                                   ref bool positive, ref bool negative)
+        {
+            float cross = (q.x - p.x) * (lz - p.z) - (q.z - p.z) * (lx - p.x);
+            if (cross > 0f) positive = true;
+            else if (cross < 0f) negative = true;
         }
 
         /// <summary>Walk-speed multiplier this cell offers right now. 1 when it offers nothing.
