@@ -1816,6 +1816,10 @@ namespace VoxelEngine.Player
             var kind = VoxelEngine.Building.RoadSurfaceSelection.Kind;
             var block = kind == VoxelEngine.Building.RoadSurfaceKind.Pathway ? paver.pathBlock : paver.roadBlock;
             var material = kind == VoxelEngine.Building.RoadSurfaceKind.Pathway ? paver.pathMaterial : paver.pavingMaterial;
+            // The third wheel card lays the SAME asphalt; what it changes is what the paver does
+            // when that road reaches water. Set here rather than in the planning branch so it is
+            // already correct by the time a plan commits.
+            _roadPaver.CrossingsOpen = kind == VoxelEngine.Building.RoadSurfaceKind.Bridge;
             int pricePerCell = kind == VoxelEngine.Building.RoadSurfaceKind.Pathway ? paver.pathMaterialPerCell : paver.materialPerCell;
 
             // ── corner radius: Ctrl+Shift + scroll, in cells ──
@@ -1895,6 +1899,27 @@ namespace VoxelEngine.Player
                 _roadPaver.CancelPlan();
                 VoxelEngine.UI.BuildFeedbackHud.Show("Road plan", "Cancelled", null, Color.white);
                 return true;
+            }
+
+            // ── Operating a drawbridge ──
+            // Aimed at a deck that can open, the interact key swings it. Checked before the plan
+            // branch and only while no plan is open, so the key that lays a road never also swings
+            // a bridge out from under the player mid-plan. `swingWhy` rather than `why` because
+            // `BeginPlan` below already declares `why` in this method's scope.
+            if (GameSettings.WasPressed(InputAction.Interact) && !_roadPaver.IsPlanning && hasHit
+                && hit.collider != null)
+            {
+                var aimedDeck = hit.collider.GetComponentInParent<AsphaltRoad>();
+                var aimedSpan = aimedDeck != null ? aimedDeck.Span : null;
+                if (aimedSpan != null && aimedSpan.CanOpen)
+                {
+                    if (aimedSpan.ToggleOpen(out string swingWhy))
+                        VoxelEngine.UI.BuildFeedbackHud.Show(aimedSpan.StatusLabel,
+                            aimedSpan.WantsOpen ? "Opening for shipping" : "Closing to traffic",
+                            block.icon, Color.white);
+                    else if (swingWhy != null) ReportRoadRefusal(swingWhy);
+                    return true;
+                }
             }
 
             if (mineDown)

@@ -1,9 +1,42 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.44.0-dev`
+**Current Version:** `9.44.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.44.1-dev] Water Crossings: Drawbridges Reachable
+
+**Type:** MINOR — the drawbridge machinery that shipped unreachable in 9.44.0 is now wired to the player and to the save. Save-compatible: the new persistence fields are additive behind a flag, and a legacy save restores a deck that classifies itself from the ground exactly as a freshly paved one does.
+
+**GitHub title:** `[9.44.1-dev] Water Crossings: a third surface-wheel card lays drawbridge roads, the interact key swings a deck you are aiming at, and the structure and its swing now survive a save`
+
+#### Added
+
+- **A third card on the road surface wheel: DRAWBRIDGE ROAD.** It is not a third paving material — the road laid is still asphalt, and `Kind == Bridge` already falls through the paver's `== Pathway` ternaries to `roadBlock` and `pavingMaterial`, so block selection needed no change at all. What the card selects is what the paver does when that road reaches water: left on asphalt the crossing is a culvert or a fixed bridge and stays shut forever; selected here, the crossing it inserts can open. It belongs on this wheel rather than on a new key because it answers the same question the other two cards answer — what kind of road am I laying — and because adding an `InputAction` would have meant a settings migration and a `CURRENT_VERSION` bump for one toggle.
+- **`RoadPaver.CrossingsOpen`**, set from the surface choice rather than inside the planning branch, so it is already correct by the time a plan commits. It reaches `BridgeSpan.Rebuild` as `allowDrawbridge`.
+- **Operating a drawbridge.** Aimed at a deck that can open, the interact key swings it, with the span's own status line on the build feedback HUD. Checked *before* the plan branch and only while no plan is open, so the key that lays a road never also swings a bridge out from under the player mid-plan.
+- **Crossings survive a save.** Additive `hasBridgeSpan` / `bridgeStructure` / `bridgeOpen` on `SavedPlacedBlock`, restored through `BridgeSpan.RestoreCell`, which groups a returning deck cell with the bridge cells already back by probing its four face-neighbour slots. A save therefore needs no list of spans — only each cell's structure and how far open it was — because a span re-forms from adjacency the same way a `RoadRun` does.
+- `BridgeSpan.ApplySavedState`, which writes the saved structure *before* rebuilding. `Rebuild` refuses to downgrade a span that is already a drawbridge, so setting the kind first is what stops a reloaded drawbridge being reclassified down to a fixed bridge by its own clearance.
+
+#### Fixed
+
+- **The leaves were untextured.** 9.44.0 called `Rebuild` with `deckMaterial: null`, which would have produced invisible leaves the first time a span became a drawbridge. Both call sites now take the material off the deck block's own prefab renderer — a leaf is the deck, and one that did not match the cells it stands in for would read as a different structure while it swung.
+
+#### Changed
+
+- **The surface wheel sizes its card array from `Segments.Length`** instead of a hardcoded `2`. It was the only part of the wheel not driven by its own data, and it was the one line that would have silently dropped the new card.
+
+#### Deliberately not stored
+
+A culvert and a fixed bridge write nothing but the flag. Both reclassify from the ground on load, the deck level is already baked into the saved position, and the piers are rebuilt from the clearance — so neither carries state the world cannot rederive. Only a drawbridge does: that the player asked for it to be able to open, and where the swing was.
+
+#### Held back to 9.44.2-dev
+
+- **Auto-open on ship approach.** The reason a drawbridge exists, and the largest of what is left: it needs a trigger volume and a query into `VoxelEngine.Maritime`, neither of which this round touched.
+- **Power draw.** An opening bridge should cost something to run.
+- **A warning light or horn.** A silent deck that drops shut is a trap.
+- **Operating a bridge without the paver in hand.** Right now you must be holding the road paver to swing one, which is defensible for the player who built it and wrong for a ship's captain. This is the item most likely to want revisiting first, and it is why auto-open matters more than it looks.
 
 ### [9.44.0-dev] Water Crossings: Culverts and Bridges on Piers
 

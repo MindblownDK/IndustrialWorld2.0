@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `9.44.0-dev`  
-**Roadmap Version:** `9.44.0-dev`  
+**Current Version:** `9.44.1-dev`  
+**Roadmap Version:** `9.44.1-dev`  
 **Date:** 2026-09-12
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,22 @@
 ---
 
 ## 0. Recently Done
+
+### 9.44.1-dev — Drawbridges Reachable
+- The machinery that shipped unreachable in 9.44.0 is now wired to the player and the save. A
+  **third surface-wheel card** (DRAWBRIDGE ROAD) lays the same asphalt but makes the crossing the
+  paver inserts able to open; it is not a third paving material, and `Kind == Bridge` already fell
+  through the paver's `== Pathway` ternaries to the road block, so block selection needed no change.
+  It went on the wheel rather than a new key because adding an `InputAction` costs a settings
+  migration and a `CURRENT_VERSION` bump for one toggle.
+- **Aimed at a deck, the interact key swings it** — checked before the plan branch and only while no
+  plan is open, so the key that lays a road never swings a bridge out from under the player. The
+  leaves, untextured in 9.44.0, now take the deck block's own material.
+- **Crossings survive a save**: additive `hasBridgeSpan`/`bridgeStructure`/`bridgeOpen`, restored by
+  probing the four face-neighbour slots, so a save needs no list of spans — a span re-forms from
+  adjacency the way a `RoadRun` does. Held to `9.44.2-dev`: auto-open on ship approach, power draw,
+  a warning light or horn, and operating a bridge without the paver in hand.
+
 
 ### 9.44.0-dev — Water Crossings: Culverts & Bridges on Piers
 - A road **crosses water** instead of being refused by it. `RoadSurfaceKind.Bridge` puts a cell in
@@ -113,22 +129,6 @@
   ≤ 0.22 rise paves at 1 asphalt, ≤ 0.50 at 2, steeper is refused with a reason on screen. Repair is
   the same asphalt priced by run wear; right-click lifts a cell and refunds only below 0.35 wear.
   Chain: HFO 40 L → 4 bitumen → + sand 2 / gravel 3 → 8 hot mix. Step 72; `res_asphalt_roads` tier 6.
-
-### 9.40.0-dev — Catalytic Cracking & Petrochemicals  *(shipped in `839f2bb`; documented late)*
-- `CatalyticCracker` is not a batch timer with a label: a **catalyst bed** decaying 2% per batch and a
-  **reactor temperature** climbing 45 °C/s toward 520 °C both gate throughput through
-  `CrackingEfficiency01 = 0.3 + 0.7 × catalyst × temperature`, so a cold or spent reactor still runs at
-  30% instead of stopping — a machine to maintain, not to babysit. Four auto-typed fluid tanks
-  (2000/1000 L in, 2000/1000 L out), two item slots each way, three world dials and a reactor glow.
-- Seven processing recipes: FCC (HFO 100 L + water 20 L + zeolite → diesel 45 / gasoline 30 / LPG 15 /
-  naphtha 5), CCR (naphtha 80 L + platinum → gasoline 60 / LPG 20), hydrocracking (HFO 80 L + LPG 20 L +
-  platinum → diesel 50 / kerosene 35), plus synthetic resin, industrial lubricant and the two catalyst
-  syntheses that let a decayed bed be fed back up. All five conversions are also appended to the
-  Stationary and Large Chemical Plants, so the chain is reachable without the dedicated reactor.
-- `Block_CatalyticCracker` (health 2200, mining tier 3, 1200 kg) from steel plate 36 / iron gear 20 /
-  circuit 12 / glass 8 / copper wire 16; `res_catalytic_cracking` tier 6 chemistry, requires
-  Atmospheric Distillation + Flare Disposal. Step 71. **Open: no save serialisation** — bed, reactor
-  temperature and tank contents reset on reload — and resin/lubricant have no consumers yet.
 
 ## 1. Executive Vision
 
@@ -1042,7 +1042,7 @@ one sentence: **a road is the difference between walking a route and being able 
    what remains and split it into however many runs the gap created, each inheriting the wear it was
    part of. Merging takes the worst of the two, so a worn strip joined to a new one is a worn strip.
 
-6. **Still open after 9.44.0-dev**
+6. **Still open after 9.44.1-dev**
    - The road **network** object: a player-given name and a traffic/condition readout across a whole
      system. Deliberately held back again — it should arrive with the routing it feeds.
    - **Road-aware routing.** Pathfinding, autopilot and delivery drones do not prefer paved routes.
@@ -1054,13 +1054,15 @@ one sentence: **a road is the difference between walking a route and being able 
    - ~~**Culverts and bridges**~~ *(9.44.0-dev)* — the paver now inserts a culvert or a bridge on
      piers where the line reaches water, at a deck level taken from its own approaches and billed
      from a separate iron-and-stone pot.
-   - **Drawbridges** — the next round (`9.44.1-dev`). The machinery shipped in `BridgeSpan` with
-     9.44.0 (classification, hinged leaves, the open/shut state machine, `SetDeckPassable`) but is
-     **not reachable in game**. Five wiring items: nothing can make a span a drawbridge (`Rebuild`
-     is called with `allowDrawbridge: false`), nothing can open one (`ToggleOpen` has no binding),
-     the leaves are built with a null material, the open state is not saved, and there is no power
-     draw, ship-approach trigger, light or horn. Wiring, not design — which is why the machinery
-     shipped rather than being stubbed.
+   - ~~**Drawbridges**~~ *(9.44.1-dev)* — reachable now: a third surface-wheel card lays a road whose
+     crossings open, the interact key swings a deck you are aiming at, and the structure and its
+     swing survive a save.
+   - **Drawbridge automation** — the next round (`9.44.2-dev`). Four items, all of them the reason a
+     drawbridge exists rather than the mechanism: **auto-open on ship approach** (needs a trigger
+     volume and a query into `VoxelEngine.Maritime`), **power draw**, a **warning light or horn** (a
+     silent deck that drops shut is a trap), and **operating one without the paver in hand** — the
+     current binding is defensible for the player who built the bridge and wrong for a ship's
+     captain, which is also why auto-open matters more than it looks.
    - ~~Water is refused rather than crossed~~ — `GradeBand.Underwater` and the `DescribeSite` string
      "needs a culvert" are now reached only when the paver has no bridge material configured, which
      is the correct remaining case: a tool that cannot afford a crossing should say so.

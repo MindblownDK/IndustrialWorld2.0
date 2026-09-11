@@ -43,6 +43,19 @@ namespace VoxelEngine.Simulation
                 Blurb = "Cobble. For feet only — no traction, costs stone.",
                 IconText = "\u25A6",
             },
+            new Segment
+            {
+                // Not a third paving material. The road laid is still asphalt — what this selects
+                // is what the paver does when that road reaches water. Left as ordinary asphalt the
+                // crossing is a culvert or a fixed bridge and stays shut forever; selected here, the
+                // crossing the paver inserts is a drawbridge that can open for a ship. It belongs on
+                // this wheel rather than on a new key because it is the same question the other two
+                // cards answer: what kind of road am I laying.
+                Kind = RoadSurfaceKind.Bridge,
+                Title = "DRAWBRIDGE ROAD",
+                Blurb = "Asphalt, but water crossings open for shipping. Costs iron.",
+                IconText = "\u25B2",
+            },
         };
 
         private Inventory _inventory;
@@ -50,7 +63,7 @@ namespace VoxelEngine.Simulation
         private VisualElement _prompt;
         private Label _promptLabel;
         private VisualElement _overlay;
-        private readonly VisualElement[] _cards = new VisualElement[2];
+        private readonly VisualElement[] _cards = new VisualElement[Segments.Length];
         private bool _open;
         private bool _wasBlocking;
         private int _hovered = -1;

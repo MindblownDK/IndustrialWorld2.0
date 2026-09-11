@@ -378,6 +378,11 @@ namespace VoxelEngine.Building
         public BlockItem BridgeBlock { get; set; }
         /// <summary>Bridge material charged per deck cell.</summary>
         public int BridgeCostPerCell { get; set; } = 6;
+        /// <summary>Whether crossings this plan lays are drawbridges rather than fixed. Set from the
+        /// surface wheel: the same asphalt road, but the structure over water can open. Off by
+        /// default, because a deck that swings shut under a lorry is not a thing to opt into by
+        /// accident.</summary>
+        public bool CrossingsOpen { get; set; }
 
         private int _bridgeCost;
         private int _gapCount;
@@ -675,8 +680,17 @@ namespace VoxelEngine.Building
                     var span = BridgeSpan.JoinOrCreate(decks[d], neighbours);
                     if (!_planSpans.Contains(span)) _planSpans.Add(span);
                 }
+                // The leaves are surfaced from the deck block's own material rather than a second
+                // authored one: a drawbridge leaf is the deck, and a leaf that did not match the
+                // cells it stands in for would read as a different structure while it swung.
+                Material deckMat = null;
+                if (BridgeBlock != null && BridgeBlock.placedPrefab != null)
+                {
+                    var deckRenderer = BridgeBlock.placedPrefab.GetComponentInChildren<MeshRenderer>(true);
+                    if (deckRenderer != null) deckMat = deckRenderer.sharedMaterial;
+                }
                 for (int sp = 0; sp < _planSpans.Count; sp++)
-                    _planSpans[sp].Rebuild(allowDrawbridge: false, deckMaterial: null);
+                    _planSpans[sp].Rebuild(allowDrawbridge: CrossingsOpen, deckMaterial: deckMat);
             }
 
             int spent = _commitCost + repairUnits;

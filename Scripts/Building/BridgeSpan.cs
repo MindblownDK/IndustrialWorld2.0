@@ -34,6 +34,7 @@
 
 using System.Collections.Generic;
 using UnityEngine;
+using VoxelEngine.Environment;   // RoadSurfaceUtility, to find the decks a restored cell joins
 
 namespace VoxelEngine.Building
 {
@@ -351,6 +352,55 @@ namespace VoxelEngine.Building
             { refusal = "A drawbridge needs at least two deck cells"; return false; }
             WantsOpen = !WantsOpen;
             return true;
+        }
+
+        /// <summary>
+        /// Restores a saved structure and swing. Called as each deck cell comes back rather than in
+        /// a pass over the finished world, for the same reason `RoadRun` re-forms from adjacency:
+        /// a save then needs no list of spans, only each cell's structure and how far open it was.
+        /// </summary>
+        public void ApplySavedState(BridgeStructure structure, float open01, Material deckMaterial)
+        {
+            // Set before the rebuild, not after: `Rebuild` refuses to downgrade a span that is
+            // already a drawbridge, so writing the saved kind first is what stops a reloaded
+            // drawbridge being reclassified down to a fixed bridge by its own clearance.
+            Structure = structure;
+            Rebuild(allowDrawbridge: structure == BridgeStructure.Drawbridge, deckMaterial: deckMaterial);
+            SetOpenImmediate(open01);
+        }
+
+        private static readonly List<AsphaltRoad> _restoreNeighbours = new List<AsphaltRoad>(8);
+        private static readonly List<AsphaltRoad> _restoreQuery = new List<AsphaltRoad>(8);
+
+        /// <summary>
+        /// Groups a restored deck cell with the bridge cells already back in the world and rebuilds
+        /// the crossing. Probes the four face-neighbour slots rather than scanning the scene: a
+        /// crossing is contiguous by definition, so anything it belongs to is one cell away.
+        /// </summary>
+        public static void RestoreCell(AsphaltRoad cell, BridgeStructure structure, float open01,
+                                       Material deckMaterial)
+        {
+            if (cell == null) return;
+            _restoreNeighbours.Clear();
+            var t = cell.transform;
+            float step = Mathf.Max(0.25f, cell.cellSize);
+            Vector3 fwd = t.forward * step, right = t.right * step;
+            for (int i = 0; i < 4; i++)
+            {
+                Vector3 probe = i == 0 ? t.position + fwd
+                              : i == 1 ? t.position - fwd
+                              : i == 2 ? t.position + right
+                              : t.position - right;
+                RoadSurfaceUtility.QueryAt(probe, _restoreQuery);
+                for (int q = 0; q < _restoreQuery.Count; q++)
+                {
+                    var other = _restoreQuery[q];
+                    if (other == null || other == cell) continue;
+                    if (other.surfaceKind != RoadSurfaceKind.Bridge) continue;
+                    if (!_restoreNeighbours.Contains(other)) _restoreNeighbours.Add(other);
+                }
+            }
+            JoinOrCreate(cell, _restoreNeighbours).ApplySavedState(structure, open01, deckMaterial);
         }
 
         /// <summary>Restores a saved open state without animating through it.</summary>

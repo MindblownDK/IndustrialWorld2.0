@@ -330,6 +330,16 @@ namespace VoxelEngine.Persistence
                 {
                     entry.hasRoadWear = true;
                     entry.roadWear = Mathf.Clamp01(road.SavedWear);
+                    // A culvert and a fixed bridge need nothing here: both reclassify from the
+                    // ground on load. Only a drawbridge carries state the world cannot rederive —
+                    // that the player asked for it to be able to open, and where the swing was.
+                    var span = road.Span;
+                    if (span != null && road.surfaceKind == VoxelEngine.Building.RoadSurfaceKind.Bridge)
+                    {
+                        entry.hasBridgeSpan = true;
+                        entry.bridgeStructure = (int)span.Structure;
+                        entry.bridgeOpen = Mathf.Clamp01(span.Open01);
+                    }
                 }
                 var gst = pb.GetComponentInChildren<VoxelEngine.Gas.GasTank>();
                 if (gst != null)
@@ -1872,6 +1882,28 @@ namespace VoxelEngine.Persistence
                     var restoredRoad = go.GetComponentInChildren<VoxelEngine.Building.AsphaltRoad>(true);
                     restoredRoad?.ApplySavedWear(sb.roadWear);
                 }
+                if (sb.hasBridgeSpan)
+                {
+                    var restoredDeck = go.GetComponentInChildren<VoxelEngine.Building.AsphaltRoad>(true);
+                    if (restoredDeck != null
+                        && restoredDeck.surfaceKind == VoxelEngine.Building.RoadSurfaceKind.Bridge)
+                    {
+                        // The leaf meshes are surfaced from the deck block's own material, so a
+                        // reloaded drawbridge swings the same plate it was built from rather than
+                        // an untextured quad.
+                        Material restoredDeckMat = null;
+                        if (blockItem != null && blockItem.placedPrefab != null)
+                        {
+                            var deckRenderer = blockItem.placedPrefab
+                                .GetComponentInChildren<MeshRenderer>(true);
+                            if (deckRenderer != null) restoredDeckMat = deckRenderer.sharedMaterial;
+                        }
+                        VoxelEngine.Building.BridgeSpan.RestoreCell(
+                            restoredDeck,
+                            (VoxelEngine.Building.BridgeStructure)sb.bridgeStructure,
+                            sb.bridgeOpen, restoredDeckMat);
+                    }
+                }
                 if (sb.paintFinish != 0)
                 {
                     var paint = go.GetComponent<VoxelEngine.Building.BlockPaint>() ?? go.AddComponent<VoxelEngine.Building.BlockPaint>();
@@ -2819,6 +2851,14 @@ namespace VoxelEngine.Persistence
             // Additive — legacy saves leave hasRoadWear false and the road restores brand new.
             public bool hasRoadWear;
             public float roadWear;
+            // Water-crossing structure (9.44.1-dev). Additive: legacy saves leave hasBridgeSpan
+            // false and a restored deck cell classifies itself from the ground beneath it, exactly
+            // as a freshly paved one does. Only the structure KIND and how far open it was need
+            // storing — the deck level is already baked into `pos`, and the piers are rebuilt from
+            // the clearance, so neither is state.
+            public bool hasBridgeSpan;
+            public int bridgeStructure;
+            public float bridgeOpen;
         }
         [Serializable] private class SavedArmorUpgradeStationState
         {
