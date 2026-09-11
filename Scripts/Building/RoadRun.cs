@@ -221,6 +221,17 @@ namespace VoxelEngine.Building
         //  MEMBERSHIP
         // ════════════════════════════════════════════════════════════════
 
+        /// <summary>The surface this run is paved with, read from its cells.</summary>
+        public RoadSurfaceKind Kind
+        {
+            get
+            {
+                for (int i = 0; i < _blocks.Count; i++)
+                    if (_blocks[i] != null) return _blocks[i].surfaceKind;
+                return RoadSurfaceKind.Asphalt;
+            }
+        }
+
         internal void Adopt(AsphaltRoad road)
         {
             if (road == null || _blocks.Contains(road)) return;
@@ -268,9 +279,20 @@ namespace VoxelEngine.Building
             return surviving;
         }
 
+        /// <summary>Two surfaces may sit next to each other but may not become one run: they cost
+        /// differently, wear differently and hand out different bonuses, so a single wear ledger
+        /// over both would be meaningless.</summary>
+        internal static bool SameKind(AsphaltRoad a, AsphaltRoad b)
+        {
+            if (a == null || b == null) return false;
+            return a.surfaceKind == b.surfaceKind;
+        }
+
         private void Absorb(RoadRun other)
         {
             if (other == null || other == this) return;
+            // A roadway and a pathway that touch stay two runs.
+            if (other._blocks.Count > 0 && _blocks.Count > 0 && !SameKind(other._blocks[0], _blocks[0])) return;
             for (int i = 0; i < other._blocks.Count; i++)
             {
                 var block = other._blocks[i];
@@ -324,6 +346,7 @@ namespace VoxelEngine.Building
                 {
                     var next = neighbours[i];
                     if (next == null || assigned.Contains(next)) continue;
+                    if (!SameKind(seed, next)) continue;
                     assigned.Add(next);
                     stack.Push(next);
                 }

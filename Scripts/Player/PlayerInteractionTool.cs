@@ -145,10 +145,11 @@ namespace VoxelEngine.Player
             var ray = shootCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0));
             bool hasHit = TryRaycastIgnoringSelf(ray, out var hit, reach);
 
-            // ── ROAD PAVER — owns its per-frame tick for the same reason the wrench and the
-            //    mechanical belt do: a held drag has to keep laying, and has to STOP the frame
-            //    LMB is released, which the button early-out below would otherwise swallow.
-            if (TryTickRoadPaver(hit, hasHit, mineHeld, buildDown)) return;
+            // ── ROAD PAVER — owns its per-frame tick ahead of every button early-out below,
+            //    because between the two clicks NOTHING is held and the plan still has to redraw
+            //    its ghost every frame.
+            if (TryTickRoadPaver(hit, hasHit, mineDown, buildDown, buildHeld,
+                                 ReadScrollY())) return;
 
             // ── INTERACTION HUD (Context Prompts) ──
             if (hasHit && !VoxelEngine.UI.UIState.IsBlocking)
@@ -1356,6 +1357,39 @@ namespace VoxelEngine.Player
 #endif
         }
 
+        private static bool IsCtrlHeld()
+        {
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
+            var kb = UnityEngine.InputSystem.Keyboard.current;
+            return kb != null && (kb.leftCtrlKey.isPressed || kb.rightCtrlKey.isPressed);
+#else
+            return Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+#endif
+        }
+
+        /// <summary>This frame's scroll-wheel delta, read the same dual-backend way `GridInput`
+        /// reads it. Legacy `Input` is switched OFF in Player Settings for this project, so a bare
+        /// `Input.mouseScrollDelta` here throws InvalidOperationException every frame.</summary>
+        private static bool EscapePressed()
+        {
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
+            var kb = UnityEngine.InputSystem.Keyboard.current;
+            return kb != null && kb.escapeKey.wasPressedThisFrame;
+#else
+            return Input.GetKeyDown(KeyCode.Escape);
+#endif
+        }
+
+        private static float ReadScrollY()
+        {
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
+            var mouse = UnityEngine.InputSystem.Mouse.current;
+            return mouse != null ? mouse.scroll.ReadValue().y : 0f;
+#else
+            return Input.mouseScrollDelta.y;
+#endif
+        }
+
         private bool IsHoldingGridBlock()
         {
             if (inventory == null) return false;
@@ -1744,81 +1778,143 @@ namespace VoxelEngine.Player
         private float _nextRoadRefusalReport;
 
         /// <summary>
-        /// LMB held lays a continuous strip of asphalt under the aim, spending hot mix as it goes
-        /// and interpolating the cells a fast sweep skips. RMB lifts one cell back and refunds the
-        /// material while the strip is still in good condition. Returns true when the paver owned
-        /// this frame, so the rest of the tool chain (mining, placing, UI) never runs underneath it.
+        /// The paver owns this frame whenever it is held. Click once to set the start of a road,
+        /// click again to lay the whole corridor the ghost is showing. Ctrl+scroll changes the
+        /// width in cells. RMB lifts one cell back, Ctrl+RMB lifts the entire placed section.
+        /// Hold B to pick the surface (asphalt road or stone pathway). Returns true when the paver
+        /// consumed the frame so mining, placing and UI never run underneath it.
         /// </summary>
-        private bool TryTickRoadPaver(RaycastHit hit, bool hasHit, bool mineHeld, bool buildDown)
+        private bool TryTickRoadPaver(RaycastHit hit, bool hasHit, bool mineDown,
+                                      bool buildDown, bool buildHeld, float scrollY)
         {
             var held = inventory.ActiveStack;
             if (held.IsEmpty || !(held.item is RoadPaverTool paver))
             {
-                // Swapping away from the tool mid-drag must end the drag, or the preview quad and
-                // the interpolation anchor survive into whatever the player picks up next.
-                if (_roadPaver != null && _roadPaver.IsDragging) _roadPaver.EndDrag();
+                // Swapping away mid-plan must drop the plan, or the ghost quad survives into
+                // whatever the player picks up next.
+                if (_roadPaver != null && _roadPaver.IsPlanning) _roadPaver.CancelPlan();
                 return false;
             }
 
-            if (buildDown && Time.time >= _nextHit)
+            _roadPaver ??= new VoxelEngine.Building.RoadPaver();
+
+            // Choosing a surface owns the mouse: the click that releases the wheel must not land
+            // as the first click of a plan underneath it.
+            if (VoxelEngine.Simulation.RoadSurfaceWheel.IsAnyOpen) return true;
+
+            var kind = VoxelEngine.Building.RoadSurfaceSelection.Kind;
+            var block = kind == VoxelEngine.Building.RoadSurfaceKind.Pathway ? paver.pathBlock : paver.roadBlock;
+            var material = kind == VoxelEngine.Building.RoadSurfaceKind.Pathway ? paver.pathMaterial : paver.pavingMaterial;
+            int pricePerCell = kind == VoxelEngine.Building.RoadSurfaceKind.Pathway ? paver.pathMaterialPerCell : paver.materialPerCell;
+
+            // ── width: Ctrl + scroll, in cells of whatever is being paved ──
+            if (Mathf.Abs(scrollY) > 0.01f && IsCtrlHeld())
             {
-                _roadPaver ??= new VoxelEngine.Building.RoadPaver();
-                _roadPaver.EndDrag();
-                if (hasHit && _roadPaver.TryScrape(hit, paver, inventory))
-                {
-                    GetComponent<VoxelEngine.Player.HeldToolView>()?.DoSwing();
-                    ConsumeDurability(held);
-                }
-                _nextHit = Time.time + 1f / Mathf.Max(0.1f, paver.fireRate);
+                int before = _roadPaver.Width;
+                _roadPaver.SetWidth(before + (scrollY > 0f ? 1 : -1));
+                if (_roadPaver.Width != before)
+                    VoxelEngine.UI.BuildFeedbackHud.Show((block != null ? block.displayName : "Road") + " width",
+                        _roadPaver.Width + (_roadPaver.Width == 1 ? " cell" : " cells"),
+                        block != null ? block.icon : null, Color.white);
                 return true;
             }
 
-            if (mineHeld)
+            // ── removal: RMB one cell, Ctrl+RMB the whole section ──
+            if (buildHeld || buildDown)
             {
-                _roadPaver ??= new VoxelEngine.Building.RoadPaver();
-                if (!_roadPaver.IsDragging) _roadPaver.BeginDrag();
+                if (_roadPaver.IsPlanning) _roadPaver.CancelPlan();
+                bool ctrl = IsCtrlHeld();
+                if (!buildDown && !ctrl && Time.time < _nextHit) return true;
 
-                var block = paver.roadBlock;
-                if (block == null || block.placedPrefab == null)
+                if (hasHit)
                 {
-                    VoxelEngine.UI.BuildFeedbackHud.Show("Road paver", "No road block configured", null, Color.yellow);
-                    return true;
+                    bool did = ctrl
+                        ? _roadPaver.RemoveRun(hit, paver, inventory, out _)
+                        : _roadPaver.TryScrape(hit, paver, inventory);
+                    if (did)
+                    {
+                        GetComponent<VoxelEngine.Player.HeldToolView>()?.DoSwing();
+                        ConsumeDurability(held);
+                        _nextHit = Time.time + 1f / Mathf.Max(0.1f, paver.fireRate);
+                    }
                 }
+                return true;
+            }
 
-                _roadPaver.TickDrag(hit, hasHit, block, paver, inventory, out int laid, out string feedback);
+            if (block == null || block.placedPrefab == null)
+            {
+                VoxelEngine.UI.BuildFeedbackHud.Show("Road paver",
+                    kind == VoxelEngine.Building.RoadSurfaceKind.Pathway
+                        ? "No pathway block configured" : "No road block configured",
+                    null, Color.yellow);
+                return true;
+            }
 
-                // No per-frame success toast: a drag lays cells every frame for as long as LMB is
-                // held, so a toast here would repaint the HUD continuously. The release branch below
-                // reports the whole gesture once. Only refusals speak while the drag is running.
+            // ── the plan: a polyline. First click starts it, every next click is a corner, the
+            //    interact key lays the whole thing, Esc throws it away. ──
+            if (EscapePressed() && _roadPaver.IsPlanning)
+            {
+                _roadPaver.CancelPlan();
+                VoxelEngine.UI.BuildFeedbackHud.Show("Road plan", "Cancelled", null, Color.white);
+                return true;
+            }
+
+            if (mineDown)
+            {
+                if (!_roadPaver.IsPlanning)
+                {
+                    if (_roadPaver.BeginPlan(hit, hasHit, block, out string why))
+                        VoxelEngine.UI.BuildFeedbackHud.Show("Road plan started",
+                            "Click each corner · [" + GameSettings.GetKey(InputAction.Interact) + "] lay road · [Esc] cancel",
+                            block.icon, Color.white);
+                    else
+                        ReportRoadRefusal(why);
+                }
+                else if (!_roadPaver.AddWaypoint(hit, hasHit, block, out string cornerWhy))
+                {
+                    ReportRoadRefusal(cornerWhy);
+                }
+                return true;
+            }
+
+            if (GameSettings.WasPressed(InputAction.Interact) && _roadPaver.IsPlanning)
+            {
+                _roadPaver.CommitPlan(block, paver, inventory, material, pricePerCell,
+                                      out int laid, out string refusal);
                 if (laid > 0)
                 {
                     GetComponent<VoxelEngine.Player.HeldToolView>()?.DoSwing();
                     ConsumeDurability(held);
                     _nextHit = Time.time + 1f / Mathf.Max(0.1f, paver.fireRate);
                 }
-
-                // Report a refusal, but throttled on its own clock: dragging along a shoreline
-                // would otherwise repaint the HUD every frame with the same sentence, and sharing
-                // `_nextHit` with the durability rate would let the two silence each other.
-                if (feedback != null && Time.time >= _nextRoadRefusalReport)
-                {
-                    VoxelEngine.UI.BuildFeedbackHud.Show("Road paver", feedback, paver.icon, Color.yellow);
-                    _nextRoadRefusalReport = Time.time + 0.35f;
-                }
+                else if (refusal != null) ReportRoadRefusal(refusal);
                 return true;
             }
 
-            if (_roadPaver != null && _roadPaver.IsDragging)
+            if (_roadPaver.IsPlanning)
             {
-                int laid = _roadPaver.LaidThisDrag;
-                _roadPaver.EndDrag();
-                if (laid > 0)
-                    VoxelEngine.UI.BuildFeedbackHud.Show("Road paved",
-                        $"{laid} cell{(laid == 1 ? "" : "s")} laid",
-                        paver.icon, new Color(0.42f, 0.85f, 0.55f));
+                // Affordability is judged on what the CLICKED route costs; the ghost additionally
+                // goes red when the live preview leg or the clicked route is unpavable.
+                _roadPaver.UpdatePlan(hit, hasHit, block,
+                    material != null && _roadPaver.HasCommitWork
+                    && inventory.CountOf(material) >= _roadPaver.CommitCost);
+                if (_roadPaver.Refusal != null) ReportRoadRefusal(_roadPaver.Refusal);
+                return true;
             }
+
             return false;
         }
+
+        /// <summary>Refusals speak on their own throttle: while the ghost is red the reason would
+        /// otherwise repaint the HUD every single frame.</summary>
+        private void ReportRoadRefusal(string reason)
+        {
+            if (string.IsNullOrEmpty(reason)) return;
+            if (Time.time < _nextRoadRefusalReport) return;
+            _nextRoadRefusalReport = Time.time + 0.8f;
+            VoxelEngine.UI.BuildFeedbackHud.Show("Cannot pave here", reason, null, Color.yellow);
+        }
+
 
         private void ConsumeDurability(ItemStack stack)
         {

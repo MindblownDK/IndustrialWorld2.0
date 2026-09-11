@@ -1,25 +1,25 @@
 // Assets/Scripts/VoxelEngine/Building/RoadPaver.cs
 //
-// THE PAVE GESTURE — drag-to-lay, and the placement maths both the gesture and the ordinary
+// THE PAVE GESTURE — point to point, and the placement maths both the gesture and the ordinary
 // block-by-block path share.
 //
 // Two jobs, one file, because they must never disagree:
 //
 //   1. STATIC PLACEMENT. Where a road cell goes, whether it may go there, and what it costs. The
-//      ghost preview, the paver drag and a hand-placed road block all resolve through
-//      `TryComputePose` + `EvaluateCell`, so a cell the preview shows as valid is a cell the
-//      commit accepts — the same "cannot drift apart" discipline the route book and the autopilot
-//      evaluator use.
-//   2. THE DRAG. A held LMB lays a continuous strip. The aim moves faster than one cell per frame
-//      when the player sweeps the mouse, so the paver interpolates the skipped cells instead of
-//      laying dots. The interpolation is bounded (`maxCellsPerStep`) so a flick across the horizon
-//      cannot lay a kilometre of road in one frame or spend the whole inventory doing it.
+//      ghost, the planner and a hand-placed road block all resolve through `TryComputePose` +
+//      `EvaluateCell`, so a cell the ghost shows as valid is a cell the commit accepts — the same
+//      "cannot drift apart" discipline the route book and the autopilot evaluator use.
+//   2. THE PLAN. One click sets the start, the next lays the corridor between. Width is Ctrl+scroll
+//      and counts cells of the selected surface, RMB lifts one cell and Ctrl+RMB lifts the whole
+//      run. See THE PLAN below for why this replaced a held drag.
 //
 // LATTICE. A run must be continuous, and on a spherical world rounding world axes drifts between
 // neighbours (the same drift `BuildSystem` warns about for machines). So a new cell anchors to an
 // existing road when one is in reach: it inherits that road's frame and quantises its offset in
-// THAT frame, which is what makes a dragged strip line up cell for cell around a planet. With no
-// neighbour to anchor to, the first cell quantises on the local tangent frame.
+// THAT frame, which is what makes a planned corridor line up cell for cell around a planet — and
+// what makes starting a plan ON an existing road extend it instead of laying a parallel strip a few
+// centimetres off. With no neighbour to anchor to, the first cell quantises on the local tangent
+// frame, and the whole corridor runs in that one frame so it cannot fan out over its length.
 //
 // HEIGHT is never inherited — it is re-probed from the ground under the resolved lateral position,
 // ignoring road colliders. That is what lets a strip climb a terrace as a ramp while staying
@@ -37,7 +37,7 @@ namespace VoxelEngine.Building
     public sealed class RoadPaver
     {
         // ════════════════════════════════════════════════════════════════
-        //  STATIC PLACEMENT — shared by the preview, the drag and the hand path
+        //  STATIC PLACEMENT — shared by the ghost, the planner and the hand path
         // ════════════════════════════════════════════════════════════════
 
         /// <summary>True when a block item lays asphalt. Used by `BuildSystem` to route a held road
@@ -107,7 +107,19 @@ namespace VoxelEngine.Building
         /// <summary>Grade and volume verdict for a resolved cell, plus what it costs.</summary>
         public static AsphaltRoad.GradeBand EvaluateCell(BlockItem block, Vector3 position, Quaternion rotation,
                                                          out int materialCost)
+            => JudgeCell(block, position, rotation, out materialCost, out _);
+
+        /// <summary>
+        /// The verdict every consumer shares, plus whether laying this cell shaves ground first.
+        /// Ground that pokes up through the cell plane but stays inside the carve limit is NOT a
+        /// refusal: the road trims it flush and prices what is left. Deeper than the limit still
+        /// refuses, because paving shaves a bump — it does not dig a tunnel. This is what stops a
+        /// one-voxel step in otherwise open ground from reading as "cannot pave inside a wall".
+        /// </summary>
+        public static AsphaltRoad.GradeBand JudgeCell(BlockItem block, Vector3 position, Quaternion rotation,
+                                                      out int materialCost, out bool needsCarve)
         {
+            needsCarve = false;
             materialCost = 1;
             var template = block != null && block.placedPrefab != null
                 ? block.placedPrefab.GetComponentInChildren<AsphaltRoad>(true)
@@ -118,9 +130,115 @@ namespace VoxelEngine.Building
             float maxRough    = template != null ? template.maxGradeRoughness   : 0.50f;
 
             var band = AsphaltRoad.EvaluateSite(position, rotation, cell, maxSmooth, maxRough, out _);
+            if (band == AsphaltRoad.GradeBand.Buried || band == AsphaltRoad.GradeBand.TooRough)
+            {
+                float above = GroundAbovePlane(position, rotation, cell);
+                if (above > CARVE_EPSILON && above <= CARVE_LIMIT)
+                {
+                    // Once the bump is shaved, everything above the plane IS the plane, so the slope
+                    // left to judge is only how far the remaining ground falls below it.
+                    float lowest = LowestGroundBelow(position, rotation, cell);
+                    float slope = -lowest / Mathf.Max(0.25f, cell);
+                    if (slope <= maxRough)
+                    {
+                        needsCarve = true;
+                        band = slope > maxSmooth ? AsphaltRoad.GradeBand.Rough : AsphaltRoad.GradeBand.Smooth;
+                    }
+                }
+            }
+
             if (band == AsphaltRoad.GradeBand.Rough) materialCost = 2;
             else if (band != AsphaltRoad.GradeBand.Smooth) materialCost = 0;
             return band;
+        }
+
+        // ════════════════════════════════════════════════════════════════
+        //  CARVE — shaving a bump so the slab sits flush
+        //
+        //  A road drapes the terrain rather than flattening it, and that stays true: carving only
+        //  trims ground that pokes UP THROUGH the cell plane, never digs below it, and never more
+        //  than about a voxel of height. It is the difference between a slab that bulges over a
+        //  stray step or refuses outright, and one that sits into the ground like it was laid there.
+        // ════════════════════════════════════════════════════════════════
+
+        /// <summary>Tallest ground the road will shave to sit flush, in metres. Roughly one voxel:
+        /// enough that a stray step never refuses a line or bulges the slab, not enough that paving
+        /// becomes free terraforming.</summary>
+        public const float CARVE_LIMIT = 1.25f;
+        private const float CARVE_EPSILON = 0.12f;
+
+        /// <summary>Height above the cell plane of the tallest ground inside the footprint, 0 when
+        /// nothing pokes through.</summary>
+        private static float GroundAbovePlane(Vector3 position, Quaternion rotation, float cell)
+        {
+            Vector3 up = rotation * Vector3.up;
+            Vector3 right = rotation * Vector3.right;
+            Vector3 forward = rotation * Vector3.forward;
+            float step = cell / 3f;
+            float above = 0f;
+            for (int gx = -1; gx <= 1; gx++)
+            for (int gz = -1; gz <= 1; gz++)
+            {
+                Vector3 lateral = position + right * (gx * step) + forward * (gz * step);
+                if (!AsphaltRoad.ProbeGround(lateral, up, out float h)) continue;
+                if (h > above) above = h;
+            }
+            return above;
+        }
+
+        /// <summary>The deepest the remaining ground falls below the cell plane, as a negative
+        /// number (0 when the footprint is level with the plane).</summary>
+        private static float LowestGroundBelow(Vector3 position, Quaternion rotation, float cell)
+        {
+            Vector3 up = rotation * Vector3.up;
+            Vector3 right = rotation * Vector3.right;
+            Vector3 forward = rotation * Vector3.forward;
+            float step = cell / 3f;
+            float lowest = 0f;
+            for (int gx = -1; gx <= 1; gx++)
+            for (int gz = -1; gz <= 1; gz++)
+            {
+                Vector3 lateral = position + right * (gx * step) + forward * (gz * step);
+                if (!AsphaltRoad.ProbeGround(lateral, up, out float h)) continue;
+                float clamped = Mathf.Min(h, 0f);
+                if (clamped < lowest) lowest = clamped;
+            }
+            return lowest;
+        }
+
+        /// <summary>Empties every solid voxel poking up through the cell plane, up to
+        /// <see cref="CARVE_LIMIT"/>. Columns deeper than the limit are left alone — the verdict has
+        /// already refused those.</summary>
+        public static void CarveCell(Vector3 position, Quaternion rotation, float cell)
+        {
+            var world = VoxelEngine.Core.ActiveWorld.Current;
+            if (world == null) return;
+            Vector3 up = rotation * Vector3.up;
+            Vector3 right = rotation * Vector3.right;
+            Vector3 forward = rotation * Vector3.forward;
+            float step = cell / 3f;
+
+            for (int gx = -1; gx <= 1; gx++)
+            for (int gz = -1; gz <= 1; gz++)
+            {
+                Vector3 lateral = position + right * (gx * step) + forward * (gz * step);
+                if (!AsphaltRoad.ProbeGround(lateral, up, out float h)) continue;
+                if (h <= CARVE_EPSILON || h > CARVE_LIMIT) continue;
+
+                Vector3Int bottom = world.WorldToVoxel(lateral + up * 0.05f);
+                Vector3Int top    = world.WorldToVoxel(lateral + up * (h + 0.30f));
+                int x0 = Mathf.Min(bottom.x, top.x), x1 = Mathf.Max(bottom.x, top.x);
+                int y0 = Mathf.Min(bottom.y, top.y), y1 = Mathf.Max(bottom.y, top.y);
+                int z0 = Mathf.Min(bottom.z, top.z), z1 = Mathf.Max(bottom.z, top.z);
+                for (int x = x0; x <= x1; x++)
+                for (int y = y0; y <= y1; y++)
+                for (int z = z0; z <= z1; z++)
+                {
+                    var v = new Vector3Int(x, y, z);
+                    if (world.GetVoxelWorld(v).IsSolid)
+                        world.SetVoxelWorld(v, VoxelEngine.Core.Voxel.Empty, remesh: true);
+                }
+            }
         }
 
         /// <summary>True when a road cell already occupies this slot, so paving again would be a
@@ -146,6 +264,14 @@ namespace VoxelEngine.Building
         {
             if (block == null || block.placedPrefab == null) return null;
 
+            // Shave before placing, so the slab lands on ground it already owns. Doing it here, in
+            // the one choke point both the planner and hand placement go through, is what keeps the
+            // ghost, the verdict and the world from disagreeing about whether a bump exists.
+            var carveTemplate = block.placedPrefab.GetComponentInChildren<AsphaltRoad>(true);
+            float carveCell = carveTemplate != null ? carveTemplate.cellSize : 1f;
+            JudgeCell(block, position, rotation, out _, out bool needsCarve);
+            if (needsCarve) CarveCell(position, rotation, carveCell);
+
             var go = Object.Instantiate(block.placedPrefab, position, rotation);
             go.name = block.displayName;
 
@@ -169,212 +295,499 @@ namespace VoxelEngine.Building
             return road;
         }
 
-        // ════════════════════════════════════════════════════════════════
-        //  THE DRAG — instance state owned by PlayerInteractionTool
-        // ════════════════════════════════════════════════════════════════
+        // ════════════════════════════════════════════════════════
+        //  THE PLAN — point to point, owned by PlayerInteractionTool
+        //
+        //  This replaces the old hold-to-drag gesture. A drag could only ever lay one cell wide,
+        //  only where the mouse happened to sweep, and it spent material before the player could
+        //  see what the whole strip would cost. A road is a DESIGN, not a scribble: click a start,
+        //  click an end, and the planner fills the corridor between them at the chosen width,
+        //  dropping every cell onto the ground. The ghost shows the entire committed shape before
+        //  a single unit is spent, red when the ground refuses part of the line or the player
+        //  cannot afford it. Starting a plan on an existing road extends that road in its own
+        //  frame, which is what makes connect-and-extend fall out of the gesture for free.
+        // ════════════════════════════════════════════════════════
 
-        private bool _dragging;
-        private readonly List<Vector3> _targetScratch = new List<Vector3>(16);
-        private readonly List<Quaternion> _rotationScratch = new List<Quaternion>(16);
-        private Vector3 _lastCellPosition;
-        private Quaternion _lastCellRotation;
-        private bool _hasLastCell;
-        private GameObject _preview;
-        private Material _previewMaterial;
-        private int _laidThisDrag;
+        public const int MIN_WIDTH = 1;
+        public const int MAX_WIDTH = 3;
 
-        public bool IsDragging => _dragging;
-        public int LaidThisDrag => _laidThisDrag;
+        private bool _planning;
+        /// <summary>The clicked points of the open plan. A road is a polyline: the corridor follows
+        /// every waypoint, so bends are placed, not approximated.</summary>
+        private readonly List<Vector3> _wpPos = new List<Vector3>(8);
+        private readonly List<Quaternion> _wpRot = new List<Quaternion>(8);
+        private readonly HashSet<long> _planSeen = new HashSet<long>(256);
+        private readonly List<Vector3> _planInR  = new List<Vector3>(128);
+        private readonly List<Vector3> _planOutR = new List<Vector3>(128);
+        private readonly List<float> _planInM  = new List<float>(128);
+        private readonly List<float> _planOutM = new List<float>(128);
+        /// <summary>Coarse pocket keys already filled this plan: the same wedge can be discovered
+        /// from two different frames at a crossing, and both must not lay a cell into it.</summary>
+        private readonly HashSet<long> _wedgeSeen = new HashSet<long>(64);
+        private int _width = 1;
 
-        /// <summary>Begins a drag. Resets the interpolation anchor so the first cell of a new
-        /// gesture is never interpolated from where the last gesture ended.</summary>
-        public void BeginDrag()
+        private readonly List<Vector3> _planPos = new List<Vector3>(128);
+        private readonly List<Quaternion> _planRot = new List<Quaternion>(128);
+        /// <summary>false where the cell lands on pavement that already exists — it is not placed
+        /// again and not charged again, but its run is resurfaced instead.</summary>
+        private readonly List<bool> _planFresh = new List<bool>(128);
+        private readonly List<int> _planCost = new List<int>(128);
+        private readonly List<RoadRun> _planTouchedRuns = new List<RoadRun>(8);
+        private string _refusal;
+        private int _totalCost;
+
+        public bool IsPlanning => _planning;
+        public int Width => _width;
+        public int PlannedCells => _planPos.Count;
+        public string Refusal => _refusal;
+        public int TotalCost => _totalCost;
+        /// <summary>True when the line crosses pavement that already exists. A plan that lays
+        /// nothing new is still work — it resurfaces the runs it crossed — so it must not read
+        /// as a refusal in the ghost.</summary>
+        public bool HasTouchedRuns => _planTouchedRuns.Count > 0;
+
+        private int _commitCount;
+        private int _commitCost;
+        private int _commitRunCount;
+        private string _commitRefusal;
+
+        /// <summary>What laying the CLICKED polyline right now would spend. The live leg to the aim
+        /// is excluded: it is preview, not commitment.</summary>
+        public int CommitCost => _commitCost;
+        public string CommitRefusal => _commitRefusal;
+        public bool HasCommitWork => _commitCost > 0 || _commitRunCount > 0;
+
+        public void SetWidth(int width) => _width = Mathf.Clamp(width, MIN_WIDTH, MAX_WIDTH);
+
+        /// <summary>First click. Snaps to an existing road when one is in reach, so the plan starts
+        /// in that road's frame instead of on a slightly different heading from the aim.</summary>
+        public bool BeginPlan(RaycastHit hit, bool hasHit, BlockItem block, out string refusal)
         {
-            _dragging = true;
-            _hasLastCell = false;
-            _laidThisDrag = 0;
+            refusal = null;
+            _planning = false;
+            _wpPos.Clear(); _wpRot.Clear();
+            if (!hasHit || block == null || block.placedPrefab == null)
+            {
+                refusal = "Nothing to pave on";
+                return false;
+            }
+            if (!TryComputePose(hit, block, out var p, out var r))
+            {
+                refusal = "Nothing to pave on";
+                return false;
+            }
+            _wpPos.Add(p); _wpRot.Add(r);
+            _planning = true;
+            return true;
         }
 
-        public void EndDrag()
+        /// <summary>Adds a corner to the open plan. A road is a polyline, not a single span: every
+        /// click after the first is a waypoint, and the corridor follows the waypoints instead of
+        /// ignoring everything between the two ends.</summary>
+        public bool AddWaypoint(RaycastHit hit, bool hasHit, BlockItem block, out string refusal)
         {
-            _dragging = false;
-            _hasLastCell = false;
-            HidePreview();
+            refusal = null;
+            if (!_planning || !hasHit || block == null || block.placedPrefab == null)
+            {
+                refusal = "Nothing to pave on";
+                return false;
+            }
+            if (!TryComputePose(hit, block, out var p, out var r))
+            {
+                refusal = "Nothing to pave on";
+                return false;
+            }
+            _wpPos.Add(p); _wpRot.Add(r);
+            return true;
         }
 
-        /// <summary>
-        /// One frame of the drag. Lays every cell between the previous cell and the current aim,
-        /// spending material as it goes and stopping the moment the player cannot afford the next
-        /// cell — a drag that runs out of asphalt ends cleanly rather than half-laying a cell.
+        public int WaypointCount => _wpPos.Count;
+
+        /// <summary>Recomputes the whole corridor: every committed waypoint pair, then a live segment
+        /// out to the current aim so the ghost always shows exactly what laying now would build.
         /// </summary>
-        public void TickDrag(RaycastHit hit, bool hasHit, BlockItem block, RoadPaverTool tool,
-                             Inventory inventory, out int laid, out string feedback)
+        public void UpdatePlan(RaycastHit hit, bool hasHit, BlockItem block, bool affordable)
+        {
+            _planPos.Clear(); _planRot.Clear(); _planFresh.Clear(); _planCost.Clear();
+            _planInR.Clear(); _planOutR.Clear(); _planInM.Clear(); _planOutM.Clear();
+            _planTouchedRuns.Clear(); _planSeen.Clear(); _wedgeSeen.Clear();
+            _refusal = null; _totalCost = 0;
+            _commitCount = 0; _commitCost = 0; _commitRunCount = 0; _commitRefusal = null;
+            if (!_planning || block == null || _wpPos.Count == 0) return;
+
+            float cell = CellOf(block);
+
+            // Legs CHAIN: a leg lays whole cells, so its far face lands up to half a cell short of
+            // (or past) the clicked waypoint. Starting the next leg from the raw waypoint instead
+            // of from that face is what left triangular holes at every bend. The cursor is the
+            // road, the waypoints are just where the player asked it to turn.
+            Vector3 cursor = _wpPos[0];
+            for (int i = 0; i + 1 < _wpPos.Count; i++)
+            {
+                Vector3 segUp = _wpRot[i] * Vector3.up;
+                Vector3 prevDir = i > 0 ? SegDir(_wpPos[i - 1], _wpPos[i], segUp) : Vector3.zero;
+                Vector3 nextDir = i + 2 < _wpPos.Count ? SegDir(_wpPos[i + 1], _wpPos[i + 2], segUp) : Vector3.zero;
+                cursor = BuildSegment(cursor, _wpRot[i], _wpPos[i + 1], block, cell, prevDir, nextDir);
+            }
+            FillCorners(block, cell);
+            FillWedges(block, cell);
+
+            // Snapshot what the clicked polyline alone commits. The live leg out to the aim is a
+            // PREVIEW: it leads the cursor, and if the aim happens to be at a wall or the sky its
+            // refusal must tint the ghost red — but it must never stop the player laying the
+            // route they actually clicked. That mismatch was exactly "I cannot finish the road".
+            _commitCount = _planPos.Count;
+            _commitCost = _totalCost;
+            _commitRefusal = _refusal;
+            _commitRunCount = _planTouchedRuns.Count;
+
+            Vector3 endPos = _wpPos[_wpPos.Count - 1];
+            if (hasHit && TryComputePose(hit, block, out var ep, out var er)) endPos = ep;
+            Vector3 liveUp = _wpRot[_wpPos.Count - 1] * Vector3.up;
+            Vector3 livePrev = _wpPos.Count > 1
+                ? SegDir(_wpPos[_wpPos.Count - 2], _wpPos[_wpPos.Count - 1], liveUp) : Vector3.zero;
+            cursor = BuildSegment(cursor, _wpRot[_wpPos.Count - 1], endPos, block, cell,
+                                  livePrev, Vector3.zero);
+            // No second wedge pass for the live leg: wedges it would discover are cells the commit
+            // will not lay, and the ghost must not promise pavement the click does not produce.
+
+            ShowGhost(cell, _refusal == null && affordable && (_commitCost > 0 || _commitRunCount > 0));
+        }
+
+        /// <summary>Second click. Charges once, places every fresh cell and resurfaces the runs the
+        /// line crossed. Refuses the WHOLE line, not just the bad cell, when the ground will not
+        /// take it: a road with a gap in it is worse than no road.</summary>
+        public bool CommitPlan(BlockItem block, RoadPaverTool tool, Inventory inventory,
+                               ItemDefinition material, int pricePerCell,
+                               out int laid, out string refusal)
         {
             laid = 0;
-            feedback = null;
-            if (!_dragging || !hasHit || block == null || tool == null || inventory == null) { HidePreview(); return; }
+            refusal = _commitRefusal;
+            if (!_planning) return false;
+            if (_commitRefusal != null) { CancelPlan(); return false; }
+            if (material == null) { CancelPlan(); refusal = "No paving material configured"; return false; }
+            if (_commitCost <= 0 && _commitRunCount == 0)
+            { CancelPlan(); refusal = "That line is already paved"; return false; }
+            if (inventory.CountOf(material) < _commitCost)
+            { CancelPlan(); refusal = "Needs " + _commitCost + " " + material.displayName; return false; }
 
-            if (!TryComputePose(hit, block, out Vector3 position, out Quaternion rotation))
+            int repairUnits = 0;
+            for (int i = 0; i < _commitRunCount; i++)
             {
-                HidePreview();
-                feedback = "Nothing to lay on";
-                return;
+                var run = _planTouchedRuns[i];
+                if (run == null || run.Wear01 <= 0f) continue;
+                repairUnits += Mathf.CeilToInt(run.Wear01 * run.PavedArea * tool.repairMaterialPerSquareMetre);
+            }
+            if (repairUnits > 0 && inventory.CountOf(material) < _totalCost + repairUnits)
+            {
+                CancelPlan();
+                refusal = "Needs " + (_totalCost + repairUnits) + " " + material.displayName;
+                return false;
             }
 
-            var template = block.placedPrefab.GetComponentInChildren<AsphaltRoad>(true);
-            float cell = template != null ? template.cellSize : 1f;
-
-            // Walk from the last laid cell to this one so a fast sweep stays a continuous strip.
-            // Both lists are reused: a drag runs every frame for as long as LMB is held.
-            var targets = _targetScratch;
-            var rotations = _rotationScratch;
-            targets.Clear();
-            rotations.Clear();
-            if (_hasLastCell)
+            inventory.container.Remove(material, _commitCost + repairUnits);
+            for (int i = 0; i < _commitCount; i++)
             {
-                InterpolateCells(_lastCellPosition, _lastCellRotation, position, rotation, cell,
-                                 tool.maxCellsPerStep, targets, rotations);
-            }
-            else
-            {
-                targets.Add(position);
-                rotations.Add(rotation);
-            }
-
-            for (int i = 0; i < targets.Count; i++)
-            {
-                if (!TryLayOne(targets[i], rotations[i], block, tool, inventory, cell, out string reason))
+                if (!_planFresh[i]) continue;
+                var road = PlaceCell(block, _planPos[i], _planRot[i]);
+                if (road != null)
                 {
-                    feedback = reason;
-                    break;
+                    road.curveInRight  = Quaternion.Inverse(_planRot[i]) * _planInR[i];
+                    road.curveOutRight = Quaternion.Inverse(_planRot[i]) * _planOutR[i];
+                    road.curveInMitre  = _planInM[i];
+                    road.curveOutMitre = _planOutM[i];
+                    road.RefreshAfterPlacement();
+
+                    // A junction box stays SQUARE, like the reference intersections: three or more
+                    // connected edges means this cell is a crossing, and a crossing mitred to one
+                    // of its arms would pinch the others.
+                    var e = road.Edges;
+                    int conn = ((e & RoadEdgeMask.North) != 0 ? 1 : 0) + ((e & RoadEdgeMask.East) != 0 ? 1 : 0)
+                             + ((e & RoadEdgeMask.South) != 0 ? 1 : 0) + ((e & RoadEdgeMask.West) != 0 ? 1 : 0);
+                    if (conn >= 3)
+                    {
+                        road.curveInRight = Vector3.zero; road.curveOutRight = Vector3.zero;
+                        road.curveInMitre = 1f; road.curveOutMitre = 1f;
+                        road.RefreshAfterPlacement();
+                    }
                 }
                 laid++;
-                _lastCellPosition = targets[i];
-                _lastCellRotation = rotations[i];
-                _hasLastCell = true;
             }
+            for (int i = 0; i < _commitRunCount; i++)
+                if (_planTouchedRuns[i] != null && _planTouchedRuns[i].Wear01 > 0f)
+                    _planTouchedRuns[i].Repair();
 
-            var previewBand = EvaluateCell(block, position, rotation, out _);
-            ShowPreview(position, rotation, cell,
-                        previewBand == AsphaltRoad.GradeBand.Smooth || previewBand == AsphaltRoad.GradeBand.Rough);
-            if (laid > 0) feedback = null;
+            int spent = _commitCost + repairUnits;
+            CancelPlan();
+            VoxelEngine.UI.BuildFeedbackHud.Show(block.displayName + " placed",
+                laid + " cell(s) · " + spent + " " + material.displayName
+                + (repairUnits > 0 ? " · includes resurfacing" : ""),
+                block.icon, new Color(0.55f, 0.80f, 0.95f));
+            return laid > 0;
         }
 
-        private bool TryLayOne(Vector3 position, Quaternion rotation, BlockItem block, RoadPaverTool tool,
-                               Inventory inventory, float cell, out string reason)
+        public void CancelPlan()
         {
-            reason = null;
-            if (IsCellOccupied(position, cell))
-            {
-                // Dragging along an existing strip is not an error: it is the normal case when the
-                // player widens or repairs. Say nothing and let the repair path handle it.
-                TryRepair(position, cell, tool, inventory, out reason);
-                return string.IsNullOrEmpty(reason);
-            }
-
-            var band = EvaluateCell(block, position, rotation, out int cost);
-            if (band != AsphaltRoad.GradeBand.Smooth && band != AsphaltRoad.GradeBand.Rough)
-            {
-                reason = AsphaltRoad.DescribeSite(band);
-                return false;
-            }
-
-            var material = tool.pavingMaterial;
-            if (material == null)
-            {
-                reason = "Paver has no material configured";
-                return false;
-            }
-
-            // The authored per-cell price times the grade surcharge: rough ground costs double,
-            // which is the grading rule the design asks for and the reason a player levels a strip.
-            int price = Mathf.Max(1, tool.materialPerCell) * Mathf.Max(1, cost);
-            if (inventory.CountOf(material) < price)
-            {
-                reason = $"Out of {material.displayName}";
-                return false;
-            }
-
-            inventory.container.Remove(material, price);
-            PlaceCell(block, position, rotation);
-            _laidThisDrag++;
-            return true;
+            _planning = false;
+            _wpPos.Clear(); _wpRot.Clear();
+            _planPos.Clear(); _planRot.Clear(); _planFresh.Clear(); _planCost.Clear();
+            _planInR.Clear(); _planOutR.Clear(); _planInM.Clear(); _planOutM.Clear();
+            _planTouchedRuns.Clear(); _planSeen.Clear(); _wedgeSeen.Clear();
+            _refusal = null; _totalCost = 0;
+            _commitCount = 0; _commitCost = 0; _commitRunCount = 0; _commitRefusal = null;
+            HideGhost();
         }
 
-        /// <summary>
-        /// Tops a worn cell's run back up. Priced by how worn the run is, so a lightly used strip is
-        /// cheap to keep and a broken one costs a proper repair — the upkeep economy the design asks
-        /// for, with no separate repair item to invent.
-        /// </summary>
-        private bool TryRepair(Vector3 position, float cell, RoadPaverTool tool,
-                               Inventory inventory, out string reason)
+        /// <summary>One straight leg of the polyline: forward from the leg's start along its own
+        /// frame, fanned out sideways by the chosen width. Width means "cells of whatever I am
+        /// paving", so 3 wide on road is 12 m of carriageway and 3 wide on pathway is 3 m of cobbles.
+        /// Cells already in the plan from an earlier leg are skipped, which is what lets two legs
+        /// share their corner cell instead of paying for it twice.</summary>
+        private Vector3 BuildSegment(Vector3 startPos, Quaternion startRot, Vector3 endPos,
+                                     BlockItem block, float cell, Vector3 prevDir, Vector3 nextDir)
         {
-            reason = null;
-            RoadSurfaceUtility.QueryAt(position, _anchorScratch);
-            AsphaltRoad target = null;
-            float bestSqr = cell * cell * 0.5f;
-            for (int i = 0; i < _anchorScratch.Count; i++)
+            Vector3 up = startRot * Vector3.up;
+            Vector3 flat = Vector3.ProjectOnPlane(endPos - startPos, up);
+            float length = flat.magnitude;
+
+            Vector3 fwd = startRot * Vector3.forward;
+            if (length > cell * 0.35f) fwd = Vector3.ProjectOnPlane(flat.normalized, up).normalized;
+            if (fwd.sqrMagnitude < 0.01f) fwd = startRot * Vector3.forward;
+            Vector3 right = Vector3.Cross(fwd, up);
+            if (right.sqrMagnitude < 0.01f) right = startRot * Vector3.right;
+            right = Vector3.ProjectOnPlane(right, up).normalized;
+            Quaternion rot = Quaternion.LookRotation(fwd, up);
+
+            int steps = Mathf.Max(1, Mathf.RoundToInt(length / Mathf.Max(0.05f, cell)));
+            float halfSpan = (_width - 1) * 0.5f;
+
+            // Where this leg meets a leg on a different heading, the cross-section is the MITRE
+            // bisector, stretched by 1/cos(half the turn) so the carriageway keeps its true width
+            // through the joint. That is what makes consecutive cells share an exact edge and tile
+            // into one arc; everywhere else the cross-section is just the leg's own right vector
+            // and the cell is a plain rectangle.
+            Mitre(prevDir, fwd, up, out Vector3 jointInR, out float jointInM);
+            Mitre(fwd, nextDir, up, out Vector3 jointOutR, out float jointOutM);
+            bool hasIn = prevDir.sqrMagnitude > 0.5f && Vector3.Dot(prevDir.normalized, fwd) < 0.98f;
+            bool hasOut = nextDir.sqrMagnitude > 0.5f && Vector3.Dot(fwd, nextDir.normalized) < 0.98f;
+
+            for (int i = 0; i < steps; i++)
             {
-                var road = _anchorScratch[i];
-                if (road == null) continue;
-                float sqr = (road.transform.position - position).sqrMagnitude;
-                if (sqr < bestSqr) { bestSqr = sqr; target = road; }
+                Vector3 inR = (i == 0 && hasIn) ? jointInR : right;
+                float inM = (i == 0 && hasIn) ? jointInM : 1f;
+                Vector3 outR = (i == steps - 1 && hasOut) ? jointOutR : right;
+                float outM = (i == steps - 1 && hasOut) ? jointOutM : 1f;
+
+                Vector3 centre = startPos + fwd * ((i + 0.5f) * cell);
+                for (int w = 0; w < _width; w++)
+                {
+                    Vector3 lateral = centre + right * ((w - halfSpan) * cell);
+                    if (!AsphaltRoad.ProbeGround(lateral, up, out float off))
+                    { SetRefusal("No ground under part of the road"); AddCell(lateral, rot, true, 0, inR, outR, inM, outM); continue; }
+                    Vector3 pos = lateral + up * off;
+
+                    if (IsCellOccupied(pos, cell))
+                    {
+                        var existing = RoadAt(pos, cell);
+                        if (existing != null && existing.Run != null && !_planTouchedRuns.Contains(existing.Run))
+                            _planTouchedRuns.Add(existing.Run);
+                        AddCell(pos, rot, false, 0, inR, outR, inM, outM);
+                        continue;
+                    }
+
+                    var band = EvaluateCell(block, pos, rot, out int cost);
+                    if (band != AsphaltRoad.GradeBand.Smooth && band != AsphaltRoad.GradeBand.Rough)
+                    { SetRefusal(AsphaltRoad.DescribeSite(band)); AddCell(pos, rot, true, 0, inR, outR, inM, outM); continue; }
+
+                    _totalCost += cost;
+                    AddCell(pos, rot, true, cost, inR, outR, inM, outM);
+                }
             }
-            if (target == null || target.Run == null) return true;
-            if (target.Run.Wear01 <= 0.001f) return true;   // nothing to do, and nothing to charge
 
-            var material = tool.pavingMaterial;
-            if (material == null) return true;
-
-            // Priced by the run's PAVED AREA, not its cell count, so repairing a carriageway of
-            // wide slabs and a footpath of patch cells both cost about a third of laying them.
-            float area = target.Run.PavedArea;
-            int cost = Mathf.Max(1, Mathf.CeilToInt(
-                target.Run.Wear01 * area * Mathf.Max(0f, tool.repairMaterialPerSquareMetre)));
-            if (inventory.CountOf(material) < cost)
-            {
-                reason = $"Needs {cost} {material.displayName} to repair this run";
-                return false;
-            }
-
-            inventory.container.Remove(material, cost);
-            target.Run.Repair();
-            VoxelEngine.UI.BuildFeedbackHud.Show("Road repaired",
-                $"{area:0} m² · −{cost} {material.displayName}", null, new Color(0.42f, 0.85f, 0.55f));
-            return true;
+            return startPos + fwd * (steps * cell);
         }
 
-        /// <summary>Walks the tangent-plane line between two cells, emitting the intermediate cells
-        /// a fast drag skipped. Bounded so one frame can never lay more than `maxCells`.</summary>
-        private static void InterpolateCells(Vector3 from, Quaternion fromRot, Vector3 to, Quaternion toRot,
-                                             float cell, int maxCells, List<Vector3> positions,
-                                             List<Quaternion> rotations)
+        private static Vector3 SegDir(Vector3 a, Vector3 b, Vector3 up)
         {
-            positions.Clear();
-            rotations.Clear();
+            Vector3 d = Vector3.ProjectOnPlane(b - a, up);
+            return d.sqrMagnitude > 1e-6f ? d.normalized : Vector3.zero;
+        }
 
-            Vector3 delta = to - from;
-            int steps = Mathf.RoundToInt(delta.magnitude / Mathf.Max(0.05f, cell));
-            steps = Mathf.Clamp(steps, 1, Mathf.Max(1, maxCells));
-            if (steps <= 1)
+        /// <summary>The mitred cross-section between two leg directions: the bisector, with the
+        /// stretch a mitre joint needs to keep the carriageway's true width through the turn.
+        /// Falls back to the first direction's perpendicular when there is no real turn.</summary>
+        private static void Mitre(Vector3 a, Vector3 b, Vector3 up, out Vector3 rightOut, out float mitre)
+        {
+            if (a.sqrMagnitude < 0.5f || b.sqrMagnitude < 0.5f)
             {
-                positions.Add(to);
-                rotations.Add(toRot);
+                Vector3 only = a.sqrMagnitude > 0.5f ? a.normalized : b.normalized;
+                rightOut = Vector3.Cross(only, up).normalized;
+                mitre = 1f;
                 return;
             }
+            Vector3 an = a.normalized, bn = b.normalized;
+            Vector3 d = an + bn;
+            if (d.sqrMagnitude < 1e-4f) d = an;
+            d.Normalize();
+            mitre = 1f / Mathf.Max(0.62f, Vector3.Dot(d, an));
+            rightOut = Vector3.Cross(d, up).normalized;
+        }
 
-            for (int i = 1; i <= steps; i++)
+        /// <summary>Fills the wedge pockets at corners and crossings. Where two paved strips meet
+        /// at an angle — two legs of one plan, or a new road crossing an old one — the diagonal
+        /// pocket between them belongs to neither strip's cells and would stay a triangular hole
+        /// in the pavement. A diagonal slot is filled when the two cells flanking it along the
+        /// corner are paved (in the plan or already in the world), which turns crossings into
+        /// filled junction boxes and sharp corners into one continuous surface, the way the
+        /// reference intersections read.</summary>
+        private void FillWedges(BlockItem block, float cell)
+        {
+            int snapshot = _planPos.Count;
+            for (int i = 0; i < snapshot; i++)
             {
-                float t = i / (float)steps;
-                Vector3 flat = Vector3.Lerp(from, to, t);
-                Quaternion rot = Quaternion.Slerp(fromRot, toRot, t);
-                // Re-drop each interpolated cell onto the ground so a bridged gully does not
-                // produce a strip of floating slabs between two supported ends.
-                if (AsphaltRoad.ProbeGround(flat, rot * Vector3.up, out float groundOffset))
-                    flat += rot * Vector3.up * groundOffset;
-                positions.Add(flat);
-                rotations.Add(rot);
+                Vector3 pos = _planPos[i];
+                Quaternion rot = _planRot[i];
+                Vector3 r = rot * Vector3.right;
+                Vector3 f = rot * Vector3.forward;
+
+                for (int sr = -1; sr <= 1; sr += 2)
+                for (int sf = -1; sf <= 1; sf += 2)
+                {
+                    Vector3 diag = pos + (r * sr + f * sf) * cell;
+                    if (IsCellOccupied(diag, cell) || _planSeen.Contains(KeyOf(diag))) continue;
+                    long pocket = KeyOf(diag / Mathf.Max(0.25f, cell * 0.5f));
+                    if (!_wedgeSeen.Add(pocket)) continue;
+
+                    // The two cells flanking the diagonal across the corner. Both paved means the
+                    // diagonal is the pocket of a corner, not a gap in open ground.
+                    bool a = IsPavedSlot(pos + r * sr * cell, cell);
+                    bool b = IsPavedSlot(pos + f * sf * cell, cell);
+                    if (!a || !b) continue;
+
+                    if (!AsphaltRoad.ProbeGround(diag, rot * Vector3.up, out float off)) continue;
+                    Vector3 dpos = diag + rot * Vector3.up * off;
+                    var band = EvaluateCell(block, dpos, rot, out int cost);
+                    if (band != AsphaltRoad.GradeBand.Smooth && band != AsphaltRoad.GradeBand.Rough) continue;
+                    _totalCost += cost;
+                    AddCell(dpos, rot, true, cost, Vector3.zero, Vector3.zero, 1f, 1f);
+                }
             }
+        }
+
+        private bool IsPavedSlot(Vector3 pos, float cell)
+            => IsCellOccupied(pos, cell) || _planSeen.Contains(KeyOf(pos));
+
+        private static long KeyOf(Vector3 pos)
+            => (long)Mathf.Round(pos.x * 8) * 1000003L
+             + (long)Mathf.Round(pos.y * 8) * 331L
+             + (long)Mathf.Round(pos.z * 8);
+
+        /// <summary>Fills the inside of every bend. Two legs meeting at a waypoint leave a one-cell
+        /// notch on the inside of the turn, and a notch is exactly what makes a bend read as two
+        /// strips that happened to touch. Adding the diagonal cell between the incoming and the
+        /// outgoing direction chamfers the corner so the run turns as one piece of road.</summary>
+        private void FillCorners(BlockItem block, float cell)
+        {
+            for (int i = 1; i + 1 < _wpPos.Count; i++)
+            {
+                Vector3 up = _wpRot[i] * Vector3.up;
+                Vector3 d1 = Vector3.ProjectOnPlane(_wpPos[i] - _wpPos[i - 1], up);
+                Vector3 d2 = Vector3.ProjectOnPlane(_wpPos[i + 1] - _wpPos[i], up);
+                if (d1.sqrMagnitude < 1e-6f || d2.sqrMagnitude < 1e-6f) continue;
+                d1.Normalize(); d2.Normalize();
+                if (Vector3.Dot(d1, d2) > 0.98f) continue;   // straight through, no bend
+
+                Vector3 inner = Vector3.ProjectOnPlane(d2 - d1, up);
+                if (inner.sqrMagnitude < 1e-6f) continue;
+                Vector3 lateral = _wpPos[i] + inner.normalized * cell;
+                if (!AsphaltRoad.ProbeGround(lateral, up, out float off)) continue;
+                Vector3 pos = lateral + up * off;
+                if (IsCellOccupied(pos, cell)) { AddCell(pos, _wpRot[i], false, 0, Vector3.zero, Vector3.zero, 1f, 1f); continue; }
+
+                var band = EvaluateCell(block, pos, _wpRot[i], out int cost);
+                if (band != AsphaltRoad.GradeBand.Smooth && band != AsphaltRoad.GradeBand.Rough) continue;
+                _totalCost += cost;
+                AddCell(pos, _wpRot[i], true, cost, Vector3.zero, Vector3.zero, 1f, 1f);
+            }
+        }
+
+        private void AddCell(Vector3 pos, Quaternion rot, bool fresh, int cost,
+                             Vector3 inR, Vector3 outR, float inM, float outM)
+        {
+            // Two legs of a polyline share their corner cell; the seen-set is what stops the second
+            // leg from laying (and charging for) a cell the first leg already put in the plan.
+            long key = KeyOf(pos);
+            if (!_planSeen.Add(key)) return;
+            _planPos.Add(pos); _planRot.Add(rot); _planFresh.Add(fresh); _planCost.Add(cost);
+            _planInR.Add(inR); _planOutR.Add(outR); _planInM.Add(inM); _planOutM.Add(outM);
+        }
+
+        private void SetRefusal(string reason)
+        {
+            if (_refusal == null) _refusal = reason;
+        }
+
+        private float CellOf(BlockItem block)
+        {
+            var tpl = block != null && block.placedPrefab != null
+                ? block.placedPrefab.GetComponentInChildren<AsphaltRoad>(true) : null;
+            return tpl != null ? Mathf.Max(0.1f, tpl.cellSize) : 4f;
+        }
+
+        /// <summary>Ctrl+remove: lift a whole placed section. The run IS the section, so this walks
+        /// the run the aimed cell belongs to and lifts every cell in it.</summary>
+        public bool RemoveRun(RaycastHit hit, RoadPaverTool tool, Inventory inventory, out int removed)
+        {
+            removed = 0;
+            var road = RoadUnder(hit);
+            if (road == null || road.Run == null) return false;
+
+            var blocks = new List<AsphaltRoad>(road.Run.Blocks);
+            bool refunded = road.Run.Wear01 <= tool.refundWearLimit
+                            && tool.pavingMaterial != null && tool.refundPerCell > 0;
+
+            for (int i = 0; i < blocks.Count; i++)
+            {
+                var cell = blocks[i];
+                if (cell == null) continue;
+                cell.DetachFromRun();
+                UnityEngine.Object.Destroy(cell.gameObject);
+                removed++;
+            }
+
+            if (removed > 0)
+            {
+                if (refunded) inventory.Add(tool.pavingMaterial, tool.refundPerCell * removed);
+                VoxelEngine.UI.BuildFeedbackHud.Show("Road section removed",
+                    removed + " cell(s)" + (refunded
+                        ? " · +" + tool.refundPerCell * removed + " " + tool.pavingMaterial.displayName
+                        : " · worn out, nothing recovered"),
+                    null, refunded ? new Color(0.55f, 0.80f, 0.95f) : new Color(0.85f, 0.70f, 0.45f));
+            }
+            return removed > 0;
+        }
+
+        private AsphaltRoad RoadAt(Vector3 pos, float cell)
+        {
+            foreach (var other in UnityEngine.Object.FindObjectsByType<AsphaltRoad>(FindObjectsSortMode.None))
+            {
+                if (other == null) continue;
+                var t = other.transform;
+                if (Vector3.Dot(t.forward, t.up) > 0.2f) continue;
+                Vector3 lp = t.worldToLocalMatrix.MultiplyPoint3x4(pos);
+                float half = cell * 0.5f;
+                if (lp.x > -half && lp.x < half && lp.z > -half && lp.z < half &&
+                    Mathf.Abs(lp.y) < Mathf.Max(0.5f, half))
+                    return other;
+            }
+            return null;
+        }
+
+        private AsphaltRoad RoadUnder(RaycastHit hit)
+        {
+            var road = hit.collider != null ? hit.collider.GetComponentInParent<AsphaltRoad>() : null;
+            if (road == null && hit.point != Vector3.zero) road = RoadAt(hit.point, 4f);
+            return road;
         }
 
         /// <summary>Lifts one cell back. Refunds material only while the run is still in good
@@ -417,62 +830,88 @@ namespace VoxelEngine.Building
             return true;
         }
 
-        // ════════════════════════════════════════════════════════════════
-        //  PREVIEW
-        // ════════════════════════════════════════════════════════════════
+        // ════════════════════════════════════════════════════════
+        //  GHOST — the whole planned corridor, drawn before a single unit is spent
+        // ════════════════════════════════════════════════════════
 
-        private static readonly Color PreviewValid   = new Color(0.30f, 0.85f, 0.55f, 0.42f);
-        private static readonly Color PreviewInvalid = new Color(0.95f, 0.35f, 0.30f, 0.42f);
+        private static readonly Color GhostGood = new Color(0.30f, 0.85f, 0.55f, 0.35f);
+        private static readonly Color GhostBad  = new Color(0.95f, 0.32f, 0.28f, 0.45f);
 
-        private void ShowPreview(Vector3 position, Quaternion rotation, float cell, bool valid)
+        private GameObject _ghost;
+        private MeshFilter _ghostFilter;
+        private MeshRenderer _ghostRenderer;
+        private Material _ghostMat;
+        private Mesh _ghostMesh;
+        private readonly List<Vector3> _gPos = new List<Vector3>(512);
+        private readonly List<Vector3> _gNrm = new List<Vector3>(512);
+        private readonly List<Vector2> _gUv = new List<Vector2>(512);
+        private readonly List<int> _gTri = new List<int>(768);
+
+        private void EnsureGhost()
         {
-            EnsurePreview();
-            if (_preview == null) return;
-            _preview.SetActive(true);
-            _preview.transform.SetPositionAndRotation(position + rotation * Vector3.up * 0.03f, rotation);
-            _preview.transform.localScale = new Vector3(cell, 1f, cell);
-            Color color = valid ? PreviewValid : PreviewInvalid;
-            _previewMaterial.color = color;
-            if (_previewMaterial.HasProperty(BaseColorId)) _previewMaterial.SetColor(BaseColorId, color);
-        }
-
-        private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
-
-        private void EnsurePreview()
-        {
-            if (_preview != null) return;
-            _previewMaterial = new Material(Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Unlit/Color"))
+            if (_ghost != null) return;
+            _ghost = new GameObject("RoadGhost") { hideFlags = HideFlags.HideAndDontSave };
+            _ghostFilter = _ghost.AddComponent<MeshFilter>();
+            _ghostRenderer = _ghost.AddComponent<MeshRenderer>();
+            var shader = Shader.Find("Universal Render Pipeline/Unlit");
+            if (shader == null) shader = Shader.Find("Unlit/Color");
+            if (shader != null)
             {
-                hideFlags = HideFlags.DontSave
-            };
-            if (_previewMaterial.HasProperty("_Surface")) _previewMaterial.SetFloat("_Surface", 1f);
-            if (_previewMaterial.HasProperty("_Blend"))   _previewMaterial.SetFloat("_Blend", 0f);
-            _previewMaterial.SetOverrideTag("RenderType", "Transparent");
-            _previewMaterial.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
-            _previewMaterial.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-            _previewMaterial.SetInt("_ZWrite", 0);
-            _previewMaterial.renderQueue = 3000;
-
-            // Holder + child quad: the holder takes the cell's world rotation from `ShowPreview`,
-            // while the child carries the fixed 90-degree tilt that turns a Quad (which faces -Z)
-            // into a flat patch. One transform cannot do both.
-            _preview = new GameObject("RoadPaverPreview") { hideFlags = HideFlags.DontSave };
-            var quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
-            quad.name = "Patch";
-            quad.hideFlags = HideFlags.DontSave;
-            Object.Destroy(quad.GetComponent<Collider>());
-            quad.transform.SetParent(_preview.transform, false);
-            quad.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
-            var previewRenderer = quad.GetComponent<MeshRenderer>();
-            previewRenderer.sharedMaterial = _previewMaterial;
-            previewRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            previewRenderer.receiveShadows = false;
-            _preview.SetActive(false);
+                _ghostMat = new Material(shader) { hideFlags = HideFlags.HideAndDontSave };
+                // Never cull: the ghost must survive being looked at from under a ramp too.
+                if (_ghostMat.HasProperty("_Cull")) _ghostMat.SetFloat("_Cull", 0f);
+                _ghostMat.color = GhostGood;
+                _ghostRenderer.material = _ghostMat;
+            }
+            _ghostMesh = new Mesh { hideFlags = HideFlags.HideAndDontSave, name = "RoadGhost" };
+            _ghostFilter.sharedMesh = _ghostMesh;
+            _ghostRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            _ghostRenderer.receiveShadows = false;
+            _ghost.SetActive(false);
         }
 
-        private void HidePreview()
+        private void ShowGhost(float cell, bool good)
         {
-            if (_preview != null) _preview.SetActive(false);
+            EnsureGhost();
+            if (_ghost == null) return;
+            _gPos.Clear(); _gNrm.Clear(); _gUv.Clear(); _gTri.Clear();
+
+            float half = cell * 0.5f * 0.96f;
+            for (int i = 0; i < _planPos.Count; i++)
+            {
+                var rot = _planRot[i];
+                Vector3 c = _planPos[i] + rot * Vector3.up * 0.09f;
+                Vector3 f = rot * Vector3.forward;
+                Vector3 r = rot * Vector3.right;
+                Vector3 n = rot * Vector3.up;
+                int b = _gPos.Count;
+                _gPos.Add(c - f * half - r * half);
+                _gPos.Add(c - f * half + r * half);
+                _gPos.Add(c + f * half + r * half);
+                _gPos.Add(c + f * half - r * half);
+                for (int v = 0; v < 4; v++) _gNrm.Add(n);
+                _gUv.Add(new Vector2(0f, 0f)); _gUv.Add(new Vector2(1f, 0f));
+                _gUv.Add(new Vector2(1f, 1f)); _gUv.Add(new Vector2(0f, 1f));
+                // Wound face-UP. The first draft's winding faced down and URP culls back faces, so
+                // the ghost was invisible from exactly the angle the player looks at it from.
+                _gTri.Add(b); _gTri.Add(b + 2); _gTri.Add(b + 1);
+                _gTri.Add(b); _gTri.Add(b + 3); _gTri.Add(b + 2);
+            }
+
+            _ghostMesh.Clear();
+            _ghostMesh.SetVertices(_gPos);
+            _ghostMesh.SetNormals(_gNrm);
+            _ghostMesh.SetUVs(0, _gUv);
+            _ghostMesh.SetTriangles(_gTri, 0);
+            _ghostMesh.RecalculateBounds();
+
+            if (_ghostMat != null) _ghostMat.color = good ? GhostGood : GhostBad;
+            _ghost.SetActive(true);
+        }
+
+        private void HideGhost()
+        {
+            if (_ghost != null) _ghost.SetActive(false);
         }
     }
 }

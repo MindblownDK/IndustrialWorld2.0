@@ -87,6 +87,17 @@ namespace VoxelEngine.EditorTools
         private const string MAT_WEAR_RETIRED = PREFABS_FOLDER + "/Mat_RoadWear.mat";
         private const string MAT_POTHOLE     = PREFABS_FOLDER + "/Mat_RoadPothole.mat";
 
+        // The stone pathway: cobble for walking around the base. Same draping cell, same wear
+        // ledger and same run merging as asphalt, but a different surface material, a different
+        // cost (stone, not hot mix) and no vehicle handling — see RoadSurfaceKind.
+        private const string PATH_PREFAB     = PREFABS_FOLDER + "/StonePathway.prefab";
+        private const string PATH_BLOCK      = BLOCKS_FOLDER  + "/Block_StonePathway.asset";
+        private const string PATH_RECIPE     = RECIPES_ROOT   + "/Recipe_StonePathway.asset";
+        private const string TEX_COBBLE      = PREFABS_FOLDER + "/Tex_RoadCobble.asset";
+        private const string TEX_COBBLE_NRM  = PREFABS_FOLDER + "/Tex_RoadCobbleNormal.asset";
+        private const string MAT_COBBLE      = PREFABS_FOLDER + "/Mat_RoadCobble.mat";
+        private const int    PATH_STONE_PER_CELL = 2;
+
         /// <summary>Bumped whenever the authored materials change meaning, so a project that already
         /// ran an earlier Step 72 gets the new look once instead of keeping the first-draft assets
         /// forever. Same marker pattern Step 69 uses for the distillation plant's `ModelRev2`.
@@ -101,7 +112,11 @@ namespace VoxelEngine.EditorTools
             ASSET_ROOT + "/GridSystem/Prefabs/ChemicalPlant_Large.prefab",
         };
 
-        private static readonly string[] AssemblerPrefabs =
+        // Fallback only. The wiring pass scans the asset database for prefabs that actually carry
+        // an Assembler, because a hardcoded path list fails SILENTLY: a renamed or moved prefab
+        // means the pass wires nothing, reports 0, and the recipe exists as an asset that no
+        // machine in the game can run.
+        private static readonly string[] AssemblerPrefabFallbacks =
         {
             ASSET_ROOT + "/StationPrefabs/Assembler.prefab",
             ASSET_ROOT + "/Factory/Prefabs/Assembler_Mk1.prefab",
@@ -182,6 +197,11 @@ namespace VoxelEngine.EditorTools
                                                     0.08f, new Color(0.34f, 0.32f, 0.30f), forceSurface);
             var crackMat    = AuthorCrackMaterial(MAT_CRACK, forceSurface);
 
+            var cobbleTex = AuthorRoadTextures(TEX_COBBLE, "Tex_RoadCobble",
+                                               TEX_COBBLE_NRM, "Tex_RoadCobbleNormal", 2, forceSurface);
+            var cobbleMat = AuthorSurfaceMaterial(MAT_COBBLE, "Mat_RoadCobble", cobbleTex,
+                                                  0.16f, Color.white, forceSurface);
+
             if (AssetDatabase.LoadAssetAtPath<Material>(MAT_WEAR_RETIRED) != null)
                 AssetDatabase.DeleteAsset(MAT_WEAR_RETIRED);
 
@@ -192,6 +212,11 @@ namespace VoxelEngine.EditorTools
             var widePrefab = AuthorRoadPrefab(WIDE_PREFAB, "AsphaltRoadWide", WIDE_CELL_SIZE,
                                               asphaltMat, shoulderMat, crackMat, potholeMat,
                                               forceSurface, ref created, ref preserved);
+
+            var pathPrefab = AuthorRoadPrefab(PATH_PREFAB, "StonePathway", 1f,
+                                              cobbleMat, cobbleMat, crackMat, potholeMat,
+                                              forceSurface, ref created, ref preserved);
+            SetSurfaceKind(PATH_PREFAB, RoadSurfaceKind.Pathway);
 
             // ── 3) Items ──────────────────────────────────────────────────
             var bitumen = GetOrCreate<ResourceItem>(BITUMEN_ITEM, ref created, ref preserved);
@@ -254,6 +279,23 @@ namespace VoxelEngine.EditorTools
             if (wideBlock.miningTier <= 0)   wideBlock.miningTier = 1;
             EditorUtility.SetDirty(wideBlock);
 
+            var pathBlock = GetOrCreate<BlockItem>(PATH_BLOCK, ref created, ref preserved);
+            pathBlock.itemId = "block_stone_pathway";
+            if (UnsetName(pathBlock.displayName)) pathBlock.displayName = "Stone Pathway";
+            pathBlock.description = "A one-metre cobble cell that drapes over the terrain. Laid for " +
+                                    "feet, not wheels: it speeds walking a little and gives vehicles " +
+                                    "nothing, so it is the cheap way to tie a base together.";
+            pathBlock.iconTint = new Color(0.42f, 0.40f, 0.37f);
+            pathBlock.category = "Building";
+            pathBlock.placedPrefab = pathPrefab;
+            pathBlock.gridSize = Vector3Int.one;
+            pathBlock.allowStacking = false;
+            if (UnsetStack(pathBlock.maxStack))  pathBlock.maxStack = 200;
+            if (UnsetMass(pathBlock.massPerUnit)) pathBlock.massPerUnit = 18f;
+            if (pathBlock.blockHealth <= 0)  pathBlock.blockHealth = 160;
+            if (pathBlock.miningTier <= 0)   pathBlock.miningTier = 1;
+            EditorUtility.SetDirty(pathBlock);
+
             var paver = GetOrCreate<RoadPaverTool>(PAVER_ITEM, ref created, ref preserved);
             paver.itemId = "tool_road_paver";
             if (UnsetName(paver.displayName)) paver.displayName = "Road Paver";
@@ -273,6 +315,12 @@ namespace VoxelEngine.EditorTools
             paver.roadBlock = wideBlock;
             paver.materialPerCell = WIDE_ASPHALT_COST;
             paver.refundPerCell = WIDE_ASPHALT_COST / 2;
+            // The hold-B alternative surface. Width is counted in CELLS OF WHATEVER IS SELECTED, so
+            // three wide is 12 m of carriageway on the 4 m asphalt slab and 3 m of cobbles on the
+            // 1 m pathway cell - one gesture, two surfaces, no second tool.
+            paver.pathBlock = pathBlock;
+            paver.pathMaterial = FindItem("Item_Stone");
+            paver.pathMaterialPerCell = PATH_STONE_PER_CELL;
             // Area-priced, so a full repair of a worn run lands near a third of what laying it
             // cost whether the run is wide slabs or patch cells.
             if (paver.repairMaterialPerSquareMetre <= 0f) paver.repairMaterialPerSquareMetre = 0.19f;
@@ -312,7 +360,14 @@ namespace VoxelEngine.EditorTools
                 mixAsphalt.displayName = "Mix Hot Asphalt";
                 mixAsphalt.recipeType = MachineRecipeType.Custom;
                 mixAsphalt.processSeconds = 5f;
-                mixAsphalt.unlockedByDefault = false;
+                // Available from game start. `unlockedByDefault = false` on a MachineRecipe is a
+                // one-way door here: ResearchNode.unlocksRecipes only holds RecipeDefinitions and
+                // ResearchManager.IsRecipeUnlocked only takes RecipeDefinitions, so NOTHING in the
+                // game can ever flip a locked MachineRecipe open. The first draft set this to false
+                // and the recipe was unreachable, which is why it looked like it was never made.
+                // The real gate for the road chain lives on the player recipes (res_asphalt_roads)
+                // and on having a Distillation Plant to make bitumen in the first place.
+                mixAsphalt.unlockedByDefault = true;
                 mixAsphalt.outputItem = asphalt;
                 mixAsphalt.outputCount = 8;
                 var inputs = new List<MachineRecipeSlot>();
@@ -325,6 +380,13 @@ namespace VoxelEngine.EditorTools
             else
             {
                 mixAsphalt.outputItem ??= asphalt;
+                EditorUtility.SetDirty(mixAsphalt);
+            }
+
+            // A project that ran the first draft holds a locked asset: open the door on re-run.
+            if (!mixAsphalt.unlockedByDefault)
+            {
+                mixAsphalt.unlockedByDefault = true;
                 EditorUtility.SetDirty(mixAsphalt);
             }
 
@@ -373,6 +435,24 @@ namespace VoxelEngine.EditorTools
             }
             EditorUtility.SetDirty(wideRecipe);
 
+            var stone = FindItem("Item_Stone");
+
+            var pathRecipe = GetOrCreate<RecipeDefinition>(PATH_RECIPE, ref created, ref preserved);
+            if (string.IsNullOrEmpty(pathRecipe.displayName)) pathRecipe.displayName = "Stone Pathway";
+            pathRecipe.outputItem = pathBlock;
+            if (pathRecipe.outputCount <= 0) pathRecipe.outputCount = 4;
+            // Ungated on purpose. A cobble path is a stone-age idea and costs nothing but stone, so
+            // hiding it behind the bitumen research chain would only make the base ugly early on.
+            pathRecipe.unlockedByDefault = true;
+            if (pathRecipe.craftSeconds <= 0f) pathRecipe.craftSeconds = 1f;
+            if (pathRecipe.inputs == null || pathRecipe.inputs.Length == 0)
+            {
+                var inputs = new List<RecipeIngredient>();
+                Add(ref inputs, stone, PATH_STONE_PER_CELL);
+                pathRecipe.inputs = inputs.ToArray();
+            }
+            EditorUtility.SetDirty(pathRecipe);
+
             var paverRecipe = GetOrCreate<RecipeDefinition>(PAVER_RECIPE, ref created, ref preserved);
             if (string.IsNullOrEmpty(paverRecipe.displayName)) paverRecipe.displayName = "Road Paver";
             paverRecipe.outputItem = paver;
@@ -398,7 +478,7 @@ namespace VoxelEngine.EditorTools
             if (registry != null)
             {
                 if (registry.recipes == null) registry.recipes = new List<RecipeDefinition>();
-                foreach (var recipe in new[] { roadRecipe, wideRecipe, paverRecipe })
+                foreach (var recipe in new[] { roadRecipe, wideRecipe, pathRecipe, paverRecipe })
                 {
                     if (recipe != null && !registry.recipes.Contains(recipe))
                     {
@@ -412,6 +492,7 @@ namespace VoxelEngine.EditorTools
             EnsureItemPersisted(asphalt);
             EnsureItemPersisted(roadBlock);
             EnsureItemPersisted(wideBlock);
+            EnsureItemPersisted(pathBlock);
             EnsureItemPersisted(paver);
 
             WireResearchNode(ref created, ref preserved, roadRecipe, wideRecipe, paverRecipe);
@@ -531,6 +612,25 @@ namespace VoxelEngine.EditorTools
 
         /// <summary>Stamps a marker child on a prefab root so a later run can tell what revision it
         /// is looking at. Hidden and inert — it carries no component.</summary>
+        /// <summary>Stamps the surface kind onto an authored road prefab. `AuthorRoadPrefab` builds
+        /// the one shared draping cell, so the single field that tells a roadway from a pathway is
+        /// set here rather than by forking the builder.</summary>
+        private static void SetSurfaceKind(string prefabPath, RoadSurfaceKind kind)
+        {
+            var root = PrefabUtility.LoadPrefabContents(prefabPath);
+            try
+            {
+                var road = root.GetComponentInChildren<AsphaltRoad>(true);
+                if (road == null || road.surfaceKind == kind) return;
+                road.surfaceKind = kind;
+                PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+            }
+            finally
+            {
+                PrefabUtility.UnloadPrefabContents(root);
+            }
+        }
+
         private static void EnsureMarker(GameObject root, string markerName)
         {
             if (root.transform.Find(markerName) != null) return;
@@ -643,7 +743,7 @@ namespace VoxelEngine.EditorTools
                 filterMode = FilterMode.Bilinear,
                 anisoLevel = 8
             };
-            normal.SetPixels(HeightToNormal(height, style == 0 ? 2.2f : 3.2f));
+            normal.SetPixels(HeightToNormal(height, style == 0 ? 2.2f : style == 1 ? 3.2f : 3.6f));
             normal.Apply(true, false);
             AssetDatabase.CreateAsset(normal, normalPath);
 
@@ -662,13 +762,14 @@ namespace VoxelEngine.EditorTools
             // 32 chip-cells across one metre of wearing course puts aggregate at ~3 cm, which is
             // coarse wearing-course stone; the shoulder is coarser still. Fewer, larger cells read
             // as cobbles rather than as bound aggregate.
-            int cells   = style == 0 ? 32 : 20;
-            int seed    = style == 0 ? 7201 : 4111;
+            int cells   = style == 0 ? 32 : style == 1 ? 20 : 7;
+            int seed    = style == 0 ? 7201 : style == 1 ? 4111 : 1301;
             float scale = TEX_SIZE / (float)cells;
 
             // Mortar is the binder squeezed up between stones: near-black, slightly warm.
             Color mortar = style == 0 ? new Color(0.055f, 0.053f, 0.056f)
-                                      : new Color(0.150f, 0.138f, 0.122f);
+                         : style == 1 ? new Color(0.150f, 0.138f, 0.122f)
+                                      : new Color(0.108f, 0.098f, 0.086f);
 
             for (int y = 0; y < TEX_SIZE; y++)
             {
@@ -697,19 +798,24 @@ namespace VoxelEngine.EditorTools
                     float edge = Mathf.Clamp01((f2 - f1) / Mathf.Max(0.5f, scale * 0.42f));
                     // A narrow mortar band: real wearing course is stone-on-stone with binder in
                     // the gaps, not stones floating in black. A wide band reads as netting.
-                    float chipMask = Mathf.SmoothStep(style == 0 ? 0.05f : 0.06f,
-                                                      style == 0 ? 0.30f : 0.40f, edge);
+                    // Cobble wants the opposite of wearing course: a WIDE, visible joint, because
+                    // the stones are laid by hand in sand rather than bound in bitumen.
+                    float chipMask = Mathf.SmoothStep(style == 0 ? 0.05f : style == 1 ? 0.06f : 0.10f,
+                                                      style == 0 ? 0.30f : style == 1 ? 0.40f : 0.52f, edge);
 
                     // Per-chip tone: mixed aggregate, so chips vary in both brightness and hue.
                     // The wearing course keeps the contrast tight so it reads as ONE surface.
                     float toneJit = Hash01(nearestX, nearestY, seed + 31);
                     float warmJit = Hash01(nearestX, nearestY, seed + 57);
-                    float tone = Mathf.Lerp(style == 0 ? 0.80f : 0.72f,
-                                            style == 0 ? 1.22f : 1.30f, toneJit);
+                    float tone = Mathf.Lerp(style == 0 ? 0.80f : style == 1 ? 0.72f : 0.78f,
+                                            style == 0 ? 1.22f : style == 1 ? 1.30f : 1.26f, toneJit);
                     Color chip = style == 0
                         ? new Color(0.300f * tone, 0.298f * tone, 0.302f * tone)
-                        : new Color(0.430f * tone, 0.404f * tone * Mathf.Lerp(0.94f, 1.08f, warmJit),
-                                    0.362f * tone * Mathf.Lerp(0.90f, 1.02f, warmJit));
+                        : style == 1
+                        ? new Color(0.430f * tone, 0.404f * tone * Mathf.Lerp(0.94f, 1.08f, warmJit),
+                                    0.362f * tone * Mathf.Lerp(0.90f, 1.02f, warmJit))
+                        : new Color(0.520f * tone, 0.500f * tone * Mathf.Lerp(0.95f, 1.06f, warmJit),
+                                    0.462f * tone * Mathf.Lerp(0.93f, 1.04f, warmJit));
 
                     // Rounded crown on each chip: the stone is a little proud in its middle.
                     float crown = 1f - Mathf.Clamp01(f1 / Mathf.Max(0.5f, scale * 0.62f));
@@ -718,7 +824,9 @@ namespace VoxelEngine.EditorTools
                     float patch = TileableValueNoise(x, y, 4,  seed + 131) - 0.5f;
                     float grit  = TileableValueNoise(x, y, 96, seed + 977) - 0.5f;
 
-                    float mottle = 1f + patch * 0.30f + grit * 0.26f;
+                    // Cobble is hand-laid stone: less of the roller's patchiness, more surface grit.
+                    float mottle = 1f + patch * (style == 2 ? 0.18f : 0.30f)
+                                      + grit  * (style == 2 ? 0.34f : 0.26f);
                     Color c = Color.Lerp(mortar, chip, chipMask) * mottle;
 
                     // Faint binder sheen in the mortar gaps only, so the stones stay matte.
@@ -859,43 +967,76 @@ namespace VoxelEngine.EditorTools
 
                 var contents = PrefabUtility.LoadPrefabContents(path);
                 bool dirty = false;
+                bool carries = false;
                 foreach (var plant in contents.GetComponentsInChildren<StationaryChemicalPlant>(true))
                 {
                     if (plant.knownRecipes == null) plant.knownRecipes = new List<ProcessingRecipe>();
                     if (!plant.knownRecipes.Contains(recipe)) { plant.knownRecipes.Add(recipe); dirty = true; }
+                    carries = true;
                 }
                 foreach (var plant in contents.GetComponentsInChildren<VoxelEngine.GridSystem.GridChemicalPlant>(true))
                 {
                     if (plant.knownRecipes == null) plant.knownRecipes = new List<ProcessingRecipe>();
                     if (!plant.knownRecipes.Contains(recipe)) { plant.knownRecipes.Add(recipe); dirty = true; }
+                    carries = true;
                 }
 
-                if (dirty) { PrefabUtility.SaveAsPrefabAsset(contents, path); wired++; }
+                if (dirty) PrefabUtility.SaveAsPrefabAsset(contents, path);
+                // `wired` counts prefabs that END UP knowing the recipe, not prefabs saved this run.
+                // Counting saves made every re-run report zero and shout an error at a project that
+                // was already correctly wired.
+                if (carries) wired++;
                 PrefabUtility.UnloadPrefabContents(contents);
             }
+            if (wired == 0)
+                Debug.LogError("[AsphaltRoadSetup] Blow Bitumen was wired to ZERO chemical plants. " +
+                               "No machine can make bitumen. Check the chemical plant prefabs.");
             return wired;
+        }
+
+        /// <summary>Every prefab in the project that carries an Assembler, found by scanning the
+        /// asset database rather than by trusting a list of paths.</summary>
+        private static IEnumerable<string> FindAssemblerPrefabs()
+        {
+            var found = new List<string>();
+            foreach (var guid in AssetDatabase.FindAssets("t:Prefab"))
+            {
+                var path = AssetDatabase.GUIDToAssetPath(guid);
+                var go = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+                if (go != null && go.GetComponentInChildren<VoxelEngine.Simulation.Assembler>(true) != null
+                    && !found.Contains(path))
+                    found.Add(path);
+            }
+            if (found.Count == 0) found.AddRange(AssemblerPrefabFallbacks);
+            return found;
         }
 
         private static int AttachToAssemblers(MachineRecipe recipe)
         {
             if (recipe == null) return 0;
             int wired = 0;
-            foreach (var path in AssemblerPrefabs)
+            foreach (var path in FindAssemblerPrefabs())
             {
                 var asset = AssetDatabase.LoadAssetAtPath<GameObject>(path);
                 if (asset == null) continue;
 
                 var contents = PrefabUtility.LoadPrefabContents(path);
                 bool dirty = false;
+                bool carries = false;
                 foreach (var assembler in contents.GetComponentsInChildren<Assembler>(true))
                 {
                     if (assembler.knownRecipes == null) assembler.knownRecipes = new List<MachineRecipe>();
                     if (!assembler.knownRecipes.Contains(recipe)) { assembler.knownRecipes.Add(recipe); dirty = true; }
+                    carries = true;
                 }
 
-                if (dirty) { PrefabUtility.SaveAsPrefabAsset(contents, path); wired++; }
+                if (dirty) PrefabUtility.SaveAsPrefabAsset(contents, path);
+                if (carries) wired++;
                 PrefabUtility.UnloadPrefabContents(contents);
             }
+            if (wired == 0)
+                Debug.LogError("[AsphaltRoadSetup] Mix Hot Asphalt was wired to ZERO assemblers. " +
+                               "No machine in the game can run it. Check the Assembler prefabs.");
             return wired;
         }
 

@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `9.41.0-dev`  
-**Roadmap Version:** `9.41.0-dev`  
+**Current Version:** `9.42.0-dev`  
+**Roadmap Version:** `9.42.0-dev`  
 **Date:** 2026-09-10
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,26 @@
 ---
 
 ## 0. Recently Done
+
+### 9.42.0-dev — Road Planner, Pathways & Surface Wheel
+- The held drag is replaced by a **polyline plan**: click the start, click each corner, press the
+  interact key, and the whole corridor is generated at the chosen width with a live ghost drawn from
+  the same cell list the commit iterates. Bends are placed as waypoints and chamfered with an inside
+  diagonal cell, so a turn reads as one piece of road. **Ctrl+scroll** sets the width in cells *of the selected surface*
+  (1–3 → 4/8/12 m of carriageway, or 1/2/3 m of cobble), so one gesture means the same thing on both.
+  Starting a plan on an existing road runs the whole corridor in that road's frame, which is what
+  makes connect-and-extend fall out of the gesture. Ground that cannot be paved **refuses the entire
+  line with a reason** rather than laying the cells that worked — no silent gaps, no auto-routing —
+  unless the obstacle is a bump inside the 1.25 m carve limit, which the road shaves flush at lay time.
+- Removal is now a pair: **RMB lifts one cell, Ctrl+RMB lifts the whole placed section**, both
+  refunding per cell while the run is under the refund wear limit. Crossing a worn run resurfaces it
+  at the tool's authored area rate, so the 9.41 repair economy survived the change of gesture.
+- **Stone Pathway** ships as a second surface: same draping cell, same runs, same wear and cracking,
+  but cobble textures, Stone 2 per cell, hand-craftable and ungated, a gentler walking bonus
+  (1.18→0.85) and **no traction, no grip and no wheel wear** — a pathway is not a cheap road.
+  **Hold B** picks the surface on a wheel built to the conveyor shape wheel's contract. Also fixed:
+  `MachineRecipe_MixAsphalt` was `unlockedByDefault = false`, and since research can only unlock
+  `RecipeDefinition`s, the whole asphalt chain was permanently uncraftable.
 
 ### 9.41.0-dev — Asphalt Roads
 - `AsphaltRoad` is a real `PlacedBlock` cell that **drapes** the terrain through five ground samples
@@ -201,7 +221,9 @@ The design goal is a seamless blend of:
 | Waymarks, named connectors & auto-run shuttle | 🛠️ WORKING ON | **9.35.0-dev**: named waymarks, `GridConnectorBlock` with the first cross-grid transfer bridge and a visible queue, and `GridRouteAutopilot` loops with armed stop conditions (Step 66). **9.36.0-dev** added the ground half: `StaticRefuelPad` (Step 67), a world-placed pad that is a metered consumer on the base's wires and a member of its fluid, gas and item runs. Open: terrain avoidance, dock-approach flying, cargo schedules, star-map rendering. |
 | Grid inspector overlay (heat / damage / centre of mass) | ✅ COMPLETED | **9.37.0-dev** shipped the whole overlay — one shared per-renderer `MaterialPropertyBlock` tint pass, one hotkey ring OFF → HEAT → DAMAGE → CENTRE OF MASS with the three reader modes, and the three research nodes authored by Setup Step 68 (Step 69 lives in the distillation-plant round). Unity validation confirmed the pass budget, the 24-block degrade readout and the research gating (9.37.1-dev added one-click research unlock/max/relock buttons to the debug spawner for exactly this kind of testing). See `Grid Inspector Overlay`. |
 | Crude fractionation & flare disposal | 🛠️ WORKING ON | **9.38.0-dev** shipped the first part: a NEW Distillation Plant block (a wide plant hall; the Oil Refinery stays its legacy machine, and both refineries stop making refined oil / HFO / MGO) with one feed tank + six typed product tanks (LPG, naphtha, kerosene, diesel, gasoline, heavy fuel oil), an **analog world dial above every outlet and inlet** that sweeps with its tank, the atmospheric-cut ladder (100 L crude → 98 L of products, 2 L off-gas), the Refined Oil conversion re-run, and a naphtha-fed plastic recipe that beats the old one per litre (Step 69; block gated by Atmospheric Distillation research). Panel: live in-place updates (no scroll snapping), scrollable recipe books, contents-based tank captions, box sizing that follows its contents. Open within the same design: spending the middle products on the maritime-engine fuel ladder, where Refined Oil comes from now that the refineries stopped making it, the off-gas line and the Flare Stack with waste-heat recovery and local pollution (both now open items of their own: **9.39.0-dev** shipped the flare stack and waste-heat recovery, **9.40.0-dev** the catalytic conversion of the heavy end, **9.41.0-dev** the asphalt chain that spends it). See `Crude Fractionation, Product Use & Flare Disposal`. |
-| Asphalt roads | 🟡 PARTIALLY COMPLETE | **9.41.0-dev** shipped the surface in two cell sizes (1 m patch, 4 m carriageway) and the pave tool: `AsphaltRoad` drapes terrain and auto-shapes its shoulder from a neighbour mask, every touching cell joins one `RoadRun` sharing a single **area-weighted** wear pool (GOOD/WORN/POTHOLED/BROKEN UP driving walk speed, traction and grip), `RoadPaver` lays a continuous wide strip by drag with slope-based pricing and refusal, repair is the same asphalt priced by run wear and paved area, wheels take traction/grip from the run and stop bogging, and a worn run shows a real crack-and-pothole mesh rather than a decal (Step 72, `res_asphalt_roads`). Open: the road **network** object (name, connected-run trace, traffic readout), routing/pathfinding that prefers paved routes, lamps and roadside furniture, a culvert/bridge volume rule, and any second road tier. See `Asphalt Roads`. |
+| Asphalt roads | 🟡 PARTIALLY COMPLETE | **9.42.0-dev** replaced the drag with a **point-to-point road planner** (click start, click end, live ghost, Ctrl+scroll width in cells, whole-line refusal with a reason, Ctrl+RMB section removal) and added a **Stone Pathway** surface chosen on a hold-B wheel — cobble, stone-priced, walk-only, no vehicle traction. **9.41.0-dev** shipped the surface in two cell sizes (1 m patch, 4 m carriageway) and the pave tool: `AsphaltRoad` drapes terrain and auto-shapes its shoulder from a neighbour mask, every touching cell joins one `RoadRun` sharing a single **area-weighted** wear pool (GOOD/WORN/POTHOLED/BROKEN UP driving walk speed, traction and grip), `RoadPaver` lays a continuous wide strip by drag with slope-based pricing and refusal, repair is the same asphalt priced by run wear and paved area, wheels take traction/grip from the run and stop bogging, and a worn run shows a real crack-and-pothole mesh rather than a decal (Step 72, `res_asphalt_roads`). Open: the road **network** object (name, connected-run trace, traffic readout), routing/pathfinding that prefers paved routes, lamps and roadside furniture, a culvert/bridge volume rule, ~~and any second road tier~~ *(9.42.0-dev — the Stone Pathway is the
+    second surface; a faster road tier is still open)*. Open now also: filleted bend corners and a
+    proper junction treatment where two planned roads cross at an angle. See `Asphalt Roads`. |
 | Catalytic cracking & petrochemicals | 🟡 PARTIALLY COMPLETE | **9.40.0-dev** shipped the `CatalyticCracker` reactor unit — catalyst bed decay and reactor temperature both gate throughput through `CrackingEfficiency01` — with FCC / CCR / hydrocracking, synthetic resin, industrial lubricant, both catalyst syntheses, four items, `Block_CatalyticCracker` and the tier-6 chemistry gate (Step 71). Open: no save serialisation for bed, temperature or tank contents; resin and lubricant have no consumers; no regenerator unit, no hydrogen plant, no grid variant. |
 | Engine Works (custom engine builder) | ❌ MISSING | Design written for the maritime/engine line: configuration, cylinders, bore/stroke, intake, fuel, compression, cooling, gearing and governor, with craft cost scaling into artefacts at the top. See `Engine Works`. |
 | Oxygen / life support | ✅ COMPLETED | Underwater reserve equipment already exists; **7.4.0-dev** activates vacuum/airless-body oxygen drain, sealed helmet+tank protection, armor oxygen-efficiency integration, and live hazard feedback. **7.5.0-dev** now resolves this against the same profile-driven air density used by flight and is Unity-validated. **9.27.0-dev** delivered airtight rooms and vents. **9.28.0-dev** closes the last item: oxygen tanks now carry a real per-instance refillable reserve (burned through helmet/armor efficiency, topped up from breathable air and from a Ventilation Unit's suit dock at 40 L/s), and the full-block Ventilation Unit pressurises every compartment it touches. |
@@ -942,12 +964,15 @@ end is worth something too.
 
 ### Asphalt Roads
 
-> **Status (9.41.0-dev):** surface in two cell sizes (1 m patch + 4 m carriageway), drag-to-pave
-> tool, per-run area-weighted wear with visible cracking, movement/traction bonuses, slope-based grade
-> pricing and area-priced repair are shipped — `Scripts/Building/AsphaltRoad.cs`, `RoadRun.cs`, `AsphaltRoadMesh.cs`,
-> `RoadPaver.cs`, `Scripts/Environment/RoadSurfaceUtility.cs`, `Scripts/Items/RoadPaverTool.cs`,
-> authored by **Setup Step 72** under `res_asphalt_roads`. The road **network** object, routing that
-> prefers paved routes, lamps and culverts remain open items below. Full narrative: `Changelog.md`.
+> **Status (9.42.0-dev):** surface in two cell sizes (1 m patch + 4 m carriageway) **plus a cobble
+> Stone Pathway**, a **point-to-point planner** with width control, a live ghost, whole-line refusal
+> and section removal, per-run area-weighted wear with visible cracking, movement/traction bonuses,
+> slope-based grade pricing and area-priced repair are shipped — `Scripts/Building/AsphaltRoad.cs`,
+> `RoadRun.cs`, `AsphaltRoadMesh.cs`, `RoadPaver.cs`, `Scripts/Environment/RoadSurfaceUtility.cs`,
+> `Scripts/Items/RoadPaverTool.cs`, `Scripts/Simulation/RoadSurfaceWheel.cs`, authored by
+> **Setup Step 72** under `res_asphalt_roads` (the pathway recipe is ungated on purpose). The road
+> **network** object, routing that prefers paved routes, lamps, culverts and filleted junction
+> geometry remain open items below. Full narrative: `Changelog.md`.
 
 A cheap surface the player lays on terrain to make the world move faster and cleaner. The idea is
 one sentence: **a road is the difference between walking a route and being able to run a schedule on it.**
@@ -1026,7 +1051,7 @@ one sentence: **a road is the difference between walking a route and being able 
    what remains and split it into however many runs the gap created, each inheriting the wear it was
    part of. Merging takes the worst of the two, so a worn strip joined to a new one is a worn strip.
 
-6. **Still open after 9.41.0-dev**
+6. **Still open after 9.42.0-dev**
    - The road **network** object: a player-given name and a traffic/condition readout across a whole
      system. Deliberately held back again — it should arrive with the routing it feeds.
    - **Road-aware routing.** Pathfinding, autopilot and delivery drones do not prefer paved routes.
@@ -1037,9 +1062,19 @@ one sentence: **a road is the difference between walking a route and being able 
      Weather (rain, mud, ice) does not modify a road's grip.
    - **Culverts and bridges**: water is refused rather than crossed. No road-side furniture either —
      no lamps, kerbstones, signage, barriers, manholes or drains (the kerb is part of the road mesh).
-   - **One tier, one curve.** Asphalt is the only paved surface; there is no concrete, gravel or dirt
-     road and no second wear curve. No asphalt temperature, laying window, roller or compaction pass —
-     hot mix cures instantly.
+   - ~~**One tier, one curve.** Asphalt is the only paved surface~~ *(9.42.0-dev — a cobble **Stone
+     Pathway** is the second surface, with its own walk curve, no vehicle handling and immunity to
+     wheel wear)*; there is still no concrete, gravel or dirt road and no second wear curve. No
+     asphalt temperature, laying window, roller or compaction pass — hot mix cures instantly.
+   - ~~**Corners and crossings are still square.**~~ *(9.42.0-dev — bent cells now carry a curve
+     frame: mitred entry/exit cross-sections, so straights keep straight kerb lines and a chain of
+     bent cells tiles into one continuous arc, while junction boxes stay square like real
+     intersections; per-cell corner rounding was tried first and rejected for beading every curve)*
+     What remains open: per-lane mitres on 3-wide curves (lanes currently fan off the centreline
+     mitre), and decorative junction furniture — crossings, stop lines, signage.
+   - **No auto-routing.** A corridor whose ground cannot be paved is refused whole, with a reason —
+     the planner never moves the road somewhere the player did not choose. If that ever changes it
+     changes here, not silently in the gesture.
    - **Bitumen comes from Heavy Fuel Oil only.** No natural bitumen deposit, tar sands ore or
      alternative binder.
 

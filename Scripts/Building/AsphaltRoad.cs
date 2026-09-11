@@ -45,12 +45,38 @@ using VoxelEngine.Environment;
 
 namespace VoxelEngine.Building
 {
+    /// <summary>What the cell is paved with. Both surfaces drape terrain and both wear under
+    /// traffic, but they cost differently and behave differently: asphalt carries vehicles,
+    /// cobble carries feet.</summary>
+    public enum RoadSurfaceKind { Asphalt, Pathway }
+
+    /// <summary>The surface the paver will lay next. Held here rather than on the tool so the
+    /// choice survives switching hotbar slots, the way the conveyor shape wheel does.</summary>
+    public static class RoadSurfaceSelection
+    {
+        public static RoadSurfaceKind Kind = RoadSurfaceKind.Asphalt;
+    }
     [DisallowMultipleComponent, RequireComponent(typeof(PlacedBlock))]
     public class AsphaltRoad : MonoBehaviour
     {
         // ════════════════════════════════════════════════════════════════
         //  AUTHORED TUNING
         // ════════════════════════════════════════════════════════════════
+
+        [Header("Surface")]
+        /// <summary>Asphalt carries wheels; Pathway is cobble for feet. Drives the bonus this cell
+        /// hands out and whether wheels are allowed to wear it down.</summary>
+        public RoadSurfaceKind surfaceKind = RoadSurfaceKind.Asphalt;
+
+        [Header("Curve Frame")]
+        /// <summary>Cross-section direction of the route where it enters and leaves this cell, in
+        /// local space, plus the mitre stretch at each joint. Zero on a straight, on a junction and
+        /// on anything hand-placed: those are square. Set by the planner on bent cells so a chain
+        /// of them tiles into one continuous arc instead of a row of notched squares.</summary>
+        [HideInInspector] public Vector3 curveInRight;
+        [HideInInspector] public Vector3 curveOutRight;
+        [HideInInspector] public float curveInMitre = 1f;
+        [HideInInspector] public float curveOutMitre = 1f;
 
         [Header("Cell")]
         [Tooltip("Edge length of one road cell in metres. Matches the BlockItem's gridSize so a " +
@@ -131,6 +157,12 @@ namespace VoxelEngine.Building
         private static readonly Color FreshTint  = new Color(1.00f, 1.00f, 1.00f);
         private static readonly Color WornTint   = new Color(1.16f, 1.15f, 1.12f);
         private static readonly Color BrokenTint = new Color(1.34f, 1.31f, 1.24f);
+
+        // Cobble ages the other way. Asphalt BLEACHES as the binder oxidises and the aggregate
+        // pales; hand-laid stone goes down in value as mud, moss and loose grit work into the
+        // joints, so a worn pathway darkens and greens rather than lightening.
+        private static readonly Color CobbleWornTint   = new Color(0.88f, 0.89f, 0.84f);
+        private static readonly Color CobbleBrokenTint = new Color(0.74f, 0.77f, 0.68f);
 
         // ════════════════════════════════════════════════════════════════
         //  LIFECYCLE
@@ -375,9 +407,13 @@ namespace VoxelEngine.Building
         /// the distance they actually covered this frame, so a parked rig wears nothing and a
         /// convoy wears the corridor properly.
         /// </summary>
-        public void RegisterTraffic(float metres, float loadFactor)
+        /// <param name="fromWheels">True for vehicles, false for feet. A cobble pathway is laid
+        /// for walking: wheels neither help nor hurt it, so a rig rolling across one does not grind
+        /// it down — and the pathway gives no traction back, which is why it is not a cheap road.</param>
+        public void RegisterTraffic(float metres, float loadFactor, bool fromWheels = false)
         {
             if (Run == null || !IsSupported) return;
+            if (fromWheels && surfaceKind == RoadSurfaceKind.Pathway) return;
             Run.AddTraffic(metres, loadFactor);
         }
 
@@ -632,7 +668,8 @@ namespace VoxelEngine.Building
             // them, and an allocation per cell here would show up as a hitch at the end of the drag.
             _sampler ??= LocalGroundHeight;
             AsphaltRoadMesh.BuildSurface(_surfaceMesh, cellSize, thickness, Edges, _sampler,
-                                         shoulderWidth, shoulderRise);
+                                         shoulderWidth, shoulderRise,
+                                         curveInRight, curveOutRight, curveInMitre, curveOutMitre);
             BuildWearMesh(Run?.Wear01 ?? 0f);
 
             _surfaceFilter.sharedMesh = _surfaceMesh;
@@ -680,8 +717,11 @@ namespace VoxelEngine.Building
             if (showWear && Mathf.Abs(wear - _wearMeshWear) >= WEAR_REBUILD_STEP) BuildWearMesh(wear);
 
             if (_surfaceRenderer == null) return;
-            Color tint = wear >= 1f ? BrokenTint : Color.Lerp(FreshTint, WornTint, Mathf.Clamp01(wear));
-            if (!supported) tint = BrokenTint;
+            bool cobble = surfaceKind == RoadSurfaceKind.Pathway;
+            Color worn   = cobble ? CobbleWornTint   : WornTint;
+            Color broken = cobble ? CobbleBrokenTint : BrokenTint;
+            Color tint = wear >= 1f ? broken : Color.Lerp(FreshTint, worn, Mathf.Clamp01(wear));
+            if (!supported) tint = broken;
             _surfaceProperties.SetColor(BaseColorId, tint);
             _surfaceProperties.SetColor(ColorId, tint);
             _surfaceRenderer.SetPropertyBlock(_surfaceProperties);
@@ -711,14 +751,31 @@ namespace VoxelEngine.Building
             return Vector3.Dot(delta, up) - surface;
         }
 
-        /// <summary>Walk-speed multiplier this cell offers right now. 1 when it offers nothing.</summary>
-        public float WalkSpeedMultiplier => IsSupported && Run != null ? Run.WalkSpeedMultiplier : 1f;
+        /// <summary>Walk-speed multiplier this cell offers right now. 1 when it offers nothing.
+        /// Cobbles are uneven underfoot, so a pathway's bonus is gentler than a roadway's and a
+        /// worn pathway turns actively hostile to boots sooner.</summary>
+        public float WalkSpeedMultiplier
+        {
+            get
+            {
+                if (!IsSupported || Run == null) return 1f;
+                if (surfaceKind != RoadSurfaceKind.Pathway) return Run.WalkSpeedMultiplier;
+                float w = Run.Wear01;
+                if (w >= 1f) return 0.85f;
+                if (w <= 0.35f) return 1.18f;
+                if (w <= 0.70f) return Mathf.Lerp(1.18f, 1.00f, Mathf.InverseLerp(0.35f, 0.70f, w));
+                return Mathf.Lerp(1.00f, 0.85f, Mathf.InverseLerp(0.70f, 1f, w));
+            }
+        }
 
-        /// <summary>Drive-traction multiplier for a wheel on this cell.</summary>
-        public float TractionMultiplier => IsSupported && Run != null ? Run.TractionMultiplier : 1f;
+        /// <summary>Drive-traction multiplier for a wheel on this cell. Cobbles offer none: loose
+        /// stone under a driven wheel is exactly what a paved yard is trying to avoid.</summary>
+        public float TractionMultiplier =>
+            IsSupported && Run != null && surfaceKind == RoadSurfaceKind.Asphalt ? Run.TractionMultiplier : 1f;
 
-        /// <summary>Lateral-grip multiplier for a wheel on this cell.</summary>
-        public float GripMultiplier => IsSupported && Run != null ? Run.GripMultiplier : 1f;
+        /// <summary>Lateral-grip multiplier for a wheel on this cell. Cobbles offer none.</summary>
+        public float GripMultiplier =>
+            IsSupported && Run != null && surfaceKind == RoadSurfaceKind.Asphalt ? Run.GripMultiplier : 1f;
 
         // ════════════════════════════════════════════════════════════════
         //  SAVE HOOKS

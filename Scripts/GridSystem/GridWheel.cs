@@ -145,7 +145,7 @@ namespace VoxelEngine.GridSystem
                     // reason "a road under heavy traffic wears faster" is a rule and not a flavour line.
                     float rolled = Mathf.Abs(Vector3.Dot(pointVelocity, forward.normalized)) * Time.fixedDeltaTime;
                     if (rolled > 0f && rolled < 4f)
-                        road.RegisterTraffic(rolled, road.WheelLoadFor(grid.Body.mass));
+                        road.RegisterTraffic(rolled, road.WheelLoadFor(grid.Body.mass), true);
                 }
 
                 _lastSpringLength = currentLength;

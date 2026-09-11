@@ -83,6 +83,8 @@ namespace VoxelEngine.Building
 
             if (GetComponent<VoxelEngine.Simulation.ConveyorShapeWheel>() == null)
                 gameObject.AddComponent<VoxelEngine.Simulation.ConveyorShapeWheel>();
+            if (GetComponent<VoxelEngine.Simulation.RoadSurfaceWheel>() == null)
+                gameObject.AddComponent<VoxelEngine.Simulation.RoadSurfaceWheel>();
 
             // Create translucent ghost materials.
             _ghostMaterialValid   = MakeGhostMaterial(new Color(0.4f, 0.9f, 0.5f, ghostAlpha));

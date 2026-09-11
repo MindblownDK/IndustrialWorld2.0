@@ -40,7 +40,10 @@ namespace VoxelEngine.Building
         /// enough to drape a gully without costing anything measurable on a highway. Public so a
         /// caller can size its height cache to match the grid this file builds and the two can
         /// never drift apart.</summary>
-        public const int SUBDIVISIONS = 3;
+        // Five, not three: the rounded outer corners project boundary vertices onto an arc, and an
+        // arc needs vertices to live on. Three subdivisions put one vertex per corner region and
+        // the "round" read as a chamfer.
+        public const int SUBDIVISIONS = 5;
 
         /// <summary>Samples a ground height in LOCAL space: x/z are metres from the cell centre,
         /// the return is metres above the cell origin. Supplied by the block so this file stays
@@ -64,11 +67,39 @@ namespace VoxelEngine.Building
         /// <param name="shoulderRise">How proud of the asphalt the kerb stands.</param>
         public static void BuildSurface(Mesh target, float cellSize, float thickness, RoadEdgeMask mask,
                                         HeightSampler sampleHeight, float shoulderWidth = 0.09f,
-                                        float shoulderRise = 0.022f)
+                                        float shoulderRise = 0.022f,
+                                        Vector3 curveInRight = default, Vector3 curveOutRight = default,
+                                        float curveInMitre = 1f, float curveOutMitre = 1f)
         {
             if (target == null) return;
             float half = cellSize * 0.5f;
             var sampler = sampleHeight ?? ((x, z) => 0f);
+
+            // ── 0) The footprint outline ───────────────────────────────────
+            // A cell sitting on a bend carries the route's cross-section at its entry and at its
+            // exit: two mitred chords. The footprint is the quad between them, so a cell on a
+            // straight is EXACTLY the old rectangle (straight kerb lines, no scalloping) while a
+            // chain of bent cells tiles into one continuous arc — outer edge long and smooth,
+            // inner edge tight, like a real carriageway. Per-cell corner rounding was tried and
+            // rejected: it put a notch in every tile of a curve and beaded the whole road.
+            // Junction cells and hand-placed cells carry no curve frame and stay square.
+            Vector3 sw, se, ne, nw;
+            bool curved = curveInRight.sqrMagnitude > 0.5f && curveOutRight.sqrMagnitude > 0.5f;
+            if (curved)
+            {
+                Vector3 ein  = new Vector3(0f, 0f, -half);
+                Vector3 eout = new Vector3(0f, 0f,  half);
+                Vector3 ir = new Vector3(curveInRight.x, 0f, curveInRight.z).normalized
+                           * (half * Mathf.Clamp(curveInMitre, 1f, 1.6f));
+                Vector3 orr = new Vector3(curveOutRight.x, 0f, curveOutRight.z).normalized
+                           * (half * Mathf.Clamp(curveOutMitre, 1f, 1.6f));
+                sw = ein - ir; se = ein + ir; ne = eout + orr; nw = eout - orr;
+            }
+            else
+            {
+                sw = new Vector3(-half, 0f, -half); se = new Vector3(half, 0f, -half);
+                ne = new Vector3(half, 0f, half);   nw = new Vector3(-half, 0f, half);
+            }
 
             var positions = new List<Vector3>((SUBDIVISIONS + 1) * (SUBDIVISIONS + 1) + 64);
             var normals   = new List<Vector3>(positions.Capacity);
@@ -85,10 +116,16 @@ namespace VoxelEngine.Building
 
             for (int iz = 0; iz < vertsPerAxis; iz++)
             {
-                float z = Mathf.Lerp(-half, half, iz / (float)SUBDIVISIONS);
+                float z = 0f;
                 for (int ix = 0; ix < vertsPerAxis; ix++)
                 {
-                    float x = Mathf.Lerp(-half, half, ix / (float)SUBDIVISIONS);
+                    // Bilinear across the footprint quad: identical to the old square grid when
+                    // the cell is straight, and a proper fan across the bend when it is not.
+                    float u = ix / (float)SUBDIVISIONS;
+                    float v = iz / (float)SUBDIVISIONS;
+                    Vector3 q = Vector3.Lerp(Vector3.Lerp(sw, se, u), Vector3.Lerp(nw, ne, u), v);
+                    float x = q.x;
+                    z = q.z;
                     float ground = sampler(x, z);
                     topHeights[iz * vertsPerAxis + ix] = ground;
 
@@ -114,14 +151,16 @@ namespace VoxelEngine.Building
             RecomputeNormals(positions, asphalt, normals, firstTop, vertsPerAxis);
 
             // ── 2) Aggregate shoulder on every unconnected edge ──────────
-            AddShoulder(positions, normals, uvs, shoulder, sampler, half, thickness,
-                        RoadEdgeMask.North, (mask & RoadEdgeMask.North) != 0, shoulderWidth, shoulderRise);
-            AddShoulder(positions, normals, uvs, shoulder, sampler, half, thickness,
-                        RoadEdgeMask.East,  (mask & RoadEdgeMask.East)  != 0, shoulderWidth, shoulderRise);
-            AddShoulder(positions, normals, uvs, shoulder, sampler, half, thickness,
-                        RoadEdgeMask.South, (mask & RoadEdgeMask.South) != 0, shoulderWidth, shoulderRise);
-            AddShoulder(positions, normals, uvs, shoulder, sampler, half, thickness,
-                        RoadEdgeMask.West,  (mask & RoadEdgeMask.West)  != 0, shoulderWidth, shoulderRise);
+            // Kerb on every unconnected edge, built along the footprint outline so it follows the
+            // curve frame instead of assuming a square cell.
+            AddShoulderEdge(positions, normals, uvs, shoulder, sampler, thickness,
+                            nw, ne, (mask & RoadEdgeMask.North) != 0, shoulderWidth, shoulderRise);
+            AddShoulderEdge(positions, normals, uvs, shoulder, sampler, thickness,
+                            ne, se, (mask & RoadEdgeMask.East) != 0, shoulderWidth, shoulderRise);
+            AddShoulderEdge(positions, normals, uvs, shoulder, sampler, thickness,
+                            se, sw, (mask & RoadEdgeMask.South) != 0, shoulderWidth, shoulderRise);
+            AddShoulderEdge(positions, normals, uvs, shoulder, sampler, thickness,
+                            sw, nw, (mask & RoadEdgeMask.West) != 0, shoulderWidth, shoulderRise);
 
             // ── 3) Skirt and base ────────────────────────────────────────
             // The skirt hangs below the LOWEST ground sample in the cell so a draped slab can
@@ -131,7 +170,8 @@ namespace VoxelEngine.Building
                 if (topHeights[i] < lowest) lowest = topHeights[i];
             float baseY = lowest - Mathf.Max(thickness, 0.22f);
 
-            AddSkirtAndBase(positions, normals, uvs, asphalt, sampler, half, thickness, baseY);
+            AddSkirtAndBase(positions, normals, uvs, asphalt, sampler, thickness, baseY,
+                              sw, se, ne, nw);
 
             target.Clear();
             target.indexFormat = positions.Count > 65000
@@ -175,23 +215,35 @@ namespace VoxelEngine.Building
             }
         }
 
-        private static void AddShoulder(List<Vector3> positions, List<Vector3> normals, List<Vector2> uvs,
-                                        List<int> triangles, HeightSampler sampler, float half, float thickness,
-                                        RoadEdgeMask edge, bool connected, float width, float rise)
+        private static void AddShoulderEdge(List<Vector3> positions, List<Vector3> normals, List<Vector2> uvs,
+                                            List<int> triangles, HeightSampler sampler, float thickness,
+                                            Vector3 a, Vector3 b, bool connected, float width, float rise)
         {
             if (connected || width <= 0.001f) return;
 
-            // Build the kerb as a strip inset from the edge: outer vertices on the cell border
-            // at the asphalt level, inner vertices raised by `rise`, so the shoulder reads as a
-            // low aggregate lip rather than a wall.
+            // The kerb as a strip inset from one outline edge: outer vertices on the footprint
+            // boundary at asphalt level, inner vertices raised by `rise`, so the shoulder reads as
+            // a low aggregate lip. Inset direction is perpendicular to the edge (toward the edge
+            // midpoint's inward normal), which keeps the lip a constant width on curved cells.
+            Vector3 mid = (a + b) * 0.5f;
+            Vector3 centre = Vector3.zero;   // replaced below by the caller-free inward normal
+            Vector3 along = (b - a);
+            if (along.sqrMagnitude < 1e-8f) return;
+            along.Normalize();
+            Vector3 inward = new Vector3(-along.z, 0f, along.x);
+            // Pick the sign that points into the cell: the outline is wound clockwise in XZ
+            // (NW->NE->SE->SW), so the interior is to the right of the travel direction.
+            Vector3 toOrigin = -mid;
+            if (Vector3.Dot(inward, new Vector3(toOrigin.x, 0f, toOrigin.z)) < 0f) inward = -inward;
+            centre = mid;
+
             Vector3 up = Vector3.up;
             for (int i = 0; i < SUBDIVISIONS; i++)
             {
-                float t0 = Mathf.Lerp(-half, half, i / (float)SUBDIVISIONS);
-                float t1 = Mathf.Lerp(-half, half, (i + 1) / (float)SUBDIVISIONS);
-
-                GetEdgeQuad(edge, t0, t1, half, width,
-                    out Vector3 outerA, out Vector3 outerB, out Vector3 innerA, out Vector3 innerB);
+                Vector3 outerA = Vector3.Lerp(a, b, i / (float)SUBDIVISIONS);
+                Vector3 outerB = Vector3.Lerp(a, b, (i + 1) / (float)SUBDIVISIONS);
+                Vector3 innerA = outerA + inward * width;
+                Vector3 innerB = outerB + inward * width;
 
                 float hOuterA = sampler(outerA.x, outerA.z);
                 float hOuterB = sampler(outerB.x, outerB.z);
@@ -215,41 +267,14 @@ namespace VoxelEngine.Building
             }
         }
 
-        private static void GetEdgeQuad(RoadEdgeMask edge, float t0, float t1, float half, float width,
-                                        out Vector3 outerA, out Vector3 outerB, out Vector3 innerA, out Vector3 innerB)
-        {
-            switch (edge)
-            {
-                case RoadEdgeMask.North:
-                    outerA = new Vector3(t0, 0f,  half); outerB = new Vector3(t1, 0f,  half);
-                    innerA = new Vector3(t0, 0f,  half - width); innerB = new Vector3(t1, 0f, half - width);
-                    break;
-                case RoadEdgeMask.South:
-                    outerA = new Vector3(t1, 0f, -half); outerB = new Vector3(t0, 0f, -half);
-                    innerA = new Vector3(t1, 0f, -half + width); innerB = new Vector3(t0, 0f, -half + width);
-                    break;
-                case RoadEdgeMask.East:
-                    outerA = new Vector3(half, 0f, t1); outerB = new Vector3(half, 0f, t0);
-                    innerA = new Vector3(half - width, 0f, t1); innerB = new Vector3(half - width, 0f, t0);
-                    break;
-                default: // West
-                    outerA = new Vector3(-half, 0f, t0); outerB = new Vector3(-half, 0f, t1);
-                    innerA = new Vector3(-half + width, 0f, t0); innerB = new Vector3(-half + width, 0f, t1);
-                    break;
-            }
-        }
-
         private static void AddSkirtAndBase(List<Vector3> positions, List<Vector3> normals, List<Vector2> uvs,
-                                            List<int> triangles, HeightSampler sampler, float half,
-                                            float thickness, float baseY)
+                                            List<int> triangles, HeightSampler sampler, float thickness,
+                                            float baseY, Vector3 sw, Vector3 se, Vector3 ne, Vector3 nw)
         {
-            // Four walls plus a flat underside. Sampled at the cell corners so the skirt follows
-            // the same drape as the top and never leaves a slot of daylight on a slope.
-            var corners = new[]
-            {
-                new Vector3(-half, 0f, -half), new Vector3(half, 0f, -half),
-                new Vector3(half, 0f, half),   new Vector3(-half, 0f, half)
-            };
+            // Four walls plus a flat underside, hung off the footprint outline so a curved cell's
+            // skirt follows the same quad the top was built from. Sampled at the corners so the
+            // skirt follows the drape and never leaves a slot of daylight on a slope.
+            var corners = new[] { sw, se, ne, nw };
             var sideNormals = new[] { Vector3.back, Vector3.right, Vector3.forward, Vector3.left };
 
             int ringStart = positions.Count;
