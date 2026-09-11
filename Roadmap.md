@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `9.43.0-dev`  
-**Roadmap Version:** `9.43.0-dev`  
+**Current Version:** `9.43.1-dev`  
+**Roadmap Version:** `9.43.1-dev`  
 **Date:** 2026-09-11
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -45,6 +45,15 @@
   Legacy, hand-placed and junction cells leave the flag false and take the 9.42 curve-frame path
   unchanged, so no existing road changes shape. `SurfaceOffset` tests the real quad rather than a
   square, so an agent in the wedge outside a curved lane is correctly off-road.
+- **9.43.1-dev** (patch, first Unity pass): the live preview leg was writing its verdict into the
+  same field the HUD prints, so the paver shouted "cannot pave inside a wall" on flat ground; a
+  one-click plan laid a one-cell stub while its ghost showed the route to the cursor; deleting
+  `FillWedges` had also dropped the pass that fills the pocket where a NEW strip meets pavement
+  already in the world, so junctions gaped. All three fixed, junction filling restored as
+  `FillJunctionPockets` (world-anchored only, so it cannot contradict the solver). Width limit
+  **3 → 10 cells**, and the minimum corner radius is now the measured `cell × (1.25 + 1.5 × halfSpan)`
+  rather than the degenerate-point guess, with an outright refusal when a turn is too tight for the
+  width instead of silent slivers.
 
 ### 9.42.0-dev — Road Planner, Pathways & Surface Wheel
 - The held drag is replaced by a **polyline plan**: click the start, click each corner, press the
@@ -944,7 +953,10 @@ end is worth something too.
 > **Setup Step 72** under `res_asphalt_roads` (the pathway recipe is ungated on purpose).
 > **9.43.0-dev** replaced the leg-stitching planner with a carriageway solver
 > (`Scripts/Building/RoadCorridor.cs`) that fillets corners to a real radius and cuts the route into
-> shared cross-sections, so every lane tiles exactly; no new assets, so no new setup step. The road
+> shared cross-sections, so every lane tiles exactly; no new assets, so no new setup step.
+> **9.43.1-dev** fixed the first Unity pass: preview refusals no longer reach the HUD, a one-click
+> plan lays what its ghost shows, junction pockets against existing pavement are filled again, and
+> width goes to 10 cells. The road
 > **network** object, routing that prefers paved routes, lamps and **culverts/bridges/drawbridges**
 > remain open items below. Full narrative: `Changelog.md`.
 
@@ -1025,7 +1037,7 @@ one sentence: **a road is the difference between walking a route and being able 
    what remains and split it into however many runs the gap created, each inheriting the wear it was
    part of. Merging takes the worst of the two, so a worn strip joined to a new one is a worn strip.
 
-6. **Still open after 9.43.0-dev**
+6. **Still open after 9.43.1-dev**
    - The road **network** object: a player-given name and a traffic/condition readout across a whole
      system. Deliberately held back again — it should arrive with the routing it feeds.
    - **Road-aware routing.** Pathfinding, autopilot and delivery drones do not prefer paved routes.

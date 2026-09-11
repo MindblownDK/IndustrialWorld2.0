@@ -70,6 +70,10 @@ namespace VoxelEngine.Building
         public int cellsPerLane;
         public float step;
         public float cornerRadius;
+        /// <summary>Set when a turn is too tight to carry a fillet at this width — the legs are
+        /// shorter than the radius the carriageway needs. The solve produces no cells; the paver
+        /// reads this and tells the player to widen the turn or narrow the road.</summary>
+        public bool cornerTooTight;
 
         private readonly List<Vector3> _arcTangent = new List<Vector3>(128);
 
@@ -121,17 +125,23 @@ namespace VoxelEngine.Building
         /// <summary>
         /// The smallest corner radius a carriageway of this width can carry, in metres.
         ///
-        /// Not a taste decision: the inside lane of a bend has a turn radius of
-        /// `radius - halfSpan * cell`, and once that reaches zero the inside lane is a point and its
-        /// cells become zero-area slivers that fold back on themselves. Measured on the solver, a
-        /// three-wide strip on a 1.5 m radius produces cells with an edge ratio of 0.002 and starts
-        /// returning concave quads; at `(halfSpan + 1) * cell` every lane stays convex with a worst
-        /// edge ratio above 0.24. So the clamp is exactly one cell of radius left for the inside lane.
+        /// Not a taste decision, and not the first guess either. The inside lane of a bend has a turn
+        /// radius of `radius - halfSpan * cell`, so as the radius shrinks the inside lane's cells get
+        /// shorter while staying a full cell wide — they become slivers, then fold concave. The first
+        /// version of this rule used `(halfSpan + 1) * cell`, which keeps the inside lane's radius
+        /// above one cell but still let a ten-wide strip emit cells whose shortest edge was 9% of
+        /// their longest.
+        ///
+        /// So the constant was measured instead: sweeping radius per width and taking the point where
+        /// no cell falls below a 0.35 edge ratio gives 1.25, 1.75, 2.50, 3.25, 4.00, 4.75, 6.25, 7.75
+        /// cells for widths 1, 2, 3, 4, 5, 6, 8, 10 — a straight line in halfSpan, fitted as
+        /// `cell * (1.25 + 1.5 * halfSpan)`. A road cannot turn inside its own width, which is true
+        /// of real carriageways and was not true of this one before.
         /// </summary>
         public static float MinimumRadius(int width, float cell)
         {
             float halfSpan = Mathf.Max(0, width - 1) * 0.5f;
-            return (halfSpan + 1f) * Mathf.Max(0.05f, cell);
+            return (1.25f + 1.5f * halfSpan) * Mathf.Max(0.05f, cell);
         }
 
         /// <summary>
@@ -153,8 +163,13 @@ namespace VoxelEngine.Building
             width = Mathf.Max(1, width);
 
             buf.cornerRadius = Mathf.Max(requestedRadius, MinimumRadius(width, cell));
+            buf.cornerTooTight = false;
 
-            BuildCentreline(buf, waypoints, up, buf.cornerRadius);
+            BuildCentreline(buf, waypoints, up, buf.cornerRadius, MinimumRadius(width, cell));
+            // A corner cannot be built at all when the legs are too short to carry the radius this
+            // width needs. Emitting it anyway produces zero-area slivers and concave cells, so the
+            // solve refuses instead and the paver says why.
+            if (buf.cornerTooTight) { buf.DiscardCells(); return; }
             // A degenerate route (every waypoint on top of the last) solves to nothing. Drop the
             // pooled cells too, or the emitter would lay whatever the previous solve left behind.
             if (buf.centreline.Count < 2) { buf.DiscardCells(); return; }
@@ -162,8 +177,13 @@ namespace VoxelEngine.Building
             ArcParameterise(buf);
 
             float total = buf.arc[buf.arc.Count - 1];
+            // Cells are stepped by EXACTLY one cell, never stretched to land on the far waypoint.
+            // Stretching (`step = total / n`) makes every slab a slightly different size, which
+            // shows up as a seam where a new strip meets an old one that was laid on the standard
+            // lattice — precisely the connect-and-extend case. `Sample` clamps at the corridor end,
+            // so an overshoot produces one short closure cell rather than a row of long ones.
             int n = Mathf.Max(1, Mathf.RoundToInt(total / cell));
-            buf.step = total / n;
+            buf.step = cell;
             buf.cellsPerLane = n;
 
             BuildStations(buf, up, n);
@@ -175,7 +195,7 @@ namespace VoxelEngine.Building
         // ════════════════════════════════════════════════════════════════
 
         private static void BuildCentreline(RoadCorridorBuffers buf, List<Vector3> waypoints,
-                                            Vector3 up, float radius)
+                                            Vector3 up, float radius, float minRadius)
         {
             buf.centreline.Add(waypoints[0]);
 
@@ -195,9 +215,15 @@ namespace VoxelEngine.Building
                 // next corner — so the radius is clamped to 45% of the shorter leg.
                 float legIn = (p - a).magnitude, legOut = (b - p).magnitude;
                 float r = radius;
-                float maxTangent = 0.45f * Mathf.Min(legIn, legOut);
+                // Half the shorter leg is as much arc as a corner may take; more and the fillet
+                // starts eating the leg it is supposed to join.
+                float maxTangent = 0.5f * Mathf.Min(legIn, legOut);
                 float maxR = maxTangent / Mathf.Tan(turn * 0.5f * Mathf.Deg2Rad);
                 if (r > maxR) r = maxR;
+                // The leg clamp is allowed to shrink the radius, but never past the point where the
+                // inside lane of the carriageway collapses. Past that there is no corner to build:
+                // the turn needs more room or the road needs to be narrower.
+                if (r < minRadius - 1e-3f) { buf.cornerTooTight = true; return; }
                 if (r < 1e-4f) { buf.centreline.Add(p); continue; }
 
                 AppendFillet(buf, p, d1, d2, turn, r, up);

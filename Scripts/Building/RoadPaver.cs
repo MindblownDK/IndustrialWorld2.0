@@ -49,6 +49,10 @@ namespace VoxelEngine.Building
         }
 
         private static readonly List<AsphaltRoad> _anchorScratch = new List<AsphaltRoad>(8);
+        /// <summary>Separate from `_anchorScratch` on purpose: `IsCellOccupied` and
+        /// `TryComputePose` both read through that one, and a shared buffer would be clobbered
+        /// the moment a caller nested them.</summary>
+        private static readonly List<AsphaltRoad> _roadAtScratch = new List<AsphaltRoad>(8);
 
         /// <summary>
         /// Resolves where a road cell goes for a given aim. Returns false when there is nothing to
@@ -309,7 +313,10 @@ namespace VoxelEngine.Building
         // ════════════════════════════════════════════════════════
 
         public const int MIN_WIDTH = 1;
-        public const int MAX_WIDTH = 3;
+        /// <summary>Widest carriageway the paver will lay, in cells. Ten cells is 40 m on the 4 m
+        /// slab, which is a motorway rather than a road; the corner solver enforces the real
+        /// limit, since a carriageway this wide simply cannot turn inside a short leg.</summary>
+        public const int MAX_WIDTH = 10;
 
         private bool _planning;
         /// <summary>The clicked points of the open plan. A road is a polyline: the corridor follows
@@ -317,6 +324,10 @@ namespace VoxelEngine.Building
         private readonly List<Vector3> _wpPos = new List<Vector3>(8);
         private readonly List<Quaternion> _wpRot = new List<Quaternion>(8);
         private readonly HashSet<long> _planSeen = new HashSet<long>(256);
+        /// <summary>Coarse pocket keys already filled this solve: one junction pocket can be
+        /// discovered from two different cells, and only one cell may go into it. Cleared by
+        /// `FillJunctionPockets` at the start of every solve.</summary>
+        private readonly HashSet<long> _pocketSeen = new HashSet<long>(64);
         private readonly List<Vector3> _planInR  = new List<Vector3>(128);
         private readonly List<Vector3> _planOutR = new List<Vector3>(128);
         private readonly List<float> _planInM  = new List<float>(128);
@@ -352,6 +363,9 @@ namespace VoxelEngine.Building
         private readonly List<int> _planCost = new List<int>(128);
         private readonly List<RoadRun> _planTouchedRuns = new List<RoadRun>(8);
         private string _refusal;
+        /// <summary>Verdict of the LIVE preview leg only. Tints the ghost; never reaches the
+        /// HUD, because the preview describes ground the player has not committed to.</summary>
+        private string _liveRefusal;
         private int _totalCost;
 
         public bool IsPlanning => _planning;
@@ -430,7 +444,7 @@ namespace VoxelEngine.Building
             _planInR.Clear(); _planOutR.Clear(); _planInM.Clear(); _planOutM.Clear();
             _quadSW.Clear(); _quadSE.Clear(); _quadNE.Clear(); _quadNW.Clear();
             _planTouchedRuns.Clear(); _planSeen.Clear();
-            _refusal = null; _totalCost = 0;
+            _refusal = null; _liveRefusal = null; _totalCost = 0;
             _commitCount = 0; _commitCost = 0; _commitRunCount = 0; _commitRefusal = null;
             if (!_planning || block == null || _wpPos.Count == 0) { HideGhost(); return; }
 
@@ -438,39 +452,54 @@ namespace VoxelEngine.Building
             // One tangent frame for the whole corridor: a corridor is short against a planet, and
             // `PlaceCell` re-drops every cell onto the real ground afterwards regardless.
             Vector3 up = _wpRot[0] * Vector3.up;
+            Vector3 aimPos = default;   // assigned only when haveAim; the && below short-circuits,
+                                      // so it has to be declared to be definitely assigned
+            bool haveAim = hasHit && TryComputePose(hit, block, out aimPos, out _);
 
-            // ── 1) The COMMITTED solve: only the points the player has actually clicked. ──
-            // A single waypoint has no direction yet, so it is given one cell of the frame's
-            // forward to solve against; the live solve below replaces it immediately.
-            CollectWaypoints(_corridorPoints, false);
-            if (_corridorPoints.Count == 1)
-                _corridorPoints.Add(_corridorPoints[0] + (_wpRot[0] * Vector3.forward) * cell);
+            // ── 1) The COMMITTED solve: what the interact key will actually lay. ──
+            // With one waypoint there is no clicked polyline yet, so the cursor IS the endpoint —
+            // otherwise the ghost would show a route to the cursor and the click would lay a single
+            // stub cell, which is exactly "I can only ever pave one row". With two or more waypoints
+            // the clicked route is the contract and the cursor is only a preview.
+            CollectWaypoints(_corridorPoints, _wpPos.Count == 1);
+            if (_wpPos.Count == 1)
+            {
+                if (haveAim) _corridorPoints[1] = aimPos;
+                else _corridorPoints[1] = _corridorPoints[0] + (_wpRot[0] * Vector3.forward) * cell;
+            }
             EmitCorridor(_commitCorridor, _corridorPoints, up, block, cell, true);
+            FillJunctionPockets(block, cell);
 
-            // Snapshot what the clicked polyline alone commits. The live leg out to the aim is a
-            // PREVIEW: it leads the cursor, and if the aim happens to be at a wall or the sky its
-            // refusal must tint the ghost red — but it must never stop the player laying the
-            // route they actually clicked. That mismatch was exactly "I cannot finish the road".
+            // Snapshot what that polyline commits. The live leg below is a PREVIEW: it leads the
+            // cursor, and if the aim happens to be at a wall or the sky it tints the ghost red —
+            // but it must never stop the player laying the route they actually clicked, and it must
+            // never reach the HUD. Printing the preview's verdict every frame is what made the paver
+            // shout "cannot pave inside a wall" while standing on flat open ground.
             _commitCount = _planPos.Count;
             _commitCost = _totalCost;
             _commitRefusal = _refusal;
             _commitRunCount = _planTouchedRuns.Count;
 
             // ── 2) The LIVE solve: the same route continued to the cursor, for the ghost only. ──
-            // It is solved separately rather than appended, because continuing the route turns the
-            // last clicked waypoint into a corner — and a corner re-fillets the cells before it.
-            // Appending would have the commit lay geometry the ghost never showed.
-            CollectWaypoints(_corridorPoints, true);
-            if (hasHit && TryComputePose(hit, block, out var ep, out var er))
-                _corridorPoints[_corridorPoints.Count - 1] = ep;
-            if (_corridorPoints.Count >= 2)
+            // Solved separately rather than appended, because continuing the route turns the last
+            // clicked waypoint into a corner, and a corner re-fillets the cells before it.
+            if (_wpPos.Count >= 2 && haveAim)
             {
+                CollectWaypoints(_corridorPoints, true);
+                _corridorPoints[_corridorPoints.Count - 1] = aimPos;
                 RoadCorridor.Build(_liveCorridor, _corridorPoints, up, _width, cell,
                                    _cornerRadiusCells * cell);
                 JudgeCorridor(_liveCorridor, block);
             }
+            else
+            {
+                // Nothing to preview beyond the committed route: show that, so the ghost and the
+                // click can never disagree.
+                _liveCorridor.DiscardCells();
+            }
 
-            bool good = _refusal == null && affordable && (_commitCost > 0 || _commitRunCount > 0);
+            bool good = _refusal == null && _liveRefusal == null && affordable
+                        && (_commitCost > 0 || _commitRunCount > 0);
             ShowGhost(good);
         }
 
@@ -574,7 +603,7 @@ namespace VoxelEngine.Building
             _planInR.Clear(); _planOutR.Clear(); _planInM.Clear(); _planOutM.Clear();
             _quadSW.Clear(); _quadSE.Clear(); _quadNE.Clear(); _quadNW.Clear(); _planExplicit.Clear();
             _planTouchedRuns.Clear(); _planSeen.Clear();
-            _refusal = null; _totalCost = 0;
+            _refusal = null; _liveRefusal = null; _totalCost = 0;
             _commitCount = 0; _commitCost = 0; _commitRunCount = 0; _commitRefusal = null;
             HideGhost();
         }
@@ -603,6 +632,13 @@ namespace VoxelEngine.Building
                                   BlockItem block, float cell, bool emit)
         {
             RoadCorridor.Build(buf, points, up, _width, cell, _cornerRadiusCells * cell);
+
+            if (buf.cornerTooTight)
+            {
+                SetRefusal("Corner too tight for a road " + _width + " wide - widen the turn, "
+                           + "or Ctrl+scroll narrower");
+                return;
+            }
             if (!emit) { JudgeCorridor(buf, block); return; }
 
             for (int i = 0; i < buf.cells.Count; i++)
@@ -658,10 +694,10 @@ namespace VoxelEngine.Building
             {
                 var frame = buf.cells[i];
                 if (!AsphaltRoad.ProbeGround(frame.position, up, out float off))
-                { SetRefusal("No ground under part of the road"); continue; }
+                { SetLiveRefusal("No ground under part of the road"); continue; }
                 var band = JudgeCell(block, frame.position + up * off, frame.rotation, out _, out _);
                 if (band != AsphaltRoad.GradeBand.Smooth && band != AsphaltRoad.GradeBand.Rough)
-                    SetRefusal(AsphaltRoad.DescribeSite(band));
+                    SetLiveRefusal(AsphaltRoad.DescribeSite(band));
             }
         }
 
@@ -676,6 +712,61 @@ namespace VoxelEngine.Building
         public float EffectiveCornerRadius(float cell)
             => RoadCorridor.MinimumRadius(_width, cell) > _cornerRadiusCells * cell
                 ? RoadCorridor.MinimumRadius(_width, cell) : _cornerRadiusCells * cell;
+
+        /// <summary>
+        /// Fills the diagonal pocket where the NEW corridor meets pavement that is ALREADY IN THE
+        /// WORLD. Within one corridor there is nothing to fill: every lane shares the carriageway's
+        /// cross-sections, so the cells meet exactly, and 9.43.0 deleted the old wedge pass for that
+        /// reason. But a corridor crossing or butting onto a strip laid earlier is a different case —
+        /// the two were solved independently, on different lattices, and the diagonal slot between
+        /// them belongs to neither. Left alone it is a triangular hole in the middle of a junction,
+        /// which is exactly what "connecting two roads does not work" looks like from the saddle.
+        ///
+        /// Restricted to pockets where at least one flanking cell is an existing world road, so it
+        /// can never add a cell the corridor solver deliberately did not lay.
+        /// </summary>
+        private void FillJunctionPockets(BlockItem block, float cell)
+        {
+            int snapshot = _planPos.Count;
+            if (snapshot == 0) return;
+            _pocketSeen.Clear();
+
+            for (int i = 0; i < snapshot; i++)
+            {
+                Vector3 pos = _planPos[i];
+                Quaternion rot = _planRot[i];
+                Vector3 r = rot * Vector3.right;
+                Vector3 f = rot * Vector3.forward;
+                Vector3 up = rot * Vector3.up;
+
+                for (int sr = -1; sr <= 1; sr += 2)
+                for (int sf = -1; sf <= 1; sf += 2)
+                {
+                    Vector3 diag = pos + (r * sr + f * sf) * cell;
+                    if (IsCellOccupied(diag, cell)) continue;
+                    long pocket = KeyOf(diag / Mathf.Max(0.25f, cell * 0.5f));
+                    if (!_pocketSeen.Add(pocket)) continue;
+
+                    // The two cells flanking the diagonal across the corner. Both paved means the
+                    // slot is the pocket of a junction rather than a gap in open ground, and at
+                    // least one of them must be pavement already in the world — otherwise this is
+                    // the corridor's own geometry and the solver has already decided it.
+                    bool sideA = _planSeen.Contains(KeyOf(pos + r * sr * cell));
+                    bool sideB = _planSeen.Contains(KeyOf(pos + f * sf * cell));
+                    bool worldA = IsCellOccupied(pos + r * sr * cell, cell);
+                    bool worldB = IsCellOccupied(pos + f * sf * cell, cell);
+                    if (!(sideA || worldA) || !(sideB || worldB)) continue;
+                    if (!worldA && !worldB) continue;
+
+                    if (!AsphaltRoad.ProbeGround(diag, up, out float off)) continue;
+                    Vector3 dpos = diag + up * off;
+                    var band = JudgeCell(block, dpos, rot, out int cost, out _);
+                    if (band != AsphaltRoad.GradeBand.Smooth && band != AsphaltRoad.GradeBand.Rough) continue;
+                    _totalCost += cost;
+                    AddCell(dpos, rot, true, cost, Vector3.zero, Vector3.zero, 1f, 1f);
+                }
+            }
+        }
 
         private void AddCell(Vector3 pos, Quaternion rot, bool fresh, int cost,
                              Vector3 inR, Vector3 outR, float inM, float outM,
@@ -701,6 +792,11 @@ namespace VoxelEngine.Building
         private void SetRefusal(string reason)
         {
             if (_refusal == null) _refusal = reason;
+        }
+
+        private void SetLiveRefusal(string reason)
+        {
+            if (_liveRefusal == null) _liveRefusal = reason;
         }
 
         private float CellOf(BlockItem block)
@@ -743,15 +839,22 @@ namespace VoxelEngine.Building
             return removed > 0;
         }
 
+        /// <summary>The road cell occupying this slot, or null. Reads the same spatial hash every
+        /// other lookup in this file uses rather than scanning the scene: this runs once per already
+        /// paved cell of a corridor, so a full `FindObjectsByType` here was O(cells x roads) on
+        /// every frame a plan was open over existing pavement. It was also the last caller of the
+        /// obsolete `FindObjectsSortMode` overload.</summary>
         private AsphaltRoad RoadAt(Vector3 pos, float cell)
         {
-            foreach (var other in UnityEngine.Object.FindObjectsByType<AsphaltRoad>(FindObjectsSortMode.None))
+            VoxelEngine.Environment.RoadSurfaceUtility.QueryAt(pos, _roadAtScratch);
+            float half = cell * 0.5f;
+            for (int i = 0; i < _roadAtScratch.Count; i++)
             {
+                var other = _roadAtScratch[i];
                 if (other == null) continue;
                 var t = other.transform;
                 if (Vector3.Dot(t.forward, t.up) > 0.2f) continue;
                 Vector3 lp = t.worldToLocalMatrix.MultiplyPoint3x4(pos);
-                float half = cell * 0.5f;
                 if (lp.x > -half && lp.x < half && lp.z > -half && lp.z < half &&
                     Mathf.Abs(lp.y) < Mathf.Max(0.5f, half))
                     return other;

@@ -1,9 +1,39 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.43.0-dev`
+**Current Version:** `9.43.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.43.1-dev] Asphalt Roads: The Paver Would Not Lay a Road
+
+**Type:** PATCH — four defects from the first Unity pass on 9.43.0, plus one balance change. No save touch, no API touch, no new assets. Reported as: "I cannot place any road, it says cannot place road inside a wall no matter where I place on the ground, I can only pave a small 1x3 row, and I want ten-wide roads and roads that connect."
+
+**GitHub title:** `[9.43.1-dev] Asphalt Roads: stop the live preview shouting its own refusals at the HUD, make a one-click plan lay what its ghost shows, width to 10 cells, restore junction filling, and a measured corner-radius rule`
+
+**Fixed**
+
+- **The paver shouted "Cannot pave inside a wall" while standing on flat open ground.** 9.43.0 gave the live preview leg its own corridor solve but let it write into the same `_refusal` field the HUD reads, and `PlayerInteractionTool` prints `Refusal` every frame a plan is open. So aiming the cursor at anything unpavable — a hillside, a rock face, the far side of a valley — put that verdict on screen continuously, regardless of what the clicked route would actually do. The preview now writes to its own `_liveRefusal`, which tints the ghost red and nothing else. This is the same class of bug 9.42.0 already fixed once for cost ("the preview leg vetoing the commit"), reintroduced through a different field.
+- **A one-click plan laid one row and the ghost lied about it.** The ghost drew the live corridor out to the cursor, while `CommitPlan` laid only the clicked polyline — and with a single waypoint there is no clicked polyline, so 9.43.0 substituted a one-cell stub. Result: a long ghost, three cells laid, exactly the "1 long, max three wide" reported. With one waypoint the cursor is now the endpoint, so the ghost and the click describe the same road. With two or more waypoints the clicked route stays the contract and the cursor stays a preview, which is the 9.42.0 design and the reason a route can be clicked in corners.
+- **Connecting a new road to an existing one left a triangular hole at the junction.** 9.43.0 deleted `FillWedges` on the correct grounds that a single corridor has no internal seams to fill — but that pass was also doing a second job it was not credited for: filling the diagonal pocket where a new strip meets pavement laid earlier, on a different lattice, by a different solve. That job is real and is now its own pass, `FillJunctionPockets`, restricted to pockets where at least one flanking cell is a road already in the world. It therefore cannot add a cell the corridor solver deliberately did not lay, which was the risk of simply putting the old pass back.
+- **Slabs were being stretched to land on the far waypoint.** The solver set `step = total / n`, so every cell of a corridor was a slightly different length. Laying that against a strip already on the standard lattice is exactly where the mismatch shows, which is the connect-and-extend case. Cells now step by exactly one cell and `Sample` clamps at the corridor end, so an overshoot yields one short closure cell instead of a row of long ones.
+
+**Changed**
+
+- **Width limit 3 → 10 cells** (`RoadPaver.MAX_WIDTH`), i.e. up to 40 m of carriageway on the 4 m slab. Ctrl+scroll as before.
+- **The minimum corner radius is now measured rather than guessed.** 9.43.0 used `(halfSpan + 1) × cell`, derived from the point where the inside lane's radius reaches zero. That is the point where cells become *degenerate*, not where they become *bad*: sweeping radius per width showed a ten-wide strip at that radius still emitting cells whose shortest edge was 9% of their longest. The radius at which no cell falls below a 0.35 edge ratio was measured per width — 1.25, 1.75, 2.50, 3.25, 4.00, 4.75, 6.25, 7.75 cells for widths 1, 2, 3, 4, 5, 6, 8, 10 — and fits a straight line, so the rule is now `cell × (1.25 + 1.5 × halfSpan)`. A road cannot turn inside its own width.
+- **A corner that cannot be built now says so instead of emitting slivers.** The leg-length clamp can shrink a fillet, but never past the radius the width needs; past that `RoadCorridor` sets `cornerTooTight`, produces no cells, and the paver reports `Corner too tight for a road N wide - widen the turn, or Ctrl+scroll narrower`. Previously the same situation silently produced zero-area and concave cells. The leg clamp also moved from 45% to 50% of the shorter leg.
+
+**Corrected after the first Unity pass**
+
+- **`RoadPaver.cs(461,51): error CS0165: Use of unassigned local variable 'aimPos'`** — the round did not compile. The aim pose was captured as `bool haveAim = hasHit && TryComputePose(hit, block, out var aimPos, out _)`. Because `&&` short-circuits, `TryComputePose` is never called when `hasHit` is false, so `aimPos` is not definitely assigned — and the compiler cannot tie the later `if (haveAim)` guard back to the assignment, because `haveAim` is just a `bool` by then. Declared as `Vector3 aimPos = default;` on its own line first, which makes it definitely assigned and keeps the guard meaningful at runtime. Every other `out var` in the touched files was checked: the remaining five are all direct calls with no short-circuit, so none can hit the same error.
+- **`RoadPaver.cs(838): warning CS0618` on `Object.FindObjectsByType<T>(FindObjectsSortMode)`** — obsolete overload. Rather than swap in the newer signature, `RoadAt` now reads `RoadSurfaceUtility`, the spatial hash every other road lookup in this file already uses. It was the one lookup still walking the entire scene, and it runs once per already-paved cell of a corridor, so it was O(cells x roads) on every frame a plan was open over existing pavement. Same filters as before (`Dot(forward, up)` degeneracy guard, local-space bounds), on its own scratch list rather than `_anchorScratch` so it cannot be clobbered by a caller that nests it inside `IsCellOccupied` or `TryComputePose`. Behavioural note: the registry only holds active roads, where `FindObjectsByType` also returned inactive ones — which is the correct set for every caller of `RoadAt` (runs touched by a corridor, the cell under the cursor, the remove/lift target), none of which should be acting on a disabled road.
+
+**Verified here, and what was not**
+
+- The corrected solver was re-run through the line-for-line Python port across 8 widths at cell 1 m and 4 widths at the 4 m slab, every one at its own minimum radius: **zero longitudinal seam, zero lateral seam, zero concave cells**, worst edge ratio 0.373 (ten-wide at its minimum). Short-leg cases that cannot carry the radius now return the refusal rather than geometry — verified for widths 1/3/10 at legs of 8, 20 and 60 m, with 200 m legs building correctly at R = 32 m.
+- All six files parse clean as C#, braces balanced, no dangling references.
+- **Still not compiled against UnityEngine or run in Unity** — there is no Unity, `dotnet` or `mono` in the agent workspace. In particular the "inside a wall" report is explained by the refusal-routing defect above, but if it persists after this patch the next suspect is the head-voxel test in `AsphaltRoad.EvaluateSite` (`position + up * 0.85`) reading natural terrain as a wall, which is a 9.41.0 code path this round did not touch. That is stated as a hypothesis, not a finding.
 
 ### [9.43.0-dev] Asphalt Roads: Carriageway Geometry — Real Corner Radii and Exact Lane Tiling
 
