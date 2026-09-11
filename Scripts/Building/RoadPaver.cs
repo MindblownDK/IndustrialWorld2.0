@@ -368,6 +368,30 @@ namespace VoxelEngine.Building
         private string _liveRefusal;
         private int _totalCost;
 
+        // ── Water crossings ──
+        // The paver does not make the player lay bridge cells by hand. A corridor that reaches
+        // water gets its crossing inserted automatically where it crosses, charged at its own
+        // price, because asking a player to eyeball a deck level is asking them to do the
+        // surveyor's job. These two are set by the caller from the tool each frame, because
+        // `UpdatePlan` is handed the road block and not the tool.
+        /// <summary>Block laid for deck cells, or null when this paver cannot cross water.</summary>
+        public BlockItem BridgeBlock { get; set; }
+        /// <summary>Bridge material charged per deck cell.</summary>
+        public int BridgeCostPerCell { get; set; } = 6;
+
+        private int _bridgeCost;
+        private int _gapCount;
+        private readonly List<bool>  _planBridge   = new List<bool>(128);
+        private readonly List<float> _groundAt     = new List<float>(64);
+        private readonly List<bool>  _isGap        = new List<bool>(64);
+        private readonly List<int>   _gapOfStation = new List<int>(64);
+        private readonly List<float> _deckAt       = new List<float>(64);
+        private readonly List<BridgeSpan> _planSpans = new List<BridgeSpan>(4);
+
+        /// <summary>Bridge material per deck cell. Deliberately well above the asphalt price: a
+        /// crossing has to hold itself up over nothing, and that should cost more than pavement.</summary>
+        private int BridgeCellCost => Mathf.Max(1, BridgeCostPerCell);
+
         public bool IsPlanning => _planning;
         public int Width => _width;
         public int PlannedCells => _planPos.Count;
@@ -386,6 +410,9 @@ namespace VoxelEngine.Building
         /// <summary>What laying the CLICKED polyline right now would spend. The live leg to the aim
         /// is excluded: it is preview, not commitment.</summary>
         public int CommitCost => _commitCost;
+        /// <summary>Deck cells in the committed plan. The caller needs this to check the bridge
+        /// material separately, because the crossing bills a different pot than the road.</summary>
+        public int CommitBridgeCells { get; private set; }
         public string CommitRefusal => _commitRefusal;
         public bool HasCommitWork => _commitCost > 0 || _commitRunCount > 0;
 
@@ -444,7 +471,9 @@ namespace VoxelEngine.Building
             _planInR.Clear(); _planOutR.Clear(); _planInM.Clear(); _planOutM.Clear();
             _quadSW.Clear(); _quadSE.Clear(); _quadNE.Clear(); _quadNW.Clear();
             _planTouchedRuns.Clear(); _planSeen.Clear();
-            _refusal = null; _liveRefusal = null; _totalCost = 0;
+            _planBridge.Clear(); _groundAt.Clear(); _isGap.Clear();
+            _gapOfStation.Clear(); _deckAt.Clear(); _planSpans.Clear();
+            _refusal = null; _liveRefusal = null; _totalCost = 0; _bridgeCost = 0; _gapCount = 0;
             _commitCount = 0; _commitCost = 0; _commitRunCount = 0; _commitRefusal = null;
             if (!_planning || block == null || _wpPos.Count == 0) { HideGhost(); return; }
 
@@ -477,6 +506,10 @@ namespace VoxelEngine.Building
             // shout "cannot pave inside a wall" while standing on flat open ground.
             _commitCount = _planPos.Count;
             _commitCost = _totalCost;
+            // Snapshotted here, before the live preview leg adds its own deck cells to the running
+            // total: what the interact key will lay is the clicked route, not the route plus the
+            // leg the cursor happens to be pointing at.
+            CommitBridgeCells = _bridgeCost / BridgeCellCost;
             _commitRefusal = _refusal;
             _commitRunCount = _planTouchedRuns.Count;
 
@@ -534,11 +567,39 @@ namespace VoxelEngine.Building
                 return false;
             }
 
+            // ── The crossing bills itself ──
+            // A deck cell is a different structure from a pavement cell and is built from a
+            // different material, so it is charged separately rather than folded into the asphalt
+            // total. Charging it from the same pot would let a player cross a river for the price
+            // of the asphalt that happens to be on top of it.
+            int bridgeCells = 0;
+            for (int i = 0; i < _commitCount; i++)
+                if (_planFresh[i] && i < _planBridge.Count && _planBridge[i]) bridgeCells++;
+
+            var bridgeMaterial = tool != null ? tool.bridgeMaterial : null;
+            int bridgeUnits = bridgeCells > 0 && BridgeBlock != null
+                ? bridgeCells * Mathf.Max(1, tool.bridgeMaterialPerCell) : 0;
+            if (bridgeUnits > 0)
+            {
+                if (bridgeMaterial == null)
+                { CancelPlan(); refusal = "No bridge material configured"; return false; }
+                if (inventory.CountOf(bridgeMaterial) < bridgeUnits)
+                {
+                    CancelPlan();
+                    refusal = "Needs " + bridgeUnits + " " + bridgeMaterial.displayName + " for the crossing";
+                    return false;
+                }
+            }
+
             inventory.container.Remove(material, _commitCost + repairUnits);
+            if (bridgeUnits > 0) inventory.container.Remove(bridgeMaterial, bridgeUnits);
+
+            _planSpans.Clear();
             for (int i = 0; i < _commitCount; i++)
             {
                 if (!_planFresh[i]) continue;
-                var road = PlaceCell(block, _planPos[i], _planRot[i]);
+                bool isDeck = i < _planBridge.Count && _planBridge[i] && BridgeBlock != null;
+                var road = PlaceCell(isDeck ? BridgeBlock : block, _planPos[i], _planRot[i]);
                 if (road != null)
                 {
                     if (_planExplicit[i])
@@ -586,11 +647,46 @@ namespace VoxelEngine.Building
                 if (_planTouchedRuns[i] != null && _planTouchedRuns[i].Wear01 > 0f)
                     _planTouchedRuns[i].Repair();
 
+            // ── Assemble the crossings ──
+            // Spans are built after the deck is on the ground rather than during placement, because
+            // a span's classification and pier spacing depend on the finished crossing: a cell laid
+            // first does not yet know whether it is one pier of a viaduct or the whole of a culvert.
+            if (bridgeCells > 0)
+            {
+                float spanReach = CellOf(BridgeBlock) * 1.75f;
+                var neighbours = new List<AsphaltRoad>(8);
+                var decks = new List<AsphaltRoad>(bridgeCells);
+                for (int i = 0; i < _commitCount; i++)
+                {
+                    if (!_planFresh[i] || i >= _planBridge.Count || !_planBridge[i]) continue;
+                    var deck = RoadAt(_planPos[i], CellOf(BridgeBlock));
+                    if (deck != null && deck.surfaceKind == RoadSurfaceKind.Bridge
+                        && !decks.Contains(deck)) decks.Add(deck);
+                }
+                for (int d = 0; d < decks.Count; d++)
+                {
+                    neighbours.Clear();
+                    for (int o = 0; o < decks.Count; o++)
+                    {
+                        if (o == d) continue;
+                        if ((decks[o].transform.position - decks[d].transform.position).magnitude <= spanReach)
+                            neighbours.Add(decks[o]);
+                    }
+                    var span = BridgeSpan.JoinOrCreate(decks[d], neighbours);
+                    if (!_planSpans.Contains(span)) _planSpans.Add(span);
+                }
+                for (int sp = 0; sp < _planSpans.Count; sp++)
+                    _planSpans[sp].Rebuild(allowDrawbridge: false, deckMaterial: null);
+            }
+
             int spent = _commitCost + repairUnits;
             CancelPlan();
             VoxelEngine.UI.BuildFeedbackHud.Show(block.displayName + " placed",
                 laid + " cell(s) · " + spent + " " + material.displayName
-                + (repairUnits > 0 ? " · includes resurfacing" : ""),
+                + (repairUnits > 0 ? " · includes resurfacing" : "")
+                + (bridgeCells > 0
+                    ? " · " + bridgeCells + " deck cell(s), " + bridgeUnits + " " + bridgeMaterial.displayName
+                    : ""),
                 block.icon, new Color(0.55f, 0.80f, 0.95f));
             return laid > 0;
         }
@@ -603,7 +699,9 @@ namespace VoxelEngine.Building
             _planInR.Clear(); _planOutR.Clear(); _planInM.Clear(); _planOutM.Clear();
             _quadSW.Clear(); _quadSE.Clear(); _quadNE.Clear(); _quadNW.Clear(); _planExplicit.Clear();
             _planTouchedRuns.Clear(); _planSeen.Clear();
-            _refusal = null; _liveRefusal = null; _totalCost = 0;
+            _planBridge.Clear(); _groundAt.Clear(); _isGap.Clear();
+            _gapOfStation.Clear(); _deckAt.Clear(); _planSpans.Clear();
+            _refusal = null; _liveRefusal = null; _totalCost = 0; _bridgeCost = 0; _gapCount = 0;
             _commitCount = 0; _commitCost = 0; _commitRunCount = 0; _commitRefusal = null;
             HideGhost();
         }
@@ -641,43 +739,145 @@ namespace VoxelEngine.Building
             }
             if (!emit) { JudgeCorridor(buf, block); return; }
 
-            for (int i = 0; i < buf.cells.Count; i++)
+            int n = buf.cellsPerLane;
+            if (n <= 0) return;
+
+            // ── Pass 1: where is the ground, and where is it not? ──
+            // A corridor that reaches water used to be refused whole, which is the correct answer
+            // for a road and the wrong answer for a crossing. So the ground is measured first, the
+            // stations that have none are collected into gaps, and each gap gets a deck level from
+            // the ground at its two ends — a bridge deck is level with its approaches, not with the
+            // riverbed, which is what makes the road run straight over instead of diving in.
+            _groundAt.Clear(); _isGap.Clear();
+            _gapOfStation.Clear(); _deckAt.Clear();
+            // Restarted here and not left to `UpdatePlan`: `EmitCorridor` runs twice per frame, once
+            // for the committed route and once for the live preview leg, and each solve numbers its
+            // own gaps. Letting the counter carry over left the deck-level loop walking gap numbers
+            // the current solve never assigned.
+            _gapCount = 0;
+            // Filled with Add rather than sized up front: `List<T>` has no Resize, and these four
+            // are reused scratch that were just cleared, so growing them one station at a time is
+            // the same work without a second API to invent.
+            for (int k = 0; k < n; k++)
             {
-                var frame = buf.cells[i];
-                Vector3 pos = frame.position;
-                Quaternion rot = frame.rotation;
+                _groundAt.Add(float.NaN); _isGap.Add(false);
+                _gapOfStation.Add(-1);    _deckAt.Add(0f);
+            }
 
-                if (!AsphaltRoad.ProbeGround(pos, up, out float off))
+            bool canBridge = BridgeBlock != null;
+            for (int w = 0; w < _width; w++)
+            {
+                for (int k = 0; k < n; k++)
                 {
-                    SetRefusal("No ground under part of the road");
-                    AddCell(pos, rot, true, 0, Vector3.zero, Vector3.zero, 1f, 1f,
-                            frame.sw, frame.se, frame.ne, frame.nw, true);
-                    continue;
+                    var frame = RoadCorridor.CellAt(buf, w, k);
+                    if (frame == null) continue;
+                    bool hit = AsphaltRoad.ProbeGround(frame.position, up, out float off);
+                    if (hit && float.IsNaN(_groundAt[k])) _groundAt[k] = off;
+                    var band = hit
+                        ? JudgeCell(block, frame.position + up * off, frame.rotation, out _, out _)
+                        : AsphaltRoad.GradeBand.NoGround;
+                    bool gap = band == AsphaltRoad.GradeBand.Underwater
+                            || band == AsphaltRoad.GradeBand.NoGround;
+                    if (gap) _isGap[k] = true;
                 }
-                pos += up * off;
+            }
 
-                if (IsCellOccupied(pos, cell))
+            // Number the gaps and give each one a deck level interpolated between the last measured
+            // ground before it and the first after it. A gap at either end of the corridor has only
+            // one side to work from, so it holds that level flat rather than inventing a slope.
+            int currentGap = -1;
+            for (int k = 0; k < n; k++)
+            {
+                if (!_isGap[k]) { currentGap = -1; continue; }
+                if (currentGap < 0) currentGap = _gapCount++;
+                _gapOfStation[k] = currentGap;
+            }
+            for (int g = 0; g < _gapCount; g++)
+            {
+                int first = -1, last = -1;
+                for (int k = 0; k < n; k++) if (_gapOfStation[k] == g) { if (first < 0) first = k; last = k; }
+                float before = float.NaN, after = float.NaN;
+                for (int k = first - 1; k >= 0; k--) if (!_isGap[k] && !float.IsNaN(_groundAt[k])) { before = _groundAt[k]; break; }
+                for (int k = last + 1; k < n; k++) if (!_isGap[k] && !float.IsNaN(_groundAt[k])) { after = _groundAt[k]; break; }
+                float level = !float.IsNaN(before) ? before
+                            : !float.IsNaN(after) ? after
+                            : 0f;
+                for (int k = first; k <= last; k++)
                 {
-                    var existing = RoadAt(pos, cell);
-                    if (existing != null && existing.Run != null && !_planTouchedRuns.Contains(existing.Run))
-                        _planTouchedRuns.Add(existing.Run);
-                    AddCell(pos, rot, false, 0, Vector3.zero, Vector3.zero, 1f, 1f,
-                            frame.sw, frame.se, frame.ne, frame.nw, true);
-                    continue;
+                    if (float.IsNaN(before) || float.IsNaN(after)) { _deckAt[k] = level; continue; }
+                    float t = last == first ? 0.5f : (k - first) / (float)(last - first);
+                    _deckAt[k] = Mathf.Lerp(before, after, t);
                 }
+            }
+            if (_gapCount > 0 && !canBridge)
+            {
+                SetRefusal("The line crosses water and this paver has no bridge material");
+                return;
+            }
 
-                var band = JudgeCell(block, pos, rot, out int cost, out _);
-                if (band != AsphaltRoad.GradeBand.Smooth && band != AsphaltRoad.GradeBand.Rough)
+            // ── Pass 2: lay it ──
+            for (int w = 0; w < _width; w++)
+            {
+                for (int k = 0; k < n; k++)
                 {
-                    SetRefusal(AsphaltRoad.DescribeSite(band));
-                    AddCell(pos, rot, true, 0, Vector3.zero, Vector3.zero, 1f, 1f,
-                            frame.sw, frame.se, frame.ne, frame.nw, true);
-                    continue;
-                }
+                    var frame = RoadCorridor.CellAt(buf, w, k);
+                    if (frame == null) continue;
+                    Vector3 pos = frame.position;
+                    Quaternion rot = frame.rotation;
+                    bool onBridge = _gapOfStation[k] >= 0;
 
-                _totalCost += cost;
-                AddCell(pos, rot, true, cost, Vector3.zero, Vector3.zero, 1f, 1f,
-                        frame.sw, frame.se, frame.ne, frame.nw, true);
+                    if (!onBridge)
+                    {
+                        if (!AsphaltRoad.ProbeGround(pos, up, out float off))
+                        {
+                            SetRefusal("No ground under part of the road");
+                            AddCell(pos, rot, true, 0, Vector3.zero, Vector3.zero, 1f, 1f,
+                                    frame.sw, frame.se, frame.ne, frame.nw, true);
+                            continue;
+                        }
+                        pos += up * off;
+
+                        if (IsCellOccupied(pos, cell))
+                        {
+                            var existing = RoadAt(pos, cell);
+                            if (existing != null && existing.Run != null && !_planTouchedRuns.Contains(existing.Run))
+                                _planTouchedRuns.Add(existing.Run);
+                            AddCell(pos, rot, false, 0, Vector3.zero, Vector3.zero, 1f, 1f,
+                                    frame.sw, frame.se, frame.ne, frame.nw, true);
+                            continue;
+                        }
+
+                        var band = JudgeCell(block, pos, rot, out int cost, out _);
+                        if (band != AsphaltRoad.GradeBand.Smooth && band != AsphaltRoad.GradeBand.Rough)
+                        {
+                            SetRefusal(AsphaltRoad.DescribeSite(band));
+                            AddCell(pos, rot, true, 0, Vector3.zero, Vector3.zero, 1f, 1f,
+                                    frame.sw, frame.se, frame.ne, frame.nw, true);
+                            continue;
+                        }
+                        _totalCost += cost;
+                        AddCell(pos, rot, true, cost, Vector3.zero, Vector3.zero, 1f, 1f,
+                                frame.sw, frame.se, frame.ne, frame.nw, true);
+                        continue;
+                    }
+
+                    // A deck cell: dropped onto the span's level, not onto the ground, and laid from
+                    // the bridge block so it carries the bridge material and the bridge surface kind.
+                    pos += up * _deckAt[k];
+                    if (IsCellOccupied(pos, cell))
+                    {
+                        var existingDeck = RoadAt(pos, cell);
+                        if (existingDeck != null && existingDeck.Run != null && !_planTouchedRuns.Contains(existingDeck.Run))
+                            _planTouchedRuns.Add(existingDeck.Run);
+                        AddCell(pos, rot, false, 0, Vector3.zero, Vector3.zero, 1f, 1f,
+                                frame.sw, frame.se, frame.ne, frame.nw, true);
+                        continue;
+                    }
+                    _bridgeCost += BridgeCellCost;
+                    AddCell(pos, rot, true, BridgeCellCost, Vector3.zero, Vector3.zero, 1f, 1f,
+                            frame.sw, frame.se, frame.ne, frame.nw, true);
+                    if (_planBridge.Count > 0) _planBridge[_planBridge.Count - 1] = true;
+                }
             }
         }
 
@@ -774,6 +974,7 @@ namespace VoxelEngine.Building
                              Vector3 qNE = default, Vector3 qNW = default,
                              bool explicitQuad = false)
         {
+            _planBridge.Add(false);
             // Two legs of a polyline share their corner cell; the seen-set is what stops the second
             // leg from laying (and charging for) a cell the first leg already put in the plan.
             long key = KeyOf(pos);

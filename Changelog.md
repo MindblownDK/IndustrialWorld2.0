@@ -1,9 +1,81 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.43.1-dev`
+**Current Version:** `9.44.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.44.0-dev] Water Crossings: Culverts and Bridges on Piers
+
+**Type:** MINOR — a new save-compatible system. A road can now cross water instead of being refused by it. New surface kind, new structure type, new setup step. Nothing existing changes meaning and no save is invalidated: the enum value is appended, never inserted, so every block already written still deserialises to the surface it had.
+
+**GitHub title:** `[9.44.0-dev] Water Crossings: the paver inserts a culvert or a bridge on piers where the line reaches water, at a deck level taken from its own approaches and billed from a separate iron-and-stone pot`
+
+#### Added
+
+- **Deck mode on the road cell.** `AsphaltRoad` gains a third `RoadSurfaceKind.Bridge`. A cell in that kind does not drape the terrain at all — `SampleGroundHeights` returns a flat field at the cell origin, so the cell reports itself supported with no ground underneath it. Everything downstream reads that height cache, which is why the mesh builder, `SurfaceOffset`, the collider and the wear decals needed no bridge-specific path anywhere. One guarded branch replaces what would otherwise have been a second cell type.
+- **`Scripts/Building/BridgeSpan.cs`.** The structure a crossing belongs to: its classification, its deck clearance, its piers. Deliberately *not* merged into `RoadRun`. A run is a wear ledger and a span is a structure, and a viaduct of three crossings is one road — one wear curve, one repair gesture — and three spans, three deck heights, three things a barge can hit. Merging them would mean either a road that wears per crossing or a crossing that cannot be repaired as part of the road it carries. Both objects sit on the same cells.
+- **Piers, spaced every 8 m of deck**, built from the deck down to whatever is under it, with a collider so a boat hits one rather than passing through. At one per 8 m a 24 m crossing gets three, which reads as a structure without turning a small culvert into a colonnade.
+- **Culvert versus bridge, classified from what is actually spanned.** Below 1.5 m of clearance a crossing hugs the ground and gets no piers, because there is not enough room under it for a pier to mean anything. Above it, the crossing stands off. A span re-classifies itself when extended, so three cells grown to thirty become a bridge on piers rather than staying a culvert.
+- **The crossing is inserted by the paver, not laid by hand.** `EmitCorridor` is now two passes: the first measures ground at every station and collects the ones that have none into numbered gaps, the second lays the road and drops deck cells onto each gap's level. A player should not have to eyeball a deck height — that is the surveyor's job, and the paver is holding the survey.
+- **Setup Step 73** (`Scripts/Editor/RoadBridgeSetup.cs`, *Tools > Voxel Engine > Run Step 73 (Water Crossings)*). Authors the deck material, `RoadBridge.prefab`, `Block_RoadBridge` and the paver's bridge wiring. Non-destructive throughout, and re-runnable.
+- `RoadPaverTool.bridgeBlock` / `bridgeMaterial` / `bridgeMaterialPerCell` (default 6).
+
+#### Changed
+
+- **A deck is level with its approaches, not with the riverbed.** Each gap's deck level is interpolated between the last measured ground before the water and the first after it, and held flat where a gap runs off the end of the corridor. This is also why no new water-surface API was needed: a real deck is level with the road it continues, so the corridor already contains both numbers.
+- **The crossing bills a separate pot.** `CommitPlan` counts deck cells, charges `bridgeMaterialPerCell` of `bridgeMaterial` each, and lays them from `bridgeBlock`. Charging the crossing out of the asphalt total would let a player cross a river for the price of the mix that happens to be on top of it. The build feedback line reports both spends separately.
+- **Affordability now checks both pots before the key is pressed**, through a new `CanAffordRoadPlan`. The ghost goes red when the iron is short, not only when the interact key is pressed — a refusal the player could have seen coming should not be a surprise.
+- **A deck grips like the road it carries.** `TractionMultiplier` and `GripMultiplier` tested `surfaceKind == Asphalt`; they now test `!= Pathway`. The rule was always "not cobble" — loose stone under a driven wheel is what a paved yard exists to avoid — and a bridge deck is paved.
+- Nine `AsphaltRoadSetup` helpers and six asset-path constants moved from `private` to `internal` so Step 73 can author a deck through the same prefab helper as the asphalt and cobble cells instead of duplicating it. A deck authored any other way would drift.
+
+#### Fixed
+
+- **Deep water no longer classifies as shallow.** `AsphaltRoad.ProbeGround` reaches 4 m down and no further, so a deck over a real channel gets no reading at all. Treating a missing reading as zero clearance classified a genuine bridge as a culvert and left it hanging with no piers — the exact opposite of what the absence means. `BridgeSpan.NO_BOTTOM_CLEARANCE` (6 m) now stands in, and piers are built to that depth, so absence of ground reads as deep water rather than as nothing underneath.
+
+#### Numbers
+
+| | Value |
+|---|---|
+| Deck cell size | 4 m — matches the wide carriageway, so the paver never changes cell size mid-corridor and puts a seam across the deck |
+| Bridge material per deck cell | 6 iron plate, against 10 asphalt for a 16 m2 carriageway cell |
+| Pier spacing | 1 per 8 m of deck |
+| Culvert threshold | below 1.5 m of clearance |
+| Assumed clearance with no bottom found | 6 m |
+
+#### Corrected after the first Unity pass
+
+- **CS0117, CS1061 x4 and CS0103 in `RoadPaver.cs`**, all three the same underlying failure: code
+  written against APIs I assumed rather than checked. `RoadSurfaceKind` is declared at *namespace*
+  level in `AsphaltRoad.cs` (line 54), not nested inside the class the way `GradeBand` is (line
+  619) — the two enums sit in different scopes in the same file, and I generalised from the one I
+  had seen, so `AsphaltRoad.RoadSurfaceKind.Bridge` does not resolve. `List<T>` has no `Resize`
+  method; that call was invented. The project's eighty-odd real `.Resize(` calls are all on
+  `ItemContainer`, a project class with its own method, which is where the false confidence came
+  from — the four scratch lists are now filled with `Add` after a `Clear`, which is the same work.
+  And the paver's bridge block is a property named `BridgeBlock`, not a field named `_bridgeBlock`.
+  Added a sweep that checks every `_identifier` referenced in the touched files against its
+  declarations, so an invented or misnamed field is caught here rather than in Unity.
+- **CS0106 in `PlayerInteractionTool.cs`.** The new `CanAffordRoadPlan` helper was spliced in at an
+  anchor that turned out to sit *inside* `TryTickRoadPaver` rather than after it, so a `private`
+  method declaration landed in a method body. It parses perfectly clean as C# — a method inside a
+  method body is a legal local function, and only the `private` modifier makes it an error — which
+  is precisely why the syntax check did not catch it. Moved to class level after the enclosing
+  method's closing brace. Added a structural check that walks the syntax tree for method
+  declarations nested inside a body, so this class of mistake is caught before delivery rather than
+  in Unity; all eight touched files come back clean.
+
+#### Held back to 9.44.1-dev
+
+The drawbridge machinery is written and in `BridgeSpan` — classification, the two hinged leaves, the open/shut state machine, the swing, and `SetDeckPassable`, which takes the deck out of service so nothing drives into an open channel. **It is not reachable in game yet**, and this version does not claim otherwise:
+
+- Nothing can *make* a span a drawbridge. `Rebuild` is called with `allowDrawbridge: false`, so every span the paver produces is a culvert or a fixed bridge.
+- Nothing can *open* one. `ToggleOpen` has no key binding or interaction behind it.
+- The leaves are built with `deckMaterial: null` at commit, so they would be untextured if a span ever became a drawbridge.
+- A drawbridge's open state is not saved. A fixed bridge or culvert needs nothing: its deck level is baked into the saved block position and its surface kind is authored on the prefab, so both restore for free. The swing is the only piece that does not.
+- No power draw, no ship-approach trigger, no warning light or horn.
+
+These are wiring, not design, which is why the machinery shipped rather than being stubbed.
 
 ### [9.43.1-dev] Asphalt Roads: The Paver Would Not Lay a Road
 

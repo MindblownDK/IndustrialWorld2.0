@@ -37,10 +37,10 @@ namespace VoxelEngine.EditorTools
 {
     public static class AsphaltRoadSetup
     {
-        private const string ASSET_ROOT     = "Assets/VoxelEngineAssets";
+        internal const string ASSET_ROOT     = "Assets/VoxelEngineAssets";
         private const string INDUSTRIAL     = ASSET_ROOT + "/Industrial";
-        private const string PREFABS_FOLDER = INDUSTRIAL + "/Prefabs";
-        private const string BLOCKS_FOLDER  = INDUSTRIAL + "/Blocks";
+        internal const string PREFABS_FOLDER = INDUSTRIAL + "/Prefabs";
+        internal const string BLOCKS_FOLDER  = INDUSTRIAL + "/Blocks";
         private const string ITEMS_FOLDER   = INDUSTRIAL + "/Items";
         private const string PROC_FOLDER    = INDUSTRIAL + "/ProcessingRecipes";
         private const string RECIPES_ROOT   = ASSET_ROOT + "/Recipes";
@@ -65,7 +65,7 @@ namespace VoxelEngine.EditorTools
 
         private const string BITUMEN_ITEM    = ITEMS_FOLDER   + "/Item_Bitumen.asset";
         private const string ASPHALT_ITEM    = ITEMS_FOLDER   + "/Item_Asphalt.asset";
-        private const string PAVER_ITEM      = ITEMS_FOLDER   + "/Tool_RoadPaver.asset";
+        internal const string PAVER_ITEM      = ITEMS_FOLDER   + "/Tool_RoadPaver.asset";
         private const string PAVER_RECIPE    = RECIPES_ROOT   + "/Recipe_RoadPaver.asset";
 
         private const string PROC_BITUMEN    = PROC_FOLDER    + "/Proc_BlownBitumen.asset";
@@ -79,13 +79,13 @@ namespace VoxelEngine.EditorTools
         private const string TEX_SHOULDER    = PREFABS_FOLDER + "/Tex_RoadShoulder.asset";
         private const string TEX_SHOULDER_NRM= PREFABS_FOLDER + "/Tex_RoadShoulderNormal.asset";
         private const string MAT_ASPHALT     = PREFABS_FOLDER + "/Mat_RoadAsphalt.mat";
-        private const string MAT_SHOULDER    = PREFABS_FOLDER + "/Mat_RoadShoulder.mat";
-        private const string MAT_CRACK       = PREFABS_FOLDER + "/Mat_RoadCrack.mat";
+        internal const string MAT_SHOULDER    = PREFABS_FOLDER + "/Mat_RoadShoulder.mat";
+        internal const string MAT_CRACK       = PREFABS_FOLDER + "/Mat_RoadCrack.mat";
         /// <summary>The first draft's wear material, retired when the four flat blobs became a
         /// fracture network and potholes. Kept as a path so a re-run deletes the orphan instead of
         /// leaving a dead material asset in the project.</summary>
         private const string MAT_WEAR_RETIRED = PREFABS_FOLDER + "/Mat_RoadWear.mat";
-        private const string MAT_POTHOLE     = PREFABS_FOLDER + "/Mat_RoadPothole.mat";
+        internal const string MAT_POTHOLE     = PREFABS_FOLDER + "/Mat_RoadPothole.mat";
 
         // The stone pathway: cobble for walking around the base. Same draping cell, same wear
         // ledger and same run merging as asphalt, but a different surface material, a different
@@ -147,16 +147,16 @@ namespace VoxelEngine.EditorTools
         private const string NODE_NAME_SENTINEL    = "New Research";
         private const float  NODE_SECONDS_SENTINEL = 30f;
 
-        private static bool UnsetName(string value)
+        internal static bool UnsetName(string value)
             => string.IsNullOrWhiteSpace(value) || value == ITEM_NAME_SENTINEL;
 
         private static bool UnsetNodeName(string value)
             => string.IsNullOrWhiteSpace(value) || value == NODE_NAME_SENTINEL;
 
-        private static bool UnsetStack(int value)
+        internal static bool UnsetStack(int value)
             => value <= 0 || value == ITEM_STACK_SENTINEL;
 
-        private static bool UnsetMass(float value)
+        internal static bool UnsetMass(float value)
             => value <= 0f || Mathf.Approximately(value, ITEM_MASS_SENTINEL);
 
         private static bool UnsetResearchSeconds(float value)
@@ -528,7 +528,7 @@ namespace VoxelEngine.EditorTools
         /// drift. `cellSize` is the variant's identity so it is always written; the proportions that
         /// follow from it are written too, since a 4 m slab at 1 m proportions looks like a tile.
         /// </summary>
-        private static GameObject AuthorRoadPrefab(string prefabPath, string rootName, float cellSize,
+        internal static GameObject AuthorRoadPrefab(string prefabPath, string rootName, float cellSize,
                                                    Material asphaltMat, Material shoulderMat,
                                                    Material crackMat, Material potholeMat,
                                                    bool forceMaterials,
@@ -615,7 +615,7 @@ namespace VoxelEngine.EditorTools
         /// <summary>Stamps the surface kind onto an authored road prefab. `AuthorRoadPrefab` builds
         /// the one shared draping cell, so the single field that tells a roadway from a pathway is
         /// set here rather than by forking the builder.</summary>
-        private static void SetSurfaceKind(string prefabPath, RoadSurfaceKind kind)
+        internal static void SetSurfaceKind(string prefabPath, RoadSurfaceKind kind)
         {
             var root = PrefabUtility.LoadPrefabContents(prefabPath);
             try
@@ -1106,7 +1106,7 @@ namespace VoxelEngine.EditorTools
         //  HELPERS
         // ════════════════════════════════════════════════════════════════
 
-        private static T GetOrCreate<T>(string path, ref int created, ref int preserved) where T : ScriptableObject
+        internal static T GetOrCreate<T>(string path, ref int created, ref int preserved) where T : ScriptableObject
         {
             var existing = AssetDatabase.LoadAssetAtPath<T>(path);
             if (existing != null) { preserved++; return existing; }
@@ -1116,13 +1116,13 @@ namespace VoxelEngine.EditorTools
             return asset;
         }
 
-        private static void Add(ref List<RecipeIngredient> list, ItemDefinition item, int count)
+        internal static void Add(ref List<RecipeIngredient> list, ItemDefinition item, int count)
         {
             if (item == null || count <= 0) return;
             list.Add(new RecipeIngredient { item = item, count = count });
         }
 
-        private static ItemDefinition FindItem(string assetName)
+        internal static ItemDefinition FindItem(string assetName)
         {
             foreach (var root in new[] { ASSET_ROOT + "/Items", ITEMS_FOLDER,
                                          ASSET_ROOT + "/Industrial/Items", ASSET_ROOT + "/Factory/Items" })
@@ -1158,7 +1158,7 @@ namespace VoxelEngine.EditorTools
             }
         }
 
-        private static void EnsureFolder(string path)
+        internal static void EnsureFolder(string path)
         {
             if (string.IsNullOrEmpty(path) || AssetDatabase.IsValidFolder(path)) return;
             int last = path.LastIndexOf('/');

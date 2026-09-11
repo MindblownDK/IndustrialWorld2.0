@@ -36,6 +36,26 @@ namespace VoxelEngine.Items
         public ItemDefinition pathMaterial;
         public int pathMaterialPerCell = 1;
 
+        [Header("Bridge (laid automatically where the line crosses water)")]
+        [Tooltip("Block laid for deck cells instead of the road block. The paver inserts these " +
+                 "itself where the corridor reaches water, so the player never has to guess a deck " +
+                 "level. A deck cell carries this item, this cost and the Bridge surface kind, which " +
+                 "makes the crossing a separate structure from the road it carries: it can be " +
+                 "priced, inspected and opened on its own. Leave this empty and the paver refuses " +
+                 "to cross water at all, which is the right answer for a tool that has not been " +
+                 "given bridge material.")]
+        public BlockItem bridgeBlock;
+
+        [Tooltip("Material the deck is built from. Stone and iron are the intended materials: a " +
+                 "bridge is deliberately an expensive thing to put down, because it is the one " +
+                 "piece of road that has to hold itself up over nothing.")]
+        public ItemDefinition bridgeMaterial;
+
+        [Tooltip("Bridge material charged per deck cell, on top of whatever the road itself costs. " +
+                 "Kept well above the asphalt price so that crossing a river is a decision rather " +
+                 "than a rounding error.")]
+        [Min(1)] public int bridgeMaterialPerCell = 6;
+
         [Tooltip("Units of material one cell costs on smooth ground. Rough ground doubles it; " +
                  "that is the grading rule the design asks for.")]
         public int materialPerCell = 1;

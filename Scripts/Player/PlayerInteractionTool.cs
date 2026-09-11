@@ -1933,14 +1933,32 @@ namespace VoxelEngine.Player
             {
                 // Affordability is judged on what the CLICKED route costs; the ghost additionally
                 // goes red when the live preview leg or the clicked route is unpavable.
-                _roadPaver.UpdatePlan(hit, hasHit, block,
-                    material != null && _roadPaver.HasCommitWork
-                    && inventory.CountOf(material) >= _roadPaver.CommitCost);
+                // The paver is handed the road block and not the tool, so the bridge block has to
+                // be pushed in alongside it every frame the tool is held. Done here rather than
+                // inside `UpdatePlan` so the paver keeps exactly one item parameter.
+                _roadPaver.BridgeBlock = paver.bridgeBlock;
+                _roadPaver.BridgeCostPerCell = paver.bridgeMaterialPerCell;
+                _roadPaver.UpdatePlan(hit, hasHit, block, CanAffordRoadPlan(paver, material, inventory));
                 if (_roadPaver.Refusal != null) ReportRoadRefusal(_roadPaver.Refusal);
                 return true;
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// Whether the player can afford the committed road plan. Both pots are checked, not just
+        /// the asphalt: a line that crosses water bills bridge material as well, and going red only
+        /// once the interact key is pressed would be a refusal the player could have seen coming.
+        /// </summary>
+        private bool CanAffordRoadPlan(VoxelEngine.Items.RoadPaverTool paver,
+                                       ItemDefinition material, Inventory inventory)
+        {
+            if (material == null || !_roadPaver.HasCommitWork) return false;
+            if (inventory.CountOf(material) < _roadPaver.CommitCost) return false;
+            int decks = _roadPaver.CommitBridgeCells;
+            if (decks <= 0 || paver == null || paver.bridgeMaterial == null) return true;
+            return inventory.CountOf(paver.bridgeMaterial) >= decks * Mathf.Max(1, paver.bridgeMaterialPerCell);
         }
 
         /// <summary>Refusals speak on their own throttle: while the ghost is red the reason would

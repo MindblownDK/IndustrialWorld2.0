@@ -1,9 +1,9 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `9.43.1-dev`  
-**Roadmap Version:** `9.43.1-dev`  
-**Date:** 2026-09-11
+**Current Version:** `9.44.0-dev`  
+**Roadmap Version:** `9.44.0-dev`  
+**Date:** 2026-09-12
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
@@ -28,6 +28,23 @@
 ---
 
 ## 0. Recently Done
+
+### 9.44.0-dev — Water Crossings: Culverts & Bridges on Piers
+- A road **crosses water** instead of being refused by it. `RoadSurfaceKind.Bridge` puts a cell in
+  deck mode: `SampleGroundHeights` returns a flat field, so the cell is supported with no ground
+  under it and the mesh, collider and wear passes need no bridge-specific path. `BridgeSpan` is the
+  structure — clearance, piers every 8 m, culvert below 1.5 m — and is deliberately not `RoadRun`:
+  a run is a wear ledger, a span is a structure, and a three-crossing viaduct is one road and three
+  spans.
+- The **paver inserts the crossing itself** where the line reaches water, at a deck level
+  interpolated from the ground at either end of the gap, so the deck is level with its approaches
+  rather than with the riverbed. No new water API: the corridor already contained both numbers.
+- The crossing **bills a separate pot** — 6 iron plate a deck cell against 10 asphalt for a 16 m2
+  carriageway cell — and affordability checks both before the key is pressed. Deck grips like road
+  (`!= Pathway`, the rule was always "not cobble"). Setup **Step 73** authors it non-destructively.
+  Drawbridge machinery is written but **not reachable in game yet**; see the changelog's held-back
+  list for the five wiring items that make up `9.44.1-dev`.
+
 
 ### 9.43.0-dev — Carriageway Geometry: Real Corners, Exact Junctions
 - The paver now solves the whole clicked polyline as one **carriageway** instead of laying legs and
@@ -112,18 +129,6 @@
   circuit 12 / glass 8 / copper wire 16; `res_catalytic_cracking` tier 6 chemistry, requires
   Atmospheric Distillation + Flare Disposal. Step 71. **Open: no save serialisation** — bed, reactor
   temperature and tank contents reset on reload — and resin/lubricant have no consumers yet.
-
-### 9.39.0-dev — Flare Stack & Waste-Heat Recovery
-- Stationary industrial `FlareStack` derrick tower + Large and Small `GridFlareStack` vents as run
-  terminators for excess fractions (LPG, naphtha, kerosene, diesel, gasoline, heavy fuel oil,
-  refined oil, crude oil) and combustible gases (hydrogen, exhaust, off-gases) to prevent line chokes.
-- Waste-Heat Power Recovery: converts ~20% of thermal combustion energy into electrical power on the
-  power grid; full casing and neighbour thermal simulation (`IHeatSourceBlock`) with atmospheric and
-  oxygen draw requirements (chokes if unventilated in a sealed room).
-- Fuel ladder & properties: `LiquidType` gains specific combustion energies (`BurnEnergyMJPerL`),
-  freezing/waxing points (`FreezingPointC`), and combustion checks; `StationaryMaritimeEngine` and
-  `GridMaritimeEngine` burn fractionated cuts with realistic energy scaling; Step 70 authors all
-  content non-destructively under the FLARE DISPOSAL & HEAT RECOVERY research gate (Tier 5).
 
 ## 1. Executive Vision
 
@@ -1037,7 +1042,7 @@ one sentence: **a road is the difference between walking a route and being able 
    what remains and split it into however many runs the gap created, each inheriting the wear it was
    part of. Merging takes the worst of the two, so a worn strip joined to a new one is a worn strip.
 
-6. **Still open after 9.43.1-dev**
+6. **Still open after 9.44.0-dev**
    - The road **network** object: a player-given name and a traffic/condition readout across a whole
      system. Deliberately held back again — it should arrive with the routing it feeds.
    - **Road-aware routing.** Pathfinding, autopilot and delivery drones do not prefer paved routes.
@@ -1046,12 +1051,21 @@ one sentence: **a road is the difference between walking a route and being able 
      carried-weight relief on pavement are not modelled at all.
    - **Rolling resistance** is not a separate wheel term — the road only scales traction and grip.
      Weather (rain, mud, ice) does not modify a road's grip.
-   - **Culverts and bridges** — the confirmed next round (`9.44.0-dev`). Water is refused rather
-     than crossed (`GradeBand.Underwater`; `DescribeSite` has said "needs a culvert" since 9.41.0).
-     Scope agreed with the team: **stone and iron, deliberately expensive**, a culvert for a stream
-     and a bridge on piers for a river, and **drawbridges that open so ships can pass** — a span
-     that is road when shut and waterway when open. No road-side furniture either — no lamps,
-     kerbstones, signage, barriers, manholes or drains (the kerb is part of the road mesh).
+   - ~~**Culverts and bridges**~~ *(9.44.0-dev)* — the paver now inserts a culvert or a bridge on
+     piers where the line reaches water, at a deck level taken from its own approaches and billed
+     from a separate iron-and-stone pot.
+   - **Drawbridges** — the next round (`9.44.1-dev`). The machinery shipped in `BridgeSpan` with
+     9.44.0 (classification, hinged leaves, the open/shut state machine, `SetDeckPassable`) but is
+     **not reachable in game**. Five wiring items: nothing can make a span a drawbridge (`Rebuild`
+     is called with `allowDrawbridge: false`), nothing can open one (`ToggleOpen` has no binding),
+     the leaves are built with a null material, the open state is not saved, and there is no power
+     draw, ship-approach trigger, light or horn. Wiring, not design — which is why the machinery
+     shipped rather than being stubbed.
+   - ~~Water is refused rather than crossed~~ — `GradeBand.Underwater` and the `DescribeSite` string
+     "needs a culvert" are now reached only when the paver has no bridge material configured, which
+     is the correct remaining case: a tool that cannot afford a crossing should say so.
+   - No road-side furniture either — no lamps, kerbstones, signage, barriers, manholes or drains
+     (the kerb is part of the road mesh).
    - ~~**One tier, one curve.** Asphalt is the only paved surface~~ *(9.42.0-dev — a cobble **Stone
      Pathway** is the second surface, with its own walk curve, no vehicle handling and immunity to
      wheel wear)*; there is still no concrete, gravel or dirt road and no second wear curve. No

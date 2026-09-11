@@ -45,10 +45,13 @@ using VoxelEngine.Environment;
 
 namespace VoxelEngine.Building
 {
-    /// <summary>What the cell is paved with. Both surfaces drape terrain and both wear under
-    /// traffic, but they cost differently and behave differently: asphalt carries vehicles,
-    /// cobble carries feet.</summary>
-    public enum RoadSurfaceKind { Asphalt, Pathway }
+    /// <summary>What the cell is paved with. They cost differently and behave differently: asphalt
+    /// carries vehicles, cobble carries feet, and a bridge deck carries both across something that
+    /// is not ground.
+    ///
+    /// `Bridge` is APPENDED, never inserted: a save stores this as an int, so every surface a
+    /// player has already laid keeps its meaning across the upgrade.</summary>
+    public enum RoadSurfaceKind { Asphalt, Pathway, Bridge }
 
     /// <summary>The surface the paver will lay next. Held here rather than on the tool so the
     /// choice survives switching hotbar slots, the way the conveyor shape wheel does.</summary>
@@ -137,6 +140,11 @@ namespace VoxelEngine.Building
 
         /// <summary>The wear pool this cell belongs to. Never null once enabled.</summary>
         public RoadRun Run { get; private set; }
+
+        /// <summary>The water crossing this cell is part of, or null for ordinary pavement. A cell
+        /// has both a run and a span on purpose: the run is the wear ledger for the whole road, the
+        /// span is the structure over one gap. See `BridgeSpan`.</summary>
+        public BridgeSpan Span { get; private set; }
 
         /// <summary>Connected edges, resolved from the neighbours actually present.</summary>
         public RoadEdgeMask Edges { get; private set; } = RoadEdgeMask.None;
@@ -232,6 +240,8 @@ namespace VoxelEngine.Building
                 _refreshQueued = false;
                 ResolveTopology(rebuild: true);
             }
+
+            TickSpan();
 
             _recheckTimer -= Time.deltaTime;
             if (_recheckTimer > 0f) return;
@@ -394,6 +404,7 @@ namespace VoxelEngine.Building
         public void DetachFromRun()
         {
             RoadSurfaceUtility.Unregister(this);
+            DetachFromSpan();
             var run = Run;
             var former = new List<AsphaltRoad>(CollectConnectedNeighbours());
             Run = null;
@@ -404,6 +415,51 @@ namespace VoxelEngine.Building
             if (former.Count < 2) return;
             RoadRun.ResplitAround(former, run?.Wear01 ?? 0f);
             for (int i = 0; i < former.Count; i++) former[i]?.ScheduleNeighbourRefresh();
+        }
+
+        // ════════════════════════════════════════════════════════════════
+        //  SPAN (bridge cells only)
+        // ════════════════════════════════════════════════════════════════
+
+        internal void AttachToSpan(BridgeSpan span)
+        {
+            Span = span;
+        }
+
+        /// <summary>Leaves the span when the cell is lifted. Does not re-solve it: a crossing that
+        /// loses a cell is still the crossing it was, just shorter.</summary>
+        internal void DetachFromSpan()
+        {
+            var span = Span;
+            Span = null;
+            span?.Release(this);
+        }
+
+        /// <summary>Takes the deck out of service while a drawbridge is open. Disables the collider
+        /// so a vehicle cannot drive into the channel, and the renderer so the player can see that
+        /// there is no road there. The block itself is untouched: its saved position, its run
+        /// membership and its wear all survive the swing, which is the whole reason the leaves are
+        /// separate meshes rather than the cells being moved.</summary>
+        public void SetDeckPassable(bool passable)
+        {
+            if (surfaceKind != RoadSurfaceKind.Bridge) return;
+            if (_surfaceCollider != null && _surfaceCollider.enabled == passable) return;
+            if (_surfaceCollider != null) _surfaceCollider.enabled = passable;
+            if (_surfaceRenderer != null) _surfaceRenderer.enabled = passable;
+        }
+
+        /// <summary>Drives the span's swing. Rides on the cell's own staggered update rather than
+        /// adding a second per-frame tick, and only for the one cell that owns the animation, so a
+        /// ten-cell drawbridge animates once and not ten times.</summary>
+        private void TickSpan()
+        {
+            var span = Span;
+            if (span == null || surfaceKind != RoadSurfaceKind.Bridge) return;
+            // Only the first cell of the span drives it. Every cell ticks on its own stagger, so
+            // without this guard a ten-cell drawbridge would advance its swing ten times a frame.
+            var cells = span.Cells;
+            if (cells.Count == 0 || !ReferenceEquals(cells[0], this)) return;
+            span.Tick(Time.deltaTime);
         }
 
         internal void AttachToRun(RoadRun run)
@@ -461,6 +517,17 @@ namespace VoxelEngine.Building
             const int AXIS = AsphaltRoadMesh.SUBDIVISIONS + 1;
             if (_heightCache == null || _heightCache.Length != AXIS * AXIS)
                 _heightCache = new float[AXIS * AXIS];
+
+            // A bridge deck does not drape anything — that is the whole point of it. The cell's
+            // origin IS the deck, so the height field is flat zero and the cell reports itself
+            // supported without ever raycasting the riverbed forty metres below. Everything
+            // downstream (mesh, collider, `SurfaceOffset`, the wear decals) reads this cache and so
+            // needs no bridge-specific path at all.
+            if (surfaceKind == RoadSurfaceKind.Bridge)
+            {
+                for (int i = 0; i < _heightCache.Length; i++) _heightCache[i] = 0f;
+                return _heightCache;
+            }
 
             Vector3 origin = transform.position;
             Vector3 up = transform.up.sqrMagnitude > 0.0001f ? transform.up.normalized : Vector3.up;
@@ -815,13 +882,16 @@ namespace VoxelEngine.Building
         }
 
         /// <summary>Drive-traction multiplier for a wheel on this cell. Cobbles offer none: loose
-        /// stone under a driven wheel is exactly what a paved yard is trying to avoid.</summary>
+        /// stone under a driven wheel is exactly what a paved yard is trying to avoid. A bridge deck
+        /// is paved, so it hands out the same traction as the road it carries — the test is "not
+        /// cobble", not "is asphalt".</summary>
         public float TractionMultiplier =>
-            IsSupported && Run != null && surfaceKind == RoadSurfaceKind.Asphalt ? Run.TractionMultiplier : 1f;
+            IsSupported && Run != null && surfaceKind != RoadSurfaceKind.Pathway ? Run.TractionMultiplier : 1f;
 
-        /// <summary>Lateral-grip multiplier for a wheel on this cell. Cobbles offer none.</summary>
+        /// <summary>Lateral-grip multiplier for a wheel on this cell. Cobbles offer none; a bridge
+        /// deck grips like the road it continues.</summary>
         public float GripMultiplier =>
-            IsSupported && Run != null && surfaceKind == RoadSurfaceKind.Asphalt ? Run.GripMultiplier : 1f;
+            IsSupported && Run != null && surfaceKind != RoadSurfaceKind.Pathway ? Run.GripMultiplier : 1f;
 
         // ════════════════════════════════════════════════════════════════
         //  SAVE HOOKS
