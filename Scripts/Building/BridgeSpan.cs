@@ -192,6 +192,42 @@ namespace VoxelEngine.Building
         /// in between is the animation, not a state.</summary>
         public bool WantsOpen { get; private set; }
 
+        public bool AutomationEnabled { get; private set; } = true;
+        public bool OpenedAutomatically => _openedBy == OpenOwner.Auto;
+        public string AutomationLabel => AutomationEnabled ? "AUTO" : "MANUAL";
+
+        /// <summary>Changes command ownership, not the current swing target or its safety checks.
+        /// Re-enabling considers vessels already present on the next scan, but never takes
+        /// ownership of a deck opened manually.</summary>
+        public void SetAutomationEnabled(bool enabled)
+        {
+            if (AutomationEnabled == enabled) return;
+            AutomationEnabled = enabled;
+            if (!enabled) _openedBy = WantsOpen ? OpenOwner.Player : OpenOwner.None;
+            _prevHoldOccupied = false;
+            _scanTimer = 0f;
+            _holdUntil = Time.time + CLEAR_GRACE_SECONDS;
+        }
+
+        /// <summary>Optional saved command data preserves mid-swing intent. A manual cell wins
+        /// when saved cells join, independent of their restore order. Missing data uses the
+        /// existing open-fraction restoration and defaults to automatic control.</summary>
+        public void RestoreControl(bool manual, bool hasCommand, bool wantsOpen, bool autoOwned)
+        {
+            if (manual) SetAutomationEnabled(false);
+            if (hasCommand)
+            {
+                WantsOpen = wantsOpen;
+                _openedBy = !wantsOpen ? OpenOwner.None
+                    : AutomationEnabled && autoOwned ? OpenOwner.Auto : OpenOwner.Player;
+            }
+            else if (!AutomationEnabled && WantsOpen) _openedBy = OpenOwner.Player;
+            _prevHoldOccupied = false;
+            _scanTimer = 0f;
+            _holdUntil = Time.time + CLEAR_GRACE_SECONDS;
+            _hornPending = false;
+        }
+
         /// <summary>Navigation must not direct road traffic through a pending swing or a lowered arm.</summary>
         public bool RoadTrafficBlocked => Structure == BridgeStructure.Drawbridge
             && (WantsOpen || Open01 > 0f || _barrierClosed01 > 0f);
@@ -352,6 +388,8 @@ namespace VoxelEngine.Building
                 cell.AttachToSpan(this);
             }
             other._cells.Clear();
+            // Never silently re-enable automation by joining a manual crossing to an automatic one.
+            if (!other.AutomationEnabled) SetAutomationEnabled(false);
             // The longer structure's deck height and kind win: absorbing a culvert into a viaduct
             // must not lower the viaduct to the culvert.
             if (other.DeckClearance > DeckClearance) DeckClearance = other.DeckClearance;
@@ -765,6 +803,7 @@ namespace VoxelEngine.Building
         /// </summary>
         private void ScanForVessels()
         {
+            if (!AutomationEnabled) return;
             var f = default(SpanFrame);
             if (!TryComputeFrame(ref f)) return;
 
@@ -918,7 +957,7 @@ namespace VoxelEngine.Building
             if (_barrierFar == null) _barrierFar = MakeBarrier("BridgeBarrier_Far");
         }
 
-        private static GameObject MakeBarrier(string name)
+        private GameObject MakeBarrier(string name)
         {
             var root = new GameObject(name);
             var arm = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -939,6 +978,7 @@ namespace VoxelEngine.Building
             }
             var post = GameObject.CreatePrimitive(PrimitiveType.Cube);
             post.name = "BarrierMotorPost";
+            post.AddComponent<IndustrialWorld.Building.BridgeControlTarget>().Span = this;
             post.transform.SetParent(root.transform, false);
             post.GetComponent<Renderer>().sharedMaterial = BeaconPostMaterial;
             return root;

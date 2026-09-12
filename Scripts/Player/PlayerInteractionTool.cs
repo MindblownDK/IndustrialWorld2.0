@@ -210,23 +210,18 @@ namespace VoxelEngine.Player
                         // press, so the two paths can never double-handle one key.
                         else
                         {
-                            var aimedDeck = hit.collider != null
-                                ? hit.collider.GetComponentInParent<VoxelEngine.Building.AsphaltRoad>() : null;
-                            var aimedSpan = aimedDeck != null ? aimedDeck.Span : null;
+                            var aimedSpan = IndustrialWorld.Building.BridgeControlTarget.Resolve(hit.collider);
                             if (aimedSpan != null && aimedSpan.CanOpen)
                             {
                                 VoxelEngine.UI.InteractionHud.Show(
                                     GameSettings.GetKey(InputAction.Interact),
-                                    aimedSpan.WantsOpen ? "Close Drawbridge" : "Open Drawbridge");
+                                    IsShiftHeld()
+                                        ? (aimedSpan.AutomationEnabled ? "Set Manual Control" : "Enable Automatic Control")
+                                        : (aimedSpan.WantsOpen ? "Close Drawbridge" : "Open Drawbridge")
+                                          + " · " + aimedSpan.AutomationLabel + " · Shift: control mode");
                                 if (GameSettings.WasPressed(InputAction.Interact))
                                 {
-                                    if (aimedSpan.ToggleOpen(out string swingWhy))
-                                        VoxelEngine.UI.BuildFeedbackHud.Show(aimedSpan.StatusLabel,
-                                            aimedSpan.WantsOpen ? "Opening for shipping" : "Closing to traffic",
-                                            null, Color.white);
-                                    else if (swingWhy != null)
-                                        VoxelEngine.UI.BuildFeedbackHud.Show("Drawbridge", swingWhy,
-                                            null, Color.yellow);
+                                    OperateDrawbridge(aimedSpan, null);
                                 }
                             }
                             else
@@ -1376,6 +1371,25 @@ namespace VoxelEngine.Player
             return Vector3.Dot(hit.normal.normalized, blockTransform.forward) > 0.55f;
         }
 
+        private static void OperateDrawbridge(BridgeSpan span, Sprite icon)
+        {
+            if (IsShiftHeld())
+            {
+                span.SetAutomationEnabled(!span.AutomationEnabled);
+                VoxelEngine.UI.BuildFeedbackHud.Show("Drawbridge · " + span.AutomationLabel,
+                    span.AutomationEnabled
+                        ? "Vessel detection enabled. Manual-open decks stay under your control."
+                        : "Ship commands disabled. Any accepted swing finishes safely; interact to operate.",
+                    icon, Color.white);
+                return;
+            }
+            if (span.ToggleOpen(out string reason))
+                VoxelEngine.UI.BuildFeedbackHud.Show(span.StatusLabel,
+                    span.WantsOpen ? "Opening for shipping" : "Closing to traffic", icon, Color.white);
+            else if (reason != null)
+                VoxelEngine.UI.BuildFeedbackHud.Show("Drawbridge", reason, icon, Color.yellow);
+        }
+
         private static bool IsShiftHeld()
         {
 #if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
@@ -1938,17 +1952,10 @@ namespace VoxelEngine.Player
             if (GameSettings.WasPressed(InputAction.Interact) && !_roadPaver.IsPlanning && hasHit
                 && hit.collider != null)
             {
-                var aimedDeck = hit.collider.GetComponentInParent<AsphaltRoad>();
-                var aimedSpan = aimedDeck != null ? aimedDeck.Span : null;
+                var aimedSpan = IndustrialWorld.Building.BridgeControlTarget.Resolve(hit.collider);
                 if (aimedSpan != null && aimedSpan.CanOpen)
                 {
-                    if (aimedSpan.ToggleOpen(out string swingWhy))
-                        VoxelEngine.UI.BuildFeedbackHud.Show(aimedSpan.StatusLabel,
-                            aimedSpan.WantsOpen ? "Opening for shipping" : "Closing to traffic",
-                            block.icon, Color.white);
-                    else if (swingWhy != null)
-                        VoxelEngine.UI.BuildFeedbackHud.Show("Drawbridge", swingWhy,
-                            block.icon, Color.yellow);
+                    OperateDrawbridge(aimedSpan, block.icon);
                     return true;
                 }
             }

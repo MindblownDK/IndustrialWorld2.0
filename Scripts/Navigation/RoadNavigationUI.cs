@@ -10,6 +10,7 @@ namespace IndustrialWorld.Navigation
     {
         public static void AddTo(VisualElement panel, GridRouteRecorder recorder)
         {
+            RoadNetworkUI.AddTo(panel, recorder);
             var guidance = RoadDriverGuidance.For(recorder);
             panel.Add(UITheme.Spacer(6));
             panel.Add(UITheme.Body("ROAD GUIDANCE · MANUAL DRIVING"));
@@ -36,7 +37,7 @@ namespace IndustrialWorld.Navigation
             panel.Add(UITheme.AccentDivider(UITheme.AccentCyan));
         }
 
-        private static Button MakeButton(string title, Action action)
+        internal static Button MakeButton(string title, Action action)
         {
             var button = UITheme.SmallButton(title, action, UITheme.BgSlot);
             button.style.marginTop = 4;

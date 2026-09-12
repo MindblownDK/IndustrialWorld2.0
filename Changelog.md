@@ -1,9 +1,86 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.47.0-dev`
+**Current Version:** `9.49.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.49.0-dev] Saved Drawbridge Automatic and Manual Control
+
+**Type:** MINOR — save-compatible control feature. Four optional boolean fields preserve per-crossing mode and command intent; no schema-version bump or fresh save. No prefab, recipe, research or balance-value changes.
+
+**GitHub title:** `[9.49.0-dev] Add saved per-crossing drawbridge automatic and manual control`
+
+#### Added
+- Hold Shift and press the configured Interact key while aiming at a drawbridge deck or barrier motor post to switch AUTO / MANUAL. The existing interaction prompt shows mode and the alternate action; feedback uses the existing animated notification feed.
+- Runtime control targets on the stationary motor posts at both approaches. These remain reachable with the deck raised and its road colliders disabled. Ordinary Interact still opens or closes the crossing.
+- Manual mode skips ship-detection scans and automatic open/close commands. Changing mode leaves the current target intact, so an accepted swing continues subject to the existing power, barrier and deck-occupancy interlocks.
+- Re-enabling automation scans again on the next tick, including vessels already present, but never takes ownership of a manually opened deck. Such a deck stays open until manually closed.
+- Saved per-span mode, requested swing target and automatic/manual ownership. These are written per deck cell so normal span reconstruction restores them without a separate registry or prefab change.
+
+#### Save and merge rules
+- Older saves have no manual-control flag and remain automatic. Missing command metadata retains the previous open-fraction fallback.
+- New saves preserve the actual requested direction even when saved below/above the midpoint, and preserve manual-open ownership. Restoring a bridge does not sound a new horn.
+- If differently configured spans join, manual mode wins; restoration order cannot silently re-enable automation. The player may explicitly enable automation afterward.
+- Switching modes does not require power. Actually swinging still uses the existing cable check and 450 W motor contract. Mode changes are not an emergency stop and never override safety checks.
+
+#### Validation
+- Thomas confirmed 9.48.0-dev named networks work in Unity.
+- Compiled the actual control, manual-operation and vessel-scan methods extracted from BridgeSpan against lightweight Unity/domain stubs: 17 checks passed. This tests command logic, not Unity physics or the complete component.
+- Recompiled/reran the existing network and routing suites: 27 network checks and 13 routing checks passed. Their stub compilation retains the pre-existing CS0675 hash-packing warning.
+- Changed C# syntax, both interaction entry points, and additive capture/restore/field wiring checked. Incremental patch verified against the preceding delivery.
+- Full Unity compilation, actual post raycasts, moving barriers and real save/reload require the checklist below.
+
+#### Unity workflow
+1. Replace the supplied project files, including WorldStatePersistence.cs, and import BridgeControlTarget.cs with its .meta file. Allow compilation.
+2. No new setup is needed. Existing crossings generate their control targets at runtime. If crossing content is missing, use Tools > Voxel Engine > Voxel Engine Setup and its existing Water Crossings step; do not manually attach components.
+3. On foot, aim at a deck or either dark barrier motor post. Hold Shift and press Interact (E by default): the prompt/notification should report MANUAL.
+4. Bring a ship into the approach volume: the manual crossing must not open automatically. Press Interact without Shift to operate it, observing the normal barrier/deck safety sequence.
+5. With the deck raised, aim at a motor post and manually close it. Verify both approaches are usable, with the paver held but idle and with another item/empty hand. An active paving plan retains its existing Interact-to-commit behavior.
+6. Re-enable AUTO with a ship already approaching: the next scan should request opening. Test ordinary automatic closing after the water clears. A manually opened deck must remain manually owned after re-enabling AUTO.
+7. Change mode during opening/closing: the current target should continue safely. Remove power and confirm mode switching still works while deck movement remains power-gated.
+8. Save/reload in MANUAL closed/open and during opening/closing on each side of the midpoint. Verify mode, direction and manual-open ownership. Load an older save to verify automatic defaults.
+9. If testing joined crossing spans, combine differing modes and verify MANUAL wins. Ordinary culverts/fixed bridges must not gain controls.
+
+### [9.48.0-dev] Named Road Networks and Cross-Run Readouts
+
+**Type:** MINOR — save-compatible feature with one additive optional string per saved static road cell. No schema-version bump, fresh save, prefab migration, recipe changes or balance-value changes.
+
+**GitHub title:** `[9.48.0-dev] Add saved road-network names and cross-run condition and traffic views`
+
+#### Added
+- ROAD NETWORK section in the existing Route Recorder panel. Opening or explicitly refreshing the view captures the connected loaded vehicle-road component within 8 m of the vehicle.
+- Snapshot readouts for loaded road-cell count, configured paved area, distinct wear-run count, area-weighted condition, worst condition, unavailable cells and estimated load-weighted travel.
+- Traffic aggregation counts each run once and attributes only the captured area's fraction of its ledger. It is not vehicles/hour or lifetime traffic; repair, run splits and world reloads can reset existing counters.
+- Player-given names up to 48 characters, persisted through the additive `roadNetworkName` field. Legacy saves without it restore unnamed. Control/markup characters are removed, and capped strings do not end with half a surrogate pair.
+- Explicit confirmation before replacing existing labels. Joining differently named roads reports mixed names instead of silently selecting one; splitting a named road leaves both parts' labels intact.
+- Rename-time rescan and scope comparison. Changed membership or label sets require another review; an incomplete 4096-cell-limited snapshot cannot rename any cells.
+- Road guidance HUD displays the label on its current road cell, without changing navigation controls or route costs.
+
+#### Network rules
+- The network uses the same adjacency as the validated road planner, including explicit corridor edges. Closed-to-road drawbridges remain network members and contribute unavailable-cell counts.
+- Only loaded supported vehicle roads are included. Pedestrian pathways are not vehicle-network links. A complete scan means complete within the loaded graph, not proof that no unloaded extension exists.
+- Names are labels, not globally unique IDs. Newly paved cells start unnamed. Explicitly naming the refreshed component includes those new cells; independently named unloaded sections are untouched.
+- Readouts are snapshots, not per-frame world scans. Refresh after traffic, repair, paving or loading changes. Wear and traffic simulation are unchanged.
+- No new authored content or manually attached components. Existing Route Recorder setup is sufficient.
+
+#### Validation
+- Thomas confirmed 9.47.0-dev driver guidance works in Unity.
+- Compiled the actual network snapshot, planner and road-query source against lightweight Unity/domain stubs; 27 network checks passed, plus all 13 existing routing regression checks. The actual name-normalization methods were extracted from AsphaltRoad for that harness, not rewritten.
+- Checks include mixed labels, confirmation refusal, split inheritance, blocked crossing membership, scope changes, run deduplication, area-weighted condition, partial-ledger attribution, legacy empty names, normalization and the exact/over-limit boundary.
+- C# syntax and incremental-patch checks passed; capture/restore/field wiring was checked structurally.
+- Full Unity compilation, UI rendering, real save/reload, and large live-world performance remain for Unity testing. The stub compile retains the pre-existing CS0675 hash-packing warning; it is not a Unity build.
+
+#### Unity workflow
+1. Replace the supplied files, including WorldStatePersistence.cs, and import RoadNetworkSnapshot.cs and RoadNetworkUI.cs with their .meta files. Allow Unity to compile.
+2. No new setup is required. If Route Recorder content is missing, use Tools > Voxel Engine > Voxel Engine Setup, Step 65 (Route Book & Range Calculator). Do not add components or change balance values manually.
+3. Park a vehicle with a Route Recorder within 8 m of connected asphalt. Open the recorder and inspect ROAD NETWORK.
+4. Enter a name and click SAVE NAME TO LOADED NETWORK. Existing different names require the replacement confirmation. Save the world, reload, then reopen the recorder to verify persistence.
+5. Join differently named roads and refresh: expect Mixed network names. Verify an unconfirmed rename changes nothing; explicitly confirm to unify the loaded component.
+6. Remove a middle cell and inspect each remaining section: both keep their labels. Add new road cells and refresh: unnamed cells remain visible until explicitly included by naming the refreshed component.
+7. Drive/walk over roads, refresh, then repair and refresh. Verify condition and estimated weighted travel reflect the current run ledgers without changing their balance.
+8. Open a drawbridge and refresh: network membership/name remain, while unavailable-cell count rises. Test driver guidance to see the current road name in its HUD.
+9. Test moving the vehicle or altering the component between inspection and naming: review must be required before applying. A graph over 4096 loaded cells must report Partial snapshot and disable naming.
 
 ### [9.47.0-dev] Connected-Road Planning and Driver Guidance
 

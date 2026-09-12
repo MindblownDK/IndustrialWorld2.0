@@ -330,6 +330,7 @@ namespace VoxelEngine.Persistence
                 {
                     entry.hasRoadWear = true;
                     entry.roadWear = Mathf.Clamp01(road.SavedWear);
+                    entry.roadNetworkName = road.NetworkName;
                     // A culvert and a fixed bridge need nothing here: both reclassify from the
                     // ground on load. Only a drawbridge carries state the world cannot rederive —
                     // that the player asked for it to be able to open, and where the swing was.
@@ -339,6 +340,10 @@ namespace VoxelEngine.Persistence
                         entry.hasBridgeSpan = true;
                         entry.bridgeStructure = (int)span.Structure;
                         entry.bridgeOpen = Mathf.Clamp01(span.Open01);
+                        entry.bridgeManualControl = !span.AutomationEnabled;
+                        entry.hasBridgeCommand = true;
+                        entry.bridgeWantsOpen = span.WantsOpen;
+                        entry.bridgeAutoOwned = span.OpenedAutomatically;
                     }
                 }
                 var gst = pb.GetComponentInChildren<VoxelEngine.Gas.GasTank>();
@@ -1877,6 +1882,9 @@ namespace VoxelEngine.Persistence
                 // Roads re-form their runs from adjacency as they come back, so the wear has to be
                 // applied AFTER the cell exists: raising, never lowering, which is what lets the
                 // last cell of a strip to restore set the condition for all of them.
+                // Additive label: missing fields in legacy saves restore as unnamed.
+                go.GetComponentInChildren<VoxelEngine.Building.AsphaltRoad>(true)
+                    ?.SetNetworkName(sb.roadNetworkName);
                 if (sb.hasRoadWear)
                 {
                     var restoredRoad = go.GetComponentInChildren<VoxelEngine.Building.AsphaltRoad>(true);
@@ -1902,6 +1910,8 @@ namespace VoxelEngine.Persistence
                             restoredDeck,
                             (VoxelEngine.Building.BridgeStructure)sb.bridgeStructure,
                             sb.bridgeOpen, restoredDeckMat);
+                        restoredDeck.Span?.RestoreControl(sb.bridgeManualControl, sb.hasBridgeCommand,
+                            sb.bridgeWantsOpen, sb.bridgeAutoOwned);
                     }
                 }
                 if (sb.paintFinish != 0)
@@ -2851,6 +2861,8 @@ namespace VoxelEngine.Persistence
             // Additive — legacy saves leave hasRoadWear false and the road restores brand new.
             public bool hasRoadWear;
             public float roadWear;
+            // 9.48.0-dev: per-cell labels preserve names across load order, splits and merges.
+            public string roadNetworkName;
             // Water-crossing structure (9.44.1-dev). Additive: legacy saves leave hasBridgeSpan
             // false and a restored deck cell classifies itself from the ground beneath it, exactly
             // as a freshly paved one does. Only the structure KIND and how far open it was need
@@ -2859,6 +2871,12 @@ namespace VoxelEngine.Persistence
             public bool hasBridgeSpan;
             public int bridgeStructure;
             public float bridgeOpen;
+            // 9.49.0-dev: absent manual flag means automatic for legacy saves.
+            // Optional command preserves swing direction and manual-open ownership on reload.
+            public bool bridgeManualControl;
+            public bool hasBridgeCommand;
+            public bool bridgeWantsOpen;
+            public bool bridgeAutoOwned;
         }
         [Serializable] private class SavedArmorUpgradeStationState
         {

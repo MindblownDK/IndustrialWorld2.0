@@ -14,7 +14,7 @@ namespace IndustrialWorld.Navigation
         private GridRouteRecorder _recorder;
         private readonly List<AsphaltRoad> _route = new List<AsphaltRoad>();
         private VisualElement _hud;
-        private Label _heading, _detail;
+        private Label _heading, _detail, _network;
         private float _clock, _opacity;
         private int _cursor;
         private string _destination;
@@ -145,6 +145,12 @@ namespace IndustrialWorld.Navigation
             Status = heading + " — " + detail;
             if (_heading != null) _heading.text = heading;
             if (_detail != null) _detail.text = detail;
+            if (_network != null)
+            {
+                var road = _cursor < _route.Count ? _route[_cursor] : null;
+                _network.text = road != null && !string.IsNullOrEmpty(road.NetworkName)
+                    ? "ROAD · " + road.NetworkName : "ROAD · Unnamed";
+            }
         }
 
         private void EnsureHud()
@@ -174,6 +180,12 @@ namespace IndustrialWorld.Navigation
             _detail.style.whiteSpace = WhiteSpace.Normal;
             _detail.style.fontSize = 11;
             _detail.style.marginTop = 5;
+            _network = new Label("ROAD NETWORK") { pickingMode = PickingMode.Ignore };
+            _network.style.color = UITheme.TextSecondary;
+            _network.style.fontSize = 10;
+            _network.style.whiteSpace = WhiteSpace.Normal;
+            _network.style.marginBottom = 4;
+            _hud.Add(_network);
             _hud.Add(_heading);
             _hud.Add(_detail);
             document.rootVisualElement.Add(_hud);

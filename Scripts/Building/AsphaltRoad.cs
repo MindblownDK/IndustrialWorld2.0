@@ -902,6 +902,28 @@ namespace VoxelEngine.Building
         //  SAVE HOOKS
         // ════════════════════════════════════════════════════════════════
 
+        /// <summary>Player label, copied to every loaded cell on explicit network rename.
+        /// A split retains labels; joining differently named roads never discards either name.</summary>
+        public string NetworkName { get; private set; } = string.Empty;
+        public const int NetworkNameLimit = 48;
+
+        public void SetNetworkName(string value) => NetworkName = NormalizeNetworkName(value);
+
+        public static string NormalizeNetworkName(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+            var clean = new System.Text.StringBuilder(NetworkNameLimit);
+            foreach (char c in value.Trim())
+            {
+                if (char.IsControl(c) || c == '<' || c == '>') continue;
+                if (clean.Length >= NetworkNameLimit) break;
+                clean.Append(c);
+            }
+            // Avoid ending a capped string halfway through a surrogate pair.
+            if (clean.Length > 0 && char.IsHighSurrogate(clean[clean.Length - 1])) clean.Length--;
+            return clean.ToString().Trim();
+        }
+
         /// <summary>Wear written into a save. Per block rather than per run id, because run ids are
         /// session-scoped and a strip can merge or split between the save and the load.</summary>
         public float SavedWear => Run?.Wear01 ?? 0f;
