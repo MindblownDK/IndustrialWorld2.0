@@ -1,9 +1,41 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.44.2-dev`
+**Current Version:** `9.44.3-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.44.3-dev] Road Surface Wheel: the Drawbridge Card Is Reachable
+
+**Type:** PATCH — one defect from the Unity pass on 9.44.2, and the wheel it sat on. No save touch, no API touch, no new assets. Reported as: "we cannot go over and select the drawbridge in the paving menu — when I mouse over it, it never goes over there."
+
+**GitHub title:** `[9.44.3-dev] Road Surface Wheel: the drawbridge card is finally selectable — the wheel is rebuilt as the conveyor-style triangle ring, with the hover driven by the ring's own geometry instead of a screen split`
+
+#### Fixed
+
+- **The third card rendered and could never be hovered.** 9.44.1's fix was half a fix: it sized the card array from `Segments.Length` so the DRAWBRIDGE ROAD card existed on screen, but the hover test still split the screen in two — `mx < width * 0.5 ? 0 : 1` — so the mouse could only ever reach the first two cards. The drawbridge was therefore still unreachable from the wheel, which took the 9.44.2 automation with it: the surface that selects it could not be selected. Nothing in the wheel assumes the segment count any more; that assumption is what made the third card a picture of a choice rather than a choice.
+
+#### Changed
+
+- **The wheel is now the conveyor shape wheel's radial ring, laid out as a triangle.** Three surfaces, three 120° slices: asphalt road at the crown, stone pathway at the lower right, drawbridge road at the lower left. The cream ring, cyan selection, hover accent, gaps between slices, centre badge, parallax, safe screen scaling and the freed-cursor overlay all come from `ConveyorShapeWheel`'s proven implementation — the two wheels now share one contract instead of the road wheel imitating half of it.
+- **The hover is pointer-event driven against the ring itself.** A `PointerMoveEvent` on the ring element, resolved by `SegmentAt` into radius band then slice angle — the centre badge is a dead zone, not a default, so releasing without aiming changes nothing. Releasing on a slice commits it; a click picks without closing, exactly as the conveyor wheel does, because the wheel must stay open through the rest of the frame so the same click cannot land on the world underneath.
+- **The blurb moved into the badge.** Each card used to carry its one-line description; on the ring there is no room for it beside the slice, so the centre badge reads the hovered surface's title and blurb — "what am I about to pick" — and falls back to the selected one when nothing is hovered. No information was lost, and the ring stays clean.
+- The idle prompt is the conveyor wheel's bottom-centre pill, in place of the old mid-screen box, so the two wheels read as one family when the paver and a conveyor belt are swapped between.
+
+#### Numbers
+
+| | Value |
+|---|---|
+| Ring geometry | 360 px element, 115–173 px hover band, 3.5° slice gaps — identical to the conveyor wheel |
+| Slice angle | 360° ÷ segment count (120° at three) — derived, never hardcoded |
+| Label radius | 142 px from centre, crown at −90°, then one label per slice |
+| Badge | title + blurb of the hovered surface, selected surface when idle |
+
+#### Verified here, and what was not
+
+- The `SegmentAt` geometry was ported and run numerically: every slice's label position maps to its own segment, the crown/lower-right/lower-left map to asphalt/pathway/drawbridge respectively, the dead centre and the slice boundaries return no segment, and points outside the band inside the element return no segment.
+- The file parses clean structurally; braces balanced, no methods nested inside method bodies.
+- **Still not compiled against UnityEngine or run in Unity.** The Unity pass should confirm the ring renders at the right scale on the target resolution, that the cursor is freed when the wheel opens (the `PushBlock` path the conveyor wheel already uses), and that hover, click-pick and release-commit each behave on all three slices.
 
 ### [9.44.2-dev] Drawbridge Automation: the Water Decides, the Deck Pays, and the Captain Does Not Need a Paver
 
