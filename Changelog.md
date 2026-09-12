@@ -1,9 +1,68 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.44.1-dev`
+**Current Version:** `9.44.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.44.2-dev] Drawbridge Automation: the Water Decides, the Deck Pays, and the Captain Does Not Need a Paver
+
+**Type:** MINOR — the four items 9.44.1 held back, all of them the reason a drawbridge exists rather than the mechanism. Save-compatible: no new saved fields, no new assets, no setup step — the automation state is derived at runtime, and a legacy save restores a deck that automates itself exactly as a freshly paved one does. The one behaviour change for existing worlds is deliberate and is spelled out under Changed: a deck that is not wired no longer swings.
+
+**GitHub title:** `[9.44.2-dev] Drawbridge Automation: auto-open for hulls in the channel, a 450 W swing billed through a cable on the abutment, horn and beacons on every swing, and the interact key works without the paver`
+
+#### Added
+
+- **Auto-open on ship approach.** The span sweeps its channel on a 0.5 s cadence — one `OverlapBoxNonAlloc` under the deck, classified along the channel axis — and opens for a hull that is actually in the water. The maritime half of the query is `WaterProbeSystem.GetSubmergence` at the grid's centre of mass: a hull in the water counts, a car on the deck does not (it is above the water line and above the deck line), and a shuttle flying over the channel counts for nothing either. That is the whole query the roadmap asked for — one call into the same probe the boats float on, not a new system.
+- **Hysteresis, so the deck is never dropped on anyone.** A hull inside 22 m of the channel line opens the deck; the deck then holds until the hull has cleared 35.2 m (approach × 1.6) plus a 4 s grace, so a bobbing hull at the reach edge or a boat that noses out and back does not flicker the road. Before any automatic shut, a 2.6 m box above the deck must be empty: a stalled lorry mid-deck postpones the shut, it is never closed around.
+- **The edge-triggered manual-override rule.** The automation opens on a fresh arrival — the edge from "water clear" to "hull inside the approach" — and shuts only what it opened. A deck the player shut while a vessel idled downstream stays shut until the water actually clears and somebody new comes up the channel; the automation never argues with the hand on the lever. A deck the player opened by hand stays open until a player shuts it.
+- **Power draw.** The swing is a machine and is billed like one: a `PowerConsumer` seated on the abutment cell demands 450 W while the deck is in motion and 0 W while it sits still, so a wired bridge costs nothing to own. The demand is pushed one network tick early and the swing advances only on the network's verdict — the same discipline the refuel pad pumps by. The consumer's reach is 8 m, so a pole or relay on the approach road connects it; it self-heals onto the new abutment if the first cell is ever lifted, and it is removed entirely when a span is not a drawbridge, because a culvert is a structure and not a machine.
+- **A warning horn on every swing**, both directions — a deck dropping shut is the more dangerous one. `Sfx.BridgeHorn` is a new procedural one-shot (98 Hz + 147 Hz, a perfect fifth in the register ships' horns and rail crossings speak in, 1.15 s, firm attack and clean release), played at the span's centre with a 140 m carry so it reaches the helm that asked for the channel. The horn sounds when the deck actually starts moving, not when the request was made: a horn followed by nothing moving is a lie told at the water.
+- **Warning beacons at both abutments**: a post and a red lens standing on the approach, just off the kerb and past the end of the deck, where a post on the deck itself would float over vanished cells and be swept through by the rising leaf. Dark while the deck is shut and idle; FLASHING while it moves — and while it strains to, which is the state that matters at 30 m; steady red while the channel is open. Three shared lazily-built materials serve every drawbridge in the world, and the blink is a material swap, not a per-frame colour write.
+- **Operating a drawbridge without the road paver in hand.** Aim at any deck cell and the standard interact prompt appears — `[E] Open Drawbridge` / `[E] Close Drawbridge` — with the same status feedback the paver path gives. The builder's binding is defensible for the player who laid the crossing; a ship's captain at the bank is exactly who this prompt is for. The paver's own binding still works, including during a plan's absence, and the two paths can never double-handle a press.
+- **A stall notice with range.** A deck that wants to move and has no watts says so, once per stall, to anyone within 55 m: "No power to swing - run a cable to the deck". Farther away it is silent — a popup about somebody else's bridge is noise — but the beacons still flash, because "this bridge is trying to move" is a fact at any distance.
+
+#### Changed
+
+- **A deck that is not wired no longer swings.** `ToggleOpen` refuses, synchronously and with the reason, when the abutment's power tap has no cable in reach ("No cable reaches this bridge - wire the deck before it can swing"); a wired bridge whose network cannot currently afford the swing accepts the request and stalls honestly instead — power may free up, which is the contract every machine on a network already keeps. This is the one change an existing 9.44.1 world will feel: a drawbridge built without power infrastructure stops opening until a cable reaches its abutment. The refusal, the beacon and the stall notice all say why.
+- **`DeckLength` now measures the crossing, not the cells.** It was the sum of every cell's size, so a three-lane deck read three times longer than it is: the leaves flew 3× their hinge-to-hinge length and the piers arrived in colonnades. Every lane of a wide deck is a cell in the span, so length and width now come from projecting the cells onto the span's own axes — one frame (`SpanFrame`) that pier stations, leaf hinges, beacon posts and both automation volumes read from, so no two parts of the span can disagree about where the crossing is.
+- **An open deck restored from a save belongs to the automation.** `ApplySavedState` marks a restored-open deck as auto-opened, so the system that opens decks for ships is the one that shuts it when the water is clear again; a deck restored mid-swing simply finishes the move its save caught it in. No new saved fields — the classification is derived from the open fraction the save already carries.
+
+#### Fixed
+
+- **The far leaf pointed away from its own crossing and dived at the water.** Both leaves tilted by opposite signs about the abutment rotation, which lifts the near leaf (it extends +Z toward the centre) and drives the far leaf down (it extends +Z away from the centre). The far leaf is now mirrored 180° about the deck's up before the tilt, so it extends from the far abutment back toward the centre and rises with the same angle as its partner — verified numerically: shut, the two leaves tile hinge-to-hinge to exactly the deck length; open at 70°, both tips rise 18.8 m on a 40 m deck and stay inside the span.
+- **The leaves were 1 m wide regardless of the deck.** Leaf width came from the abutment cell's `localScale.x`, which is 1 — road meshes are built at full size, so the prefab is never scaled. A 4 m single-lane deck swung two one-metre ribbons; a three-lane deck swung ribbons across a 12 m road. Width now comes from the frame and is the deck's full width.
+- **Piers clustered under whichever lane was placed first.** Pier stations were picked by cell INDEX — `along × (_cells.Count - 1)` — which on a multi-lane deck walks the placement order rather than the crossing, tripling the pier count and stacking them along one lane. Stations are now fractions of the axis extent, positioned on the deck's centre line, and the pier count comes from the axis length.
+- **The leaves were invisible from below** — single-sided quads, culled exactly when a helmsman looks up at a rising leaf to judge the channel. The leaf mesh now carries both windings.
+- **Drawbridge refusals no longer print under "Cannot pave here".** The paver path and the new prompt path both title a swing refusal "Drawbridge" — a power refusal is not a paving verdict, and the wrong title was on the screen at the moment the player most needed the right one.
+
+#### Numbers
+
+| | Value |
+|---|---|
+| Swing demand | 450 W while in motion, 0 W idle |
+| Power tap reach | 8 m from the abutment cell |
+| Approach reach (opens) | 22 m along the channel |
+| Hold reach (stays open) | 35.2 m (approach × 1.6) |
+| Clear grace | 4 s after the hold volume empties |
+| Scan cadence | 0.5 s, one overlap, classified by channel distance |
+| Deck-occupied guard | 2.6 m box above the deck, must be empty to auto-shut |
+| Beacon blink | 0.45 s half-period; steady while open; dark while shut and idle |
+| Horn | 98 + 147 Hz two-tone, 1.15 s, 140 m carry, 0.85 volume |
+| Stall notice | once per stall, within 55 m of the span centre |
+
+#### Verified here, and what was not
+
+- The frame, leaf, beacon and vessel-classification maths, and the full auto-open / hold / grace / occupied state machine, were re-run through a line-for-line Python port: 32 assertions, all passing — including the far-leaf rise (the 9.44.1 defect), 3-lane length/width, hinge-to-hinge tiling, approach/hold bands from both banks, the player-override edge cases, and the occupied-deck guard.
+- All three touched files parse clean as C#, braces balanced, no methods nested inside method bodies.
+- **Still not compiled against UnityEngine or run in Unity** — there is no Unity, `dotnet` or `mono` in the agent workspace. The Unity pass should watch three things specifically: the leaf tilt sign as actually rendered (the mirror is quaternion algebra verified on paper, and the port confirms the intent, but a rendered check is the proof); the beacon materials on URP (three runtime `new Material(URP/Lit)` instances — if `Shader.Find` ever returns the Standard fallback the emission keyword path differs); and the power tap's auto-discovery against a real pole (the 8 m radius is authored leniently, but line-of-sight between the pole and the abutment cell is the network's own rule).
+
+#### Held back
+
+- **A moored hull holds the channel open.** A grid left floating inside the hold volume keeps the deck open until it moves or is removed — the channel is occupied, which is honest, but a rule for "stationary for N minutes stops counting" may be wanted later.
+- **No approach barrier arm.** The visual warning is the vanishing cells, the rising leaves, the beacons and the horn; a physical gate across the road at each abutment would be furniture, and furniture is a round of its own.
+- **No per-span automation switch.** A drawbridge automates because that is what a drawbridge is; a player who wants a manual-only opening bridge builds a fixed bridge and paves a detour. If a toggle is asked for it belongs on a tender's panel, with the span's name on it.
+- **The road-side items remain open** as before: the network object, road-aware routing, creature/stamina bonuses, rolling resistance and weather grip, roadside furniture, a second wear tier, auto-routing, and binder sources other than heavy fuel oil.
 
 ### [9.44.1-dev] Water Crossings: Drawbridges Reachable
 

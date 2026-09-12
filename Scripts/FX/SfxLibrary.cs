@@ -54,6 +54,9 @@ namespace VoxelEngine.FX
         UiClick,
         UiHover,
 
+        // ── World ONE-SHOTS ────────────────────────────────────────
+        BridgeHorn,        // drawbridge warning horn — low two-tone, the register ships and rail crossings speak in
+
         // ── Ambience LOOPS ─────────────────────────────────────────
         AmbDayBirds,
         AmbNightCrickets,
@@ -160,6 +163,9 @@ namespace VoxelEngine.FX
                 case Sfx.Pickup:           return OneShot("Pickup",      0.18f, Pickup);
                 case Sfx.UiClick:          return OneShot("UiClick",     0.09f, UiClick);
                 case Sfx.UiHover:          return OneShot("UiHover",     0.06f, UiHover);
+
+                // World
+                case Sfx.BridgeHorn:       return OneShot("BridgeHorn",  1.15f, BridgeHorn);
 
                 // Ambience
                 case Sfx.AmbDayBirds:      return Loop("Birds",     6f, AmbDayBirds);
@@ -513,6 +519,30 @@ namespace VoxelEngine.FX
                 float env = Mathf.Exp(-i / (n * 0.16f));
                 float freq = Mathf.Lerp(2200f, 2700f, (float)i / n); // gentle upward chirp
                 d[i] = Mathf.Sin(2f * Mathf.PI * freq * t) * env * 0.28f;
+            }
+        }
+
+        // Drawbridge warning horn — a low two-tone (a perfect fifth apart: 98 Hz and 147 Hz), the
+        // register ships' horns and rail crossings speak in. The envelope is the horn: a firm
+        // attack, a steady voice long enough to be heard across a channel, and a clean release so
+        // the opening and closing notes never smear into one another. A slow air-supply flutter
+        // keeps it organic rather than synth-clean.
+        private static void BridgeHorn(float[] d)
+        {
+            int n = d.Length;
+            for (int i = 0; i < n; i++)
+            {
+                float t = (float)i / SAMPLE_RATE;
+                float T = (float)i / n;
+                float attack  = Mathf.Clamp01(T / 0.09f);
+                float release = Mathf.Clamp01((1f - T) / 0.28f);
+                float env = Mathf.Min(attack, release);
+                float flutter = 1f + 0.015f * Mathf.Sin(2f * Mathf.PI * 5.5f * t);
+                float low  = Mathf.Sin(2f * Mathf.PI * 98f  * t) * 0.42f;
+                float high = Mathf.Sin(2f * Mathf.PI * 147f * t) * 0.30f;
+                float harmonics = Mathf.Sin(2f * Mathf.PI * 196f * t) * 0.22f
+                                + Mathf.Sin(2f * Mathf.PI * 294f * t) * 0.12f;
+                d[i] = (low + high + harmonics) * env * flutter * 0.8f;
             }
         }
 

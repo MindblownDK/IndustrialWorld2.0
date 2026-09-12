@@ -201,9 +201,38 @@ namespace VoxelEngine.Player
                                 if (art != null) VoxelEngine.UI.GameUIController.Instance?.OpenDefense(art);
                             }
                         }
+                        // Drawbridges: aim at a deck and the interact key swings it — with or
+                        // without the road paver in hand. The builder's binding is defensible for
+                        // the player who laid the crossing; a ship's captain at the helm of a
+                        // vessel asking for the channel is exactly who this prompt is for
+                        // (9.44.2-dev). Also reached while the paver is held but idle: the paver's
+                        // own interact branch above runs first on the same frame and handles the
+                        // press, so the two paths can never double-handle one key.
                         else
                         {
-                            VoxelEngine.UI.InteractionHud.Hide();
+                            var aimedDeck = hit.collider != null
+                                ? hit.collider.GetComponentInParent<VoxelEngine.Building.AsphaltRoad>() : null;
+                            var aimedSpan = aimedDeck != null ? aimedDeck.Span : null;
+                            if (aimedSpan != null && aimedSpan.CanOpen)
+                            {
+                                VoxelEngine.UI.InteractionHud.Show(
+                                    GameSettings.GetKey(InputAction.Interact),
+                                    aimedSpan.WantsOpen ? "Close Drawbridge" : "Open Drawbridge");
+                                if (GameSettings.WasPressed(InputAction.Interact))
+                                {
+                                    if (aimedSpan.ToggleOpen(out string swingWhy))
+                                        VoxelEngine.UI.BuildFeedbackHud.Show(aimedSpan.StatusLabel,
+                                            aimedSpan.WantsOpen ? "Opening for shipping" : "Closing to traffic",
+                                            null, Color.white);
+                                    else if (swingWhy != null)
+                                        VoxelEngine.UI.BuildFeedbackHud.Show("Drawbridge", swingWhy,
+                                            null, Color.yellow);
+                                }
+                            }
+                            else
+                            {
+                                VoxelEngine.UI.InteractionHud.Hide();
+                            }
                         }
                     }
                 }
@@ -1917,7 +1946,9 @@ namespace VoxelEngine.Player
                         VoxelEngine.UI.BuildFeedbackHud.Show(aimedSpan.StatusLabel,
                             aimedSpan.WantsOpen ? "Opening for shipping" : "Closing to traffic",
                             block.icon, Color.white);
-                    else if (swingWhy != null) ReportRoadRefusal(swingWhy);
+                    else if (swingWhy != null)
+                        VoxelEngine.UI.BuildFeedbackHud.Show("Drawbridge", swingWhy,
+                            block.icon, Color.yellow);
                     return true;
                 }
             }

@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `9.44.1-dev`  
-**Roadmap Version:** `9.44.1-dev`  
+**Current Version:** `9.44.2-dev`  
+**Roadmap Version:** `9.44.2-dev`  
 **Date:** 2026-09-12
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,29 @@
 ---
 
 ## 0. Recently Done
+
+### 9.44.2-dev — Drawbridges Answer the Water
+- The four wiring items held back from 9.44.1 are in, and all of them are runtime behaviour on the
+  span that already exists — no new assets, no setup step, no new saved fields. A drawbridge now
+  **opens by itself for a hull in its channel**: one `OverlapBoxNonAlloc` under the deck every 0.5 s,
+  classified along the channel axis, with the maritime verdict coming from
+  `WaterProbeSystem.GetSubmergence` at the grid's centre of mass — a floating hull opens the deck, a
+  car on the deck and a flyer overhead do not. Hysteresis (22 m approach, 35.2 m hold, 4 s grace)
+  and a 2.6 m occupied-box above the deck mean it is never dropped on a hull or a stalled lorry, and
+  the automation only ever opens on a fresh arrival and only ever shuts what it opened, so the hand
+  on the lever always wins.
+- **The swing is billed**: a `PowerConsumer` on the abutment cell demands 450 W while the deck moves
+  and 0 W while it sits, self-healing onto a new abutment if the first cell is lifted. An unwired
+  deck no longer swings — the refusal, the flashing beacons and a range-gated stall notice all say
+  why. **Every swing sounds a procedural horn** (`Sfx.BridgeHorn`, 98 + 147 Hz, 140 m carry) and
+  **red beacons on both approaches** run dark / flashing / steady with the deck's state.
+- **The interact key works without the paver** — aim at a deck, get the standard `[E]` prompt. The
+  same round fixed real 9.44.0/9.44.1 geometry defects the automation exposed: `DeckLength` counted
+  every lane cell (3-lane leaves flew 3× too long, piers came in colonnades), the far leaf pointed
+  away from its own crossing and tilted down, leaves were 1 m wide regardless of deck width, piers
+  clustered under the first-placed lane, and the leaves were invisible from the water. One
+  `SpanFrame` projection now answers every geometric question the span asks. Numerically verified
+  through a line-for-line Python port; the Unity pass is still pending.
 
 ### 9.44.1-dev — Drawbridges Reachable
 - The machinery that shipped unreachable in 9.44.0 is now wired to the player and the save. A
@@ -108,28 +131,6 @@
   `MachineRecipe_MixAsphalt` was `unlockedByDefault = false`, and since research can only unlock
   `RecipeDefinition`s, the whole asphalt chain was permanently uncraftable.
 
-### 9.41.0-dev — Asphalt Roads
-- `AsphaltRoad` is a real `PlacedBlock` cell that **drapes** the terrain through five ground samples
-  per cell (so the drape IS the ramp — no ramp shape, no terraforming), auto-shapes its aggregate
-  shoulder from a four-bit `RoadEdgeMask` neighbour mask (kerb on an unconnected edge, none on a
-  connected one), and re-probes the ground every 6 s because terrain is diggable.
-- Every touching cell joins one `RoadRun` holding a **single shared wear pool**: bands GOOD / WORN /
-  POTHOLED / BROKEN UP at 0.35 / 0.70 / 1.00 interpolate walk speed 1.30→0.88, traction 1.25→0.85 and
-  grip 1.40→0.92. `WEAR_METRES_PER_SQUARE_METRE = 22000`, a wheel loads 14x a footstep scaled by grid
-  mass. Merging takes the worst wear; `ResplitAround` re-floods and splits when a middle cell is lifted.
-  A worn run **visibly cracks**: a fracture network of branching fissures, then potholes with broken
-  rims — real geometry, draped on the same ground samples as the slab, rebuilt on eighths of wear.
-- Two cell sizes: a **4 m carriageway slab** the Road Paver lays (16x the pavement per placement,
-  10 asphalt, so a road a vehicle uses goes down fast) and the 1 m patch cell for footpaths and hand
-  placement. Wear is billed per **paved area** so both sizes wear equally per square metre.
-- `RoadPaver` is one maths path for the preview, the drag and hand placement (`TryComputePose` +
-  `EvaluateCell`), with tangent-plane interpolation bounded at 12 cells/frame and **anchor-lattice**
-  quantisation so a dragged strip lines up around a spherical world. Grade is a **slope** rule, so the
-  verdict is identical at either cell size:
-  ≤ 0.22 rise paves at 1 asphalt, ≤ 0.50 at 2, steeper is refused with a reason on screen. Repair is
-  the same asphalt priced by run wear; right-click lifts a cell and refunds only below 0.35 wear.
-  Chain: HFO 40 L → 4 bitumen → + sand 2 / gravel 3 → 8 hot mix. Step 72; `res_asphalt_roads` tier 6.
-
 ## 1. Executive Vision
 
 IndustrialWorld is already a rich engineering sandbox: voxel terrain, planet gravity, grid-based vehicles/ships, modular wind power, fluids, gases, crafting, and a sleek premium UI. The next evolution is to make the **factory loop** the heart of the experience — without losing the freedom of building, exploration, and vehicular engineering.
@@ -206,9 +207,7 @@ The design goal is a seamless blend of:
 | Waymarks, named connectors & auto-run shuttle | 🛠️ WORKING ON | **9.35.0-dev**: named waymarks, `GridConnectorBlock` with the first cross-grid transfer bridge and a visible queue, and `GridRouteAutopilot` loops with armed stop conditions (Step 66). **9.36.0-dev** added the ground half: `StaticRefuelPad` (Step 67), a world-placed pad that is a metered consumer on the base's wires and a member of its fluid, gas and item runs. Open: terrain avoidance, dock-approach flying, cargo schedules, star-map rendering. |
 | Grid inspector overlay (heat / damage / centre of mass) | ✅ COMPLETED | **9.37.0-dev** shipped the whole overlay — one shared per-renderer `MaterialPropertyBlock` tint pass, one hotkey ring OFF → HEAT → DAMAGE → CENTRE OF MASS with the three reader modes, and the three research nodes authored by Setup Step 68 (Step 69 lives in the distillation-plant round). Unity validation confirmed the pass budget, the 24-block degrade readout and the research gating (9.37.1-dev added one-click research unlock/max/relock buttons to the debug spawner for exactly this kind of testing). See `Grid Inspector Overlay`. |
 | Crude fractionation & flare disposal | 🛠️ WORKING ON | **9.38.0-dev** shipped the first part: a NEW Distillation Plant block (a wide plant hall; the Oil Refinery stays its legacy machine, and both refineries stop making refined oil / HFO / MGO) with one feed tank + six typed product tanks (LPG, naphtha, kerosene, diesel, gasoline, heavy fuel oil), an **analog world dial above every outlet and inlet** that sweeps with its tank, the atmospheric-cut ladder (100 L crude → 98 L of products, 2 L off-gas), the Refined Oil conversion re-run, and a naphtha-fed plastic recipe that beats the old one per litre (Step 69; block gated by Atmospheric Distillation research). Panel: live in-place updates (no scroll snapping), scrollable recipe books, contents-based tank captions, box sizing that follows its contents. Open within the same design: spending the middle products on the maritime-engine fuel ladder, where Refined Oil comes from now that the refineries stopped making it, the off-gas line and the Flare Stack with waste-heat recovery and local pollution (both now open items of their own: **9.39.0-dev** shipped the flare stack and waste-heat recovery, **9.40.0-dev** the catalytic conversion of the heavy end, **9.41.0-dev** the asphalt chain that spends it). See `Crude Fractionation, Product Use & Flare Disposal`. |
-| Asphalt roads | 🟡 PARTIALLY COMPLETE | **9.42.0-dev** replaced the drag with a **point-to-point road planner** (click start, click end, live ghost, Ctrl+scroll width in cells, whole-line refusal with a reason, Ctrl+RMB section removal) and added a **Stone Pathway** surface chosen on a hold-B wheel — cobble, stone-priced, walk-only, no vehicle traction. **9.41.0-dev** shipped the surface in two cell sizes (1 m patch, 4 m carriageway) and the pave tool: `AsphaltRoad` drapes terrain and auto-shapes its shoulder from a neighbour mask, every touching cell joins one `RoadRun` sharing a single **area-weighted** wear pool (GOOD/WORN/POTHOLED/BROKEN UP driving walk speed, traction and grip), `RoadPaver` lays a continuous wide strip by drag with slope-based pricing and refusal, repair is the same asphalt priced by run wear and paved area, wheels take traction/grip from the run and stop bogging, and a worn run shows a real crack-and-pothole mesh rather than a decal (Step 72, `res_asphalt_roads`). Open: the road **network** object (name, connected-run trace, traffic readout), routing/pathfinding that prefers paved routes, lamps and roadside furniture, a culvert/bridge volume rule, ~~and any second road tier~~ *(9.42.0-dev — the Stone Pathway is the
-    second surface; a faster road tier is still open)*. Open now also: filleted bend corners and a
-    proper junction treatment where two planned roads cross at an angle. See `Asphalt Roads`. |
+| Asphalt roads | 🟡 PARTIALLY COMPLETE | **9.44.0-dev** added water crossings (culverts and fixed bridges on piers, `BridgeSpan`, deck mode on the cell, Step 73), **9.44.1-dev** made drawbridges reachable (a third surface-wheel card, the interact key swings an aimed deck, crossings survive a save), and **9.44.2-dev** automated them: auto-open for hulls in the channel (`WaterProbeSystem` verdict, 22 m approach / 35.2 m hold / 4 s grace hysteresis, an occupied-deck guard before any auto-shut), a 450 W swing billed through an abutment `PowerConsumer` (an unwired deck no longer swings), warning beacons and a procedural two-tone horn on every swing, the interact prompt without the paver in hand, and the multi-lane leaf geometry fixed around one `SpanFrame` projection — all runtime behaviour, no new assets or saved fields. **9.42.0-dev** replaced the drag with a **point-to-point road planner** (click start, click end, live ghost, Ctrl+scroll width in cells, whole-line refusal with a reason, Ctrl+RMB section removal) and added a **Stone Pathway** surface chosen on a hold-B wheel — cobble, stone-priced, walk-only, no vehicle traction. **9.41.0-dev** shipped the surface in two cell sizes (1 m patch, 4 m carriageway) and the pave tool: `AsphaltRoad` drapes terrain and auto-shapes its shoulder from a neighbour mask, every touching cell joins one `RoadRun` sharing a single **area-weighted** wear pool (GOOD/WORN/POTHOLED/BROKEN UP driving walk speed, traction and grip), wheels take traction/grip from the run and stop bogging, repair is the same asphalt priced by run wear and paved area, and a worn run shows a real crack-and-pothole mesh rather than a decal (Step 72, `res_asphalt_roads`). Open: the road **network** object (name, connected-run trace, traffic readout), routing/pathfinding that prefers paved routes, lamps and roadside furniture, a barrier arm and per-span automation switch on drawbridges, and any faster road tier. See `Asphalt Roads`. |
 | Catalytic cracking & petrochemicals | 🟡 PARTIALLY COMPLETE | **9.40.0-dev** shipped the `CatalyticCracker` reactor unit — catalyst bed decay and reactor temperature both gate throughput through `CrackingEfficiency01` — with FCC / CCR / hydrocracking, synthetic resin, industrial lubricant, both catalyst syntheses, four items, `Block_CatalyticCracker` and the tier-6 chemistry gate (Step 71). Open: no save serialisation for bed, temperature or tank contents; resin and lubricant have no consumers; no regenerator unit, no hydrogen plant, no grid variant. |
 | Engine Works (custom engine builder) | ❌ MISSING | Design written for the maritime/engine line: configuration, cylinders, bore/stroke, intake, fuel, compression, cooling, gearing and governor, with craft cost scaling into artefacts at the top. See `Engine Works`. |
 | Oxygen / life support | ✅ COMPLETED | Underwater reserve equipment already exists; **7.4.0-dev** activates vacuum/airless-body oxygen drain, sealed helmet+tank protection, armor oxygen-efficiency integration, and live hazard feedback. **7.5.0-dev** now resolves this against the same profile-driven air density used by flight and is Unity-validated. **9.27.0-dev** delivered airtight rooms and vents. **9.28.0-dev** closes the last item: oxygen tanks now carry a real per-instance refillable reserve (burned through helmet/armor efficiency, topped up from breathable air and from a Ventilation Unit's suit dock at 40 L/s), and the full-block Ventilation Unit pressurises every compartment it touches. |
@@ -961,9 +960,14 @@ end is worth something too.
 > shared cross-sections, so every lane tiles exactly; no new assets, so no new setup step.
 > **9.43.1-dev** fixed the first Unity pass: preview refusals no longer reach the HUD, a one-click
 > plan lays what its ghost shows, junction pockets against existing pavement are filled again, and
-> width goes to 10 cells. The road
-> **network** object, routing that prefers paved routes, lamps and **culverts/bridges/drawbridges**
-> remain open items below. Full narrative: `Changelog.md`.
+> width goes to 10 cells. **9.44.0-dev** added water crossings (culverts and bridges on piers,
+> `BridgeSpan`, Step 73), **9.44.1-dev** made drawbridges reachable, and **9.44.2-dev** automated
+> them — auto-open for hulls in the channel via `WaterProbeSystem`, a 450 W swing billed through an
+> abutment `PowerConsumer`, horn and beacons, the interact key without the paver, and the multi-lane
+> leaf geometry fixed around one `SpanFrame` projection (all runtime behaviour: no new assets, no
+> new step, no new saved fields). The road
+> **network** object, routing that prefers paved routes and lamps remain open items below. Full
+> narrative: `Changelog.md`.
 
 A cheap surface the player lays on terrain to make the world move faster and cleaner. The idea is
 one sentence: **a road is the difference between walking a route and being able to run a schedule on it.**
@@ -1042,7 +1046,7 @@ one sentence: **a road is the difference between walking a route and being able 
    what remains and split it into however many runs the gap created, each inheriting the wear it was
    part of. Merging takes the worst of the two, so a worn strip joined to a new one is a worn strip.
 
-6. **Still open after 9.44.1-dev**
+6. **Still open after 9.44.2-dev**
    - The road **network** object: a player-given name and a traffic/condition readout across a whole
      system. Deliberately held back again — it should arrive with the routing it feeds.
    - **Road-aware routing.** Pathfinding, autopilot and delivery drones do not prefer paved routes.
@@ -1057,12 +1061,15 @@ one sentence: **a road is the difference between walking a route and being able 
    - ~~**Drawbridges**~~ *(9.44.1-dev)* — reachable now: a third surface-wheel card lays a road whose
      crossings open, the interact key swings a deck you are aiming at, and the structure and its
      swing survive a save.
-   - **Drawbridge automation** — the next round (`9.44.2-dev`). Four items, all of them the reason a
-     drawbridge exists rather than the mechanism: **auto-open on ship approach** (needs a trigger
-     volume and a query into `VoxelEngine.Maritime`), **power draw**, a **warning light or horn** (a
-     silent deck that drops shut is a trap), and **operating one without the paver in hand** — the
-     current binding is defensible for the player who built the bridge and wrong for a ship's
-     captain, which is also why auto-open matters more than it looks.
+   - ~~**Drawbridge automation**~~ *(9.44.2-dev)* — shipped, all four items: **auto-open on ship
+     approach** (an overlap volume under the deck classified along the channel, with the maritime
+     verdict from `WaterProbeSystem.GetSubmergence` at the grid's centre of mass), **power draw**
+     (450 W while swinging through an abutment `PowerConsumer` — an unwired deck no longer swings),
+     a **warning light and horn** (beacons dark/flashing/steady at both approaches, a procedural
+     two-tone horn on every swing), and **operating without the paver in hand** (the standard
+     interact prompt on any aimed deck cell). Still open within the same design: a moored hull
+     inside the hold volume holds the channel open until it moves; no approach barrier arm; no
+     per-span automation switch.
    - ~~Water is refused rather than crossed~~ — `GradeBand.Underwater` and the `DescribeSite` string
      "needs a culvert" are now reached only when the paver has no bridge material configured, which
      is the correct remaining case: a tool that cannot afford a crossing should say so.
@@ -2369,10 +2376,13 @@ For each version, these are the high-level Unity tasks you will perform manually
     ramp) with movement, traction and wear rules~~, then the road *network* readout that autopilot and
     drone routing hang on. *(9.41.0-dev, Step 72 — surface, drag-to-pave, per-run wear, grade pricing,
     movement/traction/grip and repair all shipped, but **without a shape set**: the cell drapes the
-    ground so the drape is the ramp, and a neighbour mask only decides where the kerb rises. `RoadRun`
+    ground so the drape is the ramp, and a neighbour mask only decides where the kerb rises. 9.44.0-dev
+    added the crossings (Step 73), 9.44.1-dev the drawbridges, 9.44.2-dev their automation — all
+    runtime behaviour with no new setup step of their own. `RoadRun`
     already IS a connected trace with a traffic counter, so the network readout owes a name and a
     cross-run summary, not a flood fill. Still open: the network object, road-aware routing, creature
-    and stamina bonuses, rolling resistance, culverts/bridges and lamps.)*
+    and stamina bonuses, rolling resistance, roadside lamps/furniture, a drawbridge barrier arm and a
+    per-span automation switch.)*
 23. Author the **Engine Works** block: parameter set, balance sheet, refusal reasons, craft cost by
     specification, artefact requirements at the large end, and template storage.
 24. ~~Author **grid waymarks and the named connector block** (the cross-grid power/liquid/gas/item
