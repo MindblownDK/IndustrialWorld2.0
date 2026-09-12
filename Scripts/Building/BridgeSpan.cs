@@ -80,11 +80,12 @@ namespace VoxelEngine.Building
         /// on the approach can see it happening and stop.</summary>
         public const float SWING_SECONDS = 4f;
 
-        /// <summary>Clearance assumed when the ground probe finds no bottom at all.
-        /// `AsphaltRoad.ProbeGround` reaches 4 m down and no further, so a deck over a deep channel
-        /// gets no reading whatsoever. Treating "no bottom found" as zero clearance would classify a
-        /// genuine bridge as a culvert and leave it hanging with no piers — the exact opposite of
-        /// what the missing reading means. Absence of ground is deep water, not shallow water.</summary>
+        /// <summary>Clearance assumed when the bed probe finds no bottom at all. The probe now
+        /// reaches down through the whole channel (`BED_PROBE_DEPTH`), so reaching its end without
+        /// a hit really is a bottomless column. Treating "no bottom found" as zero clearance would
+        /// classify a genuine bridge as a culvert and leave it hanging with no piers — the exact
+        /// opposite of what the missing reading means. Absence of ground is deep water, not
+        /// shallow water.</summary>
         public const float NO_BOTTOM_CLEARANCE = 6f;
 
         /// <summary>How far a drawbridge leaf lifts, in degrees. 70 degrees leaves a clear channel
@@ -392,7 +393,7 @@ namespace VoxelEngine.Building
                 wanted = BridgeStructure.Drawbridge;
             Structure = wanted;
 
-            BuildPiers();
+            BuildPiers(deckMaterial);
             if (Structure == BridgeStructure.Drawbridge)
             {
                 BuildLeaves(deckMaterial);
@@ -425,7 +426,12 @@ namespace VoxelEngine.Building
                 var cell = _cells[i];
                 if (cell == null) continue;
                 Vector3 up = cell.transform.up;
-                if (!AsphaltRoad.ProbeGround(cell.transform.position - up * 0.2f, up, out float below))
+                // The bed probe reaches down through the whole channel, not just the four metres a
+                // road ever cares about: clearance is the number that decides culvert against
+                // bridge and sizes the automation's channel volume, and both of those want the
+                // riverbed, not the first thing below the deck.
+                if (!AsphaltRoad.ProbeGround(cell.transform.position - up * 0.2f, up, out float below,
+                                             BED_PROBE_DEPTH))
                 {
                     if (NO_BOTTOM_CLEARANCE > best) best = NO_BOTTOM_CLEARANCE;
                     continue;
@@ -437,36 +443,67 @@ namespace VoxelEngine.Building
             return best;
         }
 
-        private void BuildPiers()
+        /// <summary>How deep the bed probe reaches, in metres. Beyond this a column reads as
+        /// bottomless and its piers stand at the assumed depth instead of the real one.</summary>
+        private const float BED_PROBE_DEPTH = 40f;
+
+        private void BuildPiers(Material deckMaterial)
         {
             for (int i = 0; i < _piers.Count; i++)
                 if (_piers[i] != null) Object.Destroy(_piers[i]);
             _piers.Clear();
 
-            if (Structure == BridgeStructure.Culvert || _cells.Count == 0) return;
+            // A culvert is a pipe through the ground and wants nothing standing in the stream, and
+            // a drawbridge is a machine whose whole point is a CLEAR channel: piers under a bascule
+            // would be piers the leaves swing through and the shipping bounces off. The
+            // substructure belongs to the fixed bridge alone.
+            if (Structure != BridgeStructure.Fixed || _cells.Count == 0) return;
 
             var f = default(SpanFrame);
             if (!TryComputeFrame(ref f)) return;
 
-            // Stations are fractions of the CROSSING, not of the cell list: a three-lane deck holds
-            // three cells abreast, and indexing cells by fraction of count would triple the piers
-            // and stack them under whichever lane was placed first.
-            int piers = Mathf.FloorToInt(f.Length / Mathf.Max(1f, METRES_PER_PIER));
-            if (piers <= 0) return;
+            // ── Girders ── two beams under the deck edges (and a spine down the middle of a wide
+            // deck), running bank to bank. This is what reads as "a bridge with beams under it" at
+            // the distance bridges are seen from: structure under the slab rather than a slab
+            // floating on air. Deck material where there is one, so the girders read as part of the
+            // crossing they carry; masonry where there is not.
+            float beamH = 0.45f;
+            float beamW = Mathf.Max(0.26f, f.Cell * 0.07f);
+            Vector3 beamTop = f.Centre - f.Up * 0.12f;
+            Material beamMat = deckMaterial != null ? deckMaterial : PierMaterial;
+            void AddGirder(float across)
+            {
+                var girder = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                girder.name = "BridgeGirder";
+                Object.Destroy(girder.GetComponent<Collider>());
+                girder.transform.position = beamTop - f.Up * (beamH * 0.5f) + f.Right * across;
+                girder.transform.rotation = f.Rotation;
+                girder.transform.localScale = new Vector3(beamW, beamH, f.Length + f.Cell * 0.5f);
+                girder.GetComponent<Renderer>().sharedMaterial = beamMat;
+                _piers.Add(girder);
+            }
+            float edge = Mathf.Max(0.55f, f.Width * 0.5f - beamW);
+            AddGirder(-edge);
+            AddGirder(edge);
+            if (f.Width > f.Cell * 2.4f) AddGirder(0f);
 
+            // ── Piers ── stations are fractions of the CROSSING, not of the cell list: a three-lane
+            // deck holds three cells abreast, and indexing cells by fraction of count would triple
+            // the piers and stack them under whichever lane was placed first.
+            int piers = Mathf.FloorToInt(f.Length / Mathf.Max(1f, METRES_PER_PIER));
             for (int p = 1; p <= piers; p++)
             {
                 float along = Mathf.Lerp(f.AxisMin, f.AxisMax, p / (float)(piers + 1));
                 Vector3 at = f.Origin + f.Forward * along + f.Right * f.AcrossMid;
 
-                // No bottom inside probe range is deep water, not "nothing under it": the pier still
-                // gets built, to the assumed depth, so a bridge over a channel does not read as a
-                // slab floating in the air.
-                float drop = AsphaltRoad.ProbeGround(at, f.Up, out float ground)
+                // The bed probe reaches down through the channel (see MeasureClearance): a pier
+                // must find the riverbed, and "no bottom" after forty metres genuinely is
+                // bottomless rather than merely deeper than a road probe cares about.
+                float drop = AsphaltRoad.ProbeGround(at, f.Up, out float ground, BED_PROBE_DEPTH)
                     ? -ground : NO_BOTTOM_CLEARANCE;
                 if (drop <= 0.2f) continue;      // genuinely nothing to stand on and nothing to span
 
-                float width = Mathf.Max(0.35f, f.Cell * 0.22f);
+                float width = Mathf.Max(0.45f, f.Cell * 0.26f);
                 var pier = GameObject.CreatePrimitive(PrimitiveType.Cube);
                 pier.name = "BridgePier";
                 Object.Destroy(pier.GetComponent<Collider>());
@@ -475,7 +512,19 @@ namespace VoxelEngine.Building
                 pier.transform.position = at - f.Up * (drop * 0.5f);
                 pier.transform.rotation = f.Rotation;
                 pier.transform.localScale = new Vector3(width, drop, width);
+                pier.GetComponent<Renderer>().sharedMaterial = PierMaterial;
                 _piers.Add(pier);
+
+                // A cap the deck actually bears on, so the pier reads as masonry with a lintel
+                // rather than as a spike the slab happens to touch.
+                var cap = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                cap.name = "BridgePierCap";
+                Object.Destroy(cap.GetComponent<Collider>());
+                cap.transform.position = at - f.Up * 0.22f;
+                cap.transform.rotation = f.Rotation;
+                cap.transform.localScale = new Vector3(width * 1.7f, 0.28f, width * 1.7f);
+                cap.GetComponent<Renderer>().sharedMaterial = PierMaterial;
+                _piers.Add(cap);
             }
         }
 
@@ -911,7 +960,24 @@ namespace VoxelEngine.Building
         }
 
         private static readonly Color BeaconRed = new Color(1f, 0.16f, 0.10f);
-        private static Material _beaconPostMat, _beaconOffMat, _beaconOnMat;
+        private static Material _beaconPostMat, _beaconOffMat, _beaconOnMat, _pierMat;
+
+        /// <summary>Shared, lazily built, and never instanced per span, under the same rule as the
+        /// beacon materials: every fixed bridge in the world stands on the same masonry. Quarry
+        /// grey with no gloss — a pier is stone, and wet stone still does not shine.</summary>
+        private static Material PierMaterial
+        {
+            get
+            {
+                if (_pierMat != null) return _pierMat;
+                _pierMat = new Material(BeaconShader) { name = "Mat_BridgePier (runtime)" };
+                SetMatColour(_pierMat, new Color(0.52f, 0.50f, 0.46f));
+                SetMatFloat(_pierMat, "_Metallic", 0f);
+                SetMatFloat(_pierMat, "_Smoothness", 0.08f);
+                SetMatFloat(_pierMat, "_Glossiness", 0.08f);
+                return _pierMat;
+            }
+        }
 
         /// <summary>Shared, lazily built, and never instanced per span: every drawbridge in the world
         /// blinks through the same three materials, and the blink is a swap between two of them

@@ -22,6 +22,8 @@
 //                             mode: flat instead of draped, supported with no ground underneath.
 //   • `Block_RoadBridge`    — the block the paver lays for deck cells.
 //   • The paver's `bridgeBlock` / `bridgeMaterial` / `bridgeMaterialPerCell` wiring.
+//   • The paver's `pierMaterial` / `pierMaterialPerCell` wiring — the substructure (piers and
+//                             girders) is masonry, so it bills stone alongside the deck's iron.
 //
 // WHAT IT DELIBERATELY DOES NOT AUTHOR
 //   No crafting recipe and no research node. A bridge block is not something the player crafts and
@@ -55,6 +57,11 @@ namespace VoxelEngine.EditorTools
         /// a sixteen-square-metre carriageway cell: crossing water costs roughly six times the
         /// pavement per cell, which is the point. A bridge should be a decision.</summary>
         private const int BRIDGE_MATERIAL_PER_CELL = 6;
+
+        /// <summary>Pier material per deck cell. Stone for the substructure — the piers that stand
+        /// in the riverbed and the girders under the deck — at a third of the deck's bill, which is
+        /// about what a third of a bridge is.</summary>
+        private const int PIER_MATERIAL_PER_CELL = 2;
 
         /// <summary>Deck blocks are structural, so they are heavy and tough. Both values are only
         /// written when unset — see the note at the top of the file.</summary>
@@ -140,10 +147,21 @@ namespace VoxelEngine.EditorTools
                     paver.bridgeMaterial = AsphaltRoadSetup.FindItem("Item_IronPlate")
                                         ?? AsphaltRoadSetup.FindItem("Item_Stone");
                 if (paver.bridgeMaterialPerCell <= 0) paver.bridgeMaterialPerCell = BRIDGE_MATERIAL_PER_CELL;
+
+                // The substructure is masonry: piers and girders under the deck bill stone, and
+                // only stone — the deck is plate, what holds it up is not. Left empty when no
+                // stone item exists, and the crossing then costs deck material only, which is
+                // reported rather than crashed on.
+                if (paver.pierMaterial == null)
+                    paver.pierMaterial = AsphaltRoadSetup.FindItem("Item_Stone");
+                if (paver.pierMaterialPerCell <= 0) paver.pierMaterialPerCell = PIER_MATERIAL_PER_CELL;
                 EditorUtility.SetDirty(paver);
                 if (paver.bridgeMaterial == null)
                     Debug.LogWarning("[RoadBridgeSetup] No iron plate or stone item found - the paver " +
                                      "will refuse water crossings until bridgeMaterial is set.");
+                if (paver.pierMaterial == null)
+                    Debug.LogWarning("[RoadBridgeSetup] No stone item found - bridge supports will " +
+                                     "not bill anything until pierMaterial is set.");
             }
             else
             {

@@ -680,19 +680,24 @@ namespace VoxelEngine.Building
         /// ground is ABOVE the point). Road cells are excluded, so a strip can be aimed at an
         /// existing road without measuring the road itself. Used by the paver to drop a new cell
         /// exactly onto the surface no matter what the aim ray happened to hit.
+        /// The default reach is the paving question ("is there ground within a cell of here?").
+        /// Bridge work passes a longer <paramref name="down"/>: a pier has to find the riverbed,
+        /// not just the first thing below the deck, and "no bottom within four metres" is a very
+        /// different statement about a channel than "no bottom within forty".
         /// </summary>
-        public static bool ProbeGround(Vector3 worldPoint, Vector3 up, out float heightAbovePoint)
-            => ProbeStaticGround(worldPoint, up, out heightAbovePoint);
+        public static bool ProbeGround(Vector3 worldPoint, Vector3 up, out float heightAbovePoint,
+                                        float down = 4f)
+            => ProbeStaticGround(worldPoint, up, out heightAbovePoint, down);
 
         /// <summary>Shared static ground probe used by the site evaluation. Roads and other road
         /// cells are ignored so a grade check on a strip never measures the strip.</summary>
-        private static bool ProbeStaticGround(Vector3 worldPoint, Vector3 up, out float height)
+        private static bool ProbeStaticGround(Vector3 worldPoint, Vector3 up, out float height,
+                                               float down = 4f)
         {
             height = 0f;
             const float PROBE_UP = 2.5f;
-            const float PROBE_DOWN = 4.0f;
             int count = Physics.RaycastNonAlloc(worldPoint + up * PROBE_UP, -up, _probeHits,
-                                                PROBE_UP + PROBE_DOWN, ~0, QueryTriggerInteraction.Ignore);
+                                                PROBE_UP + down, ~0, QueryTriggerInteraction.Ignore);
             float best = float.MaxValue;
             bool hit = false;
             for (int i = 0; i < count; i++)

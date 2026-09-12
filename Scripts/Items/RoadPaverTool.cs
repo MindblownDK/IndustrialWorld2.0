@@ -56,6 +56,19 @@ namespace VoxelEngine.Items
                  "than a rounding error.")]
         [Min(1)] public int bridgeMaterialPerCell = 6;
 
+        [Tooltip("Material the substructure is built from — the piers that stand in the riverbed " +
+                 "and the girders that run under the deck. Stone is the intended material: the deck " +
+                 "is plate, but what holds it up is masonry, and the bill should say so. Charged per " +
+                 "deck cell alongside the bridge material. Leave empty and the crossing costs deck " +
+                 "material only, which is the correct default for a tool that has not been wired to " +
+                 "a stone item yet.")]
+        public ItemDefinition pierMaterial;
+
+        [Tooltip("Pier material per deck cell. Two stone a cell against six iron for the deck " +
+                 "itself: the substructure is roughly a third of the crossing's bill, which is " +
+                 "about what a third of a bridge is.")]
+        [Min(0)] public int pierMaterialPerCell = 2;
+
         [Tooltip("Units of material one cell costs on smooth ground. Rough ground doubles it; " +
                  "that is the grading rule the design asks for.")]
         public int materialPerCell = 1;

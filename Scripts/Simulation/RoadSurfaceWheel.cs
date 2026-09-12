@@ -59,7 +59,7 @@ namespace VoxelEngine.Simulation
                 // cards answer: what kind of road am I laying.
                 Kind = RoadSurfaceKind.Bridge,
                 Title = "DRAWBRIDGE ROAD",
-                Blurb = "Asphalt, but water crossings open for shipping. Costs iron.",
+                Blurb = "Asphalt, but water crossings open for shipping. Costs iron and stone.",
                 IconText = "\u25B2",
             },
         };

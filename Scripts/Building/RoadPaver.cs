@@ -245,6 +245,246 @@ namespace VoxelEngine.Building
             }
         }
 
+        // ════════════════════════════════════════════════════════════════
+        //  GRADING — cutting and filling a station to one level at commit
+        //
+        //  The carve above trims what pokes through ONE cell's plane. Grading is the bigger
+        //  gesture: when a whole station is too far out of level to take pavement at all, the
+        //  paver cuts the high side and fills the low side to one level as part of laying the
+        //  road — the player asked for a road, not for homework with a terrain tool. The terrain
+        //  only moves at COMMIT, never during planning: the corridor is re-solved every frame
+        //  while the ghost is up, and ground that shifted while the player was still drawing the
+        //  line would be ground they never agreed to move.
+        // ════════════════════════════════════════════════════════════════
+
+        /// <summary>Resolves the level a refused station will be graded to, caching the answer for
+        /// the rest of the solve. All the lanes of one station share one target, which is what
+        /// keeps the graded rectangles butted together with no seam for the slabs to bridge.</summary>
+        private bool TryGradeStation(RoadCorridorBuffers buf, Vector3 up, float cell, int k,
+                                     out float target, out string refusal)
+        {
+            target = 0f;
+            refusal = null;
+            if (k < 0 || k >= _levelAt.Count) return false;
+
+            // Cached from an earlier lane of the same station, or an earlier frame of the same
+            // solve: NaN = never asked, negative infinity = asked and refused (with the reason),
+            // anything else = the level the station grades to.
+            if (!float.IsNaN(_levelAt[k]))
+            {
+                if (float.IsNegativeInfinity(_levelAt[k])) { refusal = _levelWhy[k]; return false; }
+                target = _levelAt[k];
+                return true;
+            }
+
+            float lo = float.MaxValue, hi = float.MinValue, sum = 0f;
+            int samples = 0;
+            bool blocked = false, missed = false;
+            for (int w = 0; w < _width && !blocked && !missed; w++)
+            {
+                var frame = RoadCorridor.CellAt(buf, w, k);
+                if (frame == null) continue;
+                Vector3 fUp = frame.rotation * Vector3.up;
+                Vector3 fRight = frame.rotation * Vector3.right;
+                Vector3 fForward = frame.rotation * Vector3.forward;
+                float step = cell / 3f;
+                for (int gx = -1; gx <= 1 && !blocked && !missed; gx++)
+                for (int gz = -1; gz <= 1 && !blocked && !missed; gz++)
+                {
+                    Vector3 lateral = frame.position + fRight * (gx * step) + fForward * (gz * step);
+                    if (!GradeProbe(lateral, fUp, out float above, out bool hitBlock))
+                    { missed = true; break; }
+                    if (hitBlock) { blocked = true; break; }
+                    float h = Vector3.Dot(lateral, up) + above;
+                    if (h < lo) lo = h;
+                    if (h > hi) hi = h;
+                    sum += h;
+                    samples++;
+                }
+            }
+
+            string why = null;
+            if (blocked)
+                why = "Cannot grade through a building - lift it, or route the line around it";
+            else if (missed || samples < 3)
+                why = "No ground to grade onto under part of the line";
+            else
+            {
+                float mean = sum / samples;
+                if (hi - mean > LEVEL_CUT_MAX || mean - lo > LEVEL_FILL_MAX)
+                    why = "The ground steps too far here - the paver grades up to "
+                          + (int)LEVEL_CUT_MAX + " m of cut or fill";
+                else
+                {
+                    _levelAt[k] = mean;
+                    target = mean;
+                    return true;
+                }
+            }
+            _levelAt[k] = float.NegativeInfinity;
+            _levelWhy[k] = why;
+            refusal = why;
+            return false;
+        }
+
+        private static readonly RaycastHit[] _gradeHits = new RaycastHit[8];
+
+        /// <summary>Ground probe that also reports whether the ground it found is a placed block
+        /// rather than terrain. Grading cuts and fills voxels, and a building is not voxels — a
+        /// strip that "graded" through a wall would be a strip that paved over the player's
+        /// factory. Road cells are excluded exactly as the ground probe excludes them.</summary>
+        private static bool GradeProbe(Vector3 worldPoint, Vector3 up,
+                                       out float heightAbovePoint, out bool hitPlacedBlock)
+        {
+            heightAbovePoint = 0f;
+            hitPlacedBlock = false;
+            int count = Physics.RaycastNonAlloc(worldPoint + up * 2.5f, -up, _gradeHits, 6.5f,
+                                                ~0, QueryTriggerInteraction.Ignore);
+            int nearest = -1;
+            float best = float.MaxValue;
+            for (int i = 0; i < count; i++)
+            {
+                var collider = _gradeHits[i].collider;
+                if (collider == null) continue;
+                if (collider.GetComponentInParent<AsphaltRoad>() != null) continue;
+                float along = Vector3.Dot(worldPoint - _gradeHits[i].point, up);
+                if (along < best) { best = along; nearest = i; }
+            }
+            if (nearest < 0) return false;
+            heightAbovePoint = -best;
+            hitPlacedBlock = _gradeHits[nearest].collider.GetComponentInParent<PlacedBlock>() != null;
+            return true;
+        }
+
+        /// <summary>Whether ONE cell's footprint is within the grader's reach — the per-cell form of
+        /// the station verdict, used by the live ghost so the leg only tints red where laying would
+        /// actually refuse, and green where the paver is about to do the grading for the player.</summary>
+        private static bool CellGradeable(Vector3 position, Quaternion rotation, Vector3 up, float cell)
+        {
+            Vector3 right = rotation * Vector3.right;
+            Vector3 forward = rotation * Vector3.forward;
+            float step = cell / 3f;
+            float lo = float.MaxValue, hi = float.MinValue;
+            int samples = 0;
+            for (int gx = -1; gx <= 1; gx++)
+            for (int gz = -1; gz <= 1; gz++)
+            {
+                Vector3 lateral = position + right * (gx * step) + forward * (gz * step);
+                if (!GradeProbe(lateral, up, out float above, out bool hitBlock)) return false;
+                if (hitBlock) return false;
+                float h = Vector3.Dot(lateral, up) + above;
+                if (h < lo) lo = h;
+                if (h > hi) hi = h;
+                samples++;
+            }
+            if (samples < 3) return false;
+            return (hi - lo) * 0.5f <= LEVEL_CUT_MAX && (hi - lo) * 0.5f <= LEVEL_FILL_MAX;
+        }
+
+        /// <summary>Metres the water surface stands ABOVE <paramref name="point"/>, measured along
+        /// <paramref name="up"/>. False when the column is dry. Water in this world comes in two
+        /// dialects and both are read here: the voxels the fluid sim fills — lakes, ponds, and the
+        /// ocean wherever it is per-voxel water — and, on the sphere world, the planet's ocean
+        /// shell at the sea radius, which is not voxel water everywhere and is invisible to a pure
+        /// voxel scan. A deck over that ocean sampled the voxels, found nothing, and followed the
+        /// shore line into the sea; the shell is the second opinion.</summary>
+        private static bool WaterSurfaceAbove(Vector3 point, Vector3 up, out float surfaceAbovePoint)
+        {
+            surfaceAbovePoint = 0f;
+            bool sphere = VoxelEngine.Core.ActiveWorld.Current is VoxelEngine.Cosmos.SphereWorld;
+
+            // 1) Voxel water. `GetSurfaceHeight` returns the surface's absolute world Y on a flat
+            //    world and its height above the probe point along the local radial on a sphere;
+            //    both are normalised here into "metres above the point, along up".
+            float reading = VoxelEngine.Maritime.WaterProbeSystem.GetSurfaceHeight(point);
+            if (reading > VoxelEngine.Maritime.WaterProbeSystem.NoWaterHeight * 0.5f)
+            {
+                surfaceAbovePoint = sphere ? reading : reading - Vector3.Dot(point, up);
+                return true;
+            }
+            if (!sphere) return false;
+
+            // 2) The ocean shell. Only where what is under the station lies BELOW the shell —
+            //    dry ground above the sea is dry, whatever the arithmetic might prefer. With no
+            //    bed within reach of a forty-metre probe the column is deep water rather than a
+            //    dry chasm at the water's edge; that is the one assumption here, and the demand
+            //    arithmetic caps how wrong it can be (nothing is lifted unless the station sits
+            //    within a freeboard of the sea).
+            float aboveSea = VoxelEngine.WaterSim.PlanetWaterUtility.SignedDistanceToSea(point);
+            if (aboveSea < 0f) { surfaceAbovePoint = -aboveSea; return true; }
+            bool bed = AsphaltRoad.ProbeGround(point, up, out float bedAbove, 40f);
+            if (!bed || bedAbove < -aboveSea) { surfaceAbovePoint = -aboveSea; return true; }
+            return false;
+        }
+
+        /// <summary>Cuts and fills the ground under one plan cell to the level the cell will sit
+        /// at, at commit, before the slab is placed. Every lane of the station was given the same
+        /// target, so the graded rectangles meet with no seam. Cut and fill are each capped at the
+        /// grader's reach; the verdict has already refused anything further out than that.</summary>
+        public static void LevelGroundTo(Vector3 position, Quaternion rotation, float cell,
+                                         float targetAlongUp)
+        {
+            var world = VoxelEngine.Core.ActiveWorld.Current;
+            if (world == null) return;
+            Vector3 up = rotation * Vector3.up;
+            Vector3 right = rotation * Vector3.right;
+            Vector3 forward = rotation * Vector3.forward;
+            float step = cell / 3f;
+            float baseH = Vector3.Dot(position, up);
+
+            for (int gx = -1; gx <= 1; gx++)
+            for (int gz = -1; gz <= 1; gz++)
+            {
+                Vector3 lateral = position + right * (gx * step) + forward * (gz * step);
+                if (!AsphaltRoad.ProbeGround(lateral, up, out float off)) continue;
+                float d = targetAlongUp - (baseH + off);   // >0 fill, <0 cut
+
+                if (d > CARVE_EPSILON)
+                {
+                    // Fill: pour solid voxels from the current surface up to the target, in the
+                    // ground's own material so the graded shoulder does not read as a scar.
+                    float top = Mathf.Min(d, LEVEL_FILL_MAX);
+                    Vector3Int a = world.WorldToVoxel(lateral + up * (off + 0.05f));
+                    Vector3Int b = world.WorldToVoxel(lateral + up * (off + top - 0.05f));
+                    var material = GroundMaterialAt(world, lateral + up * (off - 0.6f));
+                    for (int x = Mathf.Min(a.x, b.x); x <= Mathf.Max(a.x, b.x); x++)
+                    for (int y = Mathf.Min(a.y, b.y); y <= Mathf.Max(a.y, b.y); y++)
+                    for (int z = Mathf.Min(a.z, b.z); z <= Mathf.Max(a.z, b.z); z++)
+                    {
+                        var v = new Vector3Int(x, y, z);
+                        if (!world.GetVoxelWorld(v).IsSolid)
+                            world.SetVoxelWorld(v, material, remesh: true);
+                    }
+                }
+                else if (d < -CARVE_EPSILON)
+                {
+                    // Cut: empty what stands above the target — the same margins as the carve,
+                    // a little above the bump so the last voxel of it goes too.
+                    float cut = Mathf.Min(-d, LEVEL_CUT_MAX);
+                    Vector3Int a = world.WorldToVoxel(lateral + up * (off - cut + 0.05f));
+                    Vector3Int b = world.WorldToVoxel(lateral + up * (off + 0.30f));
+                    for (int x = Mathf.Min(a.x, b.x); x <= Mathf.Max(a.x, b.x); x++)
+                    for (int y = Mathf.Min(a.y, b.y); y <= Mathf.Max(a.y, b.y); y++)
+                    for (int z = Mathf.Min(a.z, b.z); z <= Mathf.Max(a.z, b.z); z++)
+                    {
+                        var v = new Vector3Int(x, y, z);
+                        if (world.GetVoxelWorld(v).IsSolid)
+                            world.SetVoxelWorld(v, VoxelEngine.Core.Voxel.Empty, remesh: true);
+                    }
+                }
+            }
+        }
+
+        /// <summary>The voxel to pour a fill from: the terrain's own material where the sample
+        /// finds terrain, plain solid where it finds nothing (the same default the world itself
+        /// builds ground from).</summary>
+        private static VoxelEngine.Core.Voxel GroundMaterialAt(VoxelEngine.Core.IVoxelWorld world,
+                                                               Vector3 at)
+        {
+            var v = world.GetVoxelWorld(world.WorldToVoxel(at));
+            return v.IsSolid ? v : VoxelEngine.Core.Voxel.Solid;
+        }
+
         /// <summary>True when a road cell already occupies this slot, so paving again would be a
         /// no-op the player should be told about rather than charged for.</summary>
         public static bool IsCellOccupied(Vector3 position, float cellSize)
@@ -384,6 +624,32 @@ namespace VoxelEngine.Building
         /// accident.</summary>
         public bool CrossingsOpen { get; set; }
 
+        /// <summary>Metres a FIXED deck must stand above the water it crosses. Below this a boat
+        /// that cannot fit under is a boat the road has blocked, so the deck is lifted until the
+        /// ordinary small craft of the world pass beneath it. Together with the pier spacing this
+        /// is what makes a crossing read as a bridge rather than as a causeway laid on the surface.</summary>
+        public const float DECK_FREEBOARD_FIXED = 3.6f;
+
+        /// <summary>Metres a DRAWBRIDGE deck must stand above the water. Lower than the fixed
+        /// figure on purpose: a drawbridge opens for whatever cannot fit under it, so its closed
+        /// clearance only has to clear the water itself, not the traffic on it.</summary>
+        public const float DECK_FREEBOARD_DRAWBRIDGE = 2.4f;
+
+        /// <summary>Steepest grade the deck profile may climb or descend per cell while rising from
+        /// the shore to its clearance over the channel. The shore end of a crossing is level with
+        /// the road that leads onto it; this is the slope that takes it from there to standing over
+        /// the water, and it stays inside what the road's own grade rules call rough-but-paveable.</summary>
+        public const float DECK_MAX_GRADE = 0.15f;
+
+        /// <summary>Deepest cut the grader will make below a station's level, in metres. Cut and
+        /// fill together are what the paver will do to a strip that is too far out of level to
+        /// pave; beyond that the ground is a cliff, and a road that sliced it flat would not be a
+        /// road, it would be a quarry.</summary>
+        public const float LEVEL_CUT_MAX = 3f;
+
+        /// <summary>Highest fill the grader will pour above a station's level, in metres.</summary>
+        public const float LEVEL_FILL_MAX = 3f;
+
         private int _bridgeCost;
         private int _gapCount;
         private readonly List<bool>  _planBridge   = new List<bool>(128);
@@ -391,6 +657,11 @@ namespace VoxelEngine.Building
         private readonly List<bool>  _isGap        = new List<bool>(64);
         private readonly List<int>   _gapOfStation = new List<int>(64);
         private readonly List<float> _deckAt       = new List<float>(64);
+        private readonly List<float> _gapExcess    = new List<float>(64);
+        private readonly List<Vector3> _stationFrame = new List<Vector3>(64);
+        private readonly List<float> _levelAt      = new List<float>(64);
+        private readonly List<string> _levelWhy    = new List<string>(64);
+        private readonly List<bool>  _planLevel    = new List<bool>(128);
         private readonly List<BridgeSpan> _planSpans = new List<BridgeSpan>(4);
 
         /// <summary>Bridge material per deck cell. Deliberately well above the asphalt price: a
@@ -477,7 +748,8 @@ namespace VoxelEngine.Building
             _quadSW.Clear(); _quadSE.Clear(); _quadNE.Clear(); _quadNW.Clear();
             _planTouchedRuns.Clear(); _planSeen.Clear();
             _planBridge.Clear(); _groundAt.Clear(); _isGap.Clear();
-            _gapOfStation.Clear(); _deckAt.Clear(); _planSpans.Clear();
+            _gapOfStation.Clear(); _deckAt.Clear(); _planSpans.Clear(); _planLevel.Clear();
+            _stationFrame.Clear(); _levelAt.Clear(); _levelWhy.Clear();
             _refusal = null; _liveRefusal = null; _totalCost = 0; _bridgeCost = 0; _gapCount = 0;
             _commitCount = 0; _commitCost = 0; _commitRunCount = 0; _commitRefusal = null;
             if (!_planning || block == null || _wpPos.Count == 0) { HideGhost(); return; }
@@ -596,10 +868,80 @@ namespace VoxelEngine.Building
                 }
             }
 
+            // The substructure bills itself as well: the piers that stand in the riverbed and the
+            // girders that run under the deck are masonry, and masonry is stone. Two pots on one
+            // crossing is deliberate — the deck is iron plate and the supports are stone, and
+            // folding them together would let a stone-rich player cross water for nothing but
+            // stone, or an iron-rich one for nothing but iron.
+            var pierMaterial = tool != null ? tool.pierMaterial : null;
+            int pierUnits = bridgeCells > 0 && pierMaterial != null
+                ? bridgeCells * Mathf.Max(0, tool.pierMaterialPerCell) : 0;
+            if (pierUnits > 0 && inventory.CountOf(pierMaterial) < pierUnits)
+            {
+                CancelPlan();
+                refusal = "Needs " + pierUnits + " " + pierMaterial.displayName
+                        + " for the bridge supports";
+                return false;
+            }
+
             inventory.container.Remove(material, _commitCost + repairUnits);
             if (bridgeUnits > 0) inventory.container.Remove(bridgeMaterial, bridgeUnits);
+            if (pierUnits > 0) inventory.container.Remove(pierMaterial, pierUnits);
 
             _planSpans.Clear();
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            // After three crossings that came back "still in the water", the next report has to
+            // arrive as numbers, not as an adjective. One line per gap span, straight from the
+            // lists the solver left behind (they live until the plan is cancelled): which
+            // stations, where the deck actually stands, how far it climbed over its own ends,
+            // and what the water says on a fresh sample at the station it climbed highest for.
+            // Compiled out of release builds; in the editor it is the difference between another
+            // blind fix and a diagnosis.
+            if (_isGap.Count > 0 && _planRot.Count > 0)
+            {
+                Vector3 diagUp = _planRot[0] * Vector3.up;
+                for (int g = 0; g < _isGap.Count; g++)
+                {
+                    if (!_isGap[g]) continue;
+                    int lastGap = g;
+                    while (lastGap + 1 < _isGap.Count && _isGap[lastGap + 1]) lastGap++;
+                    float lo = float.PositiveInfinity, hi = float.NegativeInfinity;
+                    int peakStation = g;
+                    for (int s = g; s <= lastGap && s < _deckAt.Count; s++)
+                    {
+                        if (_deckAt[s] < lo) lo = _deckAt[s];
+                        if (_deckAt[s] > hi) { hi = _deckAt[s]; peakStation = s; }
+                    }
+                    float rise = hi - Mathf.Max(_deckAt[g], _deckAt[lastGap]);
+                    string water = "none";
+                    if (peakStation < _stationFrame.Count &&
+                        WaterSurfaceAbove(_stationFrame[peakStation], diagUp, out float diagSurf))
+                        water = "+" + diagSurf.ToString("F2") + "m above station " + peakStation;
+                    Debug.Log("[RoadPaver] gap " + g + "-" + lastGap + " (" + (lastGap - g + 1)
+                              + " cells) deck " + lo.ToString("F2") + ".." + hi.ToString("F2")
+                              + " rise " + rise.ToString("F2") + " water " + water);
+                    g = lastGap;
+                }
+            }
+#endif
+
+            // ── Grade the ground BEFORE any slab lands on it ──
+            // Leveling used to run inside the placement loop, one cell ahead of its own slab —
+            // which meant any neighbour placed earlier draped a mesh over ground the grader had
+            // not touched yet, and the seam between a graded station and the road before it stood
+            // as a step. All the cut and fill happens first now, so every cell's drape — graded
+            // or not — samples the finished terrain, and the transition onto a graded station is
+            // a ramp inside the neighbouring slab instead of a ledge between two.
+            for (int i = 0; i < _commitCount; i++)
+            {
+                if (!_planFresh[i]) continue;
+                bool deckEntry = i < _planBridge.Count && _planBridge[i] && BridgeBlock != null;
+                if (!deckEntry && i < _planLevel.Count && _planLevel[i])
+                    LevelGroundTo(_planPos[i], _planRot[i], CellOf(block),
+                                  Vector3.Dot(_planPos[i], _planRot[i] * Vector3.up));
+            }
+
             for (int i = 0; i < _commitCount; i++)
             {
                 if (!_planFresh[i]) continue;
@@ -700,6 +1042,7 @@ namespace VoxelEngine.Building
                 + (repairUnits > 0 ? " · includes resurfacing" : "")
                 + (bridgeCells > 0
                     ? " · " + bridgeCells + " deck cell(s), " + bridgeUnits + " " + bridgeMaterial.displayName
+                      + (pierUnits > 0 ? " + " + pierUnits + " " + pierMaterial.displayName + " supports" : "")
                     : ""),
                 block.icon, new Color(0.55f, 0.80f, 0.95f));
             return laid > 0;
@@ -714,7 +1057,8 @@ namespace VoxelEngine.Building
             _quadSW.Clear(); _quadSE.Clear(); _quadNE.Clear(); _quadNW.Clear(); _planExplicit.Clear();
             _planTouchedRuns.Clear(); _planSeen.Clear();
             _planBridge.Clear(); _groundAt.Clear(); _isGap.Clear();
-            _gapOfStation.Clear(); _deckAt.Clear(); _planSpans.Clear();
+            _gapOfStation.Clear(); _deckAt.Clear(); _planSpans.Clear(); _planLevel.Clear();
+            _stationFrame.Clear(); _levelAt.Clear(); _levelWhy.Clear();
             _refusal = null; _liveRefusal = null; _totalCost = 0; _bridgeCost = 0; _gapCount = 0;
             _commitCount = 0; _commitCost = 0; _commitRunCount = 0; _commitRefusal = null;
             HideGhost();
@@ -764,6 +1108,7 @@ namespace VoxelEngine.Building
             // riverbed, which is what makes the road run straight over instead of diving in.
             _groundAt.Clear(); _isGap.Clear();
             _gapOfStation.Clear(); _deckAt.Clear();
+            _stationFrame.Clear(); _levelAt.Clear(); _levelWhy.Clear();
             // Restarted here and not left to `UpdatePlan`: `EmitCorridor` runs twice per frame, once
             // for the committed route and once for the live preview leg, and each solve numbers its
             // own gaps. Letting the counter carry over left the deck-level loop walking gap numbers
@@ -776,6 +1121,22 @@ namespace VoxelEngine.Building
             {
                 _groundAt.Add(float.NaN); _isGap.Add(false);
                 _gapOfStation.Add(-1);    _deckAt.Add(0f);
+                _stationFrame.Add(default); _levelAt.Add(float.NaN); _levelWhy.Add(null);
+            }
+            // One representative frame position per station: the gap solver needs somewhere to
+            // sample the water surface, and a reference height to turn frame-relative offsets into
+            // absolute levels. The first lane that exists at the station is as good a spot as any —
+            // every lane at a station spans the same two cross-sections, so they all agree on
+            // height to within a rounding hair.
+            for (int k = 0; k < n; k++)
+            {
+                for (int w = 0; w < _width; w++)
+                {
+                    var stationFrame = RoadCorridor.CellAt(buf, w, k);
+                    if (stationFrame == null) continue;
+                    _stationFrame[k] = stationFrame.position;
+                    break;
+                }
             }
 
             bool canBridge = BridgeBlock != null;
@@ -790,15 +1151,42 @@ namespace VoxelEngine.Building
                     var band = hit
                         ? JudgeCell(block, frame.position + up * off, frame.rotation, out _, out _)
                         : AsphaltRoad.GradeBand.NoGround;
+                    // The bed under shallow water is dry voxels with a smooth slope, which the
+                    // site evaluation correctly calls paveable land — and the crossing then
+                    // drapes ordinary road along the lakebed, underwater. That is how a river
+                    // crossing could end up "a bridge under the water" without a single deck
+                    // cell in it. Ground that lies below the water surface is water, whatever
+                    // the bed voxels say: the ocean shell especially is not per-voxel water,
+                    // and the shallow shelf it covers reads as dry ground to a voxel test.
+                    if (hit && (band == AsphaltRoad.GradeBand.Smooth || band == AsphaltRoad.GradeBand.Rough)
+                        && WaterSurfaceAbove(frame.position, up, out float surfaceAbove)
+                        && surfaceAbove > off)
+                        band = AsphaltRoad.GradeBand.Underwater;
                     bool gap = band == AsphaltRoad.GradeBand.Underwater
                             || band == AsphaltRoad.GradeBand.NoGround;
                     if (gap) _isGap[k] = true;
+                    else if (band == AsphaltRoad.GradeBand.TooRough || band == AsphaltRoad.GradeBand.Buried)
+                    {
+                        // The station's graded level is resolved HERE, in the measuring pass, and
+                        // not left to pass 2 — because the gap solver reads `_groundAt` to anchor
+                        // the deck's approach line, and a graded station flanking the water must
+                        // anchor the deck to the level its own road will actually sit at, not to
+                        // the raw ground the grader is about to move. Cached per station, so the
+                        // other lanes of the same station and pass 2's verdict all read the same
+                        // answer without re-probing.
+                        if (TryGradeStation(buf, up, cell, k, out float gradedLevel, out _))
+                            _groundAt[k] = gradedLevel - Vector3.Dot(_stationFrame[k], up);
+                    }
                 }
             }
 
-            // Number the gaps and give each one a deck level interpolated between the last measured
-            // ground before it and the first after it. A gap at either end of the corridor has only
-            // one side to work from, so it holds that level flat rather than inventing a slope.
+            // Number the gaps and give each one a deck level. The starting point is still the
+            // ground at the gap's two ends — a bridge deck leaves the bank level with the road that
+            // leads onto it, not with the riverbed. But "level with the approaches" alone is what
+            // laid decks in the water: where the shore sits at the waterline, so does the deck. So
+            // the level over each gap is the HIGHER of the approach line and the waterline plus a
+            // freeboard, and the result is slope-limited from both shores: the crossing leaves the
+            // bank at road level, climbs no faster than a steep road, and stands over the channel.
             int currentGap = -1;
             for (int k = 0; k < n; k++)
             {
@@ -806,22 +1194,85 @@ namespace VoxelEngine.Building
                 if (currentGap < 0) currentGap = _gapCount++;
                 _gapOfStation[k] = currentGap;
             }
+            float freeboard = CrossingsOpen ? DECK_FREEBOARD_DRAWBRIDGE : DECK_FREEBOARD_FIXED;
+            float maxStep = cell * DECK_MAX_GRADE;
             for (int g = 0; g < _gapCount; g++)
             {
                 int first = -1, last = -1;
                 for (int k = 0; k < n; k++) if (_gapOfStation[k] == g) { if (first < 0) first = k; last = k; }
                 float before = float.NaN, after = float.NaN;
-                for (int k = first - 1; k >= 0; k--) if (!_isGap[k] && !float.IsNaN(_groundAt[k])) { before = _groundAt[k]; break; }
-                for (int k = last + 1; k < n; k++) if (!_isGap[k] && !float.IsNaN(_groundAt[k])) { after = _groundAt[k]; break; }
-                float level = !float.IsNaN(before) ? before
-                            : !float.IsNaN(after) ? after
-                            : 0f;
+                int beforeStation = -1, afterStation = -1;
+                for (int k = first - 1; k >= 0; k--)
+                    if (!_isGap[k] && !float.IsNaN(_groundAt[k])) { before = _groundAt[k]; beforeStation = k; break; }
+                for (int k = last + 1; k < n; k++)
+                    if (!_isGap[k] && !float.IsNaN(_groundAt[k])) { after = _groundAt[k]; afterStation = k; break; }
+
+                // Absolute heights along `up`. The offsets the probes return are frame-relative,
+                // and the two ends of a gap belong to two different frames: lerping offsets as if
+                // they shared an origin is only right when both clicked banks happen to be level.
+                // Measured against one axis it is right whatever the approaches do.
+                float beforeH = beforeStation >= 0
+                    ? Vector3.Dot(_stationFrame[beforeStation], up) + before : float.NaN;
+                float afterH = afterStation >= 0
+                    ? Vector3.Dot(_stationFrame[afterStation], up) + after : float.NaN;
+
+                int len = last - first + 1;
+                _gapExcess.Clear();
                 for (int k = first; k <= last; k++)
                 {
-                    if (float.IsNaN(before) || float.IsNaN(after)) { _deckAt[k] = level; continue; }
-                    float t = last == first ? 0.5f : (k - first) / (float)(last - first);
-                    _deckAt[k] = Mathf.Lerp(before, after, t);
+                    float t = len == 1 ? 0.5f : (k - first) / (float)(len - 1);
+                    // The approach line: flat when only one side of the gap has ground, which is
+                    // the corridor starting or ending in the water rather than crossing it. The
+                    // deck ALWAYS meets this line — it is what makes the crossing flush with the
+                    // roads on both banks, and where the banks themselves are steep, the line is
+                    // the shore road's own grade, no steeper than what is already paved there.
+                    float line = !float.IsNaN(beforeH) && !float.IsNaN(afterH)
+                        ? Mathf.Lerp(beforeH, afterH, t)
+                        : (!float.IsNaN(beforeH) ? beforeH : afterH);
+
+                    // The waterline demand at this station, as an EXCESS over the approach line.
+                    // The deck must stand at least waterline + freeboard over the water, but the
+                    // rise to that is ramped, and it is the EXCESS that is ramped rather than the
+                    // whole profile: a dry gully or a high-bank crossing has no demand at all, and
+                    // its deck must stay exactly on the line, the way it always did.
+                    //
+                    // The surface itself comes from `WaterSurfaceAbove`, which speaks both of the
+                    // world's dialects of water: the voxels the fluid sim fills (lakes, and the
+                    // ocean where it is voxel water), and — on the sphere — the planet's ocean
+                    // SHELL, which is not per-voxel water everywhere and is invisible to a pure
+                    // voxel scan. A crossing over that ocean found no water at all through the
+                    // voxel probe, the demand read as zero, and the deck followed the shore line
+                    // straight into the sea.
+                    float excess = 0f;
+                    if (WaterSurfaceAbove(_stationFrame[k], up, out float surfaceAbove))
+                    {
+                        float waterLevel = Vector3.Dot(_stationFrame[k], up) + surfaceAbove;
+                        excess = Mathf.Max(waterLevel + freeboard - line, 0f);
+                    }
+
+                    _deckAt[k] = line;
+                    _gapExcess.Add(excess);
                 }
+
+                // Slope-limit the excess from both shores. The forward pass is the highest rise
+                // the near bank permits, the backward pass the far bank's, and the deck carries
+                // the lower of the two — the one both banks permit. A gap too short to climb to
+                // its freeboard becomes a tent: the crossing stands as high as its banks can ramp
+                // it, which over a short hop is the crossing that fits.
+                float fwd = float.IsNaN(beforeH) ? float.PositiveInfinity : 0f;
+                for (int i = 0; i < len; i++)
+                {
+                    fwd = Mathf.Min(_gapExcess[i], fwd + maxStep);
+                    _gapExcess[i] = fwd;
+                }
+                float bwd = float.IsNaN(afterH) ? float.PositiveInfinity : 0f;
+                for (int i = len - 1; i >= 0; i--)
+                {
+                    bwd = Mathf.Min(_gapExcess[i], bwd + maxStep);
+                    if (bwd < _gapExcess[i]) _gapExcess[i] = bwd;
+                }
+                for (int k = first; k <= last; k++)
+                    _deckAt[k] += _gapExcess[k - first];
             }
             if (_gapCount > 0 && !canBridge)
             {
@@ -864,9 +1315,44 @@ namespace VoxelEngine.Building
                         var band = JudgeCell(block, pos, rot, out int cost, out _);
                         if (band != AsphaltRoad.GradeBand.Smooth && band != AsphaltRoad.GradeBand.Rough)
                         {
-                            SetRefusal(AsphaltRoad.DescribeSite(band));
-                            AddCell(pos, rot, true, 0, Vector3.zero, Vector3.zero, 1f, 1f,
+                            // Ground too far out of level — or buried in it — is where the paver
+                            // used to send the player away to flatten the strip by hand. It grades
+                            // instead: the whole station is cut and filled to one level at commit,
+                            // and the cell keeps the rough-ground price, because grading rough
+                            // ground is exactly what that price was always for. What the grader
+                            // cannot reach still refuses — a cliff taller than its cut, or a
+                            // building standing in the footprint.
+                            // Declared and defaulted OUTSIDE the short-circuit: `&&` never calls
+                            // `TryGradeStation` when the band is neither too rough nor buried, and
+                            // an out parameter the call never ran is an unassigned local to the
+                            // compiler, whatever the logic promises about only reading it later.
+                            float gradedTo = 0f;
+                            string gradeWhy = null;
+                            bool grade = (band == AsphaltRoad.GradeBand.TooRough ||
+                                          band == AsphaltRoad.GradeBand.Buried) &&
+                                         TryGradeStation(buf, up, cell, k, out gradedTo, out gradeWhy);
+                            if (!grade)
+                            {
+                                SetRefusal(gradeWhy ?? AsphaltRoad.DescribeSite(band));
+                                AddCell(pos, rot, true, 0, Vector3.zero, Vector3.zero, 1f, 1f,
+                                        frame.sw, frame.se, frame.ne, frame.nw, true);
+                                continue;
+                            }
+                            pos += up * (gradedTo - Vector3.Dot(pos, up));
+                            if (IsCellOccupied(pos, cell))
+                            {
+                                var gradedExisting = RoadAt(pos, cell);
+                                if (gradedExisting != null && gradedExisting.Run != null &&
+                                    !_planTouchedRuns.Contains(gradedExisting.Run))
+                                    _planTouchedRuns.Add(gradedExisting.Run);
+                                AddCell(pos, rot, false, 0, Vector3.zero, Vector3.zero, 1f, 1f,
+                                        frame.sw, frame.se, frame.ne, frame.nw, true);
+                                continue;
+                            }
+                            _totalCost += 2;
+                            AddCell(pos, rot, true, 2, Vector3.zero, Vector3.zero, 1f, 1f,
                                     frame.sw, frame.se, frame.ne, frame.nw, true);
+                            if (_planLevel.Count > 0) _planLevel[_planLevel.Count - 1] = true;
                             continue;
                         }
                         _totalCost += cost;
@@ -877,7 +1363,13 @@ namespace VoxelEngine.Building
 
                     // A deck cell: dropped onto the span's level, not onto the ground, and laid from
                     // the bridge block so it carries the bridge material and the bridge surface kind.
-                    pos += up * _deckAt[k];
+                    // `_deckAt` holds an ABSOLUTE level along `up` — the approach line plus the
+                    // ramped waterline excess, measured against the world, not against this frame —
+                    // so the cell MOVES to that level rather than adding it as an offset. Adding it
+                    // landed the deck at its own height ON TOP of the frame's height: charged,
+                    // planned, and floating double-high over the channel where nobody looking at the
+                    // water would find it.
+                    pos += up * (_deckAt[k] - Vector3.Dot(pos, up));
                     if (IsCellOccupied(pos, cell))
                     {
                         var existingDeck = RoadAt(pos, cell);
@@ -911,7 +1403,14 @@ namespace VoxelEngine.Building
                 { SetLiveRefusal("No ground under part of the road"); continue; }
                 var band = JudgeCell(block, frame.position + up * off, frame.rotation, out _, out _);
                 if (band != AsphaltRoad.GradeBand.Smooth && band != AsphaltRoad.GradeBand.Rough)
+                {
+                    // The live ghost shows what the paver will do about rough ground: grade it and
+                    // lay the road. Only ground beyond the grader's reach tints the leg red.
+                    if (band == AsphaltRoad.GradeBand.TooRough || band == AsphaltRoad.GradeBand.Buried)
+                        if (CellGradeable(frame.position, frame.rotation, up, CellOf(block)))
+                            continue;
                     SetLiveRefusal(AsphaltRoad.DescribeSite(band));
+                }
             }
         }
 
@@ -988,15 +1487,22 @@ namespace VoxelEngine.Building
                              Vector3 qNE = default, Vector3 qNW = default,
                              bool explicitQuad = false)
         {
-            _planBridge.Add(false);
             // Two legs of a polyline share their corner cell; the seen-set is what stops the second
             // leg from laying (and charging for) a cell the first leg already put in the plan.
             long key = KeyOf(pos);
             if (!_planSeen.Add(key)) return;
+            // The per-entry flag lists are appended HERE, only for a cell that actually enters the
+            // plan, and never before the seen-set check above: appending first left a phantom
+            // flag behind on every shared corner, shifting every later bridge and level flag one
+            // cell off the plan entry it belonged to. A multi-leg line that crossed water after a
+            // corner billed the wrong cells as deck, and a graded one would have moved the ground
+            // under the wrong cells.
             _planPos.Add(pos); _planRot.Add(rot); _planFresh.Add(fresh); _planCost.Add(cost);
             _planInR.Add(inR); _planOutR.Add(outR); _planInM.Add(inM); _planOutM.Add(outM);
             _quadSW.Add(qSW); _quadSE.Add(qSE); _quadNE.Add(qNE); _quadNW.Add(qNW);
             _planExplicit.Add(explicitQuad);
+            _planBridge.Add(false);
+            _planLevel.Add(false);
         }
 
         private static long KeyOf(Vector3 pos)
