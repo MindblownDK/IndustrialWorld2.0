@@ -1,9 +1,35 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.54.0-dev`
+**Current Version:** `9.55.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.55.0-dev] Saved Network Identity and Pilot Route Budgets
+
+**Type:** MINOR — save-compatible route assessment and arrival telemetry. Existing saved network routes can be reused. No new save fields, route-mode changes, item identities, prefab replacements or custom-tuning resets.
+
+**GitHub title:** `[9.55.0-dev] Fix saved network starts and restore pilot route budgets`
+
+#### Saved network starts
+- Start no longer rediscovers arbitrary centre tiles from the vehicle and compares their positions against saved endpoint representatives. The saved endpoint footprints identify the corridor; validation checks that they remain in opposite end rows and that the vehicle belongs to the same loaded component.
+- A nearer end is still chosen using along-road distance from the vehicle. Lateral row grouping uses rendered surface centres rather than construction pivots. Start and the Pilot assessment share one saved-network resolver.
+- Removed/blocked endpoints, disconnected vehicles, extended roads, unsupported topology, unavailable coordinate frames and search-budget overflow still refuse. Missing-footprint diagnostics include measured endpoint offsets; no increased 8 m radius, off-road snapping workaround or blanket removal of safety checks.
+
+#### Assessment belongs in the Auto-Run Pilot
+- Selecting a saved route immediately shows a read-only departure assessment: distance, estimated time, speed cap/profile, mass, appropriate thrust/lift figures, propulsion and standing/control watts, trip Wh, generation, usable battery Wh, discharge rating, hydrogen where applicable, leg details and warnings.
+- Network estimates include both the nearer-end approach and the end-to-end phase. Road budgets use configured wheel watts and suspension-strength scaling. Electric water propulsion and local flight use fitted propulsion ratings; local estimates include a 25% travel-time allowance and startup/phase waits. These are explicitly rated-load planning estimates, not simulated journeys or guaranteed arrival times.
+- Legacy space routes retain the existing planner calculation, profile selection, burn/leg details and warning text in the Pilot assessment. Thrust is shown in correctly scaled kN. Hydrogen thrusters are not billed for fictitious electrical drive watts, and battery charging is excluded from standing voyage demand.
+- Generator credit excludes battery discharge from the grid's combined generation ledger. Battery percentages are capacity-weighted across installed packs; disabled/recharge-only energy is not counted as available drive energy. Charge/discharge limits, empty banks and low reserves are surfaced. No battery is reported as N/A, not 0%.
+- Refresh explicitly after a refit, cargo/position change or changed generation. Start recalculates the departure snapshot; the live battery gauge refreshes separately without repeated road searches. Assessments do not consume power/fuel, author routes or start controllers. Existing Start preflight remains authoritative.
+
+#### Predicted and measured arrival battery
+- The Pilot shows a predicted arrival percentage under the displayed budget assumptions. Supply/energy shortfalls are labelled rather than pretending a viable arrival percentage; future generation is only a current-output assumption, not a fuel/weather guarantee. Shaft-propeller fuel/torque range is explicitly not covered by a battery forecast.
+- Successful road, water, local-flight and primary-Start legacy-space arrivals record actual battery Wh/percentage and retain the departure prediction alongside it. Local flight captures at its arrival hold; water captures before coasting; network runs capture only at the final end, not at the nearer-end pause.
+- The arrival snapshot remains unchanged through later charging and panel rebuilds. Stops, faults and unrelated controllers cannot impersonate arrival. Results belong to the started route even if another route is subsequently selected. Telemetry is session-only, not a save-history feature.
+- Legacy OneWayThenPark now stops at the outbound destination instead of unintentionally starting an inbound journey; arrival battery is captured before service or shutdown.
+
+**Validation:** 206 local harness checks passed, including a synthetic reproduction of the old representative-tile mismatch, saved-end identity/refusal tests, forecast accounting, actual completion hooks and a two-phase straight-road force simulation. Actual Unity compilation, rendering, save/load and real chassis/generator behavior remain manual acceptance gates. No asset setup is required.
 
 ### [9.54.0-dev] Surface-Anchored Paths and Two-End Road Network Runs
 

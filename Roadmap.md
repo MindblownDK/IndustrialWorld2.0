@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `9.54.0-dev`
-**Roadmap Version:** `9.54.0-dev`
+**Current Version:** `9.55.0-dev`
+**Roadmap Version:** `9.55.0-dev`
 **Date:** 2026-09-12
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 9.55.0-dev — Saved Network Identity and Pilot Budgets
+- Saved endpoint-row validation replaces representative-position matching.
+- Pilot route assessment, predicted battery reserve and measured arrival snapshots.
+- 206 local harness checks; Unity and live forecast calibration remain open.
+
 ### 9.54.0-dev — Surface Anchors and Two-End Network Runs
 - Sparse surface-corrected paths and explicit visibility controls.
 - Saved two-end network runs with braked, low-speed reverse-capable phases.
@@ -48,11 +53,6 @@
 - Large/Small pilot blocks are authored through non-destructive Setup Step 74.
 - Dedicated panels expose route planning and unattended start/stop controls.
 - Pilot orientation replaces a missing cockpit reference; Unity validation remains open.
-
-### 9.50.0-dev — Unattended One-Way Wheel Runs
-- Route Recorder starts bounded, forward-only unattended road runs.
-- Wheel-only commands and grounded brakes park on faults and reload.
-- Unity vehicle/physics validation remains open; existing content only.
 
 ## 1. Executive Vision
 
@@ -998,6 +998,8 @@ one sentence: **a road is the difference between walking a route and being able 
    - ~~**Simple loaded-road end-to-end operation**~~ *(9.54.0-dev)* — Planner-saved network runs; Pilot executes two braked phases.
    - **Network branching, loops and irregular corridors remain open (9.54.0-dev):** explicit destinations required until traversal policy is agreed.
    - **Unity acceptance (9.54.0-dev):** real draped-road capture, URP path visibility, curved-road reversing and save/load.
+   - ~~**Pilot execution budgets and arrival battery telemetry**~~ *(9.55.0-dev)* — read-only selected-route estimates and session arrival snapshots.
+   - **Forecast calibration remains open (9.55.0-dev):** real chassis, terrain, marine shaft-fuel range, variable generation and travel/holding times.
    - **Map-based destination and route selection remains open (deferred 9.52.0-dev, Thomas's choice):**
      map interaction, waypoint editing, route preview and mode-appropriate map planning.
    - **Local ship navigation extensions remain open (deferred 9.52.0-dev):** powered marine braking,
