@@ -124,7 +124,7 @@ namespace IndustrialWorld.Navigation
             string wanted = string.IsNullOrWhiteSpace(_recorder.nextRouteName) ? _mode + " Destination" : _recorder.nextRouteName.Trim();
             route.routeName = wanted;
             for (int n = 2; book.Find(route.routeName) != null; n++) route.routeName = wanted + " #" + n;
-            Vector3 start = _recorder.Grid.transform.position;
+            Vector3 start = RoadNavigationAnchor.ForGrid(_recorder.Grid, _mode);
             if (!RouteCoordinates.Finite(target) || Vector3.Distance(start, target) < 2f || Vector3.Distance(start, target) > 200f)
             { BuildFeedbackHud.Show("Choose a destination between 2 and 200 metres from the vehicle."); return; }
             route.AddWaypoint(RouteCoordinates.Capture(start, scene));

@@ -50,7 +50,7 @@ namespace IndustrialWorld.Navigation
                 save?.SetEnabled(snapshot.IsComplete && snapshot.Roads.Count > 0);
             };
             System.Func<Vector3> position = () => recorder.Grid != null
-                ? recorder.Grid.Body != null ? recorder.Grid.Body.position : recorder.Grid.transform.position
+                ? RoadNavigationAnchor.ForGrid(recorder.Grid, RouteTravelMode.Road)
                 : recorder.transform.position;
             var refresh = RoadNavigationUI.MakeButton("REFRESH NEARBY NETWORK", () =>
             {

@@ -127,7 +127,7 @@ namespace VoxelEngine.Navigation
     public enum RouteSpeedProfile { Economy = 0, Standard = 1, Sprint = 2 }
 
     /// <summary>A planned journey: a name, the points, and the profile to fly them on.</summary>
-    public enum RouteTravelMode { LegacyFlight = 0, Road = 1, Water = 2, Flight = 3 }
+    public enum RouteTravelMode { LegacyFlight = 0, Road = 1, Water = 2, Flight = 3, RoadNetwork = 4 }
 
     [System.Serializable]
     public class ShipRoute

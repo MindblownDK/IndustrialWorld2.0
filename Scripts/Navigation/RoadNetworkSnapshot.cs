@@ -33,17 +33,7 @@ namespace IndustrialWorld.Navigation
             _roads.Clear();
             _seen.Clear();
             IsComplete = false;
-            RoadSurfaceUtility.QueryNearby(position, RoadRoutePlanner.EndpointReach, _nearby);
-            AsphaltRoad seed = null;
-            float best = RoadRoutePlanner.EndpointReach * RoadRoutePlanner.EndpointReach;
-            foreach (var road in _nearby)
-            {
-                if (!RoadRoutePlanner.IsVehicleRoad(road)) continue;
-                float distance = (position - road.transform.position).sqrMagnitude;
-                if (distance >= best) continue;
-                seed = road;
-                best = distance;
-            }
+            AsphaltRoad seed = RoadRoutePlanner.FindEndpoint(position, _nearby, true);
             if (seed == null)
             {
                 Message = "No loaded vehicle road within 8 m of this vehicle.";

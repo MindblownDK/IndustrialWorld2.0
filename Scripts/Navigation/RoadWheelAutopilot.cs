@@ -7,7 +7,7 @@ using VoxelEngine.Navigation;
 
 namespace IndustrialWorld.Navigation
 {
-    /// <summary>One-way unattended ground run. No teleport, reverse, recovery or automatic restart.</summary>
+    /// <summary>Unattended ground runs. Network runs explicitly allow low-speed reverse legs; faults never restart.</summary>
     public sealed class RoadWheelAutopilot : MonoBehaviour
     {
         private GridEntity _grid;
@@ -20,6 +20,10 @@ namespace IndustrialWorld.Navigation
         private readonly Collider[] _overlaps = new Collider[128];
         private readonly RaycastHit[] _hits = new RaycastHit[128];
         private int _cursor;
+        private int _travelDirection = 1;
+        private bool _networkMode;
+        private readonly List<AsphaltRoad> _networkReturn = new List<AsphaltRoad>();
+        private Vector3 TravelForward => Frame.forward * _travelDirection;
         private float _countdown, _steer, _wheelbase, _maxSteer, _axleMid;
         private float _halfWidth, _halfLength, _height, _bodyTop, _stuckTime;
         private float _surfaceClock, _routeClock, _statusClock;
@@ -47,12 +51,12 @@ namespace IndustrialWorld.Navigation
             foreach (var road in _route)
             {
                 if (road == null) { points.Clear(); return false; }
-                points.Add(road.transform.position + road.transform.up * 0.18f);
+                points.Add(RoadNavigationAnchor.SurfaceCentre(road) + road.transform.up * 1f);
             }
             return points.Count > 1;
         }
 
-        public void StartRun(GridRouteRecorder recorder, RoadDriverGuidance guidance)
+        public void StartRun(GridRouteRecorder recorder, RoadDriverGuidance guidance, bool allowReverse = false)
         {
             if (!isActiveAndEnabled || _grid == null || !_grid.isActiveAndEnabled || _grid.Body == null || recorder == null || !recorder.Enabled)
             { Status = "Enabled recorder and vehicle body required."; return; }
@@ -61,6 +65,7 @@ namespace IndustrialWorld.Navigation
             if (localPilot != null && localPilot.IsActive)
             { Status = "Stop water/flight navigation before starting wheel control."; return; }
             _recorder = recorder;
+            _networkMode = allowReverse; _networkReturn.Clear(); _travelDirection = 1;
             var flight = _grid.GetComponent<GridRouteAutopilot>();
             if ((flight != null && flight.IsArmed) || _grid.AutonomousFlightActive)
             { Status = "Disarm flight auto-run before starting wheel control."; return; }
@@ -122,26 +127,68 @@ namespace IndustrialWorld.Navigation
             _halfLength = Mathf.Max(_wheelbase * 0.5f, _halfLength) + 0.3f;
             if (_halfWidth > 12f || _halfLength > 16f)
             { Status = "Vehicle exceeds the first road-controller size envelope."; return; }
-            _cursor = 0;
-            float nearest = float.MaxValue;
-            _remainingFrom.Clear();
-            for (int i = 0; i < _route.Count; i++)
-            {
-                if (!RoadRoutePlanner.IsVehicleRoad(_route[i]))
-                { Status = "Planned road is no longer available. Replan first."; return; }
-                float distance = (_route[i].transform.position - _grid.Body.worldCenterOfMass).sqrMagnitude;
-                if (distance < nearest) { nearest = distance; _cursor = i; }
-                _remainingFrom.Add(0f);
-            }
-            for (int i = _route.Count - 2; i >= 0; i--)
-                _remainingFrom[i] = _remainingFrom[i + 1]
-                    + Vector3.Distance(_route[i].transform.position, _route[i + 1].transform.position);
+            if (!CachePathProgress()) return;
+            if (allowReverse && !ChooseTravelDirection()) return;
             _stuckTime = _surfaceClock = _routeClock = _statusClock = 0f;
             _countdown = RoadWheelMath.StartDelay;
             Throttle = 0f; Brake = 1f;
             IsDriving = true;
             _grid.SetWheelParkingBrake(false);
             Status = "STARTING in 5 s — leave the vehicle path clear. One-way run, 4 m/s maximum.";
+        }
+
+        private bool CachePathProgress()
+        {
+            _cursor = 0;
+            float nearest = float.MaxValue;
+            _remainingFrom.Clear();
+            for (int i = 0; i < _route.Count; i++)
+            {
+                if (!RoadRoutePlanner.IsVehicleRoad(_route[i]))
+                { Status = "Planned road is no longer available. Replan first."; return false; }
+                float distance = (RoadNavigationAnchor.SurfaceCentre(_route[i]) - _grid.Body.worldCenterOfMass).sqrMagnitude;
+                if (distance < nearest) { nearest = distance; _cursor = i; }
+                _remainingFrom.Add(0f);
+            }
+            for (int i = _route.Count - 2; i >= 0; i--)
+                _remainingFrom[i] = _remainingFrom[i + 1]
+                    + Vector3.Distance(RoadNavigationAnchor.SurfaceCentre(_route[i]), RoadNavigationAnchor.SurfaceCentre(_route[i + 1]));
+            return true;
+        }
+
+        private bool ChooseTravelDirection()
+        {
+            int next = Mathf.Min(_route.Count - 1, _cursor + 1);
+            Vector3 direction = next > _cursor ? RoadNavigationAnchor.SurfaceCentre(_route[next]) - RoadNavigationAnchor.SurfaceCentre(_route[_cursor])
+                : RoadNavigationAnchor.SurfaceCentre(_route[_cursor]) - RoadNavigationAnchor.SurfaceCentre(_route[Mathf.Max(0, _cursor - 1)]);
+            float angle = Mathf.Abs(Vector3.SignedAngle(Frame.forward, direction, _route[_cursor].transform.up));
+            if (angle > 65f && angle < 115f) { Status = "Align the vehicle along the road before starting a network run."; return false; }
+            _travelDirection = angle >= 115f ? -1 : 1;
+            return true;
+        }
+
+        public void StartNetwork(GridRouteRecorder recorder, RoadDriverGuidance guidance, List<AsphaltRoad> approach, List<AsphaltRoad> across)
+        {
+            if (IsDriving) { Status = "Stop the active run before changing its route."; return; }
+            if (guidance == null || approach == null || across == null || across.Count < 2)
+            { Status = "Prepare a valid two-end network route first."; return; }
+            bool approachNeeded = approach.Count >= 2;
+            guidance.UseRoadPath(approachNeeded ? approach : across, "Road network");
+            StartRun(recorder, guidance, true);
+            if (IsDriving && approachNeeded) _networkReturn.AddRange(across);
+            if (IsDriving) Status = "NETWORK: " + (_networkReturn.Count > 0 ? "approach nearer end" : "drive to other end")
+                + (_travelDirection < 0 ? " in reverse" : " forward") + ". Starting in 5 seconds.";
+        }
+
+        private bool ContinueNetwork()
+        {
+            if (_networkReturn.Count == 0) return false;
+            _route.Clear(); _route.AddRange(_networkReturn); _networkReturn.Clear();
+            if (!CachePathProgress() || !ChooseTravelDirection()) { Park(Status); return true; }
+            _countdown = 5f; Throttle = _steer = 0f; Brake = 1f;
+            _stuckTime = _surfaceClock = _routeClock = _statusClock = 0f;
+            Status = "Near end reached. Braking for 5 seconds, then driving to the other end.";
+            return true;
         }
 
         public float SteeringFor(GridWheel wheel)
@@ -155,6 +202,7 @@ namespace IndustrialWorld.Navigation
         public void Park(string reason)
         {
             IsDriving = false;
+            _networkReturn.Clear(); _networkMode = false;
             Throttle = _steer = 0f;
             Brake = 1f;
             _grid?.SetWheelParkingBrake(true);
@@ -164,6 +212,7 @@ namespace IndustrialWorld.Navigation
         public void Release()
         {
             IsDriving = false;
+            _networkReturn.Clear(); _networkMode = false;
             Throttle = Brake = _steer = 0f;
             _grid?.SetWheelParkingBrake(false);
             Status = "Wheel control released. Manual driving / securing the vehicle is your responsibility.";
@@ -225,42 +274,42 @@ namespace IndustrialWorld.Navigation
             while (_cursor + 1 < _route.Count)
             {
                 if (_route[_cursor + 1] == null) { Park("Next road unloaded. Parked."); return; }
-                Vector3 a = Vector3.ProjectOnPlane(_route[_cursor].transform.position - here, up);
-                Vector3 b = Vector3.ProjectOnPlane(_route[_cursor + 1].transform.position - here, up);
+                Vector3 a = Vector3.ProjectOnPlane(RoadNavigationAnchor.SurfaceCentre(_route[_cursor]) - here, up);
+                Vector3 b = Vector3.ProjectOnPlane(RoadNavigationAnchor.SurfaceCentre(_route[_cursor + 1]) - here, up);
                 if (b.sqrMagnitude >= a.sqrMagnitude) break;
                 _cursor++;
             }
             up = _route[_cursor].transform.up;
-            float deviation = Vector3.ProjectOnPlane(_route[_cursor].transform.position - here, up).magnitude;
+            float deviation = Vector3.ProjectOnPlane(RoadNavigationAnchor.SurfaceCentre(_route[_cursor]) - here, up).magnitude;
             if (deviation > Mathf.Max(2f, _route[_cursor].cellSize))
             { Park("Off planned road. Reposition manually, then replan."); return; }
             float speed = Vector3.ProjectOnPlane(_grid.Body.linearVelocity, up).magnitude;
-            if (speed > RoadWheelMath.CruiseSpeed + 1f)
+            if (speed > (_networkMode ? 1.5f : RoadWheelMath.CruiseSpeed) + 1f)
             { Park("Overspeed. Braking; inspect slope, load and external forces."); return; }
-            if (Vector3.Dot(_grid.Body.linearVelocity, Frame.forward) < -0.5f)
-            { Park("Vehicle rolling backwards. Braking."); return; }
+            if (Vector3.Dot(_grid.Body.linearVelocity, TravelForward) < -0.5f)
+            { Park("Vehicle rolling against the commanded direction. Braking."); return; }
             float horizon = RoadWheelMath.StopDistance(speed, _deceleration) + _halfLength;
             int target = _cursor;
             Vector3 segmentForward = _cursor + 1 < _route.Count
-                ? _route[_cursor + 1].transform.position - _route[_cursor].transform.position
+                ? RoadNavigationAnchor.SurfaceCentre(_route[_cursor + 1]) - RoadNavigationAnchor.SurfaceCentre(_route[_cursor])
                 : _cursor > 0 && _route[_cursor - 1] != null
-                    ? _route[_cursor].transform.position - _route[_cursor - 1].transform.position : Frame.forward;
-            float along = Vector3.Dot(here - _route[_cursor].transform.position,
+                    ? RoadNavigationAnchor.SurfaceCentre(_route[_cursor]) - RoadNavigationAnchor.SurfaceCentre(_route[_cursor - 1]) : TravelForward;
+            float along = Vector3.Dot(here - RoadNavigationAnchor.SurfaceCentre(_route[_cursor]),
                 Vector3.ProjectOnPlane(segmentForward, up).normalized);
             float remaining = Mathf.Max(0f, _remainingFrom[_cursor] - along), look = 0f;
             for (int i = _cursor + 1; i < _route.Count && look < Mathf.Max(4f, _wheelbase + speed); i++)
             {
                 if (_route[i] == null || _route[i - 1] == null) { Park("Road unloaded. Parked."); return; }
-                float length = Vector3.Distance(_route[i - 1].transform.position, _route[i].transform.position);
+                float length = Vector3.Distance(RoadNavigationAnchor.SurfaceCentre(_route[i - 1]), RoadNavigationAnchor.SurfaceCentre(_route[i]));
                 target = i;
                 look += length;
             }
-            Vector3 to = _route[target].transform.position - here;
+            Vector3 to = RoadNavigationAnchor.SurfaceCentre(_route[target]) - here;
             if (remaining < _halfLength + 1.5f && speed < 0.3f)
-            { Park("Road endpoint reached. Parking brake applied; no automatic docking or return trip."); return; }
-            if (Mathf.Abs(Vector3.SignedAngle(Frame.forward, Vector3.ProjectOnPlane(to, up), up)) > 65f)
-            { Park("Route turn exceeds forward-only steering envelope. Reposition manually."); return; }
-            _steer = RoadWheelMath.Steering(Frame.forward, to, up, _wheelbase, _maxSteer);
+            { if (!ContinueNetwork()) Park("Road endpoint reached. Parking brake applied."); return; }
+            if (Mathf.Abs(Vector3.SignedAngle(TravelForward, Vector3.ProjectOnPlane(to, up), up)) > 65f)
+            { Park("Route turn exceeds the steering envelope. Reposition manually."); return; }
+            _steer = RoadWheelMath.Steering(TravelForward, to, up, _wheelbase, _maxSteer) * _travelDirection;
             _surfaceClock -= deltaTime;
             if (_surfaceClock <= 0f)
             {
@@ -280,17 +329,18 @@ namespace IndustrialWorld.Navigation
             if (ObstacleAhead(here - up * Vector3.Dot(here - contact, up), up, horizon))
             { Park("Obstacle or crowded safety probe. Braking; re-engage only after clearing the path."); return; }
             float targetSpeed = RoadWheelMath.SpeedLimit(remaining - _halfLength, _steer, _deceleration);
+            if (_networkMode) targetSpeed = Mathf.Min(targetSpeed, 1.5f);
             Brake = speed > targetSpeed + 0.2f ? 1f : 0f;
             float requested = Brake > 0f ? 0f : Mathf.Clamp01((targetSpeed - speed) * 0.35f);
-            Throttle = Mathf.MoveTowards(Throttle, requested, deltaTime * 0.6f);
+            Throttle = Mathf.MoveTowards(Throttle, requested * _travelDirection, deltaTime * 0.6f);
             if (Brake > 0f) Throttle = 0f;
-            _stuckTime = Throttle > 0.2f && speed < 0.2f ? _stuckTime + deltaTime : 0f;
+            _stuckTime = Mathf.Abs(Throttle) > 0.2f && speed < 0.2f ? _stuckTime + deltaTime : 0f;
             if (_stuckTime > 5f) { Park("No progress for 5 s. Parked; inspect the vehicle."); return; }
             _statusClock -= deltaTime;
             if (_statusClock <= 0f)
             {
                 _statusClock = 0.2f;
-                Status = "WHEEL AUTO · " + speed.ToString("0.0") + " m/s · " + remaining.ToString("0") + " m remaining";
+                Status = (_networkMode ? (_networkReturn.Count > 0 ? "NETWORK APPROACH" : "NETWORK END-TO-END") + (_travelDirection < 0 ? " REVERSE · " : " FORWARD · ") : "WHEEL AUTO · ") + speed.ToString("0.0") + " m/s · " + remaining.ToString("0") + " m remaining";
             }
         }
 
@@ -301,12 +351,12 @@ namespace IndustrialWorld.Navigation
             {
                 var road = _route[i];
                 if (RoadRoutePlanner.IsBlocked(road)) return false;
-                Vector3 a = road.transform.position;
+                Vector3 a = RoadNavigationAnchor.SurfaceCentre(road);
                 if (i + 1 < _route.Count && _route[i + 1] == null) return false;
-                Vector3 b = i + 1 < _route.Count ? _route[i + 1].transform.position : a;
+                Vector3 b = i + 1 < _route.Count ? RoadNavigationAnchor.SurfaceCentre(_route[i + 1]) : a;
                 Vector3 delta = b - a;
                 Vector3 direction = Vector3.ProjectOnPlane(delta, up);
-                if (direction.sqrMagnitude < 0.01f) direction = Frame.forward;
+                if (direction.sqrMagnitude < 0.01f) direction = TravelForward;
                 if (Mathf.Abs(Vector3.Dot(delta, up)) > Mathf.Max(0.15f, direction.magnitude * 0.15f)) return false;
                 Vector3 right = Vector3.Cross(up, direction).normalized;
                 int samples = Mathf.Max(1, Mathf.CeilToInt(delta.magnitude));
@@ -324,9 +374,9 @@ namespace IndustrialWorld.Navigation
 
         private bool SweptPavementClear(Vector3 here, Vector3 up, float travel)
         {
-            Vector3 forward = Vector3.ProjectOnPlane(Frame.forward, up).normalized;
+            Vector3 forward = Vector3.ProjectOnPlane(TravelForward, up).normalized;
             Vector3 point = here;
-            float curvature = Mathf.Tan(_steer * _maxSteer * Mathf.Deg2Rad) / _wheelbase;
+            float curvature = Mathf.Tan(_steer * _maxSteer * Mathf.Deg2Rad) / _wheelbase * _travelDirection;
             int steps = Mathf.Max(1, Mathf.CeilToInt(Mathf.Min(40f, travel)));
             float step = Mathf.Min(40f, travel) / steps;
             for (int n = 0; n <= steps; n++)
@@ -353,13 +403,13 @@ namespace IndustrialWorld.Navigation
             {
                 var road = _route[i];
                 if (road == null) continue;
-                float distance = Vector3.ProjectOnPlane(point - road.transform.position, up).sqrMagnitude;
+                float distance = Vector3.ProjectOnPlane(point - RoadNavigationAnchor.SurfaceCentre(road), up).sqrMagnitude;
                 if (distance >= best) continue;
                 closest = road;
                 best = distance;
             }
             if (closest == null) return false;
-            point -= up * Vector3.Dot(point - closest.transform.position, up);
+            point -= up * Vector3.Dot(point - RoadNavigationAnchor.SurfaceCentre(closest), up);
             return PavedAt(point, up);
         }
 
@@ -377,11 +427,11 @@ namespace IndustrialWorld.Navigation
 
         private bool ObstacleAhead(Vector3 contact, Vector3 up, float reach)
         {
-            Vector3 forward = Vector3.ProjectOnPlane(Frame.forward, up).normalized;
+            Vector3 forward = Vector3.ProjectOnPlane(TravelForward, up).normalized;
             Vector3 half = new Vector3(_halfWidth, _height * 0.5f, _halfLength);
             int segments = Mathf.Abs(_steer) < 0.05f ? 1 : 4;
             float step = Mathf.Min(40f, reach) / segments;
-            float bend = Mathf.Tan(_steer * _maxSteer * Mathf.Deg2Rad) / _wheelbase * step * Mathf.Rad2Deg;
+            float bend = Mathf.Tan(_steer * _maxSteer * Mathf.Deg2Rad) / _wheelbase * _travelDirection * step * Mathf.Rad2Deg;
             for (int segment = 0; segment < segments; segment++)
             {
                 Vector3 centre = contact + up * (0.35f + _height * 0.5f);

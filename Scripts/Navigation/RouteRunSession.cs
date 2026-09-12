@@ -76,6 +76,20 @@ namespace IndustrialWorld.Navigation
                 return Report("A controller is already active. Stop and release/disarm it before starting again.");
             try
             {
+                if (route.travelMode == RouteTravelMode.RoadNetwork)
+                {
+                    var approach = new System.Collections.Generic.List<VoxelEngine.Building.AsphaltRoad>();
+                    var across = new System.Collections.Generic.List<VoxelEngine.Building.AsphaltRoad>();
+                    if (!RoadNetworkRun.TryPlan(RoadNavigationAnchor.ForGrid(_grid, RouteTravelMode.Road), approach, across, out var reason)) return Report(reason);
+                    if (!RouteCoordinates.TryResolve(route, 0, out var a) || !RouteCoordinates.TryResolve(route, 1, out var b)) return Report("Saved network anchors unavailable.");
+                    Vector3 near = RoadNavigationAnchor.SurfaceCentre(across[0]), far = RoadNavigationAnchor.SurfaceCentre(across[across.Count - 1]);
+                    if (!((Vector3.Distance(a, near) <= 8f && Vector3.Distance(b, far) <= 8f)
+                        || (Vector3.Distance(a, far) <= 8f && Vector3.Distance(b, near) <= 8f))) return Report("Network ends changed or vehicle is on another network. Prepare a new network run.");
+                    var networkWheels = RoadWheelAutopilot.For(_grid);
+                    networkWheels.StartNetwork(pilot, RoadDriverGuidance.For(pilot), approach, across);
+                    _watch = 1;
+                    return Report(networkWheels.Status, networkWheels.IsDriving);
+                }
                 if (route.travelMode == RouteTravelMode.Road)
                 {
                     var guidance = RoadDriverGuidance.For(pilot);

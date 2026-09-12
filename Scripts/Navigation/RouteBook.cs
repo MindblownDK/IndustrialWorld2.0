@@ -58,7 +58,7 @@ namespace VoxelEngine.Navigation
             if (IsRecording) IndustrialWorld.Navigation.RoutePathOverlay.For(this);
             if (!IsRecording || Draft == null || Draft.waypoints.Count >= 4096) return;
             if (!IndustrialWorld.Navigation.RouteCoordinates.CanResolve(Draft)) return;
-            var point = IndustrialWorld.Navigation.RouteCoordinates.Capture(transform.position, Draft.sceneCoordinates);
+            var point = IndustrialWorld.Navigation.RouteCoordinates.Capture(IndustrialWorld.Navigation.RoadNavigationAnchor.ForGrid(GetComponent<VoxelEngine.GridSystem.GridEntity>(), Draft.travelMode), Draft.sceneCoordinates);
             CaptureNow(point.positionKm, RouteWaypoint.FindBody(CosmicRegistry.Instance, point.bodyId));
         }
 

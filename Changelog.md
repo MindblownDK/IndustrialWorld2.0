@@ -1,9 +1,26 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.53.0-dev`
+**Current Version:** `9.54.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.54.0-dev] Surface-Anchored Paths and Two-End Road Network Runs
+
+**Type:** MINOR — save-compatible network-run feature using the existing integer route-mode field (new value 4). Existing modes retain their values. No save fields, assets, item IDs or custom tuning are replaced; no fresh save required. New network routes require this version to execute.
+
+**GitHub title:** `[9.54.0-dev] Fix road path anchoring and add two-end network runs`
+
+- Road recording, route starts and road inspection now use grounded tyre contacts rather than construction pivots; centre of mass is the fallback. Previously saved pivot-based coordinates are not silently rewritten: re-record invalid old routes.
+- Road endpoints are resolved against actual paved footprints and draped surface height, not merely road transform origins. The 8 m acceptance distance is unchanged. An explicit bounded registry fallback (8192 candidates) handles surfaces outside the origin-indexed spatial lookup; a nearby wrong deck no longer automatically masks a better draped surface. The 4096-node A* budget remains.
+- Road lines follow rendered surface centres. Recording/raw waypoint previews project visually onto nearby pavement or terrain and lift by 1 m, without changing saved navigation coordinates. Up to 128 spaced markers and 16 labels replace dense marker clutter; line shape is retained. Raw-point projection is cached and limited to 64 new point probes per refresh.
+- Separate Show Selected Path and Hide Path controls report visibility state. Hide overrides the Routes inspector preview; recording remains visible until finished/discarded. Invalid road plans show an explicitly amber waypoint-only preview instead of disappearing.
+- The Planner prepares and saves a Road Network route; the Pilot selects and executes it. Lateral lane cells are grouped into rows so ordinary multi-lane pavement is not mistaken for a junction. Only a uniform-width loaded corridor with two unambiguous ends is accepted; branches, irregular widths, loops, excessive widths and budget overflow refuse rather than guess.
+- The run compares along-road distances to choose the nearer end, approaches it, brakes, waits five seconds, then travels to the other end and parks. Either network leg may reverse at a target maximum of 1.5 m/s. Travel-relative steering, safety probes, roll detection and throttle account for reverse travel. No off-road shortcut or automatic physical U-turn is invented. Ordinary Road routes remain forward-only at their existing speed.
+- Network endpoints are re-evaluated at Start and compared with the saved anchors. Faults, operator stops and controller disable cancel the pending second phase; no fault auto-restart. The existing footprint, power, wheel support, obstacle, grade and ownership checks remain.
+- No new setup stage or asset generation is needed. Planner/pilot separation, free-movement world picking, readable fields, durable Start results, Water/Flight routes and Routes inspector integration remain.
+
+**Validation:** 151 harness checks passed: 26 actual planner/registry/network geometry checks, 7 two-phase reverse/controller checks, 37 workflow/overlay checks, 9 input/ownership checks, 33 local-route checks and 39 wheel/pilot checks. Engine/domain/UI substitutes remain; extracted actual road footprint/surface math is tested with synthetic terrain heights. Both input configurations and the actual RoadDriverGuidance class compile against stubs. Unity compilation, rendering, curved-road reversing, real save/load and real vehicle journeys remain acceptance gates, not established results.
 
 ### [9.53.0-dev] Separate Route Planning from Piloting and Add Visible Route Overlays
 

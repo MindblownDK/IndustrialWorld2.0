@@ -27,7 +27,7 @@ namespace IndustrialWorld.Navigation
                     var route = new ShipRoute { routeName = wanted, travelMode = RouteTravelMode.Road,
                         sceneCoordinates = VoxelEngine.Cosmos.SpaceOrigin.Instance == null };
                     for (int n = 2; book.Find(route.routeName) != null; n++) route.routeName = wanted + " #" + n;
-                    route.AddWaypoint(RouteCoordinates.Capture(recorder.Grid.transform.position, route.sceneCoordinates));
+                    route.AddWaypoint(RouteCoordinates.Capture(RoadNavigationAnchor.ForGrid(recorder.Grid, RouteTravelMode.Road), route.sceneCoordinates));
                     route.AddWaypoint(RouteCoordinates.Capture(source.WaymarkWorldPosition, route.sceneCoordinates));
                     if (!book.Append(route)) { BuildFeedbackHud.Show("ROUTE PLANNER", "Could not save this road route."); return; }
                     recorder.SelectRoute(route.routeName);

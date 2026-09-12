@@ -36,8 +36,7 @@ namespace IndustrialWorld.Navigation
             if (_recorder == null || _recorder.Grid == null || source == null)
             { Status = "Vehicle or destination is no longer available."; return; }
             // Capture the road endpoint now, not an unsafe chase after a moving connector.
-            Vector3 from = _recorder.Grid.Body != null ? _recorder.Grid.Body.position
-                : _recorder.Grid.transform.position;
+            Vector3 from = RoadNavigationAnchor.ForGrid(_recorder.Grid, RouteTravelMode.Road);
             if (!RoadRoutePlanner.TryPlan(from, source.WaymarkWorldPosition, _route, out var reason))
             { Status = reason; return; }
             // One active navigator per vehicle, even when it carries multiple recorders.
@@ -55,7 +54,7 @@ namespace IndustrialWorld.Navigation
             if (_recorder == null || _recorder.Grid == null || route == null
                 || route.travelMode != RouteTravelMode.Road || !route.IsFlyable || route.waypoints.Count > 4096)
             { Status = "Select a recorded or world-point Road route with two or more points."; return false; }
-            if (!TryBuildRoute(_recorder.Grid.transform.position, route, _route, out var status))
+            if (!TryBuildRoute(RoadNavigationAnchor.ForGrid(_recorder.Grid, RouteTravelMode.Road), route, _route, out var status))
             { Status = status; return false; }
             foreach (var other in _recorder.Grid.GetComponentsInChildren<RoadDriverGuidance>())
                 if (other != this) other.Stop();
@@ -94,6 +93,12 @@ namespace IndustrialWorld.Navigation
             { result.Clear(); reason = "Destination must reach another connected road tile."; return false; }
             reason = "Road route ready: " + result.Count + " loaded tiles.";
             return true;
+        }
+
+        public void UseRoadPath(List<AsphaltRoad> roads, string name)
+        {
+            Stop(); _route.AddRange(roads); _cursor = 0; _destination = name; _clock = 0f;
+            Status = "Loaded network path ready.";
         }
 
         public bool CopyRemainingRoute(List<AsphaltRoad> destination)
@@ -150,14 +155,14 @@ namespace IndustrialWorld.Navigation
                     return;
                 }
             }
-            Vector3 here = grid.Body != null ? grid.Body.position : grid.transform.position;
+            Vector3 here = RoadNavigationAnchor.ForGrid(grid, RouteTravelMode.Road);
             int nearest = _cursor;
             float nearestDistance = float.MaxValue;
             // Bounded local progress; guidance is not a lane-level vehicle controller.
             int end = Mathf.Min(_route.Count, _cursor + 24);
             for (int i = _cursor; i < end; i++)
             {
-                Vector3 offset = here - _route[i].transform.position;
+                Vector3 offset = here - RoadNavigationAnchor.SurfaceCentre(_route[i]);
                 if (Mathf.Abs(Vector3.Dot(offset, _route[i].transform.up)) > 8f) continue;
                 float distance = Vector3.ProjectOnPlane(offset, _route[i].transform.up).sqrMagnitude;
                 if (distance >= nearestDistance) continue;
@@ -177,7 +182,7 @@ namespace IndustrialWorld.Navigation
                 return;
             }
             var goal = _route[_route.Count - 1];
-            if (_cursor == _route.Count - 1 && Vector3.ProjectOnPlane(here - goal.transform.position, goal.transform.up).magnitude
+            if (_cursor == _route.Count - 1 && Vector3.ProjectOnPlane(here - RoadNavigationAnchor.SurfaceCentre(goal), goal.transform.up).magnitude
                 <= Mathf.Max(2f, goal.cellSize))
             {
                 Stop();
@@ -185,12 +190,12 @@ namespace IndustrialWorld.Navigation
                 BuildFeedbackHud.Show("Road endpoint reached", Status);
                 return;
             }
-            float remaining = Vector3.Distance(here, _route[_cursor].transform.position);
+            float remaining = Vector3.Distance(here, RoadNavigationAnchor.SurfaceCentre(_route[_cursor]));
             float ahead = 0f;
             int target = _cursor;
             for (int i = _cursor + 1; i < _route.Count; i++)
             {
-                float segment = Vector3.Distance(_route[i - 1].transform.position, _route[i].transform.position);
+                float segment = Vector3.Distance(RoadNavigationAnchor.SurfaceCentre(_route[i - 1]), RoadNavigationAnchor.SurfaceCentre(_route[i]));
                 remaining += segment;
                 if (ahead < 6f) { ahead += segment; target = i; }
             }
@@ -198,7 +203,7 @@ namespace IndustrialWorld.Navigation
                 : grid.ActiveCockpit != null ? grid.ActiveCockpit.transform : grid.transform;
             Vector3 up = _route[_cursor].transform.up;
             Vector3 forward = Vector3.ProjectOnPlane(control.forward, up);
-            Vector3 direction = Vector3.ProjectOnPlane(_route[target].transform.position - here, up);
+            Vector3 direction = Vector3.ProjectOnPlane(RoadNavigationAnchor.SurfaceCentre(_route[target]) - here, up);
             float angle = Vector3.SignedAngle(forward, direction, up);
             string heading = Mathf.Abs(angle) > 120f ? "TURN BACK WHEN SAFE"
                 : angle > 18f ? "BEAR RIGHT" : angle < -18f ? "BEAR LEFT" : "FOLLOW ROAD";

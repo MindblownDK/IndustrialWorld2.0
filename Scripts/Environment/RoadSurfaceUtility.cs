@@ -40,6 +40,7 @@ namespace VoxelEngine.Environment
         private const float FOOTPRINT_HALF = 0.56f;
 
         private static readonly Dictionary<long, List<AsphaltRoad>> _cells = new Dictionary<long, List<AsphaltRoad>>(512);
+        private static readonly HashSet<AsphaltRoad> _registered = new HashSet<AsphaltRoad>();
         private static readonly List<AsphaltRoad> _queryScratch = new List<AsphaltRoad>(16);
 
         // ════════════════════════════════════════════════════════════════
@@ -50,6 +51,7 @@ namespace VoxelEngine.Environment
         public static void Register(AsphaltRoad road)
         {
             if (road == null) return;
+            _registered.Add(road);
             ForEachCell(road.transform.position, (cellKey, list) =>
             {
                 if (!list.Contains(road)) list.Add(road);
@@ -60,6 +62,7 @@ namespace VoxelEngine.Environment
         public static void Unregister(AsphaltRoad road)
         {
             if (road == null) return;
+            _registered.Remove(road);
             ForEachCell(road.transform.position, (cellKey, list) =>
             {
                 list.Remove(road);
@@ -68,7 +71,19 @@ namespace VoxelEngine.Environment
         }
 
         /// <summary>Clears the whole registry (world teardown / scene unload).</summary>
-        public static void Clear() => _cells.Clear();
+        public static void Clear() { _cells.Clear(); _registered.Clear(); }
+
+        // Explicit navigation fallback only. The spatial hash indexes construction origins,
+        // which need not lie at the rendered height of a draped/graded road.
+        public static void CopyRegistered(List<AsphaltRoad> result, int limit)
+        {
+            result.Clear();
+            foreach (var road in _registered)
+            {
+                if (road != null && road.isActiveAndEnabled) result.Add(road);
+                if (result.Count >= limit) break;
+            }
+        }
 
         private static void ForEachCell(Vector3 centre, System.Action<long, List<AsphaltRoad>> visit)
         {

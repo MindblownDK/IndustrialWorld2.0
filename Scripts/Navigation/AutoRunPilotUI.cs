@@ -32,6 +32,7 @@ namespace IndustrialWorld.Navigation
             else panel.Add(UITheme.Muted("No saved routes on this grid. Open the Route Planner to create one."));
             var details = UITheme.Muted("");
             panel.Add(details);
+            panel.Add(UITheme.Muted("Road Network runs approach the nearer end, brake, then drive to the other end; either leg may reverse at up to 1.5 m/s. Keep both directions clear."));
             var confirm = new Toggle("I confirm an unattended run and will leave its path clear") { value = session.Confirmed };
             NavigationFieldStyle.Apply(confirm);
             confirm.RegisterValueChangedCallback(evt => session.Confirmed = evt.newValue);

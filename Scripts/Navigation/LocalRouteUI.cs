@@ -63,6 +63,25 @@ namespace IndustrialWorld.Navigation
             capture.schedule.Execute(() => capture.text = book.IsRecording && book.Draft != null
                 ? "RECORDING · " + book.Draft.waypoints.Count + "/4096 points · amber path forced visible. Close this panel and drive/pilot normally."
                 : "Recording idle. Samples about every 4 m, with start/end capture.").Every(150);
+            panel.Add(RoadNavigationUI.MakeButton("PREPARE ROAD NETWORK RUN · NEAR END THEN OTHER END", () =>
+            {
+                if (!canEdit()) return;
+                if (book.IsRecording) { report("Finish the recording first."); return; }
+                var approach = new List<VoxelEngine.Building.AsphaltRoad>();
+                var across = new List<VoxelEngine.Building.AsphaltRoad>();
+                if (!RoadNetworkRun.TryPlan(RoadNavigationAnchor.ForGrid(recorder.Grid, RouteTravelMode.Road), approach, across, out var reason))
+                { report(reason); return; }
+                string wanted = string.IsNullOrWhiteSpace(recorder.nextRouteName) ? "Road Network Run" : recorder.nextRouteName.Trim();
+                var route = new ShipRoute { routeName = wanted, travelMode = RouteTravelMode.RoadNetwork,
+                    sceneCoordinates = VoxelEngine.Cosmos.SpaceOrigin.Instance == null };
+                for (int n = 2; book.Find(route.routeName) != null; n++) route.routeName = wanted + " #" + n;
+                route.AddWaypoint(RouteCoordinates.Capture(RoadNavigationAnchor.SurfaceCentre(across[0]), route.sceneCoordinates));
+                route.AddWaypoint(RouteCoordinates.Capture(RoadNavigationAnchor.SurfaceCentre(across[across.Count - 1]), route.sceneCoordinates));
+                if (!book.Append(route)) { report("Could not save network route."); return; }
+                recorder.SelectRoute(route.routeName); overlay.RefreshPreview(route.routeName); report(reason);
+                GameUIController.Instance?.RefreshCurrentPanel();
+            }));
+            panel.Add(UITheme.Muted("Network runs use the nearer end first, then the other end. Vehicle must already be on that loaded, uniform-width, unbranched road. Low-speed reversing replaces unsafe automatic U-turns. Branches/loops require an explicit destination."));
             panel.Add(RoadNavigationUI.MakeButton("SET DESTINATION IN THE WORLD", () =>
             {
                 if (!canEdit()) return;
@@ -83,13 +102,17 @@ namespace IndustrialWorld.Navigation
                 { recorder.SelectRoute(evt.newValue); overlay.RefreshPreview(evt.newValue); });
             }
             else panel.Add(UITheme.Muted("No saved routes yet."));
-            panel.Add(RoadNavigationUI.MakeButton("SHOW / HIDE SELECTED PATH", () =>
+            panel.Add(RoadNavigationUI.MakeButton("SHOW SELECTED PATH", () =>
             {
                 if (recorder.Selected == null) { report("Create or select a saved route first."); return; }
-                overlay.TogglePreview(recorder.Selected.routeName);
-                report(book.IsRecording ? "Recording path stays visible until the recording finishes."
-                    : overlay.ManualVisible ? "Selected route path enabled." : RoutePathOverlay.InspectedGrid == recorder.Grid
-                        ? "Manual preview off. The Routes inspector category is still showing this grid." : "Selected route path hidden.");
+                overlay.SetPreview(recorder.Selected.routeName, true);
+                report("Path display enabled. Invalid road plans show amber waypoint previews with a reason below.");
+            }));
+            panel.Add(RoadNavigationUI.MakeButton("HIDE PATH", () =>
+            {
+                overlay.SetPreview(recorder.selectedRouteName, false);
+                report(book.IsRecording ? "Live recording stays visible until finished; saved preview is hidden."
+                    : "Path hidden, including the current inspector preview.");
             }));
             panel.Add(RoadNavigationUI.MakeButton("REVERSE SELECTED ROUTE", () =>
             {

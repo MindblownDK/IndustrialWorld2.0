@@ -77,20 +77,60 @@ namespace IndustrialWorld.Navigation
                 || RoadSurfaceUtility.IsNeighbourSlot(a, b, -t.right, t.up, a.cellSize);
         }
 
-        private static AsphaltRoad FindEndpoint(Vector3 point, List<AsphaltRoad> scratch)
+        public static AsphaltRoad FindEndpoint(Vector3 point, List<AsphaltRoad> scratch, bool includeBlocked = false)
         {
-            RoadSurfaceUtility.QueryNearby(point, EndpointReach, scratch);
+            RoadSurfaceUtility.QueryNearby(point, 16f, scratch);
+            var best = PickSurface(point, scratch, includeBlocked);
+            if (best != null && (ClosestSurfacePoint(best, point) - point).sqrMagnitude < 0.0001f) return best;
+            RoadSurfaceUtility.CopyRegistered(scratch, NodeBudget * 2);
+            var fallback = PickSurface(point, scratch, includeBlocked);
+            if (best == null) return fallback;
+            return fallback != null && (ClosestSurfacePoint(fallback, point) - point).sqrMagnitude
+                < (ClosestSurfacePoint(best, point) - point).sqrMagnitude ? fallback : best;
+        }
+
+        private static AsphaltRoad PickSurface(Vector3 point, List<AsphaltRoad> roads, bool includeBlocked)
+        {
             AsphaltRoad best = null;
-            float distance = EndpointReach * EndpointReach;
-            foreach (var road in scratch)
+            float distance = EndpointReach * EndpointReach + 0.001f;
+            foreach (var road in roads)
             {
-                if (IsBlocked(road)) continue;
-                float candidate = (point - road.transform.position).sqrMagnitude;
+                if (!IsVehicleRoad(road) || (!includeBlocked && IsBlocked(road))) continue;
+                Vector3 nearest = ClosestSurfacePoint(road, point);
+                float candidate = (point - nearest).sqrMagnitude;
                 if (candidate >= distance) continue;
-                distance = candidate;
-                best = road;
+                distance = candidate; best = road;
             }
             return best;
+        }
+
+        public static Vector3 ClosestSurfacePoint(AsphaltRoad road, Vector3 point)
+        {
+            float offset = road.SurfaceOffset(point, road.transform.up);
+            if (!float.IsNaN(offset) && !float.IsInfinity(offset)) return point - road.transform.up * offset;
+            Vector3 local = road.transform.InverseTransformPoint(point);
+            if (!road.hasExplicitFootprint)
+            {
+                float half = road.cellSize * 0.5f;
+                local.x = Mathf.Clamp(local.x, -half, half); local.z = Mathf.Clamp(local.z, -half, half);
+            }
+            else
+            {
+                Vector3 best = road.quadSW; float distance = float.MaxValue;
+                for (int i = 0; i < 4; i++)
+                {
+                    Vector3 a = i == 0 ? road.quadSW : i == 1 ? road.quadSE : i == 2 ? road.quadNE : road.quadNW;
+                    Vector3 b = i == 0 ? road.quadSE : i == 1 ? road.quadNE : i == 2 ? road.quadNW : road.quadSW;
+                    Vector3 edge = b - a; edge.y = 0f;
+                    Vector3 delta = local - a; delta.y = 0f;
+                    Vector3 candidate = a + edge * Mathf.Clamp01(Vector3.Dot(delta, edge) / Mathf.Max(0.0001f, edge.sqrMagnitude));
+                    float d = (delta - edge * Mathf.Clamp01(Vector3.Dot(delta, edge) / Mathf.Max(0.0001f, edge.sqrMagnitude))).sqrMagnitude;
+                    if (d < distance) { distance = d; best = candidate; }
+                }
+                // Step a hair inside the quad so winding round-off does not reject an edge.
+                local = Vector3.Lerp(best, (road.quadSW + road.quadSE + road.quadNE + road.quadNW) * 0.25f, 0.001f);
+            }
+            return RoadNavigationAnchor.SurfacePoint(road, road.transform.TransformPoint(local));
         }
 
         public static bool TryPlan(Vector3 from, Vector3 to, List<AsphaltRoad> result,
@@ -102,9 +142,18 @@ namespace IndustrialWorld.Navigation
             var goal = FindEndpoint(to, nearby);
             if (start == null || goal == null)
             {
-                reason = "Both endpoints need an available vehicle road within 8 m.";
+                reason = start == null ? "Vehicle/start point has no available loaded road SURFACE within 8 m. Check grounded tyres and route origin."
+                    : "Destination point has no available loaded road SURFACE within 8 m. Old pivot-based recordings may need re-recording.";
                 return false;
             }
+            return TryPlan(start, goal, result, out reason);
+        }
+
+        public static bool TryPlan(AsphaltRoad start, AsphaltRoad goal, List<AsphaltRoad> result, out string reason)
+        {
+            result.Clear();
+            if (IsBlocked(start) || IsBlocked(goal)) { reason = "Start/end road is unavailable."; return false; }
+            var nearby = new List<AsphaltRoad>(32);
             var frontier = new SortedSet<Entry>(new EntryComparer());
             var costs = new Dictionary<AsphaltRoad, float>();
             var parents = new Dictionary<AsphaltRoad, AsphaltRoad>();
@@ -123,7 +172,7 @@ namespace IndustrialWorld.Navigation
                     for (var at = goal; at != null; at = parents.TryGetValue(at, out var parent) ? parent : null)
                         result.Add(at);
                     result.Reverse();
-                    reason = "Road route ready. Manual driving only.";
+                    reason = "Loaded road route ready.";
                     return true;
                 }
                 RoadSurfaceUtility.QueryNearby(current.transform.position,

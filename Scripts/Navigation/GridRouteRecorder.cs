@@ -139,7 +139,7 @@ namespace VoxelEngine.Navigation
             book.BeginRecording(name);
             book.Draft.travelMode = mode;
             book.Draft.sceneCoordinates = SpaceOrigin.Instance == null;
-            var start = IndustrialWorld.Navigation.RouteCoordinates.Capture(Grid.transform.position, book.Draft.sceneCoordinates);
+            var start = IndustrialWorld.Navigation.RouteCoordinates.Capture(IndustrialWorld.Navigation.RoadNavigationAnchor.ForGrid(Grid, book.Draft.travelMode), book.Draft.sceneCoordinates);
             book.ForceCapture(start.positionKm, RouteWaypoint.FindBody(CosmicRegistry.Instance, start.bodyId));
             nextRouteName = "";
         }
@@ -150,7 +150,7 @@ namespace VoxelEngine.Navigation
             if (book != null && book.IsRecording && book.Draft != null
                 && IndustrialWorld.Navigation.RouteCoordinates.CanResolve(book.Draft))
             {
-                var end = IndustrialWorld.Navigation.RouteCoordinates.Capture(Grid.transform.position, book.Draft.sceneCoordinates);
+                var end = IndustrialWorld.Navigation.RouteCoordinates.Capture(IndustrialWorld.Navigation.RoadNavigationAnchor.ForGrid(Grid, book.Draft.travelMode), book.Draft.sceneCoordinates);
                 if (book.Draft.waypoints.Count < 4096 && (book.Draft.waypoints.Count == 0 || Unity.Mathematics.math.length(end.positionKm
                     - book.Draft.waypoints[book.Draft.waypoints.Count - 1].ResolvedPositionKm(CosmicRegistry.Instance)) > 0.0005d))
                     book.Draft.AddWaypoint(end);
@@ -169,7 +169,7 @@ namespace VoxelEngine.Navigation
             var book = Book;
             if (book == null || !book.IsRecording || book.Draft == null || book.Draft.waypoints.Count >= 4096
                 || !IndustrialWorld.Navigation.RouteCoordinates.CanResolve(book.Draft)) return;
-            book.Draft.AddWaypoint(IndustrialWorld.Navigation.RouteCoordinates.Capture(Grid.transform.position, book.Draft.sceneCoordinates));
+            book.Draft.AddWaypoint(IndustrialWorld.Navigation.RouteCoordinates.Capture(IndustrialWorld.Navigation.RoadNavigationAnchor.ForGrid(Grid, book.Draft.travelMode), book.Draft.sceneCoordinates));
             RecomputeNow();
         }
 

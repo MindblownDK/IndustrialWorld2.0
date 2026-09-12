@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `9.53.0-dev`
-**Roadmap Version:** `9.53.0-dev`
+**Current Version:** `9.54.0-dev`
+**Roadmap Version:** `9.54.0-dev`
 **Date:** 2026-09-12
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 9.54.0-dev — Surface Anchors and Two-End Network Runs
+- Sparse surface-corrected paths and explicit visibility controls.
+- Saved two-end network runs with braked, low-speed reverse-capable phases.
+- 151 harness checks; Unity rendering, save/load and real driving acceptance remain open.
+
 ### 9.53.0-dev — Planner/Pilot Separation and Route Overlays
 - Planner owns route authoring; pilot owns execution with durable Start feedback.
 - Free-movement world picking, readable fields and Routes inspector / recording paths.
@@ -48,11 +53,6 @@
 - Route Recorder starts bounded, forward-only unattended road runs.
 - Wheel-only commands and grounded brakes park on faults and reload.
 - Unity vehicle/physics validation remains open; existing content only.
-
-### 9.49.0-dev — Per-Crossing Automatic and Manual Control
-- Drawbridges expose automatic/manual control from decks and barrier motor posts.
-- Saved command intent preserves swing direction and manual-open ownership.
-- Thomas confirmed 9.49.0-dev works in Unity; runtime controls require no setup assets.
 
 ## 1. Executive Vision
 
@@ -995,6 +995,9 @@ one sentence: **a road is the difference between walking a route and being able 
      `RouteDestinationPicker`, `LocalRoutePilot`; existing pilot/recorder, Unity validation pending.
    - ~~**Planner/pilot separation and visible route paths**~~ *(9.53.0-dev)* — `LocalRouteUI`,
      `AutoRunPilotUI`, `RouteRunSession`, `RoutePathOverlay`, Routes inspector; no new authoring assets.
+   - ~~**Simple loaded-road end-to-end operation**~~ *(9.54.0-dev)* — Planner-saved network runs; Pilot executes two braked phases.
+   - **Network branching, loops and irregular corridors remain open (9.54.0-dev):** explicit destinations required until traversal policy is agreed.
+   - **Unity acceptance (9.54.0-dev):** real draped-road capture, URP path visibility, curved-road reversing and save/load.
    - **Map-based destination and route selection remains open (deferred 9.52.0-dev, Thomas's choice):**
      map interaction, waypoint editing, route preview and mode-appropriate map planning.
    - **Local ship navigation extensions remain open (deferred 9.52.0-dev):** powered marine braking,
