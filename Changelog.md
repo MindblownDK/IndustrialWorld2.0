@@ -1,9 +1,40 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.45.0-dev`
+**Current Version:** `9.46.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.46.0-dev] Drawbridge Approach Barriers and Deck Safety Interlocks
+
+**Type:** MINOR — save-compatible runtime feature. No save schema, recipes, authored prefabs or balance values changed.
+
+**GitHub title:** `[9.46.0-dev] Add drawbridge approach barriers and deck safety interlocks`
+
+#### Added
+- Two full-width striped, collidable barrier arms with motor posts, generated alongside existing span beacons and cleaned up with the span.
+- Two-second eased arm movement. Opening waits for the deck and arm sweep volumes to clear before lowering barriers; deck motion waits until both barriers are lowered.
+- Deck occupancy checks guard manual and automatic swings. Saturated safety queries fail closed.
+- Barriers remain lowered during an open or stalled swing and rise only after the deck fully closes. Existing beacons flash through the waiting and barrier-transition stages.
+- Restored partially or fully open crossings immediately receive lowered barriers; no extra saved fields are needed.
+
+#### Changed
+- Synchronize the runtime version constant (previously still 9.29.0-dev) with 9.46.0-dev.
+
+#### Validation and limitations
+- Reviewed lifecycle, interlock order and restore initialization; ran whitespace checks and numerical sequencing checks outside Unity.
+- Not compiled or play-tested in Unity. Physics collision behavior, planet-relative placement, save reload and traffic clearance require the checklist supplied with this release.
+- Arms are physical obstacles, not vehicle routing signals. High-speed collision behavior depends on the vehicle's collision detection settings. No new autopilot braking logic is included.
+- Barrier motion is a spring/gravity safety mechanism, not an additional electrical consumer; the existing 450 W deck motor is unchanged.
+
+#### Unity steps
+1. Import the changed scripts into their existing project locations and allow compilation.
+2. No new content setup is required: runtime span creation/restore generates the arms. If road content is missing, use Tools > Voxel Engine > Voxel Engine Setup and its existing Water Crossings step.
+3. Test a powered drawbridge: request opening, verify barriers lower before the deck moves, then close and verify arms rise only after the deck closes.
+4. Repeat with a player and vehicle on the deck and in either arm sweep: opening must wait until clear. Test manual reversal while barriers and deck are moving.
+5. Remove power mid-swing: barriers must stay lowered, beacons flash, and restoring power must resume the deck.
+6. Save/reload closed, open and mid-swing crossings; verify barrier placement and safe restored state. Test one- and three-wide crossings on planetary terrain.
+7. Remove crossing cells and verify furniture cleanup. Check fixed bridges and culverts remain unchanged.
 
 ### [9.45.0-dev] Crossings Stand Over the Water, on Beams, and the Paver Levels the Ground Itself
 

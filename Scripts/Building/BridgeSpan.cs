@@ -160,6 +160,10 @@ namespace VoxelEngine.Building
         private Material _leafMaterial;
 
         private Beacon _beaconNear, _beaconFar;
+        private GameObject _barrierNear, _barrierFar;
+        private float _barrierClosed01;
+        private const float BarrierSeconds = 2f;
+        private static readonly Collider[] _barrierProbe = new Collider[64];
         private BeaconMode _beaconMode;
         private bool _beaconLit;
         private float _beaconTimer;
@@ -398,6 +402,7 @@ namespace VoxelEngine.Building
             {
                 BuildLeaves(deckMaterial);
                 BuildBeacons();
+                BuildBarriers();
             }
             else
             {
@@ -649,6 +654,7 @@ namespace VoxelEngine.Building
         public void SetOpenImmediate(float open01)
         {
             Open01 = Mathf.Clamp01(open01);
+            _barrierClosed01 = Open01 > 0f ? 1f : 0f;
             WantsOpen = Open01 > 0.5f;
             _hornPending = false;         // a reloaded bridge does not greet the world
             _stallNoticeShown = false;
@@ -675,13 +681,34 @@ namespace VoxelEngine.Building
 
             float target = WantsOpen ? 1f : 0f;
             bool settled = Mathf.Approximately(Open01, target);
+            var safetyFrame = default(SpanFrame);
+            if (!TryComputeFrame(ref safetyFrame)) return;
+            bool mustBlock = WantsOpen || Open01 > 0f;
+            float barrierTarget = mustBlock ? 1f : 0f;
+            bool lowering = _barrierClosed01 < barrierTarget;
+            // Wait with both exits available until the deck and the complete arm sweep are clear.
+            // A saturated query is unknown, never permission to move machinery.
+            bool occupied = !settled && DeckOccupied(safetyFrame);
+            if (!lowering || (!occupied && !BarrierSweepOccupied(safetyFrame)))
+                _barrierClosed01 = Mathf.MoveTowards(_barrierClosed01, barrierTarget,
+                    Mathf.Max(0f, deltaTime) / BarrierSeconds);
+            PlaceBarriers(ref safetyFrame);
+            bool barriersMoving = !Mathf.Approximately(_barrierClosed01, barrierTarget);
 
             if (settled)
             {
                 _stalled = false;
                 _stallNoticeShown = false;
                 if (_consumer != null) _consumer.wattsPerSecond = 0f;   // a still deck is a free deck
-                TickBeacon(Open01 >= 0.99f ? BeaconMode.Steady : BeaconMode.Dark, deltaTime);
+                TickBeacon(barriersMoving ? BeaconMode.Flash
+                    : Open01 >= 0.99f ? BeaconMode.Steady : BeaconMode.Dark, deltaTime);
+                return;
+            }
+
+            if (_barrierClosed01 < 1f || occupied)
+            {
+                if (_consumer != null) _consumer.wattsPerSecond = 0f;
+                TickBeacon(BeaconMode.Flash, deltaTime);
                 return;
             }
 
@@ -803,6 +830,7 @@ namespace VoxelEngine.Building
                                        f.Length * 0.5f);
             int hits = Physics.OverlapBoxNonAlloc(centre, half, _deckProbe, f.Rotation, ~0,
                                                   QueryTriggerInteraction.Ignore);
+            if (hits == _deckProbe.Length) return true;
             for (int i = 0; i < hits; i++)
             {
                 var col = _deckProbe[i];
@@ -878,6 +906,93 @@ namespace VoxelEngine.Building
             public Light Lamp;
         }
 
+        // Runtime furniture follows the same lifecycle as the existing span beacons.
+        // No authored prefab or balance field is replaced when an old crossing is restored.
+        private void BuildBarriers()
+        {
+            if (_barrierNear == null) _barrierNear = MakeBarrier("BridgeBarrier_Near");
+            if (_barrierFar == null) _barrierFar = MakeBarrier("BridgeBarrier_Far");
+        }
+
+        private static GameObject MakeBarrier(string name)
+        {
+            var root = new GameObject(name);
+            var arm = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            arm.name = "Arm";
+            arm.transform.SetParent(root.transform, false);
+            arm.GetComponent<Renderer>().sharedMaterial = PierMaterial;
+            // Alternating red bands share the beacon material; no per-frame material allocation.
+            for (int i = 0; i < 8; i++)
+            {
+                var stripe = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                stripe.name = "WarningBand";
+                stripe.GetComponent<Collider>().enabled = false;
+                Object.Destroy(stripe.GetComponent<Collider>());
+                stripe.transform.SetParent(arm.transform, false);
+                stripe.transform.localPosition = new Vector3(-0.4375f + i * 0.125f, 0f, 0f);
+                stripe.transform.localScale = new Vector3(0.055f, 1.02f, 1.02f);
+                stripe.GetComponent<Renderer>().sharedMaterial = BeaconOffMaterial;
+            }
+            var post = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            post.name = "BarrierMotorPost";
+            post.transform.SetParent(root.transform, false);
+            post.GetComponent<Renderer>().sharedMaterial = BeaconPostMaterial;
+            return root;
+        }
+
+        private void PlaceBarriers(ref SpanFrame f)
+        {
+            PlaceBarrier(_barrierNear, f.NearAbutment, ref f, -1f);
+            PlaceBarrier(_barrierFar, f.FarAbutment, ref f, 1f);
+        }
+
+        private void PlaceBarrier(GameObject root, Vector3 abutment, ref SpanFrame f, float side)
+        {
+            if (root == null) return;
+            Vector3 hinge = BarrierHinge(abutment, f, side);
+            float eased = _barrierClosed01 * _barrierClosed01 * (3f - 2f * _barrierClosed01);
+            root.transform.SetPositionAndRotation(hinge,
+                f.Rotation * Quaternion.Euler(0f, 0f, 90f * (1f - eased)));
+            var arm = root.transform.GetChild(0);
+            float length = f.Width + 0.6f;
+            arm.localPosition = Vector3.right * (length * 0.5f);
+            arm.localScale = new Vector3(length, 0.18f, 0.22f);
+            var post = root.transform.GetChild(1);
+            post.SetPositionAndRotation(hinge - f.Up * 0.525f, f.Rotation);
+            post.localScale = new Vector3(0.25f, 1.05f, 0.3f);
+        }
+
+        private static Vector3 BarrierHinge(Vector3 abutment, in SpanFrame f, float side)
+            => abutment + f.Forward * side * (f.Cell * 0.5f + 0.75f)
+               - f.Right * (f.Width * 0.5f + 0.3f) + f.Up * 1.05f;
+
+        private bool BarrierSweepOccupied(in SpanFrame f)
+        {
+            return BarrierSweepOccupied(f.NearAbutment, f, -1f)
+                || BarrierSweepOccupied(f.FarAbutment, f, 1f);
+        }
+
+        private bool BarrierSweepOccupied(Vector3 abutment, in SpanFrame f, float side)
+        {
+            float reach = f.Width + 0.8f;
+            Vector3 centre = BarrierHinge(abutment, f, side)
+                + (f.Right + f.Up) * (reach * 0.5f);
+            int hits = Physics.OverlapBoxNonAlloc(centre,
+                new Vector3(reach * 0.5f, reach * 0.5f + 0.15f, 0.4f),
+                _barrierProbe, f.Rotation, ~0, QueryTriggerInteraction.Ignore);
+            if (hits == _barrierProbe.Length) return true;
+            for (int i = 0; i < hits; i++)
+            {
+                var col = _barrierProbe[i];
+                if (col == null) continue;
+                if (_barrierNear != null && col.transform.IsChildOf(_barrierNear.transform)) continue;
+                if (_barrierFar != null && col.transform.IsChildOf(_barrierFar.transform)) continue;
+                if (col.GetComponentInParent<AsphaltRoad>() != null) continue;
+                return true;
+            }
+            return false;
+        }
+
         private void BuildBeacons()
         {
             _beaconNear ??= MakeBeacon("BridgeBeacon_Near");
@@ -918,6 +1033,11 @@ namespace VoxelEngine.Building
 
         private void DestroyBeacons()
         {
+            if (_barrierNear != null) Object.Destroy(_barrierNear);
+            if (_barrierFar != null) Object.Destroy(_barrierFar);
+            _barrierNear = null;
+            _barrierFar = null;
+            _barrierClosed01 = 0f;
             if (_beaconNear != null) Object.Destroy(_beaconNear.Root);
             if (_beaconFar != null) Object.Destroy(_beaconFar.Root);
             _beaconNear = null; _beaconFar = null;
@@ -1064,6 +1184,8 @@ namespace VoxelEngine.Building
                 PlaceLeaf(_leafNear, f.NearAbutment, f.Rotation, f.Width, half, angle, mirror: false);
             if (_leafFar != null)
                 PlaceLeaf(_leafFar, f.FarAbutment, f.Rotation, f.Width, half, angle, mirror: true);
+
+            PlaceBarriers(ref f);
 
             // The beacons stand on the APPROACH, just off the kerb and past the end of the deck:
             // a post on the deck itself would float over vanished cells while the span is open and

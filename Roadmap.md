@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `9.45.0-dev`  
-**Roadmap Version:** `9.45.0-dev`  
+**Current Version:** `9.46.0-dev`
+**Roadmap Version:** `9.46.0-dev`
 **Date:** 2026-09-12
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,11 @@
 ---
 
 ## 0. Recently Done
+
+### 9.46.0-dev — Drawbridge Approach Barriers
+- Runtime approach arms guard both ends of drawbridge spans.
+- Deck motion waits for lowered barriers and an empty deck.
+- Unity validation remains open; no setup assets required.
 
 ### 9.45.0-dev — Crossings Stand Over the Water, and the Paver Grades
 - The deck level over a gap is the approach line plus a waterline freeboard (3.6 m fixed / 2.4 m
@@ -101,22 +106,6 @@
   adjacency the way a `RoadRun` does. Held to `9.44.2-dev`: auto-open on ship approach, power draw,
   a warning light or horn, and operating a bridge without the paver in hand.
 
-
-### 9.44.0-dev — Water Crossings: Culverts & Bridges on Piers
-- A road **crosses water** instead of being refused by it. `RoadSurfaceKind.Bridge` puts a cell in
-  deck mode: `SampleGroundHeights` returns a flat field, so the cell is supported with no ground
-  under it and the mesh, collider and wear passes need no bridge-specific path. `BridgeSpan` is the
-  structure — clearance, piers every 8 m, culvert below 1.5 m — and is deliberately not `RoadRun`:
-  a run is a wear ledger, a span is a structure, and a three-crossing viaduct is one road and three
-  spans.
-- The **paver inserts the crossing itself** where the line reaches water, at a deck level
-  interpolated from the ground at either end of the gap, so the deck is level with its approaches
-  rather than with the riverbed. No new water API: the corridor already contained both numbers.
-- The crossing **bills a separate pot** — 6 iron plate a deck cell against 10 asphalt for a 16 m2
-  carriageway cell — and affordability checks both before the key is pressed. Deck grips like road
-  (`!= Pathway`, the rule was always "not cobble"). Setup **Step 73** authors it non-destructively.
-  Drawbridge machinery is written but **not reachable in game yet**; see the changelog's held-back
-  list for the five wiring items that make up `9.44.1-dev`.
 
 ## 1. Executive Vision
 
@@ -1066,7 +1055,7 @@ one sentence: **a road is the difference between walking a route and being able 
      a **warning light and horn** (beacons dark/flashing/steady at both approaches, a procedural
      two-tone horn on every swing), and **operating without the paver in hand** (the standard
      interact prompt on any aimed deck cell). Still open within the same design: a moored hull
-     inside the hold volume holds the channel open until it moves; no approach barrier arm; no
+     inside the hold volume holds the channel open until it moves; ~~approach barrier arms~~ *(9.46.0-dev — `BridgeSpan`, runtime-generated; no setup step)*; no
      per-span automation switch.
    - ~~Water is refused rather than crossed~~ — `GradeBand.Underwater` and the `DescribeSite` string
      "needs a culvert" are now reached only when the paver has no bridge material configured, which
