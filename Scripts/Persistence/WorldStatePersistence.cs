@@ -1177,7 +1177,8 @@ namespace VoxelEngine.Persistence
                     for (int r = 0; r < shelf.Count; r++)
                     {
                         var route = shelf[r];
-                        var savedRoute = new SavedRoute { name = route.routeName, speedProfile = route.speedProfileIndex };
+                        var savedRoute = new SavedRoute { name = route.routeName, speedProfile = route.speedProfileIndex,
+                            travelMode = (int)route.travelMode, sceneCoordinates = route.sceneCoordinates };
                         if (route.waypoints != null)
                         {
                             for (int w = 0; w < route.waypoints.Count; w++)
@@ -1461,6 +1462,8 @@ namespace VoxelEngine.Persistence
                             var route = new VoxelEngine.Navigation.ShipRoute
                             {
                                 routeName = sr.name,
+                                travelMode = (VoxelEngine.Navigation.RouteTravelMode)sr.travelMode,
+                                sceneCoordinates = sr.sceneCoordinates,
                                 speedProfileIndex = Mathf.Clamp(sr.speedProfile, 0, 2),
                             };
                             if (sr.waypoints != null)
@@ -2673,6 +2676,8 @@ namespace VoxelEngine.Persistence
         {
             public string name;
             public int speedProfile;
+            public int travelMode;
+            public bool sceneCoordinates;
             public List<SavedWaypoint> waypoints = new();
         }
 

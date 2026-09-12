@@ -127,10 +127,16 @@ namespace VoxelEngine.Navigation
     public enum RouteSpeedProfile { Economy = 0, Standard = 1, Sprint = 2 }
 
     /// <summary>A planned journey: a name, the points, and the profile to fly them on.</summary>
+    public enum RouteTravelMode { LegacyFlight = 0, Road = 1, Water = 2, Flight = 3 }
+
     [System.Serializable]
     public class ShipRoute
     {
         public string routeName = "Route";
+        // Additive metadata. Missing fields in older saves retain cosmic-flight semantics.
+        public RouteTravelMode travelMode;
+        public bool sceneCoordinates; // positionKm remains kilometres, even for a scene-local route.
+
         public List<RouteWaypoint> waypoints = new();
 
         /// <summary>The two names a shuttle loop runs between. They are waymarks, not waypoints: a
@@ -161,6 +167,7 @@ namespace VoxelEngine.Navigation
             var rest = new ShipRoute
             {
                 routeName = routeName + " (remaining)",
+                travelMode = travelMode, sceneCoordinates = sceneCoordinates,
                 speedProfileIndex = speedProfileIndex,
                 startWaymark = startWaymark,
                 endWaymark = endWaymark,

@@ -49,6 +49,41 @@ namespace IndustrialWorld.Navigation
             _clock = 0f;
         }
 
+        public bool Plan(ShipRoute route)
+        {
+            Stop();
+            if (_recorder == null || _recorder.Grid == null || route == null
+                || route.travelMode != RouteTravelMode.Road || !route.IsFlyable || route.waypoints.Count > 4096)
+            { Status = "Select a recorded or world-point Road route with two or more points."; return false; }
+            var leg = new List<AsphaltRoad>();
+            var visited = new HashSet<AsphaltRoad>();
+            Vector3 from = _recorder.Grid.transform.position;
+            for (int i = 0; i < route.waypoints.Count; i++)
+            {
+                if (!RouteCoordinates.TryResolve(route, i, out var to))
+                { _route.Clear(); Status = "Route coordinate frame or anchor unavailable."; return false; }
+                if (!RoadRoutePlanner.TryPlan(from, to, leg, out var reason))
+                { _route.Clear(); Status = "Road leg " + (i + 1) + ": " + reason; return false; }
+                foreach (var road in leg)
+                {
+                    if (_route.Count > 0 && _route[_route.Count - 1] == road) continue;
+                    if (!visited.Add(road) || _route.Count >= RoadRoutePlanner.NodeBudget)
+                    { _route.Clear(); Status = "Road route doubles back, loops or exceeds the loaded-route budget. Start near its beginning."; return false; }
+                    _route.Add(road);
+                }
+                from = to;
+            }
+            if (_route.Count < 2)
+            { _route.Clear(); Status = "Destination must reach another connected road tile."; return false; }
+            foreach (var other in _recorder.Grid.GetComponentsInChildren<RoadDriverGuidance>())
+                if (other != this) other.Stop();
+            _destination = route.routeName;
+            _cursor = 0;
+            _clock = 0f;
+            Status = "Road route ready: " + _route.Count + " loaded tiles.";
+            return true;
+        }
+
         public bool CopyRemainingRoute(List<AsphaltRoad> destination)
         {
             destination.Clear();

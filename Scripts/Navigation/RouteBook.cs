@@ -52,10 +52,22 @@ namespace VoxelEngine.Navigation
             return book;
         }
 
+        private void LateUpdate()
+        {
+            if (!IsRecording || Draft == null || Draft.waypoints.Count >= 4096) return;
+            if (!IndustrialWorld.Navigation.RouteCoordinates.CanResolve(Draft)) return;
+            var point = IndustrialWorld.Navigation.RouteCoordinates.Capture(transform.position, Draft.sceneCoordinates);
+            CaptureNow(point.positionKm, RouteWaypoint.FindBody(CosmicRegistry.Instance, point.bodyId));
+        }
+
         // ── Recording ────────────────────────────────────────────────────────
         public void BeginRecording(string name)
         {
-            Draft = new ShipRoute { routeName = string.IsNullOrWhiteSpace(name) ? "Recorded Route" : name };
+            if (IsRecording) return;
+            string wanted = string.IsNullOrWhiteSpace(name) ? "Recorded Route" : name.Trim();
+            string unique = wanted;
+            for (int n = 2; Find(unique) != null; n++) unique = wanted + " #" + n;
+            Draft = new ShipRoute { routeName = unique };
             _haveLast = false;
             IsRecording = true;
         }
@@ -78,7 +90,7 @@ namespace VoxelEngine.Navigation
                 double dy = positionKm.y - _lastCapturedKm.y;
                 double dz = positionKm.z - _lastCapturedKm.z;
                 double movedKm = System.Math.Sqrt(dx * dx + dy * dy + dz * dz);
-                if (movedKm < captureSpacingKm) return false;
+                if (movedKm < (Draft.travelMode == RouteTravelMode.LegacyFlight ? captureSpacingKm : 0.004f)) return false;
             }
             // The registry is what lets a pinned point store its offset from the body. No registry,
             // no anchor: the point is filed absolute, which is stale rather than wrong.
@@ -110,7 +122,7 @@ namespace VoxelEngine.Navigation
         /// <summary>Ends the capture and files the route. A route needs two points; one is a note.</summary>
         public ShipRoute CommitRecording()
         {
-            if (Draft == null) return null;
+            if (Draft == null || Draft.waypoints.Count < 2) return null;
             var finished = Draft;
             Draft = null;
             IsRecording = false;
@@ -183,6 +195,7 @@ namespace VoxelEngine.Navigation
                 copy.Add(new ShipRoute
                 {
                     routeName = r.routeName,
+                    travelMode = r.travelMode, sceneCoordinates = r.sceneCoordinates,
                     speedProfileIndex = r.speedProfileIndex,
                     waypoints = new List<RouteWaypoint>(r.waypoints),
                 });

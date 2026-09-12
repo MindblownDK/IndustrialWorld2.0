@@ -1,9 +1,49 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.51.0-dev`
+**Current Version:** `9.52.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.52.0-dev] Route Recording and Road / Water / Flight Start Workflows
+
+**Type:** MINOR — save-compatible navigation features and additive saved-route metadata. No fresh save required. Existing item IDs, authored pilot prefabs and customized machine tuning are unchanged.
+
+**GitHub title:** `[9.52.0-dev] Repair route recording and add Road Water Flight start workflows`
+
+#### Fixed the missing player workflow
+- Shared Local Navigation panel on Auto-Run Pilot and the existing Route Recorder: choose travel mode, record a run or select a world destination, select the saved route, confirm, and press Start. No connector/refuel-pad waymark is required for these routes.
+- Navigation panels no longer undergo the periodic quarter-second full machine-panel rebuild, which could erase mode selections and unattended-run confirmation while moving between controls. Scheduled labels update status in place; explicit actions can still rebuild the panel.
+- Local recording works without a star map. It captures the initial position, movement about every 4 m and the endpoint on filing. The prior 2.5 km spacing remains for legacy cosmic recordings, not local trips.
+- Recording is sampled once per grid by the existing RouteBook rather than once per recorder. A too-short draft is retained, names are made unique, and the shelf supports reversing the selected route for a return trip.
+- The world picker temporarily closes the panel, blocks mining/building input, supports Escape cancellation, and reopens the panel after saving a destination. Choosing a point never starts the vehicle implicitly.
+
+#### Route execution
+- Road recordings are stitched through connected, loaded pavement using their intermediate points, then handed to the existing wheel controller. Repeated/doubling-back road tiles are refused rather than silently turned into an off-road shortcut. Existing road speed, wheel-count, braking and support safeguards remain.
+- Water mode uses MaritimePropulsionSystem commands and its actual marine throttle/rudder path. Requires a submerged forward-facing propeller and existing propulsion supply. The new command owner has a heartbeat and does not pretend a helm is occupied.
+- Flight mode uses the grid's real thrusters, including an opt-in local-flight gravity-support force calculation. Preflight estimates never call the hydrogen-consuming AvailableThrust method; fuel is drawn only when applying commanded thrust.
+- Water/Flight runs start stopped and uncrewed, after explicit confirmation and a five-second countdown. They refuse competing wheel/flight/loop authority, locked vehicles, invalid frames, missing equipment, obstruction-query saturation and unsafe local legs. Crew takeover releases autonomy.
+- Ordinary Flight Stop/arrival retains powered position hold. Explicit Release ends flight authority. Water Stop/arrival cuts propulsion; the boat coasts and must be moored manually. These are different physical behaviors, not a shared fake parking brake.
+
+#### Bounded initial scope
+- Road: existing loaded-road, forward-only 4 m/s control with 4–16 grounded wheels.
+- Water: 2 m/s target, conservative loaded water/depth and hull clearance, real propulsion/rudder, no reverse-thrust brake or docking.
+- Flight: 4 m/s target, operational six-axis thrust/braking at least 1.5 m/s² per direction, plus gravity/lift margin. No automatic landing.
+- Local Water/Flight: 200 m per leg, 2 km total, up to 4096 points, vehicle envelope radius at most 20 m. No obstacle detours, global/unloaded travel, automatic restart or saved live control commands.
+- Map-based destination/route selection is an explicit open roadmap item, deferred at Thomas's request. This release supports recording and world-point selection only.
+
+#### Persistence and compatibility
+- Reuses RouteBook and ShipRoute. Additive travelMode and sceneCoordinates fields are copied through snapshots and the existing persistence layer; old saves default to legacy cosmic-flight coordinates.
+- Explicit frame checks prevent a local scene route from being reinterpreted as a cosmic route after a frame change. Missing anchors refuse local execution. Legacy interplanetary tools remain available for legacy cosmic routes.
+- No new item/prefab/research authoring required. Step 74 remains the only setup action needed if the dedicated pilot assets have not yet been created. Do not rerun Step 65 for this update.
+- Local commands are not resumed on load. Land/moor before saving or reloading ships: physical drift/gravity are not removed by the absence of an active route. Existing wheel restore behavior remains parked.
+
+#### Validation and manual steps
+- 33 local route checks passed: metadata defaults, coordinate conversion/rebasing/refusal, finite-point guards, short recording, unique names, retained drafts, snapshot/restore metadata, water/flight starts, countdown, authority conflicts, power, equipment/obstacle/length refusal, stop, release and takeover.
+- All 39 prior wheel/pilot checks passed against the updated controller/pilot sources. All 26 Step 74 simulated editor-graph checks passed again.
+- New local controller/coordinate and panel/picker sources compiled against engine/domain/UI substitutes. Route model/book tests use extracted model code and syntax-only lowering for Mono's older C# support. They are not Unity serialization or physical simulation tests.
+- Changed C# syntax, additive save wiring, live-panel guard, and the incremental patch are checked. No full Unity compile, actual mouse/panel run, marine vessel test or flight/chassis test is claimed.
+- Import the files and new metas, compile, open the existing pilot, choose a mode, then **Record** or **Set Destination in the World**. Select the route, tick confirmation and press **Start Selected Route**. Follow the supplied UNITY_GUIDE.md for the staged road/water/flight/save checklist and refusal handling.
 
 ### [9.51.0-dev] Dedicated Auto-Run Pilot Blocks and Non-Destructive Setup
 

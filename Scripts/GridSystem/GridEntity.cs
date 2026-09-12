@@ -129,6 +129,8 @@ namespace VoxelEngine.GridSystem
         /// <summary>Who is commanding the ship, for the HUD and the panels ("AUTO RUN — smelter leg").</summary>
         public string AutonomousFlightOwner { get; private set; }
 
+        public bool LocalNavigationGravityCompensation { get; set; }
+
         /// <summary>Set by `GridRouteAutopilot` each tick. A command that stops being refreshed is a
         /// destroyed commander, not a decision to hover, so a heartbeat releases the ship: see
         /// `AUTONOMOUS_FLIGHT_STALE_SECONDS` in ApplyAutonomousFlightThrust's caller.</summary>
@@ -144,6 +146,7 @@ namespace VoxelEngine.GridSystem
         {
             if (!AutonomousFlightActive) return;
             AutonomousFlightActive = false;
+            LocalNavigationGravityCompensation = false;
             AutonomousDesiredVelocity = Vector3.zero;
             AutonomousFlightOwner = null;
         }
@@ -363,7 +366,12 @@ namespace VoxelEngine.GridSystem
                 WheelParkingBrake = false;
             if (WheelAutopilot != null && WheelAutopilot.isActiveAndEnabled)
                 WheelAutopilot.TickControl(Time.fixedDeltaTime);
+            var localNavigation = GetComponent<IndustrialWorld.Navigation.LocalRoutePilot>();
+            if (localNavigation != null && localNavigation.isActiveAndEnabled)
+                localNavigation.TickControl(Time.fixedDeltaTime);
             UpdatePower();
+            if (localNavigation != null && localNavigation.IsActive && !HasPower)
+                localNavigation.Stop("Power lost; control released. Water vessels coast.");
             if (WheelAutopilot != null && WheelAutopilot.IsDriving && !HasPower)
                 WheelAutopilot.Park("Power unavailable; wheels braking. Re-engage explicitly.");
             _touchingIce = DetectIceContact();
@@ -1340,11 +1348,34 @@ namespace VoxelEngine.GridSystem
 
             Vector3 velocity = _rb.linearVelocity;
             Vector3 error = AutonomousDesiredVelocity - velocity;
+            if (LocalNavigationGravityCompensation)
+            {
+                // Local flight requests real force, including gravity support. Fuel is drawn exactly
+                // once per commanded thruster below, never during the authority/preflight estimate.
+                Vector3 remaining = (error * 0.5f - CurrentGravityAcceleration()) * _rb.mass;
+                Vector3 applied = Vector3.zero;
+                foreach (var block in AllBlocks)
+                {
+                    if (block is not GridThruster thruster || !thruster.IsOperational) continue;
+                    float rating = IndustrialWorld.Navigation.LocalRoutePilot.RatedThrust(thruster);
+                    if (rating <= 0f) continue;
+                    Vector3 direction = thruster.PushDirection.normalized;
+                    float fraction = Mathf.Clamp01(Vector3.Dot(remaining, direction) / rating);
+                    if (fraction <= 0f) continue;
+                    thruster.ThrustFraction = Mathf.Max(thruster.ThrustFraction, fraction);
+                    Vector3 force = direction * thruster.AvailableThrust(Vector3.zero, this, fraction) * fraction;
+                    applied += force;
+                    remaining -= force;
+                }
+                if (applied.sqrMagnitude > 0.0001f) _rb.AddForce(applied * THRUST_GAIN, ForceMode.Force);
+                AutonomousDampenersActive = true;
+                return;
+            }
 
             // Gravity is not the autopilot's problem: a climb is expressed as a vertical velocity, and
             // a commanded hold already has the dampener rule to settle it. Only cancel the gravity axis
             // when the command is "stay here", which is the case where fighting it would be pointless.
-            if (AutonomousDesiredVelocity.sqrMagnitude < 0.01f)
+            if (!LocalNavigationGravityCompensation && AutonomousDesiredVelocity.sqrMagnitude < 0.01f)
             {
                 Vector3 gravity = CurrentGravityAcceleration();
                 if (gravity.sqrMagnitude > 0.0001f && !ShouldDampenerHoldHover())

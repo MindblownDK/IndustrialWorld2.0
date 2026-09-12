@@ -72,7 +72,8 @@ namespace VoxelEngine.Navigation
             if (sustainedWatts <= 0.001f) sustainedWatts = RouteRules.SustainedLoadWatts;
             float idleThrustWatts = Mathf.Max(0f, thrustWatts);
 
-            if (route == null || !route.IsFlyable)
+            if (route == null || !route.IsFlyable || route.sceneCoordinates
+                || route.travelMode == RouteTravelMode.Road || route.travelMode == RouteTravelMode.Water)
                 return new RoutePlan(false, 0f, 0f, 0f, 0f, Mathf.Max(0f, thrustNewtons.fwd),
                     0f, 0f, Mathf.Max(0f, storedEnergyWh), 0f, idleThrustWatts, 0f,
                     Mathf.Max(0f, storedEnergyWh), legs, warnings);

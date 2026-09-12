@@ -45,6 +45,9 @@ namespace IndustrialWorld.Navigation
             if (_grid == null || _grid.Body == null || recorder == null || !recorder.Enabled)
             { Status = "Enabled recorder and vehicle body required."; return; }
             if (IsDriving) { Status = "Stop the active run before changing its route."; return; }
+            var localPilot = _grid.GetComponent<LocalRoutePilot>();
+            if (localPilot != null && localPilot.IsActive)
+            { Status = "Stop water/flight navigation before starting wheel control."; return; }
             _recorder = recorder;
             var flight = _grid.GetComponent<GridRouteAutopilot>();
             if ((flight != null && flight.IsArmed) || _grid.AutonomousFlightActive)

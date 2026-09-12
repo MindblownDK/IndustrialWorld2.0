@@ -9,8 +9,8 @@
 // real power bill while a capture is running — because a nav deck that costs nothing is a menu,
 // not a machine.
 //
-// Deliberately inert without a star map. On a world build with no `CosmicRegistry` loaded it
-// reports as such rather than inventing a plan, so a base ship's books never read as broken.
+// Local Road/Water/Flight recording works without a star map. Only the legacy cosmic
+// cost planner requires CosmicRegistry; the route book captures once per grid.
 
 using System.Collections.Generic;
 using Unity.Mathematics;
@@ -111,22 +111,6 @@ namespace VoxelEngine.Navigation
                 RecomputeNow();
             }
 
-            // A live capture follows the ship: record a point whenever it has actually moved.
-            var book = Book;
-            if (book != null && book.IsRecording && HasStarMap)
-            {
-                var origin = SpaceOrigin.Instance;
-                if (origin == null) return;   // no space frame: nothing to measure against
-                double3 here = origin.GetCosmicKm(transform.position);
-                // A waypoint rides the body the ship is standing in, so that a run saved above a
-                // moon is still above that moon when the player opens the book hours later. No
-                // frame body, no anchor: the point is then fixed in the cosmic frame instead.
-                var frameBody = origin.FrameBody;
-                var rides = frameBody != null
-                    ? RouteWaypoint.FindBody(CosmicRegistry.Instance, frameBody.name)
-                    : null;
-                book.CaptureNow(here, rides);
-            }
         }
 
         /// <summary>Forces an immediate re-cost — the panel calls it after any edit, so a slider
@@ -141,20 +125,34 @@ namespace VoxelEngine.Navigation
         }
 
         // ── Panel helpers: the thin verbs the buttons want ───────────────────
-        public void BeginRecording()
+        public void BeginRecording() => BeginRecording(HasStarMap ? RouteTravelMode.LegacyFlight : RouteTravelMode.Flight);
+
+        public void BeginRecording(RouteTravelMode mode)
         {
             var book = Book;
-            if (book == null) return;
+            if (book == null || book.IsRecording || !Enabled) return;
             string name = string.IsNullOrWhiteSpace(nextRouteName)
                 ? "Recorded Route " + (book.Count + 1)
                 : nextRouteName.Trim();
             book.BeginRecording(name);
+            book.Draft.travelMode = mode;
+            book.Draft.sceneCoordinates = SpaceOrigin.Instance == null;
+            var start = IndustrialWorld.Navigation.RouteCoordinates.Capture(Grid.transform.position, book.Draft.sceneCoordinates);
+            book.ForceCapture(start.positionKm, RouteWaypoint.FindBody(CosmicRegistry.Instance, start.bodyId));
             nextRouteName = "";
         }
 
         public ShipRoute CommitRecording()
         {
             var book = Book;
+            if (book != null && book.IsRecording && book.Draft != null
+                && IndustrialWorld.Navigation.RouteCoordinates.CanResolve(book.Draft))
+            {
+                var end = IndustrialWorld.Navigation.RouteCoordinates.Capture(Grid.transform.position, book.Draft.sceneCoordinates);
+                if (book.Draft.waypoints.Count < 4096 && (book.Draft.waypoints.Count == 0 || Unity.Mathematics.math.length(end.positionKm
+                    - book.Draft.waypoints[book.Draft.waypoints.Count - 1].ResolvedPositionKm(CosmicRegistry.Instance)) > 0.0005d))
+                    book.Draft.AddWaypoint(end);
+            }
             var route = book?.CommitRecording();
             if (route != null)
             {
@@ -167,12 +165,9 @@ namespace VoxelEngine.Navigation
         public void MarkWaypoint()
         {
             var book = Book;
-            if (book == null || !HasStarMap) return;
-            var origin = SpaceOrigin.Instance;
-            var rides = origin.FrameBody != null
-                ? RouteWaypoint.FindBody(CosmicRegistry.Instance, origin.FrameBody.name)
-                : null;
-            book.ForceCapture(origin.GetCosmicKm(transform.position), rides);
+            if (book == null || !book.IsRecording || book.Draft == null || book.Draft.waypoints.Count >= 4096
+                || !IndustrialWorld.Navigation.RouteCoordinates.CanResolve(book.Draft)) return;
+            book.Draft.AddWaypoint(IndustrialWorld.Navigation.RouteCoordinates.Capture(Grid.transform.position, book.Draft.sceneCoordinates));
             RecomputeNow();
         }
 

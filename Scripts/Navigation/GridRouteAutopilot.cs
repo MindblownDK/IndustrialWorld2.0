@@ -212,6 +212,12 @@ namespace VoxelEngine.Navigation
         public bool Arm()
         {
             if (Grid == null) return false;
+            var local = Grid.GetComponent<IndustrialWorld.Navigation.LocalRoutePilot>();
+            if (local != null && local.IsActive)
+            { BlockReason = "Stop local navigation before arming the shuttle loop."; return false; }
+            var chosen = Recorder != null && Recorder.Book != null ? Recorder.Book.Find(routeName) : null;
+            if (chosen != null && (chosen.sceneCoordinates || chosen.travelMode != RouteTravelMode.LegacyFlight))
+            { BlockReason = "Use START SELECTED ROUTE in Local Navigation for this route."; return false; }
             // Authority comes from the recorder: a grid flies a loop only if it can cost one. Two
             // answers to "can this ship make the trip" is how a schedule and a plan drift apart, and
             // that drift is what leaves a ship parked between two worlds with a happy-looking log.

@@ -52,12 +52,13 @@ namespace VoxelEngine.Navigation
             p.Add(VoxelEngine.UI.UITheme.AccentDivider(VoxelEngine.UI.UITheme.AccentCyan));
             p.Add(VoxelEngine.UI.UITheme.Spacer(4));
 
+            IndustrialWorld.Navigation.LocalRouteUI.AddTo(p, recorder);
             IndustrialWorld.Navigation.RoadNavigationUI.AddTo(p, recorder);
 
-            if (!live)
+            if (!live || (recorder.Selected != null && recorder.Selected.travelMode != RouteTravelMode.LegacyFlight))
             {
-                p.Add(VoxelEngine.UI.UITheme.Muted("Nothing to measure against: no star map is loaded, so a route would be a guess. "
-                    + "Board a ship in space, or wait for the sky to finish registering, and the books open themselves."));
+                p.Add(VoxelEngine.UI.UITheme.Muted("Local recording and navigation are available above without a star map. "
+                    + "The legacy interplanetary planner below is only available for cosmic flight routes with a loaded star map."));
                 return p;
             }
 

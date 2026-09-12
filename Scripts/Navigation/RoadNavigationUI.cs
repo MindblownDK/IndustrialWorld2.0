@@ -12,7 +12,7 @@ namespace IndustrialWorld.Navigation
         {
             var guidance = RoadDriverGuidance.For(recorder);
             panel.Add(UITheme.Spacer(6));
-            panel.Add(UITheme.Body("ROAD GUIDANCE · MANUAL DRIVING"));
+            panel.Add(UITheme.Body("NAMED ROAD DESTINATIONS / WHEEL STATUS"));
             panel.Add(UITheme.Muted("Loaded vehicle roads only. Endpoints snap within 8 m; access to the road and parking are manual. "
                 + "Destination road is captured when planned. Replan after moving a waymark. Guidance is not saved."));
             var status = UITheme.Muted(guidance.Status);

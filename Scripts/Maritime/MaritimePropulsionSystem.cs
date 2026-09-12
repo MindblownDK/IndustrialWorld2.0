@@ -47,6 +47,26 @@ namespace VoxelEngine.Maritime
         public float Steer { get; set; }
         /// <summary>True while the helm is actively crewed (enables rudder authority).</summary>
         public bool HelmActive { get; set; }
+        private IndustrialWorld.Navigation.LocalRoutePilot _navigation;
+        private float _navigationThrottle, _navigationSteer, _navigationHeartbeat;
+        private bool NavigationActive => _navigation != null && _navigation.IsActive
+            && Time.unscaledTime - _navigationHeartbeat < 0.35f && !HelmActive;
+        public void SetNavigationCommand(IndustrialWorld.Navigation.LocalRoutePilot owner, float throttle, float steer)
+        {
+            if (owner == null || !owner.IsActive || owner.gameObject != gameObject) return;
+            _navigation = owner;
+            _navigationThrottle = Mathf.Clamp01(throttle);
+            _navigationSteer = Mathf.Clamp(steer, -1f, 1f);
+            _navigationHeartbeat = Time.unscaledTime;
+        }
+        public void ClearNavigationCommand(IndustrialWorld.Navigation.LocalRoutePilot owner)
+        {
+            if (_navigation != owner) return;
+            _navigation = null;
+            _navigationThrottle = _navigationSteer = 0f;
+            if (!HelmActive) { Throttle = 0f; Steer = 0f; }
+        }
+
 
         // ── Electricity totals (read by Generator/E-Propeller blocks) ─
         public float ElectricityGenerated { get; private set; }
@@ -127,7 +147,7 @@ namespace VoxelEngine.Maritime
             if (!_allocated || _nodes.Length == 0) return;
 
             // 1. Refresh dynamic fields (fuel/throttle/breakage) from live blocks.
-            float throttle = Mathf.Clamp01(Throttle);
+            float throttle = NavigationActive ? _navigationThrottle : Mathf.Clamp01(Throttle);
             for (int i = 0; i < _liveMech.Count; i++)
             {
                 var (idx, block) = _liveMech[i];
@@ -213,14 +233,14 @@ namespace VoxelEngine.Maritime
             ElectricityDemand = elecDemand;
 
             // Rudder steering torque (only when the helm is crewed and moving).
-            if (HelmActive)
+            if (HelmActive || NavigationActive)
             {
-                Vector3 forward = transform.forward;
+                Vector3 forward = NavigationActive ? _navigation.Frame.forward : transform.forward;
                 float fwdSpeed = Vector3.Dot(_rb.linearVelocity, forward);
                 float steerAuthority = Mathf.Clamp01((Mathf.Abs(fwdSpeed) - s.rudderMinSpeed) / 3f);
                 if (steerAuthority > 0f)
                 {
-                    Vector3 rudderTorque = transform.up * (Steer * s.rudderTorque * steerAuthority * Mathf.Sign(fwdSpeed));
+                    Vector3 rudderTorque = transform.up * ((NavigationActive ? _navigationSteer : Steer) * s.rudderTorque * steerAuthority * Mathf.Sign(fwdSpeed));
                     totalTorque += new float3(rudderTorque.x, rudderTorque.y, rudderTorque.z);
                 }
             }

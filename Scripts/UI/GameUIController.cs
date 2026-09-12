@@ -342,7 +342,10 @@ namespace VoxelEngine.UI
             // the pointer moves off it — hover + clicks then work first time.
             // GridBattery owns an in-place live panel now; rebuilding it on every power tick
             // was the source of the Auto / Recharge / Discharge button flashing report.
-            bool liveGridBatteryPanel = _openGridBlock is VoxelEngine.GridSystem.GridBattery;
+            bool liveGridBatteryPanel = _openGridBlock is VoxelEngine.GridSystem.GridBattery
+                // Navigation owns scheduled status labels. Rebuilding every quarter-second resets
+                // route selections/confirmation between choosing a mode and clicking Start.
+                || _openGridBlock is VoxelEngine.Navigation.GridRouteRecorder;
             // Master terminal controls are also interactive and must not be rebuilt under
             // battery mode buttons. Explicit terminal actions already refresh immediately.
             bool gridTerminalControlOpen = _openGridTerminal != null;
