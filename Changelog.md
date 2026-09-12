@@ -1,9 +1,61 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.50.0-dev`
+**Current Version:** `9.51.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.51.0-dev] Dedicated Auto-Run Pilot Blocks and Non-Destructive Setup
+
+**Type:** MINOR — new save-compatible blocks, items, recipes and research. No save-schema change. Existing navigation items and their controls remain available for compatibility.
+
+**GitHub title:** `[9.51.0-dev] Add dedicated Auto-Run Pilot blocks with non-destructive Setup Step 74`
+
+#### Corrected delivery gap
+- 9.50.0-dev added unattended driving through the Route Recorder but did not author an Auto-Run Pilot block. This release supplies the actual placeable content, not another name for the existing recorder.
+- The new setup lives inside Tools > Voxel Engine > Voxel Engine Setup as Step 74. It does not call Step 65 or its generated-visual rebuilding path. Step 65 itself is unchanged.
+
+#### Added
+- Auto-Run Pilot (Large) and Auto-Run Pilot (Small), with dedicated runtime components, matching GridBlockItems, root placement colliders, control-console models, cooling fins, antenna, direction chevrons and status lenses.
+- A generated 96-pixel inventory icon outside the ItemIcons folder. Existing icon files and assigned custom sprites are preserved on reruns.
+- An autopilot-focused right-click panel that bypasses flight/star-map sections. Road planning now appears before start controls, with the loaded-network panel below. No separate Route Recorder is required.
+- The pilot's forward axis supplies the steering reference when no cockpit exists. Existing cockpits retain orientation priority; point the cyan chevron forward on a cockpit-free vehicle.
+- Owner-only control power: new Large pilots use 40 W and Small pilots 15 W during their own active run/countdown, in addition to wheel power. Idle and parked pilots have no new control load. Existing tuned values, including zero, are preserved.
+- Auto-Run Piloting research in Environment / Logistics, tier 4, after Grid Utilities. New defaults: 60 seconds, 20 T1 science packs and 10 T2 science packs.
+- Assembler-station crafting recipes and registration in the recipe registry, research tree and Resources item-persistence catalog.
+
+#### New-content defaults
+
+| Variant | Craft inputs | Craft time | Block mass | HP | Active control power |
+| --- | --- | --- | --- | --- | --- |
+| Large | Steel Plate 4, Iron Plate 2, Circuit 3, Glass 1 | 10 s | 90 kg | 350 | 40 W |
+| Small | Iron Plate 2, Circuit 2, Glass 1 | 6 s | 20 kg | 120 | 15 W |
+
+These defaults apply to newly created content only. Existing recipe quantities/times, research costs/prerequisites, stack sizes, names, health, mass and control-power values are not reset. Missing entire recipe input lists are filled, and missing item links in the known default input layout are repaired without changing quantities.
+
+#### Setup safety
+- Mandatory ingredients, foundation recipe/research assets, science types and conflicting identities are checked before authoring the pilot content. Missing ingredients are not skipped to produce a cheaper or incomplete recipe.
+- Existing item IDs and moved items/recipes/research nodes are reused. Duplicate identities or incompatible existing block types cause a clear refusal instead of destructive replacement.
+- Existing custom visual hierarchies, materials and transforms are preserved. Missing generated parts, renderer/mesh resources, root colliders and required references are repaired. The step never deletes an existing asset or rebuilds a populated custom model.
+- Registry, research-unlock and persistence-catalog links are added only if missing. A partially interrupted run can be repeated.
+- Run outside Play Mode. The step does not silently regenerate foundational item/research systems; if prerequisites are missing, it reports the exact missing asset for follow-up through the setup workflow.
+
+#### Validation
+- 26 editor-graph tests passed against the complete setup source with an in-memory AssetDatabase/PrefabUtility substitute: creation, second-run deduplication, preserved tuning/custom visuals/icon bytes, missing-reference/model repair, moved identities, prerequisite refusal and Play Mode refusal.
+- 39 runtime checks passed against the actual pilot, wheel controller, wheel math and wheel source with engine/domain stubs. These include all 34 prior wheel checks and five pilot-specific checks: cockpit-free start, owner-only power, departure, preserved zero power and shutdown on disable.
+- Changed C# syntax, dedicated-panel precedence, inherited interaction compatibility, Step 74 wiring and incremental patch checked. The shipped Assembler prefab was verified to contain a CraftingStation of tier Assembler.
+- These tests do not validate Unity asset serialization/import, real prefab rendering or physics. Unity compilation, Step 74 generation, research/crafting, placement, save/reload and driving still require the checklist below. 9.50.0-dev's real chassis validation is not marked complete by this delivery.
+
+#### Unity workflow
+1. Import the supplied scripts and .meta files, replacing matching existing files. Allow compilation, then exit Play Mode.
+2. Open Tools > Voxel Engine > Voxel Engine Setup. Click **74. Create / Repair Auto-Run Pilot Blocks (Large + Small — Non-Destructive)**. This is the step that actually creates the prefab and item assets.
+3. Confirm the completion dialog. If setup reports a missing prerequisite, stop and share the exact error; do not run broad destructive rebuilds or manually wire the pilot in the Inspector.
+4. Run Step 74 again. Verify no duplicate pilot items, recipes or research entries, and no reset of customized values or visuals.
+5. Enter Play Mode. Research **Auto-Run Piloting** under Logistics after **Grid Utilities**. Use the player crafting interface near an Assembler station and search **Auto-Run Pilot**.
+6. Craft the variant matching the vehicle's grid size and place it on the vehicle. No separate Route Recorder is needed. Without a cockpit, rotate the block so its cyan arrow points in the driving direction.
+7. Right-click the pilot. Choose the named destination, plan the road route, confirm the unattended run and start. Keep using 9.50.0-dev's wide, flat, nearby test-road procedure with 4–16 grounded wheels.
+8. Test idle versus active power draw, stopping, disabling the pilot and a cockpit-free vehicle. Do not change existing suspension or generator values to make the test pass.
+9. Save with pilot items in inventory and a placed pilot on the grid, then reload: both must resolve correctly. An active wheel run still reloads parked rather than driving.
 
 ### [9.50.0-dev] Unattended One-Way Road Vehicles and Wheel Brakes
 

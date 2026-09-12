@@ -814,6 +814,15 @@ namespace VoxelEngine.EditorTools
                 "times, recipe quantities and research cost/tier/column are never reset.");
             AddWizardButton(scroll, "72. Author Asphalt Roads Content (Road Block, Paver Tool, Bitumen + Hot Mix Chain \u2014 Non-Destructive)", () => VoxelEngine.EditorTools.AsphaltRoadSetup.RunStep72(), 62);
 
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
+                "Step 74 (9.51.0) creates dedicated AUTO-RUN PILOT blocks (Large and Small).\n" +
+                "Placeable models, icons, crafting recipes, Auto-Run Piloting research and save-catalog links.\n" +
+                "Right-click a pilot to plan and start unattended road runs; no separate Route Recorder needed.\n" +
+                "Create missing content and repair links only. Existing tuning, custom visuals and costs are preserved.");
+            AddWizardButton(scroll, "74. Create / Repair Auto-Run Pilot Blocks (Large + Small — Non-Destructive)",
+                () => IndustrialWorld.EditorTools.AutoRunPilotSetup.RunStep74(), 62);
+
             AddSpacer(scroll, 20);
         }
 

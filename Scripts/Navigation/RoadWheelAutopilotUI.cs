@@ -12,7 +12,7 @@ namespace IndustrialWorld.Navigation
             var grid = recorder.Grid;
             var control = RoadWheelAutopilot.For(grid);
             panel.Add(UITheme.Body("UNATTENDED WHEEL RUN"));
-            panel.Add(UITheme.Muted("One-way, loaded paved roads, 4 m/s maximum. Four grounded wheels and a cockpit reference required. "
+            panel.Add(UITheme.Muted("One-way, loaded paved roads, 4 m/s maximum. 4–16 grounded wheels and an Auto-Run Pilot or cockpit reference required. "
                 + "Front axle steers during autonomy; manual wheel settings stay unchanged. No reversing, docking or automatic recovery."));
             var status = UITheme.Muted(control.Status);
             panel.Add(status);

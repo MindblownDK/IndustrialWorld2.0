@@ -10,9 +10,7 @@ namespace IndustrialWorld.Navigation
     {
         public static void AddTo(VisualElement panel, GridRouteRecorder recorder)
         {
-            RoadNetworkUI.AddTo(panel, recorder);
             var guidance = RoadDriverGuidance.For(recorder);
-            RoadWheelAutopilotUI.AddTo(panel, recorder, guidance);
             panel.Add(UITheme.Spacer(6));
             panel.Add(UITheme.Body("ROAD GUIDANCE · MANUAL DRIVING"));
             panel.Add(UITheme.Muted("Loaded vehicle roads only. Endpoints snap within 8 m; access to the road and parking are manual. "
@@ -36,6 +34,8 @@ namespace IndustrialWorld.Navigation
             panel.Add(stop);
             stop.schedule.Execute(() => stop.SetEnabled(guidance != null && guidance.HasRoute)).Every(250);
             panel.Add(UITheme.AccentDivider(UITheme.AccentCyan));
+            RoadWheelAutopilotUI.AddTo(panel, recorder, guidance);
+            RoadNetworkUI.AddTo(panel, recorder);
         }
 
         internal static Button MakeButton(string title, Action action)

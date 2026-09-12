@@ -26,6 +26,7 @@ namespace IndustrialWorld.Navigation
         private float _deceleration;
         public Transform Frame { get; private set; }
         public bool IsDriving { get; private set; }
+        public bool IsControlledBy(GridRouteRecorder recorder) => IsDriving && _recorder == recorder;
         public float Throttle { get; private set; }
         public float Brake { get; private set; }
         public string Status { get; private set; } = "Wheel autopilot idle.";
@@ -65,8 +66,9 @@ namespace IndustrialWorld.Navigation
                     || (block is GridDockingPort dock && dock.IsDocked))
                 { Status = "Release landing-gear/docking locks first."; return; }
             }
+            if (Frame == null && recorder is AutoRunPilot) Frame = recorder.transform;
             if (Frame == null || _wheels.Count < 4 || _wheels.Count > 16)
-            { Status = "A cockpit reference and 4–16 enabled wheels are required."; return; }
+            { Status = "An Auto-Run Pilot or cockpit reference, and 4–16 enabled wheels are required."; return; }
             float minZ = float.MaxValue, maxZ = float.MinValue;
             _halfWidth = _halfLength = _bodyTop = 0f;
             foreach (var wheel in _wheels)

@@ -1,0 +1,39 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe52eb4685f86c44d967d9cd3e4bd91a, type: 3}
+  m_Name: res_auto_run_piloting
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Research.ResearchNode
+  nodeId: res_auto_run_piloting
+  displayName: Auto-Run Piloting
+  description: Dedicated control blocks for unattended one-way road vehicles. Includes
+    saved parking and explicit restart controls.
+  iconTint: {r: 1, g: 1, b: 1, a: 1}
+  category: 0
+  subCategory: 1
+  tier: 4
+  column: 8
+  eraLabel: 
+  prerequisites:
+  - {fileID: 11400000, guid: 4c78de6aff12dec4a90461013028bc30, type: 2}
+  researchSeconds: 60
+  cost:
+  - pack: {fileID: 11400000, guid: b58ff88af19dc134c96ca63079e30a5c, type: 2}
+    count: 20
+  - pack: {fileID: 11400000, guid: 080d81aee84fd5b4486b15264d31da24, type: 2}
+    count: 10
+  unlocksRecipes:
+  - {fileID: 11400000, guid: 333fe97b65de813418c3dbb6a60584cf, type: 2}
+  - {fileID: 11400000, guid: 3ed0c7a9eb91f784ea04e4aff03e88b1, type: 2}
+  upgradeKind: 0
+  upgradePerRankAmount: 0
+  maxRanks: 1
+  costScalesWithRank: 1

@@ -58,6 +58,8 @@ namespace VoxelEngine.GridSystem.UI
                 case VoxelEngine.Pressure.GridExhaustScrubber scrub: return MakeScrollable(ScrubberPanel(scrub));
                 case VoxelEngine.Gas.GasVent gv: return MakeScrollable(VentDumpPanel(gv));
                 case VoxelEngine.Gas.GridFlareStack fs: return MakeScrollable(FlareStackPanel(fs));
+                case IndustrialWorld.Navigation.AutoRunPilot pilot:
+                    return MakeScrollable(IndustrialWorld.Navigation.AutoRunPilotUI.BuildPanel(pilot));
                 case VoxelEngine.Navigation.GridRouteRecorder rr: return MakeScrollable(VoxelEngine.Navigation.GridRouteUI.BuildPanel(rr));
                 case VoxelEngine.Navigation.GridConnectorBlock pad: return MakeScrollable(VoxelEngine.Navigation.GridConnectorUI.BuildPanel(pad));
                 case VoxelEngine.Simulation.GridLightBlock gl: return GridLightPanel(gl);
