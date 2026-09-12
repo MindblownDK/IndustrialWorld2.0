@@ -131,6 +131,33 @@ namespace VoxelEngine.Environment
             }
         }
 
+        /// <summary>Local broad-phase road query for bounded navigation searches.
+        /// Unlike QueryAt, visits neighbouring hash buckets; results remain caller-owned.</summary>
+        public static void QueryNearby(Vector3 centre, float radius, List<AsphaltRoad> results)
+        {
+            results.Clear();
+            radius = Mathf.Clamp(radius, 0f, 16f);
+            int minX = Mathf.FloorToInt((centre.x - radius) * INV_CELL);
+            int maxX = Mathf.FloorToInt((centre.x + radius) * INV_CELL);
+            int minY = Mathf.FloorToInt((centre.y - radius) * INV_CELL);
+            int maxY = Mathf.FloorToInt((centre.y + radius) * INV_CELL);
+            int minZ = Mathf.FloorToInt((centre.z - radius) * INV_CELL);
+            int maxZ = Mathf.FloorToInt((centre.z + radius) * INV_CELL);
+            for (int x = minX; x <= maxX; x++)
+            for (int y = minY; y <= maxY; y++)
+            for (int z = minZ; z <= maxZ; z++)
+            {
+                if (!_cells.TryGetValue(HashKey(x, y, z), out var roads)) continue;
+                for (int i = 0; i < roads.Count; i++)
+                {
+                    var road = roads[i];
+                    if (road == null || !road.isActiveAndEnabled
+                        || (road.transform.position - centre).sqrMagnitude > radius * radius) continue;
+                    if (!results.Contains(road)) results.Add(road);
+                }
+            }
+        }
+
         /// <summary>
         /// True when drivable asphalt sits within <paramref name="probeDepth"/> metres below
         /// <paramref name="worldPosition"/> (and no more than a small step above it, so a

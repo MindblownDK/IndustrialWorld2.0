@@ -1,9 +1,47 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.46.0-dev`
+**Current Version:** `9.47.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.47.0-dev] Connected-Road Planning and Driver Guidance
+
+**Type:** MINOR — save-compatible navigation feature. No new save fields or authored assets; no existing balance values changed.
+
+**GitHub title:** `[9.47.0-dev] Add connected-road planning and manual driver guidance`
+
+#### Added
+- Road Guidance section in the existing Route Recorder panel, available independently of the flight planner's star-map requirement. Select a live named waymark, plan from the vehicle's position, or stop guidance.
+- Bounded A* over loaded, supported vehicle roads. Both endpoints select a nearby available road within 8 m. Physical route distance is the cost; there are no off-road shortcuts. Pedestrian pathways are excluded.
+- Local hash-bucket road queries for navigation, with caller-owned results and deduplication. Explicit corridor cells connect by shared quad edges; legacy cells use reciprocal local neighbour-slot checks.
+- Clear refusal messages for missing endpoints, disconnected/unavailable loaded routes and the 4096-discovered-cell search limit. Failure leaves no partial route.
+- Driver-only HUD with eased visibility, heading advice, remaining road distance, off-route guidance and endpoint arrival notification. No throttle, steering, flight or braking commands are issued.
+- Drawbridge availability includes pending opening, deck movement and lowered barriers. A blocked crossing pauses guidance; guidance resumes when the crossing clears. Removed, unloaded or disconnected route cells stop the session and request replanning.
+- Session-only navigation attached to an existing recorder at runtime. At most one active navigator per vehicle; no Inspector wiring, new prefab, recipe or research node is required.
+
+#### Validation
+- Thomas confirmed the preceding 9.46.0-dev drawbridge safety release works in Unity.
+- Compiled the actual RoadRoutePlanner and RoadSurfaceUtility source against lightweight Unity/domain test stubs using Mono; 13 checks passed: straight route, query deduplication, gaps, pathways, blocked crossing, reopened crossing, shortest-route choice, endpoint range, stacked roads, search budget, explicit quad adjacency, explicit quad gap and rotated tangent orientation.
+- The stub compilation reports one pre-existing CS0675 warning in the hash-key packing expression. No Unity build was run.
+- Parsed all changed C# sources for syntax errors and ran whitespace checks. UI Toolkit rendering, actual physics, long-road performance and vehicle-relative guidance remain for Unity validation.
+
+#### Deliberate scope limits
+- Guidance is not autopilot or a collision/vehicle-clearance guarantee. It does not account for lane width, turning radius, dynamic traffic or stopping distance; the driver remains responsible for safe operation.
+- Start access and final parking between a nearby road and a vehicle/waymark are manual and are not path-tested. Arrival means the road endpoint, not automatic docking.
+- Only loaded roads are searchable; search scope is 4096 discovered cells. Custom very-large road cells or unsupported joins can be conservatively refused.
+- The destination road is captured when planning. Moving a connector requires replanning. Navigation sessions are not saved; reopening the world requires a new plan.
+- No automatic reroute, named road-network management, off-road routing or wheel control was added.
+
+#### Unity workflow
+1. Replace the supplied files and import the three new navigation scripts with their .meta files. Allow compilation.
+2. No new setup is necessary. If the existing Route Recorder content is absent, open Tools > Voxel Engine > Voxel Engine Setup and run Step 65 (Route Book & Range Calculator). Use the same setup window's existing steps for any missing connector/static refuel pad content.
+3. Park a vehicle carrying a Route Recorder within 8 m of a loaded asphalt road. Name a connector or static refuel pad within 8 m of the destination road.
+4. Open the Route Recorder, choose the destination in ROAD GUIDANCE, then press PLAN ROAD ROUTE. Close the panel and take control of the vehicle; drive manually using the HUD.
+5. Test a straight route, a bend, a junction, a wide corridor and a planetary slope. Confirm the HUD shows only while that vehicle is controlled and no blocking UI is open.
+6. Test a gap, a pathway-only connection, a disconnected stacked road and a missing endpoint: each must refuse rather than return a partial route.
+7. Open a drawbridge on an active route: guidance must show ROUTE BLOCKED. Close it and wait for barriers to rise: guidance should resume. Remove a future road cell: guidance must stop and request replanning.
+8. Move off route, stop guidance, switch recorders and reload a save. Check there is no duplicate HUD and no automatic throttle/steering. Replan after reload or moving the destination connector.
 
 ### [9.46.0-dev] Drawbridge Approach Barriers and Deck Safety Interlocks
 

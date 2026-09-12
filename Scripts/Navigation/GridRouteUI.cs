@@ -52,6 +52,8 @@ namespace VoxelEngine.Navigation
             p.Add(VoxelEngine.UI.UITheme.AccentDivider(VoxelEngine.UI.UITheme.AccentCyan));
             p.Add(VoxelEngine.UI.UITheme.Spacer(4));
 
+            IndustrialWorld.Navigation.RoadNavigationUI.AddTo(p, recorder);
+
             if (!live)
             {
                 p.Add(VoxelEngine.UI.UITheme.Muted("Nothing to measure against: no star map is loaded, so a route would be a guess. "

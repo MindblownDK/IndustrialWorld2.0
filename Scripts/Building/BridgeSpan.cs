@@ -192,6 +192,10 @@ namespace VoxelEngine.Building
         /// in between is the animation, not a state.</summary>
         public bool WantsOpen { get; private set; }
 
+        /// <summary>Navigation must not direct road traffic through a pending swing or a lowered arm.</summary>
+        public bool RoadTrafficBlocked => Structure == BridgeStructure.Drawbridge
+            && (WantsOpen || Open01 > 0f || _barrierClosed01 > 0f);
+
         public int CellCount => _cells.Count;
         public IReadOnlyList<AsphaltRoad> Cells => _cells;
 

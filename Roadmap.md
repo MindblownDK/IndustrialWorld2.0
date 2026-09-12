@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `9.46.0-dev`
-**Roadmap Version:** `9.46.0-dev`
+**Current Version:** `9.47.0-dev`
+**Roadmap Version:** `9.47.0-dev`
 **Date:** 2026-09-12
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,10 +29,15 @@
 
 ## 0. Recently Done
 
+### 9.47.0-dev — Driver Road Guidance
+- Route Recorder offers bounded connected-road planning to nearby named waymarks.
+- Session-only driver HUD reports direction, distance and crossing availability.
+- Unity validation remains open; existing recorder setup only.
+
 ### 9.46.0-dev — Drawbridge Approach Barriers
 - Runtime approach arms guard both ends of drawbridge spans.
 - Deck motion waits for lowered barriers and an empty deck.
-- Unity validation remains open; no setup assets required.
+- Thomas confirmed 9.46.0-dev works in Unity; no setup assets required.
 
 ### 9.45.0-dev — Crossings Stand Over the Water, and the Paver Grades
 - The deck level over a gap is the approach line plus a waterline freeboard (3.6 m fixed / 2.4 m
@@ -90,22 +95,6 @@
   clustered under the first-placed lane, and the leaves were invisible from the water. One
   `SpanFrame` projection now answers every geometric question the span asks. Numerically verified
   through a line-for-line Python port; the Unity pass is still pending.
-
-### 9.44.1-dev — Drawbridges Reachable
-- The machinery that shipped unreachable in 9.44.0 is now wired to the player and the save. A
-  **third surface-wheel card** (DRAWBRIDGE ROAD) lays the same asphalt but makes the crossing the
-  paver inserts able to open; it is not a third paving material, and `Kind == Bridge` already fell
-  through the paver's `== Pathway` ternaries to the road block, so block selection needed no change.
-  It went on the wheel rather than a new key because adding an `InputAction` costs a settings
-  migration and a `CURRENT_VERSION` bump for one toggle.
-- **Aimed at a deck, the interact key swings it** — checked before the plan branch and only while no
-  plan is open, so the key that lays a road never swings a bridge out from under the player. The
-  leaves, untextured in 9.44.0, now take the deck block's own material.
-- **Crossings survive a save**: additive `hasBridgeSpan`/`bridgeStructure`/`bridgeOpen`, restored by
-  probing the four face-neighbour slots, so a save needs no list of spans — a span re-forms from
-  adjacency the way a `RoadRun` does. Held to `9.44.2-dev`: auto-open on ship approach, power draw,
-  a warning light or horn, and operating a bridge without the paver in hand.
-
 
 ## 1. Executive Vision
 
@@ -1032,11 +1021,14 @@ one sentence: **a road is the difference between walking a route and being able 
    what remains and split it into however many runs the gap created, each inheriting the wear it was
    part of. Merging takes the worst of the two, so a worn strip joined to a new one is a worn strip.
 
-6. **Still open after 9.45.0-dev**
+6. **Still open after 9.47.0-dev**
    - The road **network** object: a player-given name and a traffic/condition readout across a whole
      system. Deliberately held back again — it should arrive with the routing it feeds.
-   - **Road-aware routing.** Pathfinding, autopilot and delivery drones do not prefer paved routes.
-     `RoadSurfaceUtility` and `RoadRun` are the primitives; nothing consumes them for a route.
+   - ~~**Driver road guidance**~~ *(9.47.0-dev)* — `RoadRoutePlanner` and `RoadDriverGuidance`,
+     exposed by the existing Route Recorder panel (Setup Step 65); Unity validation pending.
+   - **Road-aware automation remains open (deferred 9.47.0-dev).** Wheel steering/braking,
+     delivery drones, lane/vehicle clearance, unloaded-road routing and persistent road navigation
+     are not implemented; driver guidance does not command any vehicle controls.
    - **Creatures** do not take the walk-speed bonus; only the player and grid wheels do. Stamina and
      carried-weight relief on pavement are not modelled at all.
    - **Rolling resistance** is not a separate wheel term — the road only scales traction and grip.
