@@ -43,13 +43,14 @@ using T = VoxelEngine.UI.UITheme;
 namespace VoxelEngine.UI
 {
     /// <summary>The states of the inspector overlay. The hotkey ring runs
-    /// OFF → HEAT → DAMAGE → CENTRE OF MASS → OFF (see GridInspectorHud.Ring).</summary>
+    /// OFF → HEAT → DAMAGE → CENTRE OF MASS → ROUTES → OFF (see GridInspectorHud.Ring).</summary>
     public enum GridInspectorMode
     {
         Off = 0,
         Heat = 1,
         Damage = 2,
         CentreOfMass = 3,
+        Routes = 4,
     }
 
     public static class GridInspectorHud
@@ -173,6 +174,7 @@ namespace VoxelEngine.UI
             if (uiRoot == null) return;
             if (_root == uiRoot && _card != null && _card.parent == uiRoot) return;
             _root = uiRoot;
+            IndustrialWorld.Navigation.RoutePathOverlay.Mount(uiRoot);
             if (_card != null) _card.RemoveFromHierarchy();
             if (_worstTag != null) _worstTag.RemoveFromHierarchy();
 
@@ -227,6 +229,7 @@ namespace VoxelEngine.UI
             AddChip("DAMAGE", GridInspectorMode.Damage);
             AddChip("HEAT", GridInspectorMode.Heat);
             AddChip("C.O.M", GridInspectorMode.CentreOfMass);
+            AddChip("ROUTES", GridInspectorMode.Routes);
 
             // The floating worst-block tag (HEAT only) sits above everything.
             _worstTag = new VisualElement { name = "InspectorWorstTag" };
@@ -290,6 +293,7 @@ namespace VoxelEngine.UI
 
             if (_mode == GridInspectorMode.Off)
             {
+                IndustrialWorld.Navigation.RoutePathOverlay.InspectedGrid = null;
                 HideUi();
                 return;
             }
@@ -308,6 +312,12 @@ namespace VoxelEngine.UI
             if (_target != null && _aimMissSince > 0f && now - _aimMissSince > TargetGraceSeconds)
                 DropTarget();
 
+            IndustrialWorld.Navigation.RoutePathOverlay.InspectedGrid = _mode == GridInspectorMode.Routes ? _target as GridEntity : null;
+            if (_mode == GridInspectorMode.Routes && _target is GridEntity routeGrid)
+            {
+                var book = routeGrid.GetComponent<VoxelEngine.Navigation.RouteBook>();
+                if (book != null) IndustrialWorld.Navigation.RoutePathOverlay.For(book);
+            }
             if (now >= _nextScan)
             {
                 _nextScan = now + ScanInterval;
@@ -349,13 +359,14 @@ namespace VoxelEngine.UI
         }
 
         // ── Mode control ────────────────────────────────────────────────────────
-        /// <summary>The canonical hotkey ring: OFF → HEAT → DAMAGE → CENTRE OF MASS → OFF.</summary>
+        /// <summary>The canonical hotkey ring: OFF → HEAT → DAMAGE → CENTRE OF MASS → ROUTES → OFF.</summary>
         private static readonly GridInspectorMode[] Ring =
         {
             GridInspectorMode.Off,
             GridInspectorMode.Heat,
             GridInspectorMode.Damage,
             GridInspectorMode.CentreOfMass,
+            GridInspectorMode.Routes,
         };
 
         private static void CycleMode()
@@ -367,7 +378,8 @@ namespace VoxelEngine.UI
             // do nothing else.
             if (!IsUnlocked(GridInspectorMode.Heat)
                 && !IsUnlocked(GridInspectorMode.Damage)
-                && !IsUnlocked(GridInspectorMode.CentreOfMass))
+                && !IsUnlocked(GridInspectorMode.CentreOfMass)
+                && !IsUnlocked(GridInspectorMode.Routes))
             {
                 ResolveGate(GridInspectorMode.Damage, out string reason);
                 Notify(reason);
@@ -398,6 +410,7 @@ namespace VoxelEngine.UI
         /// system present, so the overlay never hard-locks on a stripped scene).</summary>
         private static bool IsUnlocked(GridInspectorMode mode)
         {
+            if (mode == GridInspectorMode.Routes) return true;
             var rm = ResearchManager.Instance;
             if (rm == null) return true;
             var node = FindNode(rm, NodeIdOf(mode));
@@ -430,6 +443,7 @@ namespace VoxelEngine.UI
         private static bool ResolveGate(GridInspectorMode requested, out string reason)
         {
             reason = string.Empty;
+            if (requested == GridInspectorMode.Routes) return true;
             var rm = ResearchManager.Instance;
             if (rm == null) return true;   // no research system in this scene: never hard-lock
 
@@ -473,6 +487,7 @@ namespace VoxelEngine.UI
             HideMarkers();
             HideWorstTag();
             _mode = next;
+            if (next != GridInspectorMode.Routes) IndustrialWorld.Navigation.RoutePathOverlay.InspectedGrid = null;
             _worstBlock = null;
             _worstSeverity = float.NegativeInfinity;
             _worstDamage01 = 0f;
@@ -511,6 +526,7 @@ namespace VoxelEngine.UI
             GridInspectorMode.Damage => "INTEGRITY SCAN",
             GridInspectorMode.Heat => "THERMAL SCAN",
             GridInspectorMode.CentreOfMass => "MASS BALANCE",
+            GridInspectorMode.Routes => "ROUTE PATHS",
             _ => "INSPECTOR",
         };
 
@@ -519,6 +535,7 @@ namespace VoxelEngine.UI
             GridInspectorMode.Damage => T.AccentGreen,
             GridInspectorMode.Heat => T.AccentOrange,
             GridInspectorMode.CentreOfMass => T.AccentCyan,
+            GridInspectorMode.Routes => T.AccentCyan,
             _ => T.AccentDim,
         };
 
@@ -540,7 +557,8 @@ namespace VoxelEngine.UI
                 var chip = _chips[i];
                 bool active = (i == 0 && _mode == GridInspectorMode.Damage)
                               || (i == 1 && _mode == GridInspectorMode.Heat)
-                              || (i == 2 && _mode == GridInspectorMode.CentreOfMass);
+                              || (i == 2 && _mode == GridInspectorMode.CentreOfMass)
+                              || (i == 3 && _mode == GridInspectorMode.Routes);
                 chip.style.color = new StyleColor(active ? Color.white : T.TextSecondary);
                 chip.style.backgroundColor = new StyleColor(active ? ModeAccent(_mode) * 0.45f : T.BgSlot);
             }
@@ -676,6 +694,13 @@ namespace VoxelEngine.UI
         // ── Scan: read the subject and tint it ─────────────────────────────────
         private static void ScanTick()
         {
+            if (_mode == GridInspectorMode.Routes)
+            {
+                var routeGridTarget = _target as GridEntity;
+                var book = routeGridTarget != null ? routeGridTarget.GetComponent<VoxelEngine.Navigation.RouteBook>() : null;
+                SetStatus(book != null ? IndustrialWorld.Navigation.RoutePathOverlay.For(book).Status : "Aim at a grid with a route book. Recording paths remain visible independently.");
+                return;
+            }
             PruneCache();
             if (_target == null) return;
 

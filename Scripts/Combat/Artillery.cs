@@ -364,7 +364,7 @@ namespace VoxelEngine.Combat
             }
 
             // Fire (LMB).
-            if (GameSettings.IsHeld(InputAction.Mine) && Time.time >= _nextFire)
+            if (!VoxelEngine.UI.UIState.WorldToolsBlocked && GameSettings.IsHeld(InputAction.Mine) && Time.time >= _nextFire)
             {
                 if (HasAmmo())
                 {

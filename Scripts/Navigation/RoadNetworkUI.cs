@@ -28,7 +28,9 @@ namespace IndustrialWorld.Navigation
             section.Add(UITheme.Muted("This view covers connected loaded vehicle roads only, not unloaded extensions. "
                 + "Open drawbridges stay in the network. New cells start unnamed; split sections keep their labels."));
             var input = new TextField("Network name") { maxLength = AsphaltRoad.NetworkNameLimit };
+            NavigationFieldStyle.Apply(input);
             var confirm = new Toggle("Replace existing names on these loaded cells");
+            NavigationFieldStyle.Apply(confirm);
             section.Add(input);
             section.Add(confirm);
             Button save = null;

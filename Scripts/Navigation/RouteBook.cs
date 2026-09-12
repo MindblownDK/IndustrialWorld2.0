@@ -49,11 +49,13 @@ namespace VoxelEngine.Navigation
             if (grid == null) return null;
             var book = grid.GetComponent<RouteBook>();
             if (book == null && create) book = grid.gameObject.AddComponent<RouteBook>();
+            if (book != null) IndustrialWorld.Navigation.RoutePathOverlay.For(book);
             return book;
         }
 
         private void LateUpdate()
         {
+            if (IsRecording) IndustrialWorld.Navigation.RoutePathOverlay.For(this);
             if (!IsRecording || Draft == null || Draft.waypoints.Count >= 4096) return;
             if (!IndustrialWorld.Navigation.RouteCoordinates.CanResolve(Draft)) return;
             var point = IndustrialWorld.Navigation.RouteCoordinates.Capture(transform.position, Draft.sceneCoordinates);

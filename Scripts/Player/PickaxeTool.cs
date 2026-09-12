@@ -38,6 +38,7 @@ namespace VoxelEngine.Player
 
         private void Update()
         {
+            if (VoxelEngine.UI.UIState.WorldToolsBlocked) { if (beam) beam.enabled = false; return; }
             if (world == null) world = VoxelEngine.Core.ActiveWorld.Current;
             if (world == null || shootCamera == null) return;
 

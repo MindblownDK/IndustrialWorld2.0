@@ -9,7 +9,7 @@ using UnityEngine.InputSystem;
 
 namespace IndustrialWorld.Navigation
 {
-    /// <summary>Modal screen-to-world selection. UI blocking prevents mining/building click-through.</summary>
+    /// <summary>Crosshair world selection. Tool clicks are reserved without freezing movement or camera look.</summary>
     [DefaultExecutionOrder(-10000)]
     public sealed class RouteDestinationPicker : MonoBehaviour
     {
@@ -17,29 +17,36 @@ namespace IndustrialWorld.Navigation
         private GridRouteRecorder _recorder;
         private RouteTravelMode _mode;
         private int _openedFrame, _finishFrame = -1;
-        private bool _blocked;
+        private bool _ownsToolInput;
         private float _hintClock;
         private readonly RaycastHit[] _hits = new RaycastHit[128];
 
         public static void Begin(GridRouteRecorder recorder, RouteTravelMode mode)
         {
-            if (_active != null || recorder == null || recorder.Grid == null || recorder.Book == null
-                || recorder.Book.IsRecording) return;
+            if (_active != null) { BuildFeedbackHud.Show("DESTINATION", "A destination selection is already active."); return; }
+            if (recorder == null || !recorder.Enabled || !recorder.isActiveAndEnabled || recorder.Grid == null || recorder.Book == null)
+            { BuildFeedbackHud.Show("DESTINATION", "An enabled planner on a grid is required."); return; }
+            if (recorder.Book.IsRecording) { BuildFeedbackHud.Show("DESTINATION", "Finish the recording first."); return; }
             var local = LocalRoutePilot.For(recorder.Grid);
-            if (local.IsActive || (recorder.Grid.WheelAutopilot != null && recorder.Grid.WheelAutopilot.IsDriving)) return;
+            var loop = recorder.Grid.GetComponent<GridRouteAutopilot>();
+            if (local.IsActive || (loop != null && loop.IsArmed)
+                || (recorder.Grid.WheelAutopilot != null && recorder.Grid.WheelAutopilot.IsDriving))
+            { BuildFeedbackHud.Show("DESTINATION", "Stop/release active navigation before changing its destination."); return; }
             GameUIController.Instance?.CloseAll();
             var picker = recorder.gameObject.AddComponent<RouteDestinationPicker>();
             _active = picker;
             picker._recorder = recorder;
             picker._mode = mode;
             picker._openedFrame = Time.frameCount;
-            UIState.PushBlock();
-            picker._blocked = true;
+            UIState.PushWorldToolBlock();
+            picker._ownsToolInput = true;
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible = false;
             picker.Hint();
         }
 
         private void Hint() => BuildFeedbackHud.Show("SELECT " + _mode.ToString().ToUpperInvariant() + " DESTINATION",
-            "Click a visible world point within 200 m. Escape cancels. Flight empty sky: 100 m. No vehicle starts until confirmed.");
+            "Move and look normally. Aim the crosshair and left-click a point within 200 m. Escape cancels. Flight empty sky: 100 m.");
 
         private void Update()
         {
@@ -52,16 +59,14 @@ namespace IndustrialWorld.Navigation
                 return;
             }
             if (Time.frameCount <= _openedFrame || UIState.IsHardPause) return;
+            if (UIState.IsBlocking) { Destroy(this); return; }
             bool click, cancel;
-            Vector2 mouse;
 #if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
             click = Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame;
             cancel = Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame;
-            mouse = Mouse.current != null ? Mouse.current.position.ReadValue() : Vector2.zero;
 #else
             click = Input.GetMouseButtonDown(0);
             cancel = Input.GetKeyDown(KeyCode.Escape);
-            mouse = Input.mousePosition;
 #endif
             if (cancel)
             {
@@ -74,7 +79,7 @@ namespace IndustrialWorld.Navigation
             if (!click) return;
             var camera = Camera.main;
             if (camera == null) { BuildFeedbackHud.Show("No active main camera for destination selection."); return; }
-            Ray ray = camera.ScreenPointToRay(mouse);
+            Ray ray = camera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
             int count = Physics.RaycastNonAlloc(ray, _hits, 200f, ~0, QueryTriggerInteraction.Ignore);
             if (count == _hits.Length) { BuildFeedbackHud.Show("Selection query saturated; choose a clearer view."); return; }
             float closest = float.MaxValue;
@@ -133,7 +138,7 @@ namespace IndustrialWorld.Navigation
 
         private void OnDisable()
         {
-            if (_blocked) { UIState.PopBlock(); _blocked = false; }
+            if (_ownsToolInput) { UIState.PopWorldToolBlock(); _ownsToolInput = false; }
             if (_active == this) _active = null;
         }
     }

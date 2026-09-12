@@ -87,7 +87,7 @@ namespace VoxelEngine.GridSystem
 
         private void Update()
         {
-            if (VoxelEngine.UI.UIState.IsBlocking) { HoldingGridBlock = false; HideGhost(); HidePrecisionLattice(); HideGhostPortRing(); return; }
+            if (VoxelEngine.UI.UIState.WorldToolsBlocked) { HoldingGridBlock = false; HideGhost(); HidePrecisionLattice(); HideGhostPortRing(); return; }
             if (inventory == null) { HoldingGridBlock = false; HidePrecisionLattice(); HideGhostPortRing(); return; }
 
             var stack = inventory.ActiveStack;

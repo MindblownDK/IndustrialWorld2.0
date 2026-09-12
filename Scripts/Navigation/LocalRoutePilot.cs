@@ -23,6 +23,7 @@ namespace IndustrialWorld.Navigation
         private ShipRoute _holdRoute;
         private bool _holding;
         public bool IsActive { get; private set; }
+        public ShipRoute ActiveRoute => IsActive ? _route : null;
         public bool IsWater => _route != null && _route.travelMode == RouteTravelMode.Water;
         public Transform Frame { get; private set; }
         public string Status { get; private set; } = "Select a route, confirm, then press START SELECTED ROUTE.";
@@ -38,6 +39,7 @@ namespace IndustrialWorld.Navigation
 
         public bool StartRun(GridRouteRecorder recorder, ShipRoute selected)
         {
+            if (!isActiveAndEnabled) return Refuse("Local controller is disabled. Enable it before starting.");
             if (IsActive) return Refuse("Stop/release this run before choosing another route.");
             if (_grid == null || recorder == null || recorder.Grid != _grid || !recorder.Enabled
                 || _grid.Body == null || _grid.Body.isKinematic) return Refuse("Enabled pilot and unlocked vehicle body required.");

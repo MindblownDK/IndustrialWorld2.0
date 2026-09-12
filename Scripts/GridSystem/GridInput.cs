@@ -16,18 +16,18 @@ namespace VoxelEngine.GridSystem
         public static bool Mouse0
         {
 #if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
-            get => Mouse.current != null && Mouse.current.leftButton.isPressed;
+            get => !VoxelEngine.UI.UIState.WorldToolsBlocked && Mouse.current != null && Mouse.current.leftButton.isPressed;
 #else
-            get => Input.GetMouseButton(0);
+            get => !VoxelEngine.UI.UIState.WorldToolsBlocked && Input.GetMouseButton(0);
 #endif
         }
 
         public static bool Mouse1
         {
 #if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
-            get => Mouse.current != null && Mouse.current.rightButton.isPressed;
+            get => !VoxelEngine.UI.UIState.WorldToolsBlocked && Mouse.current != null && Mouse.current.rightButton.isPressed;
 #else
-            get => Input.GetMouseButton(1);
+            get => !VoxelEngine.UI.UIState.WorldToolsBlocked && Input.GetMouseButton(1);
 #endif
         }
 

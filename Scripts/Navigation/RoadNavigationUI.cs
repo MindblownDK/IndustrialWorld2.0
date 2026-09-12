@@ -8,6 +8,38 @@ namespace IndustrialWorld.Navigation
 {
     public static class RoadNavigationUI
     {
+        public static void AddPlanningTo(VisualElement panel, GridRouteRecorder recorder)
+        {
+            panel.Add(UITheme.Body("NAMED ROAD DESTINATIONS"));
+            var names = GridWaymark.CollectNames();
+            if (names.Count > 0)
+            {
+                var choice = new DropdownField("Destination waymark", names, 0);
+                NavigationFieldStyle.Apply(choice);
+                panel.Add(choice);
+                panel.Add(MakeButton("SAVE ROAD ROUTE TO THIS DESTINATION", () =>
+                {
+                    var source = GridWaymark.FindSource(choice.value);
+                    var book = recorder != null ? recorder.Book : null;
+                    if (source == null || recorder == null || recorder.Grid == null || book == null || book.IsRecording)
+                    { BuildFeedbackHud.Show("ROUTE PLANNER", "Available grid/waymark required. Finish any recording first."); return; }
+                    string wanted = string.IsNullOrWhiteSpace(recorder.nextRouteName) ? "Road to " + choice.value : recorder.nextRouteName.Trim();
+                    var route = new ShipRoute { routeName = wanted, travelMode = RouteTravelMode.Road,
+                        sceneCoordinates = VoxelEngine.Cosmos.SpaceOrigin.Instance == null };
+                    for (int n = 2; book.Find(route.routeName) != null; n++) route.routeName = wanted + " #" + n;
+                    route.AddWaypoint(RouteCoordinates.Capture(recorder.Grid.transform.position, route.sceneCoordinates));
+                    route.AddWaypoint(RouteCoordinates.Capture(source.WaymarkWorldPosition, route.sceneCoordinates));
+                    if (!book.Append(route)) { BuildFeedbackHud.Show("ROUTE PLANNER", "Could not save this road route."); return; }
+                    recorder.SelectRoute(route.routeName);
+                    recorder.nextRouteName = "";
+                    BuildFeedbackHud.Show("ROUTE SAVED", "Preview it here, then select and start it on the Auto-Run Pilot.");
+                    GameUIController.Instance?.RefreshCurrentPanel();
+                }));
+            }
+            else panel.Add(UITheme.Muted("No named destinations. Record a route or use world-point selection above."));
+            RoadNetworkUI.AddTo(panel, recorder);
+        }
+
         public static void AddTo(VisualElement panel, GridRouteRecorder recorder)
         {
             var guidance = RoadDriverGuidance.For(recorder);
@@ -25,6 +57,7 @@ namespace IndustrialWorld.Navigation
             if (names.Count > 0)
             {
                 var choice = new DropdownField("Destination", names, 0);
+            NavigationFieldStyle.Apply(choice);
                 panel.Add(choice);
                 var plan = MakeButton("PLAN ROAD ROUTE", () => guidance.Plan(choice.value));
                 panel.Add(plan);

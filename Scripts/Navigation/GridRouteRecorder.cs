@@ -35,6 +35,8 @@ namespace VoxelEngine.Navigation
         [Tooltip("The route the panel keeps open, by name, so a screen reopens on the run you were checking.")]
         public string selectedRouteName = "";
 
+        public RouteTravelMode PlanningMode { get; set; } = RouteTravelMode.Road;
+
         private RouteBook _book;
         private float _recomputeTimer;
         private RoutePlan _cachedPlan;
@@ -218,6 +220,7 @@ namespace VoxelEngine.Navigation
         public void SelectRoute(string name)
         {
             selectedRouteName = name;
+            if (Book != null) IndustrialWorld.Navigation.RoutePathOverlay.For(Book).RefreshPreview(name);
             RecomputeNow();
         }
 

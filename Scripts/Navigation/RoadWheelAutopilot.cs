@@ -40,9 +40,21 @@ namespace IndustrialWorld.Navigation
             return control;
         }
 
+        public bool CopyRoutePreview(List<Vector3> points)
+        {
+            points.Clear();
+            if (!IsDriving) return false;
+            foreach (var road in _route)
+            {
+                if (road == null) { points.Clear(); return false; }
+                points.Add(road.transform.position + road.transform.up * 0.18f);
+            }
+            return points.Count > 1;
+        }
+
         public void StartRun(GridRouteRecorder recorder, RoadDriverGuidance guidance)
         {
-            if (_grid == null || _grid.Body == null || recorder == null || !recorder.Enabled)
+            if (!isActiveAndEnabled || _grid == null || !_grid.isActiveAndEnabled || _grid.Body == null || recorder == null || !recorder.Enabled)
             { Status = "Enabled recorder and vehicle body required."; return; }
             if (IsDriving) { Status = "Stop the active run before changing its route."; return; }
             var localPilot = _grid.GetComponent<LocalRoutePilot>();

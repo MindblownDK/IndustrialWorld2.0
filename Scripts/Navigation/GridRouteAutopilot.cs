@@ -174,18 +174,25 @@ namespace VoxelEngine.Navigation
             if (_grid == null) _grid = GetComponentInParent<GridEntity>();
         }
 
-        void OnDestroy() { Grid?.ClearAutonomousFlight(); }
-        void OnDisable() { Grid?.ClearAutonomousFlight(); }
+        private void ClearOwnedFlight()
+        {
+            if (Grid != null && Grid.AutonomousFlightOwner != null
+                && Grid.AutonomousFlightOwner.StartsWith("AUTO RUN", System.StringComparison.Ordinal))
+                Grid.ClearAutonomousFlight();
+        }
+
+        void OnDestroy() { ClearOwnedFlight(); }
+        void OnDisable() { ClearOwnedFlight(); }
 
         void Update()
         {
-            if (Grid == null || !IsArmed) { Grid?.ClearAutonomousFlight(); return; }
+            if (Grid == null || !IsArmed) { ClearOwnedFlight(); return; }
 
             // The pilot's keys win, immediately and without argument. A ship whose human grabs the
             // controls mid-leg is not a failure of the loop; it is the loop working as designed.
             if (Grid.HasManualThrustInput())
             {
-                Grid.ClearAutonomousFlight();
+                ClearOwnedFlight();
                 return;
             }
 
@@ -246,7 +253,7 @@ namespace VoxelEngine.Navigation
         public void Disarm(string reason = null)
         {
             State = AutoRunState.Halted;
-            Grid?.ClearAutonomousFlight();
+            ClearOwnedFlight();
             ServingPad = null;
             if (!string.IsNullOrEmpty(reason)) { BlockReason = reason; PushLog(reason); }
             else PushLog("Disarmed");
@@ -256,7 +263,7 @@ namespace VoxelEngine.Navigation
         {
             if (!IsArmed) return;
             State = AutoRunState.Paused;
-            Grid?.ClearAutonomousFlight();
+            ClearOwnedFlight();
             PushLog("Paused");
         }
 

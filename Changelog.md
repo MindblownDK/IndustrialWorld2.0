@@ -1,9 +1,51 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.52.0-dev`
+**Current Version:** `9.53.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.53.0-dev] Separate Route Planning from Piloting and Add Visible Route Overlays
+
+**Type:** MINOR — save-compatible route visualization and workflow features. No new save fields, item identities, prefab replacements or fresh-save requirement.
+
+**GitHub title:** `[9.53.0-dev] Separate route planning from piloting and add visible route overlays`
+
+#### Planner and pilot responsibilities
+- The existing Route Recorder / Nav Plotter is the Route Planner: recording, point selection, saved-route editing, rename/reverse/delete and path visibility live there. The Auto-Run Pilot only selects an existing route and controls the grid.
+- Both blocks use the same existing grid-owned RouteBook. No duplicate route store or new planner item was introduced; place both blocks on the same grid.
+- Named road destinations can be saved as road routes from the planner. Loaded road-network inspection/naming remains available there without embedding wheel Start/Stop controls.
+- Legacy cosmic planning remains in the planner. Existing legacy loop controls move under a collapsed pilot section when applicable.
+- Pilot blocks no longer add a second recording-power bill while a planner is recording. Existing configured control watts, mass, generator output, wheel/suspension values and authored assets remain unchanged.
+
+#### World selection and readable fields
+- Destination selection now reserves world-tool clicks rather than pushing a full UI input blocker. Normal movement and camera look remain available; aim the centre crosshair and left-click. Escape cancels.
+- Tool reservation covers the interaction tool, legacy pickaxe, grid builder, grid weapon/drill mouse inputs, artillery firing and high-voltage wire placement. It does not disable camera/movement input. Completion retains the reservation through the selecting click; cleanup releases only the selector's reservation.
+- Native navigation dropdown/text/toggle labels and input text receive explicit light foregrounds and dark input backgrounds, including named road/network fields.
+
+#### Explicit Start results
+- A compact pilot panel places the primary Start button near the top. It is not silently disabled by a hidden prerequisite: each press reports acceptance or an actionable refusal, both in the panel and through a notification.
+- RouteRunSession retains the selected route, confirmation and latest result across panel rebuilds. Selection changes reset confirmation; an attempted confirmed start consumes it. Failed starts no longer depend on a transient inline label that a refresh can erase.
+- Start refuses unfinished recordings, missing routes, inactive/disabled controls, existing authority and the controllers' normal power/vehicle/path prerequisites. Exceptions are logged with a stack trace and shown as failures rather than disappearing.
+- Disabled local/wheel controllers cannot accept a run that will never tick. The dormant legacy flight controller only clears its own flight command, not the local pilot's command.
+- This does not claim every chassis can now pass preflight: the reason is made visible so actual Unity refusals can be diagnosed without guessing or overwriting tuning.
+
+#### Visible paths and Grid Inspector category
+- Added ROUTES to the Grid Inspector mode ring and category chips. It displays routes without recoloring blocks or requiring the thermal/damage research unlocks. Existing research gates for the other categories remain intact.
+- Saved-route previews use cyan lines, waypoint markers, direction arrows and larger START/END markers. Up to 64 sparse labels are shown per visible route; geometry covers up to 4096 stored points plus a temporary recording tip.
+- Recording automatically displays an amber path and live tip until it is finished or discarded, independently of manual preview and inspector mode. Finishing releases this forced visibility; a separately enabled preview can remain.
+- Road preview shares the pure pavement resolver with execution and does not show an off-road endpoint chord as a drivable road path. A visible active road run reads controller pavement nodes; an active local ship run reads the controller's frozen route.
+- Runtime geometry uses one line and one marker mesh per visible book, not a GameObject per point. Visuals fade, use non-interactive labels, contain no colliders, and release their meshes/materials/objects when hidden or their book unloads.
+- Map-based destination selection remains explicitly deferred. No map editor is included in this release.
+
+#### Validation and Unity workflow
+- 35 workflow/overlay checks passed: actual pilot Start callback, confirmation and refusal persistence, role separation, field foregrounds, point/arrow mesh data, visibility lifecycle, label/mesh budgets and shared road-path resolution.
+- 9 input/ownership checks passed: actual picker Begin/click/cleanup, independent tool versus movement/UI gates, click reservation, no implicit propulsion, and the extracted legacy ownership cleanup.
+- All 33 local-route and 39 wheel/pilot regression checks passed: **116 checks total**, using engine/domain/UI substitutes.
+- New/changed navigation UI, session, picker, overlay and input sources compiled against stubs in both legacy Input and Input System configurations. Changed C# syntax, inspector wiring, role separation and incremental package integrity were checked.
+- No Unity editor was available. Actual UI event routing, dropdown popup styling, URP rendering, camera movement and road/water/flight physics still require Unity acceptance; stub geometry/callback tests do not establish those results.
+- Import matching files and the three new script metas. No setup action is required for existing blocks; Step 74 is only needed if pilot assets have never been generated. Do not rerun Step 65 for this update.
+- Use the planner to record/select and display a route, then the same-grid pilot to select/confirm/start it. Follow UNITY_GUIDE.md for the complete staged tests. If Start refuses, send the exact persistent message beneath the button.
 
 ### [9.52.0-dev] Route Recording and Road / Water / Flight Start Workflows
 

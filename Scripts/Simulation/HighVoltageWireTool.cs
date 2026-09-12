@@ -37,7 +37,7 @@ namespace VoxelEngine.Simulation
 
         private void Update()
         {
-            if (VoxelEngine.UI.UIState.IsBlocking)
+            if (VoxelEngine.UI.UIState.WorldToolsBlocked)
             {
                 CancelConnection();
                 return;

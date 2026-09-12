@@ -55,32 +55,44 @@ namespace IndustrialWorld.Navigation
             if (_recorder == null || _recorder.Grid == null || route == null
                 || route.travelMode != RouteTravelMode.Road || !route.IsFlyable || route.waypoints.Count > 4096)
             { Status = "Select a recorded or world-point Road route with two or more points."; return false; }
-            var leg = new List<AsphaltRoad>();
-            var visited = new HashSet<AsphaltRoad>();
-            Vector3 from = _recorder.Grid.transform.position;
-            for (int i = 0; i < route.waypoints.Count; i++)
-            {
-                if (!RouteCoordinates.TryResolve(route, i, out var to))
-                { _route.Clear(); Status = "Route coordinate frame or anchor unavailable."; return false; }
-                if (!RoadRoutePlanner.TryPlan(from, to, leg, out var reason))
-                { _route.Clear(); Status = "Road leg " + (i + 1) + ": " + reason; return false; }
-                foreach (var road in leg)
-                {
-                    if (_route.Count > 0 && _route[_route.Count - 1] == road) continue;
-                    if (!visited.Add(road) || _route.Count >= RoadRoutePlanner.NodeBudget)
-                    { _route.Clear(); Status = "Road route doubles back, loops or exceeds the loaded-route budget. Start near its beginning."; return false; }
-                    _route.Add(road);
-                }
-                from = to;
-            }
-            if (_route.Count < 2)
-            { _route.Clear(); Status = "Destination must reach another connected road tile."; return false; }
+            if (!TryBuildRoute(_recorder.Grid.transform.position, route, _route, out var status))
+            { Status = status; return false; }
             foreach (var other in _recorder.Grid.GetComponentsInChildren<RoadDriverGuidance>())
                 if (other != this) other.Stop();
             _destination = route.routeName;
             _cursor = 0;
             _clock = 0f;
             Status = "Road route ready: " + _route.Count + " loaded tiles.";
+            return true;
+        }
+
+        /// <summary>Pure road planning shared by execution and preview. Never parks or commands a grid.</summary>
+        public static bool TryBuildRoute(Vector3 from, ShipRoute route, List<AsphaltRoad> result, out string reason)
+        {
+            result.Clear();
+            reason = "";
+            if (route == null || route.travelMode != RouteTravelMode.Road || !route.IsFlyable || route.waypoints.Count > 4096)
+            { reason = "A Road route with 2–4096 points is required."; return false; }
+            var leg = new List<AsphaltRoad>();
+            var visited = new HashSet<AsphaltRoad>();
+            for (int i = 0; i < route.waypoints.Count; i++)
+            {
+                if (!RouteCoordinates.TryResolve(route, i, out var to))
+                { result.Clear(); reason = "Route coordinate frame or anchor unavailable."; return false; }
+                if (!RoadRoutePlanner.TryPlan(from, to, leg, out var legReason))
+                { result.Clear(); reason = "Road leg " + (i + 1) + ": " + legReason; return false; }
+                foreach (var road in leg)
+                {
+                    if (result.Count > 0 && result[result.Count - 1] == road) continue;
+                    if (!visited.Add(road) || result.Count >= RoadRoutePlanner.NodeBudget)
+                    { result.Clear(); reason = "Road route doubles back, loops or exceeds the loaded-route budget. Start near its beginning."; return false; }
+                    result.Add(road);
+                }
+                from = to;
+            }
+            if (result.Count < 2)
+            { result.Clear(); reason = "Destination must reach another connected road tile."; return false; }
+            reason = "Road route ready: " + result.Count + " loaded tiles.";
             return true;
         }
 

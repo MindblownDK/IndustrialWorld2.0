@@ -39,12 +39,10 @@ namespace VoxelEngine.Navigation
 
             var book = recorder.Book;
             bool live = recorder.HasStarMap;
-            string state = !live ? "NO STAR MAP"
-                : book == null ? "NO BOOK"
+            string state = book == null ? "NO BOOK"
                 : book.IsRecording ? "RECORDING"
                 : book.Count == 0 ? "EMPTY" : "READY";
-            Color stateColor = !live ? VoxelEngine.UI.UITheme.AccentRed
-                : book != null && book.IsRecording ? VoxelEngine.UI.UITheme.AccentAmber
+            Color stateColor = book != null && book.IsRecording ? VoxelEngine.UI.UITheme.AccentAmber
                 : book != null && book.Count > 0 ? VoxelEngine.UI.UITheme.AccentGreen : VoxelEngine.UI.UITheme.AccentDim;
 
             var (hdr, _, _, _) = VoxelEngine.UI.UITheme.HeaderRow("✦ " + recorder.SourceName, state, stateColor);
@@ -53,7 +51,7 @@ namespace VoxelEngine.Navigation
             p.Add(VoxelEngine.UI.UITheme.Spacer(4));
 
             IndustrialWorld.Navigation.LocalRouteUI.AddTo(p, recorder);
-            IndustrialWorld.Navigation.RoadNavigationUI.AddTo(p, recorder);
+            IndustrialWorld.Navigation.RoadNavigationUI.AddPlanningTo(p, recorder);
 
             if (!live || (recorder.Selected != null && recorder.Selected.travelMode != RouteTravelMode.LegacyFlight))
             {
@@ -96,7 +94,6 @@ namespace VoxelEngine.Navigation
             }
 
             AddBookRows(p, recorder, book);
-            AddAutoRunRows(p, recorder);
             AddCaptureRows(p, recorder, book);
             AddDestinationRows(p, recorder);
 
@@ -281,7 +278,7 @@ namespace VoxelEngine.Navigation
         // reading the cost and setting the schedule is one screen rather than a scavenger hunt.
         static bool _confirmRunOut;
 
-        private static void AddAutoRunRows(VisualElement p, GridRouteRecorder recorder)
+        public static void AddAutoRunRows(VisualElement p, GridRouteRecorder recorder)
         {
             var grid = recorder.Grid;
             if (grid == null) return;

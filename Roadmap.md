@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `9.52.0-dev`
-**Roadmap Version:** `9.52.0-dev`
+**Current Version:** `9.53.0-dev`
+**Roadmap Version:** `9.53.0-dev`
 **Date:** 2026-09-12
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 9.53.0-dev — Planner/Pilot Separation and Route Overlays
+- Planner owns route authoring; pilot owns execution with durable Start feedback.
+- Free-movement world picking, readable fields and Routes inspector / recording paths.
+- 116 stub checks passed; actual Unity interaction, rendering and driving remain open.
+
 ### 9.52.0-dev — Local Route Creation and Start Controls
 - Shared Road/Water/Flight recording, world-point selection and explicit start controls.
 - Additive route-mode/frame metadata; periodic navigation panel rebuild disabled.
@@ -48,11 +53,6 @@
 - Drawbridges expose automatic/manual control from decks and barrier motor posts.
 - Saved command intent preserves swing direction and manual-open ownership.
 - Thomas confirmed 9.49.0-dev works in Unity; runtime controls require no setup assets.
-
-### 9.48.0-dev — Named Loaded Road Networks
-- Route Recorder exposes loaded-network names, condition and weighted traffic snapshots.
-- Per-cell names persist; conflicting joined names require explicit replacement.
-- Thomas confirmed 9.48.0-dev works in Unity; existing recorder setup only.
 
 ## 1. Executive Vision
 
@@ -979,7 +979,7 @@ one sentence: **a road is the difference between walking a route and being able 
    what remains and split it into however many runs the gap created, each inheriting the wear it was
    part of. Merging takes the worst of the two, so a worn strip joined to a new one is a worn strip.
 
-6. **Still open after 9.52.0-dev**
+6. **Still open after 9.53.0-dev**
    - ~~**Named loaded road networks** with cross-run condition/traffic readouts~~ *(9.48.0-dev)* —
      `RoadNetworkSnapshot` / `RoadNetworkUI`, existing Route Recorder (Setup Step 65); Thomas confirmed working in Unity.
    - **Network extensions remain open (deferred 9.48.0-dev):** unloaded/global membership,
@@ -993,6 +993,8 @@ one sentence: **a road is the difference between walking a route and being able 
      `AutoRunPilotUI`, `AutoRunPilotSetup` (Setup Step 74); Unity authoring and runtime validation pending.
    - ~~**Recorded/world-point local route start workflow**~~ *(9.52.0-dev)* — `LocalRouteUI`,
      `RouteDestinationPicker`, `LocalRoutePilot`; existing pilot/recorder, Unity validation pending.
+   - ~~**Planner/pilot separation and visible route paths**~~ *(9.53.0-dev)* — `LocalRouteUI`,
+     `AutoRunPilotUI`, `RouteRunSession`, `RoutePathOverlay`, Routes inspector; no new authoring assets.
    - **Map-based destination and route selection remains open (deferred 9.52.0-dev, Thomas's choice):**
      map interaction, waypoint editing, route preview and mode-appropriate map planning.
    - **Local ship navigation extensions remain open (deferred 9.52.0-dev):** powered marine braking,

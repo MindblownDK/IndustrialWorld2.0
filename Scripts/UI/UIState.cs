@@ -12,6 +12,11 @@ namespace VoxelEngine.UI
     {
         public static bool IsBlocking { get; private set; }
         private static int _blockCount;
+        private static int _worldToolBlocks;
+        // World selectors can own tool clicks without freezing movement or camera look.
+        public static bool WorldToolsBlocked => IsBlocking || _worldToolBlocks > 0;
+        public static void PushWorldToolBlock() => _worldToolBlocks++;
+        public static void PopWorldToolBlock() => _worldToolBlocks = System.Math.Max(0, _worldToolBlocks - 1);
 
         // One-frame guards for input that was already handled by another UI panel.
         // Set TRUE when the inventory closes via Escape, so the pause menu can skip
@@ -44,6 +49,7 @@ namespace VoxelEngine.UI
         public static void ClearSceneBlocks()
         {
             _blockCount = 0;
+            _worldToolBlocks = 0;
             IsBlocking = false;
             _hardPauseCount = 0;
             IsHardPause = false;

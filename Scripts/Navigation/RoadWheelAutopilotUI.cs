@@ -17,6 +17,7 @@ namespace IndustrialWorld.Navigation
             var status = UITheme.Muted(control.Status);
             panel.Add(status);
             var confirm = new Toggle("Start an unattended run; I will leave its path clear");
+            NavigationFieldStyle.Apply(confirm);
             panel.Add(confirm);
             var start = RoadNavigationUI.MakeButton("START WHEEL RUN · 5 SECOND COUNTDOWN", () =>
             {

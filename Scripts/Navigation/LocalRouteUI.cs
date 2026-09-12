@@ -5,138 +5,119 @@ using VoxelEngine.UI;
 
 namespace IndustrialWorld.Navigation
 {
+    /// <summary>Route authoring only. Vehicle execution lives exclusively in AutoRunPilotUI.</summary>
     public static class LocalRouteUI
     {
         public static void AddTo(VisualElement panel, GridRouteRecorder recorder)
         {
-            panel.Add(UITheme.Body("LOCAL NAVIGATION · CREATE AND START"));
+            panel.Add(UITheme.Body("ROUTE PLANNER · RECORD / DESTINATIONS / PATHS"));
             if (recorder.Grid == null || recorder.Book == null)
-            { panel.Add(UITheme.Muted("Place this block on a vehicle first.")); return; }
+            { panel.Add(UITheme.Muted("Place this planner on a grid first.")); return; }
             var book = recorder.Book;
-            var control = LocalRoutePilot.For(recorder.Grid);
-            var selected = recorder.Selected;
-            int initial = selected != null ? (int)selected.travelMode - 1 : recorder is AutoRunPilot ? 0 : 2;
-            var mode = new DropdownField("Travel mode", new List<string> { "Road", "Water", "Flight" },
-                UnityEngine.Mathf.Clamp(initial < 0 ? 2 : initial, 0, 2));
+            var overlay = RoutePathOverlay.For(book);
+            var mode = new DropdownField("New route mode", new List<string> { "Road", "Water", "Flight" }, UnityEngine.Mathf.Clamp((int)recorder.PlanningMode - 1, 0, 2));
+            NavigationFieldStyle.Apply(mode);
+            mode.RegisterValueChangedCallback(_ => recorder.PlanningMode = (RouteTravelMode)(mode.index + 1));
             panel.Add(mode);
-            var name = new TextField("New route name") { value = recorder.nextRouteName ?? "" };
+            var name = new TextField("Route name (new / rename)") { value = recorder.nextRouteName ?? "" };
+            NavigationFieldStyle.Apply(name);
             name.RegisterValueChangedCallback(evt => recorder.nextRouteName = evt.newValue);
-            name.RegisterCallback<FocusInEvent>(_ => UIState.TextInputActive = true);
-            name.RegisterCallback<FocusOutEvent>(_ => UIState.TextInputActive = false);
-            name.RegisterCallback<DetachFromPanelEvent>(_ => UIState.TextInputActive = false);
             panel.Add(name);
-            var status = UITheme.Muted(control.Status);
+            var status = UITheme.Body("Create a route here; select and execute it from an Auto-Run Pilot on this grid.");
+            status.style.whiteSpace = WhiteSpace.Normal;
             panel.Add(status);
-            var record = RoadNavigationUI.MakeButton("RECORD ROUTE FROM HERE", () =>
+            System.Action<string> report = message => { status.text = message; BuildFeedbackHud.Show("ROUTE PLANNER", message); };
+            System.Func<bool> canEdit = () =>
             {
-                recorder.BeginRecording(Mode(mode));
-                GameUIController.Instance?.RefreshCurrentPanel();
-            });
-            var file = RoadNavigationUI.MakeButton("STOP RECORDING AND SAVE ROUTE", () =>
+                var local = recorder.Grid.GetComponent<LocalRoutePilot>();
+                var legacy = recorder.Grid.GetComponent<GridRouteAutopilot>();
+                if ((local != null && local.IsActive) || (legacy != null && legacy.IsArmed)
+                    || (recorder.Grid.WheelAutopilot != null && recorder.Grid.WheelAutopilot.IsDriving))
+                { report("Stop/release the active pilot before editing or recording routes."); return false; }
+                return true;
+            };
+            panel.Add(RoadNavigationUI.MakeButton("RECORD ROUTE FROM HERE", () =>
             {
-                if (recorder.CommitRecording() == null)
-                { status.text = "Move at least 0.5 m before saving. Your draft is still recording."; return; }
+                if (!canEdit()) return;
+                if (book.IsRecording) { report("A recording is already in progress."); return; }
+                recorder.BeginRecording(recorder.PlanningMode);
+                report(book.IsRecording ? "Recording started. Points and path stay visible until recording finishes." : "Recording could not start. Check the enabled planner and grid.");
                 GameUIController.Instance?.RefreshCurrentPanel();
-            });
-            var mark = RoadNavigationUI.MakeButton("MARK WAYPOINT HERE", recorder.MarkWaypoint);
-            var abandon = RoadNavigationUI.MakeButton("DISCARD RECORDING", () =>
+            }));
+            panel.Add(RoadNavigationUI.MakeButton("MARK WAYPOINT HERE", () =>
             {
-                book.AbandonRecording();
+                if (!book.IsRecording) { report("Start a recording first."); return; }
+                recorder.MarkWaypoint();
+            }));
+            panel.Add(RoadNavigationUI.MakeButton("FINISH AND SAVE RECORDING", () =>
+            {
+                if (!book.IsRecording) { report("No recording is active."); return; }
+                if (recorder.CommitRecording() == null) { report("Move at least 0.5 m before saving; the draft is still recording."); return; }
+                overlay.RefreshPreview(recorder.selectedRouteName);
                 GameUIController.Instance?.RefreshCurrentPanel();
-            });
-            panel.Add(record); panel.Add(file); panel.Add(mark); panel.Add(abandon);
-            record.SetEnabled(!book.IsRecording && !control.IsActive);
-            file.SetEnabled(book.IsRecording); mark.SetEnabled(book.IsRecording); abandon.SetEnabled(book.IsRecording);
+            }));
+            panel.Add(RoadNavigationUI.MakeButton("DISCARD RECORDING", () =>
+            { book.AbandonRecording(); GameUIController.Instance?.RefreshCurrentPanel(); }));
             var capture = UITheme.Muted("");
             panel.Add(capture);
             capture.schedule.Execute(() => capture.text = book.IsRecording && book.Draft != null
-                ? "Recording " + book.Draft.travelMode + ": " + book.Draft.waypoints.Count + "/4096 points. Close this panel and drive/pilot; reopen to save."
-                : "Recording captures the start, movement every 4 m, and the endpoint when saved.").Every(250);
-            var pick = RoadNavigationUI.MakeButton("SET DESTINATION IN THE WORLD", () =>
-                RouteDestinationPicker.Begin(recorder, Mode(mode)));
-            panel.Add(pick);
-            pick.SetEnabled(!book.IsRecording && !control.IsActive);
-            panel.Add(UITheme.Muted("World selection closes this panel: click the destination on screen; Escape cancels. "
-                + "Flight: empty sky selects a point 100 m along the click ray. Selection saves a route, never starts it."));
+                ? "RECORDING · " + book.Draft.waypoints.Count + "/4096 points · amber path forced visible. Close this panel and drive/pilot normally."
+                : "Recording idle. Samples about every 4 m, with start/end capture.").Every(150);
+            panel.Add(RoadNavigationUI.MakeButton("SET DESTINATION IN THE WORLD", () =>
+            {
+                if (!canEdit()) return;
+                if (book.IsRecording) { report("Finish the recording before selecting another destination."); return; }
+                RouteDestinationPicker.Begin(recorder, recorder.PlanningMode);
+            }));
+            panel.Add(UITheme.Muted("Move and look normally, aim the crosshair, then left-click the destination. Escape cancels. Tool/build clicks are reserved for selection. Flight empty sky selects 100 m along the crosshair."));
             var names = new List<string>();
             foreach (var route in book.Routes) if (route != null) names.Add(route.routeName);
-            DropdownField shelf = null;
             if (names.Count > 0)
             {
-                shelf = new DropdownField("Saved route", names, UnityEngine.Mathf.Max(0, names.IndexOf(recorder.selectedRouteName)));
+                int index = UnityEngine.Mathf.Max(0, names.IndexOf(recorder.selectedRouteName));
+                recorder.SelectRoute(names[index]);
+                var shelf = new DropdownField("Saved route to edit / preview", names, index);
+                NavigationFieldStyle.Apply(shelf);
                 panel.Add(shelf);
                 shelf.RegisterValueChangedCallback(evt =>
-                {
-                    recorder.SelectRoute(evt.newValue);
-                    var route = recorder.Selected;
-                    if (route != null) mode.index = route.travelMode == RouteTravelMode.LegacyFlight ? 2 : UnityEngine.Mathf.Clamp((int)route.travelMode - 1, 0, 2);
-                });
+                { recorder.SelectRoute(evt.newValue); overlay.RefreshPreview(evt.newValue); });
             }
-            else panel.Add(UITheme.Muted("No saved routes. Record a run or select a world point above."));
-            var reverse = RoadNavigationUI.MakeButton("REVERSE SELECTED ROUTE FOR THE RETURN TRIP", () =>
+            else panel.Add(UITheme.Muted("No saved routes yet."));
+            panel.Add(RoadNavigationUI.MakeButton("SHOW / HIDE SELECTED PATH", () =>
             {
-                if (control.IsActive || (recorder.Grid.WheelAutopilot != null && recorder.Grid.WheelAutopilot.IsDriving)) return;
-                recorder.ReverseSelected();
-                GameUIController.Instance?.RefreshCurrentPanel();
-            });
-            reverse.SetEnabled(names.Count > 0 && !book.IsRecording && !control.IsActive);
-            panel.Add(reverse);
-            panel.Add(UITheme.Muted("Recorded routes replay in their saved order. Start near the first point, or reverse the route when departing its far end."));
-            var confirm = new Toggle("I confirm an unattended run and will leave the path clear");
-            panel.Add(confirm);
-            var start = RoadNavigationUI.MakeButton("START SELECTED ROUTE · 5 SECOND COUNTDOWN", () =>
-            {
-                if (!confirm.value || book.IsRecording || control.IsActive) return;
-                confirm.SetValueWithoutNotify(false);
-                var route = shelf != null ? book.Find(shelf.value) : null;
-                if (route == null) { status.text = "Create or choose a saved route first."; return; }
-                if (route.travelMode != Mode(mode) && !(route.travelMode == RouteTravelMode.LegacyFlight && Mode(mode) == RouteTravelMode.Flight))
-                { status.text = "The route was recorded for " + route.travelMode + ". Choose that mode or create a new route."; return; }
-                if (route.travelMode == RouteTravelMode.Road)
-                {
-                    var guidance = RoadDriverGuidance.For(recorder);
-                    if (!guidance.Plan(route)) { status.text = guidance.Status; return; }
-                    var wheels = RoadWheelAutopilot.For(recorder.Grid);
-                    wheels.StartRun(recorder, guidance);
-                    status.text = wheels.Status;
-                }
-                else
-                {
-                    control.StartRun(recorder, route);
-                    status.text = control.Status;
-                }
-            });
-            panel.Add(start);
-            start.SetEnabled(false);
-            string lastControl = control.Status;
-            string lastWheel = recorder.Grid.WheelAutopilot != null ? recorder.Grid.WheelAutopilot.Status : "";
-            start.schedule.Execute(() =>
-            {
-                if (recorder == null || recorder.Grid == null || control == null) return;
-                start.SetEnabled(confirm.value && names.Count > 0 && !book.IsRecording && !control.IsActive
-                    && (recorder.Grid.WheelAutopilot == null || !recorder.Grid.WheelAutopilot.IsDriving));
-                if (control.IsActive || lastControl != control.Status) status.text = control.Status;
-                lastControl = control.Status;
-                if (!control.IsActive && recorder.Grid.WheelAutopilot != null
-                    && (recorder.Grid.WheelAutopilot.IsDriving || lastWheel != recorder.Grid.WheelAutopilot.Status))
-                    status.text = recorder.Grid.WheelAutopilot.Status;
-                if (recorder.Grid.WheelAutopilot != null) lastWheel = recorder.Grid.WheelAutopilot.Status;
-            }).Every(150);
-            panel.Add(RoadNavigationUI.MakeButton("STOP · WHEEL BRAKE / WATER OFF / FLIGHT HOLD", () =>
-            {
-                control.HoldOrStop();
-                if (recorder.Grid.WheelAutopilot != null && recorder.Grid.WheelAutopilot.IsDriving)
-                    recorder.Grid.WheelAutopilot.Park("Stopped by operator.");
-                status.text = control.Status;
+                if (recorder.Selected == null) { report("Create or select a saved route first."); return; }
+                overlay.TogglePreview(recorder.Selected.routeName);
+                report(book.IsRecording ? "Recording path stays visible until the recording finishes."
+                    : overlay.ManualVisible ? "Selected route path enabled." : RoutePathOverlay.InspectedGrid == recorder.Grid
+                        ? "Manual preview off. The Routes inspector category is still showing this grid." : "Selected route path hidden.");
             }));
-            panel.Add(RoadNavigationUI.MakeButton("RELEASE LOCAL FLIGHT / WATER CONTROL", () =>
-            { control.Stop(); status.text = control.Status; }));
-            panel.Add(UITheme.Muted("Water: real marine propellers and rudder, 2 m/s, no powered brake or docking; stopping cuts propulsion and the boat coasts. "
-                + "Flight: 4 m/s, six-axis thrust plus gravity/lift margin, powered arrival hold. Exit the helm/cockpit before either starts. "
-                + "Local water/flight legs: 200 m maximum, 2 km total, clear loaded surroundings. No obstacle detours or automatic resume."));
+            panel.Add(RoadNavigationUI.MakeButton("REVERSE SELECTED ROUTE", () =>
+            {
+                if (!canEdit() || book.IsRecording) return;
+                recorder.ReverseSelected(); overlay.RefreshPreview(recorder.selectedRouteName);
+                report("Selected route reversed. Face the vehicle toward the new first leg before starting.");
+            }));
+            panel.Add(RoadNavigationUI.MakeButton("RENAME SELECTED ROUTE", () =>
+            {
+                if (!canEdit() || book.IsRecording) return;
+                string wanted = (name.value ?? "").Trim();
+                var selected = recorder.Selected;
+                if (selected == null || wanted.Length == 0 || (book.Find(wanted) != null && book.Find(wanted) != selected))
+                { report("Select a route and enter a non-empty, unique name above."); return; }
+                book.Rename(selected, wanted); recorder.SelectRoute(wanted); overlay.RefreshPreview(wanted);
+                GameUIController.Instance?.RefreshCurrentPanel();
+            }));
+            panel.Add(RoadNavigationUI.MakeButton("DELETE SELECTED SAVED ROUTE", () =>
+            {
+                if (!canEdit() || book.IsRecording || recorder.Selected == null) return;
+                recorder.RemoveRoute(recorder.Selected.routeName); overlay.RefreshPreview(recorder.selectedRouteName);
+                GameUIController.Instance?.RefreshCurrentPanel();
+            }));
+            var pathStatus = UITheme.Muted("");
+            panel.Add(pathStatus);
+            pathStatus.schedule.Execute(() => pathStatus.text = overlay.Status).Every(200);
+            panel.Add(UITheme.Muted("The Grid Inspector overlay also has a ROUTES category. Amber markers show recordings; cyan paths show saved-route previews. Road previews resolve the pavement centreline used by the road planner, not a straight off-road shortcut. Arrows indicate point order."));
             panel.Add(UITheme.AccentDivider(UITheme.AccentCyan));
         }
-
-        private static RouteTravelMode Mode(DropdownField field) => (RouteTravelMode)(field.index + 1);
     }
 }
