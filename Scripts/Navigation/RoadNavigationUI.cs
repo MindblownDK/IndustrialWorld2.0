@@ -12,6 +12,7 @@ namespace IndustrialWorld.Navigation
         {
             RoadNetworkUI.AddTo(panel, recorder);
             var guidance = RoadDriverGuidance.For(recorder);
+            RoadWheelAutopilotUI.AddTo(panel, recorder, guidance);
             panel.Add(UITheme.Spacer(6));
             panel.Add(UITheme.Body("ROAD GUIDANCE · MANUAL DRIVING"));
             panel.Add(UITheme.Muted("Loaded vehicle roads only. Endpoints snap within 8 m; access to the road and parking are manual. "

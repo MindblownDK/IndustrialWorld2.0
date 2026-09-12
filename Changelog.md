@@ -1,9 +1,55 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.49.0-dev`
+**Current Version:** `9.50.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.50.0-dev] Unattended One-Way Road Vehicles and Wheel Brakes
+
+**Type:** MINOR — save-compatible unattended ground-driving feature. One additive grid parking-brake flag; older saves default off. No authored asset, recipe, research, power-production or suspension-balance changes.
+
+**GitHub title:** `[9.50.0-dev] Add unattended one-way wheel autopilot with grounded brakes and parked reloads`
+
+#### Added
+- UNATTENDED WHEEL RUN controls in the existing Route Recorder panel: confirmation checkbox, five-second departure countdown, explicit stop/park and explicit control/brake release. A seated driver is not required.
+- A grid-owned wheel command channel, separate from cockpit ThrustInput and flight autopilot. Commands are resolved before grid power, power failure parks before wheel forces are applied, and flight thrust/damping are suppressed while wheel control or its parking brake owns the vehicle.
+- Front-axle pursuit steering during autonomous runs. Existing manual isSteerable/steerAngle settings are not overwritten; rear-wheel steering is suppressed only while autonomy owns the wheels.
+- A 4 m/s cruise ceiling, lower turn/arrival speeds, smooth throttle ramp, load/grip-sensitive braking-distance allowance and a downhill reserve. Stops are latched for unavailable pavement/crossings, lost wheel support, obstacles, crowded probes, topology/lock changes, power loss, reverse roll, overspeed and no progress.
+- Grounded mechanical service/parking brakes in GridWheel. They oppose tangential motion and apply bounded slope-holding force even without power, limited by drive-force capacity and road grip. Airborne/disabled wheels cannot apply braking force.
+- Upcoming-road width/grade checks and a conservative swept vehicle-footprint check. Non-alloc obstacle volumes cover the current hull and its predicted turn; road colliders above the support plane are not blindly exempted as pavement.
+- Endpoint stopping accounts for the vehicle's front envelope. No automatic docking, unloading, return trip or restart occurs.
+- Grid-owned parking latch survives controller disable/removal. Active or parked runs save that latch and restore with zero linear/angular velocity and brakes applied. Routes/active driving are not restored; a new plan/start is required.
+- Seated movement input releases autonomous wheel ownership for manual takeover. Existing manual wheel power demand now reads the shared wheel-throttle accessor; autonomous throttle is billed through the same power system.
+
+#### Supported first-release envelope
+- Loaded, supported vehicle pavement only; 4–16 enabled grounded wheels, a cockpit orientation reference, at least 1 m front/rear axle separation, and a front axle with enabled steering of at least 5 degrees.
+- Vehicle envelope is measured from colliders. Half-width over 12 m or half-length over 16 m is refused. Paved width must accommodate the measured footprint, not just the route's centre point.
+- Forward-only: a target more than 65 degrees off heading refuses. Planned grade above approximately 15 percent refuses; conservative collider/footprint probes can also refuse gentler uneven roads or tight curves.
+- Braking checks reserve authority for the supported downhill grade. This is not a collision-proof traffic system: external forces, extreme loads, unsupported terrain or loss of all wheel contact can exceed physical braking capability.
+- Use conventional wheel-driven vehicles for validation. Flight auto-run must be disarmed. No unattended route recovery, reverse manoeuvres, traffic priority, lane reservations, docking/services or unloaded-road streaming was added.
+- Loaded-road support sampling runs at 5 Hz; full remaining-route connectivity checks at 2 Hz. Obstacle checks and wheel control run on the grid physics tick. Distance suffixes are cached; UI status updates are throttled. Fleet performance still requires Unity measurement.
+
+#### Validation
+- Thomas confirmed 9.49.0-dev crossing controls work in Unity.
+- Compiled the complete RoadWheelAutopilot, RoadWheelMath and modified GridWheel sources against lightweight engine/domain stubs. 34 checks passed, including a fixed-step straight-line force harness that reaches the endpoint, applies the parking latch, and keeps the front inside the endpoint.
+- Checks cover pursuit signs, stopping distance, countdown, unattended throttle/power demand, no flight input writes, manual takeover, latching obstacle/bridge/support/edit/overspeed/reverse/stuck stops, controller disable, bounded powerless ground braking, airborne brake refusal and overhead-road obstruction.
+- Recompiled the existing network/routing suites: 27 + 13 checks passed. The unchanged extracted crossing-control harness also passed its 17 checks.
+- Parsed changed C# sources; checked grid command/power/wheel ordering, flight suppression and additive parked-save wiring structurally. The network/routing harness retains its pre-existing CS0675 hash-packing warning.
+- NOT compiled against Unity assemblies or tested in a Unity scene. Real steering, suspension, braking on slopes, collision casts, UI layout, save/reload and fleet performance remain open. Stub dynamics are not evidence of real chassis handling.
+
+#### Unity setup and staged testing
+1. Back up the test save. Replace the supplied project files and import the three new navigation scripts with their .meta files. Allow Unity to compile.
+2. No new assets or manual Inspector/component wiring are needed. Missing existing content must be authored through Tools > Voxel Engine > Voxel Engine Setup: existing Route Recorder Step 65 and the existing vehicle/road steps as needed. Do not alter power or suspension balance for this update.
+3. Start with a conventional vehicle you can already drive: four or more grounded wheels, an existing cockpit and Route Recorder, sufficient power, no active flight auto-run, no landing/docking lock. Align it with a wide, flat asphalt straight in a clear test area.
+4. Name a destination connector/refuel pad near the far road, then use PLAN ROAD ROUTE. The car must already be on the road; access and parking at the actual connector are not automated.
+5. Tick the unattended-run confirmation and press START WHEEL RUN. Close the panel and step out of the vehicle's path during the five-second countdown. Verify it drives without a pilot and parks before the endpoint. Begin with a nearby destination, not a valuable production area.
+6. Test STOP AND APPLY WHEEL PARKING BRAKE, then RELEASE WHEEL CONTROL / PARKING BRAKE. Re-engagement is explicit; no hazard clears itself into an automatic restart. Entering a cockpit and using movement input must take manual control.
+7. Test a broad bend, a narrow strip and a gentle slope separately. Expect conservative refusals for insufficient clearance, tight turns or uneven terrain; do not increase the speed cap to bypass a refusal.
+8. Put an obstacle ahead, open a drawbridge, remove a future road cell and disable vehicle power in separate runs. Each should latch braking, explain why, and require an explicit restart after the cause is resolved. Keep the vehicle attended during these tests.
+9. Test a stationary blocked vehicle, a removed wheel and manual takeover. Verify no synthetic flight thrust/gyro force while wheel control owns it. Brakes require ground contact; do not test by dropping valuable vehicles off bridges.
+10. Save while driving and while parked, then reload. Verify zero resumed driving velocity, applied wheel parking brake and no automatic run restart. Plan/start again or explicitly release the brake. Older unrelated saves should retain their prior behavior.
+11. Only after the single-vehicle pass, test multiple vehicles and watch frame time. They brake for one another but have no junction priority or deadlock resolution.
 
 ### [9.49.0-dev] Saved Drawbridge Automatic and Manual Control
 

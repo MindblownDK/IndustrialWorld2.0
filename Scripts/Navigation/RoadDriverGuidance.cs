@@ -49,8 +49,22 @@ namespace IndustrialWorld.Navigation
             _clock = 0f;
         }
 
+        public bool CopyRemainingRoute(List<AsphaltRoad> destination)
+        {
+            destination.Clear();
+            for (int i = _cursor; i < _route.Count; i++)
+            {
+                if (_route[i] == null) { destination.Clear(); return false; }
+                destination.Add(_route[i]);
+            }
+            return destination.Count >= 2;
+        }
+
         public void Stop()
         {
+            if (_recorder != null && _recorder.Grid != null
+                && _recorder.Grid.WheelAutopilot != null && _recorder.Grid.WheelAutopilot.IsDriving)
+                _recorder.Grid.WheelAutopilot.Park("Guidance stopped or changed. Wheel parking brake applied.");
             _route.Clear();
             _cursor = 0;
             Status = "Road guidance stopped.";
@@ -73,6 +87,11 @@ namespace IndustrialWorld.Navigation
 
         private void RefreshGuidance(GridEntity grid)
         {
+            if (grid.WheelAutopilot != null && grid.WheelAutopilot.IsDriving)
+            {
+                Show("WHEEL AUTOPILOT", grid.WheelAutopilot.Status);
+                return;
+            }
             for (int i = _cursor; i < _route.Count; i++)
             {
                 if (!RoadRoutePlanner.IsVehicleRoad(_route[i])
@@ -137,7 +156,7 @@ namespace IndustrialWorld.Navigation
             string heading = Mathf.Abs(angle) > 120f ? "TURN BACK WHEN SAFE"
                 : angle > 18f ? "BEAR RIGHT" : angle < -18f ? "BEAR LEFT" : "FOLLOW ROAD";
             Show(heading, remaining.ToString("0") + " m to road endpoint near " + _destination
-                + " · Manual driving");
+                + (grid.WheelControlHeld ? " · Wheel control / brake active" : " · Manual driving"));
         }
 
         private void Show(string heading, string detail)

@@ -1162,6 +1162,7 @@ namespace VoxelEngine.Persistence
                     gridSize = (int)grid.gridSize,
                     gravityScale = grid.gravityScale,
                     dampenersOn = grid.DampenersOn,
+                    wheelParkingBrake = grid.WheelControlHeld,
                     hydrogenStored = grid.HydrogenStored,
                     oxygenStored = grid.OxygenStored
                 };
@@ -1432,7 +1433,10 @@ namespace VoxelEngine.Persistence
                 grid.name = "Grid (restored)";
                 grid.gravityScale = savedGrid.gravityScale > 0f ? savedGrid.gravityScale : grid.gravityScale;
                 grid.DampenersOn = savedGrid.dampenersOn;
-                grid.RestorePersistentPose(savedGrid.pos, savedGrid.rot, savedGrid.velocity, savedGrid.angularVelocity);
+                grid.SetWheelParkingBrake(savedGrid.wheelParkingBrake);
+                grid.RestorePersistentPose(savedGrid.pos, savedGrid.rot,
+                    savedGrid.wheelParkingBrake ? Vector3.zero : savedGrid.velocity,
+                    savedGrid.wheelParkingBrake ? Vector3.zero : savedGrid.angularVelocity);
                 grid.HydrogenStored = Mathf.Max(0f, savedGrid.hydrogenStored);
                 grid.OxygenStored = Mathf.Max(0f, savedGrid.oxygenStored);
 
@@ -2636,6 +2640,8 @@ namespace VoxelEngine.Persistence
             public int gridSize;
             public float gravityScale;
             public bool dampenersOn = true;
+            // 9.50.0-dev: active wheel runs reload parked, never restart unattended.
+            public bool wheelParkingBrake;
             public float hydrogenStored;
             public float oxygenStored;
             // Additive 6.81.0: logical shaft-to-shaft belt links. Old saves omit

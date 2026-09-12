@@ -34,9 +34,12 @@ namespace VoxelEngine.GridSystem
         public bool isSteerable = true;
 
         public override float PowerDraw => Enabled && IsGrounded && Grid != null
-            ? powerDrawWatts * Mathf.Abs(Grid.ThrustInput.z) * Mathf.Clamp01(suspensionStrength)
+            ? powerDrawWatts * Mathf.Abs(Grid.WheelThrottle) * Mathf.Clamp01(suspensionStrength)
             : 0f;
         public bool IsGrounded { get; private set; }
+        public VoxelEngine.Building.AsphaltRoad GroundRoad { get; private set; }
+        public Vector3 GroundPoint { get; private set; }
+        public float GroundGrip { get; private set; } = 1f;
 
         private float _currentThrottle;
         private float _lastSpringLength;
@@ -84,6 +87,7 @@ namespace VoxelEngine.GridSystem
 
         public void UpdateWheel(GridEntity grid)
         {
+            GroundRoad = null;
             if (!Enabled || grid == null || grid.Body == null)
             {
                 IsGrounded = false;
@@ -96,12 +100,12 @@ namespace VoxelEngine.GridSystem
             bool powered = grid.HasPower;
             Vector3 wheelPos = transform.position;
             float radius = WheelRadius;
-            _currentThrottle = Mathf.Clamp(grid.ThrustInput.z, -1f, 1f);
+            _currentThrottle = Mathf.Clamp(grid.WheelThrottle, -1f, 1f);
 
-            Transform frame = grid.ActiveCockpit != null ? grid.ActiveCockpit.transform : grid.transform;
+            Transform frame = grid.WheelFrame;
             Vector3 baseForward = frame != null ? frame.forward : transform.forward;
             Vector3 steeringAxis = frame != null ? frame.up : transform.up;
-            float steer = isSteerable ? grid.ThrustInput.x * steerAngle : 0f;
+            float steer = grid.WheelSteering(this);
             Quaternion steerRot = Quaternion.AngleAxis(steer, steeringAxis);
             Vector3 forward = steerRot * baseForward;
 
@@ -125,6 +129,9 @@ namespace VoxelEngine.GridSystem
                 if (road != null && !road.IsSupported) road = null;
                 float traction = road != null ? road.TractionMultiplier : 1f;
                 float grip     = road != null ? road.GripMultiplier     : 1f;
+                GroundRoad = road;
+                GroundPoint = hit.point;
+                GroundGrip = grip;
 
                 if (powered && Mathf.Abs(_currentThrottle) > 0.01f)
                 {
@@ -134,6 +141,19 @@ namespace VoxelEngine.GridSystem
                 }
 
                 Vector3 pointVelocity = grid.Body.GetPointVelocity(wheelPos);
+                if (grid.WheelBrake > 0f)
+                {
+                    // Mechanical tyre brake, including bounded hill holding; never acts airborne.
+                    int supports = Mathf.Max(1, grid.GroundedWheelCount);
+                    Vector3 acceleration = -Vector3.ProjectOnPlane(pointVelocity, hit.normal)
+                        / Mathf.Max(0.001f, Time.fixedDeltaTime)
+                        - Vector3.ProjectOnPlane(grid.WheelGravity, hit.normal);
+                    float share = grid.Body.mass / supports;
+                    float cap = Mathf.Min(driveForce, share * IndustrialWorld.Navigation.RoadWheelMath.BrakeAcceleration)
+                        * Mathf.Max(0f, grip);
+                    grid.Body.AddForceAtPosition(Vector3.ClampMagnitude(acceleration * share, cap)
+                        * Mathf.Clamp01(grid.WheelBrake), wheelPos, ForceMode.Force);
+                }
                 Vector3 lateral = Vector3.Project(pointVelocity, transform.right);
                 float friction = Mathf.Clamp(grid.Body.mass * 2.2f, 2500f, 45000f) * grip;
                 grid.Body.AddForceAtPosition(-lateral * friction, wheelPos, ForceMode.Force);

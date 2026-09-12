@@ -96,6 +96,23 @@ namespace VoxelEngine.GridSystem
         public float   RotationRoll { get; set; }
         public bool    DampenersOn { get; set; } = true;
 
+        // Dedicated wheel channel: no synthetic cockpit input and no thruster commands.
+        public IndustrialWorld.Navigation.RoadWheelAutopilot WheelAutopilot { get; set; }
+        public bool WheelParkingBrake { get; private set; }
+        public bool WheelControlHeld => WheelParkingBrake || (WheelAutopilot != null && WheelAutopilot.IsDriving);
+        public float WheelThrottle => WheelControlHeld
+            ? WheelParkingBrake ? 0f : WheelAutopilot.Throttle : ThrustInput.z;
+        public float WheelBrake => WheelParkingBrake ? 1f
+            : WheelAutopilot != null && WheelAutopilot.IsDriving ? WheelAutopilot.Brake : 0f;
+        public Transform WheelFrame => WheelControlHeld && WheelAutopilot != null && WheelAutopilot.Frame != null
+            ? WheelAutopilot.Frame : CurrentControlFrame;
+        public int GroundedWheelCount { get; private set; }
+        public Vector3 WheelGravity => CurrentGravityAcceleration();
+        public void SetWheelParkingBrake(bool applied) => WheelParkingBrake = applied;
+        public float WheelSteering(GridWheel wheel) => WheelControlHeld
+            ? WheelParkingBrake || WheelAutopilot == null ? 0f : WheelAutopilot.SteeringFor(wheel)
+            : wheel.isSteerable ? ThrustInput.x * wheel.steerAngle : 0f;
+
         // ── Autonomous flight (9.35.0-dev) ─────────────────────────────────
         // A commanded velocity for a ship with nobody in the seat. This is NOT a fake pilot: see
         // ApplyAutonomousFlightThrust, which is a sibling of the dampener channel and keeps
@@ -338,7 +355,17 @@ namespace VoxelEngine.GridSystem
             // gravity because this class applies planet gravity manually.
             if (_rb != null) _rb.useGravity = false;
 
+            GroundedWheelCount = 0;
+            foreach (var block in AllBlocks)
+                if (block is GridWheel wheel && wheel.Enabled && wheel.IsGrounded) GroundedWheelCount++;
+            if (WheelParkingBrake && (WheelAutopilot == null || !WheelAutopilot.isActiveAndEnabled)
+                && IsControlled && ThrustInput.sqrMagnitude > 0.01f)
+                WheelParkingBrake = false;
+            if (WheelAutopilot != null && WheelAutopilot.isActiveAndEnabled)
+                WheelAutopilot.TickControl(Time.fixedDeltaTime);
             UpdatePower();
+            if (WheelAutopilot != null && WheelAutopilot.IsDriving && !HasPower)
+                WheelAutopilot.Park("Power unavailable; wheels braking. Re-engage explicitly.");
             _touchingIce = DetectIceContact();
             if (_touchingIce) _lastIceContactTime = Time.time;
             UpdateThrust();
@@ -1207,6 +1234,12 @@ namespace VoxelEngine.GridSystem
             foreach (var block in AllBlocks)
                 if (block is GridThruster t) t.ThrustFraction = 0f;
 
+            if (WheelControlHeld)
+            {
+                _smoothedThrustInput = Vector3.zero;
+                AutonomousDampenersActive = false;
+                return;
+            }
             if (!IsControlled)
             {
                 // Decay any remaining smoothed input so the ship doesn't lurch when re-entered.
@@ -1389,6 +1422,7 @@ namespace VoxelEngine.GridSystem
         private void UpdateDampeners()
         {
             PilotDampenerHoldActive = false;
+            if (WheelControlHeld) return; // ground brakes own this vehicle, not flight damping
             if (!DampenersOn || _rb == null) return;
 
             // An unpiloted grid only receives damping authority when it has stored
