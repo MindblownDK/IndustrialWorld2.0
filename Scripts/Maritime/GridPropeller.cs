@@ -34,8 +34,12 @@ namespace VoxelEngine.Maritime
         public override void OnPlaced()
         {
             base.OnPlaced();
-            propellerSize = tier == PropellerTier.Large ? 3f : 1f;
-            blockName = tier == PropellerTier.Large ? "Large Propeller" : "Small Propeller";
+            // v9.56.2-dev — fully dynamic: preserves custom propellerSize for balancing.
+            // Only set default if still at class default (1) or old sentinel.
+            if (Mathf.Approximately(propellerSize, 1f) || Mathf.Approximately(propellerSize, 0f))
+                propellerSize = tier == PropellerTier.Large ? 3f : 1f;
+            if (string.IsNullOrEmpty(blockName) || blockName == "Armor Block")
+                blockName = tier == PropellerTier.Large ? "Large Propeller" : "Small Propeller";
         }
 
         public override void PopulateMaritimeNode(ref MechanicalNode node)

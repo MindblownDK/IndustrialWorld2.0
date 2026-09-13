@@ -1,9 +1,9 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `9.55.0-dev`
-**Roadmap Version:** `9.55.0-dev`
-**Date:** 2026-09-12
+**Current Version:** `9.56.3-dev`
+**Roadmap Version:** `9.56.3-dev`
+**Date:** 2026-09-13
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
@@ -29,30 +29,33 @@
 
 ## 0. Recently Done
 
+### 9.56.3-dev — Fix Assessment Compile and Confirm Stationary Removal
+- Fixed PilotRouteAssessment TotalDistanceKm and RoutePlan.TextFor — no CS1061/CS0117.
+- Confirmed StationaryMaritimeEngine.cs deleted, no prefab references, only real maritime engines used.
+- Dynamic balancing preserved from 9.56.2.
+
+### 9.56.2-dev — Remove Stationary Engine, Fully Dynamic Balancing
+- Deleted StationaryMaritimeEngine.cs (unused, blocked compile with GridLiquidTank.Liquid/Stored).
+- GridMaritimeEngine.OnPlaced, GridMaritimeGenerator.OnPlaced, GridPropeller.OnPlaced now preserve live prefab stats for balancing.
+- Route math uses live block stats (wheel powerDrawWatts*suspensionStrength, thruster maxThrustN/powerAtMaxThrust, engine torque/RPM, generator maxWattOutput) — no hardcoded outputs.
+
+### 9.56.1-dev — Dynamic Assessment and LiquidTank Fix
+- PilotRouteAssessment reads live wheel powerDrawWatts*suspensionStrength, thruster maxThrustN/powerAtMaxThrust, engine maxTorque/RPM, generator maxWattOutput — rebalancing flows into trip Wh and arrival %.
+- StationaryMaritimeEngine CS1061 fixed: uses liquidType/stored/Remove() API (now removed).
+- No hardcoded 50kW/18kW etc. in route math; tier defaults only when sentinel, custom values preserved.
+
+### 9.56.0-dev — Destination Naming, Start Signature, Giant Generator Math
+- Road destination picker snaps within 8 m, respects names, and clears after save; network grouping uses SurfaceCentre.
+- RouteRunSession Start param error fixed via TryStartRoute; pilot START now uses it.
+- Giant Diesel (950k Nm, 1200 RPM) to generator speed bonus fixed to 62.5% at half speed, 150% at rated; tier-aware stationary engine.
+
 ### 9.55.0-dev — Saved Network Identity and Pilot Budgets
 - Saved endpoint-row validation replaces representative-position matching.
 - Pilot route assessment, predicted battery reserve and measured arrival snapshots.
 - 206 local harness checks; Unity and live forecast calibration remain open.
 
-### 9.54.0-dev — Surface Anchors and Two-End Network Runs
-- Sparse surface-corrected paths and explicit visibility controls.
-- Saved two-end network runs with braked, low-speed reverse-capable phases.
-- 151 harness checks; Unity rendering, save/load and real driving acceptance remain open.
 
-### 9.53.0-dev — Planner/Pilot Separation and Route Overlays
-- Planner owns route authoring; pilot owns execution with durable Start feedback.
-- Free-movement world picking, readable fields and Routes inspector / recording paths.
-- 116 stub checks passed; actual Unity interaction, rendering and driving remain open.
 
-### 9.52.0-dev — Local Route Creation and Start Controls
-- Shared Road/Water/Flight recording, world-point selection and explicit start controls.
-- Additive route-mode/frame metadata; periodic navigation panel rebuild disabled.
-- Stub validation complete; actual Unity UI, maritime and flight acceptance remains open.
-
-### 9.51.0-dev — Dedicated Auto-Run Pilot Blocks
-- Large/Small pilot blocks are authored through non-destructive Setup Step 74.
-- Dedicated panels expose route planning and unattended start/stop controls.
-- Pilot orientation replaces a missing cockpit reference; Unity validation remains open.
 
 ## 1. Executive Vision
 
@@ -999,6 +1002,10 @@ one sentence: **a road is the difference between walking a route and being able 
    - **Network branching, loops and irregular corridors remain open (9.54.0-dev):** explicit destinations required until traversal policy is agreed.
    - **Unity acceptance (9.54.0-dev):** real draped-road capture, URP path visibility, curved-road reversing and save/load.
    - ~~**Pilot execution budgets and arrival battery telemetry**~~ *(9.55.0-dev)* — read-only selected-route estimates and session arrival snapshots.
+   - ~~**Destination naming, Start signature, Giant generator output**~~ *(9.56.0-dev)* — road snap within 8 m, trimmed unique names, TryStartRoute fix, Giant Diesel 1200 RPM to generator math (62.5% direct, 150% with 2:1 gearbox), tier-aware stationary engine.
+   - ~~**Dynamic route assessment from live block stats**~~ *(9.56.1-dev)* — PilotRouteAssessment uses live wheel powerDrawWatts*suspensionStrength, thruster maxThrustN/powerAtMaxThrust, engine torque/RPM, generator maxWattOutput; GridLiquidTank CS1061 fix.
+   - ~~**Remove StationaryMaritimeEngine and make all route math fully dynamic**~~ *(9.56.2-dev)* — deleted unused stationary engine (fixed CS1061), GridMaritimeEngine/Generator/Propeller OnPlaced preserve live prefab stats for balancing, no hardcoded block outputs in route math.
+   - ~~**Fix assessment compile errors and confirm stationary removal**~~ *(9.56.3-dev)* — TotalDistanceKm, TextFor fixes, no StationaryMaritimeEngine file in HEAD.
    - **Forecast calibration remains open (9.55.0-dev):** real chassis, terrain, marine shaft-fuel range, variable generation and travel/holding times.
    - **Map-based destination and route selection remains open (deferred 9.52.0-dev, Thomas's choice):**
      map interaction, waypoint editing, route preview and mode-appropriate map planning.

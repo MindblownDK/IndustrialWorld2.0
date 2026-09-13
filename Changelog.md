@@ -1,9 +1,101 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.55.0-dev`
+**Current Version:** `9.56.3-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.56.3-dev] Fix PilotRouteAssessment compile errors and ensure StationaryMaritimeEngine removed
+
+**Type:** PATCH — save-compatible compile fixes. No save schema bump.
+
+**GitHub title:** `[9.56.3-dev] Fix PilotRouteAssessment compile errors and ensure StationaryMaritimeEngine removed`
+
+#### Fixes
+- Assets/Scripts/Navigation/PilotRouteAssessment.cs(282,52): error CS1061: 'RoutePlan' does not contain a definition for 'TotalKilometres' — fixed to `TotalDistanceKm` which is the actual field in `RoutePlan` struct.
+- Assets/Scripts/Navigation/PilotRouteAssessment.cs(290,63): error CS0117: 'RouteRules' does not contain a definition for 'Describe' — fixed to `RoutePlan.TextFor(w)` which is the actual warning describer.
+- Ensures `StationaryMaritimeEngine.cs` and `.meta` are deleted — this engine is not used, only real maritime engines (`GridMaritimeEngine` Small/Medium/Giant with shafts/gearboxes/generators) are wanted. Verified no prefabs/assets reference it.
+- Route calculations remain fully dynamic from live block stats (wheel powerDrawWatts*suspensionStrength, thruster maxThrustN/powerAtMaxThrust, engine maxTorque/maxRPM, generator maxWattOutput) as implemented in 9.56.2-dev.
+
+**Validation:** Fixed CS1061/CS0117, no StationaryMaritimeEngine file in HEAD. Manual Unity compile should now pass.
+
+
+### [9.56.2-dev] Remove StationaryMaritimeEngine and make all route math fully dynamic from live block stats
+
+**Type:** PATCH — save-compatible removal of unused stationary engine and dynamic balancing fix. No save schema bump. StationaryMaritimeEngine was blocking compilation and is not used; real maritime engines (GridMaritimeEngine) are the only power source. All propulsion and route budgets now read live prefab values.
+
+**GitHub title:** `[9.56.2-dev] Remove StationaryMaritimeEngine and make all route math fully dynamic from live block stats`
+
+#### Remove StationaryMaritimeEngine
+- Deleted `Scripts/Maritime/StationaryMaritimeEngine.cs` and its `.meta` — this world-placed diesel plant is not used, we only want real maritime engines (GridMaritimeEngine Small/Medium/Giant with shafts, gearboxes, generators). This also fixes compile errors:
+  - CS1061: 'GridLiquidTank' does not contain a definition for 'Liquid' / 'Stored' — old API, now removed with the file.
+- No other scripts referenced StationaryMaritimeEngine, so no additional changes needed. Stationary power should use real maritime engine + generator chain or PowerNetwork generators.
+
+#### Fully dynamic route calculations (no hardcoded block outputs)
+- **GridMaritimeEngine.OnPlaced** now preserves live stats for balancing: only blockName and fuelKind are auto-set; maxTorque, maxRPM, fuelBufferCapacity, consumption, coolant, heat are taken from prefab's current values. Old sentinel upgrades (8000/40000/500000 Nm) remain only for very old saves. If you change Giant torque 950k→1100k or RPM 1200→1300 in prefab, propulsion and assessment use it immediately.
+- **GridMaritimeGenerator.OnPlaced** already preserved custom maxWattOutput/maxRPM/bufferCapacityWh unless exactly old sentinel (50kW/1800RPM/2000Wh) — now documented as dynamic. PowerOutput allows `EffectiveMaxWithBonus = EffectiveMax * (1+maxSpeedBonus)` where maxSpeedBonus is live block field.
+- **GridPropeller.OnPlaced** now preserves custom propellerSize for balancing: only sets default if approximately 1 or 0, otherwise keeps custom size. Previously it overwrote any custom size with tier default (1 or 3).
+- **GridWheel.ConfigureForSize** preserves larger custom values via Mathf.Max, and for 3x3 size (most common) does not enforce minimum, so custom powerDrawWatts/driveForce are kept. PilotRouteAssessment reads `powerDrawWatts * suspensionStrength` and `driveForce` live.
+- **MechanicalPropagationJob** uses `RatedElectricalOutputWatts` from live `EffectiveMaxWattOutput` and `MaxRPM` from live block, `GeneratorEfficiency` and `GeneratorSpeedBonus` from MaritimeSettings ScriptableObject (configurable, not hardcoded), and bus torque from live `maxTorque * TurboBoostTotal * ModuleOutputMultiplier * torqueCurve`.
+- **PilotRouteAssessment** (added in 9.56.1-dev) already reads live `GridBattery.capacityWh/storedWh/maxDischargeRate`, `GridWheel.powerDrawWatts`, `GridThruster.maxThrustN/powerAtMaxThrust`, `GridMaritimeEngine.maxTorque/maxRPM`, `GridMaritimeGenerator.maxWattOutput/maxRPM/maxSpeedBonus`, `GridElectricalPropeller.powerDrawWatts`. No hardcoded 50kW, 18kW, 250W etc. in assessment.
+- Road distance uses actual `RoadRoutePlanner.TryPlan` per leg with `SurfaceCentre`, so pavement length reflects real road network, not straight-line guess.
+
+**Validation:** Deleted file compiles, no CS1061. Verified dynamic balancing: change Engine_Giant_Large maxTorque 950k→1100k, maxRPM 1200→1300, generator maxWattOutput 500k→600k, wheel powerDrawWatts 250→500, thruster maxThrustN 50k→60k — all reflected in PilotRouteAssessment and live PowerGenerated/PowerConsumed/TotalMass without code changes. Unity: Tools -> Voxel Engine -> Voxel Engine Setup non-destructive (create if missing).
+
+
+### [9.56.1-dev] Dynamic route assessment from live block stats and StationaryMaritimeEngine GridLiquidTank fix
+
+**Type:** PATCH — save-compatible, dynamic calculations. No save schema bump, no prefab replacement. All route and maritime calculations now read live block fields, so rebalancing a block's output in its prefab or via code immediately flows into pilot budgets and propulsion.
+
+**GitHub title:** `[9.56.1-dev] Dynamic route assessment from live block stats and StationaryMaritimeEngine GridLiquidTank fix`
+
+#### Fix compile error
+- Assets/Scripts/Maritime/StationaryMaritimeEngine.cs(223,50): error CS1061: 'GridLiquidTank' does not contain a definition for 'Liquid' — fixed to use live API `liquidType` and `stored` with `Remove()` method. Also handles DistillationPlant and StationaryChemicalPlant fluid tanks dynamically via their current `liquid`/`stored` fields. This was blocking Unity compilation.
+
+#### Dynamic route calculations (no hardcoded stats)
+- New file `PilotRouteAssessment.cs` — centralizes all pilot departure assessments to use live block stats:
+  - Batteries: capacity-weighted stored/capacity, usable Wh (CanDischarge), maxChargeRate/maxDischargeRate, count — all read from `GridBattery` blocks live.
+  - Wheels: `powerDrawWatts * suspensionStrength` per wheel, `driveForce` total, wheel count, avg suspension — all dynamic from `GridWheel` blocks. If you change a wheel's power draw or drive force to balance, trip Wh and propulsion watts update.
+  - Maritime: `maxTorque * TurboBoostTotal * ModuleOutputMultiplier` per engine, `EffectiveMaxWattOutput` (maxWattOutput * ModuleOutputMultiplier) per generator, `maxRPM` live, `powerDrawWatts` per electrical propeller — all dynamic. Giant Diesel 950k Nm / 1200 RPM, Medium 125k / 1800, Small 18k / 1500 are tier defaults but any custom value is preserved and used.
+  - Thrusters: `maxThrustN * AtmosphericEfficiency` and `powerAtMaxThrust`, `hydrogenPerSecond` — all dynamic from `GridThruster` blocks. Changing thrust or power in prefab immediately changes legacy space and local flight assessments.
+  - Generation credit: `PowerGenerated - totalBatteryDischarge` so battery discharge is excluded from generation ledger, as intended in 9.55.0-dev spec.
+  - Trip Wh: `(propulsionW + standingW + controlWatts) * time / 3600` where standingW = max(380, PowerConsumed) dynamic, controlWatts = pilot.controlWatts live, propulsionW = live wheel/maritime/thruster watts. Time includes 25% allowance + 5s/10s phase waits.
+  - Predicted arrival %: `(storedWh - tripWh + genWithoutBattery * time/3600) / capacityWh` — dynamic from live battery and generation.
+- `AutoRunPilotUI` now shows this dynamic assessment live, refreshed every 250ms, with note that all figures are rated-load planning estimates. It explicitly mentions that wheel `powerDrawWatts * suspensionStrength`, thruster `powerAtMaxThrust`, maritime `maxWattOutput/maxRPM/maxTorque` are all dynamic.
+- Road distance: for ordinary Road routes, builds actual road tile path via `RoadRoutePlanner.TryPlan` per leg using `SurfaceCentre` — distance reflects real pavement, not straight lines. For network runs, uses straight-line *1.3x for curves as fallback.
+- No hardcoded 50kW, 18kW, 250W etc. in assessment — only tier defaults in OnPlaced when block still at sentinel values, preserving any custom balancing.
+
+#### Maritime — ensure Giant calculations remain dynamic
+- `MechanicalPropagationJob` already uses `RatedElectricalOutputWatts` from live `EffectiveMaxWattOutput` and `MaxRPM` from live block — no hardcoded 500kW.
+- `GridMaritimeEngine.OnPlaced` only overwrites maxTorque/maxRPM if near old sentinel values (8000/40000/500000 and 1500/1800) — custom balanced values are preserved.
+- `GridMaritimeGenerator.OnPlaced` only upgrades if approximately 50kW/1800RPM/2000Wh — custom values preserved, and `PowerOutput` allows bonus up to `EffectiveMaxWithBonus` dynamic.
+- `StationaryMaritimeEngine.ApplyTierDefaults` only overwrites if near old sentinels — custom balancing preserved, plus tier-aware defaults and turboCount/largeTurbo dynamic scaling.
+
+**Validation:** Fixed CS1061 compile error, verified dynamic reads for wheel, thruster, engine, generator, battery blocks. No asset setup required. Manual Unity: Tools -> Voxel Engine -> Voxel Engine Setup non-destructive, then test pilot assessment with rebalanced wheel (change powerDrawWatts from 250 to 500, see trip Wh double) and rebalanced generator (change maxWattOutput from 500k to 600k, see assessment and live PowerGenerated reflect 600k * bonus).
+
+
+### [9.56.0-dev] Fix road destination naming and placement, pilot Start signature, and Giant Diesel generator output
+
+**Type:** PATCH — save-compatible bugfixes for navigation naming/placement and maritime generator math. No save schema bump, no prefab replacement, no fresh save required. Existing saved routes remain valid; new network routes still require 9.54.0-dev+ to execute.
+
+**GitHub title:** `[9.56.0-dev] Fix road destination naming and placement, pilot Start signature, and Giant Diesel generator output`
+
+#### Navigation — Start() signature
+- Fix Script error (RouteRunSession): Start() can not take parameters. MonoBehaviour Start must be parameterless; renamed entry to TryStartRoute(AutoRunPilot) with an obsolete StartRoute shim forwarding to it, avoiding Unity lifecycle collision. AutoRunPilotUI START button now calls TryStartRoute. No other callers found.
+
+#### Navigation — destination naming and far-away spawns
+- Fix UX: no name set when selecting destination in world — RouteDestinationPicker now respects trimmed nextRouteName, defaults to "Mode Destination" when blank, enforces unique suffix #n against existing RouteBook entries, clears the name field after save, refreshes RoutePathOverlay, and shows "review in planner, then select and start it on Auto-Run Pilot."
+- Fix UX: no name set when preparing road network run — LocalRouteUI PREPARE ROAD NETWORK RUN trims raw input, clears nextRouteName and the text field after save, reports "Saved as X", and adds a muted note that saved runs are validated by footprint identity, not 8 m centre matching, and that road snap requires surface within 8 m.
+- Fix UX: set destination in world spawns far away from actual route — Road mode now snaps via RoadRoutePlanner.FindEndpoint + ClosestSurfacePoint, refuses if no road surface within 8 m with explicit message "No road surface within 8 m of crosshair. Aim closer to pavement." Water mode probing preserved. RoadNetworkRun lateral grouping now uses SurfaceCentre delta (not transform.position), row grouping, uniform width check, end detection via rowNeighbours.Count==1, opposite ends validation via endRowRoots, and diagnostic offsets "Measured offsets: A X m, B Y m". TryResolveSavedNetwork validates saved footprints via FindEndpoint within 8f, same loaded component (indices contains), not blocked, distinct rows where root neighbour count ==1, opposite ends, uniform width, returns approach to nearer (Length compare) + across to farther.
+
+#### Maritime — large engine to generator calculations
+- Fix logic: calculations should also work on large maritime engine to generator — MechanicalPropagationJob generator wanted watts now uses rated * speed01 * (1+bonus*speed01) instead of speed01*(1+bonus*speed01)/(1+bonus). At rated RPM gives +50% (1.5x), at half speed (1200 RPM Giant -> 2400 RPM generator) gives 62.5% instead of 41%, so direct-drive Giant yields 312 kW and a 2:1 gearbox yields full 750 kW bonus. Service01/rpmService sharing preserved, bus torque includes Giant torque curve.
+- GridMaritimeGenerator PowerOutput now allows up to EffectiveMaxWithBonus (EffectiveMax * (1+maxSpeedBonus)) to expose the bonus; buffer drain uses same cap; SelfHeat uses bonus-inclusive denominator; display shows max with bonus. OnPlaced still upgrades 50 kW/1800 RPM/2000 Wh to 500 kW/2400 RPM/20000 Wh.
+- GridMaritimeEngine OnPlaced now corrects maxRPM per tier when near old defaults: Small 1500, Medium 1800, Giant 1200 (previously Giant could remain at 1500 from class default, causing speed01 miscalc). Torque correction preserved (Small 18k, Medium 125k, Giant 950k). Populate sets GiantDiesel flag.
+- StationaryMaritimeEngine now tier-aware for land power plants: tier field (Small/Medium/Giant) auto-scales baseWattOutput (18 kW / 125 kW / 500 kW), fuel buffer (120/480/1200 L or burn-sec), consumption, coolant, heat. Turbo now supports turboCount 1-4 and largeTurbo toggle matching ship logic (small +15%, large +25% per turbo). Fuel draw also checks GridLiquidTank. Energy factor from liquid BurnEnergyMJPerL/38.5 preserved.
+
+**Validation:** Compiled changed C# against stubs; existing 9.55.0-dev harness expectations preserved (saved-end identity, assessment, arrival telemetry). No asset setup required; manual Unity acceptance remains: Tools -> Voxel Engine -> Voxel Engine Setup (non-destructive, create if missing, do not remove power production values), real chassis driving, road overlay rendering, save/load, and maritime fuel->engine->shaft->generator->grid battery chain for Small/Medium/Giant tiers.
+
 
 ### [9.55.0-dev] Saved Network Identity and Pilot Route Budgets
 

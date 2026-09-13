@@ -413,55 +413,36 @@ namespace VoxelEngine.Maritime
         public override void OnPlaced()
         {
             base.OnPlaced();
-            // Auto-configure based on tier.
+            // v9.56.2-dev — fully dynamic balancing: OnPlaced preserves live block stats.
+            // Only blockName and fuelKind are auto-set; all numeric outputs (maxTorque,
+            // maxRPM, fuelBufferCapacity, consumption, coolant, heat) are taken from the
+            // prefab's current values so rebalancing a prefab immediately flows into
+            // propulsion and route assessment. Old sentinel upgrades (8000/40000/500000)
+            // are kept only for very old saves.
             switch (tier)
             {
                 case EngineTier.Small:
-                    // Name comes from the placed ITEM (player-renameable in the
-                    // GridBlockItem asset). Only fall back to the tier default when
-                    // the block carries no meaningful name at all.
                     if (string.IsNullOrEmpty(blockName) || blockName == "Armor Block" || blockName == "Maritime Engine")
                         blockName = "Crude Engine";
-                    fuelKind = MaritimeFuelKind.Solid;
+                    // Preserve fuelKind for solid, but allow override if prefab says otherwise
+                    if (fuelKind != MaritimeFuelKind.Solid && fuelKind != MaritimeFuelKind.Liquid) fuelKind = MaritimeFuelKind.Solid;
+                    // Old-save migration only — preserve any custom balanced torque
                     if (Mathf.Approximately(maxTorque, 8000f)) maxTorque = 18000f;
-                    if (Mathf.Approximately(fuelBufferCapacity, 60f)) fuelBufferCapacity = 120f;
-                    if (Mathf.Approximately(fuelConsumptionRate, 1f)) fuelConsumptionRate = 1f;
-                    if (Mathf.Approximately(baseHeatRate, 1.4f)) baseHeatRate = 1.0f;
-                    if (Mathf.Approximately(baseDissipationRate, 1.0f)) baseDissipationRate = 1.1f;
+                    // maxRPM, fuelBufferCapacity, consumption, heat are now fully dynamic from prefab
                     break;
                 case EngineTier.Medium:
-                    // Name comes from the placed ITEM (player-renameable in the
-                    // GridBlockItem asset). Only fall back to the tier default when
-                    // the block carries no meaningful name at all.
                     if (string.IsNullOrEmpty(blockName) || blockName == "Armor Block" || blockName == "Maritime Engine")
                         blockName = "Heavy Fuel Oil Engine";
                     fuelKind = MaritimeFuelKind.Liquid;
-                    liquidFuel = LiquidType.HeavyFuelOil;
+                    if (liquidFuel == LiquidType.LiquidFuel) liquidFuel = LiquidType.HeavyFuelOil;
                     if (Mathf.Approximately(maxTorque, 40000f)) maxTorque = 125000f;
-                    if (Mathf.Approximately(fuelBufferCapacity, 80f)) fuelBufferCapacity = 240f;
-                    if (Mathf.Approximately(fuelConsumptionRate, 2f)) fuelConsumptionRate = 2f;
-                    if (Mathf.Approximately(liquidRefillRate, 8f)) liquidRefillRate = 28f;
-                    if (Mathf.Approximately(coolantCapacity, 50f)) coolantCapacity = 180f;
-                    if (Mathf.Approximately(coolantRefillRate, 5f)) coolantRefillRate = 20f;
-                    if (Mathf.Approximately(baseHeatRate, 1.4f)) baseHeatRate = 2.4f;
-                    if (Mathf.Approximately(coolantDissipationRate, 2.0f)) coolantDissipationRate = 2.9f;
                     break;
                 case EngineTier.Giant:
-                    // Name comes from the placed ITEM (player-renameable in the
-                    // GridBlockItem asset). Only fall back to the tier default when
-                    // the block carries no meaningful name at all.
                     if (string.IsNullOrEmpty(blockName) || blockName == "Armor Block" || blockName == "Maritime Engine")
                         blockName = "MGO Engine";
                     fuelKind = MaritimeFuelKind.Liquid;
                     liquidFuel = LiquidType.MarineGasOil;
                     if (Mathf.Approximately(maxTorque, 500000f)) maxTorque = 950000f;
-                    if (Mathf.Approximately(fuelBufferCapacity, 300f) || Mathf.Approximately(fuelBufferCapacity, 500f)) fuelBufferCapacity = 1200f;
-                    if (Mathf.Approximately(fuelConsumptionRate, 6f) || Mathf.Approximately(fuelConsumptionRate, 12f)) fuelConsumptionRate = 12f;
-                    if (Mathf.Approximately(liquidRefillRate, 25f) || Mathf.Approximately(liquidRefillRate, 40f)) liquidRefillRate = 110f;
-                    if (Mathf.Approximately(coolantCapacity, 50f)) coolantCapacity = 800f;
-                    if (Mathf.Approximately(coolantRefillRate, 5f)) coolantRefillRate = 60f;
-                    if (Mathf.Approximately(baseHeatRate, 1.4f)) baseHeatRate = 3.4f;
-                    if (Mathf.Approximately(coolantDissipationRate, 2.0f)) coolantDissipationRate = 4.2f;
                     break;
             }
             FuelBuffer = Mathf.Min(FuelBuffer, fuelBufferCapacity);

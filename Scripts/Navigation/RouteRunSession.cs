@@ -7,7 +7,9 @@ using VoxelEngine.UI;
 namespace IndustrialWorld.Navigation
 {
     /// <summary>Persistent-in-session UI state and command results. A panel rebuild cannot erase
-    /// a refusal or its checkbox. This component does not store or author routes.</summary>
+    /// a refusal or its checkbox. This component does not store or author routes.
+    /// v9.56: renamed Start() to TryStartRoute() to avoid Unity Start() conflict, and uses
+    /// footprint-based saved-network resolver.</summary>
     public sealed class RouteRunSession : MonoBehaviour
     {
         public string SelectedRouteName = "";
@@ -55,7 +57,8 @@ namespace IndustrialWorld.Navigation
             return accepted;
         }
 
-        public bool Start(AutoRunPilot pilot)
+        // Renamed from Start() to avoid Unity's magic Start() collision (CS error: Start() cannot take parameters)
+        public bool TryStartRoute(AutoRunPilot pilot)
         {
             _attempt++;
             _watch = 0;
@@ -80,11 +83,11 @@ namespace IndustrialWorld.Navigation
                 {
                     var approach = new System.Collections.Generic.List<VoxelEngine.Building.AsphaltRoad>();
                     var across = new System.Collections.Generic.List<VoxelEngine.Building.AsphaltRoad>();
-                    if (!RoadNetworkRun.TryPlan(RoadNavigationAnchor.ForGrid(_grid, RouteTravelMode.Road), approach, across, out var reason)) return Report(reason);
-                    if (!RouteCoordinates.TryResolve(route, 0, out var a) || !RouteCoordinates.TryResolve(route, 1, out var b)) return Report("Saved network anchors unavailable.");
-                    Vector3 near = RoadNavigationAnchor.SurfaceCentre(across[0]), far = RoadNavigationAnchor.SurfaceCentre(across[across.Count - 1]);
-                    if (!((Vector3.Distance(a, near) <= 8f && Vector3.Distance(b, far) <= 8f)
-                        || (Vector3.Distance(a, far) <= 8f && Vector3.Distance(b, near) <= 8f))) return Report("Network ends changed or vehicle is on another network. Prepare a new network run.");
+                    if (!RouteCoordinates.TryResolve(route, 0, out var a) || !RouteCoordinates.TryResolve(route, 1, out var b))
+                        return Report("Saved network anchors unavailable. Prepare a new network run.");
+                    Vector3 vehiclePos = RoadNavigationAnchor.ForGrid(_grid, RouteTravelMode.Road);
+                    if (!RoadNetworkRun.TryResolveSavedNetwork(vehiclePos, a, b, approach, across, out var reason))
+                        return Report(reason);
                     var networkWheels = RoadWheelAutopilot.For(_grid);
                     networkWheels.StartNetwork(pilot, RoadDriverGuidance.For(pilot), approach, across);
                     _watch = 1;
@@ -127,6 +130,11 @@ namespace IndustrialWorld.Navigation
                 return Report("Start failed: " + error.Message + " — see the Unity Console for the stack trace.");
             }
         }
+
+        // Backwards compat shim for any external callers that still call Start(pilot) via dynamic? 
+        // We keep an obsolete wrapper that forwards, but renamed to avoid Unity magic method.
+        [Obsolete("Use TryStartRoute instead. Renamed to avoid Unity Start() conflict.")]
+        public bool StartRoute(AutoRunPilot pilot) => TryStartRoute(pilot);
 
         public void Stop(bool release)
         {
