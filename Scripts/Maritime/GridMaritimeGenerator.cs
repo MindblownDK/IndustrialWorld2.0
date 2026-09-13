@@ -7,13 +7,13 @@
 // The MaritimePropagationJob computes:
 //   ElectricityOutput = shaftTorque × shaftRPM × (2π/60) × efficiency × speedBonus × modules
 //
-// v9.56.0-dev — Giant Diesel to generator fix:
-//   • Speed bonus now yields up to +50% at rated RPM (rated * speed01*(1+bonus*speed01)).
-//     Previously speedCurve = speed01*(1+bonus*speed01)/(1+bonus) gave only 41% at half speed,
-//     making 1200 RPM Giant -> 2400 RPM generator weak. New curve gives 62.5% at half speed
-//     and full +50% bonus at rated, so direct-drive Giant still useful and 2:1 gearbox = full bonus.
-//   • PowerOutput now allows up to EffectiveMax * (1+maxSpeedBonus) to expose the bonus.
-//   • SelfHeat uses bonus-inclusive denominator so heat scales correctly.
+// v6.10.0-dev — Speed-Responsive Output + Upgrade Modules:
+//   • Speed Bonus: the faster the input shaft spins (toward rated RPM), the more
+//     power is generated — up to +50% at rated speed.
+//   • 2 Module Slots accept EngineModuleItems (Efficiency Tuning Chip raises the
+//     max output power a lot but UNLOCKS a mandatory coolant requirement;
+//     Super-Cooler Radiator Jacket triples heat dissipation while water flows).
+//   • Live temperature model: ≥100°C = thermal shutdown until < 80°C.
 
 using UnityEngine;
 using VoxelEngine.GridSystem;
@@ -28,7 +28,7 @@ namespace VoxelEngine.Maritime
         [Header("Generator")]
         [Tooltip("Max RPM this generator can accept.")]
         public float maxRPM = 1800f;
-        [Tooltip("Max electrical output (W). Excess shaft power is clipped, plus speed bonus.")]
+        [Tooltip("Max electrical output (W). Excess shaft power is clipped.")]
         public float maxWattOutput = 50000f;
 
         [Header("Speed Bonus")]
@@ -40,6 +40,7 @@ namespace VoxelEngine.Maritime
         public float bufferCapacityWh = 2000f;
         [Tooltip("Current battery buffer level (Wh).")]
         public float BufferCharge { get; private set; }
+        /// <summary>0..1 buffer fill for the UI indicator.</summary>
         public float BufferFill01 => bufferCapacityWh > 0f ? Mathf.Clamp01(BufferCharge / bufferCapacityWh) : 0f;
 
         [Header("Coolant (unlocked by Efficiency Tuning Chip)")]
@@ -49,8 +50,11 @@ namespace VoxelEngine.Maritime
         public float coolantConsumptionRate = 0.2f;
         [Tooltip("Coolant pulled from grid tanks per second when refilling.")]
         public float coolantRefillRate = 6f;
+        /// <summary>Current coolant buffer level (L).</summary>
         public float CoolantBuffer { get; private set; }
+        /// <summary>0..1 coolant fill ratio.</summary>
         public float CoolantFill01 => coolantCapacity > 0f ? Mathf.Clamp01(CoolantBuffer / coolantCapacity) : 0f;
+        /// <summary>True if any coolant is in the buffer (an active flow can be sustained).</summary>
         public bool HasCoolant => CoolantBuffer > 0.01f;
 
         [Header("Thermal Management")]
@@ -60,17 +64,22 @@ namespace VoxelEngine.Maritime
         public float baseDissipationRate = 1.2f;
         [Tooltip("Extra dissipation per second (°C/s) while coolant is flowing.")]
         public float coolantDissipationRate = 2.2f;
+        /// <summary>Generator temperature in °C.</summary>
         public float TemperatureC { get; private set; } = GridMaritimeEngine.AmbientTemperatureC;
+        /// <summary>Anchored thermal shutdown — clears below 80°C.</summary>
         public bool CriticalFailure { get; private set; }
+        /// <summary>0..1 heat normalized against the critical point (UI bars).</summary>
         public float Heat01 => Mathf.Clamp01(TemperatureC / GridMaritimeEngine.CriticalTemperatureC);
 
+        // ── Grid heat source (9.31.0) ────────────────────────────────────────
+        // Casing heat follows electrical load; a tripped generator radiates what its
+        // windings hold until it cools below the recovery point.
         public float SelfHeatC
         {
             get
             {
                 if (!Enabled) return 0f;
-                float maxWithBonus = EffectiveMaxWattOutput * (1f + Mathf.Max(0f, maxSpeedBonus));
-                float load = maxWithBonus > 0.01f ? Mathf.Clamp01(GeneratedWatts / maxWithBonus) : 0f;
+                float load = EffectiveMaxWattOutput > 0.01f ? Mathf.Clamp01(GeneratedWatts / EffectiveMaxWattOutput) : 0f;
                 float heat = VoxelEngine.Thermal.ThermalRules.MaritimeGeneratorSelfHeatC * load;
                 if (CriticalFailure) heat = Mathf.Max(heat, VoxelEngine.Thermal.ThermalRules.MaritimeGeneratorSelfHeatC * 0.6f * Heat01);
                 return heat;
@@ -87,33 +96,43 @@ namespace VoxelEngine.Maritime
                                / VoxelEngine.Thermal.ThermalRules.MaritimeGeneratorSelfHeatC);
             }
         }
+        /// <summary>≥ 100°C or latched — thermal shutdown, output shaft power rejected.</summary>
         public bool IsCriticalHeat => CriticalFailure;
 
+        // ── Modules / upgrades ───────────────────────────────────────
+        /// <summary>Generator module slots — Efficiency Tuning Chips and
+        /// Super-Cooler Radiator Jackets only.</summary>
         public ItemContainer ModuleSlots { get; private set; }
         public const int MaxModuleSlots = 2;
 
         public int EfficiencyChipCount { get; private set; }
         public int RadiatorModuleCount { get; private set; }
+        /// <summary>Output multiplier from socketed modules (1 = stock).</summary>
         public float ModuleOutputMultiplier { get; private set; } = 1f;
+        /// <summary>True while a radiator is socketed AND water is flowing.</summary>
         public bool RadiatorCoolingActive { get; private set; }
+        /// <summary>0..1 of the radiator water demand met this tick.</summary>
         public float RadiatorWaterFill01 { get; private set; }
 
+        /// <summary>Live electricity output (W) — set by ApplyResults.</summary>
         public float GeneratedWatts { get; private set; }
+        /// <summary>Current shaft RPM.</summary>
         public float CurrentRPM { get; private set; }
+        /// <summary>0..1 shaft speed vs rated (drives the +50% speed bonus).</summary>
         public float Speed01 => maxRPM > 0.01f ? Mathf.Clamp01(CurrentRPM / maxRPM) : 0f;
+        /// <summary>Current speed bonus multiplier actually applied to output (1.0–1.5).</summary>
         public float CurrentSpeedBonusMultiplier => 1f + maxSpeedBonus * Speed01;
 
+        /// <summary>Rated max output with socketed modules applied.</summary>
         public float EffectiveMaxWattOutput => maxWattOutput * ModuleOutputMultiplier;
-        public float EffectiveMaxWithBonus => EffectiveMaxWattOutput * (1f + Mathf.Max(0f, maxSpeedBonus));
 
         public override float PowerOutput
         {
             get
             {
                 if (!Enabled || CriticalFailure) return 0f;
-                // v9.56: allow bonus up to +50% so Giant 1200 RPM direct + gearbox yields full advertised power
-                float cap = EffectiveMaxWithBonus;
-                return Mathf.Min(BufferCharge > 0.1f ? GeneratedWatts : 0f, cap);
+                // Output comes from the buffer, which is charged by generation.
+                return Mathf.Min(BufferCharge > 0.1f ? GeneratedWatts : 0f, EffectiveMaxWattOutput);
             }
         }
 
@@ -134,6 +153,7 @@ namespace VoxelEngine.Maritime
             EnsureModuleSlots();
         }
 
+        /// <summary>Ensure (or create) the generator module container.</summary>
         public void EnsureModuleSlots()
         {
             if (ModuleSlots == null) ModuleSlots = new ItemContainer("Module Slots", MaxModuleSlots);
@@ -141,12 +161,14 @@ namespace VoxelEngine.Maritime
             ModuleSlots.AcceptFilter = (item, wanted) => CanSocketModule(item) ? wanted : 0;
         }
 
+        /// <summary>Module container accessor that guarantees the container exists (UI use).</summary>
         public ItemContainer GetModuleSlots()
         {
             EnsureModuleSlots();
             return ModuleSlots;
         }
 
+        /// <summary>True when the item may be socketed into this generator's module slots.</summary>
         public bool CanSocketModule(ItemDefinition item)
         {
             return item is EngineModuleItem module && module.worksOnGenerator;
@@ -155,7 +177,7 @@ namespace VoxelEngine.Maritime
         public override void PopulateMaritimeNode(ref MechanicalNode node)
         {
             node.MaxRPM = maxRPM;
-            node.MaxTorque = 0f;
+            node.MaxTorque = 0f; // generator is a pure load sink
             node.GearRatio = 1f;
             node.OutputMultiplier = 1f;
             node.RatedElectricalOutputWatts = Mathf.Max(0f, maxWattOutput);
@@ -167,7 +189,7 @@ namespace VoxelEngine.Maritime
             RefreshModuleTotals();
 
             node.FuelAvailable01 = Enabled ? 1f : 0f;
-            node.MaxRPM = maxRPM;
+            node.MaxRPM = maxRPM; // speed bonus saturates against rated RPM
             node.OutputMultiplier = ModuleOutputMultiplier;
             node.RatedElectricalOutputWatts = Mathf.Max(0f, EffectiveMaxWattOutput);
             if (!Enabled)
@@ -183,12 +205,16 @@ namespace VoxelEngine.Maritime
             GeneratedWatts = node.ElectricityOutput;
             CurrentRPM = node.CurrentRPM;
 
+            // Charge the internal buffer from generation, drain it from output.
             float dt = Time.fixedDeltaTime;
-            float charge = GeneratedWatts * dt / 3600f;
-            float drain = Mathf.Min(GeneratedWatts, EffectiveMaxWithBonus) * dt / 3600f;
+            float charge = GeneratedWatts * dt / 3600f; // W·s → Wh
+            float drain = Mathf.Min(GeneratedWatts, EffectiveMaxWattOutput) * dt / 3600f;
             BufferCharge = Mathf.Clamp(BufferCharge + charge - drain * 0.5f, 0f, bufferCapacityWh);
         }
 
+        // ══════════════════════════════════════════════════════════════
+        //  MODULES
+        // ══════════════════════════════════════════════════════════════
         private void RefreshModuleTotals()
         {
             EfficiencyChipCount = 0;
@@ -226,15 +252,19 @@ namespace VoxelEngine.Maritime
         private float _moduleHeatBonus;
         private float _moduleDissipationMultiplier = 1f;
 
+        /// <summary>True while an Efficiency Tuning Chip is socketed — coolant flow is mandatory.</summary>
         public bool RequiresActiveCoolantFlow => EfficiencyChipCount > 0;
 
+        // ══════════════════════════════════════════════════════════════
+        //  THERMAL MODEL
+        // ══════════════════════════════════════════════════════════════
         private void TickThermal(float dt)
         {
-            float maxWithBonus = EffectiveMaxWithBonus;
-            float load01 = maxWithBonus > 0.01f
-                ? Mathf.Clamp01(GeneratedWatts / maxWithBonus)
+            float load01 = EffectiveMaxWattOutput > 0.01f
+                ? Mathf.Clamp01(GeneratedWatts / EffectiveMaxWattOutput)
                 : 0f;
 
+            // Radiator jackets draw fresh/sea water from grid tanks while generating.
             RadiatorWaterFill01 = 0f;
             RadiatorCoolingActive = false;
             if (RadiatorModuleCount > 0 && load01 > 0.01f)
@@ -245,6 +275,7 @@ namespace VoxelEngine.Maritime
                 RadiatorCoolingActive = RadiatorWaterFill01 > 0.5f;
             }
 
+            // Coolant: consumed while generating when the chip demands active flow.
             if (load01 > 0.01f)
             {
                 RefillCoolant(dt);
@@ -263,6 +294,7 @@ namespace VoxelEngine.Maritime
 
             float net = heatGen - dissipation;
 
+            // Efficiency chip without an active coolant flow → overheat in ~15 s.
             if (load01 > 0.01f && RequiresActiveCoolantFlow && !HasCoolant)
                 net += GridMaritimeEngine.EfficiencyChipDryHeatRate;
 
@@ -275,6 +307,7 @@ namespace VoxelEngine.Maritime
                 CriticalFailure = false;
         }
 
+        /// <summary>Refill coolant from grid tanks. Prefers Marine Engine Coolant, falls back to Water.</summary>
         private void RefillCoolant(float dt)
         {
             float space = coolantCapacity - CoolantBuffer;
@@ -288,6 +321,9 @@ namespace VoxelEngine.Maritime
                 CoolantBuffer += drawn;
         }
 
+        // ══════════════════════════════════════════════════════════════
+        //  IGridDataProvider — live data for Grid Screens
+        // ══════════════════════════════════════════════════════════════
         public string SourceName => blockName;
         public string DataCategory => "Maritime Generators";
         public string GetDisplayData()
@@ -299,7 +335,7 @@ namespace VoxelEngine.Maritime
             return
                 $"GENERATOR {status}\n" +
                 $"{PowerFormat.Watts(GeneratedWatts)} ({CurrentRPM:0} RPM)\n" +
-                $"SPEED BONUS +{(CurrentSpeedBonusMultiplier - 1f) * 100f:0}% (max {EffectiveMaxWithBonus:0} W)\n" +
+                $"SPEED BONUS +{(CurrentSpeedBonusMultiplier - 1f) * 100f:0}%\n" +
                 $"BUFFER {BufferFill01 * 100f:0}% ({BufferCharge:0} Wh)\n" +
                 $"HEAT {Heat01 * 100f:0}% ({TemperatureC:0}°C)";
         }

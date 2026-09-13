@@ -1,9 +1,35 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.56.3-dev`
+**Current Version:** `9.56.4-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.56.4-dev] Fix road network anchor cosmic offset causing 1433m drift and large spawn offset
+
+**Type:** PATCH — save-compatible fix for road network coordinate frame. No save schema bump, but old cosmic saves will show large offset diagnostic and require re-prepare.
+
+**GitHub title:** `[9.56.4-dev] Fix road network anchor cosmic offset causing 1433m drift and large spawn offset`
+
+#### Root cause
+- RoadNetworkRun reported `Saved network anchors unavailable or removed. Measured offsets: A 1433,7 m, B 1433,7 m. Prepare a new network run.` and network points spawned with large offset.
+- Cause: `RouteCoordinates.Capture` stored cosmic km (`SpaceOrigin.Instance==null ? scene : cosmic`) when SpaceOrigin exists. For local Road/RoadNetwork routes on planet surface, this stored `GetCosmicKm` with body pinning via `FrameBody`. On resolve, `GetScenePos` conversion drifted 1.4km because road transforms are static planet-local and `FrameBody` mismatch, so `RoadRoutePlanner.FindEndpoint` (16f query, 8f EndpointReach) returned null. Fallback `RoutePathOverlay.DisplayPoint` showed raw waypoint far from road.
+
+#### Fix
+- Force `sceneCoordinates = true` for all local modes (Road, RoadNetwork, Water, Flight) in:
+  - `LocalRouteUI.cs:78` — PREPARE ROAD NETWORK RUN
+  - `RoadNavigationUI.cs:28` — Road waymark routes
+  - `RouteDestinationPicker.cs:143` — destination selection (LegacyFlight remains cosmic)
+  - `GridRouteRecorder.cs:141` — draft creation
+- New saves now store scene positions directly (`position/1000 km`), no cosmic conversion, so anchors resolve within centimeters of `RoadNavigationAnchor.SurfaceCentre`.
+- `RoadNetworkRun.TryResolveSavedNetwork` now tolerates old cosmic saves: if `FindEndpoint` fails within 8m, searches wider (512m, then 2000m) via `FindClosestInComponent` for closest road in loaded component. If still far, reports `large offset (A X m, B Y m) — likely old cosmic save from before 9.56.4-dev. New saves use scene-local coords. Please PREPARE a new network run.` Old routes with 1433m drift must be re-prepared.
+- Improved diagnostic: measures distance to `SurfaceCentre(ends[0]/ends[1])` and distinguishes large cosmic drift vs actual removal.
+
+#### Validation
+- After fix, new RoadNetwork runs should resolve anchors within 8m, `FindEndpoint` succeeds, no 1433m offset, and `RoutePathOverlay` shows road-snapped path not far-away points.
+- Old saves with 1433m offset now show explicit large-offset message and require re-prepare.
+- No prefab replacement, no power production value changes, non-destructive setup.
+
 
 ### [9.56.3-dev] Fix PilotRouteAssessment compile errors and ensure StationaryMaritimeEngine removed
 

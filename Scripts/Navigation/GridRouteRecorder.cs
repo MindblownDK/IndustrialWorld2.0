@@ -138,7 +138,8 @@ namespace VoxelEngine.Navigation
                 : nextRouteName.Trim();
             book.BeginRecording(name);
             book.Draft.travelMode = mode;
-            book.Draft.sceneCoordinates = SpaceOrigin.Instance == null;
+            bool isLocal = book.Draft.travelMode == RouteTravelMode.Road || book.Draft.travelMode == RouteTravelMode.RoadNetwork || book.Draft.travelMode == RouteTravelMode.Water || book.Draft.travelMode == RouteTravelMode.Flight;
+            book.Draft.sceneCoordinates = isLocal ? true : SpaceOrigin.Instance == null; // v9.56.4-dev: local always scene-local
             var start = IndustrialWorld.Navigation.RouteCoordinates.Capture(IndustrialWorld.Navigation.RoadNavigationAnchor.ForGrid(Grid, book.Draft.travelMode), book.Draft.sceneCoordinates);
             book.ForceCapture(start.positionKm, RouteWaypoint.FindBody(CosmicRegistry.Instance, start.bodyId));
             nextRouteName = "";

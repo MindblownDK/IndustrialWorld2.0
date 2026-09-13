@@ -9,13 +9,15 @@
 //   • Writes CurrentRPM + ElectricityOutput back into the node array so the
 //     subsequent BuoyancyJob can convert RPM into thrust.
 //
-// v9.56.0-dev —
-//   • Giant Diesel (950k Nm, 1200 RPM) to generator calculations fixed: generator
-//     wanted watts now scales as rated * speed01 * (1+bonus*speed01) giving
-//     +50% at rated speed, ~62% at half speed, so direct 1200->2400 still yields
-//     useful power and a 2:1 gearbox yields full rated+bonus.
-//   • Large maritime engine tier now correctly handled: bus torque includes
-//     Giant torque curve, generator load uses same conversion, service01 shared.
+// v6.10.0-dev —
+//   • Tree-aware per-node shaft values (ShaftTorque/ShaftRpm via ParentIndex)
+//     replacing the single rolling accumulator: branch splits no longer leak
+//     a gearbox ratio into sibling branches, and generators only sink the
+//     torque on their own branch.
+//   • Generator Speed Bonus: spinning faster toward rated RPM yields up to
+//     +50% more electrical output (maxSpeedBonus, read from node.MaxRPM scale).
+//   • Generator OutputMultiplier: upgrade-module output bonus, fed from the
+//     live block each tick.
 
 using Unity.Burst;
 using Unity.Collections;
@@ -24,10 +26,14 @@ using Unity.Mathematics;
 
 namespace VoxelEngine.Maritime
 {
+    /// <summary>A contiguous slice of the node array forming one propulsion chain.</summary>
     public struct PropulsionChain
     {
+        /// <summary>First node index (inclusive).</summary>
         public int StartIndex;
+        /// <summary>Number of nodes in this chain.</summary>
         public int Length;
+        /// <summary>Index of the torque source, or -1 if the chain has no live source.</summary>
         public int SourceIndex;
     }
 
@@ -39,12 +45,16 @@ namespace VoxelEngine.Maritime
 
         [ReadOnly] public NativeArray<PropulsionChain> Chains;
 
+        // Tunables copied from MaritimeSettings (blittable — no SO in the job).
         public float RpmResponse;
         public float GeneratorEfficiency;
         public float GlobalGearSpeedCap;
         public float WheelFlowTorque;
+        /// <summary>Extra generator output at rated RPM (0.5 = +50%).</summary>
         public float GeneratorSpeedBonus;
 
+        // ω = rpm × 2π/60. Hardcoded literal because math.PI2 is static-readonly
+        // (not a compile-time const) and cannot be used in a const expression.
         private const float RPM_TO_RAD_PER_SEC = 0.10471975512f;
 
         public void Execute(int chainIndex)
@@ -54,6 +64,10 @@ namespace VoxelEngine.Maritime
 
             int end = chain.StartIndex + chain.Length;
 
+            // ── Determine / compute all live torque sources ─────────────
+            // Every engine/waterwheel on the connected bus contributes its
+            // available torque. Mechanical loads are resolved afterwards and then
+            // shared back across those sources as one real drivetrain service level.
             float torque = 0f;
             float rpmWeighted = 0f;
             float rpmMax = 0f;
@@ -102,6 +116,9 @@ namespace VoxelEngine.Maritime
             float busRpm = torque > 0.0001f ? rpmWeighted / torque : rpmMax;
             float busTorque = torque;
 
+            // A shaft chain without an engine/waterwheel is idle, except electrical
+            // propellers: they are grid-powered pods and must still report their
+            // commanded demand/RPM without a mechanical source on the construct.
             if (!haveSource)
             {
                 for (int i = chain.StartIndex; i < end; i++)
@@ -131,6 +148,9 @@ namespace VoxelEngine.Maritime
                 return;
             }
 
+            // ── Forward propagation: rated torque and speed at every node ──
+            // Nodes are stored in BFS order from the source, so a parent is always
+            // evaluated before its children in this pass.
             for (int i = chain.StartIndex; i < end; i++)
             {
                 var node = Nodes[i];
@@ -168,6 +188,9 @@ namespace VoxelEngine.Maritime
                     {
                         float selectedRatio = math.max(0.01f, node.GearRatio);
                         float outRpm = math.min(inRpm * selectedRatio, math.min(node.MaxGearSpeed, GlobalGearSpeedCap));
+                        // If the RPM governor clamps a high selected gear, torque must
+                        // use the *actual* speed ratio or the drivetrain would destroy
+                        // power mathematically and report false overloads.
                         float actualRatio = inRpm > 0.01f ? math.max(0.01f, outRpm / inRpm) : selectedRatio;
                         node.AppliedGearRatio = actualRatio;
                         node.ShaftRpm = outRpm;
@@ -190,6 +213,9 @@ namespace VoxelEngine.Maritime
                         break;
 
                     case MechanicalNodeType.Generator:
+                        // Generators are evaluated in the backward mechanical-load
+                        // pass: their rated electrical target becomes a real torque
+                        // request instead of free power from every shaft branch.
                         node.CurrentRPM = inRpm;
                         node.ShaftRpm = inRpm;
                         node.ShaftTorque = 0f;
@@ -219,8 +245,17 @@ namespace VoxelEngine.Maritime
             ResolveMechanicalLoads(chain, end, busTorque);
         }
 
+        /// <summary>
+        /// Resolves generator and propeller resistance back toward the torque source.
+        /// The prior model calculated generation from whatever torque happened to be
+        /// present on a branch, which made every additional generator look free and
+        /// left engine stress almost unchanged. This backward pass makes all loads
+        /// share one finite mechanical power budget.
+        /// </summary>
         private void ResolveMechanicalLoads(PropulsionChain chain, int end, float busTorque)
         {
+            // Direct loads at their local shaft. Generator output is speed-limited
+            // and then converted through P = torque × omega / efficiency.
             for (int i = chain.StartIndex; i < end; i++)
             {
                 var node = Nodes[i];
@@ -240,11 +275,11 @@ namespace VoxelEngine.Maritime
                     float omega = node.ShaftRpm * RPM_TO_RAD_PER_SEC;
                     float rated = math.max(0f, node.RatedElectricalOutputWatts);
                     float speed01 = math.saturate(node.ShaftRpm / math.max(1f, node.MaxRPM));
-                    // v9.56: Giant Diesel fix — previously speedCurve = speed01*(1+bonus*speed01)/(1+bonus)
-                    // gave only 41% at half speed (1200 RPM engine -> 2400 RPM gen). New curve:
-                    // wanted = rated * speed01 * (1+bonus*speed01) gives 62.5% at half speed and
-                    // +50% at rated, so large engine direct-drive still useful and 2:1 gearbox yields full bonus.
-                    float speedCurve = speed01 * (1f + GeneratorSpeedBonus * speed01);
+                    // A generator has a regulator curve: it cannot make rated watts
+                    // at crawl speed, but it does not get an arbitrary speed bonus
+                    // above its authored electrical rating either.
+                    float speedCurve = speed01 * (1f + GeneratorSpeedBonus * speed01)
+                                     / math.max(1f, 1f + GeneratorSpeedBonus);
                     float wantedWatts = rated * speedCurve;
                     float conversion = math.max(0.05f, GeneratorEfficiency);
                     if (omega > 0.01f && wantedWatts > 0.01f)
@@ -270,11 +305,16 @@ namespace VoxelEngine.Maritime
                 Nodes[i] = node;
             }
 
+            // Walk leaves → source. A gearbox transforms output-side demand back
+            // through its ratio, exactly like real torque multiplication/reduction.
             float rootDemandTorque = 0f;
             for (int i = end - 1; i >= chain.StartIndex; i--)
             {
                 var node = Nodes[i];
                 float available = node.ShaftTorque;
+                // A generator deliberately stores zero downstream shaft torque because
+                // it is a sink, so its load compares against the parent shaft. Gearboxes
+                // instead compare against their transformed output torque.
                 if (node.Type == MechanicalNodeType.Generator && node.ParentIndex >= chain.StartIndex)
                     available = Nodes[node.ParentIndex].ShaftTorque;
                 else if (node.ParentIndex < 0)
@@ -303,6 +343,8 @@ namespace VoxelEngine.Maritime
             float service01 = rootDemandTorque > 0.0001f
                 ? math.saturate(busTorque / rootDemandTorque)
                 : 1f;
+            // Once requested torque exceeds supply the engine bogs rather than
+            // pretending to hold perfect RPM under an impossible generator bank.
             float overload01 = math.saturate(rawSourceLoad - 1f);
             float rpmService = math.lerp(1f, 0.58f, overload01);
 
@@ -320,14 +362,18 @@ namespace VoxelEngine.Maritime
                 if (node.Type == MechanicalNodeType.Generator)
                 {
                     node.ElectricityOutput = node.RequestedElectricalWatts * service01 * rpmService;
-                    node.ShaftTorque = 0f;
+                    node.ShaftTorque = 0f; // load sink: no shaft torque beyond it
                 }
 
+                // All coupled torque sources share the total bus load in proportion
+                // to their available torque, so adding generators raises every engine's
+                // reported stress instead of only affecting one arbitrary BFS root.
                 if (node.Type == MechanicalNodeType.Engine || node.Type == MechanicalNodeType.Waterwheel)
                     node.MechanicalLoadRatio = rawSourceLoad;
 
                 Nodes[i] = node;
             }
         }
+
     }
 }

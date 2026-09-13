@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using UnityEngine;
 using VoxelEngine.Cosmos;
 using VoxelEngine.Maritime;
@@ -10,8 +9,7 @@ using UnityEngine.InputSystem;
 
 namespace IndustrialWorld.Navigation
 {
-    /// <summary>Crosshair world selection. Tool clicks are reserved without freezing movement or camera look.
-    /// v9.56: Road destinations now snap to pavement surface and refuse off-road picks; naming respects the planner field.</summary>
+    /// <summary>Crosshair world selection. Tool clicks are reserved without freezing movement or camera look.</summary>
     [DefaultExecutionOrder(-10000)]
     public sealed class RouteDestinationPicker : MonoBehaviour
     {
@@ -22,7 +20,6 @@ namespace IndustrialWorld.Navigation
         private bool _ownsToolInput;
         private float _hintClock;
         private readonly RaycastHit[] _hits = new RaycastHit[128];
-        private readonly List<VoxelEngine.Building.AsphaltRoad> _roadScratch = new List<VoxelEngine.Building.AsphaltRoad>(32);
 
         public static void Begin(GridRouteRecorder recorder, RouteTravelMode mode)
         {
@@ -48,12 +45,8 @@ namespace IndustrialWorld.Navigation
             picker.Hint();
         }
 
-        private void Hint()
-        {
-            string extra = _mode == RouteTravelMode.Road ? " Aim directly at loaded pavement (within 8 m)." : "";
-            BuildFeedbackHud.Show("SELECT " + _mode.ToString().ToUpperInvariant() + " DESTINATION",
-                "Move and look normally. Aim the crosshair and left-click a point within 200 m. Escape cancels. Flight empty sky: 100 m." + extra);
-        }
+        private void Hint() => BuildFeedbackHud.Show("SELECT " + _mode.ToString().ToUpperInvariant() + " DESTINATION",
+            "Move and look normally. Aim the crosshair and left-click a point within 200 m. Escape cancels. Flight empty sky: 100 m.");
 
         private void Update()
         {
@@ -106,12 +99,14 @@ namespace IndustrialWorld.Navigation
             if (_mode == RouteTravelMode.Water)
             {
                 found = false;
+                // Water need not have a Physics collider. Probe before the nearest solid obstruction.
                 for (float distance = 1f; distance <= Mathf.Min(200f, closest); distance += 0.5f)
                 {
                     Vector3 point = ray.GetPoint(distance);
                     if (WaterProbeSystem.GetSubmergence(point, 0.1f) < 0.5f) continue;
                     Vector3 here = _recorder.Grid.transform.position;
                     Vector3 up = GravityProvider.GetUp(point);
+                    // Carry the current vessel reference height above the water to the destination.
                     float height = WaterProbeSystem.GetSurfaceHeight(here);
                     if (GravityProvider.IsRadial) target = point + up * Mathf.Clamp(-height, -5f, 10f);
                     else target = point + up * Mathf.Clamp(here.y - height, -5f, 10f);
@@ -121,46 +116,23 @@ namespace IndustrialWorld.Navigation
                 if (found && WaterProbeSystem.GetSurfaceHeight(target) <= WaterProbeSystem.NoWaterHeight * 0.5f) found = false;
             }
             else if (!found && _mode == RouteTravelMode.Flight) { target = ray.GetPoint(100f); found = true; }
-
             if (!found)
             { BuildFeedbackHud.Show("No destination", "Choose loaded road/water, or a flight point within reach."); return; }
-
-            // Road-specific snapping: must be on/near pavement, otherwise refuse
-            if (_mode == RouteTravelMode.Road)
-            {
-                var road = RoadRoutePlanner.FindEndpoint(target, _roadScratch);
-                if (road == null)
-                {
-                    BuildFeedbackHud.Show("No road surface", "No available loaded road within 8 m of that point. Aim directly at pavement, check grounded tyres and road loading.");
-                    return;
-                }
-                // Snap to surface centre or closest surface point to avoid far-away spawns
-                target = RoadRoutePlanner.ClosestSurfacePoint(road, target);
-                // Ensure still within 200m after snap (closest point could shift slightly)
-            }
-
             var book = _recorder.Book;
-            bool scene = SpaceOrigin.Instance == null;
+            bool scene = _mode == RouteTravelMode.LegacyFlight ? SpaceOrigin.Instance == null : true; // v9.56.4-dev: local modes always scene-local to avoid 1.4km offset
             var route = new ShipRoute { travelMode = _mode, sceneCoordinates = scene };
-            // Respect the name field; if empty, use a clear default. Always make unique.
-            string rawName = _recorder.nextRouteName != null ? _recorder.nextRouteName.Trim() : "";
-            string wanted = string.IsNullOrWhiteSpace(rawName) ? _mode + " Destination" : rawName;
+            string wanted = string.IsNullOrWhiteSpace(_recorder.nextRouteName) ? _mode + " Destination" : _recorder.nextRouteName.Trim();
             route.routeName = wanted;
             for (int n = 2; book.Find(route.routeName) != null; n++) route.routeName = wanted + " #" + n;
             Vector3 start = RoadNavigationAnchor.ForGrid(_recorder.Grid, _mode);
-            if (!RouteCoordinates.Finite(target) || !RouteCoordinates.Finite(start))
-            { BuildFeedbackHud.Show("Invalid coordinates", "Could not resolve world position."); return; }
-            float dist = Vector3.Distance(start, target);
-            if (dist < 2f || dist > 200f)
-            { BuildFeedbackHud.Show("Distance out of range", $"Choose a destination between 2 and 200 m from the vehicle (currently {dist:0} m)."); return; }
+            if (!RouteCoordinates.Finite(target) || Vector3.Distance(start, target) < 2f || Vector3.Distance(start, target) > 200f)
+            { BuildFeedbackHud.Show("Choose a destination between 2 and 200 metres from the vehicle."); return; }
             route.AddWaypoint(RouteCoordinates.Capture(start, scene));
             route.AddWaypoint(RouteCoordinates.Capture(target, scene));
             if (!book.Append(route)) { BuildFeedbackHud.Show("Could not save this route; choose a unique name."); return; }
             _recorder.SelectRoute(route.routeName);
             _recorder.nextRouteName = "";
-            // Ensure overlay preview updates immediately
-            RoutePathOverlay.For(book)?.RefreshPreview(route.routeName);
-            BuildFeedbackHud.Show("Route saved", route.routeName + ": review in planner, then select and start it on the Auto-Run Pilot.");
+            BuildFeedbackHud.Show("Route saved", route.routeName + ": review, confirm and press START SELECTED ROUTE.");
             _finishFrame = Time.frameCount;
         }
 

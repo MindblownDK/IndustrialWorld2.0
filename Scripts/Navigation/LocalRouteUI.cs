@@ -5,8 +5,7 @@ using VoxelEngine.UI;
 
 namespace IndustrialWorld.Navigation
 {
-    /// <summary>Route authoring only. Vehicle execution lives exclusively in AutoRunPilotUI.
-    /// v9.56: clears name field after network run save and ensures footprint-based preview.</summary>
+    /// <summary>Route authoring only. Vehicle execution lives exclusively in AutoRunPilotUI.</summary>
     public static class LocalRouteUI
     {
         public static void AddTo(VisualElement panel, GridRouteRecorder recorder)
@@ -72,29 +71,24 @@ namespace IndustrialWorld.Navigation
                 var across = new List<VoxelEngine.Building.AsphaltRoad>();
                 if (!RoadNetworkRun.TryPlan(RoadNavigationAnchor.ForGrid(recorder.Grid, RouteTravelMode.Road), approach, across, out var reason))
                 { report(reason); return; }
-                string raw = recorder.nextRouteName != null ? recorder.nextRouteName.Trim() : "";
-                string wanted = string.IsNullOrWhiteSpace(raw) ? "Road Network Run" : raw;
+                string wanted = string.IsNullOrWhiteSpace(recorder.nextRouteName) ? "Road Network Run" : recorder.nextRouteName.Trim();
                 var route = new ShipRoute { routeName = wanted, travelMode = RouteTravelMode.RoadNetwork,
-                    sceneCoordinates = VoxelEngine.Cosmos.SpaceOrigin.Instance == null };
+                    sceneCoordinates = true }; // v9.56.4-dev: always scene-local to avoid 1.4km cosmic offset
                 for (int n = 2; book.Find(route.routeName) != null; n++) route.routeName = wanted + " #" + n;
                 route.AddWaypoint(RouteCoordinates.Capture(RoadNavigationAnchor.SurfaceCentre(across[0]), route.sceneCoordinates));
                 route.AddWaypoint(RouteCoordinates.Capture(RoadNavigationAnchor.SurfaceCentre(across[across.Count - 1]), route.sceneCoordinates));
                 if (!book.Append(route)) { report("Could not save network route."); return; }
-                recorder.SelectRoute(route.routeName);
-                overlay.RefreshPreview(route.routeName);
-                recorder.nextRouteName = "";
-                name.SetValueWithoutNotify("");
-                report(reason + " Saved as " + route.routeName + ".");
+                recorder.SelectRoute(route.routeName); overlay.RefreshPreview(route.routeName); report(reason);
                 GameUIController.Instance?.RefreshCurrentPanel();
             }));
-            panel.Add(UITheme.Muted("Network runs use the nearer end first, then the other end. Vehicle must already be on that loaded, uniform-width, unbranched road. Low-speed reversing replaces unsafe automatic U-turns. Branches/loops require an explicit destination. Saved anchors use footprint identity, not 8 m centre matching."));
+            panel.Add(UITheme.Muted("Network runs use the nearer end first, then the other end. Vehicle must already be on that loaded, uniform-width, unbranched road. Low-speed reversing replaces unsafe automatic U-turns. Branches/loops require an explicit destination."));
             panel.Add(RoadNavigationUI.MakeButton("SET DESTINATION IN THE WORLD", () =>
             {
                 if (!canEdit()) return;
                 if (book.IsRecording) { report("Finish the recording before selecting another destination."); return; }
                 RouteDestinationPicker.Begin(recorder, recorder.PlanningMode);
             }));
-            panel.Add(UITheme.Muted("Move and look normally, aim the crosshair, then left-click the destination. Escape cancels. Tool/build clicks are reserved for selection. Flight empty sky selects 100 m along the crosshair. Road picks snap to pavement within 8 m."));
+            panel.Add(UITheme.Muted("Move and look normally, aim the crosshair, then left-click the destination. Escape cancels. Tool/build clicks are reserved for selection. Flight empty sky selects 100 m along the crosshair."));
             var names = new List<string>();
             foreach (var route in book.Routes) if (route != null) names.Add(route.routeName);
             if (names.Count > 0)

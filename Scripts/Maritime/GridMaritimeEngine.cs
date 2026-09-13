@@ -424,28 +424,25 @@ namespace VoxelEngine.Maritime
                 case EngineTier.Small:
                     if (string.IsNullOrEmpty(blockName) || blockName == "Armor Block" || blockName == "Maritime Engine")
                         blockName = "Crude Engine";
-                    // Preserve fuelKind for solid, but allow override if prefab says otherwise
                     if (fuelKind != MaritimeFuelKind.Solid && fuelKind != MaritimeFuelKind.Liquid) fuelKind = MaritimeFuelKind.Solid;
-                    // Old-save migration only — preserve any custom balanced torque
-                    if (Mathf.Approximately(maxTorque, 8000f)) maxTorque = 18000f;
-                    // maxRPM, fuelBufferCapacity, consumption, heat are now fully dynamic from prefab
+                    if (UnityEngine.Mathf.Approximately(maxTorque, 8000f)) maxTorque = 18000f;
                     break;
                 case EngineTier.Medium:
                     if (string.IsNullOrEmpty(blockName) || blockName == "Armor Block" || blockName == "Maritime Engine")
                         blockName = "Heavy Fuel Oil Engine";
                     fuelKind = MaritimeFuelKind.Liquid;
                     if (liquidFuel == LiquidType.LiquidFuel) liquidFuel = LiquidType.HeavyFuelOil;
-                    if (Mathf.Approximately(maxTorque, 40000f)) maxTorque = 125000f;
+                    if (UnityEngine.Mathf.Approximately(maxTorque, 40000f)) maxTorque = 125000f;
                     break;
                 case EngineTier.Giant:
                     if (string.IsNullOrEmpty(blockName) || blockName == "Armor Block" || blockName == "Maritime Engine")
                         blockName = "MGO Engine";
                     fuelKind = MaritimeFuelKind.Liquid;
                     liquidFuel = LiquidType.MarineGasOil;
-                    if (Mathf.Approximately(maxTorque, 500000f)) maxTorque = 950000f;
+                    if (UnityEngine.Mathf.Approximately(maxTorque, 500000f)) maxTorque = 950000f;
                     break;
             }
-            FuelBuffer = Mathf.Min(FuelBuffer, fuelBufferCapacity);
+            FuelBuffer = UnityEngine.Mathf.Min(FuelBuffer, fuelBufferCapacity);            FuelBuffer = Mathf.Min(FuelBuffer, fuelBufferCapacity);
             if (TemperatureC < AmbientTemperatureC + ThermalExposureC)
                 TemperatureC = AmbientTemperatureC + ThermalExposureC;
             EnsureSolidFuelInput();

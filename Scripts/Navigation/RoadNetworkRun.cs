@@ -132,16 +132,27 @@ namespace IndustrialWorld.Navigation
             if (ends.Count != 2) { reason = "This loaded network does not have exactly two ends (loop, junction or too short). Choose a destination."; return false; }
 
             // If we are resolving a saved network, validate footprints
+            // v9.56.4-dev: handle large offsets from old cosmic saves (1.4km drift) by searching wider
             if (savedA.HasValue && savedB.HasValue)
             {
                 AsphaltRoad roadA = RoadRoutePlanner.FindEndpoint(savedA.Value, scratch);
                 AsphaltRoad roadB = RoadRoutePlanner.FindEndpoint(savedB.Value, scratch);
 
+                // If not found within 8m, try wider search (512m, 2000m) for old cosmic saves
+                if (roadA == null)
+                    roadA = FindClosestInComponent(savedA.Value, roads, 512f) ?? FindClosestInComponent(savedA.Value, roads, 2000f);
+                if (roadB == null)
+                    roadB = FindClosestInComponent(savedB.Value, roads, 512f) ?? FindClosestInComponent(savedB.Value, roads, 2000f);
+
                 if (roadA == null || roadB == null)
                 {
                     float da = roadA == null ? Vector3.Distance(savedA.Value, RoadNavigationAnchor.SurfaceCentre(ends[0])) : 0f;
                     float db = roadB == null ? Vector3.Distance(savedB.Value, RoadNavigationAnchor.SurfaceCentre(ends[1])) : 0f;
-                    reason = $"Saved network anchors unavailable or removed. Measured offsets: A {(roadA == null ? da.ToString("0.0") : "ok")} m, B {(roadB == null ? db.ToString("0.0") : "ok")} m. Prepare a new network run.";
+                    bool largeOffset = da > 100f || db > 100f;
+                    if (largeOffset)
+                        reason = $"Saved network anchors have large offset (A {da:0.0} m, B {db:0.0} m) — likely old cosmic save from before 9.56.4-dev. New saves use scene-local coords. Please PREPARE a new network run on this road. Old route: {savedA.Value} / {savedB.Value}";
+                    else
+                        reason = $"Saved network anchors unavailable or removed. Measured offsets: A {(roadA == null ? da.ToString("0.0") : "ok")} m, B {(roadB == null ? db.ToString("0.0") : "ok")} m. Prepare a new network run.";
                     return false;
                 }
 
@@ -218,6 +229,24 @@ namespace IndustrialWorld.Navigation
                     + " m. Low-speed reversing may be used; no off-road approach or U-turn is invented.";
                 return across.Count >= 2;
             }
+        }
+
+        private static AsphaltRoad FindClosestInComponent(Vector3 pos, List<AsphaltRoad> roads, float maxRadius)
+        {
+            AsphaltRoad best = null;
+            float bestDist = maxRadius * maxRadius + 0.001f;
+            foreach (var road in roads)
+            {
+                if (road == null) continue;
+                Vector3 centre = RoadNavigationAnchor.SurfaceCentre(road);
+                float d = (centre - pos).sqrMagnitude;
+                if (d < bestDist)
+                {
+                    bestDist = d;
+                    best = road;
+                }
+            }
+            return best;
         }
 
         private static int Root(int[] parent, int i)
