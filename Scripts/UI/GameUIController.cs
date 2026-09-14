@@ -91,8 +91,13 @@ namespace VoxelEngine.UI
         // readouts and progress bar update IN PLACE. Without this the 4 Hz panel
         // rebuild re-created the page ScrollView and yanked the view back to the top
         // mid-scroll (the 9.38 playtest report).
-        private VoxelEngine.Crafting.ProcessorUI.PlantPanelLive _plantLive;
+        private VoxelEngine.Crafting.ProcessorUI.MachinePanelLive _plantLive;
         private bool _plantLiveDirty;
+        // Same for the Catalytic Cracker: its reactor temperature climbs on its own while
+        // the panel is open, so the readouts are written in place and the page scroll
+        // never moves (9.57.1-dev report).
+        private VoxelEngine.Crafting.ProcessorUI.MachinePanelLive _crackerLive;
+        private bool _crackerLiveDirty;
         private VoxelEngine.Crafting.Pumpjack _openPumpjack;
         private VoxelEngine.Industrial.StationaryChemicalPlant _openChemPlant;
         private VoxelEngine.Storage.StorageTerminal    _openStorageTerminal;
@@ -310,6 +315,10 @@ namespace VoxelEngine.UI
             // The Distillation Plant panel is updated IN PLACE every frame (no rebuild →
             // no scroll reset, no flashing buttons while the player works the panel).
             TickPlantLiveUI();
+            // Same treatment for the Catalytic Cracker: the reactor warms up and the bed
+            // depletes while the panel is open, so temperature / catalyst / efficiency and
+            // the four tank gauges are written in place.
+            TickCrackerLiveUI();
             PlayerHud.Tick();
             BombHud.Tick(inventory);
             PaintHud.Tick(inventory);
@@ -1341,14 +1350,22 @@ namespace VoxelEngine.UI
                 else if (_openOilRefinery      != null) { var mp = VoxelEngine.Crafting.ProcessorUI.OilRefineryPanel(_openOilRefinery, BuildSlot); _contentLayer.Add(mp); AppendItemPorts(mp, _openOilRefinery); }
                 else if (_openDistillationPlant != null)
                 {
-                    _plantLive ??= new VoxelEngine.Crafting.ProcessorUI.PlantPanelLive();
+                    _plantLive ??= new VoxelEngine.Crafting.ProcessorUI.MachinePanelLive();
                     _plantLive.Reset();
                     var mp = VoxelEngine.Crafting.ProcessorUI.DistillationPlantPanel(_openDistillationPlant, BuildSlot, _plantLive);
                     _plantLive.root = mp;
                     _contentLayer.Add(mp);
                     AppendItemPorts(mp, _openDistillationPlant);
                 }
-                else if (_openCatalyticCracker  != null) { var mp = VoxelEngine.Crafting.ProcessorUI.CatalyticCrackerPanel(_openCatalyticCracker, BuildSlot); _contentLayer.Add(mp); AppendItemPorts(mp, _openCatalyticCracker); }
+                else if (_openCatalyticCracker  != null)
+                {
+                    _crackerLive ??= new VoxelEngine.Crafting.ProcessorUI.MachinePanelLive();
+                    _crackerLive.Reset();
+                    var mp = VoxelEngine.Crafting.ProcessorUI.CatalyticCrackerPanel(_openCatalyticCracker, BuildSlot, _crackerLive);
+                    _crackerLive.root = mp;
+                    _contentLayer.Add(mp);
+                    AppendItemPorts(mp, _openCatalyticCracker);
+                }
                 else if (_openFlareStack         != null) { var mp = MachineUIs.FlareStackPanel(_openFlareStack, BuildSlot); _contentLayer.Add(mp); }
                 else if (_openPumpjack          != null) { var mp = MachineUIs.JackPumpPanel(_openPumpjack, BuildSlot); _contentLayer.Add(mp); AppendItemPorts(mp, _openPumpjack); }
                 else if (_openChemPlant        != null) { var mp = VoxelEngine.Crafting.ProcessorUI.ChemicalPlantPanel(_openChemPlant, BuildSlot); _contentLayer.Add(mp); AppendItemPorts(mp, _openChemPlant); }
@@ -3969,7 +3986,7 @@ namespace VoxelEngine.UI
             // Footer hint.
             panel.Add(Spacer(14));
 
-            var hint = new Label("Tip: connect cables from a generator. Insert Speed/Efficiency modules to tune output vs power use.");
+            var hint = new Label("Tip: connect cables from a generator. Machine Speed Modules (x1.25 throughput) and Machine Efficiency Modules (x0.8 power draw) tune output vs power use.");
             hint.style.color = new StyleColor(new Color(0.6f, 0.6f, 0.65f));
             hint.style.fontSize = 10;
             hint.style.whiteSpace = WhiteSpace.Normal;
@@ -5243,6 +5260,76 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
         }
 
 
+        /// <summary>
+        /// Catalytic Cracker panel, updated IN PLACE every frame: core temperature, catalyst
+        /// bed, cracking efficiency, the four tank gauges, the batch bar and the header pill.
+        /// Nothing here rebuilds the panel, so the page ScrollView keeps its offset while the
+        /// reactor is watched warming up to its target. A rebuild only happens when a caption
+        /// would be wrong (an auto-typed tank adopting a different liquid), and the named
+        /// "CatalyticCrackerPage" scroll carries the player's position across even that.
+        /// </summary>
+        private void TickCrackerLiveUI()
+        {
+            var live = _crackerLive;
+            var m = _openCatalyticCracker;
+            if (live == null || m == null || live.root == null || live.root.panel == null) return;
+
+            // Reactor kinetics.
+            if (live.coreTempValue != null && live.coreTempValue.panel != null)
+            {
+                live.coreTempValue.text = $"{m.reactorTemperatureC:0}°C / {m.targetOperatingTempC:0}°C";
+                live.coreTempValue.style.color = new StyleColor(VoxelEngine.Crafting.ProcessorUI.CrackerTempColor(m.reactorTemperatureC));
+            }
+            if (live.catalystValue != null && live.catalystValue.panel != null)
+            {
+                live.catalystValue.text = $"{m.catalystBedPercent:0}%";
+                live.catalystValue.style.color = new StyleColor(VoxelEngine.Crafting.ProcessorUI.CrackerCatalystColor(m.catalystBedPercent));
+            }
+            float efficiency = Mathf.Clamp01(m.CrackingEfficiency01);
+            if (live.efficiencyValue != null && live.efficiencyValue.panel != null)
+                live.efficiencyValue.text = $"{efficiency * 100f:0}%";
+            if (live.efficiencyFill != null && live.efficiencyFill.panel != null)
+                live.efficiencyFill.style.width = new StyleLength(new Length(efficiency * 100f, LengthUnit.Percent));
+
+            // Tank gauges — the tank objects are held from the build, so no FluidTanks
+            // array is allocated per frame and the gauges stay tied to the right tanks.
+            for (int i = 0; i < live.gaugeTanks.Count; i++)
+            {
+                var tank = live.gaugeTanks[i];
+                if (tank == null) continue;
+                if (i < live.gaugeFills.Count && live.gaugeFills[i] != null && live.gaugeFills[i].panel != null)
+                    live.gaugeFills[i].style.height = new StyleLength(new Length(Mathf.Clamp01(tank.Fill01) * 100f, LengthUnit.Percent));
+                if (i < live.gaugeValues.Count && live.gaugeValues[i] != null && live.gaugeValues[i].panel != null)
+                    live.gaugeValues[i].text = $"{tank.stored:0}/{tank.capacity:0} L";
+                // An auto-typed tank that adopts a new liquid changes its caption — that is
+                // the one thing a rebuild is genuinely needed for.
+                if (i < live.gaugeCaptionTypes.Count && live.gaugeCaptionTypes[i] != tank.liquid)
+                {
+                    _crackerLiveDirty = true;
+                    break;
+                }
+            }
+
+            // Batch progress.
+            if (live.progressFill != null && live.progressFill.panel != null)
+                live.progressFill.style.width = new StyleLength(new Length(Mathf.Clamp01(m.Progress01) * 100f, LengthUnit.Percent));
+
+            // Status pill + wattage.
+            string status = !m.IsOnline ? "NO POWER" : m.Current != null ? "PROCESSING" : "IDLE";
+            Color statusColor = !m.IsOnline ? UITheme.AccentRed : m.Current != null ? UITheme.AccentGreen : UITheme.AccentAmber;
+            if (live.statusLabel != null && live.statusLabel.panel != null) live.statusLabel.text = status;
+            if (live.statusPill != null && live.statusPill.panel != null)
+                live.statusPill.style.backgroundColor = new StyleColor(new Color(statusColor.r, statusColor.g, statusColor.b, 0.18f));
+            if (live.wattLabel != null && live.wattLabel.panel != null)
+                live.wattLabel.text = PowerFormat.Watts(m.CurrentWattage);
+
+            if (_crackerLiveDirty)
+            {
+                _crackerLiveDirty = false;
+                Refresh();   // a tank caption changed — one honest rebuild
+            }
+        }
+
         private bool PointerOverInteractiveUI()
         {
             if (_root?.panel == null) return false;
@@ -5667,6 +5754,14 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                 {
                     bool isUpgrade = item is FurnaceUpgradeItem;
                     return isUpgrade ? _openElectric.upgradeC : _openElectric.inputC;
+                }
+                // Oil Refinery: the same universal upgrade modules the furnace takes go in
+                // its two upgrade slots. Without this branch a shift-click landed in the
+                // input slots and the player had to drag the module across by hand.
+                if (_openOilRefinery != null)
+                {
+                    bool isUpgrade = item is FurnaceUpgradeItem;
+                    return isUpgrade ? _openOilRefinery.upgradeC : _openOilRefinery.inputC;
                 }
                 // Coal Generator: only fuel items go in.
                 if (_openCoalGen != null)

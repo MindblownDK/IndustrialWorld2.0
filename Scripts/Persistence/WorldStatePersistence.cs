@@ -265,6 +265,29 @@ namespace VoxelEngine.Persistence
                 armorSlots = equipment != null ? SerializeContainer(equipment.ArmorSlots) : null,
                 activeHotbarIndex = inv.activeHotbarIndex
             };
+
+            // 9.57.1-dev: the scene origin is re-anchored as the world runs (orbits, rebases,
+            // frame switches), so a raw scene coordinate is only meaningful in the frame it
+            // was captured in. For a player standing on or flying near a body, the position
+            // that survives a reload is the one taken RELATIVE to that body — the same
+            // construction the world spawn already uses. That anchor is the position the
+            // loader prefers; the scene coordinate and the cosmic coordinate stay in the
+            // file as the fallback and the diagnostic.
+            var frameBody = origin != null ? origin.FrameBody : null;
+            if (frameBody != null && frameBody.settings != null)
+            {
+                Vector3 bodyLocal = frameBody.transform.InverseTransformPoint(inv.transform.position);
+                save.player.hasAnchor = true;
+                save.player.anchorBody = frameBody.settings.bodyName;
+                save.player.anchorLocalX = bodyLocal.x;
+                save.player.anchorLocalY = bodyLocal.y;
+                save.player.anchorLocalZ = bodyLocal.z;
+            }
+
+            // 9.57.1-dev: the cosmic clock, so the solar system is where the save left it
+            // (orbits, seasons and lighting all read this). Legacy saves have 0 and load at t=0.
+            var registry = VoxelEngine.Cosmos.CosmicRegistry.Instance;
+            save.cosmicSimulationSeconds = registry != null ? registry.SimulationSeconds : 0d;
             return true;
         }
 
@@ -276,18 +299,49 @@ namespace VoxelEngine.Persistence
 
         private static bool IsSafePlayerSavePosition(Vector3 pos)
         {
-            if (float.IsNaN(pos.x) || float.IsNaN(pos.y) || float.IsNaN(pos.z)
-                || float.IsInfinity(pos.x) || float.IsInfinity(pos.y) || float.IsInfinity(pos.z)) return false;
+            if (!IsFiniteVector(pos)) return false;
             var body = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
             if (body == null)
             {
-                // Deep space is a perfectly valid disconnect position (real-space flight).
+                // Deep space is a perfectly valid disconnect position (real-space flight) —
+                // but it is a claim about the COSMIC position, not about the scene floats.
+                // 9.57.1-dev: a scene coordinate that is inside a celestial body right now
+                // is never a valid save, whatever the active gravity frame happens to be.
+                // This was the entry point of the restore loop: a stale scene coordinate in
+                // a deep-space frame was accepted, written on every quit, and read back the
+                // next session as a spawn beside the star.
+                if (IsInsideAnyBody(pos)) return false;
                 if (VoxelEngine.Cosmos.GravityProvider.IsDeepSpace) return true;
                 return Mathf.Abs(pos.x) < 100000f && Mathf.Abs(pos.y) < 100000f && Mathf.Abs(pos.z) < 100000f;
             }
             // Space and high-atmosphere locations are valid disconnect positions.
             // Reject only locations buried deep inside the active planetary body.
             return Vector3.Distance(pos, body.transform.position) >= body.SurfaceRadius * 0.70f;
+        }
+
+        /// <summary>
+        /// True when a scene position lands inside any celestial body's crust (5% margin
+        /// below its surface). Evaluated against the bodies' CURRENT scene positions using
+        /// the live origin, so it must be called BEFORE any re-anchoring moves them.
+        /// </summary>
+        private static bool IsInsideAnyBody(Vector3 scenePos)
+        {
+            if (!IsFiniteVector(scenePos)) return true;
+            var origin = VoxelEngine.Cosmos.SpaceOrigin.Instance;
+            var registry = VoxelEngine.Cosmos.CosmicRegistry.Instance;
+            if (origin == null || registry == null || !registry.IsReady) return false;
+
+            var toCheck = new List<Vector3>();
+            var radii = new List<float>();
+            foreach (var kv in registry.SceneBodies)
+            {
+                if (kv.Key == null || kv.Key.settings == null || kv.Value == null) continue;
+                toCheck.Add(kv.Value.transform.position);
+                radii.Add(kv.Value.SurfaceRadius);
+            }
+            for (int i = 0; i < toCheck.Count; i++)
+                if (Vector3.Distance(scenePos, toCheck[i]) < radii[i] * 0.95f) return true;
+            return false;
         }
 
         private void SavePlacedBlocks(SaveData save)
@@ -1801,48 +1855,81 @@ namespace VoxelEngine.Persistence
             var inv = FindAnyObjectByType<Inventory>();
             if (inv == null) return;
 
-            Vector3 restorePosition = ResolvePlayerRestorePosition(save.player.pos, out bool usedFallback);
-            float restoreRotY = IsFinite(save.player.rotY) ? save.player.rotY : 0f;
-            if (usedFallback)
+            // ── 9.57.1-dev: decide the restore pose BEFORE anything moves the origin ──
+            // Priority: the body anchor (exact, frame-independent) → the raw scene
+            // coordinate if it is coherent with the scene we just loaded → nothing at all,
+            // which leaves the player to PlayerSpawner's bed/world-spawn path. A rejected
+            // save is never rewritten and never guessed at.
+            Vector3 restorePosition = default;
+            bool hasRestorePosition = TryResolveSavedPlayerPosition(save.player, out restorePosition, out bool bodyAnchored);
+            if (!hasRestorePosition && save.player.container != null)
             {
-                Debug.LogWarning($"[WorldState] Saved player position was invalid; restored inventory at safe spawn {restorePosition} without rewriting the save file.");
+                Debug.LogWarning("[WorldState] Saved player position was not coherent with the loaded scene " +
+                                 "(inside a celestial body, or stale relative to a re-anchored origin). " +
+                                 "The player is placed by the spawn system at the bed/world spawn instead, and the " +
+                                 "rejected position is not written back over the save.");
             }
 
-            // Teleport only after validating the coordinates. A corrupt NaN/Infinity
-            // player pose must never touch the live transform because it can poison
-            // physics, chunk streaming, and follow-up autosaves before PlayerSpawner
-            // gets a chance to choose a fresh/bed spawn.
-            var cc = inv.GetComponent<CharacterController>();
-            if (cc != null) cc.enabled = false;
-            inv.transform.position = restorePosition;
-            inv.transform.eulerAngles = new Vector3(0, restoreRotY, 0);
-            if (cc != null) cc.enabled = true;
-            // Real-space restore: re-anchor the floating origin + reference frame at the
-            // saved cosmic position (deep-space/orbital logouts). Scene position above is
-            // then automatically consistent because the anchor is derived from it.
-            // Legacy saves omit the cosmic fields (deserialize as 0,0,0 = the star's
-            // location, which no player can legitimately occupy) — only restore when the
-            // saved cosmic position is actually non-zero.
-            bool hasCosmic = IsFinite((float)save.player.cosmicPosX) && IsFinite((float)save.player.cosmicPosY)
-                          && IsFinite((float)save.player.cosmicPosZ)
-                          && (Mathf.Abs((float)save.player.cosmicPosX)
-                            + Mathf.Abs((float)save.player.cosmicPosY)
-                            + Mathf.Abs((float)save.player.cosmicPosZ)) > 0.001f;
-            if (hasCosmic && VoxelEngine.Cosmos.CosmicRegistry.Instance != null
-                          && VoxelEngine.Cosmos.CosmicRegistry.Instance.IsReady)
+            float restoreRotY = IsFinite(save.player.rotY) ? save.player.rotY : 0f;
+
+            // ── Cosmic clock first (9.57.1-dev) ──
+            // The system is generated at t=0 on every load, so bodies must be put back on
+            // the reading the save was written at before any cosmic coordinate is resolved.
+            var registry = VoxelEngine.Cosmos.CosmicRegistry.Instance;
+            if (registry != null && registry.IsReady && save.cosmicSimulationSeconds > 0d)
+                registry.RestoreSimulationSeconds(save.cosmicSimulationSeconds);
+
+            bool deepSpaceRestored = false;
+            if (hasRestorePosition)
             {
-                var bootstrap = VoxelEngine.Cosmos.CosmosBootstrap.Instance;
-                if (bootstrap != null)
+                // Teleport only after validating the coordinates. A corrupt NaN/Infinity
+                // player pose must never touch the live transform because it can poison
+                // physics, chunk streaming, and follow-up autosaves before PlayerSpawner
+                // gets a chance to choose a fresh/bed spawn.
+                var cc = inv.GetComponent<CharacterController>();
+                if (cc != null) cc.enabled = false;
+                inv.transform.position = restorePosition;
+                inv.transform.eulerAngles = new Vector3(0, restoreRotY, 0);
+                if (cc != null) cc.enabled = true;
+
+                // Real-space restore for a genuine deep-space / high-orbit logout: re-anchor
+                // the floating origin at the saved cosmic position and re-enter the saved
+                // frame. This is ONLY correct when the saved position is really out in space
+                // — re-anchoring for a planet-side save moves every celestial body while the
+                // static blocks and grids stay at their saved scene coordinates, which is
+                // exactly how a base ends up floating in space beside a player who never
+                // left the ground (9.57.1-dev).
+                bool deepSpaceSave = !bodyAnchored && IsClearOfEveryBody(restorePosition);
+                if (deepSpaceSave && HasUsableCosmicPosition(save.player)
+                    && VoxelEngine.Cosmos.CosmicRegistry.Instance != null
+                    && VoxelEngine.Cosmos.CosmicRegistry.Instance.IsReady)
                 {
-                    bootstrap.RestoreCosmicState(
-                        new Vector3((float)save.player.cosmicPosX, (float)save.player.cosmicPosY, (float)save.player.cosmicPosZ),
-                        save.player.frameBody);
-                    // Re-apply the scene position AFTER the anchor settled so the
-                    // CharacterController sits exactly on the saved pose.
-                    inv.transform.position = restorePosition;
-                    inv.transform.eulerAngles = new Vector3(0, restoreRotY, 0);
+                    var bootstrap = VoxelEngine.Cosmos.CosmosBootstrap.Instance;
+                    if (bootstrap != null)
+                    {
+                        bootstrap.RestoreCosmicState(
+                            new Vector3((float)save.player.cosmicPosX, (float)save.player.cosmicPosY, (float)save.player.cosmicPosZ),
+                            save.player.frameBody);
+                        // Re-apply the scene position AFTER the anchor settled so the
+                        // CharacterController sits exactly on the saved pose.
+                        inv.transform.position = restorePosition;
+                        inv.transform.eulerAngles = new Vector3(0, restoreRotY, 0);
+                        deepSpaceRestored = true;
+                    }
+                }
+                else if (bodyAnchored)
+                {
+                    Debug.Log($"[WorldState] Player restored from its body anchor '{save.player.anchorBody}' at {restorePosition} " +
+                              "(no origin re-anchor — the scene already matches the body).");
                 }
             }
+
+            // 9.57.1-dev: the loaded frame can disagree with where the player actually is
+            // (a stale 'SOL'/deep-space frame over a ground position is exactly what turned a
+            // normal rejoin into a fall through an unstreamed world). Re-point the frame and
+            // the voxel streamer at the body the restored position sits on before anything
+            // else runs, so the surface exists when the player is handed control.
+            if (hasRestorePosition && !deepSpaceRestored) EnsureStreamingBodyAt(restorePosition);
 
             // Inventory + equipment.
             if (save.player.container != null) DeserializeInto(inv.container, save.player.container);
@@ -1855,44 +1942,127 @@ namespace VoxelEngine.Persistence
             inv.SetActiveHotbar(save.player.activeHotbarIndex);
         }
 
-        private static Vector3 ResolvePlayerRestorePosition(Vector3 savedPosition, out bool usedFallback)
+        /// <summary>
+        /// Resolve the pose a saved player record should be restored at, in this order:
+        /// the body anchor (exact and frame-independent), then the raw scene coordinate
+        /// when it is coherent with the freshly loaded scene. Returns false when neither
+        /// can be trusted, which hands the decision to the bed/world-spawn path.
+        /// </summary>
+        private bool TryResolveSavedPlayerPosition(SavedPlayer player, out Vector3 position, out bool bodyAnchored)
         {
-            if (IsSafePlayerSavePosition(savedPosition))
-            {
-                usedFallback = false;
-                return savedPosition;
-            }
+            position = default;
+            bodyAnchored = false;
+            if (player == null) return false;
 
-            usedFallback = true;
-            var session = Menu.WorldSession.Instance;
-            if (session != null)
+            if (player.hasAnchor && !string.IsNullOrEmpty(player.anchorBody))
             {
-                // Read-only refresh. This improves fallback quality when persistence
-                // restores before PlayerSpawner has loaded the spawn sidecar.
-                session.LoadSpawnSidecar();
-
-                if (session.hasBedSpawn && IsSafePlayerSavePosition(session.bedSpawnPoint))
-                    return session.bedSpawnPoint;
-                if (session.worldSpawnInitialized && IsSafePlayerSavePosition(session.worldSpawnPoint))
-                    return session.worldSpawnPoint;
-                if (IsSafePlayerSavePosition(session.worldSpawnPoint))
-                    return session.worldSpawnPoint;
-            }
-
-            var body = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
-            if (body != null)
-            {
-                Vector3 up = body.transform != null ? body.transform.up : Vector3.up;
-                if (session != null && IsFiniteVector(session.worldSpawnPoint))
+                var body = FindSceneBodyByName(player.anchorBody);
+                if (body != null)
                 {
-                    Vector3 fromCore = session.worldSpawnPoint - body.transform.position;
-                    if (fromCore.sqrMagnitude > 0.001f)
-                        up = fromCore.normalized;
+                    Vector3 anchored = body.transform.TransformPoint(
+                        new Vector3(player.anchorLocalX, player.anchorLocalY, player.anchorLocalZ));
+                    if (IsFiniteVector(anchored))
+                    {
+                        position = anchored;
+                        bodyAnchored = true;
+                        return true;
+                    }
                 }
-                return body.transform.position + up * (body.SurfaceRadius + 25f);
+                else
+                {
+                    Debug.LogWarning($"[WorldState] Saved body anchor '{player.anchorBody}' is not in this scene; " +
+                                     "falling back to the saved scene coordinate.");
+                }
             }
 
-            return new Vector3(0f, 250f, 0f);
+            if (IsFiniteVector(player.pos) && IsSafePlayerSavePosition(player.pos))
+            {
+                position = player.pos;
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>The scene body whose settings name matches, or null. Used by the player and grid restores.</summary>
+        private static VoxelEngine.Cosmos.CelestialBody FindSceneBodyByName(string bodyName)
+        {
+            var registry = VoxelEngine.Cosmos.CosmicRegistry.Instance;
+            if (registry != null && registry.SceneBodies != null)
+            {
+                foreach (var kv in registry.SceneBodies)
+                {
+                    if (kv.Key == null || kv.Key.settings == null || kv.Value == null) continue;
+                    if (string.Equals(kv.Key.settings.bodyName, bodyName, StringComparison.OrdinalIgnoreCase))
+                        return kv.Value;
+                }
+            }
+            var active = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
+            if (active != null && active.settings != null
+                && string.Equals(active.settings.bodyName, bodyName, StringComparison.OrdinalIgnoreCase))
+                return active;
+            var home = VoxelEngine.Cosmos.CosmosBootstrap.Instance != null
+                ? VoxelEngine.Cosmos.CosmosBootstrap.Instance.HomeBody : null;
+            if (home != null && home.settings != null
+                && string.Equals(home.settings.bodyName, bodyName, StringComparison.OrdinalIgnoreCase))
+                return home;
+            return null;
+        }
+
+        /// <summary>True when the position is clear of every body's surface (2 km of margin) — a real space restore, not a surface one.</summary>
+        private static bool IsClearOfEveryBody(Vector3 scenePos)
+        {
+            var registry = VoxelEngine.Cosmos.CosmicRegistry.Instance;
+            if (registry == null || !registry.IsReady) return true;
+            bool sawBody = false;
+            foreach (var kv in registry.SceneBodies)
+            {
+                if (kv.Key == null || kv.Key.settings == null || kv.Value == null) continue;
+                sawBody = true;
+                float altitude = Vector3.Distance(scenePos, kv.Value.transform.position) - kv.Value.SurfaceRadius;
+                if (altitude < 2000f) return false;   // inside an atmosphere / low orbit
+            }
+            return sawBody;
+        }
+
+        /// <summary>
+        /// Point the reference frame AND the voxel streamer at the body the given scene
+        /// position sits on/near (2000 m window). A no-op when they already agree or when no
+        /// body is close, so space positions are never dragged onto a planet.
+        /// </summary>
+        private static void EnsureStreamingBodyAt(Vector3 scenePos)
+        {
+            var registry = VoxelEngine.Cosmos.CosmicRegistry.Instance;
+            var origin = VoxelEngine.Cosmos.SpaceOrigin.Instance;
+            var bootstrap = VoxelEngine.Cosmos.CosmosBootstrap.Instance;
+            if (registry == null || !registry.IsReady || origin == null || bootstrap == null) return;
+
+            VoxelEngine.Cosmos.CelestialBody nearest = null;
+            float bestAltitude = 2000f;
+            foreach (var kv in registry.SceneBodies)
+            {
+                if (kv.Key == null || kv.Key.settings == null || kv.Value == null) continue;
+                float altitude = Vector3.Distance(scenePos, kv.Value.transform.position) - kv.Value.SurfaceRadius;
+                if (altitude < bestAltitude) { bestAltitude = altitude; nearest = kv.Value; }
+            }
+            if (nearest == null) return;
+            if (origin.FrameBody == nearest && bootstrap.CurrentFrameBody == nearest) return;
+
+            origin.SetFrame(nearest);
+            bootstrap.ForceStreamingBody(nearest);
+            Debug.LogWarning($"[WorldState] The loaded frame did not match the restored player position; " +
+                             $"re-targeted streaming to '{nearest.DisplayName}' ({bestAltitude:0} m above its surface) " +
+                             "so the ground is streamed under the player.");
+        }
+
+        /// <summary>True when the cosmic fields describe a real place and not a never-written record.</summary>
+        private static bool HasUsableCosmicPosition(SavedPlayer player)
+        {
+            if (player == null) return false;
+            if (!IsFinite((float)player.cosmicPosX) || !IsFinite((float)player.cosmicPosY)
+                || !IsFinite((float)player.cosmicPosZ)) return false;
+            return Mathf.Abs((float)player.cosmicPosX)
+                 + Mathf.Abs((float)player.cosmicPosY)
+                 + Mathf.Abs((float)player.cosmicPosZ) > 0.001f;
         }
 
         private static bool IsFinite(float value)
@@ -2731,6 +2901,12 @@ namespace VoxelEngine.Persistence
         [Serializable] private class SaveData
         {
             public SavedPlayer player;
+            // 9.57.1-dev: the cosmic clock the save was written at. The solar system is
+            // regenerated at t = 0 on every load, so without this every body sat at its
+            // start-of-session phase while the player's saved coordinates described where
+            // they were at the END of the session — the drift that turned a planet-side
+            // logout into a spawn in open space. Legacy saves read 0 and stay at t = 0.
+            public double cosmicSimulationSeconds;
             public List<SavedPlacedBlock>  placedBlocks  = new();
             public List<SavedPlacedTiered> placedTiered = new();
             public List<SavedQuarry>       quarries     = new();
@@ -2901,6 +3077,16 @@ namespace VoxelEngine.Persistence
             // omit these (0 + null) and restore through the old scene-anchored path.
             public double cosmicPosX; public double cosmicPosY; public double cosmicPosZ;
             public string frameBody;
+            // Body-anchored position (9.57.1-dev). `pos` above is a SCENE coordinate, and the
+            // scene origin is re-anchored as the world runs — so it is only valid in the
+            // frame it was captured in. This is the same position stored relative to the
+            // frame body's own transform, which is what actually survives a reload (the same
+            // construction the world spawn has used since 9.2.0). Legacy saves omit it:
+            // hasAnchor stays false and the loader falls back to the scene coordinate, then
+            // to the bed/world spawn.
+            public bool hasAnchor;
+            public string anchorBody;
+            public float anchorLocalX; public float anchorLocalY; public float anchorLocalZ;
             public SavedContainer container;
             // Additive in 6.22.1: two dedicated jetpack equipment slots.
             // Legacy saves leave this null and restore with empty slots.

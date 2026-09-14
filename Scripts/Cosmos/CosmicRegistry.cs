@@ -441,19 +441,40 @@ namespace VoxelEngine.Cosmos
             return result;
         }
 
-        // ── Per-frame orbit advance (real Keplerian propagation) ──
-        private void Update()
+        /// <summary>
+        /// Re-enter the simulation at a saved clock reading (9.57.1-dev). The layout is
+        /// generated at t = 0 on every scene load, so a save written after a session left
+        /// the system at a different orbital phase: the same cosmic coordinate meant a
+        /// different place in the world, which is how a planet-side logout came back as a
+        /// deep-space restore. Restoring the clock before the player is placed puts every
+        /// body back where the save was written against, and carries seasons and lighting
+        /// across a reload with it. Legacy saves have no reading and stay at t = 0.
+        /// </summary>
+        public void RestoreSimulationSeconds(double seconds)
         {
             if (!IsReady) return;
-            SimulationSeconds += Time.deltaTime * (orbitalTimeScale > 0d ? orbitalTimeScale : 1d);
-            double t = SimulationSeconds;
+            if (double.IsNaN(seconds) || double.IsInfinity(seconds) || seconds < 0d) return;
+            SimulationSeconds = seconds;
+            PropagateAll(seconds);
+        }
 
+        // ── Per-frame orbit advance (real Keplerian propagation) ──
+        private void PropagateAll(double t)
+        {
             for (int i = 0; i < _bodies.Count; i++)
             {
                 var b = _bodies[i];
                 if (b == null || !b.orbit.IsValid) continue;
                 b.UpdateFromOrbit(t);
             }
+        }
+
+        private void Update()
+        {
+            if (!IsReady) return;
+            SimulationSeconds += Time.deltaTime * (orbitalTimeScale > 0d ? orbitalTimeScale : 1d);
+            double t = SimulationSeconds;
+            PropagateAll(t);
         }
 
         // ── Public queries ─────────────────────────────────────────

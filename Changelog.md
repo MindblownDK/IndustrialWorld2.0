@@ -1,9 +1,159 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.57.0-dev`
+**Current Version:** `9.58.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.58.1-dev] Compile Fix: The Vector3 Finiteness Helper and the Qualified String Comparison
+
+**Type:** PATCH — source fix only. No save field, no asset, no authored value, no setup step, no behaviour change. Save-compatible in both directions exactly as 9.58.0-dev was.
+
+**GitHub title:** `[9.58.1-dev] Fix the five compile errors from 9.58.0-dev`
+
+#### Reported
+
+- Unity refused the 9.58.0-dev source with five errors, all of them in the two files the rejoin fix touched:
+  - `WorldStatePersistence.cs(302,27)` and `(329,27)`: `cannot convert from 'UnityEngine.Vector3' to 'float'`,
+  - `PlayerSpawner.cs(783,75)`, `(789,70)` and `(794,68)`: `The name 'StringComparison' does not exist in the current context`.
+
+#### Cause
+
+- **A helper was called by the wrong name.** The file has two finiteness helpers: `IsFinite(float)` for a scalar and `IsFiniteVector(Vector3)` for a position. During 9.58.0-dev the accidental duplicate `IsFinite(Vector3)` overload was removed — correctly, there was only ever one — but two **new** call sites in that same round (`IsSafePlayerSavePosition`, and the inside-a-body check) were written against the name `IsFinite` while handing it a `Vector3`. Nothing coerces a vector to a float in C#, so both are hard errors.
+- **A type was used without its namespace.** `PlayerSpawner.cs` imports `System.Collections`, `UnityEngine`, `Unity.Mathematics` and `VoxelEngine.Core` — not `System`. The three new `string.Equals(..., StringComparison.OrdinalIgnoreCase)` comparisons in `FindSceneBodyByName` therefore had no `StringComparison` in scope, while the three existing comparisons in the same file (looking for liquid-surface renderers, further down) use the qualified `System.StringComparison.OrdinalIgnoreCase` form the file has always used.
+
+#### Fixed
+
+- **`WorldStatePersistence.cs`** — both call sites now use `IsFiniteVector(...)`, the helper that takes a `Vector3`. The value tested is identical: `IsFiniteVector` is the same NaN-and-Infinity test applied to the three components, and it was already the helper used at every other position check in the file (`TryResolveSavedPlayerPosition`, the anchor resolution and the legacy scene-coordinate path).
+- **`PlayerSpawner.cs`** — the three comparisons are now written `System.StringComparison.OrdinalIgnoreCase`, matching the file's existing style and needing no new import. The comparison itself is unchanged: the same ordinal, case-insensitive body-name match, so a saved anchor still resolves against `settings.bodyName` exactly as documented in 9.58.0-dev.
+- **No behaviour, value or file-list change beyond those five lines.** The anchor resolution, the clock restore, the frame re-target, the live cracker tick and the universal module step are untouched.
+
+#### Why the harness did not catch it, and what now does
+
+- **Every check in the harness is a text check.** Delimiter balance, the presence of an interface member, the order of two statements, a substring — none of them can see that a call resolves to the wrong overload or that a type is not in scope. Neither mistake changes the character count, the brace depth or the words on the line. That is a real limit of a Unity-free workspace and it is stated plainly rather than glossed.
+- **Four guards added, and each was verified against the broken source as well as the fixed one** (they report 4 failures on the 9.58.0-dev source, and these five lines are what makes them pass):
+  - no vector-shaped argument may be passed to the scalar finiteness helper,
+  - the vector helper must be the one used at the position checks,
+  - a scan for `IsFinite(<argument>)` calls whose argument is a position (`pos`, `scenePos`, `anchored`, `transform.position`, ...),
+  - a per-file check that `PlayerSpawner.cs`, `CosmosBootstrap.cs` and `CosmicRegistry.cs` — the touched files that do not import `System` — qualify every `System` type they use.
+
+#### Numbers
+
+| | Value |
+|---|---|
+| Compile errors fixed | 5 (2 wrong overload, 3 unqualified type) |
+| Lines changed | 5 |
+| Behaviour changes | 0 |
+| Save fields added | 0 |
+| Harness checks | 326 in three sections (up from 320; 4 of the new ones are the compile guards) |
+| Guards verified against the broken source | yes — they fail on it |
+
+#### Manual Unity steps
+
+1. Replace `Scripts/Persistence/WorldStatePersistence.cs` and `Scripts/Player/PlayerSpawner.cs` with the versions in this delivery (the other files in the round are unchanged from 9.58.0-dev, and re-taking all of them is also fine).
+2. Let Unity compile: the console should be clean, with no error naming either file.
+3. Continue with the 9.58.0-dev acceptance run — Step 75 for the universal modules, the Catalytic Cracker panel, and the rejoin checks (save at your base, quit, rejoin three times).
+
+### [9.58.0-dev] Rejoin Spawn, Live Reactor Panel and the Universal Machine Upgrade Modules
+
+**Type:** MINOR — the round adds content (two items, two recipes, one authoring step) and extends the player save with four additive fields plus the cosmic clock. A save written before this round loads into this build unchanged: an absent anchor or clock falls back to the pre-round path, and the player is placed by the bed/world-spawn system rather than by a guess. A save written by this build loads into the previous one by ignoring the new fields. No save schema bump, no fresh save, no item identity change, no prefab replacement, and no balance value authored by an earlier step is rewritten.
+
+**GitHub title:** `[9.58.0-dev] Rejoin restores you where you logged out, the Catalytic Cracker panel updates live, and the universal machine upgrade modules now exist`
+
+#### Reported
+
+- The Distillation Plant, the Flare Stack and the ship refinery kept their batch and their tanks across a reload after 9.57.0-dev. Two follow-ups came back with the same round:
+  - the **Catalytic Cracker runs and appears in the hierarchy, but its panel never re-reads the reactor temperature** — the one readout a player watches while the reactor warms up, and the one that must not be refreshed by rebuilding the panel under a scroll,
+  - every rejoin after the first **spawned the player somewhere new** — one of them **in deep space next to the star**, in zero-g, over a world that was never streamed, and the blocks and grids around the last base were suspected of the same,
+  - and the **Oil Refinery had no universal upgrades** — only the Quarry's own modules and the maritime engine modules existed anywhere in the game.
+
+#### Root cause: the save wrote a position the next session could not interpret
+
+- **The scene coordinate is not a place, it is an offset from the current floating origin.** `SpaceOrigin` re-derives the origin anchor from the frame body every FixedUpdate and rebases it when the viewer travels, so the same number means a different place in a different frame. `player.pos` was written as a raw scene coordinate and read back as one. The world spawn has stored a *body-relative* anchor since 9.2.0 (`WorldSession.RecordWorldSpawn`); the player save never did.
+- **The orbits restarted at t = 0 on every load while the saved coordinates described the end of the session.** The numbers make the size of that clear, from the shipped assets and from the reported log:
+  - the star's `mu` is 180 km³/s² (`System_Sol`), the home planet's is `9.81 · r² = 0.628 km³/s²` (`Planet_Earth`, radius 8 km),
+  - the reported save position `(-2226.42, -1653.73, 221.91)` km is 2773 km from the star, exactly on the planet's surface,
+  - with those two values, the planet's gravity wins only within about **165 km** of it — and the planet moves 0.25 km/s along its orbit, so a clock that is minutes behind leaves the saved position outside that well,
+  - at that point the star dominates the position, the frame becomes the star (`frame 'SOL'` in the log), `GravityProvider.ActiveBody` goes null, the voxel streamer suspends, and the player is dropped into zero-g beside the star — which is also why the base, still standing at its own scene coordinates, looked like it had been flung into space. Nothing had moved it; the world around it had stopped streaming.
+- **A save-side guard accepted that position.** With no active body, `IsSafePlayerSavePosition` only rejected NaN and absurd magnitudes, so a stale scene coordinate that sat inside a planet was written on every quit and read back as a spawn beside the star.
+
+#### Fixed
+
+- **The player save is anchored to the body the player is standing on.** `SavedPlayer` gains `hasAnchor`, `anchorBody`, `anchorLocalX/Y/Z`, written from `SpaceOrigin.FrameBody.InverseTransformPoint(playerPosition)` — the same construction the world spawn has always used — and the loader resolves them back through `TransformPoint` on the body it finds by `settings.bodyName`. The anchor is exact and phase-independent: it is a position relative to the body, not to the world clock or to a floating origin, so it survives a rebase, a frame switch, a warp and a restart.
+- **The cosmic clock is saved and restored.** `SaveData.cosmicSimulationSeconds` carries `CosmicRegistry.SimulationSeconds`, and `CosmicRegistry.RestoreSimulationSeconds` puts the system back on that reading before any cosmic coordinate is resolved (NaN / Infinity / negative values are ignored, legacy saves stay at t = 0). Orbits, seasons and lighting resume at the phase the save was written at instead of the phase the system was generated at.
+- **The restore is ordered so a stale frame cannot win.** The clock is restored first, then the pose is decided (body anchor, then the legacy scene coordinate when it is coherent with the loaded scene, then nothing at all and the bed/world-spawn path takes over). The floating origin is re-anchored **only** for a position that is genuinely clear of every body — a planet-side save never re-anchors, because re-anchoring is exactly what moved every celestial body away from the player's base.
+- **The frame and the voxel streamer are re-pointed at the body under the player.** `EnsureStreamingBodyAt` finds the body the restored position sits on (2000 m window), and if the frame and the streamer disagree with the ground, it pairs `SpaceOrigin.SetFrame` with `CosmosBootstrap.ForceStreamingBody` — the same pairing respawn already uses — so the surface exists before the player is handed control.
+- **`CosmosBootstrap.RestoreCosmicState` no longer trusts a frame name over physics.** The dominance pick is recomputed from the saved cosmic position against the bodies' own cosmic positions; the stored name only decides the frame when the position is clear of every body, and a contradicting name is reported in the console instead of obeyed.
+- **The save-side guard now knows about planets.** `IsSafePlayerSavePosition` rejects any scene position inside a celestial body (5% crust margin) **whatever the active frame is** — the entry point of the whole loop — and the check runs before the anchor is written, so a bad reading can never be stored as a good anchor either.
+- **`PlayerSpawner` reads the same anchor first.** `TryReadSavedPlayerPosition` resolves the body-anchored position before the legacy `player.pos` regex, and returns immediately when it resolves, so the stale float can no longer overwrite a good anchor. A save with no anchor keeps the old path exactly.
+- **The Catalytic Cracker panel now updates in place.** `TickCrackerLiveUI` writes core temperature, catalyst bed, cracking efficiency, the four tank gauges, the batch bar, the status pill and the wattage every frame — no rebuild, so the page scroll is never reset and no button under the cursor is destroyed. The panel rebuilds only when a caption would be wrong (an auto-typed tank adopting a different liquid), and the named `CatalyticCrackerPage` scroll carries the player's position across even that. The Temperature / Catalyst / Efficiency colours come from the same two helpers the panel is built with, so a live reading cannot drift from what a rebuild would have drawn.
+- **The universal machine upgrade modules exist.** They are the modules the Electric Furnace and the Oil Refinery upgrade slots read (`FurnaceUpgradeItem`), and until now the class had **zero assets**: no item, no recipe, no research, no registry entry, which is why those slots could never be filled. Two modules are authored with their recipes, icons, registry entries, save-catalogue links and research unlock, all through a new non-destructive setup step.
+
+#### Added
+
+- **`Scripts/Editor/UniversalUpgradeSetup.cs`** (new) — **Step 75**, re-runnable and idempotent. It creates the two modules, their Assembler recipes, their generated icons, the save-catalogue entries and the research unlock; it follows an existing module identity by `itemId` instead of creating a duplicate, throws rather than choosing between two existing recipes, refuses to run in Play Mode, and stops with a named missing ingredient instead of authoring a module nobody could craft. Existing multipliers, descriptions, icons, recipe quantities and research settings are never reset, and nothing is deleted.
+- **Machine Speed Module** (`upgrade_machine_speed`) — x1.25 throughput per module, amber chevron icon, craftable at an Assembler from steel plate, circuit, iron gear and copper wire.
+- **Machine Efficiency Module** (`upgrade_machine_efficiency`) — x0.8 power draw per module, green bolt icon, craftable at an Assembler from steel plate, circuit, iron gear and copper wire.
+- **Both recipes unlock under the existing Advanced Manufacturing research** (tier 3, cost, prerequisites and column untouched) and both are registered in `RecipeRegistry`, so they appear in the crafting menu and in the research node the moment it is researched.
+
+#### Changed
+
+- **Quick transfer sends a universal module to the upgrade slots on the Oil Refinery**, mirroring the Electric Furnace rule that already existed: shift-clicking a Speed or Efficiency Module with the refinery panel open fills its upgrade slots instead of its input slots.
+- **The refinery panel says what its upgrade slots take** — universal machine modules, and explicitly that the Quarry's Range / Speed / Efficiency Upgrades and the maritime engine modules do nothing there. This is the confusion the report came from: the Quarry's modules are literally named "Speed Upgrade" and "Efficiency Upgrade" in the inventory and look universal.
+- **The Electric Furnace hint names the two modules** rather than saying "Speed/Efficiency modules".
+- **`UITheme.TankGaugeWithParts`** returns the gauge, its fill element and its value label; the existing `TankGauge` keeps its signature and delegates to it, so no call site changed.
+
+#### Numbers
+
+| | Value |
+|---|---|
+| Save fields added to existing records | 5 (player `hasAnchor`, `anchorBody`, `anchorLocalX/Y/Z`) + 1 top-level (`cosmicSimulationSeconds`) |
+| Save schema bumps | 0 |
+| New items / recipes / research nodes | 2 / 2 / 0 (the existing Advanced Manufacturing node gains two unlocks) |
+| New setup step | Step 75 (non-destructive, idempotent) |
+| Tanks updated live on the cracker panel | 4 gauges + batch bar + status pill + wattage |
+| Planet's gravity-well radius in the shipped assets | ~165 km (star `mu` 180 vs planet `mu` 0.628 km³/s²) |
+| Harness checks | 320 in three sections |
+
+#### Deliberately left open — deferred by 9.58.0-dev, not shipped half-covered
+
+- **Placed blocks and grids still save scene coordinates.** While the home body stays the frame body those coordinates are stable (the body is pinned at the same scene position every session), which is why the base was never actually moved — the frame was. If a warp-heavy session is ever shown to drift them, the same body anchor the player save now uses is the fix, and it is recorded as its own item rather than bolted on here.
+- **The two smelters still lose their batch** (Furnace / ElectricFurnace progress, `userEnabled`, `autoPull`), and **the pumpjack's barrel cycle is still session-only** — both unchanged from 9.57.0-dev.
+- **A resumed batch still resumes at its own progress**, not advanced by the time the game was closed.
+- **The universal modules are craft-only.** No loot, no derelict drop, no vendor; that matches the Quarry modules and is stated so it is a decision rather than an oversight.
+
+#### Validation
+
+- **320 harness checks pass**, in three sections. Section A and B are the 9.57.0-dev checks (machine persistence, unchanged and still green). Section C is this round: the player-save schema, the save-side and restore-side ordering, the single-definition check on every helper, the clock guard and its shared propagation path, the dominance recomputation and the hint rule in `RestoreCosmicState`, the spawner's anchor-first read, the cracker tick (in-place writes, handles held instead of `FluidTanks` re-read, exactly one rebuild path, page scroll named), the Step 75 authoring guarantees, and the arithmetic behind the report: the planet's 9.81 m/s² surface gravity, the star's 0.023 m/s² pull at 2773 km, the ~165 km well, the phase error that pushed the planet beyond it, the anchor's phase independence, and the re-anchor that made a base read as off-world.
+- **Not compiled against UnityEngine and not run in Unity.** There is no Unity, no `dotnet` and no `mono` in the workspace this round was written in, so nothing above is a compile result. Every member the new code reaches for was checked against the committed source it lives in — `SpaceOrigin.FrameBody` / `SetFrame` / `GetCosmicKm` / `TeleportCosmic`, `CosmosBootstrap.RestoreCosmicState` / `ForceStreamingBody` / `CurrentFrameBody` / `HomeBody`, `CosmicRegistry.Instance` / `SceneBodies` / `GetDominantBody` / `SimulationSeconds` / `ToDouble3`, `CelestialBody.settings.bodyName` / `SurfaceRadius` / `transform`, `BodyInstance.positionKmD` / `settings.radiusKm`, `MachineFluidTank.Fill01` / `stored` / `capacity` / `liquid` / `autoType`, `UITheme.TankGauge`, `T.StatRow` / `ProgressBar` / `Muted` / `SlotGrid` / `AccentOrange` / `AccentGold` / `AccentCyan` / `AccentGreen` / `AccentAmber` / `AccentRed`, `ItemDefinition.iconTint` / `category` / `massPerUnit` / `maxStack`, `FurnaceUpgradeItem.speedMultiplier` / `efficiencyMultiplier`, `RecipeDefinition.requiredStation` / `unlockedByDefault` / `inputs` / `outputCount`, `ResearchNode.unlocksRecipes`, `ResearchTree.nodes`, `RecipeRegistry.recipes` and `ItemPersistenceCatalog.items` — and every touched file is delimiter-balanced, which is a static check and not a substitute for the compiler.
+- **Two of the checks above failed first and were harness bugs, not source defects**: Python's `{:0}` does not truncate a float the way C#'s `{0}` does, and two needles embedded a Unicode dash that the C# source stores as an escape sequence. Both were fixed in the harness; the source was not changed.
+
+#### Files in this round
+
+| File | Change |
+|---|---|
+| `Scripts/Persistence/WorldStatePersistence.cs` | body-anchored player save, cosmic clock, ordered restore, `EnsureStreamingBodyAt`, the inside-a-body guard |
+| `Scripts/Cosmos/CosmicRegistry.cs` | `PropagateAll`, `RestoreSimulationSeconds` |
+| `Scripts/Cosmos/CosmosBootstrap.cs` | dominance outranks the stored frame name in `RestoreCosmicState` |
+| `Scripts/Player/PlayerSpawner.cs` | `TryReadAnchoredPlayerPosition`, anchor-first read, shared body lookup |
+| `Scripts/UI/GameUIController.cs` | `TickCrackerLiveUI`, cracker live handles, refinery quick-transfer route, furnace hint |
+| `Scripts/Crafting/ProcessorUI.cs` | `MachinePanelLive`, cracker panel handles, `FluidRow` live gauges, upgrade-slot hint, colour helpers |
+| `Scripts/UI/UITheme.cs` | `TankGaugeWithParts` (existing `TankGauge` unchanged) |
+| `Scripts/Editor/UniversalUpgradeSetup.cs` | new — Step 75 authoring of the universal modules |
+| `Scripts/Editor/VoxelEngineSetupWindow.cs` | Step 75 button and its non-destructive description |
+| `Scripts/Editor/UniversalUpgradeSetup.cs.meta` | new — if the project keeps meta files under version control |
+
+#### Manual Unity steps
+
+1. Replace the nine files listed above that already exist (`WorldStatePersistence`, `CosmicRegistry`, `CosmosBootstrap`, `PlayerSpawner`, `GameUIController`, `ProcessorUI`, `UITheme`, `VoxelEngineSetupWindow`), add the new `Scripts/Editor/UniversalUpgradeSetup.cs` and its `.meta` if meta files are tracked, and let Unity compile.
+2. Run `Tools > Voxel Engine > Voxel Engine Setup` and click **75. Author Universal Machine Upgrade Modules**. It creates only what is missing and reports what it did; if an earlier step was never run, it stops with the name of the missing ingredient rather than authoring a dead recipe.
+3. Confirm the two new items exist: search the crafting menu near an **Assembler** for `Machine Speed Module` and `Machine Efficiency Module` (if they do not appear, research **Advanced Manufacturing** first — the recipes are gated by that node, as the Quarry's modules are gated by their own).
+4. Verify the modules in play: put one Speed and one Efficiency Module into an **Oil Refinery**'s upgrade slots by shift-clicking from the inventory, then open the machine. The multiplier readout should be x1.25 throughput and x0.8 power draw before any new batch starts, and the panel hint should name the modules it takes.
+5. Verify the live reactor panel: light up a **Catalytic Cracker** and watch the panel while the reactor climbs to its target. Core temperature, catalyst bed and cracking efficiency should move every frame, and the page should not jump to the top while you scroll the panel.
+6. Verify the rejoin fix on the ground: stand at your base, note the coordinates, save and quit, then reload. You should come back to the same spot on the same planet, with the ground streamed under you, no `Deep space — voxel streaming suspended` line in the console, and the base where you left it.
+7. Verify the orbits: reload twice more and confirm the sun's position in the sky matches the time of day it was when you logged out (the system now resumes at the saved clock reading rather than at t = 0), and that the second and third rejoins land in the same place as the first.
+8. Verify the space path is untouched: fly up until the frame goes to deep space, save and quit, then reload. You should come back in space at the same place, in zero-g, with the star where you left it — and no falling through a planet.
+9. Load a world saved before this round: the player is placed by the bed/world-spawn path (the anchor is absent), the system starts at t = 0 as it always did, and no console error is reported — an absent anchor is the expected legacy case, not a warning.
 
 ### [9.57.0-dev] Machine Process Persistence: Machines Keep Their Batch, Their Tanks and Their Feed
 

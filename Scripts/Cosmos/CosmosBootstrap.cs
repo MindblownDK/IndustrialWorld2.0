@@ -787,6 +787,39 @@ namespace VoxelEngine.Cosmos
                 }
             }
 
+            // ── 9.57.1-dev: gravitational dominance outranks the saved frame hint ──
+            // A save can carry a frame name that no longer describes its own coordinates
+            // (the name was captured with the origin anchored elsewhere). Honouring such a
+            // hint dropped the streaming body and moved every celestial body into deep
+            // space around a player who never left the ground. The dominance pick at the
+            // saved position is authoritative whenever the position is NOT clear of every
+            // body; a name only decides the frame in genuine deep space. Note this is
+            // recomputed here rather than read from _spaceOrigin because TeleportCosmic
+            // returns early when the anchor did not actually move, and then it never re-picks.
+            double3 savedPosKm = VoxelEngine.Cosmos.CosmicRegistry.ToDouble3(savedCosmicKm);
+            double nearestAltitudeKm = double.MaxValue;
+            foreach (var kv in registry.SceneBodies)
+            {
+                if (kv.Key == null || kv.Key.settings == null) continue;
+                double altitude = math.distance(kv.Key.positionKmD, savedPosKm) - kv.Key.settings.radiusKm;
+                if (altitude < nearestAltitudeKm) nearestAltitudeKm = altitude;
+            }
+
+            if (nearestAltitudeKm <= 2d)
+            {
+                CelestialBody dominant = null;
+                BodyInstance dominantInstance = registry.GetDominantBody(savedPosKm, out double _);
+                if (dominantInstance != null) registry.SceneBodies.TryGetValue(dominantInstance, out dominant);
+                if (dominant != null && dominant != frame)
+                {
+                    if (frame != null)
+                        Debug.LogWarning($"[CosmosBootstrap] Saved frame hint '{frameBodyName}' contradicts gravitational dominance at " +
+                                         $"{savedCosmicKm} km ({nearestAltitudeKm:0.0} km above the nearest surface); " +
+                                         $"restoring into '{dominant.DisplayName}' instead.");
+                    frame = dominant;
+                }
+            }
+
             if (frame != null && frame != _streamingBody)
             {
                 _spaceOrigin.SetFrame(frame);

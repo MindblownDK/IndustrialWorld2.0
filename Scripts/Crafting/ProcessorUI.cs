@@ -26,34 +26,60 @@ namespace VoxelEngine.Crafting
     public static class ProcessorUI
     {
         /// <summary>
-        /// Element handles for the open Distillation Plant panel. The controller
-        /// updates these IN PLACE every frame (needle sweep, readouts, status pill,
-        /// progress bar) instead of rebuilding the panel — a rebuild re-created the
-        /// page ScrollView and threw the player back to the top while scrolling.
+        /// Element handles for an open machine panel whose readouts move on their own.
+        /// The controller updates these IN PLACE every frame (dials, readouts, status pill,
+        /// progress bar) instead of rebuilding the panel — a rebuild re-created the page
+        /// ScrollView and threw the player back to the top while scrolling (the 9.38
+        /// Distillation Plant report, repeated on the Catalytic Cracker in 9.57.1-dev).
+        /// Each panel fills in the fields it owns and leaves the rest null; Reset() drops
+        /// every handle when the panel closes, so a stale label can never be written to.
         /// </summary>
-        public sealed class PlantPanelLive
+        public sealed class MachinePanelLive
         {
             public VisualElement root;
-            public readonly List<int> tankIndices = new();
-            public readonly List<LiquidType> captionTypes = new();
-            public readonly List<VisualElement> needles = new();
-            public readonly List<Label> values = new();
+            // Header + batch progress (every machine panel built through BuildShell).
             public VisualElement progressFill;
             public VisualElement statusPill;
             public Label statusLabel;
             public Label wattLabel;
+            // Distillation Plant dial ring.
+            public readonly List<int> tankIndices = new();
+            public readonly List<LiquidType> captionTypes = new();
+            public readonly List<VisualElement> needles = new();
+            public readonly List<Label> values = new();
+            // Straight gauges + the tanks behind them (Catalytic Cracker and any panel
+            // that draws its tanks with FluidRow). The tank references themselves are
+            // held so a tick never has to call FluidTanks — that property builds a new
+            // array on every read and the tick runs every frame.
+            public readonly List<MachineFluidTank> gaugeTanks = new();
+            public readonly List<VisualElement> gaugeFills = new();
+            public readonly List<Label> gaugeValues = new();
+            public readonly List<LiquidType> gaugeCaptionTypes = new();
+            // Catalytic Cracker kinetics readouts.
+            public Label coreTempValue;
+            public Label catalystValue;
+            public Label efficiencyValue;
+            public VisualElement efficiencyFill;
 
             public void Reset()
             {
                 root = null;
-                tankIndices.Clear();
-                captionTypes.Clear();
-                needles.Clear();
-                values.Clear();
                 progressFill = null;
                 statusPill = null;
                 statusLabel = null;
                 wattLabel = null;
+                tankIndices.Clear();
+                captionTypes.Clear();
+                needles.Clear();
+                values.Clear();
+                gaugeTanks.Clear();
+                gaugeFills.Clear();
+                gaugeValues.Clear();
+                gaugeCaptionTypes.Clear();
+                coreTempValue = null;
+                catalystValue = null;
+                efficiencyValue = null;
+                efficiencyFill = null;
             }
         }
 
@@ -79,7 +105,9 @@ namespace VoxelEngine.Crafting
             FluidRow(p, m.FluidTanks, 150f, 108f);
             ItemSlots(p, "Inputs", m.inputC, slot);
             ItemSlots(p, "Outputs", m.outputC, slot);
-            UpgradeSlots(p, "Upgrades", m.upgradeC, slot);
+            UpgradeSlots(p, "Upgrades", m.upgradeC, slot,
+                "Universal machine modules only — Machine Speed Module (x1.25 throughput) and Machine Efficiency Module (x0.8 power draw). "
+                + "The Quarry's Range / Speed / Efficiency Upgrades and the maritime engine modules are specific to those machines and do nothing here.");
             RecipeBook(p, m.knownRecipes, m.Current, m.selectedRecipe,
                 rec => { m.selectedRecipe = rec; GameUIController.Instance?.RefreshCurrentPanel(); },
                 scrollName: "RefineryRecipeBook");
@@ -104,7 +132,7 @@ namespace VoxelEngine.Crafting
 
         // ── Distillation Plant (9.38.0) — the dedicated petroleum plant ──────
         public static VisualElement DistillationPlantPanel(DistillationPlant m, MachineUIs.SlotBuilder slot,
-            PlantPanelLive live = null)
+            MachinePanelLive live = null)
         {
             m.EnsureContainers();
             m.EnsureTanks();
@@ -152,10 +180,23 @@ namespace VoxelEngine.Crafting
         }
 
         // ── Catalytic Cracker & Reformer (9.40.0 / Step 71) ─────────────────
-        public static VisualElement CatalyticCrackerPanel(CatalyticCracker m, MachineUIs.SlotBuilder slot)
+        /// <summary>
+        /// Core temperature tint: blue while the reactor is cold, gold while it is being
+        /// brought up, orange once it is at cracking heat. Shared with the live tick so a
+        /// readout can never drift from what a rebuild would have drawn.
+        /// </summary>
+        public static Color CrackerTempColor(float temperatureC)
+            => temperatureC > 300f ? T.AccentOrange : (temperatureC > 100f ? T.AccentGold : T.AccentCyan);
+
+        /// <summary>Catalyst bed tint: green while the bed is healthy, red once it is spent.</summary>
+        public static Color CrackerCatalystColor(float bedPercent)
+            => bedPercent > 50f ? T.AccentGreen : (bedPercent > 20f ? T.AccentAmber : T.AccentRed);
+
+        public static VisualElement CatalyticCrackerPanel(CatalyticCracker m, MachineUIs.SlotBuilder slot,
+            MachinePanelLive live = null)
         {
             m.EnsureContainers();
-            var p = BuildShell("🔥 Catalytic Cracker & Reformer", m.IsOnline, m.Current, m.Progress01, m.CurrentWattage);
+            var p = BuildShell("🔥 Catalytic Cracker & Reformer", m.IsOnline, m.Current, m.Progress01, m.CurrentWattage, live);
             FixWidth(p, 520f);
 
             var page = new ScrollView(ScrollViewMode.Vertical) { name = "CatalyticCrackerPage" };
@@ -173,20 +214,34 @@ namespace VoxelEngine.Crafting
             kinRow.style.justifyContent = Justify.SpaceBetween;
             kinRow.style.marginBottom = 4;
 
-            Color tempColor = m.reactorTemperatureC > 300f ? T.AccentOrange : (m.reactorTemperatureC > 100f ? T.AccentGold : T.AccentCyan);
-            kinRow.Add(T.StatRow("🌡", "Core Temp", $"{m.reactorTemperatureC:0}°C / {m.targetOperatingTempC:0}°C", tempColor));
+            var tempRow = T.StatRow("🌡", "Core Temp", $"{m.reactorTemperatureC:0}°C / {m.targetOperatingTempC:0}°C", CrackerTempColor(m.reactorTemperatureC));
+            kinRow.Add(tempRow);
 
-            Color catColor = m.catalystBedPercent > 50f ? T.AccentGreen : (m.catalystBedPercent > 20f ? T.AccentAmber : T.AccentRed);
-            kinRow.Add(T.StatRow("🧪", "Catalyst Bed", $"{m.catalystBedPercent:0}%", catColor));
+            var catRow = T.StatRow("🧪", "Catalyst Bed", $"{m.catalystBedPercent:0}%", CrackerCatalystColor(m.catalystBedPercent));
+            kinRow.Add(catRow);
             page.Add(kinRow);
+            if (live != null)
+            {
+                // Handles so the reactor can be watched warming up: the tick moves these
+                // labels and bars in place, which leaves the page ScrollView (and the
+                // player's scroll position) exactly where it was.
+                live.coreTempValue = FindValueLabel(tempRow);
+                live.catalystValue = FindValueLabel(catRow);
+            }
 
-            var (effBar, _) = T.ProgressBar(m.CrackingEfficiency01, T.AccentCyan, 8, true);
+            var (effBar, effFill) = T.ProgressBar(m.CrackingEfficiency01, T.AccentCyan, 8, true);
             effBar.style.marginTop = 2; effBar.style.marginBottom = 6;
-            page.Add(T.StatRow("⚡", "Cracking Efficiency", $"{m.CrackingEfficiency01 * 100f:0}%", T.AccentCyan));
+            var effRow = T.StatRow("⚡", "Cracking Efficiency", $"{m.CrackingEfficiency01 * 100f:0}%", T.AccentCyan);
+            page.Add(effRow);
             page.Add(effBar);
+            if (live != null)
+            {
+                live.efficiencyValue = FindValueLabel(effRow);
+                live.efficiencyFill = effFill;
+            }
 
             // 4 Fluid Tanks (2 Inputs + 2 Outputs)
-            FluidRow(page, m.FluidTanks, 115f, 96f);
+            FluidRow(page, m.FluidTanks, 115f, 96f, live);
 
             page.Add(T.Spacer(6));
             ItemSlots(page, "Catalysts & Feed Additives", m.inputC, slot);
@@ -212,7 +267,7 @@ namespace VoxelEngine.Crafting
         }
 
         private static VisualElement BuildShell(string title, bool online,
-            ProcessingRecipe current, float progress01, float watts, PlantPanelLive live = null)
+            ProcessingRecipe current, float progress01, float watts, MachinePanelLive live = null)
         {
             var p = T.MachinePanel();
             var (hdr, _, pill, pillLabel) = T.HeaderRow(title,
@@ -256,7 +311,7 @@ namespace VoxelEngine.Crafting
         /// on top and pour / draw / drain controls underneath (9.38.0).
         /// </summary>
         private static void FluidRow(VisualElement p, IReadOnlyList<MachineFluidTank> tanks,
-            float gaugeWidth = 150f, float gaugeHeight = 108f)
+            float gaugeWidth = 150f, float gaugeHeight = 108f, MachinePanelLive live = null)
         {
             if (tanks == null || tanks.Count == 0) return;
             p.Add(GUI.SectionTitle("Fluid Tanks"));
@@ -273,12 +328,19 @@ namespace VoxelEngine.Crafting
                 col.style.marginRight = 5;
                 col.style.marginBottom = 6;
                 col.style.flexShrink = 0;
-                var gauge = T.TankGauge(TankCaption(t), t.Fill01, t.liquid.Color(),
+                var gauge = T.TankGaugeWithParts(TankCaption(t), t.Fill01, t.liquid.Color(),
                     $"{t.stored:0}/{t.capacity:0} L", gaugeWidth, gaugeHeight);
                 // The caption names what is actually in the tank; the role lives in
                 // the tooltip so "Fluid In" carries a value the player cannot use.
-                gauge.tooltip = $"{t.label} — {(t.autoType && t.IsEmpty ? "empty, adopts the first liquid poured in" : t.liquid.DisplayName())}";
-                col.Add(gauge);
+                gauge.column.tooltip = $"{t.label} — {(t.autoType && t.IsEmpty ? "empty, adopts the first liquid poured in" : t.liquid.DisplayName())}";
+                if (live != null)
+                {
+                    live.gaugeTanks.Add(t);
+                    live.gaugeFills.Add(gauge.fill);
+                    live.gaugeValues.Add(gauge.value);
+                    live.gaugeCaptionTypes.Add(t.liquid);
+                }
+                col.Add(gauge.column);
                 AddTankButtons(col, t);
                 row.Add(col);
             }
@@ -313,7 +375,7 @@ namespace VoxelEngine.Crafting
         /// rimmed in the liquid's own colour so feed and cuts are unmistakable.
         /// </summary>
         private static VisualElement DialCell(string tankLabel, MachineFluidTank t, string hint, float dial = 92f,
-            PlantPanelLive live = null, int tankIndex = -1)
+            MachinePanelLive live = null, int tankIndex = -1)
         {
             float fill = t.Fill01;
             var liquid = t.liquid;
@@ -474,13 +536,15 @@ namespace VoxelEngine.Crafting
             p.Add(grid);
         }
 
-        private static void UpgradeSlots(VisualElement p, string label, ItemContainer c, MachineUIs.SlotBuilder slot)
+        private static void UpgradeSlots(VisualElement p, string label, ItemContainer c, MachineUIs.SlotBuilder slot,
+            string hint = null)
         {
             if (c == null) return;
             p.Add(GUI.SectionTitle(label));
             var grid = T.SlotGrid(c.Size);
             for (int i = 0; i < c.Size; i++) grid.Add(slot(c, i, c.GetSlot(i), false, true));
             p.Add(grid);
+            if (!string.IsNullOrEmpty(hint)) p.Add(T.Muted(hint));
         }
 
         /// <summary>Recipe list inside a scrollable region — long recipe sets can

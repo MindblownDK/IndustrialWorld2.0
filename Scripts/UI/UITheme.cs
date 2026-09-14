@@ -418,6 +418,18 @@ namespace VoxelEngine.UI
         public static VisualElement TankGauge(
             string label, float fill01, Color fillColor,
             string valueText, float width = 54, float height = 84)
+            => TankGaugeWithParts(label, fill01, fillColor, valueText, width, height).column;
+
+        /// <summary>
+        /// Same gauge, plus handles onto the fill element and the value label. Live panels
+        /// keep a gauge honest by moving these in place (the 9.57.1-dev Catalytic Cracker
+        /// report: the panel never re-read its reactor temperature because there was no
+        /// handle to write to). Prefer this over a rebuild — a rebuild hands the player a
+        /// brand new ScrollView, which has to be pushed back to where it was.
+        /// </summary>
+        public static (VisualElement column, VisualElement fill, Label value) TankGaugeWithParts(
+            string label, float fill01, Color fillColor,
+            string valueText, float width = 54, float height = 84)
         {
             var col = new VisualElement();
             col.style.alignItems = Align.Center;
@@ -484,7 +496,7 @@ namespace VoxelEngine.UI
             val.pickingMode = PickingMode.Ignore;
             col.Add(val);
 
-            return col;
+            return (col, fillEl, val);
         }
 
         // ── Labeled Slot Card ─────────────────────────────────────────────

@@ -704,6 +704,15 @@ namespace VoxelEngine.Player
             try
             {
                 string txt = System.IO.File.ReadAllText(path);
+
+                // ── 9.57.1-dev: body anchor first ──────────────────────────────────────
+                // `player.pos` is a scene coordinate and the scene origin is re-anchored
+                // while the world runs, so the anchor (the same position stored relative to
+                // the frame body) is the one reading that still means something after a
+                // reload. It is read here, and here only, so the legacy scene-coordinate
+                // reader below can never overwrite a good anchor with a stale float.
+                if (TryReadAnchoredPlayerPosition(txt, out pos)) return true;
+
                 // Verbatim string: doubled "" for literal quotes, \{ is a regex-escaped brace.
                 const string pattern = @"""player""\s*:\s*\{\s*""pos""\s*:\s*\{\s*""x""\s*:\s*(-?[0-9.eE+-]+)\s*,\s*""y""\s*:\s*(-?[0-9.eE+-]+)\s*,\s*""z""\s*:\s*(-?[0-9.eE+-]+)";
                 var m = System.Text.RegularExpressions.Regex.Match(txt, pattern);
@@ -721,6 +730,70 @@ namespace VoxelEngine.Player
                 return true;
             }
             catch { return false; }
+        }
+
+        /// <summary>
+        /// Reads the body-anchored player position out of the save JSON and resolves it
+        /// against the freshly loaded scene. Positions that do not resolve (no body by that
+        /// name, no anchor written yet) return false so the caller falls through to the
+        /// legacy scene coordinate and then to the bed/world spawn.
+        /// </summary>
+        private static bool TryReadAnchoredPlayerPosition(string json, out Vector3 pos)
+        {
+            pos = default;
+            if (string.IsNullOrEmpty(json)) return false;
+            try
+            {
+                var anchorMatch = System.Text.RegularExpressions.Regex.Match(json,
+                    @"""hasAnchor""\s*:\s*true[\s\S]{0,400}?""anchorBody""\s*:\s*""(?<body>[^""]*)""[\s\S]{0,200}?""anchorLocalX""\s*:\s*(?<x>-?[0-9.eE+-]+)[\s\S]{0,80}?""anchorLocalY""\s*:\s*(?<y>-?[0-9.eE+-]+)[\s\S]{0,80}?""anchorLocalZ""\s*:\s*(?<z>-?[0-9.eE+-]+)");
+                if (!anchorMatch.Success) return false;
+
+                var body = FindSceneBodyByName(anchorMatch.Groups["body"].Value);
+                if (body == null) return false;
+
+                var local = new Vector3(
+                    float.Parse(anchorMatch.Groups["x"].Value, System.Globalization.CultureInfo.InvariantCulture),
+                    float.Parse(anchorMatch.Groups["y"].Value, System.Globalization.CultureInfo.InvariantCulture),
+                    float.Parse(anchorMatch.Groups["z"].Value, System.Globalization.CultureInfo.InvariantCulture));
+                if (float.IsNaN(local.x) || float.IsNaN(local.y) || float.IsNaN(local.z)
+                    || float.IsInfinity(local.x) || float.IsInfinity(local.y) || float.IsInfinity(local.z))
+                    return false;
+
+                Vector3 resolved = body.transform.TransformPoint(local);
+                if (float.IsNaN(resolved.x) || float.IsNaN(resolved.y) || float.IsNaN(resolved.z)
+                    || float.IsInfinity(resolved.x) || float.IsInfinity(resolved.y) || float.IsInfinity(resolved.z))
+                    return false;
+
+                pos = resolved;
+                return true;
+            }
+            catch { return false; }
+        }
+
+        /// <summary>The scene body whose <c>settings.bodyName</c> matches, or null.</summary>
+        private static VoxelEngine.Cosmos.CelestialBody FindSceneBodyByName(string bodyName)
+        {
+            if (string.IsNullOrEmpty(bodyName)) return null;
+            var registry = VoxelEngine.Cosmos.CosmicRegistry.Instance;
+            if (registry != null && registry.SceneBodies != null)
+            {
+                foreach (var kv in registry.SceneBodies)
+                {
+                    if (kv.Key == null || kv.Key.settings == null || kv.Value == null) continue;
+                    if (string.Equals(kv.Key.settings.bodyName, bodyName, System.StringComparison.OrdinalIgnoreCase))
+                        return kv.Value;
+                }
+            }
+            var active = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
+            if (active != null && active.settings != null
+                && string.Equals(active.settings.bodyName, bodyName, System.StringComparison.OrdinalIgnoreCase))
+                return active;
+            var bootstrap = VoxelEngine.Cosmos.CosmosBootstrap.Instance;
+            var home = bootstrap != null ? bootstrap.HomeBody : null;
+            if (home != null && home.settings != null
+                && string.Equals(home.settings.bodyName, bodyName, System.StringComparison.OrdinalIgnoreCase))
+                return home;
+            return null;
         }
 
         /// <summary>Rejects corrupt coordinates before they can freeze streaming.

@@ -823,6 +823,23 @@ namespace VoxelEngine.EditorTools
             AddWizardButton(scroll, "74. Create / Repair Auto-Run Pilot Blocks (Large + Small — Non-Destructive)",
                 () => IndustrialWorld.EditorTools.AutoRunPilotSetup.RunStep74(), 62);
 
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
+                "Step 75 (9.58.0) authors the UNIVERSAL MACHINE UPGRADE MODULES (non-destructive):\n" +
+                "  \u2022 MACHINE SPEED MODULE and MACHINE EFFICIENCY MODULE \u2014 the modules the Electric\n" +
+                "    Furnace and the Oil Refinery upgrade slots read. They had no assets at all, so those\n" +
+                "    slots could never be filled; only the Quarry's Range/Speed/Efficiency modules and the\n" +
+                "    maritime engine modules existed.\n" +
+                "  \u2022 x1.25 speed per Speed Module, x0.8 power draw per Efficiency Module, stacking across\n" +
+                "    the machine's upgrade slots\n" +
+                "  \u2022 Crafted at an ASSEMBLER, unlocked by the existing ADVANCED MANUFACTURING research\n" +
+                "    (the node keeps its cost, tier and column)\n" +
+                "  \u2022 Generated icons, recipe quantities and save-catalogue links\n" +
+                "Create missing content and repair links only \u2014 existing multipliers, descriptions,\n" +
+                "icons, recipe quantities and research settings are never reset.");
+            AddWizardButton(scroll, "75. Author Universal Machine Upgrade Modules (Speed + Efficiency \u2014 Non-Destructive)",
+                () => IndustrialWorld.EditorTools.UniversalUpgradeSetup.RunStep75(), 62);
+
             AddSpacer(scroll, 20);
         }
 
