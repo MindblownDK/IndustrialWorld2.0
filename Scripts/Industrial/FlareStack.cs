@@ -15,7 +15,7 @@ using VoxelEngine.Transport;
 namespace VoxelEngine.Industrial
 {
     [RequireComponent(typeof(PowerGenerator))]
-    public class FlareStack : MonoBehaviour, IItemPortHost
+    public class FlareStack : MonoBehaviour, IItemPortHost, IMachineProcessState
     {
         [Header("Flare Controls")]
         [Tooltip("When true, the flare is burning incoming fuel.")]
@@ -394,6 +394,45 @@ namespace VoxelEngine.Industrial
                 _flareLight.intensity = baseIntensity * flicker;
                 _flareLight.color = wasteHeatRecovery ? new Color(0.7f, 0.85f, 1.0f) : new Color(1f, 0.6f, 0.2f);
             }
+        }
+
+        // ── Machine process persistence (9.57.0-dev) ────────────────────────
+        // The derrick has no recipe worth resuming, but every setting on it came from
+        // a player decision taken on the panel — whether it flares at all, whether it
+        // recovers waste heat, and what it targets — and its feed tank holds the
+        // surplus it siphoned. All of it rides the shared machine payload.
+
+        private const string ExtraOpen = "flare_open";
+        private const string ExtraWasteHeatRecovery = "flare_waste_heat_recovery";
+        private const string ExtraTargetFuel = "flare_target_fuel";
+        private const string ExtraAutoSelectFuel = "flare_auto_select_fuel";
+        private const string ExtraTotalBurned = "flare_total_burned_litres";
+
+        public void CaptureProcessState(MachineProcessState state)
+        {
+            if (state == null) return;
+            MachineProcessPersistence.CaptureTanks(state, FluidTanks);
+            state.SetExtra(ExtraOpen, isOpen ? 1f : 0f);
+            state.SetExtra(ExtraWasteHeatRecovery, wasteHeatRecovery ? 1f : 0f);
+            state.SetExtra(ExtraTargetFuel, (int)targetFuel);
+            state.SetExtra(ExtraAutoSelectFuel, autoSelectFuel ? 1f : 0f);
+            state.SetExtra(ExtraTotalBurned, TotalBurnedLitres);
+        }
+
+        public void RestoreProcessState(MachineProcessState state)
+        {
+            if (state == null) return;
+
+            MachineProcessPersistence.RestoreTanks(state, FluidTanks);
+
+            isOpen = state.GetExtraBool(ExtraOpen, isOpen);
+            wasteHeatRecovery = state.GetExtraBool(ExtraWasteHeatRecovery, wasteHeatRecovery);
+            autoSelectFuel = state.GetExtraBool(ExtraAutoSelectFuel, autoSelectFuel);
+
+            int fuel = Mathf.RoundToInt(state.GetExtra(ExtraTargetFuel, (int)targetFuel));
+            if (System.Enum.IsDefined(typeof(LiquidType), fuel)) targetFuel = (LiquidType)fuel;
+
+            TotalBurnedLitres = Mathf.Max(0f, state.GetExtra(ExtraTotalBurned, TotalBurnedLitres));
         }
 
         // ── IItemPortHost ───────────────────────────────────────────────────

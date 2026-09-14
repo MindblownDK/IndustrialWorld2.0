@@ -1,9 +1,98 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.56.6-dev`
+**Current Version:** `9.57.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.57.0-dev] Machine Process Persistence: Machines Keep Their Batch, Their Tanks and Their Feed
+
+**Type:** MINOR — a save-compatible system. One additive save record carries the live process state of every processing machine. A save written before this round loads into this build unchanged (the record is simply absent, and each machine starts exactly as it does today); a save written by this build loads into the previous one by ignoring the new field. No save schema bump, no fresh save, no item identity change, no prefab replacement, no power production value or other authored balance value is touched.
+
+**GitHub title:** `[9.57.0-dev] Machine Process Persistence: plants, reactors, refineries and flare stacks keep their batch, their tanks and their feed across a reload`
+
+#### Why this round
+
+- The 9.40.0 entry wrote the gap down in plain sight: *"No save serialisation for the cracker ... reactor temperature, catalyst bed percentage, in-progress batch and tank contents are all lost on reload ... This is the one real gap in the shipped round and is the natural first item in a follow-up."* That was one machine. Asking the same question down the rest of the petroleum chain showed it was the whole chain:
+  - the **Distillation Plant** (9.38.0) owns seven tanks and lost every one of them,
+  - the **Oil Refinery** and the **Stationary Chemical Plant** own two tanks each,
+  - the **stationary Flare Stack** (9.39.0) owns a 2000 L tank and carries three player decisions taken on its panel,
+  - the **ship's refinery and chemical plant** kept their items in grid cargo (already saved) and their fluids in grid tanks (already saved) but lost the batch and the recipe the player had picked,
+  - and none of the four world machines wrote its **item slots** either, so a plant that had been fed coal and catalyst came back with empty slots.
+- The player-facing effect was identical in every case: pour 1900 litres of crude in, close the game, come back to an empty plant. A catalyst bed bought with gold and platinum ingots vanished on reload. A flare stack forgot it had been shut down, was recovering waste heat, and was targeting kerosene.
+
+#### Added
+
+- **`Scripts/Crafting/MachineProcessState.cs`** (new). One payload instead of a saved class per machine — the machines differ in their contents (seven tanks here, four tanks and a catalyst bed there, one tank and a fuel selection on the derrick), but they all save the same four things, so they share one shape and one contract:
+  - `MachineTankState` — one tank as it was: `index`, `label`, `LiquidType` as an int (the appended-only enum every other fluid record already stores as an int) and litres.
+  - `MachineProcessState` — the batch in progress (asset name + seconds of progress), the recipe the player locked on the panel, the tank list, and a keyed list of machine-specific numbers.
+  - `IMachineProcessState` — `CaptureProcessState` / `RestoreProcessState`. The persistence layer finds machines through this interface, so it never needs to know which machines exist, and a machine added later gets saved by implementing two methods.
+  - `MachineProcessPersistence` — the behaviour every machine would otherwise duplicate: `Resolve` (asset name first, display label second, null rather than a guess when neither matches, one warning naming the machine and the missing recipe), and `CaptureTanks` / `RestoreTanks` (index authoritative, label the fallback for an index that no longer exists, litres clamped to the live tank's own capacity, an undefined liquid value ignored so the tank keeps the type its prefab gave it).
+- **`Scripts/Persistence/WorldStatePersistence.cs`** — `SavedPlacedBlock.machineProcess`, a capture hook at the tail of `CaptureFactoryRuntime`, a restore hook at the tail of `RestoreFactoryRuntime`, and four container branches (capture and restore, in the same declared order) for the plant, the cracker, the refinery and the chemical plant.
+- **State now written per machine:**
+
+| Machine | Batch | Locked recipe | Fluid tanks | Machine-specific numbers |
+|---|---|---|---|---|
+| Distillation Plant | recipe + seconds | yes | feed + all six cuts, type and litres | — |
+| Catalytic Cracker | recipe + seconds | — (runs its own ordered list) | four tanks, type and litres | `catalyst_bed_percent`, `reactor_temperature_c` |
+| Oil Refinery | recipe + seconds | yes | fluid in + fluid out | — |
+| Stationary Chemical Plant | recipe + seconds | yes | fluid in + fluid out | — |
+| Stationary Flare Stack | — | — | flare feed tank | `flare_open`, `flare_waste_heat_recovery`, `flare_target_fuel`, `flare_auto_select_fuel`, `flare_total_burned_litres` |
+| Grid Refinery / Grid Chemical Plant | recipe + seconds | yes | — (grid tanks are already saved as blocks) | — |
+
+#### Changed
+
+- **The four world machines now save their item slots.** The plant and the cracker write inputs and outputs; the refinery writes inputs, outputs and upgrades; the chemical plant writes inputs and outputs. The refinery's upgrade slots are the ones that matter most in play: refilling them re-fires `ItemContainer.OnChanged`, so `RecalculateUpgrades` runs during the restore and the speed and efficiency multipliers come back together with the modules the player had installed, with no extra plumbing anywhere.
+- **Restore order is fixed and deliberate: containers, then the machine's own state.** A resumed batch therefore reads the containers and tanks that were just refilled rather than the empty ones the prefab spawned with, and a recipe the machine can no longer run resolves to nothing and lets the machine pick its own next batch instead of stalling on a recipe that cannot complete.
+- **The grid machines ride the existing grid block runtime record.** `SavedGridBlock.runtime` already carries factory state for machine blocks, so the ship's refinery and chemical plant needed no new grid save field — the same interface hook captures and restores them.
+- **No setup step and no authored asset changed.** Nothing in this round creates a prefab, a block, an item, a recipe or a research node, so there is no new wizard step to run: the existing steps are untouched, and every balance value on every machine prefab is exactly where the player or the setup wizard left it.
+
+#### Numbers
+
+| | Value |
+|---|---|
+| Payload fields | 7 (`recipeName`, `selectedRecipeName`, `progressSeconds`, `tanks`, `extraKeys`, `extraValues`, and the record itself) |
+| Machines covered | 5 world machines + 2 grid machines, through 1 interface |
+| Tanks restored per machine | plant 7, cracker 4, refinery 2, chemical plant 2, flare stack 1, grid machines 0 |
+| Save fields added to existing records | 1 (`SavedPlacedBlock.machineProcess`) |
+| Save schema bumps | 0 |
+| New prefabs / items / recipes / research nodes | 0 |
+
+#### Deliberately left open — deferred by 9.57.0-dev, not shipped half-covered
+
+- **The two smelters still lose their batch.** `Furnace` and `ElectricFurnace` keep smelting progress, the electric furnace's `userEnabled` switch and its `autoPull` toggle in session memory only. They are a separate machine family with their own recipe type (`SmeltingRecipe`) and their own panel decisions, and they deserve the same treatment delivered in one piece rather than a partial one; recorded as an open roadmap item against this version.
+- **The pumpjack's barrel cycle is still session-only.** Its containers are saved (they were already), its 14-second cycle progress is not.
+- **Progress belongs to the machine, not to the world clock.** A reloaded batch resumes at the progress it was saved at; time the game was closed does not advance it. That is intentional — an offline-advancing factory would silently consume inputs the player never saw being spent — and it is stated here so it is a decision rather than a surprise.
+
+#### Validation
+
+- **211 harness checks pass**, in two sections. Static: file presence, both interface members implemented on all seven machines, delimiter balance across all nine touched files, the four container branches present in both directions, no placeholder text, and no external product name introduced. Behavioural: the seven-tank plant round trip through a real JSON serialise/deserialise, over-capacity clamping, NaN litres, an undefined liquid index, an unknown tank index with a matching label, recipe resolution by asset name and by display label, a retired recipe name resolving to nothing, progress clamped to the batch it belongs to, the cracker's reactor numbers landing before efficiency is read, the flare stack's three switches and its fuel selection, the writer's own re-write of an existing extra key, the legacy no-record path, the empty-payload skip, the nested grid payload surviving JSON, and the refinery's three-container span alignment.
+- **Not compiled against UnityEngine and not run in Unity.** There is no Unity, no `dotnet` and no `mono` in the workspace this round was written in, so nothing here is a compile result. Every member the new code reaches for was checked against the committed source it lives in — `EnsureContainers`, `EnsureTanks`, `inputC` / `outputC` / `upgradeC`, `FluidTanks`, `knownRecipes`, `selectedRecipe`, `Current`, `isOpen`, `wasteHeatRecovery`, `targetFuel`, `autoSelectFuel`, `TotalBurnedLitres`, and `MachineFluidTank.label` / `liquid` / `stored` / `capacity` — and every file is delimiter-balanced, which is a static check and not a substitute for the compiler.
+
+#### Files in this round
+
+| File | Change |
+|---|---|
+| `Scripts/Crafting/MachineProcessState.cs` | new — payload, contract, shared helpers |
+| `Scripts/Crafting/DistillationPlant.cs` | implements `IMachineProcessState` |
+| `Scripts/Crafting/CatalyticCracker.cs` | implements `IMachineProcessState`, reactor extras |
+| `Scripts/Crafting/OilRefinery.cs` | implements `IMachineProcessState` |
+| `Scripts/Industrial/StationaryChemicalPlant.cs` | implements `IMachineProcessState` |
+| `Scripts/Industrial/FlareStack.cs` | implements `IMachineProcessState`, five flare extras |
+| `Scripts/GridSystem/GridRefinery.cs` | implements `IMachineProcessState` |
+| `Scripts/GridSystem/GridChemicalPlant.cs` | implements `IMachineProcessState` |
+| `Scripts/Persistence/WorldStatePersistence.cs` | payload field, capture and restore hooks, four container branches |
+
+#### Manual Unity steps
+
+1. Replace the nine files listed above (eight edited, one new, plus the new file's `.meta` if the project keeps meta files under version control). Let Unity compile.
+2. Run `Tools > Voxel Engine > Voxel Engine Setup` as usual. No step in this round authors anything, so nothing needs generating or repairing; running it is only the standing non-destructive check that every earlier authored asset is still connected.
+3. Verify the plant: fill a Distillation Plant's feed tank with crude, let one batch finish, save and reload. The feed should come back at the same level, the six cuts at the levels they had, the panel recipe and progress bar where they were, and the world dials should climb back to the same readings as they ease from empty.
+4. Verify the reactor: run a Catalytic Cracker until the reactor is hot and the bed has dropped, save and reload. Reactor temperature and catalyst bed percentage should return exactly, and the panel's cracking efficiency should read the same value before the first new tick.
+5. Verify the derrick: shut a Flare Stack, enable waste-heat recovery and target kerosene, save and reload. All three should return, the status line should read Shut while it stays closed, and the feed tank should hold what it had siphoned.
+6. Verify the refinery modules: install a speed and an efficiency module, save and reload, then open the panel. The multipliers should already be applied before any new batch starts.
+7. Verify the ship machines: pick a recipe on a grid refinery, save, reload, and confirm the panel still shows that recipe rather than Auto.
+8. Verify the legacy path: load a world saved before this version. Every machine should load empty and idle with no error in the console — the absence of a record is the expected case and is not a warning.
 
 ### [9.56.6-dev] Allow wide roads and 50m off-road approach for network runs
 

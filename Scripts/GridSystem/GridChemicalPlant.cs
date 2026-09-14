@@ -13,7 +13,7 @@ using VoxelEngine.Crafting;
 
 namespace VoxelEngine.GridSystem
 {
-    public class GridChemicalPlant : GridBlock
+    public class GridChemicalPlant : GridBlock, IMachineProcessState
     {
         [Header("Chemical Plant — Fuel Synthesis")]
         public List<ProcessingRecipe> knownRecipes = new();
@@ -57,5 +57,28 @@ namespace VoxelEngine.GridSystem
         }
 
         [System.NonSerialized] public ProcessingRecipe selectedRecipe;
+
+        // ── Machine process persistence (9.57.0-dev) ────────────────────────
+        // Same as the ship's refinery: cargo and grid tanks are saved as blocks of
+        // their own, so the batch and the player's recipe pick are what needed a
+        // home. Both ride the shared machine payload in the grid block's runtime record.
+
+        public void CaptureProcessState(MachineProcessState state)
+        {
+            if (state == null) return;
+            state.recipeName = MachineProcessPersistence.NameOf(_current);
+            state.selectedRecipeName = MachineProcessPersistence.NameOf(selectedRecipe);
+            state.progressSeconds = Mathf.Max(0f, _progress);
+        }
+
+        public void RestoreProcessState(MachineProcessState state)
+        {
+            if (state == null) return;
+            selectedRecipe = MachineProcessPersistence.Resolve(knownRecipes, state.selectedRecipeName, nameof(GridChemicalPlant));
+            _current = MachineProcessPersistence.Resolve(knownRecipes, state.recipeName, nameof(GridChemicalPlant));
+            _progress = _current == null
+                ? 0f
+                : Mathf.Clamp(state.progressSeconds, 0f, Mathf.Max(0.1f, _current.secondsPerBatch));
+        }
     }
 }

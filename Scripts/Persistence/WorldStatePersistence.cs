@@ -535,6 +535,19 @@ namespace VoxelEngine.Persistence
             CaptureMaritimePorts(go, entry);
             CaptureLightingRuntime(go, entry);
             CaptureDefenseRuntime(go, entry);
+
+            // 9.57.0-dev: one shared payload carries the live process state of any
+            // machine that implements IMachineProcessState — the batch in progress,
+            // the locked recipe, the fluid in every tank it owns and the handful of
+            // numbers only that machine has (catalyst bed, reactor temperature, flare
+            // totals). Written for static world machines and grid machines alike.
+            var processMachine = go.GetComponentInChildren<VoxelEngine.Crafting.IMachineProcessState>(true);
+            if (processMachine != null)
+            {
+                var processState = new VoxelEngine.Crafting.MachineProcessState();
+                processMachine.CaptureProcessState(processState);
+                entry.machineProcess = processState;
+            }
         }
 
 
@@ -915,6 +928,49 @@ namespace VoxelEngine.Persistence
             var assembler = go.GetComponentInChildren<VoxelEngine.Simulation.Assembler>();
             if (assembler != null)
                 return SerializeMulti(assembler.inputC, assembler.outputC, assembler.upgradeC);
+
+            // Petroleum-era machines (9.57.0-dev). Their item slots used to be dropped on
+            // save, which meant a plant that had been fed coal and catalyst for a recipe
+            // came back with empty slots. The container list of each machine is written in
+            // the fixed order its restore branch mirrors.
+            var distillation = go.GetComponentInChildren<VoxelEngine.Crafting.DistillationPlant>(true);
+            if (distillation != null)
+            {
+                distillation.EnsureContainers();
+                var sc = SerializeMulti(distillation.inputC, distillation.outputC);
+                AttachPortSnapshot(go, sc);
+                return sc;
+            }
+
+            var cracker = go.GetComponentInChildren<VoxelEngine.Crafting.CatalyticCracker>(true);
+            if (cracker != null)
+            {
+                cracker.EnsureContainers();
+                var sc = SerializeMulti(cracker.inputC, cracker.outputC);
+                AttachPortSnapshot(go, sc);
+                return sc;
+            }
+
+            var oilRefinery = go.GetComponentInChildren<VoxelEngine.Crafting.OilRefinery>(true);
+            if (oilRefinery != null)
+            {
+                oilRefinery.EnsureContainers();
+                // The upgrade slots matter as much as the recipe slots: refilling them
+                // re-fires OnChanged, so the speed and efficiency multipliers come back
+                // with the modules the player installed.
+                var sc = SerializeMulti(oilRefinery.inputC, oilRefinery.outputC, oilRefinery.upgradeC);
+                AttachPortSnapshot(go, sc);
+                return sc;
+            }
+
+            var chemicalPlant = go.GetComponentInChildren<VoxelEngine.Industrial.StationaryChemicalPlant>(true);
+            if (chemicalPlant != null)
+            {
+                chemicalPlant.EnsureContainers();
+                var sc = SerializeMulti(chemicalPlant.inputC, chemicalPlant.outputC);
+                AttachPortSnapshot(go, sc);
+                return sc;
+            }
 
             var maritimeEngine = go.GetComponentInChildren<VoxelEngine.Maritime.GridMaritimeEngine>();
             if (maritimeEngine != null)
@@ -2139,6 +2195,17 @@ namespace VoxelEngine.Persistence
             RestoreMaritimePorts(go, saved.maritimePorts);
             RestoreLightingRuntime(go, saved.lightingConfig);
             RestoreDefenseRuntime(go, saved.defenseState);
+
+            // 9.57.0-dev: the machine's own process state goes last, so a resumed batch
+            // reads the containers and tanks that were just refilled rather than the
+            // empty ones the prefab spawned with. Machines are found by interface, so
+            // this single hook covers the world machines and the grid machines alike,
+            // and a save with no record leaves the machine exactly as it loads today.
+            if (saved.machineProcess != null && !saved.machineProcess.IsEmpty)
+            {
+                var processMachine = go.GetComponentInChildren<VoxelEngine.Crafting.IMachineProcessState>(true);
+                if (processMachine != null) processMachine.RestoreProcessState(saved.machineProcess);
+            }
         }
 
         private static void RestoreDefenseRuntime(GameObject go, SavedDefenseState state)
@@ -2450,6 +2517,43 @@ namespace VoxelEngine.Persistence
             if (assembler != null)
             {
                 DeserializeMulti(sc, assembler.inputC, assembler.outputC, assembler.upgradeC);
+                return;
+            }
+
+            // Petroleum-era machines (9.57.0-dev). Same order as the capture branch.
+            var distillation = go.GetComponentInChildren<VoxelEngine.Crafting.DistillationPlant>(true);
+            if (distillation != null)
+            {
+                distillation.EnsureContainers();
+                DeserializeMulti(sc, distillation.inputC, distillation.outputC);
+                RestorePortSnapshot(go, sc);
+                return;
+            }
+
+            var cracker = go.GetComponentInChildren<VoxelEngine.Crafting.CatalyticCracker>(true);
+            if (cracker != null)
+            {
+                cracker.EnsureContainers();
+                DeserializeMulti(sc, cracker.inputC, cracker.outputC);
+                RestorePortSnapshot(go, sc);
+                return;
+            }
+
+            var oilRefinery = go.GetComponentInChildren<VoxelEngine.Crafting.OilRefinery>(true);
+            if (oilRefinery != null)
+            {
+                oilRefinery.EnsureContainers();
+                DeserializeMulti(sc, oilRefinery.inputC, oilRefinery.outputC, oilRefinery.upgradeC);
+                RestorePortSnapshot(go, sc);
+                return;
+            }
+
+            var chemicalPlant = go.GetComponentInChildren<VoxelEngine.Industrial.StationaryChemicalPlant>(true);
+            if (chemicalPlant != null)
+            {
+                chemicalPlant.EnsureContainers();
+                DeserializeMulti(sc, chemicalPlant.inputC, chemicalPlant.outputC);
+                RestorePortSnapshot(go, sc);
                 return;
             }
 
@@ -2847,6 +2951,12 @@ namespace VoxelEngine.Persistence
             public List<SavedTransportItem> conveyorItems = new();
             public List<SavedTransportItem> chuteItems = new();
             public SavedMachineState machine;
+            // Additive 9.57.0-dev: the live process + fluid state of a processing machine
+            // (batch in progress, locked recipe, every tank it owns, machine-specific
+            // numbers). Null for every other block, and null in every save written before
+            // this round — a machine with no record restores empty and idle, exactly as it
+            // did before this field existed, which is why no save schema bump is needed.
+            public VoxelEngine.Crafting.MachineProcessState machineProcess;
             // Funnel state (mode + buffered items). Null for non-funnel blocks.
             public SavedFunnelState funnelState;
             // Splitter state (buffer + round-robin cursor). Null for non-splitter blocks.

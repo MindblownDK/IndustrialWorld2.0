@@ -15,7 +15,7 @@ using VoxelEngine.Items;
 
 namespace VoxelEngine.GridSystem
 {
-    public class GridRefinery : GridBlock
+    public class GridRefinery : GridBlock, IMachineProcessState
     {
         [Header("Refinery — Liquid Fuel Chain")]
         [Tooltip("Same ProcessingRecipe assets the stationary Oil Refinery uses.")]
@@ -57,5 +57,30 @@ namespace VoxelEngine.GridSystem
 
         /// <summary>Player-selected recipe (from the UI). Null = auto-pick.</summary>
         [System.NonSerialized] public ProcessingRecipe selectedRecipe;
+
+        // ── Machine process persistence (9.57.0-dev) ────────────────────────
+        // A ship's refinery keeps its items in grid cargo and its fluids in grid
+        // tanks, and both of those are already saved as blocks of their own, so the
+        // only state that lived and died with the session was the batch and the
+        // recipe the player picked. Those ride the same shared machine payload the
+        // stationary machines use, carried through the grid block's runtime record.
+
+        public void CaptureProcessState(MachineProcessState state)
+        {
+            if (state == null) return;
+            state.recipeName = MachineProcessPersistence.NameOf(_current);
+            state.selectedRecipeName = MachineProcessPersistence.NameOf(selectedRecipe);
+            state.progressSeconds = Mathf.Max(0f, _progress);
+        }
+
+        public void RestoreProcessState(MachineProcessState state)
+        {
+            if (state == null) return;
+            selectedRecipe = MachineProcessPersistence.Resolve(knownRecipes, state.selectedRecipeName, nameof(GridRefinery));
+            _current = MachineProcessPersistence.Resolve(knownRecipes, state.recipeName, nameof(GridRefinery));
+            _progress = _current == null
+                ? 0f
+                : Mathf.Clamp(state.progressSeconds, 0f, Mathf.Max(0.1f, _current.secondsPerBatch));
+        }
     }
 }

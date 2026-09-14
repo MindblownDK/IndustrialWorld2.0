@@ -41,7 +41,7 @@ namespace VoxelEngine.Crafting
     [RequireComponent(typeof(CraftingStation))]
     [RequireComponent(typeof(PortConfig))]
     [RequireComponent(typeof(ItemPortRouting))]
-    public class DistillationPlant : MonoBehaviour, IItemPortHost
+    public class DistillationPlant : MonoBehaviour, IItemPortHost, IMachineProcessState
     {
         public const int INPUT_SLOTS  = 2;
         public const int OUTPUT_SLOTS = 4;
@@ -175,6 +175,39 @@ namespace VoxelEngine.Crafting
             for (int i = 0; i < FractionSpecs.Length; i++)
                 _allTanks[1 + i] = cutTanks[i];
             return _allTanks;
+        }
+
+        // ── Machine process persistence (9.57.0-dev) ────────────────────────
+        // The seven tanks and the half-finished batch are state the world cannot
+        // rederive, so the plant rides the shared machine payload: batch recipe and
+        // progress, the player's locked recipe, and every tank's type and level. A
+        // save written before this round carries no record at all, and the plant
+        // then loads empty and idle exactly as it does today.
+
+        public void CaptureProcessState(MachineProcessState state)
+        {
+            if (state == null) return;
+            EnsureTanks();
+            state.recipeName = MachineProcessPersistence.NameOf(_current);
+            state.selectedRecipeName = MachineProcessPersistence.NameOf(selectedRecipe);
+            state.progressSeconds = Mathf.Max(0f, _progress);
+            MachineProcessPersistence.CaptureTanks(state, FluidTanks);
+        }
+
+        public void RestoreProcessState(MachineProcessState state)
+        {
+            if (state == null) return;
+            // Containers and tanks first: the batch being resumed reads them.
+            EnsureContainers();
+            EnsureTanks();
+
+            MachineProcessPersistence.RestoreTanks(state, FluidTanks);
+
+            selectedRecipe = MachineProcessPersistence.Resolve(knownRecipes, state.selectedRecipeName, nameof(DistillationPlant));
+            _current = MachineProcessPersistence.Resolve(knownRecipes, state.recipeName, nameof(DistillationPlant));
+            _progress = _current == null
+                ? 0f
+                : Mathf.Clamp(state.progressSeconds, 0f, EffectiveBatchTime(_current));
         }
 
         // ── IItemPortHost ───────────────────────────────────────────────────

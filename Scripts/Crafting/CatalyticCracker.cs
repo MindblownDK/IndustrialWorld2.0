@@ -23,7 +23,7 @@ namespace VoxelEngine.Crafting
     [RequireComponent(typeof(CraftingStation))]
     [RequireComponent(typeof(PortConfig))]
     [RequireComponent(typeof(ItemPortRouting))]
-    public class CatalyticCracker : MonoBehaviour, IItemPortHost, IFluidStore
+    public class CatalyticCracker : MonoBehaviour, IItemPortHost, IFluidStore, IMachineProcessState
     {
         public const int INPUT_SLOTS  = 2;
         public const int OUTPUT_SLOTS = 2;
@@ -69,6 +69,47 @@ namespace VoxelEngine.Crafting
         private float _progress;
         private PowerConsumer _power;
         private MachineFluidStore _store;
+
+        // ── Machine process persistence (9.57.0-dev) ────────────────────────
+        // The reactor is the one machine in the game whose state is not just a timer:
+        // the catalyst bed and the reactor temperature gate throughput, so losing them
+        // on reload cost the player a bed they had spent materials on. Both ride the
+        // shared payload as named extras, alongside the four tanks and the batch.
+
+        private const string ExtraCatalystBed = "catalyst_bed_percent";
+        private const string ExtraReactorTemperature = "reactor_temperature_c";
+
+        public void CaptureProcessState(MachineProcessState state)
+        {
+            if (state == null) return;
+            EnsureContainers();
+            state.recipeName = MachineProcessPersistence.NameOf(_current);
+            state.selectedRecipeName = string.Empty;   // the cracker runs its own ordered list
+            state.progressSeconds = Mathf.Max(0f, _progress);
+            MachineProcessPersistence.CaptureTanks(state, FluidTanks);
+            state.SetExtra(ExtraCatalystBed, catalystBedPercent);
+            state.SetExtra(ExtraReactorTemperature, reactorTemperatureC);
+        }
+
+        public void RestoreProcessState(MachineProcessState state)
+        {
+            if (state == null) return;
+            EnsureContainers();
+
+            MachineProcessPersistence.RestoreTanks(state, FluidTanks);
+
+            _current = MachineProcessPersistence.Resolve(knownRecipes, state.recipeName, nameof(CatalyticCracker));
+            _progress = _current == null
+                ? 0f
+                : Mathf.Clamp(state.progressSeconds, 0f, Mathf.Max(0.1f, _current.secondsPerBatch));
+
+            // Restore the reactor before the efficiency is read, so the first tick
+            // after a reload runs at the throughput the player left behind.
+            catalystBedPercent = Mathf.Clamp(state.GetExtra(ExtraCatalystBed, catalystBedPercent), 0f, 100f);
+            float maxReactorTemperature = Mathf.Max(25f, targetOperatingTempC);
+            reactorTemperatureC = Mathf.Clamp(state.GetExtra(ExtraReactorTemperature, reactorTemperatureC),
+                0f, maxReactorTemperature);
+        }
 
         public IReadOnlyList<MachineFluidTank> FluidTanks => new[] { fluidInA, fluidInB, fluidOutA, fluidOutB };
         public float Progress01 => _current == null ? 0f : Mathf.Clamp01(_progress / Mathf.Max(0.1f, _current.secondsPerBatch));

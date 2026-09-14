@@ -17,7 +17,7 @@ namespace VoxelEngine.Industrial
     [RequireComponent(typeof(CraftingStation))]
     [RequireComponent(typeof(PortConfig))]
     [RequireComponent(typeof(ItemPortRouting))]
-    public class StationaryChemicalPlant : MonoBehaviour, IItemPortHost
+    public class StationaryChemicalPlant : MonoBehaviour, IItemPortHost, IMachineProcessState
     {
         public const int INPUT_SLOTS  = 3;
         public const int OUTPUT_SLOTS = 3;
@@ -61,6 +61,35 @@ namespace VoxelEngine.Industrial
             if (outputC == null) outputC = new ItemContainer("Outputs", OUTPUT_SLOTS); else outputC.Resize(OUTPUT_SLOTS);
             fluidIn  ??= new MachineFluidTank("Fluid In",  2000f, LiquidType.RefinedOil);
             fluidOut ??= new MachineFluidTank("Fluid Out", 2000f, LiquidType.LiquidFuel);
+        }
+
+        // ── Machine process persistence (9.57.0-dev) ────────────────────────
+        // One auto-typed tank in, one auto-typed tank out, plus the batch and the
+        // player's locked recipe. A save written before this round carries no
+        // record, and the plant then loads empty and idle exactly as it does today.
+
+        public void CaptureProcessState(MachineProcessState state)
+        {
+            if (state == null) return;
+            EnsureContainers();
+            state.recipeName = MachineProcessPersistence.NameOf(_current);
+            state.selectedRecipeName = MachineProcessPersistence.NameOf(selectedRecipe);
+            state.progressSeconds = Mathf.Max(0f, _progress);
+            MachineProcessPersistence.CaptureTanks(state, FluidTanks);
+        }
+
+        public void RestoreProcessState(MachineProcessState state)
+        {
+            if (state == null) return;
+            EnsureContainers();
+
+            MachineProcessPersistence.RestoreTanks(state, FluidTanks);
+
+            selectedRecipe = MachineProcessPersistence.Resolve(knownRecipes, state.selectedRecipeName, nameof(StationaryChemicalPlant));
+            _current = MachineProcessPersistence.Resolve(knownRecipes, state.recipeName, nameof(StationaryChemicalPlant));
+            _progress = _current == null
+                ? 0f
+                : Mathf.Clamp(state.progressSeconds, 0f, Mathf.Max(0.1f, _current.secondsPerBatch));
         }
 
         // ── IItemPortHost ───────────────────────────────────────────────────

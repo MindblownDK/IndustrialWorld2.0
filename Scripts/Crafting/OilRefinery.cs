@@ -38,7 +38,7 @@ namespace VoxelEngine.Crafting
     [RequireComponent(typeof(CraftingStation))]
     [RequireComponent(typeof(PortConfig))]
     [RequireComponent(typeof(ItemPortRouting))]
-    public class OilRefinery : MonoBehaviour, IItemPortHost
+    public class OilRefinery : MonoBehaviour, IItemPortHost, IMachineProcessState
     {
         public const int INPUT_SLOTS   = 2;
         public const int OUTPUT_SLOTS  = 4;
@@ -99,6 +99,36 @@ namespace VoxelEngine.Crafting
             if (inputC   == null) inputC   = new ItemContainer("Inputs",   INPUT_SLOTS);   else inputC.Resize(INPUT_SLOTS);
             if (outputC  == null) outputC  = new ItemContainer("Outputs",  OUTPUT_SLOTS);  else outputC.Resize(OUTPUT_SLOTS);
             if (upgradeC == null) upgradeC = new ItemContainer("Upgrades", UPGRADE_SLOTS); else upgradeC.Resize(UPGRADE_SLOTS);
+        }
+
+        // ── Machine process persistence (9.57.0-dev) ────────────────────────
+        // Both fluid tanks, the batch in progress and the player's locked recipe.
+        // The upgrade slots are saved as containers like every other machine's, and
+        // refilling them re-fires ItemContainer.OnChanged, so the speed and
+        // efficiency multipliers are recomputed on restore without extra plumbing.
+
+        public void CaptureProcessState(MachineProcessState state)
+        {
+            if (state == null) return;
+            EnsureContainers();
+            state.recipeName = MachineProcessPersistence.NameOf(_current);
+            state.selectedRecipeName = MachineProcessPersistence.NameOf(selectedRecipe);
+            state.progressSeconds = Mathf.Max(0f, _progress);
+            MachineProcessPersistence.CaptureTanks(state, FluidTanks);
+        }
+
+        public void RestoreProcessState(MachineProcessState state)
+        {
+            if (state == null) return;
+            EnsureContainers();
+
+            MachineProcessPersistence.RestoreTanks(state, FluidTanks);
+
+            selectedRecipe = MachineProcessPersistence.Resolve(knownRecipes, state.selectedRecipeName, nameof(OilRefinery));
+            _current = MachineProcessPersistence.Resolve(knownRecipes, state.recipeName, nameof(OilRefinery));
+            _progress = _current == null
+                ? 0f
+                : Mathf.Clamp(state.progressSeconds, 0f, EffectiveBatchTime(_current));
         }
 
         // ── IItemPortHost ───────────────────────────────────────────────────
