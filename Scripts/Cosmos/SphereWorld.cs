@@ -282,7 +282,9 @@ namespace VoxelEngine.Cosmos
             _vertexAttributes[2] = new VertexAttributeDescriptor(VertexAttribute.Color,    VertexAttributeFormat.UNorm8,  4, 0);
 
             if (enablePersistence)
-                _storage = new ChunkStorage(ResolveStorageKey(worldName, body));
+                _storage = new ChunkStorage(ResolveStorageKey(worldName, body), BuildStoreIdentity(body));
+            Debug.Log($"[SphereWorld] World '{worldName}' streaming '{body.DisplayName}' " +
+                      $"(seed {body.genParams.seed}, {DescribeStore(_storage)}).");
 
             // The job's container-validation requires a constructed oil map on every
             // schedule; the gameplay world keeps this one permanently empty.
@@ -329,6 +331,33 @@ namespace VoxelEngine.Cosmos
         }
 
         /// <summary>
+        /// The field identity a stored chunk in this body's store was generated from. Every
+        /// value here changes the surface: a store written under a different one holds
+        /// islands of another field, so <see cref="VoxelEngine.Persistence.ChunkStorage"/>
+        /// compares this against the store's own identity file before a single chunk loads.
+        /// </summary>
+        private static ChunkStoreIdentity BuildStoreIdentity(CelestialBody forBody)
+        {
+            if (forBody == null || forBody.settings == null) return null;
+            var prm = forBody.genParams;
+            return new ChunkStoreIdentity
+            {
+                bodyName          = forBody.settings.bodyName,
+                seed              = prm.seed,
+                radiusWorld       = prm.radiusWorld,
+                baseHeight        = prm.baseHeight,
+                seaRadius         = prm.seaRadius,
+                continentScaleDir = prm.continentScaleDir,
+                mountainScale     = prm.mountainScale,
+                isAsteroidBelt    = prm.isAsteroidBelt,
+            };
+        }
+
+        /// <summary>One-line store state for the streaming logs (status + how much is stored).</summary>
+        private static string DescribeStore(ChunkStorage store) =>
+            store == null ? "persistence off" : $"store {store.Status}, {store.RegionFileCount} region file(s)";
+
+        /// <summary>
         /// Re-target the streamer at a different celestial body (real interplanetary
         /// flight), or null to leave the streaming world entirely (deep space).
         /// The player's position is continuous — only the streamed terrain changes.
@@ -361,7 +390,7 @@ namespace VoxelEngine.Cosmos
             {
                 body.ApplySettings();
                 if (enablePersistence)
-                    _storage = new ChunkStorage(ResolveStorageKey(worldName, body));
+                    _storage = new ChunkStorage(ResolveStorageKey(worldName, body), BuildStoreIdentity(body));
 
                 // Rebuild the per-body ore + biome arrays.
                 if (_ores.IsCreated) _ores.Dispose();
@@ -378,7 +407,8 @@ namespace VoxelEngine.Cosmos
                 if (_pool != null) _pool.DisposeAll(System.Array.Empty<Chunk>());
                 _pool = new ChunkPool(body.transform, terrainMaterial);
 
-                Debug.Log($"[SphereWorld] Streaming re-targeted to '{body.DisplayName}' (seed {body.genParams.seed}).");
+                Debug.Log($"[SphereWorld] Streaming re-targeted to '{body.DisplayName}' " +
+                              $"(seed {body.genParams.seed}, {DescribeStore(_storage)}).");
             }
             else
             {

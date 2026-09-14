@@ -21,11 +21,33 @@ namespace VoxelEngine.Persistence
     /// </summary>
     public class ChunkStorage
     {
+        /// <summary>What happened to the store's terrain identity when it was opened.</summary>
+        public enum StoreStatus
+        {
+            /// <summary>No identity was supplied — the store behaves exactly as it did before this guard existed.</summary>
+            Unmanaged,
+            /// <summary>The stored identity matched the live body: the stored chunks belong to this field.</summary>
+            Verified,
+            /// <summary>No identity file yet (a store written before the guard, or a brand-new one). Kept as-is.</summary>
+            Adopted,
+            /// <summary>The store described a different field. It was moved aside and this body regenerates fresh.</summary>
+            Quarantined
+        }
+
         private readonly string _worldFolder;
         private readonly Thread _writerThread;
         private readonly BlockingCollection<WriteJob> _writeQueue = new();
         private readonly ManualResetEventSlim _idle = new(true);
         private volatile bool _running = true;
+
+        /// <summary>Result of the identity check performed when this store was opened.</summary>
+        public StoreStatus Status { get; private set; } = StoreStatus.Unmanaged;
+
+        /// <summary>Region files present in the store folder (after any quarantine).</summary>
+        public int RegionFileCount { get; private set; }
+
+        /// <summary>The identity this store currently describes, when one is being kept.</summary>
+        public ChunkStoreIdentity Identity { get; private set; }
 
         // Read cache: avoid reopening the same region file repeatedly when many chunks load at once.
         private readonly Dictionary<Vector2Int, Dictionary<int, ChunkSaveData>> _readCache = new();
@@ -39,13 +61,109 @@ namespace VoxelEngine.Persistence
 
         public string WorldFolder => _worldFolder;
 
-        public ChunkStorage(string worldName)
+        public ChunkStorage(string worldName) : this(worldName, null) { }
+
+        /// <summary>
+        /// Open (or create) the per-body chunk store. When an <paramref name="identity"/> is
+        /// supplied the store is checked against it first: stored chunks that were generated
+        /// from a different field are moved aside instead of loaded, because a chunk from
+        /// another field renders as an island of wrong terrain inside this one.
+        /// </summary>
+        public ChunkStorage(string worldName, ChunkStoreIdentity identity)
         {
             _worldFolder = Path.Combine(Application.persistentDataPath, "VoxelWorlds", worldName);
             Directory.CreateDirectory(_worldFolder);
+            VerifyIdentity(identity);
+            RegionFileCount = CountRegionFiles();
             _writerThread = new Thread(WriterLoop) { IsBackground = true, Name = "VoxelChunkWriter" };
             _writerThread.Start();
             Debug.Log($"[ChunkStorage] World folder: {_worldFolder}");
+        }
+
+        /// <summary>
+        /// Compare the store against the live body's field identity and act on the answer.
+        /// Nothing is ever deleted: a store that describes another field is moved into a
+        /// `stale_&lt;utc&gt;` folder next to it, so the data is still on disk to look at.
+        /// </summary>
+        private void VerifyIdentity(ChunkStoreIdentity identity)
+        {
+            if (identity == null) { Status = StoreStatus.Unmanaged; return; }
+            Identity = identity;
+
+            if (!ChunkStoreIdentity.TryRead(_worldFolder, out var stored))
+            {
+                // First open with the guard: a brand-new store, or one written by an older
+                // build. Both are kept — there is nothing to compare against, and this is
+                // also the path a world takes the first time it runs this build.
+                int existing = CountRegionFiles();
+                Status = identity.TryWrite(_worldFolder) ? StoreStatus.Adopted : StoreStatus.Unmanaged;
+                if (existing > 0)
+                {
+                    Debug.LogWarning($"[ChunkStorage] Store '{_worldFolder}' predates the identity guard " +
+                                     $"({existing} region file(s)) — adopted as {identity.Summary}. " +
+                                     "If this body's terrain looks wrong, move that folder aside once and let it regenerate.");
+                }
+                else
+                {
+                    Debug.Log($"[ChunkStorage] New store '{_worldFolder}' created for {identity.Summary}.");
+                }
+                return;
+            }
+
+            if (stored.Matches(identity, out string difference))
+            {
+                Status = StoreStatus.Verified;
+                Debug.Log($"[ChunkStorage] Store '{_worldFolder}' verified against the live body: {identity.Summary}.");
+                return;
+            }
+
+            int moved = QuarantineStoredRegions();
+            bool rewritten = identity.TryWrite(_worldFolder);
+            Status = rewritten ? StoreStatus.Quarantined : StoreStatus.Unmanaged;
+            Debug.LogWarning($"[ChunkStorage] Store '{_worldFolder}' was written against a different terrain " +
+                             $"({difference}) — moved {moved} stored region file(s) to a 'stale_' folder and " +
+                             $"regenerating this body from {identity.Summary}. Blocks, machines, grids and the " +
+                             "inventory live in world_state.json and are not affected; voxel edits made in the " +
+                             "stored chunks are what regenerates.");
+        }
+
+        /// <summary>
+        /// Move every region file (and its .previous / .tmp siblings) into a timestamped
+        /// `stale_` folder. Returns how many region files were moved. Never throws: a failed
+        /// move leaves the file where it is and logs, because a broken store is still better
+        /// than a half-deleted one.
+        /// </summary>
+        private int QuarantineStoredRegions()
+        {
+            int moved = 0;
+            try
+            {
+                string staleFolder = Path.Combine(_worldFolder, "stale_" + System.DateTime.UtcNow.ToString("yyyyMMdd_HHmmss"));
+                foreach (var file in Directory.GetFiles(_worldFolder, "r_*.dat*"))
+                {
+                    try
+                    {
+                        Directory.CreateDirectory(staleFolder);
+                        File.Move(file, Path.Combine(staleFolder, Path.GetFileName(file)));
+                        moved++;
+                    }
+                    catch (System.Exception ex)
+                    {
+                        Debug.LogWarning($"[ChunkStorage] Could not move '{file}' aside: {ex.Message}");
+                    }
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"[ChunkStorage] Could not quarantine the store in '{_worldFolder}': {ex.Message}");
+            }
+            return moved;
+        }
+
+        private int CountRegionFiles()
+        {
+            try { return Directory.GetFiles(_worldFolder, "r_*.dat").Length; }
+            catch { return 0; }
         }
 
         public void Shutdown()
@@ -72,7 +190,15 @@ namespace VoxelEngine.Persistence
                 }
             }
             if (!entries.TryGetValue(local, out var data)) return false;
-            data.RestoreInto(chunk);
+            // A payload that is not the size of the chunk's array is refused (and the stale
+            // read-cache entry dropped) so the chunk regenerates instead of being marked
+            // generated with a third of it still holding the recycled chunk's data.
+            if (!data.RestoreInto(chunk))
+            {
+                Debug.LogWarning($"[ChunkStorage] Stored chunk {chunkCoord} in {_worldFolder} has a " +
+                                 "partial payload (written before 10.0.0); regenerating it from the seed.");
+                return false;
+            }
             return true;
         }
 

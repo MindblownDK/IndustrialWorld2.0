@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `9.58.1-dev`
-**Roadmap Version:** `9.58.1-dev`
+**Current Version:** `10.0.0-dev`
+**Roadmap Version:** `10.0.0-dev`
 **Date:** 2026-09-14
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,16 @@
 
 ## 0. Recently Done
 
+### 10.0.0-dev — The Stored Chunk Is the Whole Chunk
+- `Voxel` is a three-byte struct and the store now writes and reads three bytes per voxel (`sizeof(Voxel)`); a stored chunk went from 78,608 to 117,912 bytes of payload.
+- `RegionFile` V3 -> V4 and `ChunkStoreIdentity` format 1 -> 2: every pre-fix store is refused, quarantined into `stale_<utc>/` and regenerated, so an existing world heals on first load without losing `world_state.json`.
+- 417 harness checks in five sections; section E is mutation-verified against the pre-fix byte maths.
+
+### 9.59.0-dev — Chunk Store Identity Guard and Placed-Block Body Anchor
+- A body store now carries the field identity its chunks were generated from (`store.json`): seed, radius, base height, sea, continent/mountain scale, body name. A mismatch moves the region files into `stale_<utc>/` and regenerates instead of loading another field's terrain.
+- `SavedPlacedBlock` gains an additive body anchor; blocks restore relative to the body they stood on, with the scene coordinate as the fallback.
+- One `[SphereWorld] World ... streaming ... (seed N, store <state>, N region file(s))` line per stream makes a rejoin log self-answering; 394 harness checks in four sections.
+
 ### 9.58.1-dev — Compile Fix for 9.58.0-dev
 - The two finiteness helpers and the qualified `System.StringComparison` are used correctly again; five compile errors, five lines.
 - Four harness guards for the two mistake classes, each verified against the broken source.
@@ -44,16 +54,6 @@
 - One additive record (`SavedPlacedBlock.machineProcess`) carries batch, locked recipe, tank contents and machine numbers.
 - Distillation Plant, Catalytic Cracker, Oil Refinery, Chemical Plant and Flare Stack keep their contents; ship refinery and ship chemical plant keep their batch and pick.
 - 211 harness checks passed; Unity compile, save/load and the reload acceptance run remain open.
-
-### 9.56.6-dev — Wide Roads and Off-Road Network Start
-- Road width and tapering checks removed; only a 100 m corridor is refused.
-- Network runs may seed from pavement within 50 m of the vehicle.
-- Awaiting Unity validation.
-
-### 9.55.0-dev — Saved Network Identity and Pilot Budgets
-- Saved endpoint-row validation replaces representative-position matching.
-- Pilot route assessment, predicted battery reserve and measured arrival snapshots.
-- 206 local harness checks; Unity and live forecast calibration remain open.
 
 ## 1. Executive Vision
 
@@ -1125,7 +1125,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Item entity system | 🛠️ WORKING ON | Unity validation covered the **5.70.0-dev** pooled physical world-item lifecycle. **5.71.0-dev** adds a shared cross-belt conveyor-carried visual pool; Unity factory load validation remains pending. |
 | Recipe registry refactor | 🟡 PARTIALLY COMPLETE | ScriptableObject crafting and machine recipes exist. Shaped/shapeless/smelting/machine unification and validation remain incomplete. |
 | Centralized simulation tick | 🛠️ WORKING ON | Crusher and Assembler register with `SimulationTickManager`. A first 6.4.8-dev transport migration caused broken belt-to-belt and chest/funnel flow in Unity, so **6.4.9-dev** restores transport blocks to the previously validated per-frame runtime path while keeping the centralized transport interface groundwork for a later safer migration. |
-| Factory persistence | ✅ COMPLETED | Conveyor/Chute item packets, Conveyor Splitter buffer+round-robin cursor+routing mode+per-output filters, Crusher/Assembler recipe+progress+enabled, Funnel buffer+mode, and all machine containers save and restore. Legacy saves compatible. **9.57.0-dev** extends the same additive record to the petroleum chain through one shared `IMachineProcessState` payload: batch + locked recipe + fluid tanks for the Distillation Plant, Catalytic Cracker, Oil Refinery, Chemical Plant, stationary Flare Stack and both ship machines, plus the item slots of the four world machines. **9.58.0-dev** extends the same record to the player: `hasAnchor` / `anchorBody` / `anchorLocalX/Y/Z` place a rejoin relative to the body it was saved on, and `cosmicSimulationSeconds` restores the orbital phase, while a save-side guard now refuses any scene position inside a body whatever the active frame is. **Open, deferred by 9.57.0-dev:** the two smelters (Furnace / ElectricFurnace) still keep batch progress, `userEnabled` and `autoPull` in session memory only, and the pumpjack's barrel cycle is not saved — recorded as its own item so it is not lost inside a completed row. **Open, deferred by 9.58.0-dev:** placed blocks and grids still store scene coordinates (stable while the home body stays the frame body, which is why nothing was actually moved); a body anchor for them is the fix if a warp-heavy session is ever shown to drift them. |
+| Factory persistence | ✅ COMPLETED | Conveyor/Chute item packets, Conveyor Splitter buffer+round-robin cursor+routing mode+per-output filters, Crusher/Assembler recipe+progress+enabled, Funnel buffer+mode, and all machine containers save and restore. Legacy saves compatible. **9.57.0-dev** extends the same additive record to the petroleum chain through one shared `IMachineProcessState` payload: batch + locked recipe + fluid tanks for the Distillation Plant, Catalytic Cracker, Oil Refinery, Chemical Plant, stationary Flare Stack and both ship machines, plus the item slots of the four world machines. **9.58.0-dev** extends the same record to the player: `hasAnchor` / `anchorBody` / `anchorLocalX/Y/Z` place a rejoin relative to the body it was saved on, and `cosmicSimulationSeconds` restores the orbital phase, while a save-side guard now refuses any scene position inside a body whatever the active frame is. **Open, deferred by 9.57.0-dev:** the two smelters (Furnace / ElectricFurnace) still keep batch progress, `userEnabled` and `autoPull` in session memory only, and the pumpjack's barrel cycle is not saved — recorded as its own item so it is not lost inside a completed row. **9.59.0-dev** anchors placed blocks to the body they stand on (`hasBodyAnchor` / `anchorBody` / `anchorLocalX/Y/Z`, additive) so a block survives a moved body, a rebase and a frame switch, and adds the per-body chunk-store identity file that refuses to load chunks generated from another field. **10.0.0-dev** fixes the stored payload itself — three bytes per voxel instead of two, so a stored chunk is no longer missing its last third — and retires the old files with `RegionFile` V4 and identity format 2. **Open, moved on by 9.59.0-dev:** movable grids (`SavedGrid`) and dropped items still store scene coordinates — the same body anchor is the fix there, and it is the next item in this family. |
 | Step 5 tiered setup workflow | 🛠️ WORKING ON | Generated Size-V4 prefabs migrate to Size-V5 seamless Foundation decks and Stair anchors. Missing resources are repaired safely while custom prefabs, materials, recipes, and balance values remain preserved. Unity two-run validation is pending. |
 | Step 17 setup workflow | ✅ COMPLETED | Step 17 remains non-destructive, refreshes generated visuals/colliders safely, preserves balance values, and connects upgraded Funnel/Crusher/Assembler prefabs plus contextual conveyor shape workflow. |
 
@@ -2374,6 +2374,22 @@ For each version, these are the high-level Unity tasks you will perform manually
 9. **Run setup wizard step (non-destructive)**
    - Step 23 for world forge, Star Builder, Dyson Sphere, boss relic gates, and megastructures.
 
+### For 10.0.0-dev (Stored-Chunk Payload)
+
+1. Replace `Scripts/Persistence/ChunkSaveData.cs`, `Scripts/Persistence/RegionFile.cs`, `Scripts/Persistence/ChunkStorage.cs` and `Scripts/Persistence/ChunkStoreIdentity.cs`. Let Unity compile.
+2. Load the world that was broken. Expect one `[ChunkStorage] ... (store format 1 -> 2) - moved N stored region file(s) to a 'stale_' folder ...` line, then the normal verified line on every load after it.
+3. Return to where you stood when you left: the ground is there, the speckled slabs are gone, and the blocks restored from `world_state.json` still stand where they were placed.
+4. Rejoin twice more: the seed, the store state and the terrain must be identical, with no `[RegionFile]` or `[ChunkStorage]` warning in the console.
+5. Delete `stale_<utc>/` once the world has been healthy for a session — it holds terrain that was never whole.
+
+### For 9.59.0-dev (Chunk Store Identity Guard, Placed-Block Body Anchor)
+
+1. Replace `Scripts/Persistence/ChunkStoreIdentity.cs` (new, with its `.meta`), `Scripts/Persistence/ChunkStorage.cs`, `Scripts/Cosmos/SphereWorld.cs` and `Scripts/Persistence/WorldStatePersistence.cs`. Let Unity compile.
+2. A world that is already broken: close the game, open `VoxelWorlds/<worldName>/Bodies/<BodyName>` (the folder the console prints as `[ChunkStorage] World folder:`), rename it to `<BodyName>_old` and load the world. The chunks regenerate; blocks, machines, grids, containers and the inventory come back from `world_state.json`.
+3. Every load prints one line: `[SphereWorld] World '<world>' streaming '<Body>' (seed N, store <Adopted|Verified|Quarantined>, M region file(s))`. On an existing world the first load reports `Adopted` (it predates the guard) and writes `store.json`; later loads report `Verified`.
+4. Place a block, save, quit, rejoin: the console must report `[WorldState] Restored N placed block(s) — M from a body anchor, ...` and the block must stand where it was placed.
+5. If a join still breaks, send the `[SphereWorld] World ... streaming ...` line, the `[ChunkStorage] World folder:` line and any `[ChunkStorage]` warning from both a good join and the bad one — the seed and the store state are the whole question.
+
 ### For 9.58.1-dev (Compile Fix)
 
 1. Replace `Scripts/Persistence/WorldStatePersistence.cs` and `Scripts/Player/PlayerSpawner.cs`; the rest of the round is unchanged. Let Unity compile — the console should be clean.
@@ -2410,6 +2426,8 @@ For each version, these are the high-level Unity tasks you will perform manually
 - Player position is captured only while the player object, Inventory, and a valid planetary/space position still exist.
 - A missing player record is ignored safely and is never interpreted as a static block position.
 - Invalid player coordinates now fall back to a safe bed/world/body spawn without overwriting the last known-good save.
+- **10.0.0-dev:** the stored chunk payload is the whole chunk. `Voxel` is a three-byte struct (`density`, `material`, `waterLevel`) and the store wrote and read two bytes per voxel — a leftover from before 9.16.0 — so a third of every stored chunk (z-major slices 23-33) was never on disk, with the CRC covering the truncation so nothing ever complained; on load that third kept whatever the recycled chunk held, which is the speckled terrain above and the hole the player fell through. The payload is now sized from `UnsafeUtility.SizeOf<Voxel>()`, `RestoreInto` refuses a short payload, and `RegionFile` V4 plus identity format 2 quarantine every pre-fix store instead of reading it.
+- **9.59.0-dev:** a placed block is saved the same way its owner is — a body anchor (`hasBodyAnchor` / `anchorBody` / `anchorLocalX/Y/Z`, additive) resolved through the body on load, with the scene coordinate kept as the fallback and the diagnostic; the per-body chunk store writes a `store.json` identity (seed, radius, base height, sea, continent/mountain scale, body name) and quarantines stored chunks that belong to another field instead of loading them into this one.
 - **9.58.0-dev:** the saved pose is written as a body anchor (`hasAnchor` / `anchorBody` / `anchorLocalX/Y/Z`) instead of a raw scene coordinate, so it survives a rebase, a frame switch and a warp; a scene position inside a celestial body is refused whatever the active frame is; the cosmic clock is saved and restored before any cosmic coordinate is resolved; and the floating origin is re-anchored only for a position that is clear of every body, with the frame and the voxel streamer re-pointed at the ground the player lands on.
 - **6.14.7-dev:** `WorldStatePersistence.RestorePlayer` validates saved player position and rotation before touching the live player transform, restores inventory at the safe fallback when needed, and logs the recovery as non-destructive.
 - **6.80.3-dev:** `PlayerSpawner` now validates the complete player volume for water on fresh, bed, saved, and respawn targets; wet candidates stream/search for dry terrain while control is disabled. PlayerController also gains capped uphill terrain assistance and post-move footing recovery to prevent mountain-mesh penetration. Unity testing confirmed this behavior works in Unity.

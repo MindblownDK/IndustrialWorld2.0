@@ -413,6 +413,19 @@ namespace VoxelEngine.Persistence
                     entry.hasBatteryCharge = true;
                     entry.batteryCharge = worldBattery.charge;
                 }
+                var anchor = FindAnchoringBody(pb.transform.position);
+                if (anchor != null)
+                {
+                    Vector3 local = anchor.transform.InverseTransformPoint(pb.transform.position);
+                    if (IsFiniteVector(local))
+                    {
+                        entry.hasBodyAnchor = true;
+                        entry.anchorBody     = anchor.settings.bodyName;
+                        entry.anchorLocalX   = local.x;
+                        entry.anchorLocalY   = local.y;
+                        entry.anchorLocalZ   = local.z;
+                    }
+                }
                 CaptureFactoryRuntime(pb.gameObject, entry);
                 save.placedBlocks.Add(entry);
             }
@@ -2077,11 +2090,15 @@ namespace VoxelEngine.Persistence
 
         private void RestorePlacedBlocks(SaveData save)
         {
+            int restored = 0;
+            int anchored = 0;
             foreach (var sb in save.placedBlocks)
             {
                 if (!_blockById.TryGetValue(sb.itemId, out var blockItem) || blockItem.placedPrefab == null) continue;
                 Quaternion finalRot = (sb.rot.w != 0f || sb.rot.x != 0f || sb.rot.y != 0f || sb.rot.z != 0f) ? sb.rot : Quaternion.Euler(0, sb.rotY, 0);
-                var go = Instantiate(blockItem.placedPrefab, sb.pos, finalRot);
+                Vector3 spawnPos = ResolvePlacedBlockPosition(sb, out bool fromAnchor);
+                if (fromAnchor) anchored++;
+                var go = Instantiate(blockItem.placedPrefab, spawnPos, finalRot);
                 go.name = blockItem.displayName + " (restored)";
                 if (go.GetComponentInChildren<Collider>() == null) go.AddComponent<BoxCollider>();
                 var restoredCryobed = go.GetComponentInChildren<VoxelEngine.Building.Cryobed>(true);
@@ -2168,7 +2185,76 @@ namespace VoxelEngine.Persistence
                     if (worldBattery != null)
                         worldBattery.charge = Mathf.Clamp(sb.batteryCharge, 0f, Mathf.Max(1f, worldBattery.capacityWattHours));
                 }
+                restored++;
             }
+
+            if (restored > 0)
+            {
+                Debug.Log($"[WorldState] Restored {restored} placed block(s) — {anchored} from a body anchor, " +
+                          $"{restored - anchored} at their saved scene coordinate" +
+                          (anchored == restored ? "." : " (a scene coordinate is only valid in the frame it was written in)."));
+            }
+        }
+
+        /// <summary>
+        /// Where a saved placed block belongs in THIS scene. The body anchor wins: it is the
+        /// position taken relative to the body the block was standing on, so it survives the
+        /// body moving, the origin rebasing and a frame switch. Without an anchor (legacy
+        /// saves, or a block that was floating in deep space) the saved scene coordinate is
+        /// used unchanged.
+        /// </summary>
+        private static Vector3 ResolvePlacedBlockPosition(SavedPlacedBlock block, out bool fromAnchor)
+        {
+            fromAnchor = false;
+            if (block.hasBodyAnchor && !string.IsNullOrEmpty(block.anchorBody))
+            {
+                var body = FindSceneBodyByName(block.anchorBody);
+                if (body != null)
+                {
+                    Vector3 anchored = body.transform.TransformPoint(
+                        new Vector3(block.anchorLocalX, block.anchorLocalY, block.anchorLocalZ));
+                    if (IsFiniteVector(anchored)) { fromAnchor = true; return anchored; }
+                }
+                else
+                {
+                    Debug.LogWarning($"[WorldState] Placed block '{block.itemId}' was anchored to '{block.anchorBody}', " +
+                                     "which is not in this scene; restoring it at its saved scene coordinate instead.");
+                }
+            }
+            return IsFiniteVector(block.pos) ? block.pos : Vector3.zero;
+        }
+
+        /// <summary>
+        /// The body a scene object is standing on: the body whose surface is nearest to it,
+        /// within half that body's radius so a base on the ground, a platform in the air and
+        /// a ship on a pad all anchor while something parked in deep space does not.
+        /// </summary>
+        private static VoxelEngine.Cosmos.CelestialBody FindAnchoringBody(Vector3 scenePos)
+        {
+            if (!IsFiniteVector(scenePos)) return null;
+            var registry = VoxelEngine.Cosmos.CosmicRegistry.Instance;
+            VoxelEngine.Cosmos.CelestialBody best = null;
+            float bestGap = float.MaxValue;
+            if (registry != null && registry.SceneBodies != null)
+            {
+                foreach (var kv in registry.SceneBodies)
+                {
+                    if (kv.Key == null || kv.Key.settings == null || kv.Value == null) continue;
+                    float gap = Mathf.Abs(Vector3.Distance(scenePos, kv.Value.transform.position) - kv.Value.SurfaceRadius);
+                    if (gap < bestGap) { bestGap = gap; best = kv.Value; }
+                }
+            }
+            if (best == null)
+            {
+                var active = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
+                if (active != null && active.settings != null)
+                {
+                    best = active;
+                    bestGap = Mathf.Abs(Vector3.Distance(scenePos, active.transform.position) - active.SurfaceRadius);
+                }
+            }
+            if (best == null) return null;
+            return bestGap <= best.SurfaceRadius * 0.5f ? best : null;
         }
 
         private void RestoreFactoryRuntime(GameObject go, SavedPlacedBlock saved)
@@ -3103,6 +3189,15 @@ namespace VoxelEngine.Persistence
         {
             public string itemId;
             public Vector3 pos; public Quaternion rot; public float rotY;
+            // Additive body anchor (9.58.2-dev). A placed block stands on a celestial body,
+            // and that body moves through the scene as the system runs (orbits, rebases,
+            // frame switches), so the scene coordinate above is only meaningful in the frame
+            // it was captured in. The anchor is the frame-independent position the loader
+            // prefers; `pos` stays as the fallback and as the diagnostic. Legacy saves have
+            // hasBodyAnchor false and restore exactly as they did.
+            public bool hasBodyAnchor;
+            public string anchorBody;
+            public float anchorLocalX; public float anchorLocalY; public float anchorLocalZ;
             public int hp;
             public SavedContainer container;
             public string customName;

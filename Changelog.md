@@ -1,9 +1,133 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.58.1-dev`
+**Current Version:** `10.0.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [10.0.0-dev] The Stored Chunk Is the Whole Chunk — 3-Byte Voxel Payload
+
+**Type:** MAJOR — the chunk store's payload is corrected and stamped `RegionFile` V4: a stored chunk is written and read at three bytes per voxel (`UnsafeUtility.SizeOf<Voxel>()`) instead of two, which retires every pre-fix region file (V3 and earlier are rejected and the body regenerates from its seed). The world save is untouched and still loads: bases, machines, grids, containers, the inventory and the anchored placed blocks all return from `world_state.json`. No authored asset, prefab, item, recipe or balance value changes, and no setup step is required. This is the "new chunk format" case in the versioning rule, and it is why this is a MAJOR rather than a patch — old *chunk* files cannot be read, while the *save* is unaffected.
+
+**GitHub title:** `[10.0.0-dev] Stored chunks are no longer missing their last third — the 3-byte voxel payload fix`
+
+#### Reported
+
+- The two joins in the previous report were reproducible on demand, and the logs from this round's session are what found the cause:
+  - first join: `[SphereWorld] World 'MyWorld' streaming 'Earth' (seed 1774845834, store Adopted, 0 region file(s)).`
+  - second join: `[SphereWorld] World 'MyWorld' streaming 'Earth' (seed 1774845834, store Verified, 1 region file(s)).`
+  - `[ChunkStorage] Store '...' verified against the live body: seed 1774845834, radius 8000 m, sea 8096 m, base 100 m, continent 2,4, mountains 1,1.`
+  - `[WorldState] Restored 2 placed block(s) — 2 from a body anchor, 0 at their saved scene coordinate.`
+- That ruled the store's identity out — same seed, same field, verified — and left the store's **contents**. The player's report is the shape of the same bug from the other side: **the chunk they were standing on when they left is not there when they return, so they fall through the ground into the earth**, the speckled purple terrain is still showing, and it now breaks on the **second** join — the first join that has a stored chunk to restore.
+
+#### Cause
+
+- **`Voxel` has been a three-byte struct since 9.16.0. The store has been writing two bytes per voxel ever since.**
+  - `Voxel` is `[StructLayout(LayoutKind.Sequential, Pack = 1)]` with `density` (sbyte), `material` (byte) and `waterLevel` (byte): **three bytes**, which its own header states — *"3 bytes \* 34^3 ≈ 118 KB per padded chunk"*.
+  - `ChunkSaveData.FromChunk` copied `VoxelConstants.VOXELS_PER_CHUNK_P * 2` bytes, a leftover from the two-byte voxel that predates `waterLevel` (the 9.16.0 liquid overhaul). The padded grid is 39,304 voxels: **78,608 bytes of a 117,912-byte array — exactly two thirds.**
+  - `RegionFile.ReadAll` sized its inflated buffer the same way and `ChunkSaveData.RestoreInto` copied the same short length back, so the write and the read agreed with each other perfectly.
+  - **Nothing ever logged an error.** The CRC was computed over the truncated buffer on both sides, so every file was internally valid while a third of every chunk was missing. That is why this survived as "floating slabs", "unmeshable phantom surfaces" and "mesh that disagrees with its collider": the field was blamed each time, and the store was simply short.
+- **What the missing third is.** The padded grid is z-major — `LocalToPaddedIndex(x,y,z) = (x+1) + (y+1)·34 + (z+1)·34²` — so the file stopped inside slice **z = 22 of 34**. Slices **23 to 33** of every stored chunk were never written at all, and therefore never read back either.
+- **Why it looked like this.** On load the first two thirds came from the file and the last third kept whatever the recycled chunk object already held: another chunk's terrain, or uninitialized memory. The mesher then extracted a surface from a chunk that was two thirds one terrain and one third another — speckled slabs where the alien third carried ice, crystal or ore materials, geometry that disagrees with its own collider, and, where the recycled third was air, **a chunk-shaped hole in the ground**. The chunk the player edited is the chunk that gets stored, which is exactly why the hole was under their feet when they returned.
+- **Why the first join was always healthy.** With an empty store there is nothing to restore and every voxel comes from the generator. The moment a store had content, a third of it was fiction.
+
+#### Fixed
+
+- **`ChunkSaveData`** — the payload size is asked of the struct, never written as a number: `VoxelBytes => UnsafeUtility.SizeOf<Voxel>()` and `PayloadBytes => VoxelsPerChunkP * VoxelBytes`. `FromChunk` copies the chunk's own array length. `RestoreInto` now returns `bool` and refuses any payload that is not exactly the size of the chunk's array, so a short one can never leave the tail holding recycled data.
+- **`RegionFile`** — `VERSION` goes **3 → 4** and the read buffer is sized from `ChunkSaveData.PayloadBytes`; the rejection message names the partial payload. Every V3-and-earlier file is refused whole, so the body regenerates from its seed rather than restoring terrain that was never stored. The per-entry length and CRC checks already refused anything malformed, so a legacy entry can no longer be half-read either.
+- **`ChunkStorage`** — a refused payload is logged with its chunk coordinate and the chunk regenerates instead of being marked generated.
+- **`ChunkStoreIdentity`** — `FormatVersion` 1 → 2, and the format version is now part of the comparison, so a store carrying a 9.59.0-dev identity is quarantined on sight and regenerated once, rather than loading V3 files that cannot be read whole.
+
+#### What this means for worlds that already exist
+
+- **They heal on the first load, and nothing is deleted.** The store's region files are moved into `stale_<utc>/` next to them (kept, not erased) and the terrain regenerates from the seed. `world_state.json` is untouched, so bases, machines, grids, containers, the inventory and the anchored placed blocks all come back. What regenerates is the stored **voxel** terrain: mined-out ground and voxels placed in the stored chunks.
+- **A fresh world is not needed and not recommended.** The corrupt data is quarantined by the format change itself, on the first load of the new build.
+- **`stale_<utc>/` can be deleted by hand** once the world is healthy — it is a copy of terrain that was never whole.
+
+#### Numbers
+
+| | Value |
+|---|---|
+| Bytes per voxel, before → after | 2 → 3, taken from `sizeof(Voxel)` rather than a literal |
+| Payload per stored chunk, before → after | 78,608 → 117,912 bytes |
+| Fraction of every stored chunk that was never written | one third (z-major slices 23–33 of 34) |
+| Store format | `RegionFile` V3 → V4, `ChunkStoreIdentity` format 1 → 2 |
+| Files changed | 4 (`ChunkSaveData.cs`, `RegionFile.cs`, `ChunkStorage.cs`, `ChunkStoreIdentity.cs`) |
+| Harness checks | 417 in five sections (up from 394; 23 new in section E, mutation-verified in 4 ways including a full revert to the pre-fix byte maths) |
+
+#### Manual Unity steps
+
+1. Copy the four files from this delivery over the project's copies. Let Unity compile.
+2. Load the world that was broken. Expect, once:
+   - `[ChunkStorage] Store '...' was written against a different terrain (store format 1 → 2) — moved N stored region file(s) to a 'stale_' folder ...`, then the store identity line for the regenerated body;
+   - and **no** `partial payload` warning on any later load.
+3. Walk back to where you were standing when you left: the ground must be there, the speckled slabs must be gone, and the blocks restored from `world_state.json` must still stand where you placed them.
+4. Save, quit and rejoin twice more. The seed, the store state and the terrain must be identical on every join, and the console must stay clean of `[RegionFile]` and `[ChunkStorage]` warnings.
+5. Optional: delete the `stale_<utc>/` folder once the world has been healthy for a session — it is terrain that was never whole.
+6. If a stored chunk still misbehaves, send the line it logs: it now names the chunk coordinate, the folder and the reason.
+
+### [9.59.0-dev] Chunk Store Identity Guard and the Placed-Block Body Anchor
+
+**Type:** MINOR — one new file per body store, one identity check, one new console line, and five additive fields on `SavedPlacedBlock`. Nothing needs a fresh save: a store written before this round is adopted in place and says so, and a block saved before it restores at its saved scene coordinate exactly as it did. No prefab, item, recipe or authored balance value is touched, and no setup step is required.
+
+**GitHub title:** `[9.59.0-dev] The chunk store now proves which terrain it holds, and placed blocks follow their planet`
+
+#### Reported
+
+- Joins 1 and 2 of the same world are clean. On the **third** join the player spawns at the correct spot — the 9.58.0-dev anchor holds — but the planet around them renders as **slabs of speckled purple and white terrain** standing between patches of ordinary ground, and a placed block is gone.
+- The screenshot was measured rather than eyeballed. The speckle is a **material mixture, not a shader fault**: the brightest purple pixels normalise to Crystal Geode (0.56 / 0.48 / 0.84) and the palest to Ice (0.80 / 0.90 / 1.00), over near-black rock and grass-green ground, and each slab's **silhouette** is chunk-coherent while its interior is a per-voxel colour mix. That is stored voxels from somewhere else being meshed where the player is standing, not a broken shader and not a broken generator — the GPU planet shell, which reads no stored chunks at all, was correct in the same frame.
+
+#### What the evidence says
+
+- **The player is anchored. The ground under them and the blocks on it were not.**
+  - 9.58.0-dev gave the *player* a body anchor (body name plus body-local position). That is exactly why the third join now spawns in the right place while the terrain and the block are wrong.
+  - A **placed block** is still saved as a bare scene coordinate (`SavedPlacedBlock.pos`). A celestial body moves through the scene as the system runs — orbits, floating-origin rebases, frame switches — so a scene coordinate is only valid in the frame it was written in. When the loaded frame disagrees with that one, the block is instantiated kilometres from where it was placed, quite possibly inside the terrain: a block that restores into rock is a block that is gone.
+  - A **chunk store** recorded *which chunks* it held but never *which field* they came from. `RegionFile.VERSION` guards the binary layout — and has since 9.5.3, written specifically for the "floating slabs beside freshly generated chunks" class — but a body that regenerates from a different seed, radius, sea level, base height or continent/mountain scale keeps the same store key (`VoxelWorlds/<world>/Bodies/<bodyName>`) and its chunks are read back as islands of the old terrain inside the new one.
+- **That is consistent with every part of the report**: the player stands in the right place (anchored), the GPU shell is correct (it regenerates from the live field and reads no store), the terrain the player stands on is not, and the one placed block is not where it was put.
+- **What is not confirmed, and is not claimed:** which of those two values actually changed on the third join. Two rejoins of the same world should behave identically, so either a stored file changed between them or a field value did, and neither is visible from the source alone. The new log line is what settles it, and the guard means a wrong answer can no longer pass silently.
+
+#### Fixed
+
+- **`ChunkStoreIdentity`** (new, `Scripts/Persistence/`) — the field identity a store was written against: body name, seed, `radiusWorld`, `baseHeight`, `seaRadius`, `continentScaleDir`, `mountainScale` and the asteroid flag, plus the build string and a UTC stamp as diagnostics. Floats are compared with a tolerance (0.5 m on lengths, 1e-5 on continent scale, 1e-3 on mountain scale) so a JSON round-trip cannot quarantine a good store over a last bit, and the build string is recorded but never compared.
+- **`ChunkStorage`** — one `store.json` per body store, written once when the store is created and checked on every open:
+  - **match** — `Verified`, with the identity in the log;
+  - **no identity file yet** (a store from an earlier build) — `Adopted`, with a warning naming the folder, the file count and the identity it was adopted as;
+  - **mismatch** — the store's region files are **moved** into `stale_<utc>/` inside the same folder (never deleted; the data stays on disk to inspect), the current identity is written, and the log names the difference — `seed 4242 -> 4243`, `radius 8000 m -> 12000 m` — before the body regenerates fresh from the current field.
+  - The quarantine deliberately touches only `r_*.dat*`: **blocks, machines, grids, containers and the inventory live in `world_state.json` and are not affected.** What regenerates is the voxel terrain inside the stored chunks, which is the only thing the store holds.
+- **`SphereWorld`** — every chunk store is opened with the live body's identity, and the streaming log now carries the whole answer in one line, on the first stream and on every re-target:
+  - `[SphereWorld] World 'MyWorld' streaming 'Earth' (seed 4242, store Verified, 6 region file(s)).`
+- **Placed blocks** — `SavedPlacedBlock` gains an additive body anchor (`hasBodyAnchor`, `anchorBody`, `anchorLocalX/Y/Z`). The save records the body the block is standing on — the nearest surface within half that body's radius, so a base on the ground, a platform in the air and a ship on a pad all anchor while something parked in deep space does not — and the restore resolves through that body first, falling back to the saved scene coordinate with a warning if the body is not in this scene. The load reports how many blocks came back from an anchor, and a block with no anchor restores exactly as it did before this round.
+- **One line, one answer.** With the guard and the identity line in place, a join that goes wrong now says in the console which world, which body, which seed, which store state and how many region files it used. If a stored field ever disagrees with the live one again, the store is quarantined and the planet regenerates instead of garbling.
+
+#### What this round does not do
+
+- **Grids and dropped items are still saved as scene coordinates.** The anchor pattern is applied to placed blocks here; `SavedGrid` payloads and dropped items keep their scene coordinates, exactly as the Roadmap has recorded since 9.58.0-dev. That is the next item in this family.
+- **It is not a fresh-save round and not a save wipe.** No field is removed, no format version is bumped, and a world written before this round loads into it unchanged.
+
+#### Numbers
+
+| | Value |
+|---|---|
+| New files | 1 (`ChunkStoreIdentity.cs`, plus its `.meta`) |
+| Files changed | 3 (`ChunkStorage.cs`, `SphereWorld.cs`, `WorldStatePersistence.cs`) |
+| Store files added | 1 per body store (`store.json`, ~330 bytes) |
+| Save fields added | 5 on `SavedPlacedBlock` — all additive and optional |
+| Save fields changed or removed | 0 |
+| Harness checks | 394 in four sections (up from 326; 68 new checks in section D, mutation-verified in 4 ways) |
+| Manual steps that touch your files | 1 — moving aside the store of a world that is already broken |
+
+#### Manual Unity steps
+
+1. Copy the four files from this delivery into the project, keeping the folder layout: `Scripts/Persistence/ChunkStoreIdentity.cs` (with its `.meta`), `Scripts/Persistence/ChunkStorage.cs`, `Scripts/Cosmos/SphereWorld.cs` and `Scripts/Persistence/WorldStatePersistence.cs`.
+2. Let Unity compile and clear the console.
+3. **Recover the world that is already broken** — the only step here that touches your files, and it moves rather than deletes:
+   1. Close the game.
+   2. Open the world's store folder. The console prints it as `[ChunkStorage] World folder: <path>`; it is `VoxelWorlds\<worldName>\Bodies\<BodyName>` under `%USERPROFILE%\AppData\LocalLow\<company>\<product>`.
+   3. Rename `Bodies\<BodyName>` to `Bodies\<BodyName>_old` (keep it; nothing is deleted).
+   4. Load the world. Blocks, machines, grids, containers and the inventory come back from `world_state.json`; the voxel terrain around them generates fresh from the seed, so mined-out ground and any voxels placed in those chunks are what regenerate.
+4. **Verify the guard.** Load a world and read the new line. The first run on an existing store reports `store Adopted` (it predates the guard) and writes `store.json` next to the region files; every load after that reports `store Verified`. A world whose store belongs to another field reports `store Quarantined` and regenerates once.
+5. **Verify the block anchor.** Place a block, save, quit and rejoin. The console must report `[WorldState] Restored N placed block(s) — M from a body anchor, ...` with `M` greater than zero for a block on the ground, and the block must stand where you left it.
+6. **If a join still breaks, the three lines settle it in one look**: the `[SphereWorld] World ... streaming ...` line, the `[ChunkStorage] World folder:` line, and any `[ChunkStorage]` warning. Comparing the seed and the store state between a good join and the bad one is the whole question.
 
 ### [9.58.1-dev] Compile Fix: The Vector3 Finiteness Helper and the Qualified String Comparison
 
