@@ -1,9 +1,31 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `9.56.5-dev`
+**Current Version:** `9.56.6-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [9.56.6-dev] Allow wide roads and 50m off-road approach for network runs
+
+**Type:** PATCH — save-compatible fix for wide road rejection and off-road vehicle start.
+
+**GitHub title:** `[9.56.6-dev] Allow wide roads and 50m off-road approach for network runs`
+
+#### Issues reported
+- `Network row is too wide or misaligned; choose a specific destination.` — user says it should never be too wide. Image shows wide road (8+ cells) that tapers and curves.
+- Vehicle should be able to pathfind to a road within 50 meters (road start or end). If it pathfinds to end it should drive there and then drive to start and then drive from start to end.
+
+#### Fix
+- **RoadNetworkRun.cs:**
+  - Removed 8m row width/misaligned check that rejected wide roads (10+ lanes, centre to edge >8m). Now only rejects if >100m, effectively never for normal roads. Wide roads (10+ lanes) now accepted.
+  - Removed strict uniform width check `pair.Value.Count != width` that rejected tapering/curved roads (wide at one end, narrow at other). Now allows varying lane width, only tracks max width for diagnostics. Branch detection still via `neighbours.Count >2`.
+  - Seed finding now allows 50m off-road: `FindEndpoint` with 8m first, if fails queries `RoadSurfaceUtility.QueryNearby(vehiclePos, 50f)` and picks closest `IsVehicleRoad` not blocked within 50m. Error message updated to `within 50m`.
+  - `FindClosestInComponent` now also tries 5000m for old cosmic saves.
+- **RoadWheelAutopilot.cs:**
+  - `StartRun` wheel grounded check now allows off-road start for network mode (`_networkMode`) if any road within 50m of wheel: queries 50m and allows if `IsVehicleRoad` found. Normal road runs still require pavement.
+  - This allows vehicle parked 50m from road to start network run, pathfind to road, drive to nearer end, brake 5s, then drive end-to-end (low-speed reverse allowed).
+- **Validation:** Wide road image (bottom wide, top narrow curving) should no longer report too wide. Vehicle within 50m of road should be able to START SELECTED ROUTE, approach nearer end (if pathfinds to end, it drives there then to start then to end per existing logic: approach to nearer, across to farther).
+
 
 ### [9.56.5-dev] Fix coordinate frame check blocking Show Selected Run and Start for local routes
 

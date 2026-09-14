@@ -91,10 +91,28 @@ namespace IndustrialWorld.Navigation
             { Status = "An Auto-Run Pilot or cockpit reference, and 4–16 enabled wheels are required."; return; }
             float minZ = float.MaxValue, maxZ = float.MinValue;
             _halfWidth = _halfLength = _bodyTop = 0f;
+            // v9.56.6-dev: for network runs, allow starting up to 50m off-road — vehicle will pathfind to road
+            // For normal road runs, still require pavement under wheels
+            bool allowOffRoad = _networkMode;
+            var offRoadScratch = new System.Collections.Generic.List<VoxelEngine.Building.AsphaltRoad>();
             foreach (var wheel in _wheels)
             {
-                if (!wheel.IsGrounded || RoadRoutePlanner.IsBlocked(wheel.GroundRoad))
-                { Status = "All wheels must be supported by available pavement."; return; }
+                bool onRoad = wheel.IsGrounded && !RoadRoutePlanner.IsBlocked(wheel.GroundRoad);
+                if (!onRoad && allowOffRoad)
+                {
+                    // Check if any road within 50m of this wheel
+                    VoxelEngine.Environment.RoadSurfaceUtility.QueryNearby(wheel.transform.position, 50f, offRoadScratch);
+                    foreach (var r in offRoadScratch)
+                    {
+                        if (r != null && RoadRoutePlanner.IsVehicleRoad(r) && !RoadRoutePlanner.IsBlocked(r))
+                        {
+                            onRoad = true;
+                            break;
+                        }
+                    }
+                }
+                if (!onRoad)
+                { Status = "All wheels must be supported by available pavement (or within 50m for network runs)."; return; }
                 Vector3 local = Frame.InverseTransformPoint(wheel.transform.position);
                 minZ = Mathf.Min(minZ, local.z);
                 maxZ = Mathf.Max(maxZ, local.z);

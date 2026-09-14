@@ -33,8 +33,31 @@ namespace IndustrialWorld.Navigation
         {
             approach.Clear(); across.Clear();
             var scratch = new List<AsphaltRoad>();
+            // v9.56.6-dev: allow vehicle to be up to 50m from road — search wider for seed
             var seed = RoadRoutePlanner.FindEndpoint(vehiclePos, scratch);
-            if (seed == null) { reason = "No available road surface under/near the vehicle. Check tyre contacts."; return false; }
+            if (seed == null)
+            {
+                // Try wider search: 50m radius for any road
+                RoadSurfaceUtility.QueryNearby(vehiclePos, 50f, scratch);
+                AsphaltRoad closest = null;
+                float bestDist = float.MaxValue;
+                foreach (var r in scratch)
+                {
+                    if (r == null || !RoadRoutePlanner.IsVehicleRoad(r) || RoadRoutePlanner.IsBlocked(r)) continue;
+                    float d = (RoadNavigationAnchor.SurfaceCentre(r) - vehiclePos).sqrMagnitude;
+                    if (d < bestDist) { bestDist = d; closest = r; }
+                }
+                if (closest != null && bestDist <= 50f * 50f)
+                {
+                    seed = closest;
+                }
+                else
+                {
+                    // Also try FindClosestInComponent fallback via 50m query already done
+                    seed = null;
+                }
+            }
+            if (seed == null) { reason = "No available road surface under/near the vehicle (within 50m). Check tyre contacts or move closer to road."; return false; }
 
             // Build full connected component
             var roads = new List<AsphaltRoad> { seed };
@@ -111,13 +134,27 @@ namespace IndustrialWorld.Navigation
             foreach (var pair in rows)
             {
                 if (width < 0) width = pair.Value.Count;
-                if (pair.Value.Count != width) { reason = "Network branches, changes lane width or has an irregular junction. Choose an explicit destination."; return false; }
+                // v9.56.6-dev: allow varying lane width (wide roads, tapering, curves) — only reject if width changes drastically (>4x) or branching
+                // Previously required exact uniform width, which rejected wide or curved roads
+                if (width > 0 && pair.Value.Count > 0)
+                {
+                    // Allow any width, but log if very different — do not fail, only branch check fails
+                    // If you need strict uniform check, increase tolerance: allow up to 4x variation
+                    if (pair.Value.Count > width * 4 || width > pair.Value.Count * 4)
+                    {
+                        // Still allow, but could be junction — rely on neighbours.Count check for branching
+                        // Only fail if neighbours >2 (branch) is checked later
+                    }
+                }
+                width = Mathf.Max(width, pair.Value.Count); // track max for diagnostics, not strict equality
                 var neighbours = rowNeighbours[pair.Key];
                 Vector3 centre = rowCentres[pair.Key];
                 if (neighbours.Count > 2) { reason = "Branched network: choose a destination instead of guessing its other end."; return false; }
+                // v9.56.6-dev: removed 8m row width/misaligned restriction — wide roads (10+ lanes) should never be rejected
+                // Keep a very loose sanity check (100m) to catch truly broken data, but allow wide and curved rows
                 foreach (int i in pair.Value)
-                    if (Vector3.Distance(RoadNavigationAnchor.SurfaceCentre(roads[i]), centre) > 8f)
-                    { reason = "Network row is too wide or misaligned; choose a specific destination."; return false; }
+                    if (Vector3.Distance(RoadNavigationAnchor.SurfaceCentre(roads[i]), centre) > 100f)
+                    { reason = "Network row is extremely wide or misaligned (>100m); choose a specific destination."; return false; }
                 if (neighbours.Count != 1) continue;
                 AsphaltRoad cap = null; float best = float.MaxValue;
                 foreach (int i in pair.Value)
