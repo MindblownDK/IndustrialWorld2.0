@@ -1,17 +1,3 @@
-// Assets/Scripts/IndustrialWorld/Navigation/PilotRouteAssessment.cs
-//
-// Dynamic pilot route assessment — reads live block stats, never hardcoded.
-// If you rebalance a block's output (wheel power, thruster thrust, engine torque,
-// generator watts, battery capacity/discharge), this assessment reflects it
-// immediately because it queries the placed blocks themselves.
-//
-// v9.56.1-dev — extracted from 9.55.0-dev changelog intent:
-//   • Road budgets use configured wheel watts * suspensionStrength
-//   • Electric water propulsion and local flight use fitted propulsion ratings
-//   • Battery percentages are capacity-weighted across installed packs
-//   • Generator credit excludes battery discharge from generation ledger
-//   • All figures are rated-load planning estimates, not simulated journeys
-
 using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
@@ -64,7 +50,6 @@ namespace IndustrialWorld.Navigation
                 if (block is not GridWheel wheel) continue;
                 if (!wheel.Enabled) continue;
                 count++;
-                // Dynamic: uses block's current powerDrawWatts and suspensionStrength
                 watts += Mathf.Max(0f, wheel.powerDrawWatts) * Mathf.Clamp01(wheel.suspensionStrength);
                 drive += Mathf.Max(0f, wheel.driveForce);
                 suspSum += Mathf.Clamp01(wheel.suspensionStrength);
@@ -88,22 +73,16 @@ namespace IndustrialWorld.Navigation
                 {
                     engines++;
                     torque += Mathf.Max(0f, eng.maxTorque) * eng.TurboBoostTotal * eng.ModuleOutputMultiplier;
-                    // maxRPM is dynamic per tier and per modules/turbos
                 }
                 else if (block is GridMaritimeGenerator gen && gen.Enabled)
                 {
                     gens++;
-                    // Dynamic: uses block's current maxWattOutput * ModuleOutputMultiplier and maxSpeedBonus
                     genRated += gen.EffectiveMaxWattOutput;
                     genRpm = Mathf.Max(genRpm, gen.maxRPM);
                 }
                 else if (block is GridElectricalPropeller eProp && eProp.Enabled)
                 {
                     elecW += Mathf.Max(0f, eProp.powerDrawWatts);
-                }
-                else if (block is GridPropeller prop && prop.Enabled)
-                {
-                    // mechanical propellers don't draw watts directly, they use shaft torque
                 }
             }
             return (elecW, torque, engines, gens, genRated, genRpm);
@@ -121,7 +100,6 @@ namespace IndustrialWorld.Navigation
                 if (block is not GridThruster thruster) continue;
                 if (!thruster.enabled || !thruster.Enabled) continue;
                 count++;
-                // Dynamic: uses block's current maxThrustN and powerAtMaxThrust
                 thrust += Mathf.Max(0f, thruster.maxThrustN) * (thruster.thrusterType == ThrusterType.Atmospheric ? thruster.AtmosphericEfficiency : 1f);
                 power += Mathf.Max(0f, thruster.powerAtMaxThrust);
                 if (thruster.thrusterType == ThrusterType.Hydrogen)
@@ -142,16 +120,11 @@ namespace IndustrialWorld.Navigation
             var thrusters = CollectThrusters(grid);
 
             float mass = grid.TotalMass;
-            float genWatts = 0f;
-            float genWithoutBattery = 0f;
-            // PowerGenerated includes battery discharge, so exclude it for generator credit
-            // Dynamic: uses live PowerGenerated and sums battery discharge
             float totalBatteryDischarge = 0f;
             foreach (var block in grid.AllBlocks)
                 if (block is GridBattery b) totalBatteryDischarge += Mathf.Max(0f, b.CurrentDischargeWatts);
-            genWithoutBattery = Mathf.Max(0f, grid.PowerGenerated - totalBatteryDischarge);
+            float genWithoutBattery = Mathf.Max(0f, grid.PowerGenerated - totalBatteryDischarge);
 
-            // Common header
             sb.AppendLine($"{route.travelMode} · {route.waypoints.Count} points · {mass:0} kg");
             if (batteries.count > 0)
             {
@@ -168,13 +141,11 @@ namespace IndustrialWorld.Navigation
             float controlWatts = pilot != null ? Mathf.Max(0f, pilot.controlWatts) : 40f;
             sb.AppendLine($"CONTROL {controlWatts:0} W pilot overhead");
 
-            // Mode-specific
             if (route.travelMode == RouteTravelMode.Road || route.travelMode == RouteTravelMode.RoadNetwork)
             {
                 float distance = EstimateRoadDistance(route, grid);
                 float speedCap = route.travelMode == RouteTravelMode.RoadNetwork ? 1.5f : 4f;
                 float timeSec = speedCap > 0.01f ? distance / speedCap : 0f;
-                // Add 25% allowance + 5s per phase
                 timeSec *= 1.25f;
                 timeSec += route.travelMode == RouteTravelMode.RoadNetwork ? 10f : 5f;
 
@@ -215,10 +186,8 @@ namespace IndustrialWorld.Navigation
                 float propW = maritime.electricalWatts;
                 if (propW < 0.01f && maritime.mechanicalTorque > 0.01f)
                 {
-                    // Mechanical water propulsion — estimate watts from torque * omega (uses live torque)
-                    // Assume 1200 RPM avg for estimate
                     float omega = 1200f * 0.10471975512f;
-                    propW = maritime.mechanicalTorque * omega * 0.85f * 0.01f; // small fraction for planning
+                    propW = maritime.mechanicalTorque * omega * 0.85f * 0.01f;
                 }
 
                 float standingW = Mathf.Max(380f, grid.PowerConsumed);
@@ -277,7 +246,6 @@ namespace IndustrialWorld.Navigation
             }
             else if (route.travelMode == RouteTravelMode.LegacyFlight)
             {
-                // Use existing GridRoutePlanner which already reads live thruster stats dynamically
                 var plan = VoxelEngine.Navigation.GridRoutePlanner.Evaluate(route, grid);
                 sb.AppendLine($"LEGACY SPACE {plan.TotalDistanceKm:0} km · {plan.TotalSeconds:0} s · {plan.PeakSpeedMs:0} m/s peak");
                 sb.AppendLine($"THRUST Required {plan.RequiredThrustNewtons / 1000f:0.0} kN · Available {plan.AvailableThrustNewtons / 1000f:0.0} kN (dynamic from fitted thrusters)");
@@ -298,72 +266,33 @@ namespace IndustrialWorld.Navigation
         private static float EstimateRoadDistance(ShipRoute route, GridEntity grid)
         {
             if (route == null) return 0f;
-            if (route.travelMode == RouteTravelMode.RoadNetwork)
+            if (route.waypoints.Count < 2) return 0f;
+            float total = 0f;
+            Vector3 prev = Vector3.zero;
+            bool hasPrev = false;
+            for (int i = 0; i < route.waypoints.Count; i++)
             {
-                // For network runs, we have two waypoints (the saved ends) but actual road distance
-                // is approach + across. Use straight line between waypoints as fallback, then scale.
-                // Dynamic: if we have a live RoadNetworkRun, use its last planned lengths via resolver.
-                float straight = 0f;
-                for (int i = 1; i < route.waypoints.Count; i++)
-                {
-                    if (!RouteCoordinates.TryResolve(route, i - 1, out var a)) continue;
-                    if (!RouteCoordinates.TryResolve(route, i, out var b)) continue;
-                    straight += Vector3.Distance(a, b);
-                }
-                // Road path is typically 1.3x straight due to curves
-                return straight * 1.3f;
+                if (!RouteCoordinates.TryResolve(route, i, out var pos)) continue;
+                if (hasPrev) total += Vector3.Distance(prev, pos);
+                prev = pos;
+                hasPrev = true;
             }
-            else
-            {
-                // For ordinary road routes, use RoadRoutePlanner to build actual road tile path if possible
-                var from = RoadNavigationAnchor.ForGrid(grid, RouteTravelMode.Road);
-                var tmp = new List<VoxelEngine.Building.AsphaltRoad>();
-                float total = 0f;
-                Vector3 prev = from;
-                for (int i = 0; i < route.waypoints.Count; i++)
-                {
-                    if (!RouteCoordinates.TryResolve(route, i, out var to)) continue;
-                    if (RoadRoutePlanner.TryPlan(prev, to, tmp, out _))
-                    {
-                        for (int j = 1; j < tmp.Count; j++)
-                        {
-                            total += Vector3.Distance(RoadNavigationAnchor.SurfaceCentre(tmp[j - 1]), RoadNavigationAnchor.SurfaceCentre(tmp[j]));
-                        }
-                        prev = to;
-                    }
-                    else
-                    {
-                        total += Vector3.Distance(prev, to);
-                        prev = to;
-                    }
-                }
-                return total;
-            }
+            if (route.travelMode == RouteTravelMode.RoadNetwork) total *= 1.3f;
+            return total;
         }
 
         private static float EstimateLocalDistance(ShipRoute route, GridEntity grid)
         {
             if (route == null) return 0f;
             float total = 0f;
-            Vector3 prev = grid != null ? grid.Body != null ? grid.Body.position : Vector3.zero : Vector3.zero;
-            bool first = true;
+            Vector3 prev = Vector3.zero;
+            bool hasPrev = false;
             for (int i = 0; i < route.waypoints.Count; i++)
             {
-                if (!RouteCoordinates.TryResolve(route, i, out var to)) continue;
-                if (first)
-                {
-                    first = false;
-                    prev = to;
-                    continue;
-                }
-                total += Vector3.Distance(prev, to);
-                prev = to;
-            }
-            // If route has only 2 points and we started from vehicle, include vehicle->first leg
-            if (route.waypoints.Count >= 1 && grid != null && grid.Body != null)
-            {
-                if (RouteCoordinates.TryResolve(route, 0, out var firstPt))
-                    total += Vector3.Distance(grid.Body.position, firstPt);
+                if (!RouteCoordinates.TryResolve(route, i, out var pos)) continue;
+                if (hasPrev) total += Vector3.Distance(prev, pos);
+                prev = pos;
+                hasPrev = true;
             }
             return total;
         }

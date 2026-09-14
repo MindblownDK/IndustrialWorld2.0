@@ -138,11 +138,10 @@ namespace IndustrialWorld.Navigation
                 AsphaltRoad roadA = RoadRoutePlanner.FindEndpoint(savedA.Value, scratch);
                 AsphaltRoad roadB = RoadRoutePlanner.FindEndpoint(savedB.Value, scratch);
 
-                // If not found within 8m, try wider search (512m, 2000m) for old cosmic saves
                 if (roadA == null)
-                    roadA = FindClosestInComponent(savedA.Value, roads, 512f) ?? FindClosestInComponent(savedA.Value, roads, 2000f);
+                    roadA = FindClosestInComponent(savedA.Value, roads, 512f) ?? FindClosestInComponent(savedA.Value, roads, 2000f) ?? FindClosestInComponent(savedA.Value, roads, 5000f);
                 if (roadB == null)
-                    roadB = FindClosestInComponent(savedB.Value, roads, 512f) ?? FindClosestInComponent(savedB.Value, roads, 2000f);
+                    roadB = FindClosestInComponent(savedB.Value, roads, 512f) ?? FindClosestInComponent(savedB.Value, roads, 2000f) ?? FindClosestInComponent(savedB.Value, roads, 5000f);
 
                 if (roadA == null || roadB == null)
                 {
