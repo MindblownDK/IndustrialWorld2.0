@@ -839,6 +839,8 @@ namespace VoxelEngine.EditorTools
                 "icons, recipe quantities and research settings are never reset.");
             AddWizardButton(scroll, "75. Author Universal Machine Upgrade Modules (Speed + Efficiency \u2014 Non-Destructive)",
                 () => IndustrialWorld.EditorTools.UniversalUpgradeSetup.RunStep75(), 62);
+            AddWizardButton(scroll, "76. Convert the Jack Pump to a Tank-Only Crude Producer\n(No input barrels, no output slots \u2014 Non-Destructive)",
+                () => IndustrialWorld.EditorTools.PumpjackTankSetup.RunStep76(), 62);
 
             AddSpacer(scroll, 20);
         }
@@ -1931,9 +1933,34 @@ namespace VoxelEngine.EditorTools
         {
             string path = $"{folder}/{assetName}.asset";
             var r = GetOrCreateAsset<VoxelEngine.Crafting.SmeltingRecipe>(path);
+
+            // Without an ingredient or a product the recipe is not merely useless, it is
+            // actively harmful: Furnace.FindRecipeForInput skips any recipe whose input is
+            // null, so a furnace holding such a recipe reports "No recipe for this input"
+            // no matter what the player puts in it. Refuse to write one, and say so.
+            if (input == null || output == null)
+            {
+                Debug.LogError("[Setup] Refusing to author " + assetName + ": its " +
+                               (input == null ? "input" : "output") + " item did not resolve. " +
+                               "A smelting recipe with a missing link makes the furnace unable to smelt anything.");
+                return r;
+            }
+
             r.input = input; r.inputCount = inputCount;
             r.output = output; r.outputCount = outputCount; r.smeltSeconds = seconds;
 
+            // A ScriptableObject edited in memory is NOT written back by
+            // AssetDatabase.SaveAssets() unless it is marked dirty. Every other asset
+            // factory in this file does this; this one did not, so the three base
+            // smelting recipes kept their constructor defaults on disk — a null input,
+            // a null output — and neither furnace could ever match a recipe.
+            EditorUtility.SetDirty(r);
+
+            if (r.input == null || r.output == null)
+                Debug.LogWarning("[Setup] " + assetName + " was authored but a link is still missing.");
+            else
+                Debug.Log("[Setup] " + assetName + ": " + input.displayName + " x" + inputCount +
+                          " -> " + output.displayName + " x" + outputCount + " in " + seconds + "s.");
             return r;
         }
 
@@ -3953,7 +3980,7 @@ namespace VoxelEngine.EditorTools
             var glass       = MakeIndustrialResource("Item_Glass",      "Glass",          "Clear pane fused from sand. Used in lab equipment and storage windows.",   new Color(0.70f, 0.88f, 0.95f), VoxelEngine.Items.ResourceCategory.Component, "Materials");
 
             // ─ Oil chain ─
-            var emptyBarrel = MakeIndustrialResource("Item_EmptyBarrel","Empty Barrel",    "Pressed-steel drum. Fill it with crude oil at a Pumpjack.",               new Color(0.45f, 0.45f, 0.50f), VoxelEngine.Items.ResourceCategory.Component, "Oil", maxStack: 50);
+            var emptyBarrel = MakeIndustrialResource("Item_EmptyBarrel","Empty Barrel",    "Pressed-steel drum. Feedstock for the refinery's oil chain.",               new Color(0.45f, 0.45f, 0.50f), VoxelEngine.Items.ResourceCategory.Component, "Oil", maxStack: 50);
             var crudeBarrel = MakeIndustrialResource("Item_CrudeOilBarrel","Crude Oil Barrel","Black gold. Feed it to an Oil Refinery to produce Refined Oil.",       new Color(0.10f, 0.08f, 0.06f), VoxelEngine.Items.ResourceCategory.Raw,       "Oil", maxStack: 50);
             var refinedBarrel = MakeIndustrialResource("Item_RefinedOilBarrel","Refined Oil Barrel","Cracked & distilled oil. Burns clean and feeds plastic synthesis.", new Color(0.50f, 0.30f, 0.10f), VoxelEngine.Items.ResourceCategory.Component, "Oil", maxStack: 50);
             // Refined oil is also a fuel (long burn time): useful in furnaces.
@@ -3979,8 +4006,9 @@ namespace VoxelEngine.EditorTools
             var pumpjackPrefab = GetOrCreatePrefab($"{prefabsFolder}/Pumpjack.prefab", "JackPump", root =>
             {
                 var pump = EnsureComponent<VoxelEngine.Crafting.Pumpjack>(root);
-                pump.emptyBarrel = emptyBarrel;
-                pump.crudeOilBarrel = crudeBarrel;
+                // The pumpjack has been a tank-only machine since 11.0.0-dev, so it no
+                // longer carries barrel items. Its tank is configured on the component
+                // itself; step 76 repairs an existing prefab onto that shape.
                 pump.secondsPerCycle = 14f;
                 pump.baseWattsPerSecond = 4000f;
                 pump.idleWattsPerSecond = 120f;
@@ -4093,7 +4121,7 @@ namespace VoxelEngine.EditorTools
             }
 
             var blockPumpjack = MakeIndustrialBlock("Block_Pumpjack", "Jack Pump", new Color(0.20f, 0.20f, 0.22f), pumpjackPrefab,
-                "Heavy walking-beam oil extractor. Runs only on a rare infinite Pirate World oil node; consumes Empty Barrels and draws 4 kW while pumping.", hp: 1400);
+                "Heavy walking-beam crude extractor. Draws liquid crude into its own tank rather than filling barrels, and can be piped straight into a refinery. Needs a Pirate Jack Pump Head to assemble. Draws heavy power while pumping and stops when the tank is full.", hp: 1400);
             blockPumpjack.maxStack = 5;
             blockPumpjack.massPerUnit = 35f;
             blockPumpjack.miningTier = 3;

@@ -1,9 +1,127 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `10.2.0-dev`
+**Current Version:** `11.0.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [11.0.0-dev] A Parked Hull Stays Parked, the Water Probe Stops Throwing, and the Well Produces Crude
+
+**Type:** MAJOR — this round corrects a shipped regression, and in doing so changes the save schema: the three frame-relative velocity fields added to `SavedGrid` in 10.1.0-dev are removed. The Jack Pump also stops having item slots, so its prefab changes shape. Both changes are load-compatible in one direction only — a save written by this round cannot be read by 10.1.0-dev or 10.2.0-dev — which is what the major bump records. **One setup step is required: `Tools > Voxel Engine > Voxel Engine Setup`, step 76.**
+
+**GitHub title:** `[11.0.0-dev] A parked hull stays parked, the water probe stops throwing, and the well produces crude instead of barrels`
+
+#### Why this round
+
+Test feedback named four things that were wrong. Each is dealt with below in the order it was reported, and the first is a regression this project shipped in 10.1.0-dev.
+
+#### 1. A hull sank further into the ground on every rejoin
+
+**The cause was the frame-relative velocity from 10.1.0-dev, and it is removed.** That round stored a movable grid's linear velocity relative to the motion of the scene's reference frame, on the reasonable-sounding grounds that a raw scene velocity describes motion against a frame that is itself orbiting. The arithmetic was wrong. `SpaceOrigin.FrameVelocityKmS` is in kilometres per second and a `Rigidbody.linearVelocity` is in metres per second, and the conversion multiplied by 1000 in the right direction for one leg of the round-trip and not the other. The result: a hull parked on the ground was saved with roughly zero relative velocity, and restored with its planet's entire orbital speed applied to it as a scene velocity — tens of kilometres per second of Rigidbody velocity on a hull sitting on dirt. It drove itself into the terrain, and because the position anchor put it back in the right place first, it started each rejoin from the surface and sank again.
+
+`GridEntity.StabilizeRestoredVelocityIfPossible` only zeroes a restored velocity when dampeners, the stationary lock or an energy hold is in effect, so a hull without dampeners kept the velocity. `ResolvePersistentGroundClearance` was not the mechanism — it only ever lifts, and it is a no-op when the lift it wants exceeds its maximum.
+
+- **Removed:** `SavedGrid.hasFrameRelativeVelocity`, `SavedGrid.frameRelativeVelocity`, `SavedGrid.anchorCosmicSeconds`, `CaptureGridFrameRelativeVelocity`, `RestoreGridVelocity` and the `MaxRestoredVelocitySqr` bound that only existed to catch this class of error.
+- **Restored:** the hull is handed `savedGrid.velocity` again, exactly as it was before 10.1.0-dev, still zeroed by the wheel parking brake.
+- **Kept:** the whole body anchor — `hasBodyAnchor`, `anchorBody`, `anchorLocalX/Y/Z`, `anchorRotX/Y/Z/W`, `CaptureGridBodyAnchor` and `ResolveSavedGridPose`. Testing confirmed it places the hull at the right spot and heading, so it stays exactly as it is. `SavedGrid` is back to 24 fields.
+
+A save written by 10.1.0-dev or 10.2.0-dev still loads: the three removed fields are simply not read, and `velocity` — which those rounds kept writing as the fallback — is what gets used.
+
+#### 2. The water probe threw a job-safety exception every physics step
+
+`FluidManager.TryGetVolumetricDensity` read `chunk.GetVoxelLocal(...)` without completing the chunk's `SphereChunkGenJob` first. That job declares the voxel array `[WriteOnly]`, so Unity's job-safety check threw out of `MaritimePropulsionSystem.FixedUpdate` -> `WaterProbeSystem.GetSubmergence` -> `SamplePlanetDensity` -> `PlanetWaterUtility.SampleDensityAtWorldPos` on every physics step a probe sat over a chunk that was still generating.
+
+This was a pre-existing bug, not a new one, and the fix is the convention the rest of the file already follows: `FluidManager` calls `world.CompleteGenJobForChunk(chunk)` before reading voxels in four other places — `PlaceLiquid` and three more. This path was the one that did not. `IVoxelWorld.CompleteGenJobForChunk` is documented in the interface as *"Complete any in-flight gen job for this chunk (fluid sim safety)"*, so the call is the intended one. Completing is a no-op once the job has landed, which is the common case, so the cost is a loop over `_pendingGen` that finds nothing.
+
+#### 3. Both smelters stood still — the smelting recipes on disk have no items in them
+
+**Root cause: the three base smelting recipe assets were never written to disk, so they hold their constructor defaults.** `Smelt_Iron.asset`, `Smelt_Copper.asset` and `Smelt_Steel.asset` all contain:
+
+```
+input: {fileID: 0}
+output: {fileID: 0}
+smeltSeconds: 5
+```
+
+`5` is the `SmeltingRecipe` field initialiser. `MakeSmelt` authors 4 s for iron and copper and 8 s for steel — none of which reached the file. `Furnace.FindRecipeForInput` skips any recipe whose `input` is null, so a furnace holding these three recipes can never match anything, whatever is in its input slot:
+
+```csharp
+if (r == null || r.input == null) continue;
+```
+
+`_current` stays null, the progress bar stays at zero, and the machine returns. The electric furnace runs the same match, which is why both stopped at the same time and why it looked like one shared failure — it was.
+
+**Why the writes were lost:** `MakeSmelt` set the fields and returned without calling `EditorUtility.SetDirty`. A `ScriptableObject` edited in memory is not written back by `AssetDatabase.SaveAssets()` unless it is marked dirty. Every other asset factory in `VoxelEngineSetupWindow.cs` marks its asset dirty; this one did not. The evidence is consistent across all four recipes: `Smelt_Glass`, authored by the industrial step, *does* call `EditorUtility.SetDirty(smGlass)` — and it is the one recipe whose link survived, with a real GUID in its `output`. Its `input` is null for a separate reason: the `sand` reference it was handed resolved to nothing at the time it ran.
+
+**The fix, and what to run:**
+
+- `MakeSmelt` now marks the recipe dirty, logs the link it wrote (`Smelt_Iron: Iron x1 -> Iron Ingot x1 in 4s.`), and **refuses to author a recipe whose input or output did not resolve** rather than writing one that can never match — with an error naming the asset and the missing end.
+- Re-running **step 4, Build Crafting Content**, re-authors the three base recipes and re-assigns them to the Furnace prefab. **Step 10, Build Industrial Content**, repairs `Smelt_Glass` the same way. Both steps are the standing non-destructive ones: they load an existing asset and repair its links rather than replacing it.
+- Until that is run, the furnace now says so instead of standing silent. Its report distinguishes the three cases, because they need different actions:
+
+```
+[Furnace] Not smelting: No recipe for this input. Input slot holds 8 x Item_Iron; 3 smelting recipe(s) assigned but 3 of them have no input or output item, so they can never match - re-run the crafting content setup step to repair the links.
+```
+
+`no smelting recipe is assigned` means the prefab has none; `N assigned but M of them have no input or output item` means the assets exist but lost their links; `N assigned, all linked` means the recipes are sound and the reason named at the front of the line is the real one. The line is written once per change, never every frame.
+
+Every gate is covered, including the two that returned before anything else was examined: the fuel furnace's brownout branch and the electric furnace's offline branch.
+
+#### 4. The Jack Pump now produces crude oil, not barrels
+
+The pumpjack consumed an Empty Barrel from an input slot and wrote a Crude Oil Barrel into an output slot. Crude is a liquid in this game's fluid chain, so the design forced the player to hand-carry drums between the well and the refinery instead of plumbing them together — and it needed a barrel supply just to run.
+
+- **`Pumpjack` has no item containers at all.** No input slot, no output slot, no `IItemPortHost`, no `emptyBarrel` or `crudeOilBarrel` reference.
+- **It has one tank:** `crudeTank`, a fixed-type `MachineFluidTank` holding `LiquidType.CrudeOil`. Fixed-type matters — an auto-type tank adopts whatever liquid first fills it, and a well must not be talked into holding water.
+- **It implements `IFluidStore`** so the fluid chain can draw from it, and it is a source and never a sink: `Fill` accepts nothing and `SpaceFor` reports no space, because a pumpjack has nowhere to put liquid it did not draw itself.
+- **The canister still works,** and now draws from the tank rather than from an infinite node. It adds to the canister first and only draws from the tank if the canister accepted the liquid, so a refused fill can never drain the well.
+- **The panel shows the tank.** The two rows of dead item slots are gone; in their place is a crude gauge with litres against capacity, and a status line that says PUMPING, TANK FULL, NO CRUDE BELOW or NO POWER rather than leaving the player to guess.
+- **A batch is a volume now:** `litresPerCycle` (default 1000 L) drawn over `secondsPerCycle` (default 14 s). Whatever the tank cannot take stays in the ground rather than vanishing.
+- **The well test is the game's own.** `DetectReservoir` probes under the derrick and asks `CelestialBody.BuildOreLayers()` whether the body generates crude, which is the same list that decides whether crude exists on that body at all. A hand-placed ore node is no longer required.
+- **Save:** the crude and the part-batch travel in the machine-process record written since 10.2.0-dev. A stalled jack saves no part-batch and reloads with none, so it cannot gain a head start. The tank's capacity always comes from the prefab, never from the save, so a retuned tank size applies on load and an old save is clamped into it instead of inventing crude.
+- **This is what the refinery was already waiting for.** `OilRefinery.fluidIn` is a `MachineFluidTank` preset to `LiquidType.CrudeOil` — the refinery has always taken *liquid* crude, and the barrel chain in front of it was the odd part out. A well and a refinery now connect with a pipe and nothing else.
+- The barrel items are untouched and not deleted, but they are now orphaned: `Item_CrudeOilBarrel` has no producer and no consumer anywhere in the codebase, since the refinery's recipes run on its fluid tanks rather than on barrels. Retiring the barrel item and its recipe is its own small piece of work, deliberately not folded into a bug-fix round.
+
+#### Setup step 76 (required)
+
+`Tools > Voxel Engine > Voxel Engine Setup` -> **76. Convert the Jack Pump to a Tank-Only Crude Producer**. Non-destructive by construction:
+
+- An authored tank capacity, litres per batch, seconds per batch, power draw, scan depth or scan radius is never reset. Only a value that is missing, zero or negative is filled in, and each one is logged.
+- A tank that has drifted onto another liquid is put back on crude and locked there. A stored amount is clamped into capacity, never invented.
+- The retired item-port plumbing is removed, because the panel appends an item-port section for any machine that still carries it — leaving it would show two dead slot rows under a tank gauge. Containers are deliberately not deleted: they are created at runtime and are not part of the prefab.
+- The `PowerConsumer` is checked, not authored: the draw is read from the component, so a tuned value survives.
+- If the prefab is missing the step stops and says so rather than writing a stub, because a grey box would be worse than the walking-beam unit the industrial step authors.
+
+#### Verification
+
+- **103 executable checks** across seven sections, run against the shipped members copied verbatim out of the source by a Roslyn extractor — the harness executes `Pumpjack.TryFillCanister`, `Pumpjack.CaptureProcessState` / `RestoreProcessState`, `Pumpjack`'s `IFluidStore` surface, both furnaces' `StallReason`, and `FluidManager.TryGetVolumetricDensity` itself, not a re-implementation of them.
+- **Eight mutations, all caught.** A pumpjack made into a sink; a `SpaceFor` that offers room; a stalled jack allowed to reload a part-batch; a canister fill taken in litres instead of millilitres; the job completion removed from the water probe; the fuel stall reason silenced; the crude tank allowed to adopt another liquid.
+- Two of the eight first runs were read as passes because the driver rebuilt nothing and re-ran a stale binary; that was fixed before the sweep was believed. One mutation — reordering the canister fill — survived, and it survives because it is unobservable: with the add-first guard in place the add cannot fail at that point, so the reorder changes no behaviour any input can reach. It was replaced rather than papered over. An eighth mutation blinds the new broken-recipe counter, which is what makes the diagnostic trustworthy rather than decorative.
+- All ten touched files parse clean.
+- **Step 76 first shipped with a wrong prefab path.** It looked only at `Assets/VoxelEngineAssets/Prefabs/Pumpjack.prefab`; the industrial step writes to `ASSET_ROOT + "/Industrial/Prefabs"`, so the step reported the prefab missing in a project that had it. The lookup now resolves three ways and logs which one answered: the `placedPrefab` reference on `Block_Pumpjack` first, because that is the object the game actually instantiates and a reference cannot drift the way a path can; then the authored path; then any prefab under the asset root carrying a `Pumpjack` component, so a prefab moved by hand is still found. The block's description is corrected in the same pass - it still said the pump consumed Empty Barrels and ran only on an infinite node - while the Pirate Jack Pump Head requirement, which `Recipe_Pumpjack` still enforces, is kept.
+- **A first Unity compile of the rewritten pumpjack failed with ten errors**, and every one was an API this round had assumed rather than checked: `PowerConsumer.WattsPerSecond` (the field is `wattsPerSecond`), a `MachineProcessPersistence.Register` / `Unregister` pair that does not exist — the persistence layer finds machines through `GetComponentInChildren<IMachineProcessState>`, so there is nothing to sign up for — `Physics.Raycast` treated as returning a `RaycastHit` when it returns a bool, and an `OilReservoir` component that was never in the codebase. The harness had passed because its Unity stubs carried the same assumptions as the code instead of the shipped signatures. The stubs are now copied from source, the `CurrentWattage` checks that read `PowerConsumer.wattsPerSecond` are in the suite, and the symbol audit of both new files is done against the real definitions: `CelestialBody.BuildOreLayers()` returns `OreLayer[]`, `OreLayer.material` is a `MaterialId`, `MaterialId.CrudeOil` is 18, and `ItemPortRouting` is in `VoxelEngine.Transport`. What the harness cannot do is replace the Unity compile, and that gate is reported here rather than assumed.
+
+#### Save safety
+
+- A save written by 10.1.0-dev or 10.2.0-dev loads: the three velocity fields are ignored and the scene velocity is used, so a hull that was parked comes back parked.
+- A hull's position and heading anchor is unchanged, so the placement behaviour confirmed in testing is preserved.
+- A pumpjack's crude and part-batch come back through the machine-process record. Barrels left in its old slots do not, because those slots no longer exist.
+- A save written by this round cannot be read by 10.1.0-dev or 10.2.0-dev. That one-way door is what the major bump records.
+
+#### Numbers
+
+| | Value |
+|---|---|
+| Executable checks | 103 |
+| Mutations caught | 8 of 8 |
+| `SavedGrid` fields | 27 -> 24 (three frame-relative velocity fields removed) |
+| New save fields | 0 |
+| Files changed | 10 |
+| Files added | 1 (`Scripts/Editor/PumpjackTankSetup.cs`) |
+| Setup steps required | 1 (step 76) |
+| Pumpjack item slots | 3 -> 0 |
+
+---
 
 ### [10.2.0-dev] The Smelters and the Pumpjack Keep Their Batch
 

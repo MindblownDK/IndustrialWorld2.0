@@ -878,8 +878,11 @@ namespace VoxelEngine.UI
                     _openCatalyticCracker = cracker; cracker.EnsureContainers();
                     WatchContainer(cracker.inputC); WatchContainer(cracker.outputC); break;
                 case VoxelEngine.Crafting.Pumpjack jackPump:
+                    // Tank-only machine (11.0.0-dev): no item containers to watch. The
+                    // panel is rebuilt on the machine refresh cadence instead, which is
+                    // what keeps its crude gauge and status line moving.
                     _openPumpjack = jackPump; jackPump.EnsureContainers();
-                    WatchContainer(jackPump.inputC); WatchContainer(jackPump.outputC); break;
+                    break;
                 case VoxelEngine.Industrial.StationaryChemicalPlant scp:
                     _openChemPlant = scp; scp.EnsureContainers();
                     WatchContainer(scp.inputC); WatchContainer(scp.outputC); break;

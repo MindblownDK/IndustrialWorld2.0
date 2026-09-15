@@ -597,8 +597,8 @@ namespace VoxelEngine.Player
                 {
                     if (!IsHoldingGridBlock())
                     {
-                        // (a) Infinity jack pump — fills the canister from the infinite
-                        //     crude node (never drains; power must be on).
+                        // (a) Jack pump — fills the canister from the machine's own crude
+                        //     tank (11.0.0-dev: the well holds liquid, not barrels).
                         var canJack = hit.collider.GetComponentInParent<VoxelEngine.Crafting.Pumpjack>();
                         if (canJack != null)
                         {

@@ -887,45 +887,42 @@ namespace VoxelEngine.UI
         {
             if (jackPump == null) return T.MachinePanel();
             jackPump.EnsureContainers();
+
+            var tank = jackPump.crudeTank;
+            bool full = tank != null && tank.stored >= tank.capacity - 0.001f;
+
+            // A tank-only machine has three ways to stand still and only two of them
+            // are faults, so the header says which one it is instead of leaving the
+            // player to guess at a panel with no slots in it.
             string status = !jackPump.IsOnline ? "NO POWER"
-                : !jackPump.HasReservoir ? "NO PIRATE NODE"
-                : jackPump.IsPumping ? "PUMPING" : "READY";
+                : !jackPump.HasReservoir ? "NO CRUDE BELOW"
+                : full ? "TANK FULL"
+                : jackPump.IsPumping ? "PUMPING" : "STANDBY";
             Color statusColor = !jackPump.IsOnline || !jackPump.HasReservoir ? T.AccentRed
+                : full ? T.AccentAmber
                 : jackPump.IsPumping ? T.AccentGreen : T.AccentAmber;
 
             var panel = T.MachinePanel();
-            panel.Add(BuildHeader("⚙", "Jack Pump", status, statusColor, T.AccentAmber));
+            panel.Add(BuildHeader("\u2699", "Jack Pump", status, statusColor, T.AccentAmber));
             panel.Add(T.AccentDivider(T.AccentAmber));
-            panel.Add(T.StatRow("◉", "Node", jackPump.HasReservoir ? "INFINITE PIRATE OIL" : "Place on rare Pirate oil node", jackPump.HasReservoir ? T.AccentGreen : T.TextMuted));
-            panel.Add(T.StatRow("⚡", "Power Draw", PowerFormat.Watts(jackPump.CurrentWattage), T.AccentAmber));
-            panel.Add(T.StatRow("◷", "Cycle", $"{jackPump.secondsPerCycle:0}s / barrel", T.AccentCyan));
+            panel.Add(T.StatRow("\u25c9", "Well", jackPump.HasReservoir ? "Crude struck below the derrick" : "No crude under the derrick", jackPump.HasReservoir ? T.AccentGreen : T.TextMuted));
+            panel.Add(T.StatRow("\u26a1", "Power Draw", PowerFormat.Watts(jackPump.CurrentWattage), T.AccentAmber));
+            panel.Add(T.StatRow("\u25f7", "Cycle", $"{jackPump.secondsPerCycle:0}s for {jackPump.litresPerCycle:0} L", T.AccentCyan));
             panel.Add(T.Spacer(5));
 
-            var row = new VisualElement();
-            row.style.flexDirection = FlexDirection.Row;
-            row.style.alignItems = Align.FlexStart;
-            row.style.justifyContent = Justify.SpaceAround;
-            panel.Add(row);
-
-            var input = new VisualElement();
-            input.style.alignItems = Align.Center;
-            input.Add(T.Subtitle("Empty Barrel"));
-            var inputGrid = T.SlotGrid(1);
-            inputGrid.Add(slot(jackPump.inputC, 0, jackPump.inputC.GetSlot(0), false, true));
-            input.Add(inputGrid);
-            row.Add(input);
-
-            var output = new VisualElement();
-            output.style.alignItems = Align.Center;
-            output.Add(T.Subtitle("Crude Oil Output"));
-            var outputGrid = T.SlotGrid(2);
-            for (int i = 0; i < jackPump.outputC.Size; i++)
-                outputGrid.Add(slot(jackPump.outputC, i, jackPump.outputC.GetSlot(i), false, true));
-            output.Add(outputGrid);
-            row.Add(output);
+            if (tank != null)
+            {
+                var gaugeRow = new VisualElement();
+                gaugeRow.style.flexDirection = FlexDirection.Row;
+                gaugeRow.style.justifyContent = Justify.Center;
+                gaugeRow.style.marginTop = 6; gaugeRow.style.marginBottom = 6;
+                gaugeRow.Add(T.TankGauge(tank.liquid.DisplayName(), tank.Fill01, tank.liquid.Color(),
+                    $"{tank.stored:0} / {tank.capacity:0} L", 96, 130));
+                panel.Add(gaugeRow);
+            }
 
             panel.Add(T.Spacer(6));
-            panel.Add(T.Muted("Requires Pirate Oil Recovery research and a Jack Pump Head recovered only from Pirate ruins. The rare node never depletes, but the pump draws heavy power."));
+            panel.Add(T.Muted("Draws liquid crude into its own tank. Right-click it with a liquid canister to draw crude off, or pipe the tank straight into the refinery. The pump needs power and stops when the tank is full."));
             return panel;
         }
 

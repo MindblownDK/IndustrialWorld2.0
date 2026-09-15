@@ -193,6 +193,13 @@ namespace VoxelEngine.WaterSim
 
             if (ch != null)
             {
+                // A chunk can still have its SphereChunkGenJob in flight, and that job owns
+                // the voxel array this reads. Every other voxel access in this file completes
+                // the pending job first; this path did not, so a water probe over a chunk
+                // that was still generating threw the job-safety check out of
+                // MaritimePropulsionSystem.FixedUpdate every physics step. Completing is a
+                // no-op once the job has landed, which is the common case.
+                world.CompleteGenJobForChunk(ch);
                 var v = ch.GetVoxelLocal(lx, ly, lz);
                 density = v.waterLevel / 255f;
                 return true;

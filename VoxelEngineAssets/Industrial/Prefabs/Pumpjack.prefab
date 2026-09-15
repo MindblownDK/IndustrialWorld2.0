@@ -327,7 +327,6 @@ GameObject:
   - component: {fileID: 6375350115551671543}
   - component: {fileID: 263377335145429015}
   - component: {fileID: 7848687957326602693}
-  - component: {fileID: 5759363135563263083}
   - component: {fileID: 7997118347255194711}
   - component: {fileID: 6363064261738401129}
   m_Layer: 0
@@ -408,22 +407,6 @@ MonoBehaviour:
     enabled: 1
   portIndicatorSize: 0.4
   showPortIndicators: 1
---- !u!114 &5759363135563263083
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5046380633412393529}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 9eacd68ef9a141ae95f225d895db1c7b, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Transport.ItemPortRouting
-  pushInterval: 0.5
-  pushPerTick: 8
-  pipeConnectRadius: 1.6
-  distribution: 0
 --- !u!114 &7997118347255194711
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -436,21 +419,18 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0e2d6087e130bbe4397244bd7c52bac0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Crafting.Pumpjack
-  emptyBarrel: {fileID: 11400000, guid: 84d464069ef1264449d531ddf58fea27, type: 2}
-  crudeOilBarrel: {fileID: 11400000, guid: 114d4089a60a1254fbe14853a6bf199f, type: 2}
   secondsPerCycle: 14
+  litresPerCycle: 1000
   baseWattsPerSecond: 4000
   idleWattsPerSecond: 120
   scanDepth: 120
   scanRadius: 3
-  inputC:
-    _name: Container
-    _slots: []
-    _minSize: 1
-  outputC:
-    _name: Container
-    _slots: []
-    _minSize: 1
+  crudeTank:
+    label: Crude Tank
+    liquid: 1
+    capacity: 5000
+    stored: 0
+    autoType: 0
 --- !u!114 &6363064261738401129
 MonoBehaviour:
   m_ObjectHideFlags: 0

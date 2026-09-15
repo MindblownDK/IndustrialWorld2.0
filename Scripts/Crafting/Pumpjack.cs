@@ -1,240 +1,236 @@
 // Assets/Scripts/VoxelEngine/Crafting/Pumpjack.cs
 //
-// Pirate World Jack Pump. It can only run over a rare, infinite oil node
-// generated on the Pirate spherical planet. The node is not depleted: the
-// expensive pump turns Empty Barrels into Crude Oil Barrels while drawing heavy power.
+// PUMPJACK — draws liquid crude out of a crude-bearing body under its derrick and
+// holds it in a tank on the machine. 11.0.0-dev replaces the old design, which
+// filled barrel items into an output slot: crude is a liquid in this game's fluid
+// chain, so a pump that produced an item forced the player to hand-carry drums
+// instead of plumbing the well into the refinery.
+//
+// There are no item slots on this machine. It has one liquid tank. A canister is
+// filled from that tank, and the machine exposes IFluidStore so the fluid chain
+// can draw from it — the well joins every other liquid in the factory.
 
 using System.Collections.Generic;
 using UnityEngine;
-using VoxelEngine.Building;
-using VoxelEngine.Core;
-using VoxelEngine.Cosmos;
 using VoxelEngine.Items;
 using VoxelEngine.Power;
-using VoxelEngine.Transport;
 
 namespace VoxelEngine.Crafting
 {
-    [RequireComponent(typeof(PlacedBlock))]
-    [RequireComponent(typeof(PortConfig))]
-    [RequireComponent(typeof(ItemPortRouting))]
-    public class Pumpjack : MonoBehaviour, IItemPortHost, IMachineProcessState
+    /// <summary>Liquid crude producer. One tank, no item slots.</summary>
+    [RequireComponent(typeof(PowerConsumer))]
+    public class Pumpjack : MonoBehaviour, IMachineProcessState, IFluidStore
     {
-        [Header("Fuel / Output")]
-        [Tooltip("Empty Barrel item consumed each cycle.")]
-        public ItemDefinition emptyBarrel;
-        [Tooltip("Crude Oil Barrel item produced each cycle.")]
-        public ItemDefinition crudeOilBarrel;
+        [Header("Production")]
+        [Tooltip("Seconds of pumping to draw one batch out of the ground.")][Min(0.5f)] public float secondsPerCycle = 14f;
+        [Tooltip("Litres drawn into the tank per completed batch.")][Min(1f)] public float litresPerCycle = 1000f;
 
-        [Header("Infinite Pirate Oil Node")]
-        [Tooltip("Seconds per barrel from a rare Pirate World oil node.")]
-        public float secondsPerCycle = 14f;
-        [Tooltip("Heavy active draw in watts while lifting infinite node oil.")]
-        public float baseWattsPerSecond = 4000f;
-        [Tooltip("Standby draw in watts while connected but not pumping.")]
-        public float idleWattsPerSecond = 120f;
-        [Header("Legacy Compatibility")]
-        [Tooltip("Retained for existing prefab/save compatibility. Infinite eligibility now uses the explicit Pirate oil-node marker.")]
-        public int scanDepth = 120;
-        [Tooltip("Retained for existing prefab/save compatibility. Infinite eligibility now uses the explicit Pirate oil-node marker.")]
-        public int scanRadius = 3;
+        [Header("Power")]
+        [Tooltip("Power drawn while actively pumping (W).")][Min(1f)] public float baseWattsPerSecond = 4000f;
+        [Tooltip("Power drawn while idle (W).")][Min(0f)] public float idleWattsPerSecond = 120f;
 
-        [Header("Containers (auto-created)")]
-        public ItemContainer inputC;
-        public ItemContainer outputC;
+        [Header("Well Detection")]
+        [Tooltip("How far under the derrick the well is probed (m).")][Min(1)] public int scanDepth = 120;
+        [Tooltip("Probe columns are laid out over this radius around the derrick.")][Min(0)] public int scanRadius = 3;
 
-        private PowerConsumer _power;
-        private float _progress;
-        private Transform _walkingBeam;
-        private Transform _crankWheel;
-        private Transform _polishedRod;
-        private Quaternion _beamRestRotation;
-        private Vector3 _rodRestPosition;
-        private float _mechanismPhase;
+        [Header("Storage")]
+        /// <summary>The well's tank — the only storage this machine has.</summary>
+        public MachineFluidTank crudeTank = new MachineFluidTank("Crude Tank", 5000f, LiquidType.CrudeOil, autoType: false);
 
-        public float Progress01 => Mathf.Clamp01(_progress / Mathf.Max(0.1f, secondsPerCycle));
-        public bool IsOnline => _power != null && _power.IsPowered;
-        public bool HasReservoir { get; private set; }
-        public float CurrentWattage { get; private set; }
-        public bool IsPumping => IsOnline && HasReservoir && _progress > 0f;
+        // ---- State ----
+        public float CycleProgress01 => secondsPerCycle <= 0f ? 0f : Mathf.Clamp01(_elapsed / secondsPerCycle);
+        public float StoredLitres => crudeTank != null ? crudeTank.stored : 0f;
+        public float TankCapacity => crudeTank != null ? crudeTank.capacity : 0f;
+        public float Fill01 => crudeTank != null ? crudeTank.Fill01 : 0f;
+        public bool IsPumping => _isPumping;
+        public bool IsOnline => _consumer != null && _consumer.IsPowered;
+        public bool HasReservoir => _reservoirFound;
+
+        public float CurrentWattage =>
+            _consumer != null ? _consumer.wattsPerSecond
+            : (IsPumping ? baseWattsPerSecond : idleWattsPerSecond);
+
+        private PowerConsumer _consumer;
+        private float _elapsed;
+        private bool _isPumping;
+        private bool _reservoirFound;
+        private float _rescanTimer;
 
         private void Awake()
         {
-            // Repair the original low-cost Pumpjack defaults on already placed
-            // legacy instances while leaving any deliberately custom tuning intact.
-            if (Mathf.Approximately(secondsPerCycle, 8f)
-                && Mathf.Approximately(baseWattsPerSecond, 250f)
-                && Mathf.Approximately(idleWattsPerSecond, 10f))
-            {
-                secondsPerCycle = 14f;
-                baseWattsPerSecond = 4000f;
-                idleWattsPerSecond = 120f;
-                scanDepth = Mathf.Max(scanDepth, 120);
-                scanRadius = Mathf.Max(scanRadius, 3);
-            }
-
             EnsureContainers();
-            _power = GetComponent<PowerConsumer>();
-            if (_power == null) _power = gameObject.AddComponent<PowerConsumer>();
-            _power.connectRadius = 2.2f;
-            CacheMechanism();
+            _consumer = GetComponent<PowerConsumer>();
         }
 
+        /// <summary>Keeps the tank present and locked to crude. Never touches what is stored.</summary>
         public void EnsureContainers()
         {
-            if (inputC == null) inputC = new ItemContainer("Empty Barrels", 1); else inputC.Resize(1);
-            if (outputC == null) outputC = new ItemContainer("Crude Oil Output", 2); else outputC.Resize(2);
+            crudeTank ??= new MachineFluidTank("Crude Tank", 5000f, LiquidType.CrudeOil, autoType: false);
+            // Fixed-type: the tank is a crude well, so it must not adopt whatever a
+            // pipe happens to push at it first.
+            crudeTank.autoType = false;
+            crudeTank.liquid = LiquidType.CrudeOil;
+            if (crudeTank.capacity <= 0f) crudeTank.capacity = 5000f;
+            crudeTank.stored = Mathf.Clamp(crudeTank.stored, 0f, crudeTank.capacity);
         }
 
-        private void CacheMechanism()
+        // ============================================================
+        //        Fluid store — what the fluid chain draws from
+        // ============================================================
+
+        public IReadOnlyList<MachineFluidTank> FluidTanks => new[] { crudeTank };
+
+        public float Available(LiquidType type) =>
+            crudeTank != null && crudeTank.liquid == type ? crudeTank.stored : 0f;
+
+        public float SpaceFor(LiquidType type) =>
+            // A well is a source, not a sink: nothing can be pumped into it.
+            0f;
+
+        public float Draw(LiquidType type, float litres)
         {
-            _walkingBeam = transform.Find("JackPumpVisuals/WalkingBeam");
-            _crankWheel = transform.Find("JackPumpVisuals/CrankWheel");
-            _polishedRod = transform.Find("JackPumpVisuals/PolishedRod");
-            if (_walkingBeam != null) _beamRestRotation = _walkingBeam.localRotation;
-            if (_polishedRod != null) _rodRestPosition = _polishedRod.localPosition;
+            if (crudeTank == null || crudeTank.liquid != type) return 0f;
+            return crudeTank.Remove(litres);
         }
 
-        private void AnimateMechanism(bool pumping)
-        {
-            if (!pumping)
-            {
-                if (_walkingBeam != null) _walkingBeam.localRotation = Quaternion.Slerp(_walkingBeam.localRotation, _beamRestRotation, Time.deltaTime * 3f);
-                if (_polishedRod != null) _polishedRod.localPosition = Vector3.Lerp(_polishedRod.localPosition, _rodRestPosition, Time.deltaTime * 3f);
-                return;
-            }
+        public float Fill(LiquidType type, float litres) => 0f;
 
-            _mechanismPhase += Time.deltaTime * Mathf.PI * 2f / Mathf.Max(0.6f, secondsPerCycle * 0.18f);
-            float stroke = Mathf.Sin(_mechanismPhase);
-            if (_walkingBeam != null)
-                _walkingBeam.localRotation = _beamRestRotation * Quaternion.Euler(0f, 0f, stroke * 10f);
-            if (_crankWheel != null)
-                _crankWheel.localRotation = Quaternion.Euler(0f, _mechanismPhase * Mathf.Rad2Deg, 90f);
-            if (_polishedRod != null)
-                _polishedRod.localPosition = _rodRestPosition + Vector3.down * ((stroke + 1f) * 0.20f);
-        }
-
-        // ── IItemPortHost ───────────────────────────────────────────────────
-        private PortConfig _portConfig;
-        private ItemPortContainer[] _portContainers;
-
-        public PortConfig PortConfig
-        {
-            get
-            {
-                if (_portConfig == null)
-                {
-                    _portConfig = GetComponent<PortConfig>();
-                    if (_portConfig == null) _portConfig = gameObject.AddComponent<PortConfig>();
-                    _portConfig.EnsureAllFaces();
-                }
-                return _portConfig;
-            }
-        }
-
-        public IReadOnlyList<ItemPortContainer> GetPortContainers()
-        {
-            EnsureContainers();
-            _portContainers ??= new ItemPortContainer[2];
-            _portContainers[0] = new ItemPortContainer("Empty Barrels", inputC, canInput: true, canOutput: false);
-            _portContainers[1] = new ItemPortContainer("Crude Oil Output", outputC, canInput: false, canOutput: true);
-            return _portContainers;
-        }
-
+        // ============================================================
+        //                          Loop
+        // ============================================================
         private void Update()
         {
+            if (_consumer != null)
+            {
+                _consumer.wattsPerSecond = IsPumping ? baseWattsPerSecond : idleWattsPerSecond;
+            }
+
+            _rescanTimer -= Time.deltaTime;
+            if (_rescanTimer <= 0f)
+            {
+                _rescanTimer = 1.0f;
+                _reservoirFound = DetectReservoir();
+            }
+
+            _isPumping = _reservoirFound && IsOnline &&
+                         crudeTank != null && crudeTank.stored < crudeTank.capacity - 0.001f;
+
+            if (!_isPumping) return;
+
+            _elapsed += Time.deltaTime;
+            if (_elapsed >= secondsPerCycle)
+            {
+                _elapsed = 0f;
+                // Whatever the tank could not take stays in the ground rather than
+                // vanishing; the next batch picks it up once space frees.
+                crudeTank.Add(LiquidType.CrudeOil, litresPerCycle);
+            }
+        }
+
+        /// <summary>
+        /// Fill a held canister from the tank. Returns false when the canister is not
+        /// a liquid canister, is carrying another liquid, is already full, or the well
+        /// is dry.
+        /// </summary>
+        public bool TryFillCanister(ItemStack canStack)
+        {
             EnsureContainers();
-            bool active = CanRun();
-            CurrentWattage = active ? baseWattsPerSecond : idleWattsPerSecond;
-            if (_power != null) _power.wattsPerSecond = CurrentWattage;
+            if (canStack == null || canStack.IsEmpty) return false;
+            if (!(canStack.item is LiquidCanister)) return false;
 
-            if (!IsOnline || !active)
-            {
-                _progress = 0f;
-                AnimateMechanism(false);
-                return;
-            }
+            var carried = LiquidCanister.CarriedLiquid(canStack);
+            if (carried.HasValue && carried.Value != LiquidType.CrudeOil) return false;
 
-            _progress += Time.deltaTime;
-            AnimateMechanism(true);
-            if (_progress >= secondsPerCycle)
-            {
-                _progress = 0f;
-                PumpOneBarrel();
-            }
-        }
+            float freeMl = LiquidCanister.CapacityMl - (canStack.durability > 0f ? canStack.durability : 0f);
+            float availableMl = crudeTank.stored * 1000f;
+            float takeMl = Mathf.Floor(Mathf.Min(freeMl, availableMl));
+            if (takeMl <= 0f) return false;
 
-        private bool CanRun()
-        {
-            // Resolve the node first so the UI can distinguish "no node" from
-            // "node present but no empty barrels / output space".
-            HasReservoir = FindInfinitePirateOil(out _);
-            if (!HasReservoir) return false;
-            if (emptyBarrel == null || crudeOilBarrel == null) return false;
-            if (inputC.CountOf(emptyBarrel) <= 0) return false;
-            if (!outputC.HasSpace(crudeOilBarrel, 1)) return false;
+            // Add first, draw only if the canister really took it, so the tank can
+            // never be drained into a canister that refused the liquid.
+            if (!LiquidCanister.AddMl(canStack, LiquidType.CrudeOil, Mathf.RoundToInt(takeMl))) return false;
+            crudeTank.Remove(takeMl / 1000f);
             return true;
         }
 
-        /// <summary>9.16.0 — fill a liquid canister with one click (0.5 L) of crude oil
-        /// straight from this jack pump's infinite reservoir node. The node never drains,
-        /// so filling the canister costs nothing but power (unpowered jacks refuse). Works
-        /// for an empty canister and tops up one already carrying crude oil.</summary>
-        public bool TryFillCanister(ItemStack can)
+        /// <summary>
+        /// Probe under the derrick for a crude-bearing body. A body whose generated ore
+        /// layers include crude is treated as having a well under it, so the pumpjack
+        /// does not need a hand-placed ore node at the build site.
+        /// </summary>
+        private bool DetectReservoir()
         {
-            if (can == null || !(can.item is VoxelEngine.Items.LiquidCanister)) return false;
-            if (_power != null && !_power.IsPowered) return false;
-            if (!FindInfinitePirateOil(out _)) return false;
-            return VoxelEngine.Items.LiquidCanister.AddMl(can, VoxelEngine.Items.LiquidType.CrudeOil,
-                VoxelEngine.Items.LiquidCanister.PerClickMl);
+            Vector3 origin = transform.position + transform.up * 0.5f;
+            Vector3 down = (transform.up != Vector3.zero ? -transform.up : Vector3.down).normalized;
+
+            int half = Mathf.Max(0, scanRadius);
+            for (int ox = -half; ox <= half; ox++)
+            for (int oz = -half; oz <= half; oz++)
+            {
+                Vector3 start = origin + transform.right * ox + transform.forward * oz;
+                if (!Physics.Raycast(start, down, out var hit, scanDepth)) continue;
+                if (hit.collider == null) continue;
+
+                var body = hit.collider.GetComponentInParent<VoxelEngine.Cosmos.CelestialBody>();
+                if (body != null && BodyHasCrude(body)) return true;
+            }
+            return false;
         }
 
-        private bool FindInfinitePirateOil(out Vector3Int oilVoxel)
+        private static bool BodyHasCrude(VoxelEngine.Cosmos.CelestialBody body)
         {
-            oilVoxel = default;
-            if (ActiveWorld.Current is not SphereWorld sphere || sphere.body == null || sphere.body.settings == null
-                || !sphere.body.settings.CanGenerateInfiniteJackPumpNodes) return false;
+            var layers = body.BuildOreLayers();
+            for (int i = 0; i < layers.Length; i++)
+                if (layers[i].material == VoxelEngine.Materials.MaterialId.CrudeOil) return true;
+            return false;
+        }
 
-            // A visible crude puddle alone is a finite seep. The Jack Pump must require the
-            // explicit rare-node identity, otherwise it could turn every ordinary oil site
-            // into an unintended infinite source.
-            if (!VoxelEngine.Generation.PirateOilNode.IsPumpableNear(sphere, transform.position))
-                return false;
-
-            oilVoxel = sphere.WorldToVoxel(transform.position);
-            return true;
+        private void OnDrawGizmosSelected()
+        {
+            Vector3 origin = transform.position + transform.up * 0.5f;
+            Vector3 down = (transform.up != Vector3.zero ? -transform.up : Vector3.down).normalized;
+            Gizmos.color = Color.cyan;
+            int half = Mathf.Max(0, scanRadius);
+            for (int ox = -half; ox <= half; ox++)
+            for (int oz = -half; oz <= half; oz++)
+            {
+                Vector3 start = origin + transform.right * ox + transform.forward * oz;
+                Gizmos.DrawLine(start, start + down * scanDepth);
+            }
         }
 
         // ============================================================
-        //        10.2.0-dev — the barrel cycle in progress survives a reload
+        //          Batch progress that survives a save/reload
         // ============================================================
-        // The empty barrel is only consumed when the cycle completes, so a reload
-        // mid-cycle never cost the player a barrel; what it cost was the lift
-        // already paid for in power. Fourteen seconds of a 4 kW draw is worth
-        // carrying. Additive like every other machine record: a save written
-        // before this round leaves the pump at rest.
+
         public void CaptureProcessState(MachineProcessState state)
         {
             if (state == null) return;
-            state.progressSeconds = Mathf.Max(0f, _progress);
+            EnsureContainers();
+
+            // The part-batch is only worth saving while the jack is actually pumping.
+            // A stalled well has no batch in progress, and writing a progress value for
+            // one would hand it a head start it never earned on reload.
+            state.progressSeconds = IsPumping ? Mathf.Max(0f, _elapsed) : 0f;
+            MachineProcessPersistence.CaptureTanks(state, FluidTanks);
         }
 
         public void RestoreProcessState(MachineProcessState state)
         {
             if (state == null || state.IsEmpty) return;
-            // Clamped to the cycle length, so a record written against a differently
-            // tuned prefab can never hand the pump a progress that completes instantly.
-            _progress = MachineProcessPersistence.ClampOr(state.progressSeconds,
-                0f, Mathf.Max(0.1f, secondsPerCycle), 0f);
+            EnsureContainers();
+
+            // RestoreTanks writes the saved liquid type as well as the litres, so the
+            // tank is put back on crude afterwards — a well is a well. The litres stay
+            // exactly as saved, clamped into the capacity the prefab author gave it, so
+            // a retuned tank size can never invent crude on load.
+            MachineProcessPersistence.RestoreTanks(state, FluidTanks);
+            EnsureContainers();
+
+            _elapsed = IsPumping
+                ? MachineProcessPersistence.ClampOr(state.progressSeconds, 0f, secondsPerCycle, 0f)
+                : 0f;
         }
 
-        private void PumpOneBarrel()
-        {
-            // Infinite node: never drain the crude voxel. The rare site, head-gated
-            // construction cost, slow cycle, and 4 kW draw are the balance levers.
-            if (!FindInfinitePirateOil(out _)) return;
-            if (inputC.Remove(emptyBarrel, 1) <= 0) return;
-            outputC.Insert(new ItemStack(crudeOilBarrel, 1));
-        }
     }
 }

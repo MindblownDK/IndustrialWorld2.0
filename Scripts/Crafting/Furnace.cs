@@ -97,18 +97,26 @@ namespace VoxelEngine.Crafting
             float dt = Time.deltaTime;
 
             if (_powerReq == null) _powerReq = GetComponent<VoxelEngine.Power.PowerConsumer>();
-            if (_powerReq != null && !_powerReq.IsPowered) return; // brownout: pause
+            if (_powerReq != null && !_powerReq.IsPowered)
+            {
+                // A brownout stops the batch before anything else is even looked at, so
+                // this has to name itself — otherwise a furnace on a weak network looks
+                // exactly like a broken one.
+                ReportStallChange();
+                return;
+            }
 
             // Pick a recipe matching the current input.
             if (_current == null) _current = FindRecipeForInput();
 
-            if (_current == null) { _smeltProgress = 0; return; }
+            if (_current == null) { _smeltProgress = 0; ReportStallChange(); return; }
 
             // Need fuel.
             if (_fuelRemaining <= 0f)
             {
-                if (!TryConsumeFuel()) return;
+                if (!TryConsumeFuel()) { ReportStallChange(); return; }
             }
+            ReportStallChange();
 
             // Burn fuel.
             _fuelRemaining -= dt;
@@ -119,6 +127,41 @@ namespace VoxelEngine.Crafting
             {
                 CompleteOneBatch();
             }
+        }
+
+        /// <summary>Log the stall reason the first time it appears and whenever it changes.</summary>
+        private void ReportStallChange()
+        {
+            string reason = StallReason;
+            if (reason == _lastStallReason) return;
+            _lastStallReason = reason;
+            if (string.IsNullOrEmpty(reason)) return;
+            int inputCount = inputC != null ? inputC.GetSlot(0).count : 0;
+            string inputName = inputC != null && inputC.GetSlot(0).item != null ? inputC.GetSlot(0).item.name : "nothing";
+            int assigned = knownRecipes != null ? knownRecipes.Count : 0;
+            int broken = CountBrokenRecipes();
+            string recipes = assigned == 0
+                ? "no smelting recipe is assigned to this furnace — run the crafting content setup step"
+                : broken > 0
+                    ? $"{assigned} smelting recipe(s) assigned but {broken} of them have no input or output item, so they can never match — re-run the crafting content setup step to repair the links"
+                    : $"{assigned} smelting recipe(s) assigned, all linked";
+            Debug.Log($"[Furnace] Not smelting: {reason}. Input slot holds {inputCount} x {inputName}; {recipes}.");
+        }
+
+        /// <summary>
+        /// How many assigned recipes could never match anything: a recipe with no input
+        /// item is skipped by <see cref="FindRecipeForInput"/>, and one with no output
+        /// could not complete a batch. This is the difference between "this furnace was
+        /// never given recipes" and "its recipes lost their links" — the first needs them
+        /// assigned, the second needs the authoring step re-run.
+        /// </summary>
+        private int CountBrokenRecipes()
+        {
+            if (knownRecipes == null) return 0;
+            int broken = 0;
+            foreach (var r in knownRecipes)
+                if (r == null || r.input == null || r.output == null) broken++;
+            return broken;
         }
 
         private SmeltingRecipe FindRecipeForInput()
@@ -188,6 +231,36 @@ namespace VoxelEngine.Crafting
             float remaining = Mathf.Max(0f, MachineProcessPersistence.FiniteOr(state.GetExtra(FuelRemainingKey, 0f), 0f));
             _fuelMaxDuration = maxDuration;
             _fuelRemaining = Mathf.Min(remaining, maxDuration);
+        }
+
+        // ============================================================
+        //        11.0.0-dev — say why the furnace is not smelting
+        // ============================================================
+        // A furnace that does nothing gives the player four different causes with no
+        // way to tell them apart: no recipe for the input, no burnable fuel, no power,
+        // or a full output. This names the one that is actually stopping it, for the
+        // panel to show and for the log to report once per change.
+        private string _lastStallReason = string.Empty;
+
+        /// <summary>Why the furnace is not making progress right now. Empty when it is smelting.</summary>
+        public string StallReason
+        {
+            get
+            {
+                if (_powerReq != null && !_powerReq.IsPowered) return "No power";
+                if (inputC == null || inputC.GetSlot(0).IsEmpty) return "No input";
+                if (_current == null) return "No recipe for this input";
+                if (_fuelRemaining <= 0f)
+                {
+                    var fuel = fuelC != null ? fuelC.GetSlot(0) : default;
+                    if (fuel.IsEmpty) return "No fuel";
+                    if (!(fuel.item is ResourceItem ri) || ri.fuelSeconds <= 0f)
+                        return "Fuel slot holds something that does not burn";
+                }
+                if (_current != null && !outputC.HasSpace(_current.output, _current.outputCount))
+                    return "Output full";
+                return string.Empty;
+            }
         }
 
         private void CompleteOneBatch()

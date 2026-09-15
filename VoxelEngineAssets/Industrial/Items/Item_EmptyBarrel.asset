@@ -14,12 +14,15 @@ MonoBehaviour:
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Items.ResourceItem
   itemId: item_emptybarrel
   displayName: Empty Barrel
-  description: Pressed-steel drum. Fill it with crude oil at a Pumpjack.
+  description: Pressed-steel drum. Feedstock for the refinery's oil chain.
   icon: {fileID: 21300000, guid: 00612bcc7a6d28d4e009c0a33d037fac, type: 3}
   iconTint: {r: 0.45, g: 0.45, b: 0.5, a: 1}
   maxStack: 50
   massPerUnit: 1
   category: Oil
+  requiresContainment: 0
+  cannotBeCarried: 0
+  isPressurizedCanister: 0
   viewmodelPrefab: {fileID: 0}
   subcategory: 2
   fuelSeconds: 0

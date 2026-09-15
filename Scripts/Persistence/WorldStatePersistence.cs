@@ -41,14 +41,6 @@ namespace VoxelEngine.Persistence
         private bool _loaded;
         private float _saveTimer;
 
-        /// <summary>
-        /// 100 km/s, squared. The fastest hull this game can build is nowhere near this, while
-        /// a reference-frame mismatch (a planetary orbital velocity read as a hull velocity) is
-        /// tens of km/s, so the bound separates "wrong frame" from "fast ship" by orders of
-        /// magnitude without ever clipping a legitimate velocity.
-        /// </summary>
-        private const float MaxRestoredVelocitySqr = 100_000f * 100_000f;
-
         // Background autosave cadence now comes from GameSettings.AutosaveSeconds
         // (0 = disabled). Players change it live from the Settings → Saving tab.
 
@@ -991,10 +983,14 @@ namespace VoxelEngine.Persistence
             var jackPump = go.GetComponentInChildren<VoxelEngine.Crafting.Pumpjack>();
             if (jackPump != null)
             {
+                // The pumpjack has been a tank-only machine since 11.0.0-dev: no input
+                // barrel slot, no output slot. Its crude and its part-batch are carried
+                // by the machine-process record, not by an item container. The empty
+                // record is still written so this block keeps terminating the lookup —
+                // without it the search would fall through to the generic container
+                // handlers below and look for slots the machine no longer has.
                 jackPump.EnsureContainers();
-                var sc = SerializeMulti(jackPump.inputC, jackPump.outputC);
-                AttachPortSnapshot(go, sc);
-                return sc;
+                return SerializeMulti();
             }
 
             var crusher = go.GetComponentInChildren<VoxelEngine.Simulation.Crusher>();
@@ -1367,7 +1363,6 @@ namespace VoxelEngine.Persistence
                 // kilometres away from where the ship was parked — or inside a planet.
                 // The scene pose stays in the file as the fallback and the diagnostic.
                 CaptureGridBodyAnchor(grid, entry);
-                CaptureGridFrameRelativeVelocity(grid, entry);
 
                 foreach (var block in grid.AllBlocks)
                 {
@@ -1583,9 +1578,8 @@ namespace VoxelEngine.Persistence
                 grid.gravityScale = savedGrid.gravityScale > 0f ? savedGrid.gravityScale : grid.gravityScale;
                 grid.DampenersOn = savedGrid.dampenersOn;
                 grid.SetWheelParkingBrake(savedGrid.wheelParkingBrake);
-                Vector3 gridVelocity = RestoreGridVelocity(savedGrid);
                 grid.RestorePersistentPose(gridPosition, gridRotation,
-                    savedGrid.wheelParkingBrake ? Vector3.zero : gridVelocity,
+                    savedGrid.wheelParkingBrake ? Vector3.zero : savedGrid.velocity,
                     savedGrid.wheelParkingBrake ? Vector3.zero : savedGrid.angularVelocity);
                 grid.HydrogenStored = Mathf.Max(0f, savedGrid.hydrogenStored);
                 grid.OxygenStored = Mathf.Max(0f, savedGrid.oxygenStored);
@@ -2302,34 +2296,6 @@ namespace VoxelEngine.Persistence
         }
 
         /// <summary>
-        /// A frame-relative record is turned back into a scene velocity by adding the frame
-        /// velocity THIS scene is running in, which is the only velocity a scene-space
-        /// Rigidbody can be handed. A scene-velocity record (every save written before
-        /// 10.1.0) is used as-is. A velocity that resolves to a physically impossible value
-        /// is dropped to zero so a restored hull is stationary rather than launched.
-        /// </summary>
-        private static Vector3 RestoreGridVelocity(SavedGrid g)
-        {
-            if (!g.hasFrameRelativeVelocity) return IsFiniteVector(g.velocity) ? g.velocity : Vector3.zero;
-
-            var origin = VoxelEngine.Cosmos.SpaceOrigin.Instance;
-            var frame = origin != null ? origin.FrameVelocityKmS : Unity.Mathematics.double3.zero;
-            Vector3 relative = IsFiniteVector(g.frameRelativeVelocity) ? g.frameRelativeVelocity : Vector3.zero;
-            Vector3 scene = new Vector3(
-                relative.x + (float)frame.x * 1000f,
-                relative.y + (float)frame.y * 1000f,
-                relative.z + (float)frame.z * 1000f);
-
-            if (!IsFiniteVector(scene) || scene.sqrMagnitude > MaxRestoredVelocitySqr)
-            {
-                Debug.LogWarning("[WorldState] A movable grid's frame-relative velocity resolved to an impossible value; " +
-                                 "the grid was restored stationary instead.");
-                return Vector3.zero;
-            }
-            return scene;
-        }
-
-        /// <summary>
         /// The body a scene object is standing on: the body whose surface is nearest to it,
         /// within half that body's radius so a base on the ground, a platform in the air and
         /// a ship on a pad all anchor while something parked in deep space does not.
@@ -2409,46 +2375,6 @@ namespace VoxelEngine.Persistence
             entry.anchorRotY    = localRot.y;
             entry.anchorRotZ    = localRot.z;
             entry.anchorRotW    = localRot.w;
-        }
-
-        /// <summary>
-        /// Store the hull's linear velocity relative to the motion of the scene's own reference
-        /// frame. A raw scene velocity describes the hull's motion against a frame that is
-        /// itself orbiting, so re-applying it after the frame has changed hands the hull a
-        /// velocity that belongs to nobody; the relative value is the one that means the same
-        /// thing in any frame. The scene velocity is still written above it as the fallback.
-        /// </summary>
-        private static void CaptureGridFrameRelativeVelocity(GridEntity grid, SavedGrid entry)
-        {
-            if (grid == null || entry == null) return;
-
-            var registry = VoxelEngine.Cosmos.CosmicRegistry.Instance;
-            entry.anchorCosmicSeconds = registry != null ? registry.SimulationSeconds : 0d;
-
-            var origin = VoxelEngine.Cosmos.SpaceOrigin.Instance;
-            Vector3 scene = entry.velocity;
-            if (origin == null)
-            {
-                // No origin means no frame motion to subtract, and the relative value equals
-                // the scene one; the flag still records which convention the file used.
-                entry.hasFrameRelativeVelocity = true;
-                entry.frameRelativeVelocity = scene;
-                return;
-            }
-
-            var frame = origin.FrameVelocityKmS;
-            var relative = new Vector3(
-                scene.x - (float)frame.x * 1000f,
-                scene.y - (float)frame.y * 1000f,
-                scene.z - (float)frame.z * 1000f);
-            if (!IsFiniteVector(relative))
-            {
-                Debug.LogWarning("[WorldState] A movable grid's frame-relative velocity was not finite; " +
-                                 "it was saved as a scene velocity instead.");
-                return;
-            }
-            entry.hasFrameRelativeVelocity = true;
-            entry.frameRelativeVelocity = relative;
         }
 
         private void RestoreFactoryRuntime(GameObject go, SavedPlacedBlock saved)
@@ -2950,9 +2876,11 @@ namespace VoxelEngine.Persistence
             var jackPump = go.GetComponentInChildren<VoxelEngine.Crafting.Pumpjack>();
             if (jackPump != null)
             {
+                // Tank-only machine (11.0.0-dev): nothing item-shaped to restore. Its
+                // crude and part-batch come back through the machine-process record.
+                // This block still has to terminate the lookup so the search does not
+                // fall through to the generic container handlers below.
                 jackPump.EnsureContainers();
-                DeserializeMulti(sc, jackPump.inputC, jackPump.outputC);
-                RestorePortSnapshot(go, sc);
                 return;
             }
 
@@ -3238,17 +3166,6 @@ namespace VoxelEngine.Persistence
             /// quaternion components rather than Euler angles so the round-trip is exact
             /// and no gimbal case can flip a restored hull.</summary>
             public float anchorRotX; public float anchorRotY; public float anchorRotZ; public float anchorRotW = 1f;
-            /// <summary>Mirrors <see cref="hasBodyAnchor"/> for the velocity pair: the
-            /// linear velocity was stored relative to the scene frame's own motion rather
-            /// than as a raw scene velocity. It has its own flag because the two are
-            /// independent — a grid drifting in deep space has no anchor body but its
-            /// velocity is still frame-relative.</summary>
-            public bool hasFrameRelativeVelocity;
-            public Vector3 frameRelativeVelocity;
-            /// <summary>Cosmic clock (s) the velocity was taken at, carried so a future
-            /// round can tell a fresh record from a zero-initialized one. Never compared
-            /// in this round.</summary>
-            public double anchorCosmicSeconds;
         }
         [Serializable] private class SavedRoomCharge
         {

@@ -14,12 +14,16 @@ MonoBehaviour:
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Items.BlockItem
   itemId: block_assembler
   displayName: Assembler
-  description: 
+  description: Tier-3 workstation. Required to craft iron / steel pickaxes, batteries,
+    and high-tier wires.
   icon: {fileID: 21300000, guid: b31d3ded682fd2a645c99c92ab83cfd5, type: 3}
   iconTint: {r: 0.2, g: 0.5, b: 0.85, a: 1}
   maxStack: 99
   massPerUnit: 4
   category: Stations
+  requiresContainment: 0
+  cannotBeCarried: 0
+  isPressurizedCanister: 0
   viewmodelPrefab: {fileID: 0}
   placedPrefab: {fileID: 1673581665168906378, guid: 6234256fc0d0b9f42a54a1b68c80ea4e, type: 3}
   gridSize: {x: 1, y: 1, z: 1}

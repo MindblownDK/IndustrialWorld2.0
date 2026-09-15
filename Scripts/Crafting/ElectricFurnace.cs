@@ -134,7 +134,7 @@ namespace VoxelEngine.Crafting
             if (_power != null) _power.wattsPerSecond = wantWattage;
 
             // Pause if offline.
-            if (!IsOnline) return;
+            if (!IsOnline) { ReportStallChange(); return; }
 
             // Auto-pull smeltable items from nearby containers into the input slot.
             if (autoPull)
@@ -145,8 +145,9 @@ namespace VoxelEngine.Crafting
 
             // Pick a recipe matching the current input.
             if (_current == null) _current = FindRecipeForInput();
-            if (_current == null) { _smeltProgress = 0; return; }
+            if (_current == null) { _smeltProgress = 0; ReportStallChange(); return; }
 
+            ReportStallChange();
             _smeltProgress += Time.deltaTime * SpeedMultiplier;
             if (_smeltProgress >= EffectiveSmeltTime(_current))
                 CompleteOneBatch();
@@ -251,8 +252,65 @@ namespace VoxelEngine.Crafting
         }
 
         // ============================================================
+        //   11.0.0-dev — say why the furnace is not smelting
+        // ============================================================
+        // An electric furnace has one more way to stand still than a fuel furnace — it
+        // needs the network — and a panel that shows nothing while it waits is
+        // indistinguishable from a broken machine. This names the actual cause.
+        private string _lastStallReason = string.Empty;
+
+        /// <summary>Why the furnace is not making progress right now. Empty when it is smelting.</summary>
+        public string StallReason
+        {
+            get
+            {
+                if (!userEnabled) return "Switched off";
+                if (!IsOnline) return "No power";
+                if (inputC == null || inputC.GetSlot(0).IsEmpty) return "No input";
+                if (_current == null) return "No recipe for this input";
+                if (!outputC.HasSpace(_current.output, _current.outputCount)) return "Outputs full";
+                return string.Empty;
+            }
+        }
+
+        /// <summary>Log the stall reason the first time it appears and whenever it changes.</summary>
+        private void ReportStallChange()
+        {
+            string reason = StallReason;
+            if (reason == _lastStallReason) return;
+            _lastStallReason = reason;
+            if (string.IsNullOrEmpty(reason)) return;
+            int inputCount = inputC != null ? inputC.GetSlot(0).count : 0;
+            string inputName = inputC != null && inputC.GetSlot(0).item != null ? inputC.GetSlot(0).item.name : "nothing";
+            int assigned = knownRecipes != null ? knownRecipes.Count : 0;
+            int broken = CountBrokenRecipes();
+            string recipes = assigned == 0
+                ? "no smelting recipe is assigned to this furnace — run the industrial content setup step"
+                : broken > 0
+                    ? $"{assigned} smelting recipe(s) assigned but {broken} of them have no input or output item, so they can never match — re-run the setup step that authors them to repair the links"
+                    : $"{assigned} smelting recipe(s) assigned, all linked";
+            Debug.Log($"[ElectricFurnace] Not smelting: {reason}. Input slot holds {inputCount} x {inputName}; {recipes}.");
+        }
+
+        // ============================================================
         //                       Smelting
         // ============================================================
+        /// <summary>
+        /// How many assigned recipes could never match anything: a recipe with no input
+        /// item is skipped by <see cref="FindRecipeForInput"/>, and one with no output
+        /// could not complete a batch. This is the difference between "this furnace was
+        /// never given recipes" and "its recipes lost their links" — the first needs them
+        /// assigned, the second needs the authoring step re-run.
+        /// </summary>
+        private int CountBrokenRecipes()
+        {
+            if (knownRecipes == null) return 0;
+            int broken = 0;
+            foreach (var r in knownRecipes)
+                if (r == null || r.input == null || r.output == null) broken++;
+            return broken;
+        }
+
         private SmeltingRecipe FindRecipeForInput()
         {
             var slot = inputC.GetSlot(0);
