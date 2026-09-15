@@ -18,7 +18,7 @@ namespace VoxelEngine.Crafting
     [RequireComponent(typeof(PlacedBlock))]
     [RequireComponent(typeof(PortConfig))]
     [RequireComponent(typeof(ItemPortRouting))]
-    public class Pumpjack : MonoBehaviour, IItemPortHost
+    public class Pumpjack : MonoBehaviour, IItemPortHost, IMachineProcessState
     {
         [Header("Fuel / Output")]
         [Tooltip("Empty Barrel item consumed each cycle.")]
@@ -203,6 +203,29 @@ namespace VoxelEngine.Crafting
 
             oilVoxel = sphere.WorldToVoxel(transform.position);
             return true;
+        }
+
+        // ============================================================
+        //        10.2.0-dev — the barrel cycle in progress survives a reload
+        // ============================================================
+        // The empty barrel is only consumed when the cycle completes, so a reload
+        // mid-cycle never cost the player a barrel; what it cost was the lift
+        // already paid for in power. Fourteen seconds of a 4 kW draw is worth
+        // carrying. Additive like every other machine record: a save written
+        // before this round leaves the pump at rest.
+        public void CaptureProcessState(MachineProcessState state)
+        {
+            if (state == null) return;
+            state.progressSeconds = Mathf.Max(0f, _progress);
+        }
+
+        public void RestoreProcessState(MachineProcessState state)
+        {
+            if (state == null || state.IsEmpty) return;
+            // Clamped to the cycle length, so a record written against a differently
+            // tuned prefab can never hand the pump a progress that completes instantly.
+            _progress = MachineProcessPersistence.ClampOr(state.progressSeconds,
+                0f, Mathf.Max(0.1f, secondsPerCycle), 0f);
         }
 
         private void PumpOneBarrel()

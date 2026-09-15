@@ -158,6 +158,36 @@ namespace VoxelEngine.Crafting
             return null;
         }
 
+        /// <summary>
+        /// The same resolution for a machine whose recipe list is not a
+        /// <see cref="ProcessingRecipe"/> list — the smelters, whose batches are
+        /// <see cref="SmeltingRecipe"/> assets. Matches the asset name, which is what
+        /// gets written, and returns null rather than a guess when nothing matches.
+        /// </summary>
+        public static T Resolve<T>(List<T> knownRecipes, string savedName, string owner) where T : ScriptableObject
+        {
+            if (string.IsNullOrEmpty(savedName) || knownRecipes == null) return null;
+
+            for (int i = 0; i < knownRecipes.Count; i++)
+                if (knownRecipes[i] != null && string.Equals(knownRecipes[i].name, savedName, StringComparison.Ordinal))
+                    return knownRecipes[i];
+
+            if (!string.IsNullOrEmpty(owner))
+                Debug.LogWarning($"[{owner}] Saved recipe '{savedName}' is not in this machine's recipe list; it resumes on its first runnable recipe instead.");
+            return null;
+        }
+
+        /// <summary>A saved number that is not a number becomes the fallback, never a NaN in a live machine.</summary>
+        public static float FiniteOr(float value, float fallback)
+            => float.IsNaN(value) || float.IsInfinity(value) ? fallback : value;
+
+        /// <summary>Clamp a saved number into a range, refusing a NaN or an infinity first.</summary>
+        public static float ClampOr(float value, float min, float max, float fallback)
+        {
+            value = FiniteOr(value, fallback);
+            return Mathf.Clamp(value, min, max);
+        }
+
         /// <summary>Write every tank's liquid type and level into the payload, keyed by list index.</summary>
         public static void CaptureTanks(MachineProcessState state, IReadOnlyList<MachineFluidTank> tanks)
         {

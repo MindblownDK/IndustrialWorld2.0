@@ -1,9 +1,105 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `10.0.0-dev`
+**Current Version:** `10.2.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [10.2.0-dev] The Smelters and the Pumpjack Keep Their Batch
+
+**Type:** MINOR — three machines adopt the `IMachineProcessState` contract that has existed since 9.57.0-dev, and the shared helper gains one overload plus two numeric guards. **No new save field, no format version change and no schema change at all**: the payload these machines write into (`SavedPlacedBlock.machineProcess`) has been in the save since 9.57.0-dev, so this round only starts filling it for three more machines. No authored asset, prefab, item, recipe, research node or balance value changes, so no `Tools > Voxel Engine > Voxel Engine Setup` step is required.
+
+**GitHub title:** `[10.2.0-dev] A half-smelted ingot is still half-smelted after a reload — the smelters and the pumpjack keep their batch`
+
+#### Why this round
+
+- It is the roadmap's own deferred item, recorded in the Factory persistence row since 9.57.0-dev: *"the two smelters (Furnace / ElectricFurnace) still keep batch progress, `userEnabled` and `autoPull` in session memory only, and the pumpjack's barrel cycle is not saved."*
+- Confirmed against the code rather than the note: `Furnace`, `ElectricFurnace` and `Pumpjack` were the only processing machines not implementing `IMachineProcessState`, while seven others — the Distillation Plant, Catalytic Cracker, Oil Refinery, stationary Chemical Plant, Flare Stack and both ship machines — already were.
+- **The persistence layer needed no change.** `CaptureFactoryRuntime` and `RestoreFactoryRuntime` have found machines by interface since 9.57.0-dev, so the three machines are picked up the moment they implement the contract. This round is three machines plus one shared helper.
+
+#### What each machine was losing
+
+- **Furnace** — the batch in progress, its progress, and the fuel already consumed for it. A reload came back cold with `_smeltProgress` at zero and `_fuelRemaining` at zero: the fuel item was gone from the fuel slot, the burn it paid for was gone with it, and the ingot started over. Both halves of the fuel bar (`fuelRemaining` against `fuelMaxDuration`) are carried, because a remaining burn without the duration it is measured against renders as a meaningless bar.
+- **Electric Furnace** — the batch and its progress, and the two switches the player owns. `userEnabled` and `autoPull` are public serialized fields, so a reload put them back on their prefab defaults: a furnace the player had switched off started drawing power again, and one set to auto-pull stopped pulling.
+- **Pumpjack** — the barrel cycle in progress. The empty barrel is only consumed when the cycle completes, so a reload never cost a barrel; what it cost was fourteen seconds of a 4 kW lift already paid for.
+
+#### What changed
+
+- **`Furnace`, `ElectricFurnace`, `Pumpjack`** each implement `CaptureProcessState` / `RestoreProcessState`. Progress is clamped to the batch or cycle length on the way back in, so a record written against a differently tuned prefab can never hand a machine a progress that completes instantly. The furnace's remaining burn is clamped to the fuel duration it came from, and a recipe that no longer resolves re-picks from the input instead of resuming a batch the machine has no material for.
+- **`MachineProcessPersistence.Resolve<T>`** — the existing resolver works on `List<ProcessingRecipe>`; the smelters run on `SmeltingRecipe`. Rather than fork the logic, the generic overload matches the asset name for any `ScriptableObject` recipe list, keeps the same never-guess behaviour, and logs the unresolved name by owner.
+- **`MachineProcessPersistence.FiniteOr` / `ClampOr`** — every number read out of a save passes through one of them, so a NaN or an infinity in a record can no longer reach a live machine's progress or fuel bar.
+- The electric furnace writes **both** switches on every save rather than only when they differ from a default, so a reload can never confuse "the player turned this off" with "this record predates the switch".
+
+#### Save safety
+
+- Additive end to end. A save written before this round has no `machineProcess` record for these machines, the existing `IsEmpty` guard skips the restore entirely, and every machine loads exactly as it does today: idle, on its prefab defaults, free to pick its own recipe. No existing save field changes meaning.
+
+#### Numbers
+
+| | Value |
+|---|---|
+| Files changed | 4 (`MachineProcessState.cs`, `Furnace.cs`, `ElectricFurnace.cs`, `Pumpjack.cs`) |
+| New files | 0 |
+| Machines adopting the contract | 3, bringing the total to 10 |
+| Save fields added, changed or removed | 0 |
+| New shared members | 3 (`Resolve<T>`, `FiniteOr`, `ClampOr`) |
+| Setup steps required | 0 |
+| Harness checks | 45 in four sections, mutation-verified in 5 ways (the burn not restored, the progress not clamped, the enabled switch not restored, the pumpjack cycle not restored, the resolver matching anything instead of by name) — every mutation caught |
+
+#### Manual Unity steps
+
+1. Replace the four files. Let Unity compile; the console should be clean.
+2. Run `Tools > Voxel Engine > Voxel Engine Setup` as the standing non-destructive check. This round authors nothing.
+3. Furnace: start a batch, save mid-way, rejoin — the progress bar and the fuel bar are where they were, and the batch finishes without eating a second fuel item.
+4. Electric Furnace: switch it OFF and auto-pull ON, save, rejoin — still OFF and drawing nothing, still pulling.
+5. Pumpjack: save mid-cycle over a Pirate node, rejoin — the beam resumes the stroke instead of restarting the lift.
+6. Load a pre-10.2.0-dev world: every machine idle and on its prefab defaults, no console error.
+
+### [10.1.0-dev] Movable Grids Follow Their Planet — the Grid Body Anchor
+
+**Type:** MINOR — 12 additive optional fields on `SavedGrid`, five new private members and one changed return type inside `WorldStatePersistence`. No format version is bumped, no field is removed or renamed, and no world needs a fresh save: a `world_state.json` written before this round has no anchor, resolves through its saved scene coordinate, and loads exactly as it did. No authored asset, prefab, item, recipe, research node or balance value changes, so no `Tools > Voxel Engine > Voxel Engine Setup` step is required — the standing non-destructive run is the only wizard contact.
+
+**GitHub title:** `[10.1.0-dev] A parked ship is where you parked it — movable grids now anchor to the planet they were left on`
+
+#### Why this round
+
+- The Roadmap named it as the next item in the save-anchor family, and it was the last member of that family still holding a bare scene coordinate. 9.58.0-dev anchored the player, 9.59.0-dev anchored placed blocks, and `SavedGrid` was left behind.
+- A scene coordinate describes a place in the frame the save was written in. The solar system is re-generated at the saved cosmic time on load and the scene origin is re-anchored as the world runs, so between a save and a rejoin the body a hull was parked on has moved through the scene. The hull then reloads at a coordinate that now points somewhere else — kilometres off, or inside terrain, where a restored hull simply disappears into rock.
+- The same is true of the velocity. `SavedGrid.velocity` held a scene-space velocity, and the scene frame is itself orbiting. Re-applying it after the frame has changed hands the hull a velocity that belonged to nobody: a hull that was co-moving with its planet — parked, for every practical purpose — reloads carrying the old frame's orbital velocity.
+
+#### What changed
+
+- **`SavedGrid`** gains an additive body anchor: `hasBodyAnchor`, `anchorBody`, `anchorLocalX/Y/Z`, and the pose's other half as `anchorRotX/Y/Z/W`. The rotation is stored as four quaternion components in the body's local space rather than as Euler angles, so the round-trip is exact and no gimbal case can flip a restored hull.
+- **`SavedGrid`** also gains `hasFrameRelativeVelocity` / `frameRelativeVelocity`. The flag is separate from the anchor flag on purpose, because the two are independent: a hull drifting in deep space has no anchoring body, and its velocity is still frame-relative. `anchorCosmicSeconds` records the clock the velocity was taken at, for a future round to distinguish a fresh record from a zero-initialized one; it is never compared in this round.
+- **Save** — `CaptureGridBodyAnchor` writes the pose relative to the body the hull is standing on, and only when that body is also the body the scene frame is running in. Measuring a local pose from a body the scene coordinates do not describe would be worse than not writing one, so a disagreement saves unanchored and the grid restores from its scene coordinate as it always did. A pose that is not finite is refused with a warning rather than anchored. `CaptureGridFrameRelativeVelocity` subtracts `SpaceOrigin.FrameVelocityKmS` from the scene velocity — the scene frame is the co-moving frame of its body and its axes are the cosmic axes, so the two differ by exactly that vector, in km/s.
+- **Load** — `ResolveSavedGridPose` resolves the anchor through the live body and falls back to the saved scene pose with a warning when the body is absent from the scene, when the stored rotation is degenerate, or when the resolved pose is not finite. `RestoreGridVelocity` adds the frame velocity this scene is running in back onto a frame-relative record, uses a scene-velocity record as-is, and drops a result above 100 km/s to zero so a frame mismatch leaves a hull stationary rather than launched.
+- **`RestoreGrids`** now returns how many grids came back from an anchor, and the load line carries it: `[WorldState] Loaded 0 tiered + 12 blocks + 3 movable grids (2 from a body anchor) from ...`. A rejoin log answers the question on its own, in the same spirit as the 9.59.0-dev streaming line.
+
+#### What this round does not do
+
+- **It corrects a claim rather than implementing it.** The Roadmap recorded that "movable grids and dropped items still store scene coordinates". The grid half was true; the dropped-item half was not — physical dropped items are not persisted at all. `DroppedItem` carries a 300 s lifetime and has no save record anywhere in `WorldStatePersistence`, so a stack dropped on the ground is gone after a reload by design, and the world setting that exists for it is a cap on how many may be alive at once, not a save. The Roadmap now says so, and persisting drops is recorded as its own open item instead of riding along in this family.
+- **The anchor requires the frame and the nearest body to agree.** A hull saved while the scene frame is somewhere else — or in deep space beyond every body's half-radius gate — saves unanchored. That is deliberate: an anchor measured against the wrong body is a worse failure than no anchor.
+- **No grid is deleted, moved or re-authored.** The round touches one save record and the code that reads and writes it.
+
+#### Numbers
+
+| | Value |
+|---|---|
+| Files changed | 1 (`Scripts/Persistence/WorldStatePersistence.cs`) |
+| New files | 0 |
+| Save fields added | 12 on `SavedGrid` — all additive and optional |
+| Save fields changed or removed | 0 |
+| New private members | 5 (`ResolveSavedGridPose`, `RestoreGridVelocity`, `CaptureGridBodyAnchor`, `CaptureGridFrameRelativeVelocity`, `IsFiniteQuaternion`) plus the `MaxRestoredVelocitySqr` bound |
+| Setup steps required | 0 |
+| Harness checks | 49 in four sections, mutation-verified in 5 ways (body rotation dropped from the restore, km/s read as m/s, the local offset left untransformed, the frame-body agreement guard removed, the anchor flag made a no-op) — every mutation caught, and one of them only after a test precondition was found to be passing vacuously |
+
+#### Manual Unity steps
+
+1. Replace `Scripts/Persistence/WorldStatePersistence.cs`. Let Unity compile; the console should be clean.
+2. Run `Tools > Voxel Engine > Voxel Engine Setup` as the standing non-destructive check. This round authors nothing.
+3. Park a hull, save, quit, rejoin: same place, same heading, and the load line reports it `from a body anchor`.
+4. Rejoin twice more with time passing so the planet has orbited on: same spot every time.
+5. Load a world saved before 10.1.0-dev: every hull restores at its scene coordinate as it did before, with no new warning.
 
 ### [10.0.0-dev] The Stored Chunk Is the Whole Chunk — 3-Byte Voxel Payload
 

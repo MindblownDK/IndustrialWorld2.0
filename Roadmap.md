@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `10.0.0-dev`
-**Roadmap Version:** `10.0.0-dev`
+**Current Version:** `10.2.0-dev`
+**Roadmap Version:** `10.2.0-dev`
 **Date:** 2026-09-14
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,16 @@
 
 ## 0. Recently Done
 
+### 10.2.0-dev — The Smelters and the Pumpjack Keep Their Batch
+- `Furnace`, `ElectricFurnace` and `Pumpjack` implement the existing `IMachineProcessState`, so the persistence hook already in place picks them up: batch, progress, burning fuel, the pumpjack's barrel cycle, and the electric furnace's ENABLED and auto-pull switches all survive a reload.
+- `MachineProcessPersistence` gains a generic recipe resolver for machines whose list is `SmeltingRecipe` rather than `ProcessingRecipe`, plus two numeric guards so a NaN in a save can never reach a live machine.
+- 45 harness checks in four sections, mutation-verified five ways; no new save field and no setup step, and a save written before this round leaves every machine on its prefab defaults.
+
+### 10.1.0-dev — Movable Grids Follow Their Planet
+- `SavedGrid` gains an additive body anchor (`hasBodyAnchor` / `anchorBody` / `anchorLocalX/Y/Z` plus a local rotation), so a hull reloads at the place it was left rather than at a scene coordinate that only meant anything in the frame the save was written in.
+- The linear velocity is stored relative to the scene frame's own motion, so a hull parked against its planet comes back parked instead of carrying the old frame's orbital velocity.
+- 49 harness checks in four sections, mutation-verified five ways; a save written before this round loads unchanged through the scene-coordinate fallback.
+
 ### 10.0.0-dev — The Stored Chunk Is the Whole Chunk
 - `Voxel` is a three-byte struct and the store now writes and reads three bytes per voxel (`sizeof(Voxel)`); a stored chunk went from 78,608 to 117,912 bytes of payload.
 - `RegionFile` V3 -> V4 and `ChunkStoreIdentity` format 1 -> 2: every pre-fix store is refused, quarantined into `stale_<utc>/` and regenerated, so an existing world heals on first load without losing `world_state.json`.
@@ -43,17 +53,6 @@
 - The two finiteness helpers and the qualified `System.StringComparison` are used correctly again; five compile errors, five lines.
 - Four harness guards for the two mistake classes, each verified against the broken source.
 - 326 harness checks passed; Unity compile of the fixed pair remains the open gate.
-
-### 9.58.0-dev — Rejoin Spawn, Live Reactor Panel, Universal Modules
-- Player saves carry a body anchor and the cosmic clock, so a rejoin returns to the same spot in the same frame at the same orbital phase.
-- The Catalytic Cracker panel updates temperature, catalyst, efficiency and its gauges in place; no rebuild touches the page scroll.
-- Step 75 authors the universal Machine Speed / Efficiency Modules the furnace and refinery upgrade slots read (they had no assets at all).
-- 320 harness checks passed; Unity compile, the rejoin acceptance run and the module craft run remain open.
-
-### 9.57.0-dev — Machine Process Persistence
-- One additive record (`SavedPlacedBlock.machineProcess`) carries batch, locked recipe, tank contents and machine numbers.
-- Distillation Plant, Catalytic Cracker, Oil Refinery, Chemical Plant and Flare Stack keep their contents; ship refinery and ship chemical plant keep their batch and pick.
-- 211 harness checks passed; Unity compile, save/load and the reload acceptance run remain open.
 
 ## 1. Executive Vision
 
@@ -1125,7 +1124,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Item entity system | 🛠️ WORKING ON | Unity validation covered the **5.70.0-dev** pooled physical world-item lifecycle. **5.71.0-dev** adds a shared cross-belt conveyor-carried visual pool; Unity factory load validation remains pending. |
 | Recipe registry refactor | 🟡 PARTIALLY COMPLETE | ScriptableObject crafting and machine recipes exist. Shaped/shapeless/smelting/machine unification and validation remain incomplete. |
 | Centralized simulation tick | 🛠️ WORKING ON | Crusher and Assembler register with `SimulationTickManager`. A first 6.4.8-dev transport migration caused broken belt-to-belt and chest/funnel flow in Unity, so **6.4.9-dev** restores transport blocks to the previously validated per-frame runtime path while keeping the centralized transport interface groundwork for a later safer migration. |
-| Factory persistence | ✅ COMPLETED | Conveyor/Chute item packets, Conveyor Splitter buffer+round-robin cursor+routing mode+per-output filters, Crusher/Assembler recipe+progress+enabled, Funnel buffer+mode, and all machine containers save and restore. Legacy saves compatible. **9.57.0-dev** extends the same additive record to the petroleum chain through one shared `IMachineProcessState` payload: batch + locked recipe + fluid tanks for the Distillation Plant, Catalytic Cracker, Oil Refinery, Chemical Plant, stationary Flare Stack and both ship machines, plus the item slots of the four world machines. **9.58.0-dev** extends the same record to the player: `hasAnchor` / `anchorBody` / `anchorLocalX/Y/Z` place a rejoin relative to the body it was saved on, and `cosmicSimulationSeconds` restores the orbital phase, while a save-side guard now refuses any scene position inside a body whatever the active frame is. **Open, deferred by 9.57.0-dev:** the two smelters (Furnace / ElectricFurnace) still keep batch progress, `userEnabled` and `autoPull` in session memory only, and the pumpjack's barrel cycle is not saved — recorded as its own item so it is not lost inside a completed row. **9.59.0-dev** anchors placed blocks to the body they stand on (`hasBodyAnchor` / `anchorBody` / `anchorLocalX/Y/Z`, additive) so a block survives a moved body, a rebase and a frame switch, and adds the per-body chunk-store identity file that refuses to load chunks generated from another field. **10.0.0-dev** fixes the stored payload itself — three bytes per voxel instead of two, so a stored chunk is no longer missing its last third — and retires the old files with `RegionFile` V4 and identity format 2. **Open, moved on by 9.59.0-dev:** movable grids (`SavedGrid`) and dropped items still store scene coordinates — the same body anchor is the fix there, and it is the next item in this family. |
+| Factory persistence | ✅ COMPLETED | Conveyor/Chute item packets, Conveyor Splitter buffer+round-robin cursor+routing mode+per-output filters, Crusher/Assembler recipe+progress+enabled, Funnel buffer+mode, and all machine containers save and restore. Legacy saves compatible. **9.57.0-dev** extends the same additive record to the petroleum chain through one shared `IMachineProcessState` payload: batch + locked recipe + fluid tanks for the Distillation Plant, Catalytic Cracker, Oil Refinery, Chemical Plant, stationary Flare Stack and both ship machines, plus the item slots of the four world machines. **9.58.0-dev** extends the same record to the player: `hasAnchor` / `anchorBody` / `anchorLocalX/Y/Z` place a rejoin relative to the body it was saved on, and `cosmicSimulationSeconds` restores the orbital phase, while a save-side guard now refuses any scene position inside a body whatever the active frame is. **10.2.0-dev** closes the round's own deferred item: `Furnace`, `ElectricFurnace` and `Pumpjack` implement the same `IMachineProcessState`, so batch progress, burning fuel, the barrel cycle and the electric furnace's `userEnabled` / `autoPull` switches all save and restore. **9.59.0-dev** anchors placed blocks to the body they stand on (`hasBodyAnchor` / `anchorBody` / `anchorLocalX/Y/Z`, additive) so a block survives a moved body, a rebase and a frame switch, and adds the per-body chunk-store identity file that refuses to load chunks generated from another field. **10.0.0-dev** fixes the stored payload itself — three bytes per voxel instead of two, so a stored chunk is no longer missing its last third — and retires the old files with `RegionFile` V4 and identity format 2. **10.1.0-dev** anchors movable grids the same way (`SavedGrid.hasBodyAnchor` / `anchorBody` / `anchorLocalX/Y/Z` plus a body-local rotation) and stores their linear velocity relative to the scene frame, so a hull survives a moved body, a rebase and a frame switch; a grid with no anchor keeps restoring from its scene coordinate. **Open, and corrected here:** physical dropped items were recorded as holding scene coordinates — they are not saved at all. `DroppedItem` has a 300 s lifetime and no save record, so a drop on the ground is gone after a reload by design. Persisting them is its own item, not part of this family. |
 | Step 5 tiered setup workflow | 🛠️ WORKING ON | Generated Size-V4 prefabs migrate to Size-V5 seamless Foundation decks and Stair anchors. Missing resources are repaired safely while custom prefabs, materials, recipes, and balance values remain preserved. Unity two-run validation is pending. |
 | Step 17 setup workflow | ✅ COMPLETED | Step 17 remains non-destructive, refreshes generated visuals/colliders safely, preserves balance values, and connects upgraded Funnel/Crusher/Assembler prefabs plus contextual conveyor shape workflow. |
 
@@ -2373,6 +2372,26 @@ For each version, these are the high-level Unity tasks you will perform manually
 8. Finalize save schema v2 migration for boss progression, relics, custom stars, and Dyson construction stages.
 9. **Run setup wizard step (non-destructive)**
    - Step 23 for world forge, Star Builder, Dyson Sphere, boss relic gates, and megastructures.
+
+### For 10.2.0-dev (Smelter and Pumpjack Process Persistence)
+
+1. Replace `Scripts/Crafting/MachineProcessState.cs`, `Scripts/Crafting/Furnace.cs`, `Scripts/Crafting/ElectricFurnace.cs` and `Scripts/Crafting/Pumpjack.cs`. Let Unity compile; the console should be clean.
+2. Run `Tools > Voxel Engine > Voxel Engine Setup`. This round authors no prefab, item, recipe or research node, so the run is only the standing non-destructive check. No step needs to be re-run.
+3. Load a Furnace with ore and fuel and let it get part-way through a batch, then save and quit. Rejoin: the progress bar is where it was, the fuel bar is still burning down from the same point, and the batch completes without a second fuel item being eaten.
+4. Turn an Electric Furnace OFF from its ENABLED pill, switch auto-pull ON, save and quit. Rejoin: it is still OFF and drawing no power, and auto-pull is still ON. Before this round both reset to their prefab defaults on load.
+5. Start a Jack Pump cycle over a Pirate oil node, save mid-cycle and rejoin: the walking beam picks the stroke back up rather than starting the 14 s lift over.
+6. Load a world saved before 10.2.0-dev: every machine loads idle and on its prefab defaults, with no console error. A missing record is the expected legacy case.
+
+### For 10.1.0-dev (Movable-Grid Body Anchor)
+
+1. Replace `Scripts/Persistence/WorldStatePersistence.cs`. Let Unity compile; the console should be clean.
+2. Run `Tools > Voxel Engine > Voxel Engine Setup`. This round authors no prefab, item, recipe or research node, so the run is only the standing non-destructive check that every earlier authored asset is still connected. No step needs to be re-run for the new save fields to work.
+3. Park a ship or rover on the ground near your base, note which way it faces, save and quit.
+4. Rejoin: the hull must be where you parked it and facing the same way. The load line now reads `[WorldState] Loaded N tiered + M blocks + G movable grids (A from a body anchor) from ...`, and `A` must equal the number of hulls you had.
+5. Rejoin twice more, with time passing between joins so the planet has orbited on: same spot, same heading, every time.
+6. Save a hull drifting in deep space, then rejoin: it comes back where it was, with `0 from a body anchor` for that hull. A hull with no anchoring body keeps using its scene coordinate, which is what it did before this round.
+7. Load a world saved before 10.1.0-dev: every hull restores exactly as it did before, at its scene coordinate, with no new console warning. A missing anchor is the expected legacy case.
+8. If a hull still comes back in the wrong place, send the `[WorldState] Loaded ...` line and any `[WorldState] A movable grid ...` warning from the load — the warning names the body and the reason.
 
 ### For 10.0.0-dev (Stored-Chunk Payload)
 

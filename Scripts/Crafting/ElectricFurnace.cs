@@ -17,7 +17,7 @@ namespace VoxelEngine.Crafting
     [RequireComponent(typeof(CraftingStation))]
     [RequireComponent(typeof(PortConfig))]
     [RequireComponent(typeof(ItemPortRouting))]
-    public class ElectricFurnace : MonoBehaviour, IItemPortHost
+    public class ElectricFurnace : MonoBehaviour, IItemPortHost, IMachineProcessState
     {
         [Header("Recipes")]
         public List<SmeltingRecipe> knownRecipes = new();
@@ -212,6 +212,42 @@ namespace VoxelEngine.Crafting
             }
             SpeedMultiplier      = speed;
             EfficiencyMultiplier = eff;
+        }
+
+        // ============================================================
+        //   10.2.0-dev — batch, progress and the player's own switches survive a reload
+        // ============================================================
+        // The furnace came back mid-batch with progress lost and both player
+        // switches reset to their prefab defaults, so a disabled furnace started
+        // drawing power again on reload and an auto-pulling one stopped pulling.
+        // The record is additive: a save written before this round has no payload
+        // and the furnace keeps the defaults its prefab gave it.
+        private const string UserEnabledKey = "userEnabled";
+        private const string AutoPullKey    = "autoPull";
+
+        public void CaptureProcessState(MachineProcessState state)
+        {
+            if (state == null) return;
+            state.recipeName = _current != null ? _current.name : string.Empty;
+            state.progressSeconds = Mathf.Max(0f, _smeltProgress);
+            // Both switches are written every save rather than only when they differ
+            // from a default, so a reload can never confuse "the player turned this
+            // off" with "this record predates the switch".
+            state.SetExtra(UserEnabledKey, userEnabled ? 1f : 0f);
+            state.SetExtra(AutoPullKey, autoPull ? 1f : 0f);
+        }
+
+        public void RestoreProcessState(MachineProcessState state)
+        {
+            if (state == null || state.IsEmpty) return;
+
+            userEnabled = state.GetExtraBool(UserEnabledKey, userEnabled);
+            autoPull = state.GetExtraBool(AutoPullKey, autoPull);
+
+            var recipe = MachineProcessPersistence.Resolve(knownRecipes, state.recipeName, "ElectricFurnace");
+            _current = recipe != null ? recipe : FindRecipeForInput();
+            float seconds = _current != null ? EffectiveSmeltTime(_current) : 0f;
+            _smeltProgress = MachineProcessPersistence.ClampOr(state.progressSeconds, 0f, seconds, 0f);
         }
 
         // ============================================================

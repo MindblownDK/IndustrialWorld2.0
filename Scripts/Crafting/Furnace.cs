@@ -14,7 +14,7 @@ namespace VoxelEngine.Crafting
     [RequireComponent(typeof(CraftingStation))]
     [RequireComponent(typeof(PortConfig))]
     [RequireComponent(typeof(ItemPortRouting))]
-    public class Furnace : MonoBehaviour, IItemPortHost
+    public class Furnace : MonoBehaviour, IItemPortHost, IMachineProcessState
     {
         [Header("Recipes")]
         public List<SmeltingRecipe> knownRecipes = new();
@@ -145,6 +145,49 @@ namespace VoxelEngine.Crafting
                 return true;
             }
             return false;
+        }
+
+        // ============================================================
+        //        10.2.0-dev — batch, progress and burning fuel survive a reload
+        // ============================================================
+        // Without this the furnace came back cold and mid-batch: the batch in
+        // progress was lost, and with it the fuel item already consumed for it —
+        // a reload quietly refunded nothing and threw away the burn. The record
+        // is additive: a save written before this round has no payload, so the
+        // furnace loads exactly as it did before, free to pick its own recipe.
+        private const string FuelRemainingKey = "fuelRemaining";
+        private const string FuelMaxKey       = "fuelMaxDuration";
+
+        public void CaptureProcessState(MachineProcessState state)
+        {
+            if (state == null) return;
+            state.recipeName = _current != null ? _current.name : string.Empty;
+            state.progressSeconds = Mathf.Max(0f, _smeltProgress);
+            state.SetExtra(FuelRemainingKey, Mathf.Max(0f, _fuelRemaining));
+            state.SetExtra(FuelMaxKey, Mathf.Max(0f, _fuelMaxDuration));
+        }
+
+        public void RestoreProcessState(MachineProcessState state)
+        {
+            if (state == null || state.IsEmpty) return;
+
+            // The record was written from a live batch, so its recipe should still be
+            // the one this input implies. When it is not — the input was pulled out
+            // before the save, or the recipe list changed — the furnace re-picks
+            // instead of resuming a batch it no longer has the material for.
+            var recipe = MachineProcessPersistence.Resolve(knownRecipes, state.recipeName, "Furnace");
+            _current = recipe != null ? recipe : FindRecipeForInput();
+
+            float seconds = _current != null ? _current.smeltSeconds : 0f;
+            _smeltProgress = MachineProcessPersistence.ClampOr(state.progressSeconds, 0f, seconds, 0f);
+
+            // The fuel bar only means something against the duration of the fuel item
+            // that was burned for it, so both halves come back together and the
+            // remaining burn can never outlive them.
+            float maxDuration = Mathf.Max(0f, MachineProcessPersistence.FiniteOr(state.GetExtra(FuelMaxKey, 0f), 0f));
+            float remaining = Mathf.Max(0f, MachineProcessPersistence.FiniteOr(state.GetExtra(FuelRemainingKey, 0f), 0f));
+            _fuelMaxDuration = maxDuration;
+            _fuelRemaining = Mathf.Min(remaining, maxDuration);
         }
 
         private void CompleteOneBatch()

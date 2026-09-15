@@ -40,6 +40,15 @@ namespace VoxelEngine.Persistence
 
         private bool _loaded;
         private float _saveTimer;
+
+        /// <summary>
+        /// 100 km/s, squared. The fastest hull this game can build is nowhere near this, while
+        /// a reference-frame mismatch (a planetary orbital velocity read as a hull velocity) is
+        /// tens of km/s, so the bound separates "wrong frame" from "fast ship" by orders of
+        /// magnitude without ever clipping a legitimate velocity.
+        /// </summary>
+        private const float MaxRestoredVelocitySqr = 100_000f * 100_000f;
+
         // Background autosave cadence now comes from GameSettings.AutosaveSeconds
         // (0 = disabled). Players change it live from the Settings → Saving tab.
 
@@ -1254,11 +1263,12 @@ namespace VoxelEngine.Persistence
 
                 RestorePlacedTiered(save);
                 RestorePlacedBlocks(save);
-                RestoreGrids(save);
+                int anchoredGrids = RestoreGrids(save);
                 RestorePlayer(save);
                 RestoreQuarries(save);
                 RestoreRefuelPads(save);
-                Debug.Log($"[WorldState] Loaded {save.placedTiered.Count} tiered + {save.placedBlocks.Count} blocks + {save.grids.Count} movable grids from {path}");
+                Debug.Log($"[WorldState] Loaded {save.placedTiered.Count} tiered + {save.placedBlocks.Count} blocks + {save.grids.Count} movable grids " +
+                          $"({anchoredGrids} from a body anchor) from {path}");
             }
             catch (Exception ex) { Debug.LogError("[WorldState] Load failed: " + ex.Message); }
             _loaded = true;
@@ -1349,6 +1359,15 @@ namespace VoxelEngine.Persistence
                     entry.velocity = grid.Body.linearVelocity;
                     entry.angularVelocity = grid.Body.angularVelocity;
                 }
+
+                // ── 10.1.0: anchor the grid to the body it belongs to ──────────────
+                // Without this a hull reloads at a scene coordinate that only described
+                // its place in the frame the save was written in: after the system has run
+                // on, or after a frame switch, that coordinate can be thousands of
+                // kilometres away from where the ship was parked — or inside a planet.
+                // The scene pose stays in the file as the fallback and the diagnostic.
+                CaptureGridBodyAnchor(grid, entry);
+                CaptureGridFrameRelativeVelocity(grid, entry);
 
                 foreach (var block in grid.AllBlocks)
                 {
@@ -1540,9 +1559,10 @@ namespace VoxelEngine.Persistence
             return match;
         }
 
-        private void RestoreGrids(SaveData save)
+        private int RestoreGrids(SaveData save)
         {
-            if (save.grids == null || save.grids.Count == 0) return;
+            int anchored = 0;
+            if (save.grids == null || save.grids.Count == 0) return 0;
 
             foreach (var savedGrid in save.grids)
             {
@@ -1553,13 +1573,19 @@ namespace VoxelEngine.Persistence
                     continue;
                 }
 
-                var grid = GridEntity.Create(savedGrid.pos, (GridSize)savedGrid.gridSize);
+                // 10.1.0: the anchor decides where the hull comes back. A grid with no anchor
+                // — every save written before this round — resolves to its saved scene pose.
+                ResolveSavedGridPose(savedGrid, out Vector3 gridPosition, out Quaternion gridRotation, out bool fromAnchor);
+                if (fromAnchor) anchored++;
+
+                var grid = GridEntity.Create(gridPosition, (GridSize)savedGrid.gridSize);
                 grid.name = "Grid (restored)";
                 grid.gravityScale = savedGrid.gravityScale > 0f ? savedGrid.gravityScale : grid.gravityScale;
                 grid.DampenersOn = savedGrid.dampenersOn;
                 grid.SetWheelParkingBrake(savedGrid.wheelParkingBrake);
-                grid.RestorePersistentPose(savedGrid.pos, savedGrid.rot,
-                    savedGrid.wheelParkingBrake ? Vector3.zero : savedGrid.velocity,
+                Vector3 gridVelocity = RestoreGridVelocity(savedGrid);
+                grid.RestorePersistentPose(gridPosition, gridRotation,
+                    savedGrid.wheelParkingBrake ? Vector3.zero : gridVelocity,
                     savedGrid.wheelParkingBrake ? Vector3.zero : savedGrid.angularVelocity);
                 grid.HydrogenStored = Mathf.Max(0f, savedGrid.hydrogenStored);
                 grid.OxygenStored = Mathf.Max(0f, savedGrid.oxygenStored);
@@ -1701,6 +1727,8 @@ namespace VoxelEngine.Persistence
                 // interpenetration before the restore pose releases physics.
                 grid.ResolvePersistentGroundClearance();
             }
+
+            return anchored;
         }
 
         private void RestoreGridBlocks(GridEntity grid, List<SavedGridBlock> blocks, bool precisionPass)
@@ -2088,6 +2116,11 @@ namespace VoxelEngine.Persistence
             return IsFinite(pos.x) && IsFinite(pos.y) && IsFinite(pos.z);
         }
 
+        private static bool IsFiniteQuaternion(Quaternion q)
+        {
+            return IsFinite(q.x) && IsFinite(q.y) && IsFinite(q.z) && IsFinite(q.w);
+        }
+
         private void RestorePlacedBlocks(SaveData save)
         {
             int restored = 0;
@@ -2225,6 +2258,78 @@ namespace VoxelEngine.Persistence
         }
 
         /// <summary>
+        /// Where a saved movable grid belongs in THIS scene, and which way it faced. The body
+        /// anchor wins for the same reason it wins for a placed block: it is the pose taken
+        /// relative to the body the hull was standing on or orbiting, so it survives the body
+        /// moving, the origin rebasing and a reference-frame switch. Without an anchor (legacy
+        /// saves, or a hull drifting in deep space) the saved scene pose is used unchanged, so
+        /// nothing this round changes how an older save loads.
+        /// </summary>
+        private static void ResolveSavedGridPose(SavedGrid g, out Vector3 position, out Quaternion rotation, out bool fromAnchor)
+        {
+            position = IsFiniteVector(g.pos) ? g.pos : Vector3.zero;
+            rotation = IsFiniteQuaternion(g.rot) ? g.rot.normalized : Quaternion.identity;
+            fromAnchor = false;
+
+            if (!g.hasBodyAnchor || string.IsNullOrEmpty(g.anchorBody)) return;
+
+            var body = FindSceneBodyByName(g.anchorBody);
+            if (body == null)
+            {
+                Debug.LogWarning($"[WorldState] A movable grid was anchored to '{g.anchorBody}', which is not in this scene; " +
+                                 "restoring it at its saved scene coordinate instead.");
+                return;
+            }
+
+            Vector3 anchored = body.transform.TransformPoint(new Vector3(g.anchorLocalX, g.anchorLocalY, g.anchorLocalZ));
+            Quaternion anchoredRot = body.transform.rotation
+                * new Quaternion(g.anchorRotX, g.anchorRotY, g.anchorRotZ, g.anchorRotW);
+            // The stored local rotation is normalized on its way back out, and a rotation too
+            // short to be one is refused rather than trusted: an invalid quaternion handed to a
+            // Rigidbody poisons every physics step that follows it.
+            float rotLengthSqr = anchoredRot.x * anchoredRot.x + anchoredRot.y * anchoredRot.y
+                               + anchoredRot.z * anchoredRot.z + anchoredRot.w * anchoredRot.w;
+            if (IsFiniteVector(anchored) && IsFinite(rotLengthSqr) && rotLengthSqr > 0.0001f)
+            {
+                position = anchored;
+                rotation = anchoredRot.normalized;
+                fromAnchor = true;
+                return;
+            }
+
+            Debug.LogWarning($"[WorldState] A movable grid's body anchor on '{g.anchorBody}' resolved to an invalid pose; " +
+                             "restoring it at its saved scene coordinate instead.");
+        }
+
+        /// <summary>
+        /// A frame-relative record is turned back into a scene velocity by adding the frame
+        /// velocity THIS scene is running in, which is the only velocity a scene-space
+        /// Rigidbody can be handed. A scene-velocity record (every save written before
+        /// 10.1.0) is used as-is. A velocity that resolves to a physically impossible value
+        /// is dropped to zero so a restored hull is stationary rather than launched.
+        /// </summary>
+        private static Vector3 RestoreGridVelocity(SavedGrid g)
+        {
+            if (!g.hasFrameRelativeVelocity) return IsFiniteVector(g.velocity) ? g.velocity : Vector3.zero;
+
+            var origin = VoxelEngine.Cosmos.SpaceOrigin.Instance;
+            var frame = origin != null ? origin.FrameVelocityKmS : Unity.Mathematics.double3.zero;
+            Vector3 relative = IsFiniteVector(g.frameRelativeVelocity) ? g.frameRelativeVelocity : Vector3.zero;
+            Vector3 scene = new Vector3(
+                relative.x + (float)frame.x * 1000f,
+                relative.y + (float)frame.y * 1000f,
+                relative.z + (float)frame.z * 1000f);
+
+            if (!IsFiniteVector(scene) || scene.sqrMagnitude > MaxRestoredVelocitySqr)
+            {
+                Debug.LogWarning("[WorldState] A movable grid's frame-relative velocity resolved to an impossible value; " +
+                                 "the grid was restored stationary instead.");
+                return Vector3.zero;
+            }
+            return scene;
+        }
+
+        /// <summary>
         /// The body a scene object is standing on: the body whose surface is nearest to it,
         /// within half that body's radius so a base on the ground, a platform in the air and
         /// a ship on a pad all anchor while something parked in deep space does not.
@@ -2255,6 +2360,95 @@ namespace VoxelEngine.Persistence
             }
             if (best == null) return null;
             return bestGap <= best.SurfaceRadius * 0.5f ? best : null;
+        }
+
+        /// <summary>
+        /// Record the grid's pose relative to the body it is standing on or orbiting, so a hull
+        /// reloads at the place it was left rather than at a scene coordinate that only meant
+        /// anything in the frame the save was written in. The body must also be the frame the
+        /// scene is running in, or the local pose would be measured from a body that is not
+        /// where the scene's coordinates are — in that case the grid saves unanchored and
+        /// restores from its scene coordinate exactly as it did before this round.
+        /// </summary>
+        private static void CaptureGridBodyAnchor(GridEntity grid, SavedGrid entry)
+        {
+            if (grid == null || entry == null) return;
+
+            if (!IsFiniteVector(entry.pos) || !IsFiniteQuaternion(entry.rot))
+            {
+                Debug.LogWarning("[WorldState] A movable grid's saved pose was not finite, so no body anchor was " +
+                                 "written for it; the grid will restore from its saved scene coordinate instead.");
+                return;
+            }
+
+            var origin = VoxelEngine.Cosmos.SpaceOrigin.Instance;
+            var frameBody = origin != null ? origin.FrameBody : null;
+            if (frameBody == null || frameBody.settings == null || string.IsNullOrEmpty(frameBody.settings.bodyName)) return;
+
+            var anchor = FindAnchoringBody(entry.pos);
+            if (anchor == null || anchor != frameBody || anchor.settings == null) return;
+
+            Vector3 localPos = anchor.transform.InverseTransformPoint(entry.pos);
+            if (!IsFiniteVector(localPos))
+            {
+                Debug.LogWarning($"[WorldState] A movable grid's body-local position on '{anchor.settings.bodyName}' " +
+                                 "was not finite; the grid was saved at its scene coordinate instead.");
+                return;
+            }
+
+            Quaternion localRot = Quaternion.Inverse(anchor.transform.rotation) * entry.rot;
+            if (!IsFiniteQuaternion(localRot)) localRot = Quaternion.identity;
+            localRot.Normalize();
+
+            entry.hasBodyAnchor = true;
+            entry.anchorBody    = anchor.settings.bodyName;
+            entry.anchorLocalX  = localPos.x;
+            entry.anchorLocalY  = localPos.y;
+            entry.anchorLocalZ  = localPos.z;
+            entry.anchorRotX    = localRot.x;
+            entry.anchorRotY    = localRot.y;
+            entry.anchorRotZ    = localRot.z;
+            entry.anchorRotW    = localRot.w;
+        }
+
+        /// <summary>
+        /// Store the hull's linear velocity relative to the motion of the scene's own reference
+        /// frame. A raw scene velocity describes the hull's motion against a frame that is
+        /// itself orbiting, so re-applying it after the frame has changed hands the hull a
+        /// velocity that belongs to nobody; the relative value is the one that means the same
+        /// thing in any frame. The scene velocity is still written above it as the fallback.
+        /// </summary>
+        private static void CaptureGridFrameRelativeVelocity(GridEntity grid, SavedGrid entry)
+        {
+            if (grid == null || entry == null) return;
+
+            var registry = VoxelEngine.Cosmos.CosmicRegistry.Instance;
+            entry.anchorCosmicSeconds = registry != null ? registry.SimulationSeconds : 0d;
+
+            var origin = VoxelEngine.Cosmos.SpaceOrigin.Instance;
+            Vector3 scene = entry.velocity;
+            if (origin == null)
+            {
+                // No origin means no frame motion to subtract, and the relative value equals
+                // the scene one; the flag still records which convention the file used.
+                entry.hasFrameRelativeVelocity = true;
+                entry.frameRelativeVelocity = scene;
+                return;
+            }
+
+            var frame = origin.FrameVelocityKmS;
+            var relative = new Vector3(
+                scene.x - (float)frame.x * 1000f,
+                scene.y - (float)frame.y * 1000f,
+                scene.z - (float)frame.z * 1000f);
+            if (!IsFiniteVector(relative))
+            {
+                Debug.LogWarning("[WorldState] A movable grid's frame-relative velocity was not finite; " +
+                                 "it was saved as a scene velocity instead.");
+                return;
+            }
+            entry.hasFrameRelativeVelocity = true;
+            entry.frameRelativeVelocity = relative;
         }
 
         private void RestoreFactoryRuntime(GameObject go, SavedPlacedBlock saved)
@@ -3028,6 +3222,33 @@ namespace VoxelEngine.Persistence
             // should still reload, then fail honestly at its own reservation check rather than vanish.
             public List<SavedRouteLoop> loops = new();
             public List<SavedGridBlock> blocks = new();
+
+            // ── Additive 10.1.0: the body anchor ────────────────────────────────
+            // `pos` and `rot` above are scene coordinates: the celestial bodies move
+            // through the scene as the system runs (orbits, origin rebases, reference-frame
+            // switches), so a scene pose is only meaningful in the frame it was captured in.
+            // These fields record the SAME pose relative to the body the grid was standing
+            // on or orbiting, which is the pose that survives all three. The scene pose is
+            // still written, and stays the restore path for a grid with no anchor and for
+            // every save written before this round.
+            public bool hasBodyAnchor;
+            public string anchorBody;
+            public float anchorLocalX; public float anchorLocalY; public float anchorLocalZ;
+            /// <summary>Rotation in the anchor body's local space. Stored as the four
+            /// quaternion components rather than Euler angles so the round-trip is exact
+            /// and no gimbal case can flip a restored hull.</summary>
+            public float anchorRotX; public float anchorRotY; public float anchorRotZ; public float anchorRotW = 1f;
+            /// <summary>Mirrors <see cref="hasBodyAnchor"/> for the velocity pair: the
+            /// linear velocity was stored relative to the scene frame's own motion rather
+            /// than as a raw scene velocity. It has its own flag because the two are
+            /// independent — a grid drifting in deep space has no anchor body but its
+            /// velocity is still frame-relative.</summary>
+            public bool hasFrameRelativeVelocity;
+            public Vector3 frameRelativeVelocity;
+            /// <summary>Cosmic clock (s) the velocity was taken at, carried so a future
+            /// round can tell a fresh record from a zero-initialized one. Never compared
+            /// in this round.</summary>
+            public double anchorCosmicSeconds;
         }
         [Serializable] private class SavedRoomCharge
         {
