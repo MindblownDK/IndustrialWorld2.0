@@ -1,9 +1,9 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `11.1.0-dev`
-**Roadmap Version:** `11.1.0-dev`
-**Date:** 2026-09-15
+**Current Version:** `11.4.0-dev`
+**Roadmap Version:** `11.4.0-dev`
+**Date:** 2026-09-16
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
@@ -29,6 +29,21 @@
 
 ## 0. Recently Done
 
+### 11.4.0-dev — The Chests Talk To Each Other
+- `LogisticsNetwork` runs a fulfilment pass every second: a Requester's per-face whitelists are its request list, and the nearest in-range Provider (48 m) supplies up to 16 of each item per pass.
+- Locked chests register with the network on enable; transfers move the Provider's own item instance and remove only what the destination accepted, so no stock is duplicated or lost.
+- The port panel gains a WIRELESS LOGISTICS section listing network size and, per requested item, the count in range or "none in range". No setup step and no new saved field.
+
+### 11.3.0-dev — One Ore To Smelt
+- Iron and copper ore are one canonical asset each (`Industrial/Items/Item_IronOre`, `Item_CopperOre`); setup step 80 repoints every recipe, voxel material drop and persistence-catalogue entry, then deletes the retired `Items/Item_Iron` and `Items/Item_Copper` duplicates.
+- `ItemDefinition.itemId`/`displayName` no longer default to `"iron_ore"`/`"Iron Ore"`, which is what let unauthored assets claim to be iron ore; `ItemIdentity` treats a blank id as no identity, and step 79 audits and repairs the remainder.
+- `ItemIdAliases` maps the retired ids to their replacements at load, so saves written before the consolidation keep their ore.
+
+### 11.2.0-dev — The Storage Line Closes
+- Provider and Requester chests ship as a `portLock` field on the existing `Chest` component: an active face is pinned to Output or Input, enforced on Awake, after a port-snapshot restore, and through the legacy pipe API.
+- The port panel recognises `IPortLockedHost`: a lock banner plus ON/OFF face pills instead of the three-way cycle, with the distribution toggle hidden on a Requester.
+- Setup step 78 authors both variants non-destructively; `portLock` defaults to `Free`, so every existing chest is untouched.
+
 ### 11.1.0-dev — The Chest Progression Lands
 - Three new storage tiers on the existing `Chest` component — Wooden Crate (9 slots, planks x4, inventory), Iron Chest (18 slots, iron ingot x4 + planks x2, Crafting Bench), Steel Chest (36 slots, steel ingot x4 + iron ingot x4, Assembler) — so port config, pipe/belt plumbing, and save/restore come free.
 - Setup step 77 (Build the Storage Chest Tiers, non-destructive) creates or repairs each tier's prefab, block item, and recipe; authored quantities, craft times, and the pre-existing 30-slot Chest are never reset, and the console reports the non-destructive contract on re-run.
@@ -38,21 +53,6 @@
 - The fuel and electric furnace panels display the 11.0.0-dev `StallReason` instead of a blanket "No input": the label wraps the full reason, the pill carries the short form (NO POWER / NO INPUT / NO RECIPE / NO FUEL / BAD FUEL / OUTPUT FULL / SWITCHED OFF), and a hint line under the smelt bar names the exact setup step that repairs broken smelt links.
 - `Furnace` and `ElectricFurnace` expose `HasBrokenRecipes`, and the Jack Pump's well probe digs up to 8 hops through the derrick's own collider and any blocks it stands on, so a pump installed on a base finds the seep on oil worlds.
 - Bug-fix round only: no setup step, no saved field, and no change to recipe matching, fuel, or batch logic.
-
-### 11.0.0-dev — A Parked Hull Stays Parked, and the Well Produces Crude
-- The frame-relative velocity from 10.1.0-dev is removed: it handed a parked hull its planet's orbital speed in m/s, so every rejoin drove it further into the ground. The body anchor that places the hull stays.
-- `FluidManager`'s volumetric density read now completes the chunk's generation job first, closing the job-safety throw that came out of the water probe every physics step.
-- The Jack Pump is a tank-only crude producer (no barrels, no item slots) behind setup step 76. Both smelters were standing still because the three base `Smelt_*.asset` files on disk have a null `input` and `output` - `MakeSmelt` never called `EditorUtility.SetDirty`, so its writes never reached disk - and `FindRecipeForInput` skips any recipe with no input. `MakeSmelt` now marks the asset dirty, refuses to author an unlinkable recipe, and the furnaces name which of the three cases they are in. 103 harness checks, eight mutations caught.
-
-### 10.2.0-dev — The Smelters and the Pumpjack Keep Their Batch
-- `Furnace`, `ElectricFurnace` and `Pumpjack` implement the existing `IMachineProcessState`, so the persistence hook already in place picks them up: batch, progress, burning fuel, the pumpjack's barrel cycle, and the electric furnace's ENABLED and auto-pull switches all survive a reload.
-- `MachineProcessPersistence` gains a generic recipe resolver for machines whose list is `SmeltingRecipe` rather than `ProcessingRecipe`, plus two numeric guards so a NaN in a save can never reach a live machine.
-- 45 harness checks in four sections, mutation-verified five ways; no new save field and no setup step, and a save written before this round leaves every machine on its prefab defaults.
-
-### 10.1.0-dev — Movable Grids Follow Their Planet
-- `SavedGrid` gains an additive body anchor (`hasBodyAnchor` / `anchorBody` / `anchorLocalX/Y/Z` plus a local rotation), so a hull reloads at the place it was left rather than at a scene coordinate that only meant anything in the frame the save was written in.
-- The linear velocity is stored relative to the scene frame's own motion, so a hull parked against its planet comes back parked instead of carrying the old frame's orbital velocity.
-- 49 harness checks in four sections, mutation-verified five ways; a save written before this round loads unchanged through the scene-coordinate fallback.
 
 ## 1. Executive Vision
 
@@ -1117,7 +1117,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Conveyor belts | ✅ COMPLETED | Straight, corner, ramp, and vertical conveyor flows are implemented with consistent belt-surface height, precise transitions, item visuals, shape workflow, I/O arrows, and validated persistence. |
 | Conveyor chutes | ✅ COMPLETED | Straight vertical transport, snapping, moving-item visuals, inventory endpoints, and save-compatible placement are validated. Chutes intentionally remain a single authored transport form; no corner, spiral, or other chute variants are planned. |
 | Basic machines | 🟡 PARTIALLY COMPLETE | Electric Furnace, Crusher, and three Assembler tiers exist. Crusher/Assembler have recipe-selection UIs, visual animation, centralized simulation ticks, additive buffers/progress/enabled persistence, and Unity smoke Unity validation; production statistics and module systems remain. |
-| Storage blocks | 🟡 PARTIALLY COMPLETE | A basic chest and the wider storage system exist. 11.1.0-dev ships the Wooden Crate → Iron Chest → Steel Chest tiers on the existing Chest component (setup step 77). **11.2.0-dev** closes the named progression gap: the Provider Chest (faces pinned to output) and Requester Chest (faces pinned to input) via a `portLock` field on the Chest component, a lock-aware port panel, and setup step 78. Pending Unity validation. Remaining: automated request/fulfilment routing between logistic chests (a network-level feature, not a block). |
+| Storage blocks | 🟡 PARTIALLY COMPLETE | A basic chest and the wider storage system exist. 11.1.0-dev ships the Wooden Crate → Iron Chest → Steel Chest tiers (setup step 77); **11.2.0-dev** adds the port-locked Provider and Requester chests (setup step 78); **11.4.0-dev** adds `LogisticsNetwork`, the wireless request/fulfilment pass between them, with the status readout in the port panel. Pending Unity validation. Remaining: a Buffer (hybrid) chest, and drone/vehicle carriers for out-of-range delivery. |
 | Power pole, wire, and substation | 🟡 PARTIALLY COMPLETE | Manual wiring, poles, substations, transformers, compact LV/HV one-link connectors, and 8-link wall/foundation relays exist. Setup reruns preserve balance while adding missing links. |
 | Grid/static lighting and LED strips | ✅ COMPLETED | Detail/Structural single and dual spotlights, Structural LED strip, premium segmented/clean LED visuals, screen data providers, configuration UI, visible chase animation, motion activation, and saved lighting config persistence are implemented and validated. |
 | Shared Machine UI | 🟡 PARTIALLY COMPLETE | Crusher and Assembler panels now expose recipe selection, progress, power, toggles, inventory slots, scrolling, and item-port integration. Remaining work: complete unification across every machine, production statistics, and theme overrides. |
@@ -1525,10 +1525,10 @@ Statuses are evidence-based and move forward only after code/content review and 
    - Battery-powered, recharges at port.
    - Great for vertical/supply runs.
 
-3. **Logistic Chests**
-   - Provider Chest: drones/belts pull from here.
-   - Requester Chest: drones/belts fill it.
-   - Buffer Chest: hybrid.
+3. **Logistic Chests** — ~~Provider Chest~~ ~~Requester Chest~~ *(11.2.0-dev)*, ~~wireless request/fulfilment routing between them~~ *(11.4.0-dev)*
+   - Provider Chest: drones/belts pull from here. Shipped as a `portLock` on `Chest`; `LogisticsNetwork` supplies in-range requesters automatically.
+   - Requester Chest: drones/belts fill it. Its per-face whitelists are its request list.
+   - Buffer Chest: hybrid. Still open.
 
 4. **Long-Distance Power Poles**
    - High-voltage transmission towers.

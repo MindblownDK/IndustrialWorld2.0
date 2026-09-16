@@ -1,9 +1,52 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `11.3.0-dev`
+**Current Version:** `11.4.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [11.4.0-dev] The Chests Talk To Each Other: Wireless Request and Fulfilment
+
+**Type:** MINOR — new system, save-compatible. One new runtime component, a registration hook on the chest, and a new panel section. No new asset, no setup step, no saved field: the request list is the per-face item filter that already saves and restores.
+
+**GitHub title:** `[11.4.0-dev] The chests talk to each other — wireless request and fulfilment`
+
+#### Why this round
+
+11.2.0-dev shipped the Provider and Requester chests and the roadmap recorded exactly one thing still open on the storage line: "automated request/fulfilment routing between logistic chests (a network-level feature, not a block)". Until now the two locks only described intent — a Requester across the base from a Provider stayed empty unless the player ran a pipe between them, which is precisely the spaghetti the logistic chests exist to remove.
+
+#### 1. The network
+
+New `VoxelEngine.Transport.LogisticsNetwork`, a singleton that runs one fulfilment pass per second. A locked chest registers itself on enable and drops out on disable, so the network holds only logistic chests and a free chest costs it nothing. Each pass walks the requesters and, for every item a requester asks for, finds the nearest in-range provider holding it and moves up to 16 units.
+
+| Rule | Value |
+|---|---|
+| Pass interval | 1 s |
+| Reach | 48 m |
+| Items per item-type per pass | 16 |
+
+The metering matters: a large provider drains into a requester smoothly over several seconds rather than teleporting its whole contents in a single frame, which reads as a supply line rather than a save-load.
+
+#### 2. What a Requester asks for
+
+The request list is the union of the per-face **whitelists** already on the chest — no new field and no new UI to learn. A face with no filter is deliberately ignored rather than treated as "send me anything": an unconfigured chest should sit quiet instead of hoovering up the base. The player opts in by naming items in the filter, and because those filters are already part of the port snapshot, a chest's requests survive a save and reload with no schema change.
+
+#### 3. Transfers are honest
+
+Two traps the ore round taught us are handled explicitly. The network counts and moves the **provider's own item instance** rather than the definition the requester asked with — `ItemContainer.Remove` compares by reference, so handing it a different asset that merely means the same thing would remove nothing while still inserting into the requester, duplicating stock. And the removal is driven by what the destination actually **accepted**, so a full requester can never make items vanish.
+
+#### 4. The panel shows the network
+
+A locked chest's port panel gains a WIRELESS LOGISTICS section: the reach, how many providers and requesters are on the network, and — for a Requester — every item it asks for with a green dot and a live count when the network can supply it, or an amber "none in range" when it cannot. An unfulfilled request now reads as a stock problem the player can go solve, instead of looking like a broken block. A free chest's panel is unchanged.
+
+#### What to run
+
+1. Add `Scripts/Transport/LogisticsNetwork.cs` (new file) and replace `Scripts/Building/Chest.cs` and `Scripts/UI/PortConfigHud.cs`. Let Unity compile. There is no setup step — the network creates itself when the first logistic chest wakes.
+2. Place a Provider Chest and put iron ingots in it. Place a Requester Chest within 48 m.
+3. Open the Requester, switch a face on, and add Iron Ingot to that face's filter. Its panel should list Iron Ingot with a green dot and the count available.
+4. Close the panel and wait. Ingots should arrive in the Requester in batches of 16, once a second, until the provider is empty or the requester is full.
+5. Move the Requester out past 48 m: the entry should flip to "none in range" and deliveries should stop.
+6. Save and reload with a stocked pair in place: the filters, the locks and the deliveries all resume.
 
 ### [11.3.0-dev] One Ore To Smelt: Iron Ore and Copper Ore Become Canonical
 

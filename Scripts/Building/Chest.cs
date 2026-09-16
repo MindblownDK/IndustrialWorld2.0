@@ -97,6 +97,43 @@ namespace VoxelEngine.Building
             EnforcePortLock();
         }
 
+        private void OnEnable()
+        {
+            // Only a locked chest takes part in wireless logistics; a free chest registers
+            // as neither provider nor requester and costs the network nothing.
+            if (portLock == PortLockMode.Free) return;
+            LogisticsNetwork.EnsureInstance();
+            LogisticsNetwork.Instance?.Register(this);
+        }
+
+        private void OnDisable()
+        {
+            LogisticsNetwork.Instance?.Unregister(this);
+        }
+
+        /// <summary>
+        /// Change the chest's lock at runtime and re-file it in the logistics network.
+        /// Kept as the one entry point so the network can never hold a chest under a lock
+        /// it no longer has.
+        /// </summary>
+        public void SetPortLock(PortLockMode mode)
+        {
+            if (portLock == mode) return;
+            portLock = mode;
+            _portContainers = null;      // input/output capability just changed
+            EnforcePortLock();
+
+            if (mode == PortLockMode.Free)
+            {
+                LogisticsNetwork.Instance?.Unregister(this);
+            }
+            else
+            {
+                LogisticsNetwork.EnsureInstance();
+                LogisticsNetwork.Instance?.Register(this);
+            }
+        }
+
         private void EnsureRefs()
         {
             if (_ports == null)

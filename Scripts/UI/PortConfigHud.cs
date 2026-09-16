@@ -379,6 +379,10 @@ namespace VoxelEngine.UI
             var lockBanner = BuildPortLockBanner(host);
             if (lockBanner != null) root.Add(lockBanner);
 
+            // Wireless logistics status — only for a chest that takes part in it.
+            var logistics = BuildLogisticsPanel(host);
+            if (logistics != null) root.Add(logistics);
+
             // Distribution mode toggle — only meaningful when >1 OUTPUT face.
             if (LockOf(host) != PortLockMode.Requester)
                 root.Add(BuildDistributionToggle(routing, onChanged));
@@ -477,6 +481,144 @@ namespace VoxelEngine.UI
             row.Add(text);
 
             return row;
+        }
+
+        /// <summary>
+        /// Wireless logistics readout for a logistic chest: how many partners are on the
+        /// network, and — for a Requester — how much of each requested item is actually
+        /// reachable. Returns null for anything that is not a locked chest, so no other
+        /// machine's panel changes.
+        /// </summary>
+        private static VisualElement BuildLogisticsPanel(IItemPortHost host)
+        {
+            var chest = host as Chest;
+            if (chest == null || chest.portLock == PortLockMode.Free) return null;
+
+            var net = LogisticsNetwork.Instance;
+            bool requester = chest.portLock == PortLockMode.Requester;
+            Color tint = requester ? ColInput : ColOutput;
+
+            var box = new VisualElement();
+            box.style.marginTop = 8;
+            box.style.paddingTop = 10; box.style.paddingBottom = 10;
+            box.style.paddingLeft = 12; box.style.paddingRight = 12;
+            box.style.backgroundColor = new StyleColor(T.BgCard);
+            T.Radius(box, 10f);
+            T.Border(box, 1, new Color(tint.r, tint.g, tint.b, 0.35f));
+
+            var head = new VisualElement();
+            head.style.flexDirection = FlexDirection.Row;
+            head.style.alignItems = Align.Center;
+            head.pickingMode = PickingMode.Ignore;
+
+            var title = new Label("WIRELESS LOGISTICS");
+            title.style.color = new StyleColor(T.TextPrimary);
+            title.style.fontSize = 10;
+            title.style.unityFontStyleAndWeight = FontStyle.Bold;
+            title.style.letterSpacing = 1.1f;
+            title.style.flexGrow = 1;
+            head.Add(title);
+
+            var range = new Label(LogisticsNetwork.DefaultRange.ToString("0") + " m");
+            range.style.color = new StyleColor(T.TextMuted);
+            range.style.fontSize = 10;
+            head.Add(range);
+            box.Add(head);
+
+            if (net == null)
+            {
+                var offline = T.Muted("The logistics network starts with the first logistic chest placed in the world.");
+                offline.style.marginTop = 6;
+                offline.style.whiteSpace = WhiteSpace.Normal;
+                box.Add(offline);
+                return box;
+            }
+
+            var counts = T.Muted(net.ProviderCount + " provider" + (net.ProviderCount == 1 ? "" : "s") +
+                                 "  ·  " + net.RequesterCount + " requester" + (net.RequesterCount == 1 ? "" : "s"));
+            counts.style.marginTop = 6;
+            box.Add(counts);
+
+            if (!requester)
+            {
+                var supplyNote = T.Muted("Requesters within range draw stock from this chest automatically.");
+                supplyNote.style.marginTop = 6;
+                supplyNote.style.whiteSpace = WhiteSpace.Normal;
+                box.Add(supplyNote);
+                return box;
+            }
+
+            // A Requester lists what it asks for and whether the network can supply it.
+            var requests = CollectRequestedItems(chest);
+            if (requests.Count == 0)
+            {
+                var hint = T.Muted("This chest is asking for nothing yet. Add items to an active face's " +
+                                   "filter below and the network will keep it stocked.");
+                hint.style.marginTop = 6;
+                hint.style.whiteSpace = WhiteSpace.Normal;
+                box.Add(hint);
+                return box;
+            }
+
+            foreach (var item in requests)
+            {
+                int available = net.AvailableFor(chest, item);
+                bool supplied = available > 0;
+
+                var row = new VisualElement();
+                row.style.flexDirection = FlexDirection.Row;
+                row.style.alignItems = Align.Center;
+                row.style.marginTop = 6;
+                row.pickingMode = PickingMode.Ignore;
+
+                var dot = new VisualElement();
+                dot.style.width = 6; dot.style.height = 6;
+                dot.style.marginRight = 8;
+                dot.style.backgroundColor = new StyleColor(supplied
+                    ? new Color(0.30f, 0.75f, 0.45f)
+                    : new Color(0.70f, 0.45f, 0.25f));
+                T.Radius(dot, 3f);
+                row.Add(dot);
+
+                var name = new Label(item.displayName);
+                name.style.color = new StyleColor(T.TextSecondary);
+                name.style.fontSize = 11;
+                name.style.flexGrow = 1;
+                row.Add(name);
+
+                var status = new Label(supplied ? available + " in range" : "none in range");
+                status.style.color = new StyleColor(supplied ? T.TextSecondary : new Color(0.85f, 0.55f, 0.35f));
+                status.style.fontSize = 10;
+                row.Add(status);
+
+                box.Add(row);
+            }
+
+            return box;
+        }
+
+        /// <summary>The distinct items a Requester's active input faces whitelist.</summary>
+        private static List<ItemDefinition> CollectRequestedItems(Chest chest)
+        {
+            var result = new List<ItemDefinition>();
+            var routing = chest.Routing;
+            var ports = chest.PortConfig;
+            if (routing == null || ports == null) return result;
+
+            foreach (var port in ports.ports)
+            {
+                if (!port.enabled || port.direction != PortDirection.Input) continue;
+                if (routing.GetFilterMode(port.face) != FilterMode.Whitelist) continue;
+                foreach (var item in routing.GetFilter(port.face))
+                {
+                    if (item == null) continue;
+                    bool known = false;
+                    foreach (var existing in result)
+                        if (ItemIdentity.Same(existing, item)) { known = true; break; }
+                    if (!known) result.Add(item);
+                }
+            }
+            return result;
         }
 
         // Round-Robin / Priority toggle for competing OUTPUT faces.
