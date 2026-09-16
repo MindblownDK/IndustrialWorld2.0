@@ -172,7 +172,7 @@ namespace VoxelEngine.Crafting
                 {
                     var s = chest.container.GetSlot(i);
                     if (s == null || s.IsEmpty || s.item == null) continue;
-                    if (wanted != null && s.item != wanted) continue;
+                    if (wanted != null && !ItemIdentity.Same(s.item, wanted)) continue;
                     if (!IsSmeltable(s.item)) continue;
                     if (!inputC.HasSpace(s.item, 1)) return;
 
@@ -191,7 +191,7 @@ namespace VoxelEngine.Crafting
         private bool IsSmeltable(ItemDefinition item)
         {
             foreach (var r in knownRecipes)
-                if (r != null && r.input == item) return true;
+                if (r != null && ItemIdentity.Same(r.input, item)) return true;
             return false;
         }
 
@@ -325,7 +325,9 @@ namespace VoxelEngine.Crafting
             foreach (var r in knownRecipes)
             {
                 if (r == null || r.input == null) continue;
-                if (r.input == slot.item && slot.count >= r.inputCount) return r;
+                // Identity, not reference: the same logical ore exists as more than one
+                // asset in the project, and a stack from the "other" one must still smelt.
+                if (ItemIdentity.Same(r.input, slot.item) && slot.count >= r.inputCount) return r;
             }
             return null;
         }

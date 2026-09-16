@@ -845,6 +845,8 @@ namespace VoxelEngine.EditorTools
                 () => IndustrialWorld.EditorTools.StorageChestTiersSetup.RunStep77(), 62);
             AddWizardButton(scroll, "78. Build the Logistic Chests\n(Provider = output-only / Requester = input-only \u2014 Non-Destructive)",
                 () => IndustrialWorld.EditorTools.LogisticChestsSetup.RunStep78(), 62);
+            AddWizardButton(scroll, "79. Audit and Repair Item Identity\n(Unauthored item ids + duplicate report \u2014 Non-Destructive)",
+                () => IndustrialWorld.EditorTools.ItemIdentityAuditSetup.RunStep79(), 62);
 
             AddSpacer(scroll, 20);
         }

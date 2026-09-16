@@ -100,7 +100,7 @@ namespace VoxelEngine.GridSystem
         private bool IsSmeltable(ItemDefinition item)
         {
             if (item == null || knownRecipes == null) return false;
-            foreach (var r in knownRecipes) if (r != null && r.input == item) return true;
+            foreach (var r in knownRecipes) if (r != null && VoxelEngine.Items.ItemIdentity.Same(r.input, item)) return true;
             return false;
         }
 

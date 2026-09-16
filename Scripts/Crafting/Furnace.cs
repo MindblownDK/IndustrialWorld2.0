@@ -178,7 +178,9 @@ namespace VoxelEngine.Crafting
             foreach (var r in knownRecipes)
             {
                 if (r == null || r.input == null) continue;
-                if (r.input == slot.item && slot.count >= r.inputCount) return r;
+                // Identity, not reference: the same logical ore exists as more than one
+                // asset in the project, and a stack from the "other" one must still smelt.
+                if (ItemIdentity.Same(r.input, slot.item) && slot.count >= r.inputCount) return r;
             }
             return null;
         }

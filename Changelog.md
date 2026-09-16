@@ -1,9 +1,54 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `11.2.0-dev`
+**Current Version:** `11.2.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [11.2.2-dev] The Furnaces Recognise Their Own Ore
+
+**Type:** PATCH — bug fix. No save schema change, no API removal. One new shared helper, three machines switched to it, and one new audit step (79).
+
+**GitHub title:** `[11.2.2-dev] The furnaces recognise their own ore`
+
+#### The report
+
+Both the Solid Fuel Furnace and the Electric Furnace refused iron and copper ore, reporting "Iron Ore cannot be smelt in this machine" with the ore sitting in the input slot.
+
+#### What was actually wrong
+
+The recipes were fine. `Smelt_Iron` and `Smelt_Copper` are authored, linked, assigned to both furnace prefabs, and point at real ingots. The fault was that the project contains **two different assets for the same ore**:
+
+| Logical item | Asset | itemId |
+|---|---|---|
+| Iron Ore | `Items/Item_Iron.asset` | `iron` |
+| Iron Ore | `Industrial/Items/Item_IronOre.asset` | `iron_ore` |
+| Copper Ore | `Items/Item_Copper.asset` | `copper` |
+| Copper Ore | `Industrial/Items/Item_CopperOre.asset` | `copper_ore` |
+
+The smelting recipes point at the `Items/` pair. The persistence catalogue that repopulates the player's inventory on load carries the `Industrial/` pair. Both display "Iron Ore", so they are indistinguishable in the UI — but `FindRecipeForInput` compared them with `==`, which is reference equality on a ScriptableObject. Ore that arrived through the catalogue could never satisfy a recipe pointing at the other asset, so the furnace correctly concluded it had no recipe and said so.
+
+A second, quieter fault made this hard to see. `ItemDefinition.itemId` defaults to the literal string `"iron_ore"`, so every asset whose id was never authored silently claims to be iron ore. Four assets are in that state: the real Industrial iron ore, plus a gravel item, a radar beacon block and a fire igniter tool.
+
+#### 1. Identity instead of reference equality
+
+New `VoxelEngine.Items.ItemIdentity` answers one question — are these two references the same item? Reference equality first, which is the fast exact path and covers every normal case. When that fails, a case-insensitive `itemId` match. The fallback deliberately rejects the unauthored default id, so a mis-authored tool can never masquerade as ore.
+
+`Furnace`, `ElectricFurnace` and `GridElectricFurnace` now route their recipe matching, smeltable test and auto-pull top-up check through it. Nothing else changes: a recipe that matched before still matches, by the same fast path it always took.
+
+#### 2. Setup step 79 — Audit and Repair Item Identity (Non-Destructive)
+
+New wizard button 79, implemented in `ItemIdentityAuditSetup`. It scans every `ItemDefinition` under `VoxelEngineAssets`, gives each asset still carrying the unauthored default an id derived from its own file name, and then reports every id still claimed by more than one asset.
+
+The one asset whose own name resolves to `iron_ore` — the real `Item_IronOre` — keeps it; the three impostors become `gravel`, `stationary_radar_beacon` and `fire_igniter`. An asset that already carries an authored id is never rewritten, and no field but `itemId` is ever touched, so running it twice is a no-op.
+
+The remaining duplicates (the ore pairs, several nuclear items, the farming and survival food sets) are logged as warnings rather than merged: which of two assets should survive is a content decision. The furnaces now treat them as the same item either way, so smelting works regardless.
+
+#### What to run
+
+1. Add `Scripts/Items/ItemIdentity.cs` and `Scripts/Editor/ItemIdentityAuditSetup.cs` (new files) and replace `Scripts/Crafting/Furnace.cs`, `Scripts/Crafting/ElectricFurnace.cs`, `Scripts/GridSystem/GridElectricFurnace.cs` and `Scripts/Editor/VoxelEngineSetupWindow.cs`. Let Unity compile.
+2. Put iron ore into a Solid Fuel Furnace with coal: it should smelt to an Iron Ingot. Repeat with copper ore, and with both in an Electric Furnace on a powered network.
+3. Optionally run **step 79** and read the console: it reports what it repaired and lists every id still shared by two assets.
 
 ### [11.2.0-dev] The Storage Line Closes: Provider and Requester Chests
 
