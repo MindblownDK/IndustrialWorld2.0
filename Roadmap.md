@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `11.0.0-dev`
-**Roadmap Version:** `11.0.0-dev`
+**Current Version:** `11.1.0-dev`
+**Roadmap Version:** `11.1.0-dev`
 **Date:** 2026-09-15
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,16 @@
 
 ## 0. Recently Done
 
+### 11.1.0-dev — The Chest Progression Lands
+- Three new storage tiers on the existing `Chest` component — Wooden Crate (9 slots, planks x4, inventory), Iron Chest (18 slots, iron ingot x4 + planks x2, Crafting Bench), Steel Chest (36 slots, steel ingot x4 + iron ingot x4, Assembler) — so port config, pipe/belt plumbing, and save/restore come free.
+- Setup step 77 (Build the Storage Chest Tiers, non-destructive) creates or repairs each tier's prefab, block item, and recipe; authored quantities, craft times, and the pre-existing 30-slot Chest are never reset, and the console reports the non-destructive contract on re-run.
+- The Provider/Requester (port-locked chest) end of the storage line remains open as its own round.
+
+### 11.0.1-dev — The Furnace Panel Says Why the Furnace Stands Still
+- The fuel and electric furnace panels display the 11.0.0-dev `StallReason` instead of a blanket "No input": the label wraps the full reason, the pill carries the short form (NO POWER / NO INPUT / NO RECIPE / NO FUEL / BAD FUEL / OUTPUT FULL / SWITCHED OFF), and a hint line under the smelt bar names the exact setup step that repairs broken smelt links.
+- `Furnace` and `ElectricFurnace` expose `HasBrokenRecipes`, and the Jack Pump's well probe digs up to 8 hops through the derrick's own collider and any blocks it stands on, so a pump installed on a base finds the seep on oil worlds.
+- Bug-fix round only: no setup step, no saved field, and no change to recipe matching, fuel, or batch logic.
+
 ### 11.0.0-dev — A Parked Hull Stays Parked, and the Well Produces Crude
 - The frame-relative velocity from 10.1.0-dev is removed: it handed a parked hull its planet's orbital speed in m/s, so every rejoin drove it further into the ground. The body anchor that places the hull stays.
 - `FluidManager`'s volumetric density read now completes the chunk's generation job first, closing the job-safety throw that came out of the water probe every physics step.
@@ -43,16 +53,6 @@
 - `SavedGrid` gains an additive body anchor (`hasBodyAnchor` / `anchorBody` / `anchorLocalX/Y/Z` plus a local rotation), so a hull reloads at the place it was left rather than at a scene coordinate that only meant anything in the frame the save was written in.
 - The linear velocity is stored relative to the scene frame's own motion, so a hull parked against its planet comes back parked instead of carrying the old frame's orbital velocity.
 - 49 harness checks in four sections, mutation-verified five ways; a save written before this round loads unchanged through the scene-coordinate fallback.
-
-### 10.0.0-dev — The Stored Chunk Is the Whole Chunk
-- `Voxel` is a three-byte struct and the store now writes and reads three bytes per voxel (`sizeof(Voxel)`); a stored chunk went from 78,608 to 117,912 bytes of payload.
-- `RegionFile` V3 -> V4 and `ChunkStoreIdentity` format 1 -> 2: every pre-fix store is refused, quarantined into `stale_<utc>/` and regenerated, so an existing world heals on first load without losing `world_state.json`.
-- 417 harness checks in five sections; section E is mutation-verified against the pre-fix byte maths.
-
-### 9.59.0-dev — Chunk Store Identity Guard and Placed-Block Body Anchor
-- A body store now carries the field identity its chunks were generated from (`store.json`): seed, radius, base height, sea, continent/mountain scale, body name. A mismatch moves the region files into `stale_<utc>/` and regenerates instead of loading another field's terrain.
-- `SavedPlacedBlock` gains an additive body anchor; blocks restore relative to the body they stood on, with the scene coordinate as the fallback.
-- One `[SphereWorld] World ... streaming ... (seed N, store <state>, N region file(s))` line per stream makes a rejoin log self-answering; 394 harness checks in four sections.
 
 ## 1. Executive Vision
 
@@ -1117,7 +1117,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Conveyor belts | ✅ COMPLETED | Straight, corner, ramp, and vertical conveyor flows are implemented with consistent belt-surface height, precise transitions, item visuals, shape workflow, I/O arrows, and validated persistence. |
 | Conveyor chutes | ✅ COMPLETED | Straight vertical transport, snapping, moving-item visuals, inventory endpoints, and save-compatible placement are validated. Chutes intentionally remain a single authored transport form; no corner, spiral, or other chute variants are planned. |
 | Basic machines | 🟡 PARTIALLY COMPLETE | Electric Furnace, Crusher, and three Assembler tiers exist. Crusher/Assembler have recipe-selection UIs, visual animation, centralized simulation ticks, additive buffers/progress/enabled persistence, and Unity smoke Unity validation; production statistics and module systems remain. |
-| Storage blocks | 🟡 PARTIALLY COMPLETE | A basic chest and the wider storage system exist. The planned Wooden Crate → Iron Chest → Steel Chest → Provider/Requester progression is not complete. |
+| Storage blocks | 🟡 PARTIALLY COMPLETE | A basic chest and the wider storage system exist. 11.1.0-dev ships the Wooden Crate → Iron Chest → Steel Chest tiers on the existing Chest component (setup step 77); only the Provider/Requester (port-locked) end of the progression remains. |
 | Power pole, wire, and substation | 🟡 PARTIALLY COMPLETE | Manual wiring, poles, substations, transformers, compact LV/HV one-link connectors, and 8-link wall/foundation relays exist. Setup reruns preserve balance while adding missing links. |
 | Grid/static lighting and LED strips | ✅ COMPLETED | Detail/Structural single and dual spotlights, Structural LED strip, premium segmented/clean LED visuals, screen data providers, configuration UI, visible chase animation, motion activation, and saved lighting config persistence are implemented and validated. |
 | Shared Machine UI | 🟡 PARTIALLY COMPLETE | Crusher and Assembler panels now expose recipe selection, progress, power, toggles, inventory slots, scrolling, and item-port integration. Remaining work: complete unification across every machine, production statistics, and theme overrides. |

@@ -259,6 +259,7 @@ namespace VoxelEngine.UI
         private VisualElement _liveSmeltFill;
         private VisualElement _liveFuelFill;
         private Label         _liveSmeltLabel;
+        private Label         _liveStallHint;
         private Label         _liveFuelStat;
         private VisualElement _liveStatusPill;
         private Label         _liveStatusLabel;
@@ -1162,7 +1163,7 @@ namespace VoxelEngine.UI
 
             // Clear stale references — the elements they point to are about to be destroyed.
             _liveFlame = null; _liveSmeltFill = null; _liveFuelFill = null;
-            _liveSmeltLabel = null; _liveFuelStat = null;
+            _liveSmeltLabel = null; _liveStallHint = null; _liveFuelStat = null;
             _liveStatusPill = null; _liveStatusLabel = null; _liveWattLabel = null;
             _jbStatus = null; _jbStatusPill = null;
             _jbH2Row = null; _jbH2Fill = null; _jbH2Label = null;
@@ -3519,10 +3520,13 @@ namespace VoxelEngine.UI
             var title = MakeTitle("Solid Fuel Furnace");
             title.style.flexGrow = 1;
             headerRow.Add(title);
+            // First paint uses the same rule the per-frame tick applies, so the panel
+            // never shows a "IDLE" frame before the real stall reason arrives.
+            string buildStall = f.StallReason;
             var (pill, pillLabel) = MakeStatusPillWithLabel(
-                f.IsBurning ? "BURNING" : (f.Current != null ? "OUT OF FUEL" : "IDLE"),
+                f.IsBurning ? "BURNING" : (buildStall.Length > 0 ? FurnacePillText(buildStall) : "IDLE"),
                 f.IsBurning ? new Color(0.95f, 0.50f, 0.15f)
-                            : (f.Current != null ? new Color(0.70f, 0.30f, 0.20f) : new Color(0.30f, 0.30f, 0.35f)));
+                            : (buildStall.Length > 0 ? FurnacePillColor(buildStall) : new Color(0.30f, 0.30f, 0.35f)));
             headerRow.Add(pill);
             _liveStatusPill = pill; _liveStatusLabel = pillLabel;
             panel.Add(headerRow);
@@ -3560,10 +3564,15 @@ namespace VoxelEngine.UI
             smeltLabel.style.marginTop = 6;
             smeltLabel.style.marginBottom = 4;
             smeltLabel.style.minWidth = 130;
-            smeltLabel.style.maxWidth = 130;
-            smeltLabel.style.whiteSpace = WhiteSpace.NoWrap;
+            smeltLabel.style.maxWidth = 140;
+            smeltLabel.style.whiteSpace = WhiteSpace.Normal;
             midCol.Add(smeltLabel);
             _liveSmeltLabel = smeltLabel;
+
+            // One-line reason the machine is standing still, and what fixes it.
+            // Hidden unless the stall is one the player can act on.
+            _liveStallHint = MakeStallHintLabel();
+            midCol.Add(_liveStallHint);
 
             var (smeltBar, smeltFill) = MakeProgressBarWithFill(f.SmeltProgress01,
                 new Color(0.95f, 0.55f, 0.10f), width: 140, height: 10);
@@ -3910,10 +3919,14 @@ namespace VoxelEngine.UI
             smeltLabel.style.marginTop = 6;
             smeltLabel.style.marginBottom = 4;
             smeltLabel.style.minWidth = 130;
-            smeltLabel.style.maxWidth = 130;
-            smeltLabel.style.whiteSpace = WhiteSpace.NoWrap;
+            smeltLabel.style.maxWidth = 140;
+            smeltLabel.style.whiteSpace = WhiteSpace.Normal;
             midCol.Add(smeltLabel);
             _liveSmeltLabel = smeltLabel;
+
+            // One-line reason the machine is standing still, and what fixes it.
+            _liveStallHint = MakeStallHintLabel();
+            midCol.Add(_liveStallHint);
 
             var (smeltBarE, smeltFillE) = MakeProgressBarWithFill(ef.SmeltProgress01,
                 new Color(0.20f, 0.65f, 0.95f), width: 130, height: 10);
@@ -5127,6 +5140,7 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
             if (_openFurnace != null)
             {
                 var f = _openFurnace;
+                string stall = f.StallReason;
 
                 if (_liveFlame != null)
                 {
@@ -5142,24 +5156,42 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                 }
                 if (_liveSmeltFill != null)
                     _liveSmeltFill.style.width = new StyleLength(new Length(Mathf.Clamp01(f.SmeltProgress01) * 100, LengthUnit.Percent));
+                // The label says WHY the machine is standing still. "No input" is only
+                // shown when the input slot really is empty; a broken recipe link or a
+                // bad fuel item used to hide behind it.
                 if (_liveSmeltLabel != null)
-                    _liveSmeltLabel.text = f.Current != null ? $"{f.SmeltProgress01 * 100f:0}% smelted" : "No input";
+                    _liveSmeltLabel.text = f.Current != null ? $"{f.SmeltProgress01 * 100f:0}% smelted"
+                                                             : (stall.Length > 0 ? stall : "Idle");
+                var inputSlot = f.inputC != null ? f.inputC.GetSlot(0) : default;
+                UpdateStallHint(_liveStallHint, f.HasBrokenRecipes, stall,
+                    inputSlot.IsEmpty ? null : inputSlot.item, "step 4 (Build Crafting Content)");
                 if (_liveFuelFill != null)
                     _liveFuelFill.style.width = new StyleLength(new Length(Mathf.Clamp01(f.FuelProgress01) * 100, LengthUnit.Percent));
                 if (_liveFuelStat != null)
                     _liveFuelStat.text = f.FuelMaxDuration > 0 ? $"{f.FuelRemaining:0.0}s / {f.FuelMaxDuration:0.0}s" : "No fuel";
                 if (_liveStatusPill != null && _liveStatusLabel != null)
                 {
-                    string txt = f.IsBurning ? "BURNING" : (f.Current != null ? "OUT OF FUEL" : "IDLE");
-                    Color bg = f.IsBurning ? new Color(0.95f, 0.50f, 0.15f)
-                              : (f.Current != null ? new Color(0.70f, 0.30f, 0.20f) : new Color(0.30f, 0.30f, 0.35f));
-                    _liveStatusLabel.text = txt;
-                    _liveStatusPill.style.backgroundColor = new StyleColor(bg);
+                    if (f.IsBurning)
+                    {
+                        _liveStatusLabel.text = "BURNING";
+                        _liveStatusPill.style.backgroundColor = new StyleColor(new Color(0.95f, 0.50f, 0.15f));
+                    }
+                    else if (stall.Length == 0)
+                    {
+                        _liveStatusLabel.text = "IDLE";
+                        _liveStatusPill.style.backgroundColor = new StyleColor(new Color(0.30f, 0.30f, 0.35f));
+                    }
+                    else
+                    {
+                        _liveStatusLabel.text = FurnacePillText(stall);
+                        _liveStatusPill.style.backgroundColor = new StyleColor(FurnacePillColor(stall));
+                    }
                 }
             }
             else if (_openElectric != null)
             {
                 var ef = _openElectric;
+                string stall = ef.StallReason;
 
                 if (_liveFlame != null)
                 {
@@ -5176,9 +5208,15 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                 }
                 if (_liveSmeltFill != null)
                     _liveSmeltFill.style.width = new StyleLength(new Length(Mathf.Clamp01(ef.SmeltProgress01) * 100, LengthUnit.Percent));
+                // Same honesty rule as the fuel furnace: the label carries the real
+                // stall reason, so "switched off", "no power" and "broken links" no
+                // longer all read as "No input".
                 if (_liveSmeltLabel != null)
                     _liveSmeltLabel.text = ef.Current != null ? $"{ef.SmeltProgress01 * 100f:0}% smelted"
-                                                              : (ef.IsOnline ? "No input" : "No power");
+                                                              : (stall.Length > 0 ? stall : "Idle");
+                var eInputSlot = ef.inputC != null ? ef.inputC.GetSlot(0) : default;
+                UpdateStallHint(_liveStallHint, ef.HasBrokenRecipes, stall,
+                    eInputSlot.IsEmpty ? null : eInputSlot.item, "steps 4 (Build Crafting Content) and 10 (Build Industrial Content)");
                 if (_liveStatusPill != null && _liveStatusLabel != null)
                 {
                     _liveStatusLabel.text = ef.IsOnline ? "ONLINE" : "OFFLINE";
@@ -5187,6 +5225,58 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                 }
                 if (_liveWattLabel != null) _liveWattLabel.text = $"  {ef.CurrentWattage:0} W";
             }
+        }
+
+        /// <summary>
+        /// The smelt label shows the full stall reason (it wraps), but the header pill is
+        /// a compact badge — the two longest reasons get short forms there.
+        /// </summary>
+        private static string FurnacePillText(string stall) => stall switch
+        {
+            "No recipe for this input" => "NO RECIPE",
+            "Fuel slot holds something that does not burn" => "BAD FUEL",
+            _ => stall.ToUpperInvariant()
+        };
+
+        private static Color FurnacePillColor(string stall) => stall switch
+        {
+            "No power" or "No fuel" or "No recipe for this input"
+                or "Fuel slot holds something that does not burn"
+                => new Color(0.60f, 0.20f, 0.20f),   // a fault the player has to fix
+            "No input" or "Output full" or "Outputs full"
+                => new Color(0.70f, 0.30f, 0.20f),   // waiting, not broken
+            _ => new Color(0.30f, 0.30f, 0.35f)      // switched off
+        };
+
+        /// <summary>Muted one-liner under the smelt bar, shown only for stalls the player can act on.</summary>
+        private static Label MakeStallHintLabel()
+        {
+            var hint = new Label("");
+            hint.style.color = new StyleColor(new Color(0.95f, 0.55f, 0.35f));
+            hint.style.fontSize = 10;
+            hint.style.unityTextAlign = TextAnchor.MiddleCenter;
+            hint.style.marginTop = 4;
+            hint.style.minWidth = 150;
+            hint.style.maxWidth = 170;
+            hint.style.whiteSpace = WhiteSpace.Normal;
+            hint.style.display = DisplayStyle.None;
+            hint.pickingMode = PickingMode.Ignore;
+            return hint;
+        }
+
+        private static void UpdateStallHint(Label hint, bool brokenRecipes, string stall,
+            VoxelEngine.Items.ItemDefinition inputItem, string setupStep)
+        {
+            if (hint == null) return;
+            if (stall != "No recipe for this input")
+            {
+                if (hint.style.display != DisplayStyle.None) hint.style.display = DisplayStyle.None;
+                return;
+            }
+            hint.text = brokenRecipes
+                ? $"These smelting recipes lost their item links. Re-run Voxel Engine Setup, {setupStep}, to repair them."
+                : (inputItem != null ? $"{inputItem.displayName} cannot be smelt in this machine." : string.Empty);
+            hint.style.display = DisplayStyle.Flex;
         }
 
         // ============================================================

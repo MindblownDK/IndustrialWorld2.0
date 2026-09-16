@@ -311,6 +311,13 @@ namespace VoxelEngine.Crafting
             return broken;
         }
 
+        /// <summary>
+        /// True when at least one assigned recipe lost its input or output link. The panel
+        /// uses this to tell the player which setup step repairs it instead of showing a
+        /// bare "no recipe" line.
+        /// </summary>
+        public bool HasBrokenRecipes => CountBrokenRecipes() > 0;
+
         private SmeltingRecipe FindRecipeForInput()
         {
             var slot = inputC.GetSlot(0);

@@ -157,22 +157,45 @@ namespace VoxelEngine.Crafting
         /// Probe under the derrick for a crude-bearing body. A body whose generated ore
         /// layers include crude is treated as having a well under it, so the pumpjack
         /// does not need a hand-placed ore node at the build site.
+        ///
+        /// The probe ignores anything that is not the body itself — the derrick's own
+        /// collider, blocks the pump stands on, machines. The first version stopped at
+        /// the first collider it found, so a pump on a foundation (or its own derrick)
+        /// could never see the terrain and read "NO CRUDE BELOW" on oil worlds.
         /// </summary>
         private bool DetectReservoir()
         {
             Vector3 origin = transform.position + transform.up * 0.5f;
             Vector3 down = (transform.up != Vector3.zero ? -transform.up : Vector3.down).normalized;
+            const int maxHops = 8;
 
             int half = Mathf.Max(0, scanRadius);
             for (int ox = -half; ox <= half; ox++)
             for (int oz = -half; oz <= half; oz++)
             {
-                Vector3 start = origin + transform.right * ox + transform.forward * oz;
-                if (!Physics.Raycast(start, down, out var hit, scanDepth)) continue;
-                if (hit.collider == null) continue;
+                Vector3 pos = origin + transform.right * ox + transform.forward * oz;
+                float remaining = scanDepth;
 
-                var body = hit.collider.GetComponentInParent<VoxelEngine.Cosmos.CelestialBody>();
-                if (body != null && BodyHasCrude(body)) return true;
+                for (int hop = 0; hop < maxHops && remaining > 0.01f; hop++)
+                {
+                    if (!Physics.Raycast(pos, down, out var hit, remaining)) break;   // no ground in range
+                    if (hit.collider == null) break;
+
+                    var body = hit.collider.GetComponentInParent<VoxelEngine.Cosmos.CelestialBody>();
+                    if (body != null)
+                    {
+                        if (BodyHasCrude(body)) return true;
+                        break;   // the world under here does not carry crude
+                    }
+
+                    // The derrick's own collider, or a block/machine the pump stands on —
+                    // dig past it. A ray starting inside the derrick can report a zero
+                    // distance, so the step is floored to keep the probe converging.
+                    float step = Mathf.Max(hit.distance, 0.02f);
+                    if (step >= remaining) break;
+                    pos += down * step;
+                    remaining -= step;
+                }
             }
             return false;
         }

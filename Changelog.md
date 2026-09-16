@@ -1,9 +1,95 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `11.0.0-dev`
+**Current Version:** `11.1.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [11.1.0-dev] The Chest Progression Lands: Wooden Crate, Iron Chest, Steel Chest
+
+**Type:** MINOR — new content, save-compatible. Three new storage blocks on the existing Chest component, three new recipes, and one new setup step (77). Nothing about existing chests, their saves, or the port system changes; the pre-existing 30-slot Chest is never touched.
+
+**GitHub title:** `[11.1.0-dev] The chest progression lands — Wooden Crate, Iron Chest, Steel Chest`
+
+#### Why this round
+
+The roadmap's storage line has sat at PARTIALLY COMPLETE with one gap named: "the planned Wooden Crate → Iron Chest → Steel Chest → Provider/Requester progression is not complete". The game ships a single 30-slot chest for planks x8, so early game has no cheap overflow storage and end game has no place to put the ingots the smelters just learned to make in volume.
+
+#### 1. Three tiers on the chest that already works
+
+Instead of a new component, the tiers are three more authored blocks on the SAME `VoxelEngine.Building.Chest` component, which already carries the port configuration, the belt/pipe plumbing, and the save/restore. A tier is just a slot count, a display name, and a recipe:
+
+| Tier | Slots | Recipe | Station | Craft time |
+|---|---|---|---|---|
+| Wooden Crate | 9 | Wooden Plank x4 | Inventory | instant |
+| Iron Chest | 18 | Iron Ingot x4 + Wooden Plank x2 | Crafting Bench | 2 s |
+| Steel Chest | 36 | Steel Ingot x4 + Iron Ingot x4 | Assembler | 4 s |
+
+Because the component is the one the game already knows, every surrounding system picks the tiers up with no code change: right-click opens the panel and the panel title comes from the component's `displayName`, `WorldStatePersistence` saves and restores the container plus its port snapshot by component lookup, and the item-port grid (per-face direction and filters) renders as it does for the original chest. The Wooden Crate's inventory-tier recipe means a player with four planks can build overflow storage before they have a bench.
+
+#### 2. Setup step 77 — Build the Storage Chest Tiers (Non-Destructive)
+
+New wizard button 77 in `Tools > Voxel Engine > Voxel Engine Setup`, implemented in `StorageChestTiersSetup`. Per tier it creates, or repairs, three assets:
+
+- **The prefab** (`StationPrefabs/<Tier>.prefab`): a box mesh on a `Chest` component with the tier's slot count and display name. An existing prefab is only saved when something is actually wrong — a missing Chest component, a wrong slot count, or a wrong display name is corrected; every other authored property is left alone.
+- **The block item** (`Blocks/Block_<Tier>.asset`): placeable, Storage category, the placed-prefab reference pointed at the verified prefab. Authored quantities, health, mining tier and icons are kept; only missing metadata and a broken placed-prefab link are repaired.
+- **The recipe** (`Recipes/Recipe_<Tier>.asset`): registered in the existing `RecipeRegistry`. When the recipe already exists its quantities and craft time are preserved — only a null output or ingredient link (the same failure mode that broke the smelting recipes in 11.0.0-dev) is re-linked, and a missing registry membership is restored. When it doesn't exist, it is authored from the tier table above.
+
+The step refuses to run without step 4's content (plank / iron ingot / steel ingot must resolve) and logs every decision with the `[Setup 77]` prefix. Icons bind through the usual icon sync — new items get their `ItemIcons` PNG the next editor session, and until then they render their tint fallback exactly like any other un-iconed item.
+
+#### 3. What this round does NOT do
+
+The Provider/Requester end of the roadmap line stays open: that is a port-locked variant (a chest whose faces are fixed to output-only or input-only) and needs a field on the component plus the port UI to honour it, which is its own round. This round delivers the three storage tiers the line names first.
+
+#### What to run
+
+1. Replace or add `Scripts/Editor/StorageChestTiersSetup.cs` (new file) and `Scripts/Editor/VoxelEngineSetupWindow.cs` (one new wizard button). Let Unity compile; the console should be clean.
+2. Open `Tools > Voxel Engine > Voxel Engine Setup` and run **step 77 (Build the Storage Chest Tiers)**. The dialog lists the three tiers; the console logs every create/repair with the `[Setup 77]` prefix.
+3. Craft a Wooden Crate (planks x4, straight from the inventory crafting list) and place it: the panel should read "Wooden Crate" with 9 slots. Craft an Iron Chest at a Crafting Bench and a Steel Chest at an Assembler to verify the other two tiers and their slot counts.
+4. Re-run step 77 once more: the console should report "all three tiers already present and correct, nothing written." That is the non-destructive contract.
+5. Place a tier chest, fill it, save and reload: the items and any per-face port configuration come back.
+
+### [11.0.1-dev] The Furnaces Say Why They Stand Still, and the Well Sees Past Its Own Derrick
+
+**Type:** PATCH — bug fixes only. No save changes, no API removals: the furnace panels now surface the stall reasons 11.0.0-dev already computes and logs, and the Jack Pump's well probe no longer stops at the machine's own colliders.
+
+**GitHub title:** `[11.0.1-dev] The furnaces say why they stand still, and the well sees past its own derrick`
+
+#### Why this round
+
+Test feedback: an item in the input, coal in the fuel, nothing happens — and the furnace panel says "No input", which is not true; the electric furnace reads the same way, and a Jack Pump placed into a base does not pump.
+
+#### 1. The furnace panel showed "No input" for every stall that was not "no input"
+
+`StallReason` arrived in 11.0.0-dev — No power, No input, No recipe for this input, No fuel, Fuel slot holds something that does not burn, Output full, Switched off — and the log half was wired: each change is reported once with the reason and the state of the recipe links. The panel half never was. `TickFurnaceLiveUI` still carried the old label:
+
+```csharp
+_liveSmeltLabel.text = f.Current != null ? $"{...}% smelted" : "No input";
+```
+
+`Current` is null in every stalled case, so a furnace holding ore with broken smelt links, a furnace out of fuel, and a furnace with an empty input slot all read "No input". A player who put ore in the slot watched the machine claim the slot was empty, with no way to tell which repair path applied.
+
+Now:
+
+- **The smelt label carries the actual `StallReason`** (it wraps to two lines when the reason is long). "No input" appears only when the input slot really is empty.
+- **The header pill carries the short form of the same reason** — NO POWER / NO INPUT / NO RECIPE / NO FUEL / BAD FUEL / OUTPUT FULL / SWITCHED OFF — red for faults the player has to fix, amber for states that are merely waiting.
+- **A one-line hint under the smelt bar for the "No recipe for this input" case.** When one of the assigned recipes lost its input or output link (new public `HasBrokenRecipes` on both static furnaces), the hint names the exact step to re-run: **step 4 (Build Crafting Content)** on the fuel furnace, **steps 4 and 10** on the electric furnace (which also carries the glass recipe). When the links are sound, the hint says which item in the slot cannot be smelt in that machine.
+- **First paint uses the same rule as the per-frame tick**, so the panel never flashes a stale IDLE before the reason arrives.
+
+Nothing about the matching, fuel, or batch logic changed: `StallReason` is read, not rewritten, and a furnace with sound recipes and ore in it smelts exactly as before. The 11.0.0-dev console line is unchanged and remains the definitive report for anything the panel cannot show.
+
+#### 2. The well probe stopped at the derrick's own collider
+
+`Pumpjack.DetectReservoir` cast one raycast per probe column and took the first hit. The first hit is often not the world: the derrick's own collider, a foundation or plate the pump stands on, a machine under it. None of those has a `CelestialBody` in its parent chain, so the column found "no body" — and a Jack Pump installed on a base read NO CRUDE BELOW forever, on an oil world, over a real seep.
+
+The probe now digs: a hit that is not the body's terrain advances the ray past the collider and re-casts, up to 8 hops per column, all within the configured `scanDepth`. The derrick's own collider, placed blocks, and machines are transparent to the probe, and a ray that starts inside the derrick (a zero-distance hit) steps forward a floored 0.02 m instead of stalling. A body whose ore layers do not carry crude still ends its columns immediately, so a non-oil world is refused just as fast as before. No new fields, no new setup step; the 1 s rescan cadence is unchanged.
+
+#### What to run
+
+1. Replace `Scripts/Crafting/Furnace.cs`, `Scripts/Crafting/ElectricFurnace.cs`, `Scripts/Crafting/Pumpjack.cs`, and `Scripts/UI/GameUIController.cs`. Let Unity compile; the console should be clean.
+2. No setup step to re-run: this round authors nothing.
+3. Put ore and coal in a furnace. If it smelts, done. If it does not, the panel now says why: a NO RECIPE pill with the "missing item links" hint means re-run `Tools > Voxel Engine > Voxel Engine Setup`, step 4 (and 10 for the electric furnace), once — the hint says exactly that. Any other pill text is the real cause, word for word.
+4. On an oil world, stand a Jack Pump on a foundation or any block over a seep and open its panel: it should read PUMPING, not NO CRUDE BELOW. On a world without crude, NO CRUDE BELOW is still the right answer.
 
 ### [11.0.0-dev] A Parked Hull Stays Parked, the Water Probe Stops Throwing, and the Well Produces Crude
 

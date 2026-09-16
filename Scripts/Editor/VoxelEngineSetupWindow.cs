@@ -841,6 +841,8 @@ namespace VoxelEngine.EditorTools
                 () => IndustrialWorld.EditorTools.UniversalUpgradeSetup.RunStep75(), 62);
             AddWizardButton(scroll, "76. Convert the Jack Pump to a Tank-Only Crude Producer\n(No input barrels, no output slots \u2014 Non-Destructive)",
                 () => IndustrialWorld.EditorTools.PumpjackTankSetup.RunStep76(), 62);
+            AddWizardButton(scroll, "77. Build the Storage Chest Tiers\n(Wooden Crate 9 / Iron Chest 18 / Steel Chest 36 \u2014 Non-Destructive)",
+                () => IndustrialWorld.EditorTools.StorageChestTiersSetup.RunStep77(), 62);
 
             AddSpacer(scroll, 20);
         }
