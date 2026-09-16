@@ -849,6 +849,8 @@ namespace VoxelEngine.EditorTools
                 () => IndustrialWorld.EditorTools.ItemIdentityAuditSetup.RunStep79(), 62);
             AddWizardButton(scroll, "80. Consolidate the Ore Items\n(Iron Ore + Copper Ore become canonical, duplicates retired)",
                 () => IndustrialWorld.EditorTools.OreConsolidationSetup.RunStep80(), 62);
+            AddWizardButton(scroll, "81. Repair Stolen Item Identity\n(Gravel, Radar Beacon and Fire Igniter stop claiming to be Iron Ore \u2014 Non-Destructive)",
+                () => IndustrialWorld.EditorTools.StolenIdentityRepairSetup.RunStep81(), 62);
 
             AddSpacer(scroll, 20);
         }

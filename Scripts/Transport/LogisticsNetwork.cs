@@ -14,11 +14,12 @@ namespace VoxelEngine.Transport
     /// still had to walk — a Requester sitting across the base from a Provider stayed empty
     /// unless the player ran a pipe between them.
     ///
-    /// This network closes that loop. Each Requester publishes what it wants (its per-face
-    /// item filters are the request list), and the network moves matching stock from the
-    /// nearest Provider that has it, within a fixed radius, at a metered rate. Nothing else
-    /// about the chests changes: they remain ordinary containers that pipes, belts and the
-    /// player can still use, and a chest with no filter set simply asks for nothing.
+    /// This network closes that loop. Each Requester publishes its own request list, and the
+    /// network moves matching stock from the nearest Provider that has it, within a fixed
+    /// radius, at a metered rate. The request list is separate from the chest's port filters:
+    /// a Requester's ports are OUTPUTS that feed the pipes downstream of it, while its request
+    /// list decides what the network delivers in. A Provider is the mirror — its ports are
+    /// INPUTS that pipes and belts fill, and the network hands that stock out wirelessly.
     ///
     /// Design notes:
     /// <list type="bullet">
@@ -129,7 +130,9 @@ namespace VoxelEngine.Transport
         /// </summary>
         private int FulfilOne(Chest requester)
         {
-            var wanted = CollectRequests(requester);
+            // The chest's own request list — deliberately NOT its port filters, which
+            // govern what leaves it down a pipe rather than what the network brings in.
+            var wanted = requester.Requests;
             if (wanted.Count == 0) return 0;
 
             int moved = 0;
@@ -144,36 +147,6 @@ namespace VoxelEngine.Transport
                 moved += Transfer(provider, requester, item);
             }
             return moved;
-        }
-
-        /// <summary>
-        /// What a Requester is asking for: the union of its per-face whitelists. A face with
-        /// no filter is an open request, which would mean "send me anything" — deliberately
-        /// ignored, because an unconfigured chest should sit quiet rather than hoover up the
-        /// whole base. The player opts in by naming items in the filter.
-        /// </summary>
-        private static List<ItemDefinition> CollectRequests(Chest requester)
-        {
-            var result = new List<ItemDefinition>();
-            var routing = requester.Routing;
-            var ports = requester.PortConfig;
-            if (routing == null || ports == null) return result;
-
-            foreach (var port in ports.ports)
-            {
-                if (!port.enabled || port.direction != PortDirection.Input) continue;
-                if (routing.GetFilterMode(port.face) != FilterMode.Whitelist) continue;
-
-                foreach (var item in routing.GetFilter(port.face))
-                {
-                    if (item == null) continue;
-                    bool known = false;
-                    foreach (var existing in result)
-                        if (ItemIdentity.Same(existing, item)) { known = true; break; }
-                    if (!known) result.Add(item);
-                }
-            }
-            return result;
         }
 
         /// <summary>

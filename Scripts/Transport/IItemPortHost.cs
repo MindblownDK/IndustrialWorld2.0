@@ -36,9 +36,20 @@ namespace VoxelEngine.Transport
     /// </summary>
     /// <summary>
     /// How a host's faces may be configured by the player.
-    /// <para><b>Free</b> — every face cycles None / Input / Output as usual.</para>
-    /// <para><b>Provider</b> — an active face is always an Output: the block only ever feeds the network.</para>
-    /// <para><b>Requester</b> — an active face is always an Input: the block only ever receives.</para>
+    ///
+    /// <para>The lock names the block's role in the WIRELESS logistics network, and its item
+    /// ports are the physical counterpart to that role — they point the other way:</para>
+    /// <list type="bullet">
+    ///   <item><b>Free</b> — every face cycles None / Input / Output as usual.</item>
+    ///   <item><b>Provider</b> — supplies the network wirelessly, so its faces are pinned to
+    ///         <see cref="PortDirection.Input"/>: pipes and belts FEED it the stock it hands out.</item>
+    ///   <item><b>Requester</b> — receives from the network wirelessly, so its faces are pinned to
+    ///         <see cref="PortDirection.Output"/>: it FEEDS the pipes and machines downstream of it.</item>
+    /// </list>
+    ///
+    /// <para>The wireless request list is therefore independent of the port filters: a
+    /// Requester's ports decide what leaves it down a pipe, while its request list decides
+    /// what the network delivers into it.</para>
     /// </summary>
     public enum PortLockMode { Free = 0, Provider = 1, Requester = 2 }
 

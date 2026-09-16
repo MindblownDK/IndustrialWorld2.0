@@ -16,8 +16,9 @@ namespace IndustrialWorld.EditorTools
     /// 11.1.0-dev shipped the Wooden Crate / Iron Chest / Steel Chest tiers and left the
     /// Provider/Requester end of the roadmap's storage progression open. This step authors
     /// those two blocks on the SAME <see cref="Chest"/> component, using the new
-    /// <c>portLock</c> field: a Provider Chest's active faces are pinned to Output, a
-    /// Requester Chest's to Input. Everything else — the panel, the filters, the
+    /// <c>portLock</c> field. The ports mirror the wireless role: a Provider is FED by pipes
+    /// (faces pinned to Input) and supplies the network, while a Requester is filled by the
+    /// network and FEEDS pipes (faces pinned to Output). Everything else — the panel, the filters, the
     /// belt/pipe plumbing, the save/restore — is the chest the game already knows.
     ///
     /// Non-destructive by construction: missing assets are created; an existing prefab,
@@ -93,7 +94,7 @@ namespace IndustrialWorld.EditorTools
                         size         = 18,
                         lockMode     = PortLockMode.Provider,
                         tint         = new Color(0.72f, 0.44f, 0.12f),
-                        description  = "18-slot supply buffer. Every active face is an OUTPUT — it only feeds the network.",
+                        description  = "18-slot supply buffer. Pipes fill it; the wireless network hands its stock to requesters in range.",
                         station      = StationTier.CraftingBench,
                         craftSeconds = 3f,
                         inputs       = new[] { ((ItemDefinition)ironIngot, 4), ((ItemDefinition)copperIngot, 2), ((ItemDefinition)plank, 2) }
@@ -105,7 +106,7 @@ namespace IndustrialWorld.EditorTools
                         size         = 18,
                         lockMode     = PortLockMode.Requester,
                         tint         = new Color(0.16f, 0.46f, 0.74f),
-                        description  = "18-slot delivery buffer. Every active face is an INPUT — it only receives from the network.",
+                        description  = "18-slot delivery buffer. The wireless network keeps it stocked; its ports feed the pipes downstream.",
                         station      = StationTier.CraftingBench,
                         craftSeconds = 3f,
                         inputs       = new[] { ((ItemDefinition)ironIngot, 4), ((ItemDefinition)copperIngot, 2), ((ItemDefinition)plank, 2) }
@@ -135,8 +136,8 @@ namespace IndustrialWorld.EditorTools
 
                 EditorUtility.DisplayDialog("Logistic Chests",
                     "Logistic chests ready.\n\n" +
-                    "  Provider Chest   18 slots   — faces pinned to OUTPUT\n" +
-                    "  Requester Chest  18 slots   — faces pinned to INPUT\n\n" +
+                    "  Provider Chest   18 slots   — ports INPUT (pipes fill it, network draws from it)\n" +
+                    "  Requester Chest  18 slots   — ports OUTPUT (network fills it, pipes draw from it)\n\n" +
                     "Both craft at the Crafting Bench from iron ingot x4 + copper ingot x2 + planks x2.\n\n" +
                     "The existing chests and tiers were left untouched. Missing content was created, " +
                     "broken links were repaired, authored values were never reset. See the console for every change.", "OK");
@@ -254,7 +255,9 @@ namespace IndustrialWorld.EditorTools
             cfg.EnsureAllFaces();
             if (go.GetComponent<ItemPortRouting>() == null) go.AddComponent<ItemPortRouting>();
 
-            var pinned = v.lockMode == PortLockMode.Provider ? PortDirection.Output : PortDirection.Input;
+            // Mirror of the wireless role: a Provider is FED by pipes (input ports), a
+            // Requester FEEDS them (output ports). Kept in step with Chest.PinnedDirection.
+            var pinned = v.lockMode == PortLockMode.Provider ? PortDirection.Input : PortDirection.Output;
 
             bool anyActive = false;
             for (int i = 0; i < cfg.ports.Length; i++)

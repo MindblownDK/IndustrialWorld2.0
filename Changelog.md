@@ -1,9 +1,93 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `11.4.0-dev`
+**Current Version:** `11.5.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [11.5.1-dev] One Row Per Item, And The Request List Updates While You Watch
+
+**Type:** PATCH — three bug fixes against 11.5.0-dev. No new systems, no save format change.
+
+**GitHub title:** `[11.5.1-dev] One row per item, and the request list updates while you watch`
+
+#### 1. Searching "iron ore" returned four Iron Ores
+
+Only one of them worked. The cause is older than the logistic chests: `ItemDefinition` used to arrive pre-filled with `iron_ore` / `Iron Ore` as its default id and name, so any asset authored back then whose identity was never typed in kept those values and now genuinely claims to be iron ore. Three such assets survive in the project — the gravel item, the stationary radar beacon block and the fire igniter tool — and every item picker listed all four as indistinguishable rows. Picking the wrong one bound a request to gravel wearing the ore's name.
+
+This is fixed from both ends.
+
+The **data** is repaired by new setup step 81, which finds every asset holding the legacy id that is not the canonical ore and gives it an identity derived from its own asset name: `Item_Gravel` becomes `gravel` / "Gravel", `Block_StationaryRadarBeacon` becomes `stationary_radar_beacon` / "Stationary Radar Beacon". The same sweep repairs assets whose id was authored correctly but whose display name was left on the default, which is what made the iron and copper material assets read as ore. The canonical `Item_IronOre` and `Item_CopperOre` are never touched, nothing is deleted, no reference is repointed, and an asset that already carries its own authored identity is left alone. Safe to re-run.
+
+The **UI** is hardened independently, so the pickers stay honest even if a duplicate id reappears later. The item catalogue behind every search box now collapses to one entry per id, and where several assets share an id it keeps the best-authored candidate: an asset whose own file name resolves to the id wins, having an icon helps, and a block or tool that merely inherited the id loses to a real resource item. So the ore beats its impostors even before step 81 is run.
+
+Copper was checked for the same fault. Only the material asset was affected, and step 81 covers it.
+
+#### 2. Removing a request did not refresh the panel
+
+The REQUESTS list only redrew after the item-port screen was closed and reopened. The overlay built its body once and passed an empty `onChanged` callback, so every edit inside it correctly changed the chest and then told nobody. The callback now rebuilds the panel body in place.
+
+Only the body is replaced — the card, the header and the scroll view itself survive the swap. **The scroll position is preserved across the rebuild** rather than snapping anywhere: the offset is captured before the swap and restated after layout resolves, so a long request list does not jump to the top, and it does not jump to the bottom either. Removing the fourth of ten requests leaves you looking at exactly where the fourth one was.
+
+#### Manual step in Unity
+
+1. Open **Tools -> Voxel Engine -> Voxel Engine Setup**.
+2. Scroll to the bottom and click **81. Repair Stolen Item Identity**.
+3. Read the Console. Every change logs with `[Setup 81]` and names the asset, its old identity and its new one.
+4. If the dialog reports skipped assets, those could not be named automatically from their file name — give them an id by hand.
+5. Open a Requester chest, click ITEM PORTS, then Request Item, and search "iron ore". One row, and it is the real ore.
+
+### [11.5.0-dev] The Logistic Chests Point The Right Way, And Requests Stand Alone
+
+**Type:** MINOR — corrects the 11.4.0-dev model. The port roles are inverted and the wireless request list becomes its own field with its own saved data. Save-compatible: the new field is additive and a pre-existing chest reads as requesting nothing.
+
+**GitHub title:** `[11.5.0-dev] The logistic chests point the right way, and requests stand alone`
+
+#### Why this round
+
+11.2.0-dev pinned the ports the wrong way round, and 11.4.0-dev then built the wireless network on top of that mistake by reusing the port filters as the request list. Both are corrected here.
+
+The item ports and the wireless network are **two different transports**, and a chest's role in one is the mirror of its role in the other:
+
+| | Wireless network | Item ports |
+|---|---|---|
+| **Provider Chest** | hands stock OUT to requesters | **INPUT** — pipes and belts fill it |
+| **Requester Chest** | receives stock IN from providers | **OUTPUT** — it feeds the pipes downstream |
+
+A Provider has to be filled by something, and that something is a pipe or a belt — so its ports are inputs. A Requester exists to supply the machines past it, so its ports are outputs. Previously each was the reverse of what it needed to be, which made a Requester a dead end: the network filled it and nothing could get the items back out.
+
+#### 1. The inversion
+
+`Chest.PinnedDirection` is now the single place that decides a locked chest's face direction, and it returns Input for a Provider and Output for a Requester. Everything that consults it follows automatically: `EnforcePortLock`, the container capability flags in `GetPortContainers`, the legacy pipe API (`GetInputContainer` / `GetOutputContainer` / `HasOutputReady` / `CanAcceptInput`), and `TryAcceptFromPipe`, which now refuses a push into a Requester rather than into a Provider. Setup step 78 seeds the same direction, so a freshly authored prefab matches.
+
+The port panel follows too: the face pill reads INPUT ON for a Provider and OUTPUT ON for a Requester, the banner explains the two-transport split in one line, and the round-robin toggle is hidden on a Provider (whose ports are inputs) rather than on a Requester.
+
+#### 2. Requests are their own list
+
+The request list is no longer scraped from the port whitelists. `Chest` carries a dedicated `_requests` list with `AddRequest` / `RemoveRequest` / `SetRequests`, and `LogisticsNetwork` reads exactly that. The two are now cleanly separated:
+
+- **Port filter** — what may leave this chest down a pipe.
+- **Request list** — what the network delivers into it.
+
+Reusing the filters conflated those, and with the ports inverted it became impossible to express: a Requester's faces are outputs, so its filters govern departures and could never have described what it wants delivered.
+
+#### 3. The same picker, a new place
+
+The panel's REQUESTS section lists each requested item with a live "N in range" or "none in range" readout and a remove button, plus a "＋ Request Item" button. That button opens `ItemFilterDialog.OpenList`, a new overload of the dialog the port filters already use — same search box, same inventory-click capture, same chips. The player learns one picker and uses it for both jobs.
+
+#### 4. Requests survive a save
+
+`ItemPortSnapshot` gains `requestItemIds`, written and restored by the chest's existing snapshot bridge. It is additive: a save written before this round has no list, which restores as an empty request list — the correct default. No new save plumbing and no schema break.
+
+#### What to run
+
+1. Replace `Scripts/Building/Chest.cs`, `Scripts/UI/PortConfigHud.cs`, `Scripts/UI/ItemFilterDialog.cs`, `Scripts/Transport/LogisticsNetwork.cs`, `Scripts/Transport/ItemPortRouting.cs`, `Scripts/Transport/IItemPortHost.cs` and `Scripts/Editor/LogisticChestsSetup.cs`. Let Unity compile.
+2. Re-run **step 78** so the two prefabs seed their faces in the corrected direction. Chests already placed in the world re-pin themselves on load.
+3. Open a Provider Chest: the banner should say pipes fill it, and its faces should read INPUT ON. Run a belt into it and confirm items arrive.
+4. Open a Requester Chest: its faces should read OUTPUT ON, and it should have a REQUESTS section. Add Iron Ingot there — not in the port filter.
+5. Stock the Provider with iron ingots within 48 m. The Requester's entry should go green with a count, and ingots should arrive in batches of 16 once a second.
+6. Run a pipe out of the Requester into a machine or chest: the delivered ingots should flow onward. That is the loop that was impossible before this round.
+7. Save and reload: the requests, the locks and the deliveries all resume.
 
 ### [11.4.0-dev] The Chests Talk To Each Other: Wireless Request and Fulfilment
 

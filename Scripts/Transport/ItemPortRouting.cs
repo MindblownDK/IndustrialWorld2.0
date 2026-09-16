@@ -352,6 +352,14 @@ namespace VoxelEngine.Transport
         }
 
         public List<FaceEntry> faces = new();
-        public bool HasData => faces != null && faces.Count > 0;
+
+        /// <summary>
+        /// A logistic chest's wireless request list, by item id. Additive: a save written
+        /// before 11.5.0-dev has none, and any block that is not a Requester leaves it empty.
+        /// </summary>
+        public List<string> requestItemIds = new();
+
+        public bool HasData => (faces != null && faces.Count > 0) ||
+                               (requestItemIds != null && requestItemIds.Count > 0);
     }
 }

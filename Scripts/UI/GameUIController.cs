@@ -3442,9 +3442,32 @@ namespace VoxelEngine.UI
             scroll.contentContainer.style.width = Length.Percent(100);
             card.Add(scroll);
 
-            var body = VoxelEngine.UI.PortConfigHud.BuildItemPorts(host, routing, onChanged: () => { });
-            body.style.width = Length.Percent(100);
-            scroll.Add(body);
+            // Rebuild the body in place when something inside it changes (a request removed,
+            // a face toggled). Two things matter here: the ONLY child replaced is the body,
+            // so the card, header and the ScrollView itself survive; and the scroll offset is
+            // captured before the swap and restated after layout resolves, so editing a row
+            // never yanks the player back to the top or down to the bottom.
+            VisualElement body = null;
+            void RebuildBody()
+            {
+                if (scroll.panel == null) return;
+                float keepY = scroll.scrollOffset.y;
+
+                if (body != null && body.parent == scroll.contentContainer) body.RemoveFromHierarchy();
+                body = VoxelEngine.UI.PortConfigHud.BuildItemPorts(host, routing, onChanged: RebuildBody);
+                body.style.width = Length.Percent(100);
+                scroll.Add(body);
+
+                // Content height is only known once layout has run, so restate the offset
+                // on the next tick as well as now.
+                scroll.scrollOffset = new Vector2(scroll.scrollOffset.x, keepY);
+                scroll.schedule.Execute(() =>
+                {
+                    if (scroll.panel == null) return;
+                    scroll.scrollOffset = new Vector2(scroll.scrollOffset.x, keepY);
+                }).StartingIn(0);
+            }
+            RebuildBody();
 
             _itemPortsOverlay = overlay;
             _root.Add(overlay);

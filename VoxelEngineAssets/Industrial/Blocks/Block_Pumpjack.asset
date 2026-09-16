@@ -14,8 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Items.BlockItem
   itemId: block_pumpjack
   displayName: Jack Pump
-  description: Heavy walking-beam oil extractor. Runs only on a rare infinite Pirate
-    World oil node; consumes Empty Barrels and draws 4 kW while pumping.
+  description: Heavy walking-beam crude extractor. Draws liquid crude into its own
+    tank rather than filling barrels, and can be piped straight into a refinery.
+    Needs a Pirate Jack Pump Head to assemble. Draws heavy power while pumping and
+    stops when the tank is full.
   icon: {fileID: 21300000, guid: 6f00063689fd75c52ef1f3a388d52249, type: 3}
   iconTint: {r: 0.2, g: 0.2, b: 0.22, a: 1}
   maxStack: 5

@@ -29,6 +29,47 @@ namespace VoxelEngine.Building
 
         public ItemContainer container;
 
+        /// <summary>
+        /// What a Requester asks the wireless network to deliver. Deliberately SEPARATE from
+        /// the per-face port filters: those decide what leaves this chest down a pipe, while
+        /// this decides what the network brings in. Empty means the chest requests nothing,
+        /// so an unconfigured Requester sits quiet instead of hoovering up the base.
+        /// Unused by a Provider or a free chest.
+        /// </summary>
+        [SerializeField] private List<ItemDefinition> _requests = new();
+
+        /// <summary>The items this chest asks the network for. Never null.</summary>
+        public IReadOnlyList<ItemDefinition> Requests
+        {
+            get { _requests ??= new List<ItemDefinition>(); return _requests; }
+        }
+
+        /// <summary>Add an item to the wireless request list. Duplicates are ignored.</summary>
+        public void AddRequest(ItemDefinition item)
+        {
+            if (item == null) return;
+            _requests ??= new List<ItemDefinition>();
+            foreach (var existing in _requests)
+                if (ItemIdentity.Same(existing, item)) return;
+            _requests.Add(item);
+        }
+
+        /// <summary>Remove an item from the wireless request list.</summary>
+        public void RemoveRequest(ItemDefinition item)
+        {
+            if (item == null || _requests == null) return;
+            for (int i = _requests.Count - 1; i >= 0; i--)
+                if (ItemIdentity.Same(_requests[i], item)) _requests.RemoveAt(i);
+        }
+
+        /// <summary>Replace the whole request list — used by save restore.</summary>
+        public void SetRequests(IEnumerable<ItemDefinition> items)
+        {
+            _requests = new List<ItemDefinition>();
+            if (items == null) return;
+            foreach (var item in items) AddRequest(item);
+        }
+
         private PortConfig _ports;
         private ItemPortRouting _routing;
         private ItemPortContainer[] _portContainers;
@@ -39,11 +80,12 @@ namespace VoxelEngine.Building
         public IReadOnlyList<ItemPortContainer> GetPortContainers()
         {
             EnsureRefs();
-            // A free chest is a single store that can both send and receive; a locked
-            // chest advertises only the half of that its lock allows, so the routing
-            // layer refuses the wrong transfer even if a face were somehow mis-set.
-            bool canIn  = portLock != PortLockMode.Provider;
-            bool canOut = portLock != PortLockMode.Requester;
+            // A free chest is a single store that can both send and receive. A locked chest
+            // advertises only the half its PORT role allows, which is the opposite of its
+            // wireless role: a Provider is FED by pipes (input) and supplies the network
+            // wirelessly; a Requester is filled by the network and FEEDS pipes (output).
+            bool canIn  = portLock != PortLockMode.Requester;
+            bool canOut = portLock != PortLockMode.Provider;
             _portContainers ??= new ItemPortContainer[1];
             _portContainers[0] = new ItemPortContainer("Storage", container, canIn, canOut);
             return _portContainers;
@@ -51,6 +93,14 @@ namespace VoxelEngine.Building
 
         // ── IPortLockedHost ─────────────────────────────────────────────────
         public PortLockMode PortLock => portLock;
+
+        /// <summary>
+        /// The direction every active face is pinned to. A Provider is fed BY pipes, so its
+        /// ports are inputs; a Requester feeds pipes, so its ports are outputs. This is the
+        /// mirror of the block's wireless role, and the single place that decides it.
+        /// </summary>
+        public PortDirection PinnedDirection =>
+            portLock == PortLockMode.Provider ? PortDirection.Input : PortDirection.Output;
 
         /// <summary>
         /// Pin every face to the locked direction. An OFF face stays off; an active face
@@ -62,7 +112,7 @@ namespace VoxelEngine.Building
             if (portLock == PortLockMode.Free) return;
             EnsureRefs();
             if (_ports == null) return;
-            var pinned = portLock == PortLockMode.Provider ? PortDirection.Output : PortDirection.Input;
+            var pinned = PinnedDirection;
             bool changed = false;
             for (int i = 0; i < _ports.ports.Length; i++)
             {
@@ -79,13 +129,13 @@ namespace VoxelEngine.Building
         public ItemPortRouting Routing { get { EnsureRefs(); return _routing; } }
 
         // ── IInventoryInterface (legacy pipe API) ───────────────────────────
-        // A Requester never gives items away and a Provider never takes them, so the
-        // legacy pipe API answers null/false for the half its lock forbids.
-        public ItemContainer GetOutputContainer() => portLock == PortLockMode.Requester ? null : container;
-        public ItemContainer GetInputContainer()  => portLock == PortLockMode.Provider  ? null : container;
-        public bool HasOutputReady => portLock != PortLockMode.Requester &&
+        // Mirrors GetPortContainers: a Provider only ACCEPTS from pipes (the network empties
+        // it wirelessly), a Requester only FEEDS them (the network fills it wirelessly).
+        public ItemContainer GetOutputContainer() => portLock == PortLockMode.Provider  ? null : container;
+        public ItemContainer GetInputContainer()  => portLock == PortLockMode.Requester ? null : container;
+        public bool HasOutputReady => portLock != PortLockMode.Provider &&
                                       container != null && _ports != null && _ports.HasAnyOutput();
-        public bool CanAcceptInput => portLock != PortLockMode.Provider &&
+        public bool CanAcceptInput => portLock != PortLockMode.Requester &&
                                       container != null && _ports != null && _ports.HasAnyInput();
 
         // ── Lifecycle ───────────────────────────────────────────────────────
@@ -161,7 +211,7 @@ namespace VoxelEngine.Building
         /// <summary>Accept items pushed in by a pipe (honours INPUT face + filter).</summary>
         public int TryAcceptFromPipe(Vector3 pipeWorldPos, ItemDefinition item, int count)
         {
-            if (portLock == PortLockMode.Provider) return 0;   // supply-only: never accepts a push
+            if (portLock == PortLockMode.Requester) return 0;   // network-fed: pipes never push into it
             EnsureRefs();
             return _routing != null ? _routing.TryAcceptFromPipe(pipeWorldPos, item, count) : 0;
         }
@@ -170,7 +220,15 @@ namespace VoxelEngine.Building
         public ItemPortSnapshot CapturePortSnapshot()
         {
             EnsureRefs();
-            return _routing != null ? _routing.CaptureSnapshot() : new ItemPortSnapshot();
+            var snap = _routing != null ? _routing.CaptureSnapshot() : new ItemPortSnapshot();
+            // The wireless request list rides along on the port snapshot the chest already
+            // saves, so it costs no new save plumbing and stays backward compatible.
+            snap.requestItemIds ??= new List<string>();
+            snap.requestItemIds.Clear();
+            foreach (var item in Requests)
+                if (item != null && !string.IsNullOrEmpty(item.itemId))
+                    snap.requestItemIds.Add(item.itemId);
+            return snap;
         }
 
         public void ApplyPortSnapshot(ItemPortSnapshot snap, System.Func<string, ItemDefinition> resolveItem)
@@ -178,6 +236,19 @@ namespace VoxelEngine.Building
             EnsureRefs();
             _routing?.ApplySnapshot(snap, resolveItem);
             EnforcePortLock();   // an older save of a now-locked chest can carry free directions
+
+            // Restore the request list. A save from before this field existed simply has
+            // none, which leaves the chest requesting nothing — the correct default.
+            if (snap != null && snap.requestItemIds != null && resolveItem != null)
+            {
+                var restored = new List<ItemDefinition>();
+                foreach (var id in snap.requestItemIds)
+                {
+                    var def = resolveItem(id);
+                    if (def != null) restored.Add(def);
+                }
+                SetRequests(restored);
+            }
         }
     }
 }

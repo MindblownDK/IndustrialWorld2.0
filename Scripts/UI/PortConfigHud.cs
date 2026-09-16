@@ -380,11 +380,12 @@ namespace VoxelEngine.UI
             if (lockBanner != null) root.Add(lockBanner);
 
             // Wireless logistics status — only for a chest that takes part in it.
-            var logistics = BuildLogisticsPanel(host);
+            var logistics = BuildLogisticsPanel(host, onChanged);
             if (logistics != null) root.Add(logistics);
 
             // Distribution mode toggle — only meaningful when >1 OUTPUT face.
-            if (LockOf(host) != PortLockMode.Requester)
+            // Only meaningful where competing OUTPUT faces exist — a Provider's ports are inputs.
+            if (LockOf(host) != PortLockMode.Provider)
                 root.Add(BuildDistributionToggle(routing, onChanged));
 
             var grid = new VisualElement();
@@ -422,10 +423,10 @@ namespace VoxelEngine.UI
                   "OUTPUT pushes items into adjacent pipes; INPUT accepts them.  " +
                   "Pick the container and add item filters per face."
                 : lockMode == PortLockMode.Provider
-                    ? "This block only supplies the network. Click a face to switch its OUTPUT on or off, " +
-                      "then add item filters to decide what leaves through it."
-                    : "This block only receives from the network. Click a face to switch its INPUT on or off, " +
-                      "then add item filters to decide what it will take in.");
+                    ? "Pipes and belts FILL this chest; the network hands its stock out wirelessly. " +
+                      "Click a face to switch its INPUT on or off, then filter what it will accept."
+                    : "The network FILLS this chest wirelessly; these ports feed the pipes downstream. " +
+                      "Click a face to switch its OUTPUT on or off, then filter what leaves through it.");
             hint.style.marginTop = 10;
             root.Add(hint);
 
@@ -472,8 +473,8 @@ namespace VoxelEngine.UI
             row.Add(badge);
 
             var text = new Label(provider
-                ? "Every active face is an OUTPUT — this block only supplies the network."
-                : "Every active face is an INPUT — this block only receives from the network.");
+                ? "Ports are INPUTS — pipes and belts fill this chest, and the network hands its stock out wirelessly."
+                : "Ports are OUTPUTS — the network fills this chest wirelessly, and it feeds the pipes downstream.");
             text.style.color = new StyleColor(T.TextMuted);
             text.style.fontSize = 11;
             text.style.flexGrow = 1;
@@ -489,7 +490,7 @@ namespace VoxelEngine.UI
         /// reachable. Returns null for anything that is not a locked chest, so no other
         /// machine's panel changes.
         /// </summary>
-        private static VisualElement BuildLogisticsPanel(IItemPortHost host)
+        private static VisualElement BuildLogisticsPanel(IItemPortHost host, Action onChanged)
         {
             var chest = host as Chest;
             if (chest == null || chest.portLock == PortLockMode.Free) return null;
@@ -541,27 +542,48 @@ namespace VoxelEngine.UI
 
             if (!requester)
             {
-                var supplyNote = T.Muted("Requesters within range draw stock from this chest automatically.");
+                var supplyNote = T.Muted("Requesters within range draw stock from this chest automatically. " +
+                                         "Keep it filled through its input ports.");
                 supplyNote.style.marginTop = 6;
                 supplyNote.style.whiteSpace = WhiteSpace.Normal;
                 box.Add(supplyNote);
                 return box;
             }
 
-            // A Requester lists what it asks for and whether the network can supply it.
-            var requests = CollectRequestedItems(chest);
+            // ── A Requester's wireless request list ────────────────────────
+            // Separate from the port filters by design: the ports decide what LEAVES this
+            // chest down a pipe, this decides what the network DELIVERS into it.
+            var reqHead = new VisualElement();
+            reqHead.style.flexDirection = FlexDirection.Row;
+            reqHead.style.alignItems = Align.Center;
+            reqHead.style.marginTop = 10;
+            reqHead.pickingMode = PickingMode.Ignore;
+
+            var reqTitle = new Label("REQUESTS");
+            reqTitle.style.color = new StyleColor(T.TextPrimary);
+            reqTitle.style.fontSize = 9;
+            reqTitle.style.unityFontStyleAndWeight = FontStyle.Bold;
+            reqTitle.style.letterSpacing = 1f;
+            reqTitle.style.flexGrow = 1;
+            reqHead.Add(reqTitle);
+            box.Add(reqHead);
+
+            var reqNote = T.Muted("What the network delivers here. Independent of the port filters below.");
+            reqNote.style.fontSize = 9;
+            reqNote.style.whiteSpace = WhiteSpace.Normal;
+            box.Add(reqNote);
+
+            var requests = chest.Requests;
             if (requests.Count == 0)
             {
-                var hint = T.Muted("This chest is asking for nothing yet. Add items to an active face's " +
-                                   "filter below and the network will keep it stocked.");
-                hint.style.marginTop = 6;
-                hint.style.whiteSpace = WhiteSpace.Normal;
-                box.Add(hint);
-                return box;
+                var empty = T.Muted("Nothing requested yet.");
+                empty.style.marginTop = 6;
+                box.Add(empty);
             }
 
             foreach (var item in requests)
             {
+                if (item == null) continue;
                 int available = net.AvailableFor(chest, item);
                 bool supplied = available > 0;
 
@@ -569,7 +591,6 @@ namespace VoxelEngine.UI
                 row.style.flexDirection = FlexDirection.Row;
                 row.style.alignItems = Align.Center;
                 row.style.marginTop = 6;
-                row.pickingMode = PickingMode.Ignore;
 
                 var dot = new VisualElement();
                 dot.style.width = 6; dot.style.height = 6;
@@ -578,47 +599,62 @@ namespace VoxelEngine.UI
                     ? new Color(0.30f, 0.75f, 0.45f)
                     : new Color(0.70f, 0.45f, 0.25f));
                 T.Radius(dot, 3f);
+                dot.pickingMode = PickingMode.Ignore;
                 row.Add(dot);
 
                 var name = new Label(item.displayName);
                 name.style.color = new StyleColor(T.TextSecondary);
                 name.style.fontSize = 11;
                 name.style.flexGrow = 1;
+                name.pickingMode = PickingMode.Ignore;
                 row.Add(name);
 
                 var status = new Label(supplied ? available + " in range" : "none in range");
                 status.style.color = new StyleColor(supplied ? T.TextSecondary : new Color(0.85f, 0.55f, 0.35f));
                 status.style.fontSize = 10;
+                status.style.marginRight = 6;
+                status.pickingMode = PickingMode.Ignore;
                 row.Add(status);
+
+                var captured = item;
+                var remove = new Button { text = "✕" };
+                remove.style.fontSize = 9;
+                remove.style.width = 18; remove.style.height = 18;
+                remove.style.paddingLeft = 0; remove.style.paddingRight = 0;
+                remove.style.paddingTop = 0; remove.style.paddingBottom = 0;
+                remove.style.color = new StyleColor(T.TextDanger);
+                remove.style.backgroundColor = new StyleColor(Color.clear);
+                remove.clicked += () =>
+                {
+                    chest.RemoveRequest(captured);
+                    onChanged?.Invoke();
+                };
+                row.Add(remove);
 
                 box.Add(row);
             }
 
-            return box;
-        }
-
-        /// <summary>The distinct items a Requester's active input faces whitelist.</summary>
-        private static List<ItemDefinition> CollectRequestedItems(Chest chest)
-        {
-            var result = new List<ItemDefinition>();
-            var routing = chest.Routing;
-            var ports = chest.PortConfig;
-            if (routing == null || ports == null) return result;
-
-            foreach (var port in ports.ports)
+            // Same searchable / inventory-click picker the port filters use.
+            var edit = new Button { text = "＋  Request Item" };
+            edit.style.marginTop = 8; edit.style.height = 26; edit.style.fontSize = 10;
+            edit.style.color = new StyleColor(T.TextSecondary);
+            edit.style.backgroundColor = new StyleColor(new Color(tint.r, tint.g, tint.b, 0.16f));
+            T.Radius(edit, 7f);
+            T.Border(edit, 1, new Color(tint.r, tint.g, tint.b, 0.40f));
+            edit.clicked += () =>
             {
-                if (!port.enabled || port.direction != PortDirection.Input) continue;
-                if (routing.GetFilterMode(port.face) != FilterMode.Whitelist) continue;
-                foreach (var item in routing.GetFilter(port.face))
-                {
-                    if (item == null) continue;
-                    bool known = false;
-                    foreach (var existing in result)
-                        if (ItemIdentity.Same(existing, item)) { known = true; break; }
-                    if (!known) result.Add(item);
-                }
-            }
-            return result;
+                var uiRoot = edit.panel?.visualTree ?? edit;
+                ItemFilterDialog.OpenList(uiRoot,
+                    "Requests · " + chest.displayName,
+                    "The network keeps this chest stocked with these items.",
+                    () => chest.Requests,
+                    chest.AddRequest,
+                    chest.RemoveRequest,
+                    () => onChanged?.Invoke());
+            };
+            box.Add(edit);
+
+            return box;
         }
 
         // Round-Robin / Priority toggle for competing OUTPUT faces.
@@ -742,10 +778,10 @@ namespace VoxelEngine.UI
             {
                 // Locked host: the direction is not the player's to choose, so the pill
                 // is a clean ON/OFF switch that always writes the pinned direction.
-                var pinned = lockMode == PortLockMode.Provider ? PortDirection.Output : PortDirection.Input;
+                var pinned = lockMode == PortLockMode.Provider ? PortDirection.Input : PortDirection.Output;
                 bool active = enabled && dir == pinned;
                 pill.text = active
-                    ? (lockMode == PortLockMode.Provider ? "OUTPUT ON" : "INPUT ON")
+                    ? (pinned == PortDirection.Input ? "INPUT ON" : "OUTPUT ON")
                     : "OFF";
                 pill.clicked += () =>
                 {

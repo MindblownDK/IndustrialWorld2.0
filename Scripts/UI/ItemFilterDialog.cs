@@ -212,6 +212,184 @@ namespace VoxelEngine.UI
         /// <summary>
         /// Open the modal filter editor for one face of a machine.
         /// </summary>
+        /// <summary>
+        /// The same searchable / inventory-capture picker as <see cref="Open"/>, but bound to a
+        /// plain item list instead of a face filter. Used by the logistic chest's wireless
+        /// request list, which is deliberately separate from the port filters — so the player
+        /// gets one familiar dialog for both jobs.
+        /// </summary>
+        public static void OpenList(VisualElement uiRoot, string titleText, string hintText,
+                                    Func<IReadOnlyList<ItemDefinition>> getItems,
+                                    Action<ItemDefinition> onAdd,
+                                    Action<ItemDefinition> onRemove,
+                                    Action onChanged)
+        {
+            if (uiRoot == null || getItems == null || onAdd == null || onRemove == null) return;
+            EnsureItems();
+            var panelRoot = uiRoot.panel?.visualTree ?? uiRoot;
+
+            var overlay = new VisualElement();
+            overlay.style.position = Position.Absolute;
+            overlay.style.left = 0; overlay.style.top = 0; overlay.style.right = 0; overlay.style.bottom = 0;
+            overlay.style.alignItems = Align.Center;
+            overlay.style.justifyContent = Justify.Center;
+            overlay.pickingMode = PickingMode.Ignore;
+
+            var dim = new VisualElement();
+            dim.style.position = Position.Absolute;
+            dim.style.left = 0; dim.style.top = 0; dim.style.right = 0; dim.style.bottom = 0;
+            dim.style.backgroundColor = new StyleColor(new Color(0, 0, 0, 0.45f));
+            dim.pickingMode = PickingMode.Ignore;
+            overlay.Add(dim);
+
+            void Close()
+            {
+                _captureSink = null;
+                _activeClose = null;
+                overlay.RemoveFromHierarchy();
+                PortConfigHud.IsAnyDropdownOpen = HasAncestorNamed(uiRoot, "ItemPortsOverlay");
+                onChanged?.Invoke();
+            }
+
+            var card = new VisualElement();
+            card.style.width = 380;
+            card.style.maxHeight = 520;
+            card.style.backgroundColor = new StyleColor(T.BgPanel);
+            card.style.paddingTop = 16; card.style.paddingBottom = 16;
+            card.style.paddingLeft = 16; card.style.paddingRight = 16;
+            T.Radius(card, 12f);
+            T.Border(card, 1, T.BorderBright);
+            overlay.Add(card);
+
+            var title = T.Subtitle(titleText);
+            title.style.marginTop = 0;
+            card.Add(title);
+
+            if (!string.IsNullOrEmpty(hintText))
+            {
+                var hint = T.Muted(hintText);
+                hint.style.fontSize = 9;
+                hint.style.whiteSpace = WhiteSpace.Normal;
+                card.Add(hint);
+            }
+
+            var chips = new VisualElement();
+            chips.style.flexDirection = FlexDirection.Row;
+            chips.style.flexWrap = Wrap.Wrap;
+            chips.style.marginTop = 10;
+            card.Add(chips);
+
+            var searchLbl = new Label("SEARCH TO ADD");
+            searchLbl.style.color = new StyleColor(T.TextMuted);
+            searchLbl.style.fontSize = 9;
+            searchLbl.style.unityFontStyleAndWeight = FontStyle.Bold;
+            searchLbl.style.letterSpacing = 1f;
+            searchLbl.style.marginTop = 12;
+            card.Add(searchLbl);
+
+            var search = new TextField { value = "" };
+            search.style.marginTop = 4;
+            search.style.height = 34;
+            search.style.fontSize = 13;
+            var inputEl = search.Q(TextField.textInputUssName);
+            if (inputEl != null)
+            {
+                inputEl.style.unityTextAlign = TextAnchor.MiddleLeft;
+                inputEl.style.paddingLeft = 8; inputEl.style.paddingRight = 8;
+                inputEl.style.paddingTop = 0; inputEl.style.paddingBottom = 0;
+            }
+            card.Add(search);
+
+            var resultsScroll = new ScrollView(ScrollViewMode.Vertical);
+            VoxelEngine.UI.UITheme.StyleScroller(resultsScroll);
+            resultsScroll.style.marginTop = 6;
+            resultsScroll.style.maxHeight = 200;
+            card.Add(resultsScroll);
+
+            var drop = new VisualElement();
+            drop.style.marginTop = 10;
+            drop.style.height = 36;
+            drop.style.alignItems = Align.Center;
+            drop.style.justifyContent = Justify.Center;
+            drop.style.backgroundColor = new StyleColor(new Color(T.AccentCyan.r, T.AccentCyan.g, T.AccentCyan.b, 0.10f));
+            T.Radius(drop, 8f);
+            T.Border(drop, 1, new Color(T.AccentCyan.r, T.AccentCyan.g, T.AccentCyan.b, 0.4f));
+            var dropLbl = new Label("🖱  Click an item in your inventory to add it");
+            dropLbl.style.color = new StyleColor(T.TextSecondary);
+            dropLbl.style.fontSize = 11;
+            dropLbl.pickingMode = PickingMode.Ignore;
+            drop.Add(dropLbl);
+            card.Add(drop);
+
+            void RebuildChips()
+            {
+                chips.Clear();
+                var items = getItems();
+                if (items == null || items.Count == 0)
+                    chips.Add(T.Muted("Nothing requested yet — search above or click an inventory item."));
+                else
+                    foreach (var it in items)
+                    {
+                        var captured = it;
+                        chips.Add(MakeChip(captured, () =>
+                        {
+                            onRemove(captured);
+                            RebuildChips();
+                            onChanged?.Invoke();
+                        }));
+                    }
+            }
+
+            void AddItem(ItemDefinition it)
+            {
+                if (it == null) return;
+                onAdd(it);
+                RebuildChips();
+                onChanged?.Invoke();
+                drop.style.backgroundColor = new StyleColor(new Color(T.AccentGreen.r, T.AccentGreen.g, T.AccentGreen.b, 0.25f));
+                drop.schedule.Execute(() =>
+                    drop.style.backgroundColor = new StyleColor(new Color(T.AccentCyan.r, T.AccentCyan.g, T.AccentCyan.b, 0.10f))).StartingIn(180);
+            }
+
+            void DoPopulate(string q)
+            {
+                resultsScroll.Clear();
+                q = (q ?? "").Trim().ToLowerInvariant();
+                if (q.Length == 0) return;
+                var owned = new HashSet<ItemDefinition>(getItems() ?? new List<ItemDefinition>());
+                int shown = 0;
+                foreach (var it in _allItems)
+                {
+                    if (it == null || owned.Contains(it)) continue;
+                    if (!(it.displayName ?? "").ToLowerInvariant().Contains(q) &&
+                        !(it.itemId ?? "").ToLowerInvariant().Contains(q)) continue;
+                    resultsScroll.Add(MakeResultRow(it, () => { AddItem(it); search.value = ""; }));
+                    if (++shown >= 80) break;
+                }
+                if (shown == 0) resultsScroll.Add(T.Muted("No matching items."));
+            }
+
+            search.RegisterValueChangedCallback(e => DoPopulate(e.newValue));
+
+            var done = new Button { text = "DONE" };
+            done.style.marginTop = 12; done.style.height = 32;
+            done.style.color = Color.white; done.style.fontSize = 12;
+            done.style.unityFontStyleAndWeight = FontStyle.Bold;
+            done.style.backgroundColor = new StyleColor(new Color(T.AccentCyan.r, T.AccentCyan.g, T.AccentCyan.b, 0.85f));
+            T.Radius(done, 7f);
+            done.clicked += Close;
+            card.Add(done);
+
+            RebuildChips();
+            DoPopulate("");
+
+            _captureSink = AddItem;
+            _activeClose = Close;
+            PortConfigHud.IsAnyDropdownOpen = true;
+            panelRoot.Add(overlay);
+            search.schedule.Execute(() => search.Focus()).StartingIn(40);
+        }
+
         public static void Open(VisualElement uiRoot, ItemPortRouting routing, CubeFace face, Action onChanged)
         {
             if (uiRoot == null || routing == null) return;
@@ -533,7 +711,63 @@ namespace VoxelEngine.UI
                 }
             }
 
-            _allItems = set.OrderBy(i => i.displayName).ToArray();
+            // Collapse assets that describe the SAME item. The project still carries
+            // duplicate-id assets (a gravel item, a radar beacon block and a fire igniter
+            // tool all shipped holding the old "iron_ore" default), so a search for "iron
+            // ore" used to list four identical-looking rows of which only one was the real
+            // ore. One row per id, and the row kept is the best-authored candidate, so
+            // picking it always binds the item the rest of the game means.
+            _allItems = set
+                .GroupBy(i => i.itemId, System.StringComparer.OrdinalIgnoreCase)
+                .Select(g => PreferredOf(g))
+                .OrderBy(i => i.displayName)
+                .ToArray();
+        }
+
+        /// <summary>
+        /// Choose which asset represents an id in the picker. A real item carries an icon and
+        /// a resource-ish category; an asset that merely inherited the id (a block, a tool)
+        /// does not. Score those signals so the genuine ore wins over its impostors, and fall
+        /// back to the asset whose own name matches the id.
+        /// </summary>
+        private static ItemDefinition PreferredOf(IEnumerable<ItemDefinition> candidates)
+        {
+            ItemDefinition best = null;
+            int bestScore = int.MinValue;
+
+            foreach (var item in candidates)
+            {
+                if (item == null) continue;
+                int score = 0;
+
+                // A hand-authored item asset almost always has an icon bound.
+                if (item.icon != null) score += 4;
+
+                // An asset whose file name resolves to the id is the one that owns it:
+                // Item_IronOre -> iron_ore beats Item_Gravel -> iron_ore.
+                if (NameMatchesId(item)) score += 8;
+
+                // Blocks and tools that inherited the id are not the item itself.
+                if (item is VoxelEngine.Items.BlockItem) score -= 6;
+                if (item is VoxelEngine.Items.ToolItem)  score -= 6;
+                if (item is VoxelEngine.Items.ResourceItem) score += 2;
+
+                if (score > bestScore) { bestScore = score; best = item; }
+            }
+            return best;
+        }
+
+        /// <summary>True when the asset's own file name reduces to its itemId.</summary>
+        private static bool NameMatchesId(ItemDefinition item)
+        {
+            if (item == null || string.IsNullOrEmpty(item.itemId) || string.IsNullOrEmpty(item.name)) return false;
+            string n = item.name;
+            foreach (var prefix in new[] { "Item_", "Block_", "Tool_", "GItem_", "Food_", "Seed_" })
+                if (n.StartsWith(prefix, System.StringComparison.OrdinalIgnoreCase)) { n = n.Substring(prefix.Length); break; }
+
+            string squashedName = n.Replace("_", "").Replace(" ", "").Replace("-", "");
+            string squashedId   = item.itemId.Replace("_", "").Replace(" ", "").Replace("-", "");
+            return string.Equals(squashedName, squashedId, System.StringComparison.OrdinalIgnoreCase);
         }
     }
 }
