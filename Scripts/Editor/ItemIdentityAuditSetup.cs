@@ -11,11 +11,10 @@ namespace IndustrialWorld.EditorTools
     /// <summary>
     /// Step 79 (11.2.2-dev): audit and repair item identity.
     ///
-    /// <see cref="ItemDefinition.itemId"/> defaults to <c>"iron_ore"</c>, so any item asset
-    /// whose id was never authored silently claims to BE iron ore. Four assets in the project
-    /// are in that state — a gravel item, a radar beacon block, a fire igniter tool, and the
-    /// real Industrial iron ore — which makes the id ambiguous for both persistence and the
-    /// identity fallback the furnaces now use.
+    /// <see cref="ItemDefinition.itemId"/> used to default to <c>"iron_ore"</c>, so any item
+    /// asset whose id was never authored silently claims to BE iron ore. The field now
+    /// defaults to blank, but assets serialized before that change still carry the old value:
+    /// a gravel item, a radar beacon block and a fire igniter tool all currently claim it.
     ///
     /// This step gives every unauthored asset an id derived from its own file name, then
     /// reports any id still claimed by more than one asset so the remaining duplicates are
@@ -103,23 +102,23 @@ namespace IndustrialWorld.EditorTools
         private static int RepairUnauthoredIds(List<ItemDefinition> items)
         {
             // The asset whose own name resolves to the default id is its rightful owner.
-            var owner = items.FirstOrDefault(i => IdFromAssetName(i) == ItemIdentity.UnauthoredId);
+            var owner = items.FirstOrDefault(i => IdFromAssetName(i) == ItemIdentity.LegacyDefaultId);
 
             int repaired = 0;
             foreach (var item in items)
             {
-                if (ItemIdentity.IsAuthoredId(item.itemId)) continue;   // already authored — never touched
+                if (!NeedsId(item)) continue;   // already carries a real, self-chosen id
                 if (item == owner)
                 {
                     Debug.Log("[Setup 79] " + AssetDatabase.GetAssetPath(item) +
-                              " keeps id '" + ItemIdentity.UnauthoredId + "' — its asset name owns it.");
+                              " keeps id '" + ItemIdentity.LegacyDefaultId + "' — its asset name owns it.");
                     continue;
                 }
 
                 string fresh = IdFromAssetName(item);
                 if (string.IsNullOrEmpty(fresh)) continue;
 
-                Debug.Log("[Setup 79] " + AssetDatabase.GetAssetPath(item) + " carried the unauthored default id '" +
+                Debug.Log("[Setup 79] " + AssetDatabase.GetAssetPath(item) + " carried the unauthored id '" +
                           item.itemId + "'; set to '" + fresh + "'.");
                 item.itemId = fresh;
                 EditorUtility.SetDirty(item);
@@ -128,13 +127,25 @@ namespace IndustrialWorld.EditorTools
             return repaired;
         }
 
+        /// <summary>
+        /// True when an asset has no id of its own: either blank, or still carrying the
+        /// legacy <c>"iron_ore"</c> default it was serialized with before the field default
+        /// was blanked. Either way the asset never chose that id, so it is safe to author.
+        /// </summary>
+        private static bool NeedsId(ItemDefinition item)
+        {
+            if (item == null) return false;
+            if (!ItemIdentity.IsAuthoredId(item.itemId)) return true;
+            return string.Equals(item.itemId, ItemIdentity.LegacyDefaultId, StringComparison.OrdinalIgnoreCase);
+        }
+
         /// <summary>Report ids still claimed by more than one asset, so nothing stays silent.</summary>
         private static List<string> FindDuplicateIds(List<ItemDefinition> items)
         {
             var byId = new Dictionary<string, List<ItemDefinition>>(StringComparer.OrdinalIgnoreCase);
             foreach (var item in items)
             {
-                if (!ItemIdentity.IsAuthoredId(item.itemId) && item.itemId != ItemIdentity.UnauthoredId) continue;
+                if (!ItemIdentity.IsAuthoredId(item.itemId)) continue;
                 if (!byId.TryGetValue(item.itemId, out var list))
                     byId[item.itemId] = list = new List<ItemDefinition>();
                 list.Add(item);

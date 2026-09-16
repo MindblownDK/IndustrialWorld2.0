@@ -847,6 +847,8 @@ namespace VoxelEngine.EditorTools
                 () => IndustrialWorld.EditorTools.LogisticChestsSetup.RunStep78(), 62);
             AddWizardButton(scroll, "79. Audit and Repair Item Identity\n(Unauthored item ids + duplicate report \u2014 Non-Destructive)",
                 () => IndustrialWorld.EditorTools.ItemIdentityAuditSetup.RunStep79(), 62);
+            AddWizardButton(scroll, "80. Consolidate the Ore Items\n(Iron Ore + Copper Ore become canonical, duplicates retired)",
+                () => IndustrialWorld.EditorTools.OreConsolidationSetup.RunStep80(), 62);
 
             AddSpacer(scroll, 20);
         }
@@ -901,8 +903,37 @@ namespace VoxelEngine.EditorTools
 
             // --- Items first (materials reference them) ---
             var itemMap = new System.Collections.Generic.Dictionary<MaterialId, ItemDefinition>();
+
+            // 11.3.0-dev — the ore consolidation. Iron and copper ore each used to exist
+            // twice: a bare ItemDefinition here under Items/, and the Resource-typed
+            // Industrial asset that carries the icon, the category and the fuel metadata.
+            // The Industrial asset is canonical, so this step must ADOPT it rather than
+            // author a second one; creating the duplicate again is what made the furnaces
+            // refuse ore that the player was plainly holding.
+            var canonicalItemPaths = new System.Collections.Generic.Dictionary<MaterialId, string>
+            {
+                { MaterialId.Iron,   ASSET_ROOT + "/Industrial/Items/Item_IronOre.asset"   },
+                { MaterialId.Copper, ASSET_ROOT + "/Industrial/Items/Item_CopperOre.asset" },
+            };
+
             void MakeItem(MaterialId id, string display)
             {
+                // When a canonical asset exists elsewhere, adopt it untouched: its authored
+                // icon, description and category are exactly what we want to keep.
+                if (canonicalItemPaths.TryGetValue(id, out var canonicalPath))
+                {
+                    var canonical = AssetDatabase.LoadAssetAtPath<ItemDefinition>(canonicalPath);
+                    if (canonical != null)
+                    {
+                        itemMap[id] = canonical;
+                        Debug.Log("[Setup] " + display + " resolved to the canonical asset at " + canonicalPath +
+                                  "; no duplicate authored under Items/.");
+                        return;
+                    }
+                    Debug.LogWarning("[Setup] " + display + " has no canonical asset at " + canonicalPath +
+                                     "; falling back to authoring it under Items/.");
+                }
+
                 string path = $"{ITEM_FOLDER}/Item_{id}.asset";
 
                 // Special-case Coal: it must be a ResourceItem so it works as fuel in the
@@ -1635,8 +1666,11 @@ namespace VoxelEngine.EditorTools
             coalItem = coalRes;
             // Stone/iron/copper/etc. ItemDefinitions exist in ITEM_FOLDER from step 1.
             var stone = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{ITEM_FOLDER}/Item_Stone.asset");
-            var iron  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{ITEM_FOLDER}/Item_Iron.asset");
-            var copper= AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{ITEM_FOLDER}/Item_Copper.asset");
+            // The canonical ore assets (11.3.0-dev). The retired Items/Item_Iron and
+            // Items/Item_Copper duplicates are only consulted as a fallback for a project
+            // that has not run the ore consolidation step yet.
+            var iron  = LoadCanonicalOre("Item_IronOre",   "Item_Iron");
+            var copper= LoadCanonicalOre("Item_CopperOre", "Item_Copper");
             var nickel= AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{ITEM_FOLDER}/Item_Nickel.asset");
 
             var ironIngot   = MakeResource(itemsFolder, "Iron Ingot",   new Color(0.78f,0.78f,0.82f), 999, VoxelEngine.Items.ResourceCategory.Ingot, uiCategory: "Ingots");
@@ -1931,6 +1965,26 @@ namespace VoxelEngine.EditorTools
                 r.inputs[i] = new VoxelEngine.Crafting.RecipeIngredient { item = inputs[i].item, count = inputs[i].count };
 
             return r;
+        }
+
+        /// <summary>
+        /// Resolve an ore to its canonical Industrial asset, falling back to the retired
+        /// duplicate under Items/ only when the canonical one is missing. Every step that
+        /// authors an ore-consuming recipe goes through this, so the whole project points
+        /// at one asset per ore.
+        /// </summary>
+        private static VoxelEngine.Items.ItemDefinition LoadCanonicalOre(string canonicalName, string retiredName)
+        {
+            var canonical = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>(
+                $"{ASSET_ROOT}/Industrial/Items/{canonicalName}.asset");
+            if (canonical != null) return canonical;
+
+            var retired = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>(
+                $"{ITEM_FOLDER}/{retiredName}.asset");
+            if (retired != null)
+                Debug.LogWarning("[Setup] Canonical " + canonicalName + " is missing; using the retired " +
+                                 retiredName + " instead. Run step 80 (Consolidate the Ore Items) to fix this.");
+            return retired;
         }
 
         private static VoxelEngine.Crafting.SmeltingRecipe MakeSmelt(string folder, string assetName,
@@ -3907,8 +3961,8 @@ namespace VoxelEngine.EditorTools
             var sand        = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{craftItemsFolder}/Item_Sand.asset");
             var clay        = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{craftItemsFolder}/Item_Clay.asset");
             var ice         = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{craftItemsFolder}/Item_Ice.asset");
-            var ironOre     = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{craftItemsFolder}/Item_Iron.asset");
-            var copperOre   = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{craftItemsFolder}/Item_Copper.asset");
+            var ironOre     = LoadCanonicalOre("Item_IronOre",   "Item_Iron");
+            var copperOre   = LoadCanonicalOre("Item_CopperOre", "Item_Copper");
             var coal        = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{craftItemsFolder}/Item_Coal.asset");
             var nickelOre   = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{craftItemsFolder}/Item_Nickel.asset");
             var siliconOre  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{craftItemsFolder}/Item_Silicon.asset");
@@ -8780,8 +8834,8 @@ root =>
             string commonItems = ASSET_ROOT + "/Items";
             string indItems = ASSET_ROOT + "/Industrial/Items";
 
-            var ironOre = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{commonItems}/Item_Iron.asset");
-            var copperOre = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{commonItems}/Item_Copper.asset");
+            var ironOre = LoadCanonicalOre("Item_IronOre",   "Item_Iron");
+            var copperOre = LoadCanonicalOre("Item_CopperOre", "Item_Copper");
             var stone = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{commonItems}/Item_Stone.asset");
             var sand = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{commonItems}/Item_Sand.asset");
             var ironIngot = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ResourceItem>($"{commonItems}/Item_IronIngot.asset");

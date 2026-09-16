@@ -10,8 +10,12 @@ namespace VoxelEngine.Items
     [CreateAssetMenu(menuName = "Voxel Engine/Items/Item Definition", fileName = "Item_New")]
     public class ItemDefinition : ScriptableObject
     {
-        public string itemId = "iron_ore";
-        public string displayName = "Iron Ore";
+        // Deliberately blank. These used to default to "iron_ore" / "Iron Ore", which meant
+        // every asset whose id was never authored silently claimed to BE iron ore — and the
+        // real ore could then never be told apart from a mis-authored tool. A blank id is
+        // obviously unset, so it can be detected and repaired instead of quietly colliding.
+        public string itemId = "";
+        public string displayName = "";
         [TextArea] public string description;
         public Sprite icon;
         [Tooltip("Color used for icon fallback when no sprite is assigned.")]

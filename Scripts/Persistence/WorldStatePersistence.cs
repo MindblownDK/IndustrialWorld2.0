@@ -112,6 +112,20 @@ namespace VoxelEngine.Persistence
                 foreach (var item in catalog.items) CacheItem(item);
             }
 
+            // Retired item ids: a save written before an item was consolidated still names
+            // the old id, and the asset behind it no longer exists. Alias the retired id to
+            // its replacement so those stacks come back as the surviving item instead of
+            // vanishing. An alias never overwrites a live id — if something still owns the
+            // old id, that asset wins.
+            foreach (var pair in ItemIdAliases.Retired)
+            {
+                if (_itemById.ContainsKey(pair.Key)) continue;
+                if (!_itemById.TryGetValue(pair.Value, out var replacement) || replacement == null) continue;
+                _itemById[pair.Key] = replacement;
+                if (replacement is BlockItem aliasBlock) _blockById[pair.Key] = aliasBlock;
+                if (replacement is GridBlockItem aliasGrid) _gridBlockById[pair.Key] = aliasGrid;
+            }
+
             foreach (var def in Resources.LoadAll<TieredBlockDefinition>(""))
                 _tieredById[def.family.ToString()] = def;
             foreach (var def in Resources.FindObjectsOfTypeAll<TieredBlockDefinition>())

@@ -1,9 +1,57 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `11.2.2-dev`
+**Current Version:** `11.3.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [11.3.0-dev] One Ore To Smelt: Iron Ore and Copper Ore Become Canonical
+
+**Type:** MINOR — content consolidation, save-compatible. Two duplicate item assets are retired, every reference is repointed, and existing saves are bridged by an id alias so no stack is lost. Two new setup steps (80 and the 79 audit from 11.2.2-dev). No schema change.
+
+**GitHub title:** `[11.3.0-dev] One ore to smelt — Iron Ore and Copper Ore become canonical`
+
+#### Why this round
+
+11.2.2-dev made the furnaces tolerate the duplicate ore assets, but tolerating a duplicate is not the same as not having one — and the wrong asset was winning. The furnaces accepted the bare `Items/Item_Iron` ("iron"), while the ore the player actually mines and sees in the UI is the Resource-typed `Industrial/Items/Item_IronOre` ("iron_ore") with the real icon, the Resource category and the proper description. This round picks the right one and deletes the other.
+
+| Logical item | Survives | Retired |
+|---|---|---|
+| Iron Ore | `Industrial/Items/Item_IronOre` (`iron_ore`) | `Items/Item_Iron` (`iron`) |
+| Copper Ore | `Industrial/Items/Item_CopperOre` (`copper_ore`) | `Items/Item_Copper` (`copper`) |
+
+#### 1. The item id no longer defaults to iron ore
+
+`ItemDefinition.itemId` and `displayName` defaulted to `"iron_ore"` / `"Iron Ore"`. That is the root cause behind the whole class of bug: every asset whose id was never authored silently claimed to BE iron ore, which is how a gravel item, a radar beacon block and a fire igniter tool all ended up holding that id. Both fields now default to blank — an obviously unset value that can be detected and repaired rather than quietly colliding with real content.
+
+`ItemIdentity` follows: a blank id carries no identity, so such an asset is only ever equal to itself by reference. The old default is kept as `ItemIdentity.LegacyDefaultId` purely so step 79 can still recognise assets serialized before this change.
+
+#### 2. Setup step 80 — Consolidate the Ore Items
+
+New wizard button 80, implemented in `OreConsolidationSetup`. Per ore it repoints every reference to the retired duplicate and then deletes it:
+
+- **Smelting recipes** — `Smelt_Iron`, `Smelt_Copper` and `Smelt_Steel` now take the canonical ore.
+- **Crafting and machine recipes** — every input, output and byproduct, including the crusher's ore recipes.
+- **The voxel material drop** — `Mat_Iron` and `Mat_Copper` now drop the canonical ore, so mining yields the item the recipes expect. This is the reference that decides what ends up in the player's hands.
+- **The persistence catalogue** — the retired asset is removed and the canonical one added, so saved stacks resolve at load.
+
+The step resolves the whole plan before writing anything and refuses to run if a canonical asset is missing. Re-running it is a no-op that reports both ores already consolidated.
+
+#### 3. Old saves keep their ore
+
+Deleting an asset a save refers to would normally lose the stack. New `ItemIdAliases` maps each retired id to its replacement, and `WorldStatePersistence` consults it after building the item cache — so a saved stack of `iron` loads back as Iron Ore. An alias never shadows a live id, so an asset re-introduced under a retired id takes precedence again.
+
+#### 4. The setup no longer recreates the duplicates
+
+Step 1 authored `Item_Iron` and `Item_Copper` from the voxel material table, so re-running it would have resurrected exactly what step 80 deletes. It now adopts the canonical Industrial asset for those two materials instead of authoring its own, leaving the icon and category intact. Steps 4, 10 and the research step resolve ore through one shared `LoadCanonicalOre` helper, so the whole project points at one asset per ore.
+
+#### What to run
+
+1. Add `Scripts/Items/ItemIdAliases.cs` and `Scripts/Editor/OreConsolidationSetup.cs` (new files) and replace `Scripts/Items/ItemDefinition.cs`, `Scripts/Items/ItemIdentity.cs`, `Scripts/Editor/ItemIdentityAuditSetup.cs`, `Scripts/Persistence/WorldStatePersistence.cs` and `Scripts/Editor/VoxelEngineSetupWindow.cs`. Let Unity compile.
+2. Run **step 80 (Consolidate the Ore Items)**. The console logs every repointed reference and the two deletions.
+3. Run **step 79 (Audit and Repair Item Identity)** afterwards to give the remaining unauthored assets their own ids and list any duplicates left.
+4. Mine iron ore and copper ore. Each should stack as the icon-bearing Iron Ore / Copper Ore, and smelt in both the Solid Fuel Furnace and the Electric Furnace.
+5. Load a save made before this round that held the old ore: the stacks should come back as the canonical ore rather than vanishing.
 
 ### [11.2.2-dev] The Furnaces Recognise Their Own Ore
 
