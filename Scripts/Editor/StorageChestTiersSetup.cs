@@ -190,9 +190,9 @@ namespace IndustrialWorld.EditorTools
                 cube.transform.localScale = new Vector3(1f, 0.7f, 0.7f);
                 var mat = MakeColoredMat(StationsFolder, $"Mat_{t.assetName}", t.tint);
                 if (mat != null) cube.GetComponent<Renderer>().sharedMaterial = mat;
-                var chest = root.AddComponent<Chest>();
-                chest.size = t.size;
-                chest.displayName = t.displayName;
+                var newChest = root.AddComponent<Chest>();
+                newChest.size = t.size;
+                newChest.displayName = t.displayName;
                 var prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
                 Object.DestroyImmediate(root);
                 changed = true;
@@ -325,7 +325,7 @@ namespace IndustrialWorld.EditorTools
                 {
                     for (int i = 0; i < recipe.inputs.Length; i++)
                     {
-                        if (recipe.inputs[i] == null || recipe.inputs[i].item == null || recipe.inputs[i].count <= 0)
+                        if (recipe.inputs[i].item == null || recipe.inputs[i].count <= 0)
                         {
                             if (i < t.inputs.Length && t.inputs[i].item != null)
                             {

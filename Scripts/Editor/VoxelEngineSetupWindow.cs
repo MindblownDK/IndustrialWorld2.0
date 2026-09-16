@@ -843,6 +843,8 @@ namespace VoxelEngine.EditorTools
                 () => IndustrialWorld.EditorTools.PumpjackTankSetup.RunStep76(), 62);
             AddWizardButton(scroll, "77. Build the Storage Chest Tiers\n(Wooden Crate 9 / Iron Chest 18 / Steel Chest 36 \u2014 Non-Destructive)",
                 () => IndustrialWorld.EditorTools.StorageChestTiersSetup.RunStep77(), 62);
+            AddWizardButton(scroll, "78. Build the Logistic Chests\n(Provider = output-only / Requester = input-only \u2014 Non-Destructive)",
+                () => IndustrialWorld.EditorTools.LogisticChestsSetup.RunStep78(), 62);
 
             AddSpacer(scroll, 20);
         }

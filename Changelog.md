@@ -1,9 +1,61 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `11.1.0-dev`
+**Current Version:** `11.2.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [11.2.0-dev] The Storage Line Closes: Provider and Requester Chests
+
+**Type:** MINOR — new content plus one new save-compatible field, no schema break. Two new storage blocks on the existing Chest component, a `portLock` field that defaults to the current behaviour, a port panel that adapts to a locked host, and one new setup step (78). Existing chests, their saves and their port snapshots are unaffected.
+
+**GitHub title:** `[11.2.0-dev] The storage line closes — Provider and Requester chests`
+
+#### Why this round
+
+The roadmap's storage line has named one remaining gap since 11.1.0-dev: "only the Provider/Requester (port-locked) end of the progression remains". A plain chest can be wired either way on every face, which is flexible but means a logistics bus has no block that is guaranteed to only supply, or only receive — one mis-clicked face turns a supply buffer into a sink and quietly drains the line.
+
+#### 1. A lock on the chest that already works
+
+Rather than a new component, the two variants are the same `VoxelEngine.Building.Chest` with one new field, `portLock`:
+
+| Variant | Slots | Lock | Recipe | Station |
+|---|---|---|---|---|
+| Provider Chest | 18 | every active face is an OUTPUT | Iron Ingot x4 + Copper Ingot x2 + Wooden Plank x2 | Crafting Bench, 3 s |
+| Requester Chest | 18 | every active face is an INPUT | Iron Ingot x4 + Copper Ingot x2 + Wooden Plank x2 | Crafting Bench, 3 s |
+
+The lock is enforced in three places so no path can contradict it. `EnforcePortLock` re-pins every active face on Awake and again after a port snapshot is restored, so an older save carrying free directions is corrected on load. `GetPortContainers` advertises only the half the lock allows, so the shared routing layer refuses the wrong transfer at the source. The legacy pipe API answers to match — a Provider returns no input container and rejects a pipe push outright; a Requester reports no output ready. `portLock` defaults to `Free`, which is exactly today's behaviour, so every existing chest and tier is untouched.
+
+#### 2. The panel says what the block is
+
+`PortConfigHud` now recognises a host that implements the new `IPortLockedHost` interface. A locked chest's panel gains a banner — an amber PROVIDER or blue REQUESTER badge with the rule in one line — and each face card's pill becomes a clean ON/OFF switch reading "OUTPUT ON" / "INPUT ON" / "OFF" instead of a three-way cycle, because the direction is not the player's to choose. The round-robin / priority toggle is hidden on a Requester, where it means nothing. Filters, per-face item whitelists and the two-column card grid all behave exactly as before. A free host renders the panel unchanged, down to the hint text.
+
+#### 3. Setup step 78 — Build the Logistic Chests (Non-Destructive)
+
+New wizard button 78 in `Tools > Voxel Engine > Voxel Engine Setup`, implemented in `LogisticChestsSetup`. Per variant it creates or repairs the prefab, the block item and the recipe, following the same contract as step 77: missing assets are authored, and an existing asset is only corrected where it cannot be right — a missing Chest component, a wrong slot count, display name or lock mode, a null recipe output or ingredient, a missing registry membership. Authored craft times, quantities, health and icons are never reset.
+
+The one addition over step 77 is face seeding: a locked prefab with no active face at all gets its +X face switched on in the pinned direction, so the block is useful the moment it is placed. A prefab that already has an authored face layout keeps it — only a face pointing against the lock is re-pinned. The step refuses to run without step 4's content (plank / iron ingot / copper ingot must resolve) and logs every decision with the `[Setup 78]` prefix.
+
+#### What to run
+
+1. Add `Scripts/Editor/LogisticChestsSetup.cs` (new file) and replace `Scripts/Transport/IItemPortHost.cs`, `Scripts/Building/Chest.cs`, `Scripts/UI/PortConfigHud.cs` and `Scripts/Editor/VoxelEngineSetupWindow.cs`. Let Unity compile; the console should be clean.
+2. Open `Tools > Voxel Engine > Voxel Engine Setup` and run **step 78 (Build the Logistic Chests)**.
+3. Craft a Provider Chest at a Crafting Bench and place it. Right-click it: the panel should read "Provider Chest" with the amber PROVIDER banner, and each face pill should toggle between "OUTPUT ON" and "OFF" only.
+4. Run a pipe into the Provider Chest from a full source: nothing should enter it. Run a pipe out of it into a Requester Chest: items should move one way only.
+5. Open a plain Chest and a Steel Chest to confirm they still cycle None to Input to Output with no banner.
+6. Fill a Provider Chest, switch a face off, save and reload: the items, the face state and the lock all come back.
+7. Re-run step 78: the console should report "both variants already present and correct, nothing written."
+
+### [11.1.1-dev] The Chest Tier Setup Compiles Again
+
+**Type:** PATCH — compile fixes only. No behaviour change, no save touch, no API change.
+
+**GitHub title:** `[11.1.1-dev] The chest tier setup compiles again`
+
+Two compiler errors in `StorageChestTiersSetup.cs` shipped with 11.1.0-dev and blocked the whole editor assembly, so step 77 could not be run at all:
+
+- **CS0136 at line 193** — the local `chest` declared while building a new tier prefab collided with the `chest` used in the repair branch further down the same method. The creation-path local is renamed `newChest`; the repair path is unchanged.
+- **CS0019 at line 328** — `RecipeIngredient` is a struct, so `recipe.inputs[i] == null` is not a legal comparison. The null test is dropped; the remaining `item == null || count <= 0` check already covers every broken-ingredient case the guard was written for, so the repair logic behaves identically.
 
 ### [11.1.0-dev] The Chest Progression Lands: Wooden Crate, Iron Chest, Steel Chest
 

@@ -374,8 +374,14 @@ namespace VoxelEngine.UI
             head.Add(MakeLegendChip(ColNone, "OFF"));
             root.Add(head);
 
+            // Port-lock banner — a Provider/Requester host states its rule once,
+            // so the per-face cards can stay quiet ON/OFF switches.
+            var lockBanner = BuildPortLockBanner(host);
+            if (lockBanner != null) root.Add(lockBanner);
+
             // Distribution mode toggle — only meaningful when >1 OUTPUT face.
-            root.Add(BuildDistributionToggle(routing, onChanged));
+            if (LockOf(host) != PortLockMode.Requester)
+                root.Add(BuildDistributionToggle(routing, onChanged));
 
             var grid = new VisualElement();
             grid.style.flexDirection = FlexDirection.Row;
@@ -406,13 +412,71 @@ namespace VoxelEngine.UI
                 grid.Add(card);
             }
 
-            var hint = T.Muted("Click a face to cycle None → Input → Output.  " +
-                               "OUTPUT pushes items into adjacent pipes; INPUT accepts them.  " +
-                               "Pick the container and add item filters per face.");
+            var lockMode = LockOf(host);
+            var hint = T.Muted(lockMode == PortLockMode.Free
+                ? "Click a face to cycle None → Input → Output.  " +
+                  "OUTPUT pushes items into adjacent pipes; INPUT accepts them.  " +
+                  "Pick the container and add item filters per face."
+                : lockMode == PortLockMode.Provider
+                    ? "This block only supplies the network. Click a face to switch its OUTPUT on or off, " +
+                      "then add item filters to decide what leaves through it."
+                    : "This block only receives from the network. Click a face to switch its INPUT on or off, " +
+                      "then add item filters to decide what it will take in.");
             hint.style.marginTop = 10;
             root.Add(hint);
 
             return root;
+        }
+
+        /// <summary>The host's port-lock rule, or Free when it doesn't declare one.</summary>
+        private static PortLockMode LockOf(IItemPortHost host)
+            => host is IPortLockedHost locked ? locked.PortLock : PortLockMode.Free;
+
+        /// <summary>
+        /// One-line banner naming a locked host's rule. Returns null for a Free host so
+        /// the ordinary panel is unchanged.
+        /// </summary>
+        private static VisualElement BuildPortLockBanner(IItemPortHost host)
+        {
+            var mode = LockOf(host);
+            if (mode == PortLockMode.Free) return null;
+
+            bool provider = mode == PortLockMode.Provider;
+            Color tint = provider ? ColOutput : ColInput;
+
+            var row = new VisualElement();
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
+            row.style.marginTop = 8;
+            row.style.paddingTop = 8; row.style.paddingBottom = 8;
+            row.style.paddingLeft = 10; row.style.paddingRight = 10;
+            row.style.backgroundColor = new StyleColor(new Color(tint.r, tint.g, tint.b, 0.12f));
+            T.Radius(row, 8f);
+            T.Border(row, 1, new Color(tint.r, tint.g, tint.b, 0.45f));
+            row.pickingMode = PickingMode.Ignore;
+
+            var badge = new Label(provider ? "PROVIDER" : "REQUESTER");
+            badge.style.color = new StyleColor(Color.white);
+            badge.style.fontSize = 10;
+            badge.style.unityFontStyleAndWeight = FontStyle.Bold;
+            badge.style.letterSpacing = 1.2f;
+            badge.style.paddingLeft = 8; badge.style.paddingRight = 8;
+            badge.style.paddingTop = 3; badge.style.paddingBottom = 3;
+            badge.style.marginRight = 10;
+            badge.style.backgroundColor = new StyleColor(new Color(tint.r, tint.g, tint.b, 0.85f));
+            T.Radius(badge, 5f);
+            row.Add(badge);
+
+            var text = new Label(provider
+                ? "Every active face is an OUTPUT — this block only supplies the network."
+                : "Every active face is an INPUT — this block only receives from the network.");
+            text.style.color = new StyleColor(T.TextMuted);
+            text.style.fontSize = 11;
+            text.style.flexGrow = 1;
+            text.style.whiteSpace = WhiteSpace.Normal;
+            row.Add(text);
+
+            return row;
         }
 
         // Round-Robin / Priority toggle for competing OUTPUT faces.
@@ -474,6 +538,7 @@ namespace VoxelEngine.UI
             var enabled = config.IsFaceEnabled(face);
             var bgTint  = DirectionColor(dir);
             var lockedDrawerPort = TryGetDrawerPortLock(host, config, face, out var drawerPortLabel);
+            var lockMode = LockOf(host);
 
             // Strict 2-column grid: each card is exactly half the row width and
             // never grows/shrinks; inner-margin handles the gutter.
@@ -530,6 +595,33 @@ namespace VoxelEngine.UI
                 pill.tooltip = "This side is occupied by a drawer network block. Break/move that block to edit this face.";
                 pill.style.backgroundColor = new StyleColor(new Color(0.15f, 0.55f, 0.50f, 0.75f));
                 T.Border(pill, 1, new Color(0.20f, 0.85f, 0.75f, 0.70f));
+            }
+            else if (lockMode != PortLockMode.Free)
+            {
+                // Locked host: the direction is not the player's to choose, so the pill
+                // is a clean ON/OFF switch that always writes the pinned direction.
+                var pinned = lockMode == PortLockMode.Provider ? PortDirection.Output : PortDirection.Input;
+                bool active = enabled && dir == pinned;
+                pill.text = active
+                    ? (lockMode == PortLockMode.Provider ? "OUTPUT ON" : "INPUT ON")
+                    : "OFF";
+                pill.clicked += () =>
+                {
+                    bool on = config.IsFaceEnabled(face) && config.GetDirection(face) == pinned;
+                    if (on)
+                    {
+                        config.SetDirection(face, PortDirection.None);
+                        config.SetFaceEnabled(face, false);
+                    }
+                    else
+                    {
+                        config.SetFaceEnabled(face, true);
+                        config.SetDirection(face, pinned);
+                    }
+                    (host as IPortLockedHost)?.EnforcePortLock();
+                    config.RefreshIndicators();
+                    inlineChanged?.Invoke();
+                };
             }
             else
             {
