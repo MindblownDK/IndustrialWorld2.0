@@ -1,9 +1,25 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `11.5.1-dev`
+**Current Version:** `11.5.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [11.5.2-dev] The Item Ports Panel Opens Again
+
+**Type:** PATCH — fixes a regression introduced by 11.5.1-dev. No new systems, no save format change.
+
+**GitHub title:** `[11.5.2-dev] The item ports panel opens again`
+
+#### What broke
+
+11.5.1-dev made the item-ports overlay rebuild its body in place so the REQUESTS list updates live. That rebuild opened with a guard that bailed out when the scroll view was not yet attached to a panel — sensible for a *re*build triggered from a scheduled callback, wrong for the *first* build, which runs while the overlay is still being assembled and has not been added to the root yet. The guard fired immediately, the body was never created, and the overlay opened as a title bar and a close button with nothing between them.
+
+#### The fix
+
+The first build now happens after the overlay is attached to the root, so the panel is live and anything the body schedules has somewhere to run. The bail-out guard is gone from the top of the rebuild: the body is always constructed, and only the scroll-offset restoration is conditional — it is skipped when the captured offset is zero, which is exactly the first-build case. The guard that remains is inside the scheduled callback, where an unattached panel really does mean "give up".
+
+Live refresh and scroll preservation are unchanged: removing a request still updates the list immediately, and still does not scroll the panel anywhere.
 
 ### [11.5.1-dev] One Row Per Item, And The Request List Updates While You Watch
 

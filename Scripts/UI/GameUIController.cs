@@ -3450,7 +3450,10 @@ namespace VoxelEngine.UI
             VisualElement body = null;
             void RebuildBody()
             {
-                if (scroll.panel == null) return;
+                // Remember where the player was looking BEFORE the swap. On the very first
+                // build there is nothing to remember and nothing is attached yet, so this is
+                // simply 0 -- the body must still be built, which is why there is no
+                // "not attached yet, bail out" guard here.
                 float keepY = scroll.scrollOffset.y;
 
                 if (body != null && body.parent == scroll.contentContainer) body.RemoveFromHierarchy();
@@ -3458,8 +3461,11 @@ namespace VoxelEngine.UI
                 body.style.width = Length.Percent(100);
                 scroll.Add(body);
 
+                if (keepY <= 0.5f) return;   // was at the top: nothing to restore.
+
                 // Content height is only known once layout has run, so restate the offset
-                // on the next tick as well as now.
+                // on the next tick as well as now. The scheduler only runs while the element
+                // is attached to a panel, so this is a no-op on the first build.
                 scroll.scrollOffset = new Vector2(scroll.scrollOffset.x, keepY);
                 scroll.schedule.Execute(() =>
                 {
@@ -3467,10 +3473,13 @@ namespace VoxelEngine.UI
                     scroll.scrollOffset = new Vector2(scroll.scrollOffset.x, keepY);
                 }).StartingIn(0);
             }
-            RebuildBody();
 
             _itemPortsOverlay = overlay;
             _root.Add(overlay);
+
+            // Built AFTER the overlay is attached, so the body's own scheduled work and any
+            // layout it depends on have a live panel to run against.
+            RebuildBody();
         }
 
         /// <summary>Launcher pill that opens the Item-Ports overlay.</summary>

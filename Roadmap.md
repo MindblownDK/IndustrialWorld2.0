@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `11.5.1-dev`
-**Roadmap Version:** `11.5.1-dev`
+**Current Version:** `11.5.2-dev`
+**Roadmap Version:** `11.5.2-dev`
 **Date:** 2026-09-16
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,10 @@
 
 ## 0. Recently Done
 
+### 11.5.2-dev — The Item Ports Panel Opens Again
+- Fixes the 11.5.1-dev regression that left the item-ports overlay empty: the first body build ran before the overlay was attached and was skipped by an attachment guard meant only for rebuilds.
+- The body is now built after the overlay is attached and is never skipped; only the scroll-offset restore is conditional, so live refresh and scroll preservation behave as before.
+
 ### 11.5.1-dev — One Row Per Item
 - Setup step 81 repairs the assets that inherited the old `iron_ore` default identity (gravel, radar beacon, fire igniter) and the material assets left displaying as ore; the canonical ores are untouched.
 - Every item picker collapses its catalogue to one entry per id and prefers the best-authored asset, so a duplicate id can never again show as several identical rows.
@@ -48,11 +52,6 @@
 - Iron and copper ore are one canonical asset each (`Industrial/Items/Item_IronOre`, `Item_CopperOre`); setup step 80 repoints every recipe, voxel material drop and persistence-catalogue entry, then deletes the retired `Items/Item_Iron` and `Items/Item_Copper` duplicates.
 - `ItemDefinition.itemId`/`displayName` no longer default to `"iron_ore"`/`"Iron Ore"`, which is what let unauthored assets claim to be iron ore; `ItemIdentity` treats a blank id as no identity, and step 79 audits and repairs the remainder.
 - `ItemIdAliases` maps the retired ids to their replacements at load, so saves written before the consolidation keep their ore.
-
-### 11.2.0-dev — The Storage Line Closes
-- Provider and Requester chests ship as a `portLock` field on the existing `Chest` component: an active face is pinned to Output or Input, enforced on Awake, after a port-snapshot restore, and through the legacy pipe API.
-- The port panel recognises `IPortLockedHost`: a lock banner plus ON/OFF face pills instead of the three-way cycle, with the distribution toggle hidden on a Requester.
-- Setup step 78 authors both variants non-destructively; `portLock` defaults to `Free`, so every existing chest is untouched.
 
 ### Era Transition Feel
 
