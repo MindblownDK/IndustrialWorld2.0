@@ -857,6 +857,8 @@ namespace VoxelEngine.EditorTools
                 () => IndustrialWorld.EditorTools.TransmissionTowerSetup.RunStep83(), 62);
             AddWizardButton(scroll, "84. Build the Orbital Programme\n(Orbital Map, Satellite Research Station, research \u2014 Non-Destructive)",
                 () => IndustrialWorld.EditorTools.OrbitalProgrammeSetup.RunStep84(), 62);
+            AddWizardButton(scroll, "85. Build the Rail System\n(Track, switch, buffer, station, locomotive \u2014 Non-Destructive)",
+                () => IndustrialWorld.EditorTools.RailSystemSetup.RunStep85(), 62);
 
             AddSpacer(scroll, 20);
         }

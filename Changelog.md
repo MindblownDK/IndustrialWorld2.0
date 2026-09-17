@@ -1,9 +1,82 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `11.14.0-dev`
+**Current Version:** `11.15.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [11.15.0-dev] The Permanent Way
+
+**Type:** MINOR - a new system, save-compatible. All new save fields are additive; a world with no rail behaves exactly as before.
+
+**GitHub title:** `[11.15.0-dev] The permanent way`
+
+The Train System - section 6.4 item 1, and the last unbuilt entry in that block.
+
+#### Why a railway is not just a road
+
+The codebase already has belts for short haul, drones for point-to-point, and roads for driving. A railway had to be a fourth distinct answer, not a reskin of one of them, or it would not be worth building. The line that makes it distinct:
+
+**A train is a scheduled agent that walks a graph, not a vehicle that drives on a surface.**
+
+A road is queried by position - "what am I standing on". A rail is walked by topology - "what comes next". That one difference buys the property that makes bulk haul belong on rails: **a train keeps running while its chunks are unloaded**, because walking a graph costs nothing and needs no colliders. A rover cannot do that.
+
+This is the same reasoning that put satellites on analytic orbits in 11.13.0. Anything the player expects to keep working while they are elsewhere must not depend on being simulated.
+
+#### The permanent way
+
+`RailTrack` is a `PlacedBlock`, so mining, damage, saves and the inspection overlay already work on it. It auto-connects to orthogonal neighbours like the road's neighbour mask, so the player lays cells and the line forms itself with no shape to pick.
+
+Two rules stop it being a road with extra steps:
+
+- **Gradient.** Rail refuses a slope a road would happily drape over. A railway that climbs anything is just an expensive road, so the refusal is what makes the player cut, fill and route around terrain. The rule lives in the graph itself: too-steep cells simply do not connect, rather than connecting and then failing mysteriously when a train tries it.
+- **Degree.** Plain track holds at most two connections. Three or four requires a switch, and a buffer holds one. The network stays a set of lines rather than an undifferentiated mesh, which is what makes routing meaningful.
+
+#### Pathfinding
+
+`RailNetwork` is a hash-grid registry (mirroring `RoadSurfaceUtility`) plus A* over the cell graph - the roadmap's "A* for trains on rail graph" item.
+
+A* rather than the road system's corridor solver because a railway is already a sparse graph with explicit edges, which is exactly the shape A* wants, whereas roads are a dense surface that must be traced first. Reusing the road planner would mean rediscovering topology the rail graph already knows.
+
+Edge cost is real distance divided by the cell's speed multiplier, so the planner prefers good line over a marginally shorter bad one. The heuristic is straight-line distance, which is admissible because no edge is ever shorter than the gap it spans - so the result is a genuine shortest path, not merely a path.
+
+#### Stations and schedules
+
+A station owns the cargo hold, not the train. A train is in motion and often unloaded; a station is fixed and always addressable. Putting the buffer at the station lets the factory either side fill or drain it on its own schedule, so the train only has to show up - which is what makes a railway asynchronous instead of something the player babysits.
+
+Stations are matched **by name, not by reference**, the convention the drone ports already set here. A schedule that names "North Pit" keeps working after the player demolishes and rebuilds that station.
+
+| Role | Effect |
+|---|---|
+| LOAD | Station hold to train |
+| UNLOAD | Train to station hold |
+| PASSING | Timing point, no cargo moves |
+
+Transfers put back anything the destination refuses, so a full train never destroys cargo. A dwell cap stops a jammed or mis-filtered station stranding a train forever on an order that can never complete.
+
+#### Driving feel
+
+Acceleration is deliberately low - mass is what a train is for. Arrival uses `v = sqrt(2as)`, the fastest speed from which the train can still stop in the distance remaining, so it brakes into a platform instead of overshooting it.
+
+#### Switches
+
+Right-click a switch to set the points. One detail worth calling out: a train arriving from the leg the points happen to be set to takes the next available route instead, so a switch can never bounce a train straight back the way it came.
+
+#### Persistence
+
+Station names, station roles and switch settings all survive a reload.
+
+Switch settings are re-applied **one frame after load**, deliberately. A switch clamps its selection against its live link list, and that list is still filling while neighbouring track instantiates - applying immediately would clamp against a partial list and silently change the player's routing.
+
+#### Manual step in Unity
+
+1. **Tools -> Voxel Engine -> Voxel Engine Setup**.
+2. Click **85. Build the Rail System**.
+3. Lay track between two sites, keeping the gradient gentle.
+4. Place a station beside the track at each end. Right-click each to name it and set LOAD or UNLOAD.
+5. Place a locomotive on the track. Right-click it, add both stops, press START SCHEDULE.
+
+Right-click any station, train or switch to open its console.
 
 ### [11.14.0-dev] Reasons To Launch
 

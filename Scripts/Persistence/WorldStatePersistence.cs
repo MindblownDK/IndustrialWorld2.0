@@ -442,6 +442,22 @@ namespace VoxelEngine.Persistence
                         entry.anchorLocalZ   = local.z;
                     }
                 }
+                // Rail (11.15.0). A station's name is what schedules refer to, and a switch's
+                // setting is a routing decision the player made, so both must survive a reload.
+                var railStation = pb.GetComponentInChildren<VoxelEngine.Building.RailStation>();
+                if (railStation != null)
+                {
+                    entry.hasRailStation = true;
+                    entry.railStationName = railStation.HasCustomName ? railStation.StationName : "";
+                    entry.railStationRole = (int)railStation.role;
+                }
+                var railTrack = pb.GetComponentInChildren<VoxelEngine.Building.RailTrack>();
+                if (railTrack != null && railTrack.pieceKind == VoxelEngine.Building.RailPieceKind.Switch)
+                {
+                    entry.hasRailSwitch = true;
+                    entry.railSwitchSelection = railTrack.SwitchSelection;
+                }
+
                 CaptureFactoryRuntime(pb.gameObject, entry);
                 save.placedBlocks.Add(entry);
             }
@@ -2190,6 +2206,21 @@ namespace VoxelEngine.Persistence
             return IsFinite(q.x) && IsFinite(q.y) && IsFinite(q.z) && IsFinite(q.w);
         }
 
+        /// <summary>
+        /// Re-applies a saved switch setting after the whole rail network has restored.
+        /// A switch clamps its selection against its live link list, and that list is still
+        /// being built while neighbouring track is instantiated, so applying immediately
+        /// would clamp against a partial list and silently change the player's routing.
+        /// </summary>
+        private System.Collections.IEnumerator ApplySwitchNextFrame(
+            VoxelEngine.Building.RailTrack track, int selection)
+        {
+            yield return null;
+            if (track == null) yield break;
+            track.RebuildLinks(true);
+            track.SetSwitchSelection(selection);
+        }
+
         private void RestorePlacedBlocks(SaveData save)
         {
             int restored = 0;
@@ -2237,6 +2268,24 @@ namespace VoxelEngine.Persistence
                 // Additive label: missing fields in legacy saves restore as unnamed.
                 go.GetComponentInChildren<VoxelEngine.Building.AsphaltRoad>(true)
                     ?.SetNetworkName(sb.roadNetworkName);
+                var restoredStation = go.GetComponentInChildren<VoxelEngine.Building.RailStation>(true);
+                if (restoredStation != null && sb.hasRailStation)
+                {
+                    if (!string.IsNullOrEmpty(sb.railStationName)) restoredStation.StationName = sb.railStationName;
+                    if (System.Enum.IsDefined(typeof(VoxelEngine.Building.StationRole), sb.railStationRole))
+                        restoredStation.role = (VoxelEngine.Building.StationRole)sb.railStationRole;
+                }
+                var restoredSwitch = go.GetComponentInChildren<VoxelEngine.Building.RailTrack>(true);
+                if (restoredSwitch != null && sb.hasRailSwitch)
+                {
+                    // Deferred: the switch's link list is built by its own OnEnable against
+                    // track that may not be restored yet, so the selection is clamped to a
+                    // list that is still filling. Re-applying next frame lands it correctly.
+                    var target = restoredSwitch;
+                    int selection = sb.railSwitchSelection;
+                    StartCoroutine(ApplySwitchNextFrame(target, selection));
+                }
+
                 if (sb.hasRoadWear)
                 {
                     var restoredRoad = go.GetComponentInChildren<VoxelEngine.Building.AsphaltRoad>(true);
@@ -3426,6 +3475,12 @@ namespace VoxelEngine.Persistence
         [Serializable] private class SavedPlacedBlock
         {
             public string itemId;
+            // Additive 11.15.0: rail station identity/role and switch routing.
+            public bool hasRailStation;
+            public string railStationName = "";
+            public int railStationRole;
+            public bool hasRailSwitch;
+            public int railSwitchSelection;
             public Vector3 pos; public Quaternion rot; public float rotY;
             // Additive body anchor (9.58.2-dev). A placed block stands on a celestial body,
             // and that body moves through the scene as the system runs (orbits, rebases,

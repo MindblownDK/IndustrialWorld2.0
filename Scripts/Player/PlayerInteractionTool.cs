@@ -858,6 +858,19 @@ namespace VoxelEngine.Player
                 var chest = hit.collider.GetComponentInParent<Chest>();
                 if (chest != null) { UI.GameUIController.Instance?.OpenContainer(chest.container, chest); return; }
 
+                // Rail consoles. Checked before the chest fallthrough below cannot apply,
+                // and ordered train -> station -> switch because a train parked at a
+                // platform overlaps both and the train is what the player aimed at.
+                var railTrain = hit.collider.GetComponentInParent<VoxelEngine.Building.RailTrain>();
+                if (railTrain != null) { VoxelEngine.UI.RailConfigHud.OpenTrain(railTrain); return; }
+
+                var railStation = hit.collider.GetComponentInParent<VoxelEngine.Building.RailStation>();
+                if (railStation != null) { VoxelEngine.UI.RailConfigHud.OpenStation(railStation); return; }
+
+                var railTrack = hit.collider.GetComponentInParent<VoxelEngine.Building.RailTrack>();
+                if (railTrack != null && railTrack.pieceKind == VoxelEngine.Building.RailPieceKind.Switch)
+                { VoxelEngine.UI.RailConfigHud.OpenSwitch(railTrack); return; }
+
                 // Piston Interaction: Right-click to toggle push/pull.
                 var piston = hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridPiston>();
                 if (piston != null)

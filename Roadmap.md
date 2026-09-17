@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `11.14.0-dev`
-**Roadmap Version:** `11.14.0-dev`
+**Current Version:** `11.15.0-dev`
+**Roadmap Version:** `11.15.0-dev`
 **Date:** 2026-09-16
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -33,11 +33,6 @@
 - `TrajectoryPredictor` forward-integrates the coast path with the same gravity and drag forces `GridEntity` applies, then raycasts each segment, so the impact point is real terrain rather than a vacuum conic.
 - `TrajectoryOverlay` draws it in the wide exterior view only, colour-coded impact/orbit/escape, with a distance-scaled pulsing impact marker and a plain-language HUD readout.
 - Cached against velocity change so a coasting ship does not re-solve every frame. Toggle on `J`, rebindable; settings version 15.
-
-### 11.11.0-dev — The Grid Reaches Out
-- `TransmissionTower` spans power 128 m tower-to-tower at 20 kW, registering the span as a manual link so it bypasses the cable distance/line-of-sight rules without loosening them.
-- Local tap stays at 4 m so a pylon does not hoover up every machine in its span radius; spans take part in the normal bottleneck rule and are drawn as a hanging catenary.
-- Authored by setup step 83. Closes the last open item in the section 6.4 content list.
 
 ### 11.7.1-dev — The Range Readout Tells The Truth
 - The chest panel's provider/requester counts are now measured in range (`ProvidersInRangeOf` / `RequestersInRangeOf`) instead of world-wide, so distance is visible where it was previously invisible.
@@ -1377,11 +1372,13 @@ Statuses are evidence-based and move forward only after code/content review and 
 
 #### New Content
 
-1. **Train System**
-   - Straight/curved/ramp rail blocks.
-   - Locomotive + cargo wagon grid vehicles.
-   - Train stations with loading/unloading arms.
-   - Schedule UI.
+1. **Train System** - ~~rail blocks~~ ~~locomotive~~ ~~stations with loading/unloading~~ ~~schedule UI~~ *(11.15.0-dev)* - **COMPLETE**
+   - `RailTrack` (straight / switch / buffer), `RailNetwork` (registry + A*), `RailStation` (named stop, cargo hold, LOAD/UNLOAD/PASSING), `RailTrain` (scheduled hauler), `RailConfigHud` (one console for all three).
+   - **Core design rule:** a train is a scheduled agent that WALKS A GRAPH, not a vehicle that drives on a surface. That is what lets it keep running through unloaded chunks, and it is the whole reason bulk haul belongs on rail rather than on rovers.
+   - **Balance rule:** rail refuses a gradient a road would drape over. A railway that climbs anything is just an expensive road; the refusal is what forces cut, fill and routing decisions.
+   - **Design rule:** the cargo hold lives on the STATION, not the train, so factories fill and drain on their own schedule and the train only has to show up. Stations are matched by name, so a schedule survives its station being rebuilt.
+   - **Implementation note:** switch settings must be re-applied a frame after load - a switch clamps its selection against a link list that is still filling while neighbouring track restores.
+   - Open: cargo wagons (multi-car consists), signalling and block occupancy, and rail-laying assistance for long runs.
 
 2. **Drone Ports** — ~~flying logistics drones between ports~~ *(11.7.0-dev)*
    - `DronePort` pairs with another port over 400 m and serves the logistic chests within 48 m of each end; `DroneNetwork` owns pairing, dispatch and delivery.
