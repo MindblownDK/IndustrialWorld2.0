@@ -1241,6 +1241,78 @@ namespace VoxelEngine.GridSystem.UI
                 }
             }
 
+            // ── Resource survey ──
+            if (payload.CanSurveyResources)
+            {
+                p.Add(GridUIHelpers.SectionTitle("Deep Deposit Survey"));
+
+                var deposits = payload.SurveyDeposits();
+                if (deposits.Count == 0)
+                {
+                    var none = new Label(
+                        $"No deep deposits within {payload.surveyRadius / 1000f:0.#} km of the " +
+                        "satellite's ground track. Move the orbit or wait for it to carry the " +
+                        "scanner over new terrain.");
+                    none.style.fontSize = 10;
+                    none.style.whiteSpace = WhiteSpace.Normal;
+                    none.style.marginBottom = 8;
+                    none.style.color = new StyleColor(T.TextMuted);
+                    p.Add(none);
+                }
+                else
+                {
+                    var summary = new Label($"{deposits.Count} deposit(s) in range, nearest first:");
+                    summary.style.fontSize = 10;
+                    summary.style.marginBottom = 4;
+                    summary.style.color = new StyleColor(T.TextSecondary);
+                    p.Add(summary);
+
+                    for (int i = 0; i < deposits.Count; i++)
+                    {
+                        var node = deposits[i];
+                        float distance = Vector3.Distance(
+                            payload.transform.position, node.Centre);
+
+                        var row = new VisualElement();
+                        row.style.flexDirection = FlexDirection.Row;
+                        row.style.marginBottom = 2;
+
+                        var name = new Label(
+                            VoxelEngine.Generation.DeepOreField.MaterialName(node.Material));
+                        name.style.width = 90;
+                        name.style.fontSize = 10;
+                        name.style.unityFontStyleAndWeight = FontStyle.Bold;
+                        // An exhausted deposit is still reported, greyed out, so a player
+                        // does not fly to one they already drained and assume the scanner lied.
+                        name.style.color = new StyleColor(node.IsDepleted
+                            ? T.TextMuted : Color.white);
+                        row.Add(name);
+
+                        var detail = new Label(node.IsDepleted
+                            ? $"{distance / 1000f:0.#} km   EXHAUSTED"
+                            : $"{distance / 1000f:0.#} km   {node.Remaining:N0} units " +
+                              $"({node.Fraction01 * 100f:0}%)");
+                        detail.style.flexGrow = 1;
+                        detail.style.fontSize = 10;
+                        detail.style.color = new StyleColor(node.IsDepleted
+                            ? T.TextMuted : T.TextSecondary);
+                        row.Add(detail);
+
+                        p.Add(row);
+                    }
+                }
+
+                var surveyNote = new Label(
+                    "Surveyed from the satellite's position, not yours. Deposits still need " +
+                    "a Deep Core Extractor on the ground to work.");
+                surveyNote.style.fontSize = 10;
+                surveyNote.style.whiteSpace = WhiteSpace.Normal;
+                surveyNote.style.marginTop = 4;
+                surveyNote.style.marginBottom = 8;
+                surveyNote.style.color = new StyleColor(T.TextMuted);
+                p.Add(surveyNote);
+            }
+
             // ── Climate control ──
             if (payload.CanInfluenceWeather)
             {

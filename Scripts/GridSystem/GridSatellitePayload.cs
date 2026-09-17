@@ -33,6 +33,11 @@ namespace VoxelEngine.GridSystem
         WeatherRadar = 1,
         /// <summary>All of the above, plus weather influence.</summary>
         ClimateControl = 2,
+        /// <summary>
+        /// Surveys deep ore deposits across the orbited body. Appended, never inserted:
+        /// authored prefabs store this as an int.
+        /// </summary>
+        ResourceScanner = 3,
     }
 
     /// <summary>What the player has asked a climate-control payload to do.</summary>
@@ -77,16 +82,55 @@ namespace VoxelEngine.GridSystem
             }
         }
 
+        // A resource scanner is a survey instrument, not a meteorological one. It reports
+        // seasons like every payload does, but it has no weather hardware at all - keeping
+        // the tiers distinct stops the top payload from simply being "all of the above".
         public bool CanTrackSeasons => true;
-        public bool CanTrackWeather => kind != SatellitePayloadKind.SensorArray;
+        public bool CanTrackWeather => kind == SatellitePayloadKind.WeatherRadar
+                                    || kind == SatellitePayloadKind.ClimateControl;
         public bool CanInfluenceWeather => kind == SatellitePayloadKind.ClimateControl;
+        public bool CanSurveyResources => kind == SatellitePayloadKind.ResourceScanner;
 
         public string KindLabel => kind switch
         {
             SatellitePayloadKind.WeatherRadar => "WEATHER RADAR",
             SatellitePayloadKind.ClimateControl => "CLIMATE CONTROL",
+            SatellitePayloadKind.ResourceScanner => "RESOURCE SCANNER",
             _ => "SENSOR ARRAY",
         };
+
+        [Header("Resource Survey")]
+        [Tooltip("Ground radius the scanner sweeps, in metres. Far wider than a hand " +
+                 "scanner: the whole point of orbit is seeing more at once.")]
+        public float surveyRadius = 6000f;
+
+        [Tooltip("Most deposits reported at a time. A list nobody can read is not more " +
+                 "useful than a short ranked one.")]
+        public int surveyLimit = 16;
+
+        // Per-instance, deliberately NOT a shared static. A static scratch list returned to
+        // callers would be silently overwritten the moment a second scanner surveyed, so a
+        // caller iterating one scanner's results would start reading another's.
+        private readonly List<VoxelEngine.Generation.DeepOreNode> _surveyResults = new(32);
+
+        /// <summary>
+        /// Deposits this scanner can currently see, nearest first. Returns an empty list
+        /// when the payload is not a scanner or is not operational, so a caller never has
+        /// to check the kind before asking.
+        /// </summary>
+        public IReadOnlyList<VoxelEngine.Generation.DeepOreNode> SurveyDeposits()
+        {
+            _surveyResults.Clear();
+            if (!CanSurveyResources || !IsOperational) return _surveyResults;
+
+            // Surveyed around the SATELLITE's ground track, not the player: the instrument
+            // is in orbit, and reporting what is under the player would make the satellite
+            // a pointless middleman for a tool they could carry.
+            VoxelEngine.Generation.DeepOreField.SurveyArea(
+                transform.position, surveyRadius, _surveyResults, Mathf.Max(1, surveyLimit));
+
+            return _surveyResults;
+        }
 
         public void SetDirective(ClimateDirective directive)
         {

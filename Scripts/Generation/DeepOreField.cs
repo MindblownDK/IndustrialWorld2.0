@@ -227,6 +227,49 @@ namespace VoxelEngine.Generation
         }
 
         /// <summary>
+        /// Every node within <paramref name="searchRadius"/>, nearest first. This is the
+        /// orbital survey query: a satellite sees the whole field at once rather than the
+        /// single nearest deposit a hand scanner reports.
+        ///
+        /// Capped by <paramref name="maxResults"/> because a wide sweep over a large
+        /// radius can cover hundreds of cells, and a readout nobody can scroll is not
+        /// more useful than a short ranked one.
+        /// </summary>
+        public static int SurveyArea(Vector3 worldPosition, float searchRadius,
+            List<DeepOreNode> results, int maxResults = 24)
+        {
+            results.Clear();
+
+            var body = GravityProvider.ActiveBody;
+            if (body == null || body.settings == null) return 0;
+
+            int seed = body.genParams.seed;
+            string bodyName = body.settings.bodyName;
+
+            int span = Mathf.Max(1, Mathf.CeilToInt(searchRadius / NODE_CELL_SIZE) + 1);
+            int cx = Mathf.FloorToInt(worldPosition.x / NODE_CELL_SIZE);
+            int cz = Mathf.FloorToInt(worldPosition.z / NODE_CELL_SIZE);
+
+            float rSq = searchRadius * searchRadius;
+
+            for (int dz = -span; dz <= span; dz++)
+            for (int dx = -span; dx <= span; dx++)
+            {
+                var cell = new int2(cx + dx, cz + dz);
+                if (!TryBuildNode(cell, seed, bodyName, out var node)) continue;
+                if ((node.Centre - worldPosition).sqrMagnitude > rSq) continue;
+                results.Add(node);
+            }
+
+            results.Sort((a, b) =>
+                (a.Centre - worldPosition).sqrMagnitude
+                .CompareTo((b.Centre - worldPosition).sqrMagnitude));
+
+            if (results.Count > maxResults) results.RemoveRange(maxResults, results.Count - maxResults);
+            return results.Count;
+        }
+
+        /// <summary>
         /// Takes up to <paramref name="amount"/> from a node and records the depletion.
         /// Returns what was actually removed, which is less than asked near exhaustion.
         /// </summary>

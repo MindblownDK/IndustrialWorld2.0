@@ -39,6 +39,8 @@ namespace VoxelEngine.UI
         BaseZone,
         Road,
         Player,
+        /// <summary>A deep ore deposit revealed by an orbital resource scanner.</summary>
+        Deposit,
     }
 
     /// <summary>A point of interest on the logistics map.</summary>
@@ -101,6 +103,9 @@ namespace VoxelEngine.UI
         public static int StationCount { get; private set; }
         public static int TrainCount { get; private set; }
         public static int PortCount { get; private set; }
+
+        /// <summary>Deposits currently revealed by orbital scanners.</summary>
+        public static int DepositCount { get; private set; }
         public static int ZoneCount => _zones.Count;
 
         /// <summary>
@@ -141,6 +146,7 @@ namespace VoxelEngine.UI
             GatherDrones(Grow);
             GatherZones(Grow);
             GatherRoads(Grow);
+            GatherDeposits(Grow);
 
             _markers.Add(new MapMarker(MapOverlayKind.Player, viewer, "YOU", "", false));
             Grow(viewer);
@@ -315,6 +321,39 @@ namespace VoxelEngine.UI
                 _zones.Add(new MapZone(centre, radius, $"Base {_zones.Count + 1}", members.Count));
                 grow(centre + new Vector3(radius, 0f, radius));
                 grow(centre - new Vector3(radius, 0f, radius));
+            }
+        }
+
+        // ── Deep deposits ────────────────────────────────────────────────────────
+        // Only deposits an orbital RESOURCE SCANNER has surveyed appear here. The map
+        // deliberately does not show every deposit in the world: that would make the
+        // scanner pointless and hand the player a finished prospecting answer for free.
+        // What the satellite has seen, the map shows - nothing more.
+        private static void GatherDeposits(System.Action<Vector3> grow)
+        {
+            DepositCount = 0;
+
+            var payloads = VoxelEngine.GridSystem.GridSatellitePayload.All;
+            for (int i = 0; i < payloads.Count; i++)
+            {
+                var payload = payloads[i];
+                if (payload == null || !payload.CanSurveyResources) continue;
+
+                var deposits = payload.SurveyDeposits();
+                for (int d = 0; d < deposits.Count; d++)
+                {
+                    var node = deposits[d];
+
+                    string label = VoxelEngine.Generation.DeepOreField.MaterialName(node.Material);
+                    string detail = node.IsDepleted
+                        ? "EXHAUSTED"
+                        : $"{node.Remaining:N0}";
+
+                    _markers.Add(new MapMarker(MapOverlayKind.Deposit, node.Centre,
+                        label, detail, false));
+                    grow(node.Centre);
+                    DepositCount++;
+                }
             }
         }
 

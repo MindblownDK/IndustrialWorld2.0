@@ -1,9 +1,59 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `11.20.0-dev`
+**Current Version:** `11.21.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [11.21.0-dev] Prospect From Orbit
+
+**Type:** MINOR - a new payload and its research, save-compatible. No save format change; survey results are derived, not stored.
+
+**GitHub title:** `[11.21.0-dev] Prospect from orbit`
+
+Section 6.6 item 4 - Satellite Network: scan planets for resource deposits. The first entry from 5.0.0 Orbital Expansion.
+
+#### Why this one first
+
+It is the piece that makes three separate systems into one chain. 11.13.0 put satellites in orbit, 11.14.0 gave them sensor payloads, and 11.18.0 buried finite ore deposits that have to be found on foot with a hand scanner. This connects them: a satellite now prospects the ground beneath it, so the orbital programme finally pays back into the industry on the surface instead of only reporting weather.
+
+#### The Resource Scanner
+
+A fourth satellite payload. Where the hand-held Deep Survey Scanner reports **the single nearest deposit** within 1.4 km, an orbital scanner maps **every deposit** within 6 km of the satellite's ground track and ranks them by distance.
+
+| Payload | Capability | Idle |
+|---|---|---|
+| Sensor Array | Planet-wide season telemetry | 120 W |
+| Weather Radar | + live weather and forecast | 220 W |
+| Climate Control Array | + weather influence | 260 W |
+| Satellite Resource Scanner | Maps deep ore deposits | 340 W |
+
+Deliberately **not** a strict upgrade of the weather tiers. A scanner is a survey instrument with no meteorological hardware at all - it reports seasons like every payload does, but has no radar and no influence. Keeping the branches distinct stops the newest payload from simply being "all of the above", which would retire the other three.
+
+It surveys from the **satellite's** position, not the player's. Reporting what is under the player's feet would make the satellite a pointless middleman for a tool they can already carry; surveying the ground track is what makes the orbit itself matter, and what gives a player a reason to care where they put it.
+
+Exhausted deposits are still listed, greyed out and marked EXHAUSTED, so a player does not fly to one they already drained and conclude the scanner lied to them.
+
+#### It feeds the logistics map
+
+Surveyed deposits now appear on the `L` map as purple triangles, with their own layer toggle and a SURVEYED DEPOSITS section in the sidebar.
+
+Crucially the map shows **only what a scanner has actually seen**, never every deposit in the world. Revealing them all would make the scanner pointless and hand the player a finished prospecting answer for free. What the satellite has surveyed, the map draws - nothing more. With no scanner in service the section says so plainly rather than sitting empty.
+
+#### New research
+
+**Orbital Prospecting** (tier 6), behind Orbital Science. It gets its own node rather than riding along with the existing payloads, because prospecting from orbit is a genuinely different capability from watching the weather, and bundling it would hide it behind a name that does not suggest it exists.
+
+#### Implementation note
+
+**The survey result list is per-instance, not a shared static.** A static scratch list returned to callers is silently overwritten the moment a second scanner surveys, so a caller iterating one scanner's results would start reading another's partway through - the kind of bug that only appears once a player builds their second satellite.
+
+#### Manual step in Unity
+
+1. **Tools -> Voxel Engine -> Voxel Engine Setup**.
+2. Click **84. Build the Orbital Programme** again - non-destructive, adds the Resource Scanner and the Orbital Prospecting node without touching anything authored.
+3. Research Orbital Prospecting, build a Resource Scanner onto a satellite, and commit it to orbit.
+4. Open the payload console for the ranked list, or press `L` to see deposits on the map.
 
 ### [11.20.0-dev] Earn The Late Game
 

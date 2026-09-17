@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `11.20.0-dev`
-**Roadmap Version:** `11.20.0-dev`
+**Current Version:** `11.21.0-dev`
+**Roadmap Version:** `11.21.0-dev`
 **Date:** 2026-09-16
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,14 @@
 ---
 
 ## 0. Recently Done
+
+### 11.21.0-dev - Prospect From Orbit
+- `SatellitePayloadKind.ResourceScanner` + `DeepOreField.SurveyArea` + deposit layer on the logistics map. Setup step 84 extended; new `Orbital Prospecting` node.
+- **Chain rule:** this is the piece that joins orbit (11.13.0), payloads (11.14.0) and finite deposits (11.18.0) into one loop, so the orbital programme pays back into surface industry.
+- **Design rule:** the scanner surveys from the SATELLITE's ground track, not the player's position - otherwise the satellite is a middleman for a tool the player already carries.
+- **Design rule:** not a strict upgrade. A scanner has no weather hardware, so the four payload branches stay distinct and the newest does not retire the other three.
+- **Disclosure rule:** the map shows only what a scanner has actually surveyed, never every deposit in the world - revealing them all would make the scanner pointless.
+- **Implementation note:** survey results are a PER-INSTANCE list; a shared static returned to callers breaks as soon as a second scanner exists.
 
 ### 11.20.0-dev - Earn The Late Game
 - `BossRelic` (`BossRelicKind`, `BossRelicLedger`, `BossEncounter`) + relic-gated research + setup step 88. Enemy tiers, guaranteed boss relics, and a real progression wall in front of the late game.
@@ -57,13 +65,6 @@
 - **Compatibility rule:** the authored planet constant is the FLOOR and zones only add, so no world becomes safer and no authored value is overridden.
 - Toxic atmosphere is the new third channel, stopped by sealed air rather than plating - total protection or none.
 - Warning strip shows hazard, strength and whether the player is protected against that specific hazard; reads the damage path's own sample rather than re-sampling.
-
-### 11.16.0-dev - Everything On One Sheet
-- `LogisticsMapScreen` (`L`) + `LogisticsMapData`: one local-surface map of rail lines, stations, trains, drone routes, ports, base zones and roads.
-- **Purpose rule:** the map exists to surface MISSING joins - station with no track, port with no power - collected into a NEEDS ATTENTION section, not to look pretty.
-- Base zones are inferred from logistic chest clusters at the drone port's own 48 m radius, so a circle means a zone the game actually serves.
-- Data gathering is split from painting (as with `OrbitalTrackingService`) and runs on a 0.5 s tick; symmetric edges emit from one end only.
-- Settings version 18 adds the `L` binding.
 
 ### Era Transition Feel
 
@@ -1764,9 +1765,12 @@ Statuses are evidence-based and move forward only after code/content review and 
    - Specialized mining ship grids with drills and cargo.
    - Platinum, rare earths, ice chunks.
 
-4. **Satellite Network**
-   - Scan planets for resource deposits.
-   - Relay power or data between worlds.
+4. **Satellite Network** - ~~scan planets for resource deposits~~ *(11.21.0-dev)* - **PARTIALLY COMPLETE**
+   - `SatellitePayloadKind.ResourceScanner` maps deep ore deposits within 6 km of the satellite's ground track; results feed the payload console and the `L` logistics map. Research: `Orbital Prospecting`. Authored by setup step 84.
+   - **Design rule:** surveys from the SATELLITE's position, not the player's - surveying under the player would make the satellite a middleman for the hand scanner.
+   - **Disclosure rule:** the map reveals only surveyed deposits, never the whole field.
+   - **Design rule:** the scanner is a survey instrument with no weather hardware, so it is not a strict upgrade of the other payloads and does not retire them.
+   - Open: relay power or data between worlds - needs the interplanetary power/data layer that does not exist yet.
 
 5. **Interplanetary Cargo Rocket**
    - Schedule launches between planets.

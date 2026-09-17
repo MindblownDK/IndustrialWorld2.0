@@ -120,7 +120,9 @@ namespace IndustrialWorld.EditorTools
                     "    Sensor Array     - planet-wide season tracking\n" +
                     "    Weather Radar    - adds live weather and forecast\n" +
                     "    Climate Control  - influences weather, 2.5 kW active\n" +
-                    "    Research: Orbital Science / Climate Engineering\n\n" +
+                    "    Resource Scanner - maps deep ore deposits from orbit\n" +
+                    "    Research: Orbital Science / Climate Engineering /\n" +
+                    "              Orbital Prospecting\n\n" +
                     "To gate a research node behind orbit, tick 'Requires Orbital Lab' on that node.\n\n" +
                     (any ? "Changes were written. See the Console." : "Everything was already in place."),
                     "OK");
@@ -427,6 +429,12 @@ namespace IndustrialWorld.EditorTools
                 "body it orbits. Influences the odds rather than setting the sky, and " +
                 "draws heavily while active.",
                 SatellitePayloadKind.ClimateControl, 55, 80, 260f, 2400f, 0.35f, 240f, 380f),
+
+            new("SatelliteResourceScanner", "Satellite Resource Scanner",
+                "Deep-penetration survey array. Maps the deep ore deposits beneath the " +
+                "satellite's ground track, so a world can be prospected from orbit instead " +
+                "of on foot.",
+                SatellitePayloadKind.ResourceScanner, 40, 55, 340f, 0f, 0f, 190f, 330f),
         };
 
         private static RecipeDefinition[] EnsurePayloads(RecipeRegistry registry,
@@ -469,6 +477,9 @@ namespace IndustrialWorld.EditorTools
                 float dishScale = spec.Kind switch
                 {
                     SatellitePayloadKind.ClimateControl => 2.1f,
+                    // The scanner points DOWN at the ground rather than out at the sky, so
+                    // it gets a wide, flat array that reads differently from a dish.
+                    SatellitePayloadKind.ResourceScanner => 1.9f,
                     SatellitePayloadKind.WeatherRadar => 1.6f,
                     _ => 1.1f,
                 };
@@ -485,6 +496,18 @@ namespace IndustrialWorld.EditorTools
                 mast.transform.localPosition = new Vector3(0f, 0.68f, 0f);
                 mast.transform.localScale = new Vector3(0.12f, 0.5f, 0.12f);
                 Paint(mast, mat);
+
+                // A downward-facing survey boom, so a scanner is identifiable at a glance
+                // among a stack of otherwise similar payload blocks.
+                if (spec.Kind == SatellitePayloadKind.ResourceScanner)
+                {
+                    var boom = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    boom.name = "SurveyBoom";
+                    boom.transform.SetParent(root.transform, false);
+                    boom.transform.localPosition = new Vector3(0f, -0.55f, 0f);
+                    boom.transform.localScale = new Vector3(0.7f, 0.5f, 0.7f);
+                    Paint(boom, mat);
+                }
 
                 var payload = root.AddComponent<GridSatellitePayload>();
                 payload.kind = spec.Kind;
@@ -638,6 +661,17 @@ namespace IndustrialWorld.EditorTools
                 "Sensor Array and Weather Radar payloads.",
                 tier: 5, column: 0, seconds: 150f, scienceUnlocks.ToArray(), sci3, 10, ref dirty);
 
+            // The resource scanner gets its own node rather than riding with Orbital Science:
+            // prospecting from orbit is a genuinely different capability from watching the
+            // weather, and bundling it would hide it behind a name that does not suggest it.
+            RecipeDefinition scannerRecipe =
+                payloadRecipes != null && payloadRecipes.Length > 3 ? payloadRecipes[3] : null;
+
+            var prospecting = EnsureNode(tree, "orbital_prospecting", "Orbital Prospecting",
+                "Deep-penetration survey from orbit. Unlocks the Satellite Resource Scanner, " +
+                "which maps deep ore deposits beneath the satellite's ground track.",
+                tier: 6, column: 1, seconds: 180f, scannerRecipe, sci3, 16, ref dirty);
+
             // Climate Engineering is the end of this line and is deliberately gated behind
             // the orbital lab itself: you must already have a working satellite in orbit
             // before you can research the ability to steer a planet's weather.
@@ -662,6 +696,7 @@ namespace IndustrialWorld.EditorTools
             // satellite before it makes sense to do science aboard one.
             dirty |= LinkPrerequisite(science, telemetry, "Orbital Science", "Orbital Telemetry");
             dirty |= LinkPrerequisite(climate, science, "Climate Engineering", "Orbital Science");
+            dirty |= LinkPrerequisite(prospecting, science, "Orbital Prospecting", "Orbital Science");
 
             changed = dirty;
         }

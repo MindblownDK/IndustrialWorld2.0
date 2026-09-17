@@ -45,6 +45,7 @@ namespace VoxelEngine.UI
         private static bool _showDrones = true;
         private static bool _showZones = true;
         private static bool _showRoads = true;
+        private static bool _showDeposits = true;
 
         private static float _refreshTimer;
 
@@ -59,6 +60,7 @@ namespace VoxelEngine.UI
         private static readonly Color PortInk = new(0.45f, 0.80f, 1.00f);
         private static readonly Color AlertInk = new(1.00f, 0.48f, 0.34f);
         private static readonly Color PlayerInk = new(1.00f, 1.00f, 1.00f);
+        private static readonly Color DepositInk = new(0.80f, 0.55f, 0.95f);
 
         public static bool IsOpen => _open;
 
@@ -174,6 +176,7 @@ namespace VoxelEngine.UI
             AddLayerToggle("DRONE ROUTES", DroneInk, () => _showDrones, v => _showDrones = v);
             AddLayerToggle("BASE ZONES", ZoneInk, () => _showZones, v => _showZones = v);
             AddLayerToggle("ROADS", RoadInk, () => _showRoads, v => _showRoads = v);
+            AddLayerToggle("DEPOSITS", DepositInk, () => _showDeposits, v => _showDeposits = v);
 
             var listTitle = new Label("NETWORK");
             listTitle.style.fontSize = 10;
@@ -284,7 +287,7 @@ namespace VoxelEngine.UI
             _statusLabel.text =
                 $"{LogisticsMapData.RailCells} RAIL CELLS   ·   {LogisticsMapData.StationCount} STATIONS   ·   " +
                 $"{LogisticsMapData.TrainCount} TRAINS   ·   {LogisticsMapData.PortCount} PORTS   ·   " +
-                $"{LogisticsMapData.ZoneCount} BASES";
+                $"{LogisticsMapData.ZoneCount} BASES   ·   {LogisticsMapData.DepositCount} DEPOSITS";
 
             _canvas?.MarkDirtyRepaint();
         }
@@ -348,6 +351,18 @@ namespace VoxelEngine.UI
                 anyPort = true;
             }
             if (!anyPort) AddEmpty("No drone ports.");
+
+            AddSection("SURVEYED DEPOSITS");
+            bool anyDeposit = false;
+            for (int i = 0; i < markers.Count; i++)
+            {
+                var m = markers[i];
+                if (m.Kind != MapOverlayKind.Deposit) continue;
+                _list.Add(BuildRow(m));
+                anyDeposit = true;
+            }
+            if (!anyDeposit)
+                AddEmpty("No orbital resource scanner in service.");
 
             var zones = LogisticsMapData.Zones;
             AddSection("BASE ZONES");
@@ -427,6 +442,7 @@ namespace VoxelEngine.UI
             MapOverlayKind.DronePort => PortInk,
             MapOverlayKind.BaseZone => ZoneInk,
             MapOverlayKind.Player => PlayerInk,
+            MapOverlayKind.Deposit => DepositInk,
             _ => RailInk,
         };
 
@@ -579,6 +595,7 @@ namespace VoxelEngine.UI
 
                 if (!_showRail && (m.Kind == MapOverlayKind.RailStation || m.Kind == MapOverlayKind.Train)) continue;
                 if (!_showDrones && m.Kind == MapOverlayKind.DronePort) continue;
+                if (!_showDeposits && m.Kind == MapOverlayKind.Deposit) continue;
 
                 Vector2 p = Project(m.World, centre, metresPerPixel);
                 if (!OnScreen(p, r, 30f)) continue;
@@ -612,6 +629,18 @@ namespace VoxelEngine.UI
                         painter.LineTo(p + new Vector2(6f, 0f));
                         painter.LineTo(p + new Vector2(0f, 6f));
                         painter.LineTo(p + new Vector2(-6f, 0f));
+                        painter.ClosePath();
+                        painter.Fill();
+                        break;
+
+                    case MapOverlayKind.Deposit:
+                        // A triangle: distinct from the station square, the train diamond
+                        // and the port circle, so four marker types stay tellable apart.
+                        painter.fillColor = ink;
+                        painter.BeginPath();
+                        painter.MoveTo(p + new Vector2(0f, -6f));
+                        painter.LineTo(p + new Vector2(5.5f, 4f));
+                        painter.LineTo(p + new Vector2(-5.5f, 4f));
                         painter.ClosePath();
                         painter.Fill();
                         break;
