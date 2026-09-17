@@ -851,6 +851,8 @@ namespace VoxelEngine.EditorTools
                 () => IndustrialWorld.EditorTools.OreConsolidationSetup.RunStep80(), 62);
             AddWizardButton(scroll, "81. Repair Stolen Item Identity\n(Gravel, Radar Beacon and Fire Igniter stop claiming to be Iron Ore \u2014 Non-Destructive)",
                 () => IndustrialWorld.EditorTools.StolenIdentityRepairSetup.RunStep81(), 62);
+            AddWizardButton(scroll, "82. Build the Drone Port\n(Long-range logistics relay, 400 m \u2014 Non-Destructive)",
+                () => IndustrialWorld.EditorTools.DronePortSetup.RunStep82(), 62);
 
             AddSpacer(scroll, 20);
         }

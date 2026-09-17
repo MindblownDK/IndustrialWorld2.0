@@ -261,6 +261,24 @@ namespace VoxelEngine.Transport
 
         // ── Readouts for the panel ──────────────────────────────────────────
 
+        /// <summary>
+        /// Every registered logistic chest, providers first then requesters. A Buffer appears
+        /// in both lists, so callers that care about identity must de-duplicate; callers that
+        /// test <c>SuppliesNetwork</c> / <c>RequestsFromNetwork</c> per chest (as the drone
+        /// ports do) are unaffected. Exposed so the drone layer can find the chests near a
+        /// port without repeating the registration bookkeeping.
+        /// </summary>
+        public IEnumerable<Chest> AllChests
+        {
+            get
+            {
+                PruneDestroyed();
+                foreach (var c in _providers) yield return c;
+                foreach (var c in _requesters)
+                    if (!c.SuppliesNetwork) yield return c;   // a Buffer was already yielded above
+            }
+        }
+
         public int ProviderCount  { get { PruneDestroyed(); return _providers.Count; } }
         public int RequesterCount { get { PruneDestroyed(); return _requesters.Count; } }
 

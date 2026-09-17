@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `11.6.0-dev`
-**Roadmap Version:** `11.6.0-dev`
+**Current Version:** `11.7.0-dev`
+**Roadmap Version:** `11.7.0-dev`
 **Date:** 2026-09-16
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 11.7.0-dev — The Drone Port
+- `DronePort` + `DroneNetwork` add the long-distance logistics layer: two ports link over 400 m and fly items between the logistic chests within each one's 48 m service radius, over real transit time.
+- Demand-driven from the destination end and skips anything the local wireless network can already supply, so a drone only ever flies against a real shortfall; cargo that cannot be unloaded is stored at either end or held and retried, never destroyed.
+- Powered (20 W idle, +140 W in flight); power gates dispatch only, so an airborne drone always completes its trip. Authored by setup step 82.
+
 ### 11.6.0-dev — The Buffer Chest
 - `PortLockMode.Buffer` completes the logistic chest line: it stocks itself from providers and supplies requesters, and is the first network role whose faces are NOT pinned (`Chest.IsDirectionPinned`).
 - A per-item `bufferStockTarget` (default 64, editable in the panel, saved) caps what a buffer requests, so it cannot drain its providers; buffer-to-buffer stocking is refused to prevent loops.
@@ -47,11 +52,6 @@
 - The port roles are inverted to mirror the wireless roles: a Provider's faces are INPUTS (pipes fill it), a Requester's are OUTPUTS (it feeds the pipes downstream). `Chest.PinnedDirection` is the single source, and step 78 seeds to match.
 - The wireless request list is its own field on `Chest` (`AddRequest`/`RemoveRequest`/`SetRequests`), no longer scraped from the port filters: filters govern what leaves down a pipe, requests govern what the network delivers in.
 - The panel's REQUESTS section uses `ItemFilterDialog.OpenList`, the same searchable picker as the port filters; requests persist through an additive `requestItemIds` on the port snapshot.
-
-### 11.4.0-dev — The Chests Talk To Each Other
-- `LogisticsNetwork` runs a fulfilment pass every second: a Requester's per-face whitelists are its request list, and the nearest in-range Provider (48 m) supplies up to 16 of each item per pass.
-- Locked chests register with the network on enable; transfers move the Provider's own item instance and remove only what the destination accepted, so no stock is duplicated or lost.
-- The port panel gains a WIRELESS LOGISTICS section listing network size and, per requested item, the count in range or "none in range". No setup step and no new saved field.
 
 ### Era Transition Feel
 
@@ -990,7 +990,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Conveyor belts | ✅ COMPLETED | Straight, corner, ramp, and vertical conveyor flows are implemented with consistent belt-surface height, precise transitions, item visuals, shape workflow, I/O arrows, and validated persistence. |
 | Conveyor chutes | ✅ COMPLETED | Straight vertical transport, snapping, moving-item visuals, inventory endpoints, and save-compatible placement are validated. Chutes intentionally remain a single authored transport form; no corner, spiral, or other chute variants are planned. |
 | Basic machines | 🟡 PARTIALLY COMPLETE | Electric Furnace, Crusher, and three Assembler tiers exist. Crusher/Assembler have recipe-selection UIs, visual animation, centralized simulation ticks, additive buffers/progress/enabled persistence, and Unity smoke Unity validation; production statistics and module systems remain. |
-| Storage blocks | 🟡 PARTIALLY COMPLETE | A basic chest and the wider storage system exist. 11.1.0-dev ships the Wooden Crate → Iron Chest → Steel Chest tiers (setup step 77); **11.2.0-dev** adds the port-locked Provider and Requester chests (setup step 78); **11.4.0-dev** adds `LogisticsNetwork`, the wireless request/fulfilment pass; **11.5.0-dev** inverts the port roles to mirror the wireless ones (Provider ports IN, Requester ports OUT) and gives the request list its own saved field and picker. **11.5.1-dev** fixes the duplicate item rows in the request picker (setup step 81) and makes the panel refresh live when a request is removed. Pending Unity validation. **11.6.0-dev** adds the Buffer Chest (both roles, free faces, per-item stock target), closing the Logistic Chests line. Remaining: drone/vehicle carriers for out-of-range delivery. |
+| Storage blocks | 🟡 PARTIALLY COMPLETE | A basic chest and the wider storage system exist. 11.1.0-dev ships the Wooden Crate → Iron Chest → Steel Chest tiers (setup step 77); **11.2.0-dev** adds the port-locked Provider and Requester chests (setup step 78); **11.4.0-dev** adds `LogisticsNetwork`, the wireless request/fulfilment pass; **11.5.0-dev** inverts the port roles to mirror the wireless ones (Provider ports IN, Requester ports OUT) and gives the request list its own saved field and picker. **11.5.1-dev** fixes the duplicate item rows in the request picker (setup step 81) and makes the panel refresh live when a request is removed. Pending Unity validation. **11.6.0-dev** adds the Buffer Chest (both roles, free faces, per-item stock target), closing the Logistic Chests line. **11.7.0-dev** adds the Drone Port for out-of-range delivery. Remaining: vehicle carriers, and a visible drone mesh in transit. |
 | Power pole, wire, and substation | 🟡 PARTIALLY COMPLETE | Manual wiring, poles, substations, transformers, compact LV/HV one-link connectors, and 8-link wall/foundation relays exist. Setup reruns preserve balance while adding missing links. |
 | Grid/static lighting and LED strips | ✅ COMPLETED | Detail/Structural single and dual spotlights, Structural LED strip, premium segmented/clean LED visuals, screen data providers, configuration UI, visible chase animation, motion activation, and saved lighting config persistence are implemented and validated. |
 | Shared Machine UI | 🟡 PARTIALLY COMPLETE | Crusher and Assembler panels now expose recipe selection, progress, power, toggles, inventory slots, scrolling, and item-port integration. Remaining work: complete unification across every machine, production statistics, and theme overrides. |
@@ -1393,10 +1393,11 @@ Statuses are evidence-based and move forward only after code/content review and 
    - Train stations with loading/unloading arms.
    - Schedule UI.
 
-2. **Drone Ports**
-   - Flying logistics drones between ports.
-   - Battery-powered, recharges at port.
-   - Great for vertical/supply runs.
+2. **Drone Ports** — ~~flying logistics drones between ports~~ *(11.7.0-dev)*
+   - `DronePort` pairs with another port over 400 m and serves the logistic chests within 48 m of each end; `DroneNetwork` owns pairing, dispatch and delivery.
+   - Powered rather than battery-swapping: 20 W idle, +140 W in flight. Power gates dispatch only, so an airborne drone completes its trip.
+   - **Balance rule:** a drone only carries what the local wireless network cannot. Anything a provider within 48 m of the requester can supply never takes a flight, so drones never compete with local logistics.
+   - Open: a visible drone mesh flying the route (currently an abstract timed transit), and recharge/vehicle carriers for cargo beyond one payload.
 
 3. **Logistic Chests** — ~~Provider Chest~~ ~~Requester Chest~~ *(11.2.0-dev)*, ~~wireless request/fulfilment routing between them~~ *(11.4.0-dev, roles corrected 11.5.0-dev)*, ~~Buffer Chest~~ *(11.6.0-dev)* — **COMPLETE**
    - Provider Chest: pipes and belts FILL it (ports pinned to Input); `LogisticsNetwork` hands its stock to in-range requesters.

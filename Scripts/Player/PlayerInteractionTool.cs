@@ -1246,6 +1246,10 @@ namespace VoxelEngine.Player
                 var staticSeasonMonitor = hit.collider.GetComponentInParent<VoxelEngine.Weather.StaticSeasonMonitor>();
                 if (staticSeasonMonitor != null) { UI.GameUIController.Instance?.OpenMachine(staticSeasonMonitor); return; }
 
+                // Drone Port: long-range logistics relay.
+                var dronePort = hit.collider.GetComponentInParent<VoxelEngine.Transport.DronePort>();
+                if (dronePort != null) { UI.GameUIController.Instance?.OpenMachine(dronePort); return; }
+
                 var electric = hit.collider.GetComponentInParent<ElectricFurnace>();
                 if (electric != null) { UI.GameUIController.Instance?.OpenElectricFurnace(electric); return; }
 

@@ -1,9 +1,57 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `11.6.0-dev`
+**Current Version:** `11.7.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [11.7.0-dev] The Drone Port
+
+**Type:** MINOR — a new block and a new transport layer. Save-compatible: nothing existing changes shape, and a world with no drone ports behaves exactly as before.
+
+**GitHub title:** `[11.7.0-dev] The drone port`
+
+#### Why this round
+
+`LogisticsNetwork` answers a request instantly, but only within 48 m. That radius is deliberate — stock teleporting across a whole world would make distance meaningless — but it left the last open item in the section 6.4 logistics line: an outpost further away than that could not be supplied at all, so the player hand-carried everything.
+
+A pair of Drone Ports bridges the gap without dissolving distance. Two ports link over 400 m and a drone physically flies the difference: it loads, takes real time in transit, lands, unloads and returns. Long-range supply costs power, a round trip and a pair of blocks instead of being free.
+
+#### A bridge, not a third kind of storage
+
+A Drone Port holds no inventory. It serves the logistic chests already within its own 48 m service radius, so a port is a bridge between two local networks and the player keeps using the one storage concept they already learned: a chest asks, the network answers.
+
+The dispatch pass runs from the destination end and is demand-driven. A port looks at what the requesters around it still want, and — importantly — skips anything the local wireless network can already supply. A drone is only ever launched against a real shortfall, so stock that could have been delivered locally never takes a flight it did not need. The source is then the nearest linked port whose own providers hold the item.
+
+#### Cargo is never destroyed
+
+The payload is removed from the source chests at takeoff, so for the whole flight it exists in exactly one place. On landing it is offered to the destination's requesters, then to any local chest with room. If it still cannot be placed it is flown home and stored there. Only if BOTH ends are full does the drone hold the cargo, log a warning and retry every five seconds until space appears. There is no path on which items silently vanish.
+
+#### Power
+
+Idle 20 W, plus 140 W while a drone of that port is airborne, and the draw follows the flight state. Power gates dispatch only: a drone already in the air completes its trip, so a brown-out strands nothing permanently. Both ends must be powered for a launch, since the destination pays the cost of receiving.
+
+#### Tuning
+
+| Value | Default |
+|---|---|
+| Link range | 400 m |
+| Service radius (chests served) | 48 m, matching the wireless network |
+| Payload | 64 items per round trip |
+| Drone speed | 18 m/s |
+| Handling | 2 s at each end |
+| Dispatch tick | every 2 s |
+
+All of these are per-port fields, so a placed port can be tuned without touching code, and setup never resets an authored value.
+
+#### Manual step in Unity
+
+1. Open **Tools -> Voxel Engine -> Voxel Engine Setup**.
+2. Click **82. Build the Drone Port**.
+3. The block is crafted at the Assembler from 10 steel ingots, 4 circuits and 6 copper wire.
+4. Build **two** ports, one at each site, within 400 m of each other, and give both power.
+5. Put logistic chests within 48 m of each port: providers near the source, requesters near the destination.
+6. Right-click a port to see its link count, the current flight with a progress bar, and lifetime trips and items delivered.
 
 ### [11.6.0-dev] The Buffer Chest
 
