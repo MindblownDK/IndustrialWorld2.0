@@ -69,6 +69,17 @@ namespace VoxelEngine.Fauna
             _wanderTarget = transform.position + away.normalized * wanderRadius * 1.5f;
         }
 
+        /// <summary>
+        /// Damage that does NOT spook the animal. Starvation and thirst are not an attack
+        /// to run away from - routing them through TakeDamage would make a hungry animal
+        /// bolt every single frame, which looks like a bug and scatters a penned herd.
+        /// </summary>
+        public void ApplyAttritionDamage(float amount)
+        {
+            if (amount <= 0f || !IsAlive) return;
+            base.TakeDamage(new DamageEvent { amount = amount, type = DamageType.Melee });
+        }
+
         protected virtual void FixedUpdate()
         {
             float dt = Time.fixedDeltaTime;

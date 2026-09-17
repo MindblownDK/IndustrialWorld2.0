@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `11.18.0-dev`
-**Roadmap Version:** `11.18.0-dev`
+**Current Version:** `11.19.0-dev`
+**Roadmap Version:** `11.19.0-dev`
 **Date:** 2026-09-16
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,13 @@
 ---
 
 ## 0. Recently Done
+
+### 11.19.0-dev - Keep Them Alive
+- `LivestockHusbandry` + `LivestockPen` + `LivestockPenHud`: food, water, shelter, health, breeding and population caps on the existing passive fauna. Setup step 87.
+- **Reuse rule:** husbandry is an ADDITIVE component on `PassiveAnimal`, not a second animal class. Wild and farmed herds are the same object with different components.
+- **Design rule:** needs are a chain - hunger/thirst drive health, health gates production, health and maturity gate breeding - so neglect costs income long before it costs animals.
+- **Balance rule:** milk and wool are produced WITHOUT death, so the mechanic itself pushes husbandry over slaughter. Population caps are per-pen and enforced at breeding time.
+- **Implementation note:** starvation must not route through `TakeDamage` - that triggers the flee reflex and scatters a herd every frame. Newborn clones must have their age reset or they are born adult.
 
 ### 11.18.0-dev - Something Worth Building On
 - `DeepOreField` + `DeepCoreExtractor` + `DeepSurveyHud`: large finite ore deposits, the machine that taps them, and the scanner that finds them. Setup step 86.
@@ -56,13 +63,6 @@
 - Gradient and degree limits enforced in the graph itself, so a too-steep or over-connected cell simply does not join rather than failing later.
 - Stations own the cargo hold and are matched by name, so a railway runs asynchronously and survives a station being rebuilt.
 - Authored by setup step 85. Closes the last open item in the section 6.4 content list.
-
-### 11.14.0-dev - Reasons To Launch
-- Three satellite payloads (`GridSatellitePayload`): Sensor Array (planet-wide seasons), Weather Radar (live weather + forecast), Climate Control Array (weather influence, 2.66 kW active).
-- Weather influence hooks `WeatherManager.PickNextState` - the single state-choice point - biasing the roll and storm chance. Combined via `1 - e^-total` so satellites stack with diminishing returns and can never lock a climate.
-- New `Climate Engineering` node is itself `requiresOrbitalLab`, making it the first real consumer of the orbital research gate.
-- ORBITAL SYSTEMS moved out of LIFE SUPPORT into its own equipment box with device name, tier, range and prompt.
-- Block consoles for payloads and the research station name the exact missing requirement when offline.
 
 ### Era Transition Feel
 
@@ -1404,7 +1404,20 @@ Statuses are evidence-based and move forward only after code/content review and 
    - **Balance rule:** rail refuses a gradient a road would drape over. A railway that climbs anything is just an expensive road; the refusal is what forces cut, fill and routing decisions.
    - **Design rule:** the cargo hold lives on the STATION, not the train, so factories fill and drain on their own schedule and the train only has to show up. Stations are matched by name, so a schedule survives its station being rebuilt.
    - **Implementation note:** switch settings must be re-applied a frame after load - a switch clamps its selection against a link list that is still filling while neighbouring track restores.
-   - Open: cargo wagons (multi-car consists), signalling and block occupancy, and rail-laying assistance for long runs.
+   - **SUPERSEDED - do not extend this implementation.** See item 1b. The 11.15.0 rail system stays in place and playable, but no further work goes into it; cargo wagons, signalling and laying assistance are all deferred into the rework rather than bolted onto a design that is about to be replaced.
+
+1b. **Train System v2 - unify rail with the grid system** - **PLANNED, NOT STARTED**
+   - **Why a remake and not an extension.** 11.15.0 made a train a scheduled agent walking its own private graph, deliberately separate from the grid system. That bought unloaded-chunk operation, but it also means a train is the one large buildable in the game that is NOT a player-built grid: it cannot be designed block by block, cannot carry arbitrary grid blocks, cannot be damaged, painted, pressurised or inspected like everything else the player builds, and needs its own parallel console. Every future feature would have to be written twice - once for grids, once for rails. Unifying is cheaper than maintaining that split forever.
+   - **Target:** a locomotive and its wagons are ordinary player-built GRIDS that are constrained to a rail, rather than a separate entity type. This mirrors the decision already proven by the Orbital Programme, where a satellite is an ordinary grid the player DECLARES a satellite rather than a bespoke object.
+   - **Consequences to design for:**
+     - Consists become real: couple grids into a train the way docking ports already join grids.
+     - A wagon is just a grid, so any grid block works on it - containers, tanks, refineries, turrets.
+     - Grid damage, paint, power, pressurisation and the inspection overlay all apply for free.
+     - The rail console folds into the existing grid terminal instead of being a separate UI.
+   - **Open question to settle before starting:** how a grid-based train keeps running while its chunks are unloaded. That property is the entire reason rail beat rovers for bulk haul and must NOT be lost in the rework. Likely answer is a dormant analytic mode along the rail path, the same shape as `OrbitalRails` - the grid is simulated when loaded and advanced along its path arithmetically when not.
+   - **Wider rail tracks.** Multi-cell track widths (at least a 2-wide and 3-wide gauge) so a mainline reads as a mainline and a heavy consist has somewhere to run. The road system's `RoadCorridor` already solves multi-lane footprints with an explicit four-corner footprint per cell; that is the precedent to follow rather than inventing a second approach.
+   - **Draggable rail placing with smart routing.** Click a start, drag to an end, and the tool lays the whole run: auto-straights, auto-curves, auto-junctions where it meets existing track, and a gradient-aware path that cuts and fills or refuses with a reason. The corridor solver and `RailNetwork`'s A* are both reusable here - smart placement is a routing problem the codebase has already solved twice.
+   - Deferred into this rework: cargo wagons (multi-car consists), signalling and block occupancy.
 
 2. **Drone Ports** — ~~flying logistics drones between ports~~ *(11.7.0-dev)*
    - `DronePort` pairs with another port over 400 m and serves the logistic chests within 48 m of each end; `DroneNetwork` owns pairing, dispatch and delivery.
@@ -1555,11 +1568,13 @@ Statuses are evidence-based and move forward only after code/content review and 
    - **Balance rule:** finite by design - an outpost has a lifespan, which is what keeps the player surveying and relocating.
    - Open: cave-specific deposits that require descending rather than surface placement, and extractor upgrade tiers.
 
-7. **Fauna / Flora & Livestock**
-   - Passive creatures for atmosphere.
-   - Breedable cows, sheep, and pigs with food, water, shelter, health, reproduction, and population limits.
-   - Livestock supplies renewable meat plus hide, wool, and optional milk production chains.
-   - Hostile mythical creatures occupy deep biomes, ruins, deserts, mountains, coasts, and volcanic zones.
+7. **Fauna / Flora & Livestock** - ~~passive creatures~~ ~~breedable cows/sheep/pigs with food, water, shelter, health, reproduction, population limits~~ ~~hide, wool, milk chains~~ *(11.19.0-dev)* - **LARGELY COMPLETE**
+   - Passive fauna (`PassiveAnimal`, `PassiveAnimalSpawner`) already shipped with wander/flee AI and Raw Meat / Hide / Wool drops. 11.19.0 added the husbandry layer: `LivestockHusbandry`, `LivestockPen`, `LivestockPenHud`, setup step 87.
+   - **Reuse rule:** husbandry is an additive component on the EXISTING animal, never a second animal class - so wild and farmed herds stay one object and the AI has one implementation.
+   - **Design rule:** needs form a chain (hunger/thirst -> health -> production -> breeding), so a neglected pen stops earning well before anything dies. A flat "feed or die" timer gives the player no warning and no reason to care.
+   - **Balance rule:** milk and wool come without killing, so keeping animals alive is the profitable choice without a rule enforcing it. Population caps are per-pen.
+   - **Implementation note:** attrition damage must bypass `TakeDamage`, which triggers flee. See `PassiveAnimal.ApplyAttritionDamage`.
+   - Open: hostile mythical creatures in deep biomes/ruins/volcanic zones (tracked as item 11), flora/crop expansion, and horse breeding on top of the existing `RideableAnimal`.
 
 8. **Environmental Radiation Zones** - ~~low-level radiation areas~~ ~~hazmat/upgrades reduce exposure~~ ~~Geiger counter~~ *(11.17.0-dev)* - **COMPLETE** (see item 5)
    - Open: ruins specifically emitting radiation, on top of the terrain zones.

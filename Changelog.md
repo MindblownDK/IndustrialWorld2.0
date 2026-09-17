@@ -1,9 +1,74 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `11.18.0-dev`
+**Current Version:** `11.19.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [11.19.0-dev] Keep Them Alive
+
+**Type:** MINOR - a new system, save-compatible. No save format change. Existing animals gain husbandry when the setup step runs; wild herds are unaffected until a pen is built near them.
+
+**GitHub title:** `[11.19.0-dev] Keep them alive`
+
+Section 6.5 item 7 - the livestock half of Fauna / Flora & Livestock.
+
+#### What already existed
+
+Passive fauna shipped some time ago: `PassiveAnimal` already does cows, sheep and pigs with wander-and-flee AI, correct tangent-plane movement on a spherical world, and drops on death. Raw Meat, Hide and Wool items already exist.
+
+So this release deliberately adds **only** the husbandry layer the roadmap asked for - food, water, shelter, health, reproduction and population limits - rather than re-shipping animals that already work.
+
+#### Husbandry is a component, not a new animal
+
+`LivestockHusbandry` attaches to the existing `PassiveAnimal`. A second animal class would have duplicated the AI, the spherical-gravity movement and the drop handling, and left two implementations to keep in step forever.
+
+Being additive has a nice consequence: a wild herd and a farmed herd are the same object with different components, so a player can farm animals they found rather than only animals they bought. An animal with no pen nearby behaves exactly as it always has.
+
+#### Why livestock is worth building next to hunting
+
+Hunting is extractive - kill once, walk further next time. Husbandry is renewable, and critically **milk and wool are produced without death**. Killing the animal ends the income, so the mechanic pushes the player toward keeping animals alive without needing a rule that says so.
+
+| Animal | Renewable product |
+|---|---|
+| Cow | Milk |
+| Sheep | Wool |
+| Pig | None - meat and hide only |
+
+#### Needs are a chain, not a timer
+
+An animal that just needs feeding every N minutes is a chore. These needs feed each other:
+
+**Hunger and thirst drive HEALTH. Health gates PRODUCTION. Health and maturity gate BREEDING.**
+
+So a neglected pen degrades visibly rather than failing all at once: production stops first, condition drops, and only then do animals start dying - slowly, at well under one health per second. A player who logs off with a half-full trough comes back to unhappy animals, not a pen of corpses. Hungry animals also visibly slow down, which signals neglect with no UI at all.
+
+Shelter halves consumption and speeds production. That is the entire mechanical argument for building a barn instead of leaving animals in a field.
+
+#### The pen
+
+`LivestockPen` owns the trough for the same reason the rail station owns the cargo hold: the animal moves and is often not where the player is, while the pen is fixed and always addressable. Put the supply on the pen and a factory can belt or pipe feed into it on its own schedule - the player keeps the pen stocked instead of chasing cows.
+
+It feeds, waters, shelters, breeds and harvests everything within 12 m, and its console lists **every animal individually** with its own food, water and condition. A totals-only readout would report a farm as "fine" right until animals started dying, because an average hides the one starving sheep.
+
+**The population cap is the load-bearing rule.** Uncapped breeding wrecks performance and the economy simultaneously. The cap is per-pen, enforced at the moment of breeding, and shown in the header so hitting it reads as a designed limit rather than the feature quietly breaking.
+
+#### Implementation notes
+
+- **Starvation does not use `TakeDamage`.** `PassiveAnimal.TakeDamage` triggers the flee reflex, so routing attrition through it would make a hungry animal bolt every frame and scatter a penned herd. Added `ApplyAttritionDamage` for damage that is not an attack.
+- **Newborns are reset.** A calf is cloned from a parent so it inherits the authored prefab exactly, which also means it inherits the parent's age - it would be born adult and instantly breedable without `MarkNewborn()`.
+- **Produce is refunded if it cannot be stored.** A weight-capped container can reject what `HasSpace` allowed, so the product goes back to the animal rather than vanishing.
+- Feed is matched by item id substring (wheat, corn, grain, hay, biomass, root crops), so the pen works with whatever crops the project has authored and keeps working as more are added.
+- **Products are direct serialized references, not a runtime name lookup.** `Item_Wool` lives under `VoxelEngineAssets`, not under a `Resources` folder, so a `Resources.LoadAll` search would have found nothing and stalled every sheep in the game while looking perfectly healthy. Setup step 87 assigns the references directly and only fills in ones that are missing.
+- **Milk did not exist.** Wool and Hide were authored by the earlier fauna step but Milk never was, so cows would have filled up with nothing to hand over. The step now authors it beside the other animal products, and skips it if any Milk item already exists anywhere in the project.
+
+#### Manual step in Unity
+
+1. **Tools -> Voxel Engine -> Voxel Engine Setup**.
+2. Click **87. Build Livestock Husbandry**. It attaches husbandry to the Cow, Sheep and Pig prefabs and authors the pen. If it reports missing animal prefabs, run the fauna content step first and re-run.
+3. Craft a Livestock Pen, place it where animals graze, and put feed and water in it.
+
+Right-click the pen for the herd roster.
 
 ### [11.18.0-dev] Something Worth Building On
 

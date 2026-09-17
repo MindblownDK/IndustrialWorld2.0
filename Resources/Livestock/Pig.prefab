@@ -373,6 +373,7 @@ GameObject:
   - component: {fileID: 795954461753752514}
   - component: {fileID: 545858426700433338}
   - component: {fileID: 44561451362262429}
+  - component: {fileID: 2451967957637737310}
   m_Layer: 0
   m_Name: Pig
   m_TagString: Untagged
@@ -514,6 +515,23 @@ MonoBehaviour:
   borderColor: {r: 0.3, g: 0.25, b: 0.18, a: 0.9}
   barWidth: 1.3
   barHeight: 0.16
+--- !u!114 &2451967957637737310
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1896870969599272194}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0fbac476a582437dbf37274cf5773f64, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Farming.LivestockHusbandry
+  hungerDrainPerSecond: 0.11
+  thirstDrainPerSecond: 0.14
+  secondsPerProduct: 240
+  maturitySeconds: 300
+  breedingCooldownSeconds: 420
 --- !u!1 &2040402963010288993
 GameObject:
   m_ObjectHideFlags: 0

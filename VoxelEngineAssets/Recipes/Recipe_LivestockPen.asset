@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e6e37d290c6cb84409b3993312f66bca, type: 3}
+  m_Name: Recipe_LivestockPen
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Crafting.RecipeDefinition
+  displayName: Livestock Pen
+  icon: {fileID: 0}
+  inputs:
+  - item: {fileID: 11400000, guid: 75b750e48370dfd47856fc40436c0e52, type: 2}
+    count: 40
+  - item: {fileID: 11400000, guid: 86caa3d29ca1fcb4ab57c4f35cd925b9, type: 2}
+    count: 8
+  outputItem: {fileID: 11400000, guid: 0c688edd67fbe454991d3c8d0a404b9c, type: 2}
+  outputCount: 1
+  requiredStation: 1
+  craftSeconds: 10
+  unlockedByDefault: 1

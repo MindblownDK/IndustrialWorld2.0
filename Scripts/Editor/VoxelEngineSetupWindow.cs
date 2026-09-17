@@ -861,6 +861,8 @@ namespace VoxelEngine.EditorTools
                 () => IndustrialWorld.EditorTools.RailSystemSetup.RunStep85(), 62);
             AddWizardButton(scroll, "86. Build the Deep Core Programme\n(Survey scanner + deep ore extractor \u2014 Non-Destructive)",
                 () => IndustrialWorld.EditorTools.DeepCoreSetup.RunStep86(), 62);
+            AddWizardButton(scroll, "87. Build Livestock Husbandry\n(Farmable animals + livestock pen \u2014 Non-Destructive)",
+                () => IndustrialWorld.EditorTools.LivestockHusbandrySetup.RunStep87(), 62);
 
             AddSpacer(scroll, 20);
         }
