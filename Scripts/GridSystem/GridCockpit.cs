@@ -47,6 +47,7 @@ namespace VoxelEngine.GridSystem
         private float _lastAltPressAt = -999f;
         private const float AltDoublePressSeconds = 0.32f;
         private const float THIRD_PERSON_THRESHOLD = 0.35f;
+        private const float TRAJECTORY_VIEW_DISTANCE = 8f;
 
         /// <summary>The cockpit the local player is currently seated in (null if on foot).</summary>
         public static GridCockpit ActivePilotSeat { get; private set; }
@@ -165,6 +166,18 @@ namespace VoxelEngine.GridSystem
         }
 
         private bool IsThirdPerson => _cameraDistance > THIRD_PERSON_THRESHOLD;
+
+        /// <summary>How far the cockpit camera is currently scrolled out from the grid centre.</summary>
+        public float CameraDistance => _cameraDistance;
+
+        /// <summary>True once the pilot has scrolled out of first-person into the chase camera.</summary>
+        public bool IsExteriorView => IsThirdPerson;
+
+        /// <summary>
+        /// The second zoom-out stage. The trajectory overlay only draws here, so the predicted
+        /// path never covers the cockpit glass in first-person or the tight chase view.
+        /// </summary>
+        public bool IsWideExteriorView => _cameraDistance > TRAJECTORY_VIEW_DISTANCE;
 
         private void UpdateCameraZoom()
         {

@@ -1,9 +1,152 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `11.9.0-dev`
+**Current Version:** `11.12.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [11.12.0-dev] Where You Will Actually Land
+
+**Type:** MINOR — a new pilot system. Save-compatible: no block, item or save field changes. The keybind table gains one entry and migrates itself.
+
+**GitHub title:** `[11.12.0-dev] Where you will actually land`
+
+#### Why this round
+
+Section 6.4 item 6, the Trajectory Camera, was the only entry in that block still marked PARTIAL. The cockpit already had an orbital flight computer reading out PE/AP, tangential and circular speed. What it could not tell you was the one thing a pilot actually wants on the way down: **where the ship touches the ground, and how hard**.
+
+#### Two different questions, two different solvers
+
+The existing `OrbitalTelemetry` solves a two-body conic analytically. That is correct for "what orbit am I on" and it stays exactly as it was.
+
+The new `TrajectoryPredictor` answers a different question by forward-integrating the coast path and then probing the world:
+
+- It steps the **same forces `GridEntity` applies in FixedUpdate** — scaled radial gravity on a planet, the flat-world fallback off one, and the atmospheric drag model using the identical block-count frontal-area estimate. The predicted curve therefore matches the flight the ship will actually have, instead of a vacuum parabola that lies inside an atmosphere.
+- Semi-implicit Euler, 0.25 s steps, 45 s horizon. Same integrator family as the physics step, and unlike explicit Euler it does not spiral a circular orbit outwards.
+- Each segment is raycast against the world, so the impact point is real terrain rather than an assumed sphere.
+
+It never touches the rigidbody — it reads state, integrates a copy, and reports.
+
+#### Performance
+
+A coasting ship re-solves to the same curve every frame, so the solution is cached and only rebuilt when the motion actually changed. Velocity change is the dirty signal, because thrust, gravity turns and collisions all move the velocity. Hard floor of 0.05 s between solves, hard ceiling of 0.5 s before a refresh. One `LineRenderer` and one marker exist for the whole game, hidden rather than destroyed.
+
+#### The overlay
+
+Gated in three stages, in order: the toggle is on, the player is piloting, and the camera is in the **wide exterior view** — the second zoom-out. First-person and the tight chase view stay clean, which is what the roadmap asked for.
+
+| Outcome | Line colour | HUD text |
+|---|---|---|
+| Impact | Red | `IMPACT IN 4.2s · 88 m/s` |
+| Will orbit | Green | `PATH CLEAR · WILL ORBIT` |
+| Leaving the well | Violet | `PATH CLEAR · LEAVING WELL` |
+| Clear, still climbing | Blue | `PATH CLEAR` |
+
+The line fades toward its far end, because the prediction is least trustworthy the further out it runs and should not claim equal confidence along its whole length. The impact marker is scaled by camera distance so it stays readable from 500 m up, and pulses so it reads as a warning rather than scenery.
+
+While the path is on screen, the cockpit trajectory module swaps its apsis row for the plain-language impact readout — more useful than a second copy of the conic.
+
+#### Two details that would otherwise have been bugs
+
+- The path raycast **ignores the grid it belongs to** and the pilot. Without that filter every prediction reports an instant impact with the ship it is predicting for. Probing is also suppressed until the path has cleared the hull.
+- The impact marker has **no collider** — a marker with one would be hit by the very raycasts that produced it.
+
+#### Keybind
+
+`J` toggles the trajectory camera, rebindable in Settings. The roadmap suggested `T`, but `T` is already Tool Cycle, so `J` was taken instead — free, and next to `K` for the Grid Inspector. The settings version bumped to 15, so existing profiles pick the new bind up automatically without losing custom binds.
+
+#### Manual step in Unity
+
+None. No prefab, item, recipe or research is involved — this is script-only and works as soon as it compiles.
+
+To try it: sit in a cockpit, scroll out twice, and fly. Press `J` if you want it off.
+
+### [11.11.0-dev] The Grid Reaches Out
+
+**Type:** MINOR — a new power block. Save-compatible: nothing existing changes shape, and a world with no towers behaves exactly as before.
+
+**GitHub title:** `[11.11.0-dev] The grid reaches out`
+
+#### Why this round
+
+Section 6.4 item 4, the last untouched entry in the Logistics 2.0 block: long-distance power poles.
+
+Cables only link one grid step at a time. That is the right rule for a base — it keeps wiring readable and stops power tunnelling through walls — but it meant a remote site could only be powered by dragging a cable run across the world one block at a time. The drone ports made this worse rather than better: they link over 400 m and need power at BOTH ends, so the logistics reach had outgrown the power reach.
+
+#### The tower
+
+Two Transmission Towers within 128 m link automatically and carry the network between them. A remote outpost joins the home grid with two blocks instead of a few hundred cables.
+
+| Property | Value |
+|---|---|
+| Span range | 128 m, tower to tower |
+| Span capacity | 20 kW |
+| Local tap | 4 m, picks up cables and machines at its own base |
+| Max spans | 3 — two makes a line, three makes a junction |
+
+#### How it fits the existing power layer
+
+A tower is just a `PowerNode`. The power layer already merges everything reachable into one network and prices it by its weakest link, so a tower only has to do two things: be a node, and declare long edges. Generation, storage, bottleneck maths and every existing power readout keep working untouched.
+
+The span is registered as a **manual link**, which is the mechanism the code already had for an intentional long-range edge. This matters: `CanLinkTo` short-circuits on a manual link before its distance and line-of-sight checks, so a span crosses 128 m of terrain without the tower having to opt out of the rules that keep ordinary cables honest.
+
+The local tap is deliberately kept at 4 m rather than widening `connectRadius` to the span range. Widening it would make a tower hoover up every machine within 128 m, which is not what a pylon does.
+
+The span is capacity-rated at 20 kW and takes part in the normal bottleneck rule, so a thin cable feeding the tower is still the limit. A tower line is wide, not infinite.
+
+#### Visuals
+
+A lattice pylon — four splayed legs, a mast, two cross-arms — with a hanging catenary cable drawn between spanned towers. Each pair is drawn by exactly one end, so the line is never doubled up.
+
+#### Re-spanning
+
+Placing or removing a tower re-spans the whole set, because a new tower can change which pairs are nearest and a removed one frees a slot on its partners. A re-entrancy guard makes a burst of towers streaming in cost one pass rather than one per tower.
+
+#### Manual step in Unity
+
+1. Open **Tools -> Voxel Engine -> Voxel Engine Setup**.
+2. Click **83. Build the Transmission Tower**.
+3. Crafted at the Crafting Bench from 8 steel ingots and 4 copper wire.
+4. Place one near your generators and another within 128 m, at the remote site.
+5. Run a short cable from each tower to the local machines. The two grids are now one.
+
+### [11.10.0-dev] Landed, Not Teleported
+
+**Type:** MINOR — chest weight limits, plus three fixes. Save-compatible: the weight field is additive and defaults to the world limit every chest already used.
+
+**GitHub title:** `[11.10.0-dev] Landed, not teleported`
+
+#### 1. Items arrived out of sync with the drone
+
+The flight timer covers the whole ROUND TRIP, but the handover was wired to the end of it. So the drone reached the destination at the halfway mark, visibly released its crate, flew all the way home — and only then did the items appear. The transfer was correct; its timing was not.
+
+Touchdown is now its own event. `TickFlight` reports the moment half the round trip has elapsed, which is exactly where the visual drone releases its crate, and the network hands the cargo over there. `BeginReturnLeg` then lets the drone fly home empty instead of ending the trip on the spot. A `CargoDelivered` flag makes the handover strictly once-only, and it is recomputed on load so a save taken after touchdown cannot deliver the same payload twice.
+
+#### 2. The wireless panel duplicated itself
+
+Adding a request appended a second WIRELESS LOGISTICS block below the first. The rebuild re-inserted the panel by remembered index, and that index was no longer valid once the tree had changed. The panel now lives in a fixed container that is cleared and refilled, so it cannot be inserted twice by construction.
+
+#### 3. Drone-reachable items read as "none in range"
+
+A request supplied by drone was reported as unavailable, because the readout only measured the 48 m wireless radius. A drone route is a supply line too. `AvailableByDroneFor` now totals what linked ports can reach, and such an item shows a blue dot and "N by drone" instead of an amber "none in range". Genuinely unreachable items are unchanged.
+
+#### 4. Chests have weight limits
+
+`ItemContainer` already enforced a weight limit; chests simply used the world default. The three logistic chests now carry their own, which gives them distinct roles beyond their slot counts:
+
+| Chest | Limit | Why |
+|---|---|---|
+| Provider | 1200 kg | a loading bay — pipes fill it fast |
+| Buffer | 900 kg | local working stock for an outpost |
+| Requester | 600 kg | a delivery shelf at the point of use |
+
+A limit of 0 means "use the world default", so every ordinary chest is untouched. Setup only fills an UNSET limit, so a value you tune by hand is never overwritten. The panel shows Load in kg with a bar that turns amber past 85% and red at FULL — which is what lets a chest that has stopped accepting deliveries explain itself instead of looking broken.
+
+The limit is reapplied after a reload, since a restored container is a fresh object and would otherwise revert to the world default.
+
+#### Manual step in Unity
+
+Run **78. Build the Logistic Chests** again to stamp the weight limits onto the three prefabs. Chests already placed keep whatever their prefab gives them.
 
 ### [11.9.0-dev] Heavy Lift
 

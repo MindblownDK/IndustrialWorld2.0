@@ -56,6 +56,7 @@ namespace IndustrialWorld.EditorTools
             public string       description;
             public StationTier  station;
             public float        craftSeconds;
+            public float        weightKg;
             public (ItemDefinition item, int count)[] inputs;
         }
 
@@ -100,6 +101,8 @@ namespace IndustrialWorld.EditorTools
                         displayName  = "Provider Chest",
                         size         = 18,
                         lockMode     = PortLockMode.Provider,
+                        // A loading bay: pipes fill it fast, so it carries the most.
+                        weightKg     = 1200f,
                         tint         = new Color(0.72f, 0.44f, 0.12f),
                         description  = "18-slot supply buffer. Pipes fill it; the wireless network hands its stock to requesters in range.",
                         station      = StationTier.CraftingBench,
@@ -112,6 +115,8 @@ namespace IndustrialWorld.EditorTools
                         displayName  = "Requester Chest",
                         size         = 18,
                         lockMode     = PortLockMode.Requester,
+                        // A delivery shelf at the point of use: deliberately the smallest.
+                        weightKg     = 600f,
                         tint         = new Color(0.16f, 0.46f, 0.74f),
                         description  = "18-slot delivery buffer. The wireless network keeps it stocked; its ports feed the pipes downstream.",
                         station      = StationTier.CraftingBench,
@@ -124,6 +129,8 @@ namespace IndustrialWorld.EditorTools
                         displayName  = "Buffer Chest",
                         size         = 36,
                         lockMode     = PortLockMode.Buffer,
+                        // Sits between the two: local working stock for an outpost.
+                        weightKg     = 900f,
                         tint         = new Color(0.55f, 0.45f, 0.85f),
                         description  = "36-slot hybrid store. It keeps itself topped up to a stock target from providers, " +
                                        "and supplies requesters in range. Its faces are not pinned, so pipes can both fill and drain it.",
@@ -159,6 +166,7 @@ namespace IndustrialWorld.EditorTools
                     "  Provider Chest   18 slots   — ports INPUT (pipes fill it, network draws from it)\n" +
                     "  Requester Chest  18 slots   — ports OUTPUT (network fills it, pipes draw from it)\n" +
                     "  Buffer Chest     36 slots   — both roles, faces free (tops up to its stock target)\n\n" +
+                    "Weight limits: Provider 1200 kg, Buffer 900 kg, Requester 600 kg.\n\n" +
                     "Both craft at the Crafting Bench from iron ingot x4 + copper ingot x2 + planks x2.\n\n" +
                     "The existing chests and tiers were left untouched. Missing content was created, " +
                     "broken links were repaired, authored values were never reset. See the console for every change.", "OK");
@@ -209,6 +217,7 @@ namespace IndustrialWorld.EditorTools
                 newChest.size = v.size;
                 newChest.displayName = v.displayName;
                 newChest.portLock = v.lockMode;
+                newChest.weightLimitKg = v.weightKg;
                 SeedLockedFace(root, v);
 
                 var prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
@@ -247,6 +256,14 @@ namespace IndustrialWorld.EditorTools
                 }
                 // The lock mode is the whole point of this variant: a wrong value makes the
                 // block indistinguishable from a plain chest, so it is always corrected.
+                if (v.weightKg > 0f && !Mathf.Approximately(chest.weightLimitKg, v.weightKg) &&
+                    chest.weightLimitKg <= 0f)
+                {
+                    // Only fill an UNSET limit. A value the player tuned is left alone.
+                    chest.weightLimitKg = v.weightKg;
+                    dirty = true;
+                    Debug.Log("[Setup 78] " + v.assetName + " weight limit set to " + v.weightKg + " kg.");
+                }
                 if (chest.portLock != v.lockMode)
                 {
                     chest.portLock = v.lockMode;

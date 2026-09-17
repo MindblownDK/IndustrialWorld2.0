@@ -26,6 +26,7 @@ namespace VoxelEngine.Settings
         Hotbar6, Hotbar7, Hotbar8, Hotbar9, Hotbar0,
         EnterCockpit, ExitCockpit,
         WarpDrive,
+        TrajectoryCamera,  // predicted flight path overlay while piloting (11.12.0-dev)
         GridInspector   // the Grid Inspector Overlay hotkey (9.37.0-dev): one key walks OFF → HEAT → DAMAGE → CENTRE OF MASS
     }
 
@@ -53,7 +54,7 @@ namespace VoxelEngine.Settings
 
         // Bump this when default keybinds change to force a one-time migration
         // that fills in missing or invalid bindings on old saves.
-        private const int    CURRENT_VERSION = 14;
+        private const int    CURRENT_VERSION = 15;
 
         // ----- defaults -----
         public const float DEFAULT_FOV       = 75f;
@@ -159,6 +160,7 @@ namespace VoxelEngine.Settings
             InputAction.EnterCockpit    => "H",
             InputAction.ExitCockpit     => "F",
             InputAction.WarpDrive       => "N",
+            InputAction.TrajectoryCamera => "J",
             InputAction.GridInspector   => "K",
             _ => "None"
         };

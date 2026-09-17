@@ -33,6 +33,11 @@ namespace VoxelEngine.Building
                  "the providers it shares a network with.")]
         [Min(1)] public int bufferStockTarget = 64;
 
+        [Tooltip("Weight this chest can hold, in kg. 0 = use the world's default container " +
+                 "limit. The logistic chests set their own so a Provider is a loading bay, a " +
+                 "Requester is a delivery shelf and a Buffer sits between them.")]
+        [Min(0f)] public float weightLimitKg = 0f;
+
         public ItemContainer container;
 
         /// <summary>
@@ -196,10 +201,23 @@ namespace VoxelEngine.Building
                                       container != null && _ports != null && _ports.HasAnyInput();
 
         // ── Lifecycle ───────────────────────────────────────────────────────
+        /// <summary>
+        /// Push this chest's own weight limit onto its container. A limit of 0 means "use the
+        /// world default", which is what every ordinary chest does, so nothing changes for
+        /// them. Applied on wake and whenever the lock changes, because the three logistic
+        /// roles carry different loads.
+        /// </summary>
+        public void ApplyWeightLimit()
+        {
+            if (container == null) return;
+            container.OverrideMaxWeightKg = weightLimitKg > 0f ? weightLimitKg : -1f;
+        }
+
         private void Awake()
         {
             if (container == null) container = new ItemContainer(displayName, size);
             else container.Resize(size);
+            ApplyWeightLimit();
             EnsureRefs();
             EnforcePortLock();
         }
@@ -227,6 +245,7 @@ namespace VoxelEngine.Building
         {
             if (portLock == mode) return;
             portLock = mode;
+            ApplyWeightLimit();
             _portContainers = null;      // input/output capability just changed
             EnforcePortLock();
 
@@ -314,6 +333,11 @@ namespace VoxelEngine.Building
             // A pre-11.6.0-dev save writes 0 here, which must not silently zero the target.
             if (snap != null && snap.bufferStockTarget > 0)
                 bufferStockTarget = snap.bufferStockTarget;
+
+            // The limit lives on the prefab, but a restored container is a fresh object, so
+            // the override has to be reapplied or the chest silently reverts to the world
+            // default capacity after a reload.
+            ApplyWeightLimit();
         }
     }
 }

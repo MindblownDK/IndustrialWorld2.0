@@ -692,6 +692,10 @@ namespace VoxelEngine.GridSystem
 
         public static void Tick()
         {
+            // The predicted-path overlay runs even when the HUD chrome is hidden, because
+            // its own gating (toggle + seated + wide exterior view) is stricter already.
+            TrajectoryOverlay.Tick();
+
             if (_container == null || _root == null) return;
 
             if (VoxelEngine.UI.UIState.IsBlocking)
@@ -962,7 +966,9 @@ namespace VoxelEngine.GridSystem
                 _trajectoryStatusLabel.text = "DEEP SPACE · " + coast;
                 _trajectoryStatusLabel.style.color = new StyleColor(statusColor);
                 _trajectorySpeedLabel.text = $"SPD {trajectory.TangentialSpeed:0.0} m/s · SOL FRAME";
-                _trajectoryApsisLabel.text = $"NEAREST BODY · {nearest}";
+                _trajectoryApsisLabel.text = TrajectoryOverlay.Enabled
+                ? TrajectoryOverlay.StatusText()
+                : $"NEAREST BODY · {nearest}";
                 _trajectorySpeedLabel.style.color = new StyleColor(ink);
                 _trajectoryApsisLabel.style.color = new StyleColor(new Color(ink.r, ink.g, ink.b, 0.82f));
                 T.Border(_trajectoryModule, 1f, new Color(statusColor.r, statusColor.g, statusColor.b, 0.38f));
@@ -983,9 +989,14 @@ namespace VoxelEngine.GridSystem
             _trajectoryStatusLabel.text = state + " · " + motion;
             _trajectoryStatusLabel.style.color = new StyleColor(statusColor);
             _trajectorySpeedLabel.text = $"TAN {trajectory.TangentialSpeed:0.0} · CIRC {trajectory.CircularSpeed:0.0} m/s";
-            _trajectoryApsisLabel.text = trajectory.IsEscaping
-                ? $"PE {FormatTrajectoryDistance(trajectory.PeriapsisAltitude)} · ESC {trajectory.EscapeSpeed:0.0} m/s"
-                : $"PE {FormatTrajectoryDistance(trajectory.PeriapsisAltitude)} · AP {FormatTrajectoryDistance(trajectory.ApoapsisAltitude)}";
+            // When the pilot has the predicted path up, the apsis row is more useful as a
+            // plain-language impact/clear readout than as a second copy of the conic.
+            if (TrajectoryOverlay.IsShowing)
+                _trajectoryApsisLabel.text = TrajectoryOverlay.StatusText();
+            else
+                _trajectoryApsisLabel.text = trajectory.IsEscaping
+                    ? $"PE {FormatTrajectoryDistance(trajectory.PeriapsisAltitude)} · ESC {trajectory.EscapeSpeed:0.0} m/s"
+                    : $"PE {FormatTrajectoryDistance(trajectory.PeriapsisAltitude)} · AP {FormatTrajectoryDistance(trajectory.ApoapsisAltitude)}";
             _trajectorySpeedLabel.style.color = new StyleColor(ink);
             _trajectoryApsisLabel.style.color = new StyleColor(new Color(ink.r, ink.g, ink.b, 0.82f));
             T.Border(_trajectoryModule, 1f, new Color(statusColor.r, statusColor.g, statusColor.b, 0.38f));

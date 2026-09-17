@@ -853,6 +853,8 @@ namespace VoxelEngine.EditorTools
                 () => IndustrialWorld.EditorTools.StolenIdentityRepairSetup.RunStep81(), 62);
             AddWizardButton(scroll, "82. Build the Drone Port\n(Long-range logistics relay, 400 m \u2014 Non-Destructive)",
                 () => IndustrialWorld.EditorTools.DronePortSetup.RunStep82(), 62);
+            AddWizardButton(scroll, "83. Build the Transmission Tower\n(High-voltage 128 m power span \u2014 Non-Destructive)",
+                () => IndustrialWorld.EditorTools.TransmissionTowerSetup.RunStep83(), 62);
 
             AddSpacer(scroll, 20);
         }

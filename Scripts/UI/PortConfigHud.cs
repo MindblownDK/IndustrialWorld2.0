@@ -391,28 +391,22 @@ namespace VoxelEngine.UI
             Action refreshAllCards = null;
             void RefreshAll() { refreshAllCards?.Invoke(); }
 
-            VisualElement logistics = null;
-            int logisticsIndex = -1;
+            // A FIXED host element holds the logistics panel. Rebuilding clears this slot and
+            // refills it, so the panel can never be inserted a second time. The previous
+            // version re-inserted by remembered index, which duplicated the whole WIRELESS
+            // LOGISTICS block every time a request was added.
+            var logisticsSlot = new VisualElement();
+            logisticsSlot.style.flexDirection = FlexDirection.Column;
+            root.Add(logisticsSlot);
+
             void RebuildLogistics()
             {
+                logisticsSlot.Clear();
                 var fresh = BuildLogisticsPanel(host, () => { RefreshAll(); onChanged?.Invoke(); });
-                if (logistics != null && logistics.parent == root)
-                {
-                    int at = root.IndexOf(logistics);
-                    root.Remove(logistics);
-                    if (fresh != null) root.Insert(at, fresh);
-                    logistics = fresh;
-                    logisticsIndex = at;
-                }
-                else if (fresh != null && logisticsIndex >= 0 && logisticsIndex <= root.childCount)
-                {
-                    root.Insert(logisticsIndex, fresh);
-                    logistics = fresh;
-                }
+                if (fresh != null) logisticsSlot.Add(fresh);
             }
 
-            logistics = BuildLogisticsPanel(host, () => { RefreshAll(); onChanged?.Invoke(); });
-            if (logistics != null) { root.Add(logistics); logisticsIndex = root.IndexOf(logistics); }
+            RebuildLogistics();
 
             // Distribution mode toggle — only meaningful when >1 OUTPUT face.
             // Only meaningful where competing OUTPUT faces exist — a Provider's ports are inputs.
@@ -453,6 +447,7 @@ namespace VoxelEngine.UI
             refreshAllCards = () =>
             {
                 foreach (var (face, _, _) in FACES) RebuildCard(face);
+                RebuildLogistics();
             };
 
             var lockMode = LockOf(host);
@@ -595,6 +590,30 @@ namespace VoxelEngine.UI
             counts.style.marginTop = 6;
             box.Add(counts);
 
+            // Load. The container already enforces a weight limit; showing it here is what
+            // makes a chest that has stopped accepting deliveries explain itself.
+            if (chest.container != null && chest.container.MaxWeightKg > 0f)
+            {
+                float used = chest.container.CurrentWeightKg;
+                float cap  = chest.container.MaxWeightKg;
+                float fill = chest.container.WeightFill01;
+                bool full  = fill >= 0.999f;
+
+                var load = new Label("Load  " + used.ToString("0") + " / " + cap.ToString("0") + " kg" +
+                                     (full ? "   FULL" : ""));
+                load.style.color = new StyleColor(full ? new Color(0.85f, 0.45f, 0.35f)
+                                                : fill > 0.85f ? new Color(0.85f, 0.70f, 0.35f)
+                                                : T.TextSecondary);
+                load.style.fontSize = 10;
+                load.style.marginTop = 4;
+                box.Add(load);
+
+                var (bar, _) = T.ProgressBar(fill,
+                    full ? new Color(0.80f, 0.35f, 0.30f) : tint, 6, true);
+                bar.style.marginTop = 3;
+                box.Add(bar);
+            }
+
             // The world total stays visible, clearly labelled, so "I built it but it is too
             // far away" is distinguishable from "I never built one".
             int totalPartners = requester ? net.ProviderCount : net.RequesterCount;
@@ -701,7 +720,10 @@ namespace VoxelEngine.UI
             {
                 if (item == null) continue;
                 int available = net.AvailableFor(chest, item);
-                bool supplied = available > 0;
+                // A drone route is still a supply line, so an item only reachable by air must
+                // not read as "none in range" — that made a working delivery look broken.
+                int byDrone = available > 0 ? 0 : (DroneNetwork.Instance?.AvailableByDroneFor(chest, item) ?? 0);
+                bool supplied = available > 0 || byDrone > 0;
 
                 var row = new VisualElement();
                 row.style.flexDirection = FlexDirection.Row;
@@ -711,8 +733,9 @@ namespace VoxelEngine.UI
                 var dot = new VisualElement();
                 dot.style.width = 6; dot.style.height = 6;
                 dot.style.marginRight = 8;
-                dot.style.backgroundColor = new StyleColor(supplied
-                    ? new Color(0.30f, 0.75f, 0.45f)
+                dot.style.backgroundColor = new StyleColor(
+                    available > 0 ? new Color(0.30f, 0.75f, 0.45f)      // local, immediate
+                    : byDrone > 0 ? new Color(0.35f, 0.62f, 0.85f)      // inbound by air
                     : new Color(0.70f, 0.45f, 0.25f));
                 T.Radius(dot, 3f);
                 dot.pickingMode = PickingMode.Ignore;
@@ -725,8 +748,14 @@ namespace VoxelEngine.UI
                 name.pickingMode = PickingMode.Ignore;
                 row.Add(name);
 
-                var status = new Label(supplied ? available + " in range" : "none in range");
-                status.style.color = new StyleColor(supplied ? T.TextSecondary : new Color(0.85f, 0.55f, 0.35f));
+                var status = new Label(
+                    available > 0 ? available + " in range"
+                    : byDrone > 0 ? byDrone + " by drone"
+                    : "none in range");
+                status.style.color = new StyleColor(
+                    available > 0 ? T.TextSecondary
+                    : byDrone > 0 ? new Color(0.45f, 0.70f, 0.92f)
+                    : new Color(0.85f, 0.55f, 0.35f));
                 status.style.fontSize = 10;
                 status.style.marginRight = 6;
                 status.pickingMode = PickingMode.Ignore;

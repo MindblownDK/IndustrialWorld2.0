@@ -174,6 +174,8 @@ namespace VoxelEngine.Transport
             CargoCount      = count;
             FlightTotal     = Mathf.Max(0.1f, total);
             FlightRemaining = Mathf.Clamp(remaining, 0.1f, FlightTotal);
+            // A save taken after touchdown must not deliver the same payload a second time.
+            CargoDelivered  = FlightRemaining <= FlightTotal * 0.5f;
             SyncPowerDraw();
 
             CargoFrom = transform.position;
@@ -312,6 +314,7 @@ namespace VoxelEngine.Transport
             CargoCount       = count;
             FlightTotal      = Mathf.Max(0.1f, tripSeconds);
             FlightRemaining  = FlightTotal;
+            CargoDelivered   = false;
             SyncPowerDraw();
 
             // Cosmetic only, and allowed to fail: if the visual cannot be created the
@@ -333,18 +336,59 @@ namespace VoxelEngine.Transport
         public Vector3 CargoTo { get; private set; }
 
         /// <summary>
-        /// Advance the flight. Returns true on the tick the drone lands, so the network can
-        /// hand the cargo over. Unpowered ports still fly a drone that is already airborne.
+        /// True once the cargo has been handed over at the destination. The drone still has
+        /// its return leg to fly, so the flight is not finished — this only stops the payload
+        /// being delivered twice.
+        /// </summary>
+        public bool CargoDelivered { get; private set; }
+
+        /// <summary>
+        /// Advance the flight. Returns true on the tick the drone TOUCHES DOWN at the far
+        /// end, which is the moment the items should appear in the destination chest — not
+        /// when the drone gets home. The timer covers the whole round trip, so the outbound
+        /// leg ends at the halfway mark, exactly where the visual drone releases its crate.
+        /// Delivering at the end of the timer instead made the items land while the drone was
+        /// already most of the way back, which is the out-of-sync transfer.
+        ///
+        /// Unpowered ports still fly a drone that is already airborne.
         /// </summary>
         public bool TickFlight(float dt)
         {
             if (!IsInFlight) return false;
+
             FlightRemaining -= dt;
+
+            // Touchdown at the far end: half the round trip has elapsed.
+            if (!CargoDelivered && FlightRemaining <= FlightTotal * 0.5f)
+            {
+                CargoDelivered = true;
+                return true;
+            }
+
             if (FlightRemaining > 0f) return false;
 
+            // Home again with an empty hold: end the trip quietly.
             FlightRemaining = 0f;
             SyncPowerDraw();
-            return true;
+            if (!CargoDelivered) { CargoDelivered = true; return true; }   // safety net
+
+            CompleteTrip(0);
+            return false;
+        }
+
+        /// <summary>
+        /// The outbound leg is done and the cargo has been handed over; let the drone fly
+        /// home empty instead of ending the trip on the spot.
+        /// </summary>
+        public void BeginReturnLeg(int delivered)
+        {
+            TripsCompleted++;
+            ItemsDelivered += delivered;
+            CargoItem  = null;
+            CargoCount = 0;
+            // CurrentPartner and the timer are deliberately left alone: the drone still has
+            // to fly back, and FlightRemaining is what carries it there.
+            if (FlightRemaining <= 0f) CompleteTrip(0);
         }
 
         /// <summary>
@@ -354,10 +398,15 @@ namespace VoxelEngine.Transport
         /// </summary>
         public void HoldCargo(int stuck)
         {
-            CargoCount      = Mathf.Max(0, stuck);
-            FlightRemaining = CargoCount > 0 ? RetrySeconds : 0f;
-            FlightTotal     = Mathf.Max(FlightTotal, FlightRemaining);
-            if (CargoCount <= 0) CompleteTrip(0);
+            CargoCount = Mathf.Max(0, stuck);
+            if (CargoCount <= 0) { CompleteTrip(0); return; }
+
+            // Re-arm the touchdown test: the retry window is treated as a fresh outbound leg
+            // so TickFlight fires again when it elapses. Without clearing the flag the drone
+            // would sit holding the cargo forever.
+            CargoDelivered  = false;
+            FlightTotal     = RetrySeconds * 2f;
+            FlightRemaining = FlightTotal;
             SyncPowerDraw();
         }
 
@@ -384,6 +433,7 @@ namespace VoxelEngine.Transport
         public void CompleteTrip(int delivered)
         {
             RetireDrone();
+            CargoDelivered = false;
             TripsCompleted++;
             ItemsDelivered += delivered;
             CurrentPartner = null;

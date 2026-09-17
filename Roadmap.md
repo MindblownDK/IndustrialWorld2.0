@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `11.9.0-dev`
-**Roadmap Version:** `11.9.0-dev`
+**Current Version:** `11.12.0-dev`
+**Roadmap Version:** `11.12.0-dev`
 **Date:** 2026-09-16
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,30 +29,29 @@
 
 ## 0. Recently Done
 
+### 11.12.0-dev — Where You Will Actually Land
+- `TrajectoryPredictor` forward-integrates the coast path with the same gravity and drag forces `GridEntity` applies, then raycasts each segment, so the impact point is real terrain rather than a vacuum conic.
+- `TrajectoryOverlay` draws it in the wide exterior view only, colour-coded impact/orbit/escape, with a distance-scaled pulsing impact marker and a plain-language HUD readout.
+- Cached against velocity change so a coasting ship does not re-solve every frame. Toggle on `J`, rebindable; settings version 15.
+
+### 11.11.0-dev — The Grid Reaches Out
+- `TransmissionTower` spans power 128 m tower-to-tower at 20 kW, registering the span as a manual link so it bypasses the cable distance/line-of-sight rules without loosening them.
+- Local tap stays at 4 m so a pylon does not hoover up every machine in its span radius; spans take part in the normal bottleneck rule and are drawn as a hanging catenary.
+- Authored by setup step 83. Closes the last open item in the section 6.4 content list.
+
+### 11.10.0-dev — Landed, Not Teleported
+- Cargo is handed over at TOUCHDOWN (half the round trip) rather than when the drone gets home, so items appear exactly as the drone releases them; `CargoDelivered` keeps the handover once-only across saves.
+- Logistic chests carry their own weight limits (Provider 1200 kg, Buffer 900 kg, Requester 600 kg) through the container weight system, shown as a Load bar; 0 still means the world default.
+- Fixed the duplicated WIRELESS LOGISTICS panel (fixed container instead of index re-insert), and items reachable only by drone now read "N by drone" instead of "none in range".
+
 ### 11.9.0-dev — Heavy Lift
 - Drone ports take the universal Speed / Efficiency modules (step 75) as FLY FASTER / CARRY MORE, two slots, stacking; round trips and payloads are priced from the upgraded values.
 - The drone is rebuilt as an eight-rotor heavy lifter with skids and a gimbal pod, and now flies the cargo's real chest-to-chest route instead of port to port.
 - Persistence fixed on two fronts: chest request lists and buffer targets are saved again (capture/restore now go through `Chest`), and drone ports save their name, toggle, tuning, counters and in-flight manifest so a mid-air payload is never destroyed by a reload.
 
-### 11.8.0-dev — The Drone You Can Watch
-- `TransportDrone` flies the route visibly (arc, tinted cargo crate, empty return), driven by the port's `FlightProgress` so it is presentation-only and can never strand cargo; per-port DRONE VISIBLE toggle.
-- Drone ports no longer deregister when their chunk streams out, so a route survives past the ~192-256 m load radius; a far port is reported as dormant instead of vanishing, and unpowered links are named in the panel.
-- The item-ports screen rebuilds its wireless panel and face cards together, so a filter change no longer leaves stale numbers until reopen.
-- Open: `showDrone`, `portName` and in-flight state are not yet persisted across a save.
-
 ### 11.7.1-dev — The Range Readout Tells The Truth
 - The chest panel's provider/requester counts are now measured in range (`ProvidersInRangeOf` / `RequestersInRangeOf`) instead of world-wide, so distance is visible where it was previously invisible.
 - `ProviderCount` / `RequesterCount` keep their world-wide meaning, are documented as such, and are shown only as a clearly labelled "exists elsewhere" hint pointing at the Drone Ports.
-
-### 11.7.0-dev — The Drone Port
-- `DronePort` + `DroneNetwork` add the long-distance logistics layer: two ports link over 400 m and fly items between the logistic chests within each one's 48 m service radius, over real transit time.
-- Demand-driven from the destination end and skips anything the local wireless network can already supply, so a drone only ever flies against a real shortfall; cargo that cannot be unloaded is stored at either end or held and retried, never destroyed.
-- Powered (20 W idle, +140 W in flight); power gates dispatch only, so an airborne drone always completes its trip. Authored by setup step 82.
-
-### 11.6.0-dev — The Buffer Chest
-- `PortLockMode.Buffer` completes the logistic chest line: it stocks itself from providers and supplies requesters, and is the first network role whose faces are NOT pinned (`Chest.IsDirectionPinned`).
-- A per-item `bufferStockTarget` (default 64, editable in the panel, saved) caps what a buffer requests, so it cannot drain its providers; buffer-to-buffer stocking is refused to prevent loops.
-- Setup step 78 now authors three variants; the Buffer Chest is 36 slots and is seeded with one input and one output face.
 
 ### Era Transition Feel
 
@@ -1384,7 +1383,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 |------|--------|------------------|
 | Configurable grid screens / displays | ✅ COMPLETED | All sizes, live text/power/data modes, right-click and terminal config, custom text/colors/border/font, visual bar charts, multi-source selection, live camera feeds, power gain/loss/net mode, persistence, and camera block integration are implemented and validated. |
 | Camera block live feed | ✅ COMPLETED | `GridCameraBlock` exposes a live RenderTexture through `IGridCameraFeedProvider`; `GridScreenBlock` Camera mode applies it directly to the screen surface with correct online/idle/offline LED states and validated screen-source behavior. |
-| Trajectory camera / orbit tools | 🟡 PARTIALLY COMPLETE | Roadmap design exists; final trajectory/orbit-map implementation and validation remain future work. |
+| Trajectory camera / orbit tools | ✅ COMPLETED (trajectory) | `TrajectoryPredictor` + `TrajectoryOverlay` (11.12.0-dev) give the predicted path, terrain impact marker and time/speed-to-impact in the wide exterior view. The separate Star Map / orbit overlay (item 7) is still open. |
 
 #### New Content
 
@@ -1407,11 +1406,14 @@ Statuses are evidence-based and move forward only after code/content review and 
 3. **Logistic Chests** — ~~Provider Chest~~ ~~Requester Chest~~ *(11.2.0-dev)*, ~~wireless request/fulfilment routing between them~~ *(11.4.0-dev, roles corrected 11.5.0-dev)*, ~~Buffer Chest~~ *(11.6.0-dev)* — **COMPLETE**
    - Provider Chest: pipes and belts FILL it (ports pinned to Input); `LogisticsNetwork` hands its stock to in-range requesters.
    - Requester Chest: the network fills it wirelessly; its ports (pinned to Output) FEED the pipes downstream. Its request list is a dedicated field, separate from the port filters.
+   - **Weight limits (11.10.0-dev):** Provider 1200 kg, Buffer 900 kg, Requester 600 kg, enforced by the container weight system and shown as a Load bar.
    - Buffer Chest: both roles at once, faces NOT pinned. Tops itself up to a per-item `bufferStockTarget` from providers and supplies other requesters; buffer-to-buffer stocking is refused. Authored by setup step 78.
    - **Balance rule:** a buffer requests only up to its stock target. Without that cap a buffer drains every provider it can reach, which is the standard failure mode of this block.
 
-4. **Long-Distance Power Poles**
-   - High-voltage transmission towers.
+4. **Long-Distance Power Poles** — ~~high-voltage transmission towers~~ *(11.11.0-dev)* — **COMPLETE**
+   - `TransmissionTower`: 128 m span, 20 kW, max 3 spans, 4 m local tap. Authored by setup step 83.
+   - Spans are registered as manual links, so they cross terrain that ordinary cables may not, while cables keep their strict one-grid-step rule.
+   - **Balance rule:** the span is capacity-rated and obeys the network bottleneck, so a thin cable feeding a tower is still the limit.
 
 5. **Configurable Grid Screens / Displays**
    - Multiple sizes: 1×1, 2×2, 4×4, wide banner.
@@ -1420,8 +1422,12 @@ Statuses are evidence-based and move forward only after code/content review and 
    - Customizable font, color, background, border.
    - Can show information from any block on the same grid or connected network.
 
-6. **Trajectory Camera Mode**
-   - Bound to a configurable input key (default: `T`).
+6. **Trajectory Camera Mode** — ~~predicted path, gravity arc, impact marker~~ *(11.12.0-dev)* — **COMPLETE**
+   - `TrajectoryPredictor`: semi-implicit Euler, 0.25 s steps, 45 s horizon, integrating the same scaled radial gravity and block-count drag model the physics step uses. Cached against velocity change.
+   - `TrajectoryOverlay`: one shared `LineRenderer` plus a collider-free, distance-scaled impact marker. Colour-coded impact / orbit / escape / clear.
+   - Third gate is the WIDE exterior view (second zoom-out), so first-person and the tight chase view stay clean.
+   - **Implementation note:** the path raycast must ignore its own grid and the pilot, or every prediction impacts the ship it belongs to.
+   - Bound to `J`, rebindable (the roadmap's suggested `T` was already Tool Cycle).
    - Only active when the player is piloting or editing a grid vehicle.
    - First zoom-out from first-person switches to third-person.
    - Second zoom-out with trajectory enabled draws a predicted path:

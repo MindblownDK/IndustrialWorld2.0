@@ -114,7 +114,7 @@ namespace VoxelEngine.Transport
 
                 if (destination == null || item == null || count <= 0)
                 {
-                    port.CompleteTrip(0);
+                    port.BeginReturnLeg(0);
                     continue;
                 }
 
@@ -146,7 +146,9 @@ namespace VoxelEngine.Transport
                     }
                 }
 
-                port.CompleteTrip(delivered);
+                // Hand over at touchdown and let the drone fly the return leg empty, so the
+                // items appear exactly when the visual drone releases them.
+                port.BeginReturnLeg(delivered);
             }
         }
 
@@ -390,6 +392,41 @@ namespace VoxelEngine.Transport
         {
             for (int i = _ports.Count - 1; i >= 0; i--)
                 if (_ports[i] == null) _ports.RemoveAt(i);
+        }
+
+        /// <summary>
+        /// How much of an item could reach <paramref name="chest"/> by DRONE: stock held by
+        /// providers around any port that links to a port serving this chest. The chest panel
+        /// uses it so an item that is genuinely on its way is not reported as unavailable
+        /// merely because no provider is within the 48 m wireless radius.
+        /// </summary>
+        public int AvailableByDroneFor(Chest chest, ItemDefinition item)
+        {
+            if (chest == null || item == null) return 0;
+            Prune();
+            if (_ports.Count < 2) return 0;
+
+            float serviceSqr = DronePort.ServiceRadius * DronePort.ServiceRadius;
+            int total = 0;
+
+            foreach (var local in _ports)
+            {
+                if (local == null) continue;
+                // Is this port close enough to serve the chest at all?
+                if ((local.NetworkPosition - chest.transform.position).sqrMagnitude > serviceSqr) continue;
+
+                foreach (var remote in _ports)
+                {
+                    if (remote == null || remote == local) continue;
+                    float range = Mathf.Min(local.linkRange, remote.linkRange);
+                    if ((remote.NetworkPosition - local.NetworkPosition).sqrMagnitude > range * range) continue;
+                    if (!remote.IsLoaded) continue;   // its chests are not in memory to count
+
+                    remote.CollectLocalChests(_remoteProviders, _remoteRequesters);
+                    total += AvailableAcross(_remoteProviders, item);
+                }
+            }
+            return total;
         }
 
         /// <summary>Ports within linking range of <paramref name="port"/>. Used by the UI.</summary>
