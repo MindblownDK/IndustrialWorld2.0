@@ -41,10 +41,33 @@ namespace VoxelEngine.Transport
             }
 
             var net = DroneNetwork.Instance;
-            int linked = net != null ? net.LinkedPortCount(port) : 0;
+            var (linked, unpowered, dormant) = net != null ? net.LinkStatus(port) : (0, 0, 0);
 
             p.Add(T.StatRow("", "Linked ports", linked.ToString(),
                 linked > 0 ? T.TextSecondary : T.AccentAmber));
+
+            // A link that exists but cannot work is the confusing case, so it is named
+            // explicitly rather than left as a silent "nothing is happening".
+            if (unpowered > 0)
+            {
+                var warn = T.Muted(unpowered == 1
+                    ? "One linked port has no power. It cannot send or receive until it does."
+                    : unpowered + " linked ports have no power. They cannot send or receive until they do.");
+                warn.style.color = new StyleColor(T.AccentAmber);
+                warn.style.whiteSpace = WhiteSpace.Normal;
+                warn.style.marginBottom = 5;
+                p.Add(warn);
+            }
+            if (dormant > 0)
+            {
+                var far = T.Muted(dormant == 1
+                    ? "One linked port is too far away to be loaded right now. The route is kept, but it can only trade while you are near enough for its chunk to load."
+                    : dormant + " linked ports are too far away to be loaded right now. Their routes are kept, but they can only trade while you are near enough for their chunks to load.");
+                far.style.whiteSpace = WhiteSpace.Normal;
+                far.style.fontSize = 9;
+                far.style.marginBottom = 5;
+                p.Add(far);
+            }
             p.Add(T.StatRow("", "Link range", port.linkRange.ToString("0") + " m"));
             p.Add(T.StatRow("", "Payload", port.payloadPerTrip + " per trip"));
 
@@ -102,6 +125,20 @@ namespace VoxelEngine.Transport
             p.Add(T.Spacer(8));
             p.Add(T.StatRow("", "Trips completed", port.TripsCompleted.ToString()));
             p.Add(T.StatRow("", "Items delivered", port.ItemsDelivered.ToString()));
+
+            // ── Visual drone toggle ─────────────────────────────────────────
+            p.Add(T.Spacer(8));
+            var (togglePill, _) = T.MachineToggle(
+                port.showDrone,
+                on => port.showDrone = on,
+                "DRONE VISIBLE",
+                "DRONE HIDDEN");
+            p.Add(togglePill);
+
+            var toggleNote = T.Muted("Cosmetic only. Deliveries are identical with the drone hidden.");
+            toggleNote.style.fontSize = 9;
+            toggleNote.style.whiteSpace = WhiteSpace.Normal;
+            p.Add(toggleNote);
 
             p.Add(T.Spacer(6));
             var note = T.Muted("Drones only carry what the local wireless network cannot. " +

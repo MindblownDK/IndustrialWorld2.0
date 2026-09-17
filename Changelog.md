@@ -1,9 +1,49 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `11.7.1-dev`
+**Current Version:** `11.8.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [11.8.0-dev] The Drone You Can Watch
+
+**Type:** MINOR — a new visual system plus two bug fixes. Save-compatible.
+
+**GitHub title:** `[11.8.0-dev] The drone you can watch`
+
+#### 1. Filters did not refresh the wireless panel
+
+Adding an item filter to a face updated that face's card and nothing else. The WIRELESS LOGISTICS box above it is built from the same state, so it kept showing stale numbers until the screen was closed and reopened.
+
+The panel is now rebuilt in place whenever a face card changes, and the reverse is wired too: a request added or removed inside the logistics box restates every face card. The two halves of the screen can no longer disagree, and neither rebuild disturbs scroll position.
+
+#### 2. The drone ports did not really have 400 m of range
+
+They advertised 400 m, and the check was correct — but it could never be reached. The world streams: chunks are 32 m and the view distance is 6 to 8 of them, so anything past roughly 192 to 256 m is unloaded, and the blocks inside it are disabled. The port deregistered itself in `OnDisable`, so the far end of a long route simply vanished from the network well before 400 m.
+
+Registration now lasts until the block is genuinely destroyed, so a route survives its far end being streamed out. Distance is measured from a remembered `NetworkPosition`, which stays meaningful while a port is unloaded.
+
+What a streamed-out port cannot do is touch its chests, because they are not in memory — so it is reported as **dormant** rather than quietly dropped. The route is kept and resumes the moment the chunk loads. This is an honest limit of a streaming world rather than something a logistics system can paper over, and the panel now says so in plain words instead of leaving the player to guess.
+
+#### 3. The transport drone
+
+A visible drone now flies the route: it climbs away from the source, arcs to the destination carrying a crate tinted to its cargo, lands, and returns empty with its crate hidden. It is assembled from primitives, so it needs no art asset, and its colliders are stripped — it cannot bump the player or a vehicle.
+
+It is deliberately **presentation only**. The delivery is already decided and paid for at dispatch: the cargo has left the source chests and the landing is on a timer. The drone reads the port's own `FlightProgress` rather than keeping a clock, so the model can never drift from the delivery. This matters — if the simulation waited on the model, a drone that clipped terrain or streamed out would strand real items.
+
+Each port has its own **DRONE VISIBLE / DRONE HIDDEN** toggle in its panel, as asked. Switching it off changes nothing about the logistics.
+
+#### 4. Unpowered links are named
+
+A link that exists but cannot work was previously silent. The panel now reports "One linked port has no power. It cannot send or receive until it does.", pluralising properly when several are affected, and separately reports dormant ports.
+
+#### Known limitation
+
+`showDrone` and a renamed `portName` are runtime values and are **not yet persisted** — a reloaded world returns both to their defaults. The flight state is likewise not saved, so a drone airborne at save time completes on load rather than resuming mid-air. Worth fixing in a later round; called out here so it is not mistaken for a bug.
+
+#### No Unity step
+
+No setup step: recompile and the changes apply to ports already placed.
 
 ### [11.7.1-dev] The Range Readout Tells The Truth
 

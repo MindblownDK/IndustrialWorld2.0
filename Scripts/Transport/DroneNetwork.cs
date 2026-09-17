@@ -215,6 +215,7 @@ namespace VoxelEngine.Transport
             foreach (var destination in _ports)
             {
                 if (destination == null || destination.IsInFlight) continue;
+                if (!destination.IsLoaded) continue;   // its chests are not in memory to fill
 
                 destination.CollectLocalChests(_localProviders, _localRequesters);
                 if (_localRequesters.Count == 0) continue;
@@ -261,14 +262,17 @@ namespace VoxelEngine.Transport
         {
             DronePort best = null;
             float bestSqr = float.MaxValue;
-            Vector3 origin = destination.transform.position;
+            Vector3 origin = destination.NetworkPosition;
 
             foreach (var source in _ports)
             {
                 if (source == null || source == destination) continue;
                 if (source.IsInFlight || !source.IsPowered) continue;
+                // A streamed-out port cannot see its chests, so it cannot load a payload.
+                // Its link stays registered; it simply cannot be the source right now.
+                if (!source.IsLoaded) continue;
 
-                float sqr = (source.transform.position - origin).sqrMagnitude;
+                float sqr = (source.NetworkPosition - origin).sqrMagnitude;
                 float range = Mathf.Min(source.linkRange, destination.linkRange);
                 if (sqr > range * range) continue;
                 if (sqr >= bestSqr) continue;
@@ -365,18 +369,31 @@ namespace VoxelEngine.Transport
         }
 
         /// <summary>Ports within linking range of <paramref name="port"/>. Used by the UI.</summary>
-        public int LinkedPortCount(DronePort port)
+        public int LinkedPortCount(DronePort port) => LinkStatus(port).total;
+
+        /// <summary>
+        /// A breakdown of the ports linked to <paramref name="port"/>: how many there are in
+        /// total, how many of those have no power, and how many are currently streamed out.
+        /// The UI needs the breakdown so "linked but nothing happens" can name its own cause
+        /// instead of leaving the player guessing.
+        /// </summary>
+        public (int total, int unpowered, int dormant) LinkStatus(DronePort port)
         {
-            if (port == null) return 0;
+            if (port == null) return (0, 0, 0);
             Prune();
-            int n = 0;
+
+            int total = 0, unpowered = 0, dormant = 0;
             foreach (var other in _ports)
             {
                 if (other == null || other == port) continue;
                 float range = Mathf.Min(port.linkRange, other.linkRange);
-                if ((other.transform.position - port.transform.position).sqrMagnitude <= range * range) n++;
+                if ((other.NetworkPosition - port.NetworkPosition).sqrMagnitude > range * range) continue;
+
+                total++;
+                if (!other.IsPowered) unpowered++;
+                else if (!other.IsLoaded) dormant++;
             }
-            return n;
+            return (total, unpowered, dormant);
         }
     }
 }

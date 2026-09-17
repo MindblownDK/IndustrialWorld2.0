@@ -381,8 +381,38 @@ namespace VoxelEngine.UI
             if (lockBanner != null) root.Add(lockBanner);
 
             // Wireless logistics status — only for a chest that takes part in it.
-            var logistics = BuildLogisticsPanel(host, onChanged);
-            if (logistics != null) root.Add(logistics);
+            // It has to be REBUILDABLE in place: a face card edit (adding a filter, flipping
+            // a direction) changes what this panel reports, and previously only the edited
+            // card was refreshed, so the logistics box kept showing stale numbers until the
+            // whole screen was closed and reopened.
+            // The face cards are created further down, so the logistics panel cannot call
+            // them directly yet. A mutable Action is the bridge: C# has no forward
+            // declaration for local functions, and this stays a single assignment.
+            Action refreshAllCards = null;
+            void RefreshAll() { refreshAllCards?.Invoke(); }
+
+            VisualElement logistics = null;
+            int logisticsIndex = -1;
+            void RebuildLogistics()
+            {
+                var fresh = BuildLogisticsPanel(host, () => { RefreshAll(); onChanged?.Invoke(); });
+                if (logistics != null && logistics.parent == root)
+                {
+                    int at = root.IndexOf(logistics);
+                    root.Remove(logistics);
+                    if (fresh != null) root.Insert(at, fresh);
+                    logistics = fresh;
+                    logisticsIndex = at;
+                }
+                else if (fresh != null && logisticsIndex >= 0 && logisticsIndex <= root.childCount)
+                {
+                    root.Insert(logisticsIndex, fresh);
+                    logistics = fresh;
+                }
+            }
+
+            logistics = BuildLogisticsPanel(host, () => { RefreshAll(); onChanged?.Invoke(); });
+            if (logistics != null) { root.Add(logistics); logisticsIndex = root.IndexOf(logistics); }
 
             // Distribution mode toggle — only meaningful when >1 OUTPUT face.
             // Only meaningful where competing OUTPUT faces exist — a Provider's ports are inputs.
@@ -405,7 +435,7 @@ namespace VoxelEngine.UI
                 int idx = parent.IndexOf(oldCard);
                 parent.Remove(oldCard);
                 var fresh = BuildItemFaceCard(host, routing, config, face,
-                    () => { RebuildCard(face); onChanged?.Invoke(); });
+                    () => { RebuildCard(face); RebuildLogistics(); onChanged?.Invoke(); });
                 parent.Insert(idx, fresh);
                 cardRefs[face] = fresh;
             }
@@ -413,10 +443,17 @@ namespace VoxelEngine.UI
             foreach (var (face, _, _) in FACES)
             {
                 var card = BuildItemFaceCard(host, routing, config, face,
-                    () => { RebuildCard(face); onChanged?.Invoke(); });
+                    () => { RebuildCard(face); RebuildLogistics(); onChanged?.Invoke(); });
                 cardRefs[face] = card;
                 grid.Add(card);
             }
+
+            // Now the cards exist, wire the bridge: a change made INSIDE the logistics panel
+            // (a request added or removed) also restates every face card.
+            refreshAllCards = () =>
+            {
+                foreach (var (face, _, _) in FACES) RebuildCard(face);
+            };
 
             var lockMode = LockOf(host);
             var hint = T.Muted(lockMode == PortLockMode.Free

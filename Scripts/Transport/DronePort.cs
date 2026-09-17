@@ -50,6 +50,11 @@ namespace VoxelEngine.Transport
         [Tooltip("Extra watts drawn while a drone of this port is in flight.")]
         public float flightWatts = 140f;
 
+        [Header("Visuals")]
+        [Tooltip("Show a physical drone flying the route. Purely cosmetic - the delivery is " +
+                 "identical either way, so this can be switched off on a busy base.")]
+        public bool showDrone = true;
+
         [Header("Range and capacity")]
         [Tooltip("How far this port can reach another port, in metres. Far beyond the wireless chest range.")]
         public float linkRange = 400f;
@@ -79,6 +84,16 @@ namespace VoxelEngine.Transport
         /// <summary>True while a drone is away from this port.</summary>
         public bool IsInFlight => FlightRemaining > 0f;
 
+        /// <summary>
+        /// How far through the round trip the drone is, 0 to 1. The visual drone reads this
+        /// rather than keeping its own clock, so the model can never drift from the delivery.
+        /// </summary>
+        public float FlightProgress =>
+            FlightTotal > 0f ? Mathf.Clamp01(1f - (FlightRemaining / FlightTotal)) : 0f;
+
+        /// <summary>The visual drone for the current trip, when one is being shown.</summary>
+        private TransportDrone _drone;
+
         /// <summary>Round trips completed since the port was placed. Shown in the UI.</summary>
         public int TripsCompleted { get; private set; }
         /// <summary>Items delivered since the port was placed.</summary>
@@ -102,12 +117,36 @@ namespace VoxelEngine.Transport
         {
             DroneNetwork.EnsureInstance();
             DroneNetwork.Instance?.Register(this);
+            LastKnownPosition = transform.position;
         }
 
-        private void OnDisable()
-        {
-            DroneNetwork.Instance?.Unregister(this);
-        }
+        // NOTE: deliberately NOT unregistering in OnDisable.
+        //
+        // The world streams: chunks outside the view distance (32 m per chunk, 6-8 chunks,
+        // so roughly 192-256 m) are unloaded, which disables the blocks inside them. A port
+        // 400 m away is therefore disabled almost all the time. Dropping it from the network
+        // on disable meant the long link the block advertises could never actually exist --
+        // the far port vanished from the list long before 400 m.
+        //
+        // Registration now lasts until the block is genuinely destroyed, so a route survives
+        // the far end being streamed out. A port that cannot currently reach its chests is
+        // reported as dormant rather than deleted.
+        /// <summary>
+        /// Where this port is, remembered from the last time it was loaded. Distance checks
+        /// use it so a streamed-out port keeps a meaningful position instead of reading as
+        /// wherever its unloaded transform happens to sit.
+        /// </summary>
+        public Vector3 LastKnownPosition { get; private set; }
+
+        /// <summary>The port's position, valid whether or not its chunk is currently loaded.</summary>
+        public Vector3 NetworkPosition =>
+            isActiveAndEnabled ? transform.position : LastKnownPosition;
+
+        /// <summary>
+        /// True when the port's chunk is loaded, so it can actually see its chests and fly.
+        /// A dormant port keeps its link registered but cannot load or unload cargo.
+        /// </summary>
+        public bool IsLoaded => isActiveAndEnabled;
 
         private void EnsurePower()
         {
@@ -155,6 +194,12 @@ namespace VoxelEngine.Transport
             FlightTotal      = Mathf.Max(0.1f, tripSeconds);
             FlightRemaining  = FlightTotal;
             SyncPowerDraw();
+
+            // Cosmetic only, and allowed to fail: if the visual cannot be created the
+            // delivery is completely unaffected.
+            RetireDrone();
+            if (destination != null)
+                _drone = TransportDrone.Spawn(this, transform.position, destination.NetworkPosition, item);
         }
 
         /// <summary>
@@ -186,6 +231,19 @@ namespace VoxelEngine.Transport
             SyncPowerDraw();
         }
 
+        /// <summary>Remove the visual drone, if there is one.</summary>
+        private void RetireDrone()
+        {
+            if (_drone != null) { _drone.Retire(); _drone = null; }
+        }
+
+        /// <summary>A port torn down mid-flight must not leave its drone behind.</summary>
+        private void OnDestroy()
+        {
+            DroneNetwork.Instance?.Unregister(this);
+            RetireDrone();
+        }
+
         /// <summary>How long a drone waits before retrying an unloadable payload.</summary>
         public const float RetrySeconds = 5f;
 
@@ -195,6 +253,7 @@ namespace VoxelEngine.Transport
         /// <summary>Clear the manifest once the cargo has been handed over.</summary>
         public void CompleteTrip(int delivered)
         {
+            RetireDrone();
             TripsCompleted++;
             ItemsDelivered += delivered;
             CurrentPartner = null;

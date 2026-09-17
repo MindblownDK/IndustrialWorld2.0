@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `11.7.1-dev`
-**Roadmap Version:** `11.7.1-dev`
+**Current Version:** `11.8.0-dev`
+**Roadmap Version:** `11.8.0-dev`
 **Date:** 2026-09-16
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,12 @@
 
 ## 0. Recently Done
 
+### 11.8.0-dev — The Drone You Can Watch
+- `TransportDrone` flies the route visibly (arc, tinted cargo crate, empty return), driven by the port's `FlightProgress` so it is presentation-only and can never strand cargo; per-port DRONE VISIBLE toggle.
+- Drone ports no longer deregister when their chunk streams out, so a route survives past the ~192-256 m load radius; a far port is reported as dormant instead of vanishing, and unpowered links are named in the panel.
+- The item-ports screen rebuilds its wireless panel and face cards together, so a filter change no longer leaves stale numbers until reopen.
+- Open: `showDrone`, `portName` and in-flight state are not yet persisted across a save.
+
 ### 11.7.1-dev — The Range Readout Tells The Truth
 - The chest panel's provider/requester counts are now measured in range (`ProvidersInRangeOf` / `RequestersInRangeOf`) instead of world-wide, so distance is visible where it was previously invisible.
 - `ProviderCount` / `RequesterCount` keep their world-wide meaning, are documented as such, and are shown only as a clearly labelled "exists elsewhere" hint pointing at the Drone Ports.
@@ -46,11 +52,6 @@
 ### 11.5.2-dev — The Item Ports Panel Opens Again
 - Fixes the 11.5.1-dev regression that left the item-ports overlay empty: the first body build ran before the overlay was attached and was skipped by an attachment guard meant only for rebuilds.
 - The body is now built after the overlay is attached and is never skipped; only the scroll-offset restore is conditional, so live refresh and scroll preservation behave as before.
-
-### 11.5.1-dev — One Row Per Item
-- Setup step 81 repairs the assets that inherited the old `iron_ore` default identity (gravel, radar beacon, fire igniter) and the material assets left displaying as ore; the canonical ores are untouched.
-- Every item picker collapses its catalogue to one entry per id and prefers the best-authored asset, so a duplicate id can never again show as several identical rows.
-- The item-ports overlay rebuilds its body on change instead of only on reopen, preserving scroll position — removing a request updates the list immediately and in place.
 
 ### Era Transition Feel
 
@@ -1396,7 +1397,9 @@ Statuses are evidence-based and move forward only after code/content review and 
    - `DronePort` pairs with another port over 400 m and serves the logistic chests within 48 m of each end; `DroneNetwork` owns pairing, dispatch and delivery.
    - Powered rather than battery-swapping: 20 W idle, +140 W in flight. Power gates dispatch only, so an airborne drone completes its trip.
    - **Balance rule:** a drone only carries what the local wireless network cannot. Anything a provider within 48 m of the requester can supply never takes a flight, so drones never compete with local logistics.
-   - Open: a visible drone mesh flying the route (currently an abstract timed transit), and recharge/vehicle carriers for cargo beyond one payload.
+   - ~~A visible drone mesh flying the route~~ *(11.8.0-dev)* — `TransportDrone`, presentation-only, per-port toggle.
+   - **Streaming limit:** a port outside the loaded radius (~192-256 m) keeps its route but cannot trade until its chunk loads. Reported as dormant in the panel.
+   - Open: persistence for `showDrone` / `portName` / in-flight state, and vehicle carriers for cargo beyond one payload.
 
 3. **Logistic Chests** — ~~Provider Chest~~ ~~Requester Chest~~ *(11.2.0-dev)*, ~~wireless request/fulfilment routing between them~~ *(11.4.0-dev, roles corrected 11.5.0-dev)*, ~~Buffer Chest~~ *(11.6.0-dev)* — **COMPLETE**
    - Provider Chest: pipes and belts FILL it (ports pinned to Input); `LogisticsNetwork` hands its stock to in-range requesters.
