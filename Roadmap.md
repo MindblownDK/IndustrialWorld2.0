@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `11.13.1-dev`
-**Roadmap Version:** `11.13.1-dev`
+**Current Version:** `11.14.0-dev`
+**Roadmap Version:** `11.14.0-dev`
 **Date:** 2026-09-16
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -38,11 +38,6 @@
 - `TransmissionTower` spans power 128 m tower-to-tower at 20 kW, registering the span as a manual link so it bypasses the cable distance/line-of-sight rules without loosening them.
 - Local tap stays at 4 m so a pylon does not hoover up every machine in its span radius; spans take part in the normal bottleneck rule and are drawn as a hanging catenary.
 - Authored by setup step 83. Closes the last open item in the section 6.4 content list.
-
-### 11.10.0-dev — Landed, Not Teleported
-- Cargo is handed over at TOUCHDOWN (half the round trip) rather than when the drone gets home, so items appear exactly as the drone releases them; `CargoDelivered` keeps the handover once-only across saves.
-- Logistic chests carry their own weight limits (Provider 1200 kg, Buffer 900 kg, Requester 600 kg) through the container weight system, shown as a Load bar; 0 still means the world default.
-- Fixed the duplicated WIRELESS LOGISTICS panel (fixed container instead of index re-insert), and items reachable only by drone now read "N by drone" instead of "none in range".
 
 ### 11.7.1-dev — The Range Readout Tells The Truth
 - The chest panel's provider/requester counts are now measured in range (`ProvidersInRangeOf` / `RequestersInRangeOf`) instead of world-wide, so distance is visible where it was previously invisible.
@@ -1415,8 +1410,12 @@ Statuses are evidence-based and move forward only after code/content review and 
    - **Design rule:** a satellite is a player-built grid the player DECLARES a satellite. Never a separate entity type.
    - **Design rule:** an orbit is saved as Keplerian elements, never as a pose, so a station reloads at the correct phase for the reload time.
    - **Balance rule:** the map is a researched, expensive device in a Life Support instrument slot. Its stats gate tracking range and telemetry detail, so the tier ladder has somewhere to go.
-   - Phase 2 (open): satellite sensor payloads - season tracking, weather tracking, and weather influence for very advanced satellites. Influence shifts probabilities and clears storms over time at heavy power cost; it must never conjure arbitrary weather instantly, which would trivialise the weather system.
-   - Phase 2 (open): more research nodes flagged `requiresOrbitalLab`, and satellite-specific payload blocks.
+   - ~~Phase 2: satellite sensor payloads - season tracking, weather tracking, weather influence~~ *(11.14.0-dev)* - **COMPLETE**
+   - `GridSatellitePayload`: Sensor Array / Weather Radar / Climate Control Array, all gated on SATELLITE class + committed orbit.
+   - **Balance rule:** influence shifts the odds at `PickNextState`, never sets the sky. Combined with `1 - e^-total`, so a constellation steers a climate but can never lock it and every outcome stays reachable.
+   - **Honesty rule:** live weather only resolves for the body the player is at. The radar says so rather than fabricating a remote sky; season telemetry is the genuinely planet-wide readout.
+   - `Climate Engineering` is flagged `requiresOrbitalLab` - the first shipped node to use the gate.
+   - Open: payload upgrades, multi-body sensor networks, and using orbital coverage to extend the map's tracking range.
 
 5. **Configurable Grid Screens / Displays**
    - Multiple sizes: 1×1, 2×2, 4×4, wide banner.

@@ -1,9 +1,64 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `11.13.1-dev`
+**Current Version:** `11.14.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [11.14.0-dev] Reasons To Launch
+
+**Type:** MINOR - new systems, save-compatible. All new save fields are additive; a world with no satellites behaves exactly as before.
+
+**GitHub title:** `[11.14.0-dev] Reasons to launch`
+
+Phase two of the Orbital Programme: the satellite payloads that make a launch worth doing, plus the UI change requested for the orbital map.
+
+#### Orbital Systems is now its own box
+
+The orbital map was sharing the LIFE SUPPORT card. It now has a dedicated ORBITAL SYSTEMS box directly below it, which is also more useful: instead of a single status line it shows the device name, its capability tier, its tracking range, and the open-map prompt. PERSONAL SYSTEMS reads 4 MODULES.
+
+#### Satellite payloads
+
+Three blocks, one component, escalating capability. Each requires the host construct to be classified a SATELLITE and committed to orbit - the same rule the research station uses, so there is only one requirement to learn for all orbital hardware.
+
+| Payload | Capability | Idle | Active |
+|---|---|---|---|
+| Satellite Sensor Array | Planet-wide season telemetry | 120 W | - |
+| Satellite Weather Radar | Adds live weather and forecast | 220 W | - |
+| Satellite Climate Control Array | Adds weather influence | 260 W | 2660 W |
+
+The sensor tier is the quiet but real win: season data for a planet **without standing on it**. Temperature, solar multiplier, wind multiplier, days remaining, next season, forecast.
+
+The radar tier is honest about its limit. The weather simulation only runs for the body the player is actually at, so rather than fabricating a remote planet's live sky, the panel says exactly that and points at the season telemetry, which genuinely is planet-wide.
+
+#### Weather influence, not weather command
+
+Climate Control shifts the odds of the next weather change. It does not set the sky.
+
+The hook is a single point: `PickNextState` is the one place `WeatherManager` chooses what comes next, so biasing the roll and scaling storm chance there covers every climate path - temperate, snow, and no-precipitation worlds - without touching the individual branches.
+
+Two properties make this a system rather than a cheat:
+
+- **Diminishing returns.** Satellite influence is combined through `1 - e^-total`, so each additional satellite adds less than the last and the total can never quite reach 1. A constellation steers a climate; it can never lock one. Every weather outcome stays reachable.
+- **It costs.** An active climate array draws 2.66 kW. Steering an atmosphere should hurt.
+
+Directives are MONITOR, SUPPRESS and ENCOURAGE, and the chosen directive is a standing order, so it persists through a save/load rather than quietly reverting.
+
+#### New research
+
+- **Climate Engineering** (tier 6) unlocks the climate array - and is itself flagged `requiresOrbitalLab`. You must already have a working satellite in orbit before you can research the ability to steer weather from orbit. This is the first shipped node that uses the orbital gate added last release, so the gate now has a real consumer rather than only a mechanism.
+- The Sensor Array and Weather Radar ride along with **Orbital Science**, so getting a lab up also gets you something to point at the planet.
+
+#### Block consoles
+
+Both the payloads and the research station now have panels. When one is offline it states **which** requirement is missing (off / no power / not a satellite / not in orbit) and how to fix it, because a silent dead panel on a block whose entire purpose is its requirements would just read as a bug.
+
+#### Manual step in Unity
+
+1. **Tools -> Voxel Engine -> Voxel Engine Setup**.
+2. Click **84. Build the Orbital Programme** again - it is non-destructive and will add the three new payload blocks and the Climate Engineering node without touching anything authored.
+3. Research Orbital Science, build a Sensor Array or Weather Radar onto a satellite, and commit it to orbit.
+4. For weather control: put a Satellite Research Station in orbit first, research Climate Engineering there, then build the Climate Control Array.
 
 ### [11.13.1-dev] Compile Fixes And Conventional Keys
 

@@ -37,6 +37,8 @@ namespace VoxelEngine.GridSystem.UI
                 case GridSingularityHarvester sh: return MakeScrollable(HarvesterPanel(sh, slot));
                 case GridLocatorBlock loc:  return MakeScrollable(LocatorPanel(loc));
                 case GridSeasonMonitor sm:  return MakeScrollable(SeasonMonitorPanel(sm));
+                case GridSatellitePayload sp2: return MakeScrollable(SatellitePayloadPanel(sp2));
+                case GridSatelliteLab sl:   return MakeScrollable(SatelliteLabPanel(sl));
                 case GridCargoContainer cc: return CargoPanel(cc, slot);
                 case GridWeapon gw:         return MakeScrollable(WeaponPanel(gw, slot));
                 case GridRefinery rf:       return MakeScrollable(ProcessorPanel("⚗ Ship Refinery", rf.Current, rf.Progress01, rf.PowerDraw, rf.knownRecipes, rf.Grid, rf.selectedRecipe, r => rf.selectedRecipe = r));
@@ -1130,6 +1132,213 @@ namespace VoxelEngine.GridSystem.UI
         }
 
         // ── PLANETARY SEASON MONITOR ────────────────────────────────────────
+        /// <summary>
+        /// Satellite payload console. Shows why the payload is offline when it is, because
+        /// the requirements (satellite class + committed orbit + power) are the whole point
+        /// of the block and a silent dead panel would just read as a bug.
+        /// </summary>
+        private static VisualElement SatellitePayloadPanel(GridSatellitePayload payload)
+        {
+            var p = T.MachinePanel();
+            p.style.width = 470;
+
+            string blocked = payload.BlockedReason();
+            bool online = blocked == null;
+
+            var (hdr, _, _, _) = T.HeaderRow("\u25c9 " + payload.KindLabel,
+                online ? "OPERATIONAL" : "OFFLINE",
+                online ? T.AccentGreen : T.AccentAmber);
+            p.Add(hdr);
+            p.Add(T.AccentDivider(T.AccentCyan));
+            p.Add(T.Spacer(6));
+
+            if (!online)
+            {
+                p.Add(GridUIHelpers.SectionTitle("Requirements Not Met"));
+                var why = new Label(blocked);
+                why.style.fontSize = 11;
+                why.style.whiteSpace = WhiteSpace.Normal;
+                why.style.color = new StyleColor(T.AccentAmber);
+                why.style.marginBottom = 8;
+                p.Add(why);
+
+                var help = new Label(
+                    "A payload only works aboard a construct classified as a SATELLITE and " +
+                    "committed to a stable orbit. Press N while piloting to open the " +
+                    "construct registry.");
+                help.style.fontSize = 10;
+                help.style.whiteSpace = WhiteSpace.Normal;
+                help.style.color = new StyleColor(T.TextMuted);
+                p.Add(help);
+                return p;
+            }
+
+            var body = payload.ObservedBody;
+            p.Add(GridUIHelpers.SectionTitle("Observed Body"));
+            var bodyLabel = new Label(body != null ? body.DisplayName : "\u2014");
+            bodyLabel.style.fontSize = 13;
+            bodyLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            bodyLabel.style.color = new StyleColor(T.AccentCyan);
+            bodyLabel.style.marginBottom = 8;
+            p.Add(bodyLabel);
+
+            // ── Season telemetry ──
+            p.Add(GridUIHelpers.SectionTitle("Season Telemetry"));
+            if (payload.TryGetSeason(out var season))
+            {
+                var seasonLine = new Label($"{season.SeasonIcon} {season.SeasonName}  \u00b7  " +
+                                           $"day {season.seasonDay}/{season.daysInSeason}  \u00b7  year {season.currentYear}");
+                seasonLine.style.fontSize = 12;
+                seasonLine.style.unityFontStyleAndWeight = FontStyle.Bold;
+                seasonLine.style.color = new StyleColor(Color.white);
+                p.Add(seasonLine);
+
+                var detail = new Label(
+                    $"Temperature {season.effectiveTemperature:0.0}\u00b0C   " +
+                    $"Solar x{season.solarMultiplier:0.00}   Wind x{season.windMultiplier:0.00}\n" +
+                    $"{season.daysRemainingInSeason} days until {season.NextSeasonName}   " +
+                    $"Forecast: {season.forecastPrecipitation}");
+                detail.style.fontSize = 10;
+                detail.style.whiteSpace = WhiteSpace.Normal;
+                detail.style.marginTop = 2;
+                detail.style.marginBottom = 8;
+                detail.style.color = new StyleColor(T.TextSecondary);
+                p.Add(detail);
+            }
+            else
+            {
+                var none = new Label("No season data for this body.");
+                none.style.fontSize = 10;
+                none.style.marginBottom = 8;
+                none.style.color = new StyleColor(T.TextMuted);
+                p.Add(none);
+            }
+
+            // ── Weather telemetry ──
+            if (payload.CanTrackWeather)
+            {
+                p.Add(GridUIHelpers.SectionTitle("Weather Telemetry"));
+                if (payload.TryGetWeather(out var state, out float intensity, out string forecast))
+                {
+                    var w = new Label($"{state}   intensity {intensity * 100f:0}%" +
+                                      (string.IsNullOrEmpty(forecast) ? "" : $"   forecast {forecast}"));
+                    w.style.fontSize = 12;
+                    w.style.unityFontStyleAndWeight = FontStyle.Bold;
+                    w.style.color = new StyleColor(Color.white);
+                    w.style.marginBottom = 8;
+                    p.Add(w);
+                }
+                else
+                {
+                    // Honest about the limit rather than inventing a remote sky.
+                    var w = new Label("Live weather is only resolved for the body you are " +
+                                      "currently at. Season telemetry above is planet-wide.");
+                    w.style.fontSize = 10;
+                    w.style.whiteSpace = WhiteSpace.Normal;
+                    w.style.marginBottom = 8;
+                    w.style.color = new StyleColor(T.TextMuted);
+                    p.Add(w);
+                }
+            }
+
+            // ── Climate control ──
+            if (payload.CanInfluenceWeather)
+            {
+                p.Add(GridUIHelpers.SectionTitle("Climate Directive"));
+
+                var row = new VisualElement();
+                row.style.flexDirection = FlexDirection.Row;
+                row.style.marginBottom = 6;
+
+                void Directive(string label, ClimateDirective d)
+                {
+                    var b = T.SmallButton(label, () =>
+                    {
+                        payload.SetDirective(d);
+                        VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+                    }, payload.Directive == d ? T.AccentGreen : T.AccentDim);
+                    b.style.marginRight = 6;
+                    row.Add(b);
+                }
+
+                Directive("\u25cb MONITOR", ClimateDirective.Monitor);
+                Directive("\u2600 SUPPRESS", ClimateDirective.Suppress);
+                Directive("\u2601 ENCOURAGE", ClimateDirective.Encourage);
+                p.Add(row);
+
+                float net = GridSatellitePayload.ResolveInfluence();
+                var effect = new Label(Mathf.Abs(net) < 0.001f
+                    ? "No climate influence on this world."
+                    : GridSatellitePayload.InfluenceLabel());
+                effect.style.fontSize = 11;
+                effect.style.unityFontStyleAndWeight = FontStyle.Bold;
+                effect.style.color = new StyleColor(Mathf.Abs(net) < 0.001f
+                    ? T.TextMuted
+                    : (net < 0f ? T.AccentCyan : T.AccentAmber));
+                p.Add(effect);
+
+                var note = new Label(
+                    "Influence shifts the odds of the next weather change; it does not set " +
+                    "the sky directly. Satellites stack with diminishing returns, so a " +
+                    "constellation steers a climate but can never lock it. " +
+                    $"Active draw {payload.idleWatts + payload.influenceWatts:0} W.");
+                note.style.fontSize = 10;
+                note.style.whiteSpace = WhiteSpace.Normal;
+                note.style.marginTop = 4;
+                note.style.color = new StyleColor(T.TextMuted);
+                p.Add(note);
+            }
+
+            return p;
+        }
+
+        /// <summary>Satellite research station console: reports whether orbital research can run.</summary>
+        private static VisualElement SatelliteLabPanel(GridSatelliteLab lab)
+        {
+            var p = T.MachinePanel();
+            p.style.width = 470;
+
+            string blocked = lab.BlockedReason();
+            bool online = blocked == null;
+
+            var (hdr, _, _, _) = T.HeaderRow("\u2697 Satellite Research Station",
+                online ? "OPERATIONAL" : "OFFLINE",
+                online ? T.AccentGreen : T.AccentAmber);
+            p.Add(hdr);
+            p.Add(T.AccentDivider(T.AccentCyan));
+            p.Add(T.Spacer(6));
+
+            if (online)
+            {
+                var ok = new Label("Orbital research is available. Research nodes that require " +
+                                   "an orbital laboratory can now be started.");
+                ok.style.fontSize = 11;
+                ok.style.whiteSpace = WhiteSpace.Normal;
+                ok.style.color = new StyleColor(T.AccentGreen);
+                p.Add(ok);
+            }
+            else
+            {
+                var why = new Label(blocked);
+                why.style.fontSize = 11;
+                why.style.whiteSpace = WhiteSpace.Normal;
+                why.style.color = new StyleColor(T.AccentAmber);
+                why.style.marginBottom = 8;
+                p.Add(why);
+
+                var help = new Label(
+                    "This station only hosts research aboard a powered construct classified " +
+                    "as a SATELLITE and committed to a stable orbit. Press N while piloting " +
+                    "to open the construct registry.");
+                help.style.fontSize = 10;
+                help.style.whiteSpace = WhiteSpace.Normal;
+                help.style.color = new StyleColor(T.TextMuted);
+                p.Add(help);
+            }
+
+            return p;
+        }
+
         private static VisualElement SeasonMonitorPanel(GridSeasonMonitor sm)
         {
             var p = T.MachinePanel();

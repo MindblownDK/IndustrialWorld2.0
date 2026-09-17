@@ -1440,7 +1440,14 @@ namespace VoxelEngine.Persistence
                         container = TryFindContainer(block.gameObject)
                     };
 
-                    if (block is VoxelEngine.Gas.GasVent ventBlock)
+                    if (block is GridSatellitePayload payloadBlock)
+                    {
+                        // The climate directive is a standing order the player gave, so it
+                        // must survive a reload rather than silently reverting to Monitor.
+                        savedBlock.hasSatellitePayloadState = true;
+                        savedBlock.satelliteDirective = (int)payloadBlock.Directive;
+                    }
+                    else if (block is VoxelEngine.Gas.GasVent ventBlock)
                     {
                         // Louvre position and the lifetime counter are the only two things
                         // a vent remembers; the gas itself is already gone.
@@ -1886,7 +1893,9 @@ namespace VoxelEngine.Persistence
                     var gp = block.GetComponent<VoxelEngine.Building.BlockPaint>() ?? block.gameObject.AddComponent<VoxelEngine.Building.BlockPaint>();
                     gp.Finish = (VoxelEngine.Building.PaintFinishId)saved.paintFinish;
                 }
-                if (saved.hasEngineAirModeState
+                if (saved.hasSatellitePayloadState && block is GridSatellitePayload restoredPayload)
+                    restoredPayload.SetDirective((ClimateDirective)saved.satelliteDirective);
+                else if (saved.hasEngineAirModeState
                     && block is VoxelEngine.Maritime.GridMaritimeEngine restoredEngine)
                     restoredEngine.allowAirFallbackOnStarvedLine = saved.engineAirFallback;
                 else if (saved.hasGasVentState && block is VoxelEngine.Gas.GasVent restoredVent)
@@ -3318,6 +3327,9 @@ namespace VoxelEngine.Persistence
         [Serializable] private class SavedGridBlock
         {
             public string itemId;
+            // Additive 11.14.0: standing climate directive on a satellite payload.
+            public bool hasSatellitePayloadState;
+            public int satelliteDirective;
             public Vector3Int gridPos;
             public bool isPrecision;
             public Vector3Int precisionPos;

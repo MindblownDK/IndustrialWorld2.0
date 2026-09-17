@@ -94,13 +94,15 @@ namespace IndustrialWorld.EditorTools
                 var labItem = EnsureLabItem(labPrefab, out bool labItemChanged);
                 var labRecipe = EnsureLabRecipe(registry, labItem, steel, wire, out bool labRecipeChanged);
 
-                EnsureResearchNodes(tree, mapRecipe, labRecipe, sci2, sci3, out bool researchChanged);
+                var payloadRecipes = EnsurePayloads(registry, steel, wire, out bool payloadsChanged);
+
+                EnsureResearchNodes(tree, mapRecipe, labRecipe, payloadRecipes, sci2, sci3, out bool researchChanged);
 
                 AssetDatabase.SaveAssets();
                 AssetDatabase.Refresh();
 
                 bool any = mapChanged || mapRecipeChanged || labPrefabChanged
-                           || labItemChanged || labRecipeChanged || researchChanged;
+                           || labItemChanged || labRecipeChanged || payloadsChanged || researchChanged;
 
                 Debug.Log("[Setup 84] Orbital Programme setup complete. " +
                           (any ? "Changes were written." : "Everything was already in place."));
@@ -114,6 +116,11 @@ namespace IndustrialWorld.EditorTools
                     "    Hosts research flagged 'requiresOrbitalLab'.\n" +
                     "    Only works aboard a SATELLITE committed to orbit.\n" +
                     "    Research: Orbital Science\n\n" +
+                    "  SATELLITE PAYLOADS (grid blocks)\n" +
+                    "    Sensor Array     - planet-wide season tracking\n" +
+                    "    Weather Radar    - adds live weather and forecast\n" +
+                    "    Climate Control  - influences weather, 2.5 kW active\n" +
+                    "    Research: Orbital Science / Climate Engineering\n\n" +
                     "To gate a research node behind orbit, tick 'Requires Orbital Lab' on that node.\n\n" +
                     (any ? "Changes were written. See the Console." : "Everything was already in place."),
                     "OK");
@@ -384,10 +391,231 @@ namespace IndustrialWorld.EditorTools
         }
 
         // ============================================================
+        //                    Satellite payloads
+        // ============================================================
+        private readonly struct PayloadSpec
+        {
+            public readonly string Asset, Display, Description;
+            public readonly SatellitePayloadKind Kind;
+            public readonly int Steel, Wire;
+            public readonly float Idle, Influence, Strength, Mass, Hp;
+
+            public PayloadSpec(string asset, string display, string description,
+                SatellitePayloadKind kind, int steel, int wire, float idle,
+                float influence, float strength, float mass, float hp)
+            {
+                Asset = asset; Display = display; Description = description; Kind = kind;
+                Steel = steel; Wire = wire; Idle = idle; Influence = influence;
+                Strength = strength; Mass = mass; Hp = hp;
+            }
+        }
+
+        private static readonly PayloadSpec[] Payloads =
+        {
+            new("SatelliteSensorArray", "Satellite Sensor Array",
+                "Orbital sensor package. Reports the season cycle of the body it orbits, " +
+                "planet-wide, without standing on the surface.",
+                SatellitePayloadKind.SensorArray, 18, 20, 120f, 0f, 0f, 90f, 260f),
+
+            new("SatelliteWeatherRadar", "Satellite Weather Radar",
+                "Orbital weather radar. Adds live weather state and forecast on top of " +
+                "full season telemetry.",
+                SatellitePayloadKind.WeatherRadar, 28, 36, 220f, 0f, 0f, 130f, 300f),
+
+            new("SatelliteClimateControl", "Satellite Climate Control Array",
+                "Atmospheric steering array. Suppresses or encourages weather over the " +
+                "body it orbits. Influences the odds rather than setting the sky, and " +
+                "draws heavily while active.",
+                SatellitePayloadKind.ClimateControl, 55, 80, 260f, 2400f, 0.35f, 240f, 380f),
+        };
+
+        private static RecipeDefinition[] EnsurePayloads(RecipeRegistry registry,
+            ItemDefinition steel, ItemDefinition wire, out bool changed)
+        {
+            bool dirty = false;
+            var recipes = new RecipeDefinition[Payloads.Length];
+
+            for (int i = 0; i < Payloads.Length; i++)
+            {
+                var spec = Payloads[i];
+                var prefab = EnsurePayloadPrefab(spec, out bool prefabChanged);
+                var item = EnsurePayloadItem(spec, prefab, out bool itemChanged);
+                recipes[i] = EnsurePayloadRecipe(registry, spec, item, steel, wire, out bool recipeChanged);
+                dirty |= prefabChanged || itemChanged || recipeChanged;
+            }
+
+            changed = dirty;
+            return recipes;
+        }
+
+        private static GameObject EnsurePayloadPrefab(PayloadSpec spec, out bool changed)
+        {
+            string path = GridPrefabsFolder + "/" + spec.Asset + ".prefab";
+            var existing = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+
+            if (existing == null)
+            {
+                EnsureFolder(GridPrefabsFolder);
+                var root = new GameObject(spec.Asset);
+                var mat = MakeColoredMat(GridPrefabsFolder, "Mat_" + spec.Asset, LabTint);
+
+                var body = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                body.name = "Body";
+                body.transform.SetParent(root.transform, false);
+                body.transform.localScale = new Vector3(2.0f, 1.2f, 2.0f);
+                Paint(body, mat);
+
+                // The dish grows with the tier, so the three blocks read apart at a glance.
+                float dishScale = spec.Kind switch
+                {
+                    SatellitePayloadKind.ClimateControl => 2.1f,
+                    SatellitePayloadKind.WeatherRadar => 1.6f,
+                    _ => 1.1f,
+                };
+                var dish = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                dish.name = "Dish";
+                dish.transform.SetParent(root.transform, false);
+                dish.transform.localPosition = new Vector3(0f, 0.85f, 0f);
+                dish.transform.localScale = new Vector3(dishScale, 0.07f, dishScale);
+                Paint(dish, mat);
+
+                var mast = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                mast.name = "Mast";
+                mast.transform.SetParent(root.transform, false);
+                mast.transform.localPosition = new Vector3(0f, 0.68f, 0f);
+                mast.transform.localScale = new Vector3(0.12f, 0.5f, 0.12f);
+                Paint(mast, mat);
+
+                var payload = root.AddComponent<GridSatellitePayload>();
+                payload.kind = spec.Kind;
+                payload.idleWatts = spec.Idle;
+                payload.influenceWatts = spec.Influence;
+                if (spec.Strength > 0f) payload.influenceStrength = spec.Strength;
+
+                var prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
+                UnityEngine.Object.DestroyImmediate(root);
+                changed = true;
+                Debug.Log("[Setup 84] Created " + path + ".");
+                return prefab;
+            }
+
+            var contents = PrefabUtility.LoadPrefabContents(path);
+            bool repaired = false;
+
+            var existingPayload = contents.GetComponent<GridSatellitePayload>();
+            if (existingPayload == null)
+            {
+                existingPayload = contents.AddComponent<GridSatellitePayload>();
+                // Only seed tuning when the component was missing entirely. An authored
+                // power figure or influence strength is never reset.
+                existingPayload.kind = spec.Kind;
+                existingPayload.idleWatts = spec.Idle;
+                existingPayload.influenceWatts = spec.Influence;
+                if (spec.Strength > 0f) existingPayload.influenceStrength = spec.Strength;
+                repaired = true;
+                Debug.Log("[Setup 84] " + spec.Asset + " had no GridSatellitePayload; added one.");
+            }
+
+            GameObject result = existing;
+            if (repaired) result = PrefabUtility.SaveAsPrefabAsset(contents, path);
+            PrefabUtility.UnloadPrefabContents(contents);
+
+            changed = repaired;
+            return result;
+        }
+
+        private static GridBlockItem EnsurePayloadItem(PayloadSpec spec, GameObject prefab, out bool changed)
+        {
+            string id = spec.Asset.ToLowerInvariant();
+            string path = GridItemsFolder + "/GItem_" + spec.Asset + ".asset";
+            var item = AssetDatabase.LoadAssetAtPath<GridBlockItem>(path);
+            bool created = false;
+
+            if (item == null)
+            {
+                EnsureFolder(GridItemsFolder);
+                item = ScriptableObject.CreateInstance<GridBlockItem>();
+                created = true;
+            }
+            bool dirty = created;
+
+            if (item.itemId != id) { item.itemId = id; dirty = true; }
+            if (item.displayName != spec.Display) { item.displayName = spec.Display; dirty = true; }
+            if (item.maxStack <= 0) { item.maxStack = 20; dirty = true; }
+            if (item.massPerUnit <= 0f) { item.massPerUnit = spec.Mass; dirty = true; }
+            if (item.category != "Grid Blocks") { item.category = "Grid Blocks"; dirty = true; }
+            if (string.IsNullOrEmpty(item.description)) { item.description = spec.Description; dirty = true; }
+            if (item.icon == null) item.iconTint = LabTint;
+            if (created) { item.blockMass = spec.Mass; item.blockHP = spec.Hp; }
+
+            if (item.blockPrefab == null || item.blockPrefab != prefab)
+            {
+                item.blockPrefab = prefab;
+                dirty = true;
+            }
+
+            if (dirty)
+            {
+                if (!AssetDatabase.Contains(item)) AssetDatabase.CreateAsset(item, path);
+                EditorUtility.SetDirty(item);
+                Debug.Log("[Setup 84] " + (created ? "Created" : "Repaired") + " " + path + ".");
+            }
+            changed = dirty;
+            return item;
+        }
+
+        private static RecipeDefinition EnsurePayloadRecipe(RecipeRegistry registry, PayloadSpec spec,
+            GridBlockItem item, ItemDefinition steel, ItemDefinition wire, out bool changed)
+        {
+            string stem = "Recipe_" + spec.Asset;
+            var recipe = FindRecipe(stem);
+
+            RecipeIngredient[] Inputs() => new[]
+            {
+                new RecipeIngredient { item = steel, count = spec.Steel },
+                new RecipeIngredient { item = wire,  count = spec.Wire },
+            };
+
+            if (recipe == null)
+            {
+                EnsureFolder(GridRecipesFolder);
+                recipe = ScriptableObject.CreateInstance<RecipeDefinition>();
+                recipe.displayName = spec.Display;
+                recipe.requiredStation = StationTier.Assembler;
+                recipe.craftSeconds = 25f;
+                recipe.unlockedByDefault = false;
+                recipe.outputCount = 1;
+                recipe.outputItem = item;
+                recipe.inputs = Inputs();
+                AssetDatabase.CreateAsset(recipe, GridRecipesFolder + "/" + stem + ".asset");
+                EditorUtility.SetDirty(recipe);
+                changed = true;
+                Debug.Log("[Setup 84] Created " + stem + ".");
+            }
+            else
+            {
+                bool dirty = false;
+                if (recipe.outputItem == null && item != null) { recipe.outputItem = item; recipe.outputCount = 1; dirty = true; }
+                if (recipe.inputs == null || recipe.inputs.Length == 0) { recipe.inputs = Inputs(); dirty = true; }
+                if (dirty) EditorUtility.SetDirty(recipe);
+                changed = dirty;
+            }
+
+            if (!registry.recipes.Contains(recipe))
+            {
+                registry.recipes.Add(recipe);
+                EditorUtility.SetDirty(registry);
+                Debug.Log("[Setup 84] Added " + stem + " to RecipeRegistry.");
+            }
+            return recipe;
+        }
+
+        // ============================================================
         //                      Research nodes
         // ============================================================
         private static void EnsureResearchNodes(ResearchTree tree, RecipeDefinition mapRecipe,
-            RecipeDefinition labRecipe, ScienceItem sci2, ScienceItem sci3, out bool changed)
+            RecipeDefinition labRecipe, RecipeDefinition[] payloadRecipes,
+            ScienceItem sci2, ScienceItem sci3, out bool changed)
         {
             bool dirty = false;
 
@@ -396,27 +624,67 @@ namespace IndustrialWorld.EditorTools
                 "Orbital Map, a personal instrument worn in a Life Support slot.",
                 tier: 4, column: 0, seconds: 90f, mapRecipe, sci2, 12, ref dirty);
 
-            var science = EnsureNode(tree, "orbital_science", "Orbital Science",
-                "Research performed in orbit. Unlocks the Satellite Research Station, which " +
-                "hosts experiments that cannot be run on the ground.",
-                tier: 5, column: 0, seconds: 150f, labRecipe, sci3, 10, ref dirty);
+            // The two observation payloads ride with Orbital Science, so getting a lab up
+            // also gets you something to point at the planet.
+            var scienceUnlocks = new System.Collections.Generic.List<RecipeDefinition> { labRecipe };
+            if (payloadRecipes != null)
+            {
+                if (payloadRecipes.Length > 0 && payloadRecipes[0] != null) scienceUnlocks.Add(payloadRecipes[0]);
+                if (payloadRecipes.Length > 1 && payloadRecipes[1] != null) scienceUnlocks.Add(payloadRecipes[1]);
+            }
+
+            var science = EnsureNodeMulti(tree, "orbital_science", "Orbital Science",
+                "Research performed in orbit. Unlocks the Satellite Research Station plus the " +
+                "Sensor Array and Weather Radar payloads.",
+                tier: 5, column: 0, seconds: 150f, scienceUnlocks.ToArray(), sci3, 10, ref dirty);
+
+            // Climate Engineering is the end of this line and is deliberately gated behind
+            // the orbital lab itself: you must already have a working satellite in orbit
+            // before you can research the ability to steer a planet's weather.
+            RecipeDefinition climateRecipe =
+                payloadRecipes != null && payloadRecipes.Length > 2 ? payloadRecipes[2] : null;
+
+            var climate = EnsureNode(tree, "climate_engineering", "Climate Engineering",
+                "Atmospheric steering from orbit. Unlocks the Satellite Climate Control Array, " +
+                "which shifts the odds of weather over the body it orbits. Must be researched " +
+                "aboard an orbiting satellite.",
+                tier: 6, column: 0, seconds: 240f, climateRecipe, sci3, 24, ref dirty);
+
+            if (climate != null && !climate.requiresOrbitalLab)
+            {
+                climate.requiresOrbitalLab = true;
+                EditorUtility.SetDirty(climate);
+                dirty = true;
+                Debug.Log("[Setup 84] Flagged Climate Engineering as orbital-lab-only.");
+            }
 
             // Orbital Science follows Orbital Telemetry: you need to be able to see your
             // satellite before it makes sense to do science aboard one.
-            if (science != null && telemetry != null
-                && (science.prerequisites == null || science.prerequisites.Length == 0))
-            {
-                science.prerequisites = new[] { telemetry };
-                EditorUtility.SetDirty(science);
-                dirty = true;
-                Debug.Log("[Setup 84] Linked Orbital Science behind Orbital Telemetry.");
-            }
+            dirty |= LinkPrerequisite(science, telemetry, "Orbital Science", "Orbital Telemetry");
+            dirty |= LinkPrerequisite(climate, science, "Climate Engineering", "Orbital Science");
 
             changed = dirty;
         }
 
+        private static bool LinkPrerequisite(ResearchNode node, ResearchNode prerequisite,
+            string nodeName, string prerequisiteName)
+        {
+            if (node == null || prerequisite == null) return false;
+            if (node.prerequisites != null && node.prerequisites.Length > 0) return false;
+            node.prerequisites = new[] { prerequisite };
+            EditorUtility.SetDirty(node);
+            Debug.Log("[Setup 84] Linked " + nodeName + " behind " + prerequisiteName + ".");
+            return true;
+        }
+
         private static ResearchNode EnsureNode(ResearchTree tree, string id, string name,
             string description, int tier, int column, float seconds, RecipeDefinition unlock,
+            ScienceItem pack, int packCount, ref bool dirty)
+            => EnsureNodeMulti(tree, id, name, description, tier, column, seconds,
+                unlock != null ? new[] { unlock } : null, pack, packCount, ref dirty);
+
+        private static ResearchNode EnsureNodeMulti(ResearchTree tree, string id, string name,
+            string description, int tier, int column, float seconds, RecipeDefinition[] unlocks,
             ScienceItem pack, int packCount, ref bool dirty)
         {
             string path = NodesFolder + "/Research_" + id + ".asset";
@@ -448,11 +716,13 @@ namespace IndustrialWorld.EditorTools
                     node.cost = new[] { new ResearchNode.ScienceCost { pack = pack, count = packCount } };
             }
 
-            // Only repair a MISSING unlock link. An authored list is never overwritten.
-            if (unlock != null && (node.unlocksRecipes == null || node.unlocksRecipes.Length == 0))
+            // Only repair a MISSING unlock list. An authored list is never overwritten.
+            if (unlocks != null && unlocks.Length > 0
+                && (node.unlocksRecipes == null || node.unlocksRecipes.Length == 0))
             {
-                node.unlocksRecipes = new[] { unlock };
-                local = true;
+                var valid = new System.Collections.Generic.List<RecipeDefinition>();
+                foreach (var r in unlocks) if (r != null) valid.Add(r);
+                if (valid.Count > 0) { node.unlocksRecipes = valid.ToArray(); local = true; }
             }
 
             if (local)

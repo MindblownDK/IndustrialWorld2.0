@@ -435,6 +435,21 @@ namespace VoxelEngine.Weather
             float storm = Mathf.Clamp01(profile.stormChance + seasonInfo.stormChanceModifier);
             float roll = Random.value;
 
+            // Orbital climate control (11.14.0-dev). Satellites INFLUENCE the odds rather
+            // than dictate the sky: the roll is biased, and storm chance is scaled, but
+            // every outcome stays reachable. Hooking it here — the single point where the
+            // next state is chosen — means one change covers every climate path below.
+            float influence = VoxelEngine.GridSystem.GridSatellitePayload.ResolveInfluence();
+            if (Mathf.Abs(influence) > 0.001f)
+            {
+                // Suppression (influence < 0) pushes the roll up, toward the clear/overcast
+                // branches that sit at the high end of each comparison chain.
+                roll = Mathf.Clamp01(roll - influence * 0.45f);
+                storm = Mathf.Clamp01(storm * (1f + influence * 0.8f));
+                _lastInfluence = influence;
+            }
+            else _lastInfluence = 0f;
+
             bool noPrecip = profile.precipitation == WeatherClimateProfile.Precipitation.None;
             bool snow = IsSnowBiome || profile.precipitation == WeatherClimateProfile.Precipitation.Snow || seasonInfo.isFreezing;
 
@@ -493,10 +508,18 @@ namespace VoxelEngine.Weather
             LogStateChange();
         }
 
+        /// <summary>Most recent orbital climate influence applied to a state pick, -1..1.</summary>
+        private float _lastInfluence;
+
+        /// <summary>Orbital climate influence currently steering this world, -1..1.</summary>
+        public float ClimateInfluence => _lastInfluence;
+
         private void LogStateChange(string tag = "")
         {
+            string climate = Mathf.Abs(_lastInfluence) > 0.001f
+                ? $" [climate {_lastInfluence:+0.00;-0.00}]" : "";
             Debug.Log($"[Weather] {CurrentState} -> {TargetState} (intensity~{GetIntensity(TargetState):F2})"
-                      + (string.IsNullOrEmpty(tag) ? "" : $" [{tag}]"));
+                      + (string.IsNullOrEmpty(tag) ? "" : $" [{tag}]") + climate);
         }
 
         /// <summary>Schedule synced thunder strikes during heavy precipitation (rain or blizzard).</summary>

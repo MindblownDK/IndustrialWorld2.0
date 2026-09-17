@@ -2097,23 +2097,113 @@ namespace VoxelEngine.UI
             slotRow.style.flexWrap = Wrap.Wrap;
             slotRow.Add(BuildSlot(equipment.HelmetSlots, 0, equipment.HelmetSlots.GetSlot(0), false));
             slotRow.Add(BuildSlot(equipment.OxygenTankSlots, 0, equipment.OxygenTankSlots.GetSlot(0), false));
-            // Personal instrument bay (11.13.0-dev): the Orbital Map lives here, alongside
-            // the other worn survival gear rather than in a tab of its own.
-            slotRow.Add(BuildSlot(equipment.InstrumentSlots, 0, equipment.InstrumentSlots.GetSlot(0), false));
             box.Add(slotRow);
 
-            var mapDevice = equipment.EquippedOrbitalMap;
-            var instrumentLine = new Label(mapDevice != null
-                ? $"ORBITAL MAP: {mapDevice.CapabilityLabel} \u00b7 PRESS M"
-                : "INSTRUMENT BAY EMPTY");
-            instrumentLine.style.fontSize = 8;
-            instrumentLine.style.letterSpacing = 0.8f;
-            instrumentLine.style.marginTop = 4;
-            instrumentLine.style.color = new StyleColor(mapDevice != null
-                ? new Color(0.35f, 0.80f, 1.00f)
-                : UITheme.TextMuted);
-            box.Add(instrumentLine);
+            return box;
+        }
 
+        /// <summary>
+        /// ORBITAL SYSTEMS: its own card below Life Support. The orbital map is an
+        /// instrument rather than survival gear, and giving it a dedicated box lets the
+        /// readout show the device's real capabilities instead of a single status line.
+        /// </summary>
+        private VisualElement BuildOrbitalSystemsPanel(VoxelEngine.Player.PlayerEquipment equipment)
+        {
+            var box = new VisualElement { name = "OrbitalSystemsPanel" };
+            box.style.marginTop = 7;
+            box.style.paddingTop = 6;
+            box.style.paddingBottom = 6;
+            box.style.paddingLeft = 6;
+            box.style.paddingRight = 6;
+            LcdHudTheme.ApplyDataCard(box, LcdHudTheme.Phosphor);
+
+            var device = equipment.EquippedOrbitalMap;
+            bool online = device != null;
+
+            var header = new VisualElement();
+            header.style.flexDirection = FlexDirection.Row;
+            header.style.alignItems = Align.Center;
+            header.style.justifyContent = Justify.FlexStart;
+            header.style.marginBottom = 6;
+
+            var title = new Label("ORBITAL SYSTEMS");
+            title.style.fontSize = 10;
+            title.style.unityFontStyleAndWeight = FontStyle.Bold;
+            title.style.letterSpacing = 1.2f;
+            title.style.color = LcdHudTheme.Phosphor;
+            header.Add(title);
+
+            var status = new Label(online ? "TRACKING" : "NO DEVICE");
+            status.style.marginLeft = 8;
+            status.style.fontSize = 9;
+            status.style.unityFontStyleAndWeight = FontStyle.Bold;
+            status.style.color = online
+                ? new Color(0.35f, 0.80f, 1.00f)
+                : new Color(0.95f, 0.62f, 0.18f);
+            status.style.backgroundColor = new StyleColor(LcdHudTheme.GlassDark);
+            status.style.paddingLeft = 7;
+            status.style.paddingRight = 7;
+            status.style.paddingTop = 2;
+            status.style.paddingBottom = 2;
+            SetBorderRadius(status, 1);
+            UITheme.Border(status, 1f, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.82f));
+            header.Add(status);
+            box.Add(header);
+
+            var body = new VisualElement();
+            body.style.flexDirection = FlexDirection.Row;
+            body.style.alignItems = Align.FlexStart;
+
+            body.Add(BuildSlot(equipment.InstrumentSlots, 0, equipment.InstrumentSlots.GetSlot(0), false));
+
+            var readout = new VisualElement();
+            readout.style.flexGrow = 1;
+            readout.style.marginLeft = 8;
+            readout.style.justifyContent = Justify.Center;
+
+            if (online)
+            {
+                var deviceName = new Label(device.displayName.ToUpperInvariant());
+                deviceName.style.fontSize = 9;
+                deviceName.style.unityFontStyleAndWeight = FontStyle.Bold;
+                deviceName.style.letterSpacing = 0.8f;
+                deviceName.style.color = new StyleColor(new Color(0.35f, 0.80f, 1.00f));
+                readout.Add(deviceName);
+
+                var caps = new Label(
+                    $"{device.CapabilityLabel}\nRANGE {VoxelEngine.Cosmos.OrbitalTrackingService.FormatKm(device.trackingRangeKm)}");
+                caps.style.fontSize = 8;
+                caps.style.whiteSpace = WhiteSpace.Normal;
+                caps.style.marginTop = 2;
+                caps.style.color = new StyleColor(new Color(0.58f, 0.66f, 0.76f));
+                readout.Add(caps);
+
+                var press = new Label("PRESS M TO OPEN MAP");
+                press.style.fontSize = 8;
+                press.style.letterSpacing = 0.9f;
+                press.style.marginTop = 3;
+                press.style.color = new StyleColor(new Color(0.40f, 0.85f, 0.55f));
+                readout.Add(press);
+            }
+            else
+            {
+                var empty = new Label("INSTRUMENT BAY EMPTY");
+                empty.style.fontSize = 9;
+                empty.style.unityFontStyleAndWeight = FontStyle.Bold;
+                empty.style.letterSpacing = 0.8f;
+                empty.style.color = new StyleColor(UITheme.TextMuted);
+                readout.Add(empty);
+
+                var hint = new Label("Equip an Orbital Map to track constructs, planets and moons.");
+                hint.style.fontSize = 8;
+                hint.style.whiteSpace = WhiteSpace.Normal;
+                hint.style.marginTop = 2;
+                hint.style.color = new StyleColor(UITheme.TextMuted);
+                readout.Add(hint);
+            }
+
+            body.Add(readout);
+            box.Add(body);
             return box;
         }
 
@@ -2603,9 +2693,9 @@ namespace VoxelEngine.UI
             LcdHudTheme.ApplyScreen(screen, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.90f), 1f);
             addon.Add(screen);
 
-            screen.Add(LcdHudTheme.CreateDisplayHeader("PERSONAL SYSTEMS", "EQUIPMENT", "AUX-01", "3 MODULES"));
+            screen.Add(LcdHudTheme.CreateDisplayHeader("PERSONAL SYSTEMS", "EQUIPMENT", "AUX-01", "4 MODULES"));
 
-            var allModules = LcdHudTheme.CaptionLabel("ARMOR  //  JETPACK  //  LIFE SUPPORT");
+            var allModules = LcdHudTheme.CaptionLabel("ARMOR  //  JETPACK  //  LIFE SUPPORT  //  ORBITAL");
             allModules.style.marginLeft = 3;
             allModules.style.marginBottom = 4;
             screen.Add(allModules);
@@ -2643,6 +2733,7 @@ namespace VoxelEngine.UI
                 content.Add(BuildArmorAddon(equipment));
                 content.Add(BuildJetpackSlotsPanel(equipment));
                 content.Add(BuildLifeSupportSlotsPanel(equipment));
+                content.Add(BuildOrbitalSystemsPanel(equipment));
             }
 
             LcdHudTheme.AddScanlines(screen, 8, 48f, 58f);
