@@ -1,9 +1,117 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `11.15.0-dev`
+**Current Version:** `11.17.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [11.17.0-dev] Nowhere Is Uniformly Safe
+
+**Type:** MINOR - a new system, save-compatible. No new save fields at all; hazard zones are derived, not stored, so existing worlds gain them on load.
+
+**GitHub title:** `[11.17.0-dev] Nowhere is uniformly safe`
+
+Section 6.5 items 5, 8 and 9 - Biome Hazards, Environmental Radiation Zones, Environmental Heat Zones - which are one system, so they ship as one.
+
+#### What was actually missing
+
+The game already had radiation damage, heat damage, hazmat plating, Radiation Shielding and Heat Tolerance upgrades. What it did not have was **anywhere in particular**.
+
+A body had one `radiationLevel` and one surface temperature, so a planet was uniformly lethal or uniformly safe. That makes protection a packing-list item: check the number before you launch, bring the suit, never think about it again. The roadmap asks for hazard ZONES, and a zone is a different design object - it makes a planet something you read as you cross it, with hot spots to route around, and it finally gives the Geiger counter a job.
+
+#### Zones exist without being stored
+
+`HazardField` samples zones from noise seeded by the body's own `genParams.seed`, exactly the way ore veins already work. So:
+
+- **No save data.** A zone is a pure function of (body, position) - identical on every load, identical across a rebuild, and **every existing world gains zones for free**.
+- **No spawning, streaming or registry.** A zone can be asked about at any position, including inside chunks that were never loaded.
+
+Same reasoning that put satellites on analytic orbits and trains on a graph: derive it when that is cheap, rather than simulate and store it.
+
+Worley (cellular) noise rather than fractal, for the reason ore veins use it: Worley makes discrete blobs with clear centres and clear gaps, which is what an *avoidable* zone needs. Fractal noise makes a smear the player can never be sure they have left. Coverage is a deliberately low 34% - a zone that is everywhere is just a bigger planet constant wearing a costume.
+
+#### The planet constant became the floor, not the answer
+
+Authored `radiationLevel` still applies everywhere as a baseline, and zones only ever **add** on top. No existing world becomes safer and no authored value is overridden.
+
+Zones also scale with the planet's own character rather than being pasted on:
+
+| Zone | Only appears where | Because |
+|---|---|---|
+| Radiation | The body has any radiation at all | A clean world should not sprout hot spots it was never authored to have |
+| Heat | Surface is above -10 C | A frozen moon does not grow lava fields |
+| Toxic | There is real air, and it is not breathable | Toxic air needs air. The dangerous case is a dense atmosphere that is not oxygen |
+
+#### Toxic atmosphere
+
+The new third channel. It is stopped by **sealed air, not plating**: a breathing kit with gas remaining is total protection, and anything less is none. No partial credit on purpose - a half-sealed suit in poison gas is not half-safe.
+
+#### The Geiger counter
+
+A hazard the player cannot detect until they are dying in it is not a feature, it is an ambush. `HazardWarningHud` is the half that makes zones playable, and it shows exactly three things: what the hazard is, how strong it is (a meter that fills *before* the damage gets serious), and **whether the player is actually protected against that specific hazard** - because "radiation, and you are fine" and "radiation, and you are not" are completely different situations that a bare number cannot tell apart.
+
+It only appears for a genuine LOCAL zone. A uniformly irradiated planet is a constant the player already accounts for, and a permanent warning would train them to ignore the strip exactly when a real zone shows up. Only an unprotected reading pulses; the flash is the loudest thing the strip can do, so it is reserved for what can kill you.
+
+The strip reads `PlayerStats.LastHazard` rather than re-sampling the field. Two independent samples of the same noise can disagree at a boundary, and a HUD that says SAFE while the damage path disagrees is worse than no HUD.
+
+#### Also
+
+Deaths from these hazards now name their cause: DIED OF RADIATION EXPOSURE, BURNED ALIVE IN A HEAT ZONE, BREATHED A TOXIC ATMOSPHERE.
+
+No manual Unity step - this release is pure code, and it applies to worlds that already exist.
+
+### [11.16.0-dev] Everything On One Sheet
+
+**Type:** MINOR - a new system, save-compatible. Adds one keybind and bumps the settings version; no save data changes.
+
+**GitHub title:** `[11.16.0-dev] Everything on one sheet`
+
+The Map / Radar UI - section 6.4 Improved Features item 9. Press `L`.
+
+#### The problem it solves
+
+Rail, drones, logistic chests and roads were each built in their own version, and none of them could see the others. The player had four networks and no way to look at them together.
+
+So the map's real job is not decoration - it is **finding the joins that are missing**. The station with no track beside it, the drone port with no power, the base zone nothing serves. Those go in a NEEDS ATTENTION section at the top of the sidebar, because on a mature base that list is the only reason to read the rest.
+
+#### What it shows
+
+| Layer | Drawn as |
+|---|---|
+| Rail lines | Solid edges walked from the rail graph |
+| Rail stations | Squares, with LOAD / UNLOAD / NO TRACK |
+| Trains | Filled diamonds - the only moving thing, so the easiest shape to pick out |
+| Drone routes | Solid when a drone is flying, faint when merely paired |
+| Drone ports | Dots, with READY / IN FLIGHT / NO POWER / DORMANT |
+| Base zones | Circles inferred from logistic chest clusters |
+| Roads | Faint dotted underlay |
+
+Every layer toggles. A map that cannot be simplified is unreadable on a mature base.
+
+#### Base zones are inferred, not authored
+
+There is no "base" object in this game, so the map has to work one out. A cluster of logistic chests is the honest proxy: it is exactly the thing the logistics layer already treats as one place. Chests within 48 m of any member join the same zone - the same radius a drone port actually serves, so a circle on the map means the same thing as a zone the game genuinely serves rather than a decorative blob.
+
+A single chest is not a base. Two or more is a place worth naming.
+
+#### Scale and reading
+
+Metres, top-down on XZ, same projection as the orbital map so the two read consistently - but deliberately a separate map. They answer different questions and share no scale; zooming one into the other is still open on the roadmap.
+
+The map frames itself on the full extent of everything it found when it opens, so it never opens on empty space. The background grid picks a round spacing for the current zoom and labels it, so distance is readable without a legend. Clicking any sidebar entry centres it - on a large network, finding a named station by dragging is hopeless.
+
+#### Implementation notes
+
+- **`LogisticsMapData` is a separate gathering layer**, for the same reason `OrbitalTrackingService` exists: the painter runs inside `generateVisualContent` and must stay cheap, while gathering walks several registries and allocates. Split, the map repaints on pan and zoom without re-walking the world. Gathering runs on a 0.5 s tick, never per frame.
+- **Edges are emitted from one end only.** Rail links and drone pairings are both symmetric, so without a hash tie-break every line draws twice.
+- **Labels are pooled `Label` elements**, not `MeshGenerationContext.DrawText` - the lesson recorded when the orbital map shipped.
+- Roads are drawn as per-cell marks rather than traced runs. The road layer has no edge list, and building one here would duplicate work the road system deliberately does not do.
+
+#### Controls
+
+`L` opens and closes the map, rebindable in Settings -> Controls. Settings version 18; the existing migration fills the new binding in on old profiles without touching anything the player rebound.
+
+No manual Unity step - this release is pure code.
 
 ### [11.15.0-dev] The Permanent Way
 

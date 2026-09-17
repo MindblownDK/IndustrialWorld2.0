@@ -61,11 +61,24 @@ namespace VoxelEngine.Player
             return dps;
         }
 
+        /// <summary>
+        /// Planetary baseline radiation only. Kept for callers that genuinely want the
+        /// body constant; the player damage path uses the position-aware form below so
+        /// localised zones are felt.
+        /// </summary>
         public static float RadiationDamagePerSecond()
         {
             var body = GravityProvider.ActiveBody;
             if (body == null || body.settings == null) return 0f;
             return Mathf.Max(0f, body.settings.radiationLevel);
         }
+
+        /// <summary>
+        /// Full hazard reading at a position: the planet's authored baselines PLUS any
+        /// localised zone. Zones only ever add, so no existing world becomes safer and no
+        /// authored value is overridden.
+        /// </summary>
+        public static HazardSample SampleAt(Vector3 worldPosition)
+            => HazardField.Sample(worldPosition);
     }
 }

@@ -78,6 +78,13 @@ namespace VoxelEngine.Transport
 
         public int PortCount { get { Prune(); return _ports.Count; } }
 
+        /// <summary>
+        /// Live view of the registered ports, for readers that need the whole network rather
+        /// than a count - the logistics map draws every route from this. Pruned first so a
+        /// reader never sees a destroyed port.
+        /// </summary>
+        public IReadOnlyList<DronePort> Ports { get { Prune(); return _ports; } }
+
         // ── Tick ────────────────────────────────────────────────────────────
 
         private float _timer;

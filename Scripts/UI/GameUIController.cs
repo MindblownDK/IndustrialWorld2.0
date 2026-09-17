@@ -336,6 +336,7 @@ namespace VoxelEngine.UI
             OrbitalMapScreen.Tick();
             GridIdentityHud.Tick();
             RailConfigHud.Tick();
+            LogisticsMapScreen.Tick();
             GrinderHud.Tick();
             BuildCostHud.Tick();
             if (_openQuarry != null) QuarryHud.Tick(_openQuarry);
@@ -1205,10 +1206,12 @@ namespace VoxelEngine.UI
             BuildFeedbackHud.EnsureMounted(_hudLayer);
             CockpitAlertHud.EnsureMounted(_hudLayer);
             CanisterPressureHud.EnsureMounted(_hudLayer);
+            HazardWarningHud.EnsureMounted(_hudLayer);
             VoxelEngine.Weather.WeatherHud.EnsureMounted(_hudLayer);
             OrbitalMapScreen.EnsureMounted(_topLayer);
             GridIdentityHud.EnsureMounted(_topLayer);
             RailConfigHud.EnsureMounted(_topLayer);
+            LogisticsMapScreen.EnsureMounted(_topLayer);
             GravityPullHud.EnsureMounted(_hudLayer);
             VoxelEngine.GridSystem.GridPilotHud.EnsureMounted(_hudLayer);
             GrinderHud.EnsureMounted(_hudLayer);

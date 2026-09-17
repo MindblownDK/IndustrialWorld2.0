@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `11.15.0-dev`
-**Roadmap Version:** `11.15.0-dev`
+**Current Version:** `11.17.0-dev`
+**Roadmap Version:** `11.17.0-dev`
 **Date:** 2026-09-16
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,10 +29,33 @@
 
 ## 0. Recently Done
 
-### 11.12.0-dev — Where You Will Actually Land
-- `TrajectoryPredictor` forward-integrates the coast path with the same gravity and drag forces `GridEntity` applies, then raycasts each segment, so the impact point is real terrain rather than a vacuum conic.
-- `TrajectoryOverlay` draws it in the wide exterior view only, colour-coded impact/orbit/escape, with a distance-scaled pulsing impact marker and a plain-language HUD readout.
-- Cached against velocity change so a coasting ship does not re-solve every frame. Toggle on `J`, rebindable; settings version 15.
+### 11.17.0-dev - Nowhere Is Uniformly Safe
+- `HazardField` + `HazardWarningHud`: localised radiation, heat and toxic-atmosphere zones, plus the Geiger warning strip.
+- **Core rule:** zones are DERIVED from body-seeded Worley noise, never stored. No save fields; existing worlds gain zones on load.
+- **Compatibility rule:** the authored planet constant is the FLOOR and zones only add, so no world becomes safer and no authored value is overridden.
+- Toxic atmosphere is the new third channel, stopped by sealed air rather than plating - total protection or none.
+- Warning strip shows hazard, strength and whether the player is protected against that specific hazard; reads the damage path's own sample rather than re-sampling.
+
+### 11.16.0-dev - Everything On One Sheet
+- `LogisticsMapScreen` (`L`) + `LogisticsMapData`: one local-surface map of rail lines, stations, trains, drone routes, ports, base zones and roads.
+- **Purpose rule:** the map exists to surface MISSING joins - station with no track, port with no power - collected into a NEEDS ATTENTION section, not to look pretty.
+- Base zones are inferred from logistic chest clusters at the drone port's own 48 m radius, so a circle means a zone the game actually serves.
+- Data gathering is split from painting (as with `OrbitalTrackingService`) and runs on a 0.5 s tick; symmetric edges emit from one end only.
+- Settings version 18 adds the `L` binding.
+
+### 11.15.0-dev - The Permanent Way
+- `RailTrack` / `RailNetwork` / `RailStation` / `RailTrain`: auto-connecting permanent way, hash-grid registry, A* pathfinding, named stations with cargo holds, and scheduled trains.
+- **Core design:** a train is a scheduled agent walking a graph, not a vehicle on a surface - so it keeps running while its chunks are unloaded, which is the specific reason bulk haul belongs on rails.
+- Gradient and degree limits enforced in the graph itself, so a too-steep or over-connected cell simply does not join rather than failing later.
+- Stations own the cargo hold and are matched by name, so a railway runs asynchronously and survives a station being rebuilt.
+- Authored by setup step 85. Closes the last open item in the section 6.4 content list.
+
+### 11.14.0-dev - Reasons To Launch
+- Three satellite payloads (`GridSatellitePayload`): Sensor Array (planet-wide seasons), Weather Radar (live weather + forecast), Climate Control Array (weather influence, 2.66 kW active).
+- Weather influence hooks `WeatherManager.PickNextState` - the single state-choice point - biasing the roll and storm chance. Combined via `1 - e^-total` so satellites stack with diminishing returns and can never lock a climate.
+- New `Climate Engineering` node is itself `requiresOrbitalLab`, making it the first real consumer of the orbital research gate.
+- ORBITAL SYSTEMS moved out of LIFE SUPPORT into its own equipment box with device name, tier, range and prompt.
+- Block consoles for payloads and the research station name the exact missing requirement when offline.
 
 ### 11.7.1-dev — The Range Readout Tells The Truth
 - The chest panel's provider/requester counts are now measured in range (`ProvidersInRangeOf` / `RequestersInRangeOf`) instead of world-wide, so distance is visible where it was previously invisible.
@@ -1463,9 +1486,12 @@ Statuses are evidence-based and move forward only after code/content review and 
    - Set waypoints for rovers.
    - Auto-mine / auto-deliver loops.
 
-9. **Map / Radar UI**
-   - Shows train lines, drone routes, base zones.
-   - Integrated with star map for seamless zoom from local to cosmic.
+9. **Map / Radar UI** - ~~shows train lines, drone routes, base zones~~ *(11.16.0-dev)* - **COMPLETE**
+   - `LogisticsMapScreen` on `L` + `LogisticsMapData`: rail lines/stations/trains, drone routes/ports, inferred base zones, road underlay, per-layer toggles, click-to-centre.
+   - **Purpose rule:** the map's job is finding MISSING joins, not decoration. Alerts (station with no track, port with no power, blocked train) are collected at the top of the sidebar.
+   - **Design rule:** base zones are INFERRED from logistic chest clusters at the drone port's own 48 m radius. There is no authored base object, and a circle must mean a zone the game genuinely serves.
+   - **Implementation note:** gathering is split from painting and runs on a slow tick; symmetric edges (rail links, drone pairings) must emit from one end only or every line draws twice.
+   - Open: integration with the star map for seamless zoom from local to cosmic - still deliberately separate, as the two maps use different scales and projections.
 
 #### Code Improvements
 
@@ -1512,10 +1538,12 @@ Statuses are evidence-based and move forward only after code/content review and 
    - Biome-locked deposits on the home world.
    - Planet-locked deposits beyond the home world.
 
-5. **Biome Hazards**
-   - Radiation zones require protective suit.
-   - Toxic atmosphere requires filters.
-   - Extreme temperatures require heating/cooling modules.
+5. **Biome Hazards** - ~~radiation zones~~ ~~toxic atmosphere~~ ~~extreme temperatures~~ *(11.17.0-dev)* - **COMPLETE**
+   - `HazardField` samples localised radiation / heat / toxic zones; `HazardWarningHud` is the Geiger warning. Mitigated by Radiation Shielding and hazmat, Heat Tolerance, and a sealed breathing kit respectively.
+   - **Core rule:** zones are DERIVED from body-seeded Worley noise, never stored - no save data, no streaming, and existing worlds gain them for free.
+   - **Compatibility rule:** the authored planet constant is the floor; zones only ever add.
+   - **Design rule:** Worley not fractal noise, at 34% coverage, because a zone must be AVOIDABLE. Fractal noise makes a smear the player can never be sure they have left.
+   - Open: hazard-aware route planning, and ore deposits that correlate with radiation zones.
 
 6. **Caves & Resource Nodes**
    - Large, finite ore nodes.
@@ -1527,14 +1555,11 @@ Statuses are evidence-based and move forward only after code/content review and 
    - Livestock supplies renewable meat plus hide, wool, and optional milk production chains.
    - Hostile mythical creatures occupy deep biomes, ruins, deserts, mountains, coasts, and volcanic zones.
 
-8. **Environmental Radiation Zones**
-   - Certain biomes and ruins emit low-level radiation.
-   - Hazmat suit or radiation upgrades reduce exposure.
-   - Geiger counter warns the player.
+8. **Environmental Radiation Zones** - ~~low-level radiation areas~~ ~~hazmat/upgrades reduce exposure~~ ~~Geiger counter~~ *(11.17.0-dev)* - **COMPLETE** (see item 5)
+   - Open: ruins specifically emitting radiation, on top of the terrain zones.
 
-9. **Environmental Heat Zones**
-   - Hot biomes and volcanic areas deal heat damage without protection.
-   - Heat tolerance armor upgrades allow longer exposure.
+9. **Environmental Heat Zones** - ~~volcanic areas deal heat damage~~ ~~heat tolerance allows longer exposure~~ *(11.17.0-dev)* - **COMPLETE** (see item 5)
+   - Heat zones only form where the surface is already above -10 C, so a frozen moon does not grow lava fields.
 
 10. **Airtight Doors and Vents** — ✅ COMPLETED (9.27.0-dev)
     - Sliding futuristic doors for grid bases.

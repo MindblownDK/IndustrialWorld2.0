@@ -918,6 +918,13 @@ namespace VoxelEngine.Player
                  * GetArmorUpgradeTier(ArmorUpgradeKind.HeatTolerance),
             0.10f, 1f);
 
+        /// <summary>
+        /// Toxic atmosphere is stopped by SEALED AIR, not by plating. A breathing kit is
+        /// total protection while it has gas; anything less is none. There is no partial
+        /// credit here on purpose - a half-sealed suit in poison gas is not half-safe.
+        /// </summary>
+        public float ToxicDamageMultiplier => HasBreathingKit ? 0f : 1f;
+
         public float RadiationDamageMultiplier => HasHazmatProtection
             ? 0f
             : Mathf.Clamp(

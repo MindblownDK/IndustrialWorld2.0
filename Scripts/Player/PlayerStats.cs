@@ -341,18 +341,45 @@ namespace VoxelEngine.Player
         }
         private VoxelEngine.Thermal.PlayerSuitThermal _suitThermal;
 
+        /// <summary>
+        /// Most recent environmental reading, published so the hazard HUD and the Geiger
+        /// counter read exactly the same numbers the damage path used rather than
+        /// re-sampling and potentially disagreeing with it.
+        /// </summary>
+        public HazardSample LastHazard { get; private set; }
+
         private void ApplyEnvironmentalHazards(PlayerEquipment equipment)
         {
             bool tookDamage = false;
 
+            // One position-aware sample drives all three environmental channels, so the
+            // planet baseline and any localised zone are read together rather than by
+            // three separate lookups that could disagree.
+            var hazard = PlayerHazardService.SampleAt(transform.position);
+            LastHazard = hazard;
+
             // Planetary heat (volcanic worlds) is still an instantaneous hazard; hull and
             // plume heat now flow through the suit model below, which has real inertia.
-            float heatDamage = PlayerHazardService.HeatDamagePerSecond();
+            float heatDamage = hazard.Heat;
             if (heatDamage > 0f)
             {
                 float multiplier = equipment != null ? equipment.HeatDamageMultiplier : 1f;
                 Health = Mathf.Max(0f, Health - heatDamage * multiplier * Time.deltaTime);
                 tookDamage = true;
+                if (Health <= 0f) SetDeathCause("BURNED ALIVE IN A HEAT ZONE");
+            }
+
+            // Toxic atmosphere: sealed air or nothing.
+            float toxicDamage = hazard.Toxicity;
+            if (toxicDamage > 0f)
+            {
+                float multiplier = equipment != null ? equipment.ToxicDamageMultiplier : 1f;
+                if (multiplier > 0f)
+                {
+                    Health = Mathf.Max(0f, Health - toxicDamage * multiplier * Time.deltaTime);
+                    tookDamage = true;
+                    if (Health <= 0f) SetDeathCause("BREATHED A TOXIC ATMOSPHERE");
+                }
             }
 
             var suit = SuitThermal;
@@ -368,12 +395,13 @@ namespace VoxelEngine.Player
                 }
             }
 
-            float radiationDamage = PlayerHazardService.RadiationDamagePerSecond();
+            float radiationDamage = hazard.Radiation;
             if (radiationDamage > 0f)
             {
                 float multiplier = equipment != null ? equipment.RadiationDamageMultiplier : 1f;
                 Health = Mathf.Max(0f, Health - radiationDamage * multiplier * Time.deltaTime);
                 tookDamage = true;
+                if (Health <= 0f) SetDeathCause("DIED OF RADIATION EXPOSURE");
             }
 
             if (_radiationTimer > 0f)
@@ -383,6 +411,11 @@ namespace VoxelEngine.Player
                 if (_radiationTimer <= 0f) _radiationDps = 0f;
                 tookDamage = true;
             }
+
+            // Driven from here rather than from the UI loop so the strip always reports the
+            // exact sample the damage used, instead of re-sampling and risking disagreement
+            // at a zone boundary.
+            UI.HazardWarningHud.Tick(this, equipment);
 
             if (!tookDamage) return;
             OnStatsChanged?.Invoke();
