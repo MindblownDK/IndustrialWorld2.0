@@ -1,9 +1,62 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `11.17.0-dev`
+**Current Version:** `11.18.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [11.18.0-dev] Something Worth Building On
+
+**Type:** MINOR - a new system, save-compatible. One additive save list, empty until a player actually mines a node. Deposits themselves are derived, so existing worlds already have them.
+
+**GitHub title:** `[11.18.0-dev] Something worth building on`
+
+Section 6.5 item 6 - Caves & Resource Nodes.
+
+#### What was already there, and what was not
+
+Caves already exist: `PlanetField.CaveCarve` carves them into the voxel terrain, sealed under a protective crust and never below the sea. That half of the item was done.
+
+What was missing was the second half - "large, finite ore nodes" that "encourage outpost building". Those two clauses are the same requirement said twice: a node only encourages an outpost if it is worth travelling to **and** worth staying at.
+
+#### A deep node is a different verb, not a bigger vein
+
+The important decision: a deep node **cannot be mined by hand at all**. It sits below the voxel world, is found with an instrument, and is extracted by a powered machine that runs unattended. That is what turns "I found ore" into "I am going to build here" - because the extractor needs power, power needs infrastructure, and infrastructure is an outpost.
+
+It also keeps the existing tools relevant rather than obsolete:
+
+| Tool | Role |
+|---|---|
+| Hand mining | Immediate, portable, tiny yield |
+| Ship drill | Mobile, player-driven, follows visible veins |
+| Deep Core Extractor | Fixed, unattended, huge finite yield, needs a base |
+
+#### Where nodes are: derived. What is left: stored.
+
+Node placement is a pure function of (world seed, position), sampled from Worley noise on a 900 m lattice at 30% occupancy - the same technique as the hazard zones in 11.17.0. No spawning, no registry, no streaming, and **every existing world already has deposits** without regenerating anything. Two players on one seed find the same nodes.
+
+Depletion is the one thing that cannot be derived, because it is a record of what the player did. So the save stores exactly one thing: a list of `node key -> amount taken`. An untouched node has no entry, so a fresh world and a legacy save both cost zero bytes. That is the minimum possible save surface for a finite resource.
+
+Ten materials appear, weighted so scarcity survives: iron is roughly ten times more likely than gold, and the rare ores also come in smaller nodes. A uranium find is valuable without being a permanent solution to uranium.
+
+#### Depletion is the design
+
+An infinite extractor would end the resource game the first time one was built. A finite one gives an outpost a **lifespan** - so the player keeps surveying, keeps expanding, and eventually abandons and relocates. That loop is why the roadmap wanted finite nodes rather than just bigger veins.
+
+One subtle correctness point: the extractor takes from the node *first* and banks what was actually granted, rather than producing and then decrementing. Reversed, two extractors on one deposit would each mint the last item. And anything the output buffer refuses is **refunded to the deposit** rather than dropped - silently destroying ore one item at a time is the worst possible bug for a finite resource, because it is invisible.
+
+#### Finding them
+
+A deposit below the crust is invisible by design - if it could be seen from orbit it would be a pickup, not a find. But an invisible resource with no instrument is arbitrary rather than mysterious, so the **Deep Survey Scanner** is the other half of the feature. Carry it and a strip reports the nearest deposit and the distance to it, with a meter that fills as you close. Surveying becomes a metal-detector loop: walk, watch the number, know immediately whether the last step helped. Stand on the deposit and it switches from distance to how much is actually in it.
+
+#### Manual step in Unity
+
+1. **Tools -> Voxel Engine -> Voxel Engine Setup**.
+2. Click **86. Build the Deep Core Programme**.
+3. Craft a Deep Survey Scanner, carry it, and walk until the readout says HERE.
+4. Place a Deep Core Extractor on the deposit and give it power.
+
+Deposits exist in worlds saved before this version - nothing needs regenerating.
 
 ### [11.17.0-dev] Nowhere Is Uniformly Safe
 

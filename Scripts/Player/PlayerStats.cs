@@ -348,6 +348,9 @@ namespace VoxelEngine.Player
         /// </summary>
         public HazardSample LastHazard { get; private set; }
 
+        /// <summary>Cached so the survey strip does not GetComponent every frame.</summary>
+        private Items.Inventory _surveyInventory;
+
         private void ApplyEnvironmentalHazards(PlayerEquipment equipment)
         {
             bool tookDamage = false;
@@ -416,6 +419,11 @@ namespace VoxelEngine.Player
             // exact sample the damage used, instead of re-sampling and risking disagreement
             // at a zone boundary.
             UI.HazardWarningHud.Tick(this, equipment);
+
+            // Survey readout shares this tick because it needs the same two things the
+            // hazard strip does: the player's position and their carried gear.
+            _surveyInventory ??= GetComponent<Items.Inventory>();
+            UI.DeepSurveyHud.Tick(_surveyInventory, transform.position);
 
             if (!tookDamage) return;
             OnStatsChanged?.Invoke();

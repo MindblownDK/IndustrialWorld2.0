@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `11.17.0-dev`
-**Roadmap Version:** `11.17.0-dev`
+**Current Version:** `11.18.0-dev`
+**Roadmap Version:** `11.18.0-dev`
 **Date:** 2026-09-16
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,13 @@
 ---
 
 ## 0. Recently Done
+
+### 11.18.0-dev - Something Worth Building On
+- `DeepOreField` + `DeepCoreExtractor` + `DeepSurveyHud`: large finite ore deposits, the machine that taps them, and the scanner that finds them. Setup step 86.
+- **Core rule:** a deep node CANNOT be hand-mined. It is a different verb from the pickaxe and the ship drill, which is what makes it drive outpost building instead of obsoleting the existing tools.
+- **Derivation rule:** node placement is derived from the world seed (Worley, 900 m lattice, 30% occupancy); only DEPLETION is saved. Existing worlds already have deposits.
+- **Balance rule:** nodes are finite so an outpost has a lifespan. An infinite extractor would end the resource game the first time one was built.
+- **Correctness note:** take from the node before banking the item, and refund what the output buffer refuses - otherwise two extractors double-mint the last item, or ore vanishes invisibly.
 
 ### 11.17.0-dev - Nowhere Is Uniformly Safe
 - `HazardField` + `HazardWarningHud`: localised radiation, heat and toxic-atmosphere zones, plus the Geiger warning strip.
@@ -56,10 +63,6 @@
 - New `Climate Engineering` node is itself `requiresOrbitalLab`, making it the first real consumer of the orbital research gate.
 - ORBITAL SYSTEMS moved out of LIFE SUPPORT into its own equipment box with device name, tier, range and prompt.
 - Block consoles for payloads and the research station name the exact missing requirement when offline.
-
-### 11.7.1-dev — The Range Readout Tells The Truth
-- The chest panel's provider/requester counts are now measured in range (`ProvidersInRangeOf` / `RequestersInRangeOf`) instead of world-wide, so distance is visible where it was previously invisible.
-- `ProviderCount` / `RequesterCount` keep their world-wide meaning, are documented as such, and are shown only as a clearly labelled "exists elsewhere" hint pointing at the Drone Ports.
 
 ### Era Transition Feel
 
@@ -1545,9 +1548,12 @@ Statuses are evidence-based and move forward only after code/content review and 
    - **Design rule:** Worley not fractal noise, at 34% coverage, because a zone must be AVOIDABLE. Fractal noise makes a smear the player can never be sure they have left.
    - Open: hazard-aware route planning, and ore deposits that correlate with radiation zones.
 
-6. **Caves & Resource Nodes**
-   - Large, finite ore nodes.
-   - Encourage outpost building.
+6. **Caves & Resource Nodes** - ~~large, finite ore nodes~~ ~~encourage outpost building~~ *(11.18.0-dev)* - **COMPLETE**
+   - Cave carving already shipped in `PlanetField.CaveCarve` (crust-sealed, never below sea). 11.18.0 added the resource-node half: `DeepOreField`, `DeepCoreExtractor`, `DeepSurveyHud`, setup step 86.
+   - **Design rule:** a deep node cannot be hand-mined at all. Hand mining / ship drill / extractor stay three distinct verbs, so the new machine does not obsolete the old ones.
+   - **Derivation rule:** placement derived from the world seed; only depletion is stored. Legacy saves gain deposits for free.
+   - **Balance rule:** finite by design - an outpost has a lifespan, which is what keeps the player surveying and relocating.
+   - Open: cave-specific deposits that require descending rather than surface placement, and extractor upgrade tiers.
 
 7. **Fauna / Flora & Livestock**
    - Passive creatures for atmosphere.

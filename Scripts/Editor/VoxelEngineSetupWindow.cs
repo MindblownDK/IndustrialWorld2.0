@@ -859,6 +859,8 @@ namespace VoxelEngine.EditorTools
                 () => IndustrialWorld.EditorTools.OrbitalProgrammeSetup.RunStep84(), 62);
             AddWizardButton(scroll, "85. Build the Rail System\n(Track, switch, buffer, station, locomotive \u2014 Non-Destructive)",
                 () => IndustrialWorld.EditorTools.RailSystemSetup.RunStep85(), 62);
+            AddWizardButton(scroll, "86. Build the Deep Core Programme\n(Survey scanner + deep ore extractor \u2014 Non-Destructive)",
+                () => IndustrialWorld.EditorTools.DeepCoreSetup.RunStep86(), 62);
 
             AddSpacer(scroll, 20);
         }

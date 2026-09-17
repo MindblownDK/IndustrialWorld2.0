@@ -153,6 +153,7 @@ namespace VoxelEngine.Persistence
                 SaveQuarries(save);
                 SaveRefuelPads(save);
                 SaveDronePorts(save);
+                SaveDeepOre(save);
                 string json = JsonUtility.ToJson(save, prettyPrint: true);
                 string temporaryPath = path + ".tmp";
                 string backupPath = path + ".previous";
@@ -1308,6 +1309,7 @@ namespace VoxelEngine.Persistence
                 RestoreQuarries(save);
                 RestoreRefuelPads(save);
                 RestoreDronePorts(save);
+                RestoreDeepOre(save);
                 Debug.Log($"[WorldState] Loaded {save.placedTiered.Count} tiered + {save.placedBlocks.Count} blocks + {save.grids.Count} movable grids " +
                           $"({anchoredGrids} from a body anchor) from {path}");
             }
@@ -3258,6 +3260,17 @@ namespace VoxelEngine.Persistence
             public List<SavedDronePort>      dronePorts   = new();   // 11.9.0-dev — long-range logistics relays
             // Additive in 5.69.0: omitted by legacy saves and initialized by field default.
             public List<SavedGrid>          grids        = new();
+            // 11.18.0-dev: how much has been taken out of each deep ore node. Node
+            // LOCATIONS are derived from the world seed and never saved; only the
+            // depletion the player caused is state. An untouched world writes an empty
+            // list, so this costs nothing until the player actually mines one.
+            public List<SavedDeepOre>       deepOre      = new();
+        }
+
+        [Serializable] private class SavedDeepOre
+        {
+            public string key;
+            public int extracted;
         }
         [Serializable] private class SavedGrid
         {
@@ -3781,6 +3794,35 @@ namespace VoxelEngine.Persistence
             public int currentDepth; public int cursorX; public int cursorZ;
             public int phase; public int rangeLvl; public int speedLvl; public int effLvl; // upgrade levels
             public SavedContainer outputContainer;
+        }
+
+        // ── Deep ore depletion (11.18.0-dev) ──────────────────────────────────
+        // Deliberately the smallest possible save surface for a finite resource. A node's
+        // position, material and capacity are all pure functions of the world seed, so the
+        // only thing worth storing is what the player removed.
+        private void SaveDeepOre(SaveData save)
+        {
+            foreach (var kv in VoxelEngine.Generation.DeepOreField.ExtractionState)
+            {
+                if (kv.Value <= 0) continue;
+                save.deepOre.Add(new SavedDeepOre { key = kv.Key, extracted = kv.Value });
+            }
+        }
+
+        private void RestoreDeepOre(SaveData save)
+        {
+            // Always clear, even when the save has no entries: a stale field left over from
+            // a previous world would otherwise show its depletion in the new one.
+            VoxelEngine.Generation.DeepOreField.ClearExtractionState();
+            if (save.deepOre == null || save.deepOre.Count == 0) return;
+
+            var restored = new List<KeyValuePair<string, int>>(save.deepOre.Count);
+            foreach (var entry in save.deepOre)
+            {
+                if (entry == null || string.IsNullOrEmpty(entry.key) || entry.extracted <= 0) continue;
+                restored.Add(new KeyValuePair<string, int>(entry.key, entry.extracted));
+            }
+            VoxelEngine.Generation.DeepOreField.LoadExtractionState(restored);
         }
 
         // ── Drone ports (11.9.0-dev) ──────────────────────────────────────────

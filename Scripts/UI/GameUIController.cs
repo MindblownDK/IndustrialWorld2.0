@@ -1207,6 +1207,7 @@ namespace VoxelEngine.UI
             CockpitAlertHud.EnsureMounted(_hudLayer);
             CanisterPressureHud.EnsureMounted(_hudLayer);
             HazardWarningHud.EnsureMounted(_hudLayer);
+            DeepSurveyHud.EnsureMounted(_hudLayer);
             VoxelEngine.Weather.WeatherHud.EnsureMounted(_hudLayer);
             OrbitalMapScreen.EnsureMounted(_topLayer);
             GridIdentityHud.EnsureMounted(_topLayer);
