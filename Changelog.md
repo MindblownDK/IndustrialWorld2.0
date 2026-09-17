@@ -1,9 +1,54 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `11.8.0-dev`
+**Current Version:** `11.9.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [11.9.0-dev] Heavy Lift
+
+**Type:** MINOR — drone upgrades and a new drone model, plus two persistence fixes. Save-compatible: every new saved field is additive and a world written before this round loads with sensible defaults.
+
+**GitHub title:** `[11.9.0-dev] Heavy lift`
+
+#### 1. Request lists were never saved
+
+A requester came back from a reload asking for nothing. The cause was in the persistence layer, not the chest: both the capture and the restore went straight to `ItemPortRouting`, which knows about faces and filters but nothing about the wireless request list or a buffer's stock target. `Chest.CapturePortSnapshot` and `Chest.ApplyPortSnapshot` were written to carry both and were simply never called.
+
+Persistence now prefers the chest's own capture and restore when the block has a `Chest`, falling back to the routing component for every other machine. Requests and buffer targets survive a reload.
+
+#### 2. Drone ports had no persistence at all
+
+Everything about a port reset on load: its name, its visual toggle, its tuning, its lifetime counters — and, far worse, **any flight in progress**. The cargo leaves the source chests at takeoff, so a save that caught a drone mid-air would have destroyed those items on reload.
+
+Ports now save by position and re-bind by proximity, the same model the refuel pads use. The in-flight manifest is saved with them and the flight resumes exactly where it left off, so nothing is lost. Restore runs in two passes because a manifest can only be re-bound once every port exists.
+
+#### 3. The drone looks the part
+
+Rebuilt from the reference: a white composite fuselage with a raised carbon spine, **eight arms in a radial ring** each with a motor can and a two-blade rotor, twin landing skids on four legs, and a gimballed pod at the nose. The slung cargo crate still tints itself to what it is carrying and still disappears on the empty return leg. Still primitives, so no art asset is needed, and still collider-free.
+
+#### 4. Upgradable drones
+
+The ports take the **universal modules that already exist** (setup step 75), so there is no second upgrade economy to learn:
+
+| Module | Header in the panel | Effect on the drone |
+|---|---|---|
+| Machine Speed Module | **DRONE UPGRADES** | flies faster (x1.25 per module) |
+| Machine Efficiency Module | **DRONE UPGRADES** | carries more (x1.25 payload per module) |
+
+Efficiency is inverted deliberately. On a machine it is a power multiplier below 1 (x0.8 = draws less); for a drone that reads as "each item costs you less to carry", so capacity scales by 1 divided by it. A x0.8 module gives x1.25 payload, which matches the speed module's feel rather than inventing a new curve.
+
+Two slots per port, they stack, and the panel shows the upgraded figure with the base value beside it in green so the gain is visible. Round-trip time is priced from the upgraded speed and the payload from the upgraded capacity.
+
+#### 5. The drone flies chest to chest
+
+It flew port to port, which is not where the items are. The ports are the relay that makes the trip legal, but the cargo leaves a chest and arrives in a chest, so the drone visibly started and ended in the wrong place.
+
+The network now reports which chest the payload was actually drawn from and predicts which chest will receive it, and the drone flies that route. The delivery target is a prediction only — the real destination is decided on landing, so if the situation has changed the items still go wherever they fit. The flight remains presentation-only in every case.
+
+#### Manual step in Unity
+
+No new setup step. If the upgrade modules are not in your world yet, run **75. Author Universal Machine Upgrade Modules** — the same modules the Electric Furnace and Oil Refinery use. Then right-click a Drone Port and drop them into the two DRONE UPGRADES slots.
 
 ### [11.8.0-dev] The Drone You Can Watch
 

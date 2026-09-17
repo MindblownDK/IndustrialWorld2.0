@@ -15,7 +15,14 @@ namespace VoxelEngine.Transport
         private static readonly List<Chest> _providers  = new();
         private static readonly List<Chest> _requesters = new();
 
-        public static VisualElement BuildPanel(DronePort port)
+        /// <summary>Slot factory, matching the one the machine panels use.</summary>
+        public delegate VisualElement SlotBuilder(
+            VoxelEngine.Items.IItemContainer c, int idx, VoxelEngine.Items.ItemStack s,
+            bool highlight, bool interactive);
+
+        public static VisualElement BuildPanel(DronePort port) => BuildPanel(port, null);
+
+        public static VisualElement BuildPanel(DronePort port, SlotBuilder slot)
         {
             var p = T.MachinePanel();
             p.style.width = 470;
@@ -69,7 +76,23 @@ namespace VoxelEngine.Transport
                 p.Add(far);
             }
             p.Add(T.StatRow("", "Link range", port.linkRange.ToString("0") + " m"));
-            p.Add(T.StatRow("", "Payload", port.payloadPerTrip + " per trip"));
+
+            // Show the upgraded figure, and the base alongside it when a module changes it,
+            // so the player can see what the modules actually bought them.
+            bool fasterThanBase = port.EffectiveSpeed > port.droneSpeed + 0.01f;
+            bool biggerThanBase = port.EffectivePayload > port.payloadPerTrip;
+
+            p.Add(T.StatRow("", "Payload",
+                biggerThanBase
+                    ? port.EffectivePayload + " per trip   (base " + port.payloadPerTrip + ")"
+                    : port.EffectivePayload + " per trip",
+                biggerThanBase ? T.AccentGreen : T.TextSecondary));
+
+            p.Add(T.StatRow("", "Speed",
+                fasterThanBase
+                    ? port.EffectiveSpeed.ToString("0.0") + " m/s   (base " + port.droneSpeed.ToString("0.0") + ")"
+                    : port.EffectiveSpeed.ToString("0.0") + " m/s",
+                fasterThanBase ? T.AccentGreen : T.TextSecondary));
 
             // Which logistic chests this port actually serves. A port is a bridge, not a
             // store, so this is the honest measure of whether it can do anything.
@@ -125,6 +148,52 @@ namespace VoxelEngine.Transport
             p.Add(T.Spacer(8));
             p.Add(T.StatRow("", "Trips completed", port.TripsCompleted.ToString()));
             p.Add(T.StatRow("", "Items delivered", port.ItemsDelivered.ToString()));
+
+            // ── Upgrades ────────────────────────────────────────────────────
+            // Reuses the universal modules the machines already take, so there is no second
+            // upgrade economy to learn for one block.
+            if (slot != null)
+            {
+                port.EnsureContainers();
+                port.RecalculateUpgrades();
+
+                p.Add(T.Spacer(8));
+                p.Add(T.AccentDivider(T.AccentGold));
+                p.Add(T.Spacer(4));
+
+                var upgHead = new Label("DRONE UPGRADES");
+                upgHead.style.color = new StyleColor(T.TextPrimary);
+                upgHead.style.fontSize = 10;
+                upgHead.style.unityFontStyleAndWeight = FontStyle.Bold;
+                upgHead.style.letterSpacing = 1.1f;
+                upgHead.style.marginBottom = 2;
+                p.Add(upgHead);
+
+                var upgNote = T.Muted("Machine Speed Module makes the drone FLY FASTER.  " +
+                                      "Machine Efficiency Module makes it CARRY MORE.");
+                upgNote.style.fontSize = 9;
+                upgNote.style.whiteSpace = WhiteSpace.Normal;
+                upgNote.style.marginBottom = 6;
+                p.Add(upgNote);
+
+                var slots = new VisualElement();
+                slots.style.flexDirection = FlexDirection.Row;
+                slots.style.flexWrap = Wrap.Wrap;
+                slots.style.alignItems = Align.Center;
+                for (int i = 0; i < port.upgrades.Size; i++)
+                {
+                    var cell = slot(port.upgrades, i, port.upgrades.GetSlot(i), false, true);
+                    cell.style.marginRight = 6;
+                    cell.style.marginBottom = 4;
+                    slots.Add(cell);
+                }
+                p.Add(slots);
+
+                var fitted = T.Muted(port.speedLevel + " speed  ·  " + port.capacityLevel + " capacity  fitted");
+                fitted.style.fontSize = 9;
+                fitted.style.marginTop = 2;
+                p.Add(fitted);
+            }
 
             // ── Visual drone toggle ─────────────────────────────────────────
             p.Add(T.Spacer(8));

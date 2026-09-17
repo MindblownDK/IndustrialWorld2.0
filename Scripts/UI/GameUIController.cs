@@ -924,7 +924,8 @@ namespace VoxelEngine.UI
                 case VoxelEngine.Weather.StaticSeasonMonitor ssm:
                     _openStaticSeasonMonitor = ssm; break;
                 case VoxelEngine.Transport.DronePort dp:
-                    _openDronePort = dp; break;
+                    _openDronePort = dp; dp.EnsureContainers();
+                    WatchContainer(dp.upgrades); break;
                 case VoxelEngine.Storage.StorageDrawer sd:
                     _openStorageDrawer = sd; sd.EnsureContainers();
                     WatchContainer(sd.upgradeSlots); break;
@@ -1350,7 +1351,7 @@ namespace VoxelEngine.UI
                 else if (_openNAS              != null) _contentLayer.Add(VoxelEngine.Storage.StorageUI.BuildNASPanel(_openNAS, BuildSlot));
                 else if (_openPowerstation     != null) _contentLayer.Add(BuildPowerstationPanel(_openPowerstation));
                 else if (_openStaticSeasonMonitor != null) _contentLayer.Add(VoxelEngine.Weather.SeasonMonitorUI.BuildPanel(_openStaticSeasonMonitor));
-                else if (_openDronePort != null) _contentLayer.Add(VoxelEngine.Transport.DronePortUI.BuildPanel(_openDronePort));
+                else if (_openDronePort != null) { _openDronePort.EnsureContainers(); _contentLayer.Add(VoxelEngine.Transport.DronePortUI.BuildPanel(_openDronePort, BuildSlot)); }
                 else if (_openStorageDrawer   != null) _contentLayer.Add(VoxelEngine.Storage.StorageUI.BuildDrawerPanel(_openStorageDrawer, BuildSlot));
                 else if (_openDrawerController!= null) { var mp = VoxelEngine.Storage.StorageUI.BuildDrawerControllerPanel(_openDrawerController); _contentLayer.Add(mp); AppendItemPorts(mp, _openDrawerController); }
                 else if (_openItemDisplay     != null) _contentLayer.Add(VoxelEngine.Storage.StorageUI.BuildItemDisplayPanel(_openItemDisplay, BuildSlot));

@@ -152,6 +152,7 @@ namespace VoxelEngine.Persistence
                 SaveGrids(save);
                 SaveQuarries(save);
                 SaveRefuelPads(save);
+                SaveDronePorts(save);
                 string json = JsonUtility.ToJson(save, prettyPrint: true);
                 string temporaryPath = path + ".tmp";
                 string backupPath = path + ".previous";
@@ -1155,6 +1156,19 @@ namespace VoxelEngine.Persistence
         private void AttachPortSnapshot(GameObject go, SavedContainer sc)
         {
             if (sc == null) return;
+
+            // Prefer the CHEST's own capture. It writes the wireless request list and a
+            // buffer's stock target on top of the routing data; going straight to
+            // ItemPortRouting silently dropped both, so a reloaded requester came back
+            // asking for nothing.
+            var chest = go.GetComponentInChildren<VoxelEngine.Building.Chest>();
+            if (chest != null)
+            {
+                var chestSnap = chest.CapturePortSnapshot();
+                if (chestSnap != null && chestSnap.HasData) sc.chestPort = chestSnap;
+                return;
+            }
+
             var routing = go.GetComponentInChildren<VoxelEngine.Transport.ItemPortRouting>();
             if (routing == null) return;
             var snap = routing.CaptureSnapshot();
@@ -1277,6 +1291,7 @@ namespace VoxelEngine.Persistence
                 RestorePlayer(save);
                 RestoreQuarries(save);
                 RestoreRefuelPads(save);
+                RestoreDronePorts(save);
                 Debug.Log($"[WorldState] Loaded {save.placedTiered.Count} tiered + {save.placedBlocks.Count} blocks + {save.grids.Count} movable grids " +
                           $"({anchoredGrids} from a body anchor) from {path}");
             }
@@ -3042,10 +3057,22 @@ namespace VoxelEngine.Persistence
         private void RestorePortSnapshot(GameObject go, SavedContainer sc)
         {
             if (sc == null || sc.chestPort == null || !sc.chestPort.HasData) return;
+
+            System.Func<string, ItemDefinition> resolve =
+                id => _itemById.TryGetValue(id, out var def) ? def : null;
+
+            // Mirror of AttachPortSnapshot: the chest restores its request list and buffer
+            // target as well as the routing, so it must be given the chance first.
+            var chest = go.GetComponentInChildren<VoxelEngine.Building.Chest>();
+            if (chest != null)
+            {
+                chest.ApplyPortSnapshot(sc.chestPort, resolve);
+                return;
+            }
+
             var routing = go.GetComponentInChildren<VoxelEngine.Transport.ItemPortRouting>();
             if (routing == null) return;
-            routing.ApplySnapshot(sc.chestPort,
-                id => _itemById.TryGetValue(id, out var def) ? def : null);
+            routing.ApplySnapshot(sc.chestPort, resolve);
         }
 
         private ItemStack DeserializeStack(SavedStack e, int depth = 0)
@@ -3133,6 +3160,7 @@ namespace VoxelEngine.Persistence
             public List<SavedPlacedTiered> placedTiered = new();
             public List<SavedQuarry>       quarries     = new();
             public List<SavedRefuelPad>      refuelPads   = new();   // 9.36.0-dev — the ground pads
+            public List<SavedDronePort>      dronePorts   = new();   // 11.9.0-dev — long-range logistics relays
             // Additive in 5.69.0: omitted by legacy saves and initialized by field default.
             public List<SavedGrid>          grids        = new();
         }
@@ -3640,6 +3668,114 @@ namespace VoxelEngine.Persistence
             public int currentDepth; public int cursorX; public int cursorZ;
             public int phase; public int rangeLvl; public int speedLvl; public int effLvl; // upgrade levels
             public SavedContainer outputContainer;
+        }
+
+        // ── Drone ports (11.9.0-dev) ──────────────────────────────────────────
+        // Same model as the refuel pad: a world block with no save identity of its own, so its
+        // state is stored by position and re-bound on load by proximity. What matters here is
+        // the IN-FLIGHT manifest: the cargo left the source chests at takeoff, so if a save
+        // caught a drone mid-air and we dropped the manifest, those items would be destroyed by
+        // the reload. The flight is therefore saved and resumed exactly where it was.
+        private void SaveDronePorts(SaveData save)
+        {
+            var ports = FindObjectsByType<VoxelEngine.Transport.DronePort>(FindObjectsInactive.Include);
+            foreach (var port in ports)
+            {
+                if (port == null) continue;
+                save.dronePorts.Add(new SavedDronePort
+                {
+                    pos             = port.NetworkPosition,
+                    portName        = port.portName,
+                    showDrone       = port.showDrone,
+                    linkRange       = port.linkRange,
+                    payloadPerTrip  = port.payloadPerTrip,
+                    droneSpeed      = port.droneSpeed,
+                    speedLevel      = port.speedLevel,
+                    capacityLevel   = port.capacityLevel,
+                    tripsCompleted  = port.TripsCompleted,
+                    itemsDelivered  = port.ItemsDelivered,
+                    // Flight manifest.
+                    cargoItemId     = port.CargoItem != null ? port.CargoItem.itemId : "",
+                    cargoCount      = port.CargoCount,
+                    flightRemaining = port.FlightRemaining,
+                    flightTotal     = port.FlightTotal,
+                    partnerPos      = port.CurrentPartner != null
+                                        ? port.CurrentPartner.NetworkPosition
+                                        : Vector3.zero,
+                    hasPartner      = port.CurrentPartner != null
+                });
+            }
+        }
+
+        private void RestoreDronePorts(SaveData save)
+        {
+            if (save.dronePorts == null || save.dronePorts.Count == 0) return;
+            var ports = FindObjectsByType<VoxelEngine.Transport.DronePort>(FindObjectsInactive.Include);
+
+            foreach (var sp in save.dronePorts)
+            {
+                VoxelEngine.Transport.DronePort best = null;
+                float bestDist = 2f;                      // same tolerance the pad restore uses
+                foreach (var port in ports)
+                {
+                    if (port == null) continue;
+                    float d = Vector3.Distance(port.NetworkPosition, sp.pos);
+                    if (d < bestDist) { bestDist = d; best = port; }
+                }
+                if (best == null) continue;               // port gone: nothing to restore onto
+
+                if (!string.IsNullOrEmpty(sp.portName)) best.portName = sp.portName;
+                best.showDrone      = sp.showDrone;
+                if (sp.linkRange      > 0f) best.linkRange      = sp.linkRange;
+                if (sp.payloadPerTrip > 0)  best.payloadPerTrip = sp.payloadPerTrip;
+                if (sp.droneSpeed     > 0f) best.droneSpeed     = sp.droneSpeed;
+                best.RestoreUpgrades(sp.speedLevel, sp.capacityLevel);
+                best.RestoreTotals(sp.tripsCompleted, sp.itemsDelivered);
+            }
+
+            // Second pass for the flights: every port must already exist and be positioned
+            // before a manifest can be re-bound to its destination.
+            foreach (var sp in save.dronePorts)
+            {
+                if (sp.cargoCount <= 0 || string.IsNullOrEmpty(sp.cargoItemId)) continue;
+                if (!_itemById.TryGetValue(sp.cargoItemId, out var cargo) || cargo == null) continue;
+
+                VoxelEngine.Transport.DronePort owner = null, partner = null;
+                float bestOwner = 2f, bestPartner = 2f;
+                foreach (var port in ports)
+                {
+                    if (port == null) continue;
+                    float d = Vector3.Distance(port.NetworkPosition, sp.pos);
+                    if (d < bestOwner) { bestOwner = d; owner = port; }
+                    if (sp.hasPartner)
+                    {
+                        float pd = Vector3.Distance(port.NetworkPosition, sp.partnerPos);
+                        if (pd < bestPartner) { bestPartner = pd; partner = port; }
+                    }
+                }
+                if (owner == null) continue;
+                owner.RestoreFlight(partner, cargo, sp.cargoCount, sp.flightRemaining, sp.flightTotal);
+            }
+        }
+
+        [Serializable] private class SavedDronePort
+        {
+            public Vector3 pos;
+            public string portName = "";
+            public bool showDrone = true;
+            public float linkRange;
+            public int payloadPerTrip;
+            public float droneSpeed;
+            public int speedLevel;
+            public int capacityLevel;
+            public int tripsCompleted;
+            public int itemsDelivered;
+            public string cargoItemId = "";
+            public int cargoCount;
+            public float flightRemaining;
+            public float flightTotal;
+            public Vector3 partnerPos;
+            public bool hasPartner;
         }
 
         [Serializable] private class SavedRefuelPad

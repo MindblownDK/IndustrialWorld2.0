@@ -289,12 +289,18 @@ namespace VoxelEngine.Transport
             // The destination port pays the power cost of receiving, so it must be powered too.
             if (!destination.IsPowered) return false;
 
-            int payload = Mathf.Min(wanted, best.payloadPerTrip);
+            int payload = Mathf.Min(wanted, best.EffectivePayload);
             best.CollectLocalChests(_remoteProviders, _remoteRequesters);
-            int loaded = TakeFrom(_remoteProviders, item, payload);
+            int loaded = TakeFrom(_remoteProviders, item, payload, out var sourceChest);
             if (loaded <= 0) return false;
 
-            best.Dispatch(destination, item, loaded, best.RoundTripSeconds(destination));
+            // Fly the route the CARGO actually takes. The ports are the relay that makes the
+            // trip legal, but the items leave a chest and arrive in a chest, so anchoring the
+            // drone to the ports made it visibly start and end in the wrong place.
+            Vector3 from = sourceChest != null ? sourceChest.transform.position : best.NetworkPosition;
+            Vector3 to   = PredictDeliveryPoint(destination, item);
+
+            best.Dispatch(destination, item, loaded, best.RoundTripSeconds(destination), from, to);
             return true;
         }
 
@@ -315,8 +321,9 @@ namespace VoxelEngine.Transport
         /// how much was actually taken. Each chest's OWN item instance is removed, because
         /// ItemContainer.Remove matches by reference.
         /// </summary>
-        private static int TakeFrom(List<Chest> chests, ItemDefinition item, int count)
+        private static int TakeFrom(List<Chest> chests, ItemDefinition item, int count, out Chest firstSource)
         {
+            firstSource = null;
             int taken = 0;
             foreach (var chest in chests)
             {
@@ -331,9 +338,26 @@ namespace VoxelEngine.Transport
 
                 int want = Mathf.Min(have, count - taken);
                 chest.container.Remove(stocked, want);
+                if (firstSource == null) firstSource = chest;   // where the drone visibly lifts off
                 taken += want;
             }
             return taken;
+        }
+
+        /// <summary>
+        /// The chest the payload will most likely land in, used as the drone's visual target.
+        /// Only a prediction: the real delivery is decided on landing, so if the situation has
+        /// changed by then the items still go wherever they fit. Falls back to the port.
+        /// </summary>
+        private Vector3 PredictDeliveryPoint(DronePort destination, ItemDefinition item)
+        {
+            destination.CollectLocalChests(_remoteProviders, _remoteRequesters);
+            foreach (var chest in _remoteRequesters)
+            {
+                if (chest == null || chest.container == null) continue;
+                if (chest.ShortfallOf(item) > 0) return chest.transform.position;
+            }
+            return destination.NetworkPosition;
         }
 
         /// <summary>The container's own asset instance for an item that matches by identity.</summary>

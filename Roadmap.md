@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `11.8.0-dev`
-**Roadmap Version:** `11.8.0-dev`
+**Current Version:** `11.9.0-dev`
+**Roadmap Version:** `11.9.0-dev`
 **Date:** 2026-09-16
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 11.9.0-dev — Heavy Lift
+- Drone ports take the universal Speed / Efficiency modules (step 75) as FLY FASTER / CARRY MORE, two slots, stacking; round trips and payloads are priced from the upgraded values.
+- The drone is rebuilt as an eight-rotor heavy lifter with skids and a gimbal pod, and now flies the cargo's real chest-to-chest route instead of port to port.
+- Persistence fixed on two fronts: chest request lists and buffer targets are saved again (capture/restore now go through `Chest`), and drone ports save their name, toggle, tuning, counters and in-flight manifest so a mid-air payload is never destroyed by a reload.
+
 ### 11.8.0-dev — The Drone You Can Watch
 - `TransportDrone` flies the route visibly (arc, tinted cargo crate, empty return), driven by the port's `FlightProgress` so it is presentation-only and can never strand cargo; per-port DRONE VISIBLE toggle.
 - Drone ports no longer deregister when their chunk streams out, so a route survives past the ~192-256 m load radius; a far port is reported as dormant instead of vanishing, and unpowered links are named in the panel.
@@ -48,10 +53,6 @@
 - `PortLockMode.Buffer` completes the logistic chest line: it stocks itself from providers and supplies requesters, and is the first network role whose faces are NOT pinned (`Chest.IsDirectionPinned`).
 - A per-item `bufferStockTarget` (default 64, editable in the panel, saved) caps what a buffer requests, so it cannot drain its providers; buffer-to-buffer stocking is refused to prevent loops.
 - Setup step 78 now authors three variants; the Buffer Chest is 36 slots and is seeded with one input and one output face.
-
-### 11.5.2-dev — The Item Ports Panel Opens Again
-- Fixes the 11.5.1-dev regression that left the item-ports overlay empty: the first body build ran before the overlay was attached and was skipped by an attachment guard meant only for rebuilds.
-- The body is now built after the overlay is attached and is never skipped; only the scroll-offset restore is conditional, so live refresh and scroll preservation behave as before.
 
 ### Era Transition Feel
 
@@ -1399,7 +1400,9 @@ Statuses are evidence-based and move forward only after code/content review and 
    - **Balance rule:** a drone only carries what the local wireless network cannot. Anything a provider within 48 m of the requester can supply never takes a flight, so drones never compete with local logistics.
    - ~~A visible drone mesh flying the route~~ *(11.8.0-dev)* — `TransportDrone`, presentation-only, per-port toggle.
    - **Streaming limit:** a port outside the loaded radius (~192-256 m) keeps its route but cannot trade until its chunk loads. Reported as dormant in the panel.
-   - Open: persistence for `showDrone` / `portName` / in-flight state, and vehicle carriers for cargo beyond one payload.
+   - ~~Persistence for `showDrone` / `portName` / in-flight state~~ *(11.9.0-dev)* — saved by position, flight resumes on load.
+   - ~~Upgradable drones~~ *(11.9.0-dev)* — universal Speed / Efficiency modules as speed / capacity, two slots per port.
+   - Open: vehicle carriers for cargo beyond one payload, and recharge mechanics.
 
 3. **Logistic Chests** — ~~Provider Chest~~ ~~Requester Chest~~ *(11.2.0-dev)*, ~~wireless request/fulfilment routing between them~~ *(11.4.0-dev, roles corrected 11.5.0-dev)*, ~~Buffer Chest~~ *(11.6.0-dev)* — **COMPLETE**
    - Provider Chest: pipes and belts FILL it (ports pinned to Input); `LogisticsNetwork` hands its stock to in-range requesters.

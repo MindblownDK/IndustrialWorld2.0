@@ -68,6 +68,122 @@ namespace VoxelEngine.Transport
         /// <summary>The chest range this port serves, matching the wireless network's own radius.</summary>
         public const float ServiceRadius = LogisticsNetwork.DefaultRange;
 
+        // ── Upgrades ────────────────────────────────────────────────────────
+        // The port reuses the SAME universal modules the machines take
+        // (FurnaceUpgradeItem, authored by setup step 75), so the player does not learn a
+        // second upgrade economy for one block. The two multipliers are simply read against
+        // what a drone cares about:
+        //
+        //   Speed Module      -> speedMultiplier      -> the drone flies faster
+        //   Efficiency Module -> efficiencyMultiplier -> the drone carries more per trip
+        //
+        // Efficiency is inverted on purpose. On a machine it is a power multiplier below 1
+        // (x0.8 = draws less), so for capacity it is read as "how much less does each item
+        // cost you", i.e. capacity scales by 1/efficiency. A x0.8 module therefore gives
+        // x1.25 payload, which matches the speed module's feel.
+
+        [Tooltip("Upgrade modules fitted to this port. Accepts the universal Machine Speed and " +
+                 "Machine Efficiency modules.")]
+        public ItemContainer upgrades;
+
+        [Tooltip("How many upgrade modules this port can hold.")]
+        [Min(1)] public int upgradeSlots = 2;
+
+        /// <summary>Flight-speed multiplier from fitted modules. 1 when nothing is fitted.</summary>
+        public float SpeedMultiplier { get; private set; } = 1f;
+
+        /// <summary>Payload multiplier from fitted modules. 1 when nothing is fitted.</summary>
+        public float CapacityMultiplier { get; private set; } = 1f;
+
+        /// <summary>Speed modules fitted, for the panel readout and the save.</summary>
+        public int speedLevel;
+
+        /// <summary>Capacity (efficiency) modules fitted, for the panel readout and the save.</summary>
+        public int capacityLevel;
+
+        /// <summary>The effective flight speed after upgrades.</summary>
+        public float EffectiveSpeed => Mathf.Max(1f, droneSpeed * SpeedMultiplier);
+
+        /// <summary>The effective payload after upgrades.</summary>
+        public int EffectivePayload => Mathf.Max(1, Mathf.RoundToInt(payloadPerTrip * CapacityMultiplier));
+
+        /// <summary>Create the upgrade container if it does not exist yet.</summary>
+        public void EnsureContainers()
+        {
+            if (upgrades == null) upgrades = new ItemContainer("Upgrades", upgradeSlots);
+            else if (upgrades.Size != upgradeSlots) upgrades.Resize(upgradeSlots);
+        }
+
+        /// <summary>
+        /// Recompute the multipliers from the fitted modules. Mirrors the furnace: each module
+        /// multiplies, and a stack of them multiplies per unit.
+        /// </summary>
+        public void RecalculateUpgrades()
+        {
+            EnsureContainers();
+
+            float speed = 1f, eff = 1f;
+            int speedCount = 0, capCount = 0;
+
+            for (int i = 0; i < upgrades.Size; i++)
+            {
+                var slot = upgrades.GetSlot(i);
+                if (slot.IsEmpty) continue;
+                if (slot.item is not FurnaceUpgradeItem u) continue;
+
+                speed *= Mathf.Pow(u.speedMultiplier, slot.count);
+                eff   *= Mathf.Pow(u.efficiencyMultiplier, slot.count);
+
+                if (u.speedMultiplier > 1f)      speedCount += slot.count;
+                if (u.efficiencyMultiplier < 1f) capCount   += slot.count;
+            }
+
+            SpeedMultiplier = speed;
+            // Below-1 efficiency means "costs less", which for cargo means "carries more".
+            CapacityMultiplier = eff > 0.01f ? 1f / eff : 1f;
+            speedLevel    = speedCount;
+            capacityLevel = capCount;
+        }
+
+        /// <summary>Restore the counts a save recorded, then recompute from the real contents.</summary>
+        public void RestoreUpgrades(int savedSpeedLevel, int savedCapacityLevel)
+        {
+            speedLevel    = savedSpeedLevel;
+            capacityLevel = savedCapacityLevel;
+            RecalculateUpgrades();   // the container is the truth; the counts are a readout
+        }
+
+        /// <summary>Restore lifetime counters from a save.</summary>
+        public void RestoreTotals(int trips, int items)
+        {
+            TripsCompleted = Mathf.Max(0, trips);
+            ItemsDelivered = Mathf.Max(0, items);
+        }
+
+        /// <summary>
+        /// Put a saved flight back in the air. The cargo left its source chests before the
+        /// save was written, so without this the reload would destroy real items.
+        /// </summary>
+        public void RestoreFlight(DronePort partner, ItemDefinition item, int count,
+                                  float remaining, float total)
+        {
+            if (item == null || count <= 0) return;
+
+            CurrentPartner  = partner;
+            CargoItem       = item;
+            CargoCount      = count;
+            FlightTotal     = Mathf.Max(0.1f, total);
+            FlightRemaining = Mathf.Clamp(remaining, 0.1f, FlightTotal);
+            SyncPowerDraw();
+
+            CargoFrom = transform.position;
+            CargoTo   = partner != null ? partner.NetworkPosition : transform.position;
+
+            RetireDrone();
+            if (partner != null)
+                _drone = TransportDrone.Spawn(this, CargoFrom, CargoTo, item);
+        }
+
         private PowerConsumer _power;
 
         // ── Flight state ────────────────────────────────────────────────────
@@ -111,6 +227,8 @@ namespace VoxelEngine.Transport
         private void Awake()
         {
             EnsurePower();
+            EnsureContainers();
+            RecalculateUpgrades();
         }
 
         private void OnEnable()
@@ -176,8 +294,8 @@ namespace VoxelEngine.Transport
         public float RoundTripSeconds(DronePort other)
         {
             if (other == null) return 0f;
-            float distance = Vector3.Distance(transform.position, other.transform.position);
-            return (distance * 2f) / Mathf.Max(1f, droneSpeed) + handlingSeconds * 2f;
+            float distance = Vector3.Distance(NetworkPosition, other.NetworkPosition);
+            return (distance * 2f) / EffectiveSpeed + handlingSeconds * 2f;
         }
 
         /// <summary>
@@ -186,7 +304,8 @@ namespace VoxelEngine.Transport
         /// chests by the network, so the cargo lives on the drone until it lands — it is never
         /// duplicated and never silently lost.
         /// </summary>
-        public void Dispatch(DronePort destination, ItemDefinition item, int count, float tripSeconds)
+        public void Dispatch(DronePort destination, ItemDefinition item, int count, float tripSeconds,
+                             Vector3? visualFrom = null, Vector3? visualTo = null)
         {
             CurrentPartner   = destination;
             CargoItem        = item;
@@ -197,10 +316,21 @@ namespace VoxelEngine.Transport
 
             // Cosmetic only, and allowed to fail: if the visual cannot be created the
             // delivery is completely unaffected.
+            // The drone flies the CARGO's route (chest to chest) when the network supplies it,
+            // falling back to the ports when it cannot name a chest.
+            CargoFrom = visualFrom ?? transform.position;
+            CargoTo   = visualTo   ?? (destination != null ? destination.NetworkPosition : transform.position);
+
             RetireDrone();
             if (destination != null)
-                _drone = TransportDrone.Spawn(this, transform.position, destination.NetworkPosition, item);
+                _drone = TransportDrone.Spawn(this, CargoFrom, CargoTo, item);
         }
+
+        /// <summary>Where the current payload was picked up. Visual only.</summary>
+        public Vector3 CargoFrom { get; private set; }
+
+        /// <summary>Where the current payload is being taken. Visual only.</summary>
+        public Vector3 CargoTo { get; private set; }
 
         /// <summary>
         /// Advance the flight. Returns true on the tick the drone lands, so the network can

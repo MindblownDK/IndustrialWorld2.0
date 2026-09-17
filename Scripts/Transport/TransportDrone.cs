@@ -56,48 +56,105 @@ namespace VoxelEngine.Transport
 
         private void Build(ItemDefinition cargoItem)
         {
-            var bodyTint = new Color(0.30f, 0.62f, 0.72f);
+            // Modelled on a heavy-lift octocopter: a white fuselage shell over a dark
+            // carbon frame, eight arms in a radial ring each carrying a two-blade rotor,
+            // landing skids underneath and a gimballed payload pod slung at the nose.
+            var shell  = new Color(0.90f, 0.91f, 0.93f);   // white composite body
+            var carbon = new Color(0.14f, 0.15f, 0.17f);   // dark arms and frame
+            var metal  = new Color(0.55f, 0.57f, 0.60f);   // skids and hardware
 
-            var body = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            body.name = "Body";
-            body.transform.SetParent(transform, false);
-            body.transform.localScale = new Vector3(0.9f, 0.25f, 0.9f);
-            Strip(body, bodyTint);
+            // ── Fuselage: a rounded core with a raised spine ────────────────
+            var core = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            core.name = "Fuselage";
+            core.transform.SetParent(transform, false);
+            core.transform.localScale = new Vector3(0.82f, 0.46f, 1.05f);
+            Strip(core, shell);
 
-            _rotors = new Transform[4];
-            var offsets = new[]
+            var spine = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            spine.name = "Spine";
+            spine.transform.SetParent(transform, false);
+            spine.transform.localPosition = new Vector3(0f, 0.20f, -0.05f);
+            spine.transform.localScale = new Vector3(0.34f, 0.16f, 0.66f);
+            Strip(spine, carbon);
+
+            // ── Eight arms in a radial ring, each with a rotor ──────────────
+            _rotors = new Transform[8];
+            const float armLength = 1.15f;
+            for (int i = 0; i < 8; i++)
             {
-                new Vector3( 0.6f, 0.18f,  0.6f),
-                new Vector3(-0.6f, 0.18f,  0.6f),
-                new Vector3( 0.6f, 0.18f, -0.6f),
-                new Vector3(-0.6f, 0.18f, -0.6f),
-            };
-            for (int i = 0; i < 4; i++)
-            {
-                var arm = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                float deg = i * 45f + 22.5f;               // offset so none points dead ahead
+                float rad = deg * Mathf.Deg2Rad;
+                var dir = new Vector3(Mathf.Sin(rad), 0f, Mathf.Cos(rad));
+                Vector3 hub = dir * armLength;
+
+                var arm = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
                 arm.name = "Arm" + i;
                 arm.transform.SetParent(transform, false);
-                arm.transform.localPosition = offsets[i] * 0.5f;
-                arm.transform.localScale = new Vector3(0.6f, 0.07f, 0.12f);
-                arm.transform.localRotation = Quaternion.LookRotation(offsets[i].normalized, Vector3.up);
-                Strip(arm, bodyTint * 0.7f);
+                arm.transform.localPosition = dir * (armLength * 0.5f);
+                arm.transform.localRotation = Quaternion.FromToRotation(Vector3.up, dir);
+                arm.transform.localScale = new Vector3(0.075f, armLength * 0.5f, 0.075f);
+                Strip(arm, carbon);
 
-                var rotor = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                rotor.name = "Rotor" + i;
+                // Motor can at the end of each arm.
+                var motor = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                motor.name = "Motor" + i;
+                motor.transform.SetParent(transform, false);
+                motor.transform.localPosition = hub + new Vector3(0f, 0.07f, 0f);
+                motor.transform.localScale = new Vector3(0.13f, 0.08f, 0.13f);
+                Strip(motor, shell);
+
+                // Rotor hub, with two slender blades so the spin reads clearly.
+                var rotor = new GameObject("Rotor" + i);
                 rotor.transform.SetParent(transform, false);
-                rotor.transform.localPosition = offsets[i];
-                rotor.transform.localScale = new Vector3(0.45f, 0.012f, 0.45f);
-                Strip(rotor, new Color(0.75f, 0.80f, 0.85f, 1f));
+                rotor.transform.localPosition = hub + new Vector3(0f, 0.15f, 0f);
+
+                for (int b = 0; b < 2; b++)
+                {
+                    var blade = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    blade.name = "Blade" + b;
+                    blade.transform.SetParent(rotor.transform, false);
+                    blade.transform.localPosition = new Vector3(b == 0 ? 0.30f : -0.30f, 0f, 0f);
+                    blade.transform.localScale = new Vector3(0.62f, 0.012f, 0.085f);
+                    Strip(blade, carbon);
+                }
                 _rotors[i] = rotor.transform;
             }
 
-            // The slung cargo crate, tinted to the item it represents.
+            // ── Landing skids ──────────────────────────────────────────────
+            for (int side = -1; side <= 1; side += 2)
+            {
+                var rail = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                rail.name = "Skid" + side;
+                rail.transform.SetParent(transform, false);
+                rail.transform.localPosition = new Vector3(0.42f * side, -0.52f, 0f);
+                rail.transform.localScale = new Vector3(0.07f, 0.055f, 1.25f);
+                Strip(rail, metal);
+
+                for (int end = -1; end <= 1; end += 2)
+                {
+                    var leg = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    leg.name = "Leg";
+                    leg.transform.SetParent(transform, false);
+                    leg.transform.localPosition = new Vector3(0.34f * side, -0.30f, 0.42f * end);
+                    leg.transform.localScale = new Vector3(0.055f, 0.42f, 0.055f);
+                    Strip(leg, metal);
+                }
+            }
+
+            // ── Gimballed payload pod, tinted to the cargo ─────────────────
+            var gimbal = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            gimbal.name = "Gimbal";
+            gimbal.transform.SetParent(transform, false);
+            gimbal.transform.localPosition = new Vector3(0f, -0.30f, 0.46f);
+            gimbal.transform.localScale = new Vector3(0.24f, 0.24f, 0.24f);
+            Strip(gimbal, carbon);
+
             var crate = GameObject.CreatePrimitive(PrimitiveType.Cube);
             crate.name = "Cargo";
             crate.transform.SetParent(transform, false);
-            crate.transform.localPosition = new Vector3(0f, -0.28f, 0f);
-            crate.transform.localScale = new Vector3(0.42f, 0.34f, 0.42f);
-            Strip(crate, cargoItem != null ? cargoItem.iconTint : new Color(0.8f, 0.7f, 0.4f));
+            crate.transform.localPosition = new Vector3(0f, -0.52f, 0f);
+            crate.transform.localScale = new Vector3(0.46f, 0.36f, 0.52f);
+            Strip(crate, cargoItem != null ? cargoItem.iconTint : new Color(0.82f, 0.70f, 0.40f));
             _cargo = crate.transform;
         }
 
