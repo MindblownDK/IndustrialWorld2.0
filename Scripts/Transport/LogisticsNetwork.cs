@@ -279,8 +279,45 @@ namespace VoxelEngine.Transport
             }
         }
 
+        // WORLD-WIDE totals. These count every logistic chest that exists, regardless of
+        // distance, so they answer "how big is my logistics network" and nothing more.
+        // They are NOT a range readout: use ProvidersInRangeOf / RequestersInRangeOf for
+        // anything shown on a specific chest's panel, or the numbers will claim a partner
+        // on the far side of the world is reachable.
         public int ProviderCount  { get { PruneDestroyed(); return _providers.Count; } }
         public int RequesterCount { get { PruneDestroyed(); return _requesters.Count; } }
+
+        /// <summary>
+        /// Providers this chest can actually reach, applying the same distance and
+        /// buffer-to-buffer rules as the fulfilment pass, so the panel and the transfer
+        /// never disagree about who is in range.
+        /// </summary>
+        public int ProvidersInRangeOf(Chest chest) => CountInRange(chest, _providers, true);
+
+        /// <summary>Requesters within range of this chest, by the same rule.</summary>
+        public int RequestersInRangeOf(Chest chest) => CountInRange(chest, _requesters, false);
+
+        private int CountInRange(Chest origin, List<Chest> candidates, bool asProviders)
+        {
+            if (origin == null) return 0;
+            PruneDestroyed();
+
+            int n = 0;
+            float rangeSqr = DefaultRange * DefaultRange;
+            Vector3 at = origin.transform.position;
+
+            foreach (var other in candidates)
+            {
+                if (other == null || other == origin) continue;
+                // Mirrors FindNearestProviderWith: a buffer is never stocked by a buffer,
+                // so one must not be advertised to the other as an available partner.
+                if (asProviders && other.portLock == PortLockMode.Buffer &&
+                    origin.portLock == PortLockMode.Buffer) continue;
+                if ((other.transform.position - at).sqrMagnitude > rangeSqr) continue;
+                n++;
+            }
+            return n;
+        }
 
         /// <summary>
         /// How much of <paramref name="item"/> is reachable from <paramref name="requester"/>

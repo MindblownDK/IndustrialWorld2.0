@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `11.7.0-dev`
-**Roadmap Version:** `11.7.0-dev`
+**Current Version:** `11.7.1-dev`
+**Roadmap Version:** `11.7.1-dev`
 **Date:** 2026-09-16
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,10 @@
 
 ## 0. Recently Done
 
+### 11.7.1-dev — The Range Readout Tells The Truth
+- The chest panel's provider/requester counts are now measured in range (`ProvidersInRangeOf` / `RequestersInRangeOf`) instead of world-wide, so distance is visible where it was previously invisible.
+- `ProviderCount` / `RequesterCount` keep their world-wide meaning, are documented as such, and are shown only as a clearly labelled "exists elsewhere" hint pointing at the Drone Ports.
+
 ### 11.7.0-dev — The Drone Port
 - `DronePort` + `DroneNetwork` add the long-distance logistics layer: two ports link over 400 m and fly items between the logistic chests within each one's 48 m service radius, over real transit time.
 - Demand-driven from the destination end and skips anything the local wireless network can already supply, so a drone only ever flies against a real shortfall; cargo that cannot be unloaded is stored at either end or held and retried, never destroyed.
@@ -47,11 +51,6 @@
 - Setup step 81 repairs the assets that inherited the old `iron_ore` default identity (gravel, radar beacon, fire igniter) and the material assets left displaying as ore; the canonical ores are untouched.
 - Every item picker collapses its catalogue to one entry per id and prefers the best-authored asset, so a duplicate id can never again show as several identical rows.
 - The item-ports overlay rebuilds its body on change instead of only on reopen, preserving scroll position — removing a request updates the list immediately and in place.
-
-### 11.5.0-dev — The Logistic Chests Point The Right Way
-- The port roles are inverted to mirror the wireless roles: a Provider's faces are INPUTS (pipes fill it), a Requester's are OUTPUTS (it feeds the pipes downstream). `Chest.PinnedDirection` is the single source, and step 78 seeds to match.
-- The wireless request list is its own field on `Chest` (`AddRequest`/`RemoveRequest`/`SetRequests`), no longer scraped from the port filters: filters govern what leaves down a pipe, requests govern what the network delivers in.
-- The panel's REQUESTS section uses `ItemFilterDialog.OpenList`, the same searchable picker as the port filters; requests persist through an additive `requestItemIds` on the port snapshot.
 
 ### Era Transition Feel
 

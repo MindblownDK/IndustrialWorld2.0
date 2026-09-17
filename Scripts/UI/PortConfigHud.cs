@@ -544,10 +544,34 @@ namespace VoxelEngine.UI
                 return box;
             }
 
-            var counts = T.Muted(net.ProviderCount + " provider" + (net.ProviderCount == 1 ? "" : "s") +
-                                 "  ·  " + net.RequesterCount + " requester" + (net.RequesterCount == 1 ? "" : "s"));
+            // IN RANGE of this chest — not the world total. Showing the global count here
+            // made every chest look connected no matter how far apart they were.
+            int nearProviders  = net.ProvidersInRangeOf(chest);
+            int nearRequesters = net.RequestersInRangeOf(chest);
+            bool connected = requester ? nearProviders > 0 : nearRequesters > 0;
+
+            var counts = new Label(nearProviders + " provider" + (nearProviders == 1 ? "" : "s") +
+                                   "  ·  " + nearRequesters + " requester" + (nearRequesters == 1 ? "" : "s") +
+                                   "  in range");
+            counts.style.color = new StyleColor(connected ? T.TextSecondary : new Color(0.85f, 0.55f, 0.35f));
+            counts.style.fontSize = 11;
             counts.style.marginTop = 6;
             box.Add(counts);
+
+            // The world total stays visible, clearly labelled, so "I built it but it is too
+            // far away" is distinguishable from "I never built one".
+            int totalPartners = requester ? net.ProviderCount : net.RequesterCount;
+            if (!connected && totalPartners > 0)
+            {
+                var far = T.Muted(totalPartners + " " + (requester ? "provider" : "requester") +
+                                  (totalPartners == 1 ? " exists" : "s exist") + " elsewhere in the world, " +
+                                  "out of this chest's " + LogisticsNetwork.DefaultRange.ToString("0") +
+                                  " m range. Move closer, or bridge the gap with a pair of Drone Ports.");
+                far.style.marginTop = 4;
+                far.style.fontSize = 9;
+                far.style.whiteSpace = WhiteSpace.Normal;
+                box.Add(far);
+            }
 
             if (!requester)
             {

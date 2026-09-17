@@ -1,9 +1,33 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `11.7.0-dev`
+**Current Version:** `11.7.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [11.7.1-dev] The Range Readout Tells The Truth
+
+**Type:** PATCH — fixes a misleading readout. No behaviour change to transfers, no save format change.
+
+**GitHub title:** `[11.7.1-dev] The range readout tells the truth`
+
+#### What was wrong
+
+The WIRELESS LOGISTICS line on a logistic chest counted every provider and requester **in the world**, with no distance test at all. Walking a chest to the far side of the map still reported its partners as present, which read as "everything is in range" and made the 48 m limit look broken or ignored.
+
+The limit was never actually broken. `FindNearestProviderWith` and `AvailableFor` both applied it correctly, so items only ever moved within 48 m — but the panel said otherwise, and the panel is what the player believes. The per-item "none in range" status was the only honest number on the screen.
+
+#### The fix
+
+`ProvidersInRangeOf` and `RequestersInRangeOf` are new, and they apply exactly the same distance and buffer-to-buffer rules as the fulfilment pass, so the readout and the transfer can no longer disagree. The panel now reports "2 providers · 1 requester **in range**", and turns amber when the count that matters for this chest's role is zero.
+
+The world total is not discarded, just relabelled. When a chest has no partner in range but partners exist elsewhere, a second line says so and names the range — so "I built one but it is too far away" is distinguishable from "I never built one", and it points at the Drone Ports as the way to bridge the distance.
+
+`ProviderCount` and `RequesterCount` keep their world-wide meaning and are now documented as such, with a warning not to use them for anything shown on a single chest's panel. That was the trap this bug fell into.
+
+#### No Unity step
+
+Recompile and reopen a chest panel.
 
 ### [11.7.0-dev] The Drone Port
 
