@@ -55,7 +55,7 @@ namespace VoxelEngine.Transport
         public static void EnsureInstance()
         {
             if (Instance != null) return;
-            var existing = FindFirstObjectByType<LogisticsNetwork>();
+            var existing = FindAnyObjectByType<LogisticsNetwork>();
             if (existing != null) { Instance = existing; return; }
             var go = new GameObject("LogisticsNetwork");
             Instance = go.AddComponent<LogisticsNetwork>();

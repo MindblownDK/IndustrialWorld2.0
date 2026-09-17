@@ -1,9 +1,29 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `11.12.0-dev`
+**Current Version:** `11.12.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [11.12.1-dev] Unity API Deprecations
+
+**Type:** PATCH — compile fix and warning cleanup. No behaviour change, no save impact.
+
+**GitHub title:** `[11.12.1-dev] Unity API deprecations`
+
+#### Fixed
+
+- **`TransmissionTower.cs` (141) CS0619 x2 — `Object.GetInstanceID()` is now an error.** The span cable used the two towers' instance ids to decide which end draws the shared line, so a pair is never drawn twice.
+
+  Unity suggests `GetEntityId()`, but that only exists on the newest editor and swapping to it would break the project on any older version. The tie-break never actually needed an engine id — it only needs a value that is unique and stable per instance. It now uses a private monotonic serial assigned lazily on first use, which is version-proof and does the same job.
+
+- **`DroneNetwork.cs` (48) and `LogisticsNetwork.cs` (58) CS0618 — `FindFirstObjectByType<T>()` is deprecated.** Both are singleton guards checking whether an instance already exists, so ordering is irrelevant and `FindAnyObjectByType<T>()` is the correct replacement (it is also the faster of the two).
+
+These were the only three occurrences of either API in the codebase.
+
+#### Manual step in Unity
+
+None.
 
 ### [11.12.0-dev] Where You Will Actually Land
 

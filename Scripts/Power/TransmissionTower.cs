@@ -67,7 +67,24 @@ namespace VoxelEngine.Power
 
         /// <summary>Every tower in the world, so a span search never does a scene sweep.</summary>
         private static readonly List<TransmissionTower> s_all = new();
+
+        // Stable tie-break for "which end of a span draws the cable".
+        // Unity's instance-id accessors have churned across versions (and the newest
+        // editor hard-errors on GetInstanceID), so the pair ordering uses our own
+        // monotonic serial instead. It only has to be unique and stable per instance.
+        private static int s_nextSerial;
+        private int _serial;
         public static IReadOnlyList<TransmissionTower> All => s_all;
+
+        /// <summary>Lazily assigned unique ordinal used only to pick one end of a span pair.</summary>
+        private int DrawSerial
+        {
+            get
+            {
+                if (_serial == 0) _serial = ++s_nextSerial;
+                return _serial;
+            }
+        }
 
         protected override void OnEnable()
         {
@@ -138,7 +155,7 @@ namespace VoxelEngine.Power
             foreach (var other in _spans)
             {
                 if (other == null) continue;
-                if (GetInstanceID() > other.GetInstanceID()) continue;   // the other end draws it
+                if (DrawSerial > other.DrawSerial) continue;   // the other end draws it
 
                 var go = new GameObject("SpanCable");
                 go.transform.SetParent(transform, false);
