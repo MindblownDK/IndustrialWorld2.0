@@ -70,6 +70,12 @@ namespace VoxelEngine.Research
                  "This is what makes orbital infrastructure worth building.")]
         public bool requiresOrbitalLab = false;
 
+        [Tooltip("Boss Relic Core required before this node can be researched. The relic " +
+                 "is a PREREQUISITE, not a cost: it is proof the boss was beaten, and it " +
+                 "is never consumed, so one relic can gate several nodes without forcing " +
+                 "the player to re-kill a unique boss that may not respawn.")]
+        public VoxelEngine.Combat.BossRelicKind requiresRelic = VoxelEngine.Combat.BossRelicKind.None;
+
         [Header("Cost")]
         [Tooltip("Seconds spent at a Research Lab. 0 = instant (cost paid from inventory).")]
         public float researchSeconds = 30f;

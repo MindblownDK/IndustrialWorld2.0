@@ -184,12 +184,26 @@ namespace VoxelEngine.Research
         }
 
         /// <summary>
-        /// Why this node cannot be researched at the player's current facilities, or null
-        /// if it can. Only orbital-gated nodes can return a reason today.
+        /// Why this node cannot be researched right now, or null if it can. Covers both
+        /// the orbital-lab gate and the boss-relic gate; both research entry points funnel
+        /// through here, so a gate added here cannot be bypassed by the other path.
         /// </summary>
         public string GetFacilityBlockReason(ResearchNode node)
         {
-            if (node == null || !node.requiresOrbitalLab) return null;
+            if (node == null) return null;
+
+            // Relic gate (11.20.0). Checked before the orbital gate because it is the
+            // harder requirement to satisfy - telling a player to go build a satellite
+            // when they actually need to beat a boss would send them the wrong way.
+            if (node.requiresRelic != VoxelEngine.Combat.BossRelicKind.None
+                && !VoxelEngine.Combat.BossRelicLedger.Has(node.requiresRelic))
+            {
+                string relic = VoxelEngine.Combat.BossRelicLedger.Label(node.requiresRelic);
+                string source = VoxelEngine.Combat.BossRelicLedger.SourceLabel(node.requiresRelic);
+                return $"Requires a {relic}, recovered by defeating {source}.";
+            }
+
+            if (!node.requiresOrbitalLab) return null;
             return VoxelEngine.GridSystem.GridSatelliteLab.GlobalBlockedReason();
         }
 

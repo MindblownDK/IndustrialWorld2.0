@@ -995,6 +995,17 @@ namespace VoxelEngine.Research
                 blocked.style.fontSize = 11;
                 btnRow.Add(blocked);
             }
+            else if (rm.GetFacilityBlockReason(n) is string facilityBlock)
+            {
+                // The manager already refuses these, but silently - the button would look
+                // live and simply do nothing. Stating the requirement here is the whole
+                // difference between a designed gate and an apparent bug.
+                var blocked = new Label("✗ " + facilityBlock);
+                blocked.style.color = new Color(0.95f, 0.66f, 0.32f);
+                blocked.style.fontSize = 11;
+                blocked.style.whiteSpace = WhiteSpace.Normal;
+                btnRow.Add(blocked);
+            }
             else
             {
                 bool canInventory = n.researchSeconds <= 0f;

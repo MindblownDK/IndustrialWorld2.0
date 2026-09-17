@@ -154,6 +154,7 @@ namespace VoxelEngine.Persistence
                 SaveRefuelPads(save);
                 SaveDronePorts(save);
                 SaveDeepOre(save);
+                save.bossRelics = VoxelEngine.Combat.BossRelicLedger.SaveTo();
                 string json = JsonUtility.ToJson(save, prettyPrint: true);
                 string temporaryPath = path + ".tmp";
                 string backupPath = path + ".previous";
@@ -1310,6 +1311,9 @@ namespace VoxelEngine.Persistence
                 RestoreRefuelPads(save);
                 RestoreDronePorts(save);
                 RestoreDeepOre(save);
+                // Always load, even from an empty list: a stale ledger from a previous
+                // world would otherwise hand this one free late-game research.
+                VoxelEngine.Combat.BossRelicLedger.LoadFrom(save.bossRelics);
                 Debug.Log($"[WorldState] Loaded {save.placedTiered.Count} tiered + {save.placedBlocks.Count} blocks + {save.grids.Count} movable grids " +
                           $"({anchoredGrids} from a body anchor) from {path}");
             }
@@ -3265,6 +3269,10 @@ namespace VoxelEngine.Persistence
             // depletion the player caused is state. An untouched world writes an empty
             // list, so this costs nothing until the player actually mines one.
             public List<SavedDeepOre>       deepOre      = new();
+            // 11.20.0-dev: Boss Relic Cores the player has ever earned. A permanent record
+            // of encounters beaten, not an inventory - spending a relic on research must
+            // not lock the player out of a second node needing the same one.
+            public List<int>                bossRelics   = new();
         }
 
         [Serializable] private class SavedDeepOre

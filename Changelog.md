@@ -1,9 +1,69 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `11.19.0-dev`
+**Current Version:** `11.20.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [11.20.0-dev] Earn The Late Game
+
+**Type:** MINOR - a new system, save-compatible. One additive save list. Existing research nodes are untouched and keep working exactly as before.
+
+**GitHub title:** `[11.20.0-dev] Earn the late game`
+
+Section 6.5 item 11 - the progression half of Mythical Enemies & Bosses: enemy tiers, Boss Relic Cores, and relic-gated research.
+
+#### What already existed
+
+Seven creatures already ship: Basilisk, Ghoul, Griffin, Ifrit, Karkadann, Manticore and Roc, each with its own AI, drops and health bar. The bestiary was not the gap.
+
+The gap was that **beating one meant nothing**. There were no tiers, no relics, and nothing in the tech tree that required defeating anything. The roadmap's own rule - "low-tier farming cannot replace boss progression" - had no mechanism enforcing it.
+
+#### A relic is not a rare drop
+
+A rare drop is a lottery ticket: kill things until the number comes up. That trains grinding, which is exactly what the roadmap forbids. So a Boss Relic Core is:
+
+- **Guaranteed** from its boss. The encounter is the cost, not the RNG.
+- **Unique** to that boss. No substituting an easier one.
+- **Never consumed.** It is proof, not currency.
+
+That last point is the important one. The relic is recorded in a permanent ledger, and research checks the ledger rather than spending the item. Consuming it would mean a player who researched one node is locked out of a second node needing the same relic - and would have to re-kill a unique boss that may never respawn.
+
+| Relic | Boss | Gates |
+|---|---|---|
+| Sky Core | Storm Roc | Stellar Engineering (also needs an orbital lab) |
+| Petrified Core | Elder Basilisk | Petrification Studies |
+| Ember Core | Ifrit Sultan | Ember Forge Mastery |
+| Brute Core | Karkadann Tyrant | reserved for heavy structural research |
+| Abyss Core | Leviathan | reserved for maritime research |
+
+Stellar Engineering is the roadmap's Star Builder / Dyson Sphere gate: it needs the relic **and** an orbiting satellite laboratory. The relic proves the encounter, the lab proves the infrastructure.
+
+#### Boss variants are separate prefabs
+
+`Boss_Basilisk`, `Boss_Ifrit`, `Boss_Roc` and `Boss_Karkadann` are built from instances of the existing creatures, so they inherit the authored mesh, colliders, AI and ordinary drops exactly - then get scaled up and given a health multiplier. The ordinary creatures are **completely untouched** and still spawn as before.
+
+Health is a multiplier applied at spawn rather than a separately authored number, so a boss and its common version cannot drift apart every time the base creature is retuned.
+
+#### Where the gate lives
+
+`ResearchNode.ScienceCost` is typed to `ScienceItem`, and widening it would have touched every node in the project. A relic requirement is also not really a cost - it is a facility-style prerequisite, the same shape as `requiresOrbitalLab`. So it reuses that gate and plugs into `GetFacilityBlockReason`, which **both** research entry points already funnel through, so the gate cannot be bypassed by the other path.
+
+#### The research UI now explains itself
+
+Worth calling out because it was a pre-existing hole: the orbital gate shipped in 11.13.0 was enforced in the manager but never surfaced in the UI. The button looked live and simply did nothing when pressed. Locked nodes now state the actual requirement - "Requires a Sky Core, recovered by defeating a Roc" - which is the whole difference between a designed gate and an apparent bug. This fixes the orbital gate's presentation too.
+
+#### Implementation note
+
+**The relic is granted in `OnDestroy`, not in an `Update` poll.** `Damageable.Die` calls `Destroy(gameObject)` in the same frame health reaches zero, so a polling check can miss the death entirely - the object is gone before the next tick. `OnDestroy` is the only hook guaranteed to run. It is guarded against scene unload and play-mode exit, since those destroy the object too and must not hand out a relic.
+
+#### Manual step in Unity
+
+1. **Tools -> Voxel Engine -> Voxel Engine Setup**.
+2. Click **88. Build Boss Relic Cores**.
+3. Boss variants appear in `Resources/Enemies` as `Boss_*` prefabs, ready to place or spawn.
+
+If it reports missing base creatures, run the enemy content steps first and re-run.
 
 ### [11.19.0-dev] Keep Them Alive
 

@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `11.19.0-dev`
-**Roadmap Version:** `11.19.0-dev`
+**Current Version:** `11.20.0-dev`
+**Roadmap Version:** `11.20.0-dev`
 **Date:** 2026-09-16
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,14 @@
 ---
 
 ## 0. Recently Done
+
+### 11.20.0-dev - Earn The Late Game
+- `BossRelic` (`BossRelicKind`, `BossRelicLedger`, `BossEncounter`) + relic-gated research + setup step 88. Enemy tiers, guaranteed boss relics, and a real progression wall in front of the late game.
+- **Balance rule:** a relic is GUARANTEED and UNIQUE, never a rare roll - the encounter is the cost, so low-tier farming cannot substitute for beating the boss.
+- **Design rule:** relics are never CONSUMED. They are recorded in a permanent ledger and research checks the ledger, so one relic can gate several nodes and a unique boss never has to be killed twice.
+- **Reuse rule:** the relic requirement is a facility-style gate on `GetFacilityBlockReason`, not a new `ScienceCost` type - both research entry points already funnel through it, so it cannot leak.
+- **Implementation note:** grant in `OnDestroy`, never an `Update` poll - `Damageable.Die` destroys the object the same frame, so polling can miss the death. Guard against scene unload.
+- Also fixed a pre-existing hole: the research UI never surfaced facility block reasons, so orbital-gated nodes looked live and silently did nothing.
 
 ### 11.19.0-dev - Keep Them Alive
 - `LivestockHusbandry` + `LivestockPen` + `LivestockPenHud`: food, water, shelter, health, breeding and population caps on the existing passive fauna. Setup step 87.
@@ -56,13 +64,6 @@
 - Base zones are inferred from logistic chest clusters at the drone port's own 48 m radius, so a circle means a zone the game actually serves.
 - Data gathering is split from painting (as with `OrbitalTrackingService`) and runs on a 0.5 s tick; symmetric edges emit from one end only.
 - Settings version 18 adds the `L` binding.
-
-### 11.15.0-dev - The Permanent Way
-- `RailTrack` / `RailNetwork` / `RailStation` / `RailTrain`: auto-connecting permanent way, hash-grid registry, A* pathfinding, named stations with cargo holds, and scheduled trains.
-- **Core design:** a train is a scheduled agent walking a graph, not a vehicle on a surface - so it keeps running while its chunks are unloaded, which is the specific reason bulk haul belongs on rails.
-- Gradient and degree limits enforced in the graph itself, so a too-steep or over-connected cell simply does not join rather than failing later.
-- Stations own the cargo hold and are matched by name, so a railway runs asynchronously and survives a station being rebuilt.
-- Authored by setup step 85. Closes the last open item in the section 6.4 content list.
 
 ### Era Transition Feel
 
@@ -1587,7 +1588,12 @@ Statuses are evidence-based and move forward only after code/content review and 
     - Airtight variants seal rooms for pressurization (doors seal only while fully closed).
     - Vents pump oxygen in or out of sealed spaces (PRESSURISE / DEPRESSURISE / IDLE).
 
-11. **Mythical Enemies & Bosses**
+11. **Mythical Enemies & Bosses** - ~~enemy tier determines loot tier~~ ~~named bosses guarantee unique Boss Relic Cores~~ ~~boss relics required for late-game research including Star Builder and Dyson Sphere~~ *(11.20.0-dev)* - **PROGRESSION COMPLETE, BESTIARY ONGOING**
+    - Creatures already shipped: Basilisk, Ghoul, Griffin, Ifrit, Karkadann, Manticore, Roc. 11.20.0 added the progression layer: `BossRelicKind`, `BossRelicLedger`, `BossEncounter`, relic-gated research, setup step 88.
+    - **Balance rule:** relics are guaranteed and unique per boss, never a rare roll. This is the mechanism enforcing "low-tier farming cannot replace boss progression".
+    - **Design rule:** relics are NEVER consumed - a permanent ledger records the encounter, so one relic gates several nodes and a unique boss is never killed twice.
+    - **Implementation note:** grant relics in `OnDestroy`; `Damageable.Die` destroys the object the same frame health hits zero.
+    - Open: the Leviathan and Cockatrice encounters (Abyss Core is authored but has no boss yet), automated ruin drones, raider vehicles, and richer boss mechanics (formation disruption, telegraphed phases, biome-specific navigation).
     - **Aerial:** Griffins and Rocs disrupt formations, carry targets, and create wind hazards.
     - **Brutes:** Manticores combine venomous ranged pressure with aggression; Karkadanns use armored charges and frontal defense.
     - **Ambushers:** Ghouls burrow from terrain and regenerate from fallen creatures.
