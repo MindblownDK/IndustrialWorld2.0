@@ -155,7 +155,7 @@ namespace VoxelEngine.Cosmos
         private static void AddSun(CosmicRegistry registry)
         {
             if (registry.Sun == null) return;
-            string name = registry.Sun.settings != null ? registry.Sun.settings.name : "Sun";
+            string name = registry.Sun.settings != null ? registry.Sun.settings.displayName : "Sun";
             _entries.Add(new MapEntry(name, MapEntryKind.Sun, MapMotionState.Landed,
                 registry.Sun.positionKmD, null, "", double.NaN, double.NaN, double.NaN,
                 double.NaN, double.NaN, 0d, 0d, null, true));
@@ -186,7 +186,7 @@ namespace VoxelEngine.Cosmos
 
                 var parent = body.parentBody;
                 string parentName = parent != null ? parent.DisplayName
-                    : (registry.Sun != null && registry.Sun.settings != null ? registry.Sun.settings.name : "Sun");
+                    : (registry.Sun != null && registry.Sun.settings != null ? registry.Sun.settings.displayName : "Sun");
 
                 double radiusKm = 0d;
                 if (registry.SceneBodies.TryGetValue(body, out var scene) && scene != null)

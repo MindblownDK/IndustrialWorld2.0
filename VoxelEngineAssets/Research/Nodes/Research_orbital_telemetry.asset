@@ -1,0 +1,36 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe52eb4685f86c44d967d9cd3e4bd91a, type: 3}
+  m_Name: Research_orbital_telemetry
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Research.ResearchNode
+  nodeId: orbital_telemetry
+  displayName: Orbital Telemetry
+  description: Tracks every named construct, planet and moon in the system. Unlocks
+    the Orbital Map, a personal instrument worn in a Life Support slot.
+  iconTint: {r: 1, g: 1, b: 1, a: 1}
+  category: 0
+  subCategory: 0
+  tier: 4
+  column: 0
+  eraLabel: 
+  prerequisites: []
+  requiresOrbitalLab: 0
+  researchSeconds: 90
+  cost:
+  - pack: {fileID: 11400000, guid: 080d81aee84fd5b4486b15264d31da24, type: 2}
+    count: 12
+  unlocksRecipes:
+  - {fileID: 11400000, guid: c55209e8d1d05f3498de84ac53ade54b, type: 2}
+  upgradeKind: 0
+  upgradePerRankAmount: 0
+  maxRanks: 1
+  costScalesWithRank: 0

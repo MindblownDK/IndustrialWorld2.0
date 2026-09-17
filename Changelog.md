@@ -1,9 +1,40 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `11.13.0-dev`
+**Current Version:** `11.13.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [11.13.1-dev] Compile Fixes And Conventional Keys
+
+**Type:** PATCH - compile fixes and a keybind correction. No save impact.
+
+**GitHub title:** `[11.13.1-dev] Compile fixes and conventional keys`
+
+#### Fixed
+
+- **`OrbitalTrackingService.cs` (158, 189) CS1061 - `SunSettings` has no `name`.** `SunSettings` is a plain serializable class, not a `ScriptableObject`, so it never had the implicit `.name` that Unity objects carry. The correct field is `displayName`. Both the sun's own map entry and the fallback parent name for planets now read it.
+
+- **`GridIdentityHud.cs` (187-188) and `OrbitalMapScreen.cs` (228-229) CS0104 - ambiguous `Cursor`.** `UnityEngine.UIElements` declares its own `Cursor` type, so in a file that pulls in both namespaces the bare name is ambiguous.
+
+  Fixed with `using Cursor = UnityEngine.Cursor;` rather than fully-qualifying each use site. This is not an arbitrary choice - it is the convention the codebase already uses: `InGamePauseMenu.cs` has had exactly this alias for the same reason. Matching it keeps the two files consistent with the existing pattern instead of introducing a second style.
+
+#### Changed - keybinds
+
+`N` is the conventional rename key and the construct registry is fundamentally a rename dialog, so the two have been swapped:
+
+| Action | Was | Now |
+|---|---|---|
+| Construct registry (rename/classify) | `U` | **`N`**, and **`F2`** |
+| Warp Drive | `N` | **`U`** |
+
+`F2` opens the registry as well. It is deliberately a fixed convention rather than a second rebindable binding: F2-to-rename is a platform idiom on Windows and in most file managers and editors, not a user preference, so it should always work regardless of what the primary key is bound to.
+
+Settings version bumped to 17 with a targeted migration. Profiles still sitting on the old defaults move to the new ones; a player who deliberately rebound either key keeps their choice, since the migration only rewrites a binding that still holds the exact previous default.
+
+#### Manual step in Unity
+
+None.
 
 ### [11.13.0-dev] Name Your Fleet, Own The Sky
 

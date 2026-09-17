@@ -21,6 +21,9 @@ using VoxelEngine.GridSystem;
 using VoxelEngine.Items;
 using VoxelEngine.Settings;
 using InputAction = VoxelEngine.Settings.InputAction;
+// UnityEngine.UIElements also declares a Cursor type, so the bare name is
+// ambiguous in this file. Alias the engine one we actually mean.
+using Cursor = UnityEngine.Cursor;
 using T = VoxelEngine.UI.UITheme;
 
 namespace VoxelEngine.UI

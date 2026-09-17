@@ -8,7 +8,7 @@
 // and orbit commitment on one panel makes that progression obvious instead of
 // scattering it across three different blocks.
 //
-// Opened with U while seated in a cockpit (rebindable).
+// Opened with N (rebindable) or F2 while seated in a cockpit.
 
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -16,6 +16,9 @@ using VoxelEngine.Cosmos;
 using VoxelEngine.GridSystem;
 using VoxelEngine.Settings;
 using InputAction = VoxelEngine.Settings.InputAction;
+// UnityEngine.UIElements also declares a Cursor type, so the bare name is
+// ambiguous in this file. Alias the engine one we actually mean.
+using Cursor = UnityEngine.Cursor;
 using T = VoxelEngine.UI.UITheme;
 
 namespace VoxelEngine.UI
@@ -126,7 +129,7 @@ namespace VoxelEngine.UI
             _statusLabel.style.color = new StyleColor(T.AccentAmber);
             card.Add(_statusLabel);
 
-            var close = new Button(Close) { text = "CLOSE  (U)" };
+            var close = new Button(Close) { text = "CLOSE  (N)" };
             close.style.marginTop = 12;
             close.style.height = 24;
             close.style.fontSize = 9;
@@ -164,7 +167,10 @@ namespace VoxelEngine.UI
             var seat = GridCockpit.ActiveControlSeat;
             bool seated = seat != null && GridCockpit.ActiveControlPilot != null;
 
-            bool pressed = GameSettings.WasPressed(InputAction.ConstructRegistry);
+            // F2 is the near-universal rename key on Windows, so it always opens the
+            // registry alongside the rebindable action. Kept as a fixed convention
+            // rather than a second binding: it is a platform idiom, not a preference.
+            bool pressed = GameSettings.WasPressed(InputAction.ConstructRegistry) || F2Pressed();
             if (_open && pressed) Close();
             else if (pressed && seated && !UIState.IsBlocking) Open(seat.Grid);
 
@@ -175,6 +181,16 @@ namespace VoxelEngine.UI
             }
 
             if (_open) Refresh();
+        }
+
+        private static bool F2Pressed()
+        {
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
+            var kb = UnityEngine.InputSystem.Keyboard.current;
+            return kb != null && kb.f2Key.wasPressedThisFrame;
+#else
+            return Input.GetKeyDown(KeyCode.F2);
+#endif
         }
 
         public static void Open(GridEntity grid)

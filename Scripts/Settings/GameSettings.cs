@@ -56,7 +56,7 @@ namespace VoxelEngine.Settings
 
         // Bump this when default keybinds change to force a one-time migration
         // that fills in missing or invalid bindings on old saves.
-        private const int    CURRENT_VERSION = 16;
+        private const int    CURRENT_VERSION = 17;
 
         // ----- defaults -----
         public const float DEFAULT_FOV       = 75f;
@@ -161,10 +161,10 @@ namespace VoxelEngine.Settings
             InputAction.Hotbar0         => "Digit0",
             InputAction.EnterCockpit    => "H",
             InputAction.ExitCockpit     => "F",
-            InputAction.WarpDrive       => "N",
+            InputAction.WarpDrive       => "U",
             InputAction.TrajectoryCamera => "J",
             InputAction.OrbitalMap      => "M",
-            InputAction.ConstructRegistry => "U",
+            InputAction.ConstructRegistry => "N",
             InputAction.GridInspector   => "K",
             _ => "None"
         };
@@ -203,6 +203,16 @@ namespace VoxelEngine.Settings
             // values such as Off/15s/1m/2m are preserved.
             int autosave = PlayerPrefs.GetInt(K_AUTOSAVE, 30);
             if (autosave == 30) PlayerPrefs.SetInt(K_AUTOSAVE, DEFAULT_AUTOSAVE);
+
+            // v17: the construct registry took N (the conventional rename key) and the
+            // warp drive moved to U. Only migrate profiles still sitting on the old
+            // defaults - a player who deliberately rebound either key keeps their choice.
+            string warp = PlayerPrefs.GetString(K_KEY_PREFIX + InputAction.WarpDrive, "");
+            if (string.IsNullOrEmpty(warp) || warp == "N")
+                PlayerPrefs.SetString(K_KEY_PREFIX + InputAction.WarpDrive, "U");
+            string registry = PlayerPrefs.GetString(K_KEY_PREFIX + InputAction.ConstructRegistry, "");
+            if (string.IsNullOrEmpty(registry) || registry == "U")
+                PlayerPrefs.SetString(K_KEY_PREFIX + InputAction.ConstructRegistry, "N");
 
             PlayerPrefs.SetInt(K_VERSION, CURRENT_VERSION);
             PlayerPrefs.Save();
