@@ -1,9 +1,51 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `11.5.2-dev`
+**Current Version:** `11.6.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [11.6.0-dev] The Buffer Chest
+
+**Type:** MINOR — a new block and a new chest role. Save-compatible: the new lock mode and the new saved field are additive, and every existing chest keeps the role and the ports it already had.
+
+**GitHub title:** `[11.6.0-dev] The buffer chest`
+
+#### Why this round
+
+The Logistic Chests line in section 6.4 had one item still open: the Buffer Chest, the hybrid of the other two. A Provider only gives and a Requester only takes, so a remote outpost had to reach across the whole base for every single item it consumed. A Buffer holds local working stock: it keeps itself topped up from the providers, and other requesters draw from it.
+
+#### The third role
+
+`PortLockMode` gains `Buffer`. It is the first role that is on the wireless network without having pinned faces, and that distinction is now explicit in the code rather than implied:
+
+| | Wireless network | Item ports |
+|---|---|---|
+| **Provider** | hands stock OUT | INPUT — pinned |
+| **Requester** | receives stock IN | OUTPUT — pinned |
+| **Buffer** | both — receives from providers, supplies requesters | **free** — not pinned |
+
+`Chest.IsDirectionPinned` is the new test for "are the faces locked", and it is false for a Buffer. Everything that used to read `portLock != Free` as "pinned" now asks this instead: `EnforcePortLock` leaves a Buffer's directions alone, the panel gives it the ordinary three-way face pill rather than the ON/OFF switch, and the port capability flags advertise both halves. A Buffer legitimately needs an input and an output, so pinning it would have made it useless.
+
+`SuppliesNetwork` and `RequestsFromNetwork` replace the old two-way switch in the network's registration: a Buffer registers in both lists.
+
+#### The stock target, and why it exists
+
+A Buffer that requested without limit would simply drain every Provider it could reach, which is the failure mode this kind of block usually has. So a Buffer requests only up to `bufferStockTarget` (default 64) of each item, editable per chest in the panel. `Chest.ShortfallOf` returns what a chest still wants — unbounded for a Requester, the remaining gap to the target for a Buffer — and the network's transfer is capped by it.
+
+Two buffers are also never allowed to stock each other. Without that rule a pair of buffers both requesting the same item would pass one stack back and forth forever, and a chain of them would drain the real providers unevenly. Buffers are stocked by true Providers only. The "in range" readout applies the same rule, so the number shown matches what will actually arrive.
+
+#### Persistence
+
+`bufferStockTarget` is player-editable at runtime, so it rides along on the port snapshot next to the request list. It is additive and a save written before this round has no value for it, which reads as zero and is explicitly ignored so the chest keeps its authored default rather than being silently zeroed.
+
+#### Manual step in Unity
+
+1. Open **Tools -> Voxel Engine -> Voxel Engine Setup**.
+2. Click **78. Build the Logistic Chests**. It now authors three variants; the two existing ones are untouched beyond the usual non-destructive corrections.
+3. The Buffer Chest is 36 slots, crafted at the Crafting Bench from 6 iron ingots, 4 copper ingots and 4 planks.
+4. Place one, open it, click ITEM PORTS. It shows a violet BUFFER banner, a KEEP IN STOCK field, and a REQUESTS list.
+5. Add a request and set the target. The chest fills to that number from providers in range and stops; other requesters can then draw from it.
 
 ### [11.5.2-dev] The Item Ports Panel Opens Again
 

@@ -11,15 +11,22 @@ using Object = UnityEngine.Object;
 namespace IndustrialWorld.EditorTools
 {
     /// <summary>
-    /// Step 78 (11.2.0-dev): close the storage line with the two port-locked chests.
+    /// Step 78 (11.2.0-dev, extended 11.6.0-dev): the logistic chests.
     ///
     /// 11.1.0-dev shipped the Wooden Crate / Iron Chest / Steel Chest tiers and left the
     /// Provider/Requester end of the roadmap's storage progression open. This step authors
-    /// those two blocks on the SAME <see cref="Chest"/> component, using the new
+    /// those blocks on the SAME <see cref="Chest"/> component, using the
     /// <c>portLock</c> field. The ports mirror the wireless role: a Provider is FED by pipes
     /// (faces pinned to Input) and supplies the network, while a Requester is filled by the
     /// network and FEEDS pipes (faces pinned to Output). Everything else — the panel, the filters, the
     /// belt/pipe plumbing, the save/restore — is the chest the game already knows.
+    ///
+    /// 11.6.0-dev adds the third variant the roadmap asked for: the Buffer Chest, which is
+    /// both roles at once. It keeps itself stocked from providers up to a per-item target and
+    /// lets other requesters draw from it, so a remote outpost holds its own working stock
+    /// instead of reaching across the base for every item. Its faces are deliberately NOT
+    /// pinned — a buffer needs both an input and an output — so it is seeded with one of each
+    /// and the runtime never rewrites its directions.
     ///
     /// Non-destructive by construction: missing assets are created; an existing prefab,
     /// block item or recipe is only corrected where it cannot be right (missing Chest
@@ -110,6 +117,19 @@ namespace IndustrialWorld.EditorTools
                         station      = StationTier.CraftingBench,
                         craftSeconds = 3f,
                         inputs       = new[] { ((ItemDefinition)ironIngot, 4), ((ItemDefinition)copperIngot, 2), ((ItemDefinition)plank, 2) }
+                    },
+                    new Variant
+                    {
+                        assetName    = "BufferChest",
+                        displayName  = "Buffer Chest",
+                        size         = 36,
+                        lockMode     = PortLockMode.Buffer,
+                        tint         = new Color(0.55f, 0.45f, 0.85f),
+                        description  = "36-slot hybrid store. It keeps itself topped up to a stock target from providers, " +
+                                       "and supplies requesters in range. Its faces are not pinned, so pipes can both fill and drain it.",
+                        station      = StationTier.CraftingBench,
+                        craftSeconds = 5f,
+                        inputs       = new[] { ((ItemDefinition)ironIngot, 6), ((ItemDefinition)copperIngot, 4), ((ItemDefinition)plank, 4) }
                     }
                 };
 
@@ -137,7 +157,8 @@ namespace IndustrialWorld.EditorTools
                 EditorUtility.DisplayDialog("Logistic Chests",
                     "Logistic chests ready.\n\n" +
                     "  Provider Chest   18 slots   — ports INPUT (pipes fill it, network draws from it)\n" +
-                    "  Requester Chest  18 slots   — ports OUTPUT (network fills it, pipes draw from it)\n\n" +
+                    "  Requester Chest  18 slots   — ports OUTPUT (network fills it, pipes draw from it)\n" +
+                    "  Buffer Chest     36 slots   — both roles, faces free (tops up to its stock target)\n\n" +
                     "Both craft at the Crafting Bench from iron ingot x4 + copper ingot x2 + planks x2.\n\n" +
                     "The existing chests and tiers were left untouched. Missing content was created, " +
                     "broken links were repaired, authored values were never reset. See the console for every change.", "OK");
@@ -255,6 +276,10 @@ namespace IndustrialWorld.EditorTools
             cfg.EnsureAllFaces();
             if (go.GetComponent<ItemPortRouting>() == null) go.AddComponent<ItemPortRouting>();
 
+            // A Buffer is on the network but its faces are NOT pinned — it needs both an
+            // input and an output to be useful. Seed one of each and pin nothing.
+            if (v.lockMode == PortLockMode.Buffer) return SeedBufferFaces(cfg, v);
+
             // Mirror of the wireless role: a Provider is FED by pipes (input ports), a
             // Requester FEEDS them (output ports). Kept in step with Chest.PinnedDirection.
             var pinned = v.lockMode == PortLockMode.Provider ? PortDirection.Input : PortDirection.Output;
@@ -282,6 +307,39 @@ namespace IndustrialWorld.EditorTools
                     Debug.Log("[Setup 78] " + v.assetName + " face " + cfg.ports[i].face + " pinned to " + pinned + ".");
                 }
             }
+            return touched;
+        }
+
+        /// <summary>
+        /// Seed a Buffer with one input face and one output face, and never touch a layout
+        /// the player has already authored. Unlike a pinned variant nothing is rewritten:
+        /// a Buffer may legitimately carry any mix of directions.
+        /// </summary>
+        private static bool SeedBufferFaces(PortConfig cfg, Variant v)
+        {
+            bool anyActive = false;
+            for (int i = 0; i < cfg.ports.Length; i++)
+                if (cfg.ports[i].enabled && cfg.ports[i].direction != PortDirection.None) { anyActive = true; break; }
+            if (anyActive) return false;
+
+            bool touched = false;
+            for (int i = 0; i < cfg.ports.Length; i++)
+            {
+                if (cfg.ports[i].face == CubeFace.PosX)
+                {
+                    cfg.ports[i].enabled = true;
+                    cfg.ports[i].direction = PortDirection.Input;
+                    touched = true;
+                }
+                else if (cfg.ports[i].face == CubeFace.NegX)
+                {
+                    cfg.ports[i].enabled = true;
+                    cfg.ports[i].direction = PortDirection.Output;
+                    touched = true;
+                }
+            }
+            if (touched)
+                Debug.Log("[Setup 78] " + v.assetName + " had no active face; seeded +X as Input and -X as Output.");
             return touched;
         }
 

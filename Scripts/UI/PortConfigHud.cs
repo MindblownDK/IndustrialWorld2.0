@@ -48,6 +48,7 @@ namespace VoxelEngine.UI
         private static readonly Color ColNone   = new(0.20f, 0.22f, 0.28f);
         private static readonly Color ColInput  = new(0.18f, 0.55f, 0.90f);  // cyan-ish "IN"
         private static readonly Color ColOutput = new(0.92f, 0.55f, 0.12f);  // amber-ish "OUT"
+        private static readonly Color ColBuffer = new(0.55f, 0.45f, 0.85f);  // violet: both roles at once
 
         private static readonly string[] AllNetworkTypeOptions =
             { "Any", "Power", "Data", "Fluid", "Gas" };
@@ -422,11 +423,14 @@ namespace VoxelEngine.UI
                 ? "Click a face to cycle None → Input → Output.  " +
                   "OUTPUT pushes items into adjacent pipes; INPUT accepts them.  " +
                   "Pick the container and add item filters per face."
-                : lockMode == PortLockMode.Provider
-                    ? "Pipes and belts FILL this chest; the network hands its stock out wirelessly. " +
-                      "Click a face to switch its INPUT on or off, then filter what it will accept."
-                    : "The network FILLS this chest wirelessly; these ports feed the pipes downstream. " +
-                      "Click a face to switch its OUTPUT on or off, then filter what leaves through it.");
+                : lockMode == PortLockMode.Buffer
+                    ? "This chest both stocks itself from the network and supplies it. Its faces are NOT pinned: " +
+                      "click a face to cycle None → Input → Output, exactly like a free chest."
+                    : lockMode == PortLockMode.Provider
+                        ? "Pipes and belts FILL this chest; the network hands its stock out wirelessly. " +
+                          "Click a face to switch its INPUT on or off, then filter what it will accept."
+                        : "The network FILLS this chest wirelessly; these ports feed the pipes downstream. " +
+                          "Click a face to switch its OUTPUT on or off, then filter what leaves through it.");
             hint.style.marginTop = 10;
             root.Add(hint);
 
@@ -447,7 +451,8 @@ namespace VoxelEngine.UI
             if (mode == PortLockMode.Free) return null;
 
             bool provider = mode == PortLockMode.Provider;
-            Color tint = provider ? ColOutput : ColInput;
+            bool buffer   = mode == PortLockMode.Buffer;
+            Color tint = buffer ? ColBuffer : (provider ? ColOutput : ColInput);
 
             var row = new VisualElement();
             row.style.flexDirection = FlexDirection.Row;
@@ -460,7 +465,7 @@ namespace VoxelEngine.UI
             T.Border(row, 1, new Color(tint.r, tint.g, tint.b, 0.45f));
             row.pickingMode = PickingMode.Ignore;
 
-            var badge = new Label(provider ? "PROVIDER" : "REQUESTER");
+            var badge = new Label(buffer ? "BUFFER" : provider ? "PROVIDER" : "REQUESTER");
             badge.style.color = new StyleColor(Color.white);
             badge.style.fontSize = 10;
             badge.style.unityFontStyleAndWeight = FontStyle.Bold;
@@ -472,9 +477,11 @@ namespace VoxelEngine.UI
             T.Radius(badge, 5f);
             row.Add(badge);
 
-            var text = new Label(provider
-                ? "Ports are INPUTS — pipes and belts fill this chest, and the network hands its stock out wirelessly."
-                : "Ports are OUTPUTS — the network fills this chest wirelessly, and it feeds the pipes downstream.");
+            var text = new Label(buffer
+                ? "Both roles at once — it keeps itself stocked from providers and supplies other requesters. Its faces stay free, so set each one yourself."
+                : provider
+                    ? "Ports are INPUTS — pipes and belts fill this chest, and the network hands its stock out wirelessly."
+                    : "Ports are OUTPUTS — the network fills this chest wirelessly, and it feeds the pipes downstream.");
             text.style.color = new StyleColor(T.TextMuted);
             text.style.fontSize = 11;
             text.style.flexGrow = 1;
@@ -496,8 +503,10 @@ namespace VoxelEngine.UI
             if (chest == null || chest.portLock == PortLockMode.Free) return null;
 
             var net = LogisticsNetwork.Instance;
-            bool requester = chest.portLock == PortLockMode.Requester;
-            Color tint = requester ? ColInput : ColOutput;
+            bool buffer    = chest.portLock == PortLockMode.Buffer;
+            // A Buffer shows the request list too — it is a requester as well as a provider.
+            bool requester = chest.portLock == PortLockMode.Requester || buffer;
+            Color tint = buffer ? ColBuffer : (requester ? ColInput : ColOutput);
 
             var box = new VisualElement();
             box.style.marginTop = 8;
@@ -550,6 +559,50 @@ namespace VoxelEngine.UI
                 return box;
             }
 
+            if (buffer)
+            {
+                var bufferNote = T.Muted("This chest keeps itself topped up to its stock target and lets other " +
+                                         "requesters draw from it. It is never stocked by another buffer.");
+                bufferNote.style.marginTop = 6;
+                bufferNote.style.whiteSpace = WhiteSpace.Normal;
+                box.Add(bufferNote);
+
+                // Stock target — the number that stops a buffer draining its providers.
+                var targetRow = new VisualElement();
+                targetRow.style.flexDirection = FlexDirection.Row;
+                targetRow.style.alignItems = Align.Center;
+                targetRow.style.marginTop = 8;
+
+                var targetLabel = new Label("KEEP IN STOCK");
+                targetLabel.style.color = new StyleColor(T.TextPrimary);
+                targetLabel.style.fontSize = 9;
+                targetLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+                targetLabel.style.letterSpacing = 1f;
+                targetLabel.style.flexGrow = 1;
+                targetLabel.pickingMode = PickingMode.Ignore;
+                targetRow.Add(targetLabel);
+
+                var targetField = new IntegerField { value = chest.bufferStockTarget };
+                targetField.style.width = 70;
+                targetField.style.fontSize = 11;
+                targetField.RegisterValueChangedCallback(e =>
+                {
+                    chest.bufferStockTarget = Mathf.Max(1, e.newValue);
+                    if (chest.bufferStockTarget != e.newValue)
+                        targetField.SetValueWithoutNotify(chest.bufferStockTarget);
+                });
+                targetRow.Add(targetField);
+
+                var perItem = new Label("per item");
+                perItem.style.color = new StyleColor(T.TextMuted);
+                perItem.style.fontSize = 9;
+                perItem.style.marginLeft = 6;
+                perItem.pickingMode = PickingMode.Ignore;
+                targetRow.Add(perItem);
+
+                box.Add(targetRow);
+            }
+
             // ── A Requester's wireless request list ────────────────────────
             // Separate from the port filters by design: the ports decide what LEAVES this
             // chest down a pipe, this decides what the network DELIVERS into it.
@@ -568,7 +621,9 @@ namespace VoxelEngine.UI
             reqHead.Add(reqTitle);
             box.Add(reqHead);
 
-            var reqNote = T.Muted("What the network delivers here. Independent of the port filters below.");
+            var reqNote = T.Muted(buffer
+                ? "What the network keeps stocked here, up to the target above. Independent of the port filters below."
+                : "What the network delivers here. Independent of the port filters below.");
             reqNote.style.fontSize = 9;
             reqNote.style.whiteSpace = WhiteSpace.Normal;
             box.Add(reqNote);
@@ -774,10 +829,12 @@ namespace VoxelEngine.UI
                 pill.style.backgroundColor = new StyleColor(new Color(0.15f, 0.55f, 0.50f, 0.75f));
                 T.Border(pill, 1, new Color(0.20f, 0.85f, 0.75f, 0.70f));
             }
-            else if (lockMode != PortLockMode.Free)
+            else if (lockMode == PortLockMode.Provider || lockMode == PortLockMode.Requester)
             {
-                // Locked host: the direction is not the player's to choose, so the pill
-                // is a clean ON/OFF switch that always writes the pinned direction.
+                // Direction-pinned host: the direction is not the player's to choose, so the
+                // pill is a clean ON/OFF switch that always writes the pinned direction.
+                // A Buffer is deliberately NOT here — it is on the network but its faces
+                // cycle freely, so it falls through to the ordinary three-way pill below.
                 var pinned = lockMode == PortLockMode.Provider ? PortDirection.Input : PortDirection.Output;
                 bool active = enabled && dir == pinned;
                 pill.text = active

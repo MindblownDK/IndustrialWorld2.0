@@ -83,11 +83,11 @@ namespace VoxelEngine.Transport
         {
             if (chest == null) return;
             Unregister(chest);
-            switch (chest.portLock)
-            {
-                case PortLockMode.Provider:  _providers.Add(chest);  break;
-                case PortLockMode.Requester: _requesters.Add(chest); break;
-            }
+            // A Buffer plays both parts, so it lands in BOTH lists. The fulfilment pass
+            // guards against the obvious consequence (buffers feeding each other in circles)
+            // by refusing buffer-to-buffer transfers.
+            if (chest.SuppliesNetwork)      _providers.Add(chest);
+            if (chest.RequestsFromNetwork)  _requesters.Add(chest);
         }
 
         public void Unregister(Chest chest)
@@ -141,10 +141,15 @@ namespace VoxelEngine.Transport
                 if (item == null) continue;
                 if (!requester.container.HasSpace(item, 1)) continue;
 
+                // A plain Requester pulls without limit; a Buffer only tops up to its stock
+                // target, so it cannot drain the providers it also supplies from.
+                int shortfall = requester.ShortfallOf(item);
+                if (shortfall <= 0) continue;
+
                 var provider = FindNearestProviderWith(requester, item);
                 if (provider == null) continue;
 
-                moved += Transfer(provider, requester, item);
+                moved += Transfer(provider, requester, item, shortfall);
             }
             return moved;
         }
@@ -164,6 +169,13 @@ namespace VoxelEngine.Transport
                 if (provider == null || provider.container == null) continue;
                 if (provider == requester) continue;
 
+                // A Buffer must never be supplied BY another Buffer: two buffers each
+                // wanting the same item would otherwise pass one stack back and forth
+                // forever, and a chain of them would drain the real providers unevenly.
+                // Buffers are stocked by true Providers only.
+                if (provider.portLock == PortLockMode.Buffer &&
+                    requester.portLock == PortLockMode.Buffer) continue;
+
                 float sqr = (provider.transform.position - origin).sqrMagnitude;
                 if (sqr > bestSqr) continue;
                 if (CountOf(provider.container, item) <= 0) continue;
@@ -175,11 +187,12 @@ namespace VoxelEngine.Transport
         }
 
         /// <summary>
-        /// Move up to <see cref="MaxItemsPerTransfer"/> of one item. The removal is driven by
+        /// Move up to <see cref="MaxItemsPerTransfer"/> of one item, and never more than
+        /// <paramref name="limit"/> (the destination's remaining shortfall). The removal is driven by
         /// what the destination actually accepted, so a full Requester can never make stock
         /// disappear from the Provider.
         /// </summary>
-        private static int Transfer(Chest from, Chest to, ItemDefinition item)
+        private static int Transfer(Chest from, Chest to, ItemDefinition item, int limit)
         {
             // Move the Provider's OWN item instance, not the definition the Requester asked
             // with. The container's Remove compares by reference, so handing it a different
@@ -191,7 +204,7 @@ namespace VoxelEngine.Transport
             int available = CountOf(from.container, stocked);
             if (available <= 0) return 0;
 
-            int want = Mathf.Min(available, MaxItemsPerTransfer);
+            int want = Mathf.Min(Mathf.Min(available, MaxItemsPerTransfer), limit);
             if (want <= 0) return 0;
 
             item = stocked;
@@ -268,6 +281,8 @@ namespace VoxelEngine.Transport
             foreach (var provider in _providers)
             {
                 if (provider == null || provider == requester) continue;
+                if (provider.portLock == PortLockMode.Buffer &&
+                    requester.portLock == PortLockMode.Buffer) continue;   // matches FindNearestProviderWith
                 if ((provider.transform.position - origin).sqrMagnitude > rangeSqr) continue;
                 total += CountOf(provider.container, item);
             }

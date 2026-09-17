@@ -23,9 +23,15 @@ namespace VoxelEngine.Building
         public int size = 30;
         [Tooltip("Display name shown above the panel.")]
         public string displayName = "Chest";
-        [Tooltip("Free: faces cycle None/Input/Output. Provider: every active face outputs. " +
-                 "Requester: every active face inputs. Locked chests only expose ON/OFF per face.")]
+        [Tooltip("Free: faces cycle None/Input/Output. Provider: pipes fill it, the network " +
+                 "empties it. Requester: the network fills it, pipes empty it. Buffer: both, " +
+                 "and its faces stay free. Provider/Requester expose only ON/OFF per face.")]
         public PortLockMode portLock = PortLockMode.Free;
+
+        [Tooltip("Buffer only: how many of each requested item to keep in stock. The network " +
+                 "tops the buffer up to this number and no further, so a buffer cannot drain " +
+                 "the providers it shares a network with.")]
+        [Min(1)] public int bufferStockTarget = 64;
 
         public ItemContainer container;
 
@@ -42,6 +48,34 @@ namespace VoxelEngine.Building
         public IReadOnlyList<ItemDefinition> Requests
         {
             get { _requests ??= new List<ItemDefinition>(); return _requests; }
+        }
+
+        /// <summary>
+        /// How many of <paramref name="item"/> this chest still wants from the network.
+        /// A Requester pulls without limit (int.MaxValue, capped per pass by the network);
+        /// a Buffer only tops up to <see cref="bufferStockTarget"/>, which is what stops it
+        /// from emptying the providers it also supplies from.
+        /// Zero means the chest is satisfied and the network should skip it.
+        /// </summary>
+        public int ShortfallOf(ItemDefinition item)
+        {
+            if (item == null || container == null) return 0;
+            if (!RequestsFromNetwork) return 0;
+
+            bool requested = false;
+            foreach (var r in Requests)
+                if (ItemIdentity.Same(r, item)) { requested = true; break; }
+            if (!requested) return 0;
+
+            if (portLock != PortLockMode.Buffer) return int.MaxValue;
+
+            int held = 0;
+            for (int i = 0; i < container.Size; i++)
+            {
+                var slot = container.GetSlot(i);
+                if (!slot.IsEmpty && ItemIdentity.Same(slot.item, item)) held += slot.count;
+            }
+            return Mathf.Max(0, bufferStockTarget - held);
         }
 
         /// <summary>Add an item to the wireless request list. Duplicates are ignored.</summary>
@@ -84,8 +118,10 @@ namespace VoxelEngine.Building
             // advertises only the half its PORT role allows, which is the opposite of its
             // wireless role: a Provider is FED by pipes (input) and supplies the network
             // wirelessly; a Requester is filled by the network and FEEDS pipes (output).
+            // A Buffer is both halves at once, so it advertises both.
             bool canIn  = portLock != PortLockMode.Requester;
             bool canOut = portLock != PortLockMode.Provider;
+            if (portLock == PortLockMode.Buffer) { canIn = true; canOut = true; }
             _portContainers ??= new ItemPortContainer[1];
             _portContainers[0] = new ItemPortContainer("Storage", container, canIn, canOut);
             return _portContainers;
@@ -103,13 +139,33 @@ namespace VoxelEngine.Building
             portLock == PortLockMode.Provider ? PortDirection.Input : PortDirection.Output;
 
         /// <summary>
+        /// True when the faces are actually pinned to one direction. A Buffer takes part in
+        /// the wireless network but still needs both halves of its ports, so it is locked in
+        /// role yet free in direction — every direction query must ask this first rather than
+        /// assuming "portLock != Free" means "pinned".
+        /// </summary>
+        public bool IsDirectionPinned =>
+            portLock == PortLockMode.Provider || portLock == PortLockMode.Requester;
+
+        /// <summary>True when this chest takes part in the wireless logistics network.</summary>
+        public bool IsOnLogisticsNetwork => portLock != PortLockMode.Free;
+
+        /// <summary>True when the network may draw stock OUT of this chest.</summary>
+        public bool SuppliesNetwork =>
+            portLock == PortLockMode.Provider || portLock == PortLockMode.Buffer;
+
+        /// <summary>True when the network keeps this chest stocked against a request list.</summary>
+        public bool RequestsFromNetwork =>
+            portLock == PortLockMode.Requester || portLock == PortLockMode.Buffer;
+
+        /// <summary>
         /// Pin every face to the locked direction. An OFF face stays off; an active face
         /// is rewritten to Output (Provider) or Input (Requester). A Free chest is a no-op,
         /// so calling this unconditionally is always safe.
         /// </summary>
         public void EnforcePortLock()
         {
-            if (portLock == PortLockMode.Free) return;
+            if (!IsDirectionPinned) return;   // Free and Buffer both keep free directions
             EnsureRefs();
             if (_ports == null) return;
             var pinned = PinnedDirection;
@@ -131,6 +187,7 @@ namespace VoxelEngine.Building
         // ── IInventoryInterface (legacy pipe API) ───────────────────────────
         // Mirrors GetPortContainers: a Provider only ACCEPTS from pipes (the network empties
         // it wirelessly), a Requester only FEEDS them (the network fills it wirelessly).
+        // A Buffer is exempt from both restrictions: it accepts from pipes AND feeds them.
         public ItemContainer GetOutputContainer() => portLock == PortLockMode.Provider  ? null : container;
         public ItemContainer GetInputContainer()  => portLock == PortLockMode.Requester ? null : container;
         public bool HasOutputReady => portLock != PortLockMode.Provider &&
@@ -211,7 +268,7 @@ namespace VoxelEngine.Building
         /// <summary>Accept items pushed in by a pipe (honours INPUT face + filter).</summary>
         public int TryAcceptFromPipe(Vector3 pipeWorldPos, ItemDefinition item, int count)
         {
-            if (portLock == PortLockMode.Requester) return 0;   // network-fed: pipes never push into it
+            if (portLock == PortLockMode.Requester) return 0;   // network-fed: pipes never push into it (a Buffer does accept)
             EnsureRefs();
             return _routing != null ? _routing.TryAcceptFromPipe(pipeWorldPos, item, count) : 0;
         }
@@ -228,6 +285,10 @@ namespace VoxelEngine.Building
             foreach (var item in Requests)
                 if (item != null && !string.IsNullOrEmpty(item.itemId))
                     snap.requestItemIds.Add(item.itemId);
+
+            // Only a buffer has a meaningful target; leaving it 0 elsewhere keeps the
+            // snapshot empty for every other chest, exactly as before.
+            snap.bufferStockTarget = portLock == PortLockMode.Buffer ? bufferStockTarget : 0;
             return snap;
         }
 
@@ -249,6 +310,10 @@ namespace VoxelEngine.Building
                 }
                 SetRequests(restored);
             }
+
+            // A pre-11.6.0-dev save writes 0 here, which must not silently zero the target.
+            if (snap != null && snap.bufferStockTarget > 0)
+                bufferStockTarget = snap.bufferStockTarget;
         }
     }
 }

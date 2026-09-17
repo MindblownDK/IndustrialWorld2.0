@@ -51,7 +51,22 @@ namespace VoxelEngine.Transport
     /// Requester's ports decide what leaves it down a pipe, while its request list decides
     /// what the network delivers into it.</para>
     /// </summary>
-    public enum PortLockMode { Free = 0, Provider = 1, Requester = 2 }
+    /// <summary>
+    /// How a chest's faces are pinned, and — mirrored — what it does on the wireless network.
+    ///
+    /// <list type="bullet">
+    ///   <item><b>Free</b> — an ordinary chest. Faces cycle None/Input/Output and it takes no
+    ///         part in the wireless network.</item>
+    ///   <item><b>Provider</b> — pipes and belts FILL it (faces pinned to Input); the network
+    ///         hands its stock out to requesters.</item>
+    ///   <item><b>Requester</b> — the network FILLS it (faces pinned to Output); those ports
+    ///         feed the pipes downstream.</item>
+    ///   <item><b>Buffer</b> — both at once. It keeps itself stocked from providers like a
+    ///         requester, and supplies other requesters like a provider. Its faces are NOT
+    ///         pinned, because it legitimately needs to both accept and emit.</item>
+    /// </list>
+    /// </summary>
+    public enum PortLockMode { Free = 0, Provider = 1, Requester = 2, Buffer = 3 }
 
     /// <summary>
     /// Optional companion to <see cref="IItemPortHost"/>. A host that implements it declares

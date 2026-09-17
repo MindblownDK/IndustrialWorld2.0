@@ -359,7 +359,15 @@ namespace VoxelEngine.Transport
         /// </summary>
         public List<string> requestItemIds = new();
 
+        /// <summary>
+        /// A Buffer chest's per-item stock target, which the player can change at runtime and
+        /// so must survive a save. Zero means "not written" — a save from before 11.6.0-dev,
+        /// or any block that is not a buffer — and the chest keeps its authored default.
+        /// </summary>
+        public int bufferStockTarget;
+
         public bool HasData => (faces != null && faces.Count > 0) ||
-                               (requestItemIds != null && requestItemIds.Count > 0);
+                               (requestItemIds != null && requestItemIds.Count > 0) ||
+                               bufferStockTarget > 0;
     }
 }

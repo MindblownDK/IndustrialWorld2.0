@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `11.5.2-dev`
-**Roadmap Version:** `11.5.2-dev`
+**Current Version:** `11.6.0-dev`
+**Roadmap Version:** `11.6.0-dev`
 **Date:** 2026-09-16
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 11.6.0-dev — The Buffer Chest
+- `PortLockMode.Buffer` completes the logistic chest line: it stocks itself from providers and supplies requesters, and is the first network role whose faces are NOT pinned (`Chest.IsDirectionPinned`).
+- A per-item `bufferStockTarget` (default 64, editable in the panel, saved) caps what a buffer requests, so it cannot drain its providers; buffer-to-buffer stocking is refused to prevent loops.
+- Setup step 78 now authors three variants; the Buffer Chest is 36 slots and is seeded with one input and one output face.
+
 ### 11.5.2-dev — The Item Ports Panel Opens Again
 - Fixes the 11.5.1-dev regression that left the item-ports overlay empty: the first body build ran before the overlay was attached and was skipped by an attachment guard meant only for rebuilds.
 - The body is now built after the overlay is attached and is never skipped; only the scroll-offset restore is conditional, so live refresh and scroll preservation behave as before.
@@ -47,11 +52,6 @@
 - `LogisticsNetwork` runs a fulfilment pass every second: a Requester's per-face whitelists are its request list, and the nearest in-range Provider (48 m) supplies up to 16 of each item per pass.
 - Locked chests register with the network on enable; transfers move the Provider's own item instance and remove only what the destination accepted, so no stock is duplicated or lost.
 - The port panel gains a WIRELESS LOGISTICS section listing network size and, per requested item, the count in range or "none in range". No setup step and no new saved field.
-
-### 11.3.0-dev — One Ore To Smelt
-- Iron and copper ore are one canonical asset each (`Industrial/Items/Item_IronOre`, `Item_CopperOre`); setup step 80 repoints every recipe, voxel material drop and persistence-catalogue entry, then deletes the retired `Items/Item_Iron` and `Items/Item_Copper` duplicates.
-- `ItemDefinition.itemId`/`displayName` no longer default to `"iron_ore"`/`"Iron Ore"`, which is what let unauthored assets claim to be iron ore; `ItemIdentity` treats a blank id as no identity, and step 79 audits and repairs the remainder.
-- `ItemIdAliases` maps the retired ids to their replacements at load, so saves written before the consolidation keep their ore.
 
 ### Era Transition Feel
 
@@ -990,7 +990,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 | Conveyor belts | ✅ COMPLETED | Straight, corner, ramp, and vertical conveyor flows are implemented with consistent belt-surface height, precise transitions, item visuals, shape workflow, I/O arrows, and validated persistence. |
 | Conveyor chutes | ✅ COMPLETED | Straight vertical transport, snapping, moving-item visuals, inventory endpoints, and save-compatible placement are validated. Chutes intentionally remain a single authored transport form; no corner, spiral, or other chute variants are planned. |
 | Basic machines | 🟡 PARTIALLY COMPLETE | Electric Furnace, Crusher, and three Assembler tiers exist. Crusher/Assembler have recipe-selection UIs, visual animation, centralized simulation ticks, additive buffers/progress/enabled persistence, and Unity smoke Unity validation; production statistics and module systems remain. |
-| Storage blocks | 🟡 PARTIALLY COMPLETE | A basic chest and the wider storage system exist. 11.1.0-dev ships the Wooden Crate → Iron Chest → Steel Chest tiers (setup step 77); **11.2.0-dev** adds the port-locked Provider and Requester chests (setup step 78); **11.4.0-dev** adds `LogisticsNetwork`, the wireless request/fulfilment pass; **11.5.0-dev** inverts the port roles to mirror the wireless ones (Provider ports IN, Requester ports OUT) and gives the request list its own saved field and picker. **11.5.1-dev** fixes the duplicate item rows in the request picker (setup step 81) and makes the panel refresh live when a request is removed. Pending Unity validation. Remaining: a Buffer (hybrid) chest, and drone/vehicle carriers for out-of-range delivery. |
+| Storage blocks | 🟡 PARTIALLY COMPLETE | A basic chest and the wider storage system exist. 11.1.0-dev ships the Wooden Crate → Iron Chest → Steel Chest tiers (setup step 77); **11.2.0-dev** adds the port-locked Provider and Requester chests (setup step 78); **11.4.0-dev** adds `LogisticsNetwork`, the wireless request/fulfilment pass; **11.5.0-dev** inverts the port roles to mirror the wireless ones (Provider ports IN, Requester ports OUT) and gives the request list its own saved field and picker. **11.5.1-dev** fixes the duplicate item rows in the request picker (setup step 81) and makes the panel refresh live when a request is removed. Pending Unity validation. **11.6.0-dev** adds the Buffer Chest (both roles, free faces, per-item stock target), closing the Logistic Chests line. Remaining: drone/vehicle carriers for out-of-range delivery. |
 | Power pole, wire, and substation | 🟡 PARTIALLY COMPLETE | Manual wiring, poles, substations, transformers, compact LV/HV one-link connectors, and 8-link wall/foundation relays exist. Setup reruns preserve balance while adding missing links. |
 | Grid/static lighting and LED strips | ✅ COMPLETED | Detail/Structural single and dual spotlights, Structural LED strip, premium segmented/clean LED visuals, screen data providers, configuration UI, visible chase animation, motion activation, and saved lighting config persistence are implemented and validated. |
 | Shared Machine UI | 🟡 PARTIALLY COMPLETE | Crusher and Assembler panels now expose recipe selection, progress, power, toggles, inventory slots, scrolling, and item-port integration. Remaining work: complete unification across every machine, production statistics, and theme overrides. |
@@ -1398,10 +1398,11 @@ Statuses are evidence-based and move forward only after code/content review and 
    - Battery-powered, recharges at port.
    - Great for vertical/supply runs.
 
-3. **Logistic Chests** — ~~Provider Chest~~ ~~Requester Chest~~ *(11.2.0-dev)*, ~~wireless request/fulfilment routing between them~~ *(11.4.0-dev, roles corrected 11.5.0-dev)*
+3. **Logistic Chests** — ~~Provider Chest~~ ~~Requester Chest~~ *(11.2.0-dev)*, ~~wireless request/fulfilment routing between them~~ *(11.4.0-dev, roles corrected 11.5.0-dev)*, ~~Buffer Chest~~ *(11.6.0-dev)* — **COMPLETE**
    - Provider Chest: pipes and belts FILL it (ports pinned to Input); `LogisticsNetwork` hands its stock to in-range requesters.
    - Requester Chest: the network fills it wirelessly; its ports (pinned to Output) FEED the pipes downstream. Its request list is a dedicated field, separate from the port filters.
-   - Buffer Chest: hybrid. Still open.
+   - Buffer Chest: both roles at once, faces NOT pinned. Tops itself up to a per-item `bufferStockTarget` from providers and supplies other requesters; buffer-to-buffer stocking is refused. Authored by setup step 78.
+   - **Balance rule:** a buffer requests only up to its stock target. Without that cap a buffer drains every provider it can reach, which is the standard failure mode of this block.
 
 4. **Long-Distance Power Poles**
    - High-voltage transmission towers.
