@@ -59,6 +59,16 @@ namespace VoxelEngine.Research
             if (GetRank(node) >= node.maxRanks) return;
             if (!ArePrerequisitesMet(node)) return;
 
+            // Orbital gate (11.13.0): some nodes can only be researched aboard a satellite
+            // in orbit. Checked here as well as in the UI, because the UI is not the only
+            // caller and a gate enforced in one place is a gate that eventually leaks.
+            string orbitalBlock = GetFacilityBlockReason(node);
+            if (orbitalBlock != null)
+            {
+                Debug.Log($"[Research] Blocked: {node.displayName} \u2014 {orbitalBlock}");
+                return;
+            }
+
             ActiveResearch = node;
             ActiveProgress01 = 0f;
             ActiveHasCost = false;
@@ -114,6 +124,9 @@ namespace VoxelEngine.Research
             if (node.researchSeconds > 0) return false; // Must use a Lab for timed research
             if (GetRank(node) >= node.maxRanks) return false;
             if (!ArePrerequisitesMet(node)) return false;
+            // The instant-research path must honour the orbital gate too, or it would be a
+            // free bypass around the satellite requirement.
+            if (!AreFacilitiesMet(node)) return false;
 
             // Check affordability
             foreach (var c in node.cost)
@@ -169,6 +182,19 @@ namespace VoxelEngine.Research
         {
             return _nodeRanks.TryGetValue(nodeId, out int rank) && rank > 0;
         }
+
+        /// <summary>
+        /// Why this node cannot be researched at the player's current facilities, or null
+        /// if it can. Only orbital-gated nodes can return a reason today.
+        /// </summary>
+        public string GetFacilityBlockReason(ResearchNode node)
+        {
+            if (node == null || !node.requiresOrbitalLab) return null;
+            return VoxelEngine.GridSystem.GridSatelliteLab.GlobalBlockedReason();
+        }
+
+        /// <summary>True when the node's facility requirements are satisfied.</summary>
+        public bool AreFacilitiesMet(ResearchNode node) => GetFacilityBlockReason(node) == null;
 
         public bool ArePrerequisitesMet(ResearchNode node)
         {

@@ -64,6 +64,12 @@ namespace VoxelEngine.Research
         [Header("Prerequisites")]
         public ResearchNode[] prerequisites = new ResearchNode[0];
 
+        [Header("Facility Gate")]
+        [Tooltip("If true this node can ONLY be researched at a Satellite Research Station " +
+                 "aboard a grid declared as a satellite, in orbit. Ground labs refuse it. " +
+                 "This is what makes orbital infrastructure worth building.")]
+        public bool requiresOrbitalLab = false;
+
         [Header("Cost")]
         [Tooltip("Seconds spent at a Research Lab. 0 = instant (cost paid from inventory).")]
         public float researchSeconds = 30f;

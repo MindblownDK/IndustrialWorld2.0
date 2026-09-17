@@ -1328,6 +1328,26 @@ namespace VoxelEngine.Persistence
                 // Additive 9.34.0: the ship's route book. A recorded haul run is player work,
                 // so it rides the grid record rather than the recorder block's own state — the
                 // book belongs to the vessel and survives the block being moved or replaced.
+                // Construct registry: the name and class the player gave this hull.
+                var identity = VoxelEngine.GridSystem.GridIdentity.Find(grid);
+                if (identity != null && (identity.HasCustomName || identity.Class != VoxelEngine.GridSystem.GridClass.Vessel))
+                {
+                    entry.identityName = identity.HasCustomName ? identity.DisplayName : "";
+                    entry.identityClass = (int)identity.Class;
+                }
+
+                // A committed orbit is saved as its Keplerian elements, NOT as a pose. The
+                // station must come back on the same orbit at the correct phase for the
+                // reload time, which a frozen position could never express.
+                var rails = grid.GetComponent<VoxelEngine.Cosmos.OrbitalRails>();
+                if (rails != null && rails.IsOnRails)
+                {
+                    rails.CaptureState(out bool onRails, out double[] elements, out string parentName);
+                    entry.onRails = onRails;
+                    entry.orbitElements = elements;
+                    entry.orbitParent = parentName;
+                }
+
                 var routeBook = grid.GetComponent<VoxelEngine.Navigation.RouteBook>();
                 if (routeBook != null && routeBook.Count > 0)
                 {
@@ -1617,6 +1637,23 @@ namespace VoxelEngine.Persistence
                 // their host-cell relationship and attached pipe topology.
                 RestoreGridBlocks(grid, savedGrid.blocks, false);
                 RestoreGridBlocks(grid, savedGrid.blocks, true);
+
+                // Construct registry (11.13.0). Only attach the component when the save
+                // actually carries an identity, so legacy grids stay componentless.
+                if (!string.IsNullOrEmpty(savedGrid.identityName) || savedGrid.identityClass != 0)
+                {
+                    var identity = VoxelEngine.GridSystem.GridIdentity.Ensure(grid);
+                    identity.SetDisplayName(savedGrid.identityName);
+                    identity.SetGridClass((VoxelEngine.GridSystem.GridClass)savedGrid.identityClass);
+                }
+
+                // Restore a committed orbit last: the blocks must exist first so the grid
+                // has its real mass and bounds before it is parked kinematic on rails.
+                if (savedGrid.onRails && savedGrid.orbitElements != null && savedGrid.orbitElements.Length >= 7)
+                {
+                    var rails = grid.gameObject.AddComponent<VoxelEngine.Cosmos.OrbitalRails>();
+                    rails.RestoreState(savedGrid.orbitElements, savedGrid.orbitParent);
+                }
 
                 // Route books restore onto the grid component, created here if the save has one
                 // and the ship somehow lost its recorder: losing a run because a block was
@@ -3187,6 +3224,15 @@ namespace VoxelEngine.Persistence
             public List<SavedRoomCharge> roomCharges = new();
             // Additive 9.34.0: recorded routes, in cosmic km with an optional body anchor.
             public List<SavedRoute> routes = new();
+            // Additive 11.13.0: construct registry. A grid the player never named omits
+            // these and restores as an unnamed vessel exactly as before.
+            public string identityName = "";
+            public int identityClass;
+            // Additive 11.13.0: committed orbit. `orbitElements` is
+            // [a, e, inc, raan, argPe, M0, epoch]; empty means the grid is not on rails.
+            public bool onRails;
+            public double[] orbitElements;
+            public string orbitParent = "";
             // Additive 9.35.0: armed auto-run loops. Saved on the grid because a loop is a promise the
             // *ship* made, not block state — the pad may be rebuilt out from under it and the schedule
             // should still reload, then fail honestly at its own reservation check rather than vanish.

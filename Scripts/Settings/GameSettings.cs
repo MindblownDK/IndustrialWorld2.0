@@ -27,6 +27,8 @@ namespace VoxelEngine.Settings
         EnterCockpit, ExitCockpit,
         WarpDrive,
         TrajectoryCamera,  // predicted flight path overlay while piloting (11.12.0-dev)
+        OrbitalMap,        // system-wide orbital map, requires an equipped Orbital Map device (11.13.0-dev)
+        ConstructRegistry, // name/classify the piloted construct and commit it to orbit (11.13.0-dev)
         GridInspector   // the Grid Inspector Overlay hotkey (9.37.0-dev): one key walks OFF → HEAT → DAMAGE → CENTRE OF MASS
     }
 
@@ -54,7 +56,7 @@ namespace VoxelEngine.Settings
 
         // Bump this when default keybinds change to force a one-time migration
         // that fills in missing or invalid bindings on old saves.
-        private const int    CURRENT_VERSION = 15;
+        private const int    CURRENT_VERSION = 16;
 
         // ----- defaults -----
         public const float DEFAULT_FOV       = 75f;
@@ -161,6 +163,8 @@ namespace VoxelEngine.Settings
             InputAction.ExitCockpit     => "F",
             InputAction.WarpDrive       => "N",
             InputAction.TrajectoryCamera => "J",
+            InputAction.OrbitalMap      => "M",
+            InputAction.ConstructRegistry => "U",
             InputAction.GridInspector   => "K",
             _ => "None"
         };

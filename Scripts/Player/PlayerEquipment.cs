@@ -26,6 +26,8 @@ namespace VoxelEngine.Player
         public const int HelmetSlotCount = 1;
         public const int OxygenTankSlotCount = 1;
         public const int ArmorSlotCount      = 1;
+        /// <summary>Personal instrument bay: currently the orbital map. Lives under Life Support.</summary>
+        public const int InstrumentSlotCount = 1;
 
         /// <summary>Speed bonus while two identical usable packs are equipped.</summary>
         public const float TwinSpeedBonus = 1.35f;
@@ -38,6 +40,7 @@ namespace VoxelEngine.Player
         [SerializeField] private ItemContainer _helmetSlots;
         [SerializeField] private ItemContainer _oxygenTankSlots;
         [SerializeField] private ItemContainer _armorSlots;
+        [SerializeField] private ItemContainer _instrumentSlots;
         private Inventory _inventory;
 
         public ItemContainer JetpackSlots
@@ -58,6 +61,12 @@ namespace VoxelEngine.Player
         public ItemContainer ArmorSlots
         {
             get { EnsureContainers(); return _armorSlots; }
+        }
+
+        /// <summary>Personal instrument slot (orbital map). Shown in the LIFE SUPPORT card.</summary>
+        public ItemContainer InstrumentSlots
+        {
+            get { EnsureContainers(); return _instrumentSlots; }
         }
 
         private void Awake()
@@ -94,6 +103,10 @@ namespace VoxelEngine.Player
             // so drag-equip / shift-click / the legacy RMB path all agree on what's worn.
             _armorSlots.OnChanged -= SyncEquippedArmor;
             _armorSlots.OnChanged += SyncEquippedArmor;
+
+            if (_instrumentSlots == null) _instrumentSlots = new ItemContainer("Instrument Slot", InstrumentSlotCount);
+            else _instrumentSlots.Resize(InstrumentSlotCount);
+            _instrumentSlots.AcceptFilter = (item, wanted) => item is OrbitalMapItem ? Mathf.Min(1, wanted) : 0;
         }
 
         // ════════════════════════════════════════════════════════════
@@ -235,6 +248,26 @@ namespace VoxelEngine.Player
         }
 
         /// <summary>Environment-aware: a usable pack is equipped AND can ignite here.</summary>
+        // ════════════════════════════════════════════════════════════
+        //                      ORBITAL MAP DEVICE
+        // ════════════════════════════════════════════════════════════
+
+        /// <summary>The equipped orbital map, or null. This is the single gate on the map UI.</summary>
+        public OrbitalMapItem EquippedOrbitalMap
+        {
+            get
+            {
+                var slots = InstrumentSlots;
+                if (slots == null) return null;
+                var stack = slots.GetSlot(0);
+                if (stack == null || stack.IsEmpty) return null;
+                return stack.item as OrbitalMapItem;
+            }
+        }
+
+        /// <summary>True when the player can open the orbital map.</summary>
+        public bool HasOrbitalMap => EquippedOrbitalMap != null;
+
         public bool HasUsableJetpack => GetJetpackSummary().canFly;
 
         /// <summary>Best equipped pack definition (may be empty of fuel — for display).</summary>

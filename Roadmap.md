@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `11.12.1-dev`
-**Roadmap Version:** `11.12.1-dev`
+**Current Version:** `11.13.0-dev`
+**Roadmap Version:** `11.13.0-dev`
 **Date:** 2026-09-16
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -43,11 +43,6 @@
 - Cargo is handed over at TOUCHDOWN (half the round trip) rather than when the drone gets home, so items appear exactly as the drone releases them; `CargoDelivered` keeps the handover once-only across saves.
 - Logistic chests carry their own weight limits (Provider 1200 kg, Buffer 900 kg, Requester 600 kg) through the container weight system, shown as a Load bar; 0 still means the world default.
 - Fixed the duplicated WIRELESS LOGISTICS panel (fixed container instead of index re-insert), and items reachable only by drone now read "N by drone" instead of "none in range".
-
-### 11.9.0-dev — Heavy Lift
-- Drone ports take the universal Speed / Efficiency modules (step 75) as FLY FASTER / CARRY MORE, two slots, stacking; round trips and payloads are priced from the upgraded values.
-- The drone is rebuilt as an eight-rotor heavy lifter with skids and a gimbal pod, and now flies the cargo's real chest-to-chest route instead of port to port.
-- Persistence fixed on two fronts: chest request lists and buffer targets are saved again (capture/restore now go through `Chest`), and drone ports save their name, toggle, tuning, counters and in-flight manifest so a mid-air payload is never destroyed by a reload.
 
 ### 11.7.1-dev — The Range Readout Tells The Truth
 - The chest panel's provider/requester counts are now measured in range (`ProvidersInRangeOf` / `RequestersInRangeOf`) instead of world-wide, so distance is visible where it was previously invisible.
@@ -1415,6 +1410,14 @@ Statuses are evidence-based and move forward only after code/content review and 
    - Spans are registered as manual links, so they cross terrain that ordinary cables may not, while cables keep their strict one-grid-step rule.
    - **Balance rule:** the span is capacity-rated and obeys the network bottleneck, so a thin cable feeding a tower is still the limit.
 
+4b. **Orbital Programme** - ~~grid naming/classification~~ ~~orbital map device~~ ~~station and satellite orbits~~ ~~orbital research gate~~ *(11.13.0-dev)* - **PHASE 1 COMPLETE**
+   - `GridIdentity` (name + VESSEL/SATELLITE/STATION), `OrbitalRails` (analytic Kepler orbits that cannot decay), `OrbitalTrackingService` (the data layer), `OrbitalMapScreen` (`M`), `GridSatelliteLab` (orbital research gate).
+   - **Design rule:** a satellite is a player-built grid the player DECLARES a satellite. Never a separate entity type.
+   - **Design rule:** an orbit is saved as Keplerian elements, never as a pose, so a station reloads at the correct phase for the reload time.
+   - **Balance rule:** the map is a researched, expensive device in a Life Support instrument slot. Its stats gate tracking range and telemetry detail, so the tier ladder has somewhere to go.
+   - Phase 2 (open): satellite sensor payloads - season tracking, weather tracking, and weather influence for very advanced satellites. Influence shifts probabilities and clears storms over time at heavy power cost; it must never conjure arbitrary weather instantly, which would trivialise the weather system.
+   - Phase 2 (open): more research nodes flagged `requiresOrbitalLab`, and satellite-specific payload blocks.
+
 5. **Configurable Grid Screens / Displays**
    - Multiple sizes: 1×1, 2×2, 4×4, wide banner.
    - Display text, values, bar charts, or live camera feeds.
@@ -1436,7 +1439,12 @@ Statuses are evidence-based and move forward only after code/content review and 
      - Impact marker on terrain or predicted orbit.
    - Toggled in Settings → Controls → `Trajectory Camera`.
 
-7. **Star Map / Orbit Overlay (`M`)**
+7. **Star Map / Orbit Overlay (`M`)** - ~~system map with all orbits, craft and bodies~~ *(11.13.0-dev)* - **LARGELY COMPLETE**
+   - `OrbitalMapScreen` on `M`: all bodies, all named constructs, live orbital telemetry, true focus-offset ellipses, pan/zoom/focus.
+   - Gated on an equipped `OrbitalMapItem` - the map is a researched device, not a free menu.
+   - **Implementation note:** name labels are pooled Labels, NOT `MeshGenerationContext.DrawText`, which needs a paint-time font and is not dependable across Unity versions.
+   - Open: click-to-set-navigation-target, asteroid fields on the map, and trajectory trails for orbiting bodies.
+   - Legacy design, still accurate:
    - Pressing `M` opens the system map.
    - Shows:
      - All planet and moon orbits.

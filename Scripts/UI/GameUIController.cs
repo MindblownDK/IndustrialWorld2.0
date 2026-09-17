@@ -333,6 +333,8 @@ namespace VoxelEngine.UI
             GridInspectorHud.Tick();
             GravityPullHud.Tick();
             VoxelEngine.GridSystem.GridPilotHud.Tick();
+            OrbitalMapScreen.Tick();
+            GridIdentityHud.Tick();
             GrinderHud.Tick();
             BuildCostHud.Tick();
             if (_openQuarry != null) QuarryHud.Tick(_openQuarry);
@@ -1203,6 +1205,8 @@ namespace VoxelEngine.UI
             CockpitAlertHud.EnsureMounted(_hudLayer);
             CanisterPressureHud.EnsureMounted(_hudLayer);
             VoxelEngine.Weather.WeatherHud.EnsureMounted(_hudLayer);
+            OrbitalMapScreen.EnsureMounted(_topLayer);
+            GridIdentityHud.EnsureMounted(_topLayer);
             GravityPullHud.EnsureMounted(_hudLayer);
             VoxelEngine.GridSystem.GridPilotHud.EnsureMounted(_hudLayer);
             GrinderHud.EnsureMounted(_hudLayer);
@@ -1524,7 +1528,8 @@ namespace VoxelEngine.UI
             return object.ReferenceEquals(container, equipment.ArmorSlots)
                 || object.ReferenceEquals(container, equipment.JetpackSlots)
                 || object.ReferenceEquals(container, equipment.HelmetSlots)
-                || object.ReferenceEquals(container, equipment.OxygenTankSlots);
+                || object.ReferenceEquals(container, equipment.OxygenTankSlots)
+                || object.ReferenceEquals(container, equipment.InstrumentSlots);
         }
 
 
@@ -2092,7 +2097,22 @@ namespace VoxelEngine.UI
             slotRow.style.flexWrap = Wrap.Wrap;
             slotRow.Add(BuildSlot(equipment.HelmetSlots, 0, equipment.HelmetSlots.GetSlot(0), false));
             slotRow.Add(BuildSlot(equipment.OxygenTankSlots, 0, equipment.OxygenTankSlots.GetSlot(0), false));
+            // Personal instrument bay (11.13.0-dev): the Orbital Map lives here, alongside
+            // the other worn survival gear rather than in a tab of its own.
+            slotRow.Add(BuildSlot(equipment.InstrumentSlots, 0, equipment.InstrumentSlots.GetSlot(0), false));
             box.Add(slotRow);
+
+            var mapDevice = equipment.EquippedOrbitalMap;
+            var instrumentLine = new Label(mapDevice != null
+                ? $"ORBITAL MAP: {mapDevice.CapabilityLabel} \u00b7 PRESS M"
+                : "INSTRUMENT BAY EMPTY");
+            instrumentLine.style.fontSize = 8;
+            instrumentLine.style.letterSpacing = 0.8f;
+            instrumentLine.style.marginTop = 4;
+            instrumentLine.style.color = new StyleColor(mapDevice != null
+                ? new Color(0.35f, 0.80f, 1.00f)
+                : UITheme.TextMuted);
+            box.Add(instrumentLine);
 
             return box;
         }

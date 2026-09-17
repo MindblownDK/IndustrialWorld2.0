@@ -1,9 +1,86 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `11.12.1-dev`
+**Current Version:** `11.13.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [11.13.0-dev] Name Your Fleet, Own The Sky
+
+**Type:** MINOR - new systems, save-compatible. Grids without an identity, and every legacy save, load and behave exactly as before. The keybind table gains two entries and migrates itself.
+
+**GitHub title:** `[11.13.0-dev] Name your fleet, own the sky`
+
+This is phase one of the Orbital Programme. It delivers the foundation: construct naming and classification, the orbital map device, on-rails orbits for stations and satellites, and the orbital research gate. Satellite sensor payloads (season and weather tracking, weather influence) follow in the next release, and they are built on exactly the layers added here.
+
+#### Construct registry - naming and classification
+
+Every grid can now be named and classified as a VESSEL, SATELLITE or STATION. Press `U` while piloting.
+
+A satellite is not a separate entity type, as requested: it is an ordinary player-built grid wearing a different label. That declaration is what the rest of the systems key off.
+
+Naming lives in its own `GridIdentity` component rather than as fields on `GridEntity`, for three reasons: the physics class does not grow a UI concern, a grid that was never named costs nothing at all, and an unnamed grid still reports a stable generated designation (`LC-4471`) so the map never draws a blank label. A static registry keeps the map and the satellite services off `FindObjectsByType`.
+
+#### The orbital map
+
+`M` opens a full-system view of every celestial body and every named construct, with live telemetry: apoapsis, periapsis, orbital period, inclination, and a plain-language state word (ORBITING, DRIFTING, SUBORBITAL, ESCAPING, IN FLIGHT).
+
+**The map is a device, not a menu.** It requires an Orbital Map equipped in the new personal instrument slot, which sits in the LIFE SUPPORT card next to the helmet and oxygen tank as requested. The item is expensive (12 steel + 24 copper wire at the Assembler) and gated behind the Orbital Telemetry research node, so the first one is a real milestone.
+
+The device also defines how good the map is - tracking range, whether full telemetry shows, whether orbit ellipses draw, whether focus switching is allowed. That gives the tier ladder somewhere to go later without any new UI.
+
+Rendering notes:
+
+- Orbits and bodies are drawn by a single `generateVisualContent` painter, one mesh per frame, so a system with dozens of tracked objects stays cheap.
+- Ellipses are offset by their focal distance so the parent body sits at a **focus** of the ellipse rather than its centre. That is the visual signature of a real orbit and the main reason the view reads like a map instead of a diagram.
+- Name labels are pooled `Label` elements in an overlay rather than `MeshGenerationContext.DrawText`, which needs a font resolved at paint time and is not dependable across Unity versions.
+- Out-of-range contacts are listed and flagged rather than hidden, so the player can see that a better instrument would reach them.
+
+#### On-rails orbits
+
+A construct classified as a satellite or station can be committed to orbit from the registry panel.
+
+**A rigidbody cannot hold an orbit.** Float precision, a fixed timestep and the fact that an unloaded chunk stops simulating all mean a physics-integrated satellite will decay, drift, or simply stop existing while the player is away. That is fatal for a feature whose whole promise is "put a station up and it stays there".
+
+So a committed construct switches to the same Keplerian propagation the planets and moons already use. It becomes kinematic and is placed from solved elements each frame. It cannot decay, it keeps its orbit while streamed out, and the map can draw an exact ellipse instead of guessing.
+
+Commitment is validated rather than forced. The game refuses to freeze a construct that is inside an atmosphere, below a minimum altitude, on a suborbital path, or already escaping - and says which, instead of silently circularising and stealing the player's intent. Any release hands the construct back to physics **with the exact velocity its orbit implies**, so leaving orbit is continuous rather than a dead stop.
+
+The state-vector to classical-elements conversion handles the degenerate cases properly: equatorial orbits (undefined ascending node) and circular orbits (undefined periapsis) are both special-cased rather than producing NaN. The mean anomaly is rewound to the simulation epoch on commit, without which the station would visibly jump the moment it was committed.
+
+#### Orbital research gate
+
+Research nodes gain a `requiresOrbitalLab` flag. A flagged node can only be researched at a **Satellite Research Station** aboard a construct classified as a satellite and actually in orbit.
+
+That single rule is what turns the orbital programme from decoration into progression: to finish the tech tree you have to build a satellite, get it up, and keep it there.
+
+The gate is enforced in `ResearchManager` on both entry paths - timed lab research and the instant inventory path - because a gate enforced in only one place is a gate that eventually leaks. When research is unavailable the game reports the blocker from the lab **closest to working**, so the player is told the last thing standing in their way ("Host satellite must be committed to a stable orbit") rather than an arbitrary complaint.
+
+#### Persistence
+
+Names, classifications and committed orbits all survive a save/load round trip.
+
+An orbit is saved as its **Keplerian elements, not as a pose**. A station has to come back on the same orbit at the correct phase for the reload time, which a frozen position could never express. Orbits are restored after the grid's blocks, so the hull has its real mass and bounds before it is parked on rails.
+
+All fields are additive. A save with no identity restores a componentless, unnamed grid exactly as before.
+
+#### Keybinds
+
+| Key | Action |
+|---|---|
+| `M` | Orbital map (requires the device) |
+| `U` | Construct registry, while piloting |
+
+`M` was reserved for the star map in the roadmap and this is that feature, so it takes the key. `U` was chosen after checking the table - `N` is the Warp Drive, `T` is Tool Cycle, `G` is Build Toggle Grid. Both are rebindable; settings version 16.
+
+#### Manual step in Unity
+
+1. Open **Tools -> Voxel Engine -> Voxel Engine Setup**.
+2. Click **84. Build the Orbital Programme**.
+3. Research **Orbital Telemetry**, craft an **Orbital Map**, equip it in the instrument slot in your LIFE SUPPORT panel.
+4. Press `M`.
+5. To put something up: build a grid, fly it to a stable orbit, press `U`, name it, classify it as SATELLITE or STATION, then COMMIT TO ORBIT.
+6. To gate a research node behind orbit, tick **Requires Orbital Lab** on that node.
 
 ### [11.12.1-dev] Unity API Deprecations
 
