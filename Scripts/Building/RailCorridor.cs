@@ -134,6 +134,7 @@ namespace VoxelEngine.Building
             }
 
             // Collect every lane's cells, dropped onto the real ground.
+            int missedGround = 0;
             for (int lane = 0; lane < gauge; lane++)
             {
                 for (int i = 0; i < _buffers.cellsPerLane; i++)
@@ -141,7 +142,15 @@ namespace VoxelEngine.Building
                     var frame = RoadCorridor.CellAt(_buffers, lane, i);
                     if (frame == null) continue;
 
-                    Vector3 grounded = DropToGround(frame.position, up);
+                    if (!DropToGround(frame.position, up, out Vector3 grounded))
+                    {
+                        // No ground under this cell at all - the run leaves the terrain.
+                        // Refusing is right, but it must say THAT rather than pretending
+                        // the route produced nothing.
+                        missedGround++;
+                        continue;
+                    }
+
                     plan.cells.Add(new RailPlanCell
                     {
                         position = grounded,
@@ -153,12 +162,82 @@ namespace VoxelEngine.Building
 
             if (plan.cells.Count == 0)
             {
-                plan.Refusal = "No route could be solved between those points.";
+                plan.Refusal = missedGround > 0
+                    ? "No ground under that route - it runs off the terrain. Aim at solid ground."
+                    : "No route could be solved between those points.";
                 return plan;
             }
 
+            // Smooth the profile BEFORE judging it. Real track is laid on a graded
+            // formation - the ground is cut and filled to suit the railway, not the other
+            // way round. Refusing every natural slope made the tool unusable on terrain
+            // that a real railway would simply grade flat.
+            SmoothProfile(plan, gauge, maxGradientMetres, up);
             CheckGradient(plan, gauge, maxGradientMetres, up);
             return plan;
+        }
+
+        /// <summary>
+        /// Eases the vertical profile so the line climbs at a rate a train can pull.
+        ///
+        /// WHY THIS EXISTS
+        /// A rail corridor draped straight onto raw terrain inherits every bump, and a
+        /// single step over the gradient limit failed the entire run. That is not how track
+        /// is built: a railway grades its formation, cutting through high ground and filling
+        /// low ground so the rails run smoothly.
+        ///
+        /// So the run is smoothed toward a gentle profile first, and only genuinely
+        /// impossible terrain - a cliff the smoothing cannot absorb - is refused. The
+        /// ballast bed placed underneath is what visually sells the fill.
+        ///
+        /// Each lane is smoothed independently along its own direction of travel, which is
+        /// the axis a train actually experiences.
+        /// </summary>
+        private static void SmoothProfile(RailPlan plan, int gauge, float maxGradientMetres, Vector3 up)
+        {
+            int perLane = plan.cells.Count / Mathf.Max(1, gauge);
+            if (perLane < 3) return;
+
+            // Several light passes rather than one aggressive pass: a strong single pass
+            // pulls the ends of the run away from the ground the player aimed at, which
+            // makes the track visibly float at the point they clicked.
+            const int passes = 6;
+
+            for (int pass = 0; pass < passes; pass++)
+            {
+                for (int lane = 0; lane < gauge; lane++)
+                {
+                    int baseIndex = lane * perLane;
+
+                    // Ends are pinned: the run must still start and finish where the player
+                    // pointed, or a smoothed line drifts off its own endpoints.
+                    for (int i = 1; i < perLane - 1; i++)
+                    {
+                        int prev = baseIndex + i - 1;
+                        int cur = baseIndex + i;
+                        int next = baseIndex + i + 1;
+                        if (next >= plan.cells.Count) break;
+
+                        var a = plan.cells[prev].position;
+                        var c = plan.cells[cur].position;
+                        var b = plan.cells[next].position;
+
+                        // Only the component ALONG gravity is smoothed. Touching the
+                        // horizontal component would pull the line off the route the
+                        // corridor solved and undo the curve fitting.
+                        float ha = Vector3.Dot(a, up);
+                        float hc = Vector3.Dot(c, up);
+                        float hb = Vector3.Dot(b, up);
+
+                        float target = (ha + hb) * 0.5f;
+                        float eased = Mathf.Lerp(hc, target, 0.5f);
+
+                        var cell = plan.cells[cur];
+                        cell.position = c + up * (eased - hc);
+                        plan.cells[cur] = cell;
+                    }
+                }
+            }
         }
 
         /// <summary>
@@ -206,17 +285,31 @@ namespace VoxelEngine.Building
         /// but a planet is not flat, so every cell has to be re-dropped. This mirrors what
         /// the road paver does for exactly the same reason.
         /// </summary>
-        private static Vector3 DropToGround(Vector3 point, Vector3 up)
+        private static bool DropToGround(Vector3 point, Vector3 up, out Vector3 grounded)
         {
-            const float probeUp = 6f;
-            const float probeLength = 14f;
+            // THE BUG (11.36.0): this probed 6 m up and 14 m down, and returned the input
+            // point on a miss. The corridor solves on a FLAT PLANE through the start, so on
+            // a curved planet - or any real slope - cells far from the start sit well above
+            // or below the ground. The probe missed, those cells kept their plane position,
+            // and the gradient check then measured the plane-vs-ground divergence as a
+            // vertical cliff and refused the whole run. A dead straight drag on a hillside
+            // reported "no placeable cells" on perfectly layable ground.
+            //
+            // The probe now starts far enough above and reaches far enough below to find
+            // ground across the whole run, and a genuine miss is reported rather than
+            // silently returning a point that is not on the ground.
+            const float probeUp = 60f;
+            const float probeLength = 200f;
 
             if (Physics.Raycast(point + up * probeUp, -up, out var hit, probeLength,
                     ~0, QueryTriggerInteraction.Ignore))
             {
-                return hit.point;
+                grounded = hit.point;
+                return true;
             }
-            return point;
+
+            grounded = point;
+            return false;
         }
 
         /// <summary>Longest run a single drag may lay, in metres.</summary>

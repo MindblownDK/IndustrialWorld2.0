@@ -2002,6 +2002,7 @@ namespace VoxelEngine.Player
                 // Swapping away mid-plan drops it, or a stale start point survives into
                 // whatever the player picks up next.
                 _railPlanning = false;
+                VoxelEngine.Building.RailGhost.Hide();
                 return false;
             }
 
@@ -2012,8 +2013,10 @@ namespace VoxelEngine.Player
             }
 
             // Ctrl + scroll picks the gauge, matching the paver's width gesture.
-            if (Mathf.Abs(scrollY) > 0.01f
-                && (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl)))
+            // IsCtrlHeld(), not Input.GetKey: legacy Input is switched OFF in Player Settings
+            // for this project, so a bare Input call throws every frame. The guarded helper
+            // already existed a few hundred lines up - I should have used it first time.
+            if (Mathf.Abs(scrollY) > 0.01f && IsCtrlHeld())
             {
                 int next = Mathf.Clamp(_railGauge + (scrollY > 0f ? 1 : -1),
                                        1, VoxelEngine.Building.RailCorridor.MaxGauge);
@@ -2031,11 +2034,28 @@ namespace VoxelEngine.Player
             if (mineDown && _railPlanning)
             {
                 _railPlanning = false;
+                VoxelEngine.Building.RailGhost.Hide();
                 VoxelEngine.UI.BuildFeedbackHud.Show("Rail run cancelled", "", null, T_AccentAmber);
                 return true;
             }
 
-            if (!hasHit) return true;
+            if (!hasHit)
+            {
+                VoxelEngine.Building.RailGhost.Hide();
+                return true;
+            }
+
+            // Redraw the preview every frame while a run is being aimed. Built from the
+            // SAME plan the commit will use, so what is shown is what gets laid.
+            if (_railPlanning)
+            {
+                PlanRailRun(tool, hit.point);
+                VoxelEngine.Building.RailGhost.Show(_railPlan);
+            }
+            else
+            {
+                VoxelEngine.Building.RailGhost.Hide();
+            }
 
             if (buildDown)
             {
@@ -2051,24 +2071,27 @@ namespace VoxelEngine.Player
 
                 CommitRailRun(tool, hit.point);
                 _railPlanning = false;
+                VoxelEngine.Building.RailGhost.Hide();
                 return true;
             }
 
             return true;
         }
 
-        private void CommitRailRun(RailLayerTool tool, Vector3 end)
+        /// <summary>
+        /// Solves the run from the current start to <paramref name="end"/> and returns the
+        /// cell size used.
+        ///
+        /// Shared by the ghost and the commit deliberately: a preview computed differently
+        /// from the thing it previews can lie, and a tool that shows a green route then
+        /// refuses it is worse than one with no preview at all.
+        /// </summary>
+        private float PlanRailRun(RailLayerTool tool, Vector3 end)
         {
-            if (tool == null || tool.trackBlock == null)
-            {
-                VoxelEngine.UI.BuildFeedbackHud.Show("Rail layer", "No track block assigned to this tool.",
-                    null, T_AccentAmber);
-                return;
-            }
-
             float cell = 1f;
             float gradient = 0.34f;
-            var template = tool.trackBlock.placedPrefab != null
+
+            var template = tool.trackBlock != null && tool.trackBlock.placedPrefab != null
                 ? tool.trackBlock.placedPrefab.GetComponentInChildren<VoxelEngine.Building.RailTrack>(true)
                 : null;
             if (template != null)
@@ -2081,6 +2104,20 @@ namespace VoxelEngine.Player
 
             _railPlan = VoxelEngine.Building.RailCorridor.Plan(
                 _railPlan, _railStart, end, _railGauge, cell, gradient, up);
+
+            return cell;
+        }
+
+        private void CommitRailRun(RailLayerTool tool, Vector3 end)
+        {
+            if (tool == null || tool.trackBlock == null)
+            {
+                VoxelEngine.UI.BuildFeedbackHud.Show("Rail layer", "No track block assigned to this tool.",
+                    null, T_AccentAmber);
+                return;
+            }
+
+            float cell = PlanRailRun(tool, end);
 
             if (!_railPlan.IsPlaceable)
             {

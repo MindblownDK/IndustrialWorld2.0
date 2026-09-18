@@ -1,9 +1,49 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `11.35.0-dev`
+**Current Version:** `11.36.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [11.36.0-dev] Graded Formation, And A Ghost To Aim With
+
+**Type:** MINOR - fixes a hard crash and three rail-layer failures. Save-compatible.
+
+**GitHub title:** `[11.36.0-dev] Graded formation, and a ghost to aim with`
+
+#### 1. The crash - my mistake, with the fix already in the file
+
+`InvalidOperationException` every frame the Rail Layer was held: I called `Input.GetKey` for the Ctrl modifier, and this project has legacy Input switched **off** in Player Settings.
+
+What makes this worse than a simple slip is that `PlayerInteractionTool` already had `IsCtrlHeld()` - a guarded dual-backend helper - a few hundred lines above my code, with a comment directly beside it warning that a bare `Input` call throws every frame here. I wrote a fourth variant instead of using it. Now fixed to call the existing helper, and I checked no other raw `Input` call survives in the rail path.
+
+#### 2. "No placeable cells" on a straight, flat-looking drag
+
+The corridor solves on a **flat plane** through the drag's start point, then every cell is dropped onto the real ground. The probe searched 6 m up and 14 m down.
+
+On a curved planet, or any real slope, cells far from the start sit further from that plane than the probe could reach. Those cells missed the ground entirely, silently kept their flat-plane position, and the gradient check then measured the plane-versus-ground divergence as a vertical cliff - refusing the run.
+
+The probe now reaches 60 m up and 200 m down, and a genuine miss is reported as *"No ground under that route"* instead of being silently passed on as a bogus cell.
+
+#### 3. Rails now grade the formation instead of refusing terrain
+
+You asked for the rails to form the ground, and that is also simply how railways are built: the formation is cut and filled to suit the track, not the other way round. Refusing every natural slope made the tool unusable on exactly the terrain a railway exists to cross.
+
+The run is now **smoothed before it is judged**. Six light passes ease the vertical profile toward a gentle grade, with the endpoints pinned so the line still starts and finishes where you clicked. Only terrain the smoothing genuinely cannot absorb is refused.
+
+I checked the numbers rather than guessing: a bumpy 40-cell hillside with a worst step of **0.79 m** smooths to **0.27 m**, comfortably under the 0.34 m limit. Across a valley the line fills by up to about **0.9 m** - which is exactly what the ballast bed added in 11.35.0 represents.
+
+Only the component along gravity is smoothed. Touching the horizontal would drag the line off the route the corridor solved and undo the curve fitting.
+
+#### 4. The missing ghost
+
+Between the two clicks you were committing to a route you could not see, and every refusal arrived only *after* the second click.
+
+`RailGhost` now draws the pending run every frame, built from **the same plan the commit uses** - not a separate approximation. That property matters: if the ghost shows a route, the commit lays that route. A preview computed differently from the thing it previews can lie, which is worse than no preview.
+
+A refused run still draws, in **red**, using whatever cells it solved. Hiding it would leave you aiming blind at precisely the moment you need to see what is wrong.
+
+No manual Unity step - 11.35.0's step 93 already authored everything.
 
 ### [11.35.0-dev] Ballast, And Rail That Actually Costs Something
 

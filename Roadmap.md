@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `11.35.0-dev`
-**Roadmap Version:** `11.35.0-dev`
+**Current Version:** `11.36.0-dev`
+**Roadmap Version:** `11.36.0-dev`
 **Date:** 2026-09-16
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,12 @@
 ---
 
 ## 0. Recently Done
+
+### 11.36.0-dev - Graded Formation, And A Ghost To Aim With
+- **Crash:** used `Input.GetKey` in a project with legacy Input disabled. `IsCtrlHeld()` already existed in the same file, with a comment warning about exactly this. **Rule: never call `Input.` directly here - use the guarded helpers.**
+- **Ground probe:** the corridor solves on a flat plane through the drag start, so distant cells sat outside a 6 m/14 m probe, kept their plane position, and the gradient check read that as a cliff. Probe is now 60 m/200 m and a real miss is reported distinctly.
+- **Grading:** the profile is SMOOTHED before it is judged (6 light passes, endpoints pinned, gravity axis only). A railway grades its formation; refusing every natural slope made the tool useless on the terrain it exists to cross. Verified: 0.79 m worst step smooths to 0.27 m.
+- **Ghost:** `RailGhost` previews the run from THE SAME PLAN the commit uses. A preview computed separately can lie. Refused runs draw red rather than vanishing.
 
 ### 11.35.0-dev - Ballast, And Rail That Actually Costs Something
 - **Dedupe bug:** the rail layer rejected cells within 0.45 m against 1 m spacing, but draped cells pull closer than that on slopes and curves - so a run rejected its own cells and laid nothing on empty ground. Radius is now cellSize * 0.25, derived not hard-coded.
@@ -58,14 +64,6 @@
 - **Rule:** a towed wagon cannot drive and must not run track logic - two bogies resolving switches independently can split a consist across a junction.
 - **Rule:** removing a mid-consist wagon hands its spacing to the one behind, so the train does not lurch into the gap. Losing the head uncouples and re-latches the follower so it stays drivable.
 - Loop detection before coupling, plus a 64-car bound on every chain walk.
-
-### 11.31.0-dev - A Train Is Just Something You Built
-- `GridRailTruck` + `GridRailBogie`: Train System v2 phase 1. Any player-built grid with a Rail Truck runs on the existing rail network. Setup step 92.
-- **The blocker dissolved.** The rework was gated on "how does a grid keep running while its chunks unload" - but grids are NOT chunk-streamed (persistent scene objects, saved by body anchor, never distance-culled) and nor is `PlacedBlock` track. No dormant analytic mode was needed.
-- **Hardware, not a flag:** being railed is a BLOCK the player builds and can remove, unlike `GridIdentity`'s satellite declaration. A flag would make every grid a free potential train.
-- **Balance rule:** the slowest truck and weakest acceleration aboard set the consist's performance - a train is limited by its worst component.
-- **Physics rule:** a railed grid goes kinematic and moves by `MovePosition`. Fighting the solver to hold a hard constraint causes jitter and lets collisions shove a train off its track; `MovePosition` also carries anything standing on it.
-- **Persistence rule:** the track cell is derived, never saved - the graph rebuilds from placed blocks and the bogie re-latches a frame after load.
 
 ### Era Transition Feel
 
