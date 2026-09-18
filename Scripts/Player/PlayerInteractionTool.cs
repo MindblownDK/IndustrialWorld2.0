@@ -861,6 +861,9 @@ namespace VoxelEngine.Player
                 // Rail consoles. Checked before the chest fallthrough below cannot apply,
                 // and ordered train -> station -> switch because a train parked at a
                 // platform overlaps both and the train is what the player aimed at.
+                var cargoPad = hit.collider.GetComponentInParent<VoxelEngine.Transport.CargoLaunchPad>();
+                if (cargoPad != null) { VoxelEngine.UI.CargoPadHud.Open(cargoPad); return; }
+
                 var pen = hit.collider.GetComponentInParent<VoxelEngine.Farming.LivestockPen>();
                 if (pen != null) { VoxelEngine.UI.LivestockPenHud.Open(pen); return; }
 

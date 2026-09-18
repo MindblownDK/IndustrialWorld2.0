@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `11.21.0-dev`
-**Roadmap Version:** `11.21.0-dev`
+**Current Version:** `11.24.0-dev`
+**Roadmap Version:** `11.24.0-dev`
 **Date:** 2026-09-16
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,29 @@
 
 ## 0. Recently Done
 
+### 11.24.0-dev - Freight Between Worlds
+- `CargoLaunchPad` + `CargoFlightRegistry` + `CargoPadHud`: scheduled bulk freight between bodies. Setup step 91, research `interplanetary_logistics`.
+- **Scope rule:** NOT a buildable rocket vehicle. Grids already fly to orbit, and a second flying non-grid entity is the exact split the rail rework exists to remove. Pads cover unattended repeatable freight; piloted grids cover manned flight.
+- **Simulation rule:** a flight is a timer and a manifest held in a CENTRAL registry, never on the pads - a flight outlives its endpoints' loaded state, so pad-owned state would stop ticking exactly when it matters.
+- **Safety rule:** cargo is never destroyed. Missing pad, full hold and partial delivery all hold or retry rather than dropping the shipment.
+- **Placement rule:** a pad records its body ONCE at placement. `GravityProvider.ActiveBody` follows the player, so sampling it live would make a pad think it had moved worlds.
+- Re-shipped setup steps 89 and 90, which were lost from the 11.22.0 and 11.23.0 drops.
+
+### 11.23.0-dev - Hold Your Breath, Or Don't
+- `StationRoomSolver` + `StationLifeSupport`: pressurisation for hammer-built stations. Setup step 90. Completes the half deferred by 11.22.0.
+- **Reuse rule:** shares the grid solver's ALGORITHM (bounded flood fill + escape shell) but not its coordinates. Forcing world pieces into the ship solver would mean maintaining a fake grid forever.
+- **Design rule:** a newly sealed volume starts EMPTY. Air must be produced by a powered unit that also leaks, so pressurisation is an ongoing cost, not a property of geometry.
+- **Integration rule:** station rooms plug into `RoomAtmosphereService`, the single existing answer to "is the air here breathable", so player survival, HUDs and offline survival all work without individual changes.
+- **Persistence rule:** only the CHARGE is saved; rooms are re-derived from the placed pieces. Applied a frame after load, since the pieces restore in the same pass.
+- Also re-shipped step 89's setup file, which was missing from the 11.22.0 drop.
+
+### 11.22.0-dev - Somewhere To Live Up There
+- Orbital Station hammer family: 8 new `BuildFamily` values (hull, deck, corridor, junction, viewport, airlock, dock, dome), `StationPiece`, station socket rules, `orbital_construction` research. Setup step 89.
+- **UI rule:** the wheel gained GROUPS, not more pages - `TAB` swaps sets while it is open, so eight new families do not bury the everyday pieces behind a third page.
+- **Design rule:** station pieces only snap to station pieces, so a pressure hull cannot be closed with a wooden wall. Between themselves the rules are permissive, or a ring corridor could never close.
+- **Scope note:** pressure integration is NOT claimed. `PressureRules`/`GridRoom` operate on `GridBlock` and have no concept of world-placed blocks; `StationPiece` records sealing intent for a future world room solver.
+- **Implementation note:** the tier-upgrade path rebuilds the GameObject, so it must re-tag station pieces or a hull stops being one when upgraded.
+
 ### 11.21.0-dev - Prospect From Orbit
 - `SatellitePayloadKind.ResourceScanner` + `DeepOreField.SurveyArea` + deposit layer on the logistics map. Setup step 84 extended; new `Orbital Prospecting` node.
 - **Chain rule:** this is the piece that joins orbit (11.13.0), payloads (11.14.0) and finite deposits (11.18.0) into one loop, so the orbital programme pays back into surface industry.
@@ -44,27 +67,6 @@
 - **Reuse rule:** the relic requirement is a facility-style gate on `GetFacilityBlockReason`, not a new `ScienceCost` type - both research entry points already funnel through it, so it cannot leak.
 - **Implementation note:** grant in `OnDestroy`, never an `Update` poll - `Damageable.Die` destroys the object the same frame, so polling can miss the death. Guard against scene unload.
 - Also fixed a pre-existing hole: the research UI never surfaced facility block reasons, so orbital-gated nodes looked live and silently did nothing.
-
-### 11.19.0-dev - Keep Them Alive
-- `LivestockHusbandry` + `LivestockPen` + `LivestockPenHud`: food, water, shelter, health, breeding and population caps on the existing passive fauna. Setup step 87.
-- **Reuse rule:** husbandry is an ADDITIVE component on `PassiveAnimal`, not a second animal class. Wild and farmed herds are the same object with different components.
-- **Design rule:** needs are a chain - hunger/thirst drive health, health gates production, health and maturity gate breeding - so neglect costs income long before it costs animals.
-- **Balance rule:** milk and wool are produced WITHOUT death, so the mechanic itself pushes husbandry over slaughter. Population caps are per-pen and enforced at breeding time.
-- **Implementation note:** starvation must not route through `TakeDamage` - that triggers the flee reflex and scatters a herd every frame. Newborn clones must have their age reset or they are born adult.
-
-### 11.18.0-dev - Something Worth Building On
-- `DeepOreField` + `DeepCoreExtractor` + `DeepSurveyHud`: large finite ore deposits, the machine that taps them, and the scanner that finds them. Setup step 86.
-- **Core rule:** a deep node CANNOT be hand-mined. It is a different verb from the pickaxe and the ship drill, which is what makes it drive outpost building instead of obsoleting the existing tools.
-- **Derivation rule:** node placement is derived from the world seed (Worley, 900 m lattice, 30% occupancy); only DEPLETION is saved. Existing worlds already have deposits.
-- **Balance rule:** nodes are finite so an outpost has a lifespan. An infinite extractor would end the resource game the first time one was built.
-- **Correctness note:** take from the node before banking the item, and refund what the output buffer refuses - otherwise two extractors double-mint the last item, or ore vanishes invisibly.
-
-### 11.17.0-dev - Nowhere Is Uniformly Safe
-- `HazardField` + `HazardWarningHud`: localised radiation, heat and toxic-atmosphere zones, plus the Geiger warning strip.
-- **Core rule:** zones are DERIVED from body-seeded Worley noise, never stored. No save fields; existing worlds gain zones on load.
-- **Compatibility rule:** the authored planet constant is the FLOOR and zones only add, so no world becomes safer and no authored value is overridden.
-- Toxic atmosphere is the new third channel, stopped by sealed air rather than plating - total protection or none.
-- Warning strip shows hazard, strength and whether the player is protected against that specific hazard; reads the damage path's own sample rather than re-sampling.
 
 ### Era Transition Feel
 
@@ -1745,20 +1747,19 @@ Statuses are evidence-based and move forward only after code/content review and 
 
 #### New Content
 
-1. **Rocket Platform & Rocket Parts**
-   - Build multi-stage rockets from hull, engine, fuel tank, cargo bay.
-   - Crew capsule for player travel.
-   - Cargo capsule for item transport.
+1. **Rocket Platform & Rocket Parts** - **RESCOPED, see note**
+   - ~~Cargo capsule for item transport~~ *(11.24.0-dev)* - delivered as the Cargo Launch Pad (item 5).
+   - **Scope decision:** a buildable multi-stage rocket VEHICLE is deliberately not planned. The game already reaches orbit by building a grid with thrusters and flying it, and a separate rocket entity would be a second large flying thing that is not a player-built grid - the same split the Train System v2 rework (6.4 item 1b) exists to remove.
+   - Crew capsule / player travel is therefore already served by piloted grids plus `OrbitalRails`.
+   - Open: if rocket PARTS are still wanted, they should be ordinary grid blocks (staged engines, drop tanks) rather than a new entity type.
 
-2. **Space Stations & Orbital Station Hammer Family**
-   - Buildable orbital platforms using grid blocks and a dedicated Building Hammer family.
-   - Researching **Orbital Construction** adds the Orbital Station family to the round Hammer wheel.
-   - Dedicated pressurized foundations, walls, floors, ceilings, curved corridors, junctions, reinforced windows, observation domes, airlocks, and docking frames.
-   - Modular visual language: clean futuristic habitat panels, readable seals, structural ribs, utility channels, and premium negative space.
-   - Docking ports for ships and cargo capsules.
-   - Solar arrays, radiators, life support, exterior armor, and gravity ring modules.
-   - Airtight pieces integrate with room pressure and oxygen simulation.
-   - Stations can be expanded into massive orbital factories.
+2. **Space Stations & Orbital Station Hammer Family** - ~~dedicated Hammer family~~ ~~Orbital Construction adds it to the wheel~~ ~~hull, decks, corridors, junctions, reinforced windows, domes, airlocks, docking frames~~ ~~habitat visual language~~ *(11.22.0-dev)* - **PARTIALLY COMPLETE**
+   - 8 families via `BuildFamily` (appended, save-safe), `StationPiece`, station-only socket rules, `orbital_construction` node. Authored by setup step 89.
+   - **UI rule:** the wheel has GROUPS, not more pages. `TAB` swaps between STRUCTURAL and ORBITAL STATION while the wheel is open; it opens on structural because that is the common case.
+   - **Design rule:** station pieces snap only to station pieces - a wooden wall must not be able to close a pressure hull. Between station pieces the rules are permissive so a ring corridor can close on itself.
+   - ~~Airtight pieces integrate with room pressure and oxygen simulation~~ *(11.23.0-dev)* - `StationRoomSolver` flood-fills sealed compartments from the placed pieces; `StationLifeSupport` (setup step 90) produces the air. Plugged into `RoomAtmosphereService` so player survival and HUDs work unchanged.
+   - **Design rule:** a sealed volume starts EMPTY and air must be produced and maintained - pressurisation is an ongoing power cost, not a property of geometry. A DOCK collar deliberately does not seal.
+   - Open: functional docking ports for ships and cargo capsules, solar arrays/radiators/gravity ring modules, and exterior armour.
 
 3. **Asteroid Mining**
    - Asteroid fields accessible from orbit.
@@ -1772,9 +1773,12 @@ Statuses are evidence-based and move forward only after code/content review and 
    - **Design rule:** the scanner is a survey instrument with no weather hardware, so it is not a strict upgrade of the other payloads and does not retire them.
    - Open: relay power or data between worlds - needs the interplanetary power/data layer that does not exist yet.
 
-5. **Interplanetary Cargo Rocket**
-   - Schedule launches between planets.
-   - Carry bulk resources or rare samples.
+5. **Interplanetary Cargo Rocket** - ~~schedule launches between planets~~ ~~carry bulk resources~~ *(11.24.0-dev)* - **COMPLETE**
+   - `CargoLaunchPad` (named, SEND/RECEIVE, full-load launches), `CargoFlightRegistry` (central, keeps flying while worlds are unloaded), `CargoPadHud` (console + flight board). Setup step 91.
+   - **Scope rule:** implemented as PADS, not a rocket vehicle. Grids already fly to orbit; a second non-grid flying entity is the split the rail rework is removing. See item 1.
+   - **Simulation rule:** flights live centrally, not on pads, because a flight outlives its endpoints' loaded state.
+   - **Safety rule:** missing pad, full hold and partial delivery all hold or retry - cargo is never silently destroyed.
+   - Open: multi-item manifests, and routing cargo onward from a receiving pad into a train or drone network automatically.
 
 #### Improved Features
 

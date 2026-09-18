@@ -393,6 +393,7 @@ namespace VoxelEngine.Building.Tiered
             var pb = go.GetComponent<PlacedTieredBlock>();
             if (pb == null) pb = go.AddComponent<PlacedTieredBlock>();
             pb.Initialize(def, BuildTier.Wood);
+            TagStationPiece(go, def);
             // Satisfying placement thunk at the build location.
             VoxelEngine.FX.AudioManager.PlayAt(
                 VoxelEngine.FX.SfxLibrary.Get(VoxelEngine.FX.Sfx.Place), pos,
@@ -423,7 +424,26 @@ namespace VoxelEngine.Building.Tiered
             var pb = go.GetComponent<PlacedTieredBlock>();
             if (pb == null) pb = go.AddComponent<PlacedTieredBlock>();
             pb.Initialize(def, next);
+            // Re-tag on upgrade: the upgrade path destroys and rebuilds the object, so a
+            // station hull would silently stop being a station piece the first time it was
+            // upgraded from wood to steel.
+            TagStationPiece(go, def);
             return true;
+        }
+
+        /// <summary>
+        /// Attaches (or refreshes) the station marker when the placed definition belongs to
+        /// the orbital station group. Ordinary structural pieces get nothing, so the
+        /// everyday building path is completely untouched.
+        /// </summary>
+        private static void TagStationPiece(GameObject go, TieredBlockDefinition def)
+        {
+            if (go == null || def == null) return;
+            if (BuildFamilyInfo.GroupOf(def.family) != BuildFamilyGroup.OrbitalStation) return;
+
+            var piece = go.GetComponent<StationPiece>();
+            if (piece == null) piece = go.AddComponent<StationPiece>();
+            piece.Configure(def.family);
         }
 
         public void Rotate(PlacedTieredBlock target, float delta)

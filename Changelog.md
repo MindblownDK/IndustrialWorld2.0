@@ -1,9 +1,179 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `11.21.0-dev`
+**Current Version:** `11.24.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [11.24.0-dev] Freight Between Worlds
+
+**Type:** MINOR - a new system, save-compatible. Two additive save lists, both empty until cargo pads exist.
+
+**GitHub title:** `[11.24.0-dev] Freight between worlds`
+
+Section 6.6 item 5 - the Interplanetary Cargo Rocket.
+
+#### First: two setup steps were missing again
+
+Steps **89** and **90** did not survive into the repository on their previous deliveries - the runtime code persisted every time, but the editor scripts that author the assets, and their wizard buttons, were lost. That means the station family and life support had no way to be created in Unity.
+
+Both are restored and verified in place alongside step 91. **Please run 89, 90 and 91.** I have checked all three source files, their `.meta` files and all three wizard buttons exist this time rather than assuming the write landed.
+
+#### Why cargo pads rather than a buildable rocket
+
+The roadmap lists a multi-stage rocket vehicle as well. That is deliberately **not** what shipped here, because the game already has a way to reach orbit: build a grid with thrusters and fly it. A separate rocket entity would be a second flying thing that is not a player-built grid - exactly the split the rail system is being reworked to remove. Manned flight stays a grid you build.
+
+So the cargo pad handles what a piloted grid is genuinely bad at: **unattended, repeatable, scheduled bulk freight**. The two answer different problems, which is what keeps both worth having.
+
+This completes the logistics ladder, and it is the rung that was missing:
+
+| Tier | Range |
+|---|---|
+| Belts | Metres, inside a factory |
+| Trains | Kilometres, across one planet |
+| Drone ports | 400 m, point to point |
+| **Cargo pads** | **Between bodies** |
+
+Without it a second planet is a place you visit rather than a place you can industrialise, because nothing built there can feed anything built at home.
+
+#### Flights are simulated, not flown
+
+A launch is a timer and a manifest, not a physics object - the same reasoning as trains walking a graph and satellites on analytic rails. A shipment completes whether or not either world is loaded, which is the entire promise of unattended freight.
+
+The flights live in a central registry rather than on the pads, deliberately. A flight outlives its endpoints' loaded state: the origin is usually on a planet you have left and the destination on one you have not reached. On a pad it would stop being ticked exactly when it matters.
+
+Transit time is derived from the real distance between the two bodies, through a square root so that near and far destinations are both usable, then clamped at both ends - a floor so nothing is instant, a ceiling so an unlucky planetary alignment cannot strand cargo for a whole session.
+
+#### Cargo is never destroyed
+
+Three separate cases, all resolved the same way:
+
+- **Destination pad missing on arrival** - the flight holds and re-checks, rather than evaporating. It may simply be in an unloaded chunk, and deleting cargo for that would be silent theft.
+- **Destination hold full** - the flight circles and retries.
+- **Partial delivery** - the remainder stays in flight instead of being lost.
+
+A launch also needs a **full load of one item**. A pad waits rather than burning an entire flight on a handful of ingots.
+
+#### One subtle placement rule
+
+A pad records which body it was built on **once**, at placement, and never re-samples it. The active body changes as the *player* travels, so a pad reading it live would think it had relocated to whatever world its owner happened to be standing on. The recorded body is saved and restored explicitly for the same reason - pads are restored while the player may be on an entirely different world.
+
+#### Manual steps in Unity
+
+1. **Tools -> Voxel Engine -> Voxel Engine Setup**.
+2. Run **89**, **90** and **91** (89 and 90 were missing from previous drops).
+3. Research **Interplanetary Logistics**.
+4. Build a pad on each body, name them, set one SEND pointing at the other and one RECEIVE, then power the sender and fill its hold.
+
+Right-click a pad for the console and its flight board.
+
+### [11.23.0-dev] Hold Your Breath, Or Don't
+
+**Type:** MINOR - a new system, save-compatible. One additive save list, empty until a station is actually pressurised.
+
+**GitHub title:** `[11.23.0-dev] Hold your breath, or don't`
+
+The world room solver - the half of Space Stations that 11.22.0 deliberately did not claim.
+
+#### Finishing what was deferred
+
+11.22.0 shipped the Orbital Station hammer family and explicitly refused to claim pressure integration, because `GridPressureSystem` and `GridRoom` are a **ship** system: they walk a grid's integer block dictionary and know nothing about world-placed objects. Rather than fake it, that release recorded the sealing intent and left the note. This is the missing half.
+
+#### A separate solver, a shared algorithm
+
+The two systems live in genuinely different coordinate spaces. A ship has an authoritative integer lattice with one block per cell; a hammer station is loose world objects at arbitrary positions. Forcing station pieces into the grid solver would mean inventing a fake grid for them, and every future change to ship pressure would have to keep that fiction alive.
+
+So `StationRoomSolver` shares the **algorithm** that was already proven in the grid solver - a bounded flood fill with a one-cell escape shell - and keeps its own coordinate handling.
+
+**The escape shell is the whole trick.** A fill that reaches the shell has found a way out, so that volume is open space rather than a room. That is what makes "sealed" mean something: three walls and optimism will not pressurise anything, and opening an airlock genuinely vents the compartment because the next solve escapes through it.
+
+Solving is event-driven and coalesced - placing a piece marks the solver dirty and the fill runs at most a few times a second - so building a wall stays cheap. A fill that exceeds its cell budget is treated as open rather than allowed to run away.
+
+#### Air has to be produced
+
+A newly sealed volume starts **empty**. A station is built in vacuum, and assuming a full charge the moment a room closes would make the hull and the airlock decorative.
+
+The new **Station Life Support** unit is the source. It is a placed machine that:
+
+- Costs power continuously, so holding an atmosphere is the ongoing price of living up there - and orbital power generation finally has a real consumer.
+- **Leaks.** A room slowly loses air, so life support is not a switch you flip once. Cut the power and the compartment goes stale. The rate is deliberately gentle: losing a compartment should give you time to notice, not punish you for walking away.
+
+A **DOCK** collar does not seal, by design. A room with one in its wall will not hold pressure until a ship mates into it, which is exactly what a docking port should mean.
+
+#### One seam, everywhere
+
+Station rooms plug into `RoomAtmosphereService`, the existing single point that answers "is the air here breathable". Player life support, HUDs and offline survival all ask there, so a pressurised station compartment now works for all of them at once without touching any of them.
+
+It is checked **after** ship rooms and deliberately not folded into `RoomAt`, which returns a `GridRoom` - a station room is a different type in world space, and widening that return would force every existing caller to handle a case it does not have.
+
+#### Persistence
+
+Only the **charge** is saved, keyed by room anchor. The rooms themselves are a pure function of which station pieces exist, and those are already saved as placed blocks - storing the geometry too would be a second copy that could disagree with the first.
+
+Charges are applied **one frame after load**, because the pieces are restored by the same load pass and a solve running immediately would find an empty world. A charge whose room no longer exists is dropped rather than leaking into whatever replaced it.
+
+#### Manual steps in Unity
+
+1. **Tools -> Voxel Engine -> Voxel Engine Setup**.
+2. Run **89. Build the Orbital Station Family** if you have not already - it was missing its setup file in the 11.22.0 drop and is included again here.
+3. Run **90. Build Station Life Support**.
+4. Seal a compartment out of station pieces, place a Life Support unit inside it, and give it power.
+
+### [11.22.0-dev] Somewhere To Live Up There
+
+**Type:** MINOR - a new build family and its research, save-compatible. `BuildFamily` values are APPENDED, so every piece already placed keeps its meaning.
+
+**GitHub title:** `[11.22.0-dev] Somewhere to live up there`
+
+Section 6.6 item 2 - Space Stations & the Orbital Station Hammer Family.
+
+#### Eight new families on the Hammer wheel
+
+| Piece | Role |
+|---|---|
+| HULL | Pressure wall with structural ribs |
+| DECK | Interior floor with a utility channel |
+| CORRIDOR | Open-ended tube; chains into runs |
+| JUNCTION | Open on four sides; where a station branches |
+| VIEWPORT | Framed reinforced window |
+| AIRLOCK | Sealed hatch with a mating ring |
+| DOCK | Open collar a ship mates into |
+| DOME | Observation cap for a hull or junction run |
+
+Each exists at all four build tiers, as every hammer family does. The tier ladder is deliberately flat here - upgrading a station piece is cheap rather than a second full build, because a station is already an end-game structure and making it a four-times-over material sink would just be tedium.
+
+#### The wheel now has groups, not more pages
+
+The obvious implementation was to append eight families to the existing list. That would have pushed the wheel from two pages to three and buried the everyday pieces a player uses constantly behind the ones they use occasionally.
+
+Instead the wheel has two **groups**, and `TAB` swaps between them while it is open. It always opens on STRUCTURAL, because that is what gets used most even after the station set unlocks. The TAB hint only appears once Orbital Construction is researched, so the station set reads as a discovery rather than a permanently greyed-out tease.
+
+`TAB` is contextual rather than a global keybind - it only means anything with the wheel up, so it costs no key the player might want elsewhere.
+
+#### Station pieces only snap to station pieces
+
+A station is a sealed pressure vessel. If a wooden wall could close a hull run you would get a "sealed" compartment with a plank in it, which is exactly the sort of thing that makes a pressure system feel arbitrary once one is wired up. The socket rules enforce the separation in both directions.
+
+Between station pieces the rules are deliberately **permissive** - edge-to-edge on all four sides plus top and bottom. A station is built in open space with nothing to anchor to, and over-constraining the sockets would make it impossible to close a ring corridor back on itself.
+
+#### Pressure: scoped honestly
+
+The roadmap says airtight station pieces integrate with room pressure and oxygen. That part is **not** claimed here, and the roadmap entry is marked partial rather than ticked.
+
+The reason: the pressure simulation in this codebase (`PressureRules`, `GridRoom`) operates on `GridBlock`. It is a **ship** system and has no concept of world-placed blocks at all. Wiring hammer pieces into it needs a world-side room solver that does not exist yet, and shipping half of one would produce compartments that look sealed and behave like open vacuum - worse than not claiming it.
+
+What ships instead is the honest groundwork: `StationPiece` records the sealing intent per piece (every family seals except the DOCK collar, which is open by design) and keeps a registry ready for that solver.
+
+#### Implementation note
+
+**Tier upgrades re-tag the piece.** The upgrade path destroys and rebuilds the GameObject, so a station hull would silently stop being a station piece the first time it was upgraded from wood to steel. Both the place path and the upgrade path now call the same tagging helper.
+
+#### Manual step in Unity
+
+1. **Tools -> Voxel Engine -> Voxel Engine Setup**.
+2. Click **89. Build the Orbital Station Family**.
+3. Research **Orbital Construction**.
+4. Hold the Hammer, open the build wheel, press **TAB** to reach the ORBITAL STATION set.
 
 ### [11.21.0-dev] Prospect From Orbit
 

@@ -155,6 +155,8 @@ namespace VoxelEngine.Persistence
                 SaveDronePorts(save);
                 SaveDeepOre(save);
                 save.bossRelics = VoxelEngine.Combat.BossRelicLedger.SaveTo();
+                SaveStationRooms(save);
+                SaveCargoFlights(save);
                 string json = JsonUtility.ToJson(save, prettyPrint: true);
                 string temporaryPath = path + ".tmp";
                 string backupPath = path + ".previous";
@@ -444,6 +446,18 @@ namespace VoxelEngine.Persistence
                         entry.anchorLocalZ   = local.z;
                     }
                 }
+                // Cargo pad (11.24.0). Name, role, destination and the recorded body are all
+                // player decisions or placement facts that cannot be rederived.
+                var cargoPad = pb.GetComponentInChildren<VoxelEngine.Transport.CargoLaunchPad>();
+                if (cargoPad != null)
+                {
+                    entry.hasCargoPad = true;
+                    entry.cargoPadName = cargoPad.HasCustomName ? cargoPad.PadName : "";
+                    entry.cargoPadRole = (int)cargoPad.role;
+                    entry.cargoPadDestination = cargoPad.destinationPad ?? "";
+                    entry.cargoPadBody = cargoPad.BodyName;
+                }
+
                 // Rail (11.15.0). A station's name is what schedules refer to, and a switch's
                 // setting is a routing decision the player made, so both must survive a reload.
                 var railStation = pb.GetComponentInChildren<VoxelEngine.Building.RailStation>();
@@ -1314,6 +1328,8 @@ namespace VoxelEngine.Persistence
                 // Always load, even from an empty list: a stale ledger from a previous
                 // world would otherwise hand this one free late-game research.
                 VoxelEngine.Combat.BossRelicLedger.LoadFrom(save.bossRelics);
+                RestoreStationRooms(save);
+                RestoreCargoFlights(save);
                 Debug.Log($"[WorldState] Loaded {save.placedTiered.Count} tiered + {save.placedBlocks.Count} blocks + {save.grids.Count} movable grids " +
                           $"({anchoredGrids} from a body anchor) from {path}");
             }
@@ -2274,6 +2290,19 @@ namespace VoxelEngine.Persistence
                 // Additive label: missing fields in legacy saves restore as unnamed.
                 go.GetComponentInChildren<VoxelEngine.Building.AsphaltRoad>(true)
                     ?.SetNetworkName(sb.roadNetworkName);
+                var restoredPad = go.GetComponentInChildren<VoxelEngine.Transport.CargoLaunchPad>(true);
+                if (restoredPad != null && sb.hasCargoPad)
+                {
+                    if (!string.IsNullOrEmpty(sb.cargoPadName)) restoredPad.PadName = sb.cargoPadName;
+                    if (System.Enum.IsDefined(typeof(VoxelEngine.Transport.PadRole), sb.cargoPadRole))
+                        restoredPad.role = (VoxelEngine.Transport.PadRole)sb.cargoPadRole;
+                    restoredPad.destinationPad = sb.cargoPadDestination ?? "";
+                    // The recorded body matters most: a pad is restored while the player
+                    // may be standing on a completely different world, so it must never
+                    // re-sample the active body on load.
+                    restoredPad.SetBodyName(sb.cargoPadBody);
+                }
+
                 var restoredStation = go.GetComponentInChildren<VoxelEngine.Building.RailStation>(true);
                 if (restoredStation != null && sb.hasRailStation)
                 {
@@ -3273,6 +3302,31 @@ namespace VoxelEngine.Persistence
             // of encounters beaten, not an inventory - spending a relic on research must
             // not lock the player out of a second node needing the same one.
             public List<int>                bossRelics   = new();
+            // 11.23.0-dev: air held by hammer-built station compartments. Rooms themselves
+            // are re-solved from the placed pieces on load, so only the CHARGE is stored -
+            // keyed by the room anchor cell, which is derived from the same pieces.
+            public List<SavedStationRoom>   stationRooms = new();
+            // 11.24.0-dev: cargo between worlds. A shipment in flight is real inventory
+            // that has already left its origin hold, so dropping it on save would destroy
+            // the player's goods with no trace.
+            public List<SavedCargoFlight>   cargoFlights = new();
+        }
+
+        [Serializable] private class SavedCargoFlight
+        {
+            public string originPad;
+            public string destinationPad;
+            public string destinationBody;
+            public string itemId;
+            public int count;
+            public float remaining;
+            public float total;
+        }
+
+        [Serializable] private class SavedStationRoom
+        {
+            public int x, y, z;
+            public float oxygenLitres;
         }
 
         [Serializable] private class SavedDeepOre
@@ -3496,6 +3550,12 @@ namespace VoxelEngine.Persistence
         [Serializable] private class SavedPlacedBlock
         {
             public string itemId;
+            // Additive 11.24.0: interplanetary cargo pad identity and routing.
+            public bool hasCargoPad;
+            public string cargoPadName = "";
+            public int cargoPadRole;
+            public string cargoPadDestination = "";
+            public string cargoPadBody = "";
             // Additive 11.15.0: rail station identity/role and switch routing.
             public bool hasRailStation;
             public string railStationName = "";
@@ -3802,6 +3862,112 @@ namespace VoxelEngine.Persistence
             public int currentDepth; public int cursorX; public int cursorZ;
             public int phase; public int rangeLvl; public int speedLvl; public int effLvl; // upgrade levels
             public SavedContainer outputContainer;
+        }
+
+        // ── Interplanetary cargo (11.24.0-dev) ────────────────────────────────
+        // The manifest is saved by ITEM ID rather than by reference, the same way every
+        // other container in this save does it, so a flight survives the item database
+        // being rebuilt.
+        private void SaveCargoFlights(SaveData save)
+        {
+            var flights = VoxelEngine.Transport.CargoFlightRegistry.Flights;
+            for (int i = 0; i < flights.Count; i++)
+            {
+                var flight = flights[i];
+                if (flight == null || flight.Item == null || flight.Count <= 0) continue;
+                save.cargoFlights.Add(new SavedCargoFlight
+                {
+                    originPad = flight.OriginPad,
+                    destinationPad = flight.DestinationPad,
+                    destinationBody = flight.DestinationBody,
+                    itemId = flight.Item.itemId,
+                    count = flight.Count,
+                    remaining = flight.Remaining,
+                    total = flight.Total,
+                });
+            }
+        }
+
+        private void RestoreCargoFlights(SaveData save)
+        {
+            // Always clear: a stale flight from a previous world would otherwise deliver
+            // cargo into this one.
+            VoxelEngine.Transport.CargoFlightRegistry.Clear();
+            if (save.cargoFlights == null || save.cargoFlights.Count == 0) return;
+
+            var restored = new List<VoxelEngine.Transport.CargoFlight>(save.cargoFlights.Count);
+            foreach (var entry in save.cargoFlights)
+            {
+                if (entry == null || entry.count <= 0) continue;
+                if (!_itemById.TryGetValue(entry.itemId, out var item) || item == null)
+                {
+                    Debug.LogWarning("[WorldState] Cargo flight referenced unknown item '" +
+                                     entry.itemId + "'; the shipment was dropped.");
+                    continue;
+                }
+
+                restored.Add(new VoxelEngine.Transport.CargoFlight
+                {
+                    OriginPad = entry.originPad,
+                    DestinationPad = entry.destinationPad,
+                    DestinationBody = entry.destinationBody,
+                    Item = item,
+                    Count = entry.count,
+                    Remaining = entry.remaining,
+                    Total = entry.total,
+                });
+            }
+
+            VoxelEngine.Transport.CargoFlightRegistry.Restore(restored);
+        }
+
+        // ── Station room air (11.23.0-dev) ────────────────────────────────────
+        // Only the CHARGE is saved. The rooms themselves are a pure function of which
+        // station pieces exist, and those are already saved as placed blocks, so storing
+        // the geometry too would be a second copy that could disagree with the first.
+        private void SaveStationRooms(SaveData save)
+        {
+            var rooms = VoxelEngine.Pressure.StationRoomSolver.Rooms;
+            for (int i = 0; i < rooms.Count; i++)
+            {
+                var room = rooms[i];
+                if (room == null || room.OxygenLitres <= 0f) continue;
+                save.stationRooms.Add(new SavedStationRoom
+                {
+                    x = room.Anchor.x,
+                    y = room.Anchor.y,
+                    z = room.Anchor.z,
+                    oxygenLitres = room.OxygenLitres,
+                });
+            }
+        }
+
+        private void RestoreStationRooms(SaveData save)
+        {
+            // Always clear first: a stale solve from a previous world would otherwise
+            // leave its compartments pressurised in this one.
+            VoxelEngine.Pressure.StationRoomSolver.Clear();
+            if (save.stationRooms == null || save.stationRooms.Count == 0) return;
+
+            var charges = new Dictionary<Vector3Int, float>(save.stationRooms.Count);
+            foreach (var entry in save.stationRooms)
+            {
+                if (entry == null || entry.oxygenLitres <= 0f) continue;
+                charges[new Vector3Int(entry.x, entry.y, entry.z)] = entry.oxygenLitres;
+            }
+
+            // Deferred by a frame: the station pieces are restored as placed blocks by the
+            // same load, and a solve that ran now would find an empty world and produce no
+            // rooms for the charges to land in.
+            StartCoroutine(ApplyStationChargesNextFrame(charges));
+        }
+
+        private System.Collections.IEnumerator ApplyStationChargesNextFrame(
+            Dictionary<Vector3Int, float> charges)
+        {
+            yield return null;
+            VoxelEngine.Pressure.StationRoomSolver.Solve();
+            VoxelEngine.Pressure.StationRoomSolver.ApplyCharges(charges);
         }
 
         // ── Deep ore depletion (11.18.0-dev) ──────────────────────────────────

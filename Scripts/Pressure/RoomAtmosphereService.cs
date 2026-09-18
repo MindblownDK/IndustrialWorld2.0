@@ -45,14 +45,24 @@ namespace VoxelEngine.Pressure
         public static bool IsBreathableAt(Vector3 worldPosition)
         {
             var room = RoomAt(worldPosition);
-            return room != null && room.IsBreathable;
+            if (room != null && room.IsBreathable) return true;
+
+            // Hammer-built station compartments (11.23.0). Checked second because ship
+            // rooms are the common case; a station is only ever a handful of volumes.
+            // Deliberately NOT folded into RoomAt, which returns a GridRoom - a station
+            // room is a different type living in world space, and widening that return
+            // type would force every existing caller to handle a case it does not have.
+            return StationRoomSolver.IsBreathableAt(worldPosition);
         }
 
         /// <summary>Short HUD descriptor for the room at a point ("—" when outside).</summary>
         public static string StatusAt(Vector3 worldPosition)
         {
             var room = RoomAt(worldPosition);
-            return room == null ? "—" : room.StatusLabel;
+            if (room != null) return room.StatusLabel;
+
+            var station = StationRoomSolver.RoomAt(worldPosition);
+            return station == null ? "—" : station.StatusLabel;
         }
     }
 }

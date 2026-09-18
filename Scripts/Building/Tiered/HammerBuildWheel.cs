@@ -19,7 +19,7 @@ namespace VoxelEngine.Building.Tiered
         public Inventory inventory;
         public TieredBlockRegistry registry;
 
-        private static readonly BuildFamily[] Families =
+        private static readonly BuildFamily[] StructuralFamilies =
         {
             BuildFamily.Foundation, BuildFamily.Wall, BuildFamily.Floor,
             BuildFamily.Doorway, BuildFamily.Door, BuildFamily.Window,
@@ -27,10 +27,76 @@ namespace VoxelEngine.Building.Tiered
             BuildFamily.HalfWall
         };
 
-        private static readonly string[] Icons =
+        private static readonly string[] StructuralIcons =
         {
             "▣", "▥", "▤", "⊡", "▯", "☐", "⟋", "⌂", "▏", "▤"
         };
+
+        private static readonly BuildFamily[] StationFamilies =
+        {
+            BuildFamily.StationHull, BuildFamily.StationFloor, BuildFamily.StationCorridor,
+            BuildFamily.StationJunction, BuildFamily.StationWindow, BuildFamily.StationAirlock,
+            BuildFamily.StationDock, BuildFamily.StationDome
+        };
+
+        private static readonly string[] StationIcons =
+        {
+            "▦", "▤", "═", "╬", "◫", "⊟", "⊕", "◒"
+        };
+
+        /// <summary>
+        /// Which family group the wheel is showing. Held per-session rather than saved:
+        /// the wheel should open on the everyday pieces, because that is what the player
+        /// uses most, even after the station set unlocks.
+        /// </summary>
+        private BuildFamilyGroup _group = BuildFamilyGroup.Structural;
+
+        private BuildFamily[] Families => _group == BuildFamilyGroup.OrbitalStation
+            ? StationFamilies : StructuralFamilies;
+
+        private string[] Icons => _group == BuildFamilyGroup.OrbitalStation
+            ? StationIcons : StructuralIcons;
+
+        /// <summary>
+        /// True when the station set is available. Checked live rather than cached, so
+        /// finishing the research makes the group appear without reopening the wheel.
+        /// </summary>
+        private static bool StationGroupUnlocked
+        {
+            get
+            {
+                string nodeId = BuildFamilyInfo.RequiredResearchId(BuildFamilyGroup.OrbitalStation);
+                if (string.IsNullOrEmpty(nodeId)) return true;
+                var rm = VoxelEngine.Research.ResearchManager.Instance;
+                return rm != null && rm.IsUnlocked(nodeId);
+            }
+        }
+
+        /// <summary>
+        /// Flips between the structural and station sets. Does nothing when the station
+        /// research is not done, so the toggle cannot reveal locked content.
+        /// </summary>
+        private void ToggleGroup()
+        {
+            if (_group == BuildFamilyGroup.Structural)
+            {
+                if (!StationGroupUnlocked)
+                {
+                    VoxelEngine.UI.BuildFeedbackHud.Show("Orbital Station pieces locked",
+                        "Research Orbital Construction to unlock the station family.",
+                        null, T.AccentAmber);
+                    return;
+                }
+                _group = BuildFamilyGroup.OrbitalStation;
+            }
+            else _group = BuildFamilyGroup.Structural;
+
+            // The two sets are different lengths, so a page index carried across would
+            // land on an empty page.
+            _page = 0;
+            ActiveFamily = null;
+            Build();
+        }
 
         private const int PageSize = 8;
         private UIDocument _document;
@@ -102,8 +168,30 @@ namespace VoxelEngine.Building.Tiered
             _wasWheelHeld = wheelHeld;
 
             if (!_open) return;
+            HandleGroupToggle();
             HandlePageScroll();
             UpdateParallax();
+        }
+
+        /// <summary>
+        /// Tab swaps between the structural and station sets while the wheel is open.
+        /// Contextual rather than a global keybind: it only means anything with the wheel
+        /// up, so it costs the player no key they might want elsewhere.
+        /// </summary>
+        private void HandleGroupToggle()
+        {
+            if (!TabPressed()) return;
+            ToggleGroup();
+        }
+
+        private static bool TabPressed()
+        {
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
+            var keyboard = UnityEngine.InputSystem.Keyboard.current;
+            return keyboard != null && keyboard.tabKey.wasPressedThisFrame;
+#else
+            return Input.GetKeyDown(KeyCode.Tab);
+#endif
         }
 
         private void OnDisable()
@@ -255,7 +343,14 @@ namespace VoxelEngine.Building.Tiered
             title.pickingMode = PickingMode.Ignore;
             disc.Add(title);
 
-            var page = new Label($"PAGE {_page + 1}/{PageCount}  ·  SCROLL TO BROWSE");
+            string groupName = _group == BuildFamilyGroup.OrbitalStation
+                ? "ORBITAL STATION" : "STRUCTURAL";
+            // The hint only advertises the station set once it is actually researched, so
+            // it reads as a discovery rather than as a permanently greyed-out tease.
+            string toggleHint = StationGroupUnlocked ? "  ·  TAB: " + (
+                _group == BuildFamilyGroup.OrbitalStation ? "STRUCTURAL" : "ORBITAL STATION") : "";
+
+            var page = new Label($"{groupName}  ·  PAGE {_page + 1}/{PageCount}  ·  SCROLL{toggleHint}");
             page.style.fontSize = 10;
             page.style.marginTop = 6;
             page.style.letterSpacing = 1f;
@@ -317,7 +412,7 @@ namespace VoxelEngine.Building.Tiered
             icon.pickingMode = PickingMode.Ignore;
             root.Add(icon);
 
-            var name = new Label(Families[index].ToString().ToUpperInvariant());
+            var name = new Label(BuildFamilyInfo.DisplayName(Families[index]));
             name.name = "Name";
             name.style.fontSize = 8;
             name.style.maxWidth = 76;

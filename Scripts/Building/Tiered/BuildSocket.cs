@@ -37,6 +37,16 @@ namespace VoxelEngine.Building.Tiered
         /// </summary>
         public static bool AreCompatible(BuildFamily host, SocketSide side, BuildFamily incoming)
         {
+            // ── Orbital station pieces (11.22.0-dev) ──
+            // A station is a sealed pressure vessel, so its pieces only mate with each
+            // other. Letting a wooden wall close a hull run would produce a "sealed" room
+            // with a plank in it, which is exactly the kind of thing that makes a
+            // pressure system feel arbitrary once one is wired up.
+            bool hostIsStation = BuildFamilyInfo.GroupOf(host) == BuildFamilyGroup.OrbitalStation;
+            bool incomingIsStation = BuildFamilyInfo.GroupOf(incoming) == BuildFamilyGroup.OrbitalStation;
+            if (hostIsStation || incomingIsStation)
+                return hostIsStation && incomingIsStation && StationCompatible(host, side, incoming);
+
             // Foundations bind neighboring decks, wall-like perimeter pieces, and stairs.
             if (host == BuildFamily.Foundation)
             {
@@ -124,6 +134,40 @@ namespace VoxelEngine.Building.Tiered
                 return incoming == BuildFamily.Roof;
 
             return false;
+        }
+
+        /// <summary>
+        /// Station mating rules. Deliberately permissive between station pieces: a station
+        /// is built in open space with no ground to anchor to, so over-constraining the
+        /// sockets would make it impossible to close a ring corridor back on itself.
+        /// </summary>
+        private static bool StationCompatible(BuildFamily host, SocketSide side, BuildFamily incoming)
+        {
+            // A dock collar is the outer face of a station: nothing attaches beyond it.
+            if (host == BuildFamily.StationDock) return false;
+
+            // A dome caps a run and only ever sits on top of hull or a junction.
+            if (incoming == BuildFamily.StationDome)
+                return side == SocketSide.Top
+                    && (host == BuildFamily.StationHull || host == BuildFamily.StationJunction);
+
+            // Decks lie flat inside the pressure envelope.
+            if (incoming == BuildFamily.StationFloor)
+                return side == SocketSide.Top || side == SocketSide.Bottom;
+
+            // Everything else joins edge to edge, which is how a station actually grows.
+            switch (side)
+            {
+                case SocketSide.North:
+                case SocketSide.South:
+                case SocketSide.East:
+                case SocketSide.West:
+                case SocketSide.Top:
+                case SocketSide.Bottom:
+                    return true;
+                default:
+                    return false;
+            }
         }
     }
 }
