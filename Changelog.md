@@ -1,9 +1,103 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `11.29.0-dev`
+**Current Version:** `11.31.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [11.31.0-dev] A Train Is Just Something You Built
+
+**Type:** MINOR - Train System v2, phase 1. Save-compatible and additive; the 11.15.0 rail network is untouched and existing trains keep working.
+
+**GitHub title:** `[11.31.0-dev] A train is just something you built`
+
+Section 6.4 item 1b - unifying rail with the grid system.
+
+#### The open question turned out to be a wrong premise
+
+The roadmap blocked this rework on one thing: *"how does a grid-based train keep running while its chunks are unloaded?"* - because unattended operation is the entire reason rail beat rovers for bulk haul. The expected answer was a dormant analytic mode along the rail path, mirroring `OrbitalRails`.
+
+I checked before building it, and the premise was wrong. **Grids are not chunk-streamed.** They are persistent scene objects saved by body anchor, and nothing distance-culls them. Rail track is `PlacedBlock`, likewise never distance-culled. So a grid on rails keeps ticking wherever the player is, and the hard part did not need building at all.
+
+That is worth stating plainly because it inverts the cost of the whole rework: the property that justified keeping trains separate was never actually at risk.
+
+#### A train is now an ordinary construct
+
+Build any grid, put a **Rail Truck** on it, drive it onto track. There is no locomotive entity and no special vehicle type.
+
+Everything that already works on a grid now works on a train, for free:
+
+- Any grid block works on a wagon - containers, tanks, refineries, turrets - because it is a grid and those are grid blocks.
+- Damage, paint, power, pressurisation and the inspection overlay all apply.
+- The console folds into the normal grid block UI instead of a parallel rail window.
+
+#### Why a block rather than a flag
+
+The Orbital Programme declares a satellite through `GridIdentity` - a property of the whole construct. Being railed is deliberately different: it is **hardware**. The player builds it, pays for it, can remove it, and it takes space on the hull. A flag would make every grid a potential train for free, and the rail capability would live nowhere the player can see.
+
+#### Design decisions worth naming
+
+- **The slowest truck wins.** A consist is tuned from the minimum speed and weakest acceleration across every truck aboard, because a train is limited by its worst component. Taking the best would mean bolting one fast truck to a heavy wagon made the whole thing fast, which is backwards.
+- **A railed grid goes kinematic.** A rail is a hard constraint, and fighting the physics solver to hold one is how a train jitters, climbs its own track, or gets shoved off by a collision. Movement uses `MovePosition`, so anything standing on the train is carried rather than left behind.
+- **Removing the last truck detaches and deletes the bogie**, handing the grid back to ordinary physics rather than leaving it frozen on track it can no longer drive.
+- **The track cell is not saved.** The rail graph rebuilds from placed blocks, so a bogie re-latches from its restored world position a frame after load. Only the player's intent - powered, reversed - is state.
+
+#### Still to come in this rework
+
+Multi-car consists, wider gauges, draggable smart placement and signalling. The 11.15.0 `RailTrain` remains in place and working; it will be retired once consists land, rather than removing a working feature before its replacement is complete.
+
+#### Manual step in Unity
+
+**Tools -> Voxel Engine -> Voxel Engine Setup**, then **92. Build the Rail Truck**. Build a grid, place a truck on it, park within a few metres of track, then SNAP TO RAIL and DRIVE.
+
+### [11.30.0-dev] Don't Overwrite What You Couldn't Read
+
+**Type:** MINOR - save schema versioning and corruption recovery. Fully backward compatible: saves made before this release load unchanged and are migrated on the spot.
+
+**GitHub title:** `[11.30.0-dev] Don't overwrite what you couldn't read`
+
+Section 6.6 item 9 - Interplanetary Save Data.
+
+#### What was actually missing
+
+I checked what the item still needed before writing anything. Orbital stations already save (`OrbitalRails` Keplerian elements, restored at the correct phase), asteroid positions are derived from the world seed and correctly never saved at all, and cargo schedules shipped in 11.24.0. The item's content was done.
+
+What was missing was the part the roadmap called "requires save schema v2" - and looking for it turned up something considerably worse than a missing version number.
+
+#### The bug: a failed load would silently destroy the world
+
+The loader caught every exception, logged it, and carried on with an empty world. The autosave timer then fired a few minutes later and wrote that empty world **over the save it had just failed to read**.
+
+So a save that was merely unreadable - a truncated write, a half-flushed file, one corrupt field - became permanently lost data, automatically, with the only warning buried in the console.
+
+Worse, the atomic save has been writing a `.previous` sidecar on every single save for a long time. **Nothing ever read it.** A perfectly good backup sat next to the broken file while the game overwrote the original.
+
+Three fixes:
+
+- **The backup is now read.** A failed primary load falls back to `.previous` and recovers from it, saying so clearly.
+- **A failed load blocks all saving for the session.** Not just autosave - every entry point funnels through `SaveAll`, including quit and the pause menu, and I traced all four to confirm. The file and its sidecar are left untouched so the player still has something to recover from.
+- **Truncated-but-parseable saves are caught.** `JsonUtility` happily returns an object for some malformed input, so a save missing its player block - the one field every save must have - is now treated as a failure rather than loaded as an empty world.
+
+#### Schema versioning
+
+`SaveData` now carries `schemaVersion`, stamped on every write. Saves from before this release have no field, deserialize as 0, and are treated as v1 and migrated to v2 on load.
+
+The v1 to v2 migration is deliberately a no-op beyond the stamp itself. Every field added to this format has been additive - a missing list just takes its default - which is exactly why saves have kept working without a version until now. That only holds while changes stay additive, and the moment one does not, there is now somewhere for the fix to live and a number to decide which fix to apply.
+
+A save from a **newer** build is loaded rather than refused, with a clear warning that anything this build does not understand will be dropped on the next write. Silently discarding a newer save's data would be worse than saying so.
+
+#### Verified by case, not by inspection
+
+| Scenario | Outcome |
+|---|---|
+| No file yet | Normal new world |
+| Good save | Loads, migrates if old |
+| Primary truncated, backup good | **Recovered from backup** |
+| Primary and backup both corrupt | **Saving blocked, files preserved** |
+| Exception during restore | **Saving blocked, files preserved** |
+| Save from a newer build | Loads with a warning |
+
+No manual Unity step.
 
 ### [11.29.0-dev] Your Base Keeps Working
 

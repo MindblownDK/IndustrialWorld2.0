@@ -871,6 +871,8 @@ namespace VoxelEngine.EditorTools
                 () => IndustrialWorld.EditorTools.StationLifeSupportSetup.RunStep90(), 62);
             AddWizardButton(scroll, "91. Build the Interplanetary Cargo Pad\n(Bulk freight between worlds \u2014 Non-Destructive)",
                 () => IndustrialWorld.EditorTools.CargoPadSetup.RunStep91(), 62);
+            AddWizardButton(scroll, "92. Build the Rail Truck\n(Train System v2 \u2014 any grid runs on rails \u2014 Non-Destructive)",
+                () => IndustrialWorld.EditorTools.RailTruckSetup.RunStep92(), 62);
 
             AddSpacer(scroll, 20);
         }

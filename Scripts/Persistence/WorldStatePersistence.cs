@@ -41,6 +41,24 @@ namespace VoxelEngine.Persistence
         private bool _loaded;
         private float _saveTimer;
 
+        /// <summary>
+        /// Current save schema version. Bump this when the format changes in a way a
+        /// loader must react to, and add a migration step in <see cref="MigrateSave"/>.
+        /// </summary>
+        private const int CurrentSchemaVersion = 2;
+
+        /// <summary>
+        /// Saves written before 11.30.0 carry no version and deserialize as 0.
+        /// </summary>
+        private const int LegacySchemaVersion = 1;
+
+        /// <summary>
+        /// Set when a load FAILED rather than finding no file. While true the autosave is
+        /// suppressed, because writing a fresh empty save over a world we simply could not
+        /// read is how a player permanently loses a base.
+        /// </summary>
+        private bool _loadFailed;
+
         // Background autosave cadence now comes from GameSettings.AutosaveSeconds
         // (0 = disabled). Players change it live from the Settings → Saving tab.
 
@@ -138,10 +156,28 @@ namespace VoxelEngine.Persistence
         public void SaveAll(bool writeAutosaveSlot = false)
         {
             if (Menu.WorldSession.Instance == null) return;
+
+            // THE IMPORTANT GUARD.
+            //
+            // If the save could not be READ, the in-memory world is empty or partial - not
+            // because the player demolished anything, but because we failed to load it.
+            // Writing that back is how a corrupt-but-recoverable file becomes a permanently
+            // lost base, and it happens silently on the very next autosave tick.
+            //
+            // The existing file is left exactly as it is, including its .previous sidecar,
+            // so the player still has something to recover from.
+            if (_loadFailed)
+            {
+                Debug.LogWarning("[WorldState] Save suppressed: this session started from a " +
+                                 "failed load, so writing would overwrite a world we could not read.");
+                return;
+            }
+
             string path = WorldStatePath();
             try
             {
                 var save = new SaveData();
+                save.schemaVersion = CurrentSchemaVersion;
                 if (!SavePlayer(save))
                 {
                     Debug.LogWarning("[WorldState] Skipped save because the player inventory is unavailable; existing save was preserved.");
@@ -1314,8 +1350,38 @@ namespace VoxelEngine.Persistence
 
             try
             {
-                var save = JsonUtility.FromJson<SaveData>(File.ReadAllText(path));
-                if (save == null) { _loaded = true; return; }
+                // Try the live file, then fall back to the sidecar the atomic save already
+                // maintains. That backup has been written on every save for a long time and
+                // was never read by anything - so a truncated or corrupt world was
+                // unrecoverable despite a perfectly good copy sitting next to it.
+                var save = TryReadSave(path, out string readError);
+                if (save == null)
+                {
+                    string previous = path + ".previous";
+                    if (File.Exists(previous))
+                    {
+                        save = TryReadSave(previous, out string backupError);
+                        if (save != null)
+                            Debug.LogWarning($"[WorldState] Primary save unreadable ({readError}); " +
+                                             $"recovered from {previous}.");
+                        else
+                            Debug.LogError($"[WorldState] Backup also unreadable ({backupError}).");
+                    }
+                }
+
+                if (save == null)
+                {
+                    // Distinguish "no world yet" from "world exists but cannot be read".
+                    // Only the second case must block autosave.
+                    _loadFailed = true;
+                    _loaded = true;
+                    Debug.LogError("[WorldState] Could not read the save. Autosave is DISABLED " +
+                                   "for this session so the existing file is not overwritten. " +
+                                   "Fix or remove the file, then restart.");
+                    return;
+                }
+
+                MigrateSave(save);
 
                 RestorePlacedTiered(save);
                 RestorePlacedBlocks(save);
@@ -1333,7 +1399,14 @@ namespace VoxelEngine.Persistence
                 Debug.Log($"[WorldState] Loaded {save.placedTiered.Count} tiered + {save.placedBlocks.Count} blocks + {save.grids.Count} movable grids " +
                           $"({anchoredGrids} from a body anchor) from {path}");
             }
-            catch (Exception ex) { Debug.LogError("[WorldState] Load failed: " + ex.Message); }
+            catch (Exception ex)
+            {
+                // A partial restore is still a failure: half a world written back over a
+                // whole one loses the rest. Block autosave rather than risk it.
+                _loadFailed = true;
+                Debug.LogError("[WorldState] Load failed: " + ex.Message +
+                               " - autosave DISABLED for this session to protect the file.");
+            }
             _loaded = true;
         }
 
@@ -1377,6 +1450,18 @@ namespace VoxelEngine.Persistence
                 // A committed orbit is saved as its Keplerian elements, NOT as a pose. The
                 // station must come back on the same orbit at the correct phase for the
                 // reload time, which a frozen position could never express.
+                // Rail bogie (11.31.0). Which cell it sits on is NOT saved: the rail graph
+                // rebuilds from placed track on load, so the bogie re-latches from its
+                // restored world position. Only the player's intent is state.
+                var bogie = grid.GetComponent<VoxelEngine.GridSystem.GridRailBogie>();
+                if (bogie != null)
+                {
+                    bogie.CaptureState(out bool railPowered, out bool railReversed);
+                    entry.hasRailBogie = true;
+                    entry.railPowered = railPowered;
+                    entry.railReversed = railReversed;
+                }
+
                 var rails = grid.GetComponent<VoxelEngine.Cosmos.OrbitalRails>();
                 if (rails != null && rails.IsOnRails)
                 {
@@ -1694,6 +1779,13 @@ namespace VoxelEngine.Persistence
 
                 // Restore a committed orbit last: the blocks must exist first so the grid
                 // has its real mass and bounds before it is parked kinematic on rails.
+                if (savedGrid.hasRailBogie)
+                {
+                    // Deferred a frame: the rail track is restored as placed blocks by this
+                    // same load pass, so latching now would find an empty graph.
+                    StartCoroutine(RestoreRailBogieNextFrame(grid, savedGrid.railPowered, savedGrid.railReversed));
+                }
+
                 if (savedGrid.onRails && savedGrid.orbitElements != null && savedGrid.orbitElements.Length >= 7)
                 {
                     var rails = grid.gameObject.AddComponent<VoxelEngine.Cosmos.OrbitalRails>();
@@ -2234,6 +2326,25 @@ namespace VoxelEngine.Persistence
         /// being built while neighbouring track is instantiated, so applying immediately
         /// would clamp against a partial list and silently change the player's routing.
         /// </summary>
+        /// <summary>
+        /// Re-latches a rail bogie once the track exists.
+        ///
+        /// The bogie deliberately stores no track reference - the graph is rebuilt from
+        /// placed blocks - so it finds its cell again from its restored world position.
+        /// Running this in the same frame as the load would search an empty network.
+        /// </summary>
+        private System.Collections.IEnumerator RestoreRailBogieNextFrame(
+            GridEntity grid, bool powered, bool reversed)
+        {
+            yield return null;
+            if (grid == null) yield break;
+
+            var bogie = grid.GetComponent<VoxelEngine.GridSystem.GridRailBogie>();
+            if (bogie == null) yield break;
+
+            bogie.RestoreState(powered, reversed);
+        }
+
         private System.Collections.IEnumerator ApplySwitchNextFrame(
             VoxelEngine.Building.RailTrack track, int selection)
         {
@@ -2911,6 +3022,71 @@ namespace VoxelEngine.Persistence
             }
         }
 
+        /// <summary>
+        /// Reads and deserializes a save file, returning null with a reason instead of
+        /// throwing. Treats an empty or structurally-null result as failure, because
+        /// JsonUtility returns a non-null object for some malformed input.
+        /// </summary>
+        private static SaveData TryReadSave(string path, out string error)
+        {
+            error = null;
+            try
+            {
+                if (!File.Exists(path)) { error = "file missing"; return null; }
+
+                string json = File.ReadAllText(path);
+                if (string.IsNullOrWhiteSpace(json)) { error = "file empty"; return null; }
+
+                var save = JsonUtility.FromJson<SaveData>(json);
+                if (save == null) { error = "not valid save JSON"; return null; }
+
+                // A truncated write can still parse while losing the player block, which is
+                // the one field every save must have.
+                if (save.player == null) { error = "missing player data (truncated?)"; return null; }
+
+                return save;
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Brings an older save up to the current schema.
+        ///
+        /// Every field added since the format began has been ADDITIVE - a missing list
+        /// deserializes to the field's default - which is why old saves have kept working
+        /// without a version. That only holds while changes stay additive; the moment one
+        /// does not, this is where the fix belongs, and the version number is what makes
+        /// it possible to know which fix to apply.
+        /// </summary>
+        private void MigrateSave(SaveData save)
+        {
+            if (save == null) return;
+
+            int version = save.schemaVersion <= 0 ? LegacySchemaVersion : save.schemaVersion;
+
+            if (version > CurrentSchemaVersion)
+            {
+                // Forward-compatibility is not something we can fake. Load what we can and
+                // say so, rather than silently dropping whatever the newer build wrote.
+                Debug.LogWarning($"[WorldState] Save schema v{version} is NEWER than this " +
+                                 $"build understands (v{CurrentSchemaVersion}). Loading anyway; " +
+                                 "anything this build does not know about will be lost on the next save.");
+                return;
+            }
+
+            if (version == LegacySchemaVersion)
+            {
+                // v1 -> v2 is purely the addition of the version stamp itself; every other
+                // difference is an additive list that defaults correctly. Nothing to rewrite.
+                save.schemaVersion = CurrentSchemaVersion;
+                Debug.Log("[WorldState] Migrated a pre-11.30.0 save to schema v2.");
+            }
+        }
+
         private void RestorePlacedTiered(SaveData save)
         {
             foreach (var ps in save.placedTiered)
@@ -3279,6 +3455,16 @@ namespace VoxelEngine.Persistence
         // ============================================================
         [Serializable] private class SaveData
         {
+            /// <summary>
+            /// Save schema version (11.30.0). Written on every save; absent in every save
+            /// made before this release, which deserializes as 0 and is treated as v1.
+            ///
+            /// This exists so a future format change can MIGRATE rather than guess. Until
+            /// now the loader had no way to tell an old save from a corrupt one - both
+            /// simply produced missing fields - so it could not react differently to them.
+            /// </summary>
+            public int schemaVersion;
+
             public SavedPlayer player;
             // 9.57.1-dev: the cosmic clock the save was written at. The solar system is
             // regenerated at t = 0 on every load, so without this every body sat at its
@@ -3361,6 +3547,10 @@ namespace VoxelEngine.Persistence
             // these and restores as an unnamed vessel exactly as before.
             public string identityName = "";
             public int identityClass;
+            // Additive 11.31.0: rail bogie intent (not its track cell, which is derived).
+            public bool hasRailBogie;
+            public bool railPowered;
+            public bool railReversed;
             // Additive 11.13.0: committed orbit. `orbitElements` is
             // [a, e, inc, raan, argPe, M0, epoch]; empty means the grid is not on rails.
             public bool onRails;

@@ -1,0 +1,33 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e230da79876505a41b25678102c74c13, type: 3}
+  m_Name: GItem_RailTruck
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.GridSystem.GridBlockItem
+  itemId: railtruck
+  displayName: Rail Truck
+  description: Puts a construct on rails. Any grid with a Rail Truck can run on track,
+    so a train is just something you built - it carries whatever grid blocks you
+    put on it. The slowest truck aboard sets the speed.
+  icon: {fileID: 0}
+  iconTint: {r: 0.42, g: 0.45, b: 0.5, a: 1}
+  maxStack: 900
+  massPerUnit: 1
+  category: Grid Blocks
+  requiresContainment: 0
+  cannotBeCarried: 0
+  isPressurizedCanister: 0
+  viewmodelPrefab: {fileID: 0}
+  gridSize: 1
+  blockPrefab: {fileID: 6479901520709072118, guid: 61a7b275e69fa6b45a4a13afc2289898, type: 3}
+  blockMass: 260
+  blockHP: 420
+  supportsShapeVariants: 0

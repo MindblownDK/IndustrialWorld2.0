@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `11.29.0-dev`
-**Roadmap Version:** `11.29.0-dev`
+**Current Version:** `11.31.0-dev`
+**Roadmap Version:** `11.31.0-dev`
 **Date:** 2026-09-16
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,21 @@
 
 ## 0. Recently Done
 
+### 11.31.0-dev - A Train Is Just Something You Built
+- `GridRailTruck` + `GridRailBogie`: Train System v2 phase 1. Any player-built grid with a Rail Truck runs on the existing rail network. Setup step 92.
+- **The blocker dissolved.** The rework was gated on "how does a grid keep running while its chunks unload" - but grids are NOT chunk-streamed (persistent scene objects, saved by body anchor, never distance-culled) and nor is `PlacedBlock` track. No dormant analytic mode was needed.
+- **Hardware, not a flag:** being railed is a BLOCK the player builds and can remove, unlike `GridIdentity`'s satellite declaration. A flag would make every grid a free potential train.
+- **Balance rule:** the slowest truck and weakest acceleration aboard set the consist's performance - a train is limited by its worst component.
+- **Physics rule:** a railed grid goes kinematic and moves by `MovePosition`. Fighting the solver to hold a hard constraint causes jitter and lets collisions shove a train off its track; `MovePosition` also carries anything standing on it.
+- **Persistence rule:** the track cell is derived, never saved - the graph rebuilds from placed blocks and the bogie re-latches a frame after load.
+
+### 11.30.0-dev - Don't Overwrite What You Couldn't Read
+- `SaveData.schemaVersion` (v2) plus a migration hook. Pre-11.30.0 saves read as 0, are treated as v1 and migrated in place; a NEWER save loads with a warning rather than being refused.
+- **Data-loss bug fixed:** a failed load was swallowed and the world continued empty, then autosave wrote that empty world over the file it had just failed to read. Saving is now BLOCKED for the whole session after a failed load - all four save entry points funnel through `SaveAll`.
+- **The `.previous` sidecar is finally read.** It had been written on every save for releases and never used; a corrupt world was unrecoverable with a good backup sitting beside it.
+- Truncated-but-parseable saves are detected (`JsonUtility` returns an object for some malformed input), so a save missing its player block fails instead of loading as empty.
+- **Rule:** never write a save derived from a load that did not succeed. An empty in-memory world is not evidence the player demolished anything.
+
 ### 11.29.0-dev - Your Base Keeps Working
 - `OfflineClock` + `OfflineSimulationDriver`: machines on worlds the player has left now produce, via CATCH-UP on wake rather than background ticking. Wired into the deep core extractor and livestock.
 - **Cost rule:** never tick unloaded machines. A machine records when it was last serviced and settles the whole absence in one step - identical result for a constant-rate machine, no per-frame cost while away.
@@ -49,22 +64,6 @@
 - **Vertex colours need the vertex-colour shader.** Rocks rendered flat white on a plain URP/Lit fallback. They now use `SphereWorld.terrainMaterial` itself, so rocks and terrain shade identically.
 - Shape displacement raised from +/-11% to three octaves at +/-38/18/8% with a wider ellipsoid stretch, so rocks are no longer spheres.
 - **Headroom rule:** stronger noise can overflow the fixed grid and clip the rock flat, so nominal radius is clamped against `stretch * noiseGain`. Voxels moved to 1 m (the planet's own size) because at 0.5 m that clamp capped rocks at 3 m.
-
-### 11.28.0-dev - Smooth Rocks, Real Materials
-- Asteroids are meshed with `SurfaceNetsJob` - the SAME job the planets use - instead of the hand-rolled exposed-face mesher that made them blocky. Same smooth surface, same shading, same material colours.
-- **Reuse rule:** the rock's voxel grid is sized to the mesher (one padded 34-cell chunk) rather than generalising the mesher. Asteroids inherit future terrain-meshing fixes for free, and planet terrain is never destabilised to serve rocks. Radius is 2.5-7 m, what actually fits.
-- **Smoothness rule:** density must be SIGNED AND GRADED, not binary. Surface nets interpolates the iso-crossing between voxels; a 0/127 field puts every vertex halfway and the blockiness returns. Mining softens density at the brush rim for the same reason.
-- **Shape rule:** not all spheres - per-rock ellipsoid stretch, two octaves of noise, and 0-2 spherical gouges, so a field reads as rocks rather than filler.
-- Materials are real `MaterialId` values coloured through the shared `MaterialRegistry`, so there is no separate asteroid material table to drift out of sync.
-- **Placement note:** the mesher emits a 0..Dim*voxelSize box, so geometry lives on a child offset by half the grid; otherwise a rock tumbles around its corner.
-
-### 11.27.0-dev - Rocks You Dig Into
-- `AsteroidVoxelBody`: asteroids are now small VOXEL volumes of stone with ore veins, carved a scoop at a time, not destructible props with health. `SpaceAsteroid` no longer derives from `Damageable`.
-- **Locality rule:** each rock owns a LOCAL voxel array and meshes itself, rather than living in `SphereWorld`. Planet grids are chunk-streamed and centre-anchored; an asteroid drifts and tumbles, so local data is what lets it move at all.
-- **Collider rule (opposite of 11.26.0):** a voxel asteroid must be NON-convex, or a convex hull fills in the tunnels the player just dug. Safe because rocks are kinematic.
-- **Cost rule:** remesh cost grows with the cube of the radius, so rocks are capped at 11 m (~110k cells, ~24k verts). At 26 m it was 373k cells and ~136k verts per dig.
-- **Ore rule:** ore is placed as veins biased toward the interior, so digging has something to follow. A uniform mix would make every cubic metre identical.
-- `MineVoxel` returned early with no active planet world, making deep-space mining impossible; asteroids are now intercepted before that guard. Also removed a stale second asteroid path still calling `TakeDamage`.
 
 ### Era Transition Feel
 
@@ -1408,7 +1407,7 @@ Statuses are evidence-based and move forward only after code/content review and 
    - **Implementation note:** switch settings must be re-applied a frame after load - a switch clamps its selection against a link list that is still filling while neighbouring track restores.
    - **SUPERSEDED - do not extend this implementation.** See item 1b. The 11.15.0 rail system stays in place and playable, but no further work goes into it; cargo wagons, signalling and laying assistance are all deferred into the rework rather than bolted onto a design that is about to be replaced.
 
-1b. **Train System v2 - unify rail with the grid system** - **PLANNED, NOT STARTED**
+1b. **Train System v2 - unify rail with the grid system** - **PHASE 1 COMPLETE** *(11.31.0-dev)*
    - **Why a remake and not an extension.** 11.15.0 made a train a scheduled agent walking its own private graph, deliberately separate from the grid system. That bought unloaded-chunk operation, but it also means a train is the one large buildable in the game that is NOT a player-built grid: it cannot be designed block by block, cannot carry arbitrary grid blocks, cannot be damaged, painted, pressurised or inspected like everything else the player builds, and needs its own parallel console. Every future feature would have to be written twice - once for grids, once for rails. Unifying is cheaper than maintaining that split forever.
    - **Target:** a locomotive and its wagons are ordinary player-built GRIDS that are constrained to a rail, rather than a separate entity type. This mirrors the decision already proven by the Orbital Programme, where a satellite is an ordinary grid the player DECLARES a satellite rather than a bespoke object.
    - **Consequences to design for:**
@@ -1416,10 +1415,15 @@ Statuses are evidence-based and move forward only after code/content review and 
      - A wagon is just a grid, so any grid block works on it - containers, tanks, refineries, turrets.
      - Grid damage, paint, power, pressurisation and the inspection overlay all apply for free.
      - The rail console folds into the existing grid terminal instead of being a separate UI.
-   - **Open question to settle before starting:** how a grid-based train keeps running while its chunks are unloaded. That property is the entire reason rail beat rovers for bulk haul and must NOT be lost in the rework. Likely answer is a dormant analytic mode along the rail path, the same shape as `OrbitalRails` - the grid is simulated when loaded and advanced along its path arithmetically when not.
+   - ~~**Open question:** how a grid-based train keeps running while its chunks are unloaded~~ - **SETTLED 11.31.0-dev: the premise was wrong.** Grids are not chunk-streamed (persistent scene objects, saved by body anchor, never distance-culled), and `PlacedBlock` track is not either. A grid on rails keeps ticking regardless of where the player is, so no dormant analytic mode is required.
+   - ~~A locomotive and its wagons are ordinary player-built grids constrained to a rail~~ *(11.31.0-dev)* - `GridRailTruck` (the block) + `GridRailBogie` (the constraint). Setup step 92.
+   - ~~The rail console folds into the existing grid terminal~~ *(11.31.0-dev)*.
    - **Wider rail tracks.** Multi-cell track widths (at least a 2-wide and 3-wide gauge) so a mainline reads as a mainline and a heavy consist has somewhere to run. The road system's `RoadCorridor` already solves multi-lane footprints with an explicit four-corner footprint per cell; that is the precedent to follow rather than inventing a second approach.
    - **Draggable rail placing with smart routing.** Click a start, drag to an end, and the tool lays the whole run: auto-straights, auto-curves, auto-junctions where it meets existing track, and a gradient-aware path that cuts and fills or refuses with a reason. The corridor solver and `RailNetwork`'s A* are both reusable here - smart placement is a routing problem the codebase has already solved twice.
-   - Deferred into this rework: cargo wagons (multi-car consists), signalling and block occupancy.
+   - **Phase 2 (open):** multi-car consists - couple grids the way docking ports already join them.
+   - **Phase 3 (open):** wider gauges and draggable smart placement (see the two items above).
+   - **Phase 4 (open):** signalling and block occupancy.
+   - **Retirement:** the 11.15.0 `RailTrain` stays in place and working until consists land. Removing a working feature before its replacement is complete would cost the player the only working train in the game.
 
 2. **Drone Ports** — ~~flying logistics drones between ports~~ *(11.7.0-dev)*
    - `DronePort` pairs with another port over 400 m and serves the logistic chests within 48 m of each end; `DroneNetwork` owns pairing, dispatch and delivery.
@@ -1803,9 +1807,12 @@ Statuses are evidence-based and move forward only after code/content review and 
    - **Balance rule:** offline is 45% of live, capped at 12 h, so presence always beats absence.
    - Open: extending catch-up to the remaining producers (biofarm, refineries) - the pattern is one `OfflineClock` field plus a settle-on-wake call.
 
-9. **Interplanetary Save Data**
-   - Save orbital stations, asteroid positions, rocket schedules.
-   - Requires save schema v2.
+9. **Interplanetary Save Data** - ~~save orbital stations~~ ~~asteroid positions~~ ~~rocket schedules~~ ~~save schema v2~~ *(11.30.0-dev)* - **COMPLETE**
+   - Orbital stations already saved as Keplerian elements (11.13.0), cargo schedules in 11.24.0, and asteroid positions are DERIVED from the world seed so saving them would be wrong, not missing.
+   - Schema v2 adds `SaveData.schemaVersion` plus a migration hook; legacy saves read as v1 and migrate in place.
+   - **Safety rule:** a failed load must never be written back. Autosave previously overwrote unreadable-but-recoverable worlds with an empty one.
+   - **Recovery rule:** the `.previous` sidecar the atomic save already maintains is now actually read on a failed primary load.
+   - Open: a player-facing "restore from backup" option in the menu, rather than recovery only happening automatically.
 
 ---
 

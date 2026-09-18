@@ -37,6 +37,7 @@ namespace VoxelEngine.GridSystem.UI
                 case GridSingularityHarvester sh: return MakeScrollable(HarvesterPanel(sh, slot));
                 case GridLocatorBlock loc:  return MakeScrollable(LocatorPanel(loc));
                 case GridSeasonMonitor sm:  return MakeScrollable(SeasonMonitorPanel(sm));
+                case GridRailTruck rt:      return MakeScrollable(RailTruckPanel(rt));
                 case GridSatellitePayload sp2: return MakeScrollable(SatellitePayloadPanel(sp2));
                 case GridSatelliteLab sl:   return MakeScrollable(SatelliteLabPanel(sl));
                 case GridCargoContainer cc: return CargoPanel(cc, slot);
@@ -1137,6 +1138,109 @@ namespace VoxelEngine.GridSystem.UI
         /// the requirements (satellite class + committed orbit + power) are the whole point
         /// of the block and a silent dead panel would just read as a bug.
         /// </summary>
+        /// <summary>
+        /// Rail truck console. Folded into the normal grid block UI rather than living in a
+        /// separate rail window - a train is a grid now, so it is inspected like one.
+        /// </summary>
+        private static VisualElement RailTruckPanel(GridRailTruck truck)
+        {
+            var p = T.MachinePanel();
+            p.style.width = 470;
+
+            var bogie = truck.Grid != null ? truck.Grid.GetComponent<GridRailBogie>() : null;
+            bool railed = bogie != null && bogie.IsOnRails;
+
+            var (hdr, _, _, _) = T.HeaderRow("\u25ac RAIL TRUCK",
+                railed ? "ON RAILS" : "OFF RAILS",
+                railed ? T.AccentGreen : T.AccentAmber);
+            p.Add(hdr);
+            p.Add(T.AccentDivider(T.AccentCyan));
+            p.Add(T.Spacer(6));
+
+            if (bogie == null)
+            {
+                var none = new Label("This truck is not attached to a construct yet.");
+                none.style.fontSize = 11;
+                none.style.whiteSpace = WhiteSpace.Normal;
+                none.style.color = new StyleColor(T.AccentAmber);
+                p.Add(none);
+                return p;
+            }
+
+            p.Add(GridUIHelpers.SectionTitle("Status"));
+            var status = new Label(bogie.StatusLabel);
+            status.style.fontSize = 12;
+            status.style.unityFontStyleAndWeight = FontStyle.Bold;
+            status.style.color = new StyleColor(railed ? Color.white : T.AccentAmber);
+            status.style.marginBottom = 6;
+            p.Add(status);
+
+            if (!railed)
+            {
+                var hint = new Label(
+                    "Drive or place the construct within a few metres of rail track, then " +
+                    "press SNAP TO RAIL. Any grid with a Rail Truck can run on rails - it " +
+                    "does not need to be a special vehicle.");
+                hint.style.fontSize = 10;
+                hint.style.whiteSpace = WhiteSpace.Normal;
+                hint.style.color = new StyleColor(T.TextMuted);
+                hint.style.marginBottom = 8;
+                p.Add(hint);
+            }
+            else
+            {
+                var detail = new Label(
+                    $"Top speed {bogie.maxSpeed:0.#} m/s   ·   Acceleration {bogie.acceleration:0.#} m/s2");
+                detail.style.fontSize = 10;
+                detail.style.color = new StyleColor(T.TextSecondary);
+                detail.style.marginBottom = 8;
+                p.Add(detail);
+            }
+
+            // ── Controls ──
+            p.Add(GridUIHelpers.SectionTitle("Control"));
+            var row = new VisualElement();
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.marginBottom = 6;
+
+            var driveBtn = T.SmallButton(bogie.powered ? "\u25a0 STOP" : "\u25b6 DRIVE", () =>
+            {
+                bogie.powered = !bogie.powered;
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, bogie.powered ? T.AccentGreen : T.AccentDim);
+            driveBtn.style.marginRight = 6;
+            row.Add(driveBtn);
+
+            var revBtn = T.SmallButton(bogie.reversed ? "\u21c4 REVERSE" : "\u21c4 FORWARD", () =>
+            {
+                bogie.reversed = !bogie.reversed;
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, T.AccentDim);
+            revBtn.style.marginRight = 6;
+            row.Add(revBtn);
+
+            var snapBtn = T.SmallButton(railed ? "\u2195 DETACH" : "\u2195 SNAP TO RAIL", () =>
+            {
+                if (bogie.IsOnRails) bogie.Detach();
+                else bogie.TrySnapToTrack();
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, T.AccentDim);
+            row.Add(snapBtn);
+
+            p.Add(row);
+
+            var note = new Label(
+                "A train is an ordinary construct with a Rail Truck on it, so it can carry " +
+                "any grid block - containers, tanks, refineries - and takes damage, paint " +
+                "and power exactly like anything else you build.");
+            note.style.fontSize = 10;
+            note.style.whiteSpace = WhiteSpace.Normal;
+            note.style.color = new StyleColor(T.TextMuted);
+            p.Add(note);
+
+            return p;
+        }
+
         private static VisualElement SatellitePayloadPanel(GridSatellitePayload payload)
         {
             var p = T.MachinePanel();
