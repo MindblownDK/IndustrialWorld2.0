@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `11.28.2-dev`
-**Roadmap Version:** `11.28.2-dev`
+**Current Version:** `11.29.0-dev`
+**Roadmap Version:** `11.29.0-dev`
 **Date:** 2026-09-16
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,15 @@
 ---
 
 ## 0. Recently Done
+
+### 11.29.0-dev - Your Base Keeps Working
+- `OfflineClock` + `OfflineSimulationDriver`: machines on worlds the player has left now produce, via CATCH-UP on wake rather than background ticking. Wired into the deep core extractor and livestock.
+- **Cost rule:** never tick unloaded machines. A machine records when it was last serviced and settles the whole absence in one step - identical result for a constant-rate machine, no per-frame cost while away.
+- **Clock rule:** use `CosmicRegistry.SimulationSeconds` (authoritative and SAVED), never `Time.time`, which resets on load.
+- **Balance rule:** offline output is 45% of live and caps at 12 h, so a base you are present at is always better - otherwise the optimal play is logging out.
+- **Fairness rule:** livestock decays to a floor and NEVER dies from absence. Losing a herd you had no opportunity to save punishes playing the rest of the game.
+- **Bug found:** `CargoFlightRegistry` only ticked from a loaded pad, so leaving both ends of a route froze cargo permanently. Now driven by the cosmic clock from an auto-bootstrapped driver.
+- **Trap:** both running AND stopped machines must pin the clock, or live/idle time gets re-claimed as offline time.
 
 ### 11.28.2-dev - Mining Was Switched Off In Space
 - **`PlayerInteractionTool.Update` returned early when `world == null`**, so the whole tool was disabled in deep space and no asteroid branch could ever run. The gate no longer needs a world; the liquid and igniter paths guard individually.
@@ -56,13 +65,6 @@
 - **Cost rule:** remesh cost grows with the cube of the radius, so rocks are capped at 11 m (~110k cells, ~24k verts). At 26 m it was 373k cells and ~136k verts per dig.
 - **Ore rule:** ore is placed as veins biased toward the interior, so digging has something to follow. A uniform mix would make every cubic metre identical.
 - `MineVoxel` returned early with no active planet world, making deep-space mining impossible; asteroids are now intercepted before that guard. Also removed a stale second asteroid path still calling `TakeDamage`.
-
-### 11.26.0-dev - Asteroids That Actually Exist
-- Fixed asteroid spawning, which had never worked. `IsInsidePlanet` used a `radiusKm * 2` keep-out; with 6-8 km planets that rejected everything within 12-16 km while the spawn ring only reached 14 km, so every attempt failed inside a planet's frame. Now a flat 2.5 km surface clearance plus atmosphere.
-- `MeshCollider` is now CONVEX. Non-convex colliders do not collide with other non-convex colliders and are skipped by sweeps, so ships flew through rocks that still blocked raycasts. Convex is also required on a moving body, and these drift and tumble.
-- Rocks rescaled 8-140 m to 4-26 m, with ring, separation, cluster and despawn distances retuned to match. A 140 m rock was 4% of a planet's diameter.
-- Added a barren-pass warning: a fully-rejected spawn pass used to look identical to "nothing to do", which is why this stayed invisible.
-- **Process correction:** 11.25.0 marked Asteroid Mining complete from code reading alone. It was not tested and did not work. Do not tick an item off without runtime evidence.
 
 ### Era Transition Feel
 
@@ -1794,9 +1796,12 @@ Statuses are evidence-based and move forward only after code/content review and 
 
 #### Code Improvements
 
-8. **Scene/Zone Streaming**
-   - Load planets, orbits, and asteroid fields as separate zones.
-   - Persistent base state across zone transitions.
+8. **Scene/Zone Streaming** - ~~load planets, orbits and asteroid fields as separate zones~~ ~~persistent base state across zone transitions~~ *(11.29.0-dev)* - **COMPLETE**
+   - Chunk streaming, `ChunkStorage` terrain persistence and body-anchored placed blocks already existed; 11.29.0 added the missing half - production that survives the player leaving, via `OfflineClock` catch-up.
+   - **Cost rule:** catch-up on wake, never background ticking. Cost is zero while away and does not scale with how much the player has built.
+   - **Clock rule:** the saved cosmic clock is the only valid time source across a session boundary.
+   - **Balance rule:** offline is 45% of live, capped at 12 h, so presence always beats absence.
+   - Open: extending catch-up to the remaining producers (biofarm, refineries) - the pattern is one `OfflineClock` field plus a settle-on-wake call.
 
 9. **Interplanetary Save Data**
    - Save orbital stations, asteroid positions, rocket schedules.

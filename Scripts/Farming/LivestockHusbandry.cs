@@ -85,6 +85,9 @@ namespace VoxelEngine.Farming
         private float _productTimer;
         private float _breedTimer;
 
+        /// <summary>Tracks time that passed while this animal's chunk was unloaded.</summary>
+        [SerializeField] private VoxelEngine.Simulation.OfflineClock _offline;
+
         // ── Registry ─────────────────────────────────────────────────────────────
         private static readonly List<LivestockHusbandry> s_all = new();
         public static IReadOnlyList<LivestockHusbandry> All => s_all;
@@ -98,7 +101,45 @@ namespace VoxelEngine.Farming
             _productTimer = Random.Range(0f, secondsPerProduct);
         }
 
-        private void OnEnable() { if (!s_all.Contains(this)) s_all.Add(this); }
+        private void OnEnable()
+        {
+            if (!s_all.Contains(this)) s_all.Add(this);
+            SettleAbsence();
+        }
+
+        /// <summary>
+        /// Applies an absence to this animal.
+        ///
+        /// Livestock deliberately does NOT follow the extractor's rule. An unattended pen
+        /// drains hunger and thirst - so the player genuinely has to keep it stocked - but
+        /// an animal can never STARVE TO DEATH while the player was unable to reach it.
+        /// Coming back to a field of corpses you had no opportunity to prevent is a
+        /// punishment for playing the rest of the game, not a consequence of neglect.
+        ///
+        /// So condition decays to a floor, and health is left alone. Walk away and your
+        /// herd is hungry and unproductive; it is not dead.
+        /// </summary>
+        private void SettleAbsence()
+        {
+            float seconds = _offline.Claim();
+            if (seconds <= 0f || !IsAlive) return;
+
+            Age += seconds;
+
+            float shelter = Sheltered ? 0.5f : 1f;
+            Hunger = Mathf.Max(SurvivalFloor, Hunger - hungerDrainPerSecond * shelter * seconds);
+            Thirst = Mathf.Max(SurvivalFloor, Thirst - thirstDrainPerSecond * shelter * seconds);
+
+            // Production while away is handled by the pen, which owns the output container.
+            if (_breedTimer > 0f) _breedTimer = Mathf.Max(0f, _breedTimer - seconds);
+        }
+
+        /// <summary>
+        /// Lowest condition an absence can drive an animal to. Above zero on purpose: zero
+        /// is where health damage begins, and an unreachable animal must never cross that
+        /// line through absence alone.
+        /// </summary>
+        private const float SurvivalFloor = 6f;
 
         private void OnDisable()
         {
@@ -127,6 +168,9 @@ namespace VoxelEngine.Farming
 
             TickHealth(dt);
             TickProduction(dt);
+
+            // Pinned while loaded so live seconds are never also claimed as absent ones.
+            _offline.Touch();
         }
 
         private void TickHealth(float dt)

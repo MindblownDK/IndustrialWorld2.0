@@ -35,6 +35,52 @@ namespace VoxelEngine.Transport
         /// <summary>Guards against two pads ticking the registry in the same frame.</summary>
         private static int _lastTickFrame = -1;
 
+        /// <summary>
+        /// Cosmic time the registry last advanced. Flights are stepped against the SAVED
+        /// cosmic clock rather than frame delta, so a shipment keeps closing the distance
+        /// while both its endpoints are unloaded - or across a save and reload.
+        /// </summary>
+        private static double _lastCosmicTime = -1d;
+
+        /// <summary>
+        /// Advances every flight using elapsed COSMIC seconds.
+        ///
+        /// This exists because the old model was quietly broken: the registry was only
+        /// ticked from a loaded pad's Update, so flying away from both ends of a route
+        /// froze the cargo in transit indefinitely. Driving it from the cosmic clock means
+        /// the delivery lands whether anyone is watching or not - which is the entire
+        /// promise of unattended freight.
+        /// </summary>
+        public static void TickCosmic()
+        {
+            if (_lastTickFrame == Time.frameCount) return;
+            _lastTickFrame = Time.frameCount;
+            if (_flights.Count == 0) { _lastCosmicTime = CosmicNow; return; }
+
+            double now = CosmicNow;
+            if (_lastCosmicTime < 0d || now < _lastCosmicTime) { _lastCosmicTime = now; return; }
+
+            double elapsed = now - _lastCosmicTime;
+            _lastCosmicTime = now;
+            if (elapsed <= 0d) return;
+
+            // A very long absence should not let a flight overshoot into nonsense; the
+            // longest useful step is the longest possible flight.
+            Advance((float)System.Math.Min(elapsed, 3600d));
+        }
+
+        private static double CosmicNow
+        {
+            get
+            {
+                var registry = CosmicRegistry.Instance;
+                return registry != null ? registry.SimulationSeconds : Time.timeAsDouble;
+            }
+        }
+
+        /// <summary>Resets the clock reference, so a fresh load does not bank a huge step.</summary>
+        public static void ResyncClock() => _lastCosmicTime = CosmicNow;
+
         public static void Launch(CargoFlight flight)
         {
             if (flight == null || flight.Item == null || flight.Count <= 0) return;
@@ -48,11 +94,14 @@ namespace VoxelEngine.Transport
         /// Advances every flight. Called from each pad's Update, but guarded so the
         /// registry advances exactly once per frame no matter how many pads exist.
         /// </summary>
-        public static void Tick(float deltaTime)
-        {
-            if (_lastTickFrame == Time.frameCount) return;
-            _lastTickFrame = Time.frameCount;
+        /// <summary>
+        /// Legacy per-frame entry point, kept so a loaded pad still drives deliveries at
+        /// frame resolution. Defers to the cosmic path, which is the authoritative one.
+        /// </summary>
+        public static void Tick(float deltaTime) => TickCosmic();
 
+        private static void Advance(float deltaTime)
+        {
             if (_flights.Count == 0) return;
 
             for (int i = _flights.Count - 1; i >= 0; i--)

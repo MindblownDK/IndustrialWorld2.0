@@ -1,9 +1,60 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `11.28.2-dev`
+**Current Version:** `11.29.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [11.29.0-dev] Your Base Keeps Working
+
+**Type:** MINOR - a new system, save-compatible. Adds serialized per-machine state that defaults to "never serviced", so existing saves simply start their clock on load.
+
+**GitHub title:** `[11.29.0-dev] Your base keeps working`
+
+Section 6.6 item 8 - the "persistent base state across zone transitions" half of Scene/Zone Streaming.
+
+#### What I found
+
+Chunk streaming already exists, and terrain edits and placed blocks already persist. So the interesting half of item 8 was not loading - it was this: **every producing machine in the game ticks in `Update`**, which means a base on a planet you have flown away from produces absolutely nothing.
+
+That quietly undermined the whole interplanetary layer. 11.24.0 shipped cargo pads so a second world could feed the first, but there was nothing to feed them with - the mine meant to fill the pad froze the moment you left orbit.
+
+#### Catch-up, not background simulation
+
+The obvious fix is to keep ticking unloaded machines. That is the wrong one: it costs CPU forever, scales with everything the player has ever built, and runs thousands of Updates for things nobody can see.
+
+Instead a machine records **when it was last serviced**, and on waking asks how much simulated time passed. For a constant-rate machine, producing N seconds of output in one step is the same result as N seconds of ticking, at a fraction of the cost and with zero per-frame work while away.
+
+Same principle already used three times here: satellites ride analytic orbits, trains walk a graph, deep ore nodes are derived.
+
+Time comes from `CosmicRegistry.SimulationSeconds` - the one clock that is authoritative **and saved**, so it advances across a session boundary. `Time.time` resets on load and would hand out a free harvest or none at all depending on load order.
+
+#### Deliberate limits, stated not hidden
+
+- **Offline output is 45% of live output.** A base you are standing in must always be the better base, or the optimal play becomes logging out - a miserable design.
+- **Catch-up caps at 12 hours.** Long enough that a real break is rewarded, bounded enough that an idle world cannot bank an infinite harvest.
+- **Power cannot be verified retroactively**, so the extractor assumes it held but only claims the reduced offline rate.
+
+#### Livestock plays by a different rule, on purpose
+
+An unattended pen still drains hunger and thirst - you genuinely have to keep it stocked. But an animal can **never starve to death while you were unable to reach it**. Condition decays to a floor above the damage threshold and health is left alone.
+
+Returning to a field of corpses you had no opportunity to prevent is a punishment for playing the rest of the game, not a consequence of neglect. Walk away and your herd is hungry and unproductive; it is not dead.
+
+#### A real bug this uncovered
+
+`CargoFlightRegistry` was ticked **only from a loaded pad's `Update`**. Fly away from both ends of a route and the shipment froze in transit indefinitely - the exact failure unattended freight exists to avoid, in the feature built to avoid it.
+
+Flights now advance on the cosmic clock, driven by a tiny always-present `OfflineSimulationDriver` bootstrapped via `RuntimeInitializeOnLoadMethod`. No scene object to place and none to forget - a feature that silently dies because something was missing from one scene is a class of bug this project has already lost two releases to.
+
+#### Two double-pay traps closed
+
+- A machine running **live** pins its clock every frame, or an hour of real work would also be claimed as an hour of absence.
+- A machine **stopped** (unpowered, output full) also pins its clock. Without that, a jammed extractor would bank its idle hours and pay them out as catch-up - rewarding the player for the time it spent jammed.
+
+Catch-up is surfaced on the machine's status line rather than appearing silently, because a pile of ore with no explanation reads as a bug.
+
+No manual Unity step.
 
 ### [11.28.2-dev] Mining Was Switched Off In Space
 

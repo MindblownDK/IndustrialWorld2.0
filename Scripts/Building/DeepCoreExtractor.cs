@@ -66,8 +66,19 @@ namespace VoxelEngine.Building
         private float _accumulator;
         private float _rescanTimer;
 
+        /// <summary>
+        /// Tracks time that passed while this machine was unloaded - i.e. while the player
+        /// was on another world. Serialized so it survives a save: an extractor left on a
+        /// mining outpost is exactly the thing that must keep paying out.
+        /// </summary>
+        [SerializeField] private VoxelEngine.Simulation.OfflineClock _offline;
+
         /// <summary>Lifetime total this machine has pulled, for the console readout.</summary>
         public int TotalExtracted { get; private set; }
+
+        /// <summary>Ore produced by the most recent offline catch-up, for the console.</summary>
+        public int LastOfflineYield { get; private set; }
+        public string LastOfflineItem { get; private set; } = "";
 
         private void Awake()
         {
@@ -76,7 +87,63 @@ namespace VoxelEngine.Building
             if (_power != null) _power.wattsPerSecond = powerDraw * 0.1f;
         }
 
-        private void OnEnable() => Rescan();
+        private void OnEnable()
+        {
+            Rescan();
+            // Settle the absence on wake, BEFORE any live ticking, so the catch-up is paid
+            // exactly once and the clock restarts from now.
+            SettleOfflineProduction();
+        }
+
+        /// <summary>
+        /// Converts time spent unloaded into ore, in one step.
+        ///
+        /// Deliberately runs through the SAME node extraction and output insertion as live
+        /// mining, so a deposit cannot be over-drawn and a full buffer still refunds. The
+        /// only difference is that the elapsed time arrives in one lump.
+        /// </summary>
+        private void SettleOfflineProduction()
+        {
+            float seconds = _offline.Claim();
+            if (seconds <= 0f) return;
+
+            EnsureContainers();
+            Rescan();
+            if (!HasNode || _node.IsDepleted) return;
+
+            // Power cannot be verified retroactively - the grid state while away is not
+            // recorded. Assume it held, but only at the offline rate, which is already
+            // well below live output. Claiming full output would reward abandoning a base.
+            var item = ResolveDropItem(_node.Material);
+            if (item == null) return;
+
+            int wanted = Mathf.FloorToInt(itemsPerSecond * seconds);
+            if (wanted <= 0) return;
+
+            int granted = DeepOreField.Extract(_node, wanted);
+            if (granted <= 0) return;
+
+            var leftover = output.Insert(new ItemStack { item = item, count = granted });
+            int stored = granted - (leftover?.count ?? 0);
+            TotalExtracted += stored;
+
+            // Anything the output could not hold goes back to the deposit rather than
+            // being destroyed - the same rule the live path follows.
+            if (leftover != null && leftover.count > 0)
+                DeepOreField.Refund(_node, leftover.count);
+
+            if (stored > 0)
+            {
+                // Surfaced on the machine as well as the log: a pile of ore appearing with
+                // no explanation reads as a bug, not a feature.
+                LastOfflineYield = stored;
+                LastOfflineItem = item.displayName;
+                Debug.Log($"[DeepCore] Offline catch-up: {stored} x {item.displayName} " +
+                          $"over {seconds / 60f:0.#} min of absence.");
+            }
+
+            Rescan();
+        }
 
         public void EnsureContainers()
         {
@@ -160,6 +227,11 @@ namespace VoxelEngine.Building
             IsRunning = true;
             if (_power != null) _power.wattsPerSecond = powerDraw;
 
+            // Keep the offline clock pinned to now while genuinely running. Without this,
+            // a machine that ran live for an hour would ALSO claim that hour as offline
+            // time the next time it woke - paying twice for the same seconds.
+            _offline.Touch();
+
             _accumulator += itemsPerSecond * Time.deltaTime;
             int whole = Mathf.FloorToInt(_accumulator);
             if (whole > 0)
@@ -184,7 +256,10 @@ namespace VoxelEngine.Building
             }
 
             Status = $"Extracting {DeepOreField.MaterialName(_node.Material)}  ·  " +
-                     $"{_node.Remaining:N0} left ({_node.Fraction01 * 100f:0}%)";
+                     $"{_node.Remaining:N0} left ({_node.Fraction01 * 100f:0}%)"
+                   + (LastOfflineYield > 0
+                        ? $"  ·  +{LastOfflineYield:N0} {LastOfflineItem} while away"
+                        : "");
         }
 
         private void Stop(string reason)
@@ -193,6 +268,14 @@ namespace VoxelEngine.Building
             Status = reason;
             _accumulator = 0f;
             if (_power != null) _power.wattsPerSecond = powerDraw * 0.1f;
+
+            // Stamp the clock even while STOPPED, and this matters.
+            //
+            // A machine sitting unpowered or output-full is present and failing to produce,
+            // not absent. Without this it would silently bank that idle time and pay it out
+            // as offline catch-up the next time it woke - so a jammed extractor would reward
+            // the player for the hours it spent jammed.
+            _offline.Touch();
         }
 
         private void Rescan()
