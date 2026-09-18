@@ -161,6 +161,10 @@ namespace VoxelEngine.Player
             if (TryTickRoadPaver(hit, hasHit, mineDown, buildDown, buildHeld,
                                  ReadScrollY())) return;
 
+            // ── RAIL LAYER — same reasoning as the paver: the plan lives between two clicks,
+            //    so it needs a tick that runs before any button early-out below.
+            if (TryTickRailLayer(hit, hasHit, mineDown, buildDown, ReadScrollY())) return;
+
             // ── INTERACTION HUD (Context Prompts) ──
             if (hasHit && !VoxelEngine.UI.UIState.IsBlocking)
             {
@@ -887,6 +891,14 @@ namespace VoxelEngine.Player
 
                 var railStation = hit.collider.GetComponentInParent<VoxelEngine.Building.RailStation>();
                 if (railStation != null) { VoxelEngine.UI.RailConfigHud.OpenStation(railStation); return; }
+
+                var railSignal = hit.collider.GetComponentInParent<VoxelEngine.Building.RailSignal>();
+                if (railSignal != null)
+                {
+                    VoxelEngine.UI.BuildFeedbackHud.Show("Rail signal", railSignal.StatusLabel,
+                        null, railSignal.IsOccupied ? T_AccentAmber : T_AccentCyan);
+                    return;
+                }
 
                 var railTrack = hit.collider.GetComponentInParent<VoxelEngine.Building.RailTrack>();
                 if (railTrack != null && railTrack.pieceKind == VoxelEngine.Building.RailPieceKind.Switch)
@@ -1967,6 +1979,152 @@ namespace VoxelEngine.Player
         /// or stone pathway). Returns true when the paver consumed the frame so mining, placing and
         /// UI never run underneath it.
         /// </summary>
+        // ── Rail layer state ─────────────────────────────────────────────────────
+        private VoxelEngine.Building.RailPlan _railPlan;
+        private bool _railPlanning;
+        private Vector3 _railStart;
+        private int _railGauge = 1;
+        private RailLayerTool _railTool;
+
+        /// <summary>
+        /// Drag-to-lay track. Click once to set the start, again to commit.
+        ///
+        /// Returns true whenever the rail tool is held, so it owns the mouse for as long as
+        /// it is out - the same contract the road paver uses, and what stops a commit click
+        /// also landing as a mine or build action underneath.
+        /// </summary>
+        private bool TryTickRailLayer(RaycastHit hit, bool hasHit, bool mineDown,
+                                      bool buildDown, float scrollY)
+        {
+            var held = inventory.ActiveStack;
+            if (held.IsEmpty || !(held.item is RailLayerTool tool))
+            {
+                // Swapping away mid-plan drops it, or a stale start point survives into
+                // whatever the player picks up next.
+                _railPlanning = false;
+                return false;
+            }
+
+            if (!ReferenceEquals(_railTool, tool))
+            {
+                _railTool = tool;
+                _railGauge = Mathf.Clamp(tool.defaultGauge, 1, VoxelEngine.Building.RailCorridor.MaxGauge);
+            }
+
+            // Ctrl + scroll picks the gauge, matching the paver's width gesture.
+            if (Mathf.Abs(scrollY) > 0.01f
+                && (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl)))
+            {
+                int next = Mathf.Clamp(_railGauge + (scrollY > 0f ? 1 : -1),
+                                       1, VoxelEngine.Building.RailCorridor.MaxGauge);
+                if (next != _railGauge)
+                {
+                    _railGauge = next;
+                    VoxelEngine.UI.BuildFeedbackHud.Show("Rail gauge",
+                        _railGauge == 1 ? "Single track" : $"{_railGauge} parallel tracks",
+                        null, T_AccentCyan);
+                }
+                return true;
+            }
+
+            // Right-click cancels a plan in progress.
+            if (mineDown && _railPlanning)
+            {
+                _railPlanning = false;
+                VoxelEngine.UI.BuildFeedbackHud.Show("Rail run cancelled", "", null, T_AccentAmber);
+                return true;
+            }
+
+            if (!hasHit) return true;
+
+            if (buildDown)
+            {
+                if (!_railPlanning)
+                {
+                    _railStart = hit.point;
+                    _railPlanning = true;
+                    VoxelEngine.UI.BuildFeedbackHud.Show("Rail run started",
+                        "Aim at the far end and click again. Right-click cancels.",
+                        null, T_AccentCyan);
+                    return true;
+                }
+
+                CommitRailRun(tool, hit.point);
+                _railPlanning = false;
+                return true;
+            }
+
+            return true;
+        }
+
+        private void CommitRailRun(RailLayerTool tool, Vector3 end)
+        {
+            if (tool == null || tool.trackBlock == null)
+            {
+                VoxelEngine.UI.BuildFeedbackHud.Show("Rail layer", "No track block assigned to this tool.",
+                    null, T_AccentAmber);
+                return;
+            }
+
+            float cell = 1f;
+            float gradient = 0.34f;
+            var template = tool.trackBlock.placedPrefab != null
+                ? tool.trackBlock.placedPrefab.GetComponentInChildren<VoxelEngine.Building.RailTrack>(true)
+                : null;
+            if (template != null)
+            {
+                cell = template.cellSize;
+                gradient = template.maxGradientMetres;
+            }
+
+            Vector3 up = VoxelEngine.Cosmos.GravityProvider.GetUp(_railStart);
+
+            _railPlan = VoxelEngine.Building.RailCorridor.Plan(
+                _railPlan, _railStart, end, _railGauge, cell, gradient, up);
+
+            if (!_railPlan.IsPlaceable)
+            {
+                // Say exactly why. A run that silently lays nothing is indistinguishable
+                // from a broken tool.
+                VoxelEngine.UI.BuildFeedbackHud.Show("Cannot lay this run",
+                    _railPlan.Refusal ?? "No route.", null, T_AccentAmber);
+                return;
+            }
+
+            // Charge for it before placing, and only lay what the player can pay for.
+            int needed = _railPlan.CellCount * Mathf.Max(1, tool.materialPerCell);
+            if (tool.railMaterial != null)
+            {
+                int have = inventory.container.CountOf(tool.railMaterial);
+                if (have < needed)
+                {
+                    VoxelEngine.UI.BuildFeedbackHud.Show("Not enough material",
+                        $"Need {needed} {tool.railMaterial.displayName}, have {have}.",
+                        null, T_AccentAmber);
+                    return;
+                }
+            }
+
+            int placed = VoxelEngine.Building.RailCorridor.Commit(_railPlan, tool.trackBlock);
+
+            if (placed > 0 && tool.railMaterial != null)
+            {
+                inventory.container.Remove(tool.railMaterial, placed * Mathf.Max(1, tool.materialPerCell));
+                inventory.container.RaiseChanged();
+            }
+
+            ConsumeDurability(inventory.ActiveStack);
+
+            VoxelEngine.UI.BuildFeedbackHud.Show("Rail laid",
+                placed > 0
+                    ? $"{placed} cells  ·  {_railGauge} track(s)  ·  worst gradient {_railPlan.WorstGradient:0.00} m"
+                    : "Every cell on that route already had track.",
+                null, T_AccentCyan);
+        }
+
+        private static readonly Color T_AccentCyan = new Color(0.18f, 0.72f, 0.88f);
+        private static readonly Color T_AccentAmber = new Color(0.92f, 0.60f, 0.12f);
+
         private bool TryTickRoadPaver(RaycastHit hit, bool hasHit, bool mineDown,
                                       bool buildDown, bool buildHeld, float scrollY)
         {

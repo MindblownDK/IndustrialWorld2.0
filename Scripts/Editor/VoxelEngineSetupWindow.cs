@@ -873,6 +873,10 @@ namespace VoxelEngine.EditorTools
                 () => IndustrialWorld.EditorTools.CargoPadSetup.RunStep91(), 62);
             AddWizardButton(scroll, "92. Build the Rail Truck\n(Train System v2 \u2014 any grid runs on rails \u2014 Non-Destructive)",
                 () => IndustrialWorld.EditorTools.RailTruckSetup.RunStep92(), 62);
+            AddWizardButton(scroll, "93. Build the Rail Layer\n(Drag-to-lay track, 1-3 gauge \u2014 Non-Destructive)",
+                () => IndustrialWorld.EditorTools.RailLayerSetup.RunStep93(), 62);
+            AddWizardButton(scroll, "94. Build the Rail Signal\n(Block occupancy readout \u2014 Non-Destructive)",
+                () => IndustrialWorld.EditorTools.RailSignalSetup.RunStep94(), 62);
 
             AddSpacer(scroll, 20);
         }

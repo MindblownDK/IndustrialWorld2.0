@@ -211,6 +211,11 @@ namespace VoxelEngine.GridSystem
             LeadBogie = null;
             TrailBogie = null;
 
+            // A destroyed train MUST drop its signal claims. A claim held by a dead object
+            // would block that section of line forever, and the only symptom would be
+            // trains mysteriously refusing to pass a stretch of empty track.
+            VoxelEngine.Building.RailSignalling.ReleaseAll(this);
+
             ReleasePhysics();
         }
 
@@ -251,6 +256,10 @@ namespace VoxelEngine.GridSystem
             _previousTrack = null;
             _speed = 0f;
             BlockedReason = "Not on rails.";
+
+            // Lifted off the rails: it occupies no section any more.
+            VoxelEngine.Building.RailSignalling.ReleaseAll(this);
+
             ReleasePhysics();
         }
 
@@ -314,11 +323,100 @@ namespace VoxelEngine.GridSystem
             else
             {
                 float target = maxSpeed * Mathf.Max(0.1f, CurrentTrack.speedMultiplier);
-                _speed = Mathf.MoveTowards(_speed, target, acceleration * dt);
-                BlockedReason = "";
+
+                // ── Signalling (11.34.0) ──
+                // Look far enough ahead to stop before an occupied section rather than
+                // inside it. The lookahead scales with speed, because a fast train needs
+                // more warning than a shunting one - a fixed distance would either stop a
+                // slow train absurdly early or fail to stop a fast one in time.
+                int lookahead = Mathf.Clamp(
+                    Mathf.CeilToInt(StoppingDistanceMetres() / Mathf.Max(0.5f, CellSpacing())) + 2,
+                    2, VoxelEngine.Building.RailSignalling.LookaheadCells);
+
+                var blocker = VoxelEngine.Building.RailSignalling.FindBlockingCell(
+                    CurrentTrack, _previousTrack, this, lookahead);
+
+                if (blocker != null)
+                {
+                    // Brake for the occupied section. Not an instant stop: a train that
+                    // halts the frame a signal turns red looks broken and throws anything
+                    // riding on it.
+                    _speed = Mathf.MoveTowards(_speed, 0f, acceleration * dt);
+                    BlockedReason = "Signal: track ahead occupied.";
+                    if (_speed <= 0.001f)
+                    {
+                        // Fully stopped and waiting. Hold only the section underneath us so
+                        // the line behind reopens for other trains.
+                        ClaimCurrentSections();
+                        return;
+                    }
+                }
+                else
+                {
+                    _speed = Mathf.MoveTowards(_speed, target, acceleration * dt);
+                    BlockedReason = "";
+                }
             }
 
+            ClaimCurrentSections();
             AdvanceAlongTrack(dt);
+        }
+
+        /// <summary>
+        /// Distance this train needs to stop from its current speed, plus a margin.
+        /// v^2 / 2a is the exact figure; the margin covers the cell granularity.
+        /// </summary>
+        private float StoppingDistanceMetres()
+            => (_speed * _speed) / (2f * Mathf.Max(0.1f, acceleration)) + 2f;
+
+        /// <summary>Approximate distance between adjacent cells on the current line.</summary>
+        private float CellSpacing()
+        {
+            if (CurrentTrack == null) return 1f;
+            var links = CurrentTrack.Links;
+            if (links.Count == 0) return 1f;
+            return Mathf.Max(0.5f, Vector3.Distance(CurrentTrack.RailPosition, links[0].RailPosition));
+        }
+
+        /// <summary>
+        /// Claims the section under the train and the one it is entering, and releases
+        /// everything else it was holding.
+        ///
+        /// Both are held at once because a train straddles a boundary while crossing it -
+        /// claiming only the destination would leave the cell under its own tail free for
+        /// another train to enter.
+        ///
+        /// The claim is made by the CONSIST HEAD, not per bogie, so a five-car train is one
+        /// claimant rather than five competing ones fighting over the same section.
+        /// </summary>
+        private void ClaimCurrentSections()
+        {
+            if (CurrentTrack == null) return;
+
+            var claimant = ConsistClaimant();
+            int here = VoxelEngine.Building.RailSignalling.SectionIdOf(CurrentTrack);
+
+            var next = ResolveNextTrack();
+            int ahead = next != null
+                ? VoxelEngine.Building.RailSignalling.SectionIdOf(next)
+                : here;
+
+            VoxelEngine.Building.RailSignalling.TryClaim(CurrentTrack, claimant);
+            if (next != null) VoxelEngine.Building.RailSignalling.TryClaim(next, claimant);
+
+            VoxelEngine.Building.RailSignalling.ReleaseAllExcept(claimant, here, ahead);
+        }
+
+        /// <summary>
+        /// The object that owns this consist's signal claims - always the head, so every
+        /// wagon shares one identity and a train never blocks itself.
+        /// </summary>
+        private GridRailBogie ConsistClaimant()
+        {
+            var head = this;
+            int guard = 0;
+            while (head.LeadBogie != null && guard++ < 64) head = head.LeadBogie;
+            return head;
         }
 
         private void AdvanceAlongTrack(float dt)

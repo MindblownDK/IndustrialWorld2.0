@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `11.32.0-dev`
-**Roadmap Version:** `11.32.0-dev`
+**Current Version:** `11.34.0-dev`
+**Roadmap Version:** `11.34.0-dev`
 **Date:** 2026-09-16
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,22 @@
 
 ## 0. Recently Done
 
+### 11.34.0-dev - One Train Per Section
+- `RailSignalling` + `RailSignal`: block occupancy, so two trains on one line stop instead of driving through each other. Setup step 94 (optional - occupancy works without any signal placed).
+- **Derivation rule:** a section is the track BETWEEN JUNCTIONS, derived from the graph, not a placed block. Placed signals would make an unsignalled line one giant section, so a first railway could never run two trains. A junction is its own 1-cell section - it is where routes share metal.
+- **Correctness detail:** the section id is the LOWEST cell hash, not the first found, so two trains approaching from opposite ends compute the same id. Otherwise each thinks it owns a different section and both enter.
+- **Self-deadlock rule:** a consist claims as ONE entity (the head), and a train releases everything except the section it occupies and the one it is entering - otherwise one lap of a loop deadlocks the network against its own train.
+- **Liveness rule:** claims are dropped on destroy and detach. A claim held by a dead object blocks a line forever with no visible cause.
+- Lookahead scales with real stopping distance (`v^2/2a`); a fixed distance either stops slow trains too early or fast trains too late.
+
+### 11.33.0-dev - Lay A Line, Not A Thousand Cells
+- `RailCorridor` + `RailLayerTool`: drag-to-lay rail runs at 1-3 parallel-track gauges, with solved curves. Setup step 93.
+- **Reuse rule:** the geometry is `RoadCorridor`, unchanged - centreline, fillets, per-cell four-corner footprints, tight-corner refusal. A second solver would be the same maths drifting apart.
+- **Rail-only additions:** gradient checked per lane ALONG travel (across lanes measures cant, not grade), and lanes meaning parallel TRACKS rather than independent surfaces.
+- **Rule:** a plan is fully placeable or fully refused, with the reason. Material is counted before placing, so an unaffordable run lays and charges nothing.
+- **Ordering trap:** place all cells THEN link them. Linking as you go lets each cell spend its link budget on the one behind before the one ahead exists, leaving disconnected pairs.
+- **Deliberately excluded:** automatic junctions at crossings - guessing which route is the through line would silently reroute a player's trains.
+
 ### 11.32.0-dev - Couple Them Up
 - Multi-car consists on `GridRailBogie`: couple railed constructs into a train, with per-wagon spacing, safe uncoupling and a consist readout in the grid terminal.
 - **The docking-port precedent did NOT apply.** `FixedJoint` fails twice here: a railed grid is kinematic (joints between kinematic bodies do nothing), and a joint trails like a rope so wagons cut every corner. Consists use PATH HISTORY instead - the leader records where it has been and wagons sample that trail.
@@ -51,21 +67,6 @@
 - **The `.previous` sidecar is finally read.** It had been written on every save for releases and never used; a corrupt world was unrecoverable with a good backup sitting beside it.
 - Truncated-but-parseable saves are detected (`JsonUtility` returns an object for some malformed input), so a save missing its player block fails instead of loading as empty.
 - **Rule:** never write a save derived from a load that did not succeed. An empty in-memory world is not evidence the player demolished anything.
-
-### 11.29.0-dev - Your Base Keeps Working
-- `OfflineClock` + `OfflineSimulationDriver`: machines on worlds the player has left now produce, via CATCH-UP on wake rather than background ticking. Wired into the deep core extractor and livestock.
-- **Cost rule:** never tick unloaded machines. A machine records when it was last serviced and settles the whole absence in one step - identical result for a constant-rate machine, no per-frame cost while away.
-- **Clock rule:** use `CosmicRegistry.SimulationSeconds` (authoritative and SAVED), never `Time.time`, which resets on load.
-- **Balance rule:** offline output is 45% of live and caps at 12 h, so a base you are present at is always better - otherwise the optimal play is logging out.
-- **Fairness rule:** livestock decays to a floor and NEVER dies from absence. Losing a herd you had no opportunity to save punishes playing the rest of the game.
-- **Bug found:** `CargoFlightRegistry` only ticked from a loaded pad, so leaving both ends of a route froze cargo permanently. Now driven by the cosmic clock from an auto-bootstrapped driver.
-- **Trap:** both running AND stopped machines must pin the clock, or live/idle time gets re-claimed as offline time.
-
-### 11.28.2-dev - Mining Was Switched Off In Space
-- **`PlayerInteractionTool.Update` returned early when `world == null`**, so the whole tool was disabled in deep space and no asteroid branch could ever run. The gate no longer needs a world; the liquid and igniter paths guard individually.
-- Rocks are no longer parented to `SpaceAsteroidField`: every UI names a surface via `transform.root`, so the label read the spawner. They register with `SpaceOrigin` as roots individually and unregister on despawn.
-- `WorldInspectionHud` resolves asteroid voxel material before the planet lookup, so the crosshair names the ore and shows percentage remaining.
-- **Process rule:** do not verify a fix at its destination without tracing the path from input to effect. A downstream branch is worthless if an upstream gate returns first - this is the second time that cost a release.
 
 ### Era Transition Feel
 
@@ -1420,12 +1421,14 @@ Statuses are evidence-based and move forward only after code/content review and 
    - ~~**Open question:** how a grid-based train keeps running while its chunks are unloaded~~ - **SETTLED 11.31.0-dev: the premise was wrong.** Grids are not chunk-streamed (persistent scene objects, saved by body anchor, never distance-culled), and `PlacedBlock` track is not either. A grid on rails keeps ticking regardless of where the player is, so no dormant analytic mode is required.
    - ~~A locomotive and its wagons are ordinary player-built grids constrained to a rail~~ *(11.31.0-dev)* - `GridRailTruck` (the block) + `GridRailBogie` (the constraint). Setup step 92.
    - ~~The rail console folds into the existing grid terminal~~ *(11.31.0-dev)*.
-   - **Wider rail tracks.** Multi-cell track widths (at least a 2-wide and 3-wide gauge) so a mainline reads as a mainline and a heavy consist has somewhere to run. The road system's `RoadCorridor` already solves multi-lane footprints with an explicit four-corner footprint per cell; that is the precedent to follow rather than inventing a second approach.
-   - **Draggable rail placing with smart routing.** Click a start, drag to an end, and the tool lays the whole run: auto-straights, auto-curves, auto-junctions where it meets existing track, and a gradient-aware path that cuts and fills or refuses with a reason. The corridor solver and `RailNetwork`'s A* are both reusable here - smart placement is a routing problem the codebase has already solved twice.
+   - ~~**Wider rail tracks.** Multi-cell track widths (2-wide and 3-wide gauge)~~ *(11.33.0-dev)* - delivered via `RailCorridor`, which does follow `RoadCorridor` rather than inventing a second approach.
+   - ~~**Draggable rail placing with smart routing.** Click a start, drag to an end~~ *(11.33.0-dev)* - auto-straights, auto-curves and a gradient-aware refusal that names the reason. Auto-junctions were deliberately left out (see phase 3).
    - ~~**Phase 2:** multi-car consists~~ *(11.32.0-dev)* - **COMPLETE.** Coupling uses PATH HISTORY, not the docking port's `FixedJoint`: a railed grid is kinematic so a joint is inert, and a joint trails like a rope so wagons cut corners. The leader records its route and wagons sample it at an accumulated chain distance.
-   - **Phase 3 (open):** wider gauges and draggable smart placement (see the two items above).
-   - **Phase 4 (open):** signalling and block occupancy.
-   - **Retirement:** the 11.15.0 `RailTrain` stays in place and working until consists land. Removing a working feature before its replacement is complete would cost the player the only working train in the game.
+   - ~~**Phase 3:** wider gauges and draggable smart placement~~ *(11.33.0-dev)* - **COMPLETE.** `RailCorridor` reuses `RoadCorridor` for centreline, fillets and multi-lane footprints; rail adds the gradient check and treats lanes as parallel tracks. Setup step 93.
+   - Open from phase 3: automatic junctions where runs cross, deliberately excluded because guessing the through line would reroute trains silently.
+   - ~~**Phase 4:** signalling and block occupancy~~ *(11.34.0-dev)* - **COMPLETE.** `RailSignalling` derives sections from the graph (track between junctions); trains brake for occupied line. `RailSignal` (step 94) is the visible readout and is deliberately not load-bearing.
+   - **Rework brief is now fully delivered.** Remaining rail work is polish rather than architecture: automatic junctions at crossings, and retiring the 11.15.0 `RailTrain`.
+   - **Retirement:** consists landed in 11.32.0 and signalling in 11.34.0, so the v2 path is now feature-complete against the brief. The 11.15.0 `RailTrain` can be retired in a MAJOR release - it is left in place for now because removing it is a breaking change for any save that still has one, and that belongs in a version bump rather than a minor.
 
 2. **Drone Ports** — ~~flying logistics drones between ports~~ *(11.7.0-dev)*
    - `DronePort` pairs with another port over 400 m and serves the logistic chests within 48 m of each end; `DroneNetwork` owns pairing, dispatch and delivery.

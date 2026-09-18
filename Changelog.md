@@ -1,9 +1,103 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `11.32.0-dev`
+**Current Version:** `11.34.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [11.34.0-dev] One Train Per Section
+
+**Type:** MINOR - Train System v2, phase 4. Save-compatible and additive.
+
+**GitHub title:** `[11.34.0-dev] One train per section`
+
+Signalling and block occupancy - the last piece of the rework brief.
+
+#### The problem
+
+Two trains on one line drove straight through each other. Everything else was in place - grids on rails, consists, drag-laid corridors - and the thing stopping a player running more than one train was that a second train was a guaranteed overlap rather than a scheduling problem.
+
+#### Sections are derived, not placed
+
+The obvious design is a signal block the player places, which owns the track after it. That has a bad failure mode: a line with no signals is one giant section, so a new player's first railway cannot run two trains and the feature is invisible until they learn it exists.
+
+Instead a section is **derived from the graph**: the track between two junctions is one section, because a junction is exactly where routes diverge and therefore where a train's path becomes uncertain. Signalling works the moment there is track, with nothing to place, and gets finer automatically as the network grows more complex - which is precisely when it is needed.
+
+Same principle as deep ore nodes, hazard zones and asteroid placement: derived state cannot desynchronise from the thing it describes.
+
+**A junction is its own single-cell section.** It is the one place two routes physically share metal, so it must be exclusive even when the lines either side are clear.
+
+#### The detail that makes it correct
+
+Section ids are the **lowest cell hash** in the section, not the first cell found. Two trains approaching the same stretch from opposite ends must compute the *same* id - otherwise each thinks it owns a different section and both enter it, which is exactly the head-on collision the system exists to prevent.
+
+#### Self-deadlock, avoided twice
+
+The classic way a signalling system fails is a train blocking itself:
+
+- **A consist claims as one entity.** The claim is made by the head bogie, so a five-car train is one claimant rather than five competing over the same section. Followers never run the claim path at all.
+- **A train releases everything behind it** as it moves, keeping only the section it occupies and the one it is entering. Both are held while crossing a boundary, because a train straddles two sections at that moment. Without the release, one lap of a loop would deadlock the network against its own train.
+
+Claims are also dropped when a train is destroyed or lifted off the rails. A claim held by a dead object would block that line forever, and the only symptom would be trains mysteriously refusing to cross empty track.
+
+#### Braking, not teleporting
+
+Lookahead scales with actual stopping distance (`v^2 / 2a`), so a fast train gets more warning than a shunting one. A fixed distance would either stop a slow train absurdly early or fail to stop a fast one in time. A blocked train brakes to a halt rather than stopping the frame the signal turns red, which would look broken and throw anything riding on it.
+
+#### The signal block is deliberately not load-bearing
+
+Occupancy is automatic. Removing every signal in the world changes nothing about whether trains collide.
+
+What a signal does is make an invisible rule legible: a train stopping for no apparent reason is a puzzle, and a red lamp at the point it stops is an explanation. It reads state and never changes it, so it cannot disagree with the thing it reports.
+
+#### Manual step in Unity
+
+**Tools -> Voxel Engine -> Voxel Engine Setup**, then **94. Build the Rail Signal**. Optional - occupancy already works without it. Right-click a signal to read its state.
+
+### [11.33.0-dev] Lay A Line, Not A Thousand Cells
+
+**Type:** MINOR - Train System v2, phase 3. Save-compatible and additive.
+
+**GitHub title:** `[11.33.0-dev] Lay a line, not a thousand cells`
+
+Wider gauges and draggable smart placement - the last two items from the rework brief before signalling.
+
+#### The problem
+
+Laying rail one cell at a time was the most tedious thing in the game. A line between two bases is hundreds of clicks, every curve is stepped by hand, and a gradient mistake is only discovered when a train refuses to connect to its own track.
+
+Meanwhile the road system has had click-and-drag multi-lane corridors with solved curves for a long time.
+
+#### Reusing the road solver rather than writing a rail one
+
+`RoadCorridor` already solves exactly this geometry: a centreline through waypoints, fillet curves at corners, N parallel lanes with an explicit four-corner footprint per cell, and a refusal when a corner is too tight for the width. The roadmap named it as the precedent, and it was the right call - writing a second solver would mean two implementations of the same maths drifting apart.
+
+What rail adds is only what roads genuinely do not care about:
+
+- **Gradient.** Rail refuses a slope a road drapes over. The corridor is checked against `RailTrack.maxGradientMetres` per lane *along the direction of travel* - comparing across lanes would measure the cant of the formation, which is not a gradient at all.
+- **Gauge meaning.** A road's lanes are independent surfaces; a rail corridor's lanes are **parallel tracks**, so a 2-wide run is a double-track mainline rather than one wide rail.
+
+#### Refusals, not partial success
+
+A plan is either fully placeable or fully refused, and the refusal names the reason - the steepest rise found, the gauge that cannot take the corner, the length of an over-long drag. Laying half a line because the far end was too steep would leave the player with track that goes nowhere and no explanation.
+
+Material is counted **before** anything is placed, so a run the player cannot afford lays nothing and charges nothing rather than stopping halfway.
+
+#### One ordering detail that matters
+
+`Commit` places every cell first and links the whole run afterwards. Linking as it went would let each cell fill its limited link budget with the cell behind it before the cell ahead existed - producing a line of disconnected pairs that looks like track and behaves like gravel.
+
+Cells that already have track are skipped, so crossing an existing line extends the network through the normal adjacency rules instead of stacking duplicate rails inside each other.
+
+#### Deliberately not included: automatic junctions
+
+The tool does not place switches where two runs cross. Auto-junctioning needs to know which of two crossing routes is the through line, and guessing wrong would silently reroute a player's trains. Crossing corridors simply connect, and the player places a switch where they actually want one.
+
+#### Manual step in Unity
+
+**Tools -> Voxel Engine -> Voxel Engine Setup**, then **93. Build the Rail Layer**. It requires step 85, because it lays the same Rail Track block you place by hand.
+
+Hold the tool, click a start, aim at the far end, click again. Right-click cancels. **Ctrl + scroll** picks the gauge, 1 to 3 parallel tracks.
 
 ### [11.32.0-dev] Couple Them Up
 

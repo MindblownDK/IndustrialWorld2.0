@@ -1229,6 +1229,23 @@ namespace VoxelEngine.GridSystem.UI
 
             p.Add(row);
 
+            // ── Signalling ──
+            // Shown only when it is actually the reason the train is stopped, so the panel
+            // does not teach a mechanic at a player who has one train and will never hit it.
+            if (bogie.BlockedReason != null && bogie.BlockedReason.StartsWith("Signal"))
+            {
+                p.Add(GridUIHelpers.SectionTitle("Signalling"));
+                var sig = new Label(
+                    "Waiting for the section ahead to clear. Only one train may occupy a " +
+                    "stretch of line between junctions, which is what stops two trains " +
+                    "meeting on it.");
+                sig.style.fontSize = 10;
+                sig.style.whiteSpace = WhiteSpace.Normal;
+                sig.style.color = new StyleColor(T.AccentAmber);
+                sig.style.marginBottom = 6;
+                p.Add(sig);
+            }
+
             // ── Consist ──
             p.Add(GridUIHelpers.SectionTitle("Consist"));
 
