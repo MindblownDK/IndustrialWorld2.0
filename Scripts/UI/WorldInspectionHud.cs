@@ -509,6 +509,31 @@ namespace VoxelEngine.UI
                 }
             }
 
+            // Voxel asteroids are their own little worlds, so resolve them BEFORE the planet
+            // voxel lookup and before the root-name fallback. Without this the label read
+            // "SpaceAsteroidField" - the spawner the rocks are parented to - instead of the
+            // material actually under the crosshair.
+            var asteroid = hit.collider != null
+                ? hit.collider.GetComponentInParent<VoxelEngine.Cosmos.AsteroidVoxelBody>()
+                : null;
+            if (asteroid != null)
+            {
+                Vector3 inside = hit.point - hit.normal.normalized * 0.45f;
+                var astMat = asteroid.MaterialAt(inside);
+                if (astMat == VoxelEngine.Materials.MaterialId.Air)
+                    astMat = asteroid.MaterialAt(hit.point - hit.normal.normalized * 0.85f);
+
+                var reg = ActiveWorld.Current?.MaterialRegistry;
+                var astDef = reg != null ? reg.Get(astMat) : null;
+
+                info.title = astDef != null && !string.IsNullOrWhiteSpace(astDef.displayName)
+                    ? astDef.displayName
+                    : astMat.ToString();
+                info.detail = "ASTEROID";
+                info.status = $"{asteroid.Remaining01 * 100f:0}% remaining · {hit.distance:0.0} m";
+                return true;
+            }
+
             var world = ActiveWorld.Current;
             if (world != null)
             {

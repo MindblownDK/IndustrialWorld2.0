@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `11.28.1-dev`
-**Roadmap Version:** `11.28.1-dev`
+**Current Version:** `11.28.2-dev`
+**Roadmap Version:** `11.28.2-dev`
 **Date:** 2026-09-16
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,12 @@
 ---
 
 ## 0. Recently Done
+
+### 11.28.2-dev - Mining Was Switched Off In Space
+- **`PlayerInteractionTool.Update` returned early when `world == null`**, so the whole tool was disabled in deep space and no asteroid branch could ever run. The gate no longer needs a world; the liquid and igniter paths guard individually.
+- Rocks are no longer parented to `SpaceAsteroidField`: every UI names a surface via `transform.root`, so the label read the spawner. They register with `SpaceOrigin` as roots individually and unregister on despawn.
+- `WorldInspectionHud` resolves asteroid voxel material before the planet lookup, so the crosshair names the ore and shows percentage remaining.
+- **Process rule:** do not verify a fix at its destination without tracing the path from input to effect. A downstream branch is worthless if an upstream gate returns first - this is the second time that cost a release.
 
 ### 11.28.1-dev - The Density Sign Bug
 - **Empty voxels must be NEGATIVE density, never 0.** SurfaceNets interpolates `t = da/(da-db)`; with air at 0 every vertex snapped to a cell corner, and pass 2's `IsTerrainSolid` (`> 0`) disagreed with pass 1's mask, dropping the connecting quads. Result was a shattered surface of floating faces. The engine's own `SphereDensity.EvaluateAsteroidVoxel` already used +1..127 / -127..-1; asteroids now match it.
@@ -57,12 +63,6 @@
 - Rocks rescaled 8-140 m to 4-26 m, with ring, separation, cluster and despawn distances retuned to match. A 140 m rock was 4% of a planet's diameter.
 - Added a barren-pass warning: a fully-rejected spawn pass used to look identical to "nothing to do", which is why this stayed invisible.
 - **Process correction:** 11.25.0 marked Asteroid Mining complete from code reading alone. It was not tested and did not work. Do not tick an item off without runtime evidence.
-
-### 11.25.0-dev - Plug The Ends In
-- `RailStation` and `CargoLaunchPad` now implement `IItemPortHost`, so belts and pipes can feed and drain them. Both previously had to be hand-loaded, which defeated the reason their holds exist.
-- **Direction rule:** the station allows both ways (its LOAD/UNLOAD role already decides train flow); the pad follows its role, because a SEND pad accumulating a full launch load must not be drainable or it never reaches launch size.
-- **Compatibility rule:** `[RequireComponent(typeof(ItemPortRouting))]` rather than setup-step attachment, so pads and stations ALREADY PLACED in a save gain routing on load.
-- Audit finding: Asteroid Mining (6.6 item 3) was already fully implemented and has been marked complete rather than re-shipped.
 
 ### Era Transition Feel
 

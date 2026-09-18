@@ -129,7 +129,17 @@ namespace VoxelEngine.Player
             SyncActiveWorld();
             if (inventory  == null) inventory  = GetComponentInParent<Inventory>();
             if (registry   == null) registry   = Object.FindAnyObjectByType<MaterialRegistry>();
-            if (world == null || shootCamera == null || inventory == null || registry == null) return;
+            // NOTE the deliberate absence of `world` here.
+            //
+            // This used to read `world == null || ...`, which meant the whole interaction
+            // tool switched off in deep space - there is no planet voxel world out there.
+            // That is why asteroids did nothing when hit: the asteroid branch further down
+            // was unreachable, because Update returned before ever casting a ray.
+            //
+            // The planet-only paths below still guard on `world` individually, so nothing
+            // that genuinely needs terrain can run without it.
+            if (shootCamera == null || inventory == null) return;
+            if (registry == null) registry = ResolveRegistry();
 
             bool mineHeld  = GameSettings.IsHeld (InputAction.Mine);
             bool mineDown  = GameSettings.WasPressed(InputAction.Mine);
@@ -675,6 +685,9 @@ namespace VoxelEngine.Player
                     //     first scoop fixes the canister's liquid, later scoops must match.
                     {
                         var carriedCan = VoxelEngine.Items.LiquidCanister.CarriedLiquid(stackRmb);
+                        // Scooping needs terrain voxels; in deep space there is no world to
+                        // scoop from, so skip rather than dereference a null world.
+                        if (world == null) return;
                         var posCan = world.WorldToVoxel(hit.point + hit.normal * 0.5f);
                         VoxelEngine.Items.LiquidType? poolLiquid = carriedCan;
                         byte poolLevel = 0;
@@ -753,7 +766,7 @@ namespace VoxelEngine.Player
 
                 // 0b) Fire Igniter RMB (9.16.0 fire system) — sparks a flammable liquid cell.
                 var stackIgn = inventory.ActiveStack;
-                if (!stackIgn.IsEmpty && stackIgn.item is FireIgniter)
+                if (!stackIgn.IsEmpty && stackIgn.item is FireIgniter && world != null)
                 {
                     var posIgn = world.WorldToVoxel(hit.point + hit.normal * 0.5f);
                     var posIgn2 = world.WorldToVoxel(hit.point);

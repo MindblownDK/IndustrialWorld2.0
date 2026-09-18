@@ -1,9 +1,44 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `11.28.1-dev`
+**Current Version:** `11.28.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [11.28.2-dev] Mining Was Switched Off In Space
+
+**Type:** PATCH - makes asteroids actually minable and correctly named. No save impact.
+
+**GitHub title:** `[11.28.2-dev] Mining was switched off in space`
+
+The rocks look right now, but hitting one did nothing and the label read "SpaceAsteroidField". Both had real causes.
+
+#### Nothing happened because the tool disabled itself in deep space
+
+`PlayerInteractionTool.Update` opened with:
+
+```
+if (world == null || shootCamera == null || inventory == null || registry == null) return;
+```
+
+There is no planet voxel world in deep space, so `world` is null out there and **the entire interaction tool returned before casting a single ray**. Every asteroid branch I added in the last two releases sat downstream of that line and could never run. I had checked that `MineVoxel` handled asteroids before its own world guard, but never checked whether `MineVoxel` was being reached at all.
+
+The gate no longer requires a world. The planet-only paths that genuinely need terrain - liquid scooping and the fire igniter - now guard individually instead, so nothing that needs voxels runs without them.
+
+#### It was called "SpaceAsteroidField" because rocks were children of the spawner
+
+Every UI that names a hit surface falls back to `hit.collider.transform.root.name`. Rocks were parented to the field object, so the root was the spawner.
+
+Two fixes, because one alone would have been a patch over a symptom:
+
+- **Rocks are no longer parented to the field.** They register with `SpaceOrigin` individually as world roots. This also removes a latent trap: `SetParent(transform, false)` keeps the *local* pose and reinterprets the spawn position, which only worked because the field happens to sit at the origin. Despawn now unregisters the root, or `SpaceOrigin` would keep shifting a growing list of dead transforms.
+- **The inspection HUD understands asteroids.** It resolves the voxel material under the crosshair *before* the planet lookup and the root-name fallback, so the label reads the actual material - "Iron", "Ice" - with an ASTEROID tag and a percentage remaining.
+
+The GameObject is also named `Asteroid (Iron)` rather than `SpaceAsteroid_Iron`, so any other UI falling back to a root name reads sensibly.
+
+#### What I got wrong in process
+
+Twice now I have fixed something downstream of a gate without checking the gate. Verifying that `MineVoxel` handles asteroids proves nothing if `Update` returns three hundred lines earlier. Tracing the path from input to effect - not just inspecting the destination - is what would have caught this the first time.
 
 ### [11.28.1-dev] The Density Sign Bug
 

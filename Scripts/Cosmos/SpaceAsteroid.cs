@@ -47,7 +47,9 @@ namespace VoxelEngine.Cosmos
         public static SpaceAsteroid Spawn(Vector3 position, float radius, MaterialId material,
             int seed, Vector3 driftVelocity)
         {
-            var go = new GameObject("SpaceAsteroid_" + material);
+            // Named for what it IS, not the system that made it: any UI that falls back to
+            // a root object name should read "Asteroid (Iron)" rather than a spawner class.
+            var go = new GameObject($"Asteroid ({material})");
             go.transform.position = position;
 
             var asteroid = go.AddComponent<SpaceAsteroid>();

@@ -150,12 +150,16 @@ namespace VoxelEngine.Cosmos
                 var rock = _live[i];
                 if (rock == null)
                 {
+                    // Self-destructed: a rock removes itself once fully mined out.
                     _live.RemoveAt(i);
                     continue;
                 }
                 float d = Vector3.Distance(rock.transform.position, viewerPos);
                 if (d > despawnDistanceMeters || !openSpace)
                 {
+                    // Rocks are world roots now, so they must be unregistered on death or
+                    // SpaceOrigin keeps shifting a growing list of destroyed transforms.
+                    origin.UnregisterRoot(rock.transform);
                     Destroy(rock.gameObject);
                     _live.RemoveAt(i);
                 }
@@ -208,7 +212,17 @@ namespace VoxelEngine.Cosmos
 
                 var asteroid = SpaceAsteroid.Spawn(pos, radius, material,
                     rockSeed, RandomDrift(ref rng));
-                asteroid.transform.SetParent(transform, false);
+
+                // Deliberately NOT parented to this field.
+                //
+                // Two reasons. First, `SetParent(transform, false)` keeps the LOCAL pose and
+                // reinterprets the spawn position - it only appeared to work because this
+                // object happens to sit at the origin, which is a latent trap. Second, every
+                // UI that names a hit surface walks `transform.root`, so a parented rock was
+                // labelled "SpaceAsteroidField" instead of the material under the crosshair.
+                //
+                // Rocks are registered with SpaceOrigin individually, so they rebase
+                // correctly as world roots in their own right.
                 origin.RegisterRoot(asteroid.transform);
                 _live.Add(asteroid);
                 deficit--;
@@ -237,7 +251,6 @@ namespace VoxelEngine.Cosmos
 
                         var member = SpaceAsteroid.Spawn(cPos, cRadius, cMaterial,
                             cSeed, RandomDrift(ref rng));
-                        member.transform.SetParent(transform, false);
                         origin.RegisterRoot(member.transform);
                         _live.Add(member);
                         deficit--;
@@ -346,9 +359,12 @@ namespace VoxelEngine.Cosmos
 
         private void ClearAsteroids()
         {
+            var origin = SpaceOrigin.Instance;
             for (int i = 0; i < _live.Count; i++)
             {
-                if (_live[i] != null) Destroy(_live[i].gameObject);
+                if (_live[i] == null) continue;
+                if (origin != null) origin.UnregisterRoot(_live[i].transform);
+                Destroy(_live[i].gameObject);
             }
             _live.Clear();
         }
