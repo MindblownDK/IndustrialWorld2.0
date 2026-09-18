@@ -44,10 +44,10 @@ namespace VoxelEngine.Cosmos
 
         [Tooltip("Asteroid radius range (metres). Deliberately small: planets in this game " +
                  "are only 6-8 km across, so a 140 m rock was 4% of a planet's diameter and " +
-                 "read as a moon rather than as something you mine. Capped at 11 m because " +
-                 "a voxel rock is remeshed on every dig, and cost grows with the cube of " +
-                 "the radius.")]
-        public Vector2 asteroidRadiusMeters = new Vector2(3f, 11f);
+                 "read as a moon rather than as something you mine. Capped at 6 m NOMINAL, which " +
+                 "becomes roughly a 12-14 m rock once the ellipsoid stretch and noise are " +
+                 "applied - the largest that fits the 32-cell grid without clipping.")]
+        public Vector2 asteroidRadiusMeters = new Vector2(2.5f, 6f);
 
         [Tooltip("Minimum altitude (m) above a body's surface before rocks appear while inside its frame — keeps the sky over bases clean while making high orbit and transfers feel populated.")]
         public float minOrbitAltitudeMeters = 12000f;

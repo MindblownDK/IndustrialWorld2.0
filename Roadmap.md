@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `11.27.0-dev`
-**Roadmap Version:** `11.27.0-dev`
+**Current Version:** `11.28.1-dev`
+**Roadmap Version:** `11.28.1-dev`
 **Date:** 2026-09-16
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,20 @@
 
 ## 0. Recently Done
 
+### 11.28.1-dev - The Density Sign Bug
+- **Empty voxels must be NEGATIVE density, never 0.** SurfaceNets interpolates `t = da/(da-db)`; with air at 0 every vertex snapped to a cell corner, and pass 2's `IsTerrainSolid` (`> 0`) disagreed with pass 1's mask, dropping the connecting quads. Result was a shattered surface of floating faces. The engine's own `SphereDensity.EvaluateAsteroidVoxel` already used +1..127 / -127..-1; asteroids now match it.
+- **Vertex colours need the vertex-colour shader.** Rocks rendered flat white on a plain URP/Lit fallback. They now use `SphereWorld.terrainMaterial` itself, so rocks and terrain shade identically.
+- Shape displacement raised from +/-11% to three octaves at +/-38/18/8% with a wider ellipsoid stretch, so rocks are no longer spheres.
+- **Headroom rule:** stronger noise can overflow the fixed grid and clip the rock flat, so nominal radius is clamped against `stretch * noiseGain`. Voxels moved to 1 m (the planet's own size) because at 0.5 m that clamp capped rocks at 3 m.
+
+### 11.28.0-dev - Smooth Rocks, Real Materials
+- Asteroids are meshed with `SurfaceNetsJob` - the SAME job the planets use - instead of the hand-rolled exposed-face mesher that made them blocky. Same smooth surface, same shading, same material colours.
+- **Reuse rule:** the rock's voxel grid is sized to the mesher (one padded 34-cell chunk) rather than generalising the mesher. Asteroids inherit future terrain-meshing fixes for free, and planet terrain is never destabilised to serve rocks. Radius is 2.5-7 m, what actually fits.
+- **Smoothness rule:** density must be SIGNED AND GRADED, not binary. Surface nets interpolates the iso-crossing between voxels; a 0/127 field puts every vertex halfway and the blockiness returns. Mining softens density at the brush rim for the same reason.
+- **Shape rule:** not all spheres - per-rock ellipsoid stretch, two octaves of noise, and 0-2 spherical gouges, so a field reads as rocks rather than filler.
+- Materials are real `MaterialId` values coloured through the shared `MaterialRegistry`, so there is no separate asteroid material table to drift out of sync.
+- **Placement note:** the mesher emits a 0..Dim*voxelSize box, so geometry lives on a child offset by half the grid; otherwise a rock tumbles around its corner.
+
 ### 11.27.0-dev - Rocks You Dig Into
 - `AsteroidVoxelBody`: asteroids are now small VOXEL volumes of stone with ore veins, carved a scoop at a time, not destructible props with health. `SpaceAsteroid` no longer derives from `Damageable`.
 - **Locality rule:** each rock owns a LOCAL voxel array and meshes itself, rather than living in `SphereWorld`. Planet grids are chunk-streamed and centre-anchored; an asteroid drifts and tumbles, so local data is what lets it move at all.
@@ -49,19 +63,6 @@
 - **Direction rule:** the station allows both ways (its LOAD/UNLOAD role already decides train flow); the pad follows its role, because a SEND pad accumulating a full launch load must not be drainable or it never reaches launch size.
 - **Compatibility rule:** `[RequireComponent(typeof(ItemPortRouting))]` rather than setup-step attachment, so pads and stations ALREADY PLACED in a save gain routing on load.
 - Audit finding: Asteroid Mining (6.6 item 3) was already fully implemented and has been marked complete rather than re-shipped.
-
-### 11.24.1-dev - The Missing Setup Steps
-- Restored setup steps 89, 90 and 91 and their wizard buttons, which had repeatedly failed to persist.
-- **Root cause:** workspace size, not code. `Imported Textures` (3,760 files / 49 MB) put the project at 10,076 files / 119 MB, on the snapshot caps of ~10,000 files / ~128 MB; the newest writes were being dropped. Folder removed from the workspace - now 6,321 files / 70 MB.
-- **Process rule:** after adding files, verify they exist on disk WITH their `.meta` rather than assuming the write landed. Keep the workspace well under the file/size caps.
-
-### 11.24.0-dev - Freight Between Worlds
-- `CargoLaunchPad` + `CargoFlightRegistry` + `CargoPadHud`: scheduled bulk freight between bodies. Setup step 91, research `interplanetary_logistics`.
-- **Scope rule:** NOT a buildable rocket vehicle. Grids already fly to orbit, and a second flying non-grid entity is the exact split the rail rework exists to remove. Pads cover unattended repeatable freight; piloted grids cover manned flight.
-- **Simulation rule:** a flight is a timer and a manifest held in a CENTRAL registry, never on the pads - a flight outlives its endpoints' loaded state, so pad-owned state would stop ticking exactly when it matters.
-- **Safety rule:** cargo is never destroyed. Missing pad, full hold and partial delivery all hold or retry rather than dropping the shipment.
-- **Placement rule:** a pad records its body ONCE at placement. `GravityProvider.ActiveBody` follows the player, so sampling it live would make a pad think it had moved worlds.
-- Re-shipped setup steps 89 and 90, which were lost from the 11.22.0 and 11.23.0 drops.
 
 ### Era Transition Feel
 
@@ -1763,6 +1764,7 @@ Statuses are evidence-based and move forward only after code/content review and 
    - **Implementation note:** asteroid colliders MUST be convex - they move, and non-convex mesh colliders are ignored by sweeps and by other non-convex colliders.
    - **Scale rule:** planets are only 6-8 km in radius, so rocks are 3-11 m. Anything larger reads as a moon rather than as minable, and remesh cost grows with the cube of the radius.
    - ~~Rocks are voxel bodies you tunnel into, not props you break~~ *(11.27.0-dev)* - `AsteroidVoxelBody`, stone with interior ore veins, carved by the normal mining tools.
+   - ~~Smooth iso-surface rocks with varied shapes and planet materials~~ *(11.28.0-dev)* - meshed by the planets' own `SurfaceNetsJob`; ellipsoid stretch, noise and gouges so they are not all spheres.
    - Open: dedicated asteroid-only ores, and richer rocks further from the sun.
 
 4. **Satellite Network** - ~~scan planets for resource deposits~~ *(11.21.0-dev)* - **PARTIALLY COMPLETE**

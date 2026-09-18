@@ -1,9 +1,85 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `11.27.0-dev`
+**Current Version:** `11.28.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [11.28.1-dev] The Density Sign Bug
+
+**Type:** PATCH - fixes the shattered, white, near-spherical rocks that 11.28.0 produced. No save impact.
+
+**GitHub title:** `[11.28.1-dev] The density sign bug`
+
+Your screenshot showed the real problem clearly, and it was not "a bit blocky": the surface was **broken into disconnected floating quads**, unlit white, on a shape that was still basically a sphere. Three separate bugs, all mine.
+
+#### 1. Empty voxels must be NEGATIVE, not zero
+
+This was the shattered surface.
+
+`SurfaceNetsJob` finds the iso-crossing with `(da > 0) != (db > 0)` and places the vertex at `t = da / (da - db)`. I stored air as density **0**. The sign test still fired, but `t` collapsed to exactly 0 or 1, so every vertex snapped to a cell corner instead of interpolating between them. Worse, pass 2 decides which cells are solid with `IsTerrainSolid` (also `> 0`), so the two passes disagreed about which cells even had vertices - and the quads that should have joined them were skipped. Hence floating, disconnected faces.
+
+The engine already had the right convention and I had not looked: `SphereDensity.EvaluateAsteroidVoxel` stores **solid as +1..127 and empty as -127..-1**. Asteroids now follow it exactly, including carrying the overshoot through as negative density when a dig empties a voxel - so a fresh crater has a real gradient to interpolate against instead of a faceted edge.
+
+#### 2. White because the shader ignored vertex colours
+
+The mesher bakes material colour into **vertex colours**. I fell back to a plain URP/Lit material, which does not read them, so every rock rendered flat white no matter what ore was in it.
+
+Rocks now use the terrain's own material (`SphereWorld.terrainMaterial`, the `VoxelEngine/VoxelTerrain*` vertex-colour shader). Not a lookalike - the same material asset, so rocks and ground shade identically by construction. That is also the correct answer to "use the same materials as the planets".
+
+#### 3. Still spheres because the noise was far too weak
+
+I had used +/-11% and +/-5.5% displacement, which is a sphere with a faint orange-peel texture. It is now three octaves at +/-38%, +/-18% and +/-8%, on top of a wider per-axis ellipsoid stretch (0.55-1.45).
+
+#### The consequence I had to solve for
+
+Stronger displacement means a rock can reach `radius * stretch * 1.64`, which would have grown straight through the grid padding and been **sliced flat** where it ran out of voxels. The nominal radius is now clamped against that worst case explicitly.
+
+Solving it at 0.5 m voxels capped rocks at a 3 m pebble, so voxels are now **1 m - exactly the planet's `VoxelConstants.VOXEL_SIZE`**. The 32-cell grid then spans 32 m, giving 5-14 m rocks, and a mining brush carves the same volume out of rock as it does out of ground. Spawner range is 2.5-6 m nominal, verified to fit with no clipping at every size.
+
+### [11.28.0-dev] Smooth Rocks, Real Materials
+
+**Type:** MINOR - replaces asteroid meshing and shaping. Save-compatible; asteroids are procedural and were never saved.
+
+**GitHub title:** `[11.28.0-dev] Smooth rocks, real materials`
+
+#### The blockiness was my own mesher
+
+11.27.0 made asteroids into voxel bodies, but I wrote a hand-rolled exposed-face mesher for them - so every rock came out as stacked cubes. The game already had a smooth iso-surface mesher, `SurfaceNetsJob`, and I did not use it.
+
+Asteroids are now meshed with **the exact job the planets use**. Same smooth surface, same shading path, same material colours - because it is literally the same code, not a lookalike.
+
+#### Sizing the rock to the mesher, not writing a second mesher
+
+`SurfaceNetsJob` is hard-wired to a padded `CHUNK_SIZE_P` (34) cube. Rather than generalise it - and risk destabilising planet terrain, which is the thing that matters most in the game - an asteroid's voxel grid is **exactly one chunk**.
+
+That is not a real limitation: at 0.5 m voxels, 32 inner cells is a 14 m rock, which is already the top of the size range we want. The upside is that asteroids inherit every future fix to terrain meshing for free, and there is only one mesher to maintain.
+
+Rock radius is now **2.5-7 m**, which is what actually fits the grid without touching the padding. The previous 11 m ceiling would have been silently clamped.
+
+#### Not all spheres
+
+A field of identical balls reads as procedural filler, so shape comes from three things layered together:
+
+- **A random ellipsoid stretch** per rock (0.62-1.35 on each axis), so they are potatoes and shards rather than balls.
+- **Two octaves of value noise** on the surface radius, for an irregular silhouette.
+- **Zero to two gouges** - large spherical bites taken out of the body, so some rocks are cracked or cratered rather than whole.
+
+#### Density has to be graded, not binary
+
+The detail that actually makes it smooth: density is **signed and graded** (ramping at the skin, full strength deeper) rather than a hard 0/127. Surface nets positions each vertex by interpolating the iso-crossing between neighbouring voxels - with a binary field every crossing lands exactly halfway and you get the blocky look back, just with triangles.
+
+Mining follows the same rule. A dig **softens** density at the rim of the brush instead of deleting it outright, so a fresh crater is rounded the same way the original surface is. A hard cut would leave faceted holes in an otherwise smooth rock.
+
+#### Planet materials throughout
+
+Voxels store real `MaterialId` values and are coloured through the shared `MaterialRegistry`, so asteroid stone is the same colour as planet stone and asteroid iron matches planet iron. Mining yields the registry's configured drops. There is no separate asteroid material table that could drift out of sync.
+
+#### One placement subtlety
+
+The mesher emits vertices at `cell * voxelSize`, so the mesh occupies a `0..17 m` box rather than straddling the origin. The renderer and collider therefore live on a **child** pushed back by half the grid, which puts the rock's true centre on its transform - so it tumbles about itself rather than swinging around a corner, and the world-to-local mining maths lines up. I checked the mapping numerically: centre cell 16.5 lands at local 0.0 from both directions.
+
+No manual Unity step.
 
 ### [11.27.0-dev] Rocks You Dig Into
 

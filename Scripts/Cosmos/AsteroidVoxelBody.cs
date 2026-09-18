@@ -1,162 +1,232 @@
 // Assets/Scripts/VoxelEngine/Cosmos/AsteroidVoxelBody.cs
 //
-// A SMALL VOXEL ASTEROID — stone and ore you actually dig into.
+// A SMALL VOXEL ASTEROID — stone and ore you actually dig into, meshed smooth.
 //
-// WHAT CHANGED AND WHY
-// Asteroids used to be a single lumpy mesh with health: you shot it, it popped, it gave
-// you ore. That is a destructible prop, not a minable body. You could not tunnel into
-// one, could not see the ore seams, and could not leave a half-mined rock behind.
+// WHAT CHANGED IN 11.28.0
+// The first voxel pass (11.27.0) meshed rocks with a hand-written exposed-face builder,
+// which made them read as Minecraft cubes. They are now meshed with `SurfaceNetsJob` -
+// the SAME job the planets use - so an asteroid has the same smooth iso-surface look as
+// terrain, and the same material colours, because it is literally the same code path.
 //
-// This replaces that with a real voxel volume - the same idea as the planet terrain,
-// just tiny. A rock is a dense sphere of voxels with ore veins running through it, and
-// mining carves actual material out of it.
+// THE KEY CONSTRAINT THAT MAKES THAT REUSE POSSIBLE
+// `SurfaceNetsJob` is hard-wired to a padded CHUNK_SIZE_P (34) cube: it indexes voxels
+// as CHUNK_SIZE_P^3 and walks CHUNK_SIZE+1 cells. So the asteroid's voxel grid is
+// exactly one chunk. That is not a limitation in practice - at 0.5 m voxels a 32-cell
+// chunk is a 16 m rock, which is already at the top of the size range we want.
 //
-// WHY ITS OWN GRID RATHER THAN THE PLANET'S
-// `SphereWorld` is planet-scale: it streams chunks around a viewer and its coordinates
-// are anchored to a body's centre. An asteroid is a free-floating object a few metres
-// across that DRIFTS AND TUMBLES. Putting it in the planet's voxel grid would mean
-// either it cannot move, or the grid has to support moving sub-volumes - a far larger
-// change than this feature is worth.
+// Sizing the grid to the mesher rather than writing a second mesher means asteroids
+// inherit every future fix to terrain meshing for free.
 //
-// So each asteroid owns a small dense voxel array in LOCAL space and meshes itself.
-// Because the data is local, the whole rock can be moved and rotated freely by simply
-// moving its transform, which is exactly what a drifting asteroid needs.
+// SHAPE: NOT ALL SPHERES
+// A field of identical balls reads as procedural filler. Rocks are deformed by several
+// layers of value noise plus a random axis stretch, so they come out as potatoes,
+// shards and lumps - recognisably rocks rather than spheres with dents.
 //
-// SIZE IS THE POINT
-// Rocks are 4-26 m across at a 0.5 m voxel, so a grid is at most ~52 cells per axis -
-// small enough to mesh in one pass with no streaming, no jobs and no chunk bookkeeping.
+// MATERIALS ARE THE PLANET'S MATERIALS
+// Voxels store real `MaterialId` values and are coloured through the shared
+// `MaterialRegistry`, so asteroid stone looks like planet stone and asteroid iron looks
+// like planet iron. Mining them yields the registry's configured drops. There is no
+// separate asteroid material table to drift out of sync.
 
 using System.Collections.Generic;
+using Unity.Collections;
+using Unity.Jobs;          // IJobExtensions.Run
+using Unity.Mathematics;
 using UnityEngine;
+using UnityEngine.Rendering;
+using VoxelEngine.Core;
 using VoxelEngine.Materials;
+using VoxelEngine.Meshing;
 
 namespace VoxelEngine.Cosmos
 {
     [DisallowMultipleComponent]
     public class AsteroidVoxelBody : MonoBehaviour
     {
-        /// <summary>Edge length of one asteroid voxel, in metres.</summary>
-        public const float VoxelSize = 0.5f;
+        /// <summary>
+        /// Edge length of one asteroid voxel, in metres - the SAME 1 m as planet terrain.
+        ///
+        /// Matching the planet matters for two reasons: a mining brush that carves a given
+        /// radius of ground carves the same amount of rock, and the grid (a fixed 32 inner
+        /// cells) then spans 32 m, which is what allows a usefully sized rock once the
+        /// stretch and noise headroom is subtracted. At 0.5 m the ceiling was a 3 m pebble.
+        /// </summary>
+        public const float VoxelSize = VoxelConstants.VOXEL_SIZE;
 
-        /// <summary>Density at or below this is empty space.</summary>
-        private const sbyte SolidThreshold = 0;
+        /// <summary>Grid dimension, fixed by the mesher's padded chunk layout.</summary>
+        private const int Dim = VoxelConstants.CHUNK_SIZE_P;      // 34
+        private const int Inner = VoxelConstants.CHUNK_SIZE;      // 32
 
-        [SerializeField] private int _dim;              // cells per axis
-        [SerializeField] private float _radiusMetres;
+        /// <summary>Half the grid, in metres. The mesh is emitted in a 0..Dim*vs box.</summary>
+        private const float GridCentreMetres = (Dim - 1) * 0.5f * VoxelSize;
 
-        private sbyte[] _density;
-        private byte[] _material;
-
+        private Voxel[] _voxels;
+        private Transform _meshRoot;
         private MeshFilter _filter;
+        private MeshRenderer _renderer;
         private MeshCollider _collider;
         private Mesh _mesh;
-        private bool _dirty;
 
-        public int Dimension => _dim;
+        [SerializeField] private float _radiusMetres;
+
         public float RadiusMetres => _radiusMetres;
-
-        /// <summary>Solid voxels remaining. At zero the rock is gone.</summary>
         public int SolidCount { get; private set; }
-
-        /// <summary>Total solids the rock started with, for a depletion readout.</summary>
         public int InitialSolidCount { get; private set; }
 
         public float Remaining01 => InitialSolidCount > 0
             ? Mathf.Clamp01(SolidCount / (float)InitialSolidCount) : 0f;
 
-        // ── Registry, so a drill can find nearby rocks cheaply ───────────────────
         private static readonly List<AsteroidVoxelBody> s_all = new();
         public static IReadOnlyList<AsteroidVoxelBody> All => s_all;
 
         private void OnEnable() { if (!s_all.Contains(this)) s_all.Add(this); }
         private void OnDisable() { s_all.Remove(this); }
 
+        private void OnDestroy()
+        {
+            if (_mesh != null) Destroy(_mesh);
+        }
+
         // ════════════════════════════════════════════════════════════════
         //  GENERATION
         // ════════════════════════════════════════════════════════════════
 
         /// <summary>
-        /// Fills the rock: a noisy sphere of stone with ore veins running through it.
+        /// Fills the rock with stone and ore veins and meshes it.
         ///
-        /// The ore is placed as VEINS rather than a uniform mix, because the whole reason
-        /// to dig into a rock rather than shoot it is to follow something. A uniform
-        /// sprinkle would make every cubic metre identical and the digging pointless.
+        /// Density is SIGNED and graded rather than a hard 0/127, because surface nets
+        /// interpolates the iso-crossing between neighbouring voxels. A binary field would
+        /// put every vertex exactly halfway and reintroduce the blockiness this replaces.
         /// </summary>
         public void Generate(float radiusMetres, MaterialId primaryOre, int seed)
         {
-            _radiusMetres = Mathf.Max(1.5f, radiusMetres);
+            // The grid is a fixed 32 inner cells. The nominal radius must leave room for
+            // BOTH the ellipsoid stretch and the noise displacement, or the rock grows past
+            // the padding and gets sliced flat where it runs out of grid.
+            //
+            //   worst case reach = radius * maxStretch * (1 + 0.38 + 0.18 + 0.08)
+            //
+            // Solving that against the half-grid is what sets the ceiling here, and it is
+            // why the spawner asks for smaller rocks than the raw grid size suggests.
+            const float maxStretch = 1.45f;
+            const float maxNoiseGain = 1f + 0.38f + 0.18f + 0.08f;
+            float halfGrid = (Inner * 0.5f - 1.5f) * VoxelSize;
+            float maxRadius = halfGrid / (maxStretch * maxNoiseGain);
 
-            // +2 cells of padding so the surface never touches the array edge, which would
-            // leave a flat clipped face where the mesher runs out of neighbours.
-            _dim = Mathf.Clamp(Mathf.CeilToInt(_radiusMetres * 2f / VoxelSize) + 3, 8, 72);
+            _radiusMetres = Mathf.Clamp(radiusMetres, 1.2f, maxRadius);
 
-            int count = _dim * _dim * _dim;
-            _density = new sbyte[count];
-            _material = new byte[count];
-
-            float centre = (_dim - 1) * 0.5f;
+            _voxels = new Voxel[Dim * Dim * Dim];
             var rng = new System.Random(seed);
 
-            // Three vein axes, each a random plane through the rock. A voxel near one of
-            // these planes becomes ore instead of stone.
-            Vector3[] veinDir = new Vector3[3];
-            float[] veinWidth = new float[3];
-            for (int i = 0; i < 3; i++)
+            // ── Shape ──
+            // A random ellipsoid stretch plus layered noise. The stretch is what stops the
+            // field being a bag of spheres; the noise is what makes the surface irregular.
+            var stretch = new Vector3(
+                Mathf.Lerp(0.55f, 1.45f, (float)rng.NextDouble()),
+                Mathf.Lerp(0.55f, 1.45f, (float)rng.NextDouble()),
+                Mathf.Lerp(0.55f, 1.45f, (float)rng.NextDouble()));
+
+            var noiseOffset = new Vector3(
+                (float)rng.NextDouble() * 100f,
+                (float)rng.NextDouble() * 100f,
+                (float)rng.NextDouble() * 100f);
+
+            // A few big gouges, so some rocks are cracked or bitten into rather than whole.
+            int gougeCount = rng.Next(0, 3);
+            var gougeCentre = new Vector3[gougeCount];
+            var gougeRadius = new float[gougeCount];
+            for (int g = 0; g < gougeCount; g++)
             {
-                veinDir[i] = new Vector3(
-                    (float)rng.NextDouble() * 2f - 1f,
-                    (float)rng.NextDouble() * 2f - 1f,
-                    (float)rng.NextDouble() * 2f - 1f).normalized;
-                veinWidth[i] = Mathf.Lerp(0.6f, 1.6f, (float)rng.NextDouble());
+                gougeCentre[g] = RandomOnSphere(rng) * _radiusMetres * Mathf.Lerp(0.6f, 1.0f, (float)rng.NextDouble());
+                gougeRadius[g] = _radiusMetres * Mathf.Lerp(0.25f, 0.55f, (float)rng.NextDouble());
             }
 
-            float noiseSeed = seed * 0.0131f;
+            // ── Ore veins ──
+            int veinCount = rng.Next(2, 5);
+            var veinDir = new Vector3[veinCount];
+            var veinWidth = new float[veinCount];
+            for (int v = 0; v < veinCount; v++)
+            {
+                veinDir[v] = RandomOnSphere(rng);
+                veinWidth[v] = _radiusMetres * Mathf.Lerp(0.10f, 0.22f, (float)rng.NextDouble());
+            }
+
+            float centre = (Dim - 1) * 0.5f;
             SolidCount = 0;
 
-            for (int z = 0; z < _dim; z++)
-            for (int y = 0; y < _dim; y++)
-            for (int x = 0; x < _dim; x++)
+            for (int z = 0; z < Dim; z++)
+            for (int y = 0; y < Dim; y++)
+            for (int x = 0; x < Dim; x++)
             {
-                int i = Index(x, y, z);
-                Vector3 local = new Vector3(x - centre, y - centre, z - centre);
-                float dist = local.magnitude * VoxelSize;
+                int i = (z * Dim + y) * Dim + x;
 
-                // A wobbly surface so rocks are not billiard balls.
-                Vector3 dir = local.sqrMagnitude > 0.0001f ? local.normalized : Vector3.up;
-                float wobble = Mathf.PerlinNoise(
-                    dir.x * 2.3f + noiseSeed, dir.z * 2.3f + dir.y * 1.7f + noiseSeed);
-                float surface = _radiusMetres * Mathf.Lerp(0.72f, 1.05f, wobble);
+                Vector3 cell = new Vector3(x - centre, y - centre, z - centre) * VoxelSize;
+                Vector3 shaped = new Vector3(cell.x / stretch.x, cell.y / stretch.y, cell.z / stretch.z);
+                float dist = shaped.magnitude;
 
-                if (dist > surface)
+                // Surface radius wobbles with direction so the silhouette is irregular.
+                Vector3 dir = dist > 0.0001f ? shaped / dist : Vector3.up;
+                // Strong, multi-octave displacement. The first pass used +/-11% and +/-5.5%,
+                // which is a sphere with a slight orange-peel texture - not a rock. These
+                // amplitudes reshape the silhouette properly while staying inside the grid.
+                float surface = _radiusMetres * (1f
+                    + 0.38f * (Noise(dir * 1.7f + noiseOffset) - 0.5f) * 2f
+                    + 0.18f * (Noise(dir * 3.9f + noiseOffset * 1.7f) - 0.5f) * 2f
+                    + 0.08f * (Noise(dir * 8.3f + noiseOffset * 2.3f) - 0.5f) * 2f);
+
+                float signed = surface - dist;
+
+                // Gouges cut into the body: take the nearest surface, so a bite reads as a
+                // concave crater rather than a floating hole.
+                for (int g = 0; g < gougeCount; g++)
                 {
-                    _density[i] = 0;
-                    _material[i] = (byte)MaterialId.Air;
+                    float gd = Vector3.Distance(cell, gougeCentre[g]) - gougeRadius[g];
+                    signed = Mathf.Min(signed, gd);
+                }
+
+                // SIGNED density, matching the engine's own asteroid-belt generator
+                // (SphereDensity.EvaluateAsteroidVoxel): SOLID is +1..127 and EMPTY is
+                // -127..-1. Empty must be NEGATIVE, never 0.
+                //
+                // This was the bug behind the shattered, disconnected faces: SurfaceNets
+                // finds an iso-crossing with `(da > 0) != (db > 0)` and places the vertex
+                // at `t = da / (da - db)`. With air stored as 0 the sign test still fires
+                // but t collapses to 0 or 1, so every vertex snapped to a cell corner
+                // instead of interpolating - and pass 2's `IsTerrainSolid` (also `> 0`)
+                // disagreed about which cells had vertices at all, dropping the quads that
+                // would have joined them up.
+                float signedVoxels = signed / VoxelSize;   // distance to surface, in voxels
+
+                if (signed <= 0f)
+                {
+                    sbyte outside = (sbyte)Mathf.Clamp(Mathf.RoundToInt(signedVoxels * 32f), -127, -1);
+                    _voxels[i] = new Voxel(outside, (byte)MaterialId.Air);
                     continue;
                 }
 
-                _density[i] = 127;
-                SolidCount++;
+                // Graded, not binary: the gradient across the skin is what surface nets
+                // interpolates to place a vertex smoothly between two voxel centres.
+                sbyte density = (sbyte)Mathf.Clamp(Mathf.RoundToInt(signedVoxels * 32f), 1, 127);
 
-                // Ore near a vein plane, stone elsewhere. Deeper voxels are likelier to be
-                // ore, so the valuable material is genuinely inside rather than on the skin.
-                byte chosen = (byte)MaterialId.Stone;
-                float depth01 = 1f - Mathf.Clamp01(dist / Mathf.Max(0.01f, surface));
+                byte material = (byte)MaterialId.Stone;
+                float depth01 = Mathf.Clamp01(signed / Mathf.Max(0.01f, _radiusMetres));
 
-                for (int v = 0; v < 3; v++)
+                for (int v = 0; v < veinCount; v++)
                 {
-                    float planeDist = Mathf.Abs(Vector3.Dot(local * VoxelSize, veinDir[v]));
-                    if (planeDist < veinWidth[v] * (0.5f + depth01))
+                    // Distance to a plane through the centre: a slab of ore through the rock.
+                    float planeDist = Mathf.Abs(Vector3.Dot(cell, veinDir[v]));
+                    if (planeDist < veinWidth[v] * (0.45f + depth01))
                     {
-                        chosen = (byte)primaryOre;
+                        material = (byte)primaryOre;
                         break;
                     }
                 }
 
-                _material[i] = chosen;
+                _voxels[i] = new Voxel(density, material);
+                SolidCount++;
             }
 
             InitialSolidCount = SolidCount;
-            _dirty = true;
             Rebuild();
         }
 
@@ -166,43 +236,56 @@ namespace VoxelEngine.Cosmos
 
         /// <summary>
         /// Carves a sphere out of the rock at a WORLD position, reporting what came out.
-        ///
-        /// Returns false when nothing was removed, so a caller can tell "I mined" from
-        /// "I swung at empty space" rather than silently granting nothing.
+        /// Returns false when nothing was removed.
         /// </summary>
         public bool Carve(Vector3 worldPosition, float radiusMetres, Dictionary<MaterialId, int> yield)
         {
-            if (_density == null) return false;
+            if (_voxels == null) return false;
 
             Vector3 local = transform.InverseTransformPoint(worldPosition);
-            float centre = (_dim - 1) * 0.5f;
-
-            // Local space is in metres; convert to cell space.
+            float centre = (Dim - 1) * 0.5f;
             Vector3 cell = local / VoxelSize + new Vector3(centre, centre, centre);
-            float cellRadius = Mathf.Max(0.75f, radiusMetres / VoxelSize);
+            float cellRadius = Mathf.Max(0.9f, radiusMetres / VoxelSize);
 
-            int min = Mathf.FloorToInt(-cellRadius);
-            int max = Mathf.CeilToInt(cellRadius);
+            int span = Mathf.CeilToInt(cellRadius) + 1;
+            int cx = Mathf.RoundToInt(cell.x), cy = Mathf.RoundToInt(cell.y), cz = Mathf.RoundToInt(cell.z);
             bool removed = false;
 
-            for (int dz = min; dz <= max; dz++)
-            for (int dy = min; dy <= max; dy++)
-            for (int dx = min; dx <= max; dx++)
+            for (int dz = -span; dz <= span; dz++)
+            for (int dy = -span; dy <= span; dy++)
+            for (int dx = -span; dx <= span; dx++)
             {
-                int x = Mathf.RoundToInt(cell.x) + dx;
-                int y = Mathf.RoundToInt(cell.y) + dy;
-                int z = Mathf.RoundToInt(cell.z) + dz;
-                if (x < 0 || y < 0 || z < 0 || x >= _dim || y >= _dim || z >= _dim) continue;
+                int x = cx + dx, y = cy + dy, z = cz + dz;
+                if (x < 0 || y < 0 || z < 0 || x >= Dim || y >= Dim || z >= Dim) continue;
 
-                Vector3 voxelCentre = new Vector3(x, y, z);
-                if (Vector3.Distance(voxelCentre, cell) > cellRadius) continue;
+                int i = (z * Dim + y) * Dim + x;
+                var v = _voxels[i];
+                if (v.density <= VoxelConstants.ISO_LEVEL) continue;
 
-                int i = Index(x, y, z);
-                if (_density[i] <= SolidThreshold) continue;
+                float d = Vector3.Distance(new Vector3(x, y, z), cell);
+                if (d > cellRadius) continue;
 
-                var material = (MaterialId)_material[i];
-                _density[i] = 0;
-                _material[i] = (byte)MaterialId.Air;
+                // Soften rather than delete at the rim. A hard cut would leave a faceted
+                // crater; easing the density lets surface nets round the new surface the
+                // same way it rounds the original one.
+                float falloff = 1f - Mathf.Clamp01(d / cellRadius);
+                int reduction = Mathf.Max(24, Mathf.RoundToInt(127f * falloff));
+                int next = v.density - reduction;
+
+                if (next > 0)
+                {
+                    // Still solid, just thinner - the surface moves outward smoothly.
+                    _voxels[i] = new Voxel((sbyte)next, v.material);
+                    removed = true;
+                    continue;
+                }
+
+                // Now empty. Carry the overshoot through as NEGATIVE density so the new
+                // surface has a real gradient to interpolate against; clamping to 0 here
+                // would re-create the faceted crater this whole scheme avoids.
+                var material = (MaterialId)v.material;
+                sbyte emptied = (sbyte)Mathf.Clamp(next, -127, -1);
+                _voxels[i] = new Voxel(emptied, (byte)MaterialId.Air);
                 SolidCount--;
                 removed = true;
 
@@ -215,96 +298,85 @@ namespace VoxelEngine.Cosmos
 
             if (removed)
             {
-                _dirty = true;
                 Rebuild();
-
-                // A rock mined to nothing removes itself rather than leaving an invisible
-                // collider-less husk in the field.
                 if (SolidCount <= 0) Destroy(gameObject);
             }
-
             return removed;
         }
 
         /// <summary>Material at a world position, or Air when outside or already mined.</summary>
         public MaterialId MaterialAt(Vector3 worldPosition)
         {
-            if (_density == null) return MaterialId.Air;
+            if (_voxels == null) return MaterialId.Air;
 
             Vector3 local = transform.InverseTransformPoint(worldPosition);
-            float centre = (_dim - 1) * 0.5f;
+            float centre = (Dim - 1) * 0.5f;
             Vector3 cell = local / VoxelSize + new Vector3(centre, centre, centre);
 
             int x = Mathf.RoundToInt(cell.x), y = Mathf.RoundToInt(cell.y), z = Mathf.RoundToInt(cell.z);
-            if (x < 0 || y < 0 || z < 0 || x >= _dim || y >= _dim || z >= _dim) return MaterialId.Air;
+            if (x < 0 || y < 0 || z < 0 || x >= Dim || y >= Dim || z >= Dim) return MaterialId.Air;
 
-            int i = Index(x, y, z);
-            return _density[i] > SolidThreshold ? (MaterialId)_material[i] : MaterialId.Air;
+            var v = _voxels[(z * Dim + y) * Dim + x];
+            return v.density > VoxelConstants.ISO_LEVEL ? (MaterialId)v.material : MaterialId.Air;
         }
 
         // ════════════════════════════════════════════════════════════════
-        //  MESHING
+        //  MESHING  (the planet's own surface-nets job)
         // ════════════════════════════════════════════════════════════════
 
-        /// <summary>
-        /// Rebuilds the visible mesh and its collider from the voxel data.
-        ///
-        /// Deliberately a simple exposed-face mesher rather than surface nets: a rock is at
-        /// most ~70 cells per axis and is remeshed only when actually mined, so the extra
-        /// complexity of a smooth mesher buys nothing here - and blocky faces read as
-        /// "this is voxel material you are digging", which is the point.
-        /// </summary>
         private void Rebuild()
         {
-            if (!_dirty || _density == null) return;
-            _dirty = false;
-
+            if (_voxels == null) return;
             EnsureComponents();
 
-            var verts = new List<Vector3>(1024);
-            var tris = new List<int>(2048);
-            var colors = new List<Color32>(1024);
+            const int cells = (Inner + 1) * (Inner + 1) * (Inner + 1);
+            int maxVerts = cells, maxIdx = cells * 18;
 
-            float centre = (_dim - 1) * 0.5f;
+            var voxels = new NativeArray<Voxel>(_voxels.Length, Allocator.TempJob,
+                NativeArrayOptions.UninitializedMemory);
+            voxels.CopyFrom(_voxels);
 
-            for (int z = 0; z < _dim; z++)
-            for (int y = 0; y < _dim; y++)
-            for (int x = 0; x < _dim; x++)
+            var meshDataArray = Mesh.AllocateWritableMeshData(1);
+            var bounds = new NativeArray<Bounds>(1, Allocator.TempJob);
+            var counts = new NativeArray<int>(2, Allocator.TempJob);
+            var vertScratch = new NativeArray<float3>(maxVerts, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+            var normScratch = new NativeArray<float3>(maxVerts, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+            var colScratch = new NativeArray<Color32>(maxVerts, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+            var idxScratch = new NativeArray<int>(maxIdx, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+            var cellLut = new NativeArray<int>(cells, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+
+            var attributes = new NativeArray<VertexAttributeDescriptor>(3, Allocator.TempJob);
+            attributes[0] = new VertexAttributeDescriptor(VertexAttribute.Position, VertexAttributeFormat.Float32, 3);
+            attributes[1] = new VertexAttributeDescriptor(VertexAttribute.Normal, VertexAttributeFormat.Float32, 3);
+            attributes[2] = new VertexAttributeDescriptor(VertexAttribute.Color, VertexAttributeFormat.UNorm8, 4);
+
+            var colors = MaterialColorTable();
+
+            var job = new SurfaceNetsJob
             {
-                int i = Index(x, y, z);
-                if (_density[i] <= SolidThreshold) continue;
+                voxels = voxels,
+                meshData = meshDataArray[0],
+                bounds = bounds,
+                counts = counts,
+                vertexScratch = vertScratch,
+                normalScratch = normScratch,
+                colorScratch = colScratch,
+                indexScratch = idxScratch,
+                cellVertexIndex = cellLut,
+                materialColors = colors,
+                vertexAttributes = attributes,
+                // Not a planet chunk: no radial-up assumptions, and AO is affordable here
+                // because a rock is one small grid remeshed only when mined.
+                isSphere = false,
+                enableVertexAo = true,
+                // Only used for radial shading when isSphere is set, which it is not here.
+                chunkOrigin = float3.zero,
+                voxelSize = VoxelSize,
+            };
 
-                Color32 tint = TintFor((MaterialId)_material[i]);
-                Vector3 origin = (new Vector3(x, y, z) - new Vector3(centre, centre, centre)) * VoxelSize;
-
-                // Only emit a face where the neighbour is empty. Interior faces are never
-                // seen and would multiply the triangle count many times over.
-                for (int f = 0; f < 6; f++)
-                {
-                    int nx = x + FaceNormals[f].x;
-                    int ny = y + FaceNormals[f].y;
-                    int nz = z + FaceNormals[f].z;
-
-                    bool neighbourSolid =
-                        nx >= 0 && ny >= 0 && nz >= 0 && nx < _dim && ny < _dim && nz < _dim
-                        && _density[Index(nx, ny, nz)] > SolidThreshold;
-                    if (neighbourSolid) continue;
-
-                    int baseIndex = verts.Count;
-                    for (int c = 0; c < 4; c++)
-                    {
-                        verts.Add(origin + FaceCorners[f, c] * VoxelSize);
-                        colors.Add(tint);
-                    }
-
-                    tris.Add(baseIndex);
-                    tris.Add(baseIndex + 1);
-                    tris.Add(baseIndex + 2);
-                    tris.Add(baseIndex);
-                    tris.Add(baseIndex + 2);
-                    tris.Add(baseIndex + 3);
-                }
-            }
+            // Run immediately: a dig must show its result this frame, and one 34^3 grid is
+            // small enough that scheduling and waiting costs more than it saves.
+            job.Run();
 
             if (_mesh == null)
             {
@@ -312,93 +384,165 @@ namespace VoxelEngine.Cosmos
                 _mesh.MarkDynamic();
             }
             _mesh.Clear();
+            Mesh.ApplyAndDisposeWritableMeshData(meshDataArray, _mesh,
+                MeshUpdateFlags.DontRecalculateBounds | MeshUpdateFlags.DontValidateIndices);
+            _mesh.bounds = bounds[0];
 
-            if (verts.Count == 0)
-            {
-                _filter.sharedMesh = _mesh;
-                _collider.sharedMesh = null;
-                return;
-            }
-
-            // A fully mined rock can still exceed 65k vertices while partly intact.
-            _mesh.indexFormat = verts.Count > 65000
-                ? UnityEngine.Rendering.IndexFormat.UInt32
-                : UnityEngine.Rendering.IndexFormat.UInt16;
-
-            _mesh.SetVertices(verts);
-            _mesh.SetTriangles(tris, 0);
-            _mesh.SetColors(colors);
-            _mesh.RecalculateNormals();
-            _mesh.RecalculateBounds();
+            bool hasGeometry = counts[1] >= 3 && _mesh.bounds.size.sqrMagnitude > 1e-7f;
 
             _filter.sharedMesh = _mesh;
-
-            // Collider must be reassigned, not just mutated, or PhysX keeps the old shape.
+            // Reassign rather than mutate, or PhysX keeps the previous shape and the player
+            // collides with rock they already mined away.
             _collider.sharedMesh = null;
-            _collider.sharedMesh = _mesh;
+            if (hasGeometry) _collider.sharedMesh = _mesh;
+
+            // SurfaceNets emits vertices at (cell * voxelSize), so the mesh occupies a
+            // 0..Dim*voxelSize box rather than straddling the origin. The renderer and
+            // collider live on a child that is pushed back by half the grid, which puts the
+            // rock's centre on this object's origin - so it tumbles about itself instead of
+            // swinging around a corner.
+            _meshRoot.localPosition = new Vector3(-GridCentreMetres, -GridCentreMetres, -GridCentreMetres);
+
+            voxels.Dispose();
+            bounds.Dispose();
+            counts.Dispose();
+            vertScratch.Dispose();
+            normScratch.Dispose();
+            colScratch.Dispose();
+            idxScratch.Dispose();
+            cellLut.Dispose();
+            attributes.Dispose();
+        }
+
+        /// <summary>
+        /// Colour LUT straight from the shared MaterialRegistry, so asteroid stone is the
+        /// same colour as planet stone. Cached because it never changes at runtime.
+        /// </summary>
+        private static NativeArray<Color32> MaterialColorTable()
+        {
+            var table = new NativeArray<Color32>(256, Allocator.TempJob);
+            var registry = ResolveRegistry();
+            for (int i = 0; i < 256; i++)
+                table[i] = registry != null
+                    ? (Color32)registry.GetColor((byte)i)
+                    : new Color32(120, 116, 110, 255);
+            return table;
+        }
+
+        private static MaterialRegistry _registry;
+
+        private static MaterialRegistry ResolveRegistry()
+        {
+            if (_registry != null) return _registry;
+
+            var world = ActiveWorld.Current;
+            if (world != null && world.MaterialRegistry != null) return _registry = world.MaterialRegistry;
+
+            _registry = Resources.Load<MaterialRegistry>("MaterialRegistry");
+            if (_registry == null)
+            {
+                var all = Resources.FindObjectsOfTypeAll<MaterialRegistry>();
+                if (all != null && all.Length > 0) _registry = all[0];
+            }
+            return _registry;
         }
 
         private void EnsureComponents()
         {
-            if (_filter == null)
+            // The geometry lives on a CHILD, offset by half the grid, because the mesher
+            // emits a 0..Dim*voxelSize box. Keeping the parent clean means the asteroid's
+            // transform is its true centre - which is what drift, tumble and the
+            // world-to-local mining maths all assume.
+            if (_meshRoot == null)
             {
-                _filter = GetComponent<MeshFilter>();
-                if (_filter == null) _filter = gameObject.AddComponent<MeshFilter>();
+                var existing = transform.Find("Voxels");
+                if (existing != null) _meshRoot = existing;
+                else
+                {
+                    var go = new GameObject("Voxels");
+                    go.transform.SetParent(transform, false);
+                    _meshRoot = go.transform;
+                }
             }
 
-            var renderer = GetComponent<MeshRenderer>();
-            if (renderer == null) renderer = gameObject.AddComponent<MeshRenderer>();
-            if (renderer.sharedMaterial == null)
+            if (_filter == null)
             {
-                Shader shader = Shader.Find("Universal Render Pipeline/Lit")
-                             ?? Shader.Find("Standard");
-                renderer.sharedMaterial = new Material(shader) { name = "Mat_AsteroidVoxel" };
+                _filter = _meshRoot.GetComponent<MeshFilter>();
+                if (_filter == null) _filter = _meshRoot.gameObject.AddComponent<MeshFilter>();
             }
+
+            if (_renderer == null)
+            {
+                _renderer = _meshRoot.GetComponent<MeshRenderer>();
+                if (_renderer == null) _renderer = _meshRoot.gameObject.AddComponent<MeshRenderer>();
+            }
+
+            if (_renderer.sharedMaterial == null)
+                _renderer.sharedMaterial = SharedSurfaceMaterial();
 
             if (_collider == null)
             {
-                _collider = GetComponent<MeshCollider>();
-                if (_collider == null) _collider = gameObject.AddComponent<MeshCollider>();
+                _collider = _meshRoot.GetComponent<MeshCollider>();
+                if (_collider == null) _collider = _meshRoot.gameObject.AddComponent<MeshCollider>();
             }
 
-            // Non-convex is correct here and safe: the rock is on a KINEMATIC rigidbody, and
-            // a convex hull would fill in the tunnels the player just dug - you would mine a
-            // cave and still bump into a solid ball.
+            // Non-convex: a convex hull would fill in the tunnels the player just dug, so
+            // they would mine a cave and still bump into a solid ball. Safe because rocks
+            // are on kinematic rigidbodies.
             _collider.convex = false;
         }
 
-        private int Index(int x, int y, int z) => (z * _dim + y) * _dim + x;
+        /// <summary>
+        /// One shared vertex-colour material for every rock, so a field of asteroids is a
+        /// single material and does not leak one per object.
+        /// </summary>
+        private static Material _surfaceMaterial;
 
-        private static Color32 TintFor(MaterialId material) => material switch
+        private static Material SharedSurfaceMaterial()
         {
-            MaterialId.Iron => new Color32(150, 110, 88, 255),
-            MaterialId.Nickel => new Color32(168, 170, 158, 255),
-            MaterialId.Silicon => new Color32(116, 128, 140, 255),
-            MaterialId.Cobalt => new Color32(86, 108, 176, 255),
-            MaterialId.Gold => new Color32(214, 176, 74, 255),
-            MaterialId.Platinum => new Color32(198, 206, 212, 255),
-            MaterialId.Silver => new Color32(188, 194, 200, 255),
-            MaterialId.Uranium => new Color32(112, 176, 96, 255),
-            MaterialId.Ice => new Color32(178, 214, 232, 255),
-            _ => new Color32(104, 100, 96, 255),   // stone
-        };
+            if (_surfaceMaterial != null) return _surfaceMaterial;
 
-        private static readonly Vector3Int[] FaceNormals =
-        {
-            new(0, 0, 1), new(0, 0, -1),
-            new(1, 0, 0), new(-1, 0, 0),
-            new(0, 1, 0), new(0, -1, 0),
-        };
+            // The mesher bakes material colour into VERTEX COLOURS, so the shader has to
+            // read them. A plain URP/Lit material ignores vertex colour entirely, which is
+            // why the first attempt rendered every rock flat white regardless of ore.
+            //
+            // Use the terrain's own material: it is already the vertex-colour voxel shader,
+            // so rocks and ground shade identically by construction.
+            if (ActiveWorld.Current is SphereWorld sphere && sphere.terrainMaterial != null)
+                return _surfaceMaterial = sphere.terrainMaterial;
 
-        // Corners wound counter-clockwise when viewed from outside each face.
-        private static readonly Vector3[,] FaceCorners =
+            var shared = Resources.Load<Material>("Mat_Terrain");
+            if (shared != null) return _surfaceMaterial = shared;
+
+            Shader shader = Shader.Find("VoxelEngine/VoxelTerrainURP")
+                         ?? Shader.Find("VoxelEngine/VoxelTerrainEnhanced")
+                         ?? Shader.Find("Universal Render Pipeline/Lit")
+                         ?? Shader.Find("Standard");
+
+            _surfaceMaterial = new Material(shader) { name = "Mat_AsteroidVoxel" };
+            if (_surfaceMaterial.HasProperty("_Smoothness")) _surfaceMaterial.SetFloat("_Smoothness", 0f);
+            if (_surfaceMaterial.HasProperty("_BaseColor"))
+                _surfaceMaterial.SetColor("_BaseColor", Color.white);   // let vertex colour show
+            return _surfaceMaterial;
+        }
+
+        // ── Noise helpers ────────────────────────────────────────────────────────
+
+        private static Vector3 RandomOnSphere(System.Random rng)
         {
-            { new(-0.5f, -0.5f, 0.5f), new(0.5f, -0.5f, 0.5f), new(0.5f, 0.5f, 0.5f), new(-0.5f, 0.5f, 0.5f) },
-            { new(0.5f, -0.5f, -0.5f), new(-0.5f, -0.5f, -0.5f), new(-0.5f, 0.5f, -0.5f), new(0.5f, 0.5f, -0.5f) },
-            { new(0.5f, -0.5f, 0.5f), new(0.5f, -0.5f, -0.5f), new(0.5f, 0.5f, -0.5f), new(0.5f, 0.5f, 0.5f) },
-            { new(-0.5f, -0.5f, -0.5f), new(-0.5f, -0.5f, 0.5f), new(-0.5f, 0.5f, 0.5f), new(-0.5f, 0.5f, -0.5f) },
-            { new(-0.5f, 0.5f, 0.5f), new(0.5f, 0.5f, 0.5f), new(0.5f, 0.5f, -0.5f), new(-0.5f, 0.5f, -0.5f) },
-            { new(-0.5f, -0.5f, -0.5f), new(0.5f, -0.5f, -0.5f), new(0.5f, -0.5f, 0.5f), new(-0.5f, -0.5f, 0.5f) },
-        };
+            float z = (float)rng.NextDouble() * 2f - 1f;
+            float a = (float)rng.NextDouble() * Mathf.PI * 2f;
+            float r = Mathf.Sqrt(Mathf.Max(0f, 1f - z * z));
+            return new Vector3(r * Mathf.Cos(a), r * Mathf.Sin(a), z);
+        }
+
+        /// <summary>Cheap 3D value noise in 0..1, built from Unity's 2D Perlin.</summary>
+        private static float Noise(Vector3 p)
+        {
+            float xy = Mathf.PerlinNoise(p.x, p.y);
+            float yz = Mathf.PerlinNoise(p.y, p.z);
+            float zx = Mathf.PerlinNoise(p.z, p.x);
+            return (xy + yz + zx) / 3f;
+        }
     }
 }
