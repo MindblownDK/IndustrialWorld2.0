@@ -508,18 +508,12 @@ namespace VoxelEngine.Player
                 var tree = hit.collider.GetComponentInParent<Tree>();
                 if (tree != null) { HitTree(tree); return; }
 
-                // 1b) Space asteroid? (real-space procedural rocks — Damageable with ore drops)
-                var asteroid = hit.collider.GetComponentInParent<VoxelEngine.Cosmos.SpaceAsteroid>();
-                if (asteroid != null)
+                // 1b) Space asteroid? Rocks are VOXEL BODIES as of 11.27.0, not damageable
+                // props - carve them like terrain instead of dealing damage to them.
+                var asteroidBody = hit.collider.GetComponentInParent<VoxelEngine.Cosmos.AsteroidVoxelBody>();
+                if (asteroidBody != null)
                 {
-                    int astDmg = (int)handStrength;
-                    if (!inventory.ActiveStack.IsEmpty && inventory.ActiveStack.item is ToolItem astTool)
-                        astDmg = (int)astTool.strength;
-                    asteroid.TakeDamage(new VoxelEngine.Combat.DamageEvent
-                    {
-                        amount = astDmg, point = hit.point, direction = ray.direction
-                    });
-                    _nextHit = Time.time + 0.12f;
+                    MineAsteroid(asteroidBody, ray, hit);
                     return;
                 }
 
@@ -1697,8 +1691,108 @@ namespace VoxelEngine.Player
                     point = hitPoint, direction = ray.direction, source = gameObject });
         }
 
+        /// <summary>
+        /// Carves a scoop out of a voxel asteroid and banks what came loose.
+        ///
+        /// Kept separate from planet mining because the two have genuinely different
+        /// rules: an asteroid has no chunk streaming, no sea level, no biome, and its
+        /// material lookup is a local array rather than a world query. Sharing one code
+        /// path would mean threading "is this an asteroid" through all of that.
+        /// </summary>
+        private void MineAsteroid(VoxelEngine.Cosmos.AsteroidVoxelBody asteroid, Ray ray, RaycastHit hit)
+        {
+            if (inventory == null || inventory.container == null) return;
+
+            var stack = inventory.ActiveStack;
+            float strength = handStrength;
+            float radius = handBrushRadius;
+            float rate = handFireRate;
+            int tier = handTier;
+
+            if (!stack.IsEmpty && stack.item is ToolItem tool)
+            {
+                strength = tool.strength;
+                radius = tool.brushRadius;
+                rate = tool.fireRate;
+                tier = tool.miningTier;
+            }
+
+            // Bite just inside the surface, the same trick planet mining uses: a hit point
+            // sits exactly ON the face, which rounds unpredictably to either side.
+            Vector3 point = hit.point - hit.normal.normalized * 0.12f;
+
+            var reg = registry != null ? registry : ResolveRegistry();
+
+            // Under-tier tools still work, just badly - the same rule as planet mining, so
+            // a player never hits an invisible hard lock out in space with no way back.
+            var material = asteroid.MaterialAt(point);
+            var def = reg != null ? reg.Get(material) : null;
+            if (def != null && def.miningTier > tier)
+            {
+                int gap = def.miningTier - tier;
+                radius = Mathf.Min(radius, 0.55f);
+                rate = Mathf.Max(0.35f, rate * Mathf.Pow(0.55f, gap));
+            }
+
+            _asteroidYield.Clear();
+            bool carved = asteroid.Carve(point, radius, _asteroidYield);
+
+            if (!carved)
+            {
+                _nextHit = Time.time + 1f / Mathf.Max(0.1f, rate);
+                return;
+            }
+
+            foreach (var kv in _asteroidYield)
+            {
+                var itemDef = reg != null ? reg.Get(kv.Key) : null;
+                var drop = itemDef != null ? itemDef.dropItem : null;
+                if (drop == null) continue;
+
+                int amount = Mathf.Max(1, kv.Value * Mathf.Max(1, itemDef.dropAmount));
+                var leftover = inventory.container.Insert(new ItemStack(drop, amount));
+
+                // A full pack drops the ore at the rock rather than voiding it.
+                if (leftover != null && leftover.count > 0)
+                    DroppedItem.Spawn(leftover, hit.point + hit.normal * 0.4f, hit.normal);
+            }
+
+            inventory.container.RaiseChanged();
+            _feedback?.Trigger(hit.point, hit.normal, new Color(0.75f, 0.72f, 0.68f));
+            ConsumeDurability(stack);
+            _nextHit = Time.time + 1f / Mathf.Max(0.1f, rate);
+        }
+
+        private readonly System.Collections.Generic.Dictionary<VoxelEngine.Materials.MaterialId, int>
+            _asteroidYield = new();
+
+        /// <summary>Falls back to a scene registry when no planet world is active.</summary>
+        private VoxelEngine.Materials.MaterialRegistry ResolveRegistry()
+        {
+            if (registry != null) return registry;
+            registry = Resources.Load<VoxelEngine.Materials.MaterialRegistry>("MaterialRegistry");
+            if (registry == null)
+            {
+                var all = Resources.FindObjectsOfTypeAll<VoxelEngine.Materials.MaterialRegistry>();
+                if (all != null && all.Length > 0) registry = all[0];
+            }
+            return registry;
+        }
+
         private void MineVoxel(Ray ray, RaycastHit hit)
         {
+            // Asteroids first, and BEFORE the world guard: a rock is its own little voxel
+            // volume with no planet involved, so requiring ActiveWorld here would make
+            // deep-space mining impossible - which is exactly what it used to be.
+            var asteroid = hit.collider != null
+                ? hit.collider.GetComponentInParent<VoxelEngine.Cosmos.AsteroidVoxelBody>()
+                : null;
+            if (asteroid != null)
+            {
+                MineAsteroid(asteroid, ray, hit);
+                return;
+            }
+
             if (world == null || registry == null || inventory == null || inventory.container == null) return;
 
             var stack = inventory.ActiveStack;

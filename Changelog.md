@@ -1,9 +1,54 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `11.26.0-dev`
+**Current Version:** `11.27.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [11.27.0-dev] Rocks You Dig Into
+
+**Type:** MINOR - replaces how asteroids work. Save-compatible; asteroids are procedural and were never saved.
+
+**GitHub title:** `[11.27.0-dev] Rocks you dig into`
+
+#### What was wrong
+
+11.26.0 made asteroids spawn, but they were still **destructible props**: one lumpy mesh with a health bar. You hit it, it popped, it gave you ore. You could not tunnel into a rock, could not see where the ore was, and could not leave one half-mined and come back.
+
+That is not asteroid mining, it is breaking a crate that happens to be in space.
+
+#### Asteroids are now real voxel bodies
+
+Each rock is a small dense voxel volume of **stone shot through with ore veins**. Mining carves material out of it a scoop at a time; the mesh and collider rebuild from whatever is left; the rock disappears only when it is genuinely hollowed out. Health is gone entirely - a rock is not killed, it is consumed.
+
+Ore is placed as **veins**, not a uniform mix, and biased toward the interior. That is the whole reason to dig rather than shoot: there is something to follow, and the valuable material is actually inside. A uniform sprinkle would make every cubic metre identical and the digging pointless.
+
+#### Why its own voxel grid and not the planet's
+
+`SphereWorld` is planet-scale - it streams chunks around a viewer and anchors coordinates to a body's centre. An asteroid is a free-floating object a few metres across that **drifts and tumbles**. Putting it in the planet grid would mean either it cannot move, or the grid has to support moving sub-volumes, which is a far bigger change than this is worth.
+
+So each rock owns a small voxel array in **local** space and meshes itself. Because the data is local, the whole thing moves and rotates by just moving its transform - exactly what a drifting rock needs.
+
+#### Deliberately blocky, deliberately small
+
+The mesher emits only **exposed faces** as quads rather than running surface nets. A rock is at most ~48 cells per axis and is remeshed only when actually mined, so a smooth mesher buys nothing - and blocky faces read as *"this is voxel material you are digging"*, which is the point.
+
+Rock size dropped again, from 4-26 m to **3-11 m**, because a voxel rock is remeshed on every dig and cost grows with the **cube** of the radius. At 26 m a rock was 373,000 cells and ~136,000 vertices per remesh. At 11 m it is 110,000 cells and ~24,000 vertices, comfortably inside the 16-bit index limit with a 32-bit fallback in place regardless.
+
+#### Two collider decisions, opposite ways
+
+- **Planet-side props want convex.** That was the 11.26.0 fix.
+- **A voxel asteroid must be non-convex.** A convex hull would fill in the tunnels you just dug - you would mine a cave and still bump into a solid ball. Safe here because the rock is on a kinematic rigidbody.
+
+#### Mining had to be taught about them
+
+`MineVoxel` returned early whenever there was no active planet world, so mining in deep space was impossible by construction. Asteroids are now intercepted **before** that guard, and carve through their own path - they have no chunk streaming, no sea level and no biome, so sharing the planet path would mean threading "is this an asteroid" through all of it.
+
+Under-tier tools still work, just slowly, the same rule as planet mining - a player must never hit an invisible hard lock out in space with no way back. A full inventory drops the ore at the rock rather than voiding it.
+
+I also found and removed an **older asteroid path** in the same file that still called `TakeDamage`. It would have broken the build and, worse, shortcut the new voxel path entirely.
+
+No manual Unity step. Fly above 12 km and start digging.
 
 ### [11.26.0-dev] Asteroids That Actually Exist
 

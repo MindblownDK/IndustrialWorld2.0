@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `11.26.0-dev`
-**Roadmap Version:** `11.26.0-dev`
+**Current Version:** `11.27.0-dev`
+**Roadmap Version:** `11.27.0-dev`
 **Date:** 2026-09-16
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,14 @@
 
 ## 0. Recently Done
 
+### 11.27.0-dev - Rocks You Dig Into
+- `AsteroidVoxelBody`: asteroids are now small VOXEL volumes of stone with ore veins, carved a scoop at a time, not destructible props with health. `SpaceAsteroid` no longer derives from `Damageable`.
+- **Locality rule:** each rock owns a LOCAL voxel array and meshes itself, rather than living in `SphereWorld`. Planet grids are chunk-streamed and centre-anchored; an asteroid drifts and tumbles, so local data is what lets it move at all.
+- **Collider rule (opposite of 11.26.0):** a voxel asteroid must be NON-convex, or a convex hull fills in the tunnels the player just dug. Safe because rocks are kinematic.
+- **Cost rule:** remesh cost grows with the cube of the radius, so rocks are capped at 11 m (~110k cells, ~24k verts). At 26 m it was 373k cells and ~136k verts per dig.
+- **Ore rule:** ore is placed as veins biased toward the interior, so digging has something to follow. A uniform mix would make every cubic metre identical.
+- `MineVoxel` returned early with no active planet world, making deep-space mining impossible; asteroids are now intercepted before that guard. Also removed a stale second asteroid path still calling `TakeDamage`.
+
 ### 11.26.0-dev - Asteroids That Actually Exist
 - Fixed asteroid spawning, which had never worked. `IsInsidePlanet` used a `radiusKm * 2` keep-out; with 6-8 km planets that rejected everything within 12-16 km while the spawn ring only reached 14 km, so every attempt failed inside a planet's frame. Now a flat 2.5 km surface clearance plus atmosphere.
 - `MeshCollider` is now CONVEX. Non-convex colliders do not collide with other non-convex colliders and are skipped by sweeps, so ships flew through rocks that still blocked raycasts. Convex is also required on a moving body, and these drift and tumble.
@@ -54,14 +62,6 @@
 - **Safety rule:** cargo is never destroyed. Missing pad, full hold and partial delivery all hold or retry rather than dropping the shipment.
 - **Placement rule:** a pad records its body ONCE at placement. `GravityProvider.ActiveBody` follows the player, so sampling it live would make a pad think it had moved worlds.
 - Re-shipped setup steps 89 and 90, which were lost from the 11.22.0 and 11.23.0 drops.
-
-### 11.23.0-dev - Hold Your Breath, Or Don't
-- `StationRoomSolver` + `StationLifeSupport`: pressurisation for hammer-built stations. Setup step 90. Completes the half deferred by 11.22.0.
-- **Reuse rule:** shares the grid solver's ALGORITHM (bounded flood fill + escape shell) but not its coordinates. Forcing world pieces into the ship solver would mean maintaining a fake grid forever.
-- **Design rule:** a newly sealed volume starts EMPTY. Air must be produced by a powered unit that also leaks, so pressurisation is an ongoing cost, not a property of geometry.
-- **Integration rule:** station rooms plug into `RoomAtmosphereService`, the single existing answer to "is the air here breathable", so player survival, HUDs and offline survival all work without individual changes.
-- **Persistence rule:** only the CHARGE is saved; rooms are re-derived from the placed pieces. Applied a frame after load, since the pieces restore in the same pass.
-- Also re-shipped step 89's setup file, which was missing from the 11.22.0 drop.
 
 ### Era Transition Feel
 
@@ -1761,7 +1761,8 @@ Statuses are evidence-based and move forward only after code/content review and 
    - Mining ships need no special type - a grid with a `GridDrill` and cargo is one, the same "no bespoke entity" rule the rail rework applies.
    - **Bug that hid this:** the keep-out margin (`radiusKm * 2`) exceeded the spawn ring, so nothing ever spawned inside a planet's frame. Keep-out is now a flat surface clearance, which is what the rule actually meant.
    - **Implementation note:** asteroid colliders MUST be convex - they move, and non-convex mesh colliders are ignored by sweeps and by other non-convex colliders.
-   - **Scale rule:** planets are only 6-8 km in radius, so rocks are 4-26 m. Anything larger reads as a moon rather than as minable.
+   - **Scale rule:** planets are only 6-8 km in radius, so rocks are 3-11 m. Anything larger reads as a moon rather than as minable, and remesh cost grows with the cube of the radius.
+   - ~~Rocks are voxel bodies you tunnel into, not props you break~~ *(11.27.0-dev)* - `AsteroidVoxelBody`, stone with interior ore veins, carved by the normal mining tools.
    - Open: dedicated asteroid-only ores, and richer rocks further from the sun.
 
 4. **Satellite Network** - ~~scan planets for resource deposits~~ *(11.21.0-dev)* - **PARTIALLY COMPLETE**

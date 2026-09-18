@@ -16,7 +16,6 @@
 using System.Collections.Generic;
 using Unity.Mathematics;
 using UnityEngine;
-using VoxelEngine.Items;
 using VoxelEngine.Materials;
 using Random = Unity.Mathematics.Random;
 
@@ -45,8 +44,10 @@ namespace VoxelEngine.Cosmos
 
         [Tooltip("Asteroid radius range (metres). Deliberately small: planets in this game " +
                  "are only 6-8 km across, so a 140 m rock was 4% of a planet's diameter and " +
-                 "read as a moon rather than as something you mine.")]
-        public Vector2 asteroidRadiusMeters = new Vector2(4f, 26f);
+                 "read as a moon rather than as something you mine. Capped at 11 m because " +
+                 "a voxel rock is remeshed on every dig, and cost grows with the cube of " +
+                 "the radius.")]
+        public Vector2 asteroidRadiusMeters = new Vector2(3f, 11f);
 
         [Tooltip("Minimum altitude (m) above a body's surface before rocks appear while inside its frame — keeps the sky over bases clean while making high orbit and transfers feel populated.")]
         public float minOrbitAltitudeMeters = 12000f;
@@ -83,7 +84,6 @@ namespace VoxelEngine.Cosmos
         private float _spawnTimer;
         private uint _attemptNonce;
         private bool _wasDeepSpace;
-        private readonly Dictionary<MaterialId, ItemDefinition[]> _dropCache = new Dictionary<MaterialId, ItemDefinition[]>();
 
         private void OnEnable()
         {
@@ -207,7 +207,7 @@ namespace VoxelEngine.Cosmos
                 int rockSeed = rng.NextInt(1, int.MaxValue);
 
                 var asteroid = SpaceAsteroid.Spawn(pos, radius, material,
-                    ResolveDrops(material), rockSeed, RandomDrift(ref rng));
+                    rockSeed, RandomDrift(ref rng));
                 asteroid.transform.SetParent(transform, false);
                 origin.RegisterRoot(asteroid.transform);
                 _live.Add(asteroid);
@@ -236,7 +236,7 @@ namespace VoxelEngine.Cosmos
                         int cSeed = rng.NextInt(1, int.MaxValue);
 
                         var member = SpaceAsteroid.Spawn(cPos, cRadius, cMaterial,
-                            ResolveDrops(cMaterial), cSeed, RandomDrift(ref rng));
+                            cSeed, RandomDrift(ref rng));
                         member.transform.SetParent(transform, false);
                         origin.RegisterRoot(member.transform);
                         _live.Add(member);
@@ -342,51 +342,6 @@ namespace VoxelEngine.Cosmos
                                     rng.NextDouble() * 2d - 1d);
             double len = math.length(v);
             return len < 1e-6 ? new double3(1d, 0d, 0d) : v / len;
-        }
-
-        /// <summary>
-        /// Resolve the ore ItemDefinitions for a material. The catalogue mirrors the
-        /// save system's item cache: Resources-visible assets first, then any loaded
-        /// asset in the project (editor play mode).
-        /// </summary>
-        private ItemDefinition[] ResolveDrops(MaterialId material)
-        {
-            if (_dropCache.TryGetValue(material, out var cached) && cached != null) return cached;
-
-            var list = new List<ItemDefinition>();
-            string itemId = material == MaterialId.Ice ? "ice"
-                : material == MaterialId.Iron ? "iron"
-                : material == MaterialId.Nickel ? "nickel"
-                : material == MaterialId.Silicon ? "silicon"
-                : material == MaterialId.Cobalt ? "cobalt"
-                : material == MaterialId.Silver ? "silver"
-                : material == MaterialId.Gold ? "gold"
-                : material == MaterialId.Platinum ? "platinum"
-                : material == MaterialId.Uranium ? "uranium"
-                : "stone";
-
-            foreach (var item in Resources.LoadAll<ItemDefinition>(""))
-            {
-                if (item == null) continue;
-                if (string.Equals(item.itemId, itemId, System.StringComparison.OrdinalIgnoreCase))
-                    list.Add(item);
-            }
-#if UNITY_EDITOR
-            if (list.Count == 0)
-            {
-                foreach (var item in Resources.FindObjectsOfTypeAll<ItemDefinition>())
-                {
-                    if (item == null) continue;
-                    if (string.Equals(item.itemId, itemId, System.StringComparison.OrdinalIgnoreCase))
-                    {
-                        list.Add(item);
-                        break;
-                    }
-                }
-            }
-#endif
-            _dropCache[material] = list.ToArray();
-            return _dropCache[material];
         }
 
         private void ClearAsteroids()
