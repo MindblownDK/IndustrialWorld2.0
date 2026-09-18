@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `11.34.0-dev`
-**Roadmap Version:** `11.34.0-dev`
+**Current Version:** `11.35.0-dev`
+**Roadmap Version:** `11.35.0-dev`
 **Date:** 2026-09-16
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,12 @@
 ---
 
 ## 0. Recently Done
+
+### 11.35.0-dev - Ballast, And Rail That Actually Costs Something
+- **Dedupe bug:** the rail layer rejected cells within 0.45 m against 1 m spacing, but draped cells pull closer than that on slopes and curves - so a run rejected its own cells and laid nothing on empty ground. Radius is now cellSize * 0.25, derived not hard-coded.
+- **Reporting bug:** "already laid" was printed for every failure. `Commit` now reports skipped cells separately, so laid / already-occupied / no-placeable-cells read differently.
+- **Cost:** the tool consumed steel, never track. It now consumes the Rail Track ITEM (1/cell) plus Stone (2/cell). **Rule: the tool saves effort, not materials** - a laid run costs what hand-laying costs. Charged on cells PLACED, never on skipped ones.
+- **Ballast:** every cell places a raised stone bed and lifts the rail onto it, offsets solved numerically so sleepers sit 5 mm proud rather than floating or sinking. Slab is wider than the cell so the shoulder overhangs like real track.
 
 ### 11.34.0-dev - One Train Per Section
 - `RailSignalling` + `RailSignal`: block occupancy, so two trains on one line stop instead of driving through each other. Setup step 94 (optional - occupancy works without any signal placed).
@@ -60,13 +66,6 @@
 - **Balance rule:** the slowest truck and weakest acceleration aboard set the consist's performance - a train is limited by its worst component.
 - **Physics rule:** a railed grid goes kinematic and moves by `MovePosition`. Fighting the solver to hold a hard constraint causes jitter and lets collisions shove a train off its track; `MovePosition` also carries anything standing on it.
 - **Persistence rule:** the track cell is derived, never saved - the graph rebuilds from placed blocks and the bogie re-latches a frame after load.
-
-### 11.30.0-dev - Don't Overwrite What You Couldn't Read
-- `SaveData.schemaVersion` (v2) plus a migration hook. Pre-11.30.0 saves read as 0, are treated as v1 and migrated in place; a NEWER save loads with a warning rather than being refused.
-- **Data-loss bug fixed:** a failed load was swallowed and the world continued empty, then autosave wrote that empty world over the file it had just failed to read. Saving is now BLOCKED for the whole session after a failed load - all four save entry points funnel through `SaveAll`.
-- **The `.previous` sidecar is finally read.** It had been written on every save for releases and never used; a corrupt world was unrecoverable with a good backup sitting beside it.
-- Truncated-but-parseable saves are detected (`JsonUtility` returns an object for some malformed input), so a save missing its player block fails instead of loading as empty.
-- **Rule:** never write a save derived from a load that did not succeed. An empty in-memory world is not evidence the player demolished anything.
 
 ### Era Transition Feel
 

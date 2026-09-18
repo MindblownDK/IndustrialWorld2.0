@@ -223,28 +223,94 @@ namespace VoxelEngine.Building
         public const float MaxRunMetres = 400f;
 
         /// <summary>
+        /// Ballast block laid under every rail cell. Set by the tool before committing, so
+        /// the corridor does not need to know how the player acquired it.
+        /// </summary>
+        public static BlockItem BallastBlock;
+
+        /// <summary>
+        /// How far below the draped ground the ballast slab's ORIGIN sits, in metres.
+        ///
+        /// The slab is 0.35 m tall and pivots at its own centre, so sinking it by half its
+        /// height puts its top flush with the ground the corridor draped over. The rail
+        /// then rises from that surface rather than floating above a gap.
+        /// </summary>
+        public const float BallastDropMetres = 0.175f;
+
+        /// <summary>
+        /// How far the rail is lifted above the draped ground, in metres.
+        ///
+        /// Real track sits on a raised bed. This is what makes a line read as a railway
+        /// crossing terrain rather than a stripe painted on it, and it also stops sleepers
+        /// clipping through ground that is slightly uneven between cells.
+        /// </summary>
+        public const float RailRiseMetres = 0.18f;
+
+        /// <summary>Ballast cells laid by the last commit, for the tool's readout.</summary>
+        public static int LastBallastPlaced { get; private set; }
+
+        /// <summary>
         /// Commits a plan to the world, returning how many cells were actually placed.
         ///
         /// Skips any cell that already has track, so overlapping two runs extends a network
         /// instead of stacking duplicate rails inside each other.
         /// </summary>
-        public static int Commit(RailPlan plan, BlockItem trackBlock)
+        /// <summary>
+        /// Commits a plan to the world. <paramref name="skipped"/> reports cells that were
+        /// already occupied, so the caller can tell "nothing to do" apart from "it failed".
+        /// </summary>
+        public static int Commit(RailPlan plan, BlockItem trackBlock, float cellSize, out int skipped)
         {
+            skipped = 0;
             if (plan == null || !plan.IsPlaceable) return 0;
             if (trackBlock == null || trackBlock.placedPrefab == null) return 0;
 
             int placed = 0;
+            int ballastPlaced = 0;
             var laid = new List<RailTrack>(plan.cells.Count);
 
             for (int i = 0; i < plan.cells.Count; i++)
             {
                 var cell = plan.cells[i];
 
-                // Never stack track. A second run crossing the first should join it, which
-                // the adjacency rules already handle once both cells exist.
-                if (RailNetwork.FindNearest(cell.position, 0.45f) != null) continue;
+                // Never stack track, but the test has to be much tighter than it was.
+                //
+                // THE BUG (11.35.0): this used a 0.45 m radius against cells spaced 1 m
+                // apart, which sounds safe - but every cell is draped onto real ground, and
+                // on a slope or a curve neighbouring cells pull well within half a metre of
+                // each other. The run then rejected nearly all of its own cells, reported
+                // "already had track", laid nothing, and charged nothing.
+                //
+                // A quarter of the cell spacing is the honest threshold: tight enough that
+                // a genuinely duplicated cell is caught, loose enough that legitimately
+                // adjacent draped cells are not.
+                float dedupeRadius = Mathf.Max(0.05f, cellSize * 0.25f);
+                if (RailNetwork.FindNearest(cell.position, dedupeRadius) != null)
+                {
+                    skipped++;
+                    continue;
+                }
 
-                var go = Object.Instantiate(trackBlock.placedPrefab, cell.position, cell.rotation);
+                // Ballast first, so the sleeper sits ON the stone rather than inside it.
+                // Real track is laid on a raised bed; without it the rails half-sink into
+                // whatever ground the corridor draped over.
+                if (BallastBlock != null && BallastBlock.placedPrefab != null)
+                {
+                    var bedPos = cell.position - (cell.rotation * Vector3.up) * BallastDropMetres;
+                    var bed = Object.Instantiate(BallastBlock.placedPrefab, bedPos, cell.rotation);
+                    bed.name = BallastBlock.displayName;
+
+                    var bedBlock = bed.GetComponent<PlacedBlock>();
+                    if (bedBlock == null) bedBlock = bed.AddComponent<PlacedBlock>();
+                    bedBlock.Item = BallastBlock;
+                    bedBlock.Hp = Mathf.Max(1, BallastBlock.blockHealth);
+
+                    ballastPlaced++;
+                }
+
+                // Raise the rail onto the bed it now sits on.
+                Vector3 railPos = cell.position + (cell.rotation * Vector3.up) * RailRiseMetres;
+                var go = Object.Instantiate(trackBlock.placedPrefab, railPos, cell.rotation);
                 go.name = trackBlock.displayName;
 
                 var placedBlock = go.GetComponent<PlacedBlock>();
@@ -257,6 +323,8 @@ namespace VoxelEngine.Building
 
                 placed++;
             }
+
+            LastBallastPlaced = ballastPlaced;
 
             // Link the whole run AFTER every cell exists. Linking as we go would let each
             // cell fill its limited link budget with the one behind it before the one ahead

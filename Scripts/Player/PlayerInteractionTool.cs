@@ -2091,34 +2091,74 @@ namespace VoxelEngine.Player
                 return;
             }
 
-            // Charge for it before placing, and only lay what the player can pay for.
-            int needed = _railPlan.CellCount * Mathf.Max(1, tool.materialPerCell);
-            if (tool.railMaterial != null)
+            // ── Cost ──
+            // Charged BEFORE placing and counted against what the run will actually lay,
+            // so a player is never billed for cells that were skipped as duplicates.
+            int cells = _railPlan.CellCount;
+            int trackNeeded = cells * Mathf.Max(1, tool.trackPerCell);
+            int stoneNeeded = cells * Mathf.Max(0, tool.ballastPerCell);
+
+            if (tool.trackItem != null)
             {
-                int have = inventory.container.CountOf(tool.railMaterial);
-                if (have < needed)
+                int have = inventory.container.CountOf(tool.trackItem);
+                if (have < trackNeeded)
                 {
-                    VoxelEngine.UI.BuildFeedbackHud.Show("Not enough material",
-                        $"Need {needed} {tool.railMaterial.displayName}, have {have}.",
+                    VoxelEngine.UI.BuildFeedbackHud.Show("Not enough track",
+                        $"Need {trackNeeded} {tool.trackItem.displayName}, have {have}.",
                         null, T_AccentAmber);
                     return;
                 }
             }
 
-            int placed = VoxelEngine.Building.RailCorridor.Commit(_railPlan, tool.trackBlock);
-
-            if (placed > 0 && tool.railMaterial != null)
+            if (tool.ballastMaterial != null && stoneNeeded > 0)
             {
-                inventory.container.Remove(tool.railMaterial, placed * Mathf.Max(1, tool.materialPerCell));
-                inventory.container.RaiseChanged();
+                int have = inventory.container.CountOf(tool.ballastMaterial);
+                if (have < stoneNeeded)
+                {
+                    VoxelEngine.UI.BuildFeedbackHud.Show("Not enough ballast",
+                        $"Need {stoneNeeded} {tool.ballastMaterial.displayName} for the stone bed, have {have}.",
+                        null, T_AccentAmber);
+                    return;
+                }
             }
+
+            // Hand the ballast block to the corridor just before committing, so the
+            // placement code does not need to know where it came from.
+            VoxelEngine.Building.RailCorridor.BallastBlock = tool.ballastBlock;
+
+            int placed = VoxelEngine.Building.RailCorridor.Commit(
+                _railPlan, tool.trackBlock, cell, out int skipped);
+
+            if (placed <= 0)
+            {
+                // Distinguish the two ways this can lay nothing. Reporting "already had
+                // track" when the run simply failed is what made the last build so
+                // confusing to debug.
+                VoxelEngine.UI.BuildFeedbackHud.Show("Nothing laid",
+                    skipped > 0
+                        ? $"All {skipped} cells on that route already had track."
+                        : "The route produced no placeable cells.",
+                    null, T_AccentAmber);
+                return;
+            }
+
+            // Charge only for what was actually placed.
+            if (tool.trackItem != null)
+            {
+                inventory.container.Remove(tool.trackItem, placed * Mathf.Max(1, tool.trackPerCell));
+            }
+            if (tool.ballastMaterial != null && tool.ballastPerCell > 0)
+            {
+                inventory.container.Remove(tool.ballastMaterial, placed * tool.ballastPerCell);
+            }
+            inventory.container.RaiseChanged();
 
             ConsumeDurability(inventory.ActiveStack);
 
+            string skipNote = skipped > 0 ? $"  ·  {skipped} already laid" : "";
             VoxelEngine.UI.BuildFeedbackHud.Show("Rail laid",
-                placed > 0
-                    ? $"{placed} cells  ·  {_railGauge} track(s)  ·  worst gradient {_railPlan.WorstGradient:0.00} m"
-                    : "Every cell on that route already had track.",
+                $"{placed} cells  ·  {_railGauge} track(s)  ·  " +
+                $"{VoxelEngine.Building.RailCorridor.LastBallastPlaced} ballast{skipNote}",
                 null, T_AccentCyan);
         }
 

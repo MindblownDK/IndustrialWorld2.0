@@ -64,7 +64,20 @@ namespace IndustrialWorld.EditorTools
                     return;
                 }
 
-                var tool = EnsureTool(trackBlock, steel, out bool toolChanged);
+                var stone = FindItem("Item_Stone");
+                if (stone == null)
+                    Debug.LogWarning("[Setup 93] Stone item not found; the ballast bed will be free " +
+                                     "until the base crafting content step has been run.");
+
+                // The rail ITEM the player crafts. `BlockItem` derives from `ItemDefinition`,
+                // and step 85 authors rail track as a BlockItem, so the block IS the item -
+                // which is exactly what we want: a laid run consumes the same Rail Track the
+                // player would have placed by hand.
+                ItemDefinition trackItem = trackBlock;
+
+                var ballast = EnsureBallastBlock(stone, out bool ballastChanged);
+                var tool = EnsureTool(trackBlock, trackItem, stone, ballast, out bool toolChanged);
+                toolChanged |= ballastChanged;
                 bool recipeChanged = EnsureRecipe(registry, tool, steel, wire);
 
                 AssetDatabase.SaveAssets();
@@ -73,6 +86,10 @@ namespace IndustrialWorld.EditorTools
                 EditorUtility.DisplayDialog("Step 93 - Rail Layer",
                     "Rail Layer authored.\n\n" +
                     "  RAIL LAYER   Steel x25" + (wire != null ? " + Wire x15" : "") + "\n\n" +
+                    "Costs per cell laid:\n" +
+                    "  1 x Rail Track  +  2 x Stone (ballast bed)\n" +
+                    "The tool saves effort, not materials - a laid run costs\n" +
+                    "the same as laying it by hand.\n\n" +
                     "How to use it:\n" +
                     "  1. Hold the Rail Layer.\n" +
                     "  2. Click once where the run should start.\n" +
@@ -99,7 +116,104 @@ namespace IndustrialWorld.EditorTools
             }
         }
 
-        private static RailLayerTool EnsureTool(BlockItem trackBlock, ItemDefinition steel, out bool changed)
+        /// <summary>
+        /// The raised stone bed under the track. A separate block rather than part of the
+        /// rail prefab, because the player should be able to see it, mine it, and because a
+        /// bed and a rail wear out for different reasons.
+        /// </summary>
+        private static BlockItem EnsureBallastBlock(ItemDefinition stone, out bool changed)
+        {
+            string path = Root + "/Blocks/Block_RailBallast.asset";
+            var block = AssetDatabase.LoadAssetAtPath<BlockItem>(path);
+            bool created = false;
+
+            if (block == null)
+            {
+                EnsureFolder(Root + "/Blocks");
+                block = ScriptableObject.CreateInstance<BlockItem>();
+                created = true;
+            }
+            bool dirty = created;
+
+            if (block.itemId != "railballast") { block.itemId = "railballast"; dirty = true; }
+            if (block.displayName != "Rail Ballast") { block.displayName = "Rail Ballast"; dirty = true; }
+            if (block.maxStack <= 0) { block.maxStack = 200; dirty = true; }
+            if (block.massPerUnit <= 0f) { block.massPerUnit = 12f; dirty = true; }
+            if (block.blockHealth <= 0) { block.blockHealth = 60; dirty = true; }
+            if (block.miningTier <= 0) { block.miningTier = 1; dirty = true; }
+            if (block.category != "Rail") { block.category = "Rail"; dirty = true; }
+            if (string.IsNullOrEmpty(block.description))
+            {
+                block.description =
+                    "Crushed stone bed laid under rail. Raises the track clear of the ground " +
+                    "so a line reads as a railway crossing terrain rather than a stripe on it.";
+                dirty = true;
+            }
+            if (block.icon == null) block.iconTint = new Color(0.44f, 0.42f, 0.40f);
+
+            if (block.placedPrefab == null)
+            {
+                block.placedPrefab = EnsureBallastPrefab();
+                dirty = true;
+            }
+
+            if (dirty)
+            {
+                if (!AssetDatabase.Contains(block)) AssetDatabase.CreateAsset(block, path);
+                EditorUtility.SetDirty(block);
+                Debug.Log("[Setup 93] " + (created ? "Created" : "Repaired") + " " + path + ".");
+            }
+
+            changed = dirty;
+            return block;
+        }
+
+        private static GameObject EnsureBallastPrefab()
+        {
+            const string folder = Root + "/StationPrefabs";
+            string path = folder + "/RailBallast.prefab";
+            var existing = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+            if (existing != null) return existing;
+
+            EnsureFolder(folder);
+            var root = new GameObject("RailBallast");
+
+            // A low, slightly over-wide slab: ballast spreads wider than the sleepers it
+            // carries, which is what gives real track its trapezoid shoulder.
+            var bed = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            bed.name = "Bed";
+            bed.transform.SetParent(root.transform, false);
+            bed.transform.localScale = new Vector3(1.5f, 0.35f, 1.0f);
+            bed.transform.localPosition = new Vector3(0f, 0.175f, 0f);
+
+            var mat = MakeMat("Mat_RailBallast", new Color(0.44f, 0.42f, 0.40f));
+            var renderer = bed.GetComponent<Renderer>();
+            if (renderer != null && mat != null) renderer.sharedMaterial = mat;
+
+            var prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
+            UnityEngine.Object.DestroyImmediate(root);
+            Debug.Log("[Setup 93] Created " + path + ".");
+            return prefab;
+        }
+
+        private static Material MakeMat(string name, Color c)
+        {
+            const string folder = Root + "/StationPrefabs";
+            EnsureFolder(folder);
+            string path = folder + "/" + name + ".mat";
+            var existing = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (existing != null) return existing;
+            if (AssetDatabase.LoadMainAssetAtPath(path) != null) return null;
+
+            var sh = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+            var material = new Material(sh) { name = name, color = c };
+            if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", c);
+            AssetDatabase.CreateAsset(material, path);
+            return material;
+        }
+
+        private static RailLayerTool EnsureTool(BlockItem trackBlock, ItemDefinition trackItem,
+            ItemDefinition stone, BlockItem ballast, out bool changed)
         {
             string path = ItemsFolder + "/Item_RailLayer.asset";
             var tool = AssetDatabase.LoadAssetAtPath<RailLayerTool>(path);
@@ -132,8 +246,11 @@ namespace IndustrialWorld.EditorTools
             // Repair the links even on an existing asset: a tool with no track block is a
             // tool that silently does nothing.
             if (tool.trackBlock == null) { tool.trackBlock = trackBlock; dirty = true; }
-            if (tool.railMaterial == null) { tool.railMaterial = steel; dirty = true; }
-            if (tool.materialPerCell <= 0) { tool.materialPerCell = 1; dirty = true; }
+            if (tool.ballastBlock == null && ballast != null) { tool.ballastBlock = ballast; dirty = true; }
+            if (tool.trackItem == null && trackItem != null) { tool.trackItem = trackItem; dirty = true; }
+            if (tool.ballastMaterial == null && stone != null) { tool.ballastMaterial = stone; dirty = true; }
+            if (tool.trackPerCell <= 0) { tool.trackPerCell = 1; dirty = true; }
+            if (tool.ballastPerCell <= 0) { tool.ballastPerCell = 2; dirty = true; }
 
             if (dirty)
             {

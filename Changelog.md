@@ -1,9 +1,60 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `11.34.0-dev`
+**Current Version:** `11.35.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [11.35.0-dev] Ballast, And Rail That Actually Costs Something
+
+**Type:** MINOR - fixes the rail layer and gives track a proper stone bed. Save-compatible.
+
+**GitHub title:** `[11.35.0-dev] Ballast, and rail that actually costs something`
+
+Four problems with the 11.33.0 rail layer, all reported together and all real.
+
+#### 1. "Already laid" on empty ground
+
+The duplicate check rejected any cell within **0.45 m** of existing track, against cells spaced **1 m** apart. That sounds safe, and on flat ground it is.
+
+But every cell is draped onto real terrain. On a slope or through a curve, neighbouring cells pull well inside half a metre of each other - so the run rejected **its own cells**, one after another, reported that the route already had track, laid nothing, and charged nothing. On perfectly empty ground.
+
+The threshold is now a quarter of the cell spacing, derived from the actual cell size rather than hard-coded: tight enough to catch a genuine duplicate, loose enough that legitimately adjacent draped cells survive.
+
+#### 2. It reported the wrong reason
+
+"Already laid" was printed whenever nothing was placed, whatever the cause. That is what made this so confusing to diagnose - a failed solve and a genuinely occupied route produced identical messages.
+
+`Commit` now returns how many cells it skipped, and the three outcomes read differently: cells laid, all cells already occupied, or no placeable cells produced. A message that can only say one thing is not a message.
+
+#### 3. It consumed nothing
+
+The tool charged a generic "rail material" that the setup step wired to **steel**, so laying track never consumed track.
+
+It now consumes the **Rail Track item itself** - the same one you craft and place by hand - plus stone for the bed:
+
+| Per cell | Cost |
+|---|---|
+| Rail Track | 1 |
+| Stone | 2 |
+
+That is the right relationship: **the tool saves effort, not materials.** A laid run costs exactly what laying it by hand would, so the choice to use it is about time rather than economy.
+
+Material is also charged against what was **actually placed**, not what was planned, so skipped cells are never billed.
+
+#### 4. No ballast
+
+Track sat directly on the draped ground, half-sinking into anything uneven. Real track is laid on a raised stone bed, which is exactly what the reference photo shows.
+
+Every cell now places a **Rail Ballast** slab under the rail, and the rail is lifted onto it. The slab is 1.5 m wide against a 1 m cell, so the shoulder overhangs the sleepers the way real ballast does.
+
+I worked the offsets out numerically rather than eyeballing them: the slab pivots at its own centre, so it is sunk by half its height to sit flush with the ground, and the rail rises 0.18 m - leaving it 5 mm proud of the bed. Sleepers rest **on** the stone rather than floating above a gap or buried inside it.
+
+Ballast is its own mineable block rather than part of the rail prefab, because a bed and a rail wear out for different reasons and the player should be able to see and remove it.
+
+#### Manual step in Unity
+
+**Tools -> Voxel Engine -> Voxel Engine Setup**, then **93. Build the Rail Layer** again. It is non-destructive and will author the ballast block and rewire the tool's costs without touching anything else.
 
 ### [11.34.0-dev] One Train Per Section
 
