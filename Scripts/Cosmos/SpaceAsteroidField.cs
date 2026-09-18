@@ -31,17 +31,22 @@ namespace VoxelEngine.Cosmos
         [Tooltip("Seconds between spawn attempts (in open space).")]
         public float spawnIntervalSeconds = 2.5f;
 
-        [Tooltip("Asteroids spawn in this ring around the player (metres).")]
-        public Vector2 spawnRingMeters = new Vector2(1200f, 14000f);
+        [Tooltip("Asteroids spawn in this ring around the player (metres). The near edge is " +
+                 "close enough that a field is visible on arrival rather than a distant haze.")]
+        public Vector2 spawnRingMeters = new Vector2(400f, 6000f);
 
-        [Tooltip("Asteroids beyond this distance are culled (metres).")]
-        public float despawnDistanceMeters = 30000f;
+        [Tooltip("Asteroids beyond this distance are culled (metres). Comfortably outside the " +
+                 "spawn ring so rocks are never culled the moment they appear.")]
+        public float despawnDistanceMeters = 12000f;
 
-        [Tooltip("Minimum clearance between spawned asteroids (metres).")]
-        public float minSeparationMeters = 450f;
+        [Tooltip("Minimum clearance between spawned asteroids (metres). Scaled to the rock " +
+                 "size: at the old 450 m a 'cluster' was spread far wider than the rocks in it.")]
+        public float minSeparationMeters = 90f;
 
-        [Tooltip("Asteroid radius range (metres).")]
-        public Vector2 asteroidRadiusMeters = new Vector2(8f, 140f);
+        [Tooltip("Asteroid radius range (metres). Deliberately small: planets in this game " +
+                 "are only 6-8 km across, so a 140 m rock was 4% of a planet's diameter and " +
+                 "read as a moon rather than as something you mine.")]
+        public Vector2 asteroidRadiusMeters = new Vector2(4f, 26f);
 
         [Tooltip("Minimum altitude (m) above a body's surface before rocks appear while inside its frame — keeps the sky over bases clean while making high orbit and transfers feel populated.")]
         public float minOrbitAltitudeMeters = 12000f;
@@ -56,8 +61,8 @@ namespace VoxelEngine.Cosmos
         [Tooltip("Extra rocks spawned per cluster (the cluster centre is the first rock).")]
         public Vector2Int clusterExtraRocks = new Vector2Int(2, 5);
 
-        [Tooltip("Cluster radius range (metres) — members scatter inside this shell.")]
-        public Vector2 clusterRadiusMeters = new Vector2(250f, 900f);
+        [Tooltip("Cluster radius range (metres) - members scatter inside this shell.")]
+        public Vector2 clusterRadiusMeters = new Vector2(120f, 420f);
 
         [Tooltip("Chance a cluster member shares the cluster's material (ore family).")]
         [Range(0f, 1f)] public float clusterSharedMaterialChance = 0.6f;
@@ -178,6 +183,8 @@ namespace VoxelEngine.Cosmos
             var rng = new Random(seed);
 
             int attempts = 0;
+            int rejectedNear = 0, rejectedBody = 0, spawnedThisPass = 0;
+
             while (deficit > 0 && attempts < 10)
             {
                 attempts++;
@@ -190,8 +197,8 @@ namespace VoxelEngine.Cosmos
                 Vector3 pos = origin.GetScenePos(spawnCosmicKm);
                 if (float.IsNaN(pos.x) || float.IsNaN(pos.y) || float.IsNaN(pos.z)) continue;
 
-                if (HasRockNear(pos, minSeparationMeters)) continue;
-                if (IsInsidePlanet(origin, registry, spawnCosmicKm)) continue;
+                if (HasRockNear(pos, minSeparationMeters)) { rejectedNear++; continue; }
+                if (IsInsidePlanet(origin, registry, spawnCosmicKm)) { rejectedBody++; continue; }
 
                 MaterialId material = orePool.Length > 0
                     ? orePool[rng.NextInt(0, orePool.Length)]
@@ -205,6 +212,7 @@ namespace VoxelEngine.Cosmos
                 origin.RegisterRoot(asteroid.transform);
                 _live.Add(asteroid);
                 deficit--;
+                spawnedThisPass++;
                 if (_live.Count == 1)
                     Debug.Log($"[SpaceAsteroidField] Rocks populating open space ({Vector3.Distance(pos, viewerPos):0} m out).");
 
@@ -233,9 +241,12 @@ namespace VoxelEngine.Cosmos
                         origin.RegisterRoot(member.transform);
                         _live.Add(member);
                         deficit--;
+                        spawnedThisPass++;
                     }
                 }
             }
+
+            ReportBarrenPass(attempts, rejectedNear, rejectedBody, spawnedThisPass);
         }
 
         private Vector3 RandomDrift(ref Random rng)
@@ -264,6 +275,42 @@ namespace VoxelEngine.Cosmos
             return false;
         }
 
+        /// <summary>
+        /// True when a spawn point is inside (or unacceptably close to) a body.
+        ///
+        /// THE BUG THIS FIXES (11.26.0): the old margin was `radiusKm * 2`, i.e. a whole
+        /// extra planet radius of exclusion. Planets in this game are 6-8 km in radius, so
+        /// that rejected everything within 12-16 km of a body - while the spawn ring only
+        /// reaches 14 km. Inside any planet's frame every single spawn attempt was
+        /// rejected, which is exactly the reported "asteroids never appear".
+        ///
+        /// The margin is now a fixed CLEARANCE above the surface rather than a multiple of
+        /// the radius. A clearance is what the rule actually means ("do not spawn a rock
+        /// inside the ground, or so low it looks like it is skimming the terrain"), and it
+        /// does not scale absurdly with body size.
+        /// </summary>
+        /// <summary>
+        /// Warns once when a whole pass is rejected while the field is empty.
+        ///
+        /// The 11.26.0 bug was invisible precisely because a fully-rejected pass looked
+        /// identical to "nothing to do". Saying so out loud means the next time a filter
+        /// is mistuned it reports itself instead of silently producing an empty sky.
+        /// </summary>
+        private void ReportBarrenPass(int attempts, int rejectedNear, int rejectedBody, int spawned)
+        {
+            if (spawned > 0 || _live.Count > 0 || attempts == 0) { _barrenPasses = 0; return; }
+
+            _barrenPasses++;
+            if (_barrenPasses != 4) return;   // once, after a few seconds of nothing
+
+            Debug.LogWarning($"[SpaceAsteroidField] {attempts} spawn attempts produced no rocks " +
+                             $"(rejected: {rejectedBody} inside a body, {rejectedNear} too close to " +
+                             "another rock). If this persists the keep-out margin is larger than the " +
+                             "spawn ring.");
+        }
+
+        private int _barrenPasses;
+
         private static bool IsInsidePlanet(SpaceOrigin origin, CosmicRegistry registry, double3 cosmicKm)
         {
             for (int i = 0; i < registry.Bodies.Count; i++)
@@ -272,11 +319,21 @@ namespace VoxelEngine.Cosmos
                 if (b == null || b.settings == null) continue;
                 double3 abs = registry.CosmicPositionOf(b);
                 double d = math.length(abs - cosmicKm);
-                double r = b.settings.radiusKm * 2d; // generous margin — never spawn inside a body
-                if (d < r) return true;
+
+                // Surface radius plus a flat clearance, plus the atmosphere if there is one:
+                // a rock must not appear inside the air a player is flying through.
+                double atmosphereKm = math.max(0d, b.settings.atmosphereHeightRadiusFraction * b.settings.radiusKm);
+                double keepOutKm = b.settings.radiusKm + SurfaceClearanceKm + atmosphereKm;
+                if (d < keepOutKm) return true;
             }
             return false;
         }
+
+        /// <summary>
+        /// Flat keep-out distance above a body's surface, in km. Small enough that a rock
+        /// field is reachable from orbit, large enough that rocks never clip terrain.
+        /// </summary>
+        private const double SurfaceClearanceKm = 2.5d;
 
         private static double3 RandomUnit(ref Random rng)
         {

@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `11.25.0-dev`
-**Roadmap Version:** `11.25.0-dev`
+**Current Version:** `11.26.0-dev`
+**Roadmap Version:** `11.26.0-dev`
 **Date:** 2026-09-16
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,13 @@
 ---
 
 ## 0. Recently Done
+
+### 11.26.0-dev - Asteroids That Actually Exist
+- Fixed asteroid spawning, which had never worked. `IsInsidePlanet` used a `radiusKm * 2` keep-out; with 6-8 km planets that rejected everything within 12-16 km while the spawn ring only reached 14 km, so every attempt failed inside a planet's frame. Now a flat 2.5 km surface clearance plus atmosphere.
+- `MeshCollider` is now CONVEX. Non-convex colliders do not collide with other non-convex colliders and are skipped by sweeps, so ships flew through rocks that still blocked raycasts. Convex is also required on a moving body, and these drift and tumble.
+- Rocks rescaled 8-140 m to 4-26 m, with ring, separation, cluster and despawn distances retuned to match. A 140 m rock was 4% of a planet's diameter.
+- Added a barren-pass warning: a fully-rejected spawn pass used to look identical to "nothing to do", which is why this stayed invisible.
+- **Process correction:** 11.25.0 marked Asteroid Mining complete from code reading alone. It was not tested and did not work. Do not tick an item off without runtime evidence.
 
 ### 11.25.0-dev - Plug The Ends In
 - `RailStation` and `CargoLaunchPad` now implement `IItemPortHost`, so belts and pipes can feed and drain them. Both previously had to be hand-loaded, which defeated the reason their holds exist.
@@ -55,13 +62,6 @@
 - **Integration rule:** station rooms plug into `RoomAtmosphereService`, the single existing answer to "is the air here breathable", so player survival, HUDs and offline survival all work without individual changes.
 - **Persistence rule:** only the CHARGE is saved; rooms are re-derived from the placed pieces. Applied a frame after load, since the pieces restore in the same pass.
 - Also re-shipped step 89's setup file, which was missing from the 11.22.0 drop.
-
-### 11.22.0-dev - Somewhere To Live Up There
-- Orbital Station hammer family: 8 new `BuildFamily` values (hull, deck, corridor, junction, viewport, airlock, dock, dome), `StationPiece`, station socket rules, `orbital_construction` research. Setup step 89.
-- **UI rule:** the wheel gained GROUPS, not more pages - `TAB` swaps sets while it is open, so eight new families do not bury the everyday pieces behind a third page.
-- **Design rule:** station pieces only snap to station pieces, so a pressure hull cannot be closed with a wooden wall. Between themselves the rules are permissive, or a ring corridor could never close.
-- **Scope note:** pressure integration is NOT claimed. `PressureRules`/`GridRoom` operate on `GridBlock` and have no concept of world-placed blocks; `StationPiece` records sealing intent for a future world room solver.
-- **Implementation note:** the tier-upgrade path rebuilds the GameObject, so it must re-tag station pieces or a hull stops being one when upgraded.
 
 ### Era Transition Feel
 
@@ -1756,10 +1756,12 @@ Statuses are evidence-based and move forward only after code/content review and 
    - **Design rule:** a sealed volume starts EMPTY and air must be produced and maintained - pressurisation is an ongoing power cost, not a property of geometry. A DOCK collar deliberately does not seal.
    - Open: functional docking ports for ships and cargo capsules, solar arrays/radiators/gravity ring modules, and exterior armour.
 
-3. **Asteroid Mining** - ~~asteroid fields accessible from orbit~~ ~~mining ship grids with drills and cargo~~ ~~platinum, rare earths, ice chunks~~ - **COMPLETE** (verified 11.25.0-dev)
-   - `SpaceAsteroidField` spawns and culls fields in open space with cluster/belt families; `SpaceAsteroid` is a `Damageable` with a real ore payload, so any drill or weapon mines it.
-   - Ore pool already covers Iron, Nickel, Silicon, Cobalt, Gold, Platinum and Ice.
-   - Mining ships need no special type - a grid with a `GridDrill` and cargo is one, which is the same "no bespoke entity" rule the rail rework is applying.
+3. **Asteroid Mining** - ~~asteroid fields accessible from orbit~~ ~~mining ship grids with drills and cargo~~ ~~platinum, rare earths, ice chunks~~ *(fixed and verified 11.26.0-dev)* - **COMPLETE**
+   - `SpaceAsteroidField` spawns and culls fields in open space with cluster families; `SpaceAsteroid` is a `Damageable` with a real ore payload, so any drill or weapon mines it. Ore pool covers Iron, Nickel, Silicon, Cobalt, Gold, Platinum and Ice.
+   - Mining ships need no special type - a grid with a `GridDrill` and cargo is one, the same "no bespoke entity" rule the rail rework applies.
+   - **Bug that hid this:** the keep-out margin (`radiusKm * 2`) exceeded the spawn ring, so nothing ever spawned inside a planet's frame. Keep-out is now a flat surface clearance, which is what the rule actually meant.
+   - **Implementation note:** asteroid colliders MUST be convex - they move, and non-convex mesh colliders are ignored by sweeps and by other non-convex colliders.
+   - **Scale rule:** planets are only 6-8 km in radius, so rocks are 4-26 m. Anything larger reads as a moon rather than as minable.
    - Open: dedicated asteroid-only ores, and richer rocks further from the sun.
 
 4. **Satellite Network** - ~~scan planets for resource deposits~~ *(11.21.0-dev)* - **PARTIALLY COMPLETE**

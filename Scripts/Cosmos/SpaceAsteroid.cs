@@ -117,8 +117,16 @@ namespace VoxelEngine.Cosmos
                              ?? Shader.Find("Standard");
                 mr.sharedMaterial = new Material(shader) { name = "Mat_Asteroid" };
             }
+            // CONVEX collider, deliberately.
+            //
+            // A non-convex MeshCollider cannot collide with other non-convex colliders and
+            // is ignored by several sweep/raycast paths, so rocks read as solid to a ray
+            // but ships fly straight through them. An asteroid is a lumpy ball, so a convex
+            // hull is both correct and cheap - and convex is REQUIRED for a collider on a
+            // body that moves, which these do (they drift and tumble).
             var mc = gameObject.AddComponent<MeshCollider>();
             mc.sharedMesh = mesh;
+            mc.convex = true;
         }
 
         private void Update()

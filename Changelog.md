@@ -1,9 +1,59 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `11.25.0-dev`
+**Current Version:** `11.26.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [11.26.0-dev] Asteroids That Actually Exist
+
+**Type:** MINOR - fixes a system that never worked, and corrects a claim I made last release. Save-compatible, no save format change.
+
+**GitHub title:** `[11.26.0-dev] Asteroids that actually exist`
+
+#### I was wrong last release
+
+In 11.25.0 I marked Asteroid Mining COMPLETE after reading the code and seeing spawning, ore pools, drops and colliders all present. You tested it and they never spawned. The code existed; it could not work. Reading a system is not testing it, and I should not have ticked that item off without runtime evidence.
+
+#### Root cause: the keep-out sphere was bigger than the spawn ring
+
+`IsInsidePlanet` rejected any spawn within `radiusKm * 2` of a body - an entire extra planet radius of exclusion.
+
+Planets in this game are **6-8 km in radius**, so that rejected everything within **12-16 km** of a body. The spawn ring only reached **14 km**. The arithmetic:
+
+| Planet | Radius | Old keep-out | Ring | Spawnable band |
+|---|---|---|---|---|
+| Mars | 6 km | 12 km | 1.2-14 km | 2 km sliver |
+| Pirate World | 7 km | 14 km | 1.2-14 km | **none** |
+| Olympus | 7 km | 14 km | 1.2-14 km | **none** |
+
+And because a rock only spawns once the player is 12 km *above* the surface, the viewer sits 19 km from the centre - where a 14 km ring mostly points back at the planet it just rejected. Inside any planet's frame, effectively every attempt failed.
+
+The margin is now a **flat clearance above the surface** (2.5 km, plus the atmosphere where a body has one) rather than a multiple of the radius. A clearance is what the rule always meant - do not put a rock inside the ground or in the air a player is flying through - and it does not scale absurdly with body size.
+
+#### The colliders were real but half-inert
+
+`MeshCollider` was attached but left **non-convex**. A non-convex mesh collider cannot collide with other non-convex colliders and is skipped by several sweep paths, so rocks would stop a raycast while ships flew straight through them. Convex is also *required* for a collider on a moving body, and these drift and tumble. Now convex - which is correct anyway, since an asteroid is a lumpy ball.
+
+#### They were also far too big
+
+You described them as small voxel spheres; they were **8-140 m**. Against a 7 km planet a 140 m rock is 4% of a planet's diameter, and against a 0.5 m grid cell it is 280 blocks across - a moon, not something you mine. Rescaled, with the field tuned to match:
+
+| | Was | Now |
+|---|---|---|
+| Rock radius | 8-140 m | 4-26 m |
+| Spawn ring | 1.2-14 km | 0.4-6 km |
+| Separation | 450 m | 90 m |
+| Cluster radius | 250-900 m | 120-420 m |
+| Despawn | 30 km | 12 km |
+
+Separation mattered: at 450 m apart, rocks 8 m across meant a "cluster" was spread fifty times wider than its members.
+
+#### It will not fail silently again
+
+The reason this survived review is that a fully-rejected spawn pass looked exactly like "nothing to do". The field now warns once, naming the counts, when several passes in a row produce nothing while it is empty - so a mistuned filter reports itself instead of producing an empty sky.
+
+No manual Unity step. Fly above 12 km and look around.
 
 ### [11.25.0-dev] Plug The Ends In
 
