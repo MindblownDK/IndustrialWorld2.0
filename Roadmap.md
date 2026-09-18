@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `11.31.0-dev`
-**Roadmap Version:** `11.31.0-dev`
+**Current Version:** `11.32.0-dev`
+**Roadmap Version:** `11.32.0-dev`
 **Date:** 2026-09-16
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,14 @@
 ---
 
 ## 0. Recently Done
+
+### 11.32.0-dev - Couple Them Up
+- Multi-car consists on `GridRailBogie`: couple railed constructs into a train, with per-wagon spacing, safe uncoupling and a consist readout in the grid terminal.
+- **The docking-port precedent did NOT apply.** `FixedJoint` fails twice here: a railed grid is kinematic (joints between kinematic bodies do nothing), and a joint trails like a rope so wagons cut every corner. Consists use PATH HISTORY instead - the leader records where it has been and wagons sample that trail.
+- **Why path history:** a wagon retraces the exact route including switch decisions, needs no track logic of its own, and spacing accumulates ALONG THE CHAIN rather than straight-line.
+- **Rule:** a towed wagon cannot drive and must not run track logic - two bogies resolving switches independently can split a consist across a junction.
+- **Rule:** removing a mid-consist wagon hands its spacing to the one behind, so the train does not lurch into the gap. Losing the head uncouples and re-latches the follower so it stays drivable.
+- Loop detection before coupling, plus a 64-car bound on every chain walk.
 
 ### 11.31.0-dev - A Train Is Just Something You Built
 - `GridRailTruck` + `GridRailBogie`: Train System v2 phase 1. Any player-built grid with a Rail Truck runs on the existing rail network. Setup step 92.
@@ -58,12 +66,6 @@
 - Rocks are no longer parented to `SpaceAsteroidField`: every UI names a surface via `transform.root`, so the label read the spawner. They register with `SpaceOrigin` as roots individually and unregister on despawn.
 - `WorldInspectionHud` resolves asteroid voxel material before the planet lookup, so the crosshair names the ore and shows percentage remaining.
 - **Process rule:** do not verify a fix at its destination without tracing the path from input to effect. A downstream branch is worthless if an upstream gate returns first - this is the second time that cost a release.
-
-### 11.28.1-dev - The Density Sign Bug
-- **Empty voxels must be NEGATIVE density, never 0.** SurfaceNets interpolates `t = da/(da-db)`; with air at 0 every vertex snapped to a cell corner, and pass 2's `IsTerrainSolid` (`> 0`) disagreed with pass 1's mask, dropping the connecting quads. Result was a shattered surface of floating faces. The engine's own `SphereDensity.EvaluateAsteroidVoxel` already used +1..127 / -127..-1; asteroids now match it.
-- **Vertex colours need the vertex-colour shader.** Rocks rendered flat white on a plain URP/Lit fallback. They now use `SphereWorld.terrainMaterial` itself, so rocks and terrain shade identically.
-- Shape displacement raised from +/-11% to three octaves at +/-38/18/8% with a wider ellipsoid stretch, so rocks are no longer spheres.
-- **Headroom rule:** stronger noise can overflow the fixed grid and clip the rock flat, so nominal radius is clamped against `stretch * noiseGain`. Voxels moved to 1 m (the planet's own size) because at 0.5 m that clamp capped rocks at 3 m.
 
 ### Era Transition Feel
 
@@ -1420,7 +1422,7 @@ Statuses are evidence-based and move forward only after code/content review and 
    - ~~The rail console folds into the existing grid terminal~~ *(11.31.0-dev)*.
    - **Wider rail tracks.** Multi-cell track widths (at least a 2-wide and 3-wide gauge) so a mainline reads as a mainline and a heavy consist has somewhere to run. The road system's `RoadCorridor` already solves multi-lane footprints with an explicit four-corner footprint per cell; that is the precedent to follow rather than inventing a second approach.
    - **Draggable rail placing with smart routing.** Click a start, drag to an end, and the tool lays the whole run: auto-straights, auto-curves, auto-junctions where it meets existing track, and a gradient-aware path that cuts and fills or refuses with a reason. The corridor solver and `RailNetwork`'s A* are both reusable here - smart placement is a routing problem the codebase has already solved twice.
-   - **Phase 2 (open):** multi-car consists - couple grids the way docking ports already join them.
+   - ~~**Phase 2:** multi-car consists~~ *(11.32.0-dev)* - **COMPLETE.** Coupling uses PATH HISTORY, not the docking port's `FixedJoint`: a railed grid is kinematic so a joint is inert, and a joint trails like a rope so wagons cut corners. The leader records its route and wagons sample it at an accumulated chain distance.
    - **Phase 3 (open):** wider gauges and draggable smart placement (see the two items above).
    - **Phase 4 (open):** signalling and block occupancy.
    - **Retirement:** the 11.15.0 `RailTrain` stays in place and working until consists land. Removing a working feature before its replacement is complete would cost the player the only working train in the game.

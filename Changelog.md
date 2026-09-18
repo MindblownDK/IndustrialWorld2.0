@@ -1,9 +1,53 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `11.31.0-dev`
+**Current Version:** `11.32.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [11.32.0-dev] Couple Them Up
+
+**Type:** MINOR - Train System v2, phase 2. Save-compatible and additive.
+
+**GitHub title:** `[11.32.0-dev] Couple them up`
+
+Multi-car consists: park a railed construct behind another and couple them.
+
+#### The docking-port precedent did not survive contact
+
+The roadmap said to couple grids "the way docking ports already join grids". Docking ports use a `FixedJoint` - and that turns out to be exactly wrong here, for two reasons I only found by reading the code rather than assuming:
+
+- **A railed grid is kinematic** (11.31.0 takes it out of the solver so the rail constraint is exact). A joint between kinematic bodies does nothing at all.
+- **A joint trails like a rope.** A wagon holding a fixed distance from the locomotive's *current position* cuts every corner and ends up beside the track on any curve.
+
+So consists use path history instead. The leader records where it has been, and each wagon samples that trail at its own distance back.
+
+#### Why path history is the right shape
+
+It gives the behaviour for free that a naive follower has to fake:
+
+- A wagon retraces the **exact route** the locomotive took, so it stays on the rails through curves and points.
+- It inherits the leader's routing decisions, **including which way a switch was thrown**, with no track logic of its own.
+- Spacing accumulates **along the chain**, not straight-line, so the third wagon sits three gaps back along the actual route rather than three gaps as the crow flies.
+
+A wagon that cannot find history far enough back holds station rather than snapping to the leader, which is what stops a freshly coupled train telescoping into itself.
+
+#### Decisions worth naming
+
+- **A towed wagon cannot drive.** Coupling forces its power off, and its `FixedUpdate` returns before any track logic runs. Two powered bogies on one consist fight each other, and a second bogie resolving switches independently could split a train across a junction.
+- **Coupling keeps the spacing you parked at**, rather than snapping to a constant, so a consist holds the shape you built.
+- **Refusals say why.** Too far, already coupled, not on rails, would form a loop - each returns a reason, because "I pressed couple and nothing happened" is indistinguishable from a bug.
+- **Loop detection walks the chain before coupling.** Without it, a cycle would make every consist walk in the file run forever; every walk is also bounded at 64 cars as a second line of defence.
+
+#### Breaking a consist safely
+
+Removing a wagon from the middle relinks both neighbours **and hands its spacing to the one behind**, so the rest of the train does not lurch forward into the gap. Destroying the locomotive uncouples the wagon behind it and re-latches it to the track, so it is immediately drivable rather than stranded following a corpse.
+
+#### Still to come
+
+Wider gauges, draggable smart placement, and signalling. The 11.15.0 `RailTrain` stays until those land.
+
+No manual Unity step - the Rail Truck from step 92 is all that is needed.
 
 ### [11.31.0-dev] A Train Is Just Something You Built
 

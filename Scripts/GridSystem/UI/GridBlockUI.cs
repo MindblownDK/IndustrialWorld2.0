@@ -1229,6 +1229,67 @@ namespace VoxelEngine.GridSystem.UI
 
             p.Add(row);
 
+            // ── Consist ──
+            p.Add(GridUIHelpers.SectionTitle("Consist"));
+
+            if (bogie.LeadBogie != null)
+            {
+                var towed = new Label($"Towed by {bogie.LeadBogie.name}. A coupled wagon " +
+                                      "follows the locomotive's exact route, including which " +
+                                      "way each switch was thrown.");
+                towed.style.fontSize = 10;
+                towed.style.whiteSpace = WhiteSpace.Normal;
+                towed.style.color = new StyleColor(T.TextSecondary);
+                towed.style.marginBottom = 6;
+                p.Add(towed);
+
+                var uncouple = T.SmallButton("\u2702 UNCOUPLE", () =>
+                {
+                    bogie.Uncouple();
+                    VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+                }, T.AccentAmber);
+                p.Add(uncouple);
+            }
+            else
+            {
+                int cars = bogie.ConsistLength;
+                var lead = new Label(cars > 1
+                    ? $"Leading a {cars}-car consist."
+                    : "Single car. Park another railed construct behind this one to couple it.");
+                lead.style.fontSize = 10;
+                lead.style.whiteSpace = WhiteSpace.Normal;
+                lead.style.color = new StyleColor(T.TextSecondary);
+                lead.style.marginBottom = 6;
+                p.Add(lead);
+
+                var candidate = bogie.FindCouplingCandidate();
+                if (candidate != null)
+                {
+                    var coupleRow = new VisualElement();
+                    coupleRow.style.flexDirection = FlexDirection.Row;
+                    coupleRow.style.marginBottom = 6;
+
+                    var coupleBtn = T.SmallButton($"\u26d3 COUPLE TO {candidate.name}", () =>
+                    {
+                        if (!bogie.TryCoupleTo(candidate, out string why))
+                            VoxelEngine.UI.BuildFeedbackHud.Show("Cannot couple", why, null, T.AccentAmber);
+                        VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+                    }, T.AccentDim);
+                    coupleRow.Add(coupleBtn);
+                    p.Add(coupleRow);
+                }
+
+                if (cars > 1)
+                {
+                    var breakUp = T.SmallButton("\u2702 UNCOUPLE ALL", () =>
+                    {
+                        bogie.UncoupleAll();
+                        VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+                    }, T.AccentAmber);
+                    p.Add(breakUp);
+                }
+            }
+
             var note = new Label(
                 "A train is an ordinary construct with a Rail Truck on it, so it can carry " +
                 "any grid block - containers, tanks, refineries - and takes damage, paint " +
