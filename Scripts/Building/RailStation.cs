@@ -19,6 +19,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using VoxelEngine.Items;
+using VoxelEngine.Transport;
 
 namespace VoxelEngine.Building
 {
@@ -33,8 +34,10 @@ namespace VoxelEngine.Building
         Passing = 2,
     }
 
-    [DisallowMultipleComponent, RequireComponent(typeof(PlacedBlock))]
-    public class RailStation : MonoBehaviour
+    [DisallowMultipleComponent]
+    [RequireComponent(typeof(PlacedBlock))]
+    [RequireComponent(typeof(ItemPortRouting))]
+    public class RailStation : MonoBehaviour, IItemPortHost
     {
         [Header("Identity")]
         [Tooltip("Name schedules refer to. Two stations may share a name: a train will use " +
@@ -73,6 +76,40 @@ namespace VoxelEngine.Building
         /// for an unload station and usually the wrong one for a load station.
         /// </summary>
         public ItemDefinition filter;
+
+        // ── Ports ────────────────────────────────────────────────────────────────
+        // A station without ports must be hand-loaded, which defeats the purpose: the
+        // hold exists so a factory can fill or drain it on its own schedule while the
+        // train just turns up. That only works if a belt can actually reach it.
+        private PortConfig _portConfig;
+        private ItemPortContainer[] _portContainers;
+
+        public PortConfig PortConfig
+        {
+            get
+            {
+                if (_portConfig == null)
+                {
+                    _portConfig = GetComponent<PortConfig>();
+                    if (_portConfig == null) _portConfig = gameObject.AddComponent<PortConfig>();
+                    _portConfig.EnsureAllFaces();
+                }
+                return _portConfig;
+            }
+        }
+
+        public IReadOnlyList<ItemPortContainer> GetPortContainers()
+        {
+            _portContainers ??= new ItemPortContainer[1];
+
+            // Both directions on one container, because the station's ROLE already decides
+            // which way cargo flows through the train. A LOAD station is filled by belts and
+            // emptied by trains; an UNLOAD station is the reverse. Pinning the port
+            // direction as well would double up that decision and let the two disagree.
+            _portContainers[0] = new ItemPortContainer("Station Hold", Hold,
+                canInput: true, canOutput: true);
+            return _portContainers;
+        }
 
         // ── Registry ─────────────────────────────────────────────────────────────
         private static readonly List<RailStation> s_all = new();

@@ -62,8 +62,13 @@ namespace VoxelEngine.Transport
         public float Progress01 => Total > 0f ? Mathf.Clamp01(1f - Remaining / Total) : 0f;
     }
 
-    [DisallowMultipleComponent, RequireComponent(typeof(VoxelEngine.Building.PlacedBlock))]
-    public class CargoLaunchPad : MonoBehaviour
+    // RequireComponent rather than adding it in the setup step: this way an already
+    // placed pad in an existing save gains routing on load, instead of only new ones
+    // built after re-running setup.
+    [DisallowMultipleComponent]
+    [RequireComponent(typeof(VoxelEngine.Building.PlacedBlock))]
+    [RequireComponent(typeof(ItemPortRouting))]
+    public class CargoLaunchPad : MonoBehaviour, IItemPortHost
     {
         [Header("Identity")]
         [Tooltip("Name other pads address. Matched by name, not by reference, so a pad " +
@@ -100,6 +105,61 @@ namespace VoxelEngine.Transport
         [SerializeField] private ItemContainer _hold;
 
         public string Status { get; private set; } = "Idle";
+
+        /// <summary>
+        /// Role backing field. Changing the role flips which way the ports face, so the
+        /// cached descriptor is dropped rather than left advertising the old direction.
+        /// </summary>
+        public PadRole Role
+        {
+            get => role;
+            set
+            {
+                if (role == value) return;
+                role = value;
+                _portContainers = null;
+            }
+        }
+
+        // ── Ports ────────────────────────────────────────────────────────────────
+        // Without these a pad has to be hand-loaded, which breaks the whole point: the
+        // pad is the last link in a chain that starts at a mine, so a factory must be
+        // able to belt or pipe into it unattended.
+        private PortConfig _portConfig;
+        private ItemPortContainer[] _portContainers;
+
+        public PortConfig PortConfig
+        {
+            get
+            {
+                if (_portConfig == null)
+                {
+                    _portConfig = GetComponent<PortConfig>();
+                    if (_portConfig == null) _portConfig = gameObject.AddComponent<PortConfig>();
+                    _portConfig.EnsureAllFaces();
+                }
+                return _portConfig;
+            }
+        }
+
+        public IReadOnlyList<ItemPortContainer> GetPortContainers()
+        {
+            _portContainers ??= new ItemPortContainer[1];
+
+            // Direction follows the pad's ROLE, and this one genuinely has to.
+            //
+            // A SEND pad is filled by belts and emptied by launches - if its hold were
+            // also an output, a belt could drain the load it was accumulating and the pad
+            // would never reach launch size. A RECEIVE pad is the exact mirror: filled by
+            // arriving flights, emptied by belts into the factory.
+            //
+            // (The rail station can afford both directions because a train services it
+            // through a separate path; a pad's launch is not a port operation.)
+            bool sending = role == PadRole.Send;
+            _portContainers[0] = new ItemPortContainer("Cargo Hold", Hold,
+                canInput: sending, canOutput: !sending);
+            return _portContainers;
+        }
 
         // ── Registry ─────────────────────────────────────────────────────────────
         private static readonly List<CargoLaunchPad> s_all = new();

@@ -2295,7 +2295,7 @@ namespace VoxelEngine.Persistence
                 {
                     if (!string.IsNullOrEmpty(sb.cargoPadName)) restoredPad.PadName = sb.cargoPadName;
                     if (System.Enum.IsDefined(typeof(VoxelEngine.Transport.PadRole), sb.cargoPadRole))
-                        restoredPad.role = (VoxelEngine.Transport.PadRole)sb.cargoPadRole;
+                        restoredPad.Role = (VoxelEngine.Transport.PadRole)sb.cargoPadRole;
                     restoredPad.destinationPad = sb.cargoPadDestination ?? "";
                     // The recorded body matters most: a pad is restored while the player
                     // may be standing on a completely different world, so it must never

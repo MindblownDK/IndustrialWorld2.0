@@ -1,9 +1,40 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `11.24.1-dev`
+**Current Version:** `11.25.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [11.25.0-dev] Plug The Ends In
+
+**Type:** MINOR - closes the automation gap on two existing blocks. Save-compatible, no save format change; existing placed pads and stations gain ports on load.
+
+**GitHub title:** `[11.25.0-dev] Plug the ends in`
+
+#### What I found while looking for the next feature
+
+I went to start Asteroid Mining (section 6.6 item 3) and found it was **already done**: `SpaceAsteroidField` spawns fields in open space, the ore pool already includes platinum, gold, cobalt and ice, `SpaceAsteroid` derives from `Damageable` with real drops, and mining ships are just grids with drills. There was nothing to build, so I have marked it complete rather than re-shipping it.
+
+What I found instead was a genuine gap that mattered more: **the Rail Station and the Cargo Launch Pad had no item ports.** Both had to be loaded and emptied by hand.
+
+That quietly broke the point of both blocks. The whole argument for putting the cargo hold on the station rather than the train was that a factory could fill or drain it on its own schedule while the train just turns up - and that only works if a belt can reach it. The cargo pad is the last link in a chain that starts at a mine, and it could not be fed from one.
+
+#### Both blocks now accept belts and pipes
+
+`RailStation` and `CargoLaunchPad` both implement `IItemPortHost`, so conveyors, chutes, funnels and pipes route into and out of them like any other machine.
+
+They differ in one deliberate way:
+
+- **The rail station allows both directions on its hold.** Its LOAD / UNLOAD role already decides which way cargo flows through the *train*, and a train services the hold through a separate path. Pinning port direction as well would duplicate that decision and let the two disagree.
+- **The cargo pad follows its role.** A SEND pad is input-only and a RECEIVE pad is output-only, because a SEND pad is *accumulating* toward a full launch load - if a belt could also pull from it, it would never reach launch size and the pad would sit there loading forever.
+
+Changing a pad's role now flips its port direction with it, through a property that drops the cached descriptor. Setting the raw field would have left belts facing the old way.
+
+#### Existing builds are fixed automatically
+
+Both use `[RequireComponent(typeof(ItemPortRouting))]` rather than having the setup step attach routing. That matters: a pad or station **already placed in a save** gains routing when it loads, instead of only newly built ones working after re-running setup.
+
+No manual Unity step for this release.
 
 ### [11.24.1-dev] The Missing Setup Steps
 

@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `11.24.1-dev`
-**Roadmap Version:** `11.24.1-dev`
+**Current Version:** `11.25.0-dev`
+**Roadmap Version:** `11.25.0-dev`
 **Date:** 2026-09-16
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,12 @@
 ---
 
 ## 0. Recently Done
+
+### 11.25.0-dev - Plug The Ends In
+- `RailStation` and `CargoLaunchPad` now implement `IItemPortHost`, so belts and pipes can feed and drain them. Both previously had to be hand-loaded, which defeated the reason their holds exist.
+- **Direction rule:** the station allows both ways (its LOAD/UNLOAD role already decides train flow); the pad follows its role, because a SEND pad accumulating a full launch load must not be drainable or it never reaches launch size.
+- **Compatibility rule:** `[RequireComponent(typeof(ItemPortRouting))]` rather than setup-step attachment, so pads and stations ALREADY PLACED in a save gain routing on load.
+- Audit finding: Asteroid Mining (6.6 item 3) was already fully implemented and has been marked complete rather than re-shipped.
 
 ### 11.24.1-dev - The Missing Setup Steps
 - Restored setup steps 89, 90 and 91 and their wizard buttons, which had repeatedly failed to persist.
@@ -56,14 +62,6 @@
 - **Design rule:** station pieces only snap to station pieces, so a pressure hull cannot be closed with a wooden wall. Between themselves the rules are permissive, or a ring corridor could never close.
 - **Scope note:** pressure integration is NOT claimed. `PressureRules`/`GridRoom` operate on `GridBlock` and have no concept of world-placed blocks; `StationPiece` records sealing intent for a future world room solver.
 - **Implementation note:** the tier-upgrade path rebuilds the GameObject, so it must re-tag station pieces or a hull stops being one when upgraded.
-
-### 11.21.0-dev - Prospect From Orbit
-- `SatellitePayloadKind.ResourceScanner` + `DeepOreField.SurveyArea` + deposit layer on the logistics map. Setup step 84 extended; new `Orbital Prospecting` node.
-- **Chain rule:** this is the piece that joins orbit (11.13.0), payloads (11.14.0) and finite deposits (11.18.0) into one loop, so the orbital programme pays back into surface industry.
-- **Design rule:** the scanner surveys from the SATELLITE's ground track, not the player's position - otherwise the satellite is a middleman for a tool the player already carries.
-- **Design rule:** not a strict upgrade. A scanner has no weather hardware, so the four payload branches stay distinct and the newest does not retire the other three.
-- **Disclosure rule:** the map shows only what a scanner has actually surveyed, never every deposit in the world - revealing them all would make the scanner pointless.
-- **Implementation note:** survey results are a PER-INSTANCE list; a shared static returned to callers breaks as soon as a second scanner exists.
 
 ### Era Transition Feel
 
@@ -1758,10 +1756,11 @@ Statuses are evidence-based and move forward only after code/content review and 
    - **Design rule:** a sealed volume starts EMPTY and air must be produced and maintained - pressurisation is an ongoing power cost, not a property of geometry. A DOCK collar deliberately does not seal.
    - Open: functional docking ports for ships and cargo capsules, solar arrays/radiators/gravity ring modules, and exterior armour.
 
-3. **Asteroid Mining**
-   - Asteroid fields accessible from orbit.
-   - Specialized mining ship grids with drills and cargo.
-   - Platinum, rare earths, ice chunks.
+3. **Asteroid Mining** - ~~asteroid fields accessible from orbit~~ ~~mining ship grids with drills and cargo~~ ~~platinum, rare earths, ice chunks~~ - **COMPLETE** (verified 11.25.0-dev)
+   - `SpaceAsteroidField` spawns and culls fields in open space with cluster/belt families; `SpaceAsteroid` is a `Damageable` with a real ore payload, so any drill or weapon mines it.
+   - Ore pool already covers Iron, Nickel, Silicon, Cobalt, Gold, Platinum and Ice.
+   - Mining ships need no special type - a grid with a `GridDrill` and cargo is one, which is the same "no bespoke entity" rule the rail rework is applying.
+   - Open: dedicated asteroid-only ores, and richer rocks further from the sun.
 
 4. **Satellite Network** - ~~scan planets for resource deposits~~ *(11.21.0-dev)* - **PARTIALLY COMPLETE**
    - `SatellitePayloadKind.ResourceScanner` maps deep ore deposits within 6 km of the satellite's ground track; results feed the payload console and the `L` logistics map. Research: `Orbital Prospecting`. Authored by setup step 84.

@@ -151,7 +151,9 @@ namespace VoxelEngine.UI
             foreach (PadRole r in System.Enum.GetValues(typeof(PadRole)))
             {
                 var captured = r;
-                var b = new Button(() => { _pad.role = captured; Rebuild(); })
+                // Through the property, not the field: setting the role has to invalidate
+                // the cached port descriptor or belts keep facing the old direction.
+                var b = new Button(() => { _pad.Role = captured; Rebuild(); })
                 { text = captured.ToString().ToUpperInvariant() };
                 b.style.flexGrow = 1;
                 b.style.height = 24;
