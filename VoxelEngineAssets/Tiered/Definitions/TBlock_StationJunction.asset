@@ -1,0 +1,48 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f36bfc5b50d54a24593f2613e8d30e7e, type: 3}
+  m_Name: TBlock_StationJunction
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.Tiered.TieredBlockDefinition
+  family: 13
+  displayName: StationJunction
+  woodPrefab: {fileID: 1545890869227537629, guid: f16f8d71618be0c43aee6f246e9054b2, type: 3}
+  stonePrefab: {fileID: 2355501127934536204, guid: 70e8a942536772240a547d1e48ea64f0, type: 3}
+  ironPrefab: {fileID: 1948046261796810822, guid: 2ec5551208ffdc44186498f5ed980edf, type: 3}
+  steelPrefab: {fileID: 3020461052008915253, guid: eb6255ca92cdd3b419240070155646b5, type: 3}
+  wood:
+    hp: 200
+    miningTier: 1
+  stone:
+    hp: 500
+    miningTier: 2
+  iron:
+    hp: 1500
+    miningTier: 3
+  steel:
+    hp: 4000
+    miningTier: 4
+  placeCost:
+    items:
+    - item: {fileID: 11400000, guid: 86caa3d29ca1fcb4ab57c4f35cd925b9, type: 2}
+      count: 7
+  woodToStone:
+    items:
+    - item: {fileID: 11400000, guid: 86caa3d29ca1fcb4ab57c4f35cd925b9, type: 2}
+      count: 2
+  stoneToIron:
+    items:
+    - item: {fileID: 11400000, guid: 86caa3d29ca1fcb4ab57c4f35cd925b9, type: 2}
+      count: 2
+  ironToSteel:
+    items:
+    - item: {fileID: 11400000, guid: 86caa3d29ca1fcb4ab57c4f35cd925b9, type: 2}
+      count: 2

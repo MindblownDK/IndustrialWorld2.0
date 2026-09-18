@@ -1,0 +1,48 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f36bfc5b50d54a24593f2613e8d30e7e, type: 3}
+  m_Name: TBlock_StationHull
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.Tiered.TieredBlockDefinition
+  family: 10
+  displayName: StationHull
+  woodPrefab: {fileID: 904146955128291388, guid: a09a7785cb362b745b3ba8425466ef50, type: 3}
+  stonePrefab: {fileID: 8297802070324516377, guid: 5ee705d6297ad7d47a5f07269c9828fe, type: 3}
+  ironPrefab: {fileID: 6175867744115505449, guid: 5426971e3422fd449be6e57fdafe3046, type: 3}
+  steelPrefab: {fileID: 908080689607520893, guid: 38660557c8a7c064690cabff6b417cbc, type: 3}
+  wood:
+    hp: 200
+    miningTier: 1
+  stone:
+    hp: 500
+    miningTier: 2
+  iron:
+    hp: 1500
+    miningTier: 3
+  steel:
+    hp: 4000
+    miningTier: 4
+  placeCost:
+    items:
+    - item: {fileID: 11400000, guid: 86caa3d29ca1fcb4ab57c4f35cd925b9, type: 2}
+      count: 6
+  woodToStone:
+    items:
+    - item: {fileID: 11400000, guid: 86caa3d29ca1fcb4ab57c4f35cd925b9, type: 2}
+      count: 2
+  stoneToIron:
+    items:
+    - item: {fileID: 11400000, guid: 86caa3d29ca1fcb4ab57c4f35cd925b9, type: 2}
+      count: 2
+  ironToSteel:
+    items:
+    - item: {fileID: 11400000, guid: 86caa3d29ca1fcb4ab57c4f35cd925b9, type: 2}
+      count: 2

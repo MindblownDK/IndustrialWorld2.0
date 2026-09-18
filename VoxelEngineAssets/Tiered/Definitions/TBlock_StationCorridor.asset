@@ -1,0 +1,48 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f36bfc5b50d54a24593f2613e8d30e7e, type: 3}
+  m_Name: TBlock_StationCorridor
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.Tiered.TieredBlockDefinition
+  family: 12
+  displayName: StationCorridor
+  woodPrefab: {fileID: 5174539153105479884, guid: f659a10255729054093f02bbe791535c, type: 3}
+  stonePrefab: {fileID: 5710896835447546599, guid: a47adab8ab38f32499df414967e7ef8e, type: 3}
+  ironPrefab: {fileID: 6981023395893620363, guid: c3c532f6e4940ae41beaa65936f2578e, type: 3}
+  steelPrefab: {fileID: 8333689173967099085, guid: 00d5dfedd41aa274c9095f2a2c1c99ef, type: 3}
+  wood:
+    hp: 200
+    miningTier: 1
+  stone:
+    hp: 500
+    miningTier: 2
+  iron:
+    hp: 1500
+    miningTier: 3
+  steel:
+    hp: 4000
+    miningTier: 4
+  placeCost:
+    items:
+    - item: {fileID: 11400000, guid: 86caa3d29ca1fcb4ab57c4f35cd925b9, type: 2}
+      count: 5
+  woodToStone:
+    items:
+    - item: {fileID: 11400000, guid: 86caa3d29ca1fcb4ab57c4f35cd925b9, type: 2}
+      count: 2
+  stoneToIron:
+    items:
+    - item: {fileID: 11400000, guid: 86caa3d29ca1fcb4ab57c4f35cd925b9, type: 2}
+      count: 2
+  ironToSteel:
+    items:
+    - item: {fileID: 11400000, guid: 86caa3d29ca1fcb4ab57c4f35cd925b9, type: 2}
+      count: 2

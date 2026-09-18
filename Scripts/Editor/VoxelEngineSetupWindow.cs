@@ -865,6 +865,12 @@ namespace VoxelEngine.EditorTools
                 () => IndustrialWorld.EditorTools.LivestockHusbandrySetup.RunStep87(), 62);
             AddWizardButton(scroll, "88. Build Boss Relic Cores\n(Boss variants + relic-gated research \u2014 Non-Destructive)",
                 () => IndustrialWorld.EditorTools.BossRelicSetup.RunStep88(), 62);
+            AddWizardButton(scroll, "89. Build the Orbital Station Family\n(Hammer wheel station pieces + research \u2014 Non-Destructive)",
+                () => IndustrialWorld.EditorTools.OrbitalStationSetup.RunStep89(), 62);
+            AddWizardButton(scroll, "90. Build Station Life Support\n(Pressurises sealed station rooms \u2014 Non-Destructive)",
+                () => IndustrialWorld.EditorTools.StationLifeSupportSetup.RunStep90(), 62);
+            AddWizardButton(scroll, "91. Build the Interplanetary Cargo Pad\n(Bulk freight between worlds \u2014 Non-Destructive)",
+                () => IndustrialWorld.EditorTools.CargoPadSetup.RunStep91(), 62);
 
             AddSpacer(scroll, 20);
         }

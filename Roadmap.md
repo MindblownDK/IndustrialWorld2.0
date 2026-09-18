@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `11.24.0-dev`
-**Roadmap Version:** `11.24.0-dev`
+**Current Version:** `11.24.1-dev`
+**Roadmap Version:** `11.24.1-dev`
 **Date:** 2026-09-16
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,11 @@
 ---
 
 ## 0. Recently Done
+
+### 11.24.1-dev - The Missing Setup Steps
+- Restored setup steps 89, 90 and 91 and their wizard buttons, which had repeatedly failed to persist.
+- **Root cause:** workspace size, not code. `Imported Textures` (3,760 files / 49 MB) put the project at 10,076 files / 119 MB, on the snapshot caps of ~10,000 files / ~128 MB; the newest writes were being dropped. Folder removed from the workspace - now 6,321 files / 70 MB.
+- **Process rule:** after adding files, verify they exist on disk WITH their `.meta` rather than assuming the write landed. Keep the workspace well under the file/size caps.
 
 ### 11.24.0-dev - Freight Between Worlds
 - `CargoLaunchPad` + `CargoFlightRegistry` + `CargoPadHud`: scheduled bulk freight between bodies. Setup step 91, research `interplanetary_logistics`.
@@ -59,14 +64,6 @@
 - **Design rule:** not a strict upgrade. A scanner has no weather hardware, so the four payload branches stay distinct and the newest does not retire the other three.
 - **Disclosure rule:** the map shows only what a scanner has actually surveyed, never every deposit in the world - revealing them all would make the scanner pointless.
 - **Implementation note:** survey results are a PER-INSTANCE list; a shared static returned to callers breaks as soon as a second scanner exists.
-
-### 11.20.0-dev - Earn The Late Game
-- `BossRelic` (`BossRelicKind`, `BossRelicLedger`, `BossEncounter`) + relic-gated research + setup step 88. Enemy tiers, guaranteed boss relics, and a real progression wall in front of the late game.
-- **Balance rule:** a relic is GUARANTEED and UNIQUE, never a rare roll - the encounter is the cost, so low-tier farming cannot substitute for beating the boss.
-- **Design rule:** relics are never CONSUMED. They are recorded in a permanent ledger and research checks the ledger, so one relic can gate several nodes and a unique boss never has to be killed twice.
-- **Reuse rule:** the relic requirement is a facility-style gate on `GetFacilityBlockReason`, not a new `ScienceCost` type - both research entry points already funnel through it, so it cannot leak.
-- **Implementation note:** grant in `OnDestroy`, never an `Update` poll - `Damageable.Die` destroys the object the same frame, so polling can miss the death. Guard against scene unload.
-- Also fixed a pre-existing hole: the research UI never surfaced facility block reasons, so orbital-gated nodes looked live and silently did nothing.
 
 ### Era Transition Feel
 

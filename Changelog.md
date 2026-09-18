@@ -1,9 +1,44 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `11.24.0-dev`
+**Current Version:** `11.24.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [11.24.1-dev] The Missing Setup Steps
+
+**Type:** PATCH - no gameplay change, no save impact. Restores editor scripts that were never reaching the repository.
+
+**GitHub title:** `[11.24.1-dev] The missing setup steps`
+
+#### Root cause found
+
+Setup steps 89, 90 and 91 kept vanishing between deliveries. The runtime code persisted every time; only the editor scripts and their wizard buttons disappeared, which is why the features looked half-shipped - all the behaviour existed but nothing could author the assets in Unity.
+
+The cause was **workspace size**, not the code. The project was carrying an `Imported Textures` folder of **3,760 files and 49 MB**, putting the repository at **10,076 files and 119 MB** - right on the snapshot limits of roughly 10,000 files and 128 MB. Files past the cap were silently dropped when the workspace was saved, and the most recently written ones lost the race.
+
+`Imported Textures` has been removed from this workspace at your request (it remains in your local copy). The project is now **6,321 files and 70 MB**, with comfortable headroom.
+
+#### Restored
+
+- **Step 89** - Orbital Station Family. Eight hammer families, four tiers each, plus the `orbital_construction` node.
+- **Step 90** - Station Life Support. The oxygen source for sealed station compartments.
+- **Step 91** - Interplanetary Cargo Pad. Bulk freight between bodies.
+- All three wizard buttons in the setup window.
+
+#### Verified this time
+
+Rather than assuming writes landed, this release was checked end to end after the fact:
+
+- All three setup scripts and their `.meta` files exist on disk.
+- All three wizard buttons are present.
+- Every runtime file from 11.13.0 through 11.24.0 is present - **no other losses**.
+- Brace balance verified across all sixteen recently touched files.
+- No orphaned `.meta` files and no `.cs` file missing one.
+
+#### Manual step in Unity
+
+**Tools -> Voxel Engine -> Voxel Engine Setup**, then run **89**, **90** and **91**. All three are non-destructive and safe to re-run.
 
 ### [11.24.0-dev] Freight Between Worlds
 
