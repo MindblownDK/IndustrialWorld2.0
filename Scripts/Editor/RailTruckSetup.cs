@@ -125,9 +125,10 @@ namespace IndustrialWorld.EditorTools
                 // more than they look - they are what makes it read as something that
                 // CARRIES weight, which is exactly the mechanic the load model implements.
                 //
-                // Gauge matches the track authored in step 85 (1.05 m between rail centres),
-                // so the wheels sit on the rails rather than beside them.
-                const float gauge = 1.05f;
+                // Gauge matches the track authored in step 85 (3.15 m between rail centres
+                // since the 11.41.0 triple-width formation), so the wheels sit on the rails
+                // rather than beside them.
+                const float gauge = TrackGauge;
                 const float axleZ = 0.62f;      // half the wheelbase
                 const float wheelRadius = 0.30f;
 
@@ -260,11 +261,88 @@ namespace IndustrialWorld.EditorTools
                 Debug.Log("[Setup 92] Prefab had no GridRailTruck; added one.");
             }
 
+            // The 11.41.0 formation is three times the width the first bogie was authored
+            // against; a bogie left at the old gauge would run its wheels down the middle of
+            // the sleepers. Geometry-only pass: nothing else on the prefab is touched.
+            dirty |= RegaugeBogie(contents);
+
             GameObject result = existing;
             if (dirty) result = PrefabUtility.SaveAsPrefabAsset(contents, path);
             PrefabUtility.UnloadPrefabContents(contents);
             changed = dirty;
             return result;
+        }
+
+        /// <summary>Rail centres apart, in metres. Matches step 85's formation exactly - the
+        /// wheels and the rail heads are authored from the same number on purpose.</summary>
+        private const float TrackGauge = 3.15f;
+
+        /// <summary>
+        /// Moves an existing bogie's running gear out to the current gauge. Idempotent: a
+        /// prefab already at the gauge is left byte-identical, and only the named running-gear
+        /// children move - body, materials and component tuning are never touched.
+        /// </summary>
+        private static bool RegaugeBogie(GameObject root)
+        {
+            var wheel0 = root.transform.Find("Wheel0");
+            if (wheel0 == null) return false;
+            float current = Mathf.Abs(wheel0.localPosition.x) * 2f;
+            if (Mathf.Abs(current - TrackGauge) < 0.001f) return false;
+
+            const float axleZ = 0.62f;
+            const float wheelRadius = 0.30f;
+            float half = TrackGauge * 0.5f;
+
+            for (int side = 0; side < 2; side++)
+            {
+                float x = side == 0 ? -half - 0.10f : half + 0.10f;
+
+                var frame = root.transform.Find(side == 0 ? "SideFrameL" : "SideFrameR");
+                if (frame != null) frame.localPosition = new Vector3(x, wheelRadius + 0.10f, 0f);
+
+                for (int a = 0; a < 2; a++)
+                {
+                    float z = a == 0 ? -axleZ : axleZ;
+                    var box = root.transform.Find("Axlebox" + side + a);
+                    if (box != null) box.localPosition = new Vector3(x, wheelRadius + 0.02f, z);
+
+                    for (int coil = 0; coil < 3; coil++)
+                    {
+                        var ring = root.transform.Find("Spring" + side + a + coil);
+                        if (ring != null)
+                            ring.localPosition = new Vector3(x, wheelRadius + 0.20f + coil * 0.07f, z);
+                    }
+                }
+            }
+
+            var bolster = root.transform.Find("Bolster");
+            if (bolster != null) bolster.localScale = new Vector3(TrackGauge + 0.42f, bolster.localScale.y, bolster.localScale.z);
+
+            for (int a = 0; a < 2; a++)
+            {
+                var brake = root.transform.Find("BrakeBeam" + a);
+                if (brake != null) brake.localScale = new Vector3(TrackGauge + 0.12f, brake.localScale.y, brake.localScale.z);
+
+                var axle = root.transform.Find("Axle" + a);
+                if (axle != null) axle.localScale = new Vector3(axle.localScale.x, TrackGauge * 0.5f, axle.localScale.z);
+            }
+
+            for (int i = 0; i < 4; i++)
+            {
+                float x = (i % 2 == 0) ? -half : half;
+                var w = root.transform.Find("Wheel" + i);
+                if (w != null) w.localPosition = new Vector3(x, wheelRadius, w.localPosition.z);
+
+                var flange = root.transform.Find("Flange" + i);
+                if (flange != null)
+                {
+                    float inboard = x > 0f ? -0.045f : 0.045f;
+                    flange.localPosition = new Vector3(x + inboard, wheelRadius, flange.localPosition.z);
+                }
+            }
+
+            Debug.Log("[Setup 92] Re-gauged the Rail Truck bogie to " + TrackGauge.ToString("0.00") + " m.");
+            return true;
         }
 
         private static GridBlockItem EnsureItem(GameObject prefab, out bool changed)

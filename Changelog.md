@@ -1,9 +1,132 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `11.40.0-dev`
+**Current Version:** `12.1.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.1.0-dev] Schedules, Screens And The Sound Of A Station Waking Up
+
+**Type:** MINOR - two new block families plus a track bug fix. All save fields additive; old saves load unchanged.
+
+**GitHub title:** `[12.1.0-dev] Train schedules, steampunk displays and the ballast that went missing`
+
+#### The ballast you could not see (bug fix)
+
+Track laid since the x3 formation could come out with sleepers and rails but no stone bed - the bed item resolved by ID, and when the lookup came back empty the corridor silently skipped the ballast pass and kept laying. Two fixes, belt and braces:
+
+- `PlayerInteractionTool` now self-heals a missing ballast definition at drag time (`railballast` item, `Item_Stone` material) and shows one amber toast if the assets genuinely are not there, instead of charging stone and placing nothing.
+- `RailCorridor.Commit` gained a re-bed pass: any committed cell that has track but no bed under it gets one. Re-bedded cells are counted, charged as stone, and named on the commit toast - so laying one new run also heals the old bare stretches it touches.
+
+#### Train Schedule block - services without a driver
+
+A grid block for the train itself. Build it on the same grid as the Rail Truck, press E, and write the service: an ordered list of stations, each stop with the condition that releases the train again - dwell seconds, hold until full, hold until empty, or hold while there is space left. The bogie gained real destination routing for it: `SetDestination` asks `RailNetwork` for a path, the truck walks it cell by cell (re-syncing from the path front if it is nudged off line), and fires `Arrived` - at which point the schedule advances the stop, starts the condition, and dispatches again. Stations are matched by name, so renaming a station in the console re-points every train that calls at it. The service pattern and the current stop survive a save.
+
+#### The display family - split-flap, nixie and analog, all steampunk
+
+One component, five authored housings, because "modular" should mean the hardware is shared and the configuration is yours. Every screen opens a console on E: kind (split-flap rows / glowing nixie digits in a brass cage / analog needle over a dial) and source (train speed, consist load, station departures, station status, or custom text).
+
+- **Brass Display Screen** (grid): the train's own board. Takes ROTATIONAL power - while any shaft, gearbox or engine on the grid turns above idle the drums keep clicking; park the engine and the board goes dark mid-word.
+- **Display Cabinet**, **Hanging Departure Board** and **Nixie Readout** (stationary): mains-fed through a small electric engine inside that turns the flap drums. The hanging board lists every scheduled service calling at the station beside it, from the schedule blocks' live state - the departure board and the timetable are the same data.
+- The reference board's look is honoured: dark cards, warm text, brass bezels on everything.
+
+And the sound that makes it a split-flap board: `Sfx.SplitFlapFlip` - click, slap, rattle - staggered per row as the cards turn edge-on, swap invisible, and land. A board updating should sound like a board updating, not like one clap. Nixie updates flicker their emission instead. Screen kind, source and custom text are saved for both grid and stationary housings (additive fields).
+
+#### New in the setup window
+
+Step **95. Build Steampunk Displays & Schedules** (Tools -> Voxel Engine -> Voxel Engine Setup): authors the Train Schedule and Brass Display Screen grid items and prefabs, the three stationary housings with their BlockItems, and five recipes (steel + copper wire, bench/assembler). Non-destructive as always - creates what is missing, repairs unresolvable links, never touches authored tuning. Safe to re-run.
+
+#### Manual steps in Unity
+
+1. Let the project recompile (Console should stay clean).
+2. Run **Tools -> Voxel Engine -> Voxel Engine Setup -> 95. Build Steampunk Displays & Schedules**.
+3. In a save: craft a Train Schedule (steel x4 + wire x2), build it onto a train grid next to the Rail Truck, press E and add at least two stops.
+4. Craft any screen - e.g. the Brass Display Screen (steel x6 + wire x4) on a train, or a Display Cabinet (steel x8 + wire x4) at a station wired into power - press E to pick kind and source.
+5. Re-lay or extend a track run over older bare stretches and watch the commit toast: the re-bed pass should charge and place ballast under them.
+
+### [12.0.1-dev] Compile Cleanup - Obsolete Finds And A Missing-Script Call That Never Existed
+
+**Type:** PATCH - compile diagnostics only. No save, no API, no behaviour touched.
+
+**GitHub title:** `[12.0.1-dev] Compile cleanup: obsolete find overloads and the missing-script scrub`
+
+#### The error: CS0117 on `GameObjectUtility.RemoveMonoBehavioursWithMissingScripts`
+
+The retirement scrub in setup 85 called a plural API that does not exist in Unity 6.5. The project already solves this exact problem in step 17 of the setup window with the singular, per-GameObject call - `GameObjectUtility.RemoveMonoBehavioursWithMissingScript` - walked over `GetComponentsInChildren<Transform>(true)`. Step 85 now follows the same pattern instead of inventing a second one, so inactive children are scrubbed too and the two passes cannot drift apart.
+
+#### The warnings: CS0618 on `FindObjectsByType` with `FindObjectsSortMode`
+
+Both call sites in `LogisticsMapData` now use the `FindObjectsInactive.Exclude` overload the rest of the project already standardised on (Cryobed, SpaceOrigin and others). One was the new v2 bogie marker from 12.0.0-dev; the other was the pre-existing chest-zone gather, fixed in the same pass because a warning left in the log is a warning that hides the next real one. Sort order was never relied on at either site - markers are regrouped by kind afterwards - so nothing observes the change.
+
+#### Manual step in Unity
+
+None. Code-only patch; recompile and the Console should be clean. Setup 85 still needs its re-run from the 12.0.0-dev round if you have not done it yet.
+
+### [12.0.0-dev] The v1 Train Is Gone - One Railway, Not Two
+
+**Type:** MAJOR - removes the 11.15.0 `RailTrain` entity and everything that pointed at it. BREAKING: saves that contain a v1 locomotive or its schedule cannot carry it across; start a fresh save.
+
+**GitHub title:** `[12.0.0-dev] The v1 train is gone - one railway, not two`
+
+#### What was removed and why now
+
+The rework brief in the roadmap ended with two items: automatic junctions at crossings, and retiring the 11.15.0 `RailTrain`. The junctions landed in 11.41.0-dev; the retirement is this round, and it is the reason this version is a MAJOR. A v1 train was a scheduled agent walking a private graph - the one large buildable in the game that was not a player-built grid, could not be designed block by block, took no damage, held no paint, and needed its own console. Train System v2 made a train an ordinary grid with a Rail Truck on it, and every feature since has been written once, against grids. Keeping the v1 entity meant keeping a second railway forever.
+
+The retirement waited for a MAJOR on purpose: removing the entity breaks any save that still holds a locomotive, and that belongs in a version bump a player can see, not in a minor they cannot.
+
+#### What changed in code
+
+- `RailTrain` and its `TrainState` enum are deleted. Nothing else in the project compiled against them after this round.
+- `RailConfigHud` loses the train console. A train configures itself through the grid terminal like every other buildable; the console keeps its station and switch panels.
+- The logistics map reads `GridRailBogie` instead of the retired entity list, so v2 trains appear where v1 trains used to - name, RUNNING / REVERSING / IDLE / OFF RAIL, and an alert tint when a bogie is off the rail.
+- The E-interaction branch that opened the v1 console is gone; E on a rail truck and on a coupler remain the train-side verbs.
+- Setup step 85 now scrubs the dead script off any locomotive prefab it finds (`RemoveMonoBehavioursWithMissingScripts`). The prefab shell stays on disk - a MAJOR demands a fresh save, not a deleted history - but no missing-script component survives to warn on every load. The recipe left the registry back in 11.39.0.
+
+#### What a player loses, precisely
+
+A saved v1 locomotive and its schedule. Nothing else: track, switches, signals, stations, truck bogies, couplers and consists are all v2 systems and are untouched. A locomotive placed in an old save loads as an inert shell block in the fresh-save migration case, and as nothing at all once the save is retired, which is the honest outcome of removing an entity rather than stubbing one.
+
+#### Manual step in Unity
+
+Re-run setup **85** from Tools -> Voxel Engine -> Voxel Engine Setup to scrub dead scripts off old locomotive prefabs. Non-destructive: it only removes components whose script no longer exists. Start a fresh save afterwards - this is the MAJOR that the old ones were waiting out.
+
+### [11.41.0-dev] Junctions That Join, Curves That Bend, And A Bill While You Drag
+
+**Type:** MINOR - rail graph, track visuals and a new drag HUD. Save-compatible (one additive save field).
+
+**GitHub title:** `[11.41.0-dev] Junctions that join, curves that bend, and a bill while you drag`
+
+#### Turns are smooth now, because a bend is finally drawn as a bend
+
+Two separate faults made the same kink. The rotation pass aimed each cell's WHOLE rotation at the next cell, which replaced the corridor solver's mitred yaw with the chord direction - a half-step zigzag per cell on every curve. It now keeps the solver's yaw and adds only the pitch the ground asks for.
+
+The second fault is geometric: a track cell is a rigid box set, and on a curve the outside of a bend is longer than the inside, so rigid cells gapped outboard and overlapped inboard - the dashed, fanned corner in the screenshot. `RailTrack` now derives the signed curvature of its own through route from the link graph (circumcircle of the two most opposite neighbours) and deforms its children onto that arc: sleepers fan radially, each square to the tangent at its own station, and each rail stretches to the arc length at its own offset, so rail ends meet end-to-end through the bend. It is derived, not stored, so a save reloads and re-derives it, and a junction re-link heals it.
+
+Rail runs also ask for a gentler fillet than roads do: 2.75 m minimum radius for single track instead of the road solver's 1.25 m, where one cell turned through 46 degrees and no dressing could read as a curve.
+
+#### Crossings become junctions - and do not reroute your trains
+
+Laying a line across another used to produce visible overlapping track the graph could not use: the existing cell kept its two-link straight budget, so the new arms had nothing to link into. Three changes fix it at the root.
+
+- A station is SPLICED into the run at the exact position of any existing cell the route crosses, so that cell becomes the shared node: both lines meet it at proper cell spacing instead of stacking inside it or stopping short of it.
+- Promotion to a junction now counts ARM DIRECTIONS, not neighbours - three directions 22.5 degrees apart - and runs on every link rebuild, not only on corridor commits. A hand-placed cell completing a T, and a save reloading its graph, heal into junctions through the same path. Parallel double track never promotes: its cells have no external neighbour to trigger the candidate rule.
+- A fresh junction routes STRAIGHT THROUGH by default (`RailTrack.NextFrom` picks the straightest continuation of the entry leg). This is what retired the old fear that auto-junctioning would silently reroute trains: nothing turns unless a player sets the points, and whether they did is saved (additive field `railPointsSetByPlayer`), so a reload does not quietly reset a yard.
+
+Adjacency also tightened from 1.45 m to 1.10 m. Real neighbours sit at most 1.06 m apart (1 m arc plus the gradient cap); 1.45 m let the 1.41 m lattice diagonal and parallel lines one metre abeam reach into a cell's link budget. A 5% ordering penalty keeps fore/aft ahead of a pure lateral tie without ever excluding a junction arm.
+
+#### The bill arrives while you drag, not after the click
+
+A new bottom-centre card, `RailCostHud`, reads out the run as it grows: metres, cell count, gauge, and per-material need against what the inventory actually holds, green while affordable and red the moment it is not. It is driven from the SAME plan the ghost draws and the commit lays, so the number on the card, the preview on the ground and the bill after the click cannot disagree. A refused run names its reason on the card in amber while you are still aiming.
+
+#### The formation is three times the width
+
+Sleeper 1.5 m to 4.5 m, gauge 1.05 m to 3.15 m, rail heads 0.11 m to 0.33 m, ballast bed 2.1 m to 6.3 m - the whole permanent way scaled together so the real 0.70 sleeper-to-gauge ratio survives. The Rail Truck bogie is re-gauged from the same number in step 92, so wheels sit on rail heads rather than running down the middle of the sleepers. The ghost preview measures the deck off the prefab instead of trusting a constant, so it previews exactly as wide a formation as the commit lays.
+
+All three setup steps apply the width to prefabs authored before it through geometry-only, idempotent re-gauge passes: a prefab already at the new width is left byte-identical, and nothing but running gear moves - no component, material, recipe or tuning value is touched.
+
+#### Manual step in Unity
+
+Re-run setup **85** (track formation), **92** (bogie re-gauge) and **93** (ballast bed) from Tools -> Voxel Engine -> Voxel Engine Setup. All three are non-destructive re-gauge passes; existing track in a save heals its curves and junctions on load by itself.
 
 ### [11.40.0-dev] A Real Bogie, And Track That Flows
 

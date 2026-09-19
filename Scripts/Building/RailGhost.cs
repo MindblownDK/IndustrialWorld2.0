@@ -55,8 +55,8 @@ namespace VoxelEngine.Building
         private static readonly Color Good = new(0.25f, 0.90f, 0.35f);
         private static readonly Color Bad = new(0.95f, 0.25f, 0.20f);
 
-        /// <summary>Half-width of the drawn sleeper, in metres.</summary>
-        private const float HalfWidth = 0.62f;
+        /// <summary>Half-width of the drawn sleeper when the caller has no template to measure.</summary>
+        private const float DefaultHalfWidth = 0.62f;
 
         /// <summary>Lift above the planned cell so the ghost is not buried in terrain.</summary>
         private const float Lift = 0.28f;
@@ -68,9 +68,16 @@ namespace VoxelEngine.Building
         /// it would leave the player aiming blind at exactly the moment they need to see
         /// what is wrong.
         /// </summary>
-        public static void Show(RailPlan plan)
+        /// <param name="halfWidth">
+        /// Half the formation width the commit will lay, measured off the track prefab by the
+        /// caller. The preview must be as wide as the thing it previews or the player aims a
+        /// ribbon and lays a causeway.
+        /// </param>
+        public static void Show(RailPlan plan, float halfWidth = DefaultHalfWidth)
         {
             if (plan == null || plan.cells.Count == 0) { Hide(); return; }
+
+            halfWidth = Mathf.Clamp(halfWidth, 0.1f, 8f);
 
             EnsureGhost();
             if (_root == null) return;
@@ -87,7 +94,7 @@ namespace VoxelEngine.Building
                 // them to guess which end is the problem.
                 var layer = cell.valid ? _validLayer : _invalidLayer;
 
-                Vector3 right = cell.rotation * Vector3.right * HalfWidth;
+                Vector3 right = cell.rotation * Vector3.right * halfWidth;
                 Vector3 forward = cell.rotation * Vector3.forward * 0.42f;
                 Vector3 up = cell.rotation * Vector3.up * Lift;
                 Vector3 centre = cell.position + up;

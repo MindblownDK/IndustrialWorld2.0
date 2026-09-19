@@ -336,6 +336,8 @@ namespace VoxelEngine.UI
             OrbitalMapScreen.Tick();
             GridIdentityHud.Tick();
             RailConfigHud.Tick();
+            TrainScheduleHud.Tick();
+            DisplayConfigHud.Tick();
             LivestockPenHud.Tick();
             CargoPadHud.Tick();
             LogisticsMapScreen.Tick();
@@ -1214,6 +1216,8 @@ namespace VoxelEngine.UI
             OrbitalMapScreen.EnsureMounted(_topLayer);
             GridIdentityHud.EnsureMounted(_topLayer);
             RailConfigHud.EnsureMounted(_topLayer);
+            TrainScheduleHud.EnsureMounted(_topLayer);
+            DisplayConfigHud.EnsureMounted(_topLayer);
             LivestockPenHud.EnsureMounted(_topLayer);
             CargoPadHud.EnsureMounted(_topLayer);
             LogisticsMapScreen.EnsureMounted(_topLayer);
@@ -1221,6 +1225,7 @@ namespace VoxelEngine.UI
             VoxelEngine.GridSystem.GridPilotHud.EnsureMounted(_hudLayer);
             GrinderHud.EnsureMounted(_hudLayer);
             BuildCostHud.EnsureMounted(_hudLayer);
+            RailCostHud.EnsureMounted(_hudLayer);
             DeathScreenHud.EnsureMounted(_hudLayer);
             CryobedConfigHud.EnsureMounted(_hudLayer);
             BombHud.EnsureMounted(_hudLayer);

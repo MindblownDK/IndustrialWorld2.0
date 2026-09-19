@@ -29,6 +29,7 @@
 // pushing a rigidbody and hoping.
 
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using VoxelEngine.Building;
 
@@ -80,6 +81,45 @@ namespace VoxelEngine.GridSystem
 
         /// <summary>The cell it came from, so a junction never bounces it backwards.</summary>
         private RailTrack _previousTrack;
+
+        // ── Destination routing (12.1.0) ────────────────────────────────────────
+        //
+        // A schedule needs "go to THIS station", not "follow whatever the points happen to
+        // do". The path is solved once with the same A* the planner uses, then honoured cell
+        // by cell; where the path has nothing to say (beyond the destination, or after a
+        // player reroutes the train by hand) the ordinary switch rules take over again.
+        private readonly List<RailTrack> _path = new(64);
+        private RailTrack _destination;
+
+        /// <summary>The cell this bogie is currently routed to, or null when roaming.</summary>
+        public RailTrack Destination => _destination;
+
+        /// <summary>Raised when the bogie enters its destination cell.</summary>
+        public event System.Action<GridRailBogie> Arrived;
+
+        /// <summary>
+        /// Routes the bogie to <paramref name="goal"/> over the rail graph. Returns false when
+        /// no connected route exists - the caller reports that rather than the train sitting
+        /// down without saying why.
+        /// </summary>
+        public bool SetDestination(RailTrack goal)
+        {
+            if (goal == null || CurrentTrack == null) return false;
+            if (!VoxelEngine.Building.RailNetwork.TryFindPath(CurrentTrack, goal, _path))
+            {
+                _path.Clear();
+                return false;
+            }
+            _destination = goal;
+            return true;
+        }
+
+        /// <summary>Drops any routed destination and hands control back to the points.</summary>
+        public void ClearDestination()
+        {
+            _destination = null;
+            _path.Clear();
+        }
 
         /// <summary>0..1 along the edge from CurrentTrack to the next cell.</summary>
         private float _edgeProgress;
@@ -263,6 +303,7 @@ namespace VoxelEngine.GridSystem
         {
             CurrentTrack = null;
             _previousTrack = null;
+            ClearDestination();
             _speed = 0f;
             BlockedReason = "Not on rails.";
 
@@ -312,6 +353,13 @@ namespace VoxelEngine.GridSystem
             if (LeadBogie != null) { FollowLeader(); return; }
 
             if (CurrentTrack == null) return;
+
+            if (_destination != null && CurrentTrack == _destination)
+            {
+                _destination = null;
+                _path.Clear();
+                Arrived?.Invoke(this);
+            }
 
             float dt = Time.fixedDeltaTime;
 
@@ -577,6 +625,19 @@ namespace VoxelEngine.GridSystem
 
             var links = CurrentTrack.Links;
             if (links.Count == 0) return null;
+
+            // A routed run honours its solved path through every junction; the path is
+            // resynced from the front so a train shunted by hand simply falls off the stale
+            // prefix and keeps following whatever of the route still lies ahead of it.
+            if (_path.Count > 0)
+            {
+                while (_path.Count > 0 && _path[0] != CurrentTrack) _path.RemoveAt(0);
+                if (_path.Count >= 2)
+                {
+                    var want = _path[1];
+                    if (want != null && links.Contains(want)) return want;
+                }
+            }
 
             // Reversing swaps which neighbour counts as "behind", so the same logic drives
             // the train both ways without a second code path.

@@ -10,7 +10,7 @@
 // repaint on pan and zoom without re-walking every network in the world.
 //
 // WHAT IT UNIFIES
-//   • Rail lines and stations   (RailNetwork / RailStation / RailTrain)
+//   • Rail lines and stations   (RailNetwork / RailStation / GridRailBogie)
 //   • Drone routes and ports    (DroneNetwork / DronePort)
 //   • Logistic chest clusters   (Chest with a port lock) as "base zones"
 //   • Roads                     (RoadSurfaceUtility)
@@ -204,24 +204,23 @@ namespace VoxelEngine.UI
                 grow(station.transform.position);
             }
 
+            // v2: a train is an ordinary grid with a Rail Truck on it, so the map reads
+            // bogies rather than a retired entity list (v1 RailTrain removed 12.0.0-dev).
             TrainCount = 0;
-            var trains = RailTrain.All;
-            for (int i = 0; i < trains.Count; i++)
+            var bogies = Object.FindObjectsByType<VoxelEngine.GridSystem.GridRailBogie>(
+                FindObjectsInactive.Exclude);
+            for (int i = 0; i < bogies.Length; i++)
             {
-                var train = trains[i];
-                if (train == null) continue;
+                var bogie = bogies[i];
+                if (bogie == null) continue;
                 TrainCount++;
 
-                string detail = train.State switch
-                {
-                    TrainState.Running => "TO " + train.CurrentTargetName,
-                    TrainState.Docked => "AT " + train.CurrentTargetName,
-                    TrainState.Blocked => "BLOCKED",
-                    _ => "IDLE",
-                };
-                _markers.Add(new MapMarker(MapOverlayKind.Train, train.transform.position,
-                    train.TrainName, detail, train.State == TrainState.Blocked));
-                grow(train.transform.position);
+                string detail = bogie.CurrentTrack == null
+                    ? "OFF RAIL"
+                    : bogie.powered ? (bogie.reversed ? "REVERSING" : "RUNNING") : "IDLE";
+                _markers.Add(new MapMarker(MapOverlayKind.Train, bogie.transform.position,
+                    bogie.gameObject.name, detail, bogie.CurrentTrack == null));
+                grow(bogie.transform.position);
             }
         }
 
@@ -266,7 +265,7 @@ namespace VoxelEngine.UI
         private static void GatherZones(System.Action<Vector3> grow)
         {
             _chestScratch.Clear();
-            var all = Object.FindObjectsByType<Chest>(FindObjectsSortMode.None);
+            var all = Object.FindObjectsByType<Chest>(FindObjectsInactive.Exclude);
             for (int i = 0; i < all.Length; i++)
             {
                 var chest = all[i];

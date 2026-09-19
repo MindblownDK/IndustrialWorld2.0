@@ -25,10 +25,11 @@
 //     PARALLEL TRACKS, so a 2-wide corridor is a double-track mainline, not one wide rail.
 //
 // WHAT THIS IS NOT
-// It does not place switches where lines cross. Auto-junctioning is a separate problem -
-// it needs to know which of two crossing routes is the through line - and guessing wrong
-// would silently reroute a player's trains. Corridors that meet simply connect through
-// the existing adjacency rules in `RailTrack.RebuildLinks`.
+// It does not guess which of two crossing routes is the through line - that was the fear
+// that held auto-junctioning back for three releases. Since 11.41.0 it does not need to
+// guess: a crossing becomes a junction that routes STRAIGHT THROUGH by default
+// (`RailTrack.NextFrom`), and only a player setting the points turns it. Corridors that
+// meet connect through the existing adjacency rules in `RailTrack.RebuildLinks`.
 
 using System.Collections.Generic;
 using UnityEngine;
@@ -94,6 +95,20 @@ namespace VoxelEngine.Building
     {
         /// <summary>Widest gauge the tool offers. Three parallel tracks is already a yard.</summary>
         public const int MaxGauge = 3;
+
+        /// <summary>
+        /// The smallest corner radius a rail run asks for, in metres - deliberately gentler
+        /// than the road solver's own minimum.
+        ///
+        /// A road can chamfer tightly because its surface is painted per cell; track carries
+        /// rigid steel that has to fan through a bend, and the tighter the radius the larger
+        /// the angular step per 1 m cell. At the road minimum (1.25 m) one cell turned through
+        /// 46 degrees, which no amount of sleeper fanning reads as a curve. 2.75 m holds the
+        /// step near 21 degrees, where fanned sleepers and arc-cut rails read as a real bend
+        /// while still turning inside a base. Longer gauges ask for proportionally more room.
+        /// </summary>
+        public static float MinimumRailRadius(int gauge, float cell)
+            => (2.75f + 0.75f * Mathf.Max(0, gauge - 1)) * Mathf.Max(0.05f, cell);
 
         private static readonly RoadCorridorBuffers _buffers = new();
         private static readonly List<Vector3> _waypointScratch = new(8);
@@ -165,7 +180,7 @@ namespace VoxelEngine.Building
             // The road solver does the geometry: centreline, fillets, and one explicit
             // four-corner footprint per cell per lane.
             RoadCorridor.Build(_buffers, _waypointScratch, up, gauge, cellSize,
-                RoadCorridor.MinimumRadius(gauge, cellSize));
+                MinimumRailRadius(gauge, cellSize));
 
             if (_buffers.cornerTooTight)
             {
@@ -359,10 +374,30 @@ namespace VoxelEngine.Building
 
                     if (delta.sqrMagnitude < 1e-6f) continue;
 
+                    // THE BUG (11.41.0): aiming the whole rotation at the next cell also
+                    // replaced the YAW with the chord direction, throwing away the corridor
+                    // solver's mitred axis - the one axis by which consecutive cell quads
+                    // share an edge exactly. On a bend that re-introduced a half-step zigzag
+                    // per cell, which is the kinked corner players kept screenshotting.
+                    //
+                    // So: keep the solver's yaw, and add ONLY the pitch the ground asks for.
+                    var cell = plan.cells[cur];
+                    Vector3 yaw = cell.rotation * Vector3.forward;
+                    yaw -= up * Vector3.Dot(yaw, up);
+                    if (yaw.sqrMagnitude < 1e-6f)
+                    {
+                        yaw = delta - up * Vector3.Dot(delta, up);
+                        if (yaw.sqrMagnitude < 1e-6f) continue;
+                    }
+                    yaw.Normalize();
+
+                    float rise = Vector3.Dot(delta, up);
+                    float horiz = Mathf.Sqrt(Mathf.Max(0f, delta.sqrMagnitude - rise * rise));
+                    float pitch = Mathf.Atan2(rise, horiz) * Mathf.Rad2Deg;
+
                     // Keep the corridor's own up as the roll reference so a cell on a curve
                     // does not bank; only the PITCH should follow the ground.
-                    var cell = plan.cells[cur];
-                    cell.rotation = Quaternion.LookRotation(delta.normalized, up);
+                    cell.rotation = Quaternion.LookRotation(yaw, up) * Quaternion.Euler(-pitch, 0f, 0f);
                     plan.cells[cur] = cell;
                 }
             }
@@ -429,21 +464,67 @@ namespace VoxelEngine.Building
         /// Only cells that genuinely have extra neighbours are promoted - a straight run
         /// stays straight track, so nothing becomes a switch by accident.
         /// </summary>
-        private static int PromoteCrossingsToJunctions(List<RailTrack> laid)
+        private static int PromoteCrossingsToJunctions(List<RailTrack> laid, List<RailTrack> crossings)
         {
-            int promoted = 0;
+            var laidSet = new HashSet<RailTrack>(laid);
+            var candidates = new List<RailTrack>(8);
 
+            for (int i = 0; i < crossings.Count; i++)
+                if (crossings[i] != null && !candidates.Contains(crossings[i]))
+                    candidates.Add(crossings[i]);
+
+            // Laid cells join the candidate set only when this run actually touched the
+            // existing network: a railhead ending against an old line (one run-peer), or a
+            // cell laid on top of / beside one (external neighbour within reach). A cell of
+            // a parallel run has no external neighbour at all, so double track never
+            // promotes itself into a junction soup.
             for (int i = 0; i < laid.Count; i++)
             {
                 var cell = laid[i];
                 if (cell == null) continue;
 
-                // Count every rail neighbour, not just the ones it managed to link: a cell
-                // already full at two links is exactly the case that needs promoting, and
-                // its Links list would not reveal the third arm.
-                int neighbours = CountRailNeighbours(cell);
-                if (neighbours < 3) continue;
-                if (cell.pieceKind == RailPieceKind.Switch) continue;
+                int peers = 0;
+                bool external = false;
+                bool externalNear = false;
+                var externals = new List<RailTrack>(4);
+
+                RailNetwork.QueryAdjacent(cell, _neighbourScratch);
+                for (int n = 0; n < _neighbourScratch.Count; n++)
+                {
+                    var other = _neighbourScratch[n];
+                    if (other == null || other == cell) continue;
+                    if (laidSet.Contains(other)) { peers++; continue; }
+                    external = true;
+                    externals.Add(other);
+                    if ((other.transform.position - cell.transform.position).magnitude <= MergeTouchMetres)
+                        externalNear = true;
+                }
+
+                if (!external) continue;
+                if (peers <= 1 || externalNear)
+                {
+                    if (!candidates.Contains(cell)) candidates.Add(cell);
+                }
+
+                // The existing cell a railhead ended against is the other half of a T: it
+                // needs its budget widened too or the new arm has nothing to link into.
+                if (peers <= 1)
+                {
+                    for (int n = 0; n < externals.Count; n++)
+                        if (!candidates.Contains(externals[n])) candidates.Add(externals[n]);
+                }
+            }
+
+            int promoted = 0;
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                var cell = candidates[i];
+                if (cell.pieceKind != RailPieceKind.Straight) continue;
+
+                // A junction is three or more DISTINCT ARM DIRECTIONS, not three neighbours:
+                // neighbours cluster by direction so a draped curve or a parallel line one
+                // metre to the side cannot read as a branch.
+                if (CountArmDirections(cell) < 3) continue;
 
                 cell.pieceKind = RailPieceKind.Switch;
                 promoted++;
@@ -453,14 +534,14 @@ namespace VoxelEngine.Building
 
             // Re-link AFTER every promotion. A cell promoted late would otherwise be linked
             // against neighbours that were still two-link limited when they were processed.
-            for (int i = 0; i < laid.Count; i++)
-                if (laid[i] != null) laid[i].RebuildLinks(propagate: true);
+            for (int i = 0; i < candidates.Count; i++)
+                if (candidates[i] != null) candidates[i].RebuildLinks(propagate: true);
 
-            // The existing line on the other side of the crossing also has to re-link, or it
-            // keeps the two links it had before the junction appeared.
-            for (int i = 0; i < laid.Count; i++)
+            // The lines on the other side of every junction also have to re-link, or they
+            // keep the two links they had before the junction appeared.
+            for (int i = 0; i < candidates.Count; i++)
             {
-                var cell = laid[i];
+                var cell = candidates[i];
                 if (cell == null || cell.pieceKind != RailPieceKind.Switch) continue;
 
                 RailNetwork.QueryAdjacent(cell, _neighbourScratch);
@@ -471,14 +552,14 @@ namespace VoxelEngine.Building
             return promoted;
         }
 
-        private static int CountRailNeighbours(RailTrack cell)
-        {
-            RailNetwork.QueryAdjacent(cell, _neighbourScratch);
-            int n = 0;
-            for (int i = 0; i < _neighbourScratch.Count; i++)
-                if (_neighbourScratch[i] != null && _neighbourScratch[i] != cell) n++;
-            return n;
-        }
+        /// <summary>
+        /// How many distinct directions track leaves this cell in. Neighbours within 22.5
+        /// degrees of each other are one arm, so a fore/aft pair plus a branch reads as three
+        /// while a double-track line - fore, aft and a parallel neighbour dead abeam - also
+        /// reads as three only if that parallel neighbour is genuinely there; the candidate
+        /// rules keep such cells out of promotion entirely.
+        /// </summary>
+        private static int CountArmDirections(RailTrack cell) => RailTrack.ArmDirections(cell);
 
         private static readonly List<RailTrack> _neighbourScratch = new(8);
 
@@ -643,6 +724,33 @@ namespace VoxelEngine.Building
         public static int LastBallastPlaced { get; private set; }
 
         /// <summary>
+        /// Cells of OLD track that received their missing stone bed during the last
+        /// commit, for the tool's readout and its stone charge.
+        /// </summary>
+        public static int LastRebedded { get; private set; }
+
+        /// <summary>
+        /// Whether a ballast bed already sits under a planned cell. Probed at the bed's own
+        /// origin rather than the railhead, because that is where the slab lives; anything
+        /// carrying the ballast item within the slab's own height counts as a bed.
+        /// </summary>
+        private static bool HasBallastBedUnder(RailPlanCell cell)
+        {
+            Vector3 bedPos = cell.position - (cell.rotation * Vector3.up) * BallastDropMetres;
+            int count = Physics.OverlapSphereNonAlloc(bedPos, 0.45f, _overlapScratch,
+                ~0, QueryTriggerInteraction.Ignore);
+
+            for (int i = 0; i < count; i++)
+            {
+                var c = _overlapScratch[i];
+                if (c == null) continue;
+                var pb = c.GetComponentInParent<PlacedBlock>();
+                if (pb != null && pb.Item == BallastBlock) return true;
+            }
+            return false;
+        }
+
+        /// <summary>
         /// Commits a plan to the world, returning how many cells were actually placed.
         ///
         /// Skips any cell that already has track, so overlapping two runs extends a network
@@ -690,11 +798,19 @@ namespace VoxelEngine.Building
 
             int placed = 0;
             int ballastPlaced = 0;
+            int rebedded = 0;
             var laid = new List<RailTrack>(plan.cells.Count);
+            var crossings = new List<RailTrack>(4);
 
-            for (int i = 0; i < plan.cells.Count; i++)
+            // Crossings first: where this run passes within reach of an existing cell, the
+            // existing cell IS the junction node. A station is spliced in at its exact
+            // position so both lines meet it at proper cell spacing instead of overlapping
+            // it or stopping short of it - see SpliceCrossings.
+            var work = SpliceCrossings(plan);
+
+            for (int i = 0; i < work.Count; i++)
             {
-                var cell = plan.cells[i];
+                var cell = work[i];
 
                 // Never stack track, but the test has to be much tighter than it was.
                 //
@@ -706,11 +822,32 @@ namespace VoxelEngine.Building
                 //
                 // A quarter of the cell spacing is the honest threshold: tight enough that
                 // a genuinely duplicated cell is caught, loose enough that legitimately
-                // adjacent draped cells are not.
+                // adjacent draped cells are not. A cell caught here is not a failure: at a
+                // crossing it is the shared junction node, recorded so the promotion pass
+                // can widen its link budget.
                 float dedupeRadius = Mathf.Max(0.05f, cellSize * 0.25f);
-                if (RailNetwork.FindNearest(cell.position, dedupeRadius) != null)
+                var duplicate = RailNetwork.FindNearest(cell.position, dedupeRadius);
+                if (duplicate != null)
                 {
                     skipped++;
+                    if (!crossings.Contains(duplicate)) crossings.Add(duplicate);
+
+                    // RE-BED (12.1.0). Track laid by builds where the ballast reference was
+                    // null sits on bare ground. Extending or crossing such a line is exactly
+                    // when a player looks at the bed-less stretch, so the commit drops a bed
+                    // under any touched cell that lacks one - paid for like any other bed.
+                    if (BallastBlock != null && BallastBlock.placedPrefab != null &&
+                        !HasBallastBedUnder(cell))
+                    {
+                        var bedPos = cell.position - (cell.rotation * Vector3.up) * BallastDropMetres;
+                        var bed = Object.Instantiate(BallastBlock.placedPrefab, bedPos, cell.rotation);
+                        bed.name = BallastBlock.displayName;
+                        var bedBlock = bed.GetComponent<PlacedBlock>();
+                        if (bedBlock == null) bedBlock = bed.AddComponent<PlacedBlock>();
+                        bedBlock.Item = BallastBlock;
+                        bedBlock.Hp = Mathf.Max(1, BallastBlock.blockHealth);
+                        rebedded++;
+                    }
                     continue;
                 }
 
@@ -748,10 +885,27 @@ namespace VoxelEngine.Building
             }
 
             LastBallastPlaced = ballastPlaced;
+            LastRebedded = rebedded;
 
             if (placed == 0 && skipped > 0)
                 LastCommitFailure = $"All {skipped} cells were rejected as duplicates of " +
                                     "existing track within " + (cellSize * 0.25f).ToString("0.00") + " m.";
+
+            // An overlap that landed beside an existing cell without tripping the dedupe
+            // radius is still a crossing: anything this run came within reach of shares the
+            // junction with it.
+            for (int i = 0; i < laid.Count; i++)
+            {
+                var touched = RailNetwork.FindNearest(laid[i].transform.position, MergeTouchMetres);
+                if (touched == null || crossings.Contains(touched)) continue;
+                if (laid.Contains(touched)) continue;
+                crossings.Add(touched);
+            }
+
+            // Promote BEFORE linking. A cell that is about to become a junction must have its
+            // four-link budget in place when it fills its links, or the crossing arms lose
+            // the slots to whichever two neighbours happened to be sorted first.
+            LastJunctionsFormed = PromoteCrossingsToJunctions(laid, crossings);
 
             // Link the whole run AFTER every cell exists. Linking as we go would let each
             // cell fill its limited link budget with the one behind it before the one ahead
@@ -759,9 +913,75 @@ namespace VoxelEngine.Building
             for (int i = 0; i < laid.Count; i++)
                 if (laid[i] != null) laid[i].RebuildLinks(propagate: true);
 
-            LastJunctionsFormed = PromoteCrossingsToJunctions(laid);
-
             return placed;
+        }
+
+        /// <summary>
+        /// How close a laid cell may pass to existing track and still count as having
+        /// touched it, sharing a junction rather than running beside it.
+        /// </summary>
+        private const float MergeTouchMetres = 0.75f;
+
+        /// <summary>
+        /// Splices a station into the run at every existing cell the route crosses.
+        ///
+        /// WHY SPLICE RATHER THAN OVERLAP OR STOP SHORT
+        /// A crossing used to produce either two track cells stacked inside each other or a
+        /// one-cell hole in the new line, and in both cases the existing cell kept its
+        /// two-link straight budget so the arms never joined - the crossing the player could
+        /// see was not a crossing the graph could use.
+        ///
+        /// Inserting a station at the existing cell's exact position makes that cell the
+        /// shared node: the splice is deduped away at placement, the arms on both sides sit a
+        /// proper cell away from it, and once the promotion pass widens its budget every arm
+        /// links. The run stays continuous THROUGH the junction instead of across it.
+        /// </summary>
+        private static List<RailPlanCell> SpliceCrossings(RailPlan plan)
+        {
+            var insertAfter = new Dictionary<int, RailTrack>(4);
+
+            for (int i = 0; i + 1 < plan.cells.Count; i++)
+            {
+                if (plan.cells[i + 1].lane != plan.cells[i].lane) continue;
+
+                Vector3 a = plan.cells[i].position;
+                Vector3 b = plan.cells[i + 1].position;
+                Vector3 dir = b - a;
+                float lenSq = dir.sqrMagnitude;
+                if (lenSq < 1e-6f) continue;
+
+                var existing = RailNetwork.FindNearest((a + b) * 0.5f, MergeTouchMetres);
+                if (existing == null || insertAfter.ContainsValue(existing)) continue;
+
+                Vector3 rel = existing.transform.position - a;
+                float t = Vector3.Dot(rel, dir) / lenSq;
+                if (t < 0.15f || t > 0.85f) continue;
+
+                // A line passing beside the cell rather than through it is a parallel run,
+                // not a crossing; only a near-centre pass shares a node.
+                if ((rel - dir * t).magnitude > 0.45f) continue;
+
+                insertAfter[i] = existing;
+            }
+
+            if (insertAfter.Count == 0) return plan.cells;
+
+            var work = new List<RailPlanCell>(plan.cells.Count + insertAfter.Count);
+            for (int i = 0; i < plan.cells.Count; i++)
+            {
+                work.Add(plan.cells[i]);
+                if (!insertAfter.TryGetValue(i, out var existing)) continue;
+
+                work.Add(new RailPlanCell
+                {
+                    position = existing.transform.position,
+                    rotation = Quaternion.Slerp(plan.cells[i].rotation, plan.cells[i + 1].rotation, 0.5f),
+                    lane = plan.cells[i].lane,
+                    valid = true,
+                    problem = "",
+                });
+            }
+            return work;
         }
     }
 }

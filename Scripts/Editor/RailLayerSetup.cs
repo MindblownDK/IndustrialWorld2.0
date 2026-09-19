@@ -173,7 +173,13 @@ namespace IndustrialWorld.EditorTools
             const string folder = Root + "/StationPrefabs";
             string path = folder + "/RailBallast.prefab";
             var existing = AssetDatabase.LoadAssetAtPath<GameObject>(path);
-            if (existing != null) return existing;
+            if (existing != null)
+            {
+                // The bed carries the formation: when step 85 triples the deck, a bed left at
+                // the old width would peek out as a ribbon under wide sleepers.
+                RegaugeBallast(path, existing);
+                return existing;
+            }
 
             EnsureFolder(folder);
             var root = new GameObject("RailBallast");
@@ -192,7 +198,7 @@ namespace IndustrialWorld.EditorTools
             baseSlab.name = "Bed";
             baseSlab.transform.SetParent(root.transform, false);
             // Trapezoid shoulder: wider than the sleepers it carries, as real ballast is.
-            baseSlab.transform.localScale = new Vector3(2.1f, 0.26f, 1.0f);
+            baseSlab.transform.localScale = new Vector3(BedWidth, 0.26f, 1.0f);
             baseSlab.transform.localPosition = new Vector3(0f, 0.13f, 0f);
 
             var darkMat = MakeMat("Mat_RailBallast", new Color(0.30f, 0.29f, 0.27f));
@@ -214,7 +220,7 @@ namespace IndustrialWorld.EditorTools
 
                 // Spread across the bed, densest toward the shoulders where real ballast
                 // piles up against the sleeper ends.
-                float x = (float)(rng.NextDouble() * 2.0 - 1.0) * 1.0f;
+                float x = (float)(rng.NextDouble() * 2.0 - 1.0) * (BedWidth * 0.5f - 0.1f);
                 float z = (float)(rng.NextDouble() * 2.0 - 1.0) * 0.48f;
                 float size = 0.13f + (float)rng.NextDouble() * 0.15f;
                 float lift = 0.24f + (float)rng.NextDouble() * 0.05f;
@@ -243,6 +249,44 @@ namespace IndustrialWorld.EditorTools
             UnityEngine.Object.DestroyImmediate(root);
             Debug.Log("[Setup 93] Created " + path + ".");
             return prefab;
+        }
+
+        /// <summary>Ballast bed width in metres: wider than the 4.5 m sleepers it carries, as
+        /// real ballast shoulders are. Tripled with the formation in 11.41.0.</summary>
+        private const float BedWidth = 6.3f;
+
+        /// <summary>
+        /// Widens an existing bed to the current formation. Idempotent: the bed width IS the
+        /// marker, so a prefab already at width is untouched, and only the bed slab and the
+        /// cobbles' lateral spread move - tones, jitter pattern and collider setup stay.
+        /// </summary>
+        private static void RegaugeBallast(string path, GameObject asset)
+        {
+            var contents = PrefabUtility.LoadPrefabContents(path);
+            var bed = contents.transform.Find("Bed");
+            if (bed == null || Mathf.Abs(bed.localScale.x - BedWidth) < 0.01f)
+            {
+                PrefabUtility.UnloadPrefabContents(contents);
+                return;
+            }
+
+            float factor = BedWidth / Mathf.Max(0.1f, bed.localScale.x);
+            var bsc = bed.localScale;
+            bsc.x = BedWidth;
+            bed.localScale = bsc;
+
+            for (int i = 0; i < contents.transform.childCount; i++)
+            {
+                var child = contents.transform.GetChild(i);
+                if (!child.name.StartsWith("Cobble", System.StringComparison.Ordinal)) continue;
+                var pos = child.localPosition;
+                pos.x *= factor;
+                child.localPosition = pos;
+            }
+
+            PrefabUtility.SaveAsPrefabAsset(contents, path);
+            PrefabUtility.UnloadPrefabContents(contents);
+            Debug.Log("[Setup 93] Widened the rail ballast bed to " + BedWidth.ToString("0.0") + " m.");
         }
 
         private static Material MakeMat(string name, Color c)

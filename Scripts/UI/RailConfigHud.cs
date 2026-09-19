@@ -26,7 +26,6 @@ namespace VoxelEngine.UI
         private static bool _open, _blocking;
 
         private static RailStation _station;
-        private static RailTrain _train;
         private static RailTrack _switchTrack;
 
         private static readonly List<string> _nameScratch = new();
@@ -66,21 +65,14 @@ namespace VoxelEngine.UI
         public static void OpenStation(RailStation station)
         {
             if (station == null) return;
-            _station = station; _train = null; _switchTrack = null;
-            Show();
-        }
-
-        public static void OpenTrain(RailTrain train)
-        {
-            if (train == null) return;
-            _train = train; _station = null; _switchTrack = null;
+            _station = station; _switchTrack = null;
             Show();
         }
 
         public static void OpenSwitch(RailTrack track)
         {
             if (track == null) return;
-            _switchTrack = track; _station = null; _train = null;
+            _switchTrack = track; _station = null;
             Show();
         }
 
@@ -102,7 +94,7 @@ namespace VoxelEngine.UI
             UIState.TextInputActive = false;
             if (_scrim != null) _scrim.style.display = DisplayStyle.None;
             if (_blocking) { UIState.PopBlock(); _blocking = false; }
-            _station = null; _train = null; _switchTrack = null;
+            _station = null; _switchTrack = null;
         }
 
         public static void Tick()
@@ -117,9 +109,11 @@ namespace VoxelEngine.UI
                 return;
             }
 
-            // A live panel: a running train's state changes on its own, and a station's
-            // hold is filled by machines the player is not looking at.
-            if (_train != null || _station != null) Rebuild();
+            // A live panel: a station's hold is filled by machines the player is not
+            // looking at. (The v1 train console lived here until its retirement in
+            // 12.0.0-dev; a train is a grid now and configures itself through the grid
+            // terminal like every other buildable.)
+            if (_station != null) Rebuild();
         }
 
         // ── Build ────────────────────────────────────────────────────────────────
@@ -134,7 +128,6 @@ namespace VoxelEngine.UI
             _body.Clear();
 
             if (_station != null) BuildStation();
-            else if (_train != null) BuildTrain();
             else if (_switchTrack != null) BuildSwitch();
             else { Close(); return; }
 
@@ -274,166 +267,6 @@ namespace VoxelEngine.UI
             openHold.style.height = 28;
             openHold.style.fontSize = 10;
             _body.Add(openHold);
-        }
-
-        // ── Train ────────────────────────────────────────────────────────────────
-        private static void BuildTrain()
-        {
-            Color stateColor = _train.State switch
-            {
-                TrainState.Running => new Color(0.35f, 0.88f, 0.52f),
-                TrainState.Docked => new Color(0.42f, 0.74f, 0.96f),
-                TrainState.Blocked => T.AccentAmber,
-                _ => T.TextMuted,
-            };
-
-            Title("TRAIN", _train.State.ToString().ToUpperInvariant(), stateColor);
-
-            NameField("Train name", _train.TrainName == "Unnamed Train" ? "" : _train.TrainName,
-                v => _train.TrainName = v);
-
-            Section("STATUS");
-            if (_train.State == TrainState.Blocked && !string.IsNullOrEmpty(_train.BlockedReason))
-            {
-                Info(_train.BlockedReason, T.AccentAmber);
-            }
-            else if (_train.State == TrainState.Running)
-            {
-                Info($"Running to {_train.CurrentTargetName}  ·  " +
-                     $"{_train.LegProgress01 * 100f:0}% of {_train.LegLength:0} m");
-            }
-            else if (_train.State == TrainState.Docked)
-            {
-                Info($"Docked at {_train.CurrentTargetName}.");
-            }
-            else
-            {
-                Info("Idle. Add stops and start the schedule.", T.TextMuted);
-            }
-
-            int used = 0;
-            for (int i = 0; i < _train.Hold.Size; i++)
-                if (!_train.Hold.GetSlot(i).IsEmpty) used++;
-            Info($"Hold {used}/{_train.Hold.Size} slots  ·  top speed {_train.maxSpeed:0} m/s");
-
-            // ── Schedule ──
-            Section("SCHEDULE");
-            if (_train.schedule.Count == 0)
-            {
-                Info("No stops. Add one below.", T.TextMuted);
-            }
-            for (int i = 0; i < _train.schedule.Count; i++)
-            {
-                int index = i;
-                var stop = _train.schedule[i];
-
-                var row = new VisualElement();
-                row.style.flexDirection = FlexDirection.Row;
-                row.style.alignItems = Align.Center;
-                row.style.marginBottom = 3;
-                row.style.paddingLeft = 6; row.style.paddingRight = 4;
-                row.style.paddingTop = 3; row.style.paddingBottom = 3;
-                row.style.backgroundColor = new StyleColor(new Color(0.075f, 0.09f, 0.12f, 0.95f));
-                T.Radius(row, 3f);
-
-                bool current = _train.Running && index == CurrentIndex();
-                T.Border(row, 1f, current
-                    ? new Color(0.35f, 0.88f, 0.52f, 0.85f)
-                    : new Color(0.16f, 0.22f, 0.28f, 0.9f));
-
-                var station = RailStation.Find(stop.stationName);
-                var label = new Label($"{index + 1}.  {stop.stationName}" +
-                                      (station != null ? $"   [{station.RoleLabel}]" : "   [MISSING]"));
-                label.style.flexGrow = 1;
-                label.style.fontSize = 10;
-                label.style.color = new StyleColor(station != null ? Color.white : T.AccentAmber);
-                row.Add(label);
-
-                var remove = new Button(() => { _train.schedule.RemoveAt(index); Rebuild(); }) { text = "X" };
-                remove.style.width = 24;
-                remove.style.height = 20;
-                remove.style.fontSize = 9;
-                row.Add(remove);
-
-                _body.Add(row);
-            }
-
-            // Add-stop picker, built from the names that actually exist on the network.
-            RailStation.CollectNames(_nameScratch);
-            if (_nameScratch.Count > 0)
-            {
-                Section("ADD STOP");
-                var wrap = new VisualElement();
-                wrap.style.flexDirection = FlexDirection.Row;
-                wrap.style.flexWrap = Wrap.Wrap;
-                foreach (var name in _nameScratch)
-                {
-                    string captured = name;
-                    var b = new Button(() =>
-                    {
-                        _train.schedule.Add(new ScheduleStop(captured));
-                        Rebuild();
-                    })
-                    { text = "+ " + captured };
-                    b.style.height = 22;
-                    b.style.fontSize = 9;
-                    b.style.marginRight = 4;
-                    b.style.marginBottom = 4;
-                    wrap.Add(b);
-                }
-                _body.Add(wrap);
-            }
-            else
-            {
-                Info("No named stations on the network yet. Build a station and name it first.",
-                    T.TextMuted);
-            }
-
-            // ── Controls ──
-            Section("CONTROL");
-            var controls = new VisualElement();
-            controls.style.flexDirection = FlexDirection.Row;
-
-            var run = new Button(() =>
-            {
-                if (_train.Running) _train.StopSchedule();
-                else _train.StartSchedule();
-                Rebuild();
-            })
-            { text = _train.Running ? "STOP SCHEDULE" : "START SCHEDULE" };
-            run.style.flexGrow = 1;
-            run.style.height = 28;
-            run.style.fontSize = 10;
-            run.style.unityFontStyleAndWeight = FontStyle.Bold;
-            controls.Add(run);
-
-            var loop = new Button(() => { _train.loopSchedule = !_train.loopSchedule; Rebuild(); })
-            { text = _train.loopSchedule ? "LOOP: ON" : "LOOP: OFF" };
-            loop.style.width = 110;
-            loop.style.height = 28;
-            loop.style.fontSize = 9;
-            loop.style.marginLeft = 6;
-            controls.Add(loop);
-
-            _body.Add(controls);
-
-            var openHold = new Button(() =>
-            {
-                Close();
-                GameUIController.Instance?.OpenContainer(_train.Hold);
-            })
-            { text = "OPEN TRAIN HOLD" };
-            openHold.style.marginTop = 6;
-            openHold.style.height = 26;
-            openHold.style.fontSize = 10;
-            _body.Add(openHold);
-        }
-
-        private static int CurrentIndex()
-        {
-            for (int i = 0; i < _train.schedule.Count; i++)
-                if (_train.schedule[i].stationName == _train.CurrentTargetName) return i;
-            return -1;
         }
 
         // ── Switch ───────────────────────────────────────────────────────────────

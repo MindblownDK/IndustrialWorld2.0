@@ -886,11 +886,14 @@ namespace VoxelEngine.Player
                     return;
                 }
 
-                var railTrain = hit.collider.GetComponentInParent<VoxelEngine.Building.RailTrain>();
-                if (railTrain != null) { VoxelEngine.UI.RailConfigHud.OpenTrain(railTrain); return; }
-
                 var railStation = hit.collider.GetComponentInParent<VoxelEngine.Building.RailStation>();
                 if (railStation != null) { VoxelEngine.UI.RailConfigHud.OpenStation(railStation); return; }
+
+                var scheduleBlock = hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridTrainScheduleBlock>();
+                if (scheduleBlock != null) { VoxelEngine.UI.TrainScheduleHud.Open(scheduleBlock); return; }
+
+                var display = hit.collider.GetComponentInParent<VoxelEngine.Building.RailDisplayScreen>();
+                if (display != null) { VoxelEngine.UI.DisplayConfigHud.Open(display); return; }
 
                 // Coupler: one press attaches or releases, which is what a coupler lever does.
                 var coupler = hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridRailCoupler>();
@@ -2038,6 +2041,17 @@ namespace VoxelEngine.Player
         private readonly System.Collections.Generic.List<Vector3> _railPlanScratch = new(17);
         private int _railGauge = 1;
         private RailLayerTool _railTool;
+        /// <summary>Half the formation width of the track prefab, measured off its sleeper so
+        /// the ghost previews exactly as wide a deck as the commit lays.</summary>
+        private float _railHalfWidth = 0.62f;
+
+        /// <summary>The preview is two things - the ground ghost and the cost card - and they
+        /// always appear and leave together, or one of them lingers into the next tool.</summary>
+        private static void HideRailPreview()
+        {
+            VoxelEngine.Building.RailGhost.Hide();
+            VoxelEngine.UI.RailCostHud.Hide();
+        }
 
         /// <summary>
         /// Drag-to-lay track. Click once to set the start, again to commit.
@@ -2055,7 +2069,7 @@ namespace VoxelEngine.Player
                 // Swapping away mid-plan drops it, or a stale start point survives into
                 // whatever the player picks up next.
                 _railPlanning = false;
-                VoxelEngine.Building.RailGhost.Hide();
+                HideRailPreview();
                 return false;
             }
 
@@ -2099,14 +2113,14 @@ namespace VoxelEngine.Player
             {
                 _railPlanning = false;
                 _railWaypoints.Clear();
-                VoxelEngine.Building.RailGhost.Hide();
+                HideRailPreview();
                 VoxelEngine.UI.BuildFeedbackHud.Show("Rail run cancelled", "", null, T_AccentAmber);
                 return true;
             }
 
             if (!hasHit)
             {
-                VoxelEngine.Building.RailGhost.Hide();
+                HideRailPreview();
                 return true;
             }
 
@@ -2114,12 +2128,14 @@ namespace VoxelEngine.Player
             // SAME plan the commit will use, so what is shown is what gets laid.
             if (_railPlanning)
             {
-                PlanRailRun(tool, hit.point);
-                VoxelEngine.Building.RailGhost.Show(_railPlan);
+                float cell = PlanRailRun(tool, hit.point);
+                VoxelEngine.Building.RailGhost.Show(_railPlan, _railHalfWidth);
+                // The live bill: what this run would cost, climbing as the drag grows.
+                VoxelEngine.UI.RailCostHud.Show(_railPlan, tool, _railGauge, cell);
             }
             else
             {
-                VoxelEngine.Building.RailGhost.Hide();
+                HideRailPreview();
             }
 
             // Left-click starts a run. Once started it does nothing, so a mis-click cannot
@@ -2143,7 +2159,7 @@ namespace VoxelEngine.Player
                 CommitRailRun(tool, hit.point);
                 _railPlanning = false;
                 _railWaypoints.Clear();
-                VoxelEngine.Building.RailGhost.Hide();
+                HideRailPreview();
                 return true;
             }
 
@@ -2173,6 +2189,18 @@ namespace VoxelEngine.Player
             return null;
         }
 
+        /// <summary>Runtime counterpart of FindBlockItemById for plain items.</summary>
+        private static ItemDefinition FindItemDefinitionById(string itemId)
+        {
+            foreach (var item in Resources.LoadAll<ItemDefinition>(""))
+                if (item != null && item.itemId == itemId) return item;
+
+            foreach (var item in Resources.FindObjectsOfTypeAll<ItemDefinition>())
+                if (item != null && item.itemId == itemId) return item;
+
+            return null;
+        }
+
         private float PlanRailRun(RailLayerTool tool, Vector3 end)
         {
             float cell = 1f;
@@ -2185,6 +2213,14 @@ namespace VoxelEngine.Player
             {
                 cell = template.cellSize;
                 gradient = template.maxGradientMetres;
+
+                // Measure the deck off the prefab rather than trusting a constant: the
+                // formation width is authored data (setup step 85), and a preview narrower
+                // than the laid track teaches the player to aim wrong.
+                var sleeper = template.transform.Find("Sleeper0");
+                _railHalfWidth = sleeper != null
+                    ? Mathf.Max(0.1f, sleeper.localScale.x * 0.5f)
+                    : 0.62f;
             }
 
             Vector3 up = VoxelEngine.Cosmos.GravityProvider.GetUp(_railStart);
@@ -2233,6 +2269,31 @@ namespace VoxelEngine.Player
                     "No Rail Track block found.",
                     null, T_AccentAmber);
                 return;
+            }
+
+            // THE BUG (12.1.0): a Rail Layer authored before the ballast fields existed kept
+            // them null forever unless setup step 93 was re-run, and the commit then laid a
+            // bare ladder with no stone bed - silently. The track block already healed itself
+            // by id at runtime; the ballast now does the same, and if it STILL cannot resolve
+            // the player is told, because a silent bed is exactly how this bug hid.
+            if (tool.ballastBlock == null)
+            {
+                tool.ballastBlock = FindBlockItemById("railballast");
+                if (tool.ballastBlock != null)
+                    Debug.Log("[RailLayer] Recovered a missing ballast block reference at runtime.");
+            }
+            if (tool.ballastMaterial == null)
+            {
+                tool.ballastMaterial = FindItemDefinitionById("stone");
+                if (tool.ballastMaterial != null)
+                    Debug.Log("[RailLayer] Recovered a missing ballast material reference at runtime.");
+            }
+            if (tool.ballastBlock == null || tool.ballastBlock.placedPrefab == null)
+            {
+                VoxelEngine.UI.BuildFeedbackHud.Show("Rail layer",
+                    "No Rail Ballast bed found - this run will lay without its stone bed. " +
+                    "Re-run setup step 93 to author it.",
+                    null, T_AccentAmber);
             }
 
             float cell = PlanRailRun(tool, end);
@@ -2312,20 +2373,25 @@ namespace VoxelEngine.Player
             }
             if (tool.ballastMaterial != null && tool.ballastPerCell > 0)
             {
-                inventory.container.Remove(tool.ballastMaterial, placed * tool.ballastPerCell);
+                // Re-bedded cells (old track that never got its stone bed) cost stone too:
+                // the bed is laid under them by the same commit.
+                int beds = placed + VoxelEngine.Building.RailCorridor.LastRebedded;
+                inventory.container.Remove(tool.ballastMaterial, beds * tool.ballastPerCell);
             }
             inventory.container.RaiseChanged();
 
             ConsumeDurability(inventory.ActiveStack);
 
             string skipNote = skipped > 0 ? $"  ·  {skipped} already laid" : "";
+            int rebedded = VoxelEngine.Building.RailCorridor.LastRebedded;
+            string rebedNote = rebedded > 0 ? $"  ·  {rebedded} old cell(s) re-bedded" : "";
             int junctions = VoxelEngine.Building.RailCorridor.LastJunctionsFormed;
             string junctionNote = junctions > 0 ? $"  ·  {junctions} junction(s) formed" : "";
 
             VoxelEngine.UI.BuildFeedbackHud.Show("Rail laid",
                 $"{placed} cells  ·  {_railGauge} track(s)  ·  " +
                 $"{VoxelEngine.Building.RailCorridor.LastBallastPlaced} ballast" +
-                $"{junctionNote}{skipNote}",
+                $"{junctionNote}{skipNote}{rebedNote}",
                 null, T_AccentCyan);
         }
 

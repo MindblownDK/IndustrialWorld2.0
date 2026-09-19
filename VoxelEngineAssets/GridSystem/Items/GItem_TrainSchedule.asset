@@ -1,0 +1,34 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e230da79876505a41b25678102c74c13, type: 3}
+  m_Name: GItem_TrainSchedule
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.GridSystem.GridBlockItem
+  itemId: trainschedule
+  displayName: Train Schedule
+  description: 'A conductor''s desk for a train. Build it onto a grid with a Rail
+    Truck and open it with E to write the service: an ordered list of stations, each
+    with the condition that releases the train again - dwell time, hold full, hold
+    empty, or hold with space left. The train routes itself between stops.'
+  icon: {fileID: 0}
+  iconTint: {r: 0.72, g: 0.51, b: 0.22, a: 1}
+  maxStack: 900
+  massPerUnit: 1
+  category: Grid Blocks
+  requiresContainment: 0
+  cannotBeCarried: 0
+  isPressurizedCanister: 0
+  viewmodelPrefab: {fileID: 0}
+  gridSize: 1
+  blockPrefab: {fileID: 6155353375316332509, guid: fa6370af9fd6b8c469ebce6dce887a28, type: 3}
+  blockMass: 40
+  blockHP: 150
+  supportsShapeVariants: 0

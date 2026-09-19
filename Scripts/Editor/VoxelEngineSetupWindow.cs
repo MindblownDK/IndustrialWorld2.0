@@ -877,6 +877,8 @@ namespace VoxelEngine.EditorTools
                 () => IndustrialWorld.EditorTools.RailLayerSetup.RunStep93(), 62);
             AddWizardButton(scroll, "94. Build the Rail Signal\n(Block occupancy readout \u2014 needs 85 \u2014 Non-Destructive)",
                 () => IndustrialWorld.EditorTools.RailSignalSetup.RunStep94(), 62);
+            AddWizardButton(scroll, "95. Build Steampunk Displays & Schedules\n(Split-flap, nixie, analog + train schedule block \u2014 Non-Destructive)",
+                () => IndustrialWorld.EditorTools.RailDisplaySetup.RunStep95(), 62);
 
             AddSpacer(scroll, 20);
         }

@@ -56,6 +56,7 @@ namespace VoxelEngine.FX
 
         // ── World ONE-SHOTS ────────────────────────────────────────
         BridgeHorn,        // drawbridge warning horn — low two-tone, the register ships and rail crossings speak in
+        SplitFlapFlip,     // split-flap display card turning over — the clack-slap of a departure board updating
 
         // ── Ambience LOOPS ─────────────────────────────────────────
         AmbDayBirds,
@@ -166,6 +167,7 @@ namespace VoxelEngine.FX
 
                 // World
                 case Sfx.BridgeHorn:       return OneShot("BridgeHorn",  1.15f, BridgeHorn);
+                case Sfx.SplitFlapFlip:    return OneShot("FlapFlip",    0.14f, d => SplitFlapFlip(d, variant));
 
                 // Ambience
                 case Sfx.AmbDayBirds:      return Loop("Birds",     6f, AmbDayBirds);
@@ -181,6 +183,32 @@ namespace VoxelEngine.FX
         //  CLIP BUILDERS
         // ════════════════════════════════════════════════════════════
         private delegate void Fill(float[] data);
+
+        /// <summary>
+        /// A split-flap card turning over: the release click of the escapement, the slap of
+        /// the card landing in the frame, and a small brass rattle behind it. Three bursts
+        /// rather than one noise burst - a single burst reads as a click, and the iconic
+        /// part of the sound is the slap AFTER the click.
+        /// </summary>
+        private static void SplitFlapFlip(float[] d, int variant)
+        {
+            float pitch = 1f + (variant % 3) * 0.06f;
+            Burst(d, 0.000f, 0.014f, 2400f * pitch, 0.45f);
+            Burst(d, 0.042f, 0.030f,  680f * pitch, 0.95f);
+            Burst(d, 0.080f, 0.018f, 1500f * pitch, 0.30f);
+        }
+
+        private static void Burst(float[] d, float at, float dur, float freq, float amp)
+        {
+            int start = (int)(at * SAMPLE_RATE);
+            int len = (int)(dur * SAMPLE_RATE);
+            for (int i = 0; i < len && start + i < d.Length; i++)
+            {
+                float t = i / (float)SAMPLE_RATE;
+                float env = Mathf.Exp(-t * (30f / Mathf.Max(0.001f, dur)));
+                d[start + i] += amp * env * (Random.value * 2f - 1f + Mathf.Sin(2f * Mathf.PI * freq * t)) * 0.5f;
+            }
+        }
 
         private static AudioClip Loop(string name, float dur, Fill fill)
         {

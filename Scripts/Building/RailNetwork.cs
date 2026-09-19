@@ -30,11 +30,25 @@ namespace VoxelEngine.Building
         private const float INV_CELL = 1f / CELL_SIZE;
 
         /// <summary>
-        /// How far apart two cell origins may be and still count as adjacent. A little over
-        /// one cell so a draped or slightly offset placement still joins, well under two so
-        /// a gap in the line stays a gap.
+        /// How far apart two cell origins may be and still count as adjacent.
+        ///
+        /// Tightened from 1.45 m (11.41.0): cells are stepped at exactly 1 m of arc and the
+        /// gradient cap puts a legitimate neighbour at most sqrt(1 + 0.34^2) = 1.06 m away,
+        /// so 1.10 m admits every real neighbour while excluding the 1.41 m diagonal of the
+        /// placement lattice - which at 1.45 m let parallel lines and crossing diagonals
+        /// reach into a cell's link budget and quietly reroute trains.
         /// </summary>
-        private const float ADJACENCY_RANGE = 1.45f;
+        private const float ADJACENCY_RANGE = 1.10f;
+
+        /// <summary>
+        /// How much a purely LATERAL neighbour is penalised in the link-budget ordering.
+        ///
+        /// Two parallel tracks one metre apart are neighbours by distance alone, and a
+        /// straight cell filling its two link slots on a distance tie would join the lines
+        /// sideways. A small penalty keeps fore/aft ahead of lateral without ever excluding
+        /// a lateral arm outright - a junction arm still links, it just loses a pure tie.
+        /// </summary>
+        private const float LATERAL_PENALTY = 0.05f;
 
         private static readonly Dictionary<long, List<RailTrack>> _cells = new(256);
         private static readonly HashSet<RailTrack> _registered = new();
@@ -117,9 +131,19 @@ namespace VoxelEngine.Building
 
             // Nearest first, so a cell fills its limited link budget with the cells that are
             // genuinely its neighbours rather than whichever bucket happened to be scanned first.
-            results.Sort((a, b) =>
-                (a.transform.position - centre).sqrMagnitude
-                .CompareTo((b.transform.position - centre).sqrMagnitude));
+            // LATERAL neighbours carry a small penalty (see LATERAL_PENALTY): a pure distance tie
+            // between fore/aft and a parallel line one metre to the side must not be a coin flip.
+            Vector3 forward = origin.transform.forward;
+            results.Sort((a, b) => LinkCost(a, centre, forward).CompareTo(LinkCost(b, centre, forward)));
+        }
+
+        private static float LinkCost(RailTrack candidate, Vector3 centre, Vector3 forward)
+        {
+            Vector3 delta = candidate.transform.position - centre;
+            float distance = delta.magnitude;
+            if (distance < 1e-4f) return 0f;
+            float axial = Mathf.Abs(Vector3.Dot(delta / distance, forward));
+            return distance * (1f + LATERAL_PENALTY * (1f - axial));
         }
 
         /// <summary>The track cell nearest a world position, within <paramref name="maxDistance"/>.</summary>

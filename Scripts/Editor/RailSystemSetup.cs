@@ -19,8 +19,11 @@ namespace IndustrialWorld.EditorTools
     ///   Rail Buffer   - a line end. Stops a train at the railhead.
     ///   Rail Station  - a named stop with a cargo hold and a load/unload role.
     ///
-    /// The v1 Locomotive is no longer authored here - Train System v2 replaced it with
-    /// the Rail Truck (step 92), which turns any player-built grid into a train.
+    /// The v1 Locomotive and its `RailTrain` entity are RETIRED as of 12.0.0-dev - the
+    /// MAJOR bump that the retirement waited for. Train System v2 replaced it with the
+    /// Rail Truck (step 92), which turns any player-built grid into a train; this step
+    /// now also scrubs the dead script off old locomotive prefabs so no missing-script
+    /// component survives in the project.
     ///
     /// Non-destructive: missing assets are created, existing ones only have
     /// unresolvable links repaired (null prefab, null output item, missing registry
@@ -33,6 +36,14 @@ namespace IndustrialWorld.EditorTools
         private const string BlocksFolder = Root + "/Blocks";
         private const string RecipesFolder = Root + "/Recipes";
         private const string PrefabsFolder = Root + "/StationPrefabs";
+
+        // ══ THE 11.41.0 FORMATION: three times the width the rail launched with ══
+        // Sleeper 4.5 m, gauge 3.15 m, rail heads 0.33 m. The whole permanent way scaled
+        // together so the ratio between sleeper length and gauge stays the real one (0.70),
+        // and step 92 re-gauges the bogie from the same number so wheels sit on rail heads.
+        private const float FormationGauge = 3.15f;
+        private const float SleeperLength = 4.5f;
+        private const float RailHeadWidth = 0.33f;
 
         private static readonly Color RailTint = new(0.55f, 0.57f, 0.62f);
         private static readonly Color StationTint = new(0.78f, 0.68f, 0.40f);
@@ -101,9 +112,9 @@ namespace IndustrialWorld.EditorTools
                     "  RAIL SWITCH   Steel x6 + Wire x2 - junction, right-click to set\n" +
                     "  RAIL BUFFER   Steel x3        - line end\n" +
                     "  RAIL STATION  Steel x20 + Wire x8 - named stop with a cargo hold\n" +
-                    "\nThe v1 Locomotive is RETIRED. A train is now any grid with a\n" +
-                    "Rail Truck on it - see setup step 92. Existing locomotives in\n" +
-                    "a save keep working; the recipe is simply gone.\n\n" +
+                    "\nThe v1 Locomotive is RETIRED (entity removed in 12.0.0-dev, a\n" +
+                    "MAJOR: fresh save required). A train is now any grid with a\n" +
+                    "Rail Truck on it - see setup step 92.\n\n" +
                     "To run a line:\n" +
                     "  1. Lay track between two sites. Keep the gradient gentle.\n" +
                     "  2. Place a station beside the track at each end and name it.\n" +
@@ -150,13 +161,15 @@ namespace IndustrialWorld.EditorTools
                 // Sleepers and rails at a proper gauge.
                 //
                 // The first pass used a 0.56 m gauge on a 1 m cell, which read as a narrow
-                // ladder rather than a railway - a player standing beside it saw two thin
-                // strips down the middle of a wide bed. The gauge is now 1.05 m across a
-                // 1.5 m sleeper, which is close to the real ratio of rail spacing to
-                // sleeper length and reads correctly at standing height.
+                // ladder rather than a railway. 11.39.0 went to 1.05 m across a 1.5 m sleeper,
+                // the real 0.70 ratio - and 11.41.0 tripled the whole formation to 3.15 m
+                // across a 4.5 m sleeper, because beside a player-built grid the old deck
+                // read as a ribbon rather than a railway. The ratio is unchanged by the
+                // scaling, so it still reads correctly at standing height.
                 //
                 // Four sleepers per cell rather than two: at 1 m spacing two sleepers left
-                // visible gaps between cells, so a run looked like a dashed line.
+                // visible gaps between cells, so a run looked like a dashed line. On curves
+                // RailTrack fans these radially and stretches the rails to their arc length.
                 for (int i = 0; i < 4; i++)
                 {
                     var sleeper = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -165,7 +178,7 @@ namespace IndustrialWorld.EditorTools
                     // Evenly spread across the cell so consecutive cells tile without a seam.
                     float z = -0.375f + i * 0.25f;
                     sleeper.transform.localPosition = new Vector3(0f, 0.05f, z);
-                    sleeper.transform.localScale = new Vector3(1.5f, 0.10f, 0.18f);
+                    sleeper.transform.localScale = new Vector3(SleeperLength, 0.10f, 0.18f);
                     Paint(sleeper, sleeperMat);
                 }
                 for (int i = 0; i < 2; i++)
@@ -173,10 +186,10 @@ namespace IndustrialWorld.EditorTools
                     var rail = GameObject.CreatePrimitive(PrimitiveType.Cube);
                     rail.name = "Rail" + i;
                     rail.transform.SetParent(root.transform, false);
-                    rail.transform.localPosition = new Vector3(i == 0 ? -0.525f : 0.525f, 0.14f, 0f);
+                    rail.transform.localPosition = new Vector3((i == 0 ? -1f : 1f) * FormationGauge * 0.5f, 0.14f, 0f);
                     // Slightly taller than wide, like a real rail profile, and full cell
                     // length so consecutive cells form one continuous line.
-                    rail.transform.localScale = new Vector3(0.11f, 0.12f, 1.0f);
+                    rail.transform.localScale = new Vector3(RailHeadWidth, 0.12f, 1.0f);
                     Paint(rail, railMat);
                 }
 
@@ -186,7 +199,7 @@ namespace IndustrialWorld.EditorTools
                     stop.name = "BufferStop";
                     stop.transform.SetParent(root.transform, false);
                     stop.transform.localPosition = new Vector3(0f, 0.22f, 0.42f);
-                    stop.transform.localScale = new Vector3(0.7f, 0.3f, 0.10f);
+                    stop.transform.localScale = new Vector3(2.1f, 0.3f, 0.10f);
                     Paint(stop, MakeColoredMat(PrefabsFolder, "Mat_RailBuffer", new Color(0.72f, 0.24f, 0.18f)));
                 }
                 else if (kind == RailPieceKind.Switch)
@@ -194,7 +207,7 @@ namespace IndustrialWorld.EditorTools
                     var lever = GameObject.CreatePrimitive(PrimitiveType.Cube);
                     lever.name = "PointLever";
                     lever.transform.SetParent(root.transform, false);
-                    lever.transform.localPosition = new Vector3(0.44f, 0.22f, 0f);
+                    lever.transform.localPosition = new Vector3(1.32f, 0.22f, 0f);
                     lever.transform.localScale = new Vector3(0.07f, 0.34f, 0.07f);
                     Paint(lever, MakeColoredMat(PrefabsFolder, "Mat_RailLever", new Color(0.90f, 0.72f, 0.16f)));
                 }
@@ -220,11 +233,73 @@ namespace IndustrialWorld.EditorTools
                 Debug.Log("[Setup 85] " + asset + " had no RailTrack component; added one.");
             }
 
+            // The triple-width formation (11.41.0) has to reach prefabs authored before it,
+            // or an upgraded project keeps laying ribbon track beside the new bogie.
+            // Geometry-only: sleepers, rail heads, buffer and lever; components, materials
+            // and every authored tuning value stay exactly as they are.
+            repaired |= RegaugeFormation(contents);
+
             GameObject result = existing;
             if (repaired) result = PrefabUtility.SaveAsPrefabAsset(contents, path);
             PrefabUtility.UnloadPrefabContents(contents);
             changed = repaired;
             return result;
+        }
+
+        /// <summary>
+        /// Brings an existing track prefab to the current formation width. Idempotent - a
+        /// prefab already at the gauge returns false and is left byte-identical - and blind
+        /// to anything that is not running gear, so re-running setup never flattens a
+        /// hand-tweaked prefab beyond the width itself.
+        /// </summary>
+        private static bool RegaugeFormation(GameObject root)
+        {
+            var rail0 = root.transform.Find("Rail0");
+            if (rail0 == null) return false;
+            float current = Mathf.Abs(rail0.localPosition.x) * 2f;
+            if (Mathf.Abs(current - FormationGauge) < 0.001f) return false;
+
+            for (int i = 0; i < 4; i++)
+            {
+                var sleeper = root.transform.Find("Sleeper" + i);
+                if (sleeper == null) continue;
+                var sc = sleeper.localScale;
+                sc.x = SleeperLength;
+                sleeper.localScale = sc;
+            }
+
+            for (int i = 0; i < 2; i++)
+            {
+                var rail = root.transform.Find("Rail" + i);
+                if (rail == null) continue;
+                var pos = rail.localPosition;
+                pos.x = (i == 0 ? -1f : 1f) * FormationGauge * 0.5f;
+                rail.localPosition = pos;
+                var rsc = rail.localScale;
+                rsc.x = RailHeadWidth;
+                rail.localScale = rsc;
+            }
+
+            var stop = root.transform.Find("BufferStop");
+            if (stop != null)
+            {
+                var ssc = stop.localScale;
+                ssc.x = 2.1f;
+                stop.localScale = ssc;
+            }
+
+            var lever = root.transform.Find("PointLever");
+            if (lever != null)
+            {
+                var lpos = lever.localPosition;
+                lpos.x = 1.32f;
+                lever.localPosition = lpos;
+            }
+
+            Debug.Log("[Setup 85] Re-gauged " + root.name + " to the triple-width formation " +
+                      "(sleeper " + SleeperLength.ToString("0.0") + " m, gauge " +
+                      FormationGauge.ToString("0.00") + " m).");
+            return true;
         }
 
         // ============================================================
@@ -302,25 +377,49 @@ namespace IndustrialWorld.EditorTools
         /// <summary>
         /// Removes the v1 locomotive from the game.
         ///
-        /// It is unregistered from the recipe registry rather than deleted from disk. A
-        /// player's existing save may still contain one, and deleting the asset would turn
-        /// that into a missing-reference on load - the block would vanish from their world
-        /// with no explanation. Dropping the recipe makes it uncraftable, so it stops being
-        /// a choice for new play while anything already built keeps working until the
-        /// MAJOR release that removes `RailTrain` outright.
+        /// The recipe left the registry in 11.39.0 while the asset stayed, because saves still
+        /// held locomotives and deleting the asset would have turned them into missing
+        /// references. 12.0.0-dev IS the MAJOR those saves were waiting out: the `RailTrain`
+        /// entity is gone from code, so this pass now also scrubs the dead script off the
+        /// locomotive prefab. The prefab shell itself stays on disk - a MAJOR demands a fresh
+        /// save, not a deleted history - but nothing in it references code that no longer
+        /// exists.
         /// </summary>
         private static bool RetireLocomotive(RecipeRegistry registry)
         {
             bool changed = false;
 
-            var recipe = FindRecipe("Recipe_Locomotive");
-            if (recipe != null && registry.recipes.Contains(recipe))
+            var realRecipe = FindRecipe("Recipe_Locomotive");
+            if (realRecipe != null && registry.recipes.Contains(realRecipe))
             {
-                registry.recipes.Remove(recipe);
+                registry.recipes.Remove(realRecipe);
                 EditorUtility.SetDirty(registry);
                 changed = true;
                 Debug.Log("[Setup 85] Retired the v1 Locomotive: recipe removed from the registry. " +
                           "Build a grid and put a Rail Truck on it instead (setup step 92).");
+            }
+
+            // Scrub the dead RailTrain script off any locomotive prefab. A missing-script
+            // component is a console warning on every load and a trap for the next person
+            // to open the prefab; removing it is repair, not deletion.
+            var guids = AssetDatabase.FindAssets("Locomotive t:GameObject");
+            foreach (var g in guids)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(g);
+                var contents = PrefabUtility.LoadPrefabContents(path);
+                // Singular, per-GameObject API - the same call step 17 of the setup window
+                // uses - walked over every transform including inactive children.
+                int removed = 0;
+                foreach (var t in contents.GetComponentsInChildren<Transform>(true))
+                    removed += GameObjectUtility.RemoveMonoBehavioursWithMissingScript(t.gameObject);
+                if (removed > 0)
+                {
+                    PrefabUtility.SaveAsPrefabAsset(contents, path);
+                    changed = true;
+                    Debug.Log("[Setup 85] Scrubbed " + removed + " dead script(s) off " + path +
+                              " - the v1 RailTrain entity no longer exists (12.0.0-dev).");
+                }
+                PrefabUtility.UnloadPrefabContents(contents);
             }
 
             return changed;

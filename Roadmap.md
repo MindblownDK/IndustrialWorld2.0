@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `11.40.0-dev`
-**Roadmap Version:** `11.40.0-dev`
+**Current Version:** `12.1.0-dev`
+**Roadmap Version:** `12.1.0-dev`
 **Date:** 2026-09-16
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,38 +29,33 @@
 
 ## 0. Recently Done
 
+### 12.1.0-dev - Schedules, Screens And The Sound Of A Station Waking Up
+- **Ballast fix:** the bed item could resolve empty and the corridor silently skipped ballast - now self-healed at drag time, plus a `RailCorridor` re-bed pass that heals bare cells on every commit (charged as stone, named on the toast).
+- **Train Schedule block:** ordered stop list per train with release conditions (dwell / hold full / hold empty / hold has space); bogie gained path-based `SetDestination` routing with arrival events; stations matched by name; schedule survives saves.
+- **Display family:** one `RailDisplayScreen` component, five housings - grid Brass Display Screen (rotational power tap) plus stationary Cabinet / Hanging Departure Board / Nixie Readout (mains, small electric engine inside). Console picks split-flap / nixie / analog and speed / load / departures / station / custom. Staggered `SplitFlapFlip` sfx on every card turn. Setup step 95, additive save fields.
+
+### 12.0.1-dev - Compile Cleanup
+- Setup 85's dead-script scrub now uses the singular per-GameObject `RemoveMonoBehavioursWithMissingScript` walked over all transforms - the same call step 17 uses; the plural name it called never existed in Unity 6.5 (CS0117).
+- Both `LogisticsMapData` finds moved off the obsolete `FindObjectsSortMode` overload to `FindObjectsInactive.Exclude`, matching the rest of the project (CS0618).
+- Patch round: no save, API or behaviour change.
+
+### 12.0.0-dev - The v1 Train Is Gone (MAJOR)
+- `RailTrain` + `TrainState` deleted; `RailConfigHud` loses the train console (grid terminal covers v2); logistics map reads `GridRailBogie`; E-branch for the v1 console removed.
+- Setup 85 scrubs dead scripts off locomotive prefabs (`RemoveMonoBehavioursWithMissingScripts`); prefab shells stay on disk, recipe has been gone since 11.39.0.
+- BREAKING by design: saves holding a v1 locomotive or schedule do not carry it across. This is the MAJOR the retirement waited for.
+
+### 11.41.0-dev - Junctions That Join, Curves That Bend, And A Bill While You Drag
+- **Smooth turns:** yaw now keeps the corridor solver's mitred axis (only pitch follows ground), and `RailTrack` derives signed curvature from its link graph to fan sleepers radially and stretch rails to arc length - rigid boxes no longer gap outboard on a bend. Rail fillets ask for 2.75 m minimum radius, not the road's 1.25 m.
+- **Auto-junctions delivered:** a run crossing existing track splices a station at the crossed cell so it becomes the shared node; promotion counts arm directions (>=3) on every link rebuild, so hand-placement and reloads heal too; fresh junctions route straight through until a player sets points (`railPointsSetByPlayer`, additive save field). Adjacency tightened 1.45 m to 1.10 m with a lateral tie penalty.
+- **`RailCostHud`:** live metres / cells / gauge and per-material need-vs-have while dragging, from the same plan the ghost and commit use; refusal named on the card in amber.
+- **Formation x3:** sleeper 4.5 m, gauge 3.15 m, rail heads 0.33 m, ballast bed 6.3 m; step 92 re-gauges the bogie from the same number. Setup 85/92/93 apply it to old prefabs via idempotent geometry-only re-gauge passes.
+
 ### 11.40.0-dev - A Real Bogie, And Track That Flows
 - **Staircase track fixed:** rotation came from the FLAT corridor solver, so cells stayed level while positions climbed. `AlignToSlope` now pitches each cell at the next; smoothing raised 6 to 18 passes (1.10 m worst step grades to 0.29 m).
 - **Load model:** consist mass / combined rated load of all bogies, inverse falloff, floored at 15%. Heavier is slower, more bogies is faster, capped at 1.0. Shared across the consist so a heavy wagon in the middle cannot defeat it.
 - **Bogie rebuilt** from the reference: side frames, axleboxes, coil springs, bolster, centre pivot, brake gear, flanged wheels at the 1.05 m track gauge.
 - **Placement rules:** a truck auto-snaps to rail on placement (the console button was undiscoverable), and cannot be stacked - stacked bogies would each claim rated capacity for the same mass, making an overloaded train arbitrarily fast. Side-by-side stays legal.
 - `GridRailCoupler`: wagon coupler block. Holds no joint - consists follow the leader's path - it is the player-facing control for that system.
-
-### 11.39.0-dev - Retire The Locomotive, Widen The Gauge, Make It Cobblestone
-- v1 Locomotive retired from step 85. **Recipe removed, asset kept** - deleting it would turn existing saved locomotives into missing references on load. Full removal waits for the MAJOR that drops `RailTrain`.
-- Steps 92/93/94 now say "needs 85" on the button; the dependency was previously only discoverable by hitting the error.
-- **Gauge:** 0.56 m to 1.05 m with 1.5 m sleepers (0.70 ratio, matching real track), and 4 sleepers per cell instead of 2 - at 1 m spacing two left visible gaps and a run read as a dashed line.
-- **Ballast:** one smooth cube reads as concrete however it is tinted, because a flat surface has no self-shadowing. Now a base plus 26 jittered cobbles in three tones - the shadows between stones ARE the texture. Jitter is deterministic (a prefab authored twice must be identical) and cobbles carry no colliders.
-- Rail rise re-tuned against the new ballast height rather than left alone; the old value would have floated sleepers 6.5 cm above the stones.
-
-### 11.38.0-dev - The Ghost Was White And The Failure Was Silent
-- **Root rule:** `Commit` had four early returns that all did `return 0`, so one message covered four causes and misdirected three releases of debugging. Every early return now states its reason; the toast shows it and the Console logs full counts.
-- **Likely cause:** a Rail Layer asset authored before `trackBlock` existed had it null; the setup step only repairs on re-run. The tool now resolves the block by id AT RUNTIME, so upgrade order cannot leave a dead tool.
-- **Ghost:** set vertex colours on URP/Unlit, which ignores them - the same mistake as the asteroid material in 11.28.1. Now two meshes with two real materials (green/red), needing no special shader.
-- **Rule reinforced:** never rely on vertex colours without a shader that reads them, and never let a player-facing action fail without saying why.
-
-### 11.37.0-dev - Multi-Point Runs, Real Junctions, Honest Ghost
-- **Diagnosis rule learned the hard way:** "no placeable cells" could not distinguish its own causes, so two releases were spent guessing. Refusals now report counts (solved / missed ground / blocked).
-- **Ground probe:** was taking the FIRST raycast hit - often the player, ghost, a train or laid rail - and using the start point's gravity for the whole run. Now sorts hits, skips rigidbodies/grids/rail/ghosts, and samples per-cell gravity.
-- **Ghost validity:** `EvaluateCell` marks each cell underwater / buried / blocked, and the ghost colours PER CELL so one bad cell is visible rather than reddening the whole run. Blocked cells are kept, not discarded - discarding hides the diagnosis.
-- **Auto junctions:** plain track caps at 2 links, so crossings silently dropped their extra arms. Cells with 3+ rail neighbours are promoted to switches and both lines re-linked. Straight runs keep 2 neighbours so nothing becomes a switch by accident.
-- **Multi-point placement:** LMB starts, RMB adds corners, E lays, Escape cancels. The ghost previews confirmed corners plus the live leg, because the previous corner's fillet depends on where the next leg goes.
-
-### 11.36.0-dev - Graded Formation, And A Ghost To Aim With
-- **Crash:** used `Input.GetKey` in a project with legacy Input disabled. `IsCtrlHeld()` already existed in the same file, with a comment warning about exactly this. **Rule: never call `Input.` directly here - use the guarded helpers.**
-- **Ground probe:** the corridor solves on a flat plane through the drag start, so distant cells sat outside a 6 m/14 m probe, kept their plane position, and the gradient check read that as a cliff. Probe is now 60 m/200 m and a real miss is reported distinctly.
-- **Grading:** the profile is SMOOTHED before it is judged (6 light passes, endpoints pinned, gravity axis only). A railway grades its formation; refusing every natural slope made the tool useless on the terrain it exists to cross. Verified: 0.79 m worst step smooths to 0.27 m.
-- **Ghost:** `RailGhost` previews the run from THE SAME PLAN the commit uses. A preview computed separately can lie. Refused runs draw red rather than vanishing.
 
 ### Era Transition Feel
 
@@ -1419,10 +1414,13 @@ Statuses are evidence-based and move forward only after code/content review and 
    - ~~**Draggable rail placing with smart routing.** Click a start, drag to an end~~ *(11.33.0-dev)* - auto-straights, auto-curves and a gradient-aware refusal that names the reason. Auto-junctions were deliberately left out (see phase 3).
    - ~~**Phase 2:** multi-car consists~~ *(11.32.0-dev)* - **COMPLETE.** Coupling uses PATH HISTORY, not the docking port's `FixedJoint`: a railed grid is kinematic so a joint is inert, and a joint trails like a rope so wagons cut corners. The leader records its route and wagons sample it at an accumulated chain distance.
    - ~~**Phase 3:** wider gauges and draggable smart placement~~ *(11.33.0-dev)* - **COMPLETE.** `RailCorridor` reuses `RoadCorridor` for centreline, fillets and multi-lane footprints; rail adds the gradient check and treats lanes as parallel tracks. Setup step 93.
-   - Open from phase 3: automatic junctions where runs cross, deliberately excluded because guessing the through line would reroute trains silently.
+   - ~~Open from phase 3: automatic junctions where runs cross~~ *(11.41.0-dev)* - crossings splice a shared junction node; no guessing needed because a fresh junction routes straight through until a player sets the points.
    - ~~**Phase 4:** signalling and block occupancy~~ *(11.34.0-dev)* - **COMPLETE.** `RailSignalling` derives sections from the graph (track between junctions); trains brake for occupied line. `RailSignal` (step 94) is the visible readout and is deliberately not load-bearing.
-   - **Rework brief is now fully delivered.** Remaining rail work is polish rather than architecture: automatic junctions at crossings, and retiring the 11.15.0 `RailTrain`.
-   - **Retirement:** consists landed in 11.32.0 and signalling in 11.34.0, so the v2 path is now feature-complete against the brief. The 11.15.0 `RailTrain` can be retired in a MAJOR release - it is left in place for now because removing it is a breaking change for any save that still has one, and that belongs in a version bump rather than a minor.
+   - ~~**Smooth bends** *(11.41.0-dev)* - mitred yaw plus per-cell curve deformation (fanned sleepers, arc-length rails) derived from the link graph; rail fillet radius floor raised to 2.75 m.
+   - ~~**Live material readout while dragging** *(11.41.0-dev)* - `RailCostHud`, driven from the same plan the ghost and commit use.
+   - ~~**Triple-width formation** *(11.41.0-dev)* - sleeper 4.5 m / gauge 3.15 m / rail heads 0.33 m / bed 6.3 m, bogie re-gauged in step 92; idempotent re-gauge passes in steps 85/92/93.
+  - **Rework brief is now fully delivered, retirement included (12.0.0-dev).** The rail family has no open architecture left; future rail work is content and balance, not rework.
+   - ~~**Retirement:** the 11.15.0 `RailTrain` entity~~ *(12.0.0-dev)* - **COMPLETE, MAJOR.** Entity, enum, console, map markers and interaction branch removed; setup 85 scrubs dead scripts off locomotive prefabs. Saves holding a v1 locomotive do not carry it across - the bump they were waiting out.
 
 2. **Drone Ports** — ~~flying logistics drones between ports~~ *(11.7.0-dev)*
    - `DronePort` pairs with another port over 400 m and serves the logistic chests within 48 m of each end; `DroneNetwork` owns pairing, dispatch and delivery.

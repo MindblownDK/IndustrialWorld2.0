@@ -508,6 +508,18 @@ namespace VoxelEngine.Persistence
                 {
                     entry.hasRailSwitch = true;
                     entry.railSwitchSelection = railTrack.SwitchSelection;
+                    // Additive 11.41.0: whether the routing is a player decision or the
+                    // straight-through default a fresh junction starts with.
+                    entry.railPointsSetByPlayer = railTrack.PointsSetByPlayer;
+                }
+
+                var display = pb.GetComponentInChildren<VoxelEngine.Building.RailDisplayScreen>();
+                if (display != null)
+                {
+                    entry.hasDisplayState = true;
+                    entry.displayKind = (int)display.Kind;
+                    entry.displaySource = (int)display.Source;
+                    entry.displayCustomText = display.customText ?? "";
                 }
 
                 CaptureFactoryRuntime(pb.gameObject, entry);
@@ -1595,6 +1607,25 @@ namespace VoxelEngine.Persistence
                         savedBlock.hasEngineAirModeState = true;
                         savedBlock.engineAirFallback = airModeEngine.allowAirFallbackOnStarvedLine;
                     }
+
+                    if (block is VoxelEngine.GridSystem.GridTrainScheduleBlock scheduleBlock)
+                    {
+                        // The service pattern is the player's standing order to the train;
+                        // losing it to a reload would silently turn a scheduled line back
+                        // into a hand-driven one.
+                        savedBlock.hasTrainScheduleState = true;
+                        savedBlock.trainScheduleJson = scheduleBlock.ScheduleJson;
+                        savedBlock.trainScheduleIndex = scheduleBlock.CurrentIndex;
+                    }
+
+                    var gridDisplay = block.GetComponent<VoxelEngine.Building.RailDisplayScreen>();
+                    if (gridDisplay != null)
+                    {
+                        savedBlock.hasGridDisplayState = true;
+                        savedBlock.gridDisplayKind = (int)gridDisplay.Kind;
+                        savedBlock.gridDisplaySource = (int)gridDisplay.Source;
+                        savedBlock.gridDisplayCustomText = gridDisplay.customText ?? "";
+                    }
                     else if (block is GridGasTank gasTankBlock)
                     {
                         savedBlock.hasGasTankState = true;
@@ -1973,6 +2004,22 @@ namespace VoxelEngine.Persistence
                     restoredGridCryo.oxygenStored = Mathf.Clamp(saved.cryobedOxygen, 0f, restoredGridCryo.oxygenCapacity);
                 }
 
+                var restoredSchedule = block.GetComponent<VoxelEngine.GridSystem.GridTrainScheduleBlock>();
+                if (restoredSchedule != null && saved.hasTrainScheduleState)
+                {
+                    restoredSchedule.ScheduleJson = saved.trainScheduleJson;
+                    restoredSchedule.RestoreServiceState(saved.trainScheduleIndex);
+                }
+
+                var restoredGridDisplay = block.GetComponent<VoxelEngine.Building.RailDisplayScreen>();
+                if (restoredGridDisplay != null && saved.hasGridDisplayState)
+                {
+                    restoredGridDisplay.Configure(
+                        (VoxelEngine.Building.ScreenKind)saved.gridDisplayKind,
+                        (VoxelEngine.Building.ScreenSource)saved.gridDisplaySource,
+                        saved.gridDisplayCustomText);
+                }
+
                 if (sourceItem is BlockItem attachedItem)
                 {
                     var placed = go.GetComponent<PlacedBlock>() ?? go.AddComponent<PlacedBlock>();
@@ -2346,12 +2393,12 @@ namespace VoxelEngine.Persistence
         }
 
         private System.Collections.IEnumerator ApplySwitchNextFrame(
-            VoxelEngine.Building.RailTrack track, int selection)
+            VoxelEngine.Building.RailTrack track, int selection, bool pointsSetByPlayer)
         {
             yield return null;
             if (track == null) yield break;
             track.RebuildLinks(true);
-            track.SetSwitchSelection(selection);
+            track.RestoreSwitchSelection(selection, pointsSetByPlayer);
         }
 
         private void RestorePlacedBlocks(SaveData save)
@@ -2421,6 +2468,15 @@ namespace VoxelEngine.Persistence
                     if (System.Enum.IsDefined(typeof(VoxelEngine.Building.StationRole), sb.railStationRole))
                         restoredStation.role = (VoxelEngine.Building.StationRole)sb.railStationRole;
                 }
+                var restoredDisplay = go.GetComponentInChildren<VoxelEngine.Building.RailDisplayScreen>(true);
+                if (restoredDisplay != null && sb.hasDisplayState)
+                {
+                    restoredDisplay.Configure(
+                        (VoxelEngine.Building.ScreenKind)sb.displayKind,
+                        (VoxelEngine.Building.ScreenSource)sb.displaySource,
+                        sb.displayCustomText);
+                }
+
                 var restoredSwitch = go.GetComponentInChildren<VoxelEngine.Building.RailTrack>(true);
                 if (restoredSwitch != null && sb.hasRailSwitch)
                 {
@@ -2429,7 +2485,7 @@ namespace VoxelEngine.Persistence
                     // list that is still filling. Re-applying next frame lands it correctly.
                     var target = restoredSwitch;
                     int selection = sb.railSwitchSelection;
-                    StartCoroutine(ApplySwitchNextFrame(target, selection));
+                    StartCoroutine(ApplySwitchNextFrame(target, selection, sb.railPointsSetByPlayer));
                 }
 
                 if (sb.hasRoadWear)
@@ -3644,6 +3700,16 @@ namespace VoxelEngine.Persistence
             // Additive 11.14.0: standing climate directive on a satellite payload.
             public bool hasSatellitePayloadState;
             public int satelliteDirective;
+            // Additive 12.1.0: train schedule service and grid display configuration.
+            // Legacy saves omit the flags; a restored schedule block simply starts with
+            // an empty service and a restored screen with its authored defaults.
+            public bool hasTrainScheduleState;
+            public string trainScheduleJson = "";
+            public int trainScheduleIndex;
+            public bool hasGridDisplayState;
+            public int gridDisplayKind;
+            public int gridDisplaySource;
+            public string gridDisplayCustomText = "";
             public Vector3Int gridPos;
             public bool isPrecision;
             public Vector3Int precisionPos;
@@ -3752,6 +3818,14 @@ namespace VoxelEngine.Persistence
             public int railStationRole;
             public bool hasRailSwitch;
             public int railSwitchSelection;
+            // Additive 11.41.0: player-set points vs the straight-through default.
+            public bool railPointsSetByPlayer;
+            // Additive 12.1.0: stationary display screen configuration. Legacy saves omit
+            // the flag and the housing keeps its authored defaults.
+            public bool hasDisplayState;
+            public int displayKind;
+            public int displaySource;
+            public string displayCustomText = "";
             public Vector3 pos; public Quaternion rot; public float rotY;
             // Additive body anchor (9.58.2-dev). A placed block stands on a celestial body,
             // and that body moves through the scene as the system runs (orbits, rebases,
