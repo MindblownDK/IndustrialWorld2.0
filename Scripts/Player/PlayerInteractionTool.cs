@@ -892,6 +892,56 @@ namespace VoxelEngine.Player
                 var railStation = hit.collider.GetComponentInParent<VoxelEngine.Building.RailStation>();
                 if (railStation != null) { VoxelEngine.UI.RailConfigHud.OpenStation(railStation); return; }
 
+                // Coupler: one press attaches or releases, which is what a coupler lever does.
+                var coupler = hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridRailCoupler>();
+                if (coupler != null)
+                {
+                    bool wasCoupled = coupler.IsCoupled;
+                    if (wasCoupled)
+                    {
+                        coupler.Uncouple();
+                        VoxelEngine.UI.BuildFeedbackHud.Show("Uncoupled", coupler.StatusLabel,
+                            null, T_AccentAmber);
+                    }
+                    else if (coupler.TryCouple(out string why))
+                    {
+                        VoxelEngine.UI.BuildFeedbackHud.Show("Coupled", coupler.StatusLabel,
+                            null, T_AccentCyan);
+                    }
+                    else
+                    {
+                        VoxelEngine.UI.BuildFeedbackHud.Show("Cannot couple", why, null, T_AccentAmber);
+                    }
+                    return;
+                }
+
+                // Rail truck: attach to or detach from the rails in one press.
+                var railTruck = hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridRailTruck>();
+                if (railTruck != null && railTruck.Grid != null)
+                {
+                    var bogie = railTruck.Grid.GetComponent<VoxelEngine.GridSystem.GridRailBogie>();
+                    if (bogie != null)
+                    {
+                        if (bogie.IsOnRails)
+                        {
+                            bogie.Detach();
+                            VoxelEngine.UI.BuildFeedbackHud.Show("Off the rails",
+                                "The construct is free to move normally again.", null, T_AccentAmber);
+                        }
+                        else if (bogie.TrySnapToTrack())
+                        {
+                            VoxelEngine.UI.BuildFeedbackHud.Show("On the rails",
+                                bogie.StatusLabel, null, T_AccentCyan);
+                        }
+                        else
+                        {
+                            VoxelEngine.UI.BuildFeedbackHud.Show("Cannot attach",
+                                bogie.BlockedReason, null, T_AccentAmber);
+                        }
+                        return;
+                    }
+                }
+
                 var railSignal = hit.collider.GetComponentInParent<VoxelEngine.Building.RailSignal>();
                 if (railSignal != null)
                 {
@@ -2174,14 +2224,13 @@ namespace VoxelEngine.Player
             {
                 tool.trackBlock = FindBlockItemById("railtrack");
                 if (tool.trackBlock != null)
-                    Debug.Log("[RailLayer] Recovered a missing track block reference at runtime. " +
-                              "Re-run setup step 93 to persist it.");
+                    Debug.Log("[RailLayer] Recovered a missing track block reference at runtime.");
             }
 
             if (tool.trackBlock == null)
             {
                 VoxelEngine.UI.BuildFeedbackHud.Show("Rail layer",
-                    "No Rail Track block found. Run setup step 85, then step 93.",
+                    "No Rail Track block found.",
                     null, T_AccentAmber);
                 return;
             }

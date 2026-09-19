@@ -49,6 +49,15 @@ namespace VoxelEngine.GridSystem
         [Tooltip("Top speed on clear track, metres per second.")]
         public float maxSpeed = 14f;
 
+        [Header("Load")]
+        [Tooltip("Mass in kg one bogie carries before it starts slowing the train. Adding " +
+                 "bogies raises the total the consist can haul at full speed.")]
+        public float ratedLoadKg = 6000f;
+
+        [Tooltip("Slowest fraction of top speed an overloaded train can still manage. Never " +
+                 "zero: a train that cannot move at all reads as a bug, not as overloaded.")]
+        [Range(0.05f, 1f)] public float minLoadSpeedFactor = 0.15f;
+
         [Tooltip("Acceleration and braking, m/s^2. Low on purpose - mass is what a train is " +
                  "for, and it should feel heavy.")]
         public float acceleration = 2.5f;
@@ -322,7 +331,7 @@ namespace VoxelEngine.GridSystem
             }
             else
             {
-                float target = maxSpeed * Mathf.Max(0.1f, CurrentTrack.speedMultiplier);
+                float target = maxSpeed * Mathf.Max(0.1f, CurrentTrack.speedMultiplier) * LoadSpeedFactor();
 
                 // ── Signalling (11.34.0) ──
                 // Look far enough ahead to stop before an occupied section rather than
@@ -360,6 +369,76 @@ namespace VoxelEngine.GridSystem
 
             ClaimCurrentSections();
             AdvanceAlongTrack(dt);
+        }
+
+        /// <summary>
+        /// How much of top speed this consist can actually manage under its current load.
+        ///
+        /// Mass is summed across the WHOLE consist and divided by the combined rated load
+        /// of every bogie in it, so the rule the player asked for falls out directly:
+        /// more weight is slower, more bogies is faster, and the gain is capped because
+        /// the factor never exceeds 1.
+        ///
+        /// Load is shared rather than per-bogie on purpose. A real consist spreads its
+        /// weight across every axle, and checking each bogie against only the grid it sits
+        /// on would let a player defeat the rule by putting the heavy wagon in the middle.
+        /// </summary>
+        public float LoadSpeedFactor()
+        {
+            float totalMass = 0f;
+            float totalRated = 0f;
+
+            var car = ConsistClaimant();       // walk from the head so every car is counted
+            int guard = 0;
+            while (car != null && guard++ < 64)
+            {
+                if (car.Grid != null) totalMass += Mathf.Max(0f, car.Grid.TotalMass);
+                totalRated += Mathf.Max(1f, car.ratedLoadKg);
+                car = car.TrailBogie;
+            }
+
+            if (totalRated <= 0f) return 1f;
+
+            float ratio = totalMass / totalRated;
+            if (ratio <= 1f) return 1f;        // within rating: no penalty at all
+
+            // Inverse falloff rather than linear: doubling the overload halves the speed,
+            // which keeps an overloaded train slow but always moving.
+            return Mathf.Max(minLoadSpeedFactor, 1f / ratio);
+        }
+
+        /// <summary>Total mass of the whole consist, for the console readout.</summary>
+        public float ConsistMassKg
+        {
+            get
+            {
+                float total = 0f;
+                var car = ConsistClaimant();
+                int guard = 0;
+                while (car != null && guard++ < 64)
+                {
+                    if (car.Grid != null) total += Mathf.Max(0f, car.Grid.TotalMass);
+                    car = car.TrailBogie;
+                }
+                return total;
+            }
+        }
+
+        /// <summary>Combined rated load of every bogie in the consist.</summary>
+        public float ConsistRatedKg
+        {
+            get
+            {
+                float total = 0f;
+                var car = ConsistClaimant();
+                int guard = 0;
+                while (car != null && guard++ < 64)
+                {
+                    total += Mathf.Max(0f, car.ratedLoadKg);
+                    car = car.TrailBogie;
+                }
+                return total;
+            }
         }
 
         /// <summary>

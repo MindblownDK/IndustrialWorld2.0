@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `11.39.0-dev`
-**Roadmap Version:** `11.39.0-dev`
+**Current Version:** `11.40.0-dev`
+**Roadmap Version:** `11.40.0-dev`
 **Date:** 2026-09-16
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,13 @@
 
 ## 0. Recently Done
 
+### 11.40.0-dev - A Real Bogie, And Track That Flows
+- **Staircase track fixed:** rotation came from the FLAT corridor solver, so cells stayed level while positions climbed. `AlignToSlope` now pitches each cell at the next; smoothing raised 6 to 18 passes (1.10 m worst step grades to 0.29 m).
+- **Load model:** consist mass / combined rated load of all bogies, inverse falloff, floored at 15%. Heavier is slower, more bogies is faster, capped at 1.0. Shared across the consist so a heavy wagon in the middle cannot defeat it.
+- **Bogie rebuilt** from the reference: side frames, axleboxes, coil springs, bolster, centre pivot, brake gear, flanged wheels at the 1.05 m track gauge.
+- **Placement rules:** a truck auto-snaps to rail on placement (the console button was undiscoverable), and cannot be stacked - stacked bogies would each claim rated capacity for the same mass, making an overloaded train arbitrarily fast. Side-by-side stays legal.
+- `GridRailCoupler`: wagon coupler block. Holds no joint - consists follow the leader's path - it is the player-facing control for that system.
+
 ### 11.39.0-dev - Retire The Locomotive, Widen The Gauge, Make It Cobblestone
 - v1 Locomotive retired from step 85. **Recipe removed, asset kept** - deleting it would turn existing saved locomotives into missing references on load. Full removal waits for the MAJOR that drops `RailTrain`.
 - Steps 92/93/94 now say "needs 85" on the button; the dependency was previously only discoverable by hitting the error.
@@ -54,12 +61,6 @@
 - **Ground probe:** the corridor solves on a flat plane through the drag start, so distant cells sat outside a 6 m/14 m probe, kept their plane position, and the gradient check read that as a cliff. Probe is now 60 m/200 m and a real miss is reported distinctly.
 - **Grading:** the profile is SMOOTHED before it is judged (6 light passes, endpoints pinned, gravity axis only). A railway grades its formation; refusing every natural slope made the tool useless on the terrain it exists to cross. Verified: 0.79 m worst step smooths to 0.27 m.
 - **Ghost:** `RailGhost` previews the run from THE SAME PLAN the commit uses. A preview computed separately can lie. Refused runs draw red rather than vanishing.
-
-### 11.35.0-dev - Ballast, And Rail That Actually Costs Something
-- **Dedupe bug:** the rail layer rejected cells within 0.45 m against 1 m spacing, but draped cells pull closer than that on slopes and curves - so a run rejected its own cells and laid nothing on empty ground. Radius is now cellSize * 0.25, derived not hard-coded.
-- **Reporting bug:** "already laid" was printed for every failure. `Commit` now reports skipped cells separately, so laid / already-occupied / no-placeable-cells read differently.
-- **Cost:** the tool consumed steel, never track. It now consumes the Rail Track ITEM (1/cell) plus Stone (2/cell). **Rule: the tool saves effort, not materials** - a laid run costs what hand-laying costs. Charged on cells PLACED, never on skipped ones.
-- **Ballast:** every cell places a raised stone bed and lifts the rail onto it, offsets solved numerically so sleepers sit 5 mm proud rather than floating or sinking. Slab is wider than the cell so the shoulder overhangs like real track.
 
 ### Era Transition Feel
 

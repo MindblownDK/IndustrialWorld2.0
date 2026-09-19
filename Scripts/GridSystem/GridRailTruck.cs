@@ -51,7 +51,43 @@ namespace VoxelEngine.GridSystem
         public override void OnPlaced()
         {
             base.OnPlaced();
+
+            // A truck must sit on RAIL, never on another truck.
+            //
+            // Stacked bogies are nonsense physically and break the load model: each would
+            // claim its own rated capacity while carrying the same mass, so a tower of
+            // trucks would make an overloaded train arbitrarily fast. Refusing the
+            // placement is also clearer than silently ignoring the extra ones.
+            if (HasTruckBelow())
+            {
+                VoxelEngine.UI.BuildFeedbackHud.Show("Cannot stack bogies",
+                    "A rail truck goes on the rails or on the hull - never on top of " +
+                    "another truck. Place it alongside instead.",
+                    null, new Color(0.92f, 0.60f, 0.12f));
+
+                // Remove itself rather than sitting there doing nothing, so the player gets
+                // the block back and the grid is left exactly as it was.
+                if (Grid != null) Grid.RemoveBlock(GridPos);
+                return;
+            }
+
             InstallBogie();
+        }
+
+        /// <summary>
+        /// True when another rail truck occupies the cell directly below this one.
+        ///
+        /// Checked downward only: two trucks side by side on a wide chassis is a real
+        /// four-wheel bogie arrangement and must stay legal.
+        /// </summary>
+        private bool HasTruckBelow()
+        {
+            if (Grid == null) return false;
+
+            var below = GridPos + Vector3Int.down;
+            if (!Grid.Blocks.TryGetValue(below, out var block) || block == null) return false;
+
+            return block is GridRailTruck;
         }
 
         public override void OnRemoved()
@@ -81,6 +117,14 @@ namespace VoxelEngine.GridSystem
             if (_bogie == null) _bogie = Grid.gameObject.AddComponent<GridRailBogie>();
 
             RefreshBogie(removingSelf: false);
+
+            // Snap to rail the moment the truck is fitted, if there is rail under it.
+            //
+            // Previously the only way onto the rails was a button buried in the block
+            // console, so a player who built a train beside a line had no indication it
+            // needed one more step - it simply sat there. Auto-snapping makes the obvious
+            // action work, and the console button remains for re-attaching after a detach.
+            if (!_bogie.IsOnRails) _bogie.TrySnapToTrack();
         }
 
         private void RefreshBogie(bool removingSelf)

@@ -38,6 +38,7 @@ namespace VoxelEngine.GridSystem.UI
                 case GridLocatorBlock loc:  return MakeScrollable(LocatorPanel(loc));
                 case GridSeasonMonitor sm:  return MakeScrollable(SeasonMonitorPanel(sm));
                 case GridRailTruck rt:      return MakeScrollable(RailTruckPanel(rt));
+                case GridRailCoupler rc:    return MakeScrollable(RailCouplerPanel(rc));
                 case GridSatellitePayload sp2: return MakeScrollable(SatellitePayloadPanel(sp2));
                 case GridSatelliteLab sl:   return MakeScrollable(SatelliteLabPanel(sl));
                 case GridCargoContainer cc: return CargoPanel(cc, slot);
@@ -1189,12 +1190,30 @@ namespace VoxelEngine.GridSystem.UI
             }
             else
             {
+                float loadFactor = bogie.LoadSpeedFactor();
+                float massT = bogie.ConsistMassKg / 1000f;
+                float ratedT = bogie.ConsistRatedKg / 1000f;
+
                 var detail = new Label(
-                    $"Top speed {bogie.maxSpeed:0.#} m/s   ·   Acceleration {bogie.acceleration:0.#} m/s2");
+                    $"Top speed {bogie.maxSpeed * loadFactor:0.#} m/s" +
+                    (loadFactor < 0.999f ? $" (limited from {bogie.maxSpeed:0.#})" : "") +
+                    $"   ·   Load {massT:0.#} t / {ratedT:0.#} t rated");
                 detail.style.fontSize = 10;
                 detail.style.color = new StyleColor(T.TextSecondary);
                 detail.style.marginBottom = 8;
                 p.Add(detail);
+
+                if (loadFactor < 0.999f)
+                {
+                    var overload = new Label(
+                        "Overloaded. Add more rail trucks to spread the weight, or take " +
+                        "cargo off - a heavier train is a slower one.");
+                    overload.style.fontSize = 10;
+                    overload.style.whiteSpace = WhiteSpace.Normal;
+                    overload.style.color = new StyleColor(T.AccentAmber);
+                    overload.style.marginBottom = 8;
+                    p.Add(overload);
+                }
             }
 
             // ── Controls ──
@@ -1313,6 +1332,50 @@ namespace VoxelEngine.GridSystem.UI
                 "and power exactly like anything else you build.");
             note.style.fontSize = 10;
             note.style.whiteSpace = WhiteSpace.Normal;
+            note.style.color = new StyleColor(T.TextMuted);
+            p.Add(note);
+
+            return p;
+        }
+
+        /// <summary>Wagon coupler console: attach and release this car.</summary>
+        private static VisualElement RailCouplerPanel(GridRailCoupler coupler)
+        {
+            var p = T.MachinePanel();
+            p.style.width = 470;
+
+            var (hdr, _, _, _) = T.HeaderRow("\u26d3 WAGON COUPLER",
+                coupler.IsCoupled ? "COUPLED" : "FREE",
+                coupler.IsCoupled ? T.AccentGreen : T.AccentDim);
+            p.Add(hdr);
+            p.Add(T.AccentDivider(T.AccentCyan));
+            p.Add(T.Spacer(6));
+
+            p.Add(GridUIHelpers.SectionTitle("Status"));
+            var status = new Label(coupler.StatusLabel);
+            status.style.fontSize = 11;
+            status.style.whiteSpace = WhiteSpace.Normal;
+            status.style.color = new StyleColor(Color.white);
+            status.style.marginBottom = 8;
+            p.Add(status);
+
+            var button = T.SmallButton(coupler.IsCoupled ? "\u2702 RELEASE" : "\u26d3 COUPLE", () =>
+            {
+                if (coupler.IsCoupled) coupler.Uncouple();
+                else if (!coupler.TryCouple(out string why))
+                    VoxelEngine.UI.BuildFeedbackHud.Show("Cannot couple", why, null, T.AccentAmber);
+
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, coupler.IsCoupled ? T.AccentAmber : T.AccentDim);
+            p.Add(button);
+
+            var note = new Label(
+                "The car in front does the pulling, so only the leader needs power. A towed " +
+                "wagon follows the exact route the locomotive took, including which way each " +
+                "switch was thrown.");
+            note.style.fontSize = 10;
+            note.style.whiteSpace = WhiteSpace.Normal;
+            note.style.marginTop = 8;
             note.style.color = new StyleColor(T.TextMuted);
             p.Add(note);
 

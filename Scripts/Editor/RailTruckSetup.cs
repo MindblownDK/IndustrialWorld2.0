@@ -27,6 +27,9 @@ namespace IndustrialWorld.EditorTools
 
         private static readonly Color TruckTint = new(0.42f, 0.45f, 0.50f);
         private static readonly Color WheelTint = new(0.17f, 0.18f, 0.21f);
+        private static readonly Color SpringTint = new(0.62f, 0.64f, 0.68f);
+        /// <summary>Safety orange, like the brake gear on the reference bogie.</summary>
+        private static readonly Color AccentTint = new(0.88f, 0.48f, 0.13f);
 
         public static void RunStep92()
         {
@@ -60,12 +63,21 @@ namespace IndustrialWorld.EditorTools
                 var item = EnsureItem(prefab, out bool itemChanged);
                 bool recipeChanged = EnsureRecipe(registry, item, steel, wire);
 
+                var couplerPrefab = EnsureCouplerPrefab(out bool couplerPrefabChanged);
+                var couplerItem = EnsureCouplerItem(couplerPrefab, out bool couplerItemChanged);
+                bool couplerRecipeChanged = EnsureCouplerRecipe(registry, couplerItem, steel, wire);
+
+                prefabChanged |= couplerPrefabChanged;
+                itemChanged |= couplerItemChanged;
+                recipeChanged |= couplerRecipeChanged;
+
                 AssetDatabase.SaveAssets();
                 AssetDatabase.Refresh();
 
                 EditorUtility.DisplayDialog("Step 92 - Rail Truck",
                     "Rail Truck authored.\n\n" +
-                    "  RAIL TRUCK   Steel x18" + (wire != null ? " + Wire x10" : "") + "\n\n" +
+                    "  RAIL TRUCK      Steel x18" + (wire != null ? " + Wire x10" : "") + "\n" +
+                    "  WAGON COUPLER   Steel x8" + (wire != null ? " + Wire x4" : "") + "\n\n" +
                     "Train System v2: a train is now an ordinary construct.\n\n" +
                     "  1. Build any grid you like.\n" +
                     "  2. Place a Rail Truck on it.\n" +
@@ -102,26 +114,127 @@ namespace IndustrialWorld.EditorTools
                 var root = new GameObject("RailTruck");
                 var body = MakeMat("Mat_RailTruck", TruckTint);
                 var wheel = MakeMat("Mat_RailTruckWheel", WheelTint);
+                var spring = MakeMat("Mat_RailTruckSpring", SpringTint);
+                var accent = MakeMat("Mat_RailTruckAccent", AccentTint);
 
-                var frame = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                frame.name = "Frame";
-                frame.transform.SetParent(root.transform, false);
-                frame.transform.localScale = new Vector3(2.2f, 0.5f, 2.2f);
-                frame.transform.localPosition = new Vector3(0f, 0.25f, 0f);
-                Paint(frame, body);
+                // A real bogie, not a plate on wheels.
+                //
+                // Modelled on the reference: two side frames carrying the axleboxes, a
+                // bolster across the middle that the wagon actually rests on, a centre
+                // pivot, and visible coil springs over each axlebox. The springs matter
+                // more than they look - they are what makes it read as something that
+                // CARRIES weight, which is exactly the mechanic the load model implements.
+                //
+                // Gauge matches the track authored in step 85 (1.05 m between rail centres),
+                // so the wheels sit on the rails rather than beside them.
+                const float gauge = 1.05f;
+                const float axleZ = 0.62f;      // half the wheelbase
+                const float wheelRadius = 0.30f;
 
-                // Four flanged wheels, so the block reads as a bogie at a glance.
+                // ── Side frames ──
+                for (int side = 0; side < 2; side++)
+                {
+                    float x = side == 0 ? -gauge * 0.5f - 0.10f : gauge * 0.5f + 0.10f;
+
+                    var sideFrame = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    sideFrame.name = side == 0 ? "SideFrameL" : "SideFrameR";
+                    sideFrame.transform.SetParent(root.transform, false);
+                    sideFrame.transform.localPosition = new Vector3(x, wheelRadius + 0.10f, 0f);
+                    sideFrame.transform.localScale = new Vector3(0.16f, 0.20f, 1.72f);
+                    Paint(sideFrame, body);
+
+                    // Axleboxes: the blocks the springs sit on, one over each wheel.
+                    for (int a = 0; a < 2; a++)
+                    {
+                        float z = a == 0 ? -axleZ : axleZ;
+
+                        var box = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                        box.name = "Axlebox" + side + a;
+                        box.transform.SetParent(root.transform, false);
+                        box.transform.localPosition = new Vector3(x, wheelRadius + 0.02f, z);
+                        box.transform.localScale = new Vector3(0.22f, 0.24f, 0.30f);
+                        Paint(box, body);
+
+                        // Coil spring, drawn as a short stack of thin discs so it reads as a
+                        // spring at a distance without needing a custom mesh.
+                        for (int coil = 0; coil < 3; coil++)
+                        {
+                            var ring = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                            ring.name = "Spring" + side + a + coil;
+                            ring.transform.SetParent(root.transform, false);
+                            ring.transform.localPosition =
+                                new Vector3(x, wheelRadius + 0.20f + coil * 0.07f, z);
+                            ring.transform.localScale = new Vector3(0.17f, 0.022f, 0.17f);
+                            Paint(ring, spring);
+                        }
+                    }
+                }
+
+                // ── Bolster: the cross-beam the wagon body rests on ──
+                var bolster = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                bolster.name = "Bolster";
+                bolster.transform.SetParent(root.transform, false);
+                bolster.transform.localPosition = new Vector3(0f, wheelRadius + 0.34f, 0f);
+                bolster.transform.localScale = new Vector3(gauge + 0.42f, 0.16f, 0.46f);
+                Paint(bolster, body);
+
+                // ── Centre pivot: what the wagon actually turns about ──
+                var pivot = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                pivot.name = "CentrePivot";
+                pivot.transform.SetParent(root.transform, false);
+                pivot.transform.localPosition = new Vector3(0f, wheelRadius + 0.46f, 0f);
+                pivot.transform.localScale = new Vector3(0.34f, 0.06f, 0.34f);
+                Paint(pivot, accent);
+
+                // ── Brake gear, in the accent colour like the reference ──
+                for (int a = 0; a < 2; a++)
+                {
+                    float z = a == 0 ? -axleZ : axleZ;
+                    var brake = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    brake.name = "BrakeBeam" + a;
+                    brake.transform.SetParent(root.transform, false);
+                    brake.transform.localPosition = new Vector3(0f, wheelRadius - 0.04f, z * 0.55f);
+                    brake.transform.localScale = new Vector3(gauge + 0.12f, 0.07f, 0.09f);
+                    Paint(brake, accent);
+                }
+
+                // ── Wheelsets: four flanged wheels on two axles ──
                 for (int i = 0; i < 4; i++)
                 {
+                    float x = (i % 2 == 0) ? -gauge * 0.5f : gauge * 0.5f;
+                    float z = (i < 2) ? -axleZ : axleZ;
+
                     var w = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
                     w.name = "Wheel" + i;
                     w.transform.SetParent(root.transform, false);
-                    float x = (i % 2 == 0) ? -0.85f : 0.85f;
-                    float z = (i < 2) ? -0.7f : 0.7f;
-                    w.transform.localPosition = new Vector3(x, 0.05f, z);
+                    w.transform.localPosition = new Vector3(x, wheelRadius, z);
                     w.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
-                    w.transform.localScale = new Vector3(0.45f, 0.07f, 0.45f);
+                    w.transform.localScale = new Vector3(wheelRadius * 2f, 0.06f, wheelRadius * 2f);
                     Paint(w, wheel);
+
+                    // Flange: a slightly larger, thinner disc inboard of the tread, which is
+                    // what visually keeps the wheel on the rail.
+                    var flange = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                    flange.name = "Flange" + i;
+                    flange.transform.SetParent(root.transform, false);
+                    float inboard = x > 0f ? -0.045f : 0.045f;
+                    flange.transform.localPosition = new Vector3(x + inboard, wheelRadius, z);
+                    flange.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
+                    flange.transform.localScale = new Vector3(wheelRadius * 2.2f, 0.022f, wheelRadius * 2.2f);
+                    Paint(flange, wheel);
+                }
+
+                // ── Axles ──
+                for (int a = 0; a < 2; a++)
+                {
+                    float z = a == 0 ? -axleZ : axleZ;
+                    var axle = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                    axle.name = "Axle" + a;
+                    axle.transform.SetParent(root.transform, false);
+                    axle.transform.localPosition = new Vector3(0f, wheelRadius, z);
+                    axle.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
+                    axle.transform.localScale = new Vector3(0.10f, gauge * 0.5f, 0.10f);
+                    Paint(axle, wheel);
                 }
 
                 var truck = root.AddComponent<GridRailTruck>();
@@ -226,6 +339,194 @@ namespace IndustrialWorld.EditorTools
                 recipe.displayName = "Rail Truck";
                 recipe.requiredStation = StationTier.Assembler;
                 recipe.craftSeconds = 14f;
+                recipe.unlockedByDefault = true;
+                recipe.outputCount = 1;
+                recipe.outputItem = item;
+                recipe.inputs = Inputs();
+                AssetDatabase.CreateAsset(recipe, GridRecipesFolder + "/" + stem + ".asset");
+                EditorUtility.SetDirty(recipe);
+                changed = true;
+                Debug.Log("[Setup 92] Created " + stem + ".");
+            }
+            else
+            {
+                if (recipe.outputItem == null && item != null)
+                {
+                    recipe.outputItem = item;
+                    recipe.outputCount = 1;
+                    EditorUtility.SetDirty(recipe);
+                    changed = true;
+                }
+                if (recipe.inputs == null || recipe.inputs.Length == 0)
+                {
+                    recipe.inputs = Inputs();
+                    EditorUtility.SetDirty(recipe);
+                    changed = true;
+                }
+            }
+
+            if (!registry.recipes.Contains(recipe))
+            {
+                registry.recipes.Add(recipe);
+                EditorUtility.SetDirty(registry);
+                Debug.Log("[Setup 92] Added " + stem + " to RecipeRegistry.");
+                changed = true;
+            }
+
+            return changed;
+        }
+
+        // ============================================================
+        //                      Wagon coupler
+        // ============================================================
+        private static GameObject EnsureCouplerPrefab(out bool changed)
+        {
+            string path = GridPrefabsFolder + "/RailCoupler.prefab";
+            var existing = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+
+            if (existing == null)
+            {
+                EnsureFolder(GridPrefabsFolder);
+                var root = new GameObject("RailCoupler");
+                var body = MakeMat("Mat_RailTruck", TruckTint);
+                var accent = MakeMat("Mat_RailTruckAccent", AccentTint);
+
+                // A drawhook on a headstock: reads as the thing between two wagons.
+                var headstock = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                headstock.name = "Headstock";
+                headstock.transform.SetParent(root.transform, false);
+                headstock.transform.localScale = new Vector3(1.3f, 0.34f, 0.22f);
+                headstock.transform.localPosition = new Vector3(0f, 0.45f, 0f);
+                Paint(headstock, body);
+
+                var shank = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                shank.name = "Shank";
+                shank.transform.SetParent(root.transform, false);
+                shank.transform.localScale = new Vector3(0.18f, 0.18f, 0.42f);
+                shank.transform.localPosition = new Vector3(0f, 0.45f, 0.26f);
+                Paint(shank, accent);
+
+                var knuckle = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                knuckle.name = "Knuckle";
+                knuckle.transform.SetParent(root.transform, false);
+                knuckle.transform.localScale = new Vector3(0.30f, 0.26f, 0.20f);
+                knuckle.transform.localPosition = new Vector3(0f, 0.45f, 0.50f);
+                Paint(knuckle, accent);
+
+                // Buffers either side, which is what actually takes the shove.
+                for (int i = 0; i < 2; i++)
+                {
+                    var buffer = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                    buffer.name = "Buffer" + i;
+                    buffer.transform.SetParent(root.transform, false);
+                    buffer.transform.localPosition =
+                        new Vector3(i == 0 ? -0.46f : 0.46f, 0.45f, 0.24f);
+                    buffer.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+                    buffer.transform.localScale = new Vector3(0.20f, 0.14f, 0.20f);
+                    Paint(buffer, body);
+                }
+
+                var coupler = root.AddComponent<GridRailCoupler>();
+                coupler.blockName = "Wagon Coupler";
+                coupler.BlockMass = 90f;
+                coupler.maxHP = 260f;
+
+                var prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
+                UnityEngine.Object.DestroyImmediate(root);
+                changed = true;
+                Debug.Log("[Setup 92] Created " + path + ".");
+                return prefab;
+            }
+
+            var contents = PrefabUtility.LoadPrefabContents(path);
+            bool dirty = false;
+            if (contents.GetComponent<GridRailCoupler>() == null)
+            {
+                var c = contents.AddComponent<GridRailCoupler>();
+                c.blockName = "Wagon Coupler";
+                dirty = true;
+                Debug.Log("[Setup 92] Coupler prefab had no GridRailCoupler; added one.");
+            }
+
+            GameObject result = existing;
+            if (dirty) result = PrefabUtility.SaveAsPrefabAsset(contents, path);
+            PrefabUtility.UnloadPrefabContents(contents);
+            changed = dirty;
+            return result;
+        }
+
+        private static GridBlockItem EnsureCouplerItem(GameObject prefab, out bool changed)
+        {
+            string path = GridItemsFolder + "/GItem_RailCoupler.asset";
+            var item = AssetDatabase.LoadAssetAtPath<GridBlockItem>(path);
+            bool created = false;
+
+            if (item == null)
+            {
+                EnsureFolder(GridItemsFolder);
+                item = ScriptableObject.CreateInstance<GridBlockItem>();
+                created = true;
+            }
+            bool dirty = created;
+
+            if (item.itemId != "railcoupler") { item.itemId = "railcoupler"; dirty = true; }
+            if (item.displayName != "Wagon Coupler") { item.displayName = "Wagon Coupler"; dirty = true; }
+            if (item.maxStack <= 0) { item.maxStack = 40; dirty = true; }
+            if (item.massPerUnit <= 0f) { item.massPerUnit = 90f; dirty = true; }
+            if (item.category != "Grid Blocks") { item.category = "Grid Blocks"; dirty = true; }
+            if (string.IsNullOrEmpty(item.description))
+            {
+                item.description =
+                    "Joins one car to the next. Park a railed construct behind another and " +
+                    "use the coupler to attach it; use it again to release. The car in front " +
+                    "does the pulling, so only the leader needs to be powered.";
+                dirty = true;
+            }
+            if (item.icon == null) item.iconTint = AccentTint;
+            if (created) { item.blockMass = 90f; item.blockHP = 260f; }
+
+            if (item.blockPrefab == null || item.blockPrefab != prefab)
+            {
+                item.blockPrefab = prefab;
+                dirty = true;
+            }
+
+            if (dirty)
+            {
+                if (!AssetDatabase.Contains(item)) AssetDatabase.CreateAsset(item, path);
+                EditorUtility.SetDirty(item);
+                Debug.Log("[Setup 92] " + (created ? "Created" : "Repaired") + " " + path + ".");
+            }
+
+            changed = dirty;
+            return item;
+        }
+
+        private static bool EnsureCouplerRecipe(RecipeRegistry registry, GridBlockItem item,
+            ItemDefinition steel, ItemDefinition wire)
+        {
+            const string stem = "Recipe_RailCoupler";
+            var recipe = FindRecipe(stem);
+            bool changed = false;
+
+            RecipeIngredient[] Inputs()
+            {
+                if (wire == null)
+                    return new[] { new RecipeIngredient { item = steel, count = 8 } };
+                return new[]
+                {
+                    new RecipeIngredient { item = steel, count = 8 },
+                    new RecipeIngredient { item = wire, count = 4 },
+                };
+            }
+
+            if (recipe == null)
+            {
+                EnsureFolder(GridRecipesFolder);
+                recipe = ScriptableObject.CreateInstance<RecipeDefinition>();
+                recipe.displayName = "Wagon Coupler";
+                recipe.requiredStation = StationTier.Assembler;
+                recipe.craftSeconds = 8f;
                 recipe.unlockedByDefault = true;
                 recipe.outputCount = 1;
                 recipe.outputItem = item;

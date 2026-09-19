@@ -234,6 +234,7 @@ namespace VoxelEngine.Building
             // way round. Refusing every natural slope made the tool unusable on terrain
             // that a real railway would simply grade flat.
             SmoothProfile(plan, gauge, maxGradientMetres, up);
+            AlignToSlope(plan, gauge, up);
             CheckGradient(plan, gauge, maxGradientMetres, up);
 
             // Any blocked cell refuses the RUN - a line with a gap in it is not a line -
@@ -279,7 +280,10 @@ namespace VoxelEngine.Building
             // Several light passes rather than one aggressive pass: a strong single pass
             // pulls the ends of the run away from the ground the player aimed at, which
             // makes the track visibly float at the point they clicked.
-            const int passes = 6;
+            // Raised from 6: at six passes a real hillside still left steps big enough to
+            // see between cells. Track is a graded formation - it should read as a single
+            // continuous ramp, so the profile is smoothed until it genuinely is one.
+            const int passes = 18;
 
             for (int pass = 0; pass < passes; pass++)
             {
@@ -314,6 +318,52 @@ namespace VoxelEngine.Building
                         cell.position = c + up * (eased - hc);
                         plan.cells[cur] = cell;
                     }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Pitches every cell to point at the next one, so a climb is a ramp and not stairs.
+        ///
+        /// THE BUG THIS FIXES (11.40.0): the rotation came straight from the corridor
+        /// solver, which works on a FLAT plane - so every sleeper stayed perfectly level
+        /// while the positions stepped up the hill underneath them. Each cell ended up a
+        /// separate horizontal slab at a different height, which is exactly the staircase
+        /// in the screenshot.
+        ///
+        /// Aiming each cell at its successor makes consecutive cells share an edge instead
+        /// of overlapping at a corner, which is what turns a row of blocks into a rail.
+        /// </summary>
+        private static void AlignToSlope(RailPlan plan, int gauge, Vector3 up)
+        {
+            int perLane = plan.cells.Count / Mathf.Max(1, gauge);
+            if (perLane < 2) return;
+
+            for (int lane = 0; lane < gauge; lane++)
+            {
+                int baseIndex = lane * perLane;
+
+                for (int i = 0; i < perLane; i++)
+                {
+                    int cur = baseIndex + i;
+                    if (cur >= plan.cells.Count) break;
+
+                    // Look at the next cell, or back at the previous one for the last cell
+                    // so the end of a run does not flip flat and re-create the seam there.
+                    int other = i + 1 < perLane ? baseIndex + i + 1 : baseIndex + i - 1;
+                    if (other < 0 || other >= plan.cells.Count) continue;
+
+                    Vector3 delta = i + 1 < perLane
+                        ? plan.cells[other].position - plan.cells[cur].position
+                        : plan.cells[cur].position - plan.cells[other].position;
+
+                    if (delta.sqrMagnitude < 1e-6f) continue;
+
+                    // Keep the corridor's own up as the roll reference so a cell on a curve
+                    // does not bank; only the PITCH should follow the ground.
+                    var cell = plan.cells[cur];
+                    cell.rotation = Quaternion.LookRotation(delta.normalized, up);
+                    plan.cells[cur] = cell;
                 }
             }
         }
@@ -624,12 +674,12 @@ namespace VoxelEngine.Building
             }
             if (trackBlock == null)
             {
-                LastCommitFailure = "The Rail Layer has no track block assigned. Re-run setup step 93.";
+                LastCommitFailure = "The Rail Layer has no track block assigned.";
                 return 0;
             }
             if (trackBlock.placedPrefab == null)
             {
-                LastCommitFailure = $"'{trackBlock.displayName}' has no placed prefab. Re-run setup step 85.";
+                LastCommitFailure = $"'{trackBlock.displayName}' has no placed prefab.";
                 return 0;
             }
             if (plan.cells.Count == 0)

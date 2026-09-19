@@ -1,9 +1,63 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `11.39.0-dev`
+**Current Version:** `11.40.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [11.40.0-dev] A Real Bogie, And Track That Flows
+
+**Type:** MINOR - rail visuals, load physics and a new coupler block. Save-compatible.
+
+**GitHub title:** `[11.40.0-dev] A real bogie, and track that flows`
+
+#### Track now flows over hills instead of stepping up them
+
+Your photo showed each cell as a separate level slab at a different height - a staircase, not a railway. The cause: rotation came straight from the corridor solver, which works on a **flat plane**, so every sleeper stayed perfectly level while the positions climbed underneath.
+
+Each cell is now pitched to aim at the next one, so consecutive cells share an edge rather than overlapping at a corner. Smoothing also went from 6 passes to 18, because at 6 a real hillside still left steps big enough to see - a worst step of 1.10 m now grades to 0.29 m.
+
+The last cell of a run aims *back* at its predecessor, so the end does not flip flat and re-create the seam there.
+
+#### The bogie looks like a bogie
+
+Rebuilt from your reference: two side frames carrying the axleboxes, a bolster across the middle that the wagon rests on, a centre pivot, visible coil springs over each axlebox, orange brake gear, and flanged wheels on real axles at the 1.05 m gauge the track uses.
+
+The springs matter more than they look. They are what makes it read as something that **carries weight**, which is exactly the mechanic underneath it.
+
+#### Weight actually matters now
+
+| Load | 1 bogie | 2 bogies | 4 bogies |
+|---|---|---|---|
+| 6 t | 14.0 m/s | 14.0 | 14.0 |
+| 12 t | 7.0 | 14.0 | 14.0 |
+| 24 t | 3.5 | 7.0 | 14.0 |
+| 48 t | 2.1 | 3.5 | 7.0 |
+
+Mass is summed across the **whole consist** and divided by the combined rated load of every bogie in it, so your rule falls out directly: heavier is slower, more bogies is faster, and the gain is capped because the factor never exceeds 1.
+
+Load is shared rather than per-bogie deliberately - a real consist spreads weight across every axle, and checking each bogie against only its own grid would let a player defeat the rule by putting the heavy wagon in the middle. The floor is 15% of top speed, never zero: a train that cannot move at all reads as a bug rather than as overloaded.
+
+#### Trucks snap to rails, and cannot be stacked
+
+Placing a truck on rail now **attaches immediately**. Previously the only way on was a button inside the block console, so a player who built a train beside a line had no indication a further step existed - it just sat there.
+
+Stacking is refused, and the block is returned rather than sitting there inert. Stacked bogies break the load model as well as physical sense: each would claim its own rated capacity while carrying the same mass, making an overloaded train arbitrarily fast. Side-by-side trucks stay legal, because that is a real four-wheel arrangement - only *directly below* is checked.
+
+#### Attach, detach, couple, release
+
+- **E on a rail truck** - toggles on and off the rails
+- **E on a coupler** - attaches to the car in front, or releases
+
+The new **Wagon Coupler** block is what you asked for. It holds no physics joint - consists still follow the leader's recorded path, since a joint between kinematic bodies does nothing - it is the player-facing control for that system, mounted where the connection physically is.
+
+#### Also
+
+Removed the "re-run setup step 85/93" text from the failure toasts.
+
+#### Manual step in Unity
+
+Re-run **85** (track pitch) and **92** (new bogie, wagon coupler). Both non-destructive.
 
 ### [11.39.0-dev] Retire The Locomotive, Widen The Gauge, Make It Cobblestone
 
