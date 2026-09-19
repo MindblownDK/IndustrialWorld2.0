@@ -27,18 +27,33 @@ namespace VoxelEngine.Building
     /// </summary>
     public static class RailGhost
     {
-        private static GameObject _ghost;
-        private static MeshFilter _filter;
-        private static MeshRenderer _renderer;
-        private static Material _material;
-        private static Mesh _mesh;
+        // Two separate meshes rather than one vertex-coloured mesh.
+        //
+        // THE BUG (11.38.0): the ghost set vertex colours and used URP/Unlit, which does
+        // NOT read them - so every preview rendered flat white and the green/red verdict
+        // was invisible. Exactly the same mistake as the asteroid material in 11.28.1.
+        //
+        // Splitting valid and invalid cells into two meshes with real material colours
+        // needs no special shader, so it cannot silently stop working if the render
+        // pipeline changes.
+        private static GameObject _root;
+        private static GhostLayer _validLayer;
+        private static GhostLayer _invalidLayer;
 
-        private static readonly List<Vector3> _positions = new(2048);
-        private static readonly List<int> _triangles = new(3072);
-        private static readonly List<Color> _colors = new(2048);
+        private sealed class GhostLayer
+        {
+            public MeshFilter filter;
+            public MeshRenderer renderer;
+            public Mesh mesh;
+            public readonly List<Vector3> positions = new(2048);
+            public readonly List<int> triangles = new(3072);
+        }
 
-        private static readonly Color Good = new(0.30f, 0.85f, 1.00f, 0.55f);
-        private static readonly Color Bad = new(1.00f, 0.35f, 0.25f, 0.55f);
+        // Opaque, and green rather than cyan. The URP/Unlit fallback is an OPAQUE shader,
+        // so an alpha of 0.55 was simply ignored - which is another reason the old ghost
+        // read as a solid white slab rather than a translucent hint.
+        private static readonly Color Good = new(0.25f, 0.90f, 0.35f);
+        private static readonly Color Bad = new(0.95f, 0.25f, 0.20f);
 
         /// <summary>Half-width of the drawn sleeper, in metres.</summary>
         private const float HalfWidth = 0.62f;
@@ -58,11 +73,10 @@ namespace VoxelEngine.Building
             if (plan == null || plan.cells.Count == 0) { Hide(); return; }
 
             EnsureGhost();
-            if (_ghost == null) return;
+            if (_root == null) return;
 
-            _positions.Clear();
-            _triangles.Clear();
-            _colors.Clear();
+            _validLayer.positions.Clear(); _validLayer.triangles.Clear();
+            _invalidLayer.positions.Clear(); _invalidLayer.triangles.Clear();
 
             for (int i = 0; i < plan.cells.Count; i++)
             {
@@ -71,69 +85,98 @@ namespace VoxelEngine.Building
                 // Per CELL, not per run. A route that clips one rock shows one red cell the
                 // player can nudge around, instead of turning the whole line red and leaving
                 // them to guess which end is the problem.
-                Color tint = cell.valid ? Good : Bad;
+                var layer = cell.valid ? _validLayer : _invalidLayer;
+
                 Vector3 right = cell.rotation * Vector3.right * HalfWidth;
                 Vector3 forward = cell.rotation * Vector3.forward * 0.42f;
                 Vector3 up = cell.rotation * Vector3.up * Lift;
                 Vector3 centre = cell.position + up;
 
-                int b = _positions.Count;
-                _positions.Add(centre - right - forward);
-                _positions.Add(centre + right - forward);
-                _positions.Add(centre + right + forward);
-                _positions.Add(centre - right + forward);
-                for (int v = 0; v < 4; v++) _colors.Add(tint);
+                int b = layer.positions.Count;
+                layer.positions.Add(centre - right - forward);
+                layer.positions.Add(centre + right - forward);
+                layer.positions.Add(centre + right + forward);
+                layer.positions.Add(centre - right + forward);
 
-                _triangles.Add(b); _triangles.Add(b + 1); _triangles.Add(b + 2);
-                _triangles.Add(b); _triangles.Add(b + 2); _triangles.Add(b + 3);
+                layer.triangles.Add(b); layer.triangles.Add(b + 1); layer.triangles.Add(b + 2);
+                layer.triangles.Add(b); layer.triangles.Add(b + 2); layer.triangles.Add(b + 3);
             }
 
-            _mesh.Clear();
+            Upload(_validLayer);
+            Upload(_invalidLayer);
+            _root.SetActive(true);
+        }
+
+        private static void Upload(GhostLayer layer)
+        {
+            layer.mesh.Clear();
+
+            if (layer.positions.Count == 0)
+            {
+                layer.renderer.enabled = false;
+                return;
+            }
+
             // A long multi-lane run exceeds the 16-bit index limit, and a silently truncated
             // preview would show a shorter route than the commit lays.
-            _mesh.indexFormat = _positions.Count > 65000
+            layer.mesh.indexFormat = layer.positions.Count > 65000
                 ? UnityEngine.Rendering.IndexFormat.UInt32
                 : UnityEngine.Rendering.IndexFormat.UInt16;
-            _mesh.SetVertices(_positions);
-            _mesh.SetTriangles(_triangles, 0);
-            _mesh.SetColors(_colors);
-            _mesh.RecalculateBounds();
 
-            _ghost.SetActive(true);
+            layer.mesh.SetVertices(layer.positions);
+            layer.mesh.SetTriangles(layer.triangles, 0);
+            layer.mesh.RecalculateBounds();
+            layer.renderer.enabled = true;
         }
 
         public static void Hide()
         {
-            if (_ghost != null) _ghost.SetActive(false);
+            if (_root != null) _root.SetActive(false);
         }
 
         private static void EnsureGhost()
         {
-            if (_ghost != null) return;
+            if (_root != null) return;
 
-            _ghost = new GameObject("RailGhost") { hideFlags = HideFlags.HideAndDontSave };
-            _filter = _ghost.AddComponent<MeshFilter>();
-            _renderer = _ghost.AddComponent<MeshRenderer>();
+            _root = new GameObject("RailGhost") { hideFlags = HideFlags.HideAndDontSave };
+            _validLayer = CreateLayer("Valid", Good);
+            _invalidLayer = CreateLayer("Invalid", Bad);
+            _root.SetActive(false);
+        }
 
-            var shader = Shader.Find("Universal Render Pipeline/Unlit")
-                      ?? Shader.Find("Unlit/Color");
-            if (shader != null)
+        private static GhostLayer CreateLayer(string name, Color color)
+        {
+            var go = new GameObject(name) { hideFlags = HideFlags.HideAndDontSave };
+            go.transform.SetParent(_root.transform, false);
+
+            var layer = new GhostLayer
             {
-                _material = new Material(shader) { hideFlags = HideFlags.HideAndDontSave };
-                // Never cull: the preview must survive being viewed from below a cutting.
-                if (_material.HasProperty("_Cull")) _material.SetFloat("_Cull", 0f);
-                // Transparent, so the ghost reads as a projection rather than as built track.
-                if (_material.HasProperty("_Surface")) _material.SetFloat("_Surface", 1f);
-                _renderer.material = _material;
-            }
+                filter = go.AddComponent<MeshFilter>(),
+                renderer = go.AddComponent<MeshRenderer>(),
+                mesh = new Mesh { hideFlags = HideFlags.HideAndDontSave, name = "RailGhost_" + name },
+            };
 
-            _mesh = new Mesh { hideFlags = HideFlags.HideAndDontSave, name = "RailGhost" };
-            _mesh.MarkDynamic();
-            _filter.sharedMesh = _mesh;
+            layer.mesh.MarkDynamic();
+            layer.filter.sharedMesh = layer.mesh;
 
-            _renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            _renderer.receiveShadows = false;
-            _ghost.SetActive(false);
+            // Colour lives on the MATERIAL, not in vertex colours: URP/Unlit ignores vertex
+            // colour, which is what made the previous ghost render flat white.
+            var shader = Shader.Find("Universal Render Pipeline/Unlit")
+                      ?? Shader.Find("Unlit/Color")
+                      ?? Shader.Find("Sprites/Default");
+
+            var material = new Material(shader) { hideFlags = HideFlags.HideAndDontSave };
+            if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", color);
+            if (material.HasProperty("_Color")) material.SetColor("_Color", color);
+            material.color = color;
+            // Never cull: the preview must survive being viewed from below a cutting.
+            if (material.HasProperty("_Cull")) material.SetFloat("_Cull", 0f);
+
+            layer.renderer.sharedMaterial = material;
+            layer.renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            layer.renderer.receiveShadows = false;
+
+            return layer;
         }
     }
 }

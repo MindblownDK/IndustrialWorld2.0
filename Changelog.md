@@ -1,9 +1,41 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `11.37.0-dev`
+**Current Version:** `11.38.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [11.38.0-dev] The Ghost Was White And The Failure Was Silent
+
+**Type:** PATCH-level fixes shipped as MINOR (new diagnostics API). Save-compatible.
+
+**GitHub title:** `[11.38.0-dev] The ghost was white and the failure was silent`
+
+Your screenshot solved this. The white slabs in it **are** the ghost - it was rendering the whole time, just colourless - and that told me planning was working and the failure was downstream in `Commit`.
+
+#### Why I kept missing this
+
+`Commit` had four early returns that all did the same thing: `return 0`. Null plan, null track block, null placed prefab, empty cell list - every one produced a bare zero, and the caller printed "the route produced no placeable cells" for all of them. The message actively misdirected the search, and I spent three releases looking at the planner because that is what it pointed at.
+
+**Every early return now states its own reason**, surfaced in the toast and logged with the full counts - planned, solved, missed ground, blocked, skipped. A silent failure path in a tool the player invokes is a bug in its own right, independent of whatever caused it.
+
+#### The likely root cause, and a fix that does not depend on setup order
+
+A Rail Layer asset created by an earlier setup run has `trackBlock` null, because the field did not exist when it was authored. Step 93 repairs it - but only when re-run, and the tool in your inventory was already made.
+
+`Commit` then hit `trackBlock == null` and returned 0 silently. The tool now **finds the Rail Track block by id at runtime** if its reference is missing, logs that it did, and carries on. An upgrade can no longer leave a dead tool in the player's hands regardless of what order steps are run in.
+
+#### The ghost was white for the same reason the asteroids were
+
+I set vertex colours and used URP/Unlit - which does not read vertex colours. Identical to the asteroid material bug in 11.28.1, and I made it again. The alpha was ignored too, because that fallback shader is opaque, which is why it read as a solid white slab rather than a translucent hint.
+
+Rather than hunt for a vertex-colour shader, the ghost is now **two meshes with two real materials**: green for placeable cells, red for blocked ones. That needs no special shader, so it cannot silently stop working if the render pipeline changes.
+
+#### What to expect now
+
+If a run still lays nothing, the toast will name the actual cause and the Console will carry a `[RailLayer]` line with every count. That turns the next report into a fix rather than another round of guessing.
+
+No manual Unity step, though re-running **93** will persist the recovered reference.
 
 ### [11.37.0-dev] Multi-Point Runs, Real Junctions, Honest Ghost
 

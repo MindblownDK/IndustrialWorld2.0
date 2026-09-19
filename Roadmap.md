@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `11.37.0-dev`
-**Roadmap Version:** `11.37.0-dev`
+**Current Version:** `11.38.0-dev`
+**Roadmap Version:** `11.38.0-dev`
 **Date:** 2026-09-16
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,12 @@
 ---
 
 ## 0. Recently Done
+
+### 11.38.0-dev - The Ghost Was White And The Failure Was Silent
+- **Root rule:** `Commit` had four early returns that all did `return 0`, so one message covered four causes and misdirected three releases of debugging. Every early return now states its reason; the toast shows it and the Console logs full counts.
+- **Likely cause:** a Rail Layer asset authored before `trackBlock` existed had it null; the setup step only repairs on re-run. The tool now resolves the block by id AT RUNTIME, so upgrade order cannot leave a dead tool.
+- **Ghost:** set vertex colours on URP/Unlit, which ignores them - the same mistake as the asteroid material in 11.28.1. Now two meshes with two real materials (green/red), needing no special shader.
+- **Rule reinforced:** never rely on vertex colours without a shader that reads them, and never let a player-facing action fail without saying why.
 
 ### 11.37.0-dev - Multi-Point Runs, Real Junctions, Honest Ghost
 - **Diagnosis rule learned the hard way:** "no placeable cells" could not distinguish its own causes, so two releases were spent guessing. Refusals now report counts (solved / missed ground / blocked).
@@ -55,14 +61,6 @@
 - **Self-deadlock rule:** a consist claims as ONE entity (the head), and a train releases everything except the section it occupies and the one it is entering - otherwise one lap of a loop deadlocks the network against its own train.
 - **Liveness rule:** claims are dropped on destroy and detach. A claim held by a dead object blocks a line forever with no visible cause.
 - Lookahead scales with real stopping distance (`v^2/2a`); a fixed distance either stops slow trains too early or fast trains too late.
-
-### 11.33.0-dev - Lay A Line, Not A Thousand Cells
-- `RailCorridor` + `RailLayerTool`: drag-to-lay rail runs at 1-3 parallel-track gauges, with solved curves. Setup step 93.
-- **Reuse rule:** the geometry is `RoadCorridor`, unchanged - centreline, fillets, per-cell four-corner footprints, tight-corner refusal. A second solver would be the same maths drifting apart.
-- **Rail-only additions:** gradient checked per lane ALONG travel (across lanes measures cant, not grade), and lanes meaning parallel TRACKS rather than independent surfaces.
-- **Rule:** a plan is fully placeable or fully refused, with the reason. Material is counted before placing, so an unaffordable run lays and charges nothing.
-- **Ordering trap:** place all cells THEN link them. Linking as you go lets each cell spend its link budget on the one behind before the one ahead exists, leaving disconnected pairs.
-- **Deliberately excluded:** automatic junctions at crossings - guessing which route is the through line would silently reroute a player's trains.
 
 ### Era Transition Feel
 

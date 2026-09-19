@@ -2108,6 +2108,21 @@ namespace VoxelEngine.Player
         /// from the thing it previews can lie, and a tool that shows a green route then
         /// refuses it is worse than one with no preview at all.
         /// </summary>
+        /// <summary>
+        /// Finds a block item by id at runtime. Used to recover a tool asset that predates
+        /// a field, so an upgrade does not leave a silently dead tool in the player's hands.
+        /// </summary>
+        private static BlockItem FindBlockItemById(string itemId)
+        {
+            foreach (var block in Resources.LoadAll<BlockItem>(""))
+                if (block != null && block.itemId == itemId) return block;
+
+            foreach (var block in Resources.FindObjectsOfTypeAll<BlockItem>())
+                if (block != null && block.itemId == itemId) return block;
+
+            return null;
+        }
+
         private float PlanRailRun(RailLayerTool tool, Vector3 end)
         {
             float cell = 1f;
@@ -2147,9 +2162,26 @@ namespace VoxelEngine.Player
 
         private void CommitRailRun(RailLayerTool tool, Vector3 end)
         {
-            if (tool == null || tool.trackBlock == null)
+            if (tool == null) return;
+
+            // Self-heal a tool asset authored before a field existed.
+            //
+            // This is the likeliest cause of the "nothing laid" reports: a Rail Layer
+            // created by an earlier setup run has `trackBlock` null, the setup step only
+            // repairs assets when it is re-run, and `Commit` then returned 0 silently. A
+            // tool that can find its own block at runtime cannot be broken by upgrade order.
+            if (tool.trackBlock == null)
             {
-                VoxelEngine.UI.BuildFeedbackHud.Show("Rail layer", "No track block assigned to this tool.",
+                tool.trackBlock = FindBlockItemById("railtrack");
+                if (tool.trackBlock != null)
+                    Debug.Log("[RailLayer] Recovered a missing track block reference at runtime. " +
+                              "Re-run setup step 93 to persist it.");
+            }
+
+            if (tool.trackBlock == null)
+            {
+                VoxelEngine.UI.BuildFeedbackHud.Show("Rail layer",
+                    "No Rail Track block found. Run setup step 85, then step 93.",
                     null, T_AccentAmber);
                 return;
             }
@@ -2208,11 +2240,19 @@ namespace VoxelEngine.Player
                 // Distinguish the two ways this can lay nothing. Reporting "already had
                 // track" when the run simply failed is what made the last build so
                 // confusing to debug.
-                VoxelEngine.UI.BuildFeedbackHud.Show("Nothing laid",
-                    skipped > 0
+                // Surface the corridor's own reason rather than inventing one.
+                string why = VoxelEngine.Building.RailCorridor.LastCommitFailure;
+                if (string.IsNullOrEmpty(why))
+                {
+                    why = skipped > 0
                         ? $"All {skipped} cells on that route already had track."
-                        : "The route produced no placeable cells.",
-                    null, T_AccentAmber);
+                        : $"Planned {_railPlan.CellCount} cells but none were placed.";
+                }
+
+                VoxelEngine.UI.BuildFeedbackHud.Show("Nothing laid", why, null, T_AccentAmber);
+                Debug.LogWarning($"[RailLayer] {why} (planned {_railPlan.CellCount}, " +
+                                 $"solved {_railPlan.SolvedCells}, missed ground {_railPlan.MissedGround}, " +
+                                 $"blocked {_railPlan.BlockedCells}, skipped {skipped})");
                 return;
             }
 

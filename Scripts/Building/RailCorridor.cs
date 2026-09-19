@@ -435,6 +435,9 @@ namespace VoxelEngine.Building
         /// <summary>Junctions formed by the last commit, for the tool's readout.</summary>
         public static int LastJunctionsFormed { get; private set; }
 
+        /// <summary>Why the last commit laid nothing. Null when it succeeded.</summary>
+        public static string LastCommitFailure { get; private set; }
+
         /// <summary>
         /// Decides whether one cell can actually be built, and says why not.
         ///
@@ -597,8 +600,38 @@ namespace VoxelEngine.Building
         public static int Commit(RailPlan plan, BlockItem trackBlock, float cellSize, out int skipped)
         {
             skipped = 0;
-            if (plan == null || !plan.IsPlaceable) return 0;
-            if (trackBlock == null || trackBlock.placedPrefab == null) return 0;
+            LastCommitFailure = null;
+
+            // Every early return now SAYS WHY. Three releases were lost to this method
+            // returning a bare 0: the caller printed "no placeable cells" for a null prefab,
+            // a null block and a genuinely empty plan alike, so the message actively
+            // misdirected the search. A silent failure path in a tool the player invokes
+            // is a bug in its own right.
+            if (plan == null)
+            {
+                LastCommitFailure = "No plan was produced.";
+                return 0;
+            }
+            if (!plan.IsPlaceable)
+            {
+                LastCommitFailure = plan.Refusal ?? "The plan was refused.";
+                return 0;
+            }
+            if (trackBlock == null)
+            {
+                LastCommitFailure = "The Rail Layer has no track block assigned. Re-run setup step 93.";
+                return 0;
+            }
+            if (trackBlock.placedPrefab == null)
+            {
+                LastCommitFailure = $"'{trackBlock.displayName}' has no placed prefab. Re-run setup step 85.";
+                return 0;
+            }
+            if (plan.cells.Count == 0)
+            {
+                LastCommitFailure = "The plan contained no cells.";
+                return 0;
+            }
 
             int placed = 0;
             int ballastPlaced = 0;
@@ -660,6 +693,10 @@ namespace VoxelEngine.Building
             }
 
             LastBallastPlaced = ballastPlaced;
+
+            if (placed == 0 && skipped > 0)
+                LastCommitFailure = $"All {skipped} cells were rejected as duplicates of " +
+                                    "existing track within " + (cellSize * 0.25f).ToString("0.00") + " m.";
 
             // Link the whole run AFTER every cell exists. Linking as we go would let each
             // cell fill its limited link budget with the one behind it before the one ahead
