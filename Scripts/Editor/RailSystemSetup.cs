@@ -18,7 +18,9 @@ namespace IndustrialWorld.EditorTools
     ///   Rail Switch   - a junction cell; holds up to four connections and picks one.
     ///   Rail Buffer   - a line end. Stops a train at the railhead.
     ///   Rail Station  - a named stop with a cargo hold and a load/unload role.
-    ///   Locomotive    - the scheduled hauler that walks the graph.
+    ///
+    /// The v1 Locomotive is no longer authored here - Train System v2 replaced it with
+    /// the Rail Truck (step 92), which turns any player-built grid into a train.
     ///
     /// Non-destructive: missing assets are created, existing ones only have
     /// unresolvable links repaired (null prefab, null output item, missing registry
@@ -34,7 +36,6 @@ namespace IndustrialWorld.EditorTools
 
         private static readonly Color RailTint = new(0.55f, 0.57f, 0.62f);
         private static readonly Color StationTint = new(0.78f, 0.68f, 0.40f);
-        private static readonly Color LocoTint = new(0.36f, 0.44f, 0.56f);
 
         private const string SteelPath = Root + "/Items/Item_SteelIngot.asset";
         private const string WirePath = Root + "/Industrial/Items/Item_CopperWire.asset";
@@ -82,7 +83,11 @@ namespace IndustrialWorld.EditorTools
                     steel, 3, wire, 0, registry);
 
                 any |= BuildStation(steel, wire, registry);
-                any |= BuildLocomotive(steel, wire, registry);
+                // The v1 locomotive is RETIRED (11.39.0). Train System v2 makes a train an
+                // ordinary grid with a Rail Truck on it, so a bespoke locomotive entity is
+                // now a second way to do the same thing - and the one that cannot carry
+                // grid blocks, take damage or be designed by the player.
+                any |= RetireLocomotive(registry);
 
                 AssetDatabase.SaveAssets();
                 AssetDatabase.Refresh();
@@ -96,7 +101,9 @@ namespace IndustrialWorld.EditorTools
                     "  RAIL SWITCH   Steel x6 + Wire x2 - junction, right-click to set\n" +
                     "  RAIL BUFFER   Steel x3        - line end\n" +
                     "  RAIL STATION  Steel x20 + Wire x8 - named stop with a cargo hold\n" +
-                    "  LOCOMOTIVE    Steel x40 + Wire x20 - scheduled hauler\n\n" +
+                    "\nThe v1 Locomotive is RETIRED. A train is now any grid with a\n" +
+                    "Rail Truck on it - see setup step 92. Existing locomotives in\n" +
+                    "a save keep working; the recipe is simply gone.\n\n" +
                     "To run a line:\n" +
                     "  1. Lay track between two sites. Keep the gradient gentle.\n" +
                     "  2. Place a station beside the track at each end and name it.\n" +
@@ -140,14 +147,25 @@ namespace IndustrialWorld.EditorTools
                 var sleeperMat = MakeColoredMat(PrefabsFolder, "Mat_RailSleeper", new Color(0.32f, 0.26f, 0.20f));
                 var railMat = MakeColoredMat(PrefabsFolder, "Mat_RailSteel", RailTint);
 
-                // Two sleepers and two rails: reads as track from above at 1 m per cell.
-                for (int i = 0; i < 2; i++)
+                // Sleepers and rails at a proper gauge.
+                //
+                // The first pass used a 0.56 m gauge on a 1 m cell, which read as a narrow
+                // ladder rather than a railway - a player standing beside it saw two thin
+                // strips down the middle of a wide bed. The gauge is now 1.05 m across a
+                // 1.5 m sleeper, which is close to the real ratio of rail spacing to
+                // sleeper length and reads correctly at standing height.
+                //
+                // Four sleepers per cell rather than two: at 1 m spacing two sleepers left
+                // visible gaps between cells, so a run looked like a dashed line.
+                for (int i = 0; i < 4; i++)
                 {
                     var sleeper = GameObject.CreatePrimitive(PrimitiveType.Cube);
                     sleeper.name = "Sleeper" + i;
                     sleeper.transform.SetParent(root.transform, false);
-                    sleeper.transform.localPosition = new Vector3(0f, 0.03f, i == 0 ? -0.26f : 0.26f);
-                    sleeper.transform.localScale = new Vector3(0.78f, 0.06f, 0.14f);
+                    // Evenly spread across the cell so consecutive cells tile without a seam.
+                    float z = -0.375f + i * 0.25f;
+                    sleeper.transform.localPosition = new Vector3(0f, 0.05f, z);
+                    sleeper.transform.localScale = new Vector3(1.5f, 0.10f, 0.18f);
                     Paint(sleeper, sleeperMat);
                 }
                 for (int i = 0; i < 2; i++)
@@ -155,8 +173,10 @@ namespace IndustrialWorld.EditorTools
                     var rail = GameObject.CreatePrimitive(PrimitiveType.Cube);
                     rail.name = "Rail" + i;
                     rail.transform.SetParent(root.transform, false);
-                    rail.transform.localPosition = new Vector3(i == 0 ? -0.28f : 0.28f, 0.09f, 0f);
-                    rail.transform.localScale = new Vector3(0.07f, 0.07f, 1.0f);
+                    rail.transform.localPosition = new Vector3(i == 0 ? -0.525f : 0.525f, 0.14f, 0f);
+                    // Slightly taller than wide, like a real rail profile, and full cell
+                    // length so consecutive cells form one continuous line.
+                    rail.transform.localScale = new Vector3(0.11f, 0.12f, 1.0f);
                     Paint(rail, railMat);
                 }
 
@@ -279,76 +299,31 @@ namespace IndustrialWorld.EditorTools
         // ============================================================
         //                       Locomotive
         // ============================================================
-        private static bool BuildLocomotive(ItemDefinition steel, ItemDefinition wire, RecipeRegistry registry)
+        /// <summary>
+        /// Removes the v1 locomotive from the game.
+        ///
+        /// It is unregistered from the recipe registry rather than deleted from disk. A
+        /// player's existing save may still contain one, and deleting the asset would turn
+        /// that into a missing-reference on load - the block would vanish from their world
+        /// with no explanation. Dropping the recipe makes it uncraftable, so it stops being
+        /// a choice for new play while anything already built keeps working until the
+        /// MAJOR release that removes `RailTrain` outright.
+        /// </summary>
+        private static bool RetireLocomotive(RecipeRegistry registry)
         {
-            string asset = "Locomotive";
-            string path = PrefabsFolder + "/" + asset + ".prefab";
-            var existing = AssetDatabase.LoadAssetAtPath<GameObject>(path);
-            bool prefabChanged = false;
-            GameObject prefab = existing;
+            bool changed = false;
 
-            if (existing == null)
+            var recipe = FindRecipe("Recipe_Locomotive");
+            if (recipe != null && registry.recipes.Contains(recipe))
             {
-                EnsureFolder(PrefabsFolder);
-                var root = new GameObject(asset);
-                var mat = MakeColoredMat(PrefabsFolder, "Mat_Locomotive", LocoTint);
-
-                var hull = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                hull.name = "Hull";
-                hull.transform.SetParent(root.transform, false);
-                hull.transform.localPosition = new Vector3(0f, 0.55f, 0f);
-                hull.transform.localScale = new Vector3(0.78f, 0.72f, 2.3f);
-                Paint(hull, mat);
-
-                var cab = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                cab.name = "Cab";
-                cab.transform.SetParent(root.transform, false);
-                cab.transform.localPosition = new Vector3(0f, 1.08f, -0.62f);
-                cab.transform.localScale = new Vector3(0.74f, 0.52f, 0.9f);
-                Paint(cab, mat);
-
-                for (int i = 0; i < 4; i++)
-                {
-                    var wheel = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                    wheel.name = "Wheel" + i;
-                    wheel.transform.SetParent(root.transform, false);
-                    float x = (i % 2 == 0) ? -0.36f : 0.36f;
-                    float z = (i < 2) ? -0.72f : 0.72f;
-                    wheel.transform.localPosition = new Vector3(x, 0.20f, z);
-                    wheel.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
-                    wheel.transform.localScale = new Vector3(0.36f, 0.05f, 0.36f);
-                    Paint(wheel, MakeColoredMat(PrefabsFolder, "Mat_LocoWheel", new Color(0.18f, 0.19f, 0.22f)));
-                }
-
-                root.AddComponent<RailTrain>();
-
-                prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
-                UnityEngine.Object.DestroyImmediate(root);
-                prefabChanged = true;
-                Debug.Log("[Setup 85] Created " + path + ".");
-            }
-            else
-            {
-                var contents = PrefabUtility.LoadPrefabContents(path);
-                if (contents.GetComponent<RailTrain>() == null)
-                {
-                    contents.AddComponent<RailTrain>();
-                    prefab = PrefabUtility.SaveAsPrefabAsset(contents, path);
-                    prefabChanged = true;
-                    Debug.Log("[Setup 85] Locomotive prefab had no RailTrain component; added one.");
-                }
-                PrefabUtility.UnloadPrefabContents(contents);
+                registry.recipes.Remove(recipe);
+                EditorUtility.SetDirty(registry);
+                changed = true;
+                Debug.Log("[Setup 85] Retired the v1 Locomotive: recipe removed from the registry. " +
+                          "Build a grid and put a Rail Truck on it instead (setup step 92).");
             }
 
-            EnsureBlockItem(asset, "Locomotive",
-                "A scheduled hauler. Place it on track, give it a list of station names, and " +
-                "it runs that order on its own - including while its chunks are unloaded.",
-                prefab, LocoTint, 220f, 600, "Rail", out bool itemChanged);
-
-            EnsureRecipe(registry, asset, "Locomotive", steel, 40, wire, 20,
-                StationTier.Assembler, 25f, out bool recipeChanged);
-
-            return prefabChanged || itemChanged || recipeChanged;
+            return changed;
         }
 
         // ============================================================

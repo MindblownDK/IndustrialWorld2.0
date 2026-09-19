@@ -1,9 +1,60 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `11.38.0-dev`
+**Current Version:** `11.39.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [11.39.0-dev] Retire The Locomotive, Widen The Gauge, Make It Cobblestone
+
+**Type:** MINOR - retires a superseded block and reworks rail visuals. Save-compatible.
+
+**GitHub title:** `[11.39.0-dev] Retire the locomotive, widen the gauge, make it cobblestone`
+
+The diagnostics added in 11.38.0 did their job: *"'Rail Track' has no placed prefab"* named the exact cause immediately, where three previous releases had guessed. Track is laying now.
+
+#### The v1 locomotive is retired
+
+Step 85 was still authoring it, so the game offered two ways to build a train - and the old one is strictly worse: it cannot carry grid blocks, take damage, be painted, pressurised, or designed by the player.
+
+Its recipe is **removed from the registry** rather than the asset being deleted. A save may still contain one, and deleting the asset would turn that into a missing reference on load - the block would vanish from the player's world with no explanation. Dropping the recipe makes it uncraftable, so it stops being a choice for new play while anything already built keeps working until the MAJOR release that removes `RailTrain` outright.
+
+#### The dependency is now stated
+
+Steps 92, 93 and 94 all need step 85 - they place, lay and signal the track it authors. Step 93 already refused with a clear message, but the wizard buttons said nothing, so the ordering was only discoverable by hitting the error. All three buttons now read **"needs 85"**.
+
+#### The gauge was far too narrow
+
+Rails sat 0.56 m apart on a 1 m cell, which reads as a narrow ladder down the middle of a wide bed rather than a railway.
+
+| | Was | Now |
+|---|---|---|
+| Gauge | 0.56 m | 1.05 m |
+| Sleeper length | 0.78 m | 1.5 m |
+| Sleepers per cell | 2 | 4 |
+| Rail profile | 0.07 square | 0.11 x 0.12 (taller than wide) |
+
+The gauge-to-sleeper ratio is now 0.70, which is what real track uses. Sleeper count doubled because at 1 m spacing two per cell left visible gaps at every cell boundary - a run looked like a dashed line rather than continuous track.
+
+#### The ballast reads as cobblestone
+
+It was one smooth cube. A flat surface has no self-shadowing, so it reads as poured concrete however it is tinted - the tint was never the problem.
+
+The bed is now a base slab plus **26 jittered cobbles** in three tones, each with a random yaw and a slight tilt, because the shadows *between* stones are what makes ballast look like ballast. It is also wider (2.1 m) so the shoulder spreads past the sleeper ends like real ballast does.
+
+Two details worth naming:
+- **The jitter is deterministic**, seeded by a constant. A prefab authored twice must be identical, or two setup runs produce visibly different track.
+- **Cobbles have no colliders.** They are decoration on the bed; 26 extra colliders per cell would be a real cost on a long line.
+
+#### Re-tuned the stacking against the new geometry
+
+Changing the ballast changed where its top sits, so the rail rise was recomputed rather than left alone: cobbles top out at 0.115 m, and the rail now rises 0.11 m, putting the sleeper underside at 0.110 m - **bedded into the stones** rather than floating 6.5 cm above them, which is what the old value would have produced.
+
+#### Manual step in Unity
+
+Re-run **85** (retires the locomotive, widens the gauge) and **93** (rebuilds the ballast). Both are non-destructive.
+
+Existing track keeps its old prefab; the new geometry applies to track laid after the rebuild.
 
 ### [11.38.0-dev] The Ghost Was White And The Failure Was Silent
 

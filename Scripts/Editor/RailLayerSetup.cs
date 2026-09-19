@@ -178,17 +178,66 @@ namespace IndustrialWorld.EditorTools
             EnsureFolder(folder);
             var root = new GameObject("RailBallast");
 
-            // A low, slightly over-wide slab: ballast spreads wider than the sleepers it
-            // carries, which is what gives real track its trapezoid shoulder.
-            var bed = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            bed.name = "Bed";
-            bed.transform.SetParent(root.transform, false);
-            bed.transform.localScale = new Vector3(1.5f, 0.35f, 1.0f);
-            bed.transform.localPosition = new Vector3(0f, 0.175f, 0f);
+            // COBBLESTONE, not a slab.
+            //
+            // The first version was one smooth cube, which reads as poured concrete however
+            // it is tinted - a flat surface has no shadows, so the eye gets no texture cue.
+            // Ballast looks like ballast because it is many small stones at slightly
+            // different heights and angles, and the shadows between them are the texture.
+            //
+            // So the bed is a base plus a scatter of jittered cobbles. Deterministic jitter,
+            // not random: a prefab must be identical every time it is authored, or two runs
+            // of setup produce visibly different track.
+            var baseSlab = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            baseSlab.name = "Bed";
+            baseSlab.transform.SetParent(root.transform, false);
+            // Trapezoid shoulder: wider than the sleepers it carries, as real ballast is.
+            baseSlab.transform.localScale = new Vector3(2.1f, 0.26f, 1.0f);
+            baseSlab.transform.localPosition = new Vector3(0f, 0.13f, 0f);
 
-            var mat = MakeMat("Mat_RailBallast", new Color(0.44f, 0.42f, 0.40f));
-            var renderer = bed.GetComponent<Renderer>();
-            if (renderer != null && mat != null) renderer.sharedMaterial = mat;
+            var darkMat = MakeMat("Mat_RailBallast", new Color(0.30f, 0.29f, 0.27f));
+            var stoneMat = MakeMat("Mat_RailBallastStone", new Color(0.46f, 0.44f, 0.41f));
+            var paleMat = MakeMat("Mat_RailBallastPale", new Color(0.56f, 0.54f, 0.50f));
+
+            var baseRenderer = baseSlab.GetComponent<Renderer>();
+            if (baseRenderer != null && darkMat != null) baseRenderer.sharedMaterial = darkMat;
+
+            // A deterministic PRNG seeded by a constant: same prefab every authoring run.
+            var rng = new System.Random(20260119);
+            const int cobbleCount = 26;
+
+            for (int i = 0; i < cobbleCount; i++)
+            {
+                var cobble = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                cobble.name = "Cobble" + i;
+                cobble.transform.SetParent(root.transform, false);
+
+                // Spread across the bed, densest toward the shoulders where real ballast
+                // piles up against the sleeper ends.
+                float x = (float)(rng.NextDouble() * 2.0 - 1.0) * 1.0f;
+                float z = (float)(rng.NextDouble() * 2.0 - 1.0) * 0.48f;
+                float size = 0.13f + (float)rng.NextDouble() * 0.15f;
+                float lift = 0.24f + (float)rng.NextDouble() * 0.05f;
+
+                cobble.transform.localPosition = new Vector3(x, lift, z);
+                cobble.transform.localScale = new Vector3(size, size * 0.65f, size);
+                // Random yaw and a slight tilt: aligned cubes read as a grid, not as rubble.
+                cobble.transform.localRotation = Quaternion.Euler(
+                    (float)(rng.NextDouble() * 18.0 - 9.0),
+                    (float)(rng.NextDouble() * 360.0),
+                    (float)(rng.NextDouble() * 18.0 - 9.0));
+
+                // Three tones so the bed has variation rather than one flat colour.
+                var pick = i % 3 == 0 ? paleMat : (i % 3 == 1 ? stoneMat : darkMat);
+                var r = cobble.GetComponent<Renderer>();
+                if (r != null && pick != null) r.sharedMaterial = pick;
+
+                // Cobbles are decoration on top of the bed; only the base slab needs a
+                // collider, and 26 extra colliders per cell would be a real cost on a long
+                // line.
+                var col = cobble.GetComponent<Collider>();
+                if (col != null) UnityEngine.Object.DestroyImmediate(col);
+            }
 
             var prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
             UnityEngine.Object.DestroyImmediate(root);

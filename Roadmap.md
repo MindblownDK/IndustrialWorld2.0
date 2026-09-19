@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `11.38.0-dev`
-**Roadmap Version:** `11.38.0-dev`
+**Current Version:** `11.39.0-dev`
+**Roadmap Version:** `11.39.0-dev`
 **Date:** 2026-09-16
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,13 @@
 
 ## 0. Recently Done
 
+### 11.39.0-dev - Retire The Locomotive, Widen The Gauge, Make It Cobblestone
+- v1 Locomotive retired from step 85. **Recipe removed, asset kept** - deleting it would turn existing saved locomotives into missing references on load. Full removal waits for the MAJOR that drops `RailTrain`.
+- Steps 92/93/94 now say "needs 85" on the button; the dependency was previously only discoverable by hitting the error.
+- **Gauge:** 0.56 m to 1.05 m with 1.5 m sleepers (0.70 ratio, matching real track), and 4 sleepers per cell instead of 2 - at 1 m spacing two left visible gaps and a run read as a dashed line.
+- **Ballast:** one smooth cube reads as concrete however it is tinted, because a flat surface has no self-shadowing. Now a base plus 26 jittered cobbles in three tones - the shadows between stones ARE the texture. Jitter is deterministic (a prefab authored twice must be identical) and cobbles carry no colliders.
+- Rail rise re-tuned against the new ballast height rather than left alone; the old value would have floated sleepers 6.5 cm above the stones.
+
 ### 11.38.0-dev - The Ghost Was White And The Failure Was Silent
 - **Root rule:** `Commit` had four early returns that all did `return 0`, so one message covered four causes and misdirected three releases of debugging. Every early return now states its reason; the toast shows it and the Console logs full counts.
 - **Likely cause:** a Rail Layer asset authored before `trackBlock` existed had it null; the setup step only repairs on re-run. The tool now resolves the block by id AT RUNTIME, so upgrade order cannot leave a dead tool.
@@ -53,14 +60,6 @@
 - **Reporting bug:** "already laid" was printed for every failure. `Commit` now reports skipped cells separately, so laid / already-occupied / no-placeable-cells read differently.
 - **Cost:** the tool consumed steel, never track. It now consumes the Rail Track ITEM (1/cell) plus Stone (2/cell). **Rule: the tool saves effort, not materials** - a laid run costs what hand-laying costs. Charged on cells PLACED, never on skipped ones.
 - **Ballast:** every cell places a raised stone bed and lifts the rail onto it, offsets solved numerically so sleepers sit 5 mm proud rather than floating or sinking. Slab is wider than the cell so the shoulder overhangs like real track.
-
-### 11.34.0-dev - One Train Per Section
-- `RailSignalling` + `RailSignal`: block occupancy, so two trains on one line stop instead of driving through each other. Setup step 94 (optional - occupancy works without any signal placed).
-- **Derivation rule:** a section is the track BETWEEN JUNCTIONS, derived from the graph, not a placed block. Placed signals would make an unsignalled line one giant section, so a first railway could never run two trains. A junction is its own 1-cell section - it is where routes share metal.
-- **Correctness detail:** the section id is the LOWEST cell hash, not the first found, so two trains approaching from opposite ends compute the same id. Otherwise each thinks it owns a different section and both enter.
-- **Self-deadlock rule:** a consist claims as ONE entity (the head), and a train releases everything except the section it occupies and the one it is entering - otherwise one lap of a loop deadlocks the network against its own train.
-- **Liveness rule:** claims are dropped on destroy and detach. A claim held by a dead object blocks a line forever with no visible cause.
-- Lookahead scales with real stopping distance (`v^2/2a`); a fixed distance either stops slow trains too early or fast trains too late.
 
 ### Era Transition Feel
 

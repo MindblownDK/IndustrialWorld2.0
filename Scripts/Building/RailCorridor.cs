@@ -581,8 +581,13 @@ namespace VoxelEngine.Building
         /// Real track sits on a raised bed. This is what makes a line read as a railway
         /// crossing terrain rather than a stripe painted on it, and it also stops sleepers
         /// clipping through ground that is slightly uneven between cells.
+        ///
+        /// Tuned against the ballast geometry rather than guessed: the cobbles top out at
+        /// about 0.115 m above the cell, and a sleeper is 0.10 m thick centred at 0.05 m,
+        /// so a rise of 0.11 m puts the sleeper underside at 0.06 m - bedded INTO the
+        /// stones rather than floating above them, which is how real sleepers sit.
         /// </summary>
-        public const float RailRiseMetres = 0.18f;
+        public const float RailRiseMetres = 0.11f;
 
         /// <summary>Ballast cells laid by the last commit, for the tool's readout.</summary>
         public static int LastBallastPlaced { get; private set; }
