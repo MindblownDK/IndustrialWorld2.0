@@ -1,9 +1,60 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `11.36.0-dev`
+**Current Version:** `11.37.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [11.37.0-dev] Multi-Point Runs, Real Junctions, Honest Ghost
+
+**Type:** MINOR - rail layer rework. Save-compatible.
+
+**GitHub title:** `[11.37.0-dev] Multi-point runs, real junctions, honest ghost`
+
+#### "Nothing laid" - and why I kept failing to fix it
+
+Two releases were spent guessing at this, and the reason is that the message could not distinguish its own causes. "No placeable cells" was printed whether the solver produced nothing, the ground probe missed, or every cell was obstructed. I had no more information than you did.
+
+So the first change is **diagnostics that name the failure with numbers**: how many cells the corridor solved, how many found no ground, how many were blocked. A message that can only say one thing cannot be debugged.
+
+The probe itself had two real faults:
+
+- **It took the first thing it hit.** A plain `Raycast` happily returns the player's own collider, the ghost, a train, or track already laid - and then that becomes "the ground". It now sorts all hits and skips anything with a rigidbody, any grid, any existing rail, and the ghost.
+- **It used the start point's gravity for the whole run.** On a small planet the "up" at the far end of a 400 m run is measurably different, which tilts the probe. Each cell now samples its own gravity.
+
+#### The ghost is now green and red, per cell
+
+`EvaluateCell` checks each cell for three real obstructions and the ghost colours each one individually:
+
+| Condition | Result |
+|---|---|
+| Below the waterline | red - "underwater" |
+| Solid terrain above the formation | red - "buried, the route runs into terrain" |
+| An existing placed block | red - "blocked by a placed block" |
+| Existing rail | **allowed** - that is a crossing |
+
+Per cell, not per run, on purpose: a route that clips one rock shows **one red cell you can nudge around** instead of turning the whole line red and leaving you to guess which end is wrong. The blocked cells are kept rather than discarded for exactly that reason - throwing them away would hide the information you need.
+
+#### Crossings become real junctions
+
+Plain track holds at most two links, so where a new line crossed an old one the extra arms were **silently dropped**. The rails visibly crossed and a train could not take the turn.
+
+Any cell that ends up with three or more rail neighbours is now promoted to a switch, which widens its link budget from two to four, and both lines are re-linked afterwards - the existing line too, or it keeps the two links it had before the junction appeared. A straight run still has two neighbours, so nothing becomes a switch by accident.
+
+#### Multi-point runs
+
+Laying a curve meant committing a leg, then starting again from its end. Now:
+
+- **Left-click** starts a run
+- **Right-click** adds a corner - as many as you like
+- **E** lays the whole route
+- **Escape** cancels
+
+The corridor solver already fillets every interior corner, so a chained route curves properly rather than forming hard angles. Left-click does nothing once a run is started, so a mis-click cannot commit a route you were still shaping.
+
+The ghost previews the confirmed corners **plus the leg you are currently aiming**, because the fillet at the previous corner depends on where the next leg goes - showing the legs in isolation would preview a shape the commit would not produce.
+
+No manual Unity step.
 
 ### [11.36.0-dev] Graded Formation, And A Ghost To Aim With
 

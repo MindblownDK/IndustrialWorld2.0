@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `11.36.0-dev`
-**Roadmap Version:** `11.36.0-dev`
+**Current Version:** `11.37.0-dev`
+**Roadmap Version:** `11.37.0-dev`
 **Date:** 2026-09-16
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,13 @@
 ---
 
 ## 0. Recently Done
+
+### 11.37.0-dev - Multi-Point Runs, Real Junctions, Honest Ghost
+- **Diagnosis rule learned the hard way:** "no placeable cells" could not distinguish its own causes, so two releases were spent guessing. Refusals now report counts (solved / missed ground / blocked).
+- **Ground probe:** was taking the FIRST raycast hit - often the player, ghost, a train or laid rail - and using the start point's gravity for the whole run. Now sorts hits, skips rigidbodies/grids/rail/ghosts, and samples per-cell gravity.
+- **Ghost validity:** `EvaluateCell` marks each cell underwater / buried / blocked, and the ghost colours PER CELL so one bad cell is visible rather than reddening the whole run. Blocked cells are kept, not discarded - discarding hides the diagnosis.
+- **Auto junctions:** plain track caps at 2 links, so crossings silently dropped their extra arms. Cells with 3+ rail neighbours are promoted to switches and both lines re-linked. Straight runs keep 2 neighbours so nothing becomes a switch by accident.
+- **Multi-point placement:** LMB starts, RMB adds corners, E lays, Escape cancels. The ghost previews confirmed corners plus the live leg, because the previous corner's fillet depends on where the next leg goes.
 
 ### 11.36.0-dev - Graded Formation, And A Ghost To Aim With
 - **Crash:** used `Input.GetKey` in a project with legacy Input disabled. `IsCtrlHeld()` already existed in the same file, with a comment warning about exactly this. **Rule: never call `Input.` directly here - use the guarded helpers.**
@@ -56,14 +63,6 @@
 - **Rule:** a plan is fully placeable or fully refused, with the reason. Material is counted before placing, so an unaffordable run lays and charges nothing.
 - **Ordering trap:** place all cells THEN link them. Linking as you go lets each cell spend its link budget on the one behind before the one ahead exists, leaving disconnected pairs.
 - **Deliberately excluded:** automatic junctions at crossings - guessing which route is the through line would silently reroute a player's trains.
-
-### 11.32.0-dev - Couple Them Up
-- Multi-car consists on `GridRailBogie`: couple railed constructs into a train, with per-wagon spacing, safe uncoupling and a consist readout in the grid terminal.
-- **The docking-port precedent did NOT apply.** `FixedJoint` fails twice here: a railed grid is kinematic (joints between kinematic bodies do nothing), and a joint trails like a rope so wagons cut every corner. Consists use PATH HISTORY instead - the leader records where it has been and wagons sample that trail.
-- **Why path history:** a wagon retraces the exact route including switch decisions, needs no track logic of its own, and spacing accumulates ALONG THE CHAIN rather than straight-line.
-- **Rule:** a towed wagon cannot drive and must not run track logic - two bogies resolving switches independently can split a consist across a junction.
-- **Rule:** removing a mid-consist wagon hands its spacing to the one behind, so the train does not lurch into the gap. Losing the head uncouples and re-latches the follower so it stays drivable.
-- Loop detection before coupling, plus a 64-car bound on every chain walk.
 
 ### Era Transition Feel
 

@@ -1983,6 +1983,9 @@ namespace VoxelEngine.Player
         private VoxelEngine.Building.RailPlan _railPlan;
         private bool _railPlanning;
         private Vector3 _railStart;
+        /// <summary>Confirmed corners. The cursor supplies the provisional last point.</summary>
+        private readonly System.Collections.Generic.List<Vector3> _railWaypoints = new(16);
+        private readonly System.Collections.Generic.List<Vector3> _railPlanScratch = new(17);
         private int _railGauge = 1;
         private RailLayerTool _railTool;
 
@@ -2030,10 +2033,22 @@ namespace VoxelEngine.Player
                 return true;
             }
 
-            // Right-click cancels a plan in progress.
-            if (mineDown && _railPlanning)
+            // Right-click ADDS A CORNER rather than cancelling, so a player can chain turns
+            // before committing. Cancelling moved to Escape, which is where a player already
+            // expects "abandon what I am doing" to live.
+            if (mineDown && _railPlanning && hasHit)
+            {
+                _railWaypoints.Add(hit.point);
+                VoxelEngine.UI.BuildFeedbackHud.Show("Corner added",
+                    $"{_railWaypoints.Count} points  ·  press E to lay, Escape to cancel",
+                    null, T_AccentCyan);
+                return true;
+            }
+
+            if (EscapePressed() && _railPlanning)
             {
                 _railPlanning = false;
+                _railWaypoints.Clear();
                 VoxelEngine.Building.RailGhost.Hide();
                 VoxelEngine.UI.BuildFeedbackHud.Show("Rail run cancelled", "", null, T_AccentAmber);
                 return true;
@@ -2057,20 +2072,27 @@ namespace VoxelEngine.Player
                 VoxelEngine.Building.RailGhost.Hide();
             }
 
-            if (buildDown)
+            // Left-click starts a run. Once started it does nothing, so a mis-click cannot
+            // silently commit a route the player was still shaping.
+            if (buildDown && !_railPlanning)
             {
-                if (!_railPlanning)
-                {
-                    _railStart = hit.point;
-                    _railPlanning = true;
-                    VoxelEngine.UI.BuildFeedbackHud.Show("Rail run started",
-                        "Aim at the far end and click again. Right-click cancels.",
-                        null, T_AccentCyan);
-                    return true;
-                }
+                _railWaypoints.Clear();
+                _railWaypoints.Add(hit.point);
+                _railStart = hit.point;
+                _railPlanning = true;
+                VoxelEngine.UI.BuildFeedbackHud.Show("Rail run started",
+                    "Right-click to add corners  ·  E to lay  ·  Escape to cancel",
+                    null, T_AccentCyan);
+                return true;
+            }
 
+            // E commits, matching the interact key the player already uses to finish things.
+            if (_railPlanning && VoxelEngine.Settings.GameSettings.WasPressed(
+                    VoxelEngine.Settings.InputAction.Interact))
+            {
                 CommitRailRun(tool, hit.point);
                 _railPlanning = false;
+                _railWaypoints.Clear();
                 VoxelEngine.Building.RailGhost.Hide();
                 return true;
             }
@@ -2102,8 +2124,23 @@ namespace VoxelEngine.Player
 
             Vector3 up = VoxelEngine.Cosmos.GravityProvider.GetUp(_railStart);
 
+            // Confirmed corners plus the cursor as a provisional final point, so the ghost
+            // previews the leg being aimed as part of the whole route rather than in
+            // isolation - the corner fillet at the previous point depends on where this
+            // leg is heading.
+            _railPlanScratch.Clear();
+            for (int i = 0; i < _railWaypoints.Count; i++) _railPlanScratch.Add(_railWaypoints[i]);
+
+            // Drop a provisional point that has collapsed onto the last corner, or the
+            // solver sees a zero-length leg and refuses a route that is actually fine.
+            if (_railPlanScratch.Count == 0 ||
+                (end - _railPlanScratch[_railPlanScratch.Count - 1]).sqrMagnitude > 0.04f)
+            {
+                _railPlanScratch.Add(end);
+            }
+
             _railPlan = VoxelEngine.Building.RailCorridor.Plan(
-                _railPlan, _railStart, end, _railGauge, cell, gradient, up);
+                _railPlan, _railPlanScratch, _railGauge, cell, gradient, up);
 
             return cell;
         }
@@ -2193,9 +2230,13 @@ namespace VoxelEngine.Player
             ConsumeDurability(inventory.ActiveStack);
 
             string skipNote = skipped > 0 ? $"  ·  {skipped} already laid" : "";
+            int junctions = VoxelEngine.Building.RailCorridor.LastJunctionsFormed;
+            string junctionNote = junctions > 0 ? $"  ·  {junctions} junction(s) formed" : "";
+
             VoxelEngine.UI.BuildFeedbackHud.Show("Rail laid",
                 $"{placed} cells  ·  {_railGauge} track(s)  ·  " +
-                $"{VoxelEngine.Building.RailCorridor.LastBallastPlaced} ballast{skipNote}",
+                $"{VoxelEngine.Building.RailCorridor.LastBallastPlaced} ballast" +
+                $"{junctionNote}{skipNote}",
                 null, T_AccentCyan);
         }
 

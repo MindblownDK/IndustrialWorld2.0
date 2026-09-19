@@ -64,11 +64,14 @@ namespace VoxelEngine.Building
             _triangles.Clear();
             _colors.Clear();
 
-            Color tint = plan.IsPlaceable ? Good : Bad;
-
             for (int i = 0; i < plan.cells.Count; i++)
             {
                 var cell = plan.cells[i];
+
+                // Per CELL, not per run. A route that clips one rock shows one red cell the
+                // player can nudge around, instead of turning the whole line red and leaving
+                // them to guess which end is the problem.
+                Color tint = cell.valid ? Good : Bad;
                 Vector3 right = cell.rotation * Vector3.right * HalfWidth;
                 Vector3 forward = cell.rotation * Vector3.forward * 0.42f;
                 Vector3 up = cell.rotation * Vector3.up * Lift;

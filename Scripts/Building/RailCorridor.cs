@@ -43,6 +43,16 @@ namespace VoxelEngine.Building
         public Quaternion rotation;
         /// <summary>Which parallel track this cell belongs to, 0..gauge-1.</summary>
         public int lane;
+
+        /// <summary>
+        /// False when this cell cannot be built: underwater, buried in rock, or occupied
+        /// by an existing block. Per-cell rather than per-run so the ghost can show the
+        /// player exactly WHERE a route fails instead of just refusing all of it.
+        /// </summary>
+        public bool valid;
+
+        /// <summary>Why this cell is invalid, for the readout. Empty when valid.</summary>
+        public string problem;
     }
 
     /// <summary>
@@ -59,6 +69,15 @@ namespace VoxelEngine.Building
 
         /// <summary>Steepest rise found between adjacent cells, in metres.</summary>
         public float WorstGradient { get; internal set; }
+
+        /// <summary>Cells the solver produced before grounding. Diagnostic.</summary>
+        public int SolvedCells { get; internal set; }
+
+        /// <summary>Cells that found no ground under them. Diagnostic.</summary>
+        public int MissedGround { get; internal set; }
+
+        /// <summary>Cells that are underwater, buried or obstructed.</summary>
+        public int BlockedCells { get; internal set; }
 
         public bool IsPlaceable => Refusal == null && cells.Count > 0;
         public int CellCount => cells.Count;
@@ -88,6 +107,22 @@ namespace VoxelEngine.Building
         public static RailPlan Plan(RailPlan plan, Vector3 start, Vector3 end,
             int gauge, float cellSize, float maxGradientMetres, Vector3 up)
         {
+            _twoPointScratch.Clear();
+            _twoPointScratch.Add(start);
+            _twoPointScratch.Add(end);
+            return Plan(plan, _twoPointScratch, gauge, cellSize, maxGradientMetres, up);
+        }
+
+        private static readonly List<Vector3> _twoPointScratch = new(2);
+
+        /// <summary>
+        /// Plans a run through any number of waypoints, so a player can chain turns before
+        /// committing. The corridor solver already fillets every interior corner, so a
+        /// multi-leg route curves properly rather than forming hard angles.
+        /// </summary>
+        public static RailPlan Plan(RailPlan plan, List<Vector3> waypoints,
+            int gauge, float cellSize, float maxGradientMetres, Vector3 up)
+        {
             plan ??= new RailPlan();
             plan.Reset();
 
@@ -97,7 +132,19 @@ namespace VoxelEngine.Building
             if (up.sqrMagnitude < 1e-6f) up = Vector3.up;
             up.Normalize();
 
-            float span = Vector3.Distance(start, end);
+            if (waypoints == null || waypoints.Count < 2)
+            {
+                plan.Refusal = "Need at least a start and an end.";
+                return plan;
+            }
+
+            // Total route length across every leg, not just first-to-last: a long dog-leg
+            // is a long run even when its endpoints are close together.
+            float span = 0f;
+            for (int i = 1; i < waypoints.Count; i++)
+                span += Vector3.Distance(waypoints[i - 1], waypoints[i]);
+
+            Vector3 start = waypoints[0];
             if (span < cellSize)
             {
                 plan.Refusal = "Too short - drag further to lay a run.";
@@ -113,8 +160,7 @@ namespace VoxelEngine.Building
             }
 
             _waypointScratch.Clear();
-            _waypointScratch.Add(start);
-            _waypointScratch.Add(end);
+            for (int i = 0; i < waypoints.Count; i++) _waypointScratch.Add(waypoints[i]);
 
             // The road solver does the geometry: centreline, fillets, and one explicit
             // four-corner footprint per cell per lane.
@@ -135,6 +181,8 @@ namespace VoxelEngine.Building
 
             // Collect every lane's cells, dropped onto the real ground.
             int missedGround = 0;
+            int blockedCells = 0;
+            plan.SolvedCells = _buffers.cellsPerLane * gauge;
             for (int lane = 0; lane < gauge; lane++)
             {
                 for (int i = 0; i < _buffers.cellsPerLane; i++)
@@ -151,20 +199,33 @@ namespace VoxelEngine.Building
                         continue;
                     }
 
+                    bool ok = EvaluateCell(grounded, up, out string problem);
+                    if (!ok) blockedCells++;
+
                     plan.cells.Add(new RailPlanCell
                     {
                         position = grounded,
                         rotation = frame.rotation,
                         lane = lane,
+                        valid = ok,
+                        problem = problem,
                     });
                 }
             }
 
+            plan.MissedGround = missedGround;
+            plan.BlockedCells = blockedCells;
+
             if (plan.cells.Count == 0)
             {
+                // Name the actual failure with numbers. "No placeable cells" told the player
+                // nothing and told me nothing either - two releases were spent guessing at
+                // this because the message could not distinguish its own causes.
                 plan.Refusal = missedGround > 0
-                    ? "No ground under that route - it runs off the terrain. Aim at solid ground."
-                    : "No route could be solved between those points.";
+                    ? $"No ground under that route ({missedGround} of {plan.SolvedCells} cells " +
+                      "found nothing below them). Aim at solid ground you can see."
+                    : $"The corridor solved {plan.SolvedCells} cells but none survived. " +
+                      "This is a bug - please report the run you attempted.";
                 return plan;
             }
 
@@ -174,6 +235,23 @@ namespace VoxelEngine.Building
             // that a real railway would simply grade flat.
             SmoothProfile(plan, gauge, maxGradientMetres, up);
             CheckGradient(plan, gauge, maxGradientMetres, up);
+
+            // Any blocked cell refuses the RUN - a line with a gap in it is not a line -
+            // but the cells survive so the ghost can show exactly which stretch is the
+            // problem. Clearing them would hide the very information the player needs.
+            if (plan.Refusal == null && blockedCells > 0)
+            {
+                var firstProblem = "obstructed";
+                for (int i = 0; i < plan.cells.Count; i++)
+                {
+                    if (plan.cells[i].valid) continue;
+                    firstProblem = plan.cells[i].problem;
+                    break;
+                }
+                plan.Refusal = $"{blockedCells} of {plan.cells.Count} cells {firstProblem}. " +
+                               "The red section shows where.";
+            }
+
             return plan;
         }
 
@@ -285,6 +363,144 @@ namespace VoxelEngine.Building
         /// but a planet is not flat, so every cell has to be re-dropped. This mirrors what
         /// the road paver does for exactly the same reason.
         /// </summary>
+        /// <summary>
+        /// Turns crossings into real junctions.
+        ///
+        /// WHY THIS IS NEEDED
+        /// Plain track holds at most two links, so where a new line crosses an old one the
+        /// adjacency pass simply cannot connect all four arms - the extra neighbours are
+        /// silently dropped and the two lines pass through each other without joining. The
+        /// player sees rails that visibly cross and a train that cannot take the turn.
+        ///
+        /// A cell with three or more neighbours IS a junction by definition, so any cell
+        /// that ends up in that position is promoted and re-linked. Promotion widens its
+        /// link budget from two to four, which is what lets the crossing actually connect.
+        ///
+        /// Only cells that genuinely have extra neighbours are promoted - a straight run
+        /// stays straight track, so nothing becomes a switch by accident.
+        /// </summary>
+        private static int PromoteCrossingsToJunctions(List<RailTrack> laid)
+        {
+            int promoted = 0;
+
+            for (int i = 0; i < laid.Count; i++)
+            {
+                var cell = laid[i];
+                if (cell == null) continue;
+
+                // Count every rail neighbour, not just the ones it managed to link: a cell
+                // already full at two links is exactly the case that needs promoting, and
+                // its Links list would not reveal the third arm.
+                int neighbours = CountRailNeighbours(cell);
+                if (neighbours < 3) continue;
+                if (cell.pieceKind == RailPieceKind.Switch) continue;
+
+                cell.pieceKind = RailPieceKind.Switch;
+                promoted++;
+            }
+
+            if (promoted == 0) return 0;
+
+            // Re-link AFTER every promotion. A cell promoted late would otherwise be linked
+            // against neighbours that were still two-link limited when they were processed.
+            for (int i = 0; i < laid.Count; i++)
+                if (laid[i] != null) laid[i].RebuildLinks(propagate: true);
+
+            // The existing line on the other side of the crossing also has to re-link, or it
+            // keeps the two links it had before the junction appeared.
+            for (int i = 0; i < laid.Count; i++)
+            {
+                var cell = laid[i];
+                if (cell == null || cell.pieceKind != RailPieceKind.Switch) continue;
+
+                RailNetwork.QueryAdjacent(cell, _neighbourScratch);
+                for (int n = 0; n < _neighbourScratch.Count; n++)
+                    if (_neighbourScratch[n] != null) _neighbourScratch[n].RebuildLinks(propagate: false);
+            }
+
+            return promoted;
+        }
+
+        private static int CountRailNeighbours(RailTrack cell)
+        {
+            RailNetwork.QueryAdjacent(cell, _neighbourScratch);
+            int n = 0;
+            for (int i = 0; i < _neighbourScratch.Count; i++)
+                if (_neighbourScratch[i] != null && _neighbourScratch[i] != cell) n++;
+            return n;
+        }
+
+        private static readonly List<RailTrack> _neighbourScratch = new(8);
+
+        /// <summary>Junctions formed by the last commit, for the tool's readout.</summary>
+        public static int LastJunctionsFormed { get; private set; }
+
+        /// <summary>
+        /// Decides whether one cell can actually be built, and says why not.
+        ///
+        /// This is what lets the ghost be honest per cell rather than per run: a route that
+        /// clips one rock should show one red cell the player can nudge around, not a flat
+        /// refusal of the whole line.
+        /// </summary>
+        private static bool EvaluateCell(Vector3 position, Vector3 up, out string problem)
+        {
+            problem = "";
+
+            // ── Underwater ──
+            // Track laid below the waterline is a line the player cannot use and cannot see.
+            var body = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
+            if (body != null)
+            {
+                float seaRadius = body.SeaRadius;
+                if (seaRadius > 0.01f)
+                {
+                    float radius = Vector3.Distance(position, body.transform.position);
+                    if (radius < seaRadius + WaterClearanceMetres)
+                    {
+                        problem = "underwater";
+                        return false;
+                    }
+                }
+            }
+
+            // ── Buried, or occupied by something solid ──
+            // Probed just above where the sleeper will sit. Anything solid there means the
+            // route runs into a hillside or through a player's build.
+            Vector3 probe = position + up * (RailRiseMetres + 0.5f);
+            int count = Physics.OverlapSphereNonAlloc(probe, 0.42f, _overlapScratch,
+                ~0, QueryTriggerInteraction.Ignore);
+
+            for (int i = 0; i < count; i++)
+            {
+                var c = _overlapScratch[i];
+                if (c == null) continue;
+
+                // Existing rail is fine - that is a crossing, and crossings become junctions.
+                if (c.GetComponentInParent<RailTrack>() != null) continue;
+                // Moving things are not obstructions to a plan; they will move.
+                if (c.attachedRigidbody != null) continue;
+                if (c.name.IndexOf("Ghost", System.StringComparison.OrdinalIgnoreCase) >= 0) continue;
+
+                // A placed block is a real obstruction the player must clear first.
+                if (c.GetComponentInParent<PlacedBlock>() != null)
+                {
+                    problem = "blocked by a placed block";
+                    return false;
+                }
+
+                // Terrain this far above the formation means the line is inside a hillside.
+                problem = "buried - the route runs into terrain";
+                return false;
+            }
+
+            return true;
+        }
+
+        private static readonly Collider[] _overlapScratch = new Collider[16];
+
+        /// <summary>How far above the waterline a formation must sit to count as dry.</summary>
+        private const float WaterClearanceMetres = 0.6f;
+
         private static bool DropToGround(Vector3 point, Vector3 up, out Vector3 grounded)
         {
             // THE BUG (11.36.0): this probed 6 m up and 14 m down, and returned the input
@@ -299,13 +515,39 @@ namespace VoxelEngine.Building
             // ground across the whole run, and a genuine miss is reported rather than
             // silently returning a point that is not on the ground.
             const float probeUp = 60f;
-            const float probeLength = 200f;
+            const float probeLength = 220f;
 
-            if (Physics.Raycast(point + up * probeUp, -up, out var hit, probeLength,
-                    ~0, QueryTriggerInteraction.Ignore))
+            // Per-cell gravity, not the start point's. Over a long run on a small planet the
+            // start's "up" is measurably wrong at the far end, which tilts the probe and can
+            // walk it past the surface entirely.
+            Vector3 localUp = VoxelEngine.Cosmos.GravityProvider.GetUp(point);
+            if (localUp.sqrMagnitude < 1e-6f) localUp = up;
+
+            // RaycastAll, not Raycast: the first thing hit may be the player, the ghost, a
+            // train, or track already laid. Taking hit[0] blindly is how a probe "finds
+            // ground" that is actually the player's own collider - or finds nothing usable
+            // and reports the route as off-terrain.
+            var hits = Physics.RaycastAll(point + localUp * probeUp, -localUp, probeLength,
+                ~0, QueryTriggerInteraction.Ignore);
+
+            if (hits.Length > 0)
             {
-                grounded = hit.point;
-                return true;
+                System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+
+                for (int i = 0; i < hits.Length; i++)
+                {
+                    var c = hits[i].collider;
+                    if (c == null) continue;
+
+                    // Skip anything that is not ground to build on.
+                    if (c.GetComponentInParent<RailTrack>() != null) continue;
+                    if (c.GetComponentInParent<VoxelEngine.GridSystem.GridEntity>() != null) continue;
+                    if (c.attachedRigidbody != null) continue;          // players, vehicles, debris
+                    if (c.name.IndexOf("Ghost", System.StringComparison.OrdinalIgnoreCase) >= 0) continue;
+
+                    grounded = hits[i].point;
+                    return true;
+                }
             }
 
             grounded = point;
@@ -424,6 +666,8 @@ namespace VoxelEngine.Building
             // had even been created, leaving a line of disconnected pairs.
             for (int i = 0; i < laid.Count; i++)
                 if (laid[i] != null) laid[i].RebuildLinks(propagate: true);
+
+            LastJunctionsFormed = PromoteCrossingsToJunctions(laid);
 
             return placed;
         }
