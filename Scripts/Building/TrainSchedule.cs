@@ -31,6 +31,11 @@ namespace VoxelEngine.Building
         HoldEmpty = 2,
         /// <summary>Leave when the hold has at least one slot free - loaded but not stuffed.</summary>
         HoldHasSpace = 3,
+        /// <summary>Leave when every container aboard is empty - unloaded, done here.
+        /// Appended 12.3.0-dev; a save stores the int, so waits never reorder.</summary>
+        TrainEmpty = 4,
+        /// <summary>Leave when every slot of every container aboard carries something.</summary>
+        TrainFull = 5,
     }
 
     [Serializable]
@@ -85,7 +90,8 @@ namespace VoxelEngine.Building
         /// a train waits for a platform that does not exist rather than leaving early,
         /// which is the failure a player can see and fix.
         /// </summary>
-        public static bool Satisfied(ScheduleEntry entry, RailStation station, float arrivedAt)
+        public static bool Satisfied(ScheduleEntry entry, RailStation station, float arrivedAt,
+            int trainUsed, int trainSlots)
         {
             if (entry == null) return true;
 
@@ -108,6 +114,15 @@ namespace VoxelEngine.Building
                     return used < station.Hold.Size;
                 }
 
+                // Train-side waits (12.3.0): the mirror images of the hold waits. A load
+                // stop releases on TrainFull, an unload stop on TrainEmpty - without them
+                // a schedule can only guess at what the transfer actually achieved.
+                case ScheduleWait.TrainEmpty:
+                    return trainSlots == 0 || trainUsed == 0;
+
+                case ScheduleWait.TrainFull:
+                    return trainSlots > 0 && trainUsed >= trainSlots;
+
                 default:
                     return true;
             }
@@ -122,6 +137,8 @@ namespace VoxelEngine.Building
                 ScheduleWait.HoldFull => "until hold full",
                 ScheduleWait.HoldEmpty => "until hold empty",
                 ScheduleWait.HoldHasSpace => "until hold has space",
+                ScheduleWait.TrainEmpty => "until train empty",
+                ScheduleWait.TrainFull => "until train full",
                 _ => $"dwell {Mathf.Max(0f, entry.seconds):0}s",
             };
             string name = string.IsNullOrEmpty(entry.stationName) ? "unnamed station" : entry.stationName;

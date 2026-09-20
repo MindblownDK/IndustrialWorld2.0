@@ -160,6 +160,22 @@ namespace VoxelEngine.Building
         /// <summary>How far from the station a track cell may be and still count as its platform.</summary>
         public const float ServiceRadius = 4f;
 
+        /// <summary>The station whose platform a position stands at, if any. Berthing,
+        /// servicing and the departure boards all ask this one question (12.3.0).</summary>
+        public static RailStation Nearest(Vector3 pos, float radius)
+        {
+            RailStation best = null;
+            float bestSq = radius * radius;
+            for (int i = 0; i < s_all.Count; i++)
+            {
+                var st = s_all[i];
+                if (st == null) continue;
+                float d = (st.transform.position - pos).sqrMagnitude;
+                if (d < bestSq) { bestSq = d; best = st; }
+            }
+            return best;
+        }
+
         /// <summary>Finds a station by name. Null when no station carries that name.</summary>
         public static RailStation Find(string name)
         {

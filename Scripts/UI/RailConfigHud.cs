@@ -207,6 +207,9 @@ namespace VoxelEngine.UI
                 else
                     Info(string.IsNullOrEmpty(bogie.BlockedReason)
                         ? "Not on rails." : bogie.BlockedReason, T.TextSecondary);
+
+                if (!string.IsNullOrEmpty(bogie.ServiceNote))
+                    Info(bogie.ServiceNote, T.AccentCyan);
             }
             else
             {

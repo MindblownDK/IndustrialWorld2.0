@@ -237,6 +237,24 @@ namespace VoxelEngine.GridSystem
 
         private float _nextAutoSnap;
 
+        // ── Berth servicing (12.3.0) ───────────────────────────────────────────
+        // A train standing at a working station trades cargo with it. Before this
+        // existed, ServiceTrain had no caller at all: trains arrived, waited and
+        // left without a single item moving, and the hold waits in a schedule were
+        // watching a hold nothing touched. The pass runs at 4 Hz while the train
+        // is effectively stopped, over every cargo store on the grid.
+        private float _nextService;
+        private float _nextStoreScan;
+        private readonly List<IGridItemStore> _stores = new();
+        private RailStation _serviceStation;
+        private float _serviceTotal;
+
+        /// <summary>The station this train is currently berthed at and trading with, if any.</summary>
+        public RailStation ServicingStation => _serviceStation;
+
+        /// <summary>One player-facing line about the transfer in progress.</summary>
+        public string ServiceNote { get; private set; } = "";
+
         private void OnEnable()
         {
             if (!s_all.Contains(this)) s_all.Add(this);
@@ -312,6 +330,52 @@ namespace VoxelEngine.GridSystem
             return true;
         }
 
+        private void ServiceTick()
+        {
+            if (!IsOnRails || _speed > 0.05f)
+            {
+                if (_serviceStation != null) { _serviceStation = null; ServiceNote = ""; }
+                return;
+            }
+
+            if (Time.time >= _nextStoreScan)
+            {
+                _nextStoreScan = Time.time + 5f;
+                _stores.Clear();
+                foreach (var store in GetComponentsInChildren<IGridItemStore>(true))
+                    if (store.ItemStore != null) _stores.Add(store);
+            }
+
+            if (Time.time < _nextService) return;
+            _nextService = Time.time + 0.25f;
+
+            var station = VoxelEngine.Building.RailStation.Nearest(
+                transform.position, VoxelEngine.Building.RailStation.ServiceRadius);
+            if (station == null || station.role == VoxelEngine.Building.StationRole.Passing)
+            {
+                if (_serviceStation != null) { _serviceStation = null; ServiceNote = ""; }
+                return;
+            }
+
+            // A new berth starts a new tally, so the note never totals two stations.
+            if (_serviceStation != station) { _serviceStation = station; _serviceTotal = 0f; }
+
+            int moved = 0;
+            for (int i = 0; i < _stores.Count; i++)
+                moved += station.ServiceTrain(_stores[i].ItemStore, 0.25f);
+            _serviceTotal += moved;
+
+            bool loading = station.role == VoxelEngine.Building.StationRole.Load;
+            string name = station.StationName;
+            ServiceNote = moved > 0
+                ? (loading
+                    ? $"Loading at {name} - {_serviceTotal:0} items aboard"
+                    : $"Unloading at {name} - {_serviceTotal:0} items delivered")
+                : (loading
+                    ? $"Berthed at {name} - station hold empty or train full"
+                    : $"Berthed at {name} - train empty or station hold full");
+        }
+
         /// <summary>Lifts the grid off the rails and hands it back to normal physics.</summary>
         public void Detach()
         {
@@ -371,6 +435,8 @@ namespace VoxelEngine.GridSystem
                 var truck = GetComponentInChildren<GridRailTruck>();
                 if (truck != null && truck.autoSnap) TrySnapToTrack();
             }
+
+            ServiceTick();
 
             // A coupled wagon is driven entirely by its leader's recorded path, so it must
             // NOT run the track logic below. Two bogies both resolving switches would let a

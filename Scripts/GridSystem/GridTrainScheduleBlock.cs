@@ -118,7 +118,8 @@ namespace VoxelEngine.GridSystem
             if (_waiting)
             {
                 var station = FindStation(entry != null ? entry.stationName : "");
-                if (ScheduleConditions.Satisfied(entry, station, _waitStart))
+                TrainFill(out int trainUsed, out int trainSlots);
+                if (ScheduleConditions.Satisfied(entry, station, _waitStart, trainUsed, trainSlots))
                 {
                     _waiting = false;
                     CurrentIndex = (CurrentIndex + 1) % schedule.entries.Count;
@@ -126,8 +127,10 @@ namespace VoxelEngine.GridSystem
                 }
                 else
                 {
+                    string servicing = _bogie != null && !string.IsNullOrEmpty(_bogie.ServiceNote)
+                        ? "  ·  " + _bogie.ServiceNote : "";
                     StatusLabel = $"Waiting at {EntryStationName(entry)} - " +
-                                  ScheduleConditions.Describe(entry);
+                                  ScheduleConditions.Describe(entry) + servicing;
                 }
                 return;
             }
@@ -218,6 +221,25 @@ namespace VoxelEngine.GridSystem
                 if (string.IsNullOrEmpty(value)) return;
                 var data = JsonUtility.FromJson<TrainScheduleData>(value);
                 if (data != null) schedule = data;
+            }
+        }
+
+        /// <summary>Slots used and present across every cargo store on the train, for
+        /// the train-side wait conditions. A train with no containers reports 0/0, which
+        /// reads as "empty" and never as "full".</summary>
+        private void TrainFill(out int used, out int slots)
+        {
+            used = 0; slots = 0;
+            if (_bogie == null || _bogie.Grid == null) return;
+            foreach (var block in _bogie.Grid.AllBlocks)
+            {
+                if (block is not IGridItemStore store || store.ItemStore == null) continue;
+                var c = store.ItemStore;
+                for (int i = 0; i < c.Size; i++)
+                {
+                    slots++;
+                    if (!c.GetSlot(i).IsEmpty) used++;
+                }
             }
         }
 

@@ -1,9 +1,33 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.2.0-dev`
+**Current Version:** `12.3.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.3.0-dev] The Freight Actually Rides - Stations Service Berthed Trains
+
+**Type:** MINOR - closes the cargo loop the schedule system was built around. No new assets, no save changes.
+
+**GitHub title:** `[12.3.0-dev] The freight actually rides - stations service berthed trains`
+
+#### The hole: `ServiceTrain` had no caller
+
+`RailStation.ServiceTrain` - the transfer that moves items between a station hold and a docked train, honouring the station filter, putting back anything the destination refuses - existed since the station rework and was called from nowhere. Trains arrived, waited their condition, and left without a single item moving. The hold waits in a schedule were watching a hold that nothing but pipes ever touched, and a "LOAD until hold empty" stop released the moment a factory drained the hold, whether or not the train had taken anything.
+
+#### The fix: a berth service pass on the bogie
+
+`GridRailBogie` now runs a 4 Hz service pass while the train is effectively stopped (under 0.05 m/s) on rails: it finds the station whose platform it stands at (`RailStation.Nearest`, new static, same 4 m service radius), and if that station works (role not Passing) it calls `ServiceTrain` for every cargo store on the grid - every block implementing `IGridItemStore`, rescanned every 5 s so adding a wagon mid-route joins the transfer. Hand-driven trains berth and trade exactly like scheduled ones; a train braked by a signal in front of a station does not, because it is not stopped at the platform radius... it is stopped wherever the section ends, and if that is inside the radius, trading is what a real train would call a courtesy stop.
+
+The pass reports itself: `ServicingStation` and a one-line `ServiceNote` ("Loading at Ore Head - 34 items aboard", "Berthed at Mill - train empty or station hold full"), shown in the bogie console and appended to the schedule block's waiting label, so a stalled transfer says why instead of silently watching a clock.
+
+#### Train-side wait conditions
+
+Two waits appended to `ScheduleWait` (saves store the int, so nothing reorders): **TRAIN EMPTY** - leave when every container aboard is empty, the natural release for an unload stop - and **TRAIN FULL** - leave when every slot aboard carries something, the natural release for a load stop. A train with no containers reads as empty and never as full. The schedule console offers both buttons and both descriptions. With these, a service pattern can say what it actually means: load until the train is full, unload until it is empty, and the hold waits stay for players who think in station terms.
+
+#### Manual steps in Unity
+
+None - code only, no setup step, no new assets. Recompile and in a save: give a station the LOAD role with items in its hold, put a cargo container on a train, add a stop with TRAIN FULL, and watch the note count items aboard until the train leaves full.
 
 ### [12.2.0-dev] Brass, Tubes, Cobbles And A Bogie That Actually Snaps
 

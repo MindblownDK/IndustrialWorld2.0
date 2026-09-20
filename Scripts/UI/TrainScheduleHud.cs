@@ -164,6 +164,8 @@ namespace VoxelEngine.UI
                             ScheduleWait.HoldFull => "HOLD FULL",
                             ScheduleWait.HoldEmpty => "HOLD EMPTY",
                             ScheduleWait.HoldHasSpace => "HOLD HAS SPACE",
+                            ScheduleWait.TrainEmpty => "TRAIN EMPTY",
+                            ScheduleWait.TrainFull => "TRAIN FULL",
                             _ => "DWELL",
                         },
                     };

@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.2.0-dev`
-**Roadmap Version:** `12.2.0-dev`
+**Current Version:** `12.3.0-dev`
+**Roadmap Version:** `12.3.0-dev`
 **Date:** 2026-09-16
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 12.3.0-dev - The Freight Actually Rides
+- `RailStation.ServiceTrain` had no caller since the station rework: trains waited and left without an item moving. A 4 Hz berth service pass on the bogie now trades cargo with the station a stopped train stands at, over every `IGridItemStore` on the grid, for scheduled and hand-driven trains alike.
+- The pass reports itself (`ServicingStation`, `ServiceNote`) in the bogie console and the schedule's waiting label, so a stalled transfer names its reason.
+- Two appended wait conditions: TRAIN EMPTY and TRAIN FULL - the natural releases for unload and load stops; saves store the int, so waits never reorder.
+
 ### 12.2.0-dev - Brass, Tubes, Cobbles And A Bogie That Actually Snaps
 - **Bogie snap fixed:** the snap sets a POSE now (rotate to track, anchor on the truck block) instead of dropping the grid origin on the railhead; truck renamed Bogie (step 92 rename pass); E opens a console with auto-snap toggle (default on, 1 Hz poll, saved), SNAP NOW and LIFT OFF.
 - **Brass ingot:** furnace copper x2 + iron x1; step 95 blends one steel-for-brass swap into rail piece and display recipes (idempotent, total ingots unchanged).
@@ -38,11 +43,6 @@
 - **Ballast fix:** the bed item could resolve empty and the corridor silently skipped ballast - now self-healed at drag time, plus a `RailCorridor` re-bed pass that heals bare cells on every commit (charged as stone, named on the toast).
 - **Train Schedule block:** ordered stop list per train with release conditions (dwell / hold full / hold empty / hold has space); bogie gained path-based `SetDestination` routing with arrival events; stations matched by name; schedule survives saves.
 - **Display family:** one `RailDisplayScreen` component, five housings - grid Brass Display Screen (rotational power tap) plus stationary Cabinet / Hanging Departure Board / Nixie Readout (mains, small electric engine inside). Console picks split-flap / nixie / analog and speed / load / departures / station / custom. Staggered `SplitFlapFlip` sfx on every card turn. Setup step 95, additive save fields.
-
-### 12.0.1-dev - Compile Cleanup
-- Setup 85's dead-script scrub now uses the singular per-GameObject `RemoveMonoBehavioursWithMissingScript` walked over all transforms - the same call step 17 uses; the plural name it called never existed in Unity 6.5 (CS0117).
-- Both `LogisticsMapData` finds moved off the obsolete `FindObjectsSortMode` overload to `FindObjectsInactive.Exclude`, matching the rest of the project (CS0618).
-- Patch round: no save, API or behaviour change.
 
 ### 12.0.0-dev - The v1 Train Is Gone (MAJOR)
 - `RailTrain` + `TrainState` deleted; `RailConfigHud` loses the train console (grid terminal covers v2); logistics map reads `GridRailBogie`; E-branch for the v1 console removed.
