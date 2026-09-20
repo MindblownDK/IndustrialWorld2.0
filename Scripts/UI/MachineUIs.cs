@@ -504,25 +504,23 @@ namespace VoxelEngine.UI
             Color  statusCol = r.IsOverheating ? T.AccentRed  : (r.IsOnline ? T.AccentGreen : T.TextMuted);
 
             p.Add(BuildHeader("☢", "Nuclear Reactor", status, statusCol, T.AccentGreen));
-            p.Add(T.AccentDivider(T.AccentGreen));
+            p.Add(HighTechTheme.ScanDivider(statusCol));
 
-            // Temperature
+            // Temperature - the hero readout: the number the operator watches.
             float tempRatio = r.coreTemperature / (r.maxSafeTemperature * 1.25f);
             Color tempColor = r.coreTemperature > r.maxSafeTemperature ? T.AccentRed :
                               r.coreTemperature > r.maxSafeTemperature * 0.70f ? T.AccentOrange : T.AccentCyan;
-            p.Add(T.StatRow("🌡", "Core Temperature",
-                $"{r.coreTemperature:0}°C  /  {r.maxSafeTemperature:0}°C", tempColor));
-            var (tempBar, _) = T.ProgressBar(tempRatio, tempColor, 8, false);
-            p.Add(tempBar);
-            p.Add(T.Spacer(8));
+            p.Add(HighTechTheme.Readout("CORE TEMP", $"{r.coreTemperature:0}°C", tempColor));
+            p.Add(HighTechTheme.SegmentMeter("TEMP VS SAFE MAX", tempRatio, tempColor,
+                $"{tempRatio * 100f:0}%", 14));
+            p.Add(T.Spacer(4));
 
             // Control rods + output + fuel
-            p.Add(T.StatRow("⚙", "Control Rods",    $"{r.controlRodLevel * 100f:0}% inserted", T.TextSecondary));
-            p.Add(T.StatRow("⚡", "Thermal Output",  $"{r.CurrentThermalKW:0} kW(th)",          T.AccentGold));
-            p.Add(T.StatRow("⛽", "Fuel Remaining",  $"{r.FuelRemaining01 * 100f:0}%",           T.AccentCyan));
-
-            var (fuelBar, _) = T.ProgressBar(r.FuelRemaining01, T.AccentCyan, 6, false);
-            p.Add(fuelBar);
+            p.Add(T.StatRow("⚡", "Thermal Output", $"{r.CurrentThermalKW:0} kW(th)", T.AccentGold));
+            p.Add(HighTechTheme.SegmentMeter("CONTROL RODS", r.controlRodLevel, T.AccentCyan,
+                $"{r.controlRodLevel * 100f:0}% INSERTED"));
+            p.Add(HighTechTheme.SegmentMeter("FUEL REMAINING", r.FuelRemaining01, T.AccentCyan,
+                $"{r.FuelRemaining01 * 100f:0}%"));
             p.Add(T.Divider());
 
             // Fluid tanks
@@ -556,6 +554,7 @@ namespace VoxelEngine.UI
 
             p.Add(T.Spacer(8));
             p.Add(T.Muted("Connect water tanks and steam pipes. Adjust control rods to manage output."));
+            HighTechTheme.Frame(p, statusCol);
             return p;
         }
 
@@ -598,12 +597,12 @@ namespace VoxelEngine.UI
             p.Add(BuildHeader("☢", "Portable Reactor",
                 r.IsRunning ? "RUNNING" : "OFFLINE",
                 r.IsRunning ? T.AccentGreen : T.TextMuted, T.AccentGreen));
-            p.Add(T.AccentDivider(T.AccentGreen));
+            p.Add(HighTechTheme.ScanDivider(r.IsRunning ? T.AccentGreen : T.TextMuted));
 
-            p.Add(T.StatRow("⚡", "Power Output",    r.IsRunning ? $"{r.wattsOutput:0} W" : "0 W", T.AccentGold));
-            p.Add(T.StatRow("⛽", "Fuel Remaining",  $"{r.FuelRemaining01 * 100f:0}%",               T.AccentCyan));
-            var (fuelBar, _) = T.ProgressBar(r.FuelRemaining01, T.AccentGreen, 8, false);
-            p.Add(fuelBar);
+            p.Add(HighTechTheme.Readout("POWER OUTPUT",
+                r.IsRunning ? $"{r.wattsOutput:0} W" : "0 W", T.AccentGold));
+            p.Add(HighTechTheme.SegmentMeter("FUEL REMAINING", r.FuelRemaining01, T.AccentGreen,
+                $"{r.FuelRemaining01 * 100f:0}%"));
             p.Add(T.Divider());
 
             p.Add(T.Subtitle("Inputs & Waste"));
@@ -632,6 +631,7 @@ namespace VoxelEngine.UI
 
             p.Add(T.Spacer(8));
             p.Add(T.Muted("Compact RTG — insert LEU pellets and ice. No pipes required."));
+            HighTechTheme.Frame(p, r.IsRunning ? T.AccentGreen : T.TextMuted);
             return p;
         }
 
@@ -645,11 +645,10 @@ namespace VoxelEngine.UI
             p.Add(BuildHeader("⚛", "Enrichment Centrifuge",
                 u.IsProcessing ? "PROCESSING" : "IDLE",
                 u.IsProcessing ? T.AccentPurple : T.TextMuted, T.AccentPurple));
-            p.Add(T.AccentDivider(T.AccentPurple));
+            p.Add(HighTechTheme.ScanDivider(u.IsProcessing ? T.AccentPurple : T.TextMuted));
 
-            p.Add(T.StatRow("⏱", "Progress", $"{u.Progress01 * 100f:0}%", T.AccentCyan));
-            var (progBar, _) = T.ProgressBar(u.Progress01, T.AccentPurple, 10, false);
-            p.Add(progBar);
+            p.Add(HighTechTheme.SegmentMeter("ENRICHMENT", u.Progress01, T.AccentPurple,
+                $"{u.Progress01 * 100f:0}%", 14));
             p.Add(T.Divider());
 
             // Input
@@ -680,6 +679,7 @@ namespace VoxelEngine.UI
 
             p.Add(T.Spacer(8));
             p.Add(T.Muted("Enriches raw uranium into fuel rods and LEU pellets. Requires power."));
+            HighTechTheme.Frame(p, u.IsProcessing ? T.AccentPurple : T.TextMuted);
             return p;
         }
 
@@ -693,11 +693,10 @@ namespace VoxelEngine.UI
             p.Add(BuildHeader("♻", "Waste Reprocessor",
                 w.IsProcessing ? "REPROCESSING" : "IDLE",
                 w.IsProcessing ? T.AccentOrange : T.TextMuted, T.AccentOrange));
-            p.Add(T.AccentDivider(T.AccentOrange));
+            p.Add(HighTechTheme.ScanDivider(w.IsProcessing ? T.AccentOrange : T.TextMuted));
 
-            p.Add(T.StatRow("⏱", "Progress", $"{w.Progress01 * 100f:0}%", T.AccentCyan));
-            var (progBar, _) = T.ProgressBar(w.Progress01, T.AccentOrange, 10, false);
-            p.Add(progBar);
+            p.Add(HighTechTheme.SegmentMeter("REPROCESSING", w.Progress01, T.AccentOrange,
+                $"{w.Progress01 * 100f:0}%", 14));
             p.Add(T.Divider());
 
             var slotRow = new VisualElement();
@@ -725,6 +724,7 @@ namespace VoxelEngine.UI
 
             p.Add(T.Spacer(8));
             p.Add(T.Muted("Reprocesses spent fuel rods and depleted uranium via PUREX."));
+            HighTechTheme.Frame(p, w.IsProcessing ? T.AccentOrange : T.TextMuted);
             return p;
         }
 
@@ -738,20 +738,17 @@ namespace VoxelEngine.UI
             p.Add(BuildHeader("⚗", "Electrolyser",
                 e.IsRunning ? "ELECTROLYZING" : "IDLE",
                 e.IsRunning ? T.AccentCyan : T.TextMuted, T.AccentCyan));
-            p.Add(T.AccentDivider(T.AccentCyan));
+            p.Add(HighTechTheme.ScanDivider(e.IsRunning ? T.AccentCyan : T.TextMuted));
 
-            p.Add(T.StatRow("⏱", "Progress", $"{e.Progress01 * 100f:0}%", T.AccentCyan));
-            var (progBar, _) = T.ProgressBar(e.Progress01, T.AccentCyan, 10, false);
-            p.Add(progBar);
+            p.Add(HighTechTheme.SegmentMeter("ELECTROLYSIS", e.Progress01, T.AccentCyan,
+                $"{e.Progress01 * 100f:0}%", 14));
             p.Add(T.Divider());
 
             p.Add(T.Subtitle("Gas Buffers"));
-            p.Add(TankRow(
-                T.TankGauge("H₂", e.HydrogenBuffer / e.BufferCapacity,
-                    new Color(0.28f, 0.68f, 1.0f), $"{e.HydrogenBuffer:0}/{e.BufferCapacity:0}"),
-                T.TankGauge("O₂", e.OxygenBuffer / e.BufferCapacity,
-                    new Color(0.90f, 0.38f, 0.28f), $"{e.OxygenBuffer:0}/{e.BufferCapacity:0}")
-            ));
+            p.Add(HighTechTheme.SegmentMeter("HYDROGEN", e.HydrogenBuffer / e.BufferCapacity,
+                new Color(0.28f, 0.68f, 1.0f), $"{e.HydrogenBuffer:0}/{e.BufferCapacity:0}"));
+            p.Add(HighTechTheme.SegmentMeter("OXYGEN", e.OxygenBuffer / e.BufferCapacity,
+                new Color(0.90f, 0.38f, 0.28f), $"{e.OxygenBuffer:0}/{e.BufferCapacity:0}"));
             p.Add(T.Divider());
 
             p.Add(T.Subtitle("Ice Input"));
@@ -762,6 +759,7 @@ namespace VoxelEngine.UI
 
             p.Add(T.Spacer(8));
             p.Add(T.Muted("Electrolyses ice into H₂ and O₂. Connect gas tanks via gas pipes."));
+            HighTechTheme.Frame(p, e.IsRunning ? T.AccentCyan : T.TextMuted);
             return p;
         }
 
@@ -774,20 +772,20 @@ namespace VoxelEngine.UI
             p.Add(BuildHeader("🔥", "Hydrogen Engine",
                 h.IsRunning ? "RUNNING" : "IDLE",
                 h.IsRunning ? T.AccentGold : T.TextMuted, T.AccentGold));
-            p.Add(T.AccentDivider(T.AccentGold));
+            p.Add(HighTechTheme.ScanDivider(h.IsRunning ? T.AccentGold : T.TextMuted));
 
-            p.Add(T.StatRow("⚡", "Power Output",     h.IsRunning ? $"{h.wattsOutput:0} W" : "0 W", T.AccentGold));
-            p.Add(T.StatRow("💧", "H₂ Consumption",   $"{h.hydrogenPerSecond:0.0} / sec",            T.TextSecondary));
+            p.Add(HighTechTheme.Readout("POWER OUTPUT",
+                h.IsRunning ? $"{h.wattsOutput:0} W" : "0 W", T.AccentGold));
+            p.Add(T.StatRow("💧", "H₂ Consumption", $"{h.hydrogenPerSecond:0.0} / sec", T.TextSecondary));
             p.Add(T.Divider());
 
             p.Add(T.Subtitle("Hydrogen Buffer"));
-            p.Add(TankRow(
-                T.TankGauge("H₂", h.Buffer01, new Color(0.28f, 0.68f, 1f),
-                    $"{h.bufferAmount:0} / {h.bufferCapacity:0}", 120, 64)
-            ));
+            p.Add(HighTechTheme.SegmentMeter("HYDROGEN BUFFER", h.Buffer01, new Color(0.28f, 0.68f, 1f),
+                $"{h.bufferAmount:0} / {h.bufferCapacity:0}"));
 
             p.Add(T.Spacer(8));
             p.Add(T.Muted("Burns hydrogen for clean power. Connect a hydrogen gas tank via gas pipes."));
+            HighTechTheme.Frame(p, h.IsRunning ? T.AccentGold : T.TextMuted);
             return p;
         }
 

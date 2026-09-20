@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.6.0-dev`
-**Roadmap Version:** `12.6.0-dev`
+**Current Version:** `12.7.0-dev`
+**Roadmap Version:** `12.7.0-dev`
 **Date:** 2026-09-20
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,10 @@
 
 ## 0. Recently Done
 
+### 12.7.0-dev - Targeting Computers (Advanced High-Tech)
+- **High-tech instruments** (`HighTechTheme`): corner-bracket holo frame with a status-reactive accent, scanline divider, segmented cell meter, hero numeric readout. Static styling, safe under the machine cadence.
+- **Nuclear + hydrogen lines restyled** (`MachineUIs`): reactor core, portable reactor, enrichment centrifuge, waste reprocessor, electrolyser, hydrogen engine. All values, slots and hints preserved; steam turbine and water tower wait for the rail-polish round, quarry stays industrial. No setup changes.
+
 ### 12.6.0-dev - Brass Needles And A Firebox (Railway Side Dock)
 - **Steampunk instruments** (`SteampunkTheme`): true analog dials (brass bezel, cream face, tick ring, red needle, redline), riveted dividers, brass selector keys; a text-field focus guard joins the refresh and hotkey guards.
 - **Rail consoles docked** (`RailPanels` via `OpenMachine`): station, switch, footplate, schedule, display; the bogie merges into the docked truck card (retitled Bogie) with its auto-snap toggle, service note and live speed. The three modal HUDs are deleted.
@@ -48,11 +52,6 @@
 - `RailStation.ServiceTrain` had no caller since the station rework: trains waited and left without an item moving. A 4 Hz berth service pass on the bogie now trades cargo with the station a stopped train stands at, over every `IGridItemStore` on the grid, for scheduled and hand-driven trains alike.
 - The pass reports itself (`ServicingStation`, `ServiceNote`) in the bogie console and the schedule's waiting label, so a stalled transfer names its reason.
 - Two appended wait conditions: TRAIN EMPTY and TRAIN FULL - the natural releases for unload and load stops; saves store the int, so waits never reorder.
-
-### 12.2.0-dev - Brass, Tubes, Cobbles And A Bogie That Actually Snaps
-- **Bogie snap fixed:** the snap sets a POSE now (rotate to track, anchor on the truck block) instead of dropping the grid origin on the railhead; truck renamed Bogie (step 92 rename pass); E opens a console with auto-snap toggle (default on, 1 Hz poll, saved), SNAP NOW and LIFT OFF.
-- **Brass ingot:** furnace copper x2 + iron x1; step 95 blends one steel-for-brass swap into rail piece and display recipes (idempotent, total ingots unchanged).
-- **Displays rebuilt:** nixie readout is four glass tubes with domed tops and one glowing digit each; analog gauge is a Create-style dial (backplate, bolts, tick ring, needle + tail, glass). Ballast bed rebuilds as a dense combined-mesh crushed-stone layer (3 draw calls, V2 marker in step 93). Hand-placing rail blocks is refused - rails are laid with the Rail Layer.
 
 ### Era Transition Feel
 

@@ -1,9 +1,31 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.6.0-dev`
+**Current Version:** `12.7.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.7.0-dev] Targeting Computers - Advanced Machines Go High-Tech
+
+**Type:** MINOR - presentation-only restyle of six advanced machine panels. No behaviour, save, recipe or setup changes.
+
+**GitHub title:** `[12.7.0-dev] Targeting computers - advanced machines go high-tech`
+
+#### The instrument library grows a second family
+
+`HighTechTheme` is the advanced-machine counterpart to the steampunk instruments: a corner-bracket holo frame that pins targeting-computer brackets to the panel corners, a scanline divider with one bright segment, segmented cell meters that read fuel, rods and buffers as discrete glowing cells instead of a continuous bar, and a hero numeric readout for the one number the operator watches. The frame accent follows machine status - green running, red fault, dim idle - so an overheating reactor wears a red frame. Everything is static styling with no scheduled anims, safe under the machine cadence rebuilds.
+
+#### The nuclear and hydrogen lines
+
+Reactor core, portable reactor, enrichment centrifuge, waste reprocessor, electrolyser and hydrogen engine all move onto the new chrome: hero readouts for core temperature and power output, segmented cells for control rods, fuel, enrichment, reprocessing, electrolysis and the H2/O2 buffers. Every value, slot, tank and hint is preserved - only the instruments changed. The steam turbine and water tower stay as they are for the rail-polish round, and the quarry stays industrial.
+
+#### Manual steps in Unity
+
+1. Apply the patch and recompile.
+2. No setup re-run is needed: no new blocks, items or recipes.
+3. Press E on the reactor core, portable reactor, centrifuge, reprocessor, electrolyser and hydrogen engine: each wears corner brackets, a scanline and cell meters.
+4. Run the reactor hot: past safe max the temp readout, its cells and the frame go red.
+5. Confirm every slot still takes items and every value still updates live.
 
 ### [12.6.0-dev] Brass Needles And A Firebox - The Railway Moves To The Side Dock
 
