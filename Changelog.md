@@ -1,9 +1,43 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.3.0-dev`
+**Current Version:** `12.4.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.4.0-dev] Steam Takes The Rails - Piston Engines, Water Towers And A Whistle
+
+**Type:** MINOR - new traction source and two blocks. Additive save fields only.
+
+**GitHub title:** `[12.4.0-dev] Steam takes the rails - piston engines, water towers and a whistle`
+
+#### Rotational power, and nothing else
+
+The **Steam Engine** is a machine, not a locomotive: a vertical boiler with a chimney, a horizontal steam cylinder, a crosshead on slide bars, a connecting rod down to a crank pin and a flywheel across the frames. Its only product is ROTATION - `CurrentRPM` at the flywheel, zero banked or starved, idle at first steam, full speed at full pressure. It generates no electricity and grants no traction flag: the bogie's mechanical drive takes the flywheel's turn when the grid has no electric power (the gate walks the coupled consist at 2 Hz and asks for a shaft turning above 30 RPM), and the brass screens' rotational tap reads the same number - a steam train's departure board runs off its own engine's shaft.
+
+#### The piston gear is solved, not waved at
+
+The flywheel spins, the crank pin circles with it, and the crosshead rides its bars at the exact slider-crank position (z = pin.z + sqrt(L^2 - dy^2)) with the connecting rod laid between pin and crosshead at its true length and angle. At speed it reads as an engine working; at rest it holds its last position like one. The chimney breathes WHITE steam smoke - white, not soot: a coal fire with draft and water in the boiler breathes steam, and steam is what this block sells - plus `Sfx.SteamChuff` twice per revolution under way and `Sfx.SteamWhistle` on the whistle cord.
+
+#### The tender is the train
+
+The firebox carries no private fuel slot: it shovels coal - or wood, at half the patience - out of any cargo container on the grid, like a real tender coaling from the wagon behind it. Coaling is therefore a cargo operation: a LOAD station with a coal filter coals an engine through the berth service pass from 12.3.0, and fuel persists for free with the containers. Water comes from a `GridLiquidTank` aboard (a tank wagon) while running, and from a **Water Tower** platform-side while berthed. Fire without water loses pressure; water without fire loses it slower; neither turns the flywheel.
+
+#### The footplate and the tower
+
+E on an engine opens the footplate in `RailConfigHud`: boiler pressure and water as bar readouts, live flywheel RPM, LIGHT/BANK THE FIRE, and WHISTLE. Water and fire survive a reload (additive fields); pressure deliberately does not - a banked fire restarting hot between sessions would be a free head of steam. The **Water Tower** is a tank on legs with a standpipe: it fills itself from a water network it stands beside (same FluidNode source a sprinkler drinks from) or slowly from open water - a tower by a pond seeps full the way real ones were pumped. Its level saves additively.
+
+#### New in the setup window
+
+Step **96. Build the Steam Railway** (needs 95 for brass): authors the Steam Engine grid item and prefab (bed, frames, steam cylinder, crosshead and rod, connecting rod, spoked flywheel with crank pin, brass-banded vertical boiler, chimney), the Water Tower block and prefab, and both recipes - engine steel x24 + brass x6 + wire x4 at the assembler, tower steel x10 + brass x2 at the bench. Non-destructive, safe to re-run.
+
+#### Manual steps in Unity
+
+1. Recompile; run **Tools -> Voxel Engine -> Voxel Engine Setup -> 96. Build the Steam Railway**.
+2. In a save: craft a Steam Engine, build it onto a train grid, put coal in any container aboard, and open the footplate (E) to watch pressure climb and the flywheel turn the piston gear.
+3. Cut the grid's power (or build the train with no generator at all) and drive: the flywheel's rotation pulls the train mechanically.
+4. Craft a Water Tower beside a water network or a pond, and berth a thirsty engine within reach of the standpipe.
+5. Pull the whistle cord. You will know when it works.
 
 ### [12.3.0-dev] The Freight Actually Rides - Stations Service Berthed Trains
 

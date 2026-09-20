@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.3.0-dev`
-**Roadmap Version:** `12.3.0-dev`
+**Current Version:** `12.4.0-dev`
+**Roadmap Version:** `12.4.0-dev`
 **Date:** 2026-09-16
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 12.4.0-dev - Steam Takes The Rails (Piston Engines)
+- **Steam Engine** grid block: a piston steam engine (solved slider-crank animation, white chimney steam) whose only product is ROTATIONAL POWER - the consist's mechanical drive takes it when the grid has no electric power (gate at 2 Hz), and the brass screens tap the same shaft. Firebox shovels coal/wood from any cargo container aboard; water from tank wagons moving, water towers berthed; chuff twice per revolution, whistle on the cord.
+- **Water Tower** stationary block: fills from a water network it stands beside (sprinkler's FluidNode source) or slowly from open water; berthed locomotives drink from the standpipe. Footplate console in `RailConfigHud` (pressure/water bars, fire toggle, whistle); water and fire save additively, pressure deliberately does not.
+- Setup step 96 authors both blocks, items and recipes (needs 95 for brass).
+
 ### 12.3.0-dev - The Freight Actually Rides
 - `RailStation.ServiceTrain` had no caller since the station rework: trains waited and left without an item moving. A 4 Hz berth service pass on the bogie now trades cargo with the station a stopped train stands at, over every `IGridItemStore` on the grid, for scheduled and hand-driven trains alike.
 - The pass reports itself (`ServicingStation`, `ServiceNote`) in the bogie console and the schedule's waiting label, so a stalled transfer names its reason.
@@ -38,11 +43,6 @@
 - **Bogie snap fixed:** the snap sets a POSE now (rotate to track, anchor on the truck block) instead of dropping the grid origin on the railhead; truck renamed Bogie (step 92 rename pass); E opens a console with auto-snap toggle (default on, 1 Hz poll, saved), SNAP NOW and LIFT OFF.
 - **Brass ingot:** furnace copper x2 + iron x1; step 95 blends one steel-for-brass swap into rail piece and display recipes (idempotent, total ingots unchanged).
 - **Displays rebuilt:** nixie readout is four glass tubes with domed tops and one glowing digit each; analog gauge is a Create-style dial (backplate, bolts, tick ring, needle + tail, glass). Ballast bed rebuilds as a dense combined-mesh crushed-stone layer (3 draw calls, V2 marker in step 93). Hand-placing rail blocks is refused - rails are laid with the Rail Layer.
-
-### 12.1.0-dev - Schedules, Screens And The Sound Of A Station Waking Up
-- **Ballast fix:** the bed item could resolve empty and the corridor silently skipped ballast - now self-healed at drag time, plus a `RailCorridor` re-bed pass that heals bare cells on every commit (charged as stone, named on the toast).
-- **Train Schedule block:** ordered stop list per train with release conditions (dwell / hold full / hold empty / hold has space); bogie gained path-based `SetDestination` routing with arrival events; stations matched by name; schedule survives saves.
-- **Display family:** one `RailDisplayScreen` component, five housings - grid Brass Display Screen (rotational power tap) plus stationary Cabinet / Hanging Departure Board / Nixie Readout (mains, small electric engine inside). Console picks split-flap / nixie / analog and speed / load / departures / station / custom. Staggered `SplitFlapFlip` sfx on every card turn. Setup step 95, additive save fields.
 
 ### 12.0.0-dev - The v1 Train Is Gone (MAJOR)
 - `RailTrain` + `TrainState` deleted; `RailConfigHud` loses the train console (grid terminal covers v2); logistics map reads `GridRailBogie`; E-branch for the v1 console removed.

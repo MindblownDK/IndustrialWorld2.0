@@ -330,6 +330,30 @@ namespace VoxelEngine.GridSystem
             return true;
         }
 
+        private float _nextSteamScan;
+        private bool _consistSteam;
+
+        /// <summary>Whether any grid in the consist carries a steam engine actually
+        /// TURNING - rotational power at the flywheel, which is the engine's only
+        /// product and the mechanical drive's only fuel. Scanned at 2 Hz: the gate
+        /// asks every fixed frame, but walking the consist does not need to.</summary>
+        private bool ConsistHasRotationalPower()
+        {
+            if (Time.time < _nextSteamScan) return _consistSteam;
+            _nextSteamScan = Time.time + 0.5f;
+            _consistSteam = false;
+
+            var lead = this;
+            while (lead.LeadBogie != null) lead = lead.LeadBogie;
+            for (var cur = lead; cur != null; cur = cur.TrailBogie)
+            {
+                if (cur._grid == null) continue;
+                var engine = cur._grid.GetComponentInChildren<GridSteamEngine>();
+                if (engine != null && engine.CurrentRPM > 30f) { _consistSteam = true; break; }
+            }
+            return _consistSteam;
+        }
+
         private void ServiceTick()
         {
             if (!IsOnRails || _speed > 0.05f)
@@ -462,10 +486,13 @@ namespace VoxelEngine.GridSystem
                 BlockedReason = _speed > 0.01f ? "" : "Not powered.";
                 if (_speed <= 0.001f) return;
             }
-            else if (_grid != null && !_grid.HasPower)
+            else if (_grid != null && !_grid.HasPower && !ConsistHasRotationalPower())
             {
+                // STEAM TRACTION (12.4.0): a fired locomotive with head of steam
+                // anywhere in the consist pulls whether or not the grid has a
+                // generator. Electric and steam are sources, not religions.
                 _speed = Mathf.MoveTowards(_speed, 0f, acceleration * dt);
-                BlockedReason = "No power on the grid.";
+                BlockedReason = "No power on the grid, and no shaft turning in the consist.";
                 if (_speed <= 0.001f) return;
             }
             else

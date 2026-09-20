@@ -29,6 +29,7 @@ namespace VoxelEngine.UI
         private static RailStation _station;
         private static RailTrack _switchTrack;
         private static GridRailTruck _truck;
+        private static GridSteamEngine _engine;
 
         private static readonly List<string> _nameScratch = new();
 
@@ -67,14 +68,14 @@ namespace VoxelEngine.UI
         public static void OpenStation(RailStation station)
         {
             if (station == null) return;
-            _station = station; _switchTrack = null; _truck = null;
+            _station = station; _switchTrack = null; _truck = null; _engine = null;
             Show();
         }
 
         public static void OpenSwitch(RailTrack track)
         {
             if (track == null) return;
-            _switchTrack = track; _station = null; _truck = null;
+            _switchTrack = track; _station = null; _truck = null; _engine = null;
             Show();
         }
 
@@ -83,7 +84,16 @@ namespace VoxelEngine.UI
         public static void OpenBogie(GridRailTruck truck)
         {
             if (truck == null) return;
-            _truck = truck; _station = null; _switchTrack = null;
+            _truck = truck; _station = null; _switchTrack = null; _engine = null;
+            Show();
+        }
+
+        /// <summary>The footplate: boiler pressure, water, fire and the whistle
+        /// cord. Opened with E on the steam engine (12.4.0).</summary>
+        public static void OpenSteamEngine(GridSteamEngine engine)
+        {
+            if (engine == null) return;
+            _engine = engine; _station = null; _switchTrack = null; _truck = null;
             Show();
         }
 
@@ -105,7 +115,7 @@ namespace VoxelEngine.UI
             UIState.TextInputActive = false;
             if (_scrim != null) _scrim.style.display = DisplayStyle.None;
             if (_blocking) { UIState.PopBlock(); _blocking = false; }
-            _station = null; _switchTrack = null; _truck = null;
+            _station = null; _switchTrack = null; _truck = null; _engine = null;
         }
 
         public static void Tick()
@@ -124,7 +134,7 @@ namespace VoxelEngine.UI
             // looking at. (The v1 train console lived here until its retirement in
             // 12.0.0-dev; a train is a grid now and configures itself through the grid
             // terminal like every other buildable.)
-            if (_station != null || _truck != null) Rebuild();
+            if (_station != null || _truck != null || _engine != null) Rebuild();
         }
 
         // ── Build ────────────────────────────────────────────────────────────────
@@ -141,6 +151,7 @@ namespace VoxelEngine.UI
             if (_station != null) BuildStation();
             else if (_switchTrack != null) BuildSwitch();
             else if (_truck != null) BuildBogie();
+            else if (_engine != null) BuildSteamEngine();
             else { Close(); return; }
 
             var close = new Button(Close) { text = "CLOSE" };
@@ -257,6 +268,80 @@ namespace VoxelEngine.UI
                 }
             }
             _body.Add(snapRow);
+        }
+
+        // ── Locomotive panel ───────────────────────────────────────────────────
+        private static void BuildSteamEngine()
+        {
+            if (_engine == null) return;
+
+            var head = new VisualElement { style = { flexDirection = FlexDirection.Row, marginBottom = 8 } };
+            head.style.alignItems = Align.Center;
+            var title = new Label("STEAM ENGINE");
+            title.style.flexGrow = 1;
+            title.style.fontSize = 15;
+            title.style.unityFontStyleAndWeight = FontStyle.Bold;
+            title.style.letterSpacing = 1.4f;
+            title.style.color = new StyleColor(new Color(0.45f, 0.85f, 1f));
+            head.Add(title);
+            var pill = new Label(_engine.HasSteam
+                ? $"TURNING {_engine.CurrentRPM:0} RPM"
+                : (_engine.firing ? "RAISING STEAM" : "FIRE BANKED"));
+            pill.style.fontSize = 10;
+            pill.style.color = new StyleColor(_engine.HasSteam ? T.AccentGreen : T.AccentAmber);
+            head.Add(pill);
+            _body.Add(head);
+
+            Section("BOILER");
+            Bar("PRESSURE", _engine.pressure, _engine.HasSteam ? T.AccentGreen : T.AccentAmber);
+            Bar("WATER", _engine.waterCapacity > 0 ? _engine.waterStored / _engine.waterCapacity : 0f, T.AccentCyan);
+            Info($"{_engine.waterStored:0} / {_engine.waterCapacity:0} L aboard. Tank wagons feed the " +
+                 "boiler on the move; water towers fill it berthed.", T.TextMuted);
+            Info($"Flywheel: {_engine.CurrentRPM:0} RPM. The engine's only product is rotation - " +
+                 "the mechanical drive and the brass screens take it from there.", T.TextSecondary);
+
+            Section("FIRE");
+            var fireRow = new VisualElement { style = { flexDirection = FlexDirection.Row, marginBottom = 6 } };
+            var fire = new Button(() => { _engine.firing = !_engine.firing; Rebuild(); })
+            { text = _engine.firing ? "BANK THE FIRE" : "LIGHT THE FIRE" };
+            fire.style.flexGrow = 1;
+            fire.style.height = 26;
+            fire.style.fontSize = 10;
+            fire.style.backgroundColor = new StyleColor(_engine.firing
+                ? new Color(0.45f, 0.20f, 0.10f) : new Color(0.10f, 0.13f, 0.17f));
+            fire.style.color = new StyleColor(_engine.firing ? Color.white : T.TextSecondary);
+            fireRow.Add(fire);
+
+            var whistle = new Button(() => _engine.Whistle()) { text = "WHISTLE" };
+            whistle.style.width = 90;
+            whistle.style.height = 26;
+            whistle.style.fontSize = 10;
+            whistle.style.marginLeft = 4;
+            fireRow.Add(whistle);
+            _body.Add(fireRow);
+
+            Info("The firebox shovels coal (or wood, at half the patience) out of any " +
+                 "cargo container on this grid. A LOAD station with a coal filter coals " +
+                 "it. A turning flywheel drives the train mechanically when the grid " +
+                 "has no electric power.", T.TextMuted);
+        }
+
+        private static void Bar(string label, float fill01, Color color)
+        {
+            int cells = 20;
+            int on = Mathf.RoundToInt(Mathf.Clamp01(fill01) * cells);
+            var row = new VisualElement { style = { flexDirection = FlexDirection.Row, marginBottom = 3 } };
+            var name = new Label(label.PadRight(10));
+            name.style.width = 80;
+            name.style.fontSize = 10;
+            name.style.color = new StyleColor(T.TextSecondary);
+            row.Add(name);
+            var bar = new Label(new string('#', on) + new string('-', cells - on));
+            bar.style.fontSize = 10;
+            bar.style.unityFontStyleAndWeight = FontStyle.Bold;
+            bar.style.color = new StyleColor(color);
+            row.Add(bar);
+            _body.Add(row);
         }
 
         private static Label Section(string text)

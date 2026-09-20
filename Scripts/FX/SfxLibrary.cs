@@ -57,6 +57,8 @@ namespace VoxelEngine.FX
         // ── World ONE-SHOTS ────────────────────────────────────────
         BridgeHorn,        // drawbridge warning horn — low two-tone, the register ships and rail crossings speak in
         SplitFlapFlip,     // split-flap display card turning over — the clack-slap of a departure board updating
+        SteamChuff,        // locomotive exhaust beat — the soft double puff twice per wheel revolution
+        SteamWhistle,      // boiler whistle — a long two-note cry with steam hiss behind it
 
         // ── Ambience LOOPS ─────────────────────────────────────────
         AmbDayBirds,
@@ -168,6 +170,8 @@ namespace VoxelEngine.FX
                 // World
                 case Sfx.BridgeHorn:       return OneShot("BridgeHorn",  1.15f, BridgeHorn);
                 case Sfx.SplitFlapFlip:    return OneShot("FlapFlip",    0.14f, d => SplitFlapFlip(d, variant));
+                case Sfx.SteamChuff:       return OneShot("SteamChuff",  0.16f, d => SteamChuff(d, variant));
+                case Sfx.SteamWhistle:     return OneShot("SteamWhistle", 1.30f, d => SteamWhistle(d, variant));
 
                 // Ambience
                 case Sfx.AmbDayBirds:      return Loop("Birds",     6f, AmbDayBirds);
@@ -196,6 +200,33 @@ namespace VoxelEngine.FX
             Burst(d, 0.000f, 0.014f, 2400f * pitch, 0.45f);
             Burst(d, 0.042f, 0.030f,  680f * pitch, 0.95f);
             Burst(d, 0.080f, 0.018f, 1500f * pitch, 0.30f);
+        }
+
+        /// <summary>The exhaust beat: a soft puff and the darker drag behind it. Quiet
+        /// on purpose - it fires twice per wheel revolution and a loud chuff per beat
+        /// would machine-gun the valley.</summary>
+        private static void SteamChuff(float[] d, int variant)
+        {
+            float pitch = 0.9f + (variant % 3) * 0.1f;
+            Burst(d, 0.000f, 0.070f, 320f * pitch, 0.55f);
+            Burst(d, 0.030f, 0.110f, 170f * pitch, 0.35f);
+        }
+
+        /// <summary>Boiler whistle: fundamental, its quint and a sharp octave over a
+        /// breath of hiss, with a fast attack and a tail that dies like steam does.</summary>
+        private static void SteamWhistle(float[] d, int variant)
+        {
+            float f0 = 618f * (1f + (variant % 2) * 0.03f);
+            for (int i = 0; i < d.Length; i++)
+            {
+                float t = i / (float)SAMPLE_RATE;
+                float env = Mathf.Clamp01(t / 0.06f) * Mathf.Exp(-Mathf.Max(0f, t - 0.9f) * 6f);
+                float tone = Mathf.Sin(2f * Mathf.PI * f0 * t)
+                           + 0.55f * Mathf.Sin(2f * Mathf.PI * f0 * 1.5f * t)
+                           + 0.25f * Mathf.Sin(2f * Mathf.PI * f0 * 2.02f * t);
+                float hiss = (Random.value * 2f - 1f) * 0.10f;
+                d[i] += (tone * 0.5f + hiss) * env * 0.7f;
+            }
         }
 
         private static void Burst(float[] d, float at, float dur, float freq, float amp)

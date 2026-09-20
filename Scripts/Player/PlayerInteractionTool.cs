@@ -892,6 +892,9 @@ namespace VoxelEngine.Player
                 var scheduleBlock = hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridTrainScheduleBlock>();
                 if (scheduleBlock != null) { VoxelEngine.UI.TrainScheduleHud.Open(scheduleBlock); return; }
 
+                var engine = hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridSteamEngine>();
+                if (engine != null) { VoxelEngine.UI.RailConfigHud.OpenSteamEngine(engine); return; }
+
                 var display = hit.collider.GetComponentInParent<VoxelEngine.Building.RailDisplayScreen>();
                 if (display != null) { VoxelEngine.UI.DisplayConfigHud.Open(display); return; }
 

@@ -513,6 +513,13 @@ namespace VoxelEngine.Persistence
                     entry.railPointsSetByPlayer = railTrack.PointsSetByPlayer;
                 }
 
+                var tower = pb.GetComponentInChildren<VoxelEngine.Building.WaterTower>();
+                if (tower != null)
+                {
+                    entry.hasWaterTowerState = true;
+                    entry.waterTowerStored = tower.stored;
+                }
+
                 var display = pb.GetComponentInChildren<VoxelEngine.Building.RailDisplayScreen>();
                 if (display != null)
                 {
@@ -1618,6 +1625,13 @@ namespace VoxelEngine.Persistence
                         savedBlock.trainScheduleIndex = scheduleBlock.CurrentIndex;
                     }
 
+                    if (block is VoxelEngine.GridSystem.GridSteamEngine engineBlock)
+                    {
+                        savedBlock.hasSteamEngineState = true;
+                        savedBlock.steamEngineWater = engineBlock.waterStored;
+                        savedBlock.steamEngineFiring = engineBlock.firing;
+                    }
+
                     if (block is VoxelEngine.GridSystem.GridRailTruck truckBlock)
                     {
                         // The snap policy is a standing decision about a parked train;
@@ -2021,6 +2035,14 @@ namespace VoxelEngine.Persistence
 
                 if (block is VoxelEngine.GridSystem.GridRailTruck restoredTruck && saved.hasRailTruckState)
                     restoredTruck.autoSnap = saved.truckAutoSnap;
+
+                // Named apart from the maritime restoredEngine above: same method,
+                // and C# forbids shadowing it in a sibling pattern branch.
+                if (block is VoxelEngine.GridSystem.GridSteamEngine restoredSteamEngine && saved.hasSteamEngineState)
+                {
+                    restoredSteamEngine.waterStored = Mathf.Clamp(saved.steamEngineWater, 0f, restoredSteamEngine.waterCapacity);
+                    restoredSteamEngine.firing = saved.steamEngineFiring;
+                }
 
                 var restoredGridDisplay = block.GetComponent<VoxelEngine.Building.RailDisplayScreen>();
                 if (restoredGridDisplay != null && saved.hasGridDisplayState)
@@ -2479,6 +2501,10 @@ namespace VoxelEngine.Persistence
                     if (System.Enum.IsDefined(typeof(VoxelEngine.Building.StationRole), sb.railStationRole))
                         restoredStation.role = (VoxelEngine.Building.StationRole)sb.railStationRole;
                 }
+                var restoredTower = go.GetComponentInChildren<VoxelEngine.Building.WaterTower>(true);
+                if (restoredTower != null && sb.hasWaterTowerState)
+                    restoredTower.stored = Mathf.Clamp(sb.waterTowerStored, 0f, restoredTower.capacity);
+
                 var restoredDisplay = go.GetComponentInChildren<VoxelEngine.Building.RailDisplayScreen>(true);
                 if (restoredDisplay != null && sb.hasDisplayState)
                 {
@@ -3719,6 +3745,12 @@ namespace VoxelEngine.Persistence
             public int trainScheduleIndex;
             public bool hasRailTruckState;
             public bool truckAutoSnap = true;
+            // Additive 12.4.0: steam engine boiler state. Water and fire survive a
+            // reload; pressure deliberately does not - a banked fire restarting hot
+            // between sessions would be a free head of steam.
+            public bool hasSteamEngineState;
+            public float steamEngineWater;
+            public bool steamEngineFiring = true;
             public bool hasGridDisplayState;
             public int gridDisplayKind;
             public int gridDisplaySource;
@@ -3835,6 +3867,8 @@ namespace VoxelEngine.Persistence
             public bool railPointsSetByPlayer;
             // Additive 12.1.0: stationary display screen configuration. Legacy saves omit
             // the flag and the housing keeps its authored defaults.
+            public bool hasWaterTowerState;
+            public float waterTowerStored;
             public bool hasDisplayState;
             public int displayKind;
             public int displaySource;
