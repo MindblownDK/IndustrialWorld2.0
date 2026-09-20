@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.7.0-dev`
-**Roadmap Version:** `12.7.0-dev`
+**Current Version:** `12.8.0-dev`
+**Roadmap Version:** `12.8.0-dev`
 **Date:** 2026-09-20
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 12.8.0-dev - Bulkheads And Vector Needles (Ship Sci-Fi)
+- **Starship instruments** (`StarshipTheme`): bulkhead side-rail frame with docking ticks, diamond hull divider, vector needle meter. Static styling, safe under the machine cadence.
+- **Ship systems restyled** (`GridBlockUI`): gatling, ship reactor, solar, ship engine, docking port, ore detector, beacon, cryobed. All values, slots and hints preserved; bespoke consoles (battery, vault, harvester, locator, satellites) untouched. No setup changes.
+- **Fix:** steampunk dial innards compensate the 3px bezel border and sit centred.
+
 ### 12.7.0-dev - Targeting Computers (Advanced High-Tech)
 - **High-tech instruments** (`HighTechTheme`): corner-bracket holo frame with a status-reactive accent, scanline divider, segmented cell meter, hero numeric readout. Static styling, safe under the machine cadence.
 - **Nuclear + hydrogen lines restyled** (`MachineUIs`): reactor core, portable reactor, enrichment centrifuge, waste reprocessor, electrolyser, hydrogen engine. All values, slots and hints preserved; steam turbine and water tower wait for the rail-polish round, quarry stays industrial. No setup changes.
@@ -47,11 +52,6 @@
 - **Steam Engine** grid block: a piston steam engine (solved slider-crank animation, white chimney steam) whose only product is ROTATIONAL POWER - the consist's mechanical drive takes it when the grid has no electric power (gate at 2 Hz), and the brass screens tap the same shaft. Firebox shovels coal/wood from any cargo container aboard; water from tank wagons moving, water towers berthed; chuff twice per revolution, whistle on the cord.
 - **Water Tower** stationary block: fills from a water network it stands beside (sprinkler's FluidNode source) or slowly from open water; berthed locomotives drink from the standpipe. Footplate console in `RailConfigHud` (pressure/water bars, fire toggle, whistle); water and fire save additively, pressure deliberately does not.
 - Setup step 96 authors both blocks, items and recipes (needs 95 for brass).
-
-### 12.3.0-dev - The Freight Actually Rides
-- `RailStation.ServiceTrain` had no caller since the station rework: trains waited and left without an item moving. A 4 Hz berth service pass on the bogie now trades cargo with the station a stopped train stands at, over every `IGridItemStore` on the grid, for scheduled and hand-driven trains alike.
-- The pass reports itself (`ServicingStation`, `ServiceNote`) in the bogie console and the schedule's waiting label, so a stalled transfer names its reason.
-- Two appended wait conditions: TRAIN EMPTY and TRAIN FULL - the natural releases for unload and load stops; saves store the int, so waits never reorder.
 
 ### Era Transition Feel
 

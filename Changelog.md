@@ -1,9 +1,35 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.7.0-dev`
+**Current Version:** `12.8.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.8.0-dev] Bulkheads And Vector Needles - Ship Systems Go Sci-Fi
+
+**Type:** MINOR - presentation-only restyle of eight ship-system panels plus a dial-centering fix. No behaviour, save, recipe or setup changes.
+
+**GitHub title:** `[12.8.0-dev] Bulkheads and vector needles - ship systems go sci-fi`
+
+#### The instrument library grows a third family
+
+`StarshipTheme` is the deep-space naval counterpart to the steampunk and high-tech instruments: a bulkhead frame of side-rails with docking ticks top and bottom, a hull divider with a centred diamond, and vector meters that read fuel, buffers and efficiency as a bright needle position on a track with a ghost trail. The frame accent follows block status like the holo frame does. Everything is static styling with no scheduled anims, safe under the machine cadence rebuilds.
+
+#### The ship systems
+
+Gatling weapon, ship reactor, solar panel, ship hydrogen engine, docking port, ore detector, beacon and cryobed all move onto the new chrome; the reactor fuel, solar efficiency and H2 buffer gauges become vector meters. Every value, slot, button, list and hint is preserved - only the instruments changed. The battery, containment vault, harvester, locator and satellites are already bespoke animated consoles and stay untouched, as do the industrial ship modules and the rail family.
+
+#### Fix: steampunk dials sit centred
+
+The 3px brass bezel is a real USS border, so dial innards anchored to the padding box sat 3px off the bezel centre with ticks straying toward the cream edge. The face, tick ring, needle and hub now compensate - needles and ticks sit fully inside their circles.
+
+#### Manual steps in Unity
+
+1. Apply the patch and recompile.
+2. No setup re-run is needed: no new blocks, items or recipes.
+3. Press E on the gatling, ship reactor, solar, ship engine, docking port, ore detector, beacon and cryobed: rails, diamond divider and vector needles on each.
+4. Footplate: all three dials centred, needles and ticks fully inside the cream.
+5. Confirm every slot and button still works and every value still updates live.
 
 ### [12.7.0-dev] Targeting Computers - Advanced Machines Go High-Tech
 

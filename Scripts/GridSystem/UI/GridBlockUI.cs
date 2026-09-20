@@ -1930,7 +1930,7 @@ namespace VoxelEngine.GridSystem.UI
             var p = T.MachinePanel();
             var (hdr, _, _, _) = T.HeaderRow("🔫 Gatling Weapon", "ARMED", T.AccentRed);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentRed));
+            p.Add(StarshipTheme.HullDivider(T.AccentRed));
 
             p.Add(T.StatRow("💥", "Damage", $"{gw.damage:0}", T.AccentAmber));
             p.Add(T.StatRow("🎯", "Range", $"{gw.range:0} m", T.AccentCyan));
@@ -1943,6 +1943,7 @@ namespace VoxelEngine.GridSystem.UI
             for (int i = 0; i < gw.ammo.Size; i++)
                 grid.Add(slot(gw.ammo, i, gw.ammo.GetSlot(i), false, true));
             p.Add(grid);
+            StarshipTheme.Frame(p, T.AccentRed);
             return p;
         }
 
@@ -2046,14 +2047,11 @@ namespace VoxelEngine.GridSystem.UI
                 r.IsRunning ? "RUNNING" : "IDLE",
                 r.IsRunning ? T.AccentGreen : T.AccentAmber);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentGreen));
+            p.Add(StarshipTheme.HullDivider(r.IsRunning ? T.AccentGreen : T.AccentAmber));
 
-            // Fuel-remaining gauge.
-            var gaugeRow = Row();
-            gaugeRow.style.justifyContent = Justify.Center;
-            gaugeRow.Add(T.TankGauge("Fuel", r.FuelRemaining01, new Color(0.3f, 0.85f, 0.4f),
-                $"{r.FuelRemaining01 * 100f:0}%", 64, 100));
-            p.Add(gaugeRow);
+            // Fuel-remaining vector.
+            p.Add(StarshipTheme.VectorMeter("FUEL", r.FuelRemaining01, new Color(0.3f, 0.85f, 0.4f),
+                $"{r.FuelRemaining01 * 100f:0}%"));
             p.Add(T.Spacer(6));
 
             p.Add(T.StatRow("🔌", "Power Out", PowerFormat.Watts(r.PowerOutput), T.AccentGreen));
@@ -2074,6 +2072,7 @@ namespace VoxelEngine.GridSystem.UI
             var wg = T.SlotGrid(r.wasteC.Size);
             for (int i = 0; i < r.wasteC.Size; i++) wg.Add(slot(r.wasteC, i, r.wasteC.GetSlot(i), false, true));
             p.Add(wg);
+            StarshipTheme.Frame(p, r.IsRunning ? T.AccentGreen : T.AccentAmber);
             return p;
         }
 
@@ -2220,7 +2219,7 @@ namespace VoxelEngine.GridSystem.UI
                 sp.CurrentOutput > 1f ? "GENERATING" : "IDLE",
                 sp.CurrentOutput > 1f ? T.AccentGreen : T.AccentAmber);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentGold));
+            p.Add(StarshipTheme.HullDivider(sp.CurrentOutput > 1f ? T.AccentGreen : T.AccentAmber));
 
             p.Add(T.StatRow("🔌", "Output", PowerFormat.Watts(sp.CurrentOutput), T.AccentGreen));
             p.Add(T.StatRow("⚡", "Rated Max", PowerFormat.Watts(sp.maxOutput), T.AccentCyan));
@@ -2228,11 +2227,11 @@ namespace VoxelEngine.GridSystem.UI
                 eff >= 0.66f ? T.AccentGreen : eff >= 0.33f ? T.AccentAmber : T.AccentRed));
             p.Add(T.Spacer(6));
 
-            // Visual efficiency bar.
-            var (bar, _) = T.ProgressBar(eff,
-                eff >= 0.66f ? T.AccentGreen : eff >= 0.33f ? T.AccentAmber : T.AccentRed, 8, true);
-            p.Add(bar);
+            // Visual efficiency vector.
+            Color effColor = eff >= 0.66f ? T.AccentGreen : eff >= 0.33f ? T.AccentAmber : T.AccentRed;
+            p.Add(StarshipTheme.VectorMeter("EFFICIENCY", eff, effColor, $"{eff * 100f:0}%"));
             p.Add(T.Muted("Output scales with sun angle, shadowing and weather."));
+            StarshipTheme.Frame(p, effColor);
             return p;
         }
 
@@ -2244,16 +2243,14 @@ namespace VoxelEngine.GridSystem.UI
                 he.IsRunning ? "RUNNING" : "IDLE",
                 he.IsRunning ? T.AccentGreen : T.AccentAmber);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentGreen));
-            var gaugeRow = Row();
-            gaugeRow.style.justifyContent = Justify.Center;
-            gaugeRow.Add(T.TankGauge("H2 Buffer", he.Fill01, T.AccentCyan,
-                $"{he.internalHydrogen:0}/{he.internalTankCapacity:0} L", 70, 120));
-            p.Add(gaugeRow);
+            p.Add(StarshipTheme.HullDivider(he.IsRunning ? T.AccentGreen : T.AccentAmber));
+            p.Add(StarshipTheme.VectorMeter("H2 BUFFER", he.Fill01, T.AccentCyan,
+                $"{he.internalHydrogen:0}/{he.internalTankCapacity:0} L"));
             p.Add(T.Spacer(6));
             p.Add(T.StatRow("", "Output", PowerFormat.Watts(he.PowerOutput), T.AccentGreen));
             p.Add(T.StatRow("", "Hydrogen Use", $"{he.hydrogenPerSecond:0.#} H2/s", T.AccentCyan));
             p.Add(T.Muted("Buffers hydrogen internally, then burns it into grid power. Feed it through gas pipes from H2/O2 generators and gas tanks."));
+            StarshipTheme.Frame(p, he.IsRunning ? T.AccentGreen : T.AccentAmber);
             return p;
         }
 
@@ -2267,7 +2264,7 @@ namespace VoxelEngine.GridSystem.UI
                 dp.IsDocked ? "DOCKED" : "FREE",
                 dp.IsDocked ? T.AccentGreen : T.AccentAmber);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentGold));
+            p.Add(StarshipTheme.HullDivider(dp.IsDocked ? T.AccentGreen : T.AccentAmber));
 
             p.Add(T.StatRow("⚖", "Buffer Mass", MassFormat.Format(dp.ContentMass), T.AccentCyan));
             p.Add(T.StatRow("🔒", "Lock Strength", PowerFormat.Newtons(dp.lockStrength), T.AccentCyan));
@@ -2294,6 +2291,7 @@ namespace VoxelEngine.GridSystem.UI
 
             p.Add(T.Spacer(6));
             p.Add(T.Muted("Configure per-face Input / Output + item filters below."));
+            StarshipTheme.Frame(p, dp.IsDocked ? T.AccentGreen : T.AccentAmber);
             // The port-config UI (direction + filters) is appended by GameUIController.
             return p;
         }
@@ -2520,7 +2518,7 @@ namespace VoxelEngine.GridSystem.UI
             var (hdr, _, _, _) = T.HeaderRow("📡 Beacon", bc.IsActive ? "● ACTIVE" : "○ OFF",
                 bc.IsActive ? T.AccentCyan : T.AccentDim);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentCyan));
+            p.Add(StarshipTheme.HullDivider(bc.IsActive ? T.AccentCyan : T.AccentDim));
             p.Add(T.StatRow("💡", "Power Use", PowerFormat.Watts(bc.PowerDraw), T.AccentGold));
             p.Add(T.StatRow("📊", "Beam Height", $"{bc.beamHeight:0} m", T.AccentCyan));
             p.Add(T.StatRow("🔄", "Rotation", $"{bc.rotationSpeed:0}°/s", T.AccentTeal));
@@ -2532,6 +2530,7 @@ namespace VoxelEngine.GridSystem.UI
             }, bc.Enabled ? T.AccentRed : T.AccentGreen));
             p.Add(T.Spacer(4));
             p.Add(T.Muted("Projects a visible vertical light beam into the sky. Visible from far away for navigation."));
+            StarshipTheme.Frame(p, bc.IsActive ? T.AccentCyan : T.AccentDim);
             return p;
         }
 
@@ -2542,7 +2541,7 @@ namespace VoxelEngine.GridSystem.UI
             var (hdr, _, _, _) = T.HeaderRow("🔍 Ore Detector", od.IsScanning ? "● SCANNING" : "○ OFFLINE",
                 od.IsScanning ? T.AccentGreen : T.AccentDim);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentGreen));
+            p.Add(StarshipTheme.HullDivider(od.IsScanning ? T.AccentGreen : T.AccentDim));
             p.Add(T.StatRow("⚡", "Power Use", PowerFormat.Watts(od.PowerDraw), T.AccentGold));
             p.Add(T.StatRow("📏", "Scan Radius", $"{od.scanRadius:0} blocks", T.AccentCyan));
             p.Add(T.StatRow("⬇", "Scan Depth", $"{od.maxScanDepth:0} blocks", T.AccentTeal));
@@ -2564,6 +2563,7 @@ namespace VoxelEngine.GridSystem.UI
             }
             p.Add(T.Spacer(4));
             p.Add(T.Muted("Scans the terrain below for ore deposits. Updates every 2 seconds."));
+            StarshipTheme.Frame(p, od.IsScanning ? T.AccentGreen : T.AccentDim);
             return p;
         }
 
@@ -2575,7 +2575,7 @@ namespace VoxelEngine.GridSystem.UI
             var (hdr, _, _, _) = T.HeaderRow($"❄ {cryo.blockName}", cryo.AvailabilityText,
                 online ? T.AccentGreen : T.AccentAmber);
             p.Add(hdr);
-            p.Add(T.AccentDivider(new Color(0.45f, 0.85f, 1f)));
+            p.Add(StarshipTheme.HullDivider(new Color(0.45f, 0.85f, 1f)));
             p.Add(T.StatRow("⚡", "Power", cryo.PowerEstimateText, T.AccentGold));
             p.Add(T.StatRow("◉", "Oxygen", cryo.OxygenEstimateText, T.AccentCyan));
             p.Add(T.StatRow("⌂", "Ownership", cryo.claimedByLocalPlayer ? "Owned by you" : "Unclaimed", T.AccentTeal));
@@ -2612,6 +2612,7 @@ namespace VoxelEngine.GridSystem.UI
             p.Add(row);
             p.Add(T.Spacer(4));
             p.Add(T.Muted("Gas pipes can install a variable oxygen port on the hull. Pump oxygen from H2/O2 generators into the cryobed for offline reserve."));
+            StarshipTheme.Frame(p, online ? T.AccentGreen : T.AccentAmber);
             return p;
         }
 

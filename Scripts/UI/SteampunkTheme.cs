@@ -94,6 +94,10 @@ namespace VoxelEngine.UI
         {
             float dial = Mathf.Max(72f, size);
             float fill = Mathf.Clamp01(fill01);
+            // The 3px bezel is a real USS border, so children anchor to the
+            // padding box inside it: the face centre sits one bezel-width up
+            // and left of the naive half-size origin.
+            const float bezel = 3f;
 
             var col = new VisualElement();
             col.style.alignItems = Align.Center;
@@ -124,7 +128,7 @@ namespace VoxelEngine.UI
             float faceD = dial - 14f;
             var face = new VisualElement();
             face.style.position = Position.Absolute;
-            face.style.left = 7; face.style.top = 7;
+            face.style.left = 7f - bezel; face.style.top = 7f - bezel;
             face.style.width = faceD; face.style.height = faceD;
             face.style.backgroundColor = new StyleColor(Cream);
             UITheme.Radius(face, faceD / 2f);
@@ -133,7 +137,7 @@ namespace VoxelEngine.UI
             body.Add(face);
 
             // Tick ring: eleven ticks from -135 to +135 degrees.
-            float cx = dial / 2f, cy = dial / 2f;
+            float cx = dial / 2f - bezel, cy = dial / 2f - bezel;
             float tickR = faceD / 2f - 8f;
             for (int i = 0; i < 11; i++)
             {
