@@ -20,11 +20,12 @@
 // The chimney makes white steam smoke - white, not soot: a coal fire with enough draft
 // and water in the boiler breathes steam, and steam is what this block is selling.
 //
-// THE TENDER IS THE TRAIN
-// The firebox carries no private fuel slot: it shovels coal (or wood, at half the
-// patience) out of any cargo container on the grid. Water comes from a GridLiquidTank
-// aboard on the move and from a WaterTower berthed. Fire without water loses pressure;
-// water without fire loses it slower.
+// THE FIREBOX BURNS FIRST, THE TENDER IS THE TRAIN
+// The firebox carries one private slot and burns from it first: coal, or wood at
+// half the patience. When the slot runs dry it shovels out of any cargo container
+// on the grid, like a real tender coaling from the wagon behind it. Water comes
+// from a GridLiquidTank aboard on the move and from a WaterTower berthed. Fire
+// without water loses pressure; water without fire loses it slower.
 
 using System.Collections.Generic;
 using UnityEngine;
@@ -45,6 +46,17 @@ namespace VoxelEngine.GridSystem
 
         [Tooltip("Banked fire: no burn, no pressure, no rotation. Toggled from the console.")]
         public bool firing = true;
+
+        [Tooltip("The firebox slot: coal, or wood at half the patience. Burns from here first.")]
+        public ItemContainer firebox;
+
+        /// <summary>Creates the 1-slot firebox if it is missing. Called from enable,
+        /// the UI and the save paths - a null firebox is never an error.</summary>
+        public void EnsureFirebox()
+        {
+            if (firebox == null) firebox = new ItemContainer("Firebox", 1);
+            else firebox.Resize(1);
+        }
 
         /// <summary>Boiler pressure 0..1. Runtime only: a cold boiler after a reload is
         /// honest, and a saved one would let a banked fire cheat its way to full head
@@ -91,6 +103,7 @@ namespace VoxelEngine.GridSystem
             if (!Application.isPlaying) return;
             _coal = FindItem("coal");
             _wood = FindItem("wood_log");
+            EnsureFirebox();
             _flywheelSpin = transform.Find("FlywheelSpin");
             _crankPin = transform.Find("FlywheelSpin/CrankPin");
             _crosshead = transform.Find("Crosshead");
@@ -122,7 +135,7 @@ namespace VoxelEngine.GridSystem
             float work = bogie != null ? Mathf.Clamp01(bogie.Speed / 12f) : 0f;
 
             // ── Fire and pressure ──
-            bool fed = firing && HasFuelInStores() && waterStored > 0.5f;
+            bool fed = firing && HasFuel() && waterStored > 0.5f;
             if (fed)
                 pressure = Mathf.Min(1f, pressure + dt * (0.055f + 0.045f * (1f - work)));
             else
@@ -205,6 +218,16 @@ namespace VoxelEngine.GridSystem
             _conRod.localRotation = Quaternion.Euler(angle, 0f, 0f);
         }
 
+        private bool HasFuel() => HasFuelInFirebox() || HasFuelInStores();
+
+        private bool HasFuelInFirebox()
+        {
+            if (firebox == null || firebox.Size < 1) return false;
+            if (_coal == null && _wood == null) return false;
+            var s = firebox.GetSlot(0);
+            return s.item == _coal || s.item == _wood;
+        }
+
         private bool HasFuelInStores()
         {
             if (_coal == null && _wood == null) return false;
@@ -222,6 +245,12 @@ namespace VoxelEngine.GridSystem
 
         private void ConsumeFuel()
         {
+            // The firebox burns first; the tender (any cargo container aboard) is the fallback.
+            if (firebox != null && firebox.Size > 0)
+            {
+                if (_coal != null && firebox.Remove(_coal, 1) > 0) { _lastFuelWasWood = false; return; }
+                if (_wood != null && firebox.Remove(_wood, 1) > 0) { _lastFuelWasWood = true; return; }
+            }
             foreach (var store in Stores())
             {
                 var c = store.ItemStore;

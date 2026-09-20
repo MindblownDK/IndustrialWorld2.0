@@ -887,19 +887,19 @@ namespace VoxelEngine.Player
                 }
 
                 var railStation = hit.collider.GetComponentInParent<VoxelEngine.Building.RailStation>();
-                if (railStation != null) { VoxelEngine.UI.RailConfigHud.OpenStation(railStation); return; }
+                if (railStation != null) { UI.GameUIController.Instance?.OpenMachine(railStation); return; }
 
                 var waterTower = hit.collider.GetComponentInParent<VoxelEngine.Building.WaterTower>();
                 if (waterTower != null) { UI.GameUIController.Instance?.OpenMachine(waterTower); return; }
 
                 var scheduleBlock = hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridTrainScheduleBlock>();
-                if (scheduleBlock != null) { VoxelEngine.UI.TrainScheduleHud.Open(scheduleBlock); return; }
+                if (scheduleBlock != null) { UI.GameUIController.Instance?.OpenMachine(scheduleBlock); return; }
 
                 var engine = hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridSteamEngine>();
-                if (engine != null) { VoxelEngine.UI.RailConfigHud.OpenSteamEngine(engine); return; }
+                if (engine != null) { UI.GameUIController.Instance?.OpenMachine(engine); return; }
 
                 var display = hit.collider.GetComponentInParent<VoxelEngine.Building.RailDisplayScreen>();
-                if (display != null) { VoxelEngine.UI.DisplayConfigHud.Open(display); return; }
+                if (display != null) { UI.GameUIController.Instance?.OpenMachine(display); return; }
 
                 // Coupler: one press attaches or releases, which is what a coupler lever does.
                 var coupler = hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridRailCoupler>();
@@ -929,7 +929,7 @@ namespace VoxelEngine.Player
                 // state are on one screen instead of a toast and a hidden right-click.
                 var railTruck = hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridRailTruck>();
                 if (railTruck != null)
-                { VoxelEngine.UI.RailConfigHud.OpenBogie(railTruck); return; }
+                { UI.GameUIController.Instance?.OpenMachine(railTruck); return; }
 
                 var railSignal = hit.collider.GetComponentInParent<VoxelEngine.Building.RailSignal>();
                 if (railSignal != null)
@@ -941,7 +941,7 @@ namespace VoxelEngine.Player
 
                 var railTrack = hit.collider.GetComponentInParent<VoxelEngine.Building.RailTrack>();
                 if (railTrack != null && railTrack.pieceKind == VoxelEngine.Building.RailPieceKind.Switch)
-                { VoxelEngine.UI.RailConfigHud.OpenSwitch(railTrack); return; }
+                { UI.GameUIController.Instance?.OpenMachine(railTrack); return; }
 
                 // Piston Interaction: Right-click to toggle push/pull.
                 var piston = hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridPiston>();

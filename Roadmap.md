@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.5.0-dev`
-**Roadmap Version:** `12.5.0-dev`
+**Current Version:** `12.6.0-dev`
+**Roadmap Version:** `12.6.0-dev`
 **Date:** 2026-09-20
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 12.6.0-dev - Brass Needles And A Firebox (Railway Side Dock)
+- **Steampunk instruments** (`SteampunkTheme`): true analog dials (brass bezel, cream face, tick ring, red needle, redline), riveted dividers, brass selector keys; a text-field focus guard joins the refresh and hotkey guards.
+- **Rail consoles docked** (`RailPanels` via `OpenMachine`): station, switch, footplate, schedule, display; the bogie merges into the docked truck card (retitled Bogie) with its auto-snap toggle, service note and live speed. The three modal HUDs are deleted.
+- **Firebox slot** on `GridSteamEngine`: burns first with tender fallback, persists through the container snapshot. Footplate shows pressure/water/RPM dials beside the slot. No setup changes.
+
 ### 12.5.0-dev - The Tower On The Hill (Grand Water Tower)
 - **Water Tower rebuilt:** a 10 m six-legged steel tower (galvanized riveted tank, rust-red conical roof, railed balcony, ladders, central riser, stayed spout); only structural parts keep colliders. Tank grows to 12 000 L (24 L/s network, 6 L/s seep); untouched 12.4.0 towers migrate, tuned ones are kept.
 - **Tower E-panel** on the right dock (`MachineUIs.WaterTowerPanel` via `OpenMachine`): live tank gauge, capacity/level/supply stat rows and a FULL/FILLING/SEEPING/ISOLATED status pill from new supply tracking on `WaterTower`, refreshed on the 4 Hz machine cadence. Steampunk brass accent - the UI matches the block, the rule the fleet-wide UI round follows per family. `LcdHudTheme` gains the shared brass palette.
@@ -48,11 +53,6 @@
 - **Bogie snap fixed:** the snap sets a POSE now (rotate to track, anchor on the truck block) instead of dropping the grid origin on the railhead; truck renamed Bogie (step 92 rename pass); E opens a console with auto-snap toggle (default on, 1 Hz poll, saved), SNAP NOW and LIFT OFF.
 - **Brass ingot:** furnace copper x2 + iron x1; step 95 blends one steel-for-brass swap into rail piece and display recipes (idempotent, total ingots unchanged).
 - **Displays rebuilt:** nixie readout is four glass tubes with domed tops and one glowing digit each; analog gauge is a Create-style dial (backplate, bolts, tick ring, needle + tail, glass). Ballast bed rebuilds as a dense combined-mesh crushed-stone layer (3 draw calls, V2 marker in step 93). Hand-placing rail blocks is refused - rails are laid with the Rail Layer.
-
-### 12.0.0-dev - The v1 Train Is Gone (MAJOR)
-- `RailTrain` + `TrainState` deleted; `RailConfigHud` loses the train console (grid terminal covers v2); logistics map reads `GridRailBogie`; E-branch for the v1 console removed.
-- Setup 85 scrubs dead scripts off locomotive prefabs (`RemoveMonoBehavioursWithMissingScripts`); prefab shells stay on disk, recipe has been gone since 11.39.0.
-- BREAKING by design: saves holding a v1 locomotive or schedule do not carry it across. This is the MAJOR the retirement waited for.
 
 ### Era Transition Feel
 

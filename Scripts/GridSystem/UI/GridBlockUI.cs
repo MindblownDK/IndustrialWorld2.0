@@ -1151,11 +1151,11 @@ namespace VoxelEngine.GridSystem.UI
             var bogie = truck.Grid != null ? truck.Grid.GetComponent<GridRailBogie>() : null;
             bool railed = bogie != null && bogie.IsOnRails;
 
-            var (hdr, _, _, _) = T.HeaderRow("\u25ac RAIL TRUCK",
+            var (hdr, _, _, _) = T.HeaderRow("\u25ac BOGIE",
                 railed ? "ON RAILS" : "OFF RAILS",
                 railed ? T.AccentGreen : T.AccentAmber);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentCyan));
+            p.Add(T.AccentDivider(VoxelEngine.UI.LcdHudTheme.Brass));
             p.Add(T.Spacer(6));
 
             if (bogie == null)
@@ -1180,7 +1180,7 @@ namespace VoxelEngine.GridSystem.UI
             {
                 var hint = new Label(
                     "Drive or place the construct within a few metres of rail track, then " +
-                    "press SNAP TO RAIL. Any grid with a Rail Truck can run on rails - it " +
+                    "press SNAP TO RAIL. Any grid with a Bogie can run on rails - it " +
                     "does not need to be a special vehicle.");
                 hint.style.fontSize = 10;
                 hint.style.whiteSpace = WhiteSpace.Normal;
@@ -1217,6 +1217,26 @@ namespace VoxelEngine.GridSystem.UI
             }
 
             // ── Controls ──
+            // Live running state, carried over from the retired bogie console.
+            if (railed)
+            {
+                var speed = new Label($"Speed {bogie.Speed * 3.6f:0.0} km/h.");
+                speed.style.fontSize = 11;
+                speed.style.unityFontStyleAndWeight = FontStyle.Bold;
+                speed.style.color = new StyleColor(Color.white);
+                speed.style.marginBottom = 4;
+                p.Add(speed);
+            }
+            if (!string.IsNullOrEmpty(bogie.ServiceNote))
+            {
+                var service = new Label(bogie.ServiceNote);
+                service.style.fontSize = 10;
+                service.style.whiteSpace = WhiteSpace.Normal;
+                service.style.color = new StyleColor(T.AccentCyan);
+                service.style.marginBottom = 6;
+                p.Add(service);
+            }
+
             p.Add(GridUIHelpers.SectionTitle("Control"));
             var row = new VisualElement();
             row.style.flexDirection = FlexDirection.Row;
@@ -1247,6 +1267,22 @@ namespace VoxelEngine.GridSystem.UI
             row.Add(snapBtn);
 
             p.Add(row);
+
+            // Snap policy, carried over from the retired bogie console.
+            var autoBtn = T.SmallButton("AUTO-SNAP: " + (truck.autoSnap ? "ON" : "OFF"), () =>
+            {
+                truck.autoSnap = !truck.autoSnap;
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, truck.autoSnap ? VoxelEngine.UI.LcdHudTheme.Brass : T.AccentDim);
+            autoBtn.style.marginBottom = 4;
+            p.Add(autoBtn);
+            var snapHint = new Label("Auto-snap re-latches this train onto rail under it by " +
+                "itself. Turn it off to keep a parked wagon parked.");
+            snapHint.style.fontSize = 10;
+            snapHint.style.whiteSpace = WhiteSpace.Normal;
+            snapHint.style.color = new StyleColor(T.TextMuted);
+            snapHint.style.marginBottom = 6;
+            p.Add(snapHint);
 
             // ── Signalling ──
             // Shown only when it is actually the reason the train is stopped, so the panel
@@ -1327,7 +1363,7 @@ namespace VoxelEngine.GridSystem.UI
             }
 
             var note = new Label(
-                "A train is an ordinary construct with a Rail Truck on it, so it can carry " +
+                "A train is an ordinary construct with a Bogie on it, so it can carry " +
                 "any grid block - containers, tanks, refineries - and takes damage, paint " +
                 "and power exactly like anything else you build.");
             note.style.fontSize = 10;

@@ -1,9 +1,36 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.5.0-dev`
+**Current Version:** `12.6.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.6.0-dev] Brass Needles And A Firebox - The Railway Moves To The Side Dock
+
+**Type:** MINOR - new firebox slot (additive save through the container snapshot) and five consoles migrated to docked machine cards. No breaking changes.
+
+**GitHub title:** `[12.6.0-dev] Brass needles and a firebox - the railway moves to the side dock`
+
+#### More than a colour: the steampunk instrument library
+
+`SteampunkTheme` is the railway's own instrument maker. Its analog dials are real gauges, not bars: a machined brass bezel on an iron body, a cream face, an eleven-mark tick ring over the 270-degree sweep with longer ends and middle, a red needle on a brass hub - and a redline past which the ticks themselves turn red, because a boiler pressure gauge redlines. Riveted dividers and brass selector keys complete the chrome. Everything is static styling with no scheduled anims, so the 4 Hz machine cadence rebuilds live panels around it safely.
+
+#### The railway leaves the center modal
+
+Station, switch, footplate, schedule and display all move into `RailPanels` on the right dock, opened through `OpenMachine` like every other machine - every feature carried over: station naming, roles and hold; switch routing; the whistle and the fire toggle; the full stop-list editor with its station picker and wait conditions; display kind, source and custom text. The bogie console merges into the docked truck card (retitled Bogie, brass accented) and brings its auto-snap toggle, service note and live speed with it. `RailConfigHud`, `TrainScheduleHud` and `DisplayConfigHud` are deleted. A text-field focus guard (`SteampunkTheme.IsTextInputFocused`) joins the refresh and hotkey guards, so a live rebuild never eats a station name or a dwell time mid-typing.
+
+#### The firebox
+
+The steam engine gains its coal slot: a 1-slot firebox the stoker burns from first, falling back to shoveling out of any cargo container aboard when it runs dry - LOAD-station coaling keeps working exactly as before. The slot persists through the standard container snapshot, so fuel survives a reload. The footplate shows it beside three needles: redlined boiler pressure, boiler water in litres, and flywheel RPM.
+
+#### Manual steps in Unity
+
+1. Apply the patch and recompile. Three HUD scripts are deleted - confirm the compile is clean.
+2. No setup re-run is needed: no new blocks, items or recipes.
+3. Press E on a station, a switch, a bogie, an engine, a schedule block and a display: each docks right with steampunk chrome.
+4. Footplate: watch the three needles move; put coal in the firebox slot and confirm it burns before tender coal; reload and confirm the slot kept its fuel.
+5. Station: rename it mid-game (typing must not be interrupted), set roles, open the hold, press E to come back.
+6. Schedule: add, reorder and delete stops; display: switch kind, source and custom text.
 
 ### [12.5.0-dev] The Tower On The Hill - A Grand Steel Water Tower
 

@@ -1211,6 +1211,15 @@ namespace VoxelEngine.Persistence
                 return SerializeContainer(gridBattery.ChargeSlot);
             }
 
+            // The steam engine's one-slot firebox rides the same container snapshot.
+            // Bulk boiler state (water, fire) stays in the dedicated steam fields.
+            var steamEngine = go.GetComponentInChildren<VoxelEngine.GridSystem.GridSteamEngine>(true);
+            if (steamEngine != null)
+            {
+                steamEngine.EnsureFirebox();
+                return SerializeContainer(steamEngine.firebox);
+            }
+
             var powerBattery = go.GetComponentInChildren<VoxelEngine.Power.PowerBattery>();
             if (powerBattery != null)
             {
@@ -3239,6 +3248,14 @@ namespace VoxelEngine.Persistence
             {
                 gridBattery.EnsureContainers();
                 DeserializeInto(gridBattery.ChargeSlot, sc);
+                return;
+            }
+
+            var steamEngine = go.GetComponentInChildren<VoxelEngine.GridSystem.GridSteamEngine>(true);
+            if (steamEngine != null)
+            {
+                steamEngine.EnsureFirebox();
+                DeserializeInto(steamEngine.firebox, sc);
                 return;
             }
 
