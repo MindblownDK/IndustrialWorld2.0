@@ -222,5 +222,46 @@ namespace VoxelEngine.UI
             }
             return row;
         }
+
+        /// <summary>A riveted brass inner border with a rivet on each corner -
+        /// the steampunk frame. Named so scroll-wrapping dispatchers leave it
+        /// on the panel instead of moving it into the scroller.</summary>
+        public static void Frame(VisualElement panel)
+        {
+            if (panel == null) return;
+            const float inset = 4f;
+
+            var rect = new VisualElement { name = "ThemeFrame" };
+            rect.style.position = Position.Absolute;
+            rect.style.left = inset;
+            rect.style.top = inset;
+            rect.style.right = inset;
+            rect.style.bottom = inset;
+            UITheme.Border(rect, 1f, new Color(
+                LcdHudTheme.Brass.r, LcdHudTheme.Brass.g, LcdHudTheme.Brass.b, 0.5f));
+            rect.pickingMode = PickingMode.Ignore;
+            panel.Add(rect);
+
+            CornerRivet(panel, left: true, top: true, inset);
+            CornerRivet(panel, left: false, top: true, inset);
+            CornerRivet(panel, left: true, top: false, inset);
+            CornerRivet(panel, left: false, top: false, inset);
+        }
+
+        private static void CornerRivet(VisualElement panel, bool left, bool top, float inset)
+        {
+            var rivet = new VisualElement { name = "ThemeFrame" };
+            rivet.style.position = Position.Absolute;
+            if (left) rivet.style.left = inset - 2.5f;
+            else rivet.style.right = inset - 2.5f;
+            if (top) rivet.style.top = inset - 2.5f;
+            else rivet.style.bottom = inset - 2.5f;
+            rivet.style.width = 5;
+            rivet.style.height = 5;
+            rivet.style.backgroundColor = new StyleColor(LcdHudTheme.Brass);
+            UITheme.Radius(rivet, 2.5f);
+            rivet.pickingMode = PickingMode.Ignore;
+            panel.Add(rivet);
+        }
     }
 }

@@ -1,9 +1,53 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.8.0-dev`
+**Current Version:** `12.10.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.10.0-dev] Girders And Warning Lamps - Industrial Machines Get Structured Steel
+
+**Type:** MINOR - presentation-only restyle of nine industrial machine panels covering ten machines (crusher and assembler share a builder). No behaviour, save, recipe or setup changes.
+
+**GitHub title:** `[12.10.0-dev] Girders and warning lamps - industrial machines get structured steel`
+
+#### The instrument library grows a fourth family
+
+`IndustrialTheme` is the workhorse counterpart to the brass, holo and naval instruments: a steel girder frame of beams and posts with bolt dots along the beams, a hazard divider with a caution-block cluster, and a tri-lamp status stack - red fault, amber idle, green running - like a control cabinet. Everything is static styling with no scheduled anims, safe under the machine cadence rebuilds.
+
+#### The workhorses
+
+Crusher, assembler (all tiers through the shared builder), funnel, splitter, quarry, jack pump, biofarm, flare stack, gas tank and steam turbine all move onto the new chrome. Every value, slot, recipe list, filter, upgrade and hint is preserved - only the instruments changed. The turbine joins the industrial family as power-plant equipment.
+
+#### Manual steps in Unity
+
+1. Apply the patch and recompile.
+2. No setup re-run is needed: no new blocks, items or recipes.
+3. Press E on each workhorse: girders, hazard divider and lamps on every card.
+4. Check the lamps read true: red when unpowered, blocked, dry or shut; green when running; amber when idle.
+5. Confirm splitter Mk3 filters, quarry upgrades and ports, flare fuel select and recovery, and gas type select and fill dock all behave as before.
+
+### [12.9.0-dev] Rivets On The Frame - Rail Polish And A Scroller Fix
+
+**Type:** MINOR - presentation-only: one frame-anchoring fix plus the rail-family polish. No behaviour, save, recipe or setup changes.
+
+**GitHub title:** `[12.9.0-dev] Rivets on the frame - rail polish and a scroller fix`
+
+#### Fix: theme frames stay on the panel
+
+`MakeScrollable` moved every panel child into the scroller - including the starship frame rails, which then scrolled with the content and painted over section titles and slot cards (the ship reactor in the screenshot; the docking port was never wrapped, which is why it looked clean). Frame elements are now tagged and left on the panel, so the chrome stays put while the content scrolls inside it.
+
+#### The steampunk frame, and the last two brass panels
+
+`SteampunkTheme.Frame` completes the brass chrome: a riveted inner border with a rivet on each corner, applied to all five rail consoles. The two panels that were still half-dressed join them fully: the water tower gets a riveted divider, a TANK dial in place of the tank bar, and the frame; the bogie gets a riveted divider, seven brass selector keys (drive, reverse, snap, auto-snap, couple, uncouple) and the frame. Every value, slot and callback is unchanged.
+
+#### Manual steps in Unity
+
+1. Apply the patch and recompile.
+2. No setup re-run is needed: no new blocks, items or recipes.
+3. Press E on the ship reactor, gatling, ship engine, ore detector and cryobed: rails stay fixed at the panel edges while the content scrolls, nothing paints over titles or slots.
+4. Press E on the tower (dial, rivets, frame), the bogie (brass keys, frame) and the station, switch, engine, schedule and display consoles (riveted frames).
+5. Confirm every button and slot still works.
 
 ### [12.8.0-dev] Bulkheads And Vector Needles - Ship Systems Go Sci-Fi
 

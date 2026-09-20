@@ -110,6 +110,7 @@ namespace VoxelEngine.UI
             openHold.style.minHeight = 28;
             p.Add(openHold);
             p.Add(T.Muted("The hold replaces this card; press E on the station to come back."));
+            SteampunkTheme.Frame(p);
             return p;
         }
 
@@ -151,6 +152,7 @@ namespace VoxelEngine.UI
             p.Add(T.Spacer(4));
             p.Add(T.Muted("A train arriving from the selected leg takes the next available " +
                 "route instead, so the points can never bounce a train straight back."));
+            SteampunkTheme.Frame(p);
             return p;
         }
 
@@ -214,6 +216,7 @@ namespace VoxelEngine.UI
             p.Add(T.Spacer(4));
             p.Add(T.Muted("Tank wagons feed the boiler on the move; water towers fill it " +
                 "berthed. A LOAD station with a coal filter coals the tender."));
+            SteampunkTheme.Frame(p);
             return p;
         }
 
@@ -356,6 +359,7 @@ namespace VoxelEngine.UI
                 addRow.Add(back);
                 p.Add(addRow);
             }
+            SteampunkTheme.Frame(p);
             return p;
         }
 
@@ -436,6 +440,7 @@ namespace VoxelEngine.UI
                 });
                 p.Add(field);
             }
+            SteampunkTheme.Frame(p);
             return p;
         }
     }

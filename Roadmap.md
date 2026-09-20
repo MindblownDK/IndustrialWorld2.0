@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.8.0-dev`
-**Roadmap Version:** `12.8.0-dev`
+**Current Version:** `12.10.0-dev`
+**Roadmap Version:** `12.10.0-dev`
 **Date:** 2026-09-20
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,14 @@
 
 ## 0. Recently Done
 
+### 12.10.0-dev - Girders And Warning Lamps (Industrial Steel)
+- **Industrial instruments** (`IndustrialTheme`): girder frame with bolt dots, hazard-block divider, tri-lamp status stack. Static styling, safe under the machine cadence.
+- **Workhorses restyled** (`MachineUIs`): crusher, assembler, funnel, splitter, quarry, jack pump, biofarm, flare stack, gas tank, steam turbine. All values, slots, recipes and hints preserved. No setup changes.
+
+### 12.9.0-dev - Rivets On The Frame (Rail Polish + Scroller Fix)
+- **Fix:** `MakeScrollable` leaves tagged `ThemeFrame` elements on the panel, so starship rails no longer scroll with the content or paint over titles and slots.
+- **Steampunk frame** (`SteampunkTheme.Frame`): riveted brass inner border on all five rail consoles; water tower gains a TANK dial, riveted divider and frame; bogie gains seven brass selector keys, riveted divider and frame. No setup changes.
+
 ### 12.8.0-dev - Bulkheads And Vector Needles (Ship Sci-Fi)
 - **Starship instruments** (`StarshipTheme`): bulkhead side-rail frame with docking ticks, diamond hull divider, vector needle meter. Static styling, safe under the machine cadence.
 - **Ship systems restyled** (`GridBlockUI`): gatling, ship reactor, solar, ship engine, docking port, ore detector, beacon, cryobed. All values, slots and hints preserved; bespoke consoles (battery, vault, harvester, locator, satellites) untouched. No setup changes.
@@ -42,16 +50,6 @@
 - **Steampunk instruments** (`SteampunkTheme`): true analog dials (brass bezel, cream face, tick ring, red needle, redline), riveted dividers, brass selector keys; a text-field focus guard joins the refresh and hotkey guards.
 - **Rail consoles docked** (`RailPanels` via `OpenMachine`): station, switch, footplate, schedule, display; the bogie merges into the docked truck card (retitled Bogie) with its auto-snap toggle, service note and live speed. The three modal HUDs are deleted.
 - **Firebox slot** on `GridSteamEngine`: burns first with tender fallback, persists through the container snapshot. Footplate shows pressure/water/RPM dials beside the slot. No setup changes.
-
-### 12.5.0-dev - The Tower On The Hill (Grand Water Tower)
-- **Water Tower rebuilt:** a 10 m six-legged steel tower (galvanized riveted tank, rust-red conical roof, railed balcony, ladders, central riser, stayed spout); only structural parts keep colliders. Tank grows to 12 000 L (24 L/s network, 6 L/s seep); untouched 12.4.0 towers migrate, tuned ones are kept.
-- **Tower E-panel** on the right dock (`MachineUIs.WaterTowerPanel` via `OpenMachine`): live tank gauge, capacity/level/supply stat rows and a FULL/FILLING/SEEPING/ISOLATED status pill from new supply tracking on `WaterTower`, refreshed on the 4 Hz machine cadence. Steampunk brass accent - the UI matches the block, the rule the fleet-wide UI round follows per family. `LcdHudTheme` gains the shared brass palette.
-- Setup step 96 re-authors the tower behind a `TowerV2` marker (geometry-only rebuild, tuning preserved); no save changes. `GameVersion` resynced from stale 9.55.0 to 12.5.0-dev.
-
-### 12.4.0-dev - Steam Takes The Rails (Piston Engines)
-- **Steam Engine** grid block: a piston steam engine (solved slider-crank animation, white chimney steam) whose only product is ROTATIONAL POWER - the consist's mechanical drive takes it when the grid has no electric power (gate at 2 Hz), and the brass screens tap the same shaft. Firebox shovels coal/wood from any cargo container aboard; water from tank wagons moving, water towers berthed; chuff twice per revolution, whistle on the cord.
-- **Water Tower** stationary block: fills from a water network it stands beside (sprinkler's FluidNode source) or slowly from open water; berthed locomotives drink from the standpipe. Footplate console in `RailConfigHud` (pressure/water bars, fire toggle, whistle); water and fire save additively, pressure deliberately does not.
-- Setup step 96 authors both blocks, items and recipes (needs 95 for brass).
 
 ### Era Transition Feel
 

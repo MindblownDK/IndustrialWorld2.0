@@ -80,7 +80,14 @@ namespace VoxelEngine.GridSystem.UI
         {
             if (panel == null) return panel;
             var children = new List<VisualElement>();
-            foreach (var child in panel.Children()) children.Add(child);
+            foreach (var child in panel.Children())
+            {
+                // Theme frames anchor to the panel corners and stay on the
+                // panel: moved into the scroller they would scroll with the
+                // content and paint over it.
+                if (child.name == "ThemeFrame") continue;
+                children.Add(child);
+            }
             foreach (var child in children) child.RemoveFromHierarchy();
 
             var scroll = new ScrollView(ScrollViewMode.Vertical);
@@ -1155,7 +1162,7 @@ namespace VoxelEngine.GridSystem.UI
                 railed ? "ON RAILS" : "OFF RAILS",
                 railed ? T.AccentGreen : T.AccentAmber);
             p.Add(hdr);
-            p.Add(T.AccentDivider(VoxelEngine.UI.LcdHudTheme.Brass));
+            p.Add(SteampunkTheme.RivetedDivider());
             p.Add(T.Spacer(6));
 
             if (bogie == null)
@@ -1242,38 +1249,42 @@ namespace VoxelEngine.GridSystem.UI
             row.style.flexDirection = FlexDirection.Row;
             row.style.marginBottom = 6;
 
-            var driveBtn = T.SmallButton(bogie.powered ? "\u25a0 STOP" : "\u25b6 DRIVE", () =>
+            var driveBtn = SteampunkTheme.SelectorButton(bogie.powered ? "\u25a0 STOP" : "\u25b6 DRIVE",
+                bogie.powered, () =>
             {
                 bogie.powered = !bogie.powered;
                 VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
-            }, bogie.powered ? T.AccentGreen : T.AccentDim);
+            }, false);
             driveBtn.style.marginRight = 6;
             row.Add(driveBtn);
 
-            var revBtn = T.SmallButton(bogie.reversed ? "\u21c4 REVERSE" : "\u21c4 FORWARD", () =>
+            var revBtn = SteampunkTheme.SelectorButton(bogie.reversed ? "\u21c4 REVERSE" : "\u21c4 FORWARD",
+                bogie.reversed, () =>
             {
                 bogie.reversed = !bogie.reversed;
                 VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
-            }, T.AccentDim);
+            }, false);
             revBtn.style.marginRight = 6;
             row.Add(revBtn);
 
-            var snapBtn = T.SmallButton(railed ? "\u2195 DETACH" : "\u2195 SNAP TO RAIL", () =>
+            var snapBtn = SteampunkTheme.SelectorButton(railed ? "\u2195 DETACH" : "\u2195 SNAP TO RAIL",
+                railed, () =>
             {
                 if (bogie.IsOnRails) bogie.Detach();
                 else bogie.TrySnapToTrack();
                 VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
-            }, T.AccentDim);
+            }, false);
             row.Add(snapBtn);
 
             p.Add(row);
 
             // Snap policy, carried over from the retired bogie console.
-            var autoBtn = T.SmallButton("AUTO-SNAP: " + (truck.autoSnap ? "ON" : "OFF"), () =>
+            var autoBtn = SteampunkTheme.SelectorButton("AUTO-SNAP: " + (truck.autoSnap ? "ON" : "OFF"),
+                truck.autoSnap, () =>
             {
                 truck.autoSnap = !truck.autoSnap;
                 VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
-            }, truck.autoSnap ? VoxelEngine.UI.LcdHudTheme.Brass : T.AccentDim);
+            });
             autoBtn.style.marginBottom = 4;
             p.Add(autoBtn);
             var snapHint = new Label("Auto-snap re-latches this train onto rail under it by " +
@@ -1315,11 +1326,12 @@ namespace VoxelEngine.GridSystem.UI
                 towed.style.marginBottom = 6;
                 p.Add(towed);
 
-                var uncouple = T.SmallButton("\u2702 UNCOUPLE", () =>
+                var uncouple = SteampunkTheme.SelectorButton("\u2702 UNCOUPLE",
+                    false, () =>
                 {
                     bogie.Uncouple();
                     VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
-                }, T.AccentAmber);
+                });
                 p.Add(uncouple);
             }
             else
@@ -1341,23 +1353,25 @@ namespace VoxelEngine.GridSystem.UI
                     coupleRow.style.flexDirection = FlexDirection.Row;
                     coupleRow.style.marginBottom = 6;
 
-                    var coupleBtn = T.SmallButton($"\u26d3 COUPLE TO {candidate.name}", () =>
+                    var coupleBtn = SteampunkTheme.SelectorButton($"\u26d3 COUPLE TO {candidate.name}",
+                        false, () =>
                     {
                         if (!bogie.TryCoupleTo(candidate, out string why))
                             VoxelEngine.UI.BuildFeedbackHud.Show("Cannot couple", why, null, T.AccentAmber);
                         VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
-                    }, T.AccentDim);
+                    }, false);
                     coupleRow.Add(coupleBtn);
                     p.Add(coupleRow);
                 }
 
                 if (cars > 1)
                 {
-                    var breakUp = T.SmallButton("\u2702 UNCOUPLE ALL", () =>
+                    var breakUp = SteampunkTheme.SelectorButton("\u2702 UNCOUPLE ALL",
+                    false, () =>
                     {
                         bogie.UncoupleAll();
                         VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
-                    }, T.AccentAmber);
+                    });
                     p.Add(breakUp);
                 }
             }
@@ -1371,6 +1385,7 @@ namespace VoxelEngine.GridSystem.UI
             note.style.color = new StyleColor(T.TextMuted);
             p.Add(note);
 
+            SteampunkTheme.Frame(p);
             return p;
         }
 

@@ -40,7 +40,7 @@ namespace VoxelEngine.UI
 
         private static void Rail(VisualElement panel, Color accent, bool left)
         {
-            var rail = new VisualElement();
+            var rail = new VisualElement { name = "ThemeFrame" };
             rail.style.position = Position.Absolute;
             if (left) rail.style.left = 5f;
             else rail.style.right = 5f;
@@ -54,7 +54,7 @@ namespace VoxelEngine.UI
 
         private static void Tick(VisualElement panel, Color accent, bool top)
         {
-            var tick = new VisualElement();
+            var tick = new VisualElement { name = "ThemeFrame" };
             tick.style.position = Position.Absolute;
             if (top) tick.style.top = 5f;
             else tick.style.bottom = 5f;

@@ -136,7 +136,8 @@ namespace VoxelEngine.UI
                 : funnel.BufferedCount > 0 ? T.AccentGreen : T.TextMuted;
 
             p.Add(BuildHeader("⮃", "Funnel", status, statusColor, T.AccentAmber));
-            p.Add(T.AccentDivider(T.AccentAmber));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(status == "BLOCKED" ? 0 : status == "ACTIVE" ? 2 : 1));
 
             var content = new ScrollView(ScrollViewMode.Vertical);
             content.style.flexGrow = 1;
@@ -169,6 +170,7 @@ namespace VoxelEngine.UI
             content.Add(modeRow);
 
             content.Add(T.Muted("Import pulls items from the belt side into the inventory side. Export pulls from the inventory side and pushes onto the belt side."));
+            IndustrialTheme.Frame(p);
             return p;
         }
 
@@ -189,7 +191,8 @@ namespace VoxelEngine.UI
             };
 
             p.Add(BuildHeader("⇄", $"Conveyor Splitter {splitter.tier}", status, statusColor, accent));
-            p.Add(T.AccentDivider(accent));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(status == "BLOCKED" ? 0 : status == "ACTIVE" ? 2 : 1));
 
             var content = new ScrollView(ScrollViewMode.Vertical);
             content.style.flexGrow = 1;
@@ -298,6 +301,7 @@ namespace VoxelEngine.UI
 
             content.Add(T.Divider());
             content.Add(T.Muted("Use conveyors on the intended output sides. Mk.1 supports a left-side fallback for its second lane if no right-side lane is connected."));
+            IndustrialTheme.Frame(p);
             return p;
         }
 
@@ -319,7 +323,8 @@ namespace VoxelEngine.UI
             string status = !machine.UserEnabled ? "DISABLED" : !machine.IsOnline ? "NO POWER" : machine.IsActive ? "RUNNING" : "IDLE";
             Color statusColor = !machine.UserEnabled || !machine.IsOnline ? T.AccentRed : machine.IsActive ? T.AccentGreen : T.TextMuted;
             p.Add(BuildHeader(icon, title, status, statusColor, accent));
-            p.Add(T.AccentDivider(accent));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(!machine.UserEnabled || !machine.IsOnline ? 0 : machine.IsActive ? 2 : 1));
 
             var content = new ScrollView(ScrollViewMode.Vertical);
             content.style.flexGrow = 1;
@@ -376,6 +381,7 @@ namespace VoxelEngine.UI
             content.Add(slotRow);
             content.Add(T.Spacer(8));
             content.Add(T.Muted(hint));
+            IndustrialTheme.Frame(p);
             return p;
         }
 
@@ -567,7 +573,8 @@ namespace VoxelEngine.UI
             p.Add(BuildHeader("⚙", "Steam Turbine",
                 t.IsRunning ? "SPINNING" : "IDLE",
                 t.IsRunning ? T.AccentCyan : T.TextMuted, T.AccentCyan));
-            p.Add(T.AccentDivider(T.AccentCyan));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(t.IsRunning ? 2 : 1));
 
             p.Add(T.StatRow("⚡", "Power Output",  $"{t.CurrentOutput:0} W",           T.AccentGold));
             p.Add(T.StatRow("📈", "Efficiency",    $"{t.efficiency * 100f:0}%",          T.TextSecondary));
@@ -584,6 +591,7 @@ namespace VoxelEngine.UI
 
             p.Add(T.Spacer(8));
             p.Add(T.Muted("Connect steam pipes from the reactor. Condensed water is recycled automatically."));
+            IndustrialTheme.Frame(p);
             return p;
         }
 
@@ -812,7 +820,8 @@ namespace VoxelEngine.UI
             Color  statusCol = t.storedAmount > 0 ? gasColor : T.TextMuted;
 
             p.Add(BuildHeader("🛢", $"Gas Tank  ·  {gasName}", status, statusCol, gasColor));
-            p.Add(T.AccentDivider(gasColor));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(t.storedAmount > 0 ? 2 : 1));
 
             // Large centred tank gauge.
             p.Add(TankRow(
@@ -875,6 +884,7 @@ namespace VoxelEngine.UI
 
             p.Add(T.Spacer(8));
             p.Add(T.Muted("Stores a single gas type. Connect via gas pipes. Hold a Portable H₂ Tank or hydrogen jetpack and RMB (Shift = fill 100%)."));
+            IndustrialTheme.Frame(p);
             return p;
         }
 
@@ -902,7 +912,8 @@ namespace VoxelEngine.UI
 
             var panel = T.MachinePanel();
             panel.Add(BuildHeader("\u2699", "Jack Pump", status, statusColor, T.AccentAmber));
-            panel.Add(T.AccentDivider(T.AccentAmber));
+            panel.Add(IndustrialTheme.HazardDivider());
+            panel.Add(IndustrialTheme.Lamps(!jackPump.IsOnline || !jackPump.HasReservoir ? 0 : jackPump.IsPumping ? 2 : 1));
             panel.Add(T.StatRow("\u25c9", "Well", jackPump.HasReservoir ? "Crude struck below the derrick" : "No crude under the derrick", jackPump.HasReservoir ? T.AccentGreen : T.TextMuted));
             panel.Add(T.StatRow("\u26a1", "Power Draw", PowerFormat.Watts(jackPump.CurrentWattage), T.AccentAmber));
             panel.Add(T.StatRow("\u25f7", "Cycle", $"{jackPump.secondsPerCycle:0}s for {jackPump.litresPerCycle:0} L", T.AccentCyan));
@@ -921,6 +932,7 @@ namespace VoxelEngine.UI
 
             panel.Add(T.Spacer(6));
             panel.Add(T.Muted("Draws liquid crude into its own tank. Right-click it with a liquid canister to draw crude off, or pipe the tank straight into the refinery. The pump needs power and stops when the tank is full."));
+            IndustrialTheme.Frame(panel);
             return panel;
         }
 
@@ -935,7 +947,8 @@ namespace VoxelEngine.UI
                               bf.Status == "No Biomass" ? T.AccentOrange : T.TextMuted;
 
             p.Add(BuildHeader("🌿", "Biofarm Oxygen Garden", bf.Status.ToUpperInvariant(), statusCol, new Color(0.35f,0.85f,0.45f)));
-            p.Add(T.AccentDivider(new Color(0.35f,0.85f,0.45f)));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(running ? 2 : bf.Status == "No Power" ? 0 : 1));
 
             // Stats
             p.Add(T.StatRow("⚡", "Power Draw", $"{bf.powerDraw:0} W", running ? T.AccentGreen : T.TextMuted));
@@ -959,6 +972,7 @@ namespace VoxelEngine.UI
 
             p.Add(T.Spacer(8));
             p.Add(T.Muted("Passive O₂: needs power + water pipes + biomass. Slower than electrolyser but renewable, ideal for cryobeds & offline survival."));
+            IndustrialTheme.Frame(p);
             return p;
         }
 
@@ -991,7 +1005,8 @@ namespace VoxelEngine.UI
             };
 
             p.Add(BuildHeader("\u26CF", "Quarry Drill", status, sc, T.AccentGold));
-            p.Add(T.AccentDivider(sc));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(!powered ? 0 : (q.Phase == QuarryPhase.Mining || q.Phase == QuarryPhase.Complete) ? 2 : 1));
 
             // ═══ BODY: LEFT (upgrades + output) | RIGHT (stats + ports) ═══
             var body = new VisualElement();
@@ -1101,6 +1116,7 @@ namespace VoxelEngine.UI
 
             p.Add(T.Spacer(8));
             p.Add(T.Muted("Drop upgrades into the left slots. Cycles: Tape -> Frame -> Mining."));
+            IndustrialTheme.Frame(p);
             return p;
         }
 
@@ -1148,7 +1164,8 @@ namespace VoxelEngine.UI
                 : T.AccentGreen;
 
             panel.Add(BuildHeader("🔥", "Flare Stack", status, statusColor, T.AccentOrange));
-            panel.Add(T.AccentDivider(T.AccentOrange));
+            panel.Add(IndustrialTheme.HazardDivider());
+            panel.Add(IndustrialTheme.Lamps(!flare.isOpen ? 0 : flare.BurnLoad01 > 0.01f ? 2 : 1));
             panel.Add(T.Spacer(4));
 
             panel.Add(T.Subtitle("Thermal Disposal"));
@@ -1243,6 +1260,7 @@ namespace VoxelEngine.UI
 
             panel.Add(T.Spacer(6));
             panel.Add(T.Muted("Disposes of excess petroleum cuts and off-gases. Automatically siphons overflowing product tanks from adjacent distillation plants to keep refining lines moving."));
+            IndustrialTheme.Frame(panel);
             return panel;
         }
 
@@ -1256,11 +1274,10 @@ namespace VoxelEngine.UI
         {
             if (t == null) return T.MachinePanel();
             Color brass = LcdHudTheme.Brass;
-            Color water = new Color(0.20f, 0.50f, 0.92f);
             var p = T.MachinePanel();
             p.Add(BuildHeader("💧", "Water Tower", t.StatusText,
                 t.IsFull ? T.AccentGreen : t.IsFilling ? T.AccentCyan : T.AccentAmber, brass));
-            p.Add(T.AccentDivider(brass));
+            p.Add(SteampunkTheme.RivetedDivider());
 
             p.Add(T.StatRow("🛢", "Stored", $"{t.stored:0} / {t.capacity:0} L", brass));
             p.Add(T.StatRow("📶", "Level", $"{t.Fill01 * 100f:0}%", T.TextSecondary));
@@ -1271,13 +1288,14 @@ namespace VoxelEngine.UI
             p.Add(T.Divider());
 
             p.Add(T.Subtitle("Tank"));
-            p.Add(TankRow(
-                T.TankGauge("WATER", t.Fill01, water, $"{t.stored:0} L", 120, 90)
+            p.Add(SteampunkTheme.DialRow(
+                SteampunkTheme.Dial("TANK", t.Fill01, $"{t.stored:0} L", 118f)
             ));
 
             p.Add(T.Spacer(8));
             p.Add(T.Muted("Stands beside a water network to drink from it, or by a pond to seep full. " +
                 "Berth a thirsty engine within reach of the spout and the boiler fills itself."));
+            SteampunkTheme.Frame(p);
             return p;
         }
     }
