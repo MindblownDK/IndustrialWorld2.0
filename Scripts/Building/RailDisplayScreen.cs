@@ -72,8 +72,8 @@ namespace VoxelEngine.Building
         // ── Runtime state ──────────────────────────────────────────────────────
         private Transform _screenRoot;
         private readonly List<TextMesh> _rowTexts = new(4);
+        private readonly List<TextMesh> _nixieDigits = new(4);
         private readonly List<Transform> _rowCards = new(4);
-        private TextMesh _nixieText;
         private Material _nixieMat;
         private Transform _needlePivot;
         private TextMesh _analogLabel;
@@ -103,6 +103,12 @@ namespace VoxelEngine.Building
 
         private void OnEnable()
         {
+            // EDITOR GUARD: OnEnable fires the moment a setup step AddComponents this
+            // screen onto a prefab root. The visuals are DontSave runtime hardware;
+            // building them in the editor put DontSave children inside a prefab save,
+            // which is exactly the kind of thing a prefab save refuses. In the editor
+            // the housing stays bare; the hardware appears when the game runs.
+            if (!Application.isPlaying) return;
             _consumer = GetComponent<VoxelEngine.Power.PowerConsumer>();
             BuildVisuals();
         }
@@ -136,8 +142,8 @@ namespace VoxelEngine.Building
             {
                 var old = _screenRoot.gameObject;
                 _screenRoot = null;
-                _rowTexts.Clear(); _rowCards.Clear();
-                _nixieText = null; _nixieMat = null; _needlePivot = null; _analogLabel = null;
+                _rowTexts.Clear(); _rowCards.Clear(); _nixieDigits.Clear();
+                _nixieMat = null; _needlePivot = null; _analogLabel = null;
                 if (old != null) Destroy(old);
             }
 
@@ -147,14 +153,19 @@ namespace VoxelEngine.Building
             root.transform.localRotation = Quaternion.identity;
             _screenRoot = root.transform;
 
-            // Brass bezel: the frame every kind shares, because steampunk is a frame law.
-            var bezel = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            bezel.name = "Bezel";
-            bezel.transform.SetParent(_screenRoot, false);
-            bezel.transform.localPosition = new Vector3(0f, 0f, -0.03f);
-            bezel.transform.localScale = new Vector3(1.10f, 0.72f, 0.06f);
-            Paint(bezel, Mat("Mat_DisplayBrass", Brass, metallic: 0.7f));
-            KillCollider(bezel);
+            // Brass bezel: the frame every framed kind shares. The nixie readout is
+            // tubes standing on a base, like the reference clock - a bezel around it
+            // would box in exactly the thing that makes it read as nixie.
+            if (kind != ScreenKind.Nixie)
+            {
+                var bezel = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                bezel.name = "Bezel";
+                bezel.transform.SetParent(_screenRoot, false);
+                bezel.transform.localPosition = new Vector3(0f, 0f, -0.03f);
+                bezel.transform.localScale = new Vector3(1.10f, 0.72f, 0.06f);
+                Paint(bezel, Mat("Mat_DisplayBrass", Brass, metallic: 0.7f));
+                KillCollider(bezel);
+            }
 
             switch (kind)
             {
@@ -193,69 +204,248 @@ namespace VoxelEngine.Building
 
         private void BuildNixie()
         {
-            // Brass cage: three thin bars across a recessed dark window.
-            var window = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            window.name = "NixieWindow";
-            window.transform.SetParent(_screenRoot, false);
-            window.transform.localPosition = new Vector3(0f, 0f, -0.01f);
-            window.transform.localScale = new Vector3(1.00f, 0.50f, 0.03f);
-            Paint(window, Mat("Mat_DisplayDark", DarkIron, metallic: 0.2f));
-            KillCollider(window);
+            // THE REFERENCE CLOCK, not digits on a window. Four fat glass tubes standing
+            // in dark sockets on a wooden base with a brass badge, a black backing so
+            // the glow has something to glow against, cathode rings inside each tube
+            // behind the digit, anode tips on the domes, and one warm light so the
+            // readout throws colour onto whatever it is mounted to.
+            var backing = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            backing.name = "NixieBacking";
+            backing.transform.SetParent(_screenRoot, false);
+            backing.transform.localPosition = new Vector3(0f, 0.02f, 0.06f);
+            backing.transform.localScale = new Vector3(1.02f, 0.62f, 0.04f);
+            Paint(backing, Mat("Mat_DisplayDark", DarkIron, metallic: 0.2f));
+            KillCollider(backing);
 
-            for (int i = 0; i < 3; i++)
-            {
-                var bar = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                bar.name = "CageBar" + i;
-                bar.transform.SetParent(_screenRoot, false);
-                bar.transform.localPosition = new Vector3(-0.33f + i * 0.33f, 0f, -0.045f);
-                bar.transform.localRotation = Quaternion.Euler(0f, 0f, 0f);
-                bar.transform.localScale = new Vector3(0.015f, 0.25f, 0.015f);
-                Paint(bar, Mat("Mat_DisplayBrass", Brass, metallic: 0.7f));
-                KillCollider(bar);
-            }
+            var baseBoard = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            baseBoard.name = "NixieBase";
+            baseBoard.transform.SetParent(_screenRoot, false);
+            baseBoard.transform.localPosition = new Vector3(0f, -0.30f, 0.02f);
+            baseBoard.transform.localScale = new Vector3(1.06f, 0.14f, 0.22f);
+            Paint(baseBoard, Mat("Mat_NixieWood", Mahogany, metallic: 0f));
+            KillCollider(baseBoard);
+
+            var badge = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            badge.name = "NixieBadge";
+            badge.transform.SetParent(_screenRoot, false);
+            badge.transform.localPosition = new Vector3(-0.38f, -0.30f, -0.10f);
+            badge.transform.localScale = new Vector3(0.18f, 0.09f, 0.02f);
+            Paint(badge, Mat("Mat_DisplayBrass", Brass, metallic: 0.7f));
+            KillCollider(badge);
+
+            var glass = Mat("Mat_NixieGlass", new Color(0.80f, 0.88f, 0.95f, 0.10f), metallic: 0f);
+            MakeTransparent(glass);
 
             _nixieMat = Mat("Mat_NixieGlow", NixieGlow, metallic: 0f);
             if (_nixieMat != null)
             {
                 _nixieMat.EnableKeyword("_EMISSION");
-                _nixieMat.SetColor("_EmissionColor", NixieGlow * 1.6f);
+                _nixieMat.SetColor("_EmissionColor", NixieGlow * 2.2f);
                 _nixieMat.globalIlluminationFlags = MaterialGlobalIlluminationFlags.EmissiveIsBlack;
             }
 
-            _nixieText = NewText("NixieDigits", NixieGlow, 0.22f, TextAnchor.MiddleCenter, TextAlignment.Center);
-            _nixieText.transform.SetParent(_screenRoot, false);
-            _nixieText.transform.localPosition = new Vector3(0f, 0f, -0.05f);
-            _nixieText.transform.localRotation = Quaternion.identity;
-            if (_nixieMat != null) _nixieText.GetComponent<MeshRenderer>().sharedMaterial = _nixieMat;
+            for (int i = 0; i < 4; i++)
+            {
+                float x = -0.33f + i * 0.22f;
+
+                // Socket: the tall dark collar the tube plugs into.
+                var socket = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                socket.name = "TubeSocket" + i;
+                socket.transform.SetParent(_screenRoot, false);
+                socket.transform.localPosition = new Vector3(x, -0.185f, 0.02f);
+                socket.transform.localScale = new Vector3(0.115f, 0.05f, 0.115f);
+                Paint(socket, Mat("Mat_DisplayDark", DarkIron, metallic: 0.2f));
+                KillCollider(socket);
+
+                // Glass envelope: a fat cylinder with a domed top and an anode tip,
+                // the silhouette every nixie tube is recognised by.
+                var tube = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                tube.name = "TubeGlass" + i;
+                tube.transform.SetParent(_screenRoot, false);
+                tube.transform.localPosition = new Vector3(x, 0.02f, 0.02f);
+                tube.transform.localScale = new Vector3(0.095f, 0.155f, 0.095f);
+                Paint(tube, glass);
+                KillCollider(tube);
+
+                var dome = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                dome.name = "TubeDome" + i;
+                dome.transform.SetParent(_screenRoot, false);
+                dome.transform.localPosition = new Vector3(x, 0.175f, 0.02f);
+                dome.transform.localScale = new Vector3(0.095f, 0.085f, 0.095f);
+                Paint(dome, glass);
+                KillCollider(dome);
+
+                var tip = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                tip.name = "TubeTip" + i;
+                tip.transform.SetParent(_screenRoot, false);
+                tip.transform.localPosition = new Vector3(x, 0.265f, 0.02f);
+                tip.transform.localScale = new Vector3(0.016f, 0.02f, 0.016f);
+                Paint(tip, Mat("Mat_DisplayDark", DarkIron, metallic: 0.2f));
+                KillCollider(tip);
+
+                // Cathode rings: three thin dark discs inside the glass, behind the
+                // digit. Real tubes are a stack of meshes; the digit burns in front of
+                // them, and the rings are what sell the depth through the glass.
+                for (int r = 0; r < 3; r++)
+                {
+                    var ring = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                    ring.name = "TubeCathode" + i + "_" + r;
+                    ring.transform.SetParent(_screenRoot, false);
+                    ring.transform.localPosition = new Vector3(x, -0.06f + r * 0.08f, 0.045f);
+                    ring.transform.localScale = new Vector3(0.082f, 0.004f, 0.082f);
+                    Paint(ring, Mat("Mat_DisplayDark", DarkIron, metallic: 0.2f));
+                    KillCollider(ring);
+                }
+
+                // The digit itself, burning in front of the cathode stack.
+                var digit = NewText("TubeDigit" + i, NixieGlow, 0.15f, TextAnchor.MiddleCenter, TextAlignment.Center);
+                digit.transform.SetParent(_screenRoot, false);
+                digit.transform.localPosition = new Vector3(x, 0.02f, -0.01f);
+                digit.transform.localRotation = Quaternion.identity;
+                if (_nixieMat != null) digit.GetComponent<MeshRenderer>().sharedMaterial = _nixieMat;
+                _nixieDigits.Add(digit);
+
+                // Brass pin between tubes, as the reference clock has.
+                if (i < 3)
+                {
+                    var pin = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                    pin.name = "TubePin" + i;
+                    pin.transform.SetParent(_screenRoot, false);
+                    pin.transform.localPosition = new Vector3(x + 0.11f, -0.16f, 0.02f);
+                    pin.transform.localScale = new Vector3(0.016f, 0.03f, 0.016f);
+                    Paint(pin, Mat("Mat_DisplayBrass", Brass, metallic: 0.7f));
+                    KillCollider(pin);
+                }
+            }
+
+            // One warm light for the whole readout: nixie glow is the point of a nixie,
+            // and emission alone lights nothing but itself.
+            var glowGo = new GameObject("NixieGlowLight") { hideFlags = HideFlags.DontSave };
+            glowGo.transform.SetParent(_screenRoot, false);
+            glowGo.transform.localPosition = new Vector3(0f, 0.02f, -0.25f);
+            var glow = glowGo.AddComponent<Light>();
+            glow.type = LightType.Point;
+            glow.color = NixieGlow;
+            glow.range = 2.5f;
+            glow.intensity = 0.9f;
+
+            // The readout housing is a small box on a wall, not a departure board: the
+            // tube assembly above is authored at board scale and wears this factor.
+            _screenRoot.localScale = Vector3.one * 0.62f;
         }
+
+        private static readonly Color Mahogany = new(0.28f, 0.16f, 0.10f);
 
         private void BuildAnalog()
         {
-            var dial = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            dial.name = "Dial";
-            dial.transform.SetParent(_screenRoot, false);
-            dial.transform.localPosition = new Vector3(0f, 0.05f, -0.01f);
-            dial.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
-            dial.transform.localScale = new Vector3(0.62f, 0.02f, 0.62f);
-            Paint(dial, Mat("Mat_DisplayFace", new Color(0.88f, 0.83f, 0.70f), metallic: 0f));
-            KillCollider(dial);
+            // A steam-gauge, Create-style: square brass backplate with corner bolts,
+            // round brass body, cream face, a ring of tick marks, a red needle on a
+            // black hub, and a glass cover. The needle pivot maths below matches the
+            // tick ring: at rotation theta the needle points (-sin, cos).
+            var plate = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            plate.name = "GaugePlate";
+            plate.transform.SetParent(_screenRoot, false);
+            plate.transform.localPosition = new Vector3(0f, 0.04f, 0.00f);
+            plate.transform.localScale = new Vector3(0.74f, 0.74f, 0.03f);
+            Paint(plate, Mat("Mat_DisplayBrass", Brass, metallic: 0.7f));
+            KillCollider(plate);
+
+            for (int i = 0; i < 4; i++)
+            {
+                float bx = (i % 2 == 0 ? -1f : 1f) * 0.32f;
+                float by = 0.04f + (i < 2 ? 0.32f : -0.32f);
+                var bolt = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                bolt.name = "GaugeBolt" + i;
+                bolt.transform.SetParent(_screenRoot, false);
+                bolt.transform.localPosition = new Vector3(bx, by, -0.022f);
+                bolt.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+                bolt.transform.localScale = new Vector3(0.035f, 0.012f, 0.035f);
+                Paint(bolt, Mat("Mat_DisplayDark", DarkIron, metallic: 0.2f));
+                KillCollider(bolt);
+            }
+
+            var body = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            body.name = "GaugeBody";
+            body.transform.SetParent(_screenRoot, false);
+            body.transform.localPosition = new Vector3(0f, 0.04f, -0.02f);
+            body.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            body.transform.localScale = new Vector3(0.36f, 0.03f, 0.36f);
+            Paint(body, Mat("Mat_DisplayBrass", Brass, metallic: 0.7f));
+            KillCollider(body);
+
+            var face = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            face.name = "GaugeFace";
+            face.transform.SetParent(_screenRoot, false);
+            face.transform.localPosition = new Vector3(0f, 0.04f, -0.052f);
+            face.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            face.transform.localScale = new Vector3(0.31f, 0.012f, 0.31f);
+            Paint(face, Mat("Mat_DisplayFace", new Color(0.88f, 0.83f, 0.70f), metallic: 0f));
+            KillCollider(face);
+
+            // Tick ring: eleven marks over the 240 degree sweep, ends and middle longer.
+            for (int k = 0; k <= 10; k++)
+            {
+                float theta = Mathf.Lerp(-120f, 120f, k / 10f);
+                bool major = k % 5 == 0;
+                float rad = theta * Mathf.Deg2Rad;
+                float r = 0.245f;
+                var tick = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                tick.name = "GaugeTick" + k;
+                tick.transform.SetParent(_screenRoot, false);
+                tick.transform.localPosition = new Vector3(
+                    -Mathf.Sin(rad) * r, 0.04f + Mathf.Cos(rad) * r, -0.062f);
+                tick.transform.localRotation = Quaternion.Euler(0f, 0f, theta);
+                tick.transform.localScale = major
+                    ? new Vector3(0.018f, 0.075f, 0.008f)
+                    : new Vector3(0.011f, 0.045f, 0.008f);
+                Paint(tick, Mat("Mat_DisplayTick", DarkIron, metallic: 0f));
+                KillCollider(tick);
+            }
 
             var pivot = new GameObject("NeedlePivot") { hideFlags = HideFlags.DontSave };
             pivot.transform.SetParent(_screenRoot, false);
-            pivot.transform.localPosition = new Vector3(0f, 0.05f, -0.035f);
+            pivot.transform.localPosition = new Vector3(0f, 0.04f, -0.070f);
             _needlePivot = pivot.transform;
 
             var needle = GameObject.CreatePrimitive(PrimitiveType.Cube);
             needle.name = "Needle";
             needle.transform.SetParent(_needlePivot, false);
-            needle.transform.localPosition = new Vector3(0f, 0.14f, 0f);
-            needle.transform.localScale = new Vector3(0.018f, 0.30f, 0.012f);
+            needle.transform.localPosition = new Vector3(0f, 0.115f, 0f);
+            needle.transform.localScale = new Vector3(0.016f, 0.25f, 0.008f);
             Paint(needle, Mat("Mat_DisplayNeedle", new Color(0.55f, 0.12f, 0.10f), metallic: 0f));
             KillCollider(needle);
 
-            _analogLabel = NewText("AnalogValue", DarkIron, 0.09f, TextAnchor.MiddleCenter, TextAlignment.Center);
+            var tail = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            tail.name = "NeedleTail";
+            tail.transform.SetParent(_needlePivot, false);
+            tail.transform.localPosition = new Vector3(0f, -0.045f, 0f);
+            tail.transform.localScale = new Vector3(0.024f, 0.09f, 0.008f);
+            Paint(tail, Mat("Mat_DisplayNeedle", new Color(0.55f, 0.12f, 0.10f), metallic: 0f));
+            KillCollider(tail);
+
+            var hub = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            hub.name = "NeedleHub";
+            hub.transform.SetParent(_screenRoot, false);
+            hub.transform.localPosition = new Vector3(0f, 0.04f, -0.076f);
+            hub.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            hub.transform.localScale = new Vector3(0.045f, 0.012f, 0.045f);
+            Paint(hub, Mat("Mat_DisplayDark", DarkIron, metallic: 0.2f));
+            KillCollider(hub);
+
+            var cover = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            cover.name = "GaugeGlass";
+            cover.transform.SetParent(_screenRoot, false);
+            cover.transform.localPosition = new Vector3(0f, 0.04f, -0.085f);
+            cover.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            cover.transform.localScale = new Vector3(0.325f, 0.006f, 0.325f);
+            var coverMat = Mat("Mat_NixieGlass", new Color(0.75f, 0.85f, 0.95f, 0.14f), metallic: 0f);
+            MakeTransparent(coverMat);
+            Paint(cover, coverMat);
+            KillCollider(cover);
+
+            _analogLabel = NewText("AnalogValue", DarkIron, 0.075f, TextAnchor.MiddleCenter, TextAlignment.Center);
             _analogLabel.transform.SetParent(_screenRoot, false);
-            _analogLabel.transform.localPosition = new Vector3(0f, -0.24f, -0.03f);
+            _analogLabel.transform.localPosition = new Vector3(0f, -0.40f, -0.03f);
             _analogLabel.transform.localRotation = Quaternion.identity;
         }
 
@@ -447,16 +637,24 @@ namespace VoxelEngine.Building
                 }
                 case ScreenKind.Nixie:
                 {
-                    string all = string.Join("  ", System.Linq.Enumerable.ToArray(
+                    string all = string.Join("", System.Linq.Enumerable.ToArray(
                         System.Linq.Enumerable.Where(lines, l => !string.IsNullOrEmpty(l))));
                     if (all == "") all = _powered ? "0" : "";
+                    all = Trunc(all, 4);
                     if (_shown[0] == all) break;
                     _shown[0] = all;
-                    if (_nixieText != null)
+
+                    // One digit per tube, exactly like the clock on the wall: a tube
+                    // with nothing to show stays dark rather than showing a space.
+                    bool changed = false;
+                    for (int i = 0; i < _nixieDigits.Count; i++)
                     {
-                        _nixieText.text = Trunc(all, 24);
-                        if (_powered) StartCoroutine(NixieFlicker());
+                        string ch = i < all.Length ? all.Substring(i, 1) : "";
+                        if (_nixieDigits[i].text == ch) continue;
+                        _nixieDigits[i].text = ch;
+                        changed = true;
                     }
+                    if (changed && _powered) StartCoroutine(NixieFlicker());
                     break;
                 }
                 case ScreenKind.Analog:
@@ -591,6 +789,16 @@ namespace VoxelEngine.Building
             if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", metallic);
             _mats[name] = mat;
             return mat;
+        }
+
+        /// <summary>URP lit glass: alpha-blended surface, drawn after the opaque pass so
+        /// the digit inside a tube is visible through its envelope.</summary>
+        private static void MakeTransparent(Material mat)
+        {
+            if (mat == null) return;
+            mat.SetFloat("_Surface", 1f);
+            mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            mat.renderQueue = 3000;
         }
 
         private static void KillCollider(GameObject go)

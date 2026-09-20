@@ -918,32 +918,12 @@ namespace VoxelEngine.Player
                     return;
                 }
 
-                // Rail truck: attach to or detach from the rails in one press.
+                // Rail truck: the bogie console (12.2.0). Attach/detach moved INSIDE it,
+                // next to the auto-snap setting, so the state and the control for the
+                // state are on one screen instead of a toast and a hidden right-click.
                 var railTruck = hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridRailTruck>();
-                if (railTruck != null && railTruck.Grid != null)
-                {
-                    var bogie = railTruck.Grid.GetComponent<VoxelEngine.GridSystem.GridRailBogie>();
-                    if (bogie != null)
-                    {
-                        if (bogie.IsOnRails)
-                        {
-                            bogie.Detach();
-                            VoxelEngine.UI.BuildFeedbackHud.Show("Off the rails",
-                                "The construct is free to move normally again.", null, T_AccentAmber);
-                        }
-                        else if (bogie.TrySnapToTrack())
-                        {
-                            VoxelEngine.UI.BuildFeedbackHud.Show("On the rails",
-                                bogie.StatusLabel, null, T_AccentCyan);
-                        }
-                        else
-                        {
-                            VoxelEngine.UI.BuildFeedbackHud.Show("Cannot attach",
-                                bogie.BlockedReason, null, T_AccentAmber);
-                        }
-                        return;
-                    }
-                }
+                if (railTruck != null)
+                { VoxelEngine.UI.RailConfigHud.OpenBogie(railTruck); return; }
 
                 var railSignal = hit.collider.GetComponentInParent<VoxelEngine.Building.RailSignal>();
                 if (railSignal != null)

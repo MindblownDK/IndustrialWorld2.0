@@ -1,9 +1,49 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.1.0-dev`
+**Current Version:** `12.2.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.2.0-dev] Brass, Tubes, Cobbles And A Bogie That Actually Snaps
+
+**Type:** MINOR - new material and console, rebuilt visuals, one placement rule tightened. All save fields additive.
+
+**GitHub title:** `[12.2.0-dev] Brass ingots, real nixie tubes, proper ballast stone, and a bogie that snaps`
+
+#### The bogie snaps now - and tells you about it
+
+The old snap put the GRID ORIGIN on the railhead and kept the construct's old rotation, so a truck parked at an angle "snapped" while its wheels stayed in the air and it faced across the line. `TrySnapToTrack` now sets the pose, not a coordinate: the construct rotates to face along the track, then shifts so the truck block itself sits on the railhead, wherever on the hull it was built.
+
+The truck is renamed **Bogie** (item, recipe, prefab block name - step 92 re-runs the rename over old assets), and E on it opens a proper console in `RailConfigHud`: ON/OFF RAILS state, speed, **AUTO-SNAP** toggle (on by default; a parked wagon stays parked when you turn it off), SNAP NOW and LIFT OFF buttons. Auto-snap polls once a second while unrailled, so a train built beside the line, reloaded, or overtaken by the line growing into the yard joins the rails by itself. The policy survives saves (additive field). The old inline attach/detach toast is gone - the state and its control live on one screen now.
+
+#### Brass: the steampunk metal, priced to fit
+
+New **Brass Ingot**: copper x2 + iron x1 in the furnace, one out - between copper and steel, exactly where steel (iron x2) leaves room for it, so nothing upstream changes price. Step 95 authors it and then blends ONE steel-for-brass swap into every rail piece recipe and every display-family recipe (total ingots unchanged; the blend skips recipes that already carry brass, so re-runs never stack it).
+
+#### The nixie readout is tubes now
+
+Not digits painted on a window: four glass envelopes with domed tops standing in brass sockets on a brass base, pins between them, one glowing digit floating inside each tube - the clock on the reference photo. A tube with nothing to show stays dark. Glass is alpha-blended URP lit so the digit reads through its envelope, and updates still flicker the emission.
+
+#### The analog gauge is a gauge now
+
+Square brass backplate with corner bolts, round brass body, cream face, an eleven-mark tick ring over the 240-degree sweep (ends and middle longer), red needle with a counterweight tail on a black hub, and a glass cover. The tick ring and the needle share one angle convention, so the needle actually points at its marks.
+
+#### Ballast is crushed stone, not scattered boxes
+
+The first cobble scatter - 26 loose cubes on a dark slab - read as boxes sprinkled on dirt in the world. The bed now builds a dense jittered GRID of angular stones (full three-axis rotation, three granite greys, shoulders sloping at the rim, tops proud of the slab so sleepers bed INTO stone) as one combined mesh per tone: three draw calls for the whole layer instead of 27 per cell, so a long line costs less than before while looking packed. Step 93 rebuilds the stone layer once on prefabs authored before this (V2 child marker); re-runs leave a good bed alone.
+
+#### Rails are laid, not placed
+
+Hand-placing a rail block produced a dead cell: no links, no junction logic, no ballast, and it blocked the corridor tool while looking like track. `BuildSystem.TryPlace` now refuses any block whose prefab carries a RailTrack and says why: hold the Rail Layer and drag a run.
+
+#### Manual steps in Unity
+
+1. Let the project recompile.
+2. Run setup **92** (rename to Bogie), **93** (new stone layer) and **95** (brass ingot + brass blend) from Tools -> Voxel Engine -> Voxel Engine Setup. All three are non-destructive and safe to re-run.
+3. In a save: smelt brass (copper x2 + iron x1), check a rail recipe in the crafting list shows its brass ingot, and lay a run - the bed under it is packed crushed stone now.
+4. E on a bogie: the console shows rail state, auto-snap, snap now, lift off. Park a train beside track with auto-snap on and walk away - it should be railed when you look back.
+5. Try placing a Rail Track block by hand: it should refuse and point you at the Rail Layer.
 
 ### [12.1.0-dev] Schedules, Screens And The Sound Of A Station Waking Up
 

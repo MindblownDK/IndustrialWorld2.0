@@ -74,15 +74,15 @@ namespace IndustrialWorld.EditorTools
                 AssetDatabase.SaveAssets();
                 AssetDatabase.Refresh();
 
-                EditorUtility.DisplayDialog("Step 92 - Rail Truck",
-                    "Rail Truck authored.\n\n" +
-                    "  RAIL TRUCK      Steel x18" + (wire != null ? " + Wire x10" : "") + "\n" +
+                EditorUtility.DisplayDialog("Step 92 - Bogie",
+                    "Bogie authored.\n\n" +
+                    "  BOGIE           Steel x18" + (wire != null ? " + Wire x10" : "") + "\n" +
                     "  WAGON COUPLER   Steel x8" + (wire != null ? " + Wire x4" : "") + "\n\n" +
                     "Train System v2: a train is now an ordinary construct.\n\n" +
                     "  1. Build any grid you like.\n" +
-                    "  2. Place a Rail Truck on it.\n" +
+                    "  2. Place a Bogie on it.\n" +
                     "  3. Park it within a few metres of track.\n" +
-                    "  4. Open the truck and press SNAP TO RAIL, then DRIVE.\n\n" +
+                    "  4. Open the bogie (E): auto-snap is ON by default,\n     or press SNAP NOW.\n\n" +
                     "Because it is a grid, it can carry containers, tanks,\n" +
                     "refineries or turrets, and takes damage, paint, power and\n" +
                     "pressurisation exactly like anything else you build.\n\n" +
@@ -239,7 +239,7 @@ namespace IndustrialWorld.EditorTools
                 }
 
                 var truck = root.AddComponent<GridRailTruck>();
-                truck.blockName = "Rail Truck";
+                truck.blockName = "Bogie";
                 truck.BlockMass = 260f;
                 truck.maxHP = 420f;
 
@@ -256,9 +256,19 @@ namespace IndustrialWorld.EditorTools
             if (contents.GetComponent<GridRailTruck>() == null)
             {
                 var truck = contents.AddComponent<GridRailTruck>();
-                truck.blockName = "Rail Truck";
+                truck.blockName = "Bogie";
                 dirty = true;
                 Debug.Log("[Setup 92] Prefab had no GridRailTruck; added one.");
+            }
+
+            // 12.2.0 rename pass: prefabs authored before the rename keep working, they
+            // just stop calling themselves Rail Truck.
+            var namedTruck = contents.GetComponent<GridRailTruck>();
+            if (namedTruck != null && namedTruck.blockName != "Bogie")
+            {
+                namedTruck.blockName = "Bogie";
+                dirty = true;
+                Debug.Log("[Setup 92] Renamed block to Bogie on " + path + ".");
             }
 
             // The 11.41.0 formation is three times the width the first bogie was authored
@@ -360,16 +370,28 @@ namespace IndustrialWorld.EditorTools
             bool dirty = created;
 
             if (item.itemId != "railtruck") { item.itemId = "railtruck"; dirty = true; }
-            if (item.displayName != "Rail Truck") { item.displayName = "Rail Truck"; dirty = true; }
+            // 12.2.0 rename: a rail truck IS a bogie, so that is what it is called now.
+            if (item.displayName != "Bogie") { item.displayName = "Bogie"; dirty = true; }
             if (item.maxStack <= 0) { item.maxStack = 20; dirty = true; }
             if (item.massPerUnit <= 0f) { item.massPerUnit = 260f; dirty = true; }
             if (item.category != "Grid Blocks") { item.category = "Grid Blocks"; dirty = true; }
             if (string.IsNullOrEmpty(item.description))
             {
                 item.description =
-                    "Puts a construct on rails. Any grid with a Rail Truck can run on track, " +
+                    "Puts a construct on rails. Any grid with a bogie can run on track, " +
                     "so a train is just something you built - it carries whatever grid blocks " +
-                    "you put on it. The slowest truck aboard sets the speed.";
+                    "you put on it. The slowest bogie aboard sets the speed. Open it with E " +
+                    "for the snap console: auto-snap, snap now, lift off.";
+                dirty = true;
+            }
+            else if (item.description != null && item.description.Contains("Rail Truck"))
+            {
+                // 12.2.0 rename pass over the authored blurb.
+                item.description =
+                    "Puts a construct on rails. Any grid with a bogie can run on track, " +
+                    "so a train is just something you built - it carries whatever grid blocks " +
+                    "you put on it. The slowest bogie aboard sets the speed. Open it with E " +
+                    "for the snap console: auto-snap, snap now, lift off.";
                 dirty = true;
             }
             if (item.icon == null) item.iconTint = TruckTint;
@@ -414,7 +436,7 @@ namespace IndustrialWorld.EditorTools
             {
                 EnsureFolder(GridRecipesFolder);
                 recipe = ScriptableObject.CreateInstance<RecipeDefinition>();
-                recipe.displayName = "Rail Truck";
+                recipe.displayName = "Bogie";
                 recipe.requiredStation = StationTier.Assembler;
                 recipe.craftSeconds = 14f;
                 recipe.unlockedByDefault = true;

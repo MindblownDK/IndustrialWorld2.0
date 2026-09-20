@@ -345,8 +345,8 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 9198460142388332032}
-  - component: {fileID: 6653343169740887932}
   - component: {fileID: 7906198874607627021}
+  - component: {fileID: 3532696315649945370}
   m_Layer: 0
   m_Name: HangingDepartureBoard
   m_TagString: Untagged
@@ -372,22 +372,6 @@ Transform:
   - {fileID: 1938322758835881820}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &6653343169740887932
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8991013549650543895}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 42eadc1bbeb31a842886ddf5749efc29, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.RailDisplayScreen
-  kind: 0
-  source: 2
-  customText: INDUSTRIAL WORLD
-  rows: 4
 --- !u!114 &7906198874607627021
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -407,3 +391,19 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 4294967295
   wattsPerSecond: 25
+--- !u!114 &3532696315649945370
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8991013549650543895}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cfdbd080856854349a63b82e86a5eed4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.RailDisplayScreen
+  kind: 0
+  source: 0
+  customText: INDUSTRIAL WORLD
+  rows: 4

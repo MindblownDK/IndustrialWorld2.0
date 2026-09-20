@@ -14,6 +14,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UIElements;
 using VoxelEngine.Building;
+using VoxelEngine.GridSystem;
 using VoxelEngine.Items;
 using Cursor = UnityEngine.Cursor;
 using T = VoxelEngine.UI.UITheme;
@@ -27,6 +28,7 @@ namespace VoxelEngine.UI
 
         private static RailStation _station;
         private static RailTrack _switchTrack;
+        private static GridRailTruck _truck;
 
         private static readonly List<string> _nameScratch = new();
 
@@ -65,14 +67,23 @@ namespace VoxelEngine.UI
         public static void OpenStation(RailStation station)
         {
             if (station == null) return;
-            _station = station; _switchTrack = null;
+            _station = station; _switchTrack = null; _truck = null;
             Show();
         }
 
         public static void OpenSwitch(RailTrack track)
         {
             if (track == null) return;
-            _switchTrack = track; _station = null;
+            _switchTrack = track; _station = null; _truck = null;
+            Show();
+        }
+
+        /// <summary>The bogie console: snapping policy and rail state for one truck.
+        /// Opened with E on the truck itself (12.2.0).</summary>
+        public static void OpenBogie(GridRailTruck truck)
+        {
+            if (truck == null) return;
+            _truck = truck; _station = null; _switchTrack = null;
             Show();
         }
 
@@ -94,7 +105,7 @@ namespace VoxelEngine.UI
             UIState.TextInputActive = false;
             if (_scrim != null) _scrim.style.display = DisplayStyle.None;
             if (_blocking) { UIState.PopBlock(); _blocking = false; }
-            _station = null; _switchTrack = null;
+            _station = null; _switchTrack = null; _truck = null;
         }
 
         public static void Tick()
@@ -113,7 +124,7 @@ namespace VoxelEngine.UI
             // looking at. (The v1 train console lived here until its retirement in
             // 12.0.0-dev; a train is a grid now and configures itself through the grid
             // terminal like every other buildable.)
-            if (_station != null) Rebuild();
+            if (_station != null || _truck != null) Rebuild();
         }
 
         // ── Build ────────────────────────────────────────────────────────────────
@@ -129,6 +140,7 @@ namespace VoxelEngine.UI
 
             if (_station != null) BuildStation();
             else if (_switchTrack != null) BuildSwitch();
+            else if (_truck != null) BuildBogie();
             else { Close(); return; }
 
             var close = new Button(Close) { text = "CLOSE" };
@@ -164,6 +176,84 @@ namespace VoxelEngine.UI
             row.Add(pill);
 
             _body.Add(row);
+        }
+
+        // ── Bogie panel ──────────────────────────────────────────────────────────
+        private static void BuildBogie()
+        {
+            if (_truck == null) return;
+            var bogie = _truck.Grid != null ? _truck.Grid.GetComponent<GridRailBogie>() : null;
+            bool onRails = bogie != null && bogie.IsOnRails;
+
+            var head = new VisualElement { style = { flexDirection = FlexDirection.Row, marginBottom = 8 } };
+            head.style.alignItems = Align.Center;
+            var title = new Label("BOGIE");
+            title.style.flexGrow = 1;
+            title.style.fontSize = 15;
+            title.style.unityFontStyleAndWeight = FontStyle.Bold;
+            title.style.letterSpacing = 1.4f;
+            title.style.color = new StyleColor(new Color(0.45f, 0.85f, 1f));
+            head.Add(title);
+            var pill = new Label(onRails ? "ON RAILS" : "OFF RAILS");
+            pill.style.fontSize = 10;
+            pill.style.color = new StyleColor(onRails ? T.AccentGreen : T.AccentAmber);
+            head.Add(pill);
+            _body.Add(head);
+
+            if (bogie != null)
+            {
+                if (onRails)
+                    Info($"Speed {(bogie.Speed * 3.6f):0.0} km/h.  {bogie.StatusLabel}", T.TextSecondary);
+                else
+                    Info(string.IsNullOrEmpty(bogie.BlockedReason)
+                        ? "Not on rails." : bogie.BlockedReason, T.TextSecondary);
+            }
+            else
+            {
+                Info("This truck's grid has no bogie yet.", T.TextMuted);
+            }
+
+            Section("SNAPPING");
+            Info("Auto-snap re-latches this train onto rail under it by itself - after " +
+                 "building, after a reload, or when the line grows into the yard. Turn " +
+                 "it off to keep a parked wagon parked.", T.TextMuted);
+
+            var snapRow = new VisualElement { style = { flexDirection = FlexDirection.Row, marginBottom = 6 } };
+
+            var toggle = new Button(() => { _truck.autoSnap = !_truck.autoSnap; Rebuild(); })
+            {
+                text = "AUTO-SNAP: " + (_truck.autoSnap ? "ON" : "OFF"),
+            };
+            toggle.style.flexGrow = 1;
+            toggle.style.height = 26;
+            toggle.style.fontSize = 10;
+            toggle.style.backgroundColor = new StyleColor(_truck.autoSnap
+                ? new Color(0.16f, 0.38f, 0.50f) : new Color(0.10f, 0.13f, 0.17f));
+            toggle.style.color = new StyleColor(_truck.autoSnap ? Color.white : T.TextSecondary);
+            snapRow.Add(toggle);
+
+            if (bogie != null)
+            {
+                if (onRails)
+                {
+                    var lift = new Button(() => { bogie.Detach(); Rebuild(); }) { text = "LIFT OFF" };
+                    lift.style.width = 90;
+                    lift.style.height = 26;
+                    lift.style.fontSize = 10;
+                    lift.style.marginLeft = 4;
+                    snapRow.Add(lift);
+                }
+                else
+                {
+                    var snap = new Button(() => { bogie.TrySnapToTrack(); Rebuild(); }) { text = "SNAP NOW" };
+                    snap.style.width = 90;
+                    snap.style.height = 26;
+                    snap.style.fontSize = 10;
+                    snap.style.marginLeft = 4;
+                    snapRow.Add(snap);
+                }
+            }
+            _body.Add(snapRow);
         }
 
         private static Label Section(string text)

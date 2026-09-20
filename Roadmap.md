@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.1.0-dev`
-**Roadmap Version:** `12.1.0-dev`
+**Current Version:** `12.2.0-dev`
+**Roadmap Version:** `12.2.0-dev`
 **Date:** 2026-09-16
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 12.2.0-dev - Brass, Tubes, Cobbles And A Bogie That Actually Snaps
+- **Bogie snap fixed:** the snap sets a POSE now (rotate to track, anchor on the truck block) instead of dropping the grid origin on the railhead; truck renamed Bogie (step 92 rename pass); E opens a console with auto-snap toggle (default on, 1 Hz poll, saved), SNAP NOW and LIFT OFF.
+- **Brass ingot:** furnace copper x2 + iron x1; step 95 blends one steel-for-brass swap into rail piece and display recipes (idempotent, total ingots unchanged).
+- **Displays rebuilt:** nixie readout is four glass tubes with domed tops and one glowing digit each; analog gauge is a Create-style dial (backplate, bolts, tick ring, needle + tail, glass). Ballast bed rebuilds as a dense combined-mesh crushed-stone layer (3 draw calls, V2 marker in step 93). Hand-placing rail blocks is refused - rails are laid with the Rail Layer.
+
 ### 12.1.0-dev - Schedules, Screens And The Sound Of A Station Waking Up
 - **Ballast fix:** the bed item could resolve empty and the corridor silently skipped ballast - now self-healed at drag time, plus a `RailCorridor` re-bed pass that heals bare cells on every commit (charged as stone, named on the toast).
 - **Train Schedule block:** ordered stop list per train with release conditions (dwell / hold full / hold empty / hold has space); bogie gained path-based `SetDestination` routing with arrival events; stations matched by name; schedule survives saves.
@@ -49,13 +54,6 @@
 - **Auto-junctions delivered:** a run crossing existing track splices a station at the crossed cell so it becomes the shared node; promotion counts arm directions (>=3) on every link rebuild, so hand-placement and reloads heal too; fresh junctions route straight through until a player sets points (`railPointsSetByPlayer`, additive save field). Adjacency tightened 1.45 m to 1.10 m with a lateral tie penalty.
 - **`RailCostHud`:** live metres / cells / gauge and per-material need-vs-have while dragging, from the same plan the ghost and commit use; refusal named on the card in amber.
 - **Formation x3:** sleeper 4.5 m, gauge 3.15 m, rail heads 0.33 m, ballast bed 6.3 m; step 92 re-gauges the bogie from the same number. Setup 85/92/93 apply it to old prefabs via idempotent geometry-only re-gauge passes.
-
-### 11.40.0-dev - A Real Bogie, And Track That Flows
-- **Staircase track fixed:** rotation came from the FLAT corridor solver, so cells stayed level while positions climbed. `AlignToSlope` now pitches each cell at the next; smoothing raised 6 to 18 passes (1.10 m worst step grades to 0.29 m).
-- **Load model:** consist mass / combined rated load of all bogies, inverse falloff, floored at 15%. Heavier is slower, more bogies is faster, capped at 1.0. Shared across the consist so a heavy wagon in the middle cannot defeat it.
-- **Bogie rebuilt** from the reference: side frames, axleboxes, coil springs, bolster, centre pivot, brake gear, flanged wheels at the 1.05 m track gauge.
-- **Placement rules:** a truck auto-snaps to rail on placement (the console button was undiscoverable), and cannot be stacked - stacked bogies would each claim rated capacity for the same mass, making an overloaded train arbitrarily fast. Side-by-side stays legal.
-- `GridRailCoupler`: wagon coupler block. Holds no joint - consists follow the leader's path - it is the player-facing control for that system.
 
 ### Era Transition Feel
 

@@ -235,6 +235,8 @@ namespace VoxelEngine.GridSystem
             _rb = _grid != null ? _grid.Body : null;
         }
 
+        private float _nextAutoSnap;
+
         private void OnEnable()
         {
             if (!s_all.Contains(this)) s_all.Add(this);
@@ -294,7 +296,19 @@ namespace VoxelEngine.GridSystem
             BlockedReason = "";
 
             CapturePhysics();
-            transform.position = track.RailPosition;
+
+            // A snap is a POSE, not a coordinate. Two things the old snap got wrong:
+            // it left the construct's old rotation in place (a train parked at an
+            // angle "snapped" while still facing across the line), and it put the
+            // GRID ORIGIN on the railhead - but the truck block can sit anywhere on
+            // the hull, so the wheels stayed in the air while the bogie insisted it
+            // was railed. Now: face along the track, then shift the whole construct
+            // so the truck block itself sits on the railhead.
+            transform.rotation = track.transform.rotation;
+            var truck = GetComponentInChildren<GridRailTruck>();
+            Vector3 anchor = truck != null && truck.transform != null
+                ? truck.transform.position : transform.position;
+            transform.position += track.RailPosition - anchor;
             return true;
         }
 
@@ -347,6 +361,17 @@ namespace VoxelEngine.GridSystem
 
         private void FixedUpdate()
         {
+            // AUTO-SNAP (12.2.0): a truck built beside the line, or a line extended
+            // under a parked wagon, should join the rails by itself when the truck's
+            // console says so - polled, not per-frame, because FindNearest walks the
+            // network and a parked train has nothing else to do.
+            if (!IsOnRails && Time.time >= _nextAutoSnap)
+            {
+                _nextAutoSnap = Time.time + 1f;
+                var truck = GetComponentInChildren<GridRailTruck>();
+                if (truck != null && truck.autoSnap) TrySnapToTrack();
+            }
+
             // A coupled wagon is driven entirely by its leader's recorded path, so it must
             // NOT run the track logic below. Two bogies both resolving switches would let a
             // consist split itself across a junction.

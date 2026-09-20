@@ -1618,6 +1618,14 @@ namespace VoxelEngine.Persistence
                         savedBlock.trainScheduleIndex = scheduleBlock.CurrentIndex;
                     }
 
+                    if (block is VoxelEngine.GridSystem.GridRailTruck truckBlock)
+                    {
+                        // The snap policy is a standing decision about a parked train;
+                        // a reload must not silently re-enable or disable it.
+                        savedBlock.hasRailTruckState = true;
+                        savedBlock.truckAutoSnap = truckBlock.autoSnap;
+                    }
+
                     var gridDisplay = block.GetComponent<VoxelEngine.Building.RailDisplayScreen>();
                     if (gridDisplay != null)
                     {
@@ -2010,6 +2018,9 @@ namespace VoxelEngine.Persistence
                     restoredSchedule.ScheduleJson = saved.trainScheduleJson;
                     restoredSchedule.RestoreServiceState(saved.trainScheduleIndex);
                 }
+
+                if (block is VoxelEngine.GridSystem.GridRailTruck restoredTruck && saved.hasRailTruckState)
+                    restoredTruck.autoSnap = saved.truckAutoSnap;
 
                 var restoredGridDisplay = block.GetComponent<VoxelEngine.Building.RailDisplayScreen>();
                 if (restoredGridDisplay != null && saved.hasGridDisplayState)
@@ -3706,6 +3717,8 @@ namespace VoxelEngine.Persistence
             public bool hasTrainScheduleState;
             public string trainScheduleJson = "";
             public int trainScheduleIndex;
+            public bool hasRailTruckState;
+            public bool truckAutoSnap = true;
             public bool hasGridDisplayState;
             public int gridDisplayKind;
             public int gridDisplaySource;

@@ -34,6 +34,12 @@ namespace VoxelEngine.GridSystem
         [Tooltip("Power drawn while the train is actually moving.")]
         public float powerDraw = 220f;
 
+        [Tooltip("Auto-snap: while this is on, an unrailled train re-latches onto rail " +
+                 "under it on its own - after building, after reloading, after the line " +
+                 "is extended into the yard. Turn it off in the bogie console to keep a " +
+                 "parked wagon parked.")]
+        public bool autoSnap = true;
+
         /// <summary>The bogie this truck installed on its parent grid.</summary>
         private GridRailBogie _bogie;
 

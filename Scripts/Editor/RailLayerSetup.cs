@@ -1,5 +1,6 @@
 #if UNITY_EDITOR
 using System;
+using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 using VoxelEngine.Crafting;
@@ -175,6 +176,14 @@ namespace IndustrialWorld.EditorTools
             var existing = AssetDatabase.LoadAssetAtPath<GameObject>(path);
             if (existing != null)
             {
+                // 12.2.0: the first cobble scatter was 26 loose cubes on a dark slab, and
+                // in the world it read as scattered boxes, not crushed stone. The layer is
+                // now ONE combined mesh per tone, dense and angular. Prefabs authored
+                // before that get their stone layer rebuilt once; the V2 child is the
+                // marker, so a re-run leaves a good bed alone.
+                if (existing.transform.Find("StoneLayerV2_0") == null)
+                    return RebuildBallastStone(path, existing);
+
                 // The bed carries the formation: when step 85 triples the deck, a bed left at
                 // the old width would peek out as a ribbon under wide sleepers.
                 RegaugeBallast(path, existing);
@@ -210,40 +219,7 @@ namespace IndustrialWorld.EditorTools
 
             // A deterministic PRNG seeded by a constant: same prefab every authoring run.
             var rng = new System.Random(20260119);
-            const int cobbleCount = 26;
-
-            for (int i = 0; i < cobbleCount; i++)
-            {
-                var cobble = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                cobble.name = "Cobble" + i;
-                cobble.transform.SetParent(root.transform, false);
-
-                // Spread across the bed, densest toward the shoulders where real ballast
-                // piles up against the sleeper ends.
-                float x = (float)(rng.NextDouble() * 2.0 - 1.0) * (BedWidth * 0.5f - 0.1f);
-                float z = (float)(rng.NextDouble() * 2.0 - 1.0) * 0.48f;
-                float size = 0.13f + (float)rng.NextDouble() * 0.15f;
-                float lift = 0.24f + (float)rng.NextDouble() * 0.05f;
-
-                cobble.transform.localPosition = new Vector3(x, lift, z);
-                cobble.transform.localScale = new Vector3(size, size * 0.65f, size);
-                // Random yaw and a slight tilt: aligned cubes read as a grid, not as rubble.
-                cobble.transform.localRotation = Quaternion.Euler(
-                    (float)(rng.NextDouble() * 18.0 - 9.0),
-                    (float)(rng.NextDouble() * 360.0),
-                    (float)(rng.NextDouble() * 18.0 - 9.0));
-
-                // Three tones so the bed has variation rather than one flat colour.
-                var pick = i % 3 == 0 ? paleMat : (i % 3 == 1 ? stoneMat : darkMat);
-                var r = cobble.GetComponent<Renderer>();
-                if (r != null && pick != null) r.sharedMaterial = pick;
-
-                // Cobbles are decoration on top of the bed; only the base slab needs a
-                // collider, and 26 extra colliders per cell would be a real cost on a long
-                // line.
-                var col = cobble.GetComponent<Collider>();
-                if (col != null) UnityEngine.Object.DestroyImmediate(col);
-            }
+            BuildStoneLayer(root, rng);
 
             var prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
             UnityEngine.Object.DestroyImmediate(root);
@@ -254,6 +230,121 @@ namespace IndustrialWorld.EditorTools
         /// <summary>Ballast bed width in metres: wider than the 4.5 m sleepers it carries, as
         /// real ballast shoulders are. Tripled with the formation in 11.41.0.</summary>
         private const float BedWidth = 6.3f;
+
+        /// <summary>
+        /// Crushed stone, the way a ballast bed actually looks: a dense field of angular
+        /// grey stones packed shoulder to shoulder across the whole bed, sitting slightly
+        /// proud of the base slab so the sleepers bed INTO stone rather than onto a shelf.
+        ///
+        /// Built as one combined mesh per tone (three draw calls for the whole layer,
+        /// where the first version spent 26) because a long line instantiates this prefab
+        /// once per cell and per-child draw calls multiply fast.
+        /// </summary>
+        private static void BuildStoneLayer(GameObject root, System.Random rng)
+        {
+            var darkMat  = MakeMat("Mat_RailBallast",   new Color(0.26f, 0.26f, 0.28f));
+            var stoneMat = MakeMat("Mat_RailBallastStone", new Color(0.40f, 0.40f, 0.43f));
+            var paleMat  = MakeMat("Mat_RailBallastPale",  new Color(0.54f, 0.54f, 0.57f));
+            var mats = new[] { darkMat, stoneMat, paleMat };
+
+            var verts = new[] { new List<Vector3>(), new List<Vector3>(), new List<Vector3>() };
+            var norms = new[] { new List<Vector3>(), new List<Vector3>(), new List<Vector3>() };
+            var tris  = new[] { new List<int>(), new List<int>(), new List<int>() };
+
+            // Jittered GRID, not pure scatter: scatter leaves holes and clumps, and a
+            // ballast bed is packed, not sprinkled. Columns across the bed, rows along
+            // it, each stone knocked off centre and off angle.
+            for (float cx = -BedWidth * 0.5f + 0.18f; cx <= BedWidth * 0.5f - 0.12f; cx += 0.30f)
+            {
+                for (float cz = -0.44f; cz <= 0.44f; cz += 0.24f)
+                {
+                    float x = cx + (float)(rng.NextDouble() * 0.16 - 0.08);
+                    float z = cz + (float)(rng.NextDouble() * 0.12 - 0.06);
+                    float size = 0.17f + (float)rng.NextDouble() * 0.11f;
+
+                    // Shoulders: real ballast slopes down at the edges of the bed, so
+                    // stones near the rim sit lower and tilt outward.
+                    float edge = Mathf.Clamp01((Mathf.Abs(x) - (BedWidth * 0.5f - 0.9f)) / 0.9f);
+                    float lift = 0.235f + (float)rng.NextDouble() * 0.05f - edge * 0.10f;
+
+                    var rot = Quaternion.Euler(
+                        (float)(rng.NextDouble() * 50.0 - 25.0),
+                        (float)(rng.NextDouble() * 360.0),
+                        (float)(rng.NextDouble() * 50.0 - 25.0));
+                    var scale = new Vector3(size, size * 0.72f, size * (0.85f + (float)rng.NextDouble() * 0.3f));
+
+                    AddStone(verts[rng.Next(3)], norms[rng.Next(3)], tris[rng.Next(3)],
+                        new Vector3(x, lift, z), rot, scale);
+                }
+            }
+
+            for (int t = 0; t < 3; t++)
+            {
+                if (tris[t].Count == 0) continue;
+                var go = new GameObject("StoneLayerV2_" + t);
+                go.transform.SetParent(root.transform, false);
+                var mf = go.AddComponent<MeshFilter>();
+                var mr = go.AddComponent<MeshRenderer>();
+                var mesh = new Mesh { name = "BallastStoneV2_" + t };
+                mesh.SetVertices(verts[t]);
+                mesh.SetNormals(norms[t]);
+                mesh.SetTriangles(tris[t], 0);
+                mf.sharedMesh = mesh;
+                if (mats[t] != null) mr.sharedMaterial = mats[t];
+            }
+        }
+
+        /// <summary>Appends one angular stone (a randomly rotated, flattened cube) to a
+        /// tone bucket. Vertices and normals are transformed here so the stored mesh
+        /// needs no per-stone GameObject at runtime.</summary>
+        private static void AddStone(List<Vector3> verts, List<Vector3> norms, List<int> tris,
+            Vector3 pos, Quaternion rot, Vector3 scale)
+        {
+            // Six quad faces of a unit cube, wound outward.
+            float[][] faces =
+            {
+                new[] { -1f,-1f, 1f,  1f,-1f, 1f,  1f, 1f, 1f, -1f, 1f, 1f,  0f, 0f, 1f },
+                new[] {  1f,-1f,-1f, -1f,-1f,-1f, -1f, 1f,-1f, 1f, 1f,-1f,  0f, 0f,-1f },
+                new[] {  1f,-1f, 1f,  1f,-1f,-1f,  1f, 1f,-1f, 1f, 1f, 1f,  1f, 0f, 0f },
+                new[] { -1f,-1f,-1f, -1f,-1f, 1f, -1f, 1f, 1f,-1f, 1f,-1f, -1f, 0f, 0f },
+                new[] { -1f, 1f, 1f,  1f, 1f, 1f,  1f, 1f,-1f,-1f, 1f,-1f,  0f, 1f, 0f },
+                new[] { -1f,-1f,-1f,  1f,-1f,-1f,  1f,-1f, 1f,-1f,-1f, 1f,  0f,-1f, 0f },
+            };
+
+            foreach (var f in faces)
+            {
+                int b = verts.Count;
+                var n = rot * new Vector3(f[12], f[13], f[14]);
+                for (int k = 0; k < 4; k++)
+                {
+                    var corner = new Vector3(f[k * 3], f[k * 3 + 1], f[k * 3 + 2]) * 0.5f;
+                    verts.Add(pos + rot * Vector3.Scale(corner, scale));
+                    norms.Add(n);
+                }
+                tris.Add(b); tris.Add(b + 1); tris.Add(b + 2);
+                tris.Add(b); tris.Add(b + 2); tris.Add(b + 3);
+            }
+        }
+
+        /// <summary>Strips the old loose-cube scatter off an authored bed and builds the
+        /// V2 stone layer in its place. The base slab survives: its width and collider
+        /// are already correct.</summary>
+        private static GameObject RebuildBallastStone(string path, GameObject asset)
+        {
+            var contents = PrefabUtility.LoadPrefabContents(path);
+            var rootT = contents.transform;
+            for (int i = rootT.childCount - 1; i >= 0; i--)
+            {
+                string n = rootT.GetChild(i).name;
+                if (n.StartsWith("Cobble") || n.StartsWith("StoneLayer"))
+                    UnityEngine.Object.DestroyImmediate(rootT.GetChild(i).gameObject);
+            }
+            BuildStoneLayer(contents, new System.Random(20260119));
+            var saved = PrefabUtility.SaveAsPrefabAsset(contents, path);
+            PrefabUtility.UnloadPrefabContents(contents);
+            Debug.Log("[Setup 93] Rebuilt the ballast stone layer on " + path + ".");
+            return saved;
+        }
 
         /// <summary>
         /// Widens an existing bed to the current formation. Idempotent: the bed width IS the

@@ -856,6 +856,20 @@ namespace VoxelEngine.Building
 
         public bool TryPlace(BlockItem block, RaycastHit hit, Vector3 viewDir)
         {
+            // RAILS ARE LAID, NOT PLACED (12.2.0). A hand-placed rail cell would have no
+            // links, no junction logic and no ballast bed - a dead cell that looks like
+            // track and blocks the corridor tool. The Rail Layer drag is the only way
+            // in, and it says so rather than silently refusing.
+            if (block != null && block.placedPrefab != null
+                && block.placedPrefab.GetComponentInChildren<VoxelEngine.Building.RailTrack>(true) != null)
+            {
+                VoxelEngine.UI.BuildFeedbackHud.Show("Rails need the laying tool",
+                    "Hold the Rail Layer and drag a run. A rail placed by hand would " +
+                    "have no links, no junctions and no ballast bed.",
+                    block.icon, Color.yellow);
+                return false;
+            }
+
             var targetGrid = hit.collider != null ? hit.collider.GetComponentInParent<GridEntity>() : null;
             if (targetGrid != null && IsUnifiedPipe(block))
             {

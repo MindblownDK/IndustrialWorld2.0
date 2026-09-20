@@ -71,11 +71,16 @@ namespace IndustrialWorld.EditorTools
 
                 bool any = false;
 
+                var brass = EnsureBrassIngot(registry, out bool brassChanged);
+                any |= brassChanged;
+
                 any |= BuildScheduleBlock(steel, wire, registry);
                 any |= BuildGridScreen(steel, wire, registry);
                 any |= BuildCabinet(steel, wire, registry);
                 any |= BuildHangingBoard(steel, wire, registry);
                 any |= BuildNixie(steel, wire, registry);
+
+                if (brass != null) any |= BlendBrassIntoRecipes(registry, brass);
 
                 AssetDatabase.SaveAssets();
                 AssetDatabase.Refresh();
@@ -85,6 +90,8 @@ namespace IndustrialWorld.EditorTools
 
                 EditorUtility.DisplayDialog("Step 95 - Steampunk Displays & Schedules",
                     "Authored:\n\n" +
+                    "  BRASS INGOT     furnace: copper x2 + iron x1\n" +
+                    "  (rail pieces + these recipes now blend brass x1)\n\n" +
                     "  TRAIN SCHEDULE        grid block  - steel x4 + wire x2\n" +
                     "  BRASS DISPLAY SCREEN  grid block  - steel x6 + wire x4 (shaft-fed)\n" +
                     "  DISPLAY CABINET       stationary  - steel x8 + wire x4 (15 W)\n" +
@@ -133,6 +140,7 @@ namespace IndustrialWorld.EditorTools
                 block.BlockMass = 40f;
                 block.maxHP = 150f;
 
+                ScrubMissingScripts(root);
                 prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
                 UnityEngine.Object.DestroyImmediate(root);
                 changed = true;
@@ -141,6 +149,7 @@ namespace IndustrialWorld.EditorTools
             else
             {
                 var contents = PrefabUtility.LoadPrefabContents(path);
+                ScrubMissingScripts(contents);
                 bool repaired = false;
                 if (contents.GetComponent<VoxelEngine.GridSystem.GridTrainScheduleBlock>() == null)
                 {
@@ -197,6 +206,7 @@ namespace IndustrialWorld.EditorTools
                 block.BlockMass = 30f;
                 block.maxHP = 120f;
 
+                ScrubMissingScripts(root);
                 prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
                 UnityEngine.Object.DestroyImmediate(root);
                 changed = true;
@@ -205,6 +215,7 @@ namespace IndustrialWorld.EditorTools
             else
             {
                 var contents = PrefabUtility.LoadPrefabContents(path);
+                ScrubMissingScripts(contents);
                 bool repaired = false;
                 if (contents.GetComponent<RailDisplayScreen>() == null)
                 {
@@ -285,7 +296,9 @@ namespace IndustrialWorld.EditorTools
             var prefab = EnsureStationaryPrefab("NixieReadout", ScreenKind.Nixie,
                 ScreenSource.StationStatus, 1, 8f, build =>
                 {
-                    Cube(build, "Case", new Vector3(0f, 0f, 0f), new Vector3(0.55f, 0.38f, 0.16f),
+                    // A low plinth, not a box: the tubes ARE the readout and stand
+                    // proud of it, exactly like the reference clock.
+                    Cube(build, "Case", new Vector3(0f, -0.16f, 0.02f), new Vector3(0.72f, 0.08f, 0.20f),
                         Mat("Mat_NixieBrass", Brass));
                 });
 
@@ -307,12 +320,25 @@ namespace IndustrialWorld.EditorTools
             if (existing != null)
             {
                 var contents = PrefabUtility.LoadPrefabContents(path);
+                ScrubMissingScripts(contents);
                 bool repaired = false;
                 if (contents.GetComponent<RailDisplayScreen>() == null)
                 {
                     contents.AddComponent<RailDisplayScreen>();
                     repaired = true;
                 }
+
+                // 12.2.0 nixie restyle: the old tall case boxed the tubes in; the look
+                // is tubes standing proud of a low plinth. One-time, geometry only.
+                var oldCase = contents.transform.Find("Case");
+                if (oldCase != null && oldCase.localScale.y > 0.12f)
+                {
+                    oldCase.localPosition = new Vector3(0f, -0.16f, 0.02f);
+                    oldCase.localScale = new Vector3(0.72f, 0.08f, 0.20f);
+                    repaired = true;
+                    Debug.Log("[Setup 95] Restyled the nixie plinth on " + path + ".");
+                }
+
                 if (contents.GetComponent<VoxelEngine.Power.PowerConsumer>() == null)
                 {
                     var restored = contents.AddComponent<VoxelEngine.Power.PowerConsumer>();
@@ -337,6 +363,7 @@ namespace IndustrialWorld.EditorTools
             var consumer = root.AddComponent<VoxelEngine.Power.PowerConsumer>();
             consumer.wattsPerSecond = watts;
 
+            ScrubMissingScripts(root);
             var prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
             UnityEngine.Object.DestroyImmediate(root);
             Debug.Log("[Setup 95] Created " + path + ".");
@@ -344,8 +371,159 @@ namespace IndustrialWorld.EditorTools
         }
 
         // ============================================================
+        //  Brass: the steampunk metal, and where it belongs
+        // ============================================================
+        /// <summary>
+        /// Brass ingot: copper x2 + iron x1 in the furnace, one out. Priced against the
+        /// existing smelts (steel is iron x2) so brass sits between copper and steel -
+        /// a fitting metal, not a new tier, and nothing upstream gets cheaper or dearer.
+        /// </summary>
+        private static ItemDefinition EnsureBrassIngot(RecipeRegistry registry, out bool changed)
+        {
+            string path = Root + "/Items/Item_BrassIngot.asset";
+            var item = AssetDatabase.LoadAssetAtPath<ItemDefinition>(path);
+            bool created = false;
+            if (item == null)
+            {
+                EnsureFolder(Root + "/Items");
+                item = ScriptableObject.CreateInstance<ItemDefinition>();
+                created = true;
+            }
+            bool dirty = created;
+
+            if (item.itemId != "brass_ingot") { item.itemId = "brassingot"; dirty = true; }
+            if (item.displayName != "Brass Ingot") { item.displayName = "Brass Ingot"; dirty = true; }
+            if (item.maxStack <= 0) { item.maxStack = 900; dirty = true; }
+            if (item.massPerUnit <= 0f) { item.massPerUnit = 1f; dirty = true; }
+            if (item.category != "Resources") { item.category = "Resources"; dirty = true; }
+            if (string.IsNullOrEmpty(item.description))
+            {
+                item.description =
+                    "Copper and iron fired together into the steampunk metal: brass. " +
+                    "Takes a polish, keeps a colour, and belongs on anything with a " +
+                    "gauge, a drum or a departure board on it.";
+                dirty = true;
+            }
+            if (item.icon == null) item.iconTint = Brass;
+
+            if (dirty)
+            {
+                if (!AssetDatabase.Contains(item)) AssetDatabase.CreateAsset(item, path);
+                EditorUtility.SetDirty(item);
+                Debug.Log("[Setup 95] " + (created ? "Created" : "Repaired") + " " + path + ".");
+            }
+
+            var copper = AssetDatabase.LoadAssetAtPath<ItemDefinition>(Root + "/Items/Item_CopperIngot.asset");
+            var iron = AssetDatabase.LoadAssetAtPath<ItemDefinition>(Root + "/Items/Item_IronIngot.asset");
+            bool recipeChanged = false;
+            if (copper != null && iron != null)
+            {
+                var recipe = FindRecipe("Smelt_Brass");
+                if (recipe == null)
+                {
+                    EnsureFolder(RecipesFolder);
+                    recipe = ScriptableObject.CreateInstance<RecipeDefinition>();
+                    recipe.displayName = "Brass Ingot";
+                    recipe.requiredStation = StationTier.Furnace;
+                    recipe.craftSeconds = 4f;
+                    recipe.unlockedByDefault = true;
+                    recipe.outputCount = 1;
+                    recipe.outputItem = item;
+                    recipe.inputs = new[]
+                    {
+                        new RecipeIngredient { item = copper, count = 2 },
+                        new RecipeIngredient { item = iron, count = 1 },
+                    };
+                    AssetDatabase.CreateAsset(recipe, RecipesFolder + "/Smelt_Brass.asset");
+                    EditorUtility.SetDirty(recipe);
+                    recipeChanged = true;
+                }
+                else if (recipe.outputItem == null)
+                {
+                    recipe.outputItem = item;
+                    EditorUtility.SetDirty(recipe);
+                    recipeChanged = true;
+                }
+                if (!registry.recipes.Contains(recipe))
+                {
+                    registry.recipes.Add(recipe);
+                    EditorUtility.SetDirty(registry);
+                    recipeChanged = true;
+                }
+            }
+
+            changed = dirty || recipeChanged;
+            return item;
+        }
+
+        /// <summary>
+        /// 12.2.0: rail pieces and the display family are brass hardware now. The blend
+        /// swaps ONE steel for ONE brass per recipe (total ingots unchanged, so the cost
+        /// curve does not move) and only touches recipes that have no brass yet - a
+        /// re-run never stacks brass on brass.
+        /// </summary>
+        private static bool BlendBrassIntoRecipes(RecipeRegistry registry, ItemDefinition brass)
+        {
+            bool changed = false;
+            foreach (var recipe in registry.recipes)
+            {
+                if (recipe == null || recipe.inputs == null) continue;
+
+                bool isRailPiece = recipe.outputItem is BlockItem rb
+                    && rb.placedPrefab != null
+                    && rb.placedPrefab.GetComponentInChildren<VoxelEngine.Building.RailTrack>(true) != null;
+                bool isDisplayFamily = recipe.outputItem != null
+                    && (recipe.outputItem.itemId == "trainschedule"
+                        || recipe.outputItem.itemId == "brassdisplayscreen"
+                        || recipe.outputItem.itemId == "displaycabinet"
+                        || recipe.outputItem.itemId == "hangingdepartureboard"
+                        || recipe.outputItem.itemId == "nixiereadout");
+                if (!isRailPiece && !isDisplayFamily) continue;
+
+                bool hasBrass = false;
+                int steelIndex = -1;
+                for (int i = 0; i < recipe.inputs.Length; i++)
+                {
+                    if (recipe.inputs[i].item == brass) hasBrass = true;
+                    if (recipe.inputs[i].item != null && recipe.inputs[i].item.itemId == "steel_ingot")
+                        steelIndex = i;
+                }
+                if (hasBrass || steelIndex < 0 || recipe.inputs[steelIndex].count < 2) continue;
+
+                var blended = new RecipeIngredient[recipe.inputs.Length + 1];
+                for (int i = 0; i < recipe.inputs.Length; i++) blended[i] = recipe.inputs[i];
+                blended[steelIndex].count -= 1;
+                blended[recipe.inputs.Length] = new RecipeIngredient { item = brass, count = 1 };
+                recipe.inputs = blended;
+                EditorUtility.SetDirty(recipe);
+                changed = true;
+                Debug.Log("[Setup 95] Blended brass into " + recipe.name + ".");
+            }
+            return changed;
+        }
+
+        // ============================================================
         //  Shared authoring
         // ============================================================
+        /// <summary>
+        /// Removes missing-script MonoBehaviours from a hierarchy before it is saved.
+        ///
+        /// A prefab that once saved with a stripped component carries a missing script
+        /// forever afterwards: every LoadPrefabContents hands it back, and every
+        /// SaveAsPrefabAsset refuses it, so the asset can never heal. Scrubbing before
+        /// BOTH the create-save and the repair-save breaks that loop, and the walk is
+        /// the same singular per-GameObject call step 17 uses.
+        /// </summary>
+        private static void ScrubMissingScripts(GameObject root)
+        {
+            foreach (var t in root.GetComponentsInChildren<Transform>(true))
+            {
+                int removed = GameObjectUtility.RemoveMonoBehavioursWithMissingScript(t.gameObject);
+                if (removed > 0)
+                    Debug.Log("[Setup 95] Scrubbed " + removed + " missing script(s) from " + t.name + ".");
+            }
+        }
+
         private static GameObject Cube(GameObject parent, string name, Vector3 pos, Vector3 scale, Material mat)
         {
             var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
