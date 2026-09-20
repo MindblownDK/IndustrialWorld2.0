@@ -23,6 +23,14 @@ namespace VoxelEngine.UI
         public static readonly Color SegmentOff = new(0.075f, 0.090f, 0.055f, 1f);
         public static readonly Color Caption = new(0.50f, 0.56f, 0.48f, 1f);
 
+        // ── Brass rail consoles (12.5.0): the hybrid language ─────────────────
+        // Rail-family panels keep the phosphor glass and gain a machined-brass
+        // chassis. Non-rail panels stay on the plain phosphor chassis above.
+        public static readonly Color Brass = new(0.72f, 0.51f, 0.22f, 1f);
+        public static readonly Color BrassBright = new(0.92f, 0.70f, 0.32f, 1f);
+        public static readonly Color BrassDim = new(0.42f, 0.30f, 0.13f, 1f);
+        public static readonly Color BrassGlass = new(0.10f, 0.085f, 0.05f, 0.98f);
+
         public static void ApplyChassis(VisualElement element, Color? border = null, float radius = 3f)
         {
             if (element == null) return;
@@ -619,6 +627,103 @@ namespace VoxelEngine.UI
         public static void AnimateSegments(VisualElement[] segments, float fill01, Color? signalColor = null)
         {
             SetSegments(segments, fill01, signalColor);
+        }
+
+        /// <summary>
+        /// Brass chassis for rail-family consoles: dark bronze body, bright brass
+        /// rim. Static styling only (no scheduled anims), so live panels that
+        /// rebuild every frame can call it safely.
+        /// </summary>
+        public static void ApplyBrassChassis(VisualElement element, float radius = 4f)
+        {
+            if (element == null) return;
+            element.style.backgroundColor = new StyleColor(BrassGlass);
+            UITheme.Radius(element, radius);
+            UITheme.Border(element, 1f, new Color(Brass.r, Brass.g, Brass.b, 0.95f));
+        }
+
+        /// <summary>Recessed brass-trimmed data cell for rail consoles.</summary>
+        public static void ApplyBrassDataCard(VisualElement element)
+        {
+            if (element == null) return;
+            element.style.backgroundColor = new StyleColor(GlassDark);
+            UITheme.Radius(element, 1f);
+            UITheme.Border(element, 1f, new Color(Brass.r, Brass.g, Brass.b, 0.55f));
+        }
+
+        /// <summary>
+        /// Square machined-brass command key for rail consoles. Same tactile
+        /// micro-interactions as <see cref="CommandButton"/> (0.1 s transitions,
+        /// 1.03x hover, 0.98x press), event-driven only - no schedules, live-safe.
+        /// </summary>
+        public static Button BrassCommandButton(string text, System.Action onClick, bool active = false)
+        {
+            var button = new Button(onClick) { text = text };
+            Color idleBackground = active
+                ? new Color(Brass.r, Brass.g, Brass.b, 0.20f)
+                : GlassDark;
+            Color hoverBackground = active
+                ? new Color(Brass.r, Brass.g, Brass.b, 0.30f)
+                : new Color(Brass.r, Brass.g, Brass.b, 0.14f);
+            Color pressedBackground = new Color(Brass.r, Brass.g, Brass.b, 0.38f);
+
+            button.style.minHeight = 25;
+            button.style.paddingLeft = 8;
+            button.style.paddingRight = 8;
+            button.style.paddingTop = 3;
+            button.style.paddingBottom = 3;
+            button.style.marginRight = 3;
+            button.style.marginBottom = 3;
+            button.style.fontSize = 8;
+            button.style.letterSpacing = 0.72f;
+            button.style.unityFontStyleAndWeight = FontStyle.Bold;
+            button.style.unityTextAlign = TextAnchor.MiddleCenter;
+            button.style.whiteSpace = WhiteSpace.NoWrap;
+            button.style.color = new StyleColor(active ? BrassBright : Caption);
+            button.style.backgroundColor = new StyleColor(idleBackground);
+            UITheme.Radius(button, 1f);
+            UITheme.Border(button, 1f, active
+                ? new Color(Brass.r, Brass.g, Brass.b, 0.85f)
+                : new Color(BrassDim.r, BrassDim.g, BrassDim.b, 0.92f));
+
+            button.style.transitionProperty = new List<StylePropertyName>
+            {
+                "background-color", "color", "scale", "border-color"
+            };
+            button.style.transitionDuration = new List<TimeValue>
+            {
+                new TimeValue(0.10f, TimeUnit.Second),
+                new TimeValue(0.10f, TimeUnit.Second),
+                new TimeValue(0.10f, TimeUnit.Second),
+                new TimeValue(0.10f, TimeUnit.Second)
+            };
+            button.RegisterCallback<PointerEnterEvent>(_ =>
+            {
+                button.style.backgroundColor = new StyleColor(hoverBackground);
+                button.style.color = new StyleColor(BrassBright);
+                button.style.scale = new StyleScale(new Scale(new Vector3(1.03f, 1.03f, 1f)));
+                UITheme.Border(button, 1f, Brass);
+            });
+            button.RegisterCallback<PointerLeaveEvent>(_ =>
+            {
+                button.style.backgroundColor = new StyleColor(idleBackground);
+                button.style.color = new StyleColor(active ? BrassBright : Caption);
+                button.style.scale = new StyleScale(new Scale(Vector3.one));
+                UITheme.Border(button, 1f, active
+                    ? new Color(Brass.r, Brass.g, Brass.b, 0.85f)
+                    : new Color(BrassDim.r, BrassDim.g, BrassDim.b, 0.92f));
+            });
+            button.RegisterCallback<PointerDownEvent>(_ =>
+            {
+                button.style.backgroundColor = new StyleColor(pressedBackground);
+                button.style.scale = new StyleScale(new Scale(new Vector3(0.98f, 0.98f, 1f)));
+            });
+            button.RegisterCallback<PointerUpEvent>(_ =>
+            {
+                button.style.backgroundColor = new StyleColor(hoverBackground);
+                button.style.scale = new StyleScale(new Scale(new Vector3(1.03f, 1.03f, 1f)));
+            });
+            return button;
         }
     }
 }

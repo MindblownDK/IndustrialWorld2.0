@@ -1,9 +1,39 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.4.0-dev`
+**Current Version:** `12.5.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.5.0-dev] The Tower On The Hill - A Grand Steel Water Tower
+
+**Type:** MINOR - the water tower is rebuilt as a landmark and gains its own console. No save changes; stored levels restore against the bigger tank.
+
+**GitHub title:** `[12.5.0-dev] The tower on the hill - a grand steel water tower`
+
+#### A tower worth looking at
+
+The water tower is no longer a barrel on sticks: it is a classic six-legged steel water tower, 10 m to the brass finial. A galvanized tank with iron seam bands and rivets, a rust-red conical roof, a railed balcony walkway with a boarding gap, ladders from the ground to the balcony and up the tank, a central riser pipe with a valve house, and a stayed spout arm over the platform side. The legs lean inward with girt rings and X-bracing, and only structural parts keep colliders - rivets, rungs and rails are decor, so the tower costs no more physics than before. Existing towers rebuild into the grand tower when step 96 is re-run.
+
+#### A tank worth filling
+
+Capacity grows from 4 000 L to 12 000 L, with fill rates to match: 24 L/s from a water network, 6 L/s seeping from open water (now a real `seepRate` field instead of a hardcoded number). Towers still on untouched 12.4.0 tuning migrate to the new values automatically; anything already tuned is left alone. Stored water restores as before and clamps against the bigger tank, so no save work was needed.
+
+#### The level gauge
+
+E on the tower opens its panel on the right dock, beside the inventory, like every other machine - no center modal. A live water gauge with litres aboard, capacity, level percent and supply source, kept honest by the 4 Hz machine refresh cadence, plus a status pill that reads FULL, FILLING FROM NETWORK, SEEPING FROM OPEN WATER or ISOLATED straight from the tower's new supply tracking. The panel wears steampunk brass, because the UI matches the block: rail and steam hardware gets brass, and the fleet-wide UI round will dress every other family to match its own hardware (`LcdHudTheme` gains the shared brass palette it draws from).
+
+#### Also in this round
+
+`GameVersion` was stuck at 9.55.0 while the project shipped 12.4.0 - the console banner, menu footer and saves now report 12.5.0-dev from the same constant again.
+
+#### Manual steps in Unity
+
+1. Recompile; run **Tools -> Voxel Engine -> Voxel Engine Setup -> 96. Build the Steam Railway**.
+2. In a save: place or find a Water Tower and check the new silhouette against the old barrel.
+3. Press E on the tower: the level gauge shows fill, capacity and supply state live.
+4. Stand it beside a water network or a pond and watch the status pill change as it drinks.
+5. Berth a thirsty steam engine within reach of the spout and confirm the boiler still fills.
 
 ### [12.4.0-dev] Steam Takes The Rails - Piston Engines, Water Towers And A Whistle
 

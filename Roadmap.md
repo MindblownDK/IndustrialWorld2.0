@@ -1,9 +1,9 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.4.0-dev`
-**Roadmap Version:** `12.4.0-dev`
-**Date:** 2026-09-16
+**Current Version:** `12.5.0-dev`
+**Roadmap Version:** `12.5.0-dev`
+**Date:** 2026-09-20
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 12.5.0-dev - The Tower On The Hill (Grand Water Tower)
+- **Water Tower rebuilt:** a 10 m six-legged steel tower (galvanized riveted tank, rust-red conical roof, railed balcony, ladders, central riser, stayed spout); only structural parts keep colliders. Tank grows to 12 000 L (24 L/s network, 6 L/s seep); untouched 12.4.0 towers migrate, tuned ones are kept.
+- **Tower E-panel** on the right dock (`MachineUIs.WaterTowerPanel` via `OpenMachine`): live tank gauge, capacity/level/supply stat rows and a FULL/FILLING/SEEPING/ISOLATED status pill from new supply tracking on `WaterTower`, refreshed on the 4 Hz machine cadence. Steampunk brass accent - the UI matches the block, the rule the fleet-wide UI round follows per family. `LcdHudTheme` gains the shared brass palette.
+- Setup step 96 re-authors the tower behind a `TowerV2` marker (geometry-only rebuild, tuning preserved); no save changes. `GameVersion` resynced from stale 9.55.0 to 12.5.0-dev.
+
 ### 12.4.0-dev - Steam Takes The Rails (Piston Engines)
 - **Steam Engine** grid block: a piston steam engine (solved slider-crank animation, white chimney steam) whose only product is ROTATIONAL POWER - the consist's mechanical drive takes it when the grid has no electric power (gate at 2 Hz), and the brass screens tap the same shaft. Firebox shovels coal/wood from any cargo container aboard; water from tank wagons moving, water towers berthed; chuff twice per revolution, whistle on the cord.
 - **Water Tower** stationary block: fills from a water network it stands beside (sprinkler's FluidNode source) or slowly from open water; berthed locomotives drink from the standpipe. Footplate console in `RailConfigHud` (pressure/water bars, fire toggle, whistle); water and fire save additively, pressure deliberately does not.
@@ -48,12 +53,6 @@
 - `RailTrain` + `TrainState` deleted; `RailConfigHud` loses the train console (grid terminal covers v2); logistics map reads `GridRailBogie`; E-branch for the v1 console removed.
 - Setup 85 scrubs dead scripts off locomotive prefabs (`RemoveMonoBehavioursWithMissingScripts`); prefab shells stay on disk, recipe has been gone since 11.39.0.
 - BREAKING by design: saves holding a v1 locomotive or schedule do not carry it across. This is the MAJOR the retirement waited for.
-
-### 11.41.0-dev - Junctions That Join, Curves That Bend, And A Bill While You Drag
-- **Smooth turns:** yaw now keeps the corridor solver's mitred axis (only pitch follows ground), and `RailTrack` derives signed curvature from its link graph to fan sleepers radially and stretch rails to arc length - rigid boxes no longer gap outboard on a bend. Rail fillets ask for 2.75 m minimum radius, not the road's 1.25 m.
-- **Auto-junctions delivered:** a run crossing existing track splices a station at the crossed cell so it becomes the shared node; promotion counts arm directions (>=3) on every link rebuild, so hand-placement and reloads heal too; fresh junctions route straight through until a player sets points (`railPointsSetByPlayer`, additive save field). Adjacency tightened 1.45 m to 1.10 m with a lateral tie penalty.
-- **`RailCostHud`:** live metres / cells / gauge and per-material need-vs-have while dragging, from the same plan the ghost and commit use; refusal named on the card in amber.
-- **Formation x3:** sleeper 4.5 m, gauge 3.15 m, rail heads 0.33 m, ballast bed 6.3 m; step 92 re-gauges the bogie from the same number. Setup 85/92/93 apply it to old prefabs via idempotent geometry-only re-gauge passes.
 
 ### Era Transition Feel
 

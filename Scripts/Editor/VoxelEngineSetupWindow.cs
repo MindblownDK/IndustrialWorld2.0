@@ -879,7 +879,7 @@ namespace VoxelEngine.EditorTools
                 () => IndustrialWorld.EditorTools.RailSignalSetup.RunStep94(), 62);
             AddWizardButton(scroll, "95. Build Steampunk Displays & Schedules\n(Split-flap, nixie, analog + train schedule block \u2014 Non-Destructive)",
                 () => IndustrialWorld.EditorTools.RailDisplaySetup.RunStep95(), 62);
-            AddWizardButton(scroll, "96. Build the Steam Railway\n(Steam locomotive + water tower \u2014 needs 95 \u2014 Non-Destructive)",
+            AddWizardButton(scroll, "96. Build the Steam Railway\n(Steam engine + grand water tower \u2014 needs 95 \u2014 Non-Destructive)",
                 () => IndustrialWorld.EditorTools.RailSteamSetup.RunStep96(), 62);
 
             AddSpacer(scroll, 20);

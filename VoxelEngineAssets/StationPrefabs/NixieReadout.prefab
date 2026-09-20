@@ -9,8 +9,8 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 4904058962085894102}
-  - component: {fileID: 255588468684093896}
   - component: {fileID: 2097490403411636730}
+  - component: {fileID: 2698893134826639982}
   m_Layer: 0
   m_Name: NixieReadout
   m_TagString: Untagged
@@ -34,22 +34,6 @@ Transform:
   - {fileID: 7792925426002907133}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &255588468684093896
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 4080954801765159737}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: cfdbd080856854349a63b82e86a5eed4, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.RailDisplayScreen
-  kind: 1
-  source: 3
-  customText: INDUSTRIAL WORLD
-  rows: 1
 --- !u!114 &2097490403411636730
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -69,6 +53,22 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 4294967295
   wattsPerSecond: 8
+--- !u!114 &2698893134826639982
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4080954801765159737}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bd910311dbbf14940b26df8024ff0df8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.RailDisplayScreen
+  kind: 0
+  source: 0
+  customText: INDUSTRIAL WORLD
+  rows: 4
 --- !u!1 &5478974834090040677
 GameObject:
   m_ObjectHideFlags: 0

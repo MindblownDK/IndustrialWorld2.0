@@ -889,6 +889,9 @@ namespace VoxelEngine.Player
                 var railStation = hit.collider.GetComponentInParent<VoxelEngine.Building.RailStation>();
                 if (railStation != null) { VoxelEngine.UI.RailConfigHud.OpenStation(railStation); return; }
 
+                var waterTower = hit.collider.GetComponentInParent<VoxelEngine.Building.WaterTower>();
+                if (waterTower != null) { UI.GameUIController.Instance?.OpenMachine(waterTower); return; }
+
                 var scheduleBlock = hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridTrainScheduleBlock>();
                 if (scheduleBlock != null) { VoxelEngine.UI.TrainScheduleHud.Open(scheduleBlock); return; }
 

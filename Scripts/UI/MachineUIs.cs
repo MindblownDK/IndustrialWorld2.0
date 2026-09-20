@@ -1247,5 +1247,40 @@ namespace VoxelEngine.UI
             panel.Add(T.Muted("Disposes of excess petroleum cuts and off-gases. Automatically siphons overflowing product tanks from adjacent distillation plants to keep refining lines moving."));
             return panel;
         }
+
+        // ════════════════════════════════════════════════════════════
+        //                       WATER TOWER
+        // ════════════════════════════════════════════════════════════
+        /// <summary>Level gauge for the grand water tower (12.5.0). A machine-card
+        /// panel on the right dock with a steampunk brass accent, because the UI
+        /// matches the block: rail and steam hardware wears brass.</summary>
+        public static VisualElement WaterTowerPanel(VoxelEngine.Building.WaterTower t)
+        {
+            if (t == null) return T.MachinePanel();
+            Color brass = LcdHudTheme.Brass;
+            Color water = new Color(0.20f, 0.50f, 0.92f);
+            var p = T.MachinePanel();
+            p.Add(BuildHeader("💧", "Water Tower", t.StatusText,
+                t.IsFull ? T.AccentGreen : t.IsFilling ? T.AccentCyan : T.AccentAmber, brass));
+            p.Add(T.AccentDivider(brass));
+
+            p.Add(T.StatRow("🛢", "Stored", $"{t.stored:0} / {t.capacity:0} L", brass));
+            p.Add(T.StatRow("📶", "Level", $"{t.Fill01 * 100f:0}%", T.TextSecondary));
+            p.Add(T.StatRow("🚰", "Supply", t.IsFull ? "Tank full"
+                : t.lastSource == VoxelEngine.Building.WaterTower.TowerSource.Network ? "Water network"
+                : t.lastSource == VoxelEngine.Building.WaterTower.TowerSource.OpenWater ? "Open water"
+                : "No source", T.TextSecondary));
+            p.Add(T.Divider());
+
+            p.Add(T.Subtitle("Tank"));
+            p.Add(TankRow(
+                T.TankGauge("WATER", t.Fill01, water, $"{t.stored:0} L", 120, 90)
+            ));
+
+            p.Add(T.Spacer(8));
+            p.Add(T.Muted("Stands beside a water network to drink from it, or by a pond to seep full. " +
+                "Berth a thirsty engine within reach of the spout and the boiler fills itself."));
+            return p;
+        }
     }
 }

@@ -37,8 +37,8 @@ namespace VoxelEngine.Core
     public static class GameVersion
     {
         // ── Bump these when you ship ──────────────────────────────────────
-        public const int    Major = 9;
-        public const int    Minor = 55;
+        public const int    Major = 12;
+        public const int    Minor = 5;
         public const int    Patch = 0;
 
         /// <summary>
