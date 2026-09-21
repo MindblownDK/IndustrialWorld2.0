@@ -1,9 +1,31 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.10.0-dev`
+**Current Version:** `12.11.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.11.0-dev] Girders Across The Grid - Ship Modules Get Structured Steel
+
+**Type:** MINOR - presentation-only restyle of sixteen grid block panels onto the existing industrial instruments. No behaviour, save, recipe or setup changes.
+
+**GitHub title:** `[12.11.0-dev] Girders across the grid - ship modules get structured steel`
+
+#### The same steel, a second hangar
+
+No new theme this round: the sixteen grid modules move onto the `IndustrialTheme` instruments from 12.10 - girder frame with bolt dots, hazard-block divider, tri-lamp status stack. Same static styling, safe under the machine cadence rebuilds, and the `ThemeFrame` tags keep the girders on the panel when the card scrolls.
+
+#### The grid modules
+
+Liquid tank, gas tank, H2/O2 generator, cargo container, ship refinery and chemical plant (through the shared processor builder), electric furnace, drill, landing gear, wheel, sliding door, grid biofarm, exhaust scrubber, gas vent, flare stack, air vent and the generic fallback card all move onto the new chrome. Every value, slot, recipe list, slider, toggle and hint is preserved - only the instruments changed. The bespoke consoles (battery, vault, harvester, locator, satellites, season monitor, LED and light, rail coupler) stay on their own instruments.
+
+#### Manual steps in Unity
+
+1. Apply the patch and recompile.
+2. No setup re-run is needed: no new blocks, items or recipes.
+3. Press E on each module: girders, hazard divider and lamps on every card.
+4. Check the lamps read true: red when off, unpowered or starved; green when running, working, open, locked, grounded or holding stock; amber when idle.
+5. Confirm drain, gas type select and fill dock, recipe select, gear and wheel toggles, door sliders, and the ship terminal button all behave as before.
 
 ### [12.10.0-dev] Girders And Warning Lamps - Industrial Machines Get Structured Steel
 

@@ -1,9 +1,9 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.10.0-dev`
-**Roadmap Version:** `12.10.0-dev`
-**Date:** 2026-09-20
+**Current Version:** `12.11.0-dev`
+**Roadmap Version:** `12.11.0-dev`
+**Date:** 2026-09-21
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
@@ -45,11 +45,6 @@
 ### 12.7.0-dev - Targeting Computers (Advanced High-Tech)
 - **High-tech instruments** (`HighTechTheme`): corner-bracket holo frame with a status-reactive accent, scanline divider, segmented cell meter, hero numeric readout. Static styling, safe under the machine cadence.
 - **Nuclear + hydrogen lines restyled** (`MachineUIs`): reactor core, portable reactor, enrichment centrifuge, waste reprocessor, electrolyser, hydrogen engine. All values, slots and hints preserved; steam turbine and water tower wait for the rail-polish round, quarry stays industrial. No setup changes.
-
-### 12.6.0-dev - Brass Needles And A Firebox (Railway Side Dock)
-- **Steampunk instruments** (`SteampunkTheme`): true analog dials (brass bezel, cream face, tick ring, red needle, redline), riveted dividers, brass selector keys; a text-field focus guard joins the refresh and hotkey guards.
-- **Rail consoles docked** (`RailPanels` via `OpenMachine`): station, switch, footplate, schedule, display; the bogie merges into the docked truck card (retitled Bogie) with its auto-snap toggle, service note and live speed. The three modal HUDs are deleted.
-- **Firebox slot** on `GridSteamEngine`: burns first with tender fallback, persists through the container snapshot. Footplate shows pressure/water/RPM dials beside the slot. No setup changes.
 
 ### Era Transition Feel
 
@@ -656,6 +651,12 @@ spends the thing the route book was built to hold.
 ### Crude Fractionation, Product Use & Flare Disposal
 
 *(shipped in 9.38.0-dev, first part — `Scripts/Crafting/DistillationPlant.cs`: the dedicated plant
+machine, one feed tank + six typed product tanks + `PlantFluidStore`; `Scripts/Crafting/OilRefinery.cs`
+walked back to its legacy machine and both refineries lost the retired fuel chain (refined oil / heavy
+fuel oil / marine gas oil); `Scripts/Items/LiquidType.cs`: LPG/Naphtha/Kerosene/Diesel/Gasoline
+appended with densities and gauge colours; Setup Step 69 (`PetroleumColumnSetup.cs`) authors the
+plant-hall model with an analog dial above every outlet and inlet, the Atmospheric Cut, the Refined Oil
+re-runistillationPlant.cs`: the dedicated plant
 machine, one feed tank + six typed product tanks + `PlantFluidStore`; `Scripts/Crafting/OilRefinery.cs`
 walked back to its legacy machine and both refineries lost the retired fuel chain (refined oil / heavy
 fuel oil / marine gas oil); `Scripts/Items/LiquidType.cs`: LPG/Naphtha/Kerosene/Diesel/Gasoline

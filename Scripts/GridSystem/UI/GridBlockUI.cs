@@ -109,7 +109,8 @@ namespace VoxelEngine.GridSystem.UI
                 tank.Fill01 >= 0.99f ? "FULL" : "OK",
                 tank.Fill01 >= 0.99f ? T.AccentAmber : T.AccentGreen);
             p.Add(hdr);
-            p.Add(T.AccentDivider(tank.liquidType.Color()));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(tank.stored > 0.001f ? 2 : 1));
 
             // Visual tank gauge.
             var gaugeRow = Row();
@@ -169,6 +170,7 @@ namespace VoxelEngine.GridSystem.UI
                 VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
             }, T.AccentRed));
             p.Add(actions);
+            IndustrialTheme.Frame(p);
             return p;
         }
 
@@ -181,7 +183,8 @@ namespace VoxelEngine.GridSystem.UI
                 tank.Fill01 >= 0.99f ? "FULL" : "OK",
                 tank.Fill01 >= 0.99f ? T.AccentAmber : T.AccentGreen);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentCyan));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(tank.stored > 0.001f ? 2 : 1));
 
             var gaugeRow = Row();
             gaugeRow.style.justifyContent = Justify.Center;
@@ -240,6 +243,7 @@ namespace VoxelEngine.GridSystem.UI
                 p.Add(T.Muted("Place a Portable Hydrogen Tank or a hydrogen jetpack (Hydrogen Boost / Hybrid) here to fill it from bulk ship H₂."));
             }
 
+            IndustrialTheme.Frame(p);
             return p;
         }
 
@@ -251,7 +255,8 @@ namespace VoxelEngine.GridSystem.UI
                      : gen.Status == "No Power" ? T.AccentRed : T.AccentAmber;
             var (hdr, _, _, _) = T.HeaderRow("⚗ H2/O2 Generator", gen.Status.ToUpper(), sc);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentCyan));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(gen.Status == "Producing" ? 2 : gen.Status == "No Power" ? 0 : 1));
 
             // Three tanks: water buffer + H₂ and O₂ outputs.
             var gaugeRow = Row();
@@ -289,6 +294,7 @@ namespace VoxelEngine.GridSystem.UI
                 for (int i = 0; i < gen.iceInput.Size; i++)
                     grid.Add(slot(gen.iceInput, i, gen.iceInput.GetSlot(i), false, true));
             p.Add(grid);
+            IndustrialTheme.Frame(p);
             return p;
         }
 
@@ -509,7 +515,8 @@ namespace VoxelEngine.GridSystem.UI
                 cc.Fill01 >= 0.99f ? "FULL" : "OK",
                 cc.Fill01 >= 0.99f ? T.AccentRed : T.AccentGreen);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentGold));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(cc.Fill01 >= 0.99f ? 1 : 2));
 
             // Mass-cap header (the headline "total weight at top of inventory").
             p.Add(GridUIHelpers.WeightCapHeader(cc.CurrentMassKg, cc.maxMassKg));
@@ -547,6 +554,7 @@ namespace VoxelEngine.GridSystem.UI
             p.Add(T.Spacer(6));
             p.Add(T.SmallButton("🛰  Open Ship Terminal",
                 () => VoxelEngine.UI.GameUIController.Instance?.OpenGridTerminal(cc.Grid), T.AccentCyan));
+            IndustrialTheme.Frame(p);
             return p;
         }
 
@@ -1976,7 +1984,8 @@ namespace VoxelEngine.GridSystem.UI
             var (hdr, _, _, _) = T.HeaderRow(title, running ? "PROCESSING" : "IDLE",
                 running ? T.AccentGreen : T.AccentAmber);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentCyan));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(running ? 2 : 1));
 
             p.Add(T.StatRow("⚡", "Power Use", PowerFormat.Watts(powerDraw), T.AccentGold));
             if (running)
@@ -2017,6 +2026,7 @@ namespace VoxelEngine.GridSystem.UI
                     p.Add(RecipeButton(r.GetDisplayName(), RecipeSummary(r), selected == r, current == r,
                         () => { onSelect(captured); VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel(); }));
                 }
+            IndustrialTheme.Frame(p);
             return p;
         }
 
@@ -2100,7 +2110,8 @@ namespace VoxelEngine.GridSystem.UI
             var (hdr, _, _, _) = T.HeaderRow("🔥 Ship Electric Furnace",
                 f.IsSmelting ? "SMELTING" : "IDLE", f.IsSmelting ? T.AccentGreen : T.AccentAmber);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentGold));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(f.IsSmelting ? 2 : 1));
 
             p.Add(T.StatRow("⚡", "Power Use", PowerFormat.Watts(f.PowerDraw), T.AccentGold));
             if (f.IsSmelting) { var (bar,_) = T.ProgressBar(f.Progress01, T.AccentGreen, 8, true); p.Add(bar); }
@@ -2121,6 +2132,7 @@ namespace VoxelEngine.GridSystem.UI
             var og = T.SlotGrid(f.outputC.Size);
             for (int i = 0; i < f.outputC.Size; i++) og.Add(slot(f.outputC, i, f.outputC.GetSlot(i), false, true));
             p.Add(og);
+            IndustrialTheme.Frame(p);
             return p;
         }
 
@@ -2132,7 +2144,8 @@ namespace VoxelEngine.GridSystem.UI
             var (hdr, _, _, _) = T.HeaderRow("⛏ Mining Drill",
                 d.IsActive ? "MINING" : "IDLE", d.IsActive ? T.AccentGreen : T.AccentAmber);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentGold));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(d.IsActive ? 2 : 1));
 
             p.Add(T.StatRow("⚡", "Power Use", PowerFormat.Watts(d.PowerDraw), T.AccentGold));
             p.Add(T.StatRow("◎", "Radius", $"{d.drillRadius:0.#} m", T.AccentCyan));
@@ -2141,6 +2154,7 @@ namespace VoxelEngine.GridSystem.UI
             var g = T.SlotGrid(d.buffer.Size);
             for (int i = 0; i < d.buffer.Size; i++) g.Add(slot(d.buffer, i, d.buffer.GetSlot(i), false, true));
             p.Add(g);
+            IndustrialTheme.Frame(p);
             return p;
         }
 
@@ -2152,7 +2166,8 @@ namespace VoxelEngine.GridSystem.UI
                 lg.IsLocked ? "LOCKED" : "UNLOCKED",
                 lg.IsLocked ? T.AccentGreen : T.AccentAmber);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentGold));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(lg.IsLocked ? 2 : 1));
 
             p.Add(T.StatRow("🔒", "Lock Strength", PowerFormat.Newtons(lg.lockStrength), T.AccentCyan));
             p.Add(T.Spacer(6));
@@ -2168,6 +2183,7 @@ namespace VoxelEngine.GridSystem.UI
                 VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
             }, lg.autoLock ? T.AccentTeal : (Color?)null));
             p.Add(row);
+            IndustrialTheme.Frame(p);
             return p;
         }
 
@@ -2179,7 +2195,8 @@ namespace VoxelEngine.GridSystem.UI
                 wheel.IsGrounded ? "GROUNDED" : "AIRBORNE",
                 wheel.IsGrounded ? T.AccentGreen : T.AccentAmber);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentCyan));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(wheel.IsGrounded ? 2 : 1));
             p.Add(T.StatRow("", "Power Use", PowerFormat.Watts(wheel.PowerDraw), T.AccentGold));
             p.Add(T.StatRow("", "Drive Force", PowerFormat.Newtons(wheel.driveForce), T.AccentCyan));
             p.Add(T.StatRow("", "Spring", PowerFormat.Newtons(wheel.springForce), T.AccentCyan));
@@ -2198,6 +2215,7 @@ namespace VoxelEngine.GridSystem.UI
                 wheel.isSteerable = !wheel.isSteerable;
                 VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
             }, wheel.isSteerable ? T.AccentGreen : T.BgSlot));
+            IndustrialTheme.Frame(p);
             return p;
         }
 
@@ -2319,7 +2337,8 @@ namespace VoxelEngine.GridSystem.UI
             Color stateColor = !door.Enabled ? T.AccentDim : !door.HasPower ? T.AccentRed : door.IsOpen ? T.AccentGreen : T.AccentAmber;
             var (hdr, _, _, _) = T.HeaderRow("▣ " + door.SourceName, state, stateColor);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentCyan));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(!door.Enabled || !door.HasPower ? 0 : door.IsOpen ? 2 : 1));
 
             p.Add(T.StatRow("⚡", "Power Use", PowerFormat.Watts(door.PowerDraw), T.AccentGold));
             p.Add(T.StatRow("⇆", "Slide", $"{door.slideDistance:0.##} m", T.AccentCyan));
@@ -2350,6 +2369,7 @@ namespace VoxelEngine.GridSystem.UI
             p.Add(SliderRow("Hold Time", door.motionGraceSeconds, 0.25f, 10f, v => door.motionGraceSeconds = v, "0.25s", "10s"));
             p.Add(SliderRow("Slide Speed", door.slideSpeed, 1f, 20f, v => door.slideSpeed = v, "1", "20"));
             p.Add(T.Muted("Motion mode opens the door when a player is nearby and closes after the hold time."));
+            IndustrialTheme.Frame(p);
             return p;
         }
 
@@ -2640,7 +2660,8 @@ namespace VoxelEngine.GridSystem.UI
                        farm.Status == "No Power" ? T.AccentRed : T.AccentAmber;
             var (hdr, _, _, _) = T.HeaderRow($"🌿 {farm.blockName}", farm.Status.ToUpperInvariant(), sc);
             p.Add(hdr);
-            p.Add(T.AccentDivider(new Color(0.35f, 0.85f, 0.45f)));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(farm.Status == "Producing" ? 2 : farm.Status == "No Power" ? 0 : 1));
 
             var gaugeRow = Row();
             gaugeRow.style.justifyContent = Justify.SpaceAround;
@@ -2665,6 +2686,7 @@ namespace VoxelEngine.GridSystem.UI
             p.Add(grid);
             p.Add(T.Spacer(4));
             p.Add(T.Muted("Passive O₂: needs grid power + water tanks + biomass (wheat/corn/seeds). Slower than electrolyser but renewable and ideal for ships & cryobeds."));
+            IndustrialTheme.Frame(p);
             return p;
         }
 
@@ -2673,12 +2695,13 @@ namespace VoxelEngine.GridSystem.UI
             var p = T.MachinePanel();
             var (hdr, _, _, _) = T.HeaderRow(block.blockName, "INFO", T.AccentCyan);
             p.Add(hdr);
-            p.Add(T.AccentDivider());
+            p.Add(IndustrialTheme.HazardDivider());
             p.Add(T.StatRow("❤", "Integrity", $"{block.currentHP:0} / {block.maxHP:0}", IntegrityColor(block)));
             p.Add(T.StatRow("⚖", "Mass", MassFormat.Format(block.TotalMass), T.AccentCyan));
             if (block.PowerDraw > 0)   p.Add(T.StatRow("⚡", "Power Use", PowerFormat.Watts(block.PowerDraw), T.AccentGold));
             if (block.PowerOutput > 0) p.Add(T.StatRow("🔌", "Power Out", PowerFormat.Watts(block.PowerOutput), T.AccentGreen));
             AddThermalRow(p, block);
+            IndustrialTheme.Frame(p);
             return p;
         }
 
@@ -2750,7 +2773,8 @@ namespace VoxelEngine.GridSystem.UI
 
             var (hdr, _, _, _) = T.HeaderRow("◈ " + scrub.SourceName, state, stateColor);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentAmber));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(!scrub.Enabled || !online ? 0 : scrub.IsWorking ? 2 : 1));
             p.Add(T.Spacer(4));
 
             p.Add(GridUIHelpers.SectionTitle("Sealed Compartment"));
@@ -2831,6 +2855,7 @@ namespace VoxelEngine.GridSystem.UI
             p.Add(T.Muted("Heat and foul gas leave overboard; the vacated air volume is replaced from the gas "
                 + "network through the vent ports. On an airless world with no piped oxygen, scrubbing also "
                 + "lowers room pressure — cool a compartment and you may need the Air Vent to hold it up."));
+            IndustrialTheme.Frame(p);
             return p;
         }
 
@@ -2849,7 +2874,8 @@ namespace VoxelEngine.GridSystem.UI
 
             var (hdr, _, _, _) = T.HeaderRow("◈ " + vent.SourceName, state, stateColor);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentCyan));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(!vent.Enabled ? 0 : !open2 ? 1 : vent.HasPower ? 2 : 1));
             p.Add(T.Spacer(4));
 
             p.Add(GridUIHelpers.SectionTitle("Disposal"));
@@ -2926,6 +2952,7 @@ namespace VoxelEngine.GridSystem.UI
             p.Add(T.Muted("Storage first, disposal second: a tank on the run is filled before the vent sees any "
                 + "gas, so a line that ends in a tank never leaks to the wind. A power cut drops the unit to its "
                 + "draft rate instead of trapping the exhaust — the engine keeps running, the plume just thickens."));
+            IndustrialTheme.Frame(p);
             return p;
         }
 
@@ -2949,7 +2976,8 @@ namespace VoxelEngine.GridSystem.UI
 
             var (hdr, _, _, _) = T.HeaderRow("🔥 " + flare.SourceName, state, stateColor);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentOrange));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(!flare.Enabled || flare.OxygenStarved ? 0 : flare.BurnLoad01 > 0.01f ? 2 : 1));
             p.Add(T.Spacer(4));
 
             p.Add(GridUIHelpers.SectionTitle("Thermal Disposal & Flaring"));
@@ -3021,6 +3049,7 @@ namespace VoxelEngine.GridSystem.UI
             p.Add(T.Spacer(4));
             p.Add(T.Muted("Run terminator for excess petroleum cuts and off-gases. Destroys surplus fractions "
                 + "so distillation never stops. Waste heat recovery generator converts burn energy into electric power."));
+            IndustrialTheme.Frame(p);
             return p;
         }
 
@@ -3062,7 +3091,8 @@ namespace VoxelEngine.GridSystem.UI
 
             var (hdr, _, _, _) = T.HeaderRow("◉ " + vent.SourceName, state, stateColor);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentCyan));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(!vent.Enabled || !online ? 0 : vent.IsWorking ? 2 : 1));
             p.Add(T.Spacer(4));
 
             // Live room telemetry.
@@ -3158,6 +3188,7 @@ namespace VoxelEngine.GridSystem.UI
 
             p.Add(T.Spacer(4));
             p.Add(T.Muted("Oxygen reaches this vent through GAS PIPES only — run a pipe from an oxygen tank to one of the vent's gas ports. Depressurising pumps the room back into those tanks before a spacewalk."));
+            IndustrialTheme.Frame(p);
             return p;
         }
 
