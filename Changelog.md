@@ -1,9 +1,35 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.13.0-dev`
+**Current Version:** `12.14.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.14.0-dev] Engine Room And Helm - Maritime Chromed
+
+**Type:** MINOR - presentation-only restyle of all fourteen maritime block panels, plus a scroller fix port. No behaviour, save, recipe or setup changes.
+
+**GitHub title:** `[12.14.0-dev] Engine room and helm - maritime chromed`
+
+#### The engine room goes industrial
+
+Thirteen panels take the steel: engine, generator, gearbox, bilge pump, marine water pump, both propellers, turbocharger, waterwheel, drive shaft, shaft housing, exhaust pipe and hull. Hazard dividers, girder frames, and lamps wired to each block's own status ladder - critical heat, overstress, choke and missing exhaust read red; running, spinning, pumping and venting read green. The engine's tier-tinted divider retires with the swap; tier still shows in the block name and the coolant section it gates.
+
+#### The helm goes starship
+
+The helm is a nav console, not machinery, so it docks with the starship family: hull divider and status-reactive rails, matching the pilot and locator. Manned reads green, unmanned dim.
+
+#### Fix: maritime scroller keeps frames on the panel
+
+`MaritimeBlockUI.MakeScrollable` ports the 12.9 `ThemeFrame` guard, so the engine, generator and helm frames stay anchored while their content scrolls. Same four-line rule, same behaviour everywhere else.
+
+#### Manual steps in Unity
+
+1. Apply the patch and recompile.
+2. No setup re-run is needed: no new blocks, items or recipes.
+3. Press E on each maritime block: girders or bulkheads, themed divider, and lamps on the thirteen machines.
+4. Check the lamps read true: red on critical heat, overstress shutdown, choke, missing exhaust or oxygen, disconnected turbo, dry seal and soaked hull; green when running, spinning, pumping or venting; amber when idle.
+5. Scroll the tall engine, generator and helm cards fully: frames stay pinned, content slides beneath.
 
 ### [12.13.0-dev] Sparks And Star Charts - World Machines And Nav Consoles Chromed
 

@@ -155,7 +155,14 @@ namespace VoxelEngine.Maritime
         {
             if (panel == null) return panel;
             var children = new List<VisualElement>();
-            foreach (var child in panel.Children()) children.Add(child);
+            foreach (var child in panel.Children())
+            {
+                // Theme frames anchor to the panel corners and stay on the
+                // panel: moved into the scroller they would scroll with the
+                // content and paint over it.
+                if (child.name == "ThemeFrame") continue;
+                children.Add(child);
+            }
             foreach (var child in children) child.RemoveFromHierarchy();
 
             var scroll = new ScrollView(ScrollViewMode.Vertical);
@@ -193,11 +200,8 @@ namespace VoxelEngine.Maritime
             var (hdr, _, _, _) = T.HeaderRow($"⚙ {eng.blockName}", status, statusColor);
             p.Add(hdr);
 
-            // Accent divider colour based on tier.
-            Color accent = eng.tier == EngineTier.Giant ? T.AccentGold
-                         : eng.tier == EngineTier.Medium ? T.AccentOrange
-                         : T.AccentAmber;
-            p.Add(T.AccentDivider(accent));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(eng.CriticalFailure || eng.IsOverstressShutdown || !eng.HasExhaust || eng.OxygenStarved || eng.ExhaustFill01 >= 0.99f ? 0 : eng.IsRunning ? 2 : 1));
 
             // ── Fuel display ──────────────────────────────────────────
             if (eng.fuelKind == MaritimeFuelKind.Liquid)
@@ -502,6 +506,7 @@ namespace VoxelEngine.Maritime
             p.Add(T.Muted("Requires an adjacent Exhaust Pipe to vent gas. " +
                           "Without one the engine chokes and produces zero torque."));
 
+            IndustrialTheme.Frame(p);
             return p;
         }
 
@@ -520,7 +525,8 @@ namespace VoxelEngine.Maritime
 
             var (hdr, _, _, _) = T.HeaderRow("🔌 Maritime Generator", status, statusColor);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentGreen));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(gen.CriticalFailure ? 0 : gen.GeneratedWatts > 1f ? 2 : 1));
 
             // ── Power production ──────────────────────────────────────
             p.Add(GridUIHelpers.SectionTitle("Power Production"));
@@ -600,6 +606,7 @@ namespace VoxelEngine.Maritime
                 }
             }
 
+            IndustrialTheme.Frame(p);
             return p;
         }
 
@@ -615,7 +622,8 @@ namespace VoxelEngine.Maritime
 
             var (hdr, _, _, _) = T.HeaderRow("⚙ Gearbox", status, statusColor);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentOrange));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(gb.IsOverstressed ? 0 : 2));
 
             // ── Two-column: input vs output ───────────────────────────
             p.Add(GridUIHelpers.SectionTitle("Torque & Speed"));
@@ -716,6 +724,7 @@ namespace VoxelEngine.Maritime
                           "automatically becomes the output. Higher ratio = faster output but less " +
                           "torque. Low ratios for heavy props, high ratios for generators."));
 
+            IndustrialTheme.Frame(p);
             return p;
         }
 
@@ -732,7 +741,8 @@ namespace VoxelEngine.Maritime
 
             var (hdr, _, _, _) = T.HeaderRow("💧 Bilge Pump", status, statusColor);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentBlue));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(!hasPower ? 0 : bp.IsActive ? 2 : 1));
 
             p.Add(GridUIHelpers.SectionTitle("Draining"));
             p.Add(T.StatRow("🚿", "Drain Rate", $"{bp.drainRate:0.#} kg/s per hull", T.AccentCyan));
@@ -744,6 +754,7 @@ namespace VoxelEngine.Maritime
             p.Add(T.Muted("Scans nearby hull blocks and removes absorbed water. " +
                           "Essential for untreated-wood ships in storms or after hull breaches."));
 
+            IndustrialTheme.Frame(p);
             return p;
         }
 
@@ -762,7 +773,8 @@ namespace VoxelEngine.Maritime
 
             var (hdr, _, _, _) = T.HeaderRow("🌊 Marine Water Pump", status, statusColor);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentBlue));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(!mwp.IsSubmerged ? 0 : mwp.IsPumping ? 2 : 1));
 
             var gaugeRow = Row();
             gaugeRow.style.justifyContent = Justify.Center;
@@ -779,6 +791,7 @@ namespace VoxelEngine.Maritime
             p.Add(T.Spacer(6));
             p.Add(T.Muted("Sucks water from the ocean and pushes it into connected Water tanks. " +
                           "Place below the waterline. Used for engine coolant supply."));
+            IndustrialTheme.Frame(p);
             return p;
         }
 
@@ -792,7 +805,8 @@ namespace VoxelEngine.Maritime
 
             var (hdr, _, _, _) = T.HeaderRow($"🌀 {prop.blockName}", status, statusColor);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentCyan));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(spinning ? 2 : 1));
 
             p.Add(GridUIHelpers.SectionTitle("Propulsion"));
             p.Add(T.StatRow("⚙", "Speed", $"{prop.CurrentRPM:0} RPM", T.AccentTeal));
@@ -808,6 +822,7 @@ namespace VoxelEngine.Maritime
             p.Add(T.Muted("Thrust = RPM × Submergence × Size. " +
                           "Must be below the waterline to generate thrust."));
 
+            IndustrialTheme.Frame(p);
             return p;
         }
 
@@ -833,7 +848,8 @@ namespace VoxelEngine.Maritime
 
             var (hdr, _, _, _) = T.HeaderRow("⚡ Electrical Propeller", status, statusColor);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentPurple));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(spinning ? 2 : 1));
 
             p.Add(GridUIHelpers.SectionTitle("Propulsion"));
             p.Add(T.StatRow("⚙", "Speed", $"{ep.CurrentRPM:0} RPM", T.AccentTeal));
@@ -854,6 +870,7 @@ namespace VoxelEngine.Maritime
             p.Add(T.Muted("Commanded draw is billed once by the grid power bus. Delivered power sets real RPM and thrust. " +
                           "Must be below the waterline to generate thrust."));
 
+            IndustrialTheme.Frame(p);
             return p;
         }
 
@@ -869,7 +886,8 @@ namespace VoxelEngine.Maritime
 
             var (hdr, _, _, _) = T.HeaderRow("🌀 Turbocharger", status, statusColor);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentGold));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(tc.IsConnected ? 2 : 0));
 
             p.Add(GridUIHelpers.SectionTitle("Boost"));
             p.Add(T.StatRow("📊", "Boost Pressure", $"{tc.BoostPressure:0.##} bar", T.AccentGold));
@@ -887,6 +905,7 @@ namespace VoxelEngine.Maritime
             else
                 p.Add(T.Muted("Connected to a Giant Diesel. The red core glows under load."));
 
+            IndustrialTheme.Frame(p);
             return p;
         }
 
@@ -903,7 +922,8 @@ namespace VoxelEngine.Maritime
 
             var (hdr, _, _, _) = T.HeaderRow("🌊 Waterwheel", status, statusColor);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentTeal));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(spinning ? 2 : 1));
 
             p.Add(GridUIHelpers.SectionTitle("Mechanical"));
             p.Add(T.StatRow("⚙", "Speed", $"{ww.CurrentRPM:0} RPM", T.AccentTeal));
@@ -914,6 +934,7 @@ namespace VoxelEngine.Maritime
             p.Add(T.Muted("DUAL-MODE: Generates torque from water flow when stationary. " +
                           "Produces paddle thrust when driven by a shaft on a moving ship."));
 
+            IndustrialTheme.Frame(p);
             return p;
         }
 
@@ -930,7 +951,8 @@ namespace VoxelEngine.Maritime
 
             var (hdr, _, _, _) = T.HeaderRow("🔗 Drive Shaft", status, statusColor);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentCyan));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(spinning ? 2 : 1));
 
             p.Add(T.StatRow("⚙", "Speed", $"{ds.CurrentRPM:0} RPM", T.AccentTeal));
             p.Add(T.StatRow("⚡", "Max Safe RPM", $"{ds.maxSafeRPM:0} RPM", T.AccentAmber));
@@ -939,6 +961,7 @@ namespace VoxelEngine.Maritime
             p.Add(T.Muted("Transmits torque from an engine to propellers, gearboxes, or generators. " +
                           "If disabled or destroyed, the propulsion chain stops downstream."));
 
+            IndustrialTheme.Frame(p);
             return p;
         }
 
@@ -954,12 +977,14 @@ namespace VoxelEngine.Maritime
 
             var (hdr, _, _, _) = T.HeaderRow("◉ Watertight Shaft Housing", status, statusColor);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentTeal));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(!housing.waterproof ? 0 : spinning ? 2 : 1));
             p.Add(T.StatRow("⚙", "Shaft Speed", $"{housing.CurrentRPM:0} RPM", T.AccentTeal));
             p.Add(T.StatRow("⚡", "Max Safe RPM", $"{housing.maxSafeRPM:0} RPM", T.AccentAmber));
             p.Add(T.StatRow("💧", "Hull Seal", housing.waterproof ? "WATERTIGHT" : "CHECK SEAL", housing.waterproof ? T.AccentGreen : T.AccentRed));
             p.Add(T.Spacer(6));
             p.Add(T.Muted("A sealed hull block with a through-shaft. Use it where a mechanical line crosses the water-facing hull, then belt-link parallel shafts to branch additional outputs."));
+            IndustrialTheme.Frame(p);
             return p;
         }
 
@@ -975,7 +1000,8 @@ namespace VoxelEngine.Maritime
 
             var (hdr, _, _, _) = T.HeaderRow("💨 Exhaust Pipe", status, statusColor);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentAmber));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(ex.IsVenting ? 2 : 1));
 
             p.Add(T.StatRow("🌫", "Smoke Rate", $"{ex.smokeRate:0}/s", T.AccentAmber));
             p.Add(T.StatRow("💨", "Status", ex.IsVenting ? "Venting gas from adjacent engine(s)" : "No active engines adjacent", T.TextSecondary));
@@ -998,6 +1024,7 @@ namespace VoxelEngine.Maritime
                           "Without one, exhaust gas backs up and the engine chokes. " +
                           "Emits visible smoke while venting — black for Giant Diesel, grey for small engines."));
 
+            IndustrialTheme.Frame(p);
             return p;
         }
 
@@ -1013,7 +1040,7 @@ namespace VoxelEngine.Maritime
 
             var (hdr, _, _, _) = T.HeaderRow("🧭 Helm", status, statusColor);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentGold));
+            p.Add(StarshipTheme.HullDivider(statusColor));
 
             if (helm.IsActive)
             {
@@ -1034,6 +1061,7 @@ namespace VoxelEngine.Maritime
             p.Add(T.Muted("Walk up and press E to take the helm. " +
                           "W = throttle up, S = throttle down, A/D = steer left/right."));
 
+            StarshipTheme.Frame(p, statusColor);
             return p;
         }
 
@@ -1049,7 +1077,8 @@ namespace VoxelEngine.Maritime
 
             var (hdr, _, _, _) = T.HeaderRow($"🧱 {hull.blockName}", status, statusColor);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentTeal));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(hull.WaterlogFill01 > 0.5f ? 0 : hull.WaterloggedMass > 0.1f ? 1 : 2));
 
             p.Add(GridUIHelpers.SectionTitle("Material"));
             p.Add(T.StatRow("🌊", "Buoyancy", $"{hull.buoyancyFactor * 100f:0}%", T.AccentBlue));
@@ -1070,6 +1099,7 @@ namespace VoxelEngine.Maritime
                               "Use a Bilge Pump to drain."));
             }
 
+            IndustrialTheme.Frame(p);
             return p;
         }
 

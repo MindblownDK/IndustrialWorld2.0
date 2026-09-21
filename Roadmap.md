@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.13.0-dev`
-**Roadmap Version:** `12.13.0-dev`
+**Current Version:** `12.14.0-dev`
+**Roadmap Version:** `12.14.0-dev`
 **Date:** 2026-09-21
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,10 @@
 
 ## 0. Recently Done
 
+### 12.14.0-dev - Engine Room And Helm (Maritime)
+- **Maritime chromed** (`MaritimeBlockUI`): thirteen engine-room panels industrial (hazard divider, girder frame, status lamps), helm starship (hull divider, reactive rails). Tier divider retired; all values, slots, gauges and hints preserved.
+- **Fix:** `MakeScrollable` ports the 12.9 `ThemeFrame` guard, so tall-card frames stay pinned while content scrolls. No setup changes.
+
 ### 12.13.0-dev - Sparks And Star Charts (Last Machine Panels)
 - **World machines chromed** (industrial): processor shell (refinery, chemical, distillation, cracker), wind turbine, voltage station, drone port, fluid pump, armor station, plus world battery, turrets, container, furnaces, coal generator, powerstation (`GameUIController`). Status lamps where the block has a running state.
 - **Nav consoles chromed** (starship): observatory, auto-run pilot, connector, route recorder, refuel pad. Every fallback branch framed on its own path. No setup changes.
@@ -45,10 +49,6 @@
 ### 12.10.0-dev - Girders And Warning Lamps (Industrial Steel)
 - **Industrial instruments** (`IndustrialTheme`): girder frame with bolt dots, hazard-block divider, tri-lamp status stack. Static styling, safe under the machine cadence.
 - **Workhorses restyled** (`MachineUIs`): crusher, assembler, funnel, splitter, quarry, jack pump, biofarm, flare stack, gas tank, steam turbine. All values, slots, recipes and hints preserved. No setup changes.
-
-### 12.9.0-dev - Rivets On The Frame (Rail Polish + Scroller Fix)
-- **Fix:** `MakeScrollable` leaves tagged `ThemeFrame` elements on the panel, so starship rails no longer scroll with the content or paint over titles and slots.
-- **Steampunk frame** (`SteampunkTheme.Frame`): riveted brass inner border on all five rail consoles; water tower gains a TANK dial, riveted divider and frame; bogie gains seven brass selector keys, riveted divider and frame. No setup changes.
 
 ### Era Transition Feel
 
