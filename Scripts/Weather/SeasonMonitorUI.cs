@@ -23,10 +23,14 @@ namespace VoxelEngine.Weather
                 isPowered ? "ONLINE" : "NO POWER",
                 isPowered ? T.AccentGreen : T.AccentAmber);
             p.Add(hdr);
-            p.Add(T.AccentDivider(isPowered ? T.AccentCyan : T.AccentAmber));
+            p.Add(StarshipTheme.HullDivider(isPowered ? T.AccentGreen : T.AccentAmber));
             p.Add(T.Spacer(6));
 
-            if (sm == null) return p;
+            if (sm == null)
+            {
+                StarshipTheme.Frame(p, T.AccentAmber);
+                return p;
+            }
 
             if (!isPowered)
             {
@@ -202,6 +206,7 @@ namespace VoxelEngine.Weather
             pwrRow.Add(statusLabel);
             p.Add(pwrRow);
 
+            StarshipTheme.Frame(p, isPowered ? T.AccentGreen : T.AccentAmber);
             return p;
         }
 

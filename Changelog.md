@@ -1,9 +1,35 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.12.0-dev`
+**Current Version:** `12.13.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.13.0-dev] Sparks And Star Charts - World Machines And Nav Consoles Chromed
+
+**Type:** MINOR - presentation-only restyle of eighteen side-docked machine panels onto the industrial and starship instruments. No behaviour, save, recipe or setup changes.
+
+**GitHub title:** `[12.13.0-dev] Sparks and star charts - world machines and nav consoles chromed`
+
+#### The world machines go industrial
+
+Thirteen panels take the steel: the shared processor shell (oil refinery, chemical plant, distillation plant, catalytic cracker through one builder), wind turbine, voltage station, drone port, fluid pump, armor station, and the seven right-side cards in `GameUIController` (world battery, turret defences, container, solid-fuel furnace, coal generator, electric furnace, powerstation). Hazard dividers, girder frames, and lamps that read the block's own state - burning, generating, smelting, in flight, charging. Panels whose status already shows in bespoke chrome (voltage load bar, turret stock strip, passive chests) take divider and frame only.
+
+#### The nav consoles go starship
+
+The planetary observatory, auto-run pilot, connector pad, route recorder and refuel pad dock as starship telemetry with hull dividers and status-reactive rails, matching the grid-side season monitor. Every early-return branch (missing block, local-only routes, unavailable machines) is framed on its own path so no fallback card ships bare.
+
+#### Deliberately deferred
+
+Maritime (fourteen panels) and storage (eleven panels) are each a full round on their own and follow next. The LCD centre screens (production stats, recipe browser, ship control centre), the drop/void confirm modals, the crafting-bench card and the item-ports overlay stay on their own chrome - they are player screens, not machine cards. The two unbound UIDocument panels (`SharedMachinePanel`, `RecipeSelectionPanel`) are unused legacy and untouched.
+
+#### Manual steps in Unity
+
+1. Apply the patch and recompile.
+2. No setup re-run is needed: no new blocks, items or recipes.
+3. Press E on each machine: girders or bulkheads, themed divider, and lamps where fitted.
+4. Check the lamps read true: red when unpowered, stalled or switched off; green when burning, generating, smelting, flying or charging; amber when idle.
+5. Confirm recipe books, defence toggles and sliders, ports overlays, the unavailable-machine fallbacks and the route recorder's local-only branch all behave as before.
 
 ### [12.12.0-dev] Chrome On Every Console - The Grid Set Is Complete
 

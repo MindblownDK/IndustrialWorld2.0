@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.12.0-dev`
-**Roadmap Version:** `12.12.0-dev`
+**Current Version:** `12.13.0-dev`
+**Roadmap Version:** `12.13.0-dev`
 **Date:** 2026-09-21
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,19 @@
 
 ## 0. Recently Done
 
+### 12.13.0-dev - Sparks And Star Charts (Last Machine Panels)
+- **World machines chromed** (industrial): processor shell (refinery, chemical, distillation, cracker), wind turbine, voltage station, drone port, fluid pump, armor station, plus world battery, turrets, container, furnaces, coal generator, powerstation (`GameUIController`). Status lamps where the block has a running state.
+- **Nav consoles chromed** (starship): observatory, auto-run pilot, connector, route recorder, refuel pad. Every fallback branch framed on its own path. No setup changes.
+- **Deferred:** maritime and storage await their own rounds; LCD centre screens, confirm modals and the crafting bench stay on player chrome.
+
+### 12.12.0-dev - Chrome On Every Console (GridBlockUI Finale)
+- **Last ten consoles chromed** (`GridBlockUI`): battery (industrial), vault + harvester (high-tech), locator, satellites, season monitor (starship), coupler (steampunk), LED + light (industrial, color-reactive dividers kept). Bespoke visuals and live loops untouched.
+- **Preserved:** all values, slots, modes, sliders, color keys and hints; offline satellite branch framed on both paths. No setup changes.
+
+### 12.11.0-dev - Girders Across The Grid (Industrial Grid Modules)
+- **Grid modules restyled** (`GridBlockUI`): liquid/gas tanks, H2O2, cargo, refinery/chemical plant, furnace, drill, landing gear, wheel, sliding door, grid biofarm, scrubber, vent, flare, air vent, generic fallback. Girder frame, hazard divider, status lamps on each card.
+- **Preserved:** all values, slots, recipes, sliders, toggles and hints; bespoke consoles (battery, vault, harvester, locator, satellites, season monitor, LED/light, rail coupler) untouched. No setup changes.
+
 ### 12.10.0-dev - Girders And Warning Lamps (Industrial Steel)
 - **Industrial instruments** (`IndustrialTheme`): girder frame with bolt dots, hazard-block divider, tri-lamp status stack. Static styling, safe under the machine cadence.
 - **Workhorses restyled** (`MachineUIs`): crusher, assembler, funnel, splitter, quarry, jack pump, biofarm, flare stack, gas tank, steam turbine. All values, slots, recipes and hints preserved. No setup changes.
@@ -36,11 +49,6 @@
 ### 12.9.0-dev - Rivets On The Frame (Rail Polish + Scroller Fix)
 - **Fix:** `MakeScrollable` leaves tagged `ThemeFrame` elements on the panel, so starship rails no longer scroll with the content or paint over titles and slots.
 - **Steampunk frame** (`SteampunkTheme.Frame`): riveted brass inner border on all five rail consoles; water tower gains a TANK dial, riveted divider and frame; bogie gains seven brass selector keys, riveted divider and frame. No setup changes.
-
-### 12.8.0-dev - Bulkheads And Vector Needles (Ship Sci-Fi)
-- **Starship instruments** (`StarshipTheme`): bulkhead side-rail frame with docking ticks, diamond hull divider, vector needle meter. Static styling, safe under the machine cadence.
-- **Ship systems restyled** (`GridBlockUI`): gatling, ship reactor, solar, ship engine, docking port, ore detector, beacon, cryobed. All values, slots and hints preserved; bespoke consoles (battery, vault, harvester, locator, satellites) untouched. No setup changes.
-- **Fix:** steampunk dial innards compensate the 3px bezel border and sit centred.
 
 ### Era Transition Feel
 

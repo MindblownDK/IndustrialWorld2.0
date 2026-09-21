@@ -25,6 +25,7 @@ namespace VoxelEngine.UI
             {
                 panel.Add(UITheme.Title("Armor Upgrade Station"));
                 panel.Add(UITheme.Muted("Station unavailable."));
+                IndustrialTheme.Frame(panel);
                 return panel;
             }
 
@@ -34,7 +35,8 @@ namespace VoxelEngine.UI
                 station.IsUpgrading ? UITheme.AccentAmber : UITheme.AccentGreen);
             header.Insert(0, UITheme.IconBadge("⚒", UITheme.AccentAmber));
             panel.Add(header);
-            panel.Add(UITheme.AccentDivider(UITheme.AccentAmber));
+            panel.Add(IndustrialTheme.HazardDivider());
+            panel.Add(IndustrialTheme.Lamps(station.IsUpgrading ? 2 : 1));
 
             bool inputsLocked = station.IsUpgrading;
             var slots = new VisualElement();
@@ -115,6 +117,7 @@ namespace VoxelEngine.UI
             timingHint.style.marginTop = 10;
             timingHint.style.whiteSpace = WhiteSpace.Normal;
             panel.Add(timingHint);
+            IndustrialTheme.Frame(panel);
             return panel;
         }
 

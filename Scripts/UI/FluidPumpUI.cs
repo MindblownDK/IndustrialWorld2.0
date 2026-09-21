@@ -26,6 +26,7 @@ namespace VoxelEngine.UI
             {
                 p.Add(UITheme.Title("Liquid Pump"));
                 p.Add(UITheme.Muted("Pump unavailable."));
+                IndustrialTheme.Frame(p);
                 return p;
             }
 
@@ -38,7 +39,8 @@ namespace VoxelEngine.UI
                 pump.IsPowered ? "ONLINE" : "NO POWER",
                 pump.IsPowered ? UITheme.AccentGreen : UITheme.AccentRed);
             p.Add(header);
-            p.Add(UITheme.AccentDivider(accent));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(!pump.IsPowered ? 0 : pump.HasSource ? 2 : 1));
 
             // ── Liquid type selector ────────────────────────────────────────
             var modeRow = new VisualElement();
@@ -164,6 +166,7 @@ namespace VoxelEngine.UI
                 "the pump spawns new liquid without draining the source. Finite pools are drained voxel-by-voxel. " +
                 "Connect liquid pipes to tanks and machines to transport the liquid."));
 
+            IndustrialTheme.Frame(p);
             return p;
         }
     }

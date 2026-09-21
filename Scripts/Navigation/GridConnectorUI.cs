@@ -35,6 +35,7 @@ namespace VoxelEngine.Navigation
             if (connector == null)
             {
                 p.Add(VoxelEngine.UI.UITheme.Body("No connector under the cursor."));
+                VoxelEngine.UI.StarshipTheme.Frame(p, VoxelEngine.UI.UITheme.AccentDim);
                 return p;
             }
 
@@ -49,7 +50,7 @@ namespace VoxelEngine.Navigation
 
             var (hdr, _, _, _) = VoxelEngine.UI.UITheme.HeaderRow("⚓ " + connector.blockName, state, ink);
             p.Add(hdr);
-            p.Add(VoxelEngine.UI.UITheme.AccentDivider(VoxelEngine.UI.UITheme.AccentCyan));
+            p.Add(VoxelEngine.UI.StarshipTheme.HullDivider(ink));
 
             // ── Power / enable ───────────────────────────────────────────────
             var (powerPill, _) = VoxelEngine.UI.UITheme.MachineToggle(on, v =>
@@ -199,6 +200,7 @@ namespace VoxelEngine.Navigation
             p.Add(VoxelEngine.UI.UITheme.Muted("One transfer at a time, because that is what a fitting is. A ship "
                 + "leaves when its own target is met — the pad serves, the shuttle decides."));
             VoxelEngine.UI.UITheme.AnimatePanelBoot(p);
+            VoxelEngine.UI.StarshipTheme.Frame(p, ink);
             return p;
         }
 

@@ -33,10 +33,15 @@ namespace VoxelEngine.Transport
                 powered ? "ONLINE" : "NO POWER",
                 powered ? T.AccentGreen : T.AccentAmber);
             p.Add(hdr);
-            p.Add(T.AccentDivider(powered ? T.AccentCyan : T.AccentAmber));
+            p.Add(VoxelEngine.UI.IndustrialTheme.HazardDivider());
+            p.Add(VoxelEngine.UI.IndustrialTheme.Lamps(port == null || !powered ? 0 : port.IsInFlight ? 2 : 1));
             p.Add(T.Spacer(6));
 
-            if (port == null) return p;
+            if (port == null)
+            {
+                VoxelEngine.UI.IndustrialTheme.Frame(p);
+                return p;
+            }
 
             if (!powered)
             {
@@ -217,6 +222,7 @@ namespace VoxelEngine.Transport
             note.style.fontSize = 9;
             p.Add(note);
 
+            VoxelEngine.UI.IndustrialTheme.Frame(p);
             return p;
         }
     }

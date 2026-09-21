@@ -1901,7 +1901,8 @@ namespace VoxelEngine.UI
             SetBorderRadius(_battStatus, 12);
             head.Add(_battStatus);
             p.Add(head);
-            p.Add(UITheme.AccentDivider(new Color(0.45f, 0.75f, 0.95f)));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(pb.lastChargeInW > 0.5f || pb.lastDischargeOutW > 0.5f || pb.IsChargingItem ? 2 : 1));
 
             // ── Segmented charge gauge + big % ────────────────────────
             var gaugeRow = new VisualElement();
@@ -1976,6 +1977,7 @@ namespace VoxelEngine.UI
             // a device was charging (the dock used to rebuild the panel every tick).
             if (_batterySweepPending) { _battSegSmooth = 0f; _batterySweepPending = false; }
             TickBatteryLiveUI();
+            IndustrialTheme.Frame(p);
             return p;
         }
 
@@ -2388,6 +2390,7 @@ namespace VoxelEngine.UI
                         : energy != null ? "Energy / Relic Turret"
                         : "Auto Turret";
             panel.Add(MakeTitle(name));
+            panel.Add(IndustrialTheme.HazardDivider());
 
             // Live stock strip (EMPTY / LOW / OK) from shared DefenseStatus.
             if (VoxelEngine.Combat.DefenseStatus.TryDescribe(defense, out var stockInfo))
@@ -2589,6 +2592,7 @@ namespace VoxelEngine.UI
                 eHint.style.marginBottom = 4;
                 panel.Add(eHint);
             }
+            IndustrialTheme.Frame(panel);
         }
 
         private static VoxelEngine.Combat.TargetFilter GetDefenseFilter(Component d)
@@ -3478,6 +3482,7 @@ namespace VoxelEngine.UI
             root.Add(panel);
 
             panel.Add(MakeTitle(c.Name));
+            panel.Add(IndustrialTheme.HazardDivider());
 
             // Scroll so the slot grid + advanced port config both fit on small panels.
             var scroll = new ScrollView(ScrollViewMode.Vertical);
@@ -3496,6 +3501,7 @@ namespace VoxelEngine.UI
             // Uses the same shared collapsible widget every machine uses.
             if (_openChest != null)
                 AppendItemPorts(scroll, _openChest);
+            IndustrialTheme.Frame(panel);
         }
 
 
@@ -3724,6 +3730,8 @@ namespace VoxelEngine.UI
             headerRow.Add(pill);
             _liveStatusPill = pill; _liveStatusLabel = pillLabel;
             panel.Add(headerRow);
+            panel.Add(IndustrialTheme.HazardDivider());
+            panel.Add(IndustrialTheme.Lamps(f.IsBurning ? 2 : buildStall.Length > 0 ? 0 : 1));
 
             // ===== Main row: INPUT  ->  [flame + arrow + progress]  ->  OUTPUT =====
             var mainRow = new VisualElement();
@@ -3839,6 +3847,7 @@ namespace VoxelEngine.UI
 
             // Advanced per-face item ports (Input/Fuel/Output routing + filters).
             AppendItemPorts(panel, f);
+            IndustrialTheme.Frame(panel);
         }
 
         // -------- prettier-UI helpers used by furnace + electric furnace --------
@@ -3986,6 +3995,8 @@ namespace VoxelEngine.UI
                 : "0 W";
             headerRow.Add(coalWatt);
             panel.Add(headerRow);
+            panel.Add(IndustrialTheme.HazardDivider());
+            panel.Add(IndustrialTheme.Lamps(!f.userEnabled ? 0 : coalGen != null && coalGen.isOn ? 2 : 1));
 
             panel.Add(MakeSubtitle("Fuel"));
             var row = new VisualElement(); row.style.flexDirection = FlexDirection.Row;
@@ -4030,6 +4041,7 @@ namespace VoxelEngine.UI
 
             // Advanced item ports — auto-feed the fuel slot via pipes.
             AppendItemPorts(panel, f);
+            IndustrialTheme.Frame(panel);
         }
 
         // ----- RIGHT (electric furnace) -----
@@ -4069,6 +4081,8 @@ namespace VoxelEngine.UI
             headerRow.Add(wattLbl);
             _liveWattLabel = wattLbl;
             panel.Add(headerRow);
+            panel.Add(IndustrialTheme.HazardDivider());
+            panel.Add(IndustrialTheme.Lamps(!ef.userEnabled || !online ? 0 : ef.SmeltProgress01 > 0.001f ? 2 : 1));
 
             // Auto-pull toggle: continuously pull smeltable items from nearby chests.
             {
@@ -4204,6 +4218,7 @@ namespace VoxelEngine.UI
 
             // Advanced per-face ITEM ports (route pipes to Input / Output, with filters).
             AppendItemPorts(panel, ef);
+            IndustrialTheme.Frame(panel);
         }
 
         // ----- RIGHT (anvil-style armor upgrades) -----
@@ -6402,7 +6417,8 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                 ps.TotalWatts > 0 ? "ACTIVE" : "EMPTY",
                 ps.TotalWatts > 0 ? UITheme.AccentGold : UITheme.TextMuted);
             p.Add(hdr);
-            p.Add(UITheme.AccentDivider(UITheme.AccentGold));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(ps.TotalWatts > 0 ? 2 : 1));
             p.Add(UITheme.StatRow("⚡", "Total Output", $"{ps.TotalWatts:0} W", UITheme.AccentGold));
             p.Add(UITheme.Divider());
             p.Add(UITheme.Subtitle("PSU Slots (4)"));
@@ -6413,6 +6429,7 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
             p.Add(UITheme.Spacer(8));
             p.Add(UITheme.Muted("Each PSU module adds to the power capacity of the nearest Server Rack. " +
                                 "Only PSU items may be inserted."));
+            IndustrialTheme.Frame(p);
             return p;
         }
     }

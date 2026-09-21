@@ -14,7 +14,7 @@ namespace VoxelEngine.Simulation
             string title = station.IsHighVoltage ? "⚡ High Voltage Grid" : "🔌 Low Voltage Grid";
             var (hdr, _, _, _) = T.HeaderRow(title, "CONNECTED", T.AccentCyan);
             p.Add(hdr);
-            p.Add(T.AccentDivider(station.IsHighVoltage ? T.AccentGold : T.AccentCyan));
+            p.Add(IndustrialTheme.HazardDivider());
 
             // Stats
             p.Add(T.StatRow("⚡", "Total Produced", PowerFormat.Watts(station.TotalProduced), T.AccentGreen));
@@ -36,6 +36,7 @@ namespace VoxelEngine.Simulation
             p.Add(T.Spacer(10));
             p.Add(T.Muted("This panel shows live statistics from the connected power grid network."));
 
+            IndustrialTheme.Frame(p);
             return p;
         }
 

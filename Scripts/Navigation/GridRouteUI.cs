@@ -34,6 +34,7 @@ namespace VoxelEngine.Navigation
             if (recorder == null)
             {
                 p.Add(VoxelEngine.UI.UITheme.Body("No route recorder under the cursor."));
+                VoxelEngine.UI.StarshipTheme.Frame(p, VoxelEngine.UI.UITheme.AccentDim);
                 return p;
             }
 
@@ -47,7 +48,7 @@ namespace VoxelEngine.Navigation
 
             var (hdr, _, _, _) = VoxelEngine.UI.UITheme.HeaderRow("✦ " + recorder.SourceName, state, stateColor);
             p.Add(hdr);
-            p.Add(VoxelEngine.UI.UITheme.AccentDivider(VoxelEngine.UI.UITheme.AccentCyan));
+            p.Add(VoxelEngine.UI.StarshipTheme.HullDivider(stateColor));
             p.Add(VoxelEngine.UI.UITheme.Spacer(4));
 
             IndustrialWorld.Navigation.LocalRouteUI.AddTo(p, recorder);
@@ -57,6 +58,7 @@ namespace VoxelEngine.Navigation
             {
                 p.Add(VoxelEngine.UI.UITheme.Muted("Local recording and navigation are available above without a star map. "
                     + "The legacy interplanetary planner below is only available for cosmic flight routes with a loaded star map."));
+                VoxelEngine.UI.StarshipTheme.Frame(p, stateColor);
                 return p;
             }
 
@@ -101,6 +103,7 @@ namespace VoxelEngine.Navigation
             p.Add(VoxelEngine.UI.UITheme.Muted("Cost is the ship's own arithmetic: its real mass, the thrust it can hold, the energy "
                 + "in its batteries and the load it carries while the trip is being flown. Refit the ship and the "
                 + "plan moves with it — a route is never a promise the engine cannot keep."));
+            VoxelEngine.UI.StarshipTheme.Frame(p, stateColor);
             return p;
         }
 

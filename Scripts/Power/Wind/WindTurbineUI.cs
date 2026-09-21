@@ -40,6 +40,7 @@ namespace VoxelEngine.Power.Wind
             {
                 p.Add(T.Title("Wind Turbine"));
                 p.Add(T.Muted("Turbine unavailable."));
+                VoxelEngine.UI.IndustrialTheme.Frame(p);
                 return p;
             }
 
@@ -69,7 +70,8 @@ namespace VoxelEngine.Power.Wind
                 : $"Horizontal-axis turbine · {c.rotorDiameter:0} m rotor · rated {PowerFormatter.FormatWatts(c.ratedPowerWatts)}");
             sub.style.marginTop = 0;
             p.Add(sub);
-            p.Add(T.AccentDivider(AccentTurbine));
+            p.Add(VoxelEngine.UI.IndustrialTheme.HazardDivider());
+            p.Add(VoxelEngine.UI.IndustrialTheme.Lamps(complete && c.CurrentOutputWatts > 1f ? 2 : 1));
 
             // Vertical-only scroller: horizontal is explicitly off and inner content
             // is clamped to the viewport width so it can never overflow sideways.
@@ -206,6 +208,7 @@ namespace VoxelEngine.Power.Wind
                 ? "Connect your power line to the marked port square at the rotor base."
                 : "Connect your power line to the marked port square at the tower base."));
 
+            VoxelEngine.UI.IndustrialTheme.Frame(p);
             return p;
         }
 

@@ -34,6 +34,7 @@ namespace VoxelEngine.Navigation
             if (pad == null)
             {
                 p.Add(VoxelEngine.UI.UITheme.Body("No refuel pad under the cursor."));
+                VoxelEngine.UI.StarshipTheme.Frame(p, VoxelEngine.UI.UITheme.AccentDim);
                 return p;
             }
 
@@ -48,7 +49,7 @@ namespace VoxelEngine.Navigation
 
             var (hdr, _, _, _) = VoxelEngine.UI.UITheme.HeaderRow("⛽ " + pad.WaymarkLabel, state, ink);
             p.Add(hdr);
-            p.Add(VoxelEngine.UI.UITheme.AccentDivider(VoxelEngine.UI.UITheme.AccentCyan));
+            p.Add(VoxelEngine.UI.StarshipTheme.HullDivider(ink));
 
             var (powerPill, _) = VoxelEngine.UI.UITheme.MachineToggle(on, v =>
             {
@@ -194,6 +195,7 @@ namespace VoxelEngine.Navigation
             VoxelEngine.UI.GameUIController.Instance?.AppendMachinePorts(p, pad);
 
             VoxelEngine.UI.UITheme.AnimatePanelBoot(p);
+            VoxelEngine.UI.StarshipTheme.Frame(p, ink);
             return p;
         }
 

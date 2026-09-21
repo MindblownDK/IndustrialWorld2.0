@@ -12,9 +12,9 @@ namespace IndustrialWorld.Navigation
             panel.name = "AutoRunPilotPanel";
             panel.style.width = 520;
             panel.Add(UITheme.Body("AUTO-RUN PILOT · VEHICLE CONTROL"));
-            panel.Add(UITheme.AccentDivider(UITheme.AccentCyan));
+            panel.Add(StarshipTheme.HullDivider(UITheme.AccentCyan));
             if (pilot == null || pilot.Grid == null || pilot.Book == null)
-            { panel.Add(UITheme.Muted("Place this pilot on a grid first.")); return panel; }
+            { panel.Add(UITheme.Muted("Place this pilot on a grid first.")); StarshipTheme.Frame(panel, UITheme.AccentCyan); return panel; }
             panel.Add(UITheme.Muted("Create and manage routes in the Route Planner / existing Route Recorder or Nav Plotter on this grid. This pilot only executes a saved route. Assessment below uses live block stats — change a block's output and it updates."));
             var session = RouteRunSession.For(pilot.Grid);
             var names = new List<string>();
@@ -105,6 +105,7 @@ namespace IndustrialWorld.Navigation
                 VoxelEngine.Navigation.GridRouteUI.AddAutoRunRows(loop, pilot);
                 panel.Add(loop);
             }
+            StarshipTheme.Frame(panel, UITheme.AccentCyan);
             return panel;
         }
     }

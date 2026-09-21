@@ -111,6 +111,7 @@ namespace VoxelEngine.Crafting
             RecipeBook(p, m.knownRecipes, m.Current, m.selectedRecipe,
                 rec => { m.selectedRecipe = rec; GameUIController.Instance?.RefreshCurrentPanel(); },
                 scrollName: "RefineryRecipeBook");
+            IndustrialTheme.Frame(p);
             return p;
         }
 
@@ -127,6 +128,7 @@ namespace VoxelEngine.Crafting
             RecipeBook(p, m.knownRecipes, m.Current, m.selectedRecipe,
                 rec => { m.selectedRecipe = rec; GameUIController.Instance?.RefreshCurrentPanel(); },
                 scrollName: "ChemicalPlantRecipeBook");
+            IndustrialTheme.Frame(p);
             return p;
         }
 
@@ -176,6 +178,7 @@ namespace VoxelEngine.Crafting
             ItemSlots(page, "Outputs", m.outputC, slot);
             RecipeBook(page, m.knownRecipes, m.Current, m.selectedRecipe,
                 rec => { m.selectedRecipe = rec; GameUIController.Instance?.RefreshCurrentPanel(); }, ownScroll: false);
+            IndustrialTheme.Frame(p);
             return p;
         }
 
@@ -252,6 +255,7 @@ namespace VoxelEngine.Crafting
                 rec => { m.SelectRecipe(rec); GameUIController.Instance?.RefreshCurrentPanel(); },
                 ownScroll: false);
 
+            IndustrialTheme.Frame(p);
             return p;
         }
 
@@ -274,7 +278,8 @@ namespace VoxelEngine.Crafting
                 !online ? "NO POWER" : current != null ? "PROCESSING" : "IDLE",
                 !online ? T.AccentRed : current != null ? T.AccentGreen : T.AccentAmber);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentCyan));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(!online ? 0 : current != null ? 2 : 1));
 
             var wattRow = T.StatRow("⚡", "Power Use", PowerFormat.Watts(watts), T.AccentGold);
             p.Add(wattRow);
