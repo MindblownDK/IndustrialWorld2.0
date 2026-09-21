@@ -1,9 +1,31 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.11.0-dev`
+**Current Version:** `12.12.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.12.0-dev] Chrome On Every Console - The Grid Set Is Complete
+
+**Type:** MINOR - presentation-only restyle of the last ten grid block panels onto the four existing instrument families. No behaviour, save, recipe or setup changes.
+
+**GitHub title:** `[12.12.0-dev] Chrome on every console - the grid set is complete`
+
+#### Four families, ten consoles, zero new code
+
+No new theme this round: every remaining `GridBlockUI` panel takes chrome from the family that matches its block. The battery joins the industrial line as power-plant equipment with a hazard divider and lamps; the vault and harvester keep their live singularity visuals under high-tech holo brackets and scanline dividers; the locator, both satellite consoles and the season monitor dock as starship telemetry with hull dividers and status-reactive rails; the wagon coupler gets brass rivets and finishes the rail set. All static styling, safe under the machine cadence rebuilds.
+
+#### Deliberately preserved
+
+The LED strip and spotlight keep their colour-reactive dividers - the divider is the only place the configured colour shows, so it stays, with industrial lamps and girders around it. The vault and harvester black-hole visuals, pressure gauge, efficiency bar, warning banners and live animation loops are untouched; only the outer chrome changed. Every value, slot, mode button, slider, colour key and hint is preserved.
+
+#### Manual steps in Unity
+
+1. Apply the patch and recompile.
+2. No setup re-run is needed: no new blocks, items or recipes.
+3. Press E on each console: frames, dividers and (where fitted) lamps on every card.
+4. Check the lamps read true: battery green while charging or discharging, amber idle; lights red when off or unpowered, green when lit.
+5. Confirm the offline satellite branch still shows its requirements card framed, and LED/light colour keys still recolour the divider live.
 
 ### [12.11.0-dev] Girders Across The Grid - Ship Modules Get Structured Steel
 

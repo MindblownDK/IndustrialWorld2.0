@@ -305,7 +305,8 @@ namespace VoxelEngine.GridSystem.UI
             Color initialStateColor = BatteryStateColor(bat);
             var (hdr, _, statePill, stateLabel) = T.HeaderRow("🔋 Battery", bat.TransferState, initialStateColor);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentGreen));
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(IndustrialTheme.Lamps(bat.IsCharging || bat.IsDischarging ? 2 : 1));
 
             // Premium segmented charge gauge runs in place. The surrounding labels below
             // are also refreshed in place, so mode buttons never disappear/recreate on
@@ -407,6 +408,7 @@ namespace VoxelEngine.GridSystem.UI
 
             RefreshLiveValues();
             p.schedule.Execute(RefreshLiveValues).Every(100);
+            IndustrialTheme.Frame(p);
             return p;
         }
 
@@ -579,7 +581,7 @@ namespace VoxelEngine.GridSystem.UI
             };
             var (hdr, _, _, _) = T.HeaderRow("◉ Containment Vault", status, statusColor);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentPurple));
+            p.Add(HighTechTheme.ScanDivider(statusColor));
 
             // ── The contained singularity (live) ──
             // FIXED 168×168 stage, horizontally centred in the panel, so the
@@ -744,6 +746,7 @@ namespace VoxelEngine.GridSystem.UI
             var spots = new[] { spotA, spotB, spotC };
             p.schedule.Execute(() => AnimateVaultPanel(p, cv, spots, marker, warn, pressureText, ref shownPressure))
                 .Every(80);
+            HighTechTheme.Frame(p, statusColor);
             return p;
         }
 
@@ -868,7 +871,7 @@ namespace VoxelEngine.GridSystem.UI
                 active ? "HARVESTING" : sh.Status.ToUpperInvariant(),
                 active ? T.AccentGreen : sh.Status == "No Power" ? T.AccentAmber : T.AccentDim);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentPurple));
+            p.Add(HighTechTheme.ScanDivider(active ? T.AccentGreen : sh.Status == "No Power" ? T.AccentAmber : T.AccentDim));
 
             // ── The contained black hole (live) ──
             var coreBox = new VisualElement();
@@ -991,6 +994,7 @@ namespace VoxelEngine.GridSystem.UI
 
             var hSpots = new[] { hSpotA, hSpotB, hSpotC };
             p.schedule.Execute(() => AnimateHarvesterPanel(p, sh, hSpots, effFill, effText, hWarn)).Every(80);
+            HighTechTheme.Frame(p, active ? T.AccentGreen : sh.Status == "No Power" ? T.AccentAmber : T.AccentDim);
             return p;
         }
 
@@ -1051,7 +1055,7 @@ namespace VoxelEngine.GridSystem.UI
                 tracking ? "TRACKING" : loc.Status.ToUpperInvariant(),
                 tracking ? T.AccentGreen : T.AccentAmber);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentCyan));
+            p.Add(StarshipTheme.HullDivider(tracking ? T.AccentGreen : T.AccentAmber));
 
             // Target readout with a live pulse dot.
             var targetRow = new VisualElement();
@@ -1136,6 +1140,7 @@ namespace VoxelEngine.GridSystem.UI
                     ? new Color(0.9f, 0.95f, 1f)
                     : new Color(0.5f, 0.55f, 0.65f);
             }).Every(400);
+            StarshipTheme.Frame(p, tracking ? T.AccentGreen : T.AccentAmber);
             return p;
         }
 
@@ -1407,7 +1412,7 @@ namespace VoxelEngine.GridSystem.UI
                 coupler.IsCoupled ? "COUPLED" : "FREE",
                 coupler.IsCoupled ? T.AccentGreen : T.AccentDim);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentCyan));
+            p.Add(SteampunkTheme.RivetedDivider());
             p.Add(T.Spacer(6));
 
             p.Add(GridUIHelpers.SectionTitle("Status"));
@@ -1438,6 +1443,7 @@ namespace VoxelEngine.GridSystem.UI
             note.style.color = new StyleColor(T.TextMuted);
             p.Add(note);
 
+            SteampunkTheme.Frame(p);
             return p;
         }
 
@@ -1453,7 +1459,7 @@ namespace VoxelEngine.GridSystem.UI
                 online ? "OPERATIONAL" : "OFFLINE",
                 online ? T.AccentGreen : T.AccentAmber);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentCyan));
+            p.Add(StarshipTheme.HullDivider(online ? T.AccentGreen : T.AccentAmber));
             p.Add(T.Spacer(6));
 
             if (!online)
@@ -1474,6 +1480,7 @@ namespace VoxelEngine.GridSystem.UI
                 help.style.whiteSpace = WhiteSpace.Normal;
                 help.style.color = new StyleColor(T.TextMuted);
                 p.Add(help);
+                StarshipTheme.Frame(p, online ? T.AccentGreen : T.AccentAmber);
                 return p;
             }
 
@@ -1665,6 +1672,7 @@ namespace VoxelEngine.GridSystem.UI
                 p.Add(note);
             }
 
+            StarshipTheme.Frame(p, online ? T.AccentGreen : T.AccentAmber);
             return p;
         }
 
@@ -1681,7 +1689,7 @@ namespace VoxelEngine.GridSystem.UI
                 online ? "OPERATIONAL" : "OFFLINE",
                 online ? T.AccentGreen : T.AccentAmber);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentCyan));
+            p.Add(StarshipTheme.HullDivider(online ? T.AccentGreen : T.AccentAmber));
             p.Add(T.Spacer(6));
 
             if (online)
@@ -1712,6 +1720,7 @@ namespace VoxelEngine.GridSystem.UI
                 p.Add(help);
             }
 
+            StarshipTheme.Frame(p, online ? T.AccentGreen : T.AccentAmber);
             return p;
         }
 
@@ -1725,7 +1734,7 @@ namespace VoxelEngine.GridSystem.UI
                 online ? "ONLINE" : "OFFLINE",
                 online ? T.AccentGreen : T.AccentAmber);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentCyan));
+            p.Add(StarshipTheme.HullDivider(online ? T.AccentGreen : T.AccentAmber));
             p.Add(T.Spacer(6));
 
             // Target Planet section
@@ -1890,6 +1899,7 @@ namespace VoxelEngine.GridSystem.UI
                 progressLabel.text = $"Day {live.seasonDay}/{live.daysInSeason} ({Mathf.RoundToInt(live.seasonProgress * 100f)}%) • {live.daysRemainingInSeason} days until {live.NextSeasonName}";
             }).Every(400);
 
+            StarshipTheme.Frame(p, online ? T.AccentGreen : T.AccentAmber);
             return p;
         }
 
@@ -2386,6 +2396,7 @@ namespace VoxelEngine.GridSystem.UI
             var (hdr, _, _, _) = T.HeaderRow("▰ " + name, state, stateColor);
             p.Add(hdr);
             p.Add(T.AccentDivider(strip.stripColor));
+            p.Add(IndustrialTheme.Lamps((block != null && !block.Enabled) || !online ? 0 : 2));
 
             p.Add(T.StatRow("⚡", "Power Use", PowerFormat.Watts(strip.wattsDraw), T.AccentGold));
             p.Add(T.StatRow("📏", "Length", $"{strip.stripLength:0.##} m", T.AccentCyan));
@@ -2451,6 +2462,7 @@ namespace VoxelEngine.GridSystem.UI
 
             p.Add(T.Spacer(4));
             p.Add(T.Muted("Length changes are live now; corner-to-corner placement will use this same runtime length foundation in the next build-tool pass."));
+            IndustrialTheme.Frame(p);
             return p;
         }
 
@@ -2475,6 +2487,7 @@ namespace VoxelEngine.GridSystem.UI
             var (hdr, _, _, _) = T.HeaderRow("💡 " + light.SourceName, state, stateColor);
             p.Add(hdr);
             p.Add(T.AccentDivider(light.lightColor));
+            p.Add(IndustrialTheme.Lamps(!light.Enabled || !light.IsOnline ? 0 : 2));
 
             p.Add(T.StatRow("⚡", "Power Use", PowerFormat.Watts(light.PowerDraw), T.AccentGold));
             p.Add(T.StatRow("📏", "Range", $"{light.range:0.#} m", T.AccentCyan));
@@ -2530,6 +2543,7 @@ namespace VoxelEngine.GridSystem.UI
 
             p.Add(T.Spacer(4));
             p.Add(T.Muted("Right-click a spotlight to open this config. Settings apply live to all beams in dual-output lights."));
+            IndustrialTheme.Frame(p);
             return p;
         }
 

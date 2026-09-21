@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.11.0-dev`
-**Roadmap Version:** `12.11.0-dev`
+**Current Version:** `12.12.0-dev`
+**Roadmap Version:** `12.12.0-dev`
 **Date:** 2026-09-21
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -41,10 +41,6 @@
 - **Starship instruments** (`StarshipTheme`): bulkhead side-rail frame with docking ticks, diamond hull divider, vector needle meter. Static styling, safe under the machine cadence.
 - **Ship systems restyled** (`GridBlockUI`): gatling, ship reactor, solar, ship engine, docking port, ore detector, beacon, cryobed. All values, slots and hints preserved; bespoke consoles (battery, vault, harvester, locator, satellites) untouched. No setup changes.
 - **Fix:** steampunk dial innards compensate the 3px bezel border and sit centred.
-
-### 12.7.0-dev - Targeting Computers (Advanced High-Tech)
-- **High-tech instruments** (`HighTechTheme`): corner-bracket holo frame with a status-reactive accent, scanline divider, segmented cell meter, hero numeric readout. Static styling, safe under the machine cadence.
-- **Nuclear + hydrogen lines restyled** (`MachineUIs`): reactor core, portable reactor, enrichment centrifuge, waste reprocessor, electrolyser, hydrogen engine. All values, slots and hints preserved; steam turbine and water tower wait for the rail-polish round, quarry stays industrial. No setup changes.
 
 ### Era Transition Feel
 
