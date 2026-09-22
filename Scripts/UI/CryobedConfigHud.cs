@@ -108,6 +108,7 @@ namespace VoxelEngine.UI
             pill.style.paddingLeft = 8; pill.style.paddingRight = 8; pill.style.paddingTop = 3; pill.style.paddingBottom = 3; 
             T.Radius(pill, 10); titleRow.Add(pill);
             panel.Add(titleRow);
+            panel.Add(StarshipTheme.HullDivider(online ? T.AccentGreen : T.AccentAmber));
 
             var nameField = new TextField("Name") { value = name };
             nameField.style.marginBottom = 12;
@@ -213,6 +214,7 @@ namespace VoxelEngine.UI
             buttons.Add(MakeButton("Transfer", () => BuildFeedbackHud.Show("Transfer", "Multiplayer ownership transfer will unlock later", null, T.AccentAmber), new Color(0.55f,0.58f,0.66f)));
             buttons.Add(MakeButton("Close", Close, new Color(0.18f,0.22f,0.28f)));
             panel.Add(buttons);
+            StarshipTheme.Frame(panel, online ? T.AccentGreen : T.AccentAmber);
 
             RefreshLiveStats();
         }

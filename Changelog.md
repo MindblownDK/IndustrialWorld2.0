@@ -1,9 +1,32 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.15.0-dev`
+**Current Version:** `12.16.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.16.0-dev] Dialogs And Decision Cards - Chrome For The Floating UI
+
+**Type:** MINOR - presentation-only chrome for the floating dialogs and decision cards: item filter dialogs, the two void-confirmation modals, the item-ports overlay, the cryobed config dialog, the grid screen config dialog and the crafting bench card. No behaviour, save, recipe or setup changes.
+
+**GitHub title:** `[12.16.0-dev] Dialogs and decision cards - chrome for the floating UI`
+
+#### Every floating card framed
+
+The machine panels are all chromed, so this round dresses the dialogs that float above them. The three item filter dialogs, the item-ports overlay and both void confirmations take industrial chrome - hazard divider, girder frame - with the drop-limit and tank-void modals keeping their caution semantics. The cryobed dialog takes the starship hull treatment with green rails when staffed and amber when calling for a colonist; the grid screen config takes high-tech scanlines in display cyan.
+
+#### The bench reads its queue
+
+The crafting bench card is the one decision card with a running state, so it earns status lamps: green while the queue has work, amber at rest. The pure dialogs and modals stay lampless - nothing runs inside them, so there is nothing to report. Every value, slot, filter, toggle and button is preserved - only the presentation changed.
+
+#### Manual steps in Unity
+
+1. Apply the patch and recompile.
+2. No setup re-run is needed: no new blocks, items or recipes.
+3. Open each filter dialog on a filtered face: hazard divider and girder frame on all three.
+4. Press E on a cryobed and a grid screen: hull rails and scanline divider respectively.
+5. Open the item-ports overlay, both void modals and the crafting bench: framed cards, and green bench lamps while a craft is queued.
+6. Confirm filters, ports, voids, naming, screen settings and crafting all behave as before.
 
 ### [12.15.0-dev] Holo Racks And Data Brackets - Storage Goes High-Tech
 

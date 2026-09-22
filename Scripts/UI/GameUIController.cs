@@ -3602,6 +3602,7 @@ namespace VoxelEngine.UI
             close.clicked += Close;
             head.Add(close);
             card.Add(head);
+            card.Add(IndustrialTheme.HazardDivider());
 
             // Scrollable body so it never overflows the screen.
             var scroll = new ScrollView(ScrollViewMode.Vertical);
@@ -3648,6 +3649,7 @@ namespace VoxelEngine.UI
             // Built AFTER the overlay is attached, so the body's own scheduled work and any
             // layout it depends on have a live panel to run against.
             RebuildBody();
+            IndustrialTheme.Frame(card);
         }
 
         /// <summary>Launcher pill that opens the Item-Ports overlay.</summary>
@@ -4241,6 +4243,8 @@ namespace VoxelEngine.UI
             root.Add(panel);
 
             panel.Add(MakeTitle(st.displayName));
+            panel.Add(IndustrialTheme.HazardDivider());
+            panel.Add(IndustrialTheme.Lamps(_activeQueue != null && _activeQueue.HasWork ? 2 : 1));
 
             // Active craft queue display.
             if (_activeQueue != null && _activeQueue.HasWork)
@@ -4292,6 +4296,7 @@ namespace VoxelEngine.UI
                 // GetInstanceID, which the Unity 6.4 compiler immediately
                 // flagged as obsolete — reverted to GetEntityId here.)
                 panelId: "station_" + st.GetEntityId());
+            IndustrialTheme.Frame(panel);
         }
 
         // ============================================================
@@ -4940,7 +4945,7 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
             var title = MakeTitle("DROP LIMIT WARNING");
             title.style.color = new StyleColor(UITheme.AccentAmber);
             card.Add(title);
-            card.Add(UITheme.AccentDivider(UITheme.AccentAmber));
+            card.Add(IndustrialTheme.HazardDivider());
 
             var msg = new Label($"You are about to drop {snapshot.count:N0} x {snapshot.item.displayName}, but only {capacity:N0} physical item units can exist before the world-drop limit is reached.\n\nConfirming will drop what fits and VOID {voidCount:N0} item unit{(voidCount == 1 ? "" : "s")}. Denying keeps the stack in your inventory.");
             msg.style.whiteSpace = WhiteSpace.Normal;
@@ -4997,6 +5002,7 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
             row.Add(confirm);
             card.Add(row);
 
+            IndustrialTheme.Frame(card);
             _dropVoidOverlay = overlay;
             _root.Add(overlay);
             overlay.BringToFront();
@@ -5053,7 +5059,7 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
             overlay.Add(card);
 
             card.Add(MakeTitle($"Void {resourceLabel}?"));
-            card.Add(UITheme.AccentDivider(UITheme.AccentRed));
+            card.Add(IndustrialTheme.HazardDivider());
             var message = new Label($"This tank contains {storedAmount:0.##} units of {resourceLabel.ToLowerInvariant()}. " +
                                     $"Changing it to {nextType} will permanently void the stored {resourceLabel.ToLowerInvariant()}.");
             message.style.whiteSpace = WhiteSpace.Normal;
@@ -5084,6 +5090,7 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
             row.Add(confirm);
             card.Add(row);
 
+            IndustrialTheme.Frame(card);
             _tankTypeVoidOverlay = overlay;
             _root.Add(overlay);
             overlay.BringToFront();

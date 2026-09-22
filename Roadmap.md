@@ -1,9 +1,9 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.15.0-dev`
-**Roadmap Version:** `12.15.0-dev`
-**Date:** 2026-09-21
+**Current Version:** `12.16.0-dev`
+**Roadmap Version:** `12.16.0-dev`
+**Date:** 2026-09-22
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
@@ -29,6 +29,10 @@
 
 ## 0. Recently Done
 
+### 12.16.0-dev - Dialogs And Decision Cards (Floating UI Chrome)
+- **Dialogs chromed** (`ItemFilterDialog`, `GameUIController`): three filter dialogs, item-ports overlay, drop-limit and tank-void modals industrial; crafting bench industrial with queue-reactive lamps (green crafting, amber idle). Cryobed dialog starship (green staffed / amber calling); grid screen config high-tech cyan.
+- **Preserved:** all values, slots, filters, toggles, queues and screen settings. Unused `LightingControlUI` and row-builder `PortConfigHud` carry no chrome. No setup changes.
+
 ### 12.15.0-dev - Holo Racks And Data Brackets (Storage High-Tech)
 - **Storage network chromed** (`StorageUI`): all eleven panels high-tech (scanline divider, reactive holo brackets) - terminals, importer/exporter, disk manipulator, NAS, server, drawers, item display. Offline terminal branches framed on their own paths.
 - **Preserved:** all values, slots, filters, queues, searches and hints. No setup changes.
@@ -45,10 +49,6 @@
 ### 12.12.0-dev - Chrome On Every Console (GridBlockUI Finale)
 - **Last ten consoles chromed** (`GridBlockUI`): battery (industrial), vault + harvester (high-tech), locator, satellites, season monitor (starship), coupler (steampunk), LED + light (industrial, color-reactive dividers kept). Bespoke visuals and live loops untouched.
 - **Preserved:** all values, slots, modes, sliders, color keys and hints; offline satellite branch framed on both paths. No setup changes.
-
-### 12.11.0-dev - Girders Across The Grid (Industrial Grid Modules)
-- **Grid modules restyled** (`GridBlockUI`): liquid/gas tanks, H2O2, cargo, refinery/chemical plant, furnace, drill, landing gear, wheel, sliding door, grid biofarm, scrubber, vent, flare, air vent, generic fallback. Girder frame, hazard divider, status lamps on each card.
-- **Preserved:** all values, slots, recipes, sliders, toggles and hints; bespoke consoles (battery, vault, harvester, locator, satellites, season monitor, LED/light, rail coupler) untouched. No setup changes.
 
 ### Era Transition Feel
 

@@ -198,6 +198,7 @@ namespace VoxelEngine.GridSystem.UI
             closeBtn.style.minWidth = 26; closeBtn.style.minHeight = 26;
             UITheme.Radius(closeBtn, 4);
             hdr.Add(closeBtn);
+            _panel.Add(HighTechTheme.ScanDivider(UITheme.AccentCyan));
 
             // ── Screen info ──
             var info = new VisualElement();
@@ -437,6 +438,7 @@ namespace VoxelEngine.GridSystem.UI
             _previewText.style.color = new StyleColor(_target.textColor);
             _previewText.style.fontSize = 11; _previewText.style.whiteSpace = WhiteSpace.Normal;
             pBox.Add(_previewText);
+            HighTechTheme.Frame(_panel, UITheme.AccentCyan);
 
             RefreshAll();
         }

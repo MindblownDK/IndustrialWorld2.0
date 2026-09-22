@@ -97,6 +97,7 @@ namespace VoxelEngine.UI
             var title = T.Subtitle(titleText);
             title.style.marginTop = 0;
             card.Add(title);
+            card.Add(IndustrialTheme.HazardDivider());
 
             var currentWrap = new VisualElement();
             currentWrap.style.flexDirection = FlexDirection.Row;
@@ -205,6 +206,7 @@ namespace VoxelEngine.UI
             _captureSink = SetItem;
             _activeClose = Close;
             PortConfigHud.IsAnyDropdownOpen = true;
+            IndustrialTheme.Frame(card);
             panelRoot.Add(overlay);
             search.schedule.Execute(() => search.Focus()).StartingIn(40);
         }
@@ -264,6 +266,7 @@ namespace VoxelEngine.UI
             var title = T.Subtitle(titleText);
             title.style.marginTop = 0;
             card.Add(title);
+            card.Add(IndustrialTheme.HazardDivider());
 
             if (!string.IsNullOrEmpty(hintText))
             {
@@ -386,6 +389,7 @@ namespace VoxelEngine.UI
             _captureSink = AddItem;
             _activeClose = Close;
             PortConfigHud.IsAnyDropdownOpen = true;
+            IndustrialTheme.Frame(card);
             panelRoot.Add(overlay);
             search.schedule.Execute(() => search.Focus()).StartingIn(40);
         }
@@ -436,6 +440,7 @@ namespace VoxelEngine.UI
             var title = T.Subtitle($"Filter · {FaceLabel(face)}");
             title.style.marginTop = 0;
             card.Add(title);
+            card.Add(IndustrialTheme.HazardDivider());
 
             // ── Whitelist / Blacklist toggle ───────────────────────
             var modeRow = new VisualElement();
@@ -572,6 +577,7 @@ namespace VoxelEngine.UI
             _captureSink = AddItem;
             _activeClose = Close;
             PortConfigHud.IsAnyDropdownOpen = true;   // suspend the panel auto-refresh
+            IndustrialTheme.Frame(card);
             panelRoot.Add(overlay);
             search.schedule.Execute(() => search.Focus()).StartingIn(40);
         }
