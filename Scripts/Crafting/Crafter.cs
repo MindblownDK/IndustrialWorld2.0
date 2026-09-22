@@ -69,7 +69,7 @@ namespace VoxelEngine.Crafting
                     if (item.cannotBeCarried && !ic.allowPlayerCarry) return "Cannot carry by hand";
                     float need = Mathf.Max(0.0001f, item.massPerUnit) * recipe.outputCount;
                     if (ic.MaxWeightKg > 0f && ic.RemainingWeightKg < need)
-                        return $"Overweight {ic.CurrentWeightKg:0}/{ic.MaxWeightKg:0} kg";
+                        return $"Overweight {MassFormat.Format(ic.CurrentWeightKg)} / {MassFormat.Format(ic.MaxWeightKg)}";
                 }
                 return "Inventory full";
             }
@@ -85,7 +85,7 @@ namespace VoxelEngine.Crafting
         {
             if (destination is ItemContainer ic)
                 return $"space={ic.HasSpace(recipe.outputItem, recipe.outputCount)} " +
-                       $"weight={ic.CurrentWeightKg:0.##}/{ic.MaxWeightKg:0.##}kg " +
+                       $"weight={MassFormat.Format(ic.CurrentWeightKg)} / {MassFormat.Format(ic.MaxWeightKg)} " +
                        $"filter={ic.AcceptFilter != null}";
             return $"dest={(destination != null ? destination.GetType().Name : "null")} (no space gate)";
         }

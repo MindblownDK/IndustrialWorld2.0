@@ -1,9 +1,53 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.17.1-dev`
+**Current Version:** `12.17.3-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.17.3-dev] Floats Rise By Hand - Manual Animation And Prefixed Mass
+
+**Type:** PATCH - the render probe caught the invisible float red-handed (opacity already 0.00 half a second after spawn): style transitions snap on freshly-created elements, so the rise-and-fade is now driven per-frame by hand. Mass ratios revert to proper SI prefixes on both sides per feedback. No behaviour, save, recipe or setup changes.
+
+**GitHub title:** `[12.17.3-dev] Floats rise by hand - manual animation and prefixed mass`
+
+#### Transitions out, ticks in
+
+The probe line said it all: attached panel, sane bounds, Flex display, Visible visibility - and opacity 0.00 at +500ms into a 2-second fade. UITK style transitions never animate on an element that has not painted its start values yet; they jump straight to the target. `FloatAt` now drives the animation itself with 16ms scheduler ticks over unscaled time: ease-out rise across 46px, linear fade across 2 seconds, then the ticker pauses and the label removes itself. Same look as designed, none of the transition system. The probe stays one more round to confirm opacity reads ~0.75 at +500ms.
+
+#### Prefixes stay prefixed
+
+The single-unit ratio experiment is reverted: current/max mass pairs print each side in its own correct SI unit again ("222.24 t / 450 kg", kilotonnes when greater), on the inventory CARGO LOAD card, the grid cargo readout and the grid terminal list. The overweight float and the console state dump follow the same rule, so every mass the player reads carries its prefix.
+
+#### Manual steps in Unity
+
+1. Apply the patch and recompile.
+2. No setup re-run is needed: no new blocks, items or recipes.
+3. Click CRAFT on an overweight-blocked recipe: the reason visibly floats up from the button and fades over 2 seconds.
+4. Confirm the PROBE line now reads opacity ~0.75 and the overweight text carries prefixes.
+5. Shed load and confirm crafting resumes with no new console noise.
+
+### [12.17.2-dev] One Unit Per Ratio - Cargo Load And Float Probe
+
+**Type:** PATCH - the cargo load card mixed units ("222 t / 450 kg"), hiding a 500x overload at a glance; all three current/max mass ratios now share one unit. Plus a render probe on the floating text, which logs show is spawned correctly but never draws. No behaviour, save, recipe or setup changes.
+
+**GitHub title:** `[12.17.2-dev] One unit per ratio - cargo load and float probe`
+
+#### The overload you could not see
+
+The 12.17.1 console ladder proved the craft refusals were legitimate: the test inventory carried 222,242 kg against a 450 kg cap. But the CARGO LOAD card formatted each side independently, printing "222.24 t / 450 kg" - two units side by side, trivially misread as fine. The card now uses the existing `MassFormat.FormatRatio`, which picks one unit from the capacity: "222242 / 450 kg". Unmissable. The same mixed-unit pattern in the grid cargo readout and the grid master terminal inventory list is fixed in the same way.
+
+#### Hunting the invisible float
+
+The logs also proved the float pipeline runs cleanly: callback fires, reason computed, label spawned on the TopLayer at the button's position, no exceptions - yet nothing draws, while toasts on the HUD layer render fine. A scheduled probe now logs the label's live render state half a second after spawn (attached panel, world bounds, resolved opacity, display, visibility), which separates a detached tree, an off-screen position and a transparency fault in one retest.
+
+#### Manual steps in Unity
+
+1. Apply the patch and recompile.
+2. No setup re-run is needed: no new blocks, items or recipes.
+3. Open the inventory: CARGO LOAD shows both numbers in one unit.
+4. Click CRAFT on an overweight-blocked recipe and copy the `[CraftFeedback] PROBE` console line.
+5. Shed load below the cap and confirm crafting resumes with no new console noise.
 
 ### [12.17.1-dev] Feedback You Cannot Miss - Console Mirror And Toasts Return
 

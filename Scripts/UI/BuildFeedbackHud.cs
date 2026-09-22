@@ -93,19 +93,33 @@ namespace VoxelEngine.UI
             label.pickingMode = PickingMode.Ignore;
             layer.Add(label);
 
-            // Kick the rise-and-fade once attached, then clean up after 2.1s.
+            // Render probe: reports where (and whether) the label actually draws.
             label.schedule.Execute(() =>
             {
-                label.style.transitionProperty = new List<StylePropertyName> { "translate", "opacity" };
-                label.style.transitionDuration = new List<TimeValue>
-                    { new TimeValue(2.0f, TimeUnit.Second), new TimeValue(2.0f, TimeUnit.Second) };
-                label.style.translate = new Translate(new Length(-50f, LengthUnit.Percent), -46f, 0f);
-                label.style.opacity = 0f;
-            }).ExecuteLater(0);
-            label.schedule.Execute(() =>
+                if (label.panel == null) { Debug.LogWarning("[CraftFeedback] PROBE: label detached (no panel)."); return; }
+                var wb = label.worldBound;
+                var rs = label.resolvedStyle;
+                Debug.Log($"[CraftFeedback] PROBE: panel=ok bound={wb.x:0},{wb.y:0},{wb.width:0}x{wb.height:0} opacity={rs.opacity:0.00} display={rs.display} visibility={rs.visibility}");
+            }).StartingIn(500);
+
+            // Manual rise-and-fade: style transitions snap to their target on
+            // freshly-created elements (the probe showed opacity 0.00 at
+            // +500ms), so drive the 2s animation with per-frame ticks.
+            float bornAt = Time.unscaledTime;
+            IVisualElementScheduledItem ticker = null;
+            ticker = label.schedule.Execute(() =>
             {
-                if (label.parent != null) label.RemoveFromHierarchy();
-            }).StartingIn(2100);
+                float t = (Time.unscaledTime - bornAt) / 2.0f;
+                if (t >= 1f || label.panel == null)
+                {
+                    ticker?.Pause();
+                    if (label.parent != null) label.RemoveFromHierarchy();
+                    return;
+                }
+                float eased = 1f - (1f - t) * (1f - t);   // ease-out quad
+                label.style.translate = new Translate(new Length(-50f, LengthUnit.Percent), -46f * eased, 0f);
+                label.style.opacity = 1f - t;
+            }).Every(16);
             }
             catch (System.Exception e) { Debug.LogException(e); }
         }

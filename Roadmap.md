@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.17.1-dev`
-**Roadmap Version:** `12.17.1-dev`
+**Current Version:** `12.17.3-dev`
+**Roadmap Version:** `12.17.3-dev`
 **Date:** 2026-09-22
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,14 @@
 
 ## 0. Recently Done
 
+### 12.17.3-dev - Manual Float Animation (Transition Snap Fix)
+- **Floats fixed** (`BuildFeedbackHud`): probe proved transitions snap to target on fresh elements, so the 2s rise-and-fade runs on per-frame ticks (ease-out rise, linear fade, self-removing). Probe stays to confirm ~0.75 opacity at +500ms.
+- **Prefixes restored:** mass ratios print each side in its own SI unit again (cargo card, grid cargo, grid terminal, overweight float, console dump). No setup changes.
+
+### 12.17.2-dev - Single-Unit Mass Ratios (Cargo Load Fix)
+- **Ratios unified** (`MassFormat.FormatRatio`): inventory CARGO LOAD, grid cargo readout and grid terminal inventory list now print current/max in one shared unit, so overloads read at a glance. Refusals already proven legitimate by the 12.17.1 console ladder.
+- **Float probe added** (`BuildFeedbackHud`): spawn logs the label's live render state (panel, bounds, opacity, display, visibility) to isolate the invisible-float fault. No setup changes.
+
 ### 12.17.1-dev - Unmissable Craft Feedback (Diagnostic Ladder)
 - **Ladder added** (`GameUIController`, `CraftingScreen`, `Crafter.DescribeSpace`): failed crafts log `[Craft] Click/Refused` with reason plus space/weight/filter state, float at the button (console-mirrored, throw-safe) and post a returning toast. Bench chrome verified click-safe.
 - **Preserved:** all craft, queue, batch and refresh behaviour. No setup changes.
@@ -40,14 +48,6 @@
 ### 12.16.1-dev - Bench Fix Round (Cryo Dock, Craft Errors)
 - **Fixed:** cryobed control side-docked like other machine panels; oxygen tank rebuilt with valve, shading and level ticks; filter search caret centred when empty (all three dialogs); failed crafts now toast the reason instead of silently doing nothing.
 - **Preserved:** starship cryo chrome, all values, queues and modal behaviour. No setup changes.
-
-### 12.16.0-dev - Dialogs And Decision Cards (Floating UI Chrome)
-- **Dialogs chromed** (`ItemFilterDialog`, `GameUIController`): three filter dialogs, item-ports overlay, drop-limit and tank-void modals industrial; crafting bench industrial with queue-reactive lamps (green crafting, amber idle). Cryobed dialog starship (green staffed / amber calling); grid screen config high-tech cyan.
-- **Preserved:** all values, slots, filters, toggles, queues and screen settings. Unused `LightingControlUI` and row-builder `PortConfigHud` carry no chrome. No setup changes.
-
-### 12.15.0-dev - Holo Racks And Data Brackets (Storage High-Tech)
-- **Storage network chromed** (`StorageUI`): all eleven panels high-tech (scanline divider, reactive holo brackets) - terminals, importer/exporter, disk manipulator, NAS, server, drawers, item display. Offline terminal branches framed on their own paths.
-- **Preserved:** all values, slots, filters, queues, searches and hints. No setup changes.
 
 ### Era Transition Feel
 
