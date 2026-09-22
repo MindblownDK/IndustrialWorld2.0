@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.17.3-dev`
-**Roadmap Version:** `12.17.3-dev`
+**Current Version:** `12.18.0-dev`
+**Roadmap Version:** `12.18.0-dev`
 **Date:** 2026-09-22
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,14 @@
 
 ## 0. Recently Done
 
+### 12.18.0-dev - Silence Between Stars (Vacuum Ducking)
+- **Ducking added** (`VacuumAudio`): exterior audibility from listener air pressure (sky, ship rooms, station rooms); machine/thruster loops, ambience, weather, positional one-shots and tool hits scale with it. UI, music and pickups bypass.
+- **Preserved:** all mix levels, volumes and behaviour in air. No setup changes.
+
+### 12.17.4-dev - Quiet Console (Diagnostics Removed)
+- **Removed:** craft click/refusal traces, float mirrors, the render probe and the unused `DescribeSpace` helper. Floats, toasts, reasons and error guards all stay.
+- **Preserved:** all craft, queue, batch and refresh behaviour. No setup changes.
+
 ### 12.17.3-dev - Manual Float Animation (Transition Snap Fix)
 - **Floats fixed** (`BuildFeedbackHud`): probe proved transitions snap to target on fresh elements, so the 2s rise-and-fade runs on per-frame ticks (ease-out rise, linear fade, self-removing). Probe stays to confirm ~0.75 opacity at +500ms.
 - **Prefixes restored:** mass ratios print each side in its own SI unit again (cargo card, grid cargo, grid terminal, overweight float, console dump). No setup changes.
@@ -40,14 +48,6 @@
 ### 12.17.1-dev - Unmissable Craft Feedback (Diagnostic Ladder)
 - **Ladder added** (`GameUIController`, `CraftingScreen`, `Crafter.DescribeSpace`): failed crafts log `[Craft] Click/Refused` with reason plus space/weight/filter state, float at the button (console-mirrored, throw-safe) and post a returning toast. Bench chrome verified click-safe.
 - **Preserved:** all craft, queue, batch and refresh behaviour. No setup changes.
-
-### 12.17.0-dev - Floating Feedback Text (Craft Failures)
-- **Floats added** (`BuildFeedbackHud.FloatAt`, `Crafter.CraftFailReason`): failed crafts float the exact reason at the clicked CRAFT button for 2s (missing items red; full / overweight with live kg / gates amber), on the topmost layer so open panels never hide it. Both recipe browsers covered.
-- **Preserved:** all craft, queue, batch and refresh behaviour; failure toasts replaced by floats. No setup changes.
-
-### 12.16.1-dev - Bench Fix Round (Cryo Dock, Craft Errors)
-- **Fixed:** cryobed control side-docked like other machine panels; oxygen tank rebuilt with valve, shading and level ticks; filter search caret centred when empty (all three dialogs); failed crafts now toast the reason instead of silently doing nothing.
-- **Preserved:** starship cryo chrome, all values, queues and modal behaviour. No setup changes.
 
 ### Era Transition Feel
 
@@ -1679,7 +1679,7 @@ Statuses are evidence-based and move forward only after code/content review and 
     - Space is black, silent, and filled with distant stars and nebulae. Sparse starfield and palette-tinted nebulae are implemented.
     - Nearby planets and moons are visible as proper real-surface spheres.
     - **7.19.0-dev:** eclipse-aware sun glare, restrained lens ghosts, and bounded world-anchored dust particles are implemented; Unity validation is pending.
-    - Audio ducking remains open: exterior sounds must be muted in vacuum while suit, cockpit, UI, and internal-grid feedback remain readable.
+    - ~~Audio ducking: exterior sounds muted in vacuum while suit, cockpit, UI, and internal-grid feedback remain readable~~ *(12.18.0-dev)* - `VacuumAudio` scales all exterior emitters by listener air pressure; sealed rooms count as air.
 
 20. **World Generation Refactor**
     - Planet-aware, biome-aware ore placement.

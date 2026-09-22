@@ -47,6 +47,8 @@ namespace VoxelEngine.FX
 
         private void Update()
         {
+            // Global vacuum ducking runs every frame (it throttles its own sampling).
+            VacuumAudio.Tick();
             _scanTimer += Time.unscaledDeltaTime;
             if (_scanTimer < SCAN_INTERVAL) return;
             _scanTimer = 0f;

@@ -63,16 +63,11 @@ namespace VoxelEngine.UI
         public static void FloatAt(VisualElement anchor, string text, Color tint)
         {
             if (anchor == null || string.IsNullOrEmpty(text)) return;
-            // Console mirror: the guaranteed channel even if the visual layer
-            // misbehaves. Craft failures are rare and user-initiated, so this
-            // never spams.
-            Debug.Log($"[CraftFeedback] {text}");
             var layer = _floatLayer ?? _container;
-            if (layer == null) { Debug.LogWarning("[CraftFeedback] No float layer and no toast container."); return; }
+            if (layer == null) { Debug.LogWarning("[BuildFeedbackHud] FloatAt: no float layer and no toast container."); return; }
             Vector2 pos;
             try { pos = layer.WorldToLocal(anchor.worldBound.center); }
             catch (System.Exception e) { Debug.LogException(e); return; }
-            Debug.Log($"[CraftFeedback] layer={layer.name} pos={pos.x:0},{pos.y:0}");
 
             try
             {
@@ -93,18 +88,9 @@ namespace VoxelEngine.UI
             label.pickingMode = PickingMode.Ignore;
             layer.Add(label);
 
-            // Render probe: reports where (and whether) the label actually draws.
-            label.schedule.Execute(() =>
-            {
-                if (label.panel == null) { Debug.LogWarning("[CraftFeedback] PROBE: label detached (no panel)."); return; }
-                var wb = label.worldBound;
-                var rs = label.resolvedStyle;
-                Debug.Log($"[CraftFeedback] PROBE: panel=ok bound={wb.x:0},{wb.y:0},{wb.width:0}x{wb.height:0} opacity={rs.opacity:0.00} display={rs.display} visibility={rs.visibility}");
-            }).StartingIn(500);
-
             // Manual rise-and-fade: style transitions snap to their target on
-            // freshly-created elements (the probe showed opacity 0.00 at
-            // +500ms), so drive the 2s animation with per-frame ticks.
+            // freshly-created elements, so drive the 2s animation with
+            // per-frame ticks.
             float bornAt = Time.unscaledTime;
             IVisualElementScheduledItem ticker = null;
             ticker = label.schedule.Execute(() =>

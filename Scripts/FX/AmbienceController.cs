@@ -85,19 +85,21 @@ namespace VoxelEngine.FX
             var wm = VoxelEngine.Weather.WeatherManager.Instance;
             if (wm != null) weatherDuck = Mathf.Lerp(1f, 0.25f, Mathf.Clamp01(wm.Intensity));
 
-            // Decide target volumes from environment.
+            // Decide target volumes from environment. No air, no ambience:
+            // wind, wildlife and cave beds all need atmosphere to exist.
+            float vac = VacuumAudio.Exterior01;
             if (_underground)
             {
                 _tWind = _tBirds = _tCrickets = 0f;
-                _tCaveRumble = RUMBLE_VOL;
-                _tCaveDrips  = DRIPS_VOL;
+                _tCaveRumble = RUMBLE_VOL * vac;
+                _tCaveDrips  = DRIPS_VOL * vac;
             }
             else
             {
                 _tCaveRumble = _tCaveDrips = 0f;
-                _tWind     = WIND_VOL * weatherDuck;
-                _tBirds    = BIRDS_VOL * _dayFactor * weatherDuck;
-                _tCrickets = CRICK_VOL * (1f - _dayFactor) * weatherDuck;
+                _tWind     = WIND_VOL * weatherDuck * vac;
+                _tBirds    = BIRDS_VOL * _dayFactor * weatherDuck * vac;
+                _tCrickets = CRICK_VOL * (1f - _dayFactor) * weatherDuck * vac;
             }
 
             // Smoothly approach targets.

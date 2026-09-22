@@ -1,9 +1,49 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.17.3-dev`
+**Current Version:** `12.18.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.18.0-dev] Silence Between Stars - Vacuum Audio Ducking
+
+**Type:** MINOR - new global vacuum ducking: exterior sound now fades with the air at the listener, so spacewalks go silent while sealed cockpits keep hearing the ship. UI, music and pickup cues bypass it entirely. No behaviour, save, recipe or setup changes.
+
+**GitHub title:** `[12.18.0-dev] Silence between stars - vacuum audio ducking`
+
+#### One question, one answer
+
+The new `VacuumAudio` asks the same question every frame - how much exterior sound survives at the listener - and every exterior emitter multiplies by the answer. Sampling is physical: open-sky pressure from the atmosphere model, ship-room pressure from the pressure system, station-room fill from the room solver, best air wins. Full sound at 0.3 atm and above, linear fade below, hard silence at zero. The value eases toward its target (fast out, slower back), so flying through an airlock threshold never pops.
+
+#### What goes quiet, what stays
+
+Machine loops, thruster roar, wind, wildlife and cave beds, the full weather mix including thunder, positional one-shots (horns, steam, placement) and tool hits all scale with the air. A pilot in a pressurised cockpit hears everything; an engineer on EVA hears nothing but the suit-adjacent layer: UI clicks, toasts, pickups and music are untouched by design. Thin high-altitude air lands in between - quieter, not gone.
+
+#### Manual steps in Unity
+
+1. Apply the patch and recompile.
+2. No setup re-run is needed: no new blocks, items or recipes.
+3. Fly a ship out of atmosphere: machine and thruster loops fade to nothing; UI clicks and music stay.
+4. Sit in a sealed, pressurised cockpit in vacuum: the ship reads full again.
+5. Step back into air: the soundscape swells back over about two seconds.
+6. Confirm weather, ambience and one-shots behave as before on the surface.
+
+### [12.17.4-dev] Quiet Console - Craft Diagnostics Removed
+
+**Type:** PATCH - removes the temporary craft-failure diagnostics now the floats are proven working: click/refusal traces, float mirrors, the render probe and the now-unused destination state helper. No behaviour, save, recipe or setup changes.
+
+**GitHub title:** `[12.17.4-dev] Quiet console - craft diagnostics removed`
+
+#### What left the code
+
+The `[Craft]` click and refusal traces in both recipe browsers, the `[CraftFeedback]` mirror and position logs plus the half-second render probe in `FloatAt`, and `Crafter.DescribeSpace`, which only existed to feed the refusal line. Player-facing feedback is untouched: failed crafts still float the reason at the button and post a toast for later. The genuine error guards stay - a missing float layer still warns once, and craft exceptions still log with a full stack.
+
+#### Manual steps in Unity
+
+1. Apply the patch and recompile.
+2. No setup re-run is needed: no new blocks, items or recipes.
+3. Click CRAFT on a blocked recipe: float and toast appear, console stays silent.
+4. Craft successfully: no new console noise, queues and batches behave as before.
 
 ### [12.17.3-dev] Floats Rise By Hand - Manual Animation And Prefixed Mass
 

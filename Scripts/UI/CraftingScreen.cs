@@ -728,11 +728,10 @@ namespace VoxelEngine.UI
                     done++;
                 }
                 if (done > 0) { _amount[panelId] = 1; refresh?.Invoke(); return; }
-                // Nothing crafted: console (guaranteed), float (in-inventory)
-                // and toast (after closing the panels) all say why.
+                // Nothing crafted: float (in-inventory) and toast (after
+                // closing the panels) both say why.
                 string reason = queueRoom < 1 ? "Queue full"
                     : Crafter.CraftFailReason(source, dest, recipe) ?? "Inventory full";
-                Debug.Log($"[Craft] Refused {recipe.GetName()}: {reason} | ing={Crafter.HasIngredients(source, recipe)} | {Crafter.DescribeSpace(dest, recipe)}");
                 Color tint = Crafter.HasIngredients(source, recipe) ? T.AccentAmber : T.AccentRed;
                 try { BuildFeedbackHud.FloatAt(craftBtn, "⚠ " + reason, tint); }
                 catch (System.Exception floatEx) { Debug.LogException(floatEx); }

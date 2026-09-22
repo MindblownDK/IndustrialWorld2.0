@@ -73,7 +73,9 @@ namespace VoxelEngine.FX
             float target = Mathf.Clamp01(_activity());
             _fade = Mathf.MoveTowards(_fade, target, Time.deltaTime * _fadeSpeed);
 
-            _src.volume = _fade * _baseVolume;
+            // Exterior loops go quiet in vacuum (listener-based, so a sealed
+            // cockpit still hears the ship while EVA hears nothing).
+            _src.volume = _fade * _baseVolume * VacuumAudio.Exterior01;
             _src.pitch  = _basePitch + _fade * _pitchSpread;
 
             // Pause the source entirely when fully silent to save voices.

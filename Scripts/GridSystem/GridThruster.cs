@@ -167,10 +167,11 @@ namespace VoxelEngine.GridSystem
             main.startSize = _baseStartSize * Mathf.Lerp(0.6f, 1.0f, fraction);
             main.startSpeed = _baseStartSpeed * Mathf.Lerp(0.5f, 1.0f, fraction);
 
-            // Drive the audio rumble.
+            // Drive the audio rumble. Thruster roar is exterior: vacuum
+            // silences it at the listener, while a sealed cockpit still hears it.
             if (_audio != null)
             {
-                _audio.volume = fraction * fraction * _maxVolume;
+                _audio.volume = fraction * fraction * _maxVolume * VoxelEngine.FX.VacuumAudio.Exterior01;
                 _audio.pitch = Mathf.Lerp(0.75f, 1.25f, fraction);
             }
 

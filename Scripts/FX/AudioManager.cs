@@ -126,11 +126,14 @@ namespace VoxelEngine.FX
             float volume = 1f, float pitch = 1f, float maxDistance = 30f)
         {
             if (clip == null) return;
+            // Positional one-shots are exterior by definition: silent in vacuum.
+            float vac = VacuumAudio.Exterior01;
+            if (vac <= 0.001f) return;
             var go = new GameObject("~Sfx3D");
             go.transform.position = position;
             var s = go.AddComponent<AudioSource>();
             s.clip          = clip;
-            s.volume        = volume;
+            s.volume        = volume * vac;
             s.pitch         = pitch;
             s.spatialBlend  = 1f;
             s.rolloffMode   = AudioRolloffMode.Linear;

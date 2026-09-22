@@ -5316,20 +5316,18 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
             btn = new Button(() => {
                 try
                 {
-                    Debug.Log($"[Craft] Click {recipe.GetName()}");
                     CraftQueue qNow = _activeQueue;
                     if (qNow == null && recipe.requiredStation != Crafting.StationTier.None && inventory != null)
                         qNow = FindNearestQueueForTier(recipe.requiredStation, inventory.transform.position);
-                    // A failed craft says why three ways: console (guaranteed),
-                    // floating text at the button (visible in-inventory) and a
-                    // toast (visible after closing the panels).
+                    // A failed craft says why two ways: floating text at the
+                    // button (visible in-inventory) and a toast (visible after
+                    // closing the panels).
                     string reason = Crafter.CraftFailReason(source, dest, recipe);
                     if (reason == null)
                     {
                         if (Crafter.TryCraft(source, dest, recipe, qNow)) { Refresh(); return; }
                         reason = "Inventory full";   // unreachable in practice; stay honest anyway
                     }
-                    Debug.Log($"[Craft] Refused {recipe.GetName()}: {reason} | ing={Crafter.HasIngredients(source, recipe)} | {Crafter.DescribeSpace(dest, recipe)}");
                     Color tint = Crafter.HasIngredients(source, recipe) ? UITheme.AccentAmber : UITheme.AccentRed;
                     try { BuildFeedbackHud.FloatAt(btn, "⚠ " + reason, tint); }
                     catch (System.Exception floatEx) { Debug.LogException(floatEx); }

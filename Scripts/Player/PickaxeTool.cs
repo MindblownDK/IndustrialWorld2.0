@@ -27,6 +27,7 @@ namespace VoxelEngine.Player
         public AudioSource  hitAudio;
 
         private float _nextHit;
+        private float _hitBaseVolume = 1f;
 
         private void Awake()
         {
@@ -34,6 +35,7 @@ namespace VoxelEngine.Player
             if (shootCamera == null) shootCamera = Camera.main;
             // Route tool SFX through the SFX mixer bus (no-op without a mixer asset).
             if (hitAudio != null) VoxelEngine.FX.AudioManager.Route(hitAudio, music: false);
+            if (hitAudio != null) _hitBaseVolume = hitAudio.volume;
         }
 
         private void Update()
@@ -75,7 +77,12 @@ namespace VoxelEngine.Player
                 beam.SetPosition(0, transform.position);
                 beam.SetPosition(1, hit.point);
             }
-            if (hitAudio) hitAudio.Play();
+            // Tool hits are exterior: silent in vacuum, full in air or a sealed room.
+            if (hitAudio)
+            {
+                hitAudio.volume = _hitBaseVolume * VoxelEngine.FX.VacuumAudio.Exterior01;
+                if (hitAudio.volume > 0.001f) hitAudio.Play();
+            }
         }
     }
 }

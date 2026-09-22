@@ -77,20 +77,6 @@ namespace VoxelEngine.Crafting
         }
 
         /// <summary>
-        /// One-line destination state for the console log when a craft is
-        /// refused: space verdict, live weight and whether an accept gate
-        /// (cargo filter) is installed.
-        /// </summary>
-        public static string DescribeSpace(IItemContainer destination, RecipeDefinition recipe)
-        {
-            if (destination is ItemContainer ic)
-                return $"space={ic.HasSpace(recipe.outputItem, recipe.outputCount)} " +
-                       $"weight={MassFormat.Format(ic.CurrentWeightKg)} / {MassFormat.Format(ic.MaxWeightKg)} " +
-                       $"filter={ic.AcceptFilter != null}";
-            return $"dest={(destination != null ? destination.GetType().Name : "null")} (no space gate)";
-        }
-
-        /// <summary>
         /// Returns the highest station tier currently accessible from 'origin' within 'radius'.
         /// Always includes StationTier.None (recipes craftable bare-handed).
         /// </summary>
