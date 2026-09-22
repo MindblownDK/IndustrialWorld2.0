@@ -1,9 +1,35 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.16.0-dev`
+**Current Version:** `12.16.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.16.1-dev] Cryobed Docks Right And Craft Buttons Speak Up - Bench Fix Round
+
+**Type:** PATCH - bugfix round for four bench-adjacent reports: the cryobed panel opened centre-screen, its oxygen bar looked plain, the filter search caret sat high while empty, and failed crafts died silently. No behaviour, save, recipe or setup changes.
+
+**GitHub title:** `[12.16.1-dev] Cryobed docks right and craft buttons speak up - bench fix round`
+
+#### Cryobed joins the side dock
+
+The cryobed control panel now docks on the right like every other machine panel - full height, right edge, transparent backdrop - instead of floating centre-screen. It stays modal (Close button or Pause to dismiss), and the starship rails and hull divider from 12.16 carry over unchanged.
+
+#### A tank worthy of the name
+
+The oxygen readout is now a proper pressure vessel: valve cap and neck stacked above the body, cylinder shading down the flanks and level ticks at 25 / 50 / 75 %. The live fill, the empty/low/ok colour cues and the centred percentage all behave exactly as before.
+
+#### Caret fix and honest craft buttons
+
+The filter search fields in all three dialogs stretch their inner text element to the full field height, so the caret stays vertically centred while the field is empty instead of riding high. And the CRAFT button now reports failure: "Missing ingredients" when items are short, "No room for output" when the inventory is full or overweight, and "Craft error" (plus a console log entry) if anything throws. The success path is untouched.
+
+#### Manual steps in Unity
+
+1. Apply the patch and recompile.
+2. No setup re-run is needed: no new blocks, items or recipes.
+3. Press E on a cryobed: panel docks right, oxygen tank has valve, shading and ticks.
+4. Open each filter dialog: the empty search caret sits centred.
+5. Click CRAFT on a bench recipe: crafts as before; if one ever fails, a toast now says why - report the toast text.
 
 ### [12.16.0-dev] Dialogs And Decision Cards - Chrome For The Floating UI
 

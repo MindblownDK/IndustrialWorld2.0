@@ -120,6 +120,10 @@ namespace VoxelEngine.UI
             var inputEl = search.Q(TextField.textInputUssName);
             if (inputEl != null)
             {
+                // Stretch to the full field height so the caret stays
+                // vertically centred while the field is empty.
+                inputEl.style.flexGrow = 1f;
+                inputEl.style.alignSelf = Align.Stretch;
                 inputEl.style.unityTextAlign = TextAnchor.MiddleLeft;
                 inputEl.style.paddingLeft = 8; inputEl.style.paddingRight = 8;
                 inputEl.style.paddingTop = 0; inputEl.style.paddingBottom = 0;
@@ -297,6 +301,10 @@ namespace VoxelEngine.UI
             var inputEl = search.Q(TextField.textInputUssName);
             if (inputEl != null)
             {
+                // Stretch to the full field height so the caret stays
+                // vertically centred while the field is empty.
+                inputEl.style.flexGrow = 1f;
+                inputEl.style.alignSelf = Align.Stretch;
                 inputEl.style.unityTextAlign = TextAnchor.MiddleLeft;
                 inputEl.style.paddingLeft = 8; inputEl.style.paddingRight = 8;
                 inputEl.style.paddingTop = 0; inputEl.style.paddingBottom = 0;
@@ -489,6 +497,10 @@ namespace VoxelEngine.UI
             var inputEl = search.Q(TextField.textInputUssName);
             if (inputEl != null)
             {
+                // Stretch to the full field height so the caret stays
+                // vertically centred while the field is empty.
+                inputEl.style.flexGrow = 1f;
+                inputEl.style.alignSelf = Align.Stretch;
                 inputEl.style.unityTextAlign = TextAnchor.MiddleLeft;
                 inputEl.style.paddingLeft = 8; inputEl.style.paddingRight = 8;
                 inputEl.style.paddingTop = 0; inputEl.style.paddingBottom = 0;

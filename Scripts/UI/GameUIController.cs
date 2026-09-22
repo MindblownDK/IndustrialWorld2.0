@@ -5312,10 +5312,23 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
             bool can = Crafter.HasIngredients(source, recipe);
             bool atMaxQueue = sameRecipeQueued >= 10;
             var btn = new Button(() => {
-                CraftQueue qNow = _activeQueue;
-                if (qNow == null && recipe.requiredStation != Crafting.StationTier.None && inventory != null)
-                    qNow = FindNearestQueueForTier(recipe.requiredStation, inventory.transform.position);
-                if (Crafter.TryCraft(source, dest, recipe, qNow)) Refresh();
+                try
+                {
+                    CraftQueue qNow = _activeQueue;
+                    if (qNow == null && recipe.requiredStation != Crafting.StationTier.None && inventory != null)
+                        qNow = FindNearestQueueForTier(recipe.requiredStation, inventory.transform.position);
+                    if (Crafter.TryCraft(source, dest, recipe, qNow)) { Refresh(); return; }
+                    // A failed craft must say why instead of silently doing nothing.
+                    if (!Crafter.HasIngredients(source, recipe))
+                        BuildFeedbackHud.Show("Missing ingredients", recipe.GetName(), recipe.GetIcon(), UITheme.AccentRed);
+                    else
+                        BuildFeedbackHud.Show("No room for output", "Inventory full or overweight", recipe.GetIcon(), UITheme.AccentAmber);
+                }
+                catch (System.Exception e)
+                {
+                    Debug.LogException(e);
+                    BuildFeedbackHud.Show("Craft error", "See the console log", recipe.GetIcon(), UITheme.AccentRed);
+                }
             }) { text = "CRAFT" };
             btn.style.minHeight = 32; btn.style.minWidth = 80; btn.style.color = Color.white;
             btn.style.unityFontStyleAndWeight = FontStyle.Bold;

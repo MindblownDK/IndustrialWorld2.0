@@ -34,9 +34,9 @@ namespace VoxelEngine.UI
             _overlay = new VisualElement { name = "CryobedConfigHud" };
             _overlay.style.position = Position.Absolute;
             _overlay.style.left = 0; _overlay.style.right = 0; _overlay.style.top = 0; _overlay.style.bottom = 0;
-            _overlay.style.backgroundColor = new StyleColor(new Color(0f, 0f, 0f, 0.45f));
-            _overlay.style.alignItems = Align.Center;
-            _overlay.style.justifyContent = Justify.Center;
+            _overlay.style.backgroundColor = new StyleColor(new Color(0f, 0f, 0f, 0f));
+            _overlay.style.alignItems = Align.FlexEnd;
+            _overlay.style.justifyContent = Justify.FlexStart;
             _overlay.style.display = DisplayStyle.None;
             uiRoot.Add(_overlay);
         }
@@ -91,7 +91,11 @@ namespace VoxelEngine.UI
 
             var panel = new VisualElement();
             _panelRef = panel;
-            panel.style.width = 540; panel.style.maxWidth = new StyleLength(new Length(92f, LengthUnit.Percent));
+            // Side-docked like every other machine panel: full height, right edge.
+            panel.style.position = Position.Absolute;
+            panel.style.top = 24; panel.style.bottom = 92; panel.style.right = 18;
+            panel.style.width = new StyleLength(new Length(30f, LengthUnit.Percent));
+            panel.style.minWidth = 320; panel.style.maxWidth = 500;
             panel.style.paddingLeft = 20; panel.style.paddingRight = 20; panel.style.paddingTop = 18; panel.style.paddingBottom = 18;
             panel.style.backgroundColor = new StyleColor(new Color(0.035f, 0.045f, 0.060f, 0.98f));
             T.Radius(panel, 14); T.Border(panel, 1, online ? new Color(0.30f, 0.95f, 0.62f, 0.45f) : new Color(0.95f, 0.30f, 0.18f, 0.45f));
@@ -130,6 +134,25 @@ namespace VoxelEngine.UI
             var oxyRightWrap = new VisualElement(); oxyRightWrap.style.flexGrow = 1; oxyRightWrap.style.flexDirection = FlexDirection.Row; oxyRightWrap.style.alignItems = Align.FlexStart;
             oxygenRow.Add(oxyRightWrap);
 
+            // Tank assembly: valve cap + neck stacked above the pressure vessel.
+            var tankWrap = new VisualElement();
+            tankWrap.style.flexDirection = FlexDirection.Column;
+            tankWrap.style.alignItems = Align.Center;
+            tankWrap.style.marginRight = 12;
+
+            var valveCap = new VisualElement();
+            valveCap.style.width = 36; valveCap.style.height = 12;
+            valveCap.style.backgroundColor = new StyleColor(new Color(0.10f, 0.32f, 0.45f, 1f));
+            T.Border(valveCap, 1, new Color(0.20f, 0.70f, 0.95f, 0.50f));
+            T.Radius(valveCap, 3);
+            tankWrap.Add(valveCap);
+
+            var valveNeck = new VisualElement();
+            valveNeck.style.width = 18; valveNeck.style.height = 8;
+            valveNeck.style.backgroundColor = new StyleColor(new Color(0.16f, 0.55f, 0.75f, 1f));
+            T.Radius(valveNeck, 2);
+            tankWrap.Add(valveNeck);
+
             // Tank graphic
             var tankOuter = new VisualElement { name = "OxygenTankOuter" };
             tankOuter.style.width = 58;
@@ -143,7 +166,6 @@ namespace VoxelEngine.UI
             T.Radius(tankOuter, 11);
             tankOuter.style.position = Position.Relative;
             tankOuter.style.overflow = Overflow.Hidden;
-            tankOuter.style.marginRight = 12;
 
             // Fill element
             var fill = new VisualElement { name = "OxygenTankFill" };
@@ -164,6 +186,35 @@ namespace VoxelEngine.UI
             gloss.pickingMode = PickingMode.Ignore;
             tankOuter.Add(gloss);
 
+            // Cylinder shading: highlight left, shadow right.
+            var shadeL = new VisualElement();
+            shadeL.style.position = Position.Absolute;
+            shadeL.style.left = 5; shadeL.style.top = 26; shadeL.style.bottom = 6; shadeL.style.width = 7;
+            shadeL.style.backgroundColor = new StyleColor(new Color(1f, 1f, 1f, 0.10f));
+            T.Radius(shadeL, 3);
+            shadeL.pickingMode = PickingMode.Ignore;
+            tankOuter.Add(shadeL);
+
+            var shadeR = new VisualElement();
+            shadeR.style.position = Position.Absolute;
+            shadeR.style.right = 5; shadeR.style.top = 26; shadeR.style.bottom = 6; shadeR.style.width = 9;
+            shadeR.style.backgroundColor = new StyleColor(new Color(0f, 0f, 0f, 0.28f));
+            T.Radius(shadeR, 3);
+            shadeR.pickingMode = PickingMode.Ignore;
+            tankOuter.Add(shadeR);
+
+            // Level ticks at 25 / 50 / 75 %.
+            foreach (float tickPct in new float[] { 25f, 50f, 75f })
+            {
+                var tick = new VisualElement();
+                tick.style.position = Position.Absolute;
+                tick.style.right = 4; tick.style.width = 10; tick.style.height = 2;
+                tick.style.bottom = new StyleLength(new Length(tickPct, LengthUnit.Percent));
+                tick.style.backgroundColor = new StyleColor(new Color(1f, 1f, 1f, 0.45f));
+                tick.pickingMode = PickingMode.Ignore;
+                tankOuter.Add(tick);
+            }
+
             // Percentage label centered over tank
             var pctLabel = new Label("0%");
             _oxygenPctLabel = pctLabel;
@@ -176,7 +227,8 @@ namespace VoxelEngine.UI
             pctLabel.pickingMode = PickingMode.Ignore;
             tankOuter.Add(pctLabel);
 
-            oxyRightWrap.Add(tankOuter);
+            tankWrap.Add(tankOuter);
+            oxyRightWrap.Add(tankWrap);
 
             var detailsCol = new VisualElement(); detailsCol.style.flexGrow = 1; detailsCol.style.flexDirection = FlexDirection.Column;
             var oxyText = new Label(OxygenText());

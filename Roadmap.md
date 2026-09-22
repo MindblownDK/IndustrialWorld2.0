@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.16.0-dev`
-**Roadmap Version:** `12.16.0-dev`
+**Current Version:** `12.16.1-dev`
+**Roadmap Version:** `12.16.1-dev`
 **Date:** 2026-09-22
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,10 @@
 
 ## 0. Recently Done
 
+### 12.16.1-dev - Bench Fix Round (Cryo Dock, Craft Errors)
+- **Fixed:** cryobed control side-docked like other machine panels; oxygen tank rebuilt with valve, shading and level ticks; filter search caret centred when empty (all three dialogs); failed crafts now toast the reason instead of silently doing nothing.
+- **Preserved:** starship cryo chrome, all values, queues and modal behaviour. No setup changes.
+
 ### 12.16.0-dev - Dialogs And Decision Cards (Floating UI Chrome)
 - **Dialogs chromed** (`ItemFilterDialog`, `GameUIController`): three filter dialogs, item-ports overlay, drop-limit and tank-void modals industrial; crafting bench industrial with queue-reactive lamps (green crafting, amber idle). Cryobed dialog starship (green staffed / amber calling); grid screen config high-tech cyan.
 - **Preserved:** all values, slots, filters, toggles, queues and screen settings. Unused `LightingControlUI` and row-builder `PortConfigHud` carry no chrome. No setup changes.
@@ -45,10 +49,6 @@
 - **World machines chromed** (industrial): processor shell (refinery, chemical, distillation, cracker), wind turbine, voltage station, drone port, fluid pump, armor station, plus world battery, turrets, container, furnaces, coal generator, powerstation (`GameUIController`). Status lamps where the block has a running state.
 - **Nav consoles chromed** (starship): observatory, auto-run pilot, connector, route recorder, refuel pad. Every fallback branch framed on its own path. No setup changes.
 - **Deferred:** maritime and storage await their own rounds; LCD centre screens, confirm modals and the crafting bench stay on player chrome.
-
-### 12.12.0-dev - Chrome On Every Console (GridBlockUI Finale)
-- **Last ten consoles chromed** (`GridBlockUI`): battery (industrial), vault + harvester (high-tech), locator, satellites, season monitor (starship), coupler (steampunk), LED + light (industrial, color-reactive dividers kept). Bespoke visuals and live loops untouched.
-- **Preserved:** all values, slots, modes, sliders, color keys and hints; offline satellite branch framed on both paths. No setup changes.
 
 ### Era Transition Feel
 
