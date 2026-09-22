@@ -1385,7 +1385,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 |------|--------|------------------|
 | Configurable grid screens / displays | ✅ COMPLETED | All sizes, live text/power/data modes, right-click and terminal config, custom text/colors/border/font, visual bar charts, multi-source selection, live camera feeds, power gain/loss/net mode, persistence, and camera block integration are implemented and validated. |
 | Camera block live feed | ✅ COMPLETED | `GridCameraBlock` exposes a live RenderTexture through `IGridCameraFeedProvider`; `GridScreenBlock` Camera mode applies it directly to the screen surface with correct online/idle/offline LED states and validated screen-source behavior. |
-| Trajectory camera / orbit tools | ✅ COMPLETED (trajectory) | `TrajectoryPredictor` + `TrajectoryOverlay` (11.12.0-dev) give the predicted path, terrain impact marker and time/speed-to-impact in the wide exterior view. The separate Star Map / orbit overlay (item 7) is still open. |
+| Trajectory camera / orbit tools | ✅ COMPLETED (trajectory) | `TrajectoryPredictor` + `TrajectoryOverlay` (11.12.0-dev) give the predicted path, terrain impact marker and time/speed-to-impact in the wide exterior view. The separate Star Map / orbit overlay (item 7) is complete (12.19.0-dev). |
 
 #### New Content
 
@@ -1475,20 +1475,20 @@ Statuses are evidence-based and move forward only after code/content review and 
      - Impact marker on terrain or predicted orbit.
    - Toggled in Settings → Controls → `Trajectory Camera`.
 
-7. **Star Map / Orbit Overlay (`M`)** - ~~system map with all orbits, craft and bodies~~ *(11.13.0-dev)* - **LARGELY COMPLETE**
+7. **Star Map / Orbit Overlay (`M`)** - ~~system map with all orbits, craft and bodies~~ *(11.13.0-dev)* - **COMPLETE**
    - `OrbitalMapScreen` on `M`: all bodies, all named constructs, live orbital telemetry, true focus-offset ellipses, pan/zoom/focus.
    - Gated on an equipped `OrbitalMapItem` - the map is a researched device, not a free menu.
    - **Implementation note:** name labels are pooled Labels, NOT `MeshGenerationContext.DrawText`, which needs a paint-time font and is not dependable across Unity versions.
-   - Open: click-to-set-navigation-target, asteroid fields on the map, and trajectory trails for orbiting bodies.
+   - ~~Open: click-to-set-navigation-target, asteroid fields on the map, and trajectory trails for orbiting bodies.~~ *(12.19.0-dev: persistent click-to-set navigation target with live resolution, the asteroid shell drawn as a ring-plus-rocks region, and analytic trajectory trails on every drawn ellipse)*
    - Legacy design, still accurate:
    - Pressing `M` opens the system map.
    - Shows:
      - All planet and moon orbits.
      - Grid ships currently in orbit or in flight.
-     - Asteroid fields.
+     - ~~Asteroid fields.~~ *(12.19.0-dev)*
      - Player bases and landing pads.
-   - Click a body to set navigation target.
-   - Optional trajectory trails for all orbiting bodies.
+   - ~~Click a body to set navigation target.~~ *(12.19.0-dev)*
+   - ~~Optional trajectory trails for all orbiting bodies.~~ *(12.19.0-dev)*
 
 8. **Grid Route Recorder, Calculator & Autopilot**
    - Manually calculate distance, travel time, required thrust, power/fuel cost, and reserve margin to a selected body or waypoint.

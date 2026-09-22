@@ -35,7 +35,7 @@ namespace VoxelEngine.UI
         private static VisualElement _canvas;
         private static VisualElement _sidebar;
         private static VisualElement _labelLayer;
-        private static Label _headerLabel, _statusLabel, _focusLabel;
+        private static Label _headerLabel, _statusLabel, _focusLabel, _navLabel;
         private static ScrollView _list;
         private static bool _open;
         private static bool _blocking;
@@ -114,6 +114,10 @@ namespace VoxelEngine.UI
             {
                 _dragging = false;
                 _canvas.ReleasePointer(e.pointerId);
+                // A press-and-release without a drag is a click: acquire the contact
+                // under the cursor as the navigation target, or clear on empty space.
+                if (((Vector2)e.position - _dragStart).magnitude <= 6f)
+                    HandleCanvasClick(e.localPosition);
             });
 
             // Label overlay sits above the painted mesh but ignores the pointer so panning
@@ -157,7 +161,20 @@ namespace VoxelEngine.UI
             _focusLabel.pickingMode = PickingMode.Ignore;
             _canvas.Add(_focusLabel);
 
-            var hint = new Label("DRAG TO PAN   ·   SCROLL TO ZOOM   ·   CLICK A CONTACT TO FOCUS   ·   M / ESC TO CLOSE");
+            _navLabel = new Label("");
+            _navLabel.style.position = Position.Absolute;
+            _navLabel.style.top = 34;
+            _navLabel.style.fontSize = 10;
+            _navLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _navLabel.style.letterSpacing = 1.6f;
+            _navLabel.style.color = new StyleColor(new Color(0.95f, 0.78f, 0.30f));
+            _navLabel.style.alignSelf = Align.Center;
+            _navLabel.style.width = Length.Percent(100);
+            _navLabel.style.unityTextAlign = TextAnchor.UpperCenter;
+            _navLabel.pickingMode = PickingMode.Ignore;
+            _canvas.Add(_navLabel);
+
+            var hint = new Label("DRAG TO PAN   ·   SCROLL TO ZOOM   ·   CLICK CONTACT = NAV TARGET + FOLLOW   ·   CLICK SPACE = CLEAR   ·   M / ESC TO CLOSE");
             hint.style.position = Position.Absolute;
             hint.style.bottom = 12;
             hint.style.width = Length.Percent(100);
@@ -225,6 +242,7 @@ namespace VoxelEngine.UI
             }
 
             if (_screen == null) return;
+            NavigationTarget.EnsureRestored();
             _open = true;
             _screen.style.display = DisplayStyle.Flex;
             if (!_blocking) { UIState.PushBlock(); _blocking = true; }
@@ -262,6 +280,7 @@ namespace VoxelEngine.UI
             _statusLabel.text = $"{_device.displayName.ToUpperInvariant()}  ·  {_device.CapabilityLabel}  ·  " +
                                 $"{tracked}/{contacts} CONTACTS IN RANGE  ·  RANGE {OrbitalTrackingService.FormatKm(_device.trackingRangeKm)}";
             _focusLabel.text = string.IsNullOrEmpty(_focusName) ? "" : "Focus: " + _focusName;
+            _navLabel.text = NavigationTarget.HasTarget ? "NAV TARGET: " + NavigationTarget.TargetName : "";
 
             BuildList(entries);
             LayoutLabels();
@@ -328,10 +347,12 @@ namespace VoxelEngine.UI
             top.style.flexDirection = FlexDirection.Row;
             top.style.justifyContent = Justify.SpaceBetween;
 
-            var name = new Label(entry.Name);
+            bool nav = NavigationTarget.HasTarget && entry.Name == NavigationTarget.TargetName;
+            var name = new Label(nav ? entry.Name + "  [NAV]" : entry.Name);
             name.style.fontSize = 10;
             name.style.unityFontStyleAndWeight = FontStyle.Bold;
-            name.style.color = new StyleColor(entry.InRange ? InkFor(entry) : T.TextMuted);
+            name.style.color = new StyleColor(!entry.InRange ? T.TextMuted
+                : nav ? new Color(0.95f, 0.85f, 0.35f) : InkFor(entry));
             top.Add(name);
 
             var kind = new Label(entry.KindLabel);
@@ -390,6 +411,7 @@ namespace VoxelEngine.UI
             MapEntryKind.Sun => new Color(1.00f, 0.88f, 0.42f),
             MapEntryKind.Planet => new Color(0.55f, 0.78f, 0.95f),
             MapEntryKind.Moon => new Color(0.72f, 0.75f, 0.80f),
+            MapEntryKind.Asteroid => new Color(0.78f, 0.70f, 0.55f),
             _ => VesselInk,
         };
 
@@ -413,19 +435,7 @@ namespace VoxelEngine.UI
             var entries = OrbitalTrackingService.Entries;
             if (entries.Count == 0) return;
 
-            Vector2 centre = new(r.width * 0.5f, r.height * 0.5f) ;
-            centre += _pan;
-
-            // Anchor the view on the focused contact, else on the dominant body, so the
-            // map always opens on something meaningful instead of the system barycentre.
-            double3 anchor = default;
-            for (int i = 0; i < entries.Count; i++)
-            {
-                if (entries[i].Name == _focusName) { anchor = entries[i].PositionKm; break; }
-            }
-
-            // Scale: pixels per km. Chosen so a default zoom frames a planet and its moons.
-            double pxPerKm = 0.00035d * _zoom;
+            Frame(r, entries, out Vector2 centre, out double3 anchor, out double pxPerKm);
 
             // Orbit ellipses first, so contact markers draw on top of them.
             if (_device == null || _device.showOrbitPaths)
@@ -448,8 +458,12 @@ namespace VoxelEngine.UI
                     double periR = (e.PeriapsisKm + surface) * pxPerKm;
                     if (apoR < 3d || apoR > 40000d) continue;
 
-                    DrawEllipse(painter, pc, (float)apoR, (float)periR,
-                        e.IsCraft ? new Color(InkFor(e).r, InkFor(e).g, InkFor(e).b, 0.5f) : OrbitLine);
+                    Color lineColor = e.IsCraft
+                        ? new Color(InkFor(e).r, InkFor(e).g, InkFor(e).b, 0.5f)
+                        : OrbitLine;
+                    DrawEllipse(painter, pc, (float)apoR, (float)periR, lineColor);
+                    PaintTrail(painter, pc, Project(e.PositionKm, anchor, centre, pxPerKm),
+                        (float)apoR, (float)periR, lineColor);
                 }
             }
 
@@ -466,6 +480,14 @@ namespace VoxelEngine.UI
 
                 if (e.IsBody)
                 {
+                    // The asteroid shell draws as a region — a ring plus its rocks —
+                    // never as a solid disc, which would swallow the inner system.
+                    if (e.Kind == MapEntryKind.Asteroid)
+                    {
+                        PaintAsteroidBelt(painter, e, p, anchor, centre, pxPerKm, ink, r);
+                        continue;
+                    }
+
                     // Bodies draw to scale where possible, with a floor so a distant moon
                     // is still clickable rather than a sub-pixel dot.
                     float radius = Mathf.Clamp((float)(e.RadiusKm * pxPerKm), 3f, 900f);
@@ -496,6 +518,14 @@ namespace VoxelEngine.UI
                 }
 
             }
+
+            // Navigation target reticle, resolved live so it tracks moving craft.
+            if (NavigationTarget.HasTarget && NavigationTarget.TryResolve(out double3 navKm))
+            {
+                Vector2 np = Project(navKm, anchor, centre, pxPerKm);
+                if (np.x > -60 && np.y > -60 && np.x < r.width + 60 && np.y < r.height + 60)
+                    PaintReticle(painter, np);
+            }
         }
 
         // ── Name labels ──────────────────────────────────────────────────────────
@@ -510,12 +540,7 @@ namespace VoxelEngine.UI
             var entries = OrbitalTrackingService.Entries;
             if (r.width < 10 || r.height < 10) { HideLabelsFrom(0); return; }
 
-            Vector2 centre = new Vector2(r.width * 0.5f, r.height * 0.5f) + _pan;
-            double3 anchor = default;
-            for (int i = 0; i < entries.Count; i++)
-                if (entries[i].Name == _focusName) { anchor = entries[i].PositionKm; break; }
-
-            double pxPerKm = 0.00035d * _zoom;
+            Frame(r, entries, out Vector2 centre, out double3 anchor, out double pxPerKm);
 
             int used = 0;
             for (int i = 0; i < entries.Count; i++)
@@ -533,11 +558,13 @@ namespace VoxelEngine.UI
                 label.style.display = DisplayStyle.Flex;
                 label.style.left = p.x + 9f;
                 label.style.top = p.y - 8f;
-                label.style.color = new StyleColor(e.Name == _focusName
+                bool marked = e.Name == _focusName
+                    || (NavigationTarget.HasTarget && e.Name == NavigationTarget.TargetName);
+                label.style.color = new StyleColor(marked
                     ? new Color(0.95f, 0.85f, 0.35f)
                     : InkFor(e));
                 label.style.fontSize = e.IsBody ? 10 : 9;
-                label.style.unityFontStyleAndWeight = e.Name == _focusName ? FontStyle.Bold : FontStyle.Normal;
+                label.style.unityFontStyleAndWeight = marked ? FontStyle.Bold : FontStyle.Normal;
             }
             HideLabelsFrom(used);
         }
@@ -575,6 +602,186 @@ namespace VoxelEngine.UI
                 if (entries[i].IsBody && entries[i].Name == child.ParentName) return entries[i].RadiusKm;
             }
             return 0d;
+        }
+
+        /// <summary>
+        /// The shared view frame: paint, labels, and click hit-testing all project
+        /// through this, so what you click is always what you see.
+        /// </summary>
+        private static void Frame(Rect r, IReadOnlyList<MapEntry> entries,
+            out Vector2 centre, out double3 anchor, out double pxPerKm)
+        {
+            centre = new Vector2(r.width * 0.5f, r.height * 0.5f) + _pan;
+
+            // Anchor the view on the focused contact, else on the dominant body, so the
+            // map always opens on something meaningful instead of the system barycentre.
+            anchor = default;
+            for (int i = 0; i < entries.Count; i++)
+            {
+                if (entries[i].Name == _focusName) { anchor = entries[i].PositionKm; break; }
+            }
+
+            // Scale: pixels per km. Chosen so a default zoom frames a planet and its moons.
+            pxPerKm = 0.00035d * _zoom;
+        }
+
+        /// <summary>
+        /// Click-to-acquire: the nearest contact inside its grab radius becomes the
+        /// navigation target (and the follow focus, when the device allows it).
+        /// Empty space clears both, which also hands pan control back to the player.
+        /// </summary>
+        private static void HandleCanvasClick(Vector2 localPos)
+        {
+            Rect r = _canvas.contentRect;
+            var entries = OrbitalTrackingService.Entries;
+            if (r.width < 10 || r.height < 10 || entries.Count == 0) return;
+            Frame(r, entries, out Vector2 centre, out double3 anchor, out double pxPerKm);
+
+            int best = -1;
+            float bestD = float.MaxValue;
+            for (int i = 0; i < entries.Count; i++)
+            {
+                var e = entries[i];
+                if (!e.InRange) continue;
+                Vector2 p = Project(e.PositionKm, anchor, centre, pxPerKm);
+
+                float d;
+                float grab;
+                if (e.Kind == MapEntryKind.Asteroid)
+                {
+                    // The belt is a ring: grab it by its edge. Its centre is usually
+                    // the sun, which keeps its own grab radius.
+                    float radius = Mathf.Clamp((float)(e.RadiusKm * pxPerKm), 10f, 4000f);
+                    d = Mathf.Abs((localPos - p).magnitude - radius);
+                    grab = 12f;
+                }
+                else if (e.IsBody)
+                {
+                    float radius = Mathf.Clamp((float)(e.RadiusKm * pxPerKm), 3f, 900f);
+                    d = (localPos - p).magnitude;
+                    grab = Mathf.Max(radius, 14f);
+                }
+                else
+                {
+                    d = (localPos - p).magnitude;
+                    grab = 14f;
+                }
+
+                if (d <= grab && d < bestD) { best = i; bestD = d; }
+            }
+
+            if (best >= 0)
+            {
+                var e = entries[best];
+                if (_device != null && _device.allowFocusSwitching)
+                {
+                    _focusName = e.Name;
+                    _pan = Vector2.zero;
+                }
+                NavigationTarget.Set(e.Name, e.Kind);
+            }
+            else
+            {
+                _focusName = "";
+                NavigationTarget.Clear();
+            }
+            RefreshData();
+        }
+
+        /// <summary>
+        /// An analytic trajectory trail: an arc of the entry's already-drawn orbit
+        /// ellipse, trailing behind the body's current position. No history buffer —
+        /// the solved elements are the trail. Same (focus, a, c, b) convention as
+        /// DrawEllipse, so the arc always lies exactly on the ellipse.
+        /// </summary>
+        private static void PaintTrail(Painter2D painter, Vector2 focus, Vector2 bodyPos,
+            float apoR, float periR, Color color)
+        {
+            float a = (apoR + periR) * 0.5f;
+            float c = a - periR;
+            float b = Mathf.Sqrt(Mathf.Max(0.01f, a * a - c * c));
+            if (a < 12f || a > 20000f || b <= 0f) return;
+
+            float tBody = Mathf.Atan2((bodyPos.y - focus.y) / b, (bodyPos.x - focus.x + c) / a);
+
+            const float Sweep = 1.1f;
+            const int Chunks = 3;
+            for (int k = 0; k < Chunks; k++)
+            {
+                float t0 = tBody - Sweep + Sweep * k / Chunks;
+                float t1 = tBody - Sweep + Sweep * (k + 1) / Chunks;
+                float alpha = 0.14f + 0.18f * k;
+                painter.strokeColor = new Color(color.r, color.g, color.b, color.a * alpha * 2f);
+                painter.lineWidth = 2f;
+                painter.BeginPath();
+                for (int sgm = 0; sgm <= 14; sgm++)
+                {
+                    float t = Mathf.Lerp(t0, t1, sgm / 14f);
+                    var p = new Vector2(focus.x + Mathf.Cos(t) * a - c, focus.y + Mathf.Sin(t) * b);
+                    if (sgm == 0) painter.MoveTo(p); else painter.LineTo(p);
+                }
+                painter.Stroke();
+            }
+        }
+
+        /// <summary>Corner-tick reticle marking the live navigation target.</summary>
+        private static void PaintReticle(Painter2D painter, Vector2 p)
+        {
+            painter.strokeColor = new Color(0.95f, 0.78f, 0.30f, 0.95f);
+            painter.lineWidth = 2f;
+            const float g = 7f;
+            const float L = 17f;
+            painter.BeginPath();
+            painter.MoveTo(new Vector2(p.x - L, p.y - g));
+            painter.LineTo(new Vector2(p.x - L, p.y - L));
+            painter.LineTo(new Vector2(p.x - g, p.y - L));
+            painter.MoveTo(new Vector2(p.x + g, p.y - L));
+            painter.LineTo(new Vector2(p.x + L, p.y - L));
+            painter.LineTo(new Vector2(p.x + L, p.y - g));
+            painter.MoveTo(new Vector2(p.x + L, p.y + g));
+            painter.LineTo(new Vector2(p.x + L, p.y + L));
+            painter.LineTo(new Vector2(p.x + g, p.y + L));
+            painter.MoveTo(new Vector2(p.x - g, p.y + L));
+            painter.LineTo(new Vector2(p.x - L, p.y + L));
+            painter.LineTo(new Vector2(p.x - L, p.y + g));
+            painter.Stroke();
+        }
+
+        /// <summary>
+        /// The asteroid shell as a region: a boundary ring at the shell radius plus
+        /// its rocks as stride-sampled dust motes. Dots share the orbit-path device
+        /// gate — a basic unit still sees the ring.
+        /// </summary>
+        private static void PaintAsteroidBelt(Painter2D painter, MapEntry e, Vector2 p,
+            double3 anchor, Vector2 centre, double pxPerKm, Color ink, Rect r)
+        {
+            float radius = Mathf.Clamp((float)(e.RadiusKm * pxPerKm), 10f, 4000f);
+            painter.strokeColor = new Color(ink.r, ink.g, ink.b, 0.65f);
+            painter.lineWidth = 1.2f;
+            painter.BeginPath();
+            painter.Arc(p, radius, 0f, 360f);
+            painter.Stroke();
+
+            if (_device != null && !_device.showOrbitPaths) return;
+
+            var registry = CosmicRegistry.Instance;
+            var rocks = registry != null ? registry.Asteroids : null;
+            if (rocks == null || rocks.Count == 0) return;
+
+            double3 sun = registry.Sun != null ? registry.Sun.positionKmD : default;
+            int stride = Mathf.Max(1, (rocks.Count + 219) / 220);
+            painter.fillColor = new Color(ink.r, ink.g, ink.b, 0.8f);
+            for (int i = 0; i < rocks.Count; i += stride)
+            {
+                var rock = rocks[i];
+                if (rock == null) continue;
+                double3 rp = sun + new double3(rock.positionKm.x, rock.positionKm.y, rock.positionKm.z);
+                Vector2 sp = Project(rp, anchor, centre, pxPerKm);
+                if (sp.x < 0 || sp.y < 0 || sp.x > r.width || sp.y > r.height) continue;
+                painter.BeginPath();
+                painter.Arc(sp, 1.3f, 0f, 360f);
+                painter.Fill();
+            }
         }
 
         private static Vector2 Project(double3 posKm, double3 anchorKm, Vector2 centre, double pxPerKm)

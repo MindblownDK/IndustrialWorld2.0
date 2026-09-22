@@ -1,9 +1,49 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.18.0-dev`
+**Current Version:** `12.19.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.19.1-dev] Local Click - Orbital Map Pointer Fix
+
+**Type:** PATCH - fixes a compile error in the star map's click-to-acquire handler: `PointerUpEvent` exposes the cursor as `localPosition`, not `localMousePosition`, which only exists on the mouse-event family. One-word fix, no behaviour change.
+
+**GitHub title:** `[12.19.1-dev] Local click - orbital map pointer fix`
+
+#### Manual steps in Unity
+
+1. Apply the patch on top of 12.19.0-dev and recompile: the CS1061 error is gone.
+2. No setup re-run is needed: no new blocks, items or recipes.
+3. Press `M` and click a contact: the navigation target still acquires exactly as in 12.19.0-dev.
+
+### [12.19.0-dev] Chart the Belt - Star Map Navigation Targets, Asteroid Fields and Trails
+
+**Type:** MINOR - the orbital map grows its three missing pieces: click any contact to set a persistent navigation target, the system's asteroid shell draws as a rocky region instead of empty space, and orbiting bodies trail their paths behind them. No behaviour, save, recipe or setup changes.
+
+**GitHub title:** `[12.19.0-dev] Chart the belt - star map navigation targets, asteroid fields and trails`
+
+#### Click a contact, keep it
+
+Clicking a contact on the map canvas now sets it as the navigation target: a gold corner-tick reticle marks it on the chart, a `NAV TARGET` line names it in the header, and its sidebar row carries a `[NAV]` tag. When the equipped device allows focus switching the map also follows the new target. Clicking empty space clears the target and hands pan control back. The target persists across sessions and always resolves live - bodies from the cosmic registry, craft from their grid identity - so it tracks a moving ship even with the map closed. The new `NavigationTarget` service is UI-free on purpose: item 8 (route recorder and autopilot) will follow it without touching the map.
+
+#### The belt on the chart
+
+The tracking snapshot aggregates the system's scattered rocks into one `Asteroid Belt` contact at the shell centroid, listed in the BODIES section like any other body. The map draws it as a region rather than a disc: a boundary ring at the shell radius plus up to 220 stride-sampled rocks as dust motes, so the shell reads as a belt at any zoom without swallowing the inner system. The ring is clickable by its edge - its centre is usually the sun, which keeps its own grab radius. Paint, labels and click hit-testing now share one view-frame helper, so what you click is always what you see.
+
+#### Trails without history
+
+Every contact with a drawn orbit ellipse now trails a fading arc behind its current position - three chunks along the last stretch of its own path, brightest at the body. The arcs are analytic, read straight off the solved apoapsis/periapsis elements in the same focus-offset convention as the ellipses, so they lie exactly on the drawn orbit with no position-history buffer to maintain. Trails share the orbit-path device gate, like the ellipses themselves.
+
+#### Manual steps in Unity
+
+1. Apply the patch and recompile.
+2. No setup re-run is needed: no new blocks, items or recipes.
+3. Equip an Orbital Map and press `M`: zoom out and find the belt ring with its dust motes and the `Asteroid Belt` row under BODIES.
+4. Click a moon: the gold reticle, the `NAV TARGET` header line and the `[NAV]` row tag appear, and the map follows it.
+5. Click empty space: target and follow clear, and drag-panning works freely again.
+6. Confirm orbiting moons and craft trail fading arcs along their ellipses.
+7. Close the game, reopen, press `M`: the navigation target is restored.
 
 ### [12.18.0-dev] Silence Between Stars - Vacuum Audio Ducking
 

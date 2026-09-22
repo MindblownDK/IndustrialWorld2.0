@@ -148,6 +148,7 @@ namespace VoxelEngine.Cosmos
 
             AddSun(registry);
             AddBodies(registry);
+            AddAsteroidBelt(registry);
             AddCraft(registry, viewerKm, trackingRangeKm);
         }
 
@@ -205,6 +206,25 @@ namespace VoxelEngine.Cosmos
         }
 
         // ── Player constructs ────────────────────────────────────────────────────
+        /// <summary>
+        /// Aggregates the system's individually-scattered asteroid rocks into one
+        /// "Asteroid Belt" contact: the map draws the shell region (centroid +
+        /// radius), not up to 400 sub-pixel rocks. Always shown, like the bodies.
+        /// </summary>
+        private static void AddAsteroidBelt(CosmicRegistry registry)
+        {
+            var rocks = registry.Asteroids;
+            if (rocks == null || rocks.Count == 0) return;
+
+            double3 centroid = NavigationTarget.BeltCentroidKm(registry);
+            double radiusKm = NavigationTarget.BeltRadiusKm(registry, centroid);
+
+            _entries.Add(new MapEntry(NavigationTarget.BeltName, MapEntryKind.Asteroid,
+                MapMotionState.Drifting, centroid, null, "", double.NaN, double.NaN,
+                double.NaN, double.NaN, double.NaN, 0d, Mathf.Max((float)radiusKm, 1f),
+                null, true));
+        }
+
         private static void AddCraft(CosmicRegistry registry, double3 viewerKm, double trackingRangeKm)
         {
             var origin = SpaceOrigin.Instance;
