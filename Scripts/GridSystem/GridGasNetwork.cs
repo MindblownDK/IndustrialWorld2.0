@@ -48,7 +48,7 @@ namespace VoxelEngine.GridSystem
             var id = endpoint != null ? endpoint.GetEntityId().GetHashCode() : 0;
             return ((long)id << 24) ^ ((long)(int)type << 8) ^ ((forOutput ? 1L : 0L) << 4) ^ (includeStockpile ? 1L : 0L);
         }
-        public void SetDirty() => s_tankCache.Clear();
+        public void SetDirty() { s_tankCache.Clear(); _topo.Clear(); _seedMemo.Clear(); }
 
         private void Awake()
         {
@@ -189,31 +189,35 @@ namespace VoxelEngine.GridSystem
 
         /// <summary>
         /// Every non-pipe block reachable from this endpoint through its pipe run: the same
-        /// walk the fill/draw paths use, exposed for vent and tap queries. The pipe graph is
-        /// collected first and the scan runs over the grid afterwards, which keeps the
-        /// traversal in one place (ConnectedGasPipes) instead of three.
+        /// walk the fill/draw paths use, exposed for vent and tap queries. Links come from
+        /// the cached grid topology (no physics); enablement stays a live check.
         /// </summary>
         public IEnumerable<GridBlock> ConnectedEndpoints(GridBlock endpoint)
         {
             var grid = endpoint != null ? endpoint.Grid : null;
             if (grid == null) yield break;
 
-            var pipes = CollectGasPipes(endpoint);
-            if (pipes.Count == 0) yield break;
+            var topo = EnsureTopology(grid);
+            if (topo == null) yield break;
 
-            float detail = GridSize.Small.CellSize();
-            foreach (var block in grid.AllBlocks)
+            var yielded = new HashSet<GridBlock>();
+            foreach (var pipe in ReachablePipes(endpoint))
             {
-                if (block == null || block == endpoint || IsGasPipe(block)) continue;
-                if (!block.Enabled) continue;
-                bool linked = block is VoxelEngine.Gas.GasVent || block is VoxelEngine.Gas.GridFlareStack;
-                foreach (var pipe in pipes)                        // centre proximity is enough
+                if (topo.pipeBlocks.TryGetValue(pipe, out var blocks))
                 {
-                    if (!linked && !IsTankPortWithinDetailLink(grid, pipe, block,
-                            VoxelEngine.Maritime.MaritimePorts.GasPrefixes, detail)) continue;
-                    if (linked && !BlocksAreGasLinked(block, pipe, detail)) continue;
-                    yield return block;
-                    break;
+                    foreach (var block in blocks)
+                    {
+                        if (block == null || block == endpoint || !block.Enabled) continue;
+                        if (yielded.Add(block)) yield return block;
+                    }
+                }
+                if (topo.pipeVents.TryGetValue(pipe, out var vents))
+                {
+                    foreach (var vent in vents)
+                    {
+                        if (vent == null || vent == endpoint || !vent.Enabled) continue;
+                        if (yielded.Add(vent)) yield return vent;
+                    }
                 }
             }
         }
@@ -224,14 +228,9 @@ namespace VoxelEngine.GridSystem
         {
             var grid = endpoint != null ? endpoint.Grid : null;
             if (grid == null) return new List<GridBlock>();
-
-            float cs = grid.gridSize.CellSize();
-            var seeds = new List<GridBlock>(4);
-            foreach (var adjacent in UnifiedGridTopology.AdjacentBlocks(grid, endpoint))
-                if (IsGasPipe(adjacent)) seeds.Add(adjacent);
-            foreach (var pipe in grid.AllBlocks)
-                if (IsGasPipe(pipe) && BlocksAreGasLinked(endpoint, pipe, cs)) seeds.Add(pipe);
-            return CollectGasPipesFrom(grid, endpoint, seeds);
+            var topo = EnsureTopology(grid);
+            if (topo == null) return new List<GridBlock>();
+            return CollectGasPipesFrom(grid, endpoint, SeedsFor(grid, topo, endpoint));
         }
 
         /// <summary>
@@ -244,7 +243,9 @@ namespace VoxelEngine.GridSystem
             var pipes = new List<GridBlock>();
             if (grid == null || seedPipes == null || seedPipes.Count == 0) return pipes;
 
-            float cs = grid.gridSize.CellSize();
+            var topo = EnsureTopology(grid);
+            if (topo == null) return pipes;
+
             var visited = new HashSet<GridBlock>();
             var queue = new Queue<GridBlock>();
 
@@ -261,18 +262,7 @@ namespace VoxelEngine.GridSystem
             {
                 var from = queue.Dequeue();
                 pipes.Add(from);
-                foreach (var adjacent in UnifiedGridTopology.AdjacentBlocks(grid, from))
-                {
-                    if (!IsGasPipe(adjacent)) continue;
-                    if (WrenchBlacklist.IsBlocked(from.gameObject, adjacent.gameObject)) continue;
-                    if (visited.Add(adjacent)) queue.Enqueue(adjacent);
-                }
-                foreach (var pipe in ProximityPipes(grid, from, cs))
-                {
-                    if (!AreDetailPipesCardinalLinked(grid, from, pipe)) continue;
-                    if (WrenchBlacklist.IsBlocked(from.gameObject, pipe.gameObject)) continue;
-                    if (visited.Add(pipe)) queue.Enqueue(pipe);
-                }
+                ExpandCachedLinks(grid, topo, from, cardinalCheckAdj: false, visited, queue);
             }
             return pipes;
         }
@@ -312,7 +302,10 @@ namespace VoxelEngine.GridSystem
             if (s_tankCache.TryGetValue(key, out var cached) && Time.time - cached.time < TankCacheTtl)
             {
                 for (int i = 0; i < cached.tanks.Count; i++)
-                    if (cached.tanks[i] != null) yield return cached.tanks[i];
+                {
+                    var cachedTank = cached.tanks[i];
+                    if (cachedTank != null && cachedTank.Enabled) yield return cachedTank;
+                }
                 yield break;
             }
 
@@ -324,99 +317,390 @@ namespace VoxelEngine.GridSystem
                 yield return fresh[i];
         }
 
+        /// <summary>Tanks reachable from an endpoint, walking the cached grid topology
+        /// (no physics, no port-tree scans). Link discovery runs at topology time with
+        /// the same predicates; blacklist edges and tank state stay live per query.</summary>
         private IEnumerable<GridGasTank> ConnectedTanks(GridBlock endpoint, Gas.GasType type, bool forOutput, bool includeStockpile)
         {
             var grid = endpoint != null ? endpoint.Grid : null;
             if (grid == null || type == Gas.GasType.None) yield break;
 
-            float cs = grid.gridSize.CellSize();
-            var visitedPipes = new HashSet<GridBlock>();
+            var topo = EnsureTopology(grid);
+            if (topo == null) yield break;
+
             var yieldedTanks = new HashSet<GridGasTank>();
-            var corridorTanks = new List<GridGasTank>(4);
-            var queue = new Queue<GridBlock>();
-
-            void SeedPipe(GridBlock pipe)
+            foreach (var pipeBlock in ReachablePipes(endpoint))
             {
-                if (pipe == null || WrenchBlacklist.IsBlocked(endpoint.gameObject, pipe.gameObject)
-                    || !visitedPipes.Add(pipe)) return;
-                queue.Enqueue(pipe);
-            }
-
-            foreach (var adjacent in UnifiedGridTopology.AdjacentBlocks(grid, endpoint))
-                if (IsGasPipe(adjacent)) SeedPipe(adjacent);
-            foreach (var pipe in grid.AllBlocks)
-            {
-                if (pipe == null || !IsGasPipe(pipe)) continue;
-                if (BlocksAreGasLinked(endpoint, pipe, cs)) SeedPipe(pipe);
-            }
-
-            while (queue.Count > 0)
-            {
-                var pipeBlock = queue.Dequeue();
-
-                foreach (var adjacent in UnifiedGridTopology.AdjacentBlocks(grid, pipeBlock))
+                // Directly plumbed tanks (adjacent + proximity): wrench-blacklist edges apply.
+                if (topo.pipeTanksDirect.TryGetValue(pipeBlock, out var direct))
                 {
-                    if (IsGasPipe(adjacent)
-                        && !WrenchBlacklist.IsBlocked(pipeBlock.gameObject, adjacent.gameObject)
-                        && visitedPipes.Add(adjacent)) queue.Enqueue(adjacent);
-                }
-                foreach (var pipe in ProximityPipes(grid, pipeBlock, cs))
-                {
-                    if (!AreDetailPipesCardinalLinked(grid, pipeBlock, pipe)) continue;
-                    if (!WrenchBlacklist.IsBlocked(pipeBlock.gameObject, pipe.gameObject)
-                        && visitedPipes.Add(pipe)) queue.Enqueue(pipe);
-                }
-
-                foreach (var adjacent in UnifiedGridTopology.AdjacentBlocks(grid, pipeBlock))
-                {
-                    if (adjacent is GridGasTank tank && tank.Enabled
-                        && !WrenchBlacklist.IsBlocked(pipeBlock.gameObject, tank.gameObject))
+                    for (int i = 0; i < direct.Count; i++)
                     {
+                        var tank = direct[i];
+                        if (tank == null || !tank.Enabled) continue;
+                        if (WrenchBlacklist.IsBlocked(pipeBlock.gameObject, tank.gameObject)) continue;
                         bool typeOk = tank.gasType == type || (!forOutput && tank.stored <= 0.001f);
                         bool stockpileOk = includeStockpile || tank.mode != GridTankMode.Stockpile;
                         if (typeOk && stockpileOk && yieldedTanks.Add(tank)) yield return tank;
                     }
                 }
-                foreach (var maybeTank in ProximityBlocks(grid, pipeBlock, cs))
+                // Corridor/brute-force tanks: the legacy walkers never blacklist-checked
+                // these paths, so neither do we (link membership is still topological).
+                if (topo.pipeTanksCorridor.TryGetValue(pipeBlock, out var corridor))
                 {
-                    if (maybeTank is not GridGasTank tank || !tank.Enabled
-                        || WrenchBlacklist.IsBlocked(pipeBlock.gameObject, tank.gameObject)) continue;
-                    bool typeOk = tank.gasType == type || (!forOutput && tank.stored <= 0.001f);
-                    bool stockpileOk = includeStockpile || tank.mode != GridTankMode.Stockpile;
-                    if (typeOk && stockpileOk && yieldedTanks.Add(tank)) yield return tank;
-                }
-                ProbeGasTankCorridor(pipeBlock, type, forOutput, includeStockpile, yieldedTanks, corridorTanks);
-                for (int i = 0; i < corridorTanks.Count; i++)
-                    yield return corridorTanks[i];
-            }
-
-            // ── Brute-force 5-cell cardinal fallback ──────────────────
-            // Any tank within 5 cells (cardinal) of ANY visited pipe is connected,
-            // even if the OverlapSphere probe missed due to collider gaps or slight
-            // off-axis placement. This guarantees the advertised "5 grid squares".
-            if (visitedPipes.Count > 0)
-            {
-                float smallStep = GridSize.Small.CellSize();
-                foreach (var block in grid.AllBlocks)
-                {
-                    if (block is not GridGasTank tank || !tank.Enabled || yieldedTanks.Contains(tank)) continue;
-                    bool typeOk = tank.gasType == type || (!forOutput && tank.stored <= 0.001f);
-                    bool stockpileOk = includeStockpile || tank.mode != GridTankMode.Stockpile;
-                    if (!typeOk || !stockpileOk) continue;
-                    foreach (var pipe in visitedPipes)
+                    for (int i = 0; i < corridor.Count; i++)
                     {
-                        if (IsTankPortWithinDetailLink(grid, pipe, tank,
-                                VoxelEngine.Maritime.MaritimePorts.GasPrefixes, smallStep))
-                        {
-                            if (yieldedTanks.Add(tank)) yield return tank;
-                            break;
-                        }
+                        var tank = corridor[i];
+                        if (tank == null || !tank.Enabled) continue;
+                        bool typeOk = tank.gasType == type || (!forOutput && tank.stored <= 0.001f);
+                        bool stockpileOk = includeStockpile || tank.mode != GridTankMode.Stockpile;
+                        if (typeOk && stockpileOk && yieldedTanks.Add(tank)) yield return tank;
                     }
                 }
             }
         }
 
         // Scratch buffers — enlarged to 32 to avoid missing in dense builds
+        // REACHED PIPE TOPOLOGY (12.24.1-dev perf fix)
+        // Thrusters query AvailableGasFor/DrawGasFor every physics tick, and every uncached
+        // query walked OverlapSpheres, corridor sweeps and port-tree scans - hundreds of
+        // physics probes per second per ship (the 5 FPS freezes). Link discovery now runs
+        // once per topology change into a per-grid snapshot, using the exact same
+        // predicates, and queries follow cached links (microseconds). Live state - wrench
+        // blacklist, tank enabled/type/mode - is still evaluated per query, so routing
+        // behaviour is unchanged.
+
+        /// <summary>Per-grid snapshot of gas plumbing. Rebuilt when the grid's block
+        /// set changes; one pipe is re-probed on a rolling timer as a backstop.</summary>
+        private class GridGasTopology
+        {
+            public readonly HashSet<GridBlock> pipes = new();
+            public readonly List<GridBlock> pipeOrder = new();
+            public readonly Dictionary<GridBlock, List<GridBlock>> pipeLinksAdj = new();
+            public readonly Dictionary<GridBlock, List<GridBlock>> pipeLinksProx = new();
+            public readonly Dictionary<GridBlock, List<GridGasTank>> pipeTanksDirect = new();
+            public readonly Dictionary<GridBlock, List<GridGasTank>> pipeTanksCorridor = new();
+            public readonly Dictionary<GridBlock, List<GridBlock>> pipeBlocks = new();
+            public readonly Dictionary<GridBlock, List<GridBlock>> pipeVents = new();
+            public readonly Dictionary<GridBlock, List<GridCryobed>> pipeCryos = new();
+            public int blockCount;
+        }
+
+        private readonly Dictionary<GridEntity, GridGasTopology> _topo = new();
+        private readonly Dictionary<GridBlock, (GridGasTopology topo, int count, float time, List<GridBlock> seeds)> _seedMemo = new();
+        private readonly List<GridBlock> _deadSeeds = new();
+        private const float SeedMemoTtl = 2f;
+        private readonly List<GridEntity> _rollingGrids = new();
+        private readonly List<GridEntity> _deadGrids = new();
+        private int _rollingGridIdx;
+        private int _rollingPipeIdx;
+        private float _rollingAt;
+        private const float RollingPipeProbeSeconds = 0.25f;
+
+        private void Update()
+        {
+            if (Time.unscaledTime - _rollingAt < RollingPipeProbeSeconds) return;
+            _rollingAt = Time.unscaledTime;
+            RollingRefresh();
+        }
+
+        private GridGasTopology EnsureTopology(GridEntity grid)
+        {
+            if (grid == null) return null;
+            if (!_topo.TryGetValue(grid, out var topo) || topo == null)
+            {
+                topo = new GridGasTopology();
+                _topo[grid] = topo;
+                RebuildTopology(grid, topo);
+                return topo;
+            }
+            int count = 0;
+            bool nulls = false;
+            foreach (var block in grid.AllBlocks)
+            {
+                if (block == null) nulls = true;
+                else count++;
+            }
+            if (nulls || count != topo.blockCount) RebuildTopology(grid, topo);
+            return topo;
+        }
+
+        private void RebuildTopology(GridEntity grid, GridGasTopology topo)
+        {
+            topo.pipes.Clear();
+            topo.pipeOrder.Clear();
+            topo.pipeLinksAdj.Clear();
+            topo.pipeLinksProx.Clear();
+            topo.pipeTanksDirect.Clear();
+            topo.pipeTanksCorridor.Clear();
+            topo.pipeBlocks.Clear();
+            topo.pipeVents.Clear();
+            topo.pipeCryos.Clear();
+
+            var nonPipes = new List<GridBlock>();
+            var tanks = new List<GridGasTank>();
+            var vents = new List<GridBlock>();
+            var cryos = new List<GridCryobed>();
+            int count = 0;
+            foreach (var block in grid.AllBlocks)
+            {
+                if (block == null) continue;
+                count++;
+                if (IsGasPipe(block))
+                {
+                    topo.pipes.Add(block);
+                    topo.pipeOrder.Add(block);
+                    continue;
+                }
+                nonPipes.Add(block);
+                if (block is GridGasTank tank) tanks.Add(tank);
+                else if (block is GridCryobed cryo) cryos.Add(cryo);
+                if (block is Gas.GasVent || block is VoxelEngine.Gas.GridFlareStack) vents.Add(block);
+            }
+            topo.blockCount = count;
+
+            float cs = grid.gridSize.CellSize();
+            float detail = GridSize.Small.CellSize();
+            for (int i = 0; i < topo.pipeOrder.Count; i++)
+            {
+                var pipe = topo.pipeOrder[i];
+                ComputePipeLinks(grid, topo, pipe, cs);
+                ComputePipeTanks(grid, topo, pipe, cs, detail, tanks);
+                ComputePipeBlocks(grid, topo, pipe, cs, detail, nonPipes, vents, cryos);
+            }
+        }
+
+        private void ComputePipeLinks(GridEntity grid, GridGasTopology topo, GridBlock pipe, float cs)
+        {
+            var adj = new List<GridBlock>();
+            foreach (var adjacent in UnifiedGridTopology.AdjacentBlocks(grid, pipe))
+            {
+                if (adjacent != null && adjacent != pipe && IsGasPipe(adjacent) && !adj.Contains(adjacent))
+                    adj.Add(adjacent);
+            }
+            topo.pipeLinksAdj[pipe] = adj;
+
+            var prox = new List<GridBlock>();
+            foreach (var candidate in ProximityPipes(grid, pipe, cs))
+            {
+                if (candidate == null || candidate == pipe) continue;
+                if (!AreDetailPipesCardinalLinked(grid, pipe, candidate)) continue;
+                if (!adj.Contains(candidate) && !prox.Contains(candidate)) prox.Add(candidate);
+            }
+            topo.pipeLinksProx[pipe] = prox;
+        }
+
+        private void ComputePipeTanks(GridEntity grid, GridGasTopology topo, GridBlock pipe,
+            float cs, float detail, List<GridGasTank> tanks)
+        {
+            var direct = new List<GridGasTank>();
+            foreach (var adjacent in UnifiedGridTopology.AdjacentBlocks(grid, pipe))
+            {
+                if (adjacent is GridGasTank tank && !direct.Contains(tank)) direct.Add(tank);
+            }
+            foreach (var nearby in ProximityBlocks(grid, pipe, cs))
+            {
+                if (nearby is GridGasTank tank && !direct.Contains(tank)) direct.Add(tank);
+            }
+            topo.pipeTanksDirect[pipe] = direct;
+
+            var corridor = new List<GridGasTank>();
+            ProbePipeTankCorridorAll(grid, pipe, detail, corridor);
+            float smallStep = GridSize.Small.CellSize();
+            var prefixes = VoxelEngine.Maritime.MaritimePorts.GasPrefixes;
+            for (int i = 0; i < tanks.Count; i++)
+            {
+                var tank = tanks[i];
+                if (tank == null || direct.Contains(tank) || corridor.Contains(tank)) continue;
+                if (IsTankPortWithinDetailLink(grid, pipe, tank, prefixes, smallStep))
+                    corridor.Add(tank);
+            }
+            topo.pipeTanksCorridor[pipe] = corridor;
+        }
+
+        private void ComputePipeBlocks(GridEntity grid, GridGasTopology topo, GridBlock pipe,
+            float cs, float detail, List<GridBlock> nonPipes, List<GridBlock> vents, List<GridCryobed> cryos)
+        {
+            var ventLinks = new List<GridBlock>();
+            for (int i = 0; i < vents.Count; i++)
+            {
+                if (vents[i] != null && BlocksAreGasLinked(vents[i], pipe, detail)) ventLinks.Add(vents[i]);
+            }
+            topo.pipeVents[pipe] = ventLinks;
+
+            var prefixes = VoxelEngine.Maritime.MaritimePorts.GasPrefixes;
+            var blockLinks = new List<GridBlock>();
+            for (int i = 0; i < nonPipes.Count; i++)
+            {
+                var block = nonPipes[i];
+                if (block is Gas.GasVent || block is VoxelEngine.Gas.GridFlareStack) continue;
+                if (IsTankPortWithinDetailLink(grid, pipe, block, prefixes, detail)) blockLinks.Add(block);
+            }
+            topo.pipeBlocks[pipe] = blockLinks;
+
+            var cryoLinks = new List<GridCryobed>();
+            for (int i = 0; i < cryos.Count; i++)
+            {
+                if (IsTankPortWithinDetailLink(grid, pipe, cryos[i], prefixes, detail)) cryoLinks.Add(cryos[i]);
+            }
+            topo.pipeCryos[pipe] = cryoLinks;
+        }
+
+        /// <summary>Topology-time corridor sweep: the same probe pattern as the legacy
+        /// filtered walk, but collects every port-aligned tank while type/mode/enabled
+        /// stay live query filters. Like the legacy walk it deliberately applies no
+        /// grid check, so a docked neighbour's tank on the corridor still links.</summary>
+        private static void ProbePipeTankCorridorAll(GridEntity grid, GridBlock pipeBlock,
+            float detail, List<GridGasTank> collected)
+        {
+            if (pipeBlock == null || collected == null) return;
+            const int maxCells = 5;
+            Transform frame = pipeBlock.Grid != null ? pipeBlock.Grid.transform : null;
+            PipeAdjacency.ProbeCardinal(pipeBlock.transform.position, frame, detail, maxCells,
+                s_gasRowProbe, col =>
+                {
+                    var tank = col.GetComponent<GridGasTank>();
+                    if (tank == null) tank = col.GetComponentInParent<GridGasTank>();
+                    if (tank != null
+                        && IsTankPortWithinDetailLink(grid, pipeBlock, tank,
+                            VoxelEngine.Maritime.MaritimePorts.GasPrefixes, detail)
+                        && !collected.Contains(tank)) collected.Add(tank);
+                    return false;
+                }, radiusScale: 2.2f);
+        }
+
+        private void RefreshPipeLinks(GridEntity grid, GridGasTopology topo, GridBlock pipe)
+        {
+            if (grid == null || topo == null || pipe == null || pipe.Grid != grid) return;
+            if (!IsGasPipe(pipe) || !topo.pipes.Contains(pipe)) return;
+            float cs = grid.gridSize.CellSize();
+            float detail = GridSize.Small.CellSize();
+            var tanks = new List<GridGasTank>();
+            var vents = new List<GridBlock>();
+            var cryos = new List<GridCryobed>();
+            var nonPipes = new List<GridBlock>();
+            foreach (var block in grid.AllBlocks)
+            {
+                if (block == null || IsGasPipe(block)) continue;
+                nonPipes.Add(block);
+                if (block is GridGasTank tank) tanks.Add(tank);
+                else if (block is GridCryobed cryo) cryos.Add(cryo);
+                if (block is Gas.GasVent || block is VoxelEngine.Gas.GridFlareStack) vents.Add(block);
+            }
+            ComputePipeLinks(grid, topo, pipe, cs);
+            ComputePipeTanks(grid, topo, pipe, cs, detail, tanks);
+            ComputePipeBlocks(grid, topo, pipe, cs, detail, nonPipes, vents, cryos);
+        }
+
+        private void RollingRefresh()
+        {
+            _rollingGrids.Clear();
+            _deadGrids.Clear();
+            foreach (var pair in _topo)
+            {
+                if (pair.Key == null) _deadGrids.Add(pair.Key);
+                else _rollingGrids.Add(pair.Key);
+            }
+            for (int i = 0; i < _deadGrids.Count; i++) _topo.Remove(_deadGrids[i]);
+            _deadSeeds.Clear();
+            foreach (var pair in _seedMemo)
+            {
+                if (pair.Key == null) _deadSeeds.Add(pair.Key);
+            }
+            for (int i = 0; i < _deadSeeds.Count; i++) _seedMemo.Remove(_deadSeeds[i]);
+            if (_rollingGrids.Count == 0) return;
+            _rollingGridIdx %= _rollingGrids.Count;
+            var grid = _rollingGrids[_rollingGridIdx];
+            _rollingGridIdx++;
+            if (!_topo.TryGetValue(grid, out var topo) || topo.pipeOrder.Count == 0) return;
+            _rollingPipeIdx %= topo.pipeOrder.Count;
+            var pipe = topo.pipeOrder[_rollingPipeIdx];
+            _rollingPipeIdx++;
+            if (pipe == null || !topo.pipes.Contains(pipe)) return;
+            RefreshPipeLinks(grid, topo, pipe);
+        }
+
+        /// <summary>Endpoint seed pipes, memoized per topology: the endpoint's own
+        /// adjacency only changes when the grid's block set does.</summary>
+        private List<GridBlock> SeedsFor(GridEntity grid, GridGasTopology topo, GridBlock endpoint)
+        {
+            if (endpoint != null && _seedMemo.TryGetValue(endpoint, out var memo)
+                && memo.topo == topo && memo.count == topo.blockCount
+                && memo.seeds != null && Time.time - memo.time < SeedMemoTtl)
+                return memo.seeds;
+
+            var seeds = new List<GridBlock>(4);
+            if (grid != null && topo != null && endpoint != null)
+            {
+                float cs = grid.gridSize.CellSize();
+                foreach (var adjacent in UnifiedGridTopology.AdjacentBlocks(grid, endpoint))
+                {
+                    if (adjacent != null && topo.pipes.Contains(adjacent) && !seeds.Contains(adjacent))
+                        seeds.Add(adjacent);
+                }
+                for (int i = 0; i < topo.pipeOrder.Count; i++)
+                {
+                    var pipe = topo.pipeOrder[i];
+                    if (pipe != null && BlocksAreGasLinked(endpoint, pipe, cs) && !seeds.Contains(pipe))
+                        seeds.Add(pipe);
+                }
+                _seedMemo[endpoint] = (topo, topo.blockCount, Time.time, seeds);
+            }
+            return seeds;
+        }
+
+        /// <summary>BFS over cached pipe links with live wrench-blacklist edges.
+        /// The cryo walker additionally cardinal-checks adjacent steps (legacy).</summary>
+        private List<GridBlock> ReachablePipes(GridBlock endpoint, bool cardinalCheckAdj = false)
+        {
+            var pipes = new List<GridBlock>();
+            var grid = endpoint != null ? endpoint.Grid : null;
+            if (grid == null) return pipes;
+            var topo = EnsureTopology(grid);
+            if (topo == null) return pipes;
+
+            var visited = new HashSet<GridBlock>();
+            var queue = new Queue<GridBlock>();
+            foreach (var seed in SeedsFor(grid, topo, endpoint))
+            {
+                if (seed != null && !WrenchBlacklist.IsBlocked(endpoint.gameObject, seed.gameObject)
+                    && visited.Add(seed)) queue.Enqueue(seed);
+            }
+            while (queue.Count > 0)
+            {
+                var from = queue.Dequeue();
+                pipes.Add(from);
+                ExpandCachedLinks(grid, topo, from, cardinalCheckAdj, visited, queue);
+            }
+            return pipes;
+        }
+
+        private void ExpandCachedLinks(GridEntity grid, GridGasTopology topo, GridBlock from,
+            bool cardinalCheckAdj, HashSet<GridBlock> visited, Queue<GridBlock> queue)
+        {
+            if (topo.pipeLinksAdj.TryGetValue(from, out var adj))
+            {
+                for (int i = 0; i < adj.Count; i++)
+                {
+                    var next = adj[i];
+                    if (next == null) continue;
+                    if (cardinalCheckAdj && !AreDetailPipesCardinalLinked(grid, from, next)) continue;
+                    if (WrenchBlacklist.IsBlocked(from.gameObject, next.gameObject)) continue;
+                    if (visited.Add(next)) queue.Enqueue(next);
+                }
+            }
+            if (topo.pipeLinksProx.TryGetValue(from, out var prox))
+            {
+                for (int i = 0; i < prox.Count; i++)
+                {
+                    var next = prox[i];
+                    if (next == null) continue;
+                    if (WrenchBlacklist.IsBlocked(from.gameObject, next.gameObject)) continue;
+                    if (visited.Add(next)) queue.Enqueue(next);
+                }
+            }
+        }
+
         private static readonly Collider[] s_gasProbe = new Collider[32];
         private static readonly List<GridBlock> s_gasProximityResult = new(32);
 
@@ -488,31 +772,6 @@ namespace VoxelEngine.GridSystem
 
         private static readonly Collider[] s_gasRowProbe = new Collider[32];
 
-        private static void ProbeGasTankCorridor(GridBlock pipeBlock, Gas.GasType type,
-            bool forOutput, bool includeStockpile, HashSet<GridGasTank> yieldedTanks, List<GridGasTank> newlyLinked)
-        {
-            newlyLinked?.Clear();
-            if (pipeBlock == null) return;
-            float detail = GridSize.Small.CellSize();
-            const int maxCells = 5;
-            Transform frame = pipeBlock.Grid != null ? pipeBlock.Grid.transform : null;
-            PipeAdjacency.ProbeCardinal(pipeBlock.transform.position, frame, detail, maxCells,
-                s_gasRowProbe, col =>
-                {
-                    var tank = col.GetComponent<GridGasTank>();
-                    if (tank == null) tank = col.GetComponentInParent<GridGasTank>();
-                    if (tank != null && tank.Enabled && !yieldedTanks.Contains(tank))
-                    {
-                        bool typeOk = tank.gasType == type || (!forOutput && tank.stored <= 0.001f);
-                        bool stockpileOk = includeStockpile || tank.mode != GridTankMode.Stockpile;
-                        bool portAligned = IsTankPortWithinDetailLink(pipeBlock.Grid, pipeBlock, tank,
-                            VoxelEngine.Maritime.MaritimePorts.GasPrefixes, detail);
-                        if (typeOk && stockpileOk && portAligned && yieldedTanks.Add(tank)) newlyLinked?.Add(tank);
-                    }
-                    return false;
-                }, radiusScale: 2.2f);
-        }
-
         private static bool AreDetailPipesCardinalLinked(GridEntity grid, GridBlock a, GridBlock b)
         {
             if (grid == null || a == null || b == null) return false;
@@ -521,51 +780,24 @@ namespace VoxelEngine.GridSystem
             return PipeAdjacency.IsCoplanarPipeLinkDelta(localDelta, detail, 5f, detail * 0.18f);
         }
 
-        private static IEnumerable<GridCryobed> ConnectedCryobeds(GridBlock endpoint)
+        /// <summary>Cryobeds reachable from an endpoint, walking the cached grid topology.</summary>
+        private IEnumerable<GridCryobed> ConnectedCryobeds(GridBlock endpoint)
         {
             var grid = endpoint != null ? endpoint.Grid : null;
             if (grid == null) yield break;
-            float cs = grid.gridSize.CellSize();
-            float detail = GridSize.Small.CellSize();
-            var visitedPipes = new HashSet<GridBlock>();
-            var queue = new Queue<GridBlock>();
 
-            void Seed(GridBlock pipe)
+            var topo = EnsureTopology(grid);
+            if (topo == null) yield break;
+
+            var yielded = new HashSet<GridCryobed>();
+            foreach (var pipeBlock in ReachablePipes(endpoint, cardinalCheckAdj: true))
             {
-                if (pipe == null || !IsGasPipe(pipe) || WrenchBlacklist.IsBlocked(endpoint.gameObject, pipe.gameObject)) return;
-                if (visitedPipes.Add(pipe)) queue.Enqueue(pipe);
-            }
-
-            foreach (var adjacent in UnifiedGridTopology.AdjacentBlocks(grid, endpoint))
-                if (IsGasPipe(adjacent)) Seed(adjacent);
-            foreach (var block in grid.AllBlocks)
-                if (IsGasPipe(block) && BlocksAreGasLinked(endpoint, block, cs)) Seed(block);
-
-            while (queue.Count > 0)
-            {
-                var pipeBlock = queue.Dequeue();
-                foreach (var adjacent in UnifiedGridTopology.AdjacentBlocks(grid, pipeBlock))
-                    if (IsGasPipe(adjacent)
-                        && !WrenchBlacklist.IsBlocked(pipeBlock.gameObject, adjacent.gameObject)
-                        && AreDetailPipesCardinalLinked(grid, pipeBlock, adjacent)
-                        && visitedPipes.Add(adjacent)) queue.Enqueue(adjacent);
-                foreach (var pipe in ProximityPipes(grid, pipeBlock, cs))
-                    if (AreDetailPipesCardinalLinked(grid, pipeBlock, pipe)
-                        && !WrenchBlacklist.IsBlocked(pipeBlock.gameObject, pipe.gameObject)
-                        && visitedPipes.Add(pipe)) queue.Enqueue(pipe);
-            }
-
-            foreach (var block in grid.AllBlocks)
-            {
-                if (block is not GridCryobed cryo || !cryo.Enabled) continue;
-                foreach (var pipe in visitedPipes)
+                if (!topo.pipeCryos.TryGetValue(pipeBlock, out var cryos)) continue;
+                for (int i = 0; i < cryos.Count; i++)
                 {
-                    if (IsTankPortWithinDetailLink(grid, pipe, cryo,
-                            VoxelEngine.Maritime.MaritimePorts.GasPrefixes, detail))
-                    {
-                        yield return cryo;
-                        break;
-                    }
+                    var cryo = cryos[i];
+                    if (cryo == null || !cryo.Enabled) continue;
+                    if (yielded.Add(cryo)) yield return cryo;
                 }
             }
         }

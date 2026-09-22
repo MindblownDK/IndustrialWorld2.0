@@ -1,9 +1,17 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.24.0-dev`
+**Current Version:** `12.24.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.24.1-dev] Grid Gas Topology Cache - Piped Thruster Lag Fix
+
+**Type:** PATCH - per-tick thruster gas queries on grids walked OverlapSpheres, corridor sweeps and port-tree scans every 0.15 s per thruster (hundreds of physics probes per second per ship: the 5 FPS freezes with pipes near thrusters). Link discovery now runs once per topology change into a cached per-grid snapshot using the same predicates, and queries follow cached links in microseconds. Wrench blacklist, tank enabled/type/mode stay live per query, so routing behaviour is unchanged. No recipe or setup changes.
+
+**GitHub title:** `[12.24.1-dev] Grid gas topology cache - piped thruster lag fix`
+
+**Manual steps:** none - code-only fix. Verify in Unity: build a ship like the report (a few brass pipes feeding 4 hydrogen thrusters), run it, and confirm the frame rate stays smooth while thrusting; then place/remove a pipe mid-run and confirm gas connects within a couple of seconds.
 
 ### [12.24.0-dev] Warp Core - Gas Pipe Perf Fix, Warp Battery Fuel and Drive Panel
 
