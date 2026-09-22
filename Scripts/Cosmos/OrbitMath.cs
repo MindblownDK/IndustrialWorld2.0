@@ -205,5 +205,31 @@ namespace VoxelEngine.Cosmos
 
             return new double3(x3, y3, z3);
         }
+
+        /// <summary>
+        /// Reference-frame offset (km) of a point on an orbit given directly by true
+        /// anomaly — the map's ellipse/trail sampler. Same elements-to-position path
+        /// as propagation, so a drawn ring always passes exactly through its body.
+        /// Takes raw elements (no struct) so callers holding snapshots need no μ.
+        /// </summary>
+        public static double3 ReferencePositionAtTrueAnomaly(double semiMajorAxisKm, double eccentricity,
+            double inclinationRad, double raanRad, double argPeriapsisRad, double trueAnomalyRad)
+        {
+            double a = semiMajorAxisKm;
+            double e = math.clamp(eccentricity, 0d, 0.95d);
+            if (!(a > 0.01d)) return double3.zero;
+            double cosNu = math.cos(trueAnomalyRad), sinNu = math.sin(trueAnomalyRad);
+            double r = a * (1d - e * e) / math.max(0.000001d, 1d + e * cosNu);
+            var perifocal = new double3(r * cosNu, r * sinNu, 0d);
+            var o = new OrbitElements
+            {
+                semiMajorAxisKm = a,
+                eccentricity = e,
+                inclinationRad = inclinationRad,
+                raanRad = raanRad,
+                argPeriapsisRad = argPeriapsisRad,
+            };
+            return RotatePerifocalToReference(perifocal, o);
+        }
     }
 }

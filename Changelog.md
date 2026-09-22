@@ -1,9 +1,39 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.19.1-dev`
+**Current Version:** `12.19.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.19.2-dev] True Plane - Orbit Map Projection and Path Fixes
+
+**Type:** PATCH - fixes how orbits display on the star map: the map projected the XZ plane while the system actually orbits in the XY reference plane, so every planet drew in an edge-on row; planet solar ellipses were skipped entirely; and body rings were axis-aligned fictions. The map now projects the true orbital plane, draws every ellipse, and samples body rings and trails from the live elements. No save, recipe or setup changes.
+
+**GitHub title:** `[12.19.2-dev] True plane - orbit map projection and path fixes`
+
+#### The map was edge-on
+
+Orbital elements are seeded about the reference (XY) plane, but the map projected top-down XZ - exactly edge-on to every orbit. That is why the whole system drew as a single row of planets. The projection now uses XY, so the system opens face-on: planets spread around the sun with their true shapes, and the same frame carries labels, clicks, the belt and the nav reticle with it.
+
+#### Rings for every planet
+
+The ellipse pass skipped any entry with a null parent pointer - which is every planet, since the sun is not a `BodyInstance`. Planets now resolve their parent by name (the sun's entry is always present), so each planet draws its solar ellipse. Craft behave exactly as before.
+
+#### Exact paths, exact trails
+
+Body rings are no longer axis-aligned ellipses from apoapsis/periapsis radii: the tracking service now carries each body's node, argument of periapsis and live true anomaly, and the map samples the ring through the same elements-to-position path as propagation. Whatever orientation and inclination was seeded, the ring matches it - and the body always sits exactly on its own ring. Trails are the true-anomaly arc behind the body's live position through the same sampler. The parent-surface padding that inflated moon rings is gone for bodies (their radii were already centre-based); craft keep it, since their telemetry is altitude-based.
+
+#### Belt band
+
+The belt gains its inner edge: the shell now reads as a band between its nearest- and furthest-rock radii instead of a single ring, with the rock motes scattered between.
+
+#### Manual steps in Unity
+
+1. Apply the patch on top of 12.19.1-dev and recompile.
+2. No setup re-run is needed: no new blocks, items or recipes.
+3. Press `M`: planets spread face-on around the sun, each with its own ellipse - no more single row.
+4. Zoom to Earth and the Moon: the Moon sits on its ring with Earth at the focus, and its trail hugs the ring behind it. (If the ring still looks off-centre, check the local `Moon_Earth` template's `orbitEccentricity` - the focus offset is real physics for the authored value; 0 gives a centred ring.)
+5. Confirm clicks, the nav reticle, the belt band and the sidebar behave as in 12.19.0-dev.
 
 ### [12.19.1-dev] Local Click - Orbital Map Pointer Fix
 

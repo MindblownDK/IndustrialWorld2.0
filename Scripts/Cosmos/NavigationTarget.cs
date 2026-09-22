@@ -171,6 +171,25 @@ namespace VoxelEngine.Cosmos
             return n == 0 ? sun : sun + sum / n;
         }
 
+        /// <summary>Nearest rock distance (km) from the centroid — the shell's inner edge.</summary>
+        public static double BeltInnerRadiusKm(CosmicRegistry registry, double3 centroidKm)
+        {
+            double minR = double.MaxValue;
+            double3 sun = registry != null && registry.Sun != null ? registry.Sun.positionKmD : default;
+            var rocks = registry != null ? registry.Asteroids : null;
+            if (rocks != null)
+            {
+                for (int i = 0; i < rocks.Count; i++)
+                {
+                    if (rocks[i] == null) continue;
+                    double3 p = sun + new double3(rocks[i].positionKm.x, rocks[i].positionKm.y, rocks[i].positionKm.z);
+                    double d = math.length(p - centroidKm);
+                    if (d < minR) minR = d;
+                }
+            }
+            return minR == double.MaxValue ? 0d : minR;
+        }
+
         /// <summary>Furthest rock distance (km) from the centroid — the belt's drawn radius.</summary>
         public static double BeltRadiusKm(CosmicRegistry registry, double3 centroidKm)
         {

@@ -446,14 +446,18 @@ namespace VoxelEngine.UI
                     if (!e.InRange) continue;
                     if (e.Motion != MapMotionState.Orbiting) continue;
                     if (double.IsNaN(e.ApoapsisKm) || double.IsNaN(e.PeriapsisKm)) continue;
-                    if (e.Parent == null) continue;
+                    // Planets orbit the sun, which is not a BodyInstance — they carry a
+                    // null parent with the sun's name and resolve it below. Only entries
+                    // with no parent at all are skipped.
+                    if (e.Parent == null && string.IsNullOrEmpty(e.ParentName)) continue;
 
                     double3 parentPos = ParentPosition(entries, e);
                     Vector2 pc = Project(parentPos, anchor, centre, pxPerKm);
 
-                    // Radii include the parent's surface radius, because AP/PE are altitudes
-                    // for craft but the ellipse has to be drawn about the body's centre.
-                    double surface = ParentRadiusKm(entries, e);
+                    // Craft AP/PE are altitudes, so the parent's surface is added back to
+                    // draw about the body's centre. Body AP/PE are already centre-based
+                    // Kepler radii and stay exact.
+                    double surface = e.IsBody ? 0d : ParentRadiusKm(entries, e);
                     double apoR = (e.ApoapsisKm + surface) * pxPerKm;
                     double periR = (e.PeriapsisKm + surface) * pxPerKm;
                     if (apoR < 3d || apoR > 40000d) continue;
@@ -461,9 +465,14 @@ namespace VoxelEngine.UI
                     Color lineColor = e.IsCraft
                         ? new Color(InkFor(e).r, InkFor(e).g, InkFor(e).b, 0.5f)
                         : OrbitLine;
-                    DrawEllipse(painter, pc, (float)apoR, (float)periR, lineColor);
-                    PaintTrail(painter, pc, Project(e.PositionKm, anchor, centre, pxPerKm),
-                        (float)apoR, (float)periR, lineColor);
+                    if (e.IsBody && !double.IsNaN(e.TrueAnomalyRad))
+                        PaintBodyOrbit(painter, e, pc, pxPerKm, lineColor);
+                    else
+                    {
+                        DrawEllipse(painter, pc, (float)apoR, (float)periR, lineColor);
+                        PaintTrail(painter, pc, Project(e.PositionKm, anchor, centre, pxPerKm),
+                            (float)apoR, (float)periR, lineColor);
+                    }
                 }
             }
 
@@ -762,11 +771,23 @@ namespace VoxelEngine.UI
             painter.Arc(p, radius, 0f, 360f);
             painter.Stroke();
 
-            if (_device != null && !_device.showOrbitPaths) return;
-
             var registry = CosmicRegistry.Instance;
             var rocks = registry != null ? registry.Asteroids : null;
             if (rocks == null || rocks.Count == 0) return;
+
+            // Inner edge: the shell reads as a band between two radii, not a disc.
+            double innerKm = NavigationTarget.BeltInnerRadiusKm(registry, e.PositionKm);
+            float innerR = (float)(innerKm * pxPerKm);
+            if (innerR >= 4f && innerR < radius)
+            {
+                painter.strokeColor = new Color(ink.r, ink.g, ink.b, 0.4f);
+                painter.lineWidth = 1f;
+                painter.BeginPath();
+                painter.Arc(p, innerR, 0f, 360f);
+                painter.Stroke();
+            }
+
+            if (_device != null && !_device.showOrbitPaths) return;
 
             double3 sun = registry.Sun != null ? registry.Sun.positionKmD : default;
             int stride = Mathf.Max(1, (rocks.Count + 219) / 220);
@@ -786,11 +807,66 @@ namespace VoxelEngine.UI
 
         private static Vector2 Project(double3 posKm, double3 anchorKm, Vector2 centre, double pxPerKm)
         {
-            // Top-down projection onto the system's XZ plane: the orbital plane most bodies
-            // share, so this reads as a map rather than an arbitrary slice.
+            // Projection onto the system's XY plane: the elements are seeded about the
+            // reference plane, so this is the plane the orbits actually share. (An XZ
+            // top-down showed the whole system edge-on — every planet in a row.)
             double dx = (posKm.x - anchorKm.x) * pxPerKm;
-            double dz = (posKm.z - anchorKm.z) * pxPerKm;
-            return new Vector2(centre.x + (float)dx, centre.y - (float)dz);
+            double dy = (posKm.y - anchorKm.y) * pxPerKm;
+            return new Vector2(centre.x + (float)dx, centre.y - (float)dy);
+        }
+
+        /// <summary>
+        /// A body's orbit drawn from its live elements: the ring is sampled through
+        /// the same elements-to-position path as propagation (full Ω/ω/i), and the
+        /// trail is the true-anomaly arc behind the body's live position. The body
+        /// always sits exactly on its ring, at whatever orientation and inclination
+        /// the designer seeded — no axis-aligned fiction.
+        /// </summary>
+        private static void PaintBodyOrbit(Painter2D painter, MapEntry e, Vector2 focus,
+            double pxPerKm, Color color)
+        {
+            double aKm = (e.ApoapsisKm + e.PeriapsisKm) * 0.5d;
+            if (!(aKm > 0d)) return;
+            double ecc = (e.ApoapsisKm - e.PeriapsisKm) / (e.ApoapsisKm + e.PeriapsisKm);
+            if (!(ecc >= 0d) || ecc >= 0.95d) return;
+            double incl = e.InclinationDeg * Mathf.Deg2Rad;
+
+            painter.strokeColor = color;
+            painter.lineWidth = 1.1f;
+            painter.BeginPath();
+            const int Segments = 96;
+            for (int i = 0; i <= Segments; i++)
+            {
+                double nu = i / (double)Segments * Mathf.PI * 2d;
+                double3 off = OrbitMath.ReferencePositionAtTrueAnomaly(
+                    aKm, ecc, incl, e.RaanRad, e.ArgPeriapsisRad, nu);
+                var p = new Vector2(focus.x + (float)(off.x * pxPerKm),
+                    focus.y - (float)(off.y * pxPerKm));
+                if (i == 0) painter.MoveTo(p); else painter.LineTo(p);
+            }
+            painter.Stroke();
+
+            double nuBody = e.TrueAnomalyRad;
+            const double Sweep = 1.1d;
+            for (int k = 0; k < 3; k++)
+            {
+                double t0 = nuBody - Sweep + Sweep * k / 3d;
+                double t1 = nuBody - Sweep + Sweep * (k + 1) / 3d;
+                float alpha = 0.14f + 0.18f * k;
+                painter.strokeColor = new Color(color.r, color.g, color.b, color.a * alpha * 2f);
+                painter.lineWidth = 2f;
+                painter.BeginPath();
+                for (int sgm = 0; sgm <= 14; sgm++)
+                {
+                    double nu = t0 + (t1 - t0) * sgm / 14d;
+                    double3 off = OrbitMath.ReferencePositionAtTrueAnomaly(
+                        aKm, ecc, incl, e.RaanRad, e.ArgPeriapsisRad, nu);
+                    var p = new Vector2(focus.x + (float)(off.x * pxPerKm),
+                        focus.y - (float)(off.y * pxPerKm));
+                    if (sgm == 0) painter.MoveTo(p); else painter.LineTo(p);
+                }
+                painter.Stroke();
+            }
         }
 
         /// <summary>Draws an ellipse from its apoapsis/periapsis radii, offset so a focus sits at one focus.</summary>

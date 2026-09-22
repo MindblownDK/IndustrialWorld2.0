@@ -70,6 +70,15 @@ namespace VoxelEngine.Cosmos
         public readonly double InclinationDeg;
         public readonly double SpeedMs;
 
+        /// <summary>
+        /// Orbit orientation (rad) + live true anomaly (rad). Bodies only — the map's
+        /// exact ellipse/trail sampler needs them; craft pass NaN and keep the
+        /// axis-aligned approximation, which carries no orientation data.
+        /// </summary>
+        public readonly double RaanRad;
+        public readonly double ArgPeriapsisRad;
+        public readonly double TrueAnomalyRad;
+
         /// <summary>Radius in km, for drawing bodies to scale. Zero for craft.</summary>
         public readonly double RadiusKm;
 
@@ -82,13 +91,15 @@ namespace VoxelEngine.Cosmos
         public MapEntry(string name, MapEntryKind kind, MapMotionState motion, double3 positionKm,
             BodyInstance parent, string parentName, double altitudeKm, double apoapsisKm,
             double periapsisKm, double periodSeconds, double inclinationDeg, double speedMs,
-            double radiusKm, GridEntity grid, bool inRange)
+            double radiusKm, GridEntity grid, bool inRange,
+            double raanRad, double argPeriapsisRad, double trueAnomalyRad)
         {
             Name = name; Kind = kind; Motion = motion; PositionKm = positionKm;
             Parent = parent; ParentName = parentName; AltitudeKm = altitudeKm;
             ApoapsisKm = apoapsisKm; PeriapsisKm = periapsisKm; PeriodSeconds = periodSeconds;
             InclinationDeg = inclinationDeg; SpeedMs = speedMs; RadiusKm = radiusKm;
             Grid = grid; InRange = inRange;
+            RaanRad = raanRad; ArgPeriapsisRad = argPeriapsisRad; TrueAnomalyRad = trueAnomalyRad;
         }
 
         public bool IsBody => Kind == MapEntryKind.Sun || Kind == MapEntryKind.Planet
@@ -159,7 +170,8 @@ namespace VoxelEngine.Cosmos
             string name = registry.Sun.settings != null ? registry.Sun.settings.displayName : "Sun";
             _entries.Add(new MapEntry(name, MapEntryKind.Sun, MapMotionState.Landed,
                 registry.Sun.positionKmD, null, "", double.NaN, double.NaN, double.NaN,
-                double.NaN, double.NaN, 0d, 0d, null, true));
+                double.NaN, double.NaN, 0d, 0d, null, true,
+                double.NaN, double.NaN, double.NaN));
         }
 
         private static void AddBodies(CosmicRegistry registry)
@@ -177,12 +189,18 @@ namespace VoxelEngine.Cosmos
                 // only introduce a second source of truth that could disagree.
                 var orbit = body.orbit;
                 double apo = double.NaN, peri = double.NaN, period = double.NaN, incl = double.NaN;
+                double raan = double.NaN, argP = double.NaN, nu = double.NaN;
                 if (orbit.IsValid)
                 {
                     apo = orbit.semiMajorAxisKm * (1d + orbit.eccentricity);
                     peri = orbit.semiMajorAxisKm * (1d - orbit.eccentricity);
                     period = orbit.PeriodSeconds;
                     incl = orbit.inclinationRad * Mathf.Rad2Deg;
+                    raan = orbit.raanRad;
+                    argP = orbit.argPeriapsisRad;
+                    double m = OrbitMath.MeanAnomalyAt(orbit, registry.SimulationSeconds);
+                    nu = OrbitMath.TrueAnomaly(OrbitMath.SolveKepler(m, orbit.eccentricity),
+                        orbit.eccentricity);
                 }
 
                 var parent = body.parentBody;
@@ -201,7 +219,8 @@ namespace VoxelEngine.Cosmos
                     parent, parentName,
                     double.NaN, apo, peri, period, incl,
                     math.length(body.velocityKmS) * 1000d,
-                    radiusKm, null, true));
+                    radiusKm, null, true,
+                    raan, argP, nu));
             }
         }
 
@@ -222,7 +241,8 @@ namespace VoxelEngine.Cosmos
             _entries.Add(new MapEntry(NavigationTarget.BeltName, MapEntryKind.Asteroid,
                 MapMotionState.Drifting, centroid, null, "", double.NaN, double.NaN,
                 double.NaN, double.NaN, double.NaN, 0d, Mathf.Max((float)radiusKm, 1f),
-                null, true));
+                null, true,
+                double.NaN, double.NaN, double.NaN));
         }
 
         private static void AddCraft(CosmicRegistry registry, double3 viewerKm, double trackingRangeKm)
@@ -260,7 +280,8 @@ namespace VoxelEngine.Cosmos
 
                 _entries.Add(new MapEntry(identity.DisplayName, kind, motion, cosmicKm,
                     parent, parentName, altKm, apoKm, periKm, period, incl, speedMs,
-                    0d, grid, inRange));
+                    0d, grid, inRange,
+                    double.NaN, double.NaN, double.NaN));
             }
         }
 

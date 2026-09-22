@@ -1489,6 +1489,7 @@ Statuses are evidence-based and move forward only after code/content review and 
      - Player bases and landing pads.
    - ~~Click a body to set navigation target.~~ *(12.19.0-dev)*
    - ~~Optional trajectory trails for all orbiting bodies.~~ *(12.19.0-dev)*
+   - *(12.19.2-dev: map projects the true XY orbital plane instead of edge-on XZ; every planet draws its solar ellipse; body rings and trails are sampled from the live elements; belt shell draws its inner edge)*
 
 8. **Grid Route Recorder, Calculator & Autopilot**
    - Manually calculate distance, travel time, required thrust, power/fuel cost, and reserve margin to a selected body or waypoint.
