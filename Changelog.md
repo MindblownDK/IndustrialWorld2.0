@@ -1,9 +1,27 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.23.0-dev`
+**Current Version:** `12.24.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.24.0-dev] Warp Core - Gas Pipe Perf Fix, Warp Battery Fuel and Drive Panel
+
+**Type:** MINOR - gas tank lookups move from per-query physics BFS to a cached tank map (the 5 FPS at 10+ pipes), and the warp drive gets its fuel model plus the hero panel: an internal battery per drive, pooled range, a recharge toggle, max-draw display, and a live lime-on-black widget with power visibly streaming in while it charges. No recipe or setup changes.
+
+**GitHub title:** `[12.24.0-dev] Warp core - gas pipe perf fix, warp battery fuel and drive panel`
+
+#### Gas pipes stop melting the frame rate
+
+Every gas tank lookup used to walk the pipe network with physics: each visited pipe fired a sphere probe plus a 31-probe corridor sweep, so one question on a 10-pipe run cost 300+ overlap queries - twice a second per machine. Tank discovery now happens once per topology change plus one pipe per quarter-second on a rolling refresh, and queries are dictionary lookups with a cheap range check (no physics, no BFS, no per-query allocation). New tanks still register instantly through topology dirties, and cached links drop the moment grids drift apart instead of drawing gas across the gap. Same tanks found, same filters, roughly 10x cheaper.
+
+#### Jump fuel: range is bought, not granted
+
+Each warp drive now carries a 10 kWh internal battery fed from the grid bus, and all enabled drives on a grid pool their stores. Jump cost is distance times Wh-per-km (default 4, so one full drive flies exactly one fixed hop), consumed proportionally across the pool; short banks refuse with the exact numbers and the honest advice (recharge, or fit more drives). The 45-second spin-up stays as the coils warming - fuel and spin-up are independent, and a starved grid banks slowly instead of pretending. Stored energy, the recharge toggle and cooldowns persist with the grid.
+
+#### The drive panel
+
+Opening a warp drive now shows the hero widget: big fill %, live charge kW with a status dot, a bolt in a ring that pulses while power streams in from both sides, a time-to-full pill plus red stop, then stored/pooled/range/max-draw/price/spin-up/cooldown stats and RECHARGE, SPIN UP and JUMP controls. The autopilot banks for its legs automatically (player toggle untouched) and reports BANK vs need on the map card.
 
 ### [12.23.0-dev] Jump Legs - Autopilot Warp Integration
 

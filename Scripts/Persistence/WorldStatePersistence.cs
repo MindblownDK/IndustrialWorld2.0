@@ -1699,6 +1699,14 @@ namespace VoxelEngine.Persistence
                         savedBlock.gridBatteryMode = (int)gridBattery.mode;
                     }
 
+                    if (block is GridWarpDrive warpDrive)
+                    {
+                        savedBlock.hasWarpDriveState = true;
+                        savedBlock.warpStoredWh = warpDrive.warpStoredWh;
+                        savedBlock.warpRecharging = warpDrive.recharging;
+                        savedBlock.warpCooldown01 = warpDrive.Cooldown01;
+                    }
+
                     if (block is VoxelEngine.Maritime.GridGearbox gearbox)
                     {
                         savedBlock.hasGearboxState = true;
@@ -2169,6 +2177,9 @@ namespace VoxelEngine.Persistence
                         restoredGridBattery.mode = (GridBatteryMode)saved.gridBatteryMode;
                     restoredGridBattery.storedWh = Mathf.Clamp(saved.gridBatteryStoredWh, 0f, restoredGridBattery.capacityWh);
                 }
+
+                if (saved.hasWarpDriveState && block is GridWarpDrive restoredWarp)
+                    restoredWarp.RestorePersistentState(saved.warpStoredWh, saved.warpRecharging, saved.warpCooldown01);
 
                 if (saved.hasGearboxState && block is VoxelEngine.Maritime.GridGearbox restoredGearbox)
                     restoredGearbox.RestorePersistentSettings(saved.gearboxRatio, saved.gearboxSelectedGear);
@@ -3827,6 +3838,10 @@ namespace VoxelEngine.Persistence
             public bool hasGridBatteryState;
             public float gridBatteryStoredWh;
             public int gridBatteryMode;
+            public bool hasWarpDriveState;
+            public float warpStoredWh;
+            public bool warpRecharging;
+            public float warpCooldown01;
             // Additive gearbox setting state. The exact free-form ratio is the
             // authoritative player choice; selectedGear preserves legacy UI slots.
             public bool hasGearboxState;

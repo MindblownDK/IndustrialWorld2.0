@@ -41,6 +41,18 @@ namespace VoxelEngine.Gas
 
         private void Awake() => EnsureContainers();
 
+        // Tanks join/leave the cached tank map through topology dirties, so a
+        // newly placed tank is findable without waiting for a pipe edit.
+        private void OnEnable()
+        {
+            GasNetwork.EnsureInstance();
+            if (GasNetwork.Instance != null) GasNetwork.Instance.SetDirty(transform.position);
+        }
+        private void OnDisable()
+        {
+            if (GasNetwork.Instance != null) GasNetwork.Instance.SetDirty(transform.position);
+        }
+
         private void Update()
         {
             if (!IsHydrogenMode) return;

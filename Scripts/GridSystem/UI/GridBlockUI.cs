@@ -33,6 +33,7 @@ namespace VoxelEngine.GridSystem.UI
                 case GridGasTank gt:        return GasTankPanel(gt, slot);
                 case GridH2O2Generator h2:  return MakeScrollable(H2O2Panel(h2, slot));
                 case GridBattery bat:       return BatteryPanel(bat, slot);
+                case GridWarpDrive wd:        return MakeScrollable(WarpDrivePanel(wd));
                 case GridContainmentVault cv: return MakeScrollable(ContainmentVaultPanel(cv, slot));
                 case GridSingularityHarvester sh: return MakeScrollable(HarvesterPanel(sh, slot));
                 case GridLocatorBlock loc:  return MakeScrollable(LocatorPanel(loc));
@@ -299,6 +300,263 @@ namespace VoxelEngine.GridSystem.UI
         }
 
         // ── BATTERY ────────────────────────────────────────────────────────────
+        // ── WARP DRIVE ───────────────────────────────────────────────────────
+        // The hero widget: this drive's fill %, live charge kW, a bolt in a ring with
+        // power visibly streaming in from both sides while it charges, time-to-full
+        // pill plus red stop, then pooled-store stats and spin/jump controls. Lime on
+        // void-black, space-sci-fi framing. Everything live-updates in place.
+
+        private static readonly Color WarpLime = new Color(0.70f, 0.88f, 0.16f);
+        private static readonly Color WarpLimeDim = new Color(0.45f, 0.60f, 0.14f);
+        private static readonly Color WarpRed = new Color(0.78f, 0.22f, 0.18f);
+
+        private static VisualElement WarpDrivePanel(GridWarpDrive drive)
+        {
+            var p = T.MachinePanel();
+            p.name = "WarpDrivePanel";
+            StarshipTheme.Frame(p, WarpLime);
+
+            var (hdr, _, _, stateLabel) = T.HeaderRow("WARP DRIVE", WarpStateWord(drive), WarpLime);
+            p.Add(hdr);
+            p.Add(StarshipTheme.HullDivider(WarpLime));
+
+            // ── Hero card ──
+            var hero = new VisualElement();
+            hero.style.backgroundColor = new StyleColor(new Color(0.045f, 0.05f, 0.07f, 0.98f));
+            T.Radius(hero, 14);
+            hero.style.paddingLeft = 16; hero.style.paddingRight = 16;
+            hero.style.paddingTop = 12; hero.style.paddingBottom = 12;
+            hero.style.marginTop = 6;
+            hero.pickingMode = PickingMode.Ignore;
+            p.Add(hero);
+
+            var topRow = Row();
+            topRow.style.alignItems = Align.Center;
+            topRow.style.justifyContent = Justify.SpaceBetween;
+            var pct = new Label("0%");
+            pct.style.fontSize = 34;
+            pct.style.unityFontStyleAndWeight = FontStyle.Bold;
+            pct.style.color = new StyleColor(Color.white);
+            pct.pickingMode = PickingMode.Ignore;
+            topRow.Add(pct);
+            var kwRow = Row();
+            kwRow.style.alignItems = Align.Center;
+            var kwDot = new VisualElement();
+            kwDot.style.width = 10; kwDot.style.height = 10;
+            T.Radius(kwDot, 5);
+            kwDot.style.backgroundColor = new StyleColor(WarpLime);
+            kwDot.style.marginRight = 6;
+            kwDot.pickingMode = PickingMode.Ignore;
+            kwRow.Add(kwDot);
+            var kw = new Label("0 kW");
+            kw.style.fontSize = 15;
+            kw.style.unityFontStyleAndWeight = FontStyle.Bold;
+            kw.style.color = new StyleColor(WarpLime);
+            kw.pickingMode = PickingMode.Ignore;
+            kwRow.Add(kw);
+            topRow.Add(kwRow);
+            hero.Add(topRow);
+
+            // Ring + bolt + inflow dots. Dots stream from both edges toward the ring
+            // while the battery takes charge; parked and dim otherwise.
+            var stage = new VisualElement();
+            stage.style.position = Position.Relative;
+            stage.style.height = 128;
+            stage.style.marginTop = 4;
+            stage.style.marginBottom = 4;
+            stage.style.alignItems = Align.Center;
+            stage.style.justifyContent = Justify.Center;
+            stage.pickingMode = PickingMode.Ignore;
+            hero.Add(stage);
+
+            var ring = new VisualElement();
+            ring.style.width = 108; ring.style.height = 108;
+            T.Radius(ring, 54);
+            ring.style.backgroundColor = new StyleColor(new Color(0.015f, 0.016f, 0.022f, 1f));
+            ring.style.borderLeftWidth = 3; ring.style.borderRightWidth = 3;
+            ring.style.borderTopWidth = 3; ring.style.borderBottomWidth = 3;
+            ring.style.borderLeftColor = new StyleColor(WarpLimeDim);
+            ring.style.borderRightColor = new StyleColor(WarpLimeDim);
+            ring.style.borderTopColor = new StyleColor(WarpLimeDim);
+            ring.style.borderBottomColor = new StyleColor(WarpLimeDim);
+            ring.style.alignItems = Align.Center;
+            ring.style.justifyContent = Justify.Center;
+            ring.pickingMode = PickingMode.Ignore;
+            var bolt = new Label("⚡");
+            bolt.style.fontSize = 44;
+            bolt.style.color = new StyleColor(WarpLime);
+            bolt.pickingMode = PickingMode.Ignore;
+            ring.Add(bolt);
+            stage.Add(ring);
+
+            const int DotsPerSide = 4;
+            var dots = new VisualElement[DotsPerSide * 2];
+            float[] dotTops = { 14f, 44f, 74f, 102f };
+            for (int i = 0; i < dots.Length; i++)
+            {
+                var d = new VisualElement();
+                d.style.position = Position.Absolute;
+                d.style.width = 6; d.style.height = 6;
+                T.Radius(d, 3);
+                d.style.backgroundColor = new StyleColor(WarpLime);
+                d.style.top = dotTops[i % DotsPerSide];
+                d.pickingMode = PickingMode.Ignore;
+                dots[i] = d;
+                stage.Add(d);
+            }
+
+            var pillRow = Row();
+            pillRow.style.alignItems = Align.Center;
+            pillRow.style.justifyContent = Justify.Center;
+            pillRow.style.marginTop = 2;
+            var pill = new Label("—");
+            pill.style.fontSize = 11;
+            pill.style.unityFontStyleAndWeight = FontStyle.Bold;
+            pill.style.color = new StyleColor(Color.white);
+            pill.style.backgroundColor = new StyleColor(new Color(0.10f, 0.11f, 0.15f, 1f));
+            T.Radius(pill, 9);
+            pill.style.paddingLeft = 12; pill.style.paddingRight = 12;
+            pill.style.paddingTop = 4; pill.style.paddingBottom = 4;
+            pill.style.marginRight = 8;
+            pill.pickingMode = PickingMode.Ignore;
+            pillRow.Add(pill);
+            var stop = T.SmallButton("■", () =>
+            {
+                if (drive == null) return;
+                drive.recharging = false;
+                GameUIController.Instance?.RefreshCurrentPanel();
+            }, WarpRed);
+            stop.style.width = 34;
+            pillRow.Add(stop);
+            hero.Add(pillRow);
+
+            // ── Stats ──
+            p.Add(T.Spacer(6));
+            var storedRow = T.StatRow("🔋", "Stored", "—", WarpLime);
+            var storedVal = StatRowValue(storedRow);
+            p.Add(storedRow);
+            var poolRow = T.StatRow("🫂", "Pooled", "—", T.AccentCyan);
+            var poolVal = StatRowValue(poolRow);
+            p.Add(poolRow);
+            var rangeRow = T.StatRow("🎯", "Range now", "—", T.AccentGreen);
+            var rangeVal = StatRowValue(rangeRow);
+            p.Add(rangeRow);
+            var drawRow = T.StatRow("⚡", "Max draw", PowerFormat.Watts(drive.powerDrawWatts), T.AccentAmber);
+            p.Add(drawRow);
+            var priceRow = T.StatRow("⛽", "Jump price", $"{drive.energyPerKmWh:0.##} Wh/km", T.TextSecondary);
+            p.Add(priceRow);
+            var spinRow = T.StatRow("🌀", "Spin-up", "—", T.AccentCyan);
+            var spinVal = StatRowValue(spinRow);
+            p.Add(spinRow);
+            var coolRow = T.StatRow("❄", "Cooldown", "—", T.TextSecondary);
+            var coolVal = StatRowValue(coolRow);
+            p.Add(coolRow);
+
+            // ── Controls ──
+            p.Add(T.Spacer(4));
+            var btnRow = Row();
+            btnRow.Add(T.SmallButton(drive.recharging ? "RECHARGE ON" : "RECHARGE OFF", () =>
+            {
+                if (drive == null) return;
+                drive.recharging = !drive.recharging;
+                GameUIController.Instance?.RefreshCurrentPanel();
+            }, drive.recharging ? WarpLime : T.BgSlot));
+            btnRow.Add(T.SmallButton("SPIN UP", () =>
+            {
+                drive?.BeginCharge();
+                GameUIController.Instance?.RefreshCurrentPanel();
+            }, T.BgSlot));
+            btnRow.Add(T.SmallButton("JUMP", () =>
+            {
+                drive?.TryWarp();
+                GameUIController.Instance?.RefreshCurrentPanel();
+            }, T.BgSlot));
+            p.Add(btnRow);
+            p.Add(T.Muted("Range is bought from the pooled battery of every enabled drive on this grid. Far jump, thin bank: fit more drives."));
+
+            // ── Live tick: labels, pill, ring pulse and inflow dots, all in place ──
+            p.schedule.Execute(() =>
+            {
+                if (drive == null || p.panel == null) return;
+                bool flowing = drive.RechargeEffective && drive.CurrentChargeWatts > 1f && !drive.GridStarved;
+                bool starved = drive.GridStarved && (drive.recharging || drive.IsCharging);
+
+                pct.text = $"{drive.Fill01 * 100f:0}%";
+                kw.text = PowerFormat.Watts(drive.CurrentChargeWatts);
+                kwDot.style.backgroundColor = new StyleColor(flowing ? WarpLime : (starved ? WarpRed : T.TextMuted));
+                stateLabel.text = WarpStateWord(drive);
+
+                float pulse = flowing ? 0.75f + 0.25f * Mathf.Sin(Time.time * 5f) : 1f;
+                bolt.style.color = new StyleColor(new Color(WarpLime.r * pulse, WarpLime.g * pulse, WarpLime.b * pulse));
+                ring.style.opacity = flowing ? 0.85f + 0.15f * Mathf.Sin(Time.time * 5f) : 1f;
+
+                float t = Time.time * 0.55f;
+                for (int i = 0; i < dots.Length; i++)
+                {
+                    bool left = i < DotsPerSide;
+                    float phase = (t + (i % DotsPerSide) / (float)DotsPerSide) % 1f;
+                    if (!flowing) phase = (i % DotsPerSide) / (float)DotsPerSide; // parked
+                    float edge = phase * 36f; // percent of stage width, edge → ring
+                    if (left) { dots[i].style.left = Length.Percent(edge); dots[i].style.right = StyleKeyword.Auto; }
+                    else { dots[i].style.right = Length.Percent(edge); dots[i].style.left = StyleKeyword.Auto; }
+                    dots[i].style.opacity = flowing ? 1f - phase * 0.55f : 0.25f;
+                }
+
+                pill.text = WarpPillText(drive, flowing, starved);
+                if (storedVal != null)
+                    storedVal.text = $"{drive.warpStoredWh / 1000f:0.00} / {drive.warpCapacityWh / 1000f:0.00} kWh";
+                if (poolVal != null && drive.Grid != null)
+                    poolVal.text = $"{GridWarpDrive.PooledStoredWh(drive.Grid) / 1000f:0.00} kWh · {GridWarpDrive.PooledDriveCount(drive.Grid)} drives";
+                if (rangeVal != null && drive.Grid != null)
+                    rangeVal.text = $"{GridWarpDrive.PoolRangeKm(drive.Grid):N0} km";
+                if (spinVal != null)
+                    spinVal.text = drive.IsReady ? "READY" : (drive.IsCharging ? $"{drive.Charge01 * 100f:0}%" : "IDLE");
+                if (coolVal != null)
+                    coolVal.text = drive.Cooldown01 > 0f ? WarpEta(drive.Cooldown01 * drive.cooldownSeconds) : "—";
+            }).Every(50);
+
+            return p;
+        }
+
+        private static string WarpStateWord(GridWarpDrive drive)
+        {
+            if (drive == null) return "—";
+            if (!drive.Enabled) return "OFFLINE";
+            if (drive.Cooldown01 > 0f) return "COOLDOWN";
+            if (drive.IsReady) return "READY";
+            if (drive.IsCharging) return "SPINNING UP";
+            if (drive.GridStarved) return "GRID STARVED";
+            if (drive.RechargeEffective) return "RECHARGING";
+            if (drive.Fill01 >= 0.999f) return "FULL";
+            return "IDLE";
+        }
+
+        private static string WarpPillText(GridWarpDrive drive, bool flowing, bool starved)
+        {
+            if (drive.Fill01 >= 0.999f) return "FULL";
+            if (starved) return "GRID STARVED";
+            if (!flowing) return drive.recharging ? "PAUSED" : "RECHARGE OFF";
+            double secs = (drive.warpCapacityWh - drive.warpStoredWh) * 3600d / System.Math.Max(1d, drive.CurrentChargeWatts);
+            if (secs > 5400d) return $"{secs / 3600d:0.0} h remaining";
+            if (secs > 90d) return $"{secs / 60d:0} min remaining";
+            return $"{secs:0} s remaining";
+        }
+
+        private static string WarpEta(double seconds)
+        {
+            long s = System.Math.Max(0L, (long)seconds);
+            return $"{s / 60}:{s % 60:00}";
+        }
+
+        /// <summary>StatRow builds icon+label+value; the value label is the last Label child.</summary>
+        private static Label StatRowValue(VisualElement row)
+        {
+            Label last = null;
+            foreach (var child in row.Children())
+                if (child is Label l) last = l;
+            return last;
+        }
+
         private static VisualElement BatteryPanel(GridBattery bat, MachineUIs.SlotBuilder slot)
         {
             var p = T.MachinePanel();

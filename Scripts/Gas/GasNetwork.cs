@@ -27,6 +27,23 @@ namespace VoxelEngine.Gas
         private readonly List<Vector3> _dirtyPositions = new(4);
         private bool _globalVisualRefresh;
 
+        // ── Tank map (12.24.0-dev perf fix) ──────────────────────────────
+        // The old query path ran a physics BFS per question: every visited pipe
+        // fired a sphere probe plus a 31-probe cardinal corridor sweep, so one
+        // tank lookup on a 10-pipe run cost 300+ overlap queries — twice a second
+        // per machine. The map moves that physics to topology-change time plus a
+        // slow rolling refresh; queries become dictionary lookups with a cheap
+        // range-relevance check (no physics, no BFS, no per-query allocation).
+        private readonly Dictionary<GasPipe, int> _netId = new();
+        private readonly Dictionary<int, List<GasPipe>> _netPipes = new();
+        private readonly Dictionary<int, List<GasTank>> _netTanks = new();
+        private int _tankMapCursor;
+        private float _rollingAt;
+        private const float RollingPipeProbeSeconds = 0.25f;
+        private const float TankLinkRelevanceM = 7f; // corridor reach (5 cells + margin) past any net pipe
+        private static readonly HashSet<int> s_seedNets = new();
+        private static readonly List<GasPipe> s_floodStack = new();
+
         // Coalesce rapid register/unregister bursts (e.g. placing pipes in a row)
         // into a single rebuild so we don't do O(N) work every frame the player
         // holds the place button. Mirrors PowerNetworkManager.
@@ -53,6 +70,9 @@ namespace VoxelEngine.Gas
                 for (int i = 0; i < _pipes.Count; i++)
                     if (_pipes[i] != null) _pipes[i].neighbours.Remove(p);
                 p.neighbours.Clear();
+                _netId.Clear();
+                _netPipes.Clear();
+                _netTanks.Clear();
                 MarkDirty(formerPosition);
             }
         }
@@ -75,11 +95,21 @@ namespace VoxelEngine.Gas
 
         private void LateUpdate()
         {
-            if (!_dirty) return;
-            if (Time.unscaledTime - _dirtyAt < RebuildSettleDelay) return;
-            _dirty = false;
-            Rebuild();
-            RefreshAffectedVisuals();
+            if (_dirty && Time.unscaledTime - _dirtyAt >= RebuildSettleDelay)
+            {
+                _dirty = false;
+                Rebuild();
+                RefreshAffectedVisuals();
+            }
+            // Rolling re-probe: one pipe per tick keeps the tank map honest when
+            // grids drift relative to each other, with no detectable burst.
+            if (_pipes.Count > 0 && Time.unscaledTime - _rollingAt >= RollingPipeProbeSeconds)
+            {
+                _rollingAt = Time.unscaledTime;
+                _tankMapCursor %= _pipes.Count;
+                CollectPipeTanks(_pipes[_tankMapCursor]);
+                _tankMapCursor++;
+            }
         }
 
         private void RefreshAffectedVisuals()
@@ -191,6 +221,103 @@ namespace VoxelEngine.Gas
                     }
                 }
             }
+
+            AssignNetworkIds();
+            if (_netTanks.Count == 0) RefreshTankMap(); // cold start: one placement-time pass
+            _tankMapCursor = 0;
+        }
+
+        // ── Tank map ─────────────────────────────────────────────────────
+        // Connected-component ids over the neighbour graph, so a tank query can
+        // admit whole networks without walking them.
+
+        private void AssignNetworkIds()
+        {
+            _netId.Clear();
+            _netPipes.Clear();
+            int next = 1;
+            for (int i = 0; i < _pipes.Count; i++)
+            {
+                var root = _pipes[i];
+                if (root == null || _netId.ContainsKey(root)) continue;
+                s_floodStack.Clear();
+                s_floodStack.Add(root);
+                _netId[root] = next;
+                var members = new List<GasPipe> { root };
+                while (s_floodStack.Count > 0)
+                {
+                    var cur = s_floodStack[s_floodStack.Count - 1];
+                    s_floodStack.RemoveAt(s_floodStack.Count - 1);
+                    if (cur.neighbours == null) continue;
+                    for (int k = 0; k < cur.neighbours.Count; k++)
+                    {
+                        var nb = cur.neighbours[k];
+                        if (nb == null || _netId.ContainsKey(nb)) continue;
+                        _netId[nb] = next;
+                        members.Add(nb);
+                        s_floodStack.Add(nb);
+                    }
+                }
+                _netPipes[next] = members;
+                next++;
+            }
+        }
+
+        private void RefreshTankMap()
+        {
+            foreach (var list in _netTanks.Values) list.Clear();
+            for (int i = 0; i < _pipes.Count; i++) CollectPipeTanks(_pipes[i]);
+        }
+
+        /// <summary>Probe the tanks touching one pipe (sphere + cardinal corridor)
+        /// and file them under the pipe's network. Runs at rebuild time and in the
+        /// rolling refresh — never inside a tank query.</summary>
+        private void CollectPipeTanks(GasPipe pipe)
+        {
+            if (pipe == null || !_netId.TryGetValue(pipe, out int id)) return;
+            if (!_netTanks.TryGetValue(id, out var list)) _netTanks[id] = list = new List<GasTank>(4);
+            list.RemoveAll(t => t == null);
+
+            // Use a fixed ~2.75 m probe radius for tank detection — connectRadius
+            // is kept for explicit links but tank discovery needs a stable face-
+            // touch range that works even when connectRadius is tightened.
+            int hitCount = Physics.OverlapSphereNonAlloc(pipe.transform.position,
+                Mathf.Max(pipe.connectRadius, 2.75f), s_tankProbe, ~0, QueryTriggerInteraction.Collide);
+            for (int i = 0; i < hitCount; i++)
+            {
+                var col = s_tankProbe[i];
+                var tank = col != null ? col.GetComponent<GasTank>() ?? col.GetComponentInParent<GasTank>() : null;
+                if (tank != null && !list.Contains(tank)) list.Add(tank);
+            }
+
+            var block = pipe.GetComponentInParent<GridBlock>();
+            float pipeStep = block != null && block.Grid != null
+                ? GridSizeExt.CellSize(block.Grid.gridSize)
+                : GridStep(pipe, pipe);
+            Transform frame = block != null && block.Grid != null ? block.Grid.transform : null;
+            VoxelEngine.Networks.PipeAdjacency.ProbeCardinal(pipe.transform.position, frame, pipeStep, 5, s_tankProbe, col =>
+            {
+                var tank = col.GetComponent<GasTank>() ?? col.GetComponentInParent<GasTank>();
+                if (tank != null && !list.Contains(tank)) list.Add(tank);
+                return false; // collect everything — queries filter by type and direction
+            });
+        }
+
+        /// <summary>A cached link stays valid while its tank sits within corridor
+        /// reach of any pipe in the network — grids that drift apart stop sharing
+        /// gas instead of spookily drawing across the gap. Pure distance math.</summary>
+        private bool TankStillRelevant(int net, GasTank tank)
+        {
+            if (!_netPipes.TryGetValue(net, out var members)) return false;
+            Vector3 at = tank.transform.position;
+            float rangeSqr = TankLinkRelevanceM * TankLinkRelevanceM;
+            for (int i = 0; i < members.Count; i++)
+            {
+                var pipe = members[i];
+                if (pipe == null) continue;
+                if ((pipe.transform.position - at).sqrMagnitude <= rangeSqr) return true;
+            }
+            return false;
         }
 
         // Memoize identical tank lookups briefly: engines, taps and pumps probe on
@@ -246,62 +373,37 @@ namespace VoxelEngine.Gas
             var viaPort = ProbeTankCardinal(origin, null, step, type, forOutput);
             if (viaPort != null) return viaPort;
 
-            // BFS through pipe network — seed pipes near origin.
-            var visited = new HashSet<GasPipe>();
-            var queue = new Queue<GasPipe>();
+            // Cached network lookup — the physics that used to live in this BFS
+            // now runs at rebuild time plus a rolling refresh (see CollectPipeTanks).
+            // Seed semantics are unchanged: only pipes near the origin (passing the
+            // seed filter) admit their networks, exactly like the old BFS seeds.
+            s_seedNets.Clear();
             for (int i = 0; i < _pipes.Count; i++)
             {
                 var startPipe = _pipes[i];
                 if (startPipe == null) continue;
                 if (seedFilter != null && !seedFilter(startPipe)) continue;
                 if ((startPipe.transform.position - origin).sqrMagnitude > searchDist * searchDist) continue;
-                if (visited.Add(startPipe)) queue.Enqueue(startPipe);
+                if (_netId.TryGetValue(startPipe, out int seedNet)) s_seedNets.Add(seedNet);
             }
-
-            while (queue.Count > 0)
+            foreach (int seedNet in s_seedNets)
             {
-                var cur = queue.Dequeue();
-                var block = cur.GetComponentInParent<GridBlock>();
-                float pipeStep = block != null && block.Grid != null
-                    ? GridSizeExt.CellSize(block.Grid.gridSize)
-                    : GridStep(cur, cur);
-                Transform frame = block != null && block.Grid != null ? block.Grid.transform : null;
-
-                // Use a fixed ~2.75 m probe radius for tank detection — connectRadius
-                // is kept for explicit links but tank discovery needs a stable face-
-                // touch range that works even when connectRadius is tightened.
-                var near = ProbeTankSphere(cur.transform.position, Mathf.Max(cur.connectRadius, 2.75f), type, forOutput);
-                if (near != null) return near;
-                var viaPipe = ProbeTankCardinal(cur.transform.position, frame, pipeStep, type, forOutput);
-                if (viaPipe != null) return viaPipe;
-
-                if (cur.neighbours == null) continue;
-                for (int i = 0; i < cur.neighbours.Count; i++)
+                if (!_netTanks.TryGetValue(seedNet, out var tanks)) continue;
+                for (int i = 0; i < tanks.Count; i++)
                 {
-                    var nb = cur.neighbours[i];
-                    if (nb != null && visited.Add(nb)) queue.Enqueue(nb);
+                    var tank = tanks[i];
+                    if (tank == null || !tank.gameObject.activeInHierarchy) continue;
+                    if (!TankStillRelevant(seedNet, tank)) continue;
+                    if (forOutput && tank.allowOutput && tank.storedGasType == type && tank.storedAmount > 0)
+                        return tank;
+                    if (!forOutput && tank.acceptInput && (tank.storedGasType == type || tank.storedGasType == GasType.None))
+                        return tank;
                 }
             }
             return null;
         }
 
         private static readonly Collider[] s_tankProbe = new Collider[24];
-
-        private static GasTank ProbeTankSphere(Vector3 centre, float radius, GasType type, bool forOutput)
-        {
-            int hitCount = Physics.OverlapSphereNonAlloc(centre, radius, s_tankProbe, ~0, QueryTriggerInteraction.Collide);
-            for (int i = 0; i < hitCount; i++)
-            {
-                var col = s_tankProbe[i];
-                var tank = col != null ? col.GetComponent<GasTank>() ?? col.GetComponentInParent<GasTank>() : null;
-                if (tank == null) continue;
-                if (forOutput && tank.allowOutput && tank.storedGasType == type && tank.storedAmount > 0)
-                    return tank;
-                if (!forOutput && tank.acceptInput && (tank.storedGasType == type || tank.storedGasType == GasType.None))
-                    return tank;
-            }
-            return null;
-        }
 
         private static GasTank ProbeTankCardinal(Vector3 origin, Transform gridFrame, float step, GasType type, bool forOutput)
         {

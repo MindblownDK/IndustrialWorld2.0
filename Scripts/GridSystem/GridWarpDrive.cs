@@ -16,6 +16,12 @@
 // The jump itself is a floating-origin teleport: SpaceOrigin.TeleportCosmic re-anchors
 // the scene at the destination, the reference frame re-selects the nearest body, and
 // the grid arrives co-moving with that frame (scene velocity zeroed).
+//
+// FUEL (12.24.0-dev): the spin-up above is just the coils warming — the jump itself
+// is bought with stored energy. Every drive carries an internal battery fed from the
+// grid bus (see RECHARGE), and all enabled drives on a grid POOL their stores: range
+// is pooled-kWh divided by Wh-per-km, so a far jump with a thin bank needs more drives.
+// Consumption drains the pool proportionally, never one drive first.
 using Unity.Mathematics;
 using UnityEngine;
 using VoxelEngine.Cosmos;
@@ -29,8 +35,18 @@ namespace VoxelEngine.GridSystem
         [Tooltip("Seconds of continuous charging to reach full charge.")]
         public float chargeSeconds = 45f;
 
-        [Tooltip("Power drawn (W) while charging.")]
+        [Tooltip("Max power draw (W) while recharging the internal battery or spinning up.")]
         public float powerDrawWatts = 45000f;
+
+        [Header("Warp Battery")]
+        [Tooltip("Internal energy store per drive (Wh). Enabled drives on a grid pool their stores; range is pool divided by price.")]
+        public float warpCapacityWh = 10000f;
+        [Tooltip("Energy price of distance (Wh per km). At default tuning one full drive jumps exactly one fixed hop.")]
+        public float energyPerKmWh = 4f;
+        [Tooltip("Recharge the internal battery from the grid bus (draws up to the max above).")]
+        public bool recharging = true;
+        [Tooltip("Banked jump energy (Wh). Persisted with the grid.")]
+        public float warpStoredWh;
 
         [Tooltip("Cooldown after a jump before the drive can charge again.")]
         public float cooldownSeconds = 180f;
@@ -55,8 +71,17 @@ namespace VoxelEngine.GridSystem
         public float Cooldown01 { get; private set; }
         public bool IsCharging { get; private set; }
         public bool IsReady => Charge01 >= 1f && Cooldown01 <= 0f;
+        public float CurrentChargeWatts { get; private set; }
+        public float Fill01 => warpCapacityWh > 0f ? Mathf.Clamp01(warpStoredWh / warpCapacityWh) : 0f;
+        public bool WantsCharge => Enabled && Grid != null && warpStoredWh < warpCapacityWh - 0.001f;
+        private bool _autoRecharge;
+        /// <summary>Autopilot override: charge for the leg without touching the player's toggle.</summary>
+        public void SetAutoRecharge(bool v) => _autoRecharge = v;
+        public bool RechargeEffective => (recharging || _autoRecharge) && WantsCharge;
+        public bool GridStarved => Grid != null && Grid.PowerAvailability01 < ChargeStallPowerFraction
+            && ((recharging || _autoRecharge) || IsCharging);
 
-        public override float PowerDraw => (IsCharging && Enabled && Grid != null) ? powerDrawWatts : 0f;
+        public override float PowerDraw => (Enabled && Grid != null && (RechargeEffective || IsCharging)) ? powerDrawWatts : 0f;
 
         private const float ChargeStallPowerFraction = 0.35f; // below this grid power availability, charge stalls
 
@@ -66,6 +91,17 @@ namespace VoxelEngine.GridSystem
 
             if (Cooldown01 > 0f)
                 Cooldown01 = Mathf.Max(0f, Cooldown01 - Time.deltaTime / Mathf.Max(1f, cooldownSeconds));
+
+            // Battery: bank what the bus actually delivers (draw × availability), so a
+            // starved grid charges slowly instead of pretending. Runs whether or not
+            // the coils are spinning — fuel and spin-up are independent.
+            CurrentChargeWatts = 0f;
+            if (RechargeEffective && Grid != null)
+            {
+                float got = powerDrawWatts * Mathf.Clamp01(Grid.PowerAvailability01);
+                warpStoredWh = Mathf.Min(warpCapacityWh, warpStoredWh + got * Time.deltaTime / 3600f);
+                CurrentChargeWatts = got;
+            }
 
             if (!IsCharging || !Enabled) return;
 
@@ -232,6 +268,21 @@ namespace VoxelEngine.GridSystem
                 }
             }
 
+            // ── Fuel check: range is bought, not granted ────────────────────
+            double distKm = math.length(destination - gridCosmic);
+            float rate = Grid != null ? MaxRateWhPerKm(Grid) : energyPerKmWh;
+            float costWh = (float)(distKm * rate);
+            float pooled = Grid != null ? PooledStoredWh(Grid) : warpStoredWh;
+            if (pooled < costWh - 0.01f)
+            {
+                BuildFeedbackHud.Show("Warp Drive",
+                    $"Need {costWh / 1000f:0.0} kWh for {distKm:0} km — banked {pooled / 1000f:0.0} kWh. " +
+                    "Recharge, or fit more drives.", null, new Color(1f, 0.7f, 0.25f));
+                return false;
+            }
+            if (Grid != null) TryConsumePooledWh(Grid, costWh);
+            else warpStoredWh = Mathf.Max(0f, warpStoredWh - costWh);
+
             // ── Execute: floating-origin teleport ─────────────────
             origin.TeleportCosmic(destination);
             origin.SetFrame(targetPlanet != null || locatorBody != null
@@ -277,6 +328,83 @@ namespace VoxelEngine.GridSystem
             if (la < 1e-12 || lb < 1e-12) return 0d;
             double dot = math.clamp(math.dot(a, b) / (la * lb), -1d, 1d);
             return math.acos(dot) * 57.29577951308232d;
+        }
+
+        // ── Pooled store ────────────────────────────────────────────────
+        // Every enabled warp drive on a grid throws its battery into one pot.
+        // Costing uses the WORST rate in the pool (never strand a jump), and
+        // consumption drains proportionally so all drives land equally empty.
+
+        public static float PooledStoredWh(GridEntity grid)
+        {
+            if (grid == null) return 0f;
+            float total = 0f;
+            foreach (var block in grid.AllBlocks)
+                if (block is GridWarpDrive w && w.Enabled) total += Mathf.Max(0f, w.warpStoredWh);
+            return total;
+        }
+
+        public static float PooledCapacityWh(GridEntity grid)
+        {
+            if (grid == null) return 0f;
+            float total = 0f;
+            foreach (var block in grid.AllBlocks)
+                if (block is GridWarpDrive w && w.Enabled) total += Mathf.Max(0f, w.warpCapacityWh);
+            return total;
+        }
+
+        public static int PooledDriveCount(GridEntity grid)
+        {
+            if (grid == null) return 0;
+            int n = 0;
+            foreach (var block in grid.AllBlocks)
+                if (block is GridWarpDrive w && w.Enabled) n++;
+            return n;
+        }
+
+        public static float MaxRateWhPerKm(GridEntity grid)
+        {
+            if (grid == null) return 4f;
+            float worst = 0f;
+            bool any = false;
+            foreach (var block in grid.AllBlocks)
+                if (block is GridWarpDrive w && w.Enabled)
+                {
+                    if (!any || w.energyPerKmWh > worst) worst = w.energyPerKmWh;
+                    any = true;
+                }
+            return any ? Mathf.Max(0.01f, worst) : 4f;
+        }
+
+        /// <summary>Drain wh from the pool proportionally. Returns false and drains
+        /// nothing when the pool is short — the caller refuses the jump instead.</summary>
+        public static bool TryConsumePooledWh(GridEntity grid, float wh)
+        {
+            if (grid == null || wh <= 0f) return true;
+            float total = PooledStoredWh(grid);
+            if (total < wh - 0.01f) return false;
+            foreach (var block in grid.AllBlocks)
+                if (block is GridWarpDrive w && w.Enabled && w.warpStoredWh > 0f)
+                    w.warpStoredWh = Mathf.Max(0f, w.warpStoredWh - wh * (w.warpStoredWh / total));
+            return true;
+        }
+
+        /// <summary>How far the current pool flies, km. Zero when the pot is empty.</summary>
+        public static double PoolRangeKm(GridEntity grid)
+        {
+            float rate = MaxRateWhPerKm(grid);
+            return rate > 0f ? PooledStoredWh(grid) / rate : 0d;
+        }
+
+        /// <summary>Save-load restore: banked energy, recharge toggle and cooldown.
+        /// The spin-up never persists — a loaded drive re-spools in 45 seconds.</summary>
+        public void RestorePersistentState(float storedWh, bool recharging, float cooldown01)
+        {
+            warpStoredWh = Mathf.Clamp(storedWh, 0f, Mathf.Max(0f, warpCapacityWh));
+            this.recharging = recharging;
+            Cooldown01 = Mathf.Clamp01(cooldown01);
+            IsCharging = false;
+            Charge01 = 0f;
         }
 
         public override void OnRemoved()

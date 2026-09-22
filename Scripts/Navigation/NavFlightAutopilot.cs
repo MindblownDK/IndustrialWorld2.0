@@ -91,6 +91,8 @@ namespace VoxelEngine.Navigation
         private float _aimAngle;
         private float _lastCharge01;
         private float _chargeStallT;
+        private float _legNeedWh;
+        private float _legPooledWh;
 
         public static NavFlightAutopilot For(GridEntity grid)
         {
@@ -224,6 +226,7 @@ namespace VoxelEngine.Navigation
         public void Disengage(string reason)
         {
             bool wasActive = Active == this;
+            if (_drive != null) { _drive.SetAutoRecharge(false); _drive = null; }
             if (_grid != null && _grid.AutonomousFlightActive && _grid.AutonomousFlightOwner == FlightOwner)
                 _grid.ClearAutonomousFlight();
             State = NavFlightState.Off;
@@ -233,6 +236,7 @@ namespace VoxelEngine.Navigation
 
         private void SilentRelease()
         {
+            if (_drive != null) { _drive.SetAutoRecharge(false); _drive = null; }
             if (_grid != null && _grid.AutonomousFlightActive && _grid.AutonomousFlightOwner == FlightOwner)
                 _grid.ClearAutonomousFlight();
             State = NavFlightState.Off;
@@ -369,6 +373,7 @@ namespace VoxelEngine.Navigation
             {
                 if (State == NavFlightState.WarpAim || State == NavFlightState.WarpCharge)
                     State = NavFlightState.Cruise;
+                if (_drive != null) _drive.SetAutoRecharge(false);
                 _aimBest = float.MaxValue;
                 _aimStalled = 0f;
                 return;
@@ -380,6 +385,14 @@ namespace VoxelEngine.Navigation
                 return;
             }
             if (d < 1f) { State = NavFlightState.Cruise; return; }
+
+            // Energy: the leg must be banked before the spool matters. The drive
+            // auto-charges for the leg (player toggle untouched); aiming continues
+            // in parallel so the ship is lined up when the bank fills.
+            double legKm = _legIsCapture ? d / 1000d : _drive.jumpRangeKm;
+            _legNeedWh = (float)(legKm * GridWarpDrive.MaxRateWhPerKm(_grid));
+            _legPooledWh = GridWarpDrive.PooledStoredWh(_grid);
+            _drive.SetAutoRecharge(_legPooledWh < _legNeedWh - 0.01f);
 
             Vector3 dir = rel / d;
             // Aim through the exact frame the drive fires along (cockpit when there is
@@ -424,7 +437,7 @@ namespace VoxelEngine.Navigation
             }
             else { _chargeStallT = 0f; _lastCharge01 = _drive.Charge01; }
 
-            if (_drive.IsReady && angle <= fireAngle)
+            if (_drive.IsReady && angle <= fireAngle && _legPooledWh >= _legNeedWh - 0.01f)
             {
                 if (_drive.TryWarp())
                 {
@@ -535,10 +548,15 @@ namespace VoxelEngine.Navigation
                     string chg = a._drive != null
                         ? (a._drive.IsReady ? "DRIVE READY" : $"CHARGE {a._drive.Charge01 * 100f:0}%")
                         : "NO DRIVE";
+                    string bank = a._drive != null && a._drive.Grid != null
+                        ? $"BANK {a._legPooledWh / 1000f:0.0}/{a._legNeedWh / 1000f:0.0} kWh" +
+                          (a._legPooledWh < a._legNeedWh - 0.01f ? (a._drive.GridStarved ? " STARVED" : "") : " OK")
+                        : "";
                     string stall = a._chargeStallT > 5f ? " · STALLED (power?)" : "";
                     string leg = a._legIsCapture ? " · LOCK" : " · HOP";
                     return (a.State == NavFlightState.WarpAim ? "WARP·AIM " : "WARP·CHARGE ") + aim +
-                           " · " + chg + leg + stall + (a._grid.IsControlled ? "" : " (unmanned)");
+                           " · " + chg + (string.IsNullOrEmpty(bank) ? "" : " · " + bank) + leg + stall +
+                           (a._grid.IsControlled ? "" : " (unmanned)");
                 }
                 if (a.State == NavFlightState.Hold)
                     return $"AUTO·HOLD at {NavigationTarget.TargetName}" + (a._grid.IsControlled ? "" : " (unmanned)");
