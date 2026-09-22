@@ -1,9 +1,36 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.19.2-dev`
+**Current Version:** `12.20.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.20.0-dev] Clean Chart - Trajectory Toggles and Map Legibility
+
+**Type:** MINOR - the star map gets trajectory visibility toggles per class (planets, constructs, satellites), zoom-adaptive planet markers that stay readable when zoomed in, and label decluttering so the system's heart stops piling names on top of each other. No save, recipe or setup changes.
+
+**GitHub title:** `[12.20.0-dev] Clean chart - trajectory toggles and map legibility`
+
+#### Trajectory toggles
+
+A small `TRAJECTORIES` card sits top-right of the map with three checkboxes: Planets (planet and moon paths), Grids (ship and station trajectories) and Satellites. Unchecked hides that class's rings and trails; checked shows them. The choice persists across sessions, and the equipped device's orbit-path capability stays the master switch underneath. Flipping a checkbox never pans the map or disturbs the nav target.
+
+#### Readable at any zoom
+
+Body markers kept to true scale shrank to dots the moment you zoomed in on their moons. Markers now keep a zoom-adaptive floor (3 px at system zoom, growing to 20 px fully zoomed in), so a planet stays a readable disc at any magnification. Click hit-testing follows the same sizes, so what you click is still what you see.
+
+#### Declutter
+
+A moon hugging its planet keeps its name to itself until zoomed in enough to stand clear of it, which alone clears the label pile-up at the system's heart. The belt's label rides the bottom edge of its ring instead of sitting on the crowded centre. Planet, sun and construct labels are unchanged.
+
+#### Manual steps in Unity
+
+1. Apply the patch on top of 12.19.2-dev and recompile.
+2. No setup re-run is needed: no new blocks, items or recipes.
+3. Press `M`: the `TRAJECTORIES` card sits top-right with Planets, Grids and Satellites checked.
+4. Uncheck Planets: planet and moon rings and trails vanish; recheck and they return. Same for the other two.
+5. Zoom fully in on Earth: the planet stays a readable disc instead of a dot, and the Moon's label appears once it stands clear.
+6. Close and reopen the game: toggle choices are remembered.
 
 ### [12.19.2-dev] True Plane - Orbit Map Projection and Path Fixes
 

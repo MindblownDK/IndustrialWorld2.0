@@ -36,6 +36,15 @@ namespace VoxelEngine.UI
         private static VisualElement _sidebar;
         private static VisualElement _labelLayer;
         private static Label _headerLabel, _statusLabel, _focusLabel, _navLabel;
+
+        // Trajectory layer visibility, persisted per player. The device's orbit-path
+        // gate stays the master switch; these filter within what the device allows.
+        private const string PrefsTrajPlanets = "IW_MapTrajPlanets";
+        private const string PrefsTrajGrids = "IW_MapTrajGrids";
+        private const string PrefsTrajSats = "IW_MapTrajSats";
+        private static bool _showPlanetTraj = true;
+        private static bool _showGridTraj = true;
+        private static bool _showSatTraj = true;
         private static ScrollView _list;
         private static bool _open;
         private static bool _blocking;
@@ -184,6 +193,37 @@ namespace VoxelEngine.UI
             hint.style.color = new StyleColor(new Color(0.38f, 0.44f, 0.55f));
             hint.pickingMode = PickingMode.Ignore;
             _canvas.Add(hint);
+
+            // ── Trajectory toggles ──
+            // A small overlay card, top-right. It eats pointer down/up so flipping a
+            // checkbox never pans the map or clears the nav target underneath it.
+            var trajPanel = new VisualElement { name = "OrbitalMapTraj" };
+            trajPanel.style.position = Position.Absolute;
+            trajPanel.style.right = 12;
+            trajPanel.style.top = 12;
+            trajPanel.style.paddingLeft = 10; trajPanel.style.paddingRight = 10;
+            trajPanel.style.paddingTop = 7; trajPanel.style.paddingBottom = 7;
+            trajPanel.style.backgroundColor = new StyleColor(new Color(0.075f, 0.09f, 0.12f, 0.95f));
+            T.Border(trajPanel, 1f, new Color(0.16f, 0.22f, 0.28f, 0.9f));
+            T.Radius(trajPanel, 4f);
+            trajPanel.RegisterCallback<PointerDownEvent>(e => e.StopPropagation());
+            trajPanel.RegisterCallback<PointerUpEvent>(e => e.StopPropagation());
+            _canvas.Add(trajPanel);
+
+            var trajTitle = new Label("TRAJECTORIES");
+            trajTitle.style.fontSize = 8;
+            trajTitle.style.letterSpacing = 1.5f;
+            trajTitle.style.unityFontStyleAndWeight = FontStyle.Bold;
+            trajTitle.style.color = new StyleColor(new Color(0.40f, 0.50f, 0.62f));
+            trajTitle.style.marginBottom = 4;
+            trajPanel.Add(trajTitle);
+
+            trajPanel.Add(MakeTrajToggle("Planets", PrefsTrajPlanets,
+                "Planet and moon orbit paths", v => _showPlanetTraj = v));
+            trajPanel.Add(MakeTrajToggle("Grids", PrefsTrajGrids,
+                "Construct (ship and station) trajectories", v => _showGridTraj = v));
+            trajPanel.Add(MakeTrajToggle("Satellites", PrefsTrajSats,
+                "Satellite trajectories", v => _showSatTraj = v));
 
             // ── Sidebar ──
             _sidebar = new VisualElement { name = "OrbitalMapSidebar" };
@@ -404,6 +444,42 @@ namespace VoxelEngine.UI
             return row;
         }
 
+        private static Toggle MakeTrajToggle(string label, string prefsKey, string tooltip,
+            System.Action<bool> apply)
+        {
+            bool value = PlayerPrefs.GetInt(prefsKey, 1) == 1;
+            apply(value);
+            var toggle = new Toggle(label) { value = value, tooltip = tooltip };
+            toggle.style.fontSize = 9;
+            toggle.style.color = new StyleColor(new Color(0.75f, 0.82f, 0.90f));
+            toggle.style.marginBottom = 2;
+            toggle.RegisterValueChangedCallback(e =>
+            {
+                apply(e.newValue);
+                PlayerPrefs.SetInt(prefsKey, e.newValue ? 1 : 0);
+                PlayerPrefs.Save();
+                _canvas.MarkDirtyRepaint();
+            });
+            return toggle;
+        }
+
+        private static bool TrajVisible(MapEntryKind kind)
+        {
+            switch (kind)
+            {
+                case MapEntryKind.Planet:
+                case MapEntryKind.Moon:
+                    return _showPlanetTraj;
+                case MapEntryKind.Vessel:
+                case MapEntryKind.Station:
+                    return _showGridTraj;
+                case MapEntryKind.Satellite:
+                    return _showSatTraj;
+                default:
+                    return true;
+            }
+        }
+
         private static Color InkFor(MapEntry e) => e.Kind switch
         {
             MapEntryKind.Satellite => SatelliteInk,
@@ -445,6 +521,7 @@ namespace VoxelEngine.UI
                     var e = entries[i];
                     if (!e.InRange) continue;
                     if (e.Motion != MapMotionState.Orbiting) continue;
+                    if (!TrajVisible(e.Kind)) continue;
                     if (double.IsNaN(e.ApoapsisKm) || double.IsNaN(e.PeriapsisKm)) continue;
                     // Planets orbit the sun, which is not a BodyInstance — they carry a
                     // null parent with the sun's name and resolve it below. Only entries
@@ -499,7 +576,8 @@ namespace VoxelEngine.UI
 
                     // Bodies draw to scale where possible, with a floor so a distant moon
                     // is still clickable rather than a sub-pixel dot.
-                    float radius = Mathf.Clamp((float)(e.RadiusKm * pxPerKm), 3f, 900f);
+                    float floorPx = Mathf.Clamp(3f * Mathf.Sqrt((float)_zoom), 3f, 20f);
+                    float radius = Mathf.Clamp((float)(e.RadiusKm * pxPerKm), floorPx, 900f);
                     painter.fillColor = new Color(ink.r * 0.35f, ink.g * 0.35f, ink.b * 0.40f, 0.95f);
                     painter.BeginPath();
                     painter.Arc(p, radius, 0f, 360f);
@@ -560,13 +638,38 @@ namespace VoxelEngine.UI
                 Vector2 p = Project(e.PositionKm, anchor, centre, pxPerKm);
                 if (p.x < -100 || p.y < -100 || p.x > r.width + 100 || p.y > r.height + 100) continue;
 
+                // A moon hugging its planet keeps its name to itself until zoomed in —
+                // this alone clears the label pile-up at the system's heart.
+                if (e.Kind == MapEntryKind.Moon)
+                {
+                    Vector2 pp = Project(ParentPosition(entries, e), anchor, centre, pxPerKm);
+                    if ((p - pp).magnitude < 36f) continue;
+                }
+
                 Label label = used < _labelPool.Count ? _labelPool[used] : NewLabel();
                 used++;
 
                 label.text = e.Name;
                 label.style.display = DisplayStyle.Flex;
-                label.style.left = p.x + 9f;
-                label.style.top = p.y - 8f;
+                if (e.Kind == MapEntryKind.Asteroid)
+                {
+                    float ringR = Mathf.Clamp((float)(e.RadiusKm * pxPerKm), 10f, 4000f);
+                    if (ringR > 50f)
+                    {
+                        label.style.left = p.x + 10f;
+                        label.style.top = p.y + ringR - 10f;
+                    }
+                    else
+                    {
+                        label.style.left = p.x + 9f;
+                        label.style.top = p.y - 8f;
+                    }
+                }
+                else
+                {
+                    label.style.left = p.x + 9f;
+                    label.style.top = p.y - 8f;
+                }
                 bool marked = e.Name == _focusName
                     || (NavigationTarget.HasTarget && e.Name == NavigationTarget.TargetName);
                 label.style.color = new StyleColor(marked
@@ -666,7 +769,8 @@ namespace VoxelEngine.UI
                 }
                 else if (e.IsBody)
                 {
-                    float radius = Mathf.Clamp((float)(e.RadiusKm * pxPerKm), 3f, 900f);
+                    float floorPx = Mathf.Clamp(3f * Mathf.Sqrt((float)_zoom), 3f, 20f);
+                    float radius = Mathf.Clamp((float)(e.RadiusKm * pxPerKm), floorPx, 900f);
                     d = (localPos - p).magnitude;
                     grab = Mathf.Max(radius, 14f);
                 }
