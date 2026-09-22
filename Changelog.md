@@ -1,9 +1,37 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.21.0-dev`
+**Current Version:** `12.22.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.22.1-dev] Fly-To Compile Fix
+
+**Type:** PATCH - fixes the 12.22.0-dev compile error (`reason` used before assignment on the engage path) and the `FindObjectsSortMode` deprecation warnings (now uses the `FindObjectsInactive.Exclude` overload like the rest of the codebase). No behaviour changes.
+
+**GitHub title:** `[12.22.1-dev] Fly-to compile fix`
+
+### [12.22.0-dev] Fly To - Nav-Target Autopilot Cruise Control
+
+**Type:** MINOR - press P (or the map's ENGAGE AUTOPILOT card) and the ship in reach flies itself to the orbital map's nav target: a braking-curve cruise computed from live thrust and mass, stick override with resume, and an arrival hold on the warp shelf. No recipe or setup changes; no new blocks, items or wizard steps.
+
+**GitHub title:** `[12.22.0-dev] Fly to - nav-target autopilot cruise control`
+
+#### Engage and fly
+
+Set a nav target on the orbital map (M), stand by your ship (or stay in the seat), and press P - or use the new AUTOPILOT card on the map itself. The nearest ship within 60 m flies the leg: seated pilots keep their seat, camera and tools while the cruise owns translation, and unseated engages get a 3-second STAND CLEAR countdown first. The map card shows the live leg underneath: state, target, distance, speed and ETA.
+
+#### Honest physics, said out loud
+
+Speed is governed by a braking curve, not a wish: v = sqrt(2*a*d) from the ship's own directional thrust and live body mass, capped at 2500 m/s, so a heavy ship with a weak drive genuinely takes longer to stop. Legs that cannot brake along the flight line are refused (or released mid-flight) with the reason announced, legs that make no progress for 25 seconds are abandoned rather than flown forever, and the autopilot will not fly into the sun. Touching the translation stick overrides instantly and the cruise resumes on release; rotation always stays live.
+
+#### Arrival and hold
+
+Bodies are met at the surface plus 90 km - the same shelf the warp drive arrives on - while ships, stations and other contacts hold at 300 m. On arrival the ship keeps station and says so; P releases it. Exiting the seat mid-cruise does not stop the ship: it continues unmanned and announces that too.
+
+#### What stays open
+
+This is the first autopilot leg only: vacuum flight, one ship at a time, no terrain or traffic avoidance, no atmospheric legs, no docking, and no warp legs yet. Those remain open under roadmap item 8 (warp legs additionally under item 15).
 
 ### [12.21.0-dev] True Colours - Planet Hues, Pollution Readout, Bigger Text and Orbit Pace
 

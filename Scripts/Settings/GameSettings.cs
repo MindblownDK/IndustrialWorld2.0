@@ -30,7 +30,8 @@ namespace VoxelEngine.Settings
         OrbitalMap,        // system-wide orbital map, requires an equipped Orbital Map device (11.13.0-dev)
         LogisticsMap,      // local-surface map of rail, drone, road and base networks (11.16.0-dev)
         ConstructRegistry, // name/classify the piloted construct and commit it to orbit (11.13.0-dev)
-        GridInspector   // the Grid Inspector Overlay hotkey (9.37.0-dev): one key walks OFF → HEAT → DAMAGE → CENTRE OF MASS
+        GridInspector,  // the Grid Inspector Overlay hotkey (9.37.0-dev): one key walks OFF → HEAT → DAMAGE → CENTRE OF MASS
+        Autopilot       // fly-to-nav-target cruise control (12.22.0-dev)
     }
 
     public static class GameSettings
@@ -168,6 +169,7 @@ namespace VoxelEngine.Settings
             InputAction.LogisticsMap    => "L",
             InputAction.ConstructRegistry => "N",
             InputAction.GridInspector   => "K",
+            InputAction.Autopilot       => "P",
             _ => "None"
         };
 

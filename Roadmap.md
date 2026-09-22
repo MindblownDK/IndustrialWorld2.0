@@ -1499,7 +1499,7 @@ Statuses are evidence-based and move forward only after code/content review and 
    - Manually calculate distance, travel time, required thrust, power/fuel cost, and reserve margin to a selected body or waypoint.
    - Uses live ship mass, cargo, batteries, fuel, hydrogen, generation, efficiency, and damage state.
    - Record piloted paths between planets, stations, bases, mines, and docks.
-   - Autopilot follows validated routes, avoids hazards, manages braking reserves, and performs configured cargo/charging/refueling stops.
+   - Autopilot follows validated routes, avoids hazards, manages braking reserves, and performs configured cargo/charging/refueling stops. *(12.22.0-dev ships the first autopilot leg: seated/unseated fly-to-nav-target cruise with braking curve, stick override/resume and arrival hold. Hazard avoidance, dock approach, cargo ops, atmospheric legs and warp legs remain.)*
    - Route safety reacts to weather, gravity, territory, pollution signatures, hostile encounters, and changed ship contents.
 
 #### Improved Features

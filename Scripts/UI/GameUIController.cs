@@ -341,6 +341,7 @@ namespace VoxelEngine.UI
             GravityPullHud.Tick();
             VoxelEngine.GridSystem.GridPilotHud.Tick();
             OrbitalMapScreen.Tick();
+            VoxelEngine.Navigation.NavFlightAutopilot.Tick();
             GridIdentityHud.Tick();
             LivestockPenHud.Tick();
             CargoPadHud.Tick();

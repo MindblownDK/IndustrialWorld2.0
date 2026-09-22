@@ -36,6 +36,8 @@ namespace VoxelEngine.UI
         private static VisualElement _sidebar;
         private static VisualElement _labelLayer;
         private static Label _headerLabel, _statusLabel, _focusLabel, _navLabel;
+        private static Button _apButton;
+        private static Label _apStatus;
 
         // Trajectory layer visibility, persisted per player. The device's orbit-path
         // gate stays the master switch; these filter within what the device allows.
@@ -183,7 +185,7 @@ namespace VoxelEngine.UI
             _navLabel.pickingMode = PickingMode.Ignore;
             _canvas.Add(_navLabel);
 
-            var hint = new Label("DRAG TO PAN   ·   SCROLL TO ZOOM   ·   CLICK CONTACT = NAV TARGET + FOLLOW   ·   CLICK SPACE = CLEAR   ·   M / ESC TO CLOSE");
+            var hint = new Label("DRAG TO PAN   ·   SCROLL TO ZOOM   ·   CLICK CONTACT = NAV TARGET + FOLLOW   ·   CLICK SPACE = CLEAR   ·   P = AUTOPILOT   ·   M / ESC TO CLOSE");
             hint.style.position = Position.Absolute;
             hint.style.bottom = 12;
             hint.style.width = Length.Percent(100);
@@ -224,6 +226,50 @@ namespace VoxelEngine.UI
                 "Construct (ship and station) trajectories", v => _showGridTraj = v));
             trajPanel.Add(MakeTrajToggle("Satellites", PrefsTrajSats,
                 "Satellite trajectories", v => _showSatTraj = v));
+
+            // ── Autopilot ──
+            // Fly-to control for the ship in reach: engages the cruise to the nav
+            // target and reports the live leg underneath. Eats the pointer like the
+            // trajectory card, so engaging never pans the map or clears the target.
+            var apPanel = new VisualElement { name = "OrbitalMapAutopilot" };
+            apPanel.style.position = Position.Absolute;
+            apPanel.style.left = 18;
+            apPanel.style.top = 76;
+            apPanel.style.width = 245;
+            apPanel.style.paddingLeft = 10; apPanel.style.paddingRight = 10;
+            apPanel.style.paddingTop = 7; apPanel.style.paddingBottom = 7;
+            apPanel.style.backgroundColor = new StyleColor(new Color(0.075f, 0.09f, 0.12f, 0.95f));
+            T.Border(apPanel, 1f, new Color(0.16f, 0.22f, 0.28f, 0.9f));
+            T.Radius(apPanel, 4f);
+            apPanel.RegisterCallback<PointerDownEvent>(e => e.StopPropagation());
+            apPanel.RegisterCallback<PointerUpEvent>(e => e.StopPropagation());
+            _canvas.Add(apPanel);
+
+            var apTitle = new Label("AUTOPILOT");
+            apTitle.style.fontSize = 9;
+            apTitle.style.letterSpacing = 1.5f;
+            apTitle.style.unityFontStyleAndWeight = FontStyle.Bold;
+            apTitle.style.color = new StyleColor(new Color(0.40f, 0.50f, 0.62f));
+            apTitle.style.marginBottom = 4;
+            apPanel.Add(apTitle);
+
+            _apButton = new Button(() => VoxelEngine.Navigation.NavFlightAutopilot.ToggleFromMap()) { text = "ENGAGE AUTOPILOT [P]" };
+            _apButton.style.fontSize = 10;
+            _apButton.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _apButton.style.color = new StyleColor(new Color(0.55f, 0.95f, 0.65f));
+            _apButton.style.backgroundColor = new StyleColor(new Color(0.06f, 0.10f, 0.08f, 1f));
+            T.Border(_apButton, 1f, new Color(0.25f, 0.45f, 0.30f, 0.9f));
+            T.Radius(_apButton, 3f);
+            _apButton.style.paddingTop = 4; _apButton.style.paddingBottom = 4;
+            _apButton.style.marginTop = 2;
+            apPanel.Add(_apButton);
+
+            _apStatus = new Label("");
+            _apStatus.style.fontSize = 9;
+            _apStatus.style.whiteSpace = WhiteSpace.Normal;
+            _apStatus.style.color = new StyleColor(T.TextMuted);
+            _apStatus.style.marginTop = 4;
+            apPanel.Add(_apStatus);
 
             // ── Sidebar ──
             _sidebar = new VisualElement { name = "OrbitalMapSidebar" };
@@ -321,6 +367,10 @@ namespace VoxelEngine.UI
                                 $"{tracked}/{contacts} CONTACTS IN RANGE  ·  RANGE {OrbitalTrackingService.FormatKm(_device.trackingRangeKm)}";
             _focusLabel.text = string.IsNullOrEmpty(_focusName) ? "" : "Focus: " + _focusName;
             _navLabel.text = NavigationTarget.HasTarget ? "NAV TARGET: " + NavigationTarget.TargetName : "";
+            var apFlight = VoxelEngine.Navigation.NavFlightAutopilot.Active;
+            bool apOn = apFlight != null && apFlight.Engaged;
+            _apButton.text = apOn ? "DISENGAGE [P]" : (NavigationTarget.HasTarget ? "ENGAGE AUTOPILOT [P]" : "NO NAV TARGET");
+            _apStatus.text = VoxelEngine.Navigation.NavFlightAutopilot.StatusLine;
 
             BuildList(entries);
             LayoutLabels();

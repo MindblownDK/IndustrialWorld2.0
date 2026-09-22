@@ -1248,6 +1248,16 @@ namespace VoxelEngine.GridSystem
                 AutonomousDampenersActive = false;
                 return;
             }
+            // Cruise control (12.22.0-dev): a seated pilot with hands off the translation
+            // stick lets a velocity command fly the ship; the instant the stick moves, the
+            // pilot owns translation again and the command resumes on release. Rotation
+            // always stays live (mouse-look drives the gyros every frame), and the dampener
+            // rules already treat a nonzero command as thrusting, so nothing brakes the
+            // cruise. A stale command releases whether or not anyone is seated.
+            if (AutonomousFlightActive && Time.unscaledTime - _autonomousFlightHeartbeat > AUTONOMOUS_FLIGHT_STALE_SECONDS)
+                ClearAutonomousFlight();
+            bool cruiseTranslating = IsControlled && AutonomousFlightActive && !HasManualThrustInput();
+
             if (!IsControlled)
             {
                 // Decay any remaining smoothed input so the ship doesn't lurch when re-entered.
@@ -1272,46 +1282,52 @@ namespace VoxelEngine.GridSystem
             }
 
             AutonomousDampenersActive = false;
+            if (cruiseTranslating) ApplyAutonomousFlightThrust();
 
             // Control-seat local frame (so "forward" = where the pilot is looking).
             Transform frame = CurrentControlFrame;
 
-            // Smooth the pilot's binary key input so thrust ramps up/down instead of
-            // snapping instantly. This is the core of "feeling the mass" of the ship.
-            Vector3 input = Vector3.MoveTowards(_smoothedThrustInput, ThrustInput, THRUST_SPOOL_RATE * Time.fixedDeltaTime);
-            _smoothedThrustInput = input;
-
-            // Accumulate world-space force from the thrusters that push each requested way.
-            Vector3 worldForce = Vector3.zero;
-            foreach (var block in AllBlocks)
+            // While the cruise owns translation the pilot's stick is idle by definition, so there is
+            // no manual force to add; the gyro section below still runs every tick.
+            if (!cruiseTranslating)
             {
-                if (!(block is GridThruster thruster) || !thruster.IsOperational) continue;
+                // Smooth the pilot's binary key input so thrust ramps up/down instead of
+                // snapping instantly. This is the core of "feeling the mass" of the ship.
+                Vector3 input = Vector3.MoveTowards(_smoothedThrustInput, ThrustInput, THRUST_SPOOL_RATE * Time.fixedDeltaTime);
+                _smoothedThrustInput = input;
 
-                // The direction this thruster pushes the ship, in the cockpit's local frame.
-                Vector3 pushLocal = frame.InverseTransformDirection(thruster.PushDirection);
+                // Accumulate world-space force from the thrusters that push each requested way.
+                Vector3 worldForce = Vector3.zero;
+                foreach (var block in AllBlocks)
+                {
+                    if (!(block is GridThruster thruster) || !thruster.IsOperational) continue;
 
-                // Does the pilot want thrust along this thruster's push axis?
-                float want =
-                      pushLocal.x * Mathf.Clamp(input.x, -1f, 1f)
-                    + pushLocal.y * Mathf.Clamp(input.y, -1f, 1f)
-                    + pushLocal.z * Mathf.Clamp(input.z, -1f, 1f);
+                    // The direction this thruster pushes the ship, in the cockpit's local frame.
+                    Vector3 pushLocal = frame.InverseTransformDirection(thruster.PushDirection);
 
-                if (want <= 0.05f) continue; // this thruster doesn't help the requested move
+                    // Does the pilot want thrust along this thruster's push axis?
+                    float want =
+                          pushLocal.x * Mathf.Clamp(input.x, -1f, 1f)
+                        + pushLocal.y * Mathf.Clamp(input.y, -1f, 1f)
+                        + pushLocal.z * Mathf.Clamp(input.z, -1f, 1f);
 
-                float fraction = Mathf.Clamp01(want);
-                thruster.ThrustFraction = fraction;
+                    if (want <= 0.05f) continue; // this thruster doesn't help the requested move
 
-                // Consume this thruster's fuel/power + get its usable thrust (N), then push
-                // the ship along the thruster's real push direction (so it stays balanced).
-                float thrustN = thruster.AvailableThrust(input, this, fraction) * fraction;
-                worldForce += thruster.PushDirection * thrustN;
-            }
+                    float fraction = Mathf.Clamp01(want);
+                    thruster.ThrustFraction = fraction;
 
-            if (worldForce.sqrMagnitude > 0.0001f)
-            {
-                // Real force in Newtons → ForceMode.Force divides by mass, so a heavy or
-                // lightly-thrusted ship genuinely struggles (no more "too much thrust").
-                _rb.AddForce(worldForce * THRUST_GAIN, ForceMode.Force);
+                    // Consume this thruster's fuel/power + get its usable thrust (N), then push
+                    // the ship along the thruster's real push direction (so it stays balanced).
+                    float thrustN = thruster.AvailableThrust(input, this, fraction) * fraction;
+                    worldForce += thruster.PushDirection * thrustN;
+                }
+
+                if (worldForce.sqrMagnitude > 0.0001f)
+                {
+                    // Real force in Newtons → ForceMode.Force divides by mass, so a heavy or
+                    // lightly-thrusted ship genuinely struggles (no more "too much thrust").
+                    _rb.AddForce(worldForce * THRUST_GAIN, ForceMode.Force);
+                }
             }
 
             Vector3 rotInput = new Vector3(RotationPitch, RotationYaw, RotationRoll);
