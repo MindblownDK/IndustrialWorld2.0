@@ -94,6 +94,13 @@ namespace VoxelEngine.Cosmos
         /// </summary>
         private const double MinPlanetGapKm = 8000d;
 
+        /// <summary>
+        /// Planet element timeScale multiplier for arcade orbit pace: a ~33-hour
+        /// nominal year becomes ~15 minutes. Moons keep their own pace (already
+        /// minutes), as do rails craft, seasons and lighting.
+        /// </summary>
+        private const double ArcadeOrbitPaceMultiplier = 120d;
+
         // ── Lifecycle ─────────────────────────────────────────────
         private void Awake()
         {
@@ -134,6 +141,13 @@ namespace VoxelEngine.Cosmos
             worldSeed = seed != 0 ? seed : 1337;
             SimulationSeconds = 0d;
 
+            // Orbit pace is a world-creation choice (cosmos sidecar). Missing sidecar
+            // or old save: the session default is realistic, so nothing changes.
+            double orbitPaceMultiplier = 1d;
+            var paceSession = VoxelEngine.Menu.WorldSession.Instance;
+            if (paceSession != null && paceSession.orbitPace == VoxelEngine.Menu.WorldSession.OrbitPaceArcade)
+                orbitPaceMultiplier = ArcadeOrbitPaceMultiplier;
+
             var rng = new Random((uint)(worldSeed > 0 ? worldSeed : 1));
 
             double sunMu = template.sun != null && template.sun.gravitationalParameterKm3S2 > 1d
@@ -171,7 +185,7 @@ namespace VoxelEngine.Cosmos
                     planetRadius += ND(ref rng, sepLo, sepHi);
                 }
 
-                var elements = BuildPlanetElements(pt, planetRadius, ref rng, i, templates.Length);
+                var elements = BuildPlanetElements(pt, planetRadius, ref rng, i, templates.Length, orbitPaceMultiplier);
                 var planet = new BodyInstance
                 {
                     isPlanet       = true,
@@ -250,7 +264,7 @@ namespace VoxelEngine.Cosmos
         }
 
         private static OrbitElements BuildPlanetElements(PlanetTemplate pt, double a, ref Random rng,
-            int index, int count)
+            int index, int count, double paceMultiplier)
         {
             double eAuthored = pt.orbitEccentricity;
             // Keep periapsis away from the star: e ≤ 1 − 250/a.
@@ -272,7 +286,7 @@ namespace VoxelEngine.Cosmos
                 argPeriapsisRad      = ND(ref rng, 0d, Mathd.TwoPi),
                 meanAnomaly0         = phase,
                 gravitationalParamKm3S2 = 180d, // placeholder; the real sun μ is assigned by the caller
-                timeScale            = Mathd.Max(0.1d, pt.orbitSpeed > 0f ? pt.orbitSpeed : 1d),
+                timeScale            = Mathd.Max(0.1d, pt.orbitSpeed > 0f ? pt.orbitSpeed : 1d) * paceMultiplier,
             };
         }
 

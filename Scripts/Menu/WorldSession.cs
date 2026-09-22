@@ -134,6 +134,16 @@ namespace VoxelEngine.Menu
         /// <summary>Per-planet seed table (one editable, randomized-by-default seed per planet).</summary>
         public SystemSeedState seedState;
 
+        /// <summary>Orbit pace modes: realistic Keplerian periods vs fast arcade sweep.</summary>
+        public const int OrbitPaceRealistic = 0;
+        public const int OrbitPaceArcade = 1;
+
+        /// <summary>
+        /// This world's orbit pace, chosen at creation and stored in the cosmos
+        /// sidecar. Default realistic: old saves without the key keep real periods.
+        /// </summary>
+        public int orbitPace = OrbitPaceRealistic;
+
         /// <summary>Index of the planet to spawn on (0 = first planet in the system).</summary>
         public int spawnPlanetIndex = 0;
 
@@ -639,6 +649,7 @@ namespace VoxelEngine.Menu
                     chosenSystemName = chosenSystemName ?? "",
                     seedState        = seedState,
                     spawnPlanetIndex = spawnPlanetIndex,
+                    orbitPace        = orbitPace,
                 };
                 File.WriteAllText(CosmosSidecarPath, JsonUtility.ToJson(payload, true));
             }
@@ -656,6 +667,7 @@ namespace VoxelEngine.Menu
                 chosenSystemName = data.chosenSystemName ?? "";
                 seedState        = data.seedState;
                 spawnPlanetIndex = data.spawnPlanetIndex;
+                orbitPace        = data.orbitPace;
                 return seedState != null;
             }
             catch (System.Exception ex) { Debug.LogWarning("[WorldSession] LoadCosmosSidecar: " + ex.Message); return false; }
@@ -667,6 +679,7 @@ namespace VoxelEngine.Menu
             public string chosenSystemName;
             public SystemSeedState seedState;
             public int spawnPlanetIndex;
+            public int orbitPace;
         }
 
         public static string SanitizeWorldFolderName(string raw)

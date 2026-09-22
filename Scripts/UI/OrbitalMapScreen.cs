@@ -146,14 +146,14 @@ namespace VoxelEngine.UI
             _canvas.Add(header);
 
             _headerLabel = new Label("ORBITAL MAP");
-            _headerLabel.style.fontSize = 15;
+            _headerLabel.style.fontSize = 16;
             _headerLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
             _headerLabel.style.letterSpacing = 2.4f;
             _headerLabel.style.color = new StyleColor(new Color(0.55f, 0.95f, 0.65f));
             header.Add(_headerLabel);
 
             _statusLabel = new Label("");
-            _statusLabel.style.fontSize = 9;
+            _statusLabel.style.fontSize = 10;
             _statusLabel.style.color = new StyleColor(T.TextMuted);
             _statusLabel.style.marginTop = 2;
             header.Add(_statusLabel);
@@ -161,7 +161,7 @@ namespace VoxelEngine.UI
             _focusLabel = new Label("");
             _focusLabel.style.position = Position.Absolute;
             _focusLabel.style.top = 14;
-            _focusLabel.style.fontSize = 13;
+            _focusLabel.style.fontSize = 14;
             _focusLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
             _focusLabel.style.color = new StyleColor(new Color(0.95f, 0.85f, 0.35f));
             _focusLabel.style.alignSelf = Align.Center;
@@ -173,7 +173,7 @@ namespace VoxelEngine.UI
             _navLabel = new Label("");
             _navLabel.style.position = Position.Absolute;
             _navLabel.style.top = 34;
-            _navLabel.style.fontSize = 10;
+            _navLabel.style.fontSize = 11;
             _navLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
             _navLabel.style.letterSpacing = 1.6f;
             _navLabel.style.color = new StyleColor(new Color(0.95f, 0.78f, 0.30f));
@@ -188,7 +188,7 @@ namespace VoxelEngine.UI
             hint.style.bottom = 12;
             hint.style.width = Length.Percent(100);
             hint.style.unityTextAlign = TextAnchor.LowerCenter;
-            hint.style.fontSize = 8;
+            hint.style.fontSize = 9;
             hint.style.letterSpacing = 1.4f;
             hint.style.color = new StyleColor(new Color(0.38f, 0.44f, 0.55f));
             hint.pickingMode = PickingMode.Ignore;
@@ -211,7 +211,7 @@ namespace VoxelEngine.UI
             _canvas.Add(trajPanel);
 
             var trajTitle = new Label("TRAJECTORIES");
-            trajTitle.style.fontSize = 8;
+            trajTitle.style.fontSize = 9;
             trajTitle.style.letterSpacing = 1.5f;
             trajTitle.style.unityFontStyleAndWeight = FontStyle.Bold;
             trajTitle.style.color = new StyleColor(new Color(0.40f, 0.50f, 0.62f));
@@ -237,7 +237,7 @@ namespace VoxelEngine.UI
             _screen.Add(_sidebar);
 
             var listTitle = new Label("TRACKED CONTACTS");
-            listTitle.style.fontSize = 10;
+            listTitle.style.fontSize = 11;
             listTitle.style.unityFontStyleAndWeight = FontStyle.Bold;
             listTitle.style.letterSpacing = 1.6f;
             listTitle.style.color = new StyleColor(new Color(0.55f, 0.95f, 0.65f));
@@ -342,7 +342,7 @@ namespace VoxelEngine.UI
             if (!any)
             {
                 var none = new Label("No named constructs. Name a grid to track it.");
-                none.style.fontSize = 9;
+                none.style.fontSize = 10;
                 none.style.whiteSpace = WhiteSpace.Normal;
                 none.style.color = new StyleColor(T.TextMuted);
                 none.style.marginBottom = 8;
@@ -360,7 +360,7 @@ namespace VoxelEngine.UI
         private static void AddSection(string text)
         {
             var label = new Label(text);
-            label.style.fontSize = 8;
+            label.style.fontSize = 9;
             label.style.letterSpacing = 1.5f;
             label.style.unityFontStyleAndWeight = FontStyle.Bold;
             label.style.color = new StyleColor(new Color(0.40f, 0.50f, 0.62f));
@@ -389,14 +389,14 @@ namespace VoxelEngine.UI
 
             bool nav = NavigationTarget.HasTarget && entry.Name == NavigationTarget.TargetName;
             var name = new Label(nav ? entry.Name + "  [NAV]" : entry.Name);
-            name.style.fontSize = 10;
+            name.style.fontSize = 11;
             name.style.unityFontStyleAndWeight = FontStyle.Bold;
             name.style.color = new StyleColor(!entry.InRange ? T.TextMuted
                 : nav ? new Color(0.95f, 0.85f, 0.35f) : InkFor(entry));
             top.Add(name);
 
             var kind = new Label(entry.KindLabel);
-            kind.style.fontSize = 7;
+            kind.style.fontSize = 8;
             kind.style.letterSpacing = 1f;
             kind.style.color = new StyleColor(new Color(0.45f, 0.53f, 0.64f));
             top.Add(kind);
@@ -405,7 +405,7 @@ namespace VoxelEngine.UI
             if (!entry.InRange)
             {
                 var oor = new Label("OUT OF TRACKING RANGE");
-                oor.style.fontSize = 8;
+                oor.style.fontSize = 9;
                 oor.style.color = new StyleColor(T.AccentAmber);
                 row.Add(oor);
                 return row;
@@ -413,9 +413,19 @@ namespace VoxelEngine.UI
 
             var state = new Label(entry.MotionLabel
                 + (string.IsNullOrEmpty(entry.ParentName) ? "" : "  ·  " + entry.ParentName));
-            state.style.fontSize = 8;
+            state.style.fontSize = 9;
             state.style.color = new StyleColor(MotionColor(entry.Motion));
             row.Add(state);
+
+            // Pollution burden. Reads 0% everywhere until the pollution simulation
+            // lands and feeds the tracking snapshot — the readout is already wired.
+            if (entry.Kind == MapEntryKind.Planet || entry.Kind == MapEntryKind.Moon)
+            {
+                var pol = new Label($"POLLUTION {(entry.Pollution01 * 100d):0}%");
+                pol.style.fontSize = 9;
+                pol.style.color = new StyleColor(new Color(0.62f, 0.64f, 0.52f));
+                row.Add(pol);
+            }
 
             // Full telemetry is what an expensive device buys you. A basic unit stops here.
             if (_device != null && _device.showFullTelemetry && entry.Motion == MapMotionState.Orbiting)
@@ -425,7 +435,7 @@ namespace VoxelEngine.UI
                     $"PE {OrbitalTrackingService.FormatKm(entry.PeriapsisKm)}\n" +
                     $"T {OrbitalTrackingService.FormatPeriod(entry.PeriodSeconds)}   " +
                     $"INC {(double.IsNaN(entry.InclinationDeg) ? "—" : entry.InclinationDeg.ToString("0.0") + "\u00b0")}");
-                detail.style.fontSize = 8;
+                detail.style.fontSize = 9;
                 detail.style.whiteSpace = WhiteSpace.Normal;
                 detail.style.color = new StyleColor(new Color(0.58f, 0.66f, 0.76f));
                 detail.style.marginTop = 2;
@@ -450,7 +460,7 @@ namespace VoxelEngine.UI
             bool value = PlayerPrefs.GetInt(prefsKey, 1) == 1;
             apply(value);
             var toggle = new Toggle(label) { value = value, tooltip = tooltip };
-            toggle.style.fontSize = 9;
+            toggle.style.fontSize = 10;
             toggle.style.color = new StyleColor(new Color(0.75f, 0.82f, 0.90f));
             toggle.style.marginBottom = 2;
             toggle.RegisterValueChangedCallback(e =>
@@ -480,16 +490,25 @@ namespace VoxelEngine.UI
             }
         }
 
-        private static Color InkFor(MapEntry e) => e.Kind switch
+        private static Color InkFor(MapEntry e)
         {
-            MapEntryKind.Satellite => SatelliteInk,
-            MapEntryKind.Station => StationInk,
-            MapEntryKind.Sun => new Color(1.00f, 0.88f, 0.42f),
-            MapEntryKind.Planet => new Color(0.55f, 0.78f, 0.95f),
-            MapEntryKind.Moon => new Color(0.72f, 0.75f, 0.80f),
-            MapEntryKind.Asteroid => new Color(0.78f, 0.70f, 0.55f),
-            _ => VesselInk,
-        };
+            // Planets and moons wear their authored hue (the same displayColor the
+            // beacons use), so Mars reads red and ice reads pale. Unauthored bodies
+            // keep the classic kind colours below.
+            if ((e.Kind == MapEntryKind.Planet || e.Kind == MapEntryKind.Moon)
+                && e.BodyColor.a > 0.01f)
+                return e.BodyColor;
+            return e.Kind switch
+            {
+                MapEntryKind.Satellite => SatelliteInk,
+                MapEntryKind.Station => StationInk,
+                MapEntryKind.Sun => new Color(1.00f, 0.88f, 0.42f),
+                MapEntryKind.Planet => new Color(0.55f, 0.78f, 0.95f),
+                MapEntryKind.Moon => new Color(0.72f, 0.75f, 0.80f),
+                MapEntryKind.Asteroid => new Color(0.78f, 0.70f, 0.55f),
+                _ => VesselInk,
+            };
+        }
 
         private static Color MotionColor(MapMotionState m) => m switch
         {
@@ -675,7 +694,7 @@ namespace VoxelEngine.UI
                 label.style.color = new StyleColor(marked
                     ? new Color(0.95f, 0.85f, 0.35f)
                     : InkFor(e));
-                label.style.fontSize = e.IsBody ? 10 : 9;
+                label.style.fontSize = e.IsBody ? 12 : 11;
                 label.style.unityFontStyleAndWeight = marked ? FontStyle.Bold : FontStyle.Normal;
             }
             HideLabelsFrom(used);

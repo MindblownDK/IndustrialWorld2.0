@@ -1,9 +1,40 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.20.0-dev`
+**Current Version:** `12.21.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.21.0-dev] True Colours - Planet Hues, Pollution Readout, Bigger Text and Orbit Pace
+
+**Type:** MINOR - planets and moons wear their authored hues on the star map, every body row carries a pollution readout (wired, awaiting the simulation), all map text is bigger, and world creation offers a Realistic / Arcade orbit pace so planets visibly sweep in arcade worlds. No recipe or setup changes; old saves default to realistic pace.
+
+**GitHub title:** `[12.21.0-dev] True colours - planet hues, pollution readout, bigger text and orbit pace`
+
+#### Planets in their own colours
+
+Every planet and moon asset authors a `displayColor` - the same hue its sky beacon already wears - and the map now uses it for markers, labels and sidebar rows, so Mars reads red, ice reads pale and volcanic reads ember. Bodies without an authored hue keep the classic blue/grey kind colours. Orbit rings stay uniformly green: one trajectory language, no rainbow spaghetti.
+
+#### Pollution, ready when you are
+
+Each planet and moon row now shows a `POLLUTION 0%` line under its motion state. The value flows through the tracking snapshot from a clearly-marked seam that returns zero until the pollution simulation lands - wire the real per-body source there and every readout lights up with no further map changes.
+
+#### Bigger text
+
+All map type is bumped: floating labels grow to 12/11 px, sidebar rows to 11/9/8 px, and the header, status, focus, nav and hint lines each step up. Layout and the 310 px sidebar are unchanged; everything still fits.
+
+#### Orbit pace at world creation
+
+The new-world form's solar-system section gains an `ORBIT PACE` picker: `REALISTIC` (true Keplerian periods - a year takes days) or `ARCADE` (planet orbital speed x120, a year in minutes, visibly sweeping on the map). The choice is stored per world in the cosmos sidecar next to the system and seeds; old saves without the key default to realistic, and it is deliberately not editable after creation since it shapes generation. Only planet elements are accelerated - moons, rails craft, seasons and lighting keep normal time.
+
+#### Manual steps in Unity
+
+1. Apply the patch on top of 12.20.0-dev and recompile.
+2. No setup re-run is needed: no new blocks, items or recipes.
+3. Press `M`: planets wear distinct hues in markers, labels and rows; each planet/moon row shows `POLLUTION 0%`; all text is visibly larger.
+4. Create a new world: the solar-system section offers `REALISTIC` / `ARCADE` orbit pace with realistic preselected.
+5. Start an arcade world, open the map and watch: planets visibly move along their rings within a minute or two.
+6. Load an older save: it plays exactly as before (realistic pace, no behaviour change).
 
 ### [12.20.0-dev] Clean Chart - Trajectory Toggles and Map Legibility
 

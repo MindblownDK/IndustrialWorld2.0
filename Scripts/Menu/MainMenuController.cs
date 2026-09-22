@@ -44,6 +44,7 @@ namespace VoxelEngine.Menu
         private int    _newContainerWeightPercent = WorldSession.DefaultContainerWeightPercent;
         private bool   _newShowDropVoidWarning = true;
         private bool   _newAllowRuinLootRespawn = WorldSession.DefaultAllowRuinLootRespawn;
+        private int    _newOrbitPace = WorldSession.OrbitPaceRealistic;
 
         // Edit-world form values. Only non-generation settings are editable here.
         private string _editOriginalName = string.Empty;
@@ -882,6 +883,7 @@ namespace VoxelEngine.Menu
             _session.chosenSystemName = state.systemName;
             _session.seedState        = state;
             _session.spawnPlanetIndex = _selectedSpawnPlanet;
+            _session.orbitPace        = _newOrbitPace;
         }
 
         /// <summary>
@@ -1056,6 +1058,41 @@ namespace VoxelEngine.Menu
             allBtn.style.marginTop = 4;
             allBtn.style.alignSelf = Align.FlexEnd;
             box.Add(allBtn);
+
+            // ── Orbit pace: realistic periods vs fast arcade sweep ──
+            var paceHdr = T.Muted("ORBIT PACE");
+            paceHdr.style.unityFontStyleAndWeight = FontStyle.Bold;
+            paceHdr.style.marginTop = 10;
+            paceHdr.style.marginBottom = 6;
+            box.Add(paceHdr);
+
+            var paceRow = new VisualElement();
+            paceRow.style.flexDirection = FlexDirection.Row;
+            paceRow.style.marginBottom = 4;
+            string[] paceNames = { "REALISTIC", "ARCADE" };
+            for (int pi = 0; pi < paceNames.Length; pi++)
+            {
+                int captured = pi;
+                bool paceActive = _newOrbitPace == captured;
+                var paceBtn = new Button(() => { _newOrbitPace = captured; BuildUI(); })
+                    { text = paceNames[captured] };
+                paceBtn.style.minHeight = 28;
+                paceBtn.style.minWidth = 110;
+                paceBtn.style.marginRight = 5;
+                paceBtn.style.fontSize = 10;
+                paceBtn.style.unityFontStyleAndWeight = FontStyle.Bold;
+                paceBtn.style.color = Color.white;
+                paceBtn.style.backgroundColor = new StyleColor(paceActive
+                    ? new Color(T.AccentCyan.r, T.AccentCyan.g, T.AccentCyan.b, 0.85f)
+                    : new Color(T.BgSlot.r, T.BgSlot.g, T.BgSlot.b, 0.85f));
+                T.Radius(paceBtn, T.ButtonRadius);
+                T.Border(paceBtn, 0, Color.clear);
+                paceRow.Add(paceBtn);
+            }
+            box.Add(paceRow);
+            var paceHelp = T.Muted("Realistic: true Keplerian periods — a year takes days. Arcade: planets sweep visibly (x120 orbital speed). Moons, craft and seasons keep normal time. Set at creation; stored per world.");
+            paceHelp.style.marginTop = 2;
+            box.Add(paceHelp);
 
             return box;
         }

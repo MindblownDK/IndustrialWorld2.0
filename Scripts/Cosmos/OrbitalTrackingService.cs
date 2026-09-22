@@ -79,6 +79,15 @@ namespace VoxelEngine.Cosmos
         public readonly double ArgPeriapsisRad;
         public readonly double TrueAnomalyRad;
 
+        /// <summary>
+        /// Authored body hue (BodySettings.displayColor). Alpha 0 means unauthored —
+        /// the map falls back to its kind colour. Bodies only.
+        /// </summary>
+        public readonly Color BodyColor;
+
+        /// <summary>Pollution burden 0..1. Always 0 until the pollution simulation lands.</summary>
+        public readonly double Pollution01;
+
         /// <summary>Radius in km, for drawing bodies to scale. Zero for craft.</summary>
         public readonly double RadiusKm;
 
@@ -92,7 +101,8 @@ namespace VoxelEngine.Cosmos
             BodyInstance parent, string parentName, double altitudeKm, double apoapsisKm,
             double periapsisKm, double periodSeconds, double inclinationDeg, double speedMs,
             double radiusKm, GridEntity grid, bool inRange,
-            double raanRad, double argPeriapsisRad, double trueAnomalyRad)
+            double raanRad, double argPeriapsisRad, double trueAnomalyRad,
+            Color bodyColor, double pollution01)
         {
             Name = name; Kind = kind; Motion = motion; PositionKm = positionKm;
             Parent = parent; ParentName = parentName; AltitudeKm = altitudeKm;
@@ -100,6 +110,7 @@ namespace VoxelEngine.Cosmos
             InclinationDeg = inclinationDeg; SpeedMs = speedMs; RadiusKm = radiusKm;
             Grid = grid; InRange = inRange;
             RaanRad = raanRad; ArgPeriapsisRad = argPeriapsisRad; TrueAnomalyRad = trueAnomalyRad;
+            BodyColor = bodyColor; Pollution01 = pollution01;
         }
 
         public bool IsBody => Kind == MapEntryKind.Sun || Kind == MapEntryKind.Planet
@@ -171,7 +182,8 @@ namespace VoxelEngine.Cosmos
             _entries.Add(new MapEntry(name, MapEntryKind.Sun, MapMotionState.Landed,
                 registry.Sun.positionKmD, null, "", double.NaN, double.NaN, double.NaN,
                 double.NaN, double.NaN, 0d, 0d, null, true,
-                double.NaN, double.NaN, double.NaN));
+                double.NaN, double.NaN, double.NaN,
+                default, 0d));
         }
 
         private static void AddBodies(CosmicRegistry registry)
@@ -211,6 +223,9 @@ namespace VoxelEngine.Cosmos
                 if (registry.SceneBodies.TryGetValue(body, out var scene) && scene != null)
                     radiusKm = scene.SurfaceRadius / 1000d;
 
+                Color bodyColor = body.settings != null ? body.settings.displayColor : default;
+                double pollution = PollutionFor(body);
+
                 _entries.Add(new MapEntry(
                     body.DisplayName,
                     body.isPlanet ? MapEntryKind.Planet : MapEntryKind.Moon,
@@ -220,9 +235,17 @@ namespace VoxelEngine.Cosmos
                     double.NaN, apo, peri, period, incl,
                     math.length(body.velocityKmS) * 1000d,
                     radiusKm, null, true,
-                    raan, argP, nu));
+                    raan, argP, nu,
+                    bodyColor, pollution));
             }
         }
+
+        /// <summary>
+        /// Pollution burden 0..1 for a body. PLACEHOLDER (12.21.0-dev): always zero
+        /// until the pollution simulation lands — wire the real per-body source here
+        /// and the map readout lights up with no further map changes.
+        /// </summary>
+        private static double PollutionFor(BodyInstance body) => 0d;
 
         // ── Player constructs ────────────────────────────────────────────────────
         /// <summary>
@@ -242,7 +265,8 @@ namespace VoxelEngine.Cosmos
                 MapMotionState.Drifting, centroid, null, "", double.NaN, double.NaN,
                 double.NaN, double.NaN, double.NaN, 0d, Mathf.Max((float)radiusKm, 1f),
                 null, true,
-                double.NaN, double.NaN, double.NaN));
+                double.NaN, double.NaN, double.NaN,
+                default, 0d));
         }
 
         private static void AddCraft(CosmicRegistry registry, double3 viewerKm, double trackingRangeKm)
@@ -281,7 +305,8 @@ namespace VoxelEngine.Cosmos
                 _entries.Add(new MapEntry(identity.DisplayName, kind, motion, cosmicKm,
                     parent, parentName, altKm, apoKm, periKm, period, incl, speedMs,
                     0d, grid, inRange,
-                    double.NaN, double.NaN, double.NaN));
+                    double.NaN, double.NaN, double.NaN,
+                    default, 0d));
             }
         }
 

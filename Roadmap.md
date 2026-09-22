@@ -245,6 +245,8 @@ The Building Hammer gains a research-locked **Orbital Station** family with a cl
 
 Industrial activity creates pollution that spreads outward from its source and changes local threat levels.
 
+*(12.21.0-dev: the star map already shows a per-planet/moon pollution readout; values stay 0% until this simulation lands and feeds the tracking snapshot.)*
+
 #### Pollution Sources
 
 - Solid-fuel generators, combustion engines, furnaces, refineries, chemical plants, mining machines, waste overflow, damaged reactors, rockets, and heavy vehicles emit different pollution types.
@@ -1491,6 +1493,7 @@ Statuses are evidence-based and move forward only after code/content review and 
    - ~~Optional trajectory trails for all orbiting bodies.~~ *(12.19.0-dev)*
    - *(12.19.2-dev: map projects the true XY orbital plane instead of edge-on XZ; every planet draws its solar ellipse; body rings and trails are sampled from the live elements; belt shell draws its inner edge)*
    - *(12.20.0-dev: trajectory visibility toggles per class, zoom-adaptive body markers, moon-label and belt-label declutter)*
+   - *(12.21.0-dev: authored per-body hues, pollution readout, larger text, Realistic/Arcade orbit pace at world creation)*
 
 8. **Grid Route Recorder, Calculator & Autopilot**
    - Manually calculate distance, travel time, required thrust, power/fuel cost, and reserve margin to a selected body or waypoint.
