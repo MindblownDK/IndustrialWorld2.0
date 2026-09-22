@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.14.0-dev`
-**Roadmap Version:** `12.14.0-dev`
+**Current Version:** `12.15.0-dev`
+**Roadmap Version:** `12.15.0-dev`
 **Date:** 2026-09-21
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,10 @@
 
 ## 0. Recently Done
 
+### 12.15.0-dev - Holo Racks And Data Brackets (Storage High-Tech)
+- **Storage network chromed** (`StorageUI`): all eleven panels high-tech (scanline divider, reactive holo brackets) - terminals, importer/exporter, disk manipulator, NAS, server, drawers, item display. Offline terminal branches framed on their own paths.
+- **Preserved:** all values, slots, filters, queues, searches and hints. No setup changes.
+
 ### 12.14.0-dev - Engine Room And Helm (Maritime)
 - **Maritime chromed** (`MaritimeBlockUI`): thirteen engine-room panels industrial (hazard divider, girder frame, status lamps), helm starship (hull divider, reactive rails). Tier divider retired; all values, slots, gauges and hints preserved.
 - **Fix:** `MakeScrollable` ports the 12.9 `ThemeFrame` guard, so tall-card frames stay pinned while content scrolls. No setup changes.
@@ -45,10 +49,6 @@
 ### 12.11.0-dev - Girders Across The Grid (Industrial Grid Modules)
 - **Grid modules restyled** (`GridBlockUI`): liquid/gas tanks, H2O2, cargo, refinery/chemical plant, furnace, drill, landing gear, wheel, sliding door, grid biofarm, scrubber, vent, flare, air vent, generic fallback. Girder frame, hazard divider, status lamps on each card.
 - **Preserved:** all values, slots, recipes, sliders, toggles and hints; bespoke consoles (battery, vault, harvester, locator, satellites, season monitor, LED/light, rail coupler) untouched. No setup changes.
-
-### 12.10.0-dev - Girders And Warning Lamps (Industrial Steel)
-- **Industrial instruments** (`IndustrialTheme`): girder frame with bolt dots, hazard-block divider, tri-lamp status stack. Static styling, safe under the machine cadence.
-- **Workhorses restyled** (`MachineUIs`): crusher, assembler, funnel, splitter, quarry, jack pump, biofarm, flare stack, gas tank, steam turbine. All values, slots, recipes and hints preserved. No setup changes.
 
 ### Era Transition Feel
 

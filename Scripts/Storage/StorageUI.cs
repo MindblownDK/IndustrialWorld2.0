@@ -46,13 +46,14 @@ namespace VoxelEngine.Storage
                 online ? "ONLINE" : "NO RACK",
                 online ? T.AccentGreen : T.AccentRed);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentCyan));
+            p.Add(HighTechTheme.ScanDivider(online ? T.AccentGreen : T.AccentRed));
 
             if (!online)
             {
                 p.Add(T.Body("No server rack connected or rack is offline."));
                 p.Add(T.Spacer(8));
                 p.Add(T.Muted("Place a Server Rack nearby with a PSU and connect power."));
+                HighTechTheme.Frame(p, online ? T.AccentGreen : T.AccentRed);
                 return p;
             }
 
@@ -315,6 +316,7 @@ namespace VoxelEngine.Storage
             hint.style.unityTextAlign = TextAnchor.MiddleCenter;
             p.Add(hint);
 
+            HighTechTheme.Frame(p, online ? T.AccentGreen : T.AccentRed);
             return p;
         }
 
@@ -376,11 +378,12 @@ namespace VoxelEngine.Storage
                 online ? "ONLINE" : "NO RACK",
                 online ? T.AccentPurple : T.AccentRed);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentPurple));
+            p.Add(HighTechTheme.ScanDivider(online ? T.AccentPurple : T.AccentRed));
 
             if (!online)
             {
                 p.Add(T.Body("No server rack connected."));
+                HighTechTheme.Frame(p, online ? T.AccentPurple : T.AccentRed);
                 return p;
             }
 
@@ -491,6 +494,7 @@ namespace VoxelEngine.Storage
             p.Add(scroll);
             p.Add(T.Spacer(4));
             p.Add(T.Muted("Patterns let the auto-crafter produce items automatically."));
+            HighTechTheme.Frame(p, online ? T.AccentPurple : T.AccentRed);
             return p;
         }
 
@@ -511,11 +515,12 @@ namespace VoxelEngine.Storage
                 online ? "ONLINE" : "NO RACK",
                 online ? T.AccentCyan : T.AccentRed);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentCyan));
+            p.Add(HighTechTheme.ScanDivider(online ? T.AccentCyan : T.AccentRed));
 
             if (!online)
             {
                 p.Add(T.Body("No server rack connected."));
+                HighTechTheme.Frame(p, online ? T.AccentCyan : T.AccentRed);
                 return p;
             }
 
@@ -625,6 +630,7 @@ namespace VoxelEngine.Storage
 
             p.Add(T.Spacer(4));
             p.Add(T.Muted("Items are auto-crafted from storage and deposited back."));
+            HighTechTheme.Frame(p, online ? T.AccentCyan : T.AccentRed);
             return p;
         }
 
@@ -643,7 +649,7 @@ namespace VoxelEngine.Storage
                 online ? "IMPORTING" : "NO RACK",
                 online ? T.AccentGreen : T.AccentRed);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentGreen));
+            p.Add(HighTechTheme.ScanDivider(online ? T.AccentGreen : T.AccentRed));
 
             p.Add(T.StatRow("⏱", "Interval",  $"{importer.CurrentInterval:0.00}s", T.TextSecondary));
             p.Add(T.StatRow("📦", "Stack Size", $"{importer.CurrentStackSize}", T.AccentCyan));
@@ -687,6 +693,7 @@ namespace VoxelEngine.Storage
 
             p.Add(T.Spacer(6));
             p.Add(T.Muted("Place adjacent to a chest. Imports items into the storage network automatically."));
+            HighTechTheme.Frame(p, online ? T.AccentGreen : T.AccentRed);
             return p;
         }
 
@@ -705,7 +712,7 @@ namespace VoxelEngine.Storage
                 online ? "EXPORTING" : "NO RACK",
                 online ? T.AccentOrange : T.AccentRed);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentOrange));
+            p.Add(HighTechTheme.ScanDivider(online ? T.AccentOrange : T.AccentRed));
 
             p.Add(T.StatRow("⏱", "Interval",   $"{exporter.CurrentInterval:0.00}s",  T.TextSecondary));
             p.Add(T.StatRow("📦", "Stack Size",  $"{exporter.CurrentStackSize}",       T.AccentCyan));
@@ -742,6 +749,7 @@ namespace VoxelEngine.Storage
 
             p.Add(T.Spacer(6));
             p.Add(T.Muted("Place adjacent to a chest. Exports items from the storage network."));
+            HighTechTheme.Frame(p, online ? T.AccentOrange : T.AccentRed);
             return p;
         }
 
@@ -762,7 +770,7 @@ namespace VoxelEngine.Storage
             var (hdr, _, _, _) = T.HeaderRow("💿 Disk Manipulator",
                 manipulator.StatusText, statusColor);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentCyan));
+            p.Add(HighTechTheme.ScanDivider(statusColor));
 
             // Progress bar.
             if (manipulator.IsTransferring)
@@ -814,6 +822,7 @@ namespace VoxelEngine.Storage
             p.Add(T.Spacer(8));
             p.Add(T.Muted("Insert source and destination disks. Items transfer automatically. " +
                           "Disks remember their contents when removed."));
+            HighTechTheme.Frame(p, statusColor);
             return p;
         }
 
@@ -833,7 +842,7 @@ namespace VoxelEngine.Storage
                 nas.TotalCapacity > 0 ? "CONNECTED" : "EMPTY",
                 nas.TotalCapacity > 0 ? T.AccentGreen : T.TextMuted);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentCyan));
+            p.Add(HighTechTheme.ScanDivider(nas.TotalCapacity > 0 ? T.AccentGreen : T.TextMuted));
 
             p.Add(T.StatRow("💾", "Storage",
                 $"{nas.TotalStored:N0} / {nas.TotalCapacity:N0} GB", T.AccentCyan));
@@ -853,6 +862,7 @@ namespace VoxelEngine.Storage
             p.Add(T.Spacer(8));
             p.Add(T.Muted("Connect to a Server Rack via data cables to expand network storage. " +
                           "Each disk remembers its contents."));
+            HighTechTheme.Frame(p, nas.TotalCapacity > 0 ? T.AccentGreen : T.TextMuted);
             return p;
         }
 
@@ -897,7 +907,7 @@ namespace VoxelEngine.Storage
                 p.Add(warn);
             }
 
-            p.Add(T.AccentDivider(T.AccentCyan));
+            p.Add(HighTechTheme.ScanDivider(statusCol));
 
             // Stats.
             p.Add(T.StatRow("💾", "Storage",     $"{rack.TotalStored:N0} / {rack.TotalCapacity:N0} GB", T.AccentCyan));
@@ -954,6 +964,7 @@ namespace VoxelEngine.Storage
 
             p.Add(T.Spacer(4));
             p.Add(T.Muted("CPU accepts only CPU modules. RAM accepts only RAM. PSU accepts only PSU."));
+            HighTechTheme.Frame(p, statusCol);
             return p;
         }
 
@@ -969,7 +980,7 @@ namespace VoxelEngine.Storage
             var (hdr, _, _, _) = T.HeaderRow("▣ Storage Drawer", hasItem ? drawer.storedItem.displayName : "EMPTY",
                 hasItem ? T.AccentTeal : T.TextMuted);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentTeal));
+            p.Add(HighTechTheme.ScanDivider(hasItem ? T.AccentTeal : T.TextMuted));
             p.Add(T.StatRow("📦", "Stored", $"{drawer.storedCount:N0} / {drawer.Capacity:N0}", T.AccentCyan));
             p.Add(T.StatRow("⇈", "Stack Limit", $"{drawer.StackMultiplier}x", T.AccentGold));
             p.Add(T.StatRow("🕳", "Overflow", drawer.HasVoidUpgrade ? "VOID" : "BLOCK", drawer.HasVoidUpgrade ? T.AccentPurple : T.TextMuted));
@@ -990,6 +1001,7 @@ namespace VoxelEngine.Storage
             p.Add(upgradeGrid);
             p.Add(T.Divider());
             p.Add(T.Muted("LMB front = take 1 · Shift+LMB = take full stack · RMB with item = insert hand stack · Shift+RMB = insert all matching items. Break from sides/back."));
+            HighTechTheme.Frame(p, hasItem ? T.AccentTeal : T.TextMuted);
             return p;
         }
 
@@ -1005,7 +1017,7 @@ namespace VoxelEngine.Storage
             var (hdr, _, _, _) = T.HeaderRow("▤ Drawer Controller", online ? "LINKED" : "NO RACK",
                 online ? T.AccentGreen : T.AccentRed);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentGreen));
+            p.Add(HighTechTheme.ScanDivider(online ? T.AccentGreen : T.AccentRed));
             p.Add(T.StatRow("🖥", "Server Rack", controller.ConnectedRack != null ? controller.ConnectedRack.name : "None", online ? T.AccentGreen : T.TextMuted));
             p.Add(T.StatRow("▣", "Drawers", controller.Drawers.Count.ToString(), T.AccentCyan));
             p.Add(T.StatRow("📡", "Drawer Radius", $"{controller.drawerRadius:0} m", T.TextSecondary));
@@ -1046,6 +1058,7 @@ namespace VoxelEngine.Storage
             }
             p.Add(T.Spacer(6));
             p.Add(T.Muted("RMB the controller with an item to import it into linked drawers. Shift+RMB imports every matching stack. Item pipes import/export through controller item ports."));
+            HighTechTheme.Frame(p, online ? T.AccentGreen : T.AccentRed);
             return p;
         }
 
@@ -1059,7 +1072,7 @@ namespace VoxelEngine.Storage
             bool online = display.ConnectedRack != null && display.ConnectedRack.IsOnline;
             var (hdr, _, _, _) = T.HeaderRow("◫ Item Display", online ? "ONLINE" : "NO RACK", online ? T.AccentCyan : T.AccentRed);
             p.Add(hdr);
-            p.Add(T.AccentDivider(T.AccentCyan));
+            p.Add(HighTechTheme.ScanDivider(online ? T.AccentCyan : T.AccentRed));
             p.Add(T.StatRow("🔎", "Filter", display.filterItem != null ? display.filterItem.displayName : "None", display.filterItem != null ? T.AccentGold : T.TextMuted));
             p.Add(T.StatRow("#", "System Amount", display.filterItem != null ? display.CurrentCount.ToString("N0") : "—", T.AccentCyan));
             p.Add(T.Divider());
@@ -1105,6 +1118,7 @@ namespace VoxelEngine.Storage
             Rebuild("");
             p.Add(T.Spacer(6));
             p.Add(T.Muted("Shows a configured item icon and its total amount across the connected storage system."));
+            HighTechTheme.Frame(p, online ? T.AccentCyan : T.AccentRed);
             return p;
         }
 

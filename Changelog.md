@@ -1,9 +1,31 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.14.0-dev`
+**Current Version:** `12.15.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.15.0-dev] Holo Racks And Data Brackets - Storage Goes High-Tech
+
+**Type:** MINOR - presentation-only restyle of all eleven storage network panels onto the high-tech instruments. No behaviour, save, recipe or setup changes.
+
+**GitHub title:** `[12.15.0-dev] Holo racks and data brackets - storage goes high-tech`
+
+#### One network, one family
+
+The storage network is the most advanced system in the game, so all eleven panels take high-tech chrome as a single family: storage, pattern and crafting terminals, importer, exporter, disk manipulator, NAS block, server rack, drawer, drawer controller and item display. Corner-bracket holo frames with status-reactive accents, scanline dividers - green brackets on a live rack, red on a dead one, purple on patterns, amber on exports. Every value, slot, filter, queue, search field and hint is preserved - only the instruments changed.
+
+#### Framed on every path
+
+The three terminals each carry an offline branch for a missing or dead rack, and each branch is framed on its own path - no fallback card ships bare. The server's divider sits below its power bar exactly where it always did; the drawer's teal accent follows its filled state.
+
+#### Manual steps in Unity
+
+1. Apply the patch and recompile.
+2. No setup re-run is needed: no new blocks, items or recipes.
+3. Press E on each storage block: holo brackets and scanline divider on every card.
+4. Check the accents read true: green when linked and online, red on NO RACK, purple patterns, amber exports, teal on a filled drawer.
+5. Confirm search, sorting, filters, craft queueing, disk transfers and the offline terminal branches all behave as before.
 
 ### [12.14.0-dev] Engine Room And Helm - Maritime Chromed
 
