@@ -716,7 +716,8 @@ namespace VoxelEngine.UI
             // CRAFT button.
             bool canCraft = maxByIngredients >= 1 && queueRoom >= 1;
             int toCraft = Mathf.Min(amount, maxByIngredients, queueRoom);
-            var craftBtn = new Button(() =>
+            Button craftBtn = null;
+            craftBtn = new Button(() =>
             {
                 int n = Mathf.Min(GetAmt(panelId), queueRoom);
                 int done = 0;
@@ -726,7 +727,16 @@ namespace VoxelEngine.UI
                     if (!Crafter.TryCraft(source, dest, recipe, q)) break;
                     done++;
                 }
-                if (done > 0) { _amount[panelId] = 1; refresh?.Invoke(); }
+                if (done > 0) { _amount[panelId] = 1; refresh?.Invoke(); return; }
+                // Nothing crafted: console (guaranteed), float (in-inventory)
+                // and toast (after closing the panels) all say why.
+                string reason = queueRoom < 1 ? "Queue full"
+                    : Crafter.CraftFailReason(source, dest, recipe) ?? "Inventory full";
+                Debug.Log($"[Craft] Refused {recipe.GetName()}: {reason} | ing={Crafter.HasIngredients(source, recipe)} | {Crafter.DescribeSpace(dest, recipe)}");
+                Color tint = Crafter.HasIngredients(source, recipe) ? T.AccentAmber : T.AccentRed;
+                try { BuildFeedbackHud.FloatAt(craftBtn, "⚠ " + reason, tint); }
+                catch (System.Exception floatEx) { Debug.LogException(floatEx); }
+                BuildFeedbackHud.Show("Craft failed", reason, recipe.GetIcon(), tint);
             })
             { text = canCraft ? (toCraft > 1 ? $"CRAFT  ×{toCraft}" : "CRAFT") : (queueRoom < 1 ? "QUEUE FULL" : "MISSING ITEMS") };
             craftBtn.style.height = 38;

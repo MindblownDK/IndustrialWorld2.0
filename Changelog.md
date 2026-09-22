@@ -1,9 +1,53 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.16.1-dev`
+**Current Version:** `12.17.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.17.1-dev] Feedback You Cannot Miss - Console Mirror And Toasts Return
+
+**Type:** PATCH - the 12.17 floats never appeared in-game, so failed crafts now report three ways at once: a console log (the guaranteed channel), the floating text at the button, and the returning toast (visible after closing the panels). No behaviour, save, recipe or setup changes.
+
+**GitHub title:** `[12.17.1-dev] Feedback you cannot miss - console mirror and toasts return`
+
+#### Three channels, one reason
+
+Every failed craft in both recipe browsers now logs `[Craft] Refused ...` with the exact reason plus a destination state dump (space verdict, live weight, accept-gate flag), floats the reason at the clicked CRAFT button, and posts a toast for after the panels close. Clicking CRAFT also logs `[Craft] Click ...`, which proves whether the button callback runs at all. Floats mirror to `[CraftFeedback]` in the console with their layer and position, and a throwing float can no longer swallow its own caller.
+
+#### What this diagnoses
+
+One retest now separates every suspect: no `[Craft] Click` means the button never fires; a `Refused` line names the exact gate (ingredients, space, weight, filter); console lines without visuals mean the feedback layers misbehave. The bench chrome was verified click-safe - every frame, divider and lamp element ignores picking.
+
+#### Manual steps in Unity
+
+1. Apply the patch and recompile.
+2. No setup re-run is needed: no new blocks, items or recipes.
+3. Click CRAFT on a failing recipe, then copy the `[Craft]` / `[CraftFeedback]` console lines and report them plus whether the float and the toast appeared.
+4. Confirm successful crafts still craft silently with no new console lines beyond the click entry.
+
+### [12.17.0-dev] Craft Failures Float Up - Floating Feedback Text
+
+**Type:** MINOR - new floating combat-text feedback: failed crafts now say why right at the clicked CRAFT button, naming the exact refusal (missing items, full inventory, overweight with live kg). No behaviour, save, recipe or setup changes.
+
+**GitHub title:** `[12.17.0-dev] Craft failures float up - floating feedback text`
+
+#### Why floats instead of toasts
+
+The 12.16.1 failure toasts worked, but they render on the HUD layer - behind the open inventory - so the player only saw them after closing the panels. The new `BuildFeedbackHud.FloatAt` renders on the topmost tooltip layer instead: a dark pill with the reason appears at the button, rises and fades over 2 seconds, then removes itself. It never blocks input.
+
+#### The game names the exact gate
+
+A shared `Crafter.CraftFailReason` mirrors the craft refusal checks so both recipe browsers explain themselves identically: the station right-pane browser (bench, assembler and friends) and the inventory centre browser. "Missing ingredients" in red, "Inventory full", "Overweight 449/450 kg", containment and carry gates in amber. A partial batch that crafts some and then fails still refreshes normally; the float only appears when nothing was crafted. Exceptions still log to the console and float "Craft error".
+
+#### Manual steps in Unity
+
+1. Apply the patch and recompile.
+2. No setup re-run is needed: no new blocks, items or recipes.
+3. Fill the inventory (or hit the weight cap) and click CRAFT on a craftable recipe: the reason floats up from the button and fades.
+4. Try the same in the inventory centre browser: identical float.
+5. Make space and craft again: crafts as before, no float.
+6. Confirm queueing, progress, cancel and batch amounts all behave as before.
 
 ### [12.16.1-dev] Cryobed Docks Right And Craft Buttons Speak Up - Bench Fix Round
 

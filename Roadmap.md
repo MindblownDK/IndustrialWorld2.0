@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.16.1-dev`
-**Roadmap Version:** `12.16.1-dev`
+**Current Version:** `12.17.1-dev`
+**Roadmap Version:** `12.17.1-dev`
 **Date:** 2026-09-22
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,14 @@
 
 ## 0. Recently Done
 
+### 12.17.1-dev - Unmissable Craft Feedback (Diagnostic Ladder)
+- **Ladder added** (`GameUIController`, `CraftingScreen`, `Crafter.DescribeSpace`): failed crafts log `[Craft] Click/Refused` with reason plus space/weight/filter state, float at the button (console-mirrored, throw-safe) and post a returning toast. Bench chrome verified click-safe.
+- **Preserved:** all craft, queue, batch and refresh behaviour. No setup changes.
+
+### 12.17.0-dev - Floating Feedback Text (Craft Failures)
+- **Floats added** (`BuildFeedbackHud.FloatAt`, `Crafter.CraftFailReason`): failed crafts float the exact reason at the clicked CRAFT button for 2s (missing items red; full / overweight with live kg / gates amber), on the topmost layer so open panels never hide it. Both recipe browsers covered.
+- **Preserved:** all craft, queue, batch and refresh behaviour; failure toasts replaced by floats. No setup changes.
+
 ### 12.16.1-dev - Bench Fix Round (Cryo Dock, Craft Errors)
 - **Fixed:** cryobed control side-docked like other machine panels; oxygen tank rebuilt with valve, shading and level ticks; filter search caret centred when empty (all three dialogs); failed crafts now toast the reason instead of silently doing nothing.
 - **Preserved:** starship cryo chrome, all values, queues and modal behaviour. No setup changes.
@@ -40,15 +48,6 @@
 ### 12.15.0-dev - Holo Racks And Data Brackets (Storage High-Tech)
 - **Storage network chromed** (`StorageUI`): all eleven panels high-tech (scanline divider, reactive holo brackets) - terminals, importer/exporter, disk manipulator, NAS, server, drawers, item display. Offline terminal branches framed on their own paths.
 - **Preserved:** all values, slots, filters, queues, searches and hints. No setup changes.
-
-### 12.14.0-dev - Engine Room And Helm (Maritime)
-- **Maritime chromed** (`MaritimeBlockUI`): thirteen engine-room panels industrial (hazard divider, girder frame, status lamps), helm starship (hull divider, reactive rails). Tier divider retired; all values, slots, gauges and hints preserved.
-- **Fix:** `MakeScrollable` ports the 12.9 `ThemeFrame` guard, so tall-card frames stay pinned while content scrolls. No setup changes.
-
-### 12.13.0-dev - Sparks And Star Charts (Last Machine Panels)
-- **World machines chromed** (industrial): processor shell (refinery, chemical, distillation, cracker), wind turbine, voltage station, drone port, fluid pump, armor station, plus world battery, turrets, container, furnaces, coal generator, powerstation (`GameUIController`). Status lamps where the block has a running state.
-- **Nav consoles chromed** (starship): observatory, auto-run pilot, connector, route recorder, refuel pad. Every fallback branch framed on its own path. No setup changes.
-- **Deferred:** maritime and storage await their own rounds; LCD centre screens, confirm modals and the crafting bench stay on player chrome.
 
 ### Era Transition Feel
 

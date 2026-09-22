@@ -50,6 +50,47 @@ namespace VoxelEngine.Crafting
         }
 
         /// <summary>
+        /// Mirrors <see cref="TryCraft"/>'s refusal gates and names the reason.
+        /// Returns null when the craft would succeed, otherwise a short
+        /// player-facing explanation ("Missing ingredients", "Inventory full",
+        /// "Overweight 449/450 kg", ...).
+        /// </summary>
+        public static string CraftFailReason(IItemContainer source, IItemContainer destination, RecipeDefinition recipe)
+        {
+            if (!HasIngredients(source, recipe)) return "Missing ingredients";
+            if (destination is ItemContainer ic)
+            {
+                if (ic.HasSpace(recipe.outputItem, recipe.outputCount)) return null;
+                // The output does not fit: explain WHICH gate refused it.
+                var item = recipe.outputItem;
+                if (item != null)
+                {
+                    if (item.requiresContainment && !ic.allowContainment) return "Needs a containment vault";
+                    if (item.cannotBeCarried && !ic.allowPlayerCarry) return "Cannot carry by hand";
+                    float need = Mathf.Max(0.0001f, item.massPerUnit) * recipe.outputCount;
+                    if (ic.MaxWeightKg > 0f && ic.RemainingWeightKg < need)
+                        return $"Overweight {ic.CurrentWeightKg:0}/{ic.MaxWeightKg:0} kg";
+                }
+                return "Inventory full";
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// One-line destination state for the console log when a craft is
+        /// refused: space verdict, live weight and whether an accept gate
+        /// (cargo filter) is installed.
+        /// </summary>
+        public static string DescribeSpace(IItemContainer destination, RecipeDefinition recipe)
+        {
+            if (destination is ItemContainer ic)
+                return $"space={ic.HasSpace(recipe.outputItem, recipe.outputCount)} " +
+                       $"weight={ic.CurrentWeightKg:0.##}/{ic.MaxWeightKg:0.##}kg " +
+                       $"filter={ic.AcceptFilter != null}";
+            return $"dest={(destination != null ? destination.GetType().Name : "null")} (no space gate)";
+        }
+
+        /// <summary>
         /// Returns the highest station tier currently accessible from 'origin' within 'radius'.
         /// Always includes StationTier.None (recipes craftable bare-handed).
         /// </summary>

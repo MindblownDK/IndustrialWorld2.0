@@ -18,6 +18,9 @@ namespace VoxelEngine.UI
     {
         // ── State ──────────────────────────────────────────────────────
         private static VisualElement _root, _container;
+        // Topmost layer for floating combat-text feedback: toasts live on the
+        // HUD layer and hide behind open panels, while floats must show above.
+        private static VisualElement _floatLayer;
 
         private struct FeedEntry
         {
@@ -47,6 +50,64 @@ namespace VoxelEngine.UI
             _container.pickingMode         = PickingMode.Ignore;
             uiRoot.Add(_container);
             LcdHudTheme.YieldWhileBlocking(_container);
+        }
+
+        /// <summary>Registers the topmost layer floating text renders on.</summary>
+        public static void SetFloatLayer(VisualElement layer) { _floatLayer = layer; }
+
+        /// <summary>
+        /// Floating combat-text feedback anchored at an element: rises ~46px
+        /// over 2 seconds while fading out, then removes itself. Never blocks
+        /// input. Falls back to a toast when no float layer is registered.
+        /// </summary>
+        public static void FloatAt(VisualElement anchor, string text, Color tint)
+        {
+            if (anchor == null || string.IsNullOrEmpty(text)) return;
+            // Console mirror: the guaranteed channel even if the visual layer
+            // misbehaves. Craft failures are rare and user-initiated, so this
+            // never spams.
+            Debug.Log($"[CraftFeedback] {text}");
+            var layer = _floatLayer ?? _container;
+            if (layer == null) { Debug.LogWarning("[CraftFeedback] No float layer and no toast container."); return; }
+            Vector2 pos;
+            try { pos = layer.WorldToLocal(anchor.worldBound.center); }
+            catch (System.Exception e) { Debug.LogException(e); return; }
+            Debug.Log($"[CraftFeedback] layer={layer.name} pos={pos.x:0},{pos.y:0}");
+
+            try
+            {
+            var label = new Label(text);
+            label.style.position = Position.Absolute;
+            label.style.left = pos.x;
+            label.style.top = pos.y - 12;
+            label.style.translate = new Translate(new Length(-50f, LengthUnit.Percent), 0f, 0f);
+            label.style.fontSize = 13;
+            label.style.unityFontStyleAndWeight = FontStyle.Bold;
+            label.style.whiteSpace = WhiteSpace.NoWrap;
+            label.style.color = new StyleColor(tint);
+            label.style.backgroundColor = new StyleColor(new Color(0.04f, 0.04f, 0.07f, 0.92f));
+            label.style.paddingLeft = 10; label.style.paddingRight = 10;
+            label.style.paddingTop = 5; label.style.paddingBottom = 5;
+            T.Radius(label, 6);
+            T.Border(label, 1, new Color(tint.r, tint.g, tint.b, 0.55f));
+            label.pickingMode = PickingMode.Ignore;
+            layer.Add(label);
+
+            // Kick the rise-and-fade once attached, then clean up after 2.1s.
+            label.schedule.Execute(() =>
+            {
+                label.style.transitionProperty = new List<StylePropertyName> { "translate", "opacity" };
+                label.style.transitionDuration = new List<TimeValue>
+                    { new TimeValue(2.0f, TimeUnit.Second), new TimeValue(2.0f, TimeUnit.Second) };
+                label.style.translate = new Translate(new Length(-50f, LengthUnit.Percent), -46f, 0f);
+                label.style.opacity = 0f;
+            }).ExecuteLater(0);
+            label.schedule.Execute(() =>
+            {
+                if (label.parent != null) label.RemoveFromHierarchy();
+            }).StartingIn(2100);
+            }
+            catch (System.Exception e) { Debug.LogException(e); }
         }
 
         // ── Public API ─────────────────────────────────────────────────
