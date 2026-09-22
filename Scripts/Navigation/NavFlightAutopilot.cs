@@ -37,7 +37,7 @@ using VoxelEngine.UI;
 namespace VoxelEngine.Navigation
 {
     /// <summary>Where the fly-to leg is, in one word, for the map and the toasts.</summary>
-    public enum NavFlightState { Off = 0, Departing = 1, Cruise = 2, Hold = 3 }
+    public enum NavFlightState { Off = 0, Departing = 1, Cruise = 2, Hold = 3, WarpAim = 4, WarpCharge = 5 }
 
     [DisallowMultipleComponent]
     [DefaultExecutionOrder(-10)]     // decide first, so the grid's physics step sees this tick's command
@@ -80,6 +80,17 @@ namespace VoxelEngine.Navigation
         private bool _wasControlled;
         private float _distM;
         private float _speedMs;
+        private GridWarpDrive _drive;
+        private bool _warpAbandoned;
+        private bool _warpCooling;
+        private bool _legIsCapture;
+        private int _warpFails;
+        private float _warpRetryAt;
+        private float _aimBest = float.MaxValue;
+        private float _aimStalled;
+        private float _aimAngle;
+        private float _lastCharge01;
+        private float _chargeStallT;
 
         public static NavFlightAutopilot For(GridEntity grid)
         {
@@ -183,6 +194,15 @@ namespace VoxelEngine.Navigation
             _standoffM = ComputeStandoffM();
             _bestDistance = float.MaxValue;
             _stalled = 0f;
+            _drive = null;
+            _warpAbandoned = false;
+            _warpCooling = false;
+            _warpFails = 0;
+            _warpRetryAt = 0f;
+            _aimBest = float.MaxValue;
+            _aimStalled = 0f;
+            _lastCharge01 = 0f;
+            _chargeStallT = 0f;
             _wasControlled = _grid.IsControlled;
             _distM = rel.magnitude;
             _speedMs = _grid.Body.linearVelocity.magnitude;
@@ -231,6 +251,8 @@ namespace VoxelEngine.Navigation
             // Live refusals: anything that would have stopped the engage stops the leg.
             if (!NavigationTarget.HasTarget || !NavigationTarget.TryResolve(out double3 targetCosmic))
             { Disengage("Nav target lost — holding position."); return; }
+            if (NavigationTarget.TargetKind == MapEntryKind.Sun)
+            { Disengage("Nav target is the sun — releasing the ship."); return; }
             if (!_grid.HasPower)
             { Disengage("Control power lost — holding position."); return; }
             if (_grid.Body == null || _grid.Body.isKinematic)
@@ -256,6 +278,8 @@ namespace VoxelEngine.Navigation
             }
 
             Vector3 shipPos = _grid.Body.position;
+            if (!AtmosphereManager.IsInSpace(shipPos))
+            { Disengage("Entered atmosphere — vacuum legs only. Ship is yours."); return; }
             Vector3 velocity = _grid.Body.linearVelocity;
             Vector3 rel = origin.GetScenePos(targetCosmic) - shipPos;
             float d = rel.magnitude;
@@ -310,9 +334,149 @@ namespace VoxelEngine.Navigation
                     }
                 }
                 else { _bestDistance = Mathf.Min(_bestDistance, d); _stalled = 0f; }
+                WarpTick(rel, d);
             }
 
+            if (State != NavFlightState.WarpAim && State != NavFlightState.WarpCharge)
+                _grid.SetAutonomousRotation(0f, 0f, 0f);
             _grid.SetAutonomousFlight(desired, FlightOwner);
+        }
+
+        // ── Warp legs ────────────────────────────────────────────────────
+        // Long legs jump: a body inside the drive's capture band is taken in one
+        // planet-lock jump (which lands on this autopilot's own hold shelf), anything
+        // past one fixed hop closes by repeated aimed hops, and short legs cruise.
+        // The ship keeps cruising while it aims and charges — a jump zeroes velocity
+        // anyway, so there is nothing to gain by stopping first.
+
+        private void WarpTick(Vector3 rel, float d)
+        {
+            _warpCooling = false;
+            if (_drive == null || _drive.Grid != _grid || !_drive.Enabled)
+                _drive = FindDrive();
+            bool wantWarp = !_warpAbandoned && _drive != null && Time.unscaledTime >= _warpRetryAt;
+            var kind = NavigationTarget.TargetKind;
+            bool bodyTarget = kind == MapEntryKind.Planet || kind == MapEntryKind.Moon;
+            _legIsCapture = false;
+            if (wantWarp)
+            {
+                double dKm = d / 1000d;
+                _legIsCapture = bodyTarget && dKm > _drive.minJumpKm * 2d && dKm <= 20000d;
+                bool hopLeg = !_legIsCapture && d > _drive.jumpRangeKm * 1000f + 100000f;
+                wantWarp = _legIsCapture || hopLeg;
+            }
+            if (!wantWarp)
+            {
+                if (State == NavFlightState.WarpAim || State == NavFlightState.WarpCharge)
+                    State = NavFlightState.Cruise;
+                _aimBest = float.MaxValue;
+                _aimStalled = 0f;
+                return;
+            }
+            if (_drive.Cooldown01 > 0f)
+            {
+                State = NavFlightState.Cruise;
+                _warpCooling = true;
+                return;
+            }
+            if (d < 1f) { State = NavFlightState.Cruise; return; }
+
+            Vector3 dir = rel / d;
+            // Aim through the exact frame the drive fires along (cockpit when there is
+            // one, else grid forward) — checking grid forward while the drive fires
+            // along a sideways cockpit would jump the wrong way.
+            Transform aimFrame = _drive.Grid.ActiveCockpit != null
+                ? _drive.Grid.ActiveCockpit.transform : _grid.transform;
+            float angle = Vector3.Angle(aimFrame.forward, dir);
+            float fireAngle = _legIsCapture ? Mathf.Min(7f, _drive.targetConeDeg * 0.5f) : 2f;
+            _aimAngle = angle;
+            bool seated = _grid.IsControlled;
+
+            if (!seated)
+            {
+                if (!HasGyroAuthority())
+                { AbandonWarp("no gyro authority — fit gyroscopes for unmanned warp"); return; }
+                // Cross-product P-controller: the torque axis that swings the nose onto
+                // the target, so the signs work out by construction and the command
+                // fades as the ship lines up.
+                Vector3 axis = Vector3.Cross(aimFrame.forward, dir);
+                Vector3 localAxis = _grid.transform.InverseTransformDirection(axis);
+                if (angle < 0.5f) _grid.SetAutonomousRotation(0f, 0f, 0f);
+                else _grid.SetAutonomousRotation(
+                    Mathf.Clamp(localAxis.y * 2f, -1f, 1f),
+                    Mathf.Clamp(localAxis.x * 2f, -1f, 1f), 0f);
+                if (angle < _aimBest - 0.2f) { _aimBest = angle; _aimStalled = 0f; }
+                else
+                {
+                    _aimStalled += Time.fixedDeltaTime;
+                    if (_aimStalled > 90f) { AbandonWarp("cannot aim the ship"); return; }
+                }
+            }
+            else _grid.SetAutonomousRotation(0f, 0f, 0f); // the mouse owns the gyros
+
+            _drive.BeginCharge(); // idempotent: charges, holds at full, never double-starts
+            State = angle <= fireAngle ? NavFlightState.WarpCharge : NavFlightState.WarpAim;
+
+            if (_drive.IsCharging)
+            {
+                if (Mathf.Abs(_drive.Charge01 - _lastCharge01) < 0.0005f) _chargeStallT += Time.fixedDeltaTime;
+                else { _chargeStallT = 0f; _lastCharge01 = _drive.Charge01; }
+            }
+            else { _chargeStallT = 0f; _lastCharge01 = _drive.Charge01; }
+
+            if (_drive.IsReady && angle <= fireAngle)
+            {
+                if (_drive.TryWarp())
+                {
+                    State = NavFlightState.Cruise;
+                    _warpFails = 0;
+                    _grid.SetAutonomousRotation(0f, 0f, 0f);
+                    _bestDistance = float.MaxValue;
+                    _stalled = 0f;
+                    _aimBest = float.MaxValue;
+                    _aimStalled = 0f;
+                }
+                else
+                {
+                    _warpFails++;
+                    if (_warpFails >= 3) AbandonWarp("warp drive refused to fire");
+                    else
+                    {
+                        _warpRetryAt = Time.unscaledTime + 10f;
+                        State = NavFlightState.Cruise;
+                        Say("Warp refused — cruising, will retry.", Warn);
+                    }
+                }
+            }
+        }
+
+        private void AbandonWarp(string reason)
+        {
+            _warpAbandoned = true;
+            State = NavFlightState.Cruise;
+            _grid.SetAutonomousRotation(0f, 0f, 0f);
+            Say($"Warp abandoned ({reason}) — cruising the rest.", Warn);
+        }
+
+        private GridWarpDrive FindDrive()
+        {
+            GridWarpDrive fallback = null;
+            foreach (var block in _grid.AllBlocks)
+            {
+                if (block is not GridWarpDrive w || !w.Enabled || w.Grid != _grid) continue;
+                if (w.IsReady) return w;
+                if (w.IsCharging && fallback == null) fallback = w;
+                else if (w.Cooldown01 <= 0f && (fallback == null || !fallback.IsCharging)) fallback = w;
+                else if (fallback == null) fallback = w;
+            }
+            return fallback;
+        }
+
+        private bool HasGyroAuthority()
+        {
+            foreach (var block in _grid.AllBlocks)
+                if (block is GridGyroscope gy && gy.Enabled && gy.torquePower > 0f) return true;
+            return false;
         }
 
         /// <summary>Conservative braking acceleration available along a world-space
@@ -363,11 +527,29 @@ namespace VoxelEngine.Navigation
                     return $"AUTO·DEPARTING {NavigationTarget.TargetName} in {Mathf.CeilToInt(a._countdown)} — STAND CLEAR";
                 if (a._grid.HasManualThrustInput())
                     return $"AUTO·OVERRIDE — stick has {a._grid.name}, cruise resumes on release";
+                if (a.State == NavFlightState.WarpAim || a.State == NavFlightState.WarpCharge)
+                {
+                    string aim = a._grid.IsControlled
+                        ? $"AIM AT {NavigationTarget.TargetName} — {a._aimAngle:0}° OFF (you aim)"
+                        : $"AIM {a._aimAngle:0.0}° OFF";
+                    string chg = a._drive != null
+                        ? (a._drive.IsReady ? "DRIVE READY" : $"CHARGE {a._drive.Charge01 * 100f:0}%")
+                        : "NO DRIVE";
+                    string stall = a._chargeStallT > 5f ? " · STALLED (power?)" : "";
+                    string leg = a._legIsCapture ? " · LOCK" : " · HOP";
+                    return (a.State == NavFlightState.WarpAim ? "WARP·AIM " : "WARP·CHARGE ") + aim +
+                           " · " + chg + leg + stall + (a._grid.IsControlled ? "" : " (unmanned)");
+                }
                 if (a.State == NavFlightState.Hold)
                     return $"AUTO·HOLD at {NavigationTarget.TargetName}" + (a._grid.IsControlled ? "" : " (unmanned)");
                 double etaS = a._speedMs > 30f ? a._distM / a._speedMs : a._distM / 40d;
-                return $"AUTO·CRUISE {NavigationTarget.TargetName} · {OrbitalTrackingService.FormatKm(a._distM / 1000d)} · " +
+                string line = $"AUTO·CRUISE {NavigationTarget.TargetName} · {OrbitalTrackingService.FormatKm(a._distM / 1000d)} · " +
                        $"{a._speedMs:0} m/s · ETA {FormatEta(etaS)}" + (a._grid.IsControlled ? "" : " (unmanned)");
+                if (a._warpCooling && a._drive != null)
+                    line += $" · WARP COOLDOWN {FormatEta(a._drive.Cooldown01 * a._drive.cooldownSeconds)}";
+                else if (a._warpAbandoned)
+                    line += " · NO WARP";
+                return line;
             }
         }
 

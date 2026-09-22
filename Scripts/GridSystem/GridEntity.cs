@@ -149,6 +149,23 @@ namespace VoxelEngine.GridSystem
             LocalNavigationGravityCompensation = false;
             AutonomousDesiredVelocity = Vector3.zero;
             AutonomousFlightOwner = null;
+            _autoRotActive = false;
+            _autoYaw = _autoPitch = _autoRoll = 0f;
+        }
+
+        float _autoYaw, _autoPitch, _autoRoll;
+        bool _autoRotActive;
+
+        /// <summary>Commanded turn rates for an unmanned ship, grid-local, same ±1
+        /// convention as the cockpit's RotationYaw/Pitch/Roll. Applied as gyro torque
+        /// by ApplyAutonomousRotation; a seated pilot's mouse owns the gyros instead,
+        /// so this channel is ignored while controlled. Heartbeat-shared with the
+        /// velocity command: a commander that stops refreshing releases everything.</summary>
+        public void SetAutonomousRotation(float yaw, float pitch, float roll)
+        {
+            _autoYaw = yaw; _autoPitch = pitch; _autoRoll = roll;
+            _autoRotActive = true;
+            _autonomousFlightHeartbeat = Time.unscaledTime;
         }
 
         float _autonomousFlightHeartbeat;
@@ -1274,6 +1291,7 @@ namespace VoxelEngine.GridSystem
                     else
                     {
                         ApplyAutonomousFlightThrust();
+                        ApplyAutonomousRotation();
                         return;
                     }
                 }
@@ -1426,6 +1444,26 @@ namespace VoxelEngine.GridSystem
             if (worldForce.sqrMagnitude > 0.0001f)
                 _rb.AddForce(worldForce * THRUST_GAIN, ForceMode.Force);
             AutonomousDampenersActive = true;
+        }
+
+        /// <summary>Turns an unmanned ship from the autonomous rotation command, through
+        /// the same installed gyroscopes, torque curve and angular damping the pilot's
+        /// mouse drives — never better than the pilot is. Grid-local frame: commanders
+        /// compute their rates against the grid's own axes, not any cockpit's.</summary>
+        private void ApplyAutonomousRotation()
+        {
+            if (!_autoRotActive || _rb == null) return;
+            Vector3 rotInput = new Vector3(_autoPitch, _autoYaw, _autoRoll);
+            if (rotInput.sqrMagnitude < 0.0001f) return;
+            float gyroTorque = 0f;
+            foreach (var block in AllBlocks)
+                if (block is GridGyroscope gy && gy.Enabled) gyroTorque += gy.torquePower;
+            if (gyroTorque <= 0f) return;
+            Vector3 worldTorque = transform.TransformDirection(rotInput);
+            float massFactor = 10000f / Mathf.Max(10000f, _rb.mass);
+            worldTorque *= gyroTorque * 0.0005f * massFactor;
+            _rb.AddTorque(worldTorque, ForceMode.Acceleration);
+            _rb.angularDamping = 3f;
         }
 
         private void ApplyAutonomousDampenerThrust()

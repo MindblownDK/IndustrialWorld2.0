@@ -1,9 +1,31 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.22.1-dev`
+**Current Version:** `12.23.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.23.0-dev] Jump Legs - Autopilot Warp Integration
+
+**Type:** MINOR - long fly-to legs now jump: the autopilot aims the ship, charges the warp drive, fires when aligned, and resumes the cruise after arrival - planet-lock captures in one jump, longer hauls by repeated aimed hops. No recipe or setup changes; no new blocks or items.
+
+**GitHub title:** `[12.23.0-dev] Jump legs - autopilot warp integration`
+
+#### How a warp leg flies
+
+When the remaining distance is past one fixed hop, or a target body sits inside the drive's capture band, the cruise hands over to the warp states: WARP-AIM turns the ship (unmanned ships steer themselves through their gyros; seated pilots aim with the mouse and the map shows how many degrees off they are), WARP-CHARGE holds the aim while the drive charges, then fires automatically when charged and aligned. The ship keeps cruising throughout - a jump zeroes velocity anyway, so stopping first would only waste time. Capture jumps land exactly on the autopilot's own hold shelf, so arrival just happens.
+
+#### Honest jumping
+
+Everything reads the drive's live tuning: capture band, hop range and cone angle all follow the block's own numbers. Cooldowns are cruised through and shown on the map card; a stalled charge says STALLED (power?); three refused fires, unmanned aim without gyros, or 90 seconds of failing to line up abandons warp for the leg with the reason announced - the cruise still completes, just slower. Disengaging never destroys a paid-for charge: a charging drive finishes and sits ready for a manual firing.
+
+#### Safety rails
+
+Two new live guards ride every leg: retargeting to the sun mid-flight releases the ship instead of flying into it, and touching atmosphere releases it instead of lithobraking at cruise speed. Aiming is computed through the exact frame the drive fires along, so a sideways cockpit can no longer send the jump the wrong way.
+
+#### What stays open
+
+Route-book warp legs for the auto-run loops and the destination-select UI remain open under item 15; hazard avoidance, dock approach, cargo ops and atmospheric legs remain open under item 8.
 
 ### [12.22.1-dev] Fly-To Compile Fix
 

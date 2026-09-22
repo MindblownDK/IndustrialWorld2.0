@@ -1499,7 +1499,7 @@ Statuses are evidence-based and move forward only after code/content review and 
    - Manually calculate distance, travel time, required thrust, power/fuel cost, and reserve margin to a selected body or waypoint.
    - Uses live ship mass, cargo, batteries, fuel, hydrogen, generation, efficiency, and damage state.
    - Record piloted paths between planets, stations, bases, mines, and docks.
-   - Autopilot follows validated routes, avoids hazards, manages braking reserves, and performs configured cargo/charging/refueling stops. *(12.22.0-dev ships the first autopilot leg: seated/unseated fly-to-nav-target cruise with braking curve, stick override/resume and arrival hold. Hazard avoidance, dock approach, cargo ops, atmospheric legs and warp legs remain.)*
+   - Autopilot follows validated routes, avoids hazards, manages braking reserves, and performs configured cargo/charging/refueling stops. *(12.22.0-dev ships the first autopilot leg: seated/unseated fly-to-nav-target cruise with braking curve, stick override/resume and arrival hold. 12.23.0-dev adds warp legs: auto-aim/charge/fire with cruise resume. Hazard avoidance, dock approach, cargo ops and atmospheric legs remain.)*
    - Route safety reacts to weather, gravity, territory, pollution signatures, hostile encounters, and changed ship contents.
 
 #### Improved Features
@@ -2264,7 +2264,7 @@ For each version, these are the high-level Unity tasks you will perform manually
 13. ~~Build player heat UI with green/yellow/red indicator.~~ *(9.30.0-dev suit strip; 9.32.0-dev reports the crew's compartment on the same panel)*
 14. ~~Implement atmospheric entry heat simulation.~~ *(9.29.0-dev; concealed-space exhaust and room heat closed by 9.32.0-dev, Step 63)*
 14b. ~~Grid Route Recorder & Energy Calculator: manual route calculation and recorded routes.~~ *(9.34.0-dev, Step 65 — distance, travel time, gravity wells, atmosphere segments, required thrust, power and hydrogen use, reserve margin and named warnings, with routes saved as waypoint lists on the grid. Autopilot remains open.)*
-15. Build coordinate Jump Drive prefab, charge/range calculator, safe-arrival validation, destination UI, and Autopilot route integration. *(prefab, charge/range maths and safe-arrival validation shipped earlier with `GridWarpDrive`; the destination-select UI and Autopilot legs remain — 9.34.0-dev ships the route book the destination picker will hand its selections to)*
+15. Build coordinate Jump Drive prefab, charge/range calculator, safe-arrival validation, destination UI, and Autopilot route integration. *(prefab, charge/range maths and safe-arrival validation shipped earlier with `GridWarpDrive`; 12.23.0-dev ships the Autopilot legs for nav-target flights (auto-aim/charge/fire with cruise resume). The destination-select UI and route-book warp legs remain — 9.34.0-dev ships the route book the destination picker will hand its selections to)*
 16. Build empire dashboard UI.
 17. **Run setup wizard step (non-destructive)**
     - Step 22 for planetary bases, exo-alloys, nuclear, radiation, and heat systems.
