@@ -253,7 +253,7 @@ namespace VoxelEngine.UI
             apTitle.style.marginBottom = 4;
             apPanel.Add(apTitle);
 
-            _apButton = new Button(() => VoxelEngine.Navigation.NavFlightAutopilot.ToggleFromMap()) { text = "ENGAGE AUTOPILOT [P]" };
+            _apButton = new Button(() => VoxelEngine.Navigation.NavFlightAutopilot.ToggleFromMap()) { text = $"ENGAGE AUTOPILOT [{GameSettings.GetKey(InputAction.Autopilot)}]" };
             _apButton.style.fontSize = 10;
             _apButton.style.unityFontStyleAndWeight = FontStyle.Bold;
             _apButton.style.color = new StyleColor(new Color(0.55f, 0.95f, 0.65f));
@@ -305,6 +305,9 @@ namespace VoxelEngine.UI
                 if (_open) Close();
                 else TryOpen();
             }
+
+            if (!textInput && GameSettings.WasPressed(InputAction.Autopilot))
+                VoxelEngine.Navigation.NavFlightAutopilot.Toggle();
 
             if (_open && !textInput && GameSettings.WasPressed(InputAction.Pause))
             {
@@ -369,7 +372,7 @@ namespace VoxelEngine.UI
             _navLabel.text = NavigationTarget.HasTarget ? "NAV TARGET: " + NavigationTarget.TargetName : "";
             var apFlight = VoxelEngine.Navigation.NavFlightAutopilot.Active;
             bool apOn = apFlight != null && apFlight.Engaged;
-            _apButton.text = apOn ? "DISENGAGE [P]" : (NavigationTarget.HasTarget ? "ENGAGE AUTOPILOT [P]" : "NO NAV TARGET");
+            _apButton.text = apOn ? $"DISENGAGE [{GameSettings.GetKey(InputAction.Autopilot)}]" : (NavigationTarget.HasTarget ? $"ENGAGE AUTOPILOT [{GameSettings.GetKey(InputAction.Autopilot)}]" : "NO NAV TARGET");
             _apStatus.text = VoxelEngine.Navigation.NavFlightAutopilot.StatusLine;
 
             BuildList(entries);

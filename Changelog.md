@@ -1,9 +1,17 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.25.1-dev`
+**Current Version:** `12.26.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.26.0-dev] Autopilot Take-Over, F3 Key, God-Mode Toggle and Warp Screen Redo
+
+**Type:** MINOR - the fly-to autopilot now behaves: it requires an AutoRunPilot block aboard (engage refuses and a live leg disengages without one), and grabbing the stick disengages with Autopilot disabled, player input detected instead of fighting you for the ship. The autopilot hotkey moves off P (landing gear / parking) to F3, is wired up for the first time (it was map-button-only despite the label), and stays rebindable in Settings like every other action. PlayerController gets an infiniteHealth testing toggle (damage immunity; forced respawn still works). And the warp screen is redone: thin bright speed lines instead of chunky bars, a much subtler edge glow. No recipe or setup changes.
+
+**GitHub title:** `[12.26.0-dev] Autopilot take-over, F3 key, god-mode toggle and warp screen redo`
+
+**Manual steps:** none - code-only. Verify in Unity: engage fly-to without an AutoRunPilot (refused), with one (flies), grab the stick (disengages with the message); press F3 to toggle; rebind it in Settings; tick infiniteHealth and take a hit; jump and confirm the new screen effect.
 
 ### [12.25.1-dev] Warp Smear Fix, Arrival Readout and Particle API Fix
 

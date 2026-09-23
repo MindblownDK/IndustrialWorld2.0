@@ -82,6 +82,7 @@ namespace VoxelEngine.Navigation
         private float _speedMs;
         private GridWarpDrive _drive;
         private bool _warpAbandoned;
+        private bool _stickArmed;
         private bool _warpCooling;
         private bool _legIsCapture;
         private int _warpFails;
@@ -105,7 +106,7 @@ namespace VoxelEngine.Navigation
 
         // ── Engage / disengage ─────────────────────────────────────────────
 
-        /// <summary>P key / map button: halt the live flight, or fly the nearest ship in reach.</summary>
+        /// <summary>Hotkey / map button: halt the live flight, or fly the nearest ship in reach.</summary>
         public static void Toggle()
         {
             if (Active != null && Active.Engaged)
@@ -142,6 +143,14 @@ namespace VoxelEngine.Navigation
             var pilot = For(nearest);
             if (pilot == null) { Say("Autopilot failed to attach to that ship.", Warn); return; }
             if (!pilot.TryEngage(out string reason)) Say(reason, Warn);
+        }
+
+        private static bool HasPilotBlock(GridEntity grid)
+        {
+            if (grid == null) return false;
+            foreach (var block in grid.AllBlocks)
+                if (block is IndustrialWorld.Navigation.AutoRunPilot pilot && pilot.Enabled) return true;
+            return false;
         }
 
         public bool TryEngage(out string reason)
@@ -181,6 +190,8 @@ namespace VoxelEngine.Navigation
                 if (block is GridThruster t && t.IsOperational) { anyThruster = true; break; }
             if (!anyThruster)
             { reason = "No working thrusters — fit and power at least one."; return false; }
+            if (!HasPilotBlock(_grid))
+            { reason = "No autopilot block aboard — fit an AutoRunPilot to fly hands-free."; return false; }
 
             var origin = SpaceOrigin.Instance;
             if (origin == null)
@@ -201,6 +212,7 @@ namespace VoxelEngine.Navigation
             _warpCooling = false;
             _warpFails = 0;
             _warpRetryAt = 0f;
+            _stickArmed = false;
             _aimBest = float.MaxValue;
             _aimStalled = 0f;
             _lastCharge01 = 0f;
@@ -264,13 +276,24 @@ namespace VoxelEngine.Navigation
             var origin = SpaceOrigin.Instance;
             if (origin == null)
             { Disengage("Star map fix lost — holding position."); return; }
+            if (!HasPilotBlock(_grid))
+            { Disengage("Autopilot block missing — fit an AutoRunPilot to fly hands-free."); return; }
+            // The stick is a take-over, not a suggestion: any manual thrust input
+            // disengages (armed on first thrust-free tick so engaging mid-flight
+            // while thrusting does not kick instantly). Mouse aim never triggers
+            // this — a seated pilot aims warp legs by hand while engaged.
+            if (_grid.HasManualThrustInput())
+            {
+                if (_stickArmed) { Disengage("Autopilot disabled — player input detected."); return; }
+            }
+            else _stickArmed = true;
 
             // Seat changes never stop the ship; they change who is responsible for it.
             if (_grid.IsControlled != _wasControlled)
             {
                 _wasControlled = _grid.IsControlled;
-                if (!_wasControlled) Say("Continuing unmanned — press P within reach to halt the ship.", Warn);
-                else Say("Pilot aboard — stick overrides, cruise resumes on release.", Go);
+                if (!_wasControlled) Say($"Continuing unmanned — press {GameSettings.GetKey(InputAction.Autopilot)} within reach to halt the ship.", Warn);
+                else Say("Pilot aboard — touch the stick to take over.", Go);
             }
 
             if (State == NavFlightState.Departing)
@@ -576,8 +599,6 @@ namespace VoxelEngine.Navigation
                 if (a == null || !a.Engaged || a._grid == null) return "";
                 if (a.State == NavFlightState.Departing)
                     return $"AUTO·DEPARTING {NavigationTarget.TargetName} in {Mathf.CeilToInt(a._countdown)} — STAND CLEAR";
-                if (a._grid.HasManualThrustInput())
-                    return $"AUTO·OVERRIDE — stick has {a._grid.name}, cruise resumes on release";
                 string warpLeg = WarpLegLine;
                 if (!string.IsNullOrEmpty(warpLeg)) return warpLeg;
 

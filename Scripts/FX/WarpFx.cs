@@ -254,19 +254,19 @@ namespace VoxelEngine.FX
                     if (j.t < PreSeconds)
                     {
                         float k = j.t / PreSeconds;
-                        s = 0.25f * k;
-                        e = 0.55f * k;
+                        s = 0.20f * k;
+                        e = 0.32f * k;
                     }
                     else if (j.t < PreSeconds + TransitSeconds)
                     {
-                        s = 1f;
-                        e = 0.55f + 0.2f * Mathf.Sin(j.t * 7f);
+                        s = 0.8f;
+                        e = 0.32f + 0.08f * Mathf.Sin(j.t * 7f);
                     }
                     else
                     {
                         float k = (j.t - PreSeconds - TransitSeconds) / OutSeconds;
-                        s = 1f - k;
-                        e = 0.55f * (1f - k);
+                        s = 0.8f * (1f - k);
+                        e = 0.32f * (1f - k);
                     }
                     if (s > streakTarget) streakTarget = s;
                     if (e > edgeTarget) edgeTarget = e;
@@ -326,7 +326,7 @@ namespace VoxelEngine.FX
             if (!show) return;
             _overlay.BringToFront();
             _streakLayer.style.opacity = Mathf.Clamp01(streak);
-            float zoom = 1f + 0.45f * Mathf.Clamp01(streak);
+            float zoom = 1f + 0.30f * Mathf.Clamp01(streak);
             _streakLayer.style.scale = new StyleScale(new Scale(new Vector2(zoom, zoom)));
             _edgeLayer.style.opacity = Mathf.Clamp01(edge);
             _flashLayer.style.opacity = Mathf.Clamp01(_flash);
@@ -362,14 +362,14 @@ namespace VoxelEngine.FX
             tex.wrapMode = TextureWrapMode.Clamp;
             var px = new Color[S * S];
             var rng = new System.Random(1337);
-            for (int i = 0; i < 130; i++)
+            for (int i = 0; i < 220; i++)
             {
                 double ang = rng.NextDouble() * Math.PI * 2.0;
                 float dx = (float)Math.Cos(ang), dy = (float)Math.Sin(ang);
-                float r0 = 30f + (float)rng.NextDouble() * 90f;
-                float len = 60f + (float)rng.NextDouble() * 190f;
-                int hw = 1 + rng.Next(0, 2);
-                float a = 0.20f + (float)rng.NextDouble() * 0.55f;
+                float r0 = 8f + (float)rng.NextDouble() * 70f;
+                float len = 30f + (float)rng.NextDouble() * 120f;
+                int hw = rng.Next(0, 10) == 0 ? 1 : 0;
+                float a = 0.10f + (float)rng.NextDouble() * 0.32f;
                 int steps = (int)len;
                 for (int s = 0; s < steps; s++)
                 {
@@ -414,9 +414,9 @@ namespace VoxelEngine.FX
                     float dx = x / (float)(S - 1) * 2f - 1f;
                     float dy = y / (float)(S - 1) * 2f - 1f;
                     float d = Mathf.Sqrt(dx * dx + dy * dy);
-                    float t = Mathf.Clamp01((d - 0.52f) / 0.53f);
+                    float t = Mathf.Clamp01((d - 0.62f) / 0.43f);
                     t = t * t * (3f - 2f * t);
-                    px[y * S + x] = new Color(0.45f, 0.78f, 1f, t * 0.85f);
+                    px[y * S + x] = new Color(0.45f, 0.78f, 1f, t * 0.38f);
                 }
             }
             tex.SetPixels(px);

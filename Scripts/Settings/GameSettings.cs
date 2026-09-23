@@ -58,7 +58,7 @@ namespace VoxelEngine.Settings
 
         // Bump this when default keybinds change to force a one-time migration
         // that fills in missing or invalid bindings on old saves.
-        private const int    CURRENT_VERSION = 18;
+        private const int    CURRENT_VERSION = 19;
 
         // ----- defaults -----
         public const float DEFAULT_FOV       = 75f;
@@ -169,7 +169,7 @@ namespace VoxelEngine.Settings
             InputAction.LogisticsMap    => "L",
             InputAction.ConstructRegistry => "N",
             InputAction.GridInspector   => "K",
-            InputAction.Autopilot       => "P",
+            InputAction.Autopilot       => "F3",
             _ => "None"
         };
 
@@ -217,6 +217,12 @@ namespace VoxelEngine.Settings
             string registry = PlayerPrefs.GetString(K_KEY_PREFIX + InputAction.ConstructRegistry, "");
             if (string.IsNullOrEmpty(registry) || registry == "U")
                 PlayerPrefs.SetString(K_KEY_PREFIX + InputAction.ConstructRegistry, "N");
+
+// v19: autopilot moved off P (landing gear / parking) to F3. Only migrate
+            // profiles still sitting on the old default - a deliberate rebind is kept.
+            string ap = PlayerPrefs.GetString(K_KEY_PREFIX + InputAction.Autopilot, "");
+            if (string.IsNullOrEmpty(ap) || ap == "P")
+                PlayerPrefs.SetString(K_KEY_PREFIX + InputAction.Autopilot, "F3");
 
             PlayerPrefs.SetInt(K_VERSION, CURRENT_VERSION);
             PlayerPrefs.Save();

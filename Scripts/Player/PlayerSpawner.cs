@@ -364,7 +364,7 @@ namespace VoxelEngine.Player
                     VoxelEngine.UI.BuildFeedbackHud.Show("Offline Death", offlineReason, null, new Color(0.95f, 0.25f, 0.20f));
                     // Delay death by 0.5s so feedback is readable
                     yield return new WaitForSeconds(0.6f);
-                    stats.TakeDamage(9999f); // will trigger Die() -> DeathScreen with world spawn
+                    stats.TakeDamage(9999f, ignoreInfinite: true); // will trigger Die() -> DeathScreen with world spawn
                 }
             }
         }

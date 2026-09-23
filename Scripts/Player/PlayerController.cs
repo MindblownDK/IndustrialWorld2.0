@@ -23,6 +23,12 @@ namespace VoxelEngine.Player
     [RequireComponent(typeof(CharacterController))]
     public class PlayerController : MonoBehaviour
     {
+        [Header("Testing")]
+        [Tooltip("Testing cheat: the player takes no damage while this is on.")]
+        public bool infiniteHealth = false;
+        /// <summary>Live testing cheat flag, read by PlayerStats.TakeDamage.</summary>
+        public static bool InfiniteHealth { get; private set; }
+
         [Header("Movement")]
         [Tooltip("Horizontal walk speed (m/s).")]
         public float walkSpeed = 5.5f;
@@ -163,6 +169,7 @@ namespace VoxelEngine.Player
         private void Awake()
         {
             _cc = GetComponent<CharacterController>();
+            InfiniteHealth = infiniteHealth;
             _cc.height = standHeight;
             _cc.center = new Vector3(0, standHeight * 0.5f, 0);
             // On spherical bodies the terrain has hills/mountains in every direction. The default
@@ -236,6 +243,7 @@ namespace VoxelEngine.Player
         // ============================================================
         private void Update()
         {
+            InfiniteHealth = infiniteHealth;
             // If the spawner hasn't finished placing us yet, freeze entirely (no input, no gravity).
             // Prevents falling-through-ungenerated-chunks AND prevents the player taking
             // control before the saved position has been restored.
