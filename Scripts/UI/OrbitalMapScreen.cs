@@ -306,8 +306,6 @@ namespace VoxelEngine.UI
                 else TryOpen();
             }
 
-            if (!textInput && GameSettings.WasPressed(InputAction.Autopilot))
-                VoxelEngine.Navigation.NavFlightAutopilot.Toggle();
 
             if (_open && !textInput && GameSettings.WasPressed(InputAction.Pause))
             {

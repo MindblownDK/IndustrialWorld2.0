@@ -169,6 +169,7 @@ namespace VoxelEngine.Player
         private void Awake()
         {
             _cc = GetComponent<CharacterController>();
+            if (VoxelEngine.Settings.GameSettings.InfiniteHealth) infiniteHealth = true;
             InfiniteHealth = infiniteHealth;
             _cc.height = standHeight;
             _cc.center = new Vector3(0, standHeight * 0.5f, 0);
@@ -244,6 +245,8 @@ namespace VoxelEngine.Player
         private void Update()
         {
             InfiniteHealth = infiniteHealth;
+            if (VoxelEngine.Settings.GameSettings.InfiniteHealth != infiniteHealth)
+                VoxelEngine.Settings.GameSettings.InfiniteHealth = infiniteHealth;
             // If the spawner hasn't finished placing us yet, freeze entirely (no input, no gravity).
             // Prevents falling-through-ungenerated-chunks AND prevents the player taking
             // control before the saved position has been restored.

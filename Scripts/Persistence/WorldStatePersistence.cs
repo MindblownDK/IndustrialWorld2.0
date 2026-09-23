@@ -319,6 +319,7 @@ namespace VoxelEngine.Persistence
                 // Additive armor slot save: ItemStack.durability contains installed
                 // module tiers, so this preserves the exact upgraded armor piece.
                 armorSlots = equipment != null ? SerializeContainer(equipment.ArmorSlots) : null,
+                instrumentSlots = equipment != null ? SerializeContainer(equipment.InstrumentSlots) : null,
                 activeHotbarIndex = inv.activeHotbarIndex
             };
 
@@ -2279,6 +2280,7 @@ namespace VoxelEngine.Persistence
             if (save.player.helmetSlots != null) DeserializeInto(equipment.HelmetSlots, save.player.helmetSlots);
             if (save.player.oxygenTankSlots != null) DeserializeInto(equipment.OxygenTankSlots, save.player.oxygenTankSlots);
             if (save.player.armorSlots != null) DeserializeInto(equipment.ArmorSlots, save.player.armorSlots);
+            if (save.player.instrumentSlots != null) DeserializeInto(equipment.InstrumentSlots, save.player.instrumentSlots);
             inv.SetActiveHotbar(save.player.activeHotbarIndex);
         }
 
@@ -3878,6 +3880,7 @@ namespace VoxelEngine.Persistence
             // Additive armor equipment slot. Legacy saves omit this and keep an
             // empty armor slot; upgraded armor retains its packed durability state.
             public SavedContainer armorSlots;
+            public SavedContainer instrumentSlots;
             public int activeHotbarIndex;
         }
         [Serializable] private class SavedPlacedBlock

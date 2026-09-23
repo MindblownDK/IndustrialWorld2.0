@@ -276,6 +276,17 @@ namespace VoxelEngine.GridSystem
             float yaw   = Mathf.Clamp(mouseX * sens, -1f, 1f);
             float pitch = Mathf.Clamp(-mouseY * sens, -1f, 1f);
 
+            // Autopilot owns the nose while engaged: mouse gyro is parked so it can't
+            // fight the flight plan. Warp legs excepted — the seated pilot aims those
+            // by hand while the drive charges and fires.
+            if (Grid != null && VoxelEngine.Navigation.NavFlightAutopilot.ActiveGrid == Grid)
+            {
+                var apState = VoxelEngine.Navigation.NavFlightAutopilot.ActiveState;
+                if (apState != VoxelEngine.Navigation.NavFlightState.WarpAim
+                    && apState != VoxelEngine.Navigation.NavFlightState.WarpCharge)
+                { yaw = 0f; pitch = 0f; }
+            }
+
             Grid.SetFlightInput(thrust, yaw, pitch, roll);
 
             // ── Maritime integration ───────────────────────────────────

@@ -255,6 +255,10 @@ namespace VoxelEngine.UI
                 rebuild?.Invoke();
             }));
             p.Add(Hint("Overrides Recipe Browser and Production Statistics accent colors without affecting gameplay."));
+            p.Add(T.Divider());
+            p.Add(SectionLabel("Testing"));
+            p.Add(ToggleRow("Infinite Health", "Testing cheat: the player takes no damage while this is on.",
+                GameSettings.InfiniteHealth, on => GameSettings.InfiniteHealth = on));
         }
 
         private static VisualElement ThemePreview()

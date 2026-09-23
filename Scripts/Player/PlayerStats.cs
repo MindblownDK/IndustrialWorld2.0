@@ -306,7 +306,7 @@ namespace VoxelEngine.Player
         public void TakeDamage(float amount, bool ignoreInfinite = false)
         {
             if (amount <= 0) return;
-            if (!ignoreInfinite && PlayerController.InfiniteHealth) return;
+            if (!ignoreInfinite && (PlayerController.InfiniteHealth || VoxelEngine.Settings.GameSettings.InfiniteHealth)) return;
             if (equippedArmor != null) amount *= (1f - equippedArmor.damageReduction);
             Health = Mathf.Max(0, Health - amount);
             OnStatsChanged?.Invoke();

@@ -68,6 +68,7 @@ namespace VoxelEngine.Navigation
         /// <summary>The one engaged fly-to leg, or null. One ship at a time: the map
         /// status line and the P key both talk about exactly this flight.</summary>
         public static NavFlightAutopilot Active { get; private set; }
+        private static int _lastToggleFrame = -1;
 
         public NavFlightState State { get; private set; } = NavFlightState.Off;
         public bool Engaged => Active == this && State != NavFlightState.Off;
@@ -109,6 +110,10 @@ namespace VoxelEngine.Navigation
         /// <summary>Hotkey / map button: halt the live flight, or fly the nearest ship in reach.</summary>
         public static void Toggle()
         {
+            // One toggle per frame: two hotkey paths once fired the same press twice
+            // (engage + instant disengage). This makes that impossible by construction.
+            if (_lastToggleFrame == Time.frameCount) return;
+            _lastToggleFrame = Time.frameCount;
             if (Active != null && Active.Engaged)
             {
                 if (Active.State == NavFlightState.Departing) Active.Disengage("Departure cancelled — ship is yours.");
@@ -224,7 +229,7 @@ namespace VoxelEngine.Navigation
             {
                 State = NavFlightState.Cruise;
                 Say($"Engaged — {NavigationTarget.TargetName}, {OrbitalTrackingService.FormatKm(_distM / 1000d)} out. " +
-                    $"Stick overrides, {GameSettings.GetKey(InputAction.Autopilot)} disengages.", Go);
+                    $"Touch the stick or press {GameSettings.GetKey(InputAction.Autopilot)} to take over.", Go);
             }
             else
             {
@@ -561,6 +566,9 @@ namespace VoxelEngine.Navigation
                 return a != null && a.Engaged && a._grid != null ? a._grid : null;
             }
         }
+
+        /// <summary>Engaged state of the active autopilot (Off when disengaged).</summary>
+        public static NavFlightState ActiveState => Active != null && Active.Engaged ? Active.State : NavFlightState.Off;
 
         /// <summary>One live line for an in-progress warp leg (aim/charge/bank); empty
         /// unless the active autopilot is currently flying a warp leg. Shared by the

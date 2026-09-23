@@ -304,6 +304,19 @@ namespace VoxelEngine.GridSystem
             float pooled = Grid != null ? PooledStoredWh(Grid) : warpStoredWh;
             if (pooled < costWh - 0.01f)
             {
+                double affordableKm = rate > 0f ? pooled / rate : 0d;
+                if (affordableKm >= 100d && affordableKm < distKm - 1d
+                    && !VoxelEngine.UI.ConfirmDialogHud.IsOpen)
+                {
+                    double pct = affordableKm / distKm * 100d;
+                    double leftKm = distKm - affordableKm;
+                    VoxelEngine.UI.ConfirmDialogHud.Show("Partial jump?",
+                        $"Banked {pooled / 1000f:0.0} of {costWh / 1000f:0.0} kWh for {distKm:0} km — " +
+                        $"jump {pct:0}% ({affordableKm:0} km), {100d - pct:0}% ({leftKm:0} km) short?",
+                        "Jump partway", "Abort",
+                        () => { if (this != null) TryWarpPartial(affordableKm, distKm, originName); });
+                    return false;
+                }
                 BuildFeedbackHud.Show("Warp Drive",
                     $"Need {costWh / 1000f:0.0} kWh for {distKm:0} km — banked {pooled / 1000f:0.0} kWh. " +
                     "Recharge, or fit more drives.", null, new Color(1f, 0.7f, 0.25f));
@@ -360,6 +373,73 @@ namespace VoxelEngine.GridSystem
                 BuildFeedbackHud.Show("Warp Jump", $"Arrived {targetName} - jumped {distKm:0} km", null, new Color(0.55f, 0.85f, 1f));
                 VoxelEngine.FX.WarpFx.ReportArrival(Grid, $"ARRIVED {targetName} - {originName} TO HERE - {distKm:0} km{whereAmI}");
                 Debug.Log($"[GridWarpDrive] Warp to {targetName} at {destination} km from {originName}.");
+            });
+            return true;
+        }
+
+        /// <summary>
+        /// Fire a partial blind hop toward the aim point, spending (nearly) the whole
+        /// bank. Re-validates everything: the bank may have changed since the popup.
+        /// Short-hop floor is 100 km (the min-jump rule targets fixed-hop abuse, not this).
+        /// </summary>
+        public bool TryWarpPartial(double affordableKm, double fullDistKm, string originName)
+        {
+            if (!IsReady || Grid == null) return false;
+            var origin = SpaceOrigin.Instance;
+            var registry = CosmicRegistry.Instance;
+            if (origin == null || registry == null || !registry.IsReady) return false;
+
+            Transform aimFrame = Grid.ActiveCockpit != null ? Grid.ActiveCockpit.transform : transform;
+            Vector3 aimDir = aimFrame.forward.normalized;
+            double3 gridCosmic = origin.GetCosmicKm(transform.position);
+            float rate = MaxRateWhPerKm(Grid);
+            float pooled = PooledStoredWh(Grid);
+            double affordKm = rate > 0f ? pooled / rate : 0d;
+            double hopKm = System.Math.Min(affordKm, affordableKm);
+            if (hopKm < 100d)
+            {
+                BuildFeedbackHud.Show("Warp Drive", "Bank drained — recharge and try again.", null, new Color(1f, 0.7f, 0.25f));
+                return false;
+            }
+            float costWh = (float)(hopKm * rate);
+            if (!TryConsumePooledWh(Grid, costWh)) return false;
+            double3 destination = gridCosmic + CosmicRegistry.ToDouble3(aimDir) * hopKm;
+
+            double pct = fullDistKm > 1d ? hopKm / fullDistKm * 100d : 100d;
+            string targetName = $"{hopKm:0} km partial hop ({pct:0}% of {fullDistKm:0} km)";
+
+            IsCharging = false;
+            Charge01 = 0f;
+            Cooldown01 = 1f;
+            VoxelEngine.FX.WarpFx.PlayJump(this, () =>
+            {
+                origin.TeleportCosmic(destination);
+                origin.SetFrame(null);
+                if (Grid != null && Grid.Body != null)
+                {
+                    Grid.Body.linearVelocity = Vector3.zero;
+                    Grid.Body.angularVelocity = Vector3.zero;
+                }
+                var pilot = Grid != null && Grid.ActiveCockpit != null ? Grid.ActiveCockpit.Pilot : null;
+                if (pilot != null) pilot.ResetVelocity();
+
+                string whereAmI = "";
+                {
+                    double3 nowAt = origin.GetCosmicKm(transform.position);
+                    BodyInstance near = null;
+                    double nearD = double.MaxValue;
+                    for (int i = 0; i < registry.Bodies.Count; i++)
+                    {
+                        var b = registry.Bodies[i];
+                        if (b == null) continue;
+                        double dd = math.length(registry.CosmicPositionOf(b) - nowAt);
+                        if (dd < nearD) { nearD = dd; near = b; }
+                    }
+                    if (near != null) whereAmI = $" - nearest {near.DisplayName} {nearD:0} km";
+                }
+                BuildFeedbackHud.Show("Warp Jump", $"Arrived {targetName} - jumped {hopKm:0} km", null, new Color(0.55f, 0.85f, 1f));
+                VoxelEngine.FX.WarpFx.ReportArrival(Grid, $"ARRIVED {targetName} - {originName} TO HERE - {hopKm:0} km{whereAmI}");
+                Debug.Log($"[GridWarpDrive] Partial warp {hopKm:0} km of {fullDistKm:0} from {originName}.");
             });
             return true;
         }

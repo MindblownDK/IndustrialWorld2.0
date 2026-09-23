@@ -1,9 +1,17 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.26.0-dev`
+**Current Version:** `12.27.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.27.0-dev] F3 Double-Toggle Fix, Orbital Map Save, Godmode That Sticks and Partial Jumps
+
+**Type:** MINOR - F3 engaged then instantly disengaged because the hotkey fired from two tick paths; the duplicate is removed and Toggle is now guarded to one action per frame. The orbital map no longer vanishes on load: equipment instrument slots are now saved and restored like every other slot group. Infinite health actually sticks now: the toggle persists in settings (new Testing row plus the PlayerController checkbox) instead of dying with the spawner. Mouse gyro parks while the autopilot flies (warp legs excepted, where you still aim). And a short bank no longer means no jump: firing with insufficient energy offers a partial-jump popup showing distance, percentage and remainder, and Accept flies the part the bank buys. No recipe or setup changes.
+
+**GitHub title:** `[12.27.0-dev] F3 double-toggle fix, orbital map save, godmode that sticks and partial jumps`
+
+**Manual steps:** none - code-only. Verify in Unity: press F3 once (stays engaged); save/load with the orbital map equipped (still there); tick infinite health, reload, take a hit (no damage); engage and move the mouse (nose stays); fire short-banked (popup with % and km, Accept jumps partway).
 
 ### [12.26.0-dev] Autopilot Take-Over, F3 Key, God-Mode Toggle and Warp Screen Redo
 

@@ -1238,6 +1238,7 @@ namespace VoxelEngine.UI
             BuildFeedbackHud.SetFloatLayer(_topLayer);
             CockpitAlertHud.EnsureMounted(_hudLayer);
             VoxelEngine.FX.WarpFx.EnsureOverlayMounted(_hudLayer);
+            ConfirmDialogHud.EnsureMounted(_hudLayer);
             CanisterPressureHud.EnsureMounted(_hudLayer);
             HazardWarningHud.EnsureMounted(_hudLayer);
             DeepSurveyHud.EnsureMounted(_hudLayer);

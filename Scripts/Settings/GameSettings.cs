@@ -98,6 +98,7 @@ namespace VoxelEngine.Settings
         // ----- Gameplay -----
         public static bool  FlyMode          { get => PlayerPrefs.GetInt(K_FLY_MODE, 0) != 0; set { PlayerPrefs.SetInt(K_FLY_MODE, value ? 1 : 0); Notify(); } }
         public static bool  ScreenShake      { get => PlayerPrefs.GetInt("ve_screenshake", 1) != 0; set { PlayerPrefs.SetInt("ve_screenshake", value ? 1 : 0); Notify(); } }
+        public static bool  InfiniteHealth    { get => PlayerPrefs.GetInt("ve_infinitehealth", 0) != 0; set { PlayerPrefs.SetInt("ve_infinitehealth", value ? 1 : 0); Notify(); } }
 
         // ----- Audio -----
         public static float MasterVolume     { get => PlayerPrefs.GetFloat(K_VOL, DEFAULT_VOLUME); set { PlayerPrefs.SetFloat(K_VOL, value); Apply(); } }
