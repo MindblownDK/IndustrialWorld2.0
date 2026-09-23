@@ -126,8 +126,9 @@ namespace VoxelEngine.GridSystem
             // P toggles ALL landing gear on the grid (lock ⇆ unlock).
             if (GridInput.PPressed) ToggleAllLandingGear();
 
-            // N engages / fires the Warp Drive (the ONLY warp in the game — an expensive,
-            // chargeable grid block). First press begins charging; second fires when ready.
+            // The warp key (U by default) engages / fires the Warp Drive (the ONLY warp
+            // in the game — an expensive, chargeable grid block). First press begins
+            // charging; second fires when ready.
             if (VoxelEngine.Settings.GameSettings.WasPressed(VoxelEngine.Settings.InputAction.WarpDrive))
                 HandleWarpDriveInput();
 

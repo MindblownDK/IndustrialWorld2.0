@@ -1,9 +1,25 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.24.1-dev`
+**Current Version:** `12.25.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.25.1-dev] Warp Smear Fix, Arrival Readout and Particle API Fix
+
+**Type:** PATCH - the warp effect smeared the ship itself: the bubble's near wall washed over the hull and the streak particles were huge additive smears, so the bubble now renders its far shell only (ship stays crisp inside) and the streaks are small dim speed lines. Fixes the WarpFx compile error on this Unity version (StretchBillboard does not exist here, Stretch does) and the obsolete ShapeModule.box warning (now scale). And the arrival finally answers where you are: the jump toast shows the distance jumped, and the cockpit WARP LCD holds an arrival line for ~25 s (destination, origin to here, km, plus nearest body after a blind hop). No recipe or setup changes.
+
+**GitHub title:** `[12.25.1-dev] Warp smear fix, arrival readout and particle API fix`
+
+**Manual steps:** none - code-only plus one shader tweak. Verify in Unity: fire the drive and confirm it compiles clean, the ship stays crisp inside the bubble with small streaks past the hull, the toast shows the km jumped, and the cockpit WARP line holds the arrival readout afterwards.
+
+### [12.25.0-dev] Warp FX - Jump Effect, Live Warp Key and Cockpit Warp Readout
+
+**Type:** MINOR - the jump drive gets its moment: firing the drive now swallows the ship in a pulsing energy bubble, stretches the stars into warp streaks past the hull, tunnels the screen with a flash, punches the FOV wide and rumbles through a synthesized riser-to-whoosh (all procedural, no assets; screen FX only for the grid the player is aboard). Also fixes the warp key mixup: the v17 rebind moved warp N to U but the drive still said press N, so the prompt now shows the live binding and the setup docs say U. And the cockpit finally shows the autopilot warp leg line (aim/charge/bank) on its LCD, so a seated pilot can see the ship is waiting on their aim instead of wondering why it never fires. No recipe or setup changes.
+
+**GitHub title:** `[12.25.0-dev] Warp FX - jump effect, live warp key and cockpit warp readout`
+
+**Manual steps:** none - code-only plus one shader file. Verify in Unity: charge and fire the drive (U by default) and confirm the bubble/streak/screen/FOV/sound sequence plays and the ship arrives; engage the autopilot on a long leg while seated and confirm the cockpit WARP LCD line appears and the drive auto-fires once aimed.
 
 ### [12.24.1-dev] Grid Gas Topology Cache - Piped Thruster Lag Fix
 

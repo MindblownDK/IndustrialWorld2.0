@@ -6,7 +6,7 @@
 // orbits, floating origin, frame switches). This block is the one legitimate shortcut:
 //
 //   • It CHARGES over time, drawing a heavy sustained power load (grid-wide power).
-//   • Once charged, a pilot can trigger it (InputAction.WarpDrive, default N) to
+//   • Once charged, a pilot can trigger it (InputAction.WarpDrive, U by default) to
 //     jump the whole ship to the aimed planet (arriving in co-moving orbit) — or a
 //     fixed range straight ahead when no planet is in the target cone.
 //   • It requires vacuum (it is a space drive), has a cooldown, and its recipe +
@@ -113,8 +113,20 @@ namespace VoxelEngine.GridSystem
             if (Charge01 >= 1f)
             {
                 IsCharging = false;
-                BuildFeedbackHud.Show("Warp Drive", "CHARGED — press [N] to jump", null, new Color(0.55f, 0.85f, 1f));
+                BuildFeedbackHud.Show("Warp Drive", $"CHARGED — press [{WarpKeyName}] to jump", null, new Color(0.55f, 0.85f, 1f));
             }
+        }
+
+        /// <summary>Display name of the live warp key binding (U unless rebound).</summary>
+        private static string WarpKeyName => DisplayKey(VoxelEngine.Settings.GameSettings.GetKey(VoxelEngine.Settings.InputAction.WarpDrive));
+
+        private static string DisplayKey(string code)
+        {
+            if (string.IsNullOrEmpty(code) || code == "None") return "--";
+            if (code.StartsWith("Digit")) return code.Substring(5);
+            if (code.StartsWith("Left")) return code.Substring(4);
+            if (code.StartsWith("Right")) return code.Substring(5);
+            return code;
         }
 
         /// <summary>Begin charging (no-op when already charging, ready, or on cooldown).</summary>
@@ -148,6 +160,11 @@ namespace VoxelEngine.GridSystem
         /// </summary>
         public bool TryWarp()
         {
+            if (VoxelEngine.FX.WarpFx.IsPending(this))
+            {
+                BuildFeedbackHud.Show("Warp Drive", "Jump imminent…", null, new Color(0.55f, 0.85f, 1f));
+                return true;
+            }
             if (!IsReady)
             {
                 if (IsCharging)
@@ -155,7 +172,7 @@ namespace VoxelEngine.GridSystem
                 else if (Cooldown01 > 0f)
                     BuildFeedbackHud.Show("Warp Drive", $"Cooling down — {Mathf.CeilToInt(Cooldown01 * cooldownSeconds)}s", null, new Color(1f, 0.7f, 0.25f));
                 else
-                    BuildFeedbackHud.Show("Warp Drive", "Not charged — press [N] to charge", null, new Color(1f, 0.7f, 0.25f));
+                    BuildFeedbackHud.Show("Warp Drive", $"Not charged — press [{WarpKeyName}] to charge", null, new Color(1f, 0.7f, 0.25f));
                 return false;
             }
 
@@ -270,6 +287,18 @@ namespace VoxelEngine.GridSystem
 
             // ── Fuel check: range is bought, not granted ────────────────────
             double distKm = math.length(destination - gridCosmic);
+            // Origin snapshot for the arrival readout (nearest charted body by name).
+            string originName = "deep space";
+            {
+                double bestD = double.MaxValue;
+                for (int i = 0; i < registry.Bodies.Count; i++)
+                {
+                    var ob = registry.Bodies[i];
+                    if (ob == null) continue;
+                    double od = math.length(registry.CosmicPositionOf(ob) - gridCosmic);
+                    if (od < bestD) { bestD = od; originName = ob.DisplayName; }
+                }
+            }
             float rate = Grid != null ? MaxRateWhPerKm(Grid) : energyPerKmWh;
             float costWh = (float)(distKm * rate);
             float pooled = Grid != null ? PooledStoredWh(Grid) : warpStoredWh;
@@ -283,35 +312,55 @@ namespace VoxelEngine.GridSystem
             if (Grid != null) TryConsumePooledWh(Grid, costWh);
             else warpStoredWh = Mathf.Max(0f, warpStoredWh - costWh);
 
-            // ── Execute: floating-origin teleport ─────────────────
-            origin.TeleportCosmic(destination);
-            origin.SetFrame(targetPlanet != null || locatorBody != null
-                ? ResolveSceneBody(registry, targetPlanet != null ? targetPlanet : locatorBody)
-                : null);
-
-            // Arrive co-moving with the destination frame: zero scene velocity so the
-            // grid hangs relative to the target (SE-style orbit arrival).
-            if (Grid != null && Grid.Body != null)
-            {
-                Grid.Body.linearVelocity = Vector3.zero;
-                Grid.Body.angularVelocity = Vector3.zero;
-            }
-            var pilot = Grid != null && Grid.ActiveCockpit != null ? Grid.ActiveCockpit.Pilot : null;
-            if (pilot != null) pilot.ResetVelocity();
-
+            // ── Execute (async): the FX pre-phase plays first, then the teleport ──
+            // State resets NOW (at initiation) so neither the autopilot gate nor a
+            // second keypress can double-fire while the bubble inflates.
             IsCharging = false;
             Charge01 = 0f;
             Cooldown01 = 1f;
+            VoxelEngine.FX.WarpFx.PlayJump(this, () =>
+            {
+                origin.TeleportCosmic(destination);
+                origin.SetFrame(targetPlanet != null || locatorBody != null
+                    ? ResolveSceneBody(registry, targetPlanet != null ? targetPlanet : locatorBody)
+                    : null);
 
-            string targetName = targetPlanet != null
-                ? $"{targetPlanet.DisplayName} orbit ({arrivalAltitudeKm:0} km altitude)"
-                : targetSingularity != null
-                    ? $"{targetSingularity.DisplayName} standoff ({(int)targetSingularity.standoffArrivalKm:0} km from horizon)"
-                    : locatorArrivalName != null
-                        ? $"Locator: {locatorArrivalName}"
-                        : $"{jumpRangeKm:0} km straight ahead";
-            BuildFeedbackHud.Show("Warp Jump", $"Arrived: {targetName}", null, new Color(0.55f, 0.85f, 1f));
-            Debug.Log($"[GridWarpDrive] Warp to {targetName} at {destination} km.");
+                // Arrive co-moving with the destination frame: zero scene velocity so the
+                // grid hangs relative to the target (SE-style orbit arrival).
+                if (Grid != null && Grid.Body != null)
+                {
+                    Grid.Body.linearVelocity = Vector3.zero;
+                    Grid.Body.angularVelocity = Vector3.zero;
+                }
+                var pilot = Grid != null && Grid.ActiveCockpit != null ? Grid.ActiveCockpit.Pilot : null;
+                if (pilot != null) pilot.ResetVelocity();
+
+                string targetName = targetPlanet != null
+                    ? $"{targetPlanet.DisplayName} orbit ({arrivalAltitudeKm:0} km altitude)"
+                    : targetSingularity != null
+                        ? $"{targetSingularity.DisplayName} standoff ({(int)targetSingularity.standoffArrivalKm:0} km from horizon)"
+                        : locatorArrivalName != null
+                            ? $"Locator: {locatorArrivalName}"
+                            : $"{jumpRangeKm:0} km straight ahead";
+                string whereAmI = "";
+                if (targetPlanet == null && targetSingularity == null && locatorArrivalName == null)
+                {
+                    double3 nowAt = origin.GetCosmicKm(transform.position);
+                    BodyInstance near = null;
+                    double nearD = double.MaxValue;
+                    for (int i = 0; i < registry.Bodies.Count; i++)
+                    {
+                        var b = registry.Bodies[i];
+                        if (b == null) continue;
+                        double dd = math.length(registry.CosmicPositionOf(b) - nowAt);
+                        if (dd < nearD) { nearD = dd; near = b; }
+                    }
+                    if (near != null) whereAmI = $" - nearest {near.DisplayName} {nearD:0} km";
+                }
+                BuildFeedbackHud.Show("Warp Jump", $"Arrived {targetName} - jumped {distKm:0} km", null, new Color(0.55f, 0.85f, 1f));
+                VoxelEngine.FX.WarpFx.ReportArrival(Grid, $"ARRIVED {targetName} - {originName} TO HERE - {distKm:0} km{whereAmI}");
+                Debug.Log($"[GridWarpDrive] Warp to {targetName} at {destination} km from {originName}.");
+            });
             return true;
         }
 
@@ -409,6 +458,7 @@ namespace VoxelEngine.GridSystem
 
         public override void OnRemoved()
         {
+            VoxelEngine.FX.WarpFx.CancelFor(this);
             IsCharging = false;
             Charge01 = 0f;
             base.OnRemoved();

@@ -529,6 +529,44 @@ namespace VoxelEngine.Navigation
             if (GameSettings.WasPressed(InputAction.Autopilot)) Toggle();
         }
 
+        /// <summary>The grid the active autopilot is flying (null when disengaged).</summary>
+        public static GridEntity ActiveGrid
+        {
+            get
+            {
+                var a = Active;
+                return a != null && a.Engaged && a._grid != null ? a._grid : null;
+            }
+        }
+
+        /// <summary>One live line for an in-progress warp leg (aim/charge/bank); empty
+        /// unless the active autopilot is currently flying a warp leg. Shared by the
+        /// orbital map status and the cockpit warp readout.</summary>
+        public static string WarpLegLine
+        {
+            get
+            {
+                var a = Active;
+                if (a == null || !a.Engaged || a._grid == null) return "";
+                if (a.State != NavFlightState.WarpAim && a.State != NavFlightState.WarpCharge) return "";
+                string aim = a._grid.IsControlled
+                    ? $"AIM AT {NavigationTarget.TargetName} — {a._aimAngle:0}° OFF (you aim)"
+                    : $"AIM {a._aimAngle:0.0}° OFF";
+                string chg = a._drive != null
+                    ? (a._drive.IsReady ? "DRIVE READY" : $"CHARGE {a._drive.Charge01 * 100f:0}%")
+                    : "NO DRIVE";
+                string bank = a._drive != null && a._drive.Grid != null
+                    ? $"BANK {a._legPooledWh / 1000f:0.0}/{a._legNeedWh / 1000f:0.0} kWh" +
+                      (a._legPooledWh < a._legNeedWh - 0.01f ? (a._drive.GridStarved ? " STARVED" : "") : " OK")
+                    : "";
+                string stall = a._chargeStallT > 5f ? " · STALLED (power?)" : "";
+                string leg = a._legIsCapture ? " · LOCK" : " · HOP";
+                return (a.State == NavFlightState.WarpAim ? "WARP·AIM " : "WARP·CHARGE ") + aim +
+                       " · " + chg + (string.IsNullOrEmpty(bank) ? "" : " · " + bank) + leg + stall +
+                       (a._grid.IsControlled ? "" : " (unmanned)");
+            }
+        }
+
         /// <summary>One live line for the orbital map: state, target, distance, speed, ETA.</summary>
         public static string StatusLine
         {
@@ -540,24 +578,9 @@ namespace VoxelEngine.Navigation
                     return $"AUTO·DEPARTING {NavigationTarget.TargetName} in {Mathf.CeilToInt(a._countdown)} — STAND CLEAR";
                 if (a._grid.HasManualThrustInput())
                     return $"AUTO·OVERRIDE — stick has {a._grid.name}, cruise resumes on release";
-                if (a.State == NavFlightState.WarpAim || a.State == NavFlightState.WarpCharge)
-                {
-                    string aim = a._grid.IsControlled
-                        ? $"AIM AT {NavigationTarget.TargetName} — {a._aimAngle:0}° OFF (you aim)"
-                        : $"AIM {a._aimAngle:0.0}° OFF";
-                    string chg = a._drive != null
-                        ? (a._drive.IsReady ? "DRIVE READY" : $"CHARGE {a._drive.Charge01 * 100f:0}%")
-                        : "NO DRIVE";
-                    string bank = a._drive != null && a._drive.Grid != null
-                        ? $"BANK {a._legPooledWh / 1000f:0.0}/{a._legNeedWh / 1000f:0.0} kWh" +
-                          (a._legPooledWh < a._legNeedWh - 0.01f ? (a._drive.GridStarved ? " STARVED" : "") : " OK")
-                        : "";
-                    string stall = a._chargeStallT > 5f ? " · STALLED (power?)" : "";
-                    string leg = a._legIsCapture ? " · LOCK" : " · HOP";
-                    return (a.State == NavFlightState.WarpAim ? "WARP·AIM " : "WARP·CHARGE ") + aim +
-                           " · " + chg + (string.IsNullOrEmpty(bank) ? "" : " · " + bank) + leg + stall +
-                           (a._grid.IsControlled ? "" : " (unmanned)");
-                }
+                string warpLeg = WarpLegLine;
+                if (!string.IsNullOrEmpty(warpLeg)) return warpLeg;
+
                 if (a.State == NavFlightState.Hold)
                     return $"AUTO·HOLD at {NavigationTarget.TargetName}" + (a._grid.IsControlled ? "" : " (unmanned)");
                 double etaS = a._speedMs > 30f ? a._distM / a._speedMs : a._distM / 40d;

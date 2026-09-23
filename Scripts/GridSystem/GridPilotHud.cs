@@ -18,8 +18,8 @@ namespace VoxelEngine.GridSystem
         private static VisualElement _container;
         private static GridCockpit _cachedCockpit;
         private static float _cockpitSearchTimer;
-        private static Label _speedLabel, _altLabel, _verticalSpeedLabel, _environmentLabel, _gravityGLabel, _gravityDetailLabel, _gravityReferenceLabel, _trajectoryStatusLabel, _trajectorySpeedLabel, _trajectoryApsisLabel, _powerLabel, _h2Label, _dampLabel, _batteryValueLabel, _offlineLabel;
-        private static VisualElement _gravityModule, _gravityLcdBezel, _trajectoryModule, _trajectoryLcdBezel, _powerFill, _h2Fill, _batteryGaugeFill;
+        private static Label _speedLabel, _altLabel, _verticalSpeedLabel, _environmentLabel, _gravityGLabel, _gravityDetailLabel, _gravityReferenceLabel, _trajectoryStatusLabel, _trajectorySpeedLabel, _trajectoryApsisLabel, _powerLabel, _h2Label, _dampLabel, _batteryValueLabel, _offlineLabel, _warpLabel;
+        private static VisualElement _gravityModule, _gravityLcdBezel, _trajectoryModule, _trajectoryLcdBezel, _powerFill, _h2Fill, _batteryGaugeFill, _warpModule;
         private static VisualElement[] _gravitySegments;
         private static float _smoothSpeed, _smoothAlt, _smoothPower;
         private const int LayoutRevision = 11;
@@ -191,6 +191,7 @@ namespace VoxelEngine.GridSystem
             _container.Add(BuildResourceScreen());
             _container.Add(BuildBatteryGauge());
             _container.Add(BuildDampenerScreen());
+            _container.Add(BuildWarpScreen());
         }
 
         private static VisualElement BuildPrimaryFlightScreen()
@@ -374,6 +375,38 @@ namespace VoxelEngine.GridSystem
             _dampLabel.style.color = new StyleColor(LcdHudTheme.Phosphor);
             _dampLabel.pickingMode = PickingMode.Ignore;
             screen.Add(_dampLabel);
+            return screen;
+        }
+
+        private static VisualElement BuildWarpScreen()
+        {
+            var screen = new VisualElement { name = "WarpLcd" };
+            _warpModule = screen;
+            screen.style.minHeight = 22;
+            screen.style.paddingLeft = 7;
+            screen.style.paddingRight = 7;
+            screen.style.paddingTop = 4;
+            screen.style.paddingBottom = 4;
+            screen.style.flexDirection = FlexDirection.Row;
+            screen.style.alignItems = Align.Center;
+            screen.style.display = DisplayStyle.None;
+            screen.pickingMode = PickingMode.Ignore;
+            LcdHudTheme.ApplyScreen(screen, new Color(LcdHudTheme.Bezel.r, LcdHudTheme.Bezel.g, LcdHudTheme.Bezel.b, 0.90f), 1f);
+            LcdHudTheme.AddScanlines(screen, 2, top: 6f, spacing: 10f);
+
+            var caption = LcdHudTheme.CaptionLabel("WARP");
+            caption.style.width = 58;
+            screen.Add(caption);
+            _warpLabel = new Label("");
+            _warpLabel.style.flexGrow = 1;
+            _warpLabel.style.fontSize = 8;
+            _warpLabel.style.letterSpacing = 0.5f;
+            _warpLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _warpLabel.style.unityTextAlign = TextAnchor.MiddleRight;
+            _warpLabel.style.whiteSpace = WhiteSpace.Normal;
+            _warpLabel.style.color = new StyleColor(LcdHudTheme.Phosphor);
+            _warpLabel.pickingMode = PickingMode.Ignore;
+            screen.Add(_warpLabel);
             return screen;
         }
 
@@ -851,6 +884,7 @@ namespace VoxelEngine.GridSystem
             }
             UpdateGravityReadout(grid);
             UpdateTrajectoryReadout(grid);
+            UpdateWarpReadout(grid);
 
             float powerBal = grid.PowerBalance;
             float powerLoad = grid.PowerGenerated > 0.1f ? grid.PowerConsumed / grid.PowerGenerated : (grid.PowerConsumed > 0 ? 1f : 0f);
@@ -914,6 +948,18 @@ namespace VoxelEngine.GridSystem
             if (gravity.Gees <= 0.20f || gravity.SurfaceFraction <= 0.15f) return new Color(0.45f, 0.74f, 0.90f);
             if (gravity.Gees <= 0.70f || gravity.SurfaceFraction <= 0.50f) return new Color(0.56f, 0.82f, 0.72f);
             return GravityLcdInk;
+        }
+
+        private static void UpdateWarpReadout(GridEntity grid)
+        {
+            if (_warpModule == null || _warpLabel == null) return;
+            string line = "";
+            if (grid != null && VoxelEngine.Navigation.NavFlightAutopilot.ActiveGrid == grid)
+                line = VoxelEngine.Navigation.NavFlightAutopilot.WarpLegLine;
+            if (string.IsNullOrEmpty(line))
+                line = VoxelEngine.FX.WarpFx.ArrivalLineFor(grid);
+            _warpModule.style.display = string.IsNullOrEmpty(line) ? DisplayStyle.None : DisplayStyle.Flex;
+            if (!string.IsNullOrEmpty(line)) _warpLabel.text = line;
         }
 
         private static void UpdateTrajectoryReadout(GridEntity grid)

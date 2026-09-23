@@ -16041,7 +16041,7 @@ AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
                 "• Item: GItem_WarpDrive (Grid Blocks)\n" +
                 "• Recipe: 40 Steel Plate + 12 Advanced Circuit + 8 Uranium Ore + 6 Lithium @ Assembler\n" +
                 "• Research: Warp Drive (tier 7) after Shipbuilding\n\n" +
-                "In-game: place it on a ship, fly to space, press [N] in the cockpit to charge (45 s, 45 kW), then press [N] again to jump to the aimed planet — or 2500 km straight ahead. It is the ONLY warp in the game; everything else is real flight.",
+                "In-game: place it on a ship, fly to space, press [U] in the cockpit to charge (45 s, 45 kW), then press [U] again to jump to the aimed planet — or 2500 km straight ahead. It is the ONLY warp in the game; everything else is real flight.",
                 "OK");
         }
 
