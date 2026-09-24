@@ -459,7 +459,7 @@ namespace VoxelEngine.Navigation
 
             if (_drive.IsReady && angle <= fireAngle && _legPooledWh >= _legNeedWh - 0.01f)
             {
-                if (_drive.TryWarp())
+                if (_drive.TryWarp(skipConfirm: true))
                 {
                     State = NavFlightState.Cruise;
                     _warpFails = 0;

@@ -535,6 +535,11 @@ namespace VoxelEngine.Cosmos
             {
                 if (root == null) continue;
                 root.position += delta;
+                // A live rigidbody will snap the transform back next physics tick
+                // unless its physics pose is shifted too — that is how a warp can
+                // leave the hull behind the seated camera.
+                var rb = root.GetComponent<Rigidbody>();
+                if (rb != null) rb.position += delta;
             }
 
             // Rigidbody roots must keep physics in sync with their transforms.
@@ -546,6 +551,7 @@ namespace VoxelEngine.Cosmos
                 // Skip objects already shifted through a registered ancestor.
                 if (IsUnderRegisteredRoot(t)) continue;
                 t.position += delta;
+                rb.position += delta;
             }
 
             // CharacterControllers (player) — already moved with their root, but a

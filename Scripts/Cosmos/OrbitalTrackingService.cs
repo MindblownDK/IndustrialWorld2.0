@@ -308,6 +308,38 @@ namespace VoxelEngine.Cosmos
                     double.NaN, double.NaN, double.NaN,
                     default, 0d));
             }
+
+            // Powered beacons broadcast even when the hull has never been named.
+            // A beacon is the opt-in contact; unnamed scrap stays off the map.
+            var beacons = GridBeacon.All;
+            for (int i = 0; i < beacons.Count; i++)
+            {
+                var beacon = beacons[i];
+                if (beacon == null || !beacon.IsActive) continue;
+                var grid = beacon.Grid;
+                if (grid == null || grid.BlockCount == 0) continue;
+
+                bool already = false;
+                for (int e = 0; e < _entries.Count; e++)
+                    if (_entries[e].Grid == grid) { already = true; break; }
+                if (already) continue;
+
+                Vector3 scenePos = grid.Body != null ? grid.Body.worldCenterOfMass : grid.transform.position;
+                double3 cosmicKm = origin != null ? origin.GetCosmicKm(scenePos) : default;
+
+                SolveCraft(grid, scenePos, out MapMotionState motion, out BodyInstance parent,
+                    out string parentName, out double altKm, out double apoKm, out double periKm,
+                    out double period, out double incl, out double speedMs);
+
+                string name = !string.IsNullOrWhiteSpace(grid.name) && grid.name != "Grid"
+                    ? grid.name
+                    : "BEACON";
+                _entries.Add(new MapEntry(name, MapEntryKind.Vessel, motion, cosmicKm,
+                    parent, parentName, altKm, apoKm, periKm, period, incl, speedMs,
+                    0d, grid, true,
+                    double.NaN, double.NaN, double.NaN,
+                    default, 0d));
+            }
         }
 
         /// <summary>

@@ -5,9 +5,9 @@
 // takes the accept wedge, Esc / right-click aborts. Used for partial warp jumps
 // (and anything else that cannot decide alone). One dialog at a time.
 //
-// 12.28.2-dev: the previous card sat under a locked cockpit cursor, so neither
-// button could be reached. The wheel PushBlock's the UI so look frees, and the
-// wedges read from mouse position the same way the hammer ring does.
+// 12.29.0-dev: dark wedges, white labels (no cream/green wash). Hover is the
+// mouse's side of screen centre, or A/D / arrows — never the inner disc as JUMP.
+// Enter only fires the highlighted wedge; Esc / right-click abort.
 
 using System;
 using UnityEngine;
@@ -97,7 +97,7 @@ namespace VoxelEngine.UI
             disc.style.height = 290;
             disc.style.alignItems = Align.Center;
             disc.style.justifyContent = Justify.Center;
-            disc.style.backgroundColor = new StyleColor(new Color(0.025f, 0.035f, 0.055f, 0.99f));
+            disc.style.backgroundColor = new StyleColor(new Color(0.04f, 0.05f, 0.07f, 1f));
             disc.style.paddingLeft = 18;
             disc.style.paddingRight = 18;
             disc.pickingMode = PickingMode.Ignore;
@@ -109,7 +109,7 @@ namespace VoxelEngine.UI
             _titleLabel.style.fontSize = 16;
             _titleLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
             _titleLabel.style.letterSpacing = 1.6f;
-            _titleLabel.style.color = new StyleColor(UITheme.AccentCyan);
+            _titleLabel.style.color = new StyleColor(Color.white);
             _titleLabel.style.unityTextAlign = TextAnchor.MiddleCenter;
             _titleLabel.style.whiteSpace = WhiteSpace.Normal;
             _titleLabel.pickingMode = PickingMode.Ignore;
@@ -118,13 +118,13 @@ namespace VoxelEngine.UI
             _detailLabel = new Label();
             _detailLabel.style.marginTop = 8;
             _detailLabel.style.fontSize = 11;
-            _detailLabel.style.color = new StyleColor(UITheme.TextPrimary);
+            _detailLabel.style.color = new StyleColor(new Color(0.85f, 0.88f, 0.92f));
             _detailLabel.style.unityTextAlign = TextAnchor.MiddleCenter;
             _detailLabel.style.whiteSpace = WhiteSpace.Normal;
             _detailLabel.pickingMode = PickingMode.Ignore;
             disc.Add(_detailLabel);
 
-            var hint = new Label("point a wedge  ·  click / Enter  ·  Esc abort");
+            var hint = new Label("point or A / D  ·  click / Enter  ·  Esc abort");
             hint.style.marginTop = 10;
             hint.style.fontSize = 9;
             hint.style.color = new StyleColor(UITheme.TextMuted);
@@ -137,20 +137,14 @@ namespace VoxelEngine.UI
             _wheel.Add(_acceptLabel);
             _wheel.Add(_abortLabel);
 
-            _overlay.RegisterCallback<PointerMoveEvent>(evt =>
-            {
-                if (!IsOpen) return;
-                SetHovered(SegmentAt(_wheel.WorldToLocal(evt.position)));
-            });
             _overlay.RegisterCallback<PointerDownEvent>(evt =>
             {
                 if (!IsOpen) return;
                 evt.StopPropagation();
                 if (evt.button == 1) { Hide(); return; }
                 if (evt.button != 0) return;
-                int seg = SegmentAt(_wheel.WorldToLocal(evt.position));
-                if (seg == 1) Hide();
-                else if (seg == 0 || seg < 0) Accept();
+                if (_hovered == 1) Hide();
+                else if (_hovered == 0) Accept();
             });
 
             _tick = _overlay.schedule.Execute(Tick).Every(16);
@@ -180,7 +174,7 @@ namespace VoxelEngine.UI
             if (_acceptLabel != null) _acceptLabel.text = string.IsNullOrEmpty(acceptText) ? "JUMP" : acceptText.ToUpperInvariant();
             if (_abortLabel != null) _abortLabel.text = string.IsNullOrEmpty(abortText) ? "ABORT" : abortText.ToUpperInvariant();
             _onAccept = onAccept;
-            _hovered = 0;
+            _hovered = -1;
             if (!IsOpen && !_pushedBlock)
             {
                 UIState.PushBlock();
@@ -223,6 +217,8 @@ namespace VoxelEngine.UI
         private static void Tick()
         {
             if (!IsOpen) return;
+            PollMouseHover();
+            PollSteerKeys();
 
             if (GameSettings.WasPressed(InputAction.Pause))
             {
@@ -233,8 +229,37 @@ namespace VoxelEngine.UI
             if (ConfirmKeyPressed())
             {
                 if (_hovered == 1) Hide();
-                else Accept();
+                else if (_hovered == 0) Accept();
             }
+        }
+
+        private static void PollMouseHover()
+        {
+            Vector2 mouse;
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
+            var m = Mouse.current;
+            mouse = m != null ? m.position.ReadValue() : new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
+#else
+            mouse = Input.mousePosition;
+#endif
+            float dx = mouse.x - Screen.width * 0.5f;
+            if (dx > 28f) SetHovered(0);
+            else if (dx < -28f) SetHovered(1);
+        }
+
+        private static void PollSteerKeys()
+        {
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
+            var kb = Keyboard.current;
+            if (kb != null)
+            {
+                if (kb.aKey.wasPressedThisFrame || kb.leftArrowKey.wasPressedThisFrame) SetHovered(1);
+                if (kb.dKey.wasPressedThisFrame || kb.rightArrowKey.wasPressedThisFrame) SetHovered(0);
+                return;
+            }
+#endif
+            if (Input.GetKeyDown(KeyCode.A) || Input.GetKeyDown(KeyCode.LeftArrow)) SetHovered(1);
+            if (Input.GetKeyDown(KeyCode.D) || Input.GetKeyDown(KeyCode.RightArrow)) SetHovered(0);
         }
 
         private static bool ConfirmKeyPressed()
@@ -274,13 +299,13 @@ namespace VoxelEngine.UI
             if (_acceptLabel != null)
             {
                 bool on = _hovered == 0;
-                _acceptLabel.style.color = new StyleColor(on ? UITheme.AccentGreen : Color.white);
+                _acceptLabel.style.color = new StyleColor(Color.white);
                 _acceptLabel.style.scale = new StyleScale(new Scale(on ? new Vector3(1.06f, 1.06f, 1f) : Vector3.one));
             }
             if (_abortLabel != null)
             {
                 bool on = _hovered == 1;
-                _abortLabel.style.color = new StyleColor(on ? UITheme.AccentRed : Color.white);
+                _abortLabel.style.color = new StyleColor(Color.white);
                 _abortLabel.style.scale = new StyleScale(new Scale(on ? new Vector3(1.06f, 1.06f, 1f) : Vector3.one));
             }
         }
@@ -300,10 +325,10 @@ namespace VoxelEngine.UI
 
             var pixels = new Color32[RingSize * RingSize];
             float center = (RingSize - 1) * 0.5f;
-            Color32 cream = new Color32(245, 242, 232, 245);
-            Color32 acceptHot = new Color32(55, 190, 105, 255);
-            Color32 abortHot = new Color32(215, 55, 45, 255);
-            Color32 rim = new Color32(180, 175, 160, 180);
+            Color32 idle = new Color32(36, 42, 52, 255);
+            Color32 acceptHot = new Color32(32, 110, 62, 255);
+            Color32 abortHot = new Color32(140, 38, 34, 255);
+            Color32 rim = new Color32(210, 214, 220, 220);
 
             for (int y = 0; y < RingSize; y++)
             {
@@ -319,7 +344,7 @@ namespace VoxelEngine.UI
                     bool hovered = seg == _hovered;
                     Color32 color = hovered
                         ? (seg == 0 ? acceptHot : abortHot)
-                        : cream;
+                        : idle;
                     float edge = Mathf.Min(radius - InnerR, OuterR - radius);
                     float alphaFade = Mathf.Clamp01(edge / 8f);
                     color.a = (byte)Mathf.RoundToInt(255 * alphaFade * (hovered ? 1f : 0.96f));

@@ -1,9 +1,37 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.28.2-dev`
+**Current Version:** `12.29.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.29.0-dev] Confirm Every Jump, Warp Leave-Behind, Beacon Map, Real Dampeners
+
+**Type:** MINOR - seated warp always asks before the hop (full bank or partial); autopilot still fires without the wheel. The jump no longer leaves the hull/pilot behind: world origin shift moves each registered rigidbody with its transform, and arrival snaps the grid body and seated pilot onto the cockpit. The confirm wheel is dark wedges with white labels; hover is left/right of screen centre (or A/D / arrows), so abort is actually selectable. A powered Grid Beacon paints the hull on the orbital map even when unnamed. Inertia dampeners brake with the grid's thrusters and gyros instead of zeroing velocity. No recipe or setup changes.
+
+**GitHub title:** `[12.29.0-dev] Confirm every jump, warp leave-behind, beacon map, real dampeners`
+
+#### Confirm before warp
+
+Firing from the seat always opens the wheel (Jump / Abort, or Jump partway when the bank is short). Enter only takes the highlighted wedge; Esc / right-click abort. Autopilot warp legs pass skipConfirm so cruise does not stall on the dialog. Cockpit warp input is ignored while the wheel is open.
+
+#### Warp leave-behind
+
+SpaceOrigin.ShiftWorld now adds the same delta to each registered root's Rigidbody.position. After TeleportCosmic, CommitJump (and the partial hop) snap Grid.Body.position to the transform and the seated Pilot onto the cockpit, then zero residual velocity.
+
+#### Confirm wheel
+
+Wedges are charcoal; hover is a dark green / dark red. Labels stay white. Hover follows mouse X versus screen centre (dead zone in the middle) plus A/D and arrows. Default hover is none, so Enter does not fire until a wedge is chosen. Click uses the hovered wedge, not the inner disc.
+
+#### Beacon on the map
+
+GridBeacon keeps a live All list. OrbitalTrackingService adds a powered unnamed beacon hull as an in-range contact (named GridIdentity still wins; unnamed scrap without a beacon stays off).
+
+#### Real dampeners
+
+Seated and autopilot hold call ApplyAutonomousDampenerThrust (thrusters opposing velocity) and gyro torque against spin. Unmanned grids still preserve the gravity axis unless hover-hold. No linearVelocity / Acceleration-30 snap.
+
+**Manual steps:** none - code-only. Verify in Unity: sit in a charged warp drive, press the warp key (wheel, point right or D then Enter/click to jump, left or A then Enter/click or Esc to abort); fire a short-banked hop the same way; after a jump the hull and you arrive together; F3 warp legs still auto-fire with no wheel; a powered beacon on an unnamed hull appears on the orbital map; dampeners on with thrusters fitted bleed speed instead of a hard stop, and a ship with no gyros keeps spinning.
 
 ### [12.28.2-dev] Partial-Jump Wheel - Point and Click, No Mouse Lock
 

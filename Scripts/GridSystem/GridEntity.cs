@@ -1481,7 +1481,11 @@ namespace VoxelEngine.GridSystem
 
             Vector3 velocity = _rb.linearVelocity;
             Vector3 gravity = CurrentGravityAcceleration();
-            bool preserveGravityAxis = gravity.sqrMagnitude > 0.0001f && !ShouldDampenerHoldHover();
+            // Unmanned ships fall. A seated/autopilot hold fights the full velocity
+            // with thrusters, including the gravity axis — if they have no downward
+            // thrusters they cannot hover, which is the honest answer.
+            bool preserveGravityAxis = gravity.sqrMagnitude > 0.0001f
+                && !IsControlled && !AutonomousFlightActive && !ShouldDampenerHoldHover();
             Vector3 brakeVelocity = preserveGravityAxis
                 ? Vector3.ProjectOnPlane(velocity, gravity.normalized)
                 : velocity;
@@ -1532,52 +1536,27 @@ namespace VoxelEngine.GridSystem
             bool pilotHold = (IsControlled || AutonomousFlightActive) && !isThrusting;
             PilotDampenerHoldActive = pilotHold;
 
-            Vector3 vel = _rb.linearVelocity;
-            if (!isThrusting && vel.sqrMagnitude > 0.0001f)
-            {
-                float massFactor = 10000f / Mathf.Max(10000f, _rb.mass);
-                // Piloted hold is intentionally decisive: it must actually settle at
-                // velocity zero rather than preserving the vertical gravity component.
-                float brake = pilotHold ? 30f : autonomous ? 12f : 2.5f * massFactor;
-                bool iceRecovery = IsRecoveringFromIceContact();
-                if (iceRecovery && !pilotHold) brake *= IceGridBrakeMultiplier;
+            if (HasStationaryLock()) return;
 
-                Vector3 gravity = CurrentGravityAcceleration();
-                Vector3 dampedVelocity = vel;
-                bool hasGravity = gravity.sqrMagnitude > 0.0001f;
-                bool hoverHold = ShouldDampenerHoldHover();
-                bool fullStop = pilotHold || hoverHold;
+            // Unmanned idle already ran ApplyAutonomousDampenerThrust in UpdateThrust.
+            // Seated / autopilot hold must use the same thruster path — they used to
+            // cheat with a velocity snap.
+            if (!isThrusting && (IsControlled || AutonomousFlightActive))
+                ApplyAutonomousDampenerThrust();
 
-                // Preserve a natural gravity-axis fall only for unattended/non-hover
-                // grids. The cockpit hold requested by the pilot cancels all axes.
-                if (hasGravity && !fullStop && (iceRecovery || !hoverHold))
-                    dampedVelocity = Vector3.ProjectOnPlane(vel, gravity.normalized);
-
-                float speed = dampedVelocity.magnitude;
-                float settle = pilotHold ? 1f : Mathf.Clamp01(speed / 0.5f);
-                if (speed > 0.0001f)
-                    _rb.AddForce(-dampedVelocity * brake * settle, ForceMode.Acceleration);
-
-                // Snap the final residual so the held craft genuinely reads 0.0 m/s.
-                float snapThreshold = pilotHold ? 0.08f : 0.03f;
-                if (speed < snapThreshold)
-                {
-                    if (fullStop && !iceRecovery)
-                        _rb.linearVelocity = Vector3.zero;
-                    else if (hasGravity)
-                        _rb.linearVelocity = Vector3.Project(vel, gravity.normalized);
-                    else
-                        _rb.linearVelocity = Vector3.zero;
-                }
-            }
-
+            // Angular: gyros oppose spin. Never lerp angular velocity to zero —
+            // a ship with no gyros keeps rotating.
             Vector3 angularVelocity = _rb.angularVelocity;
             if (!isThrusting && angularVelocity.sqrMagnitude > 0.0001f)
             {
-                float angularBrake = _touchingIce && !pilotHold ? 0.75f : pilotHold ? 18f : autonomous ? 10f : 4f;
-                _rb.angularVelocity = Vector3.Lerp(angularVelocity, Vector3.zero, angularBrake * Time.fixedDeltaTime);
-                if ((pilotHold || autonomous) && _rb.angularVelocity.sqrMagnitude < 0.0004f)
-                    _rb.angularVelocity = Vector3.zero;
+                float gyroTorque = 0f;
+                foreach (var block in AllBlocks)
+                    if (block is GridGyroscope gy && gy.Enabled) gyroTorque += gy.torquePower;
+                if (gyroTorque > 0f)
+                {
+                    float massFactor = 10000f / Mathf.Max(10000f, _rb.mass);
+                    _rb.AddTorque(-angularVelocity * gyroTorque * 0.00015f * massFactor, ForceMode.Acceleration);
+                }
             }
         }
 

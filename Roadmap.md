@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.28.2-dev`
-**Roadmap Version:** `12.28.2-dev`
+**Current Version:** `12.29.0-dev`
+**Roadmap Version:** `12.29.0-dev`
 **Date:** 2026-09-24
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 12.29.0-dev - Confirm Every Jump, Leave-Behind, Beacon Map, Real Dampeners
+- **Always confirm** (`GridWarpDrive.TryWarp`): seated full/partial hops open the wheel; autopilot `skipConfirm`. Arrival snaps `Body` + seated pilot; `ShiftWorld` moves `rb.position`.
+- **Wheel / map / dampeners:** dark wedges, mouse vs screen centre + A/D; powered `GridBeacon` on the orbital map; thruster/gyro dampeners (no velocity snap).
+- **Preserved:** pooling, mass penalty, partial-jump maths, F3 fly-to. No setup changes.
+
 ### 12.28.2-dev - Partial-Jump Wheel
 - **Cursor frees** (`ConfirmDialogHud`): `UIState.PushBlock` on show, two-wedge JUMP / ABORT ring, click / Enter / Esc.
 - **Preserved:** partial-jump maths, pooling, mass penalty. No setup changes.
@@ -47,10 +52,6 @@
 - **Fixed:** F3 one action per frame; orbital map slots persist; infinite health saved in settings.
 - **Partial jumps:** short bank offers distance / percent / remainder; Accept flies the part the bank buys.
 - **Preserved:** warp FX, pooling, fly-to. No setup changes.
-
-### 12.26.0-dev - Autopilot Take-Over, F3, God-Mode, Warp Screen
-- **Autopilot:** requires an AutoRunPilot; stick disengages; F3 hotkey (was P, map-only). Infinite health testing toggle.
-- **Warp screen:** thin speed lines, subtler edge glow. No setup changes.
 
 ### Era Transition Feel
 

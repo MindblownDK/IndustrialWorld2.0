@@ -143,6 +143,7 @@ namespace VoxelEngine.GridSystem
         private void HandleWarpDriveInput()
         {
             if (Grid == null) return;
+            if (VoxelEngine.UI.ConfirmDialogHud.IsOpen) return;
             GridWarpDrive drive = null;
             foreach (var block in Grid.AllBlocks)
             {

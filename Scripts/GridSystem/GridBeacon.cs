@@ -5,6 +5,7 @@
 //
 // The beam is a stretched emissive cylinder that fades with distance.
 
+using System.Collections.Generic;
 using UnityEngine;
 using VoxelEngine.Materials;
 
@@ -12,6 +13,9 @@ namespace VoxelEngine.GridSystem
 {
     public class GridBeacon : GridBlock
     {
+        private static readonly List<GridBeacon> s_all = new();
+        /// <summary>Live beacons, for the orbital map. Powered ones paint as contacts.</summary>
+        public static IReadOnlyList<GridBeacon> All => s_all;
         [Header("Beacon")]
         [Tooltip("Power consumed while active (W).")]
         public float powerDrawWatts = 10f;
@@ -39,6 +43,20 @@ namespace VoxelEngine.GridSystem
             blockName = "Beacon";
             CreateBeam();
             IsActive = true;
+            Register();
+        }
+
+        private void OnEnable() => Register();
+        private void OnDisable() => Unregister();
+
+        private void Register()
+        {
+            if (!s_all.Contains(this)) s_all.Add(this);
+        }
+
+        private void Unregister()
+        {
+            s_all.Remove(this);
         }
 
         private void Update()
@@ -121,6 +139,7 @@ namespace VoxelEngine.GridSystem
 
         public override void OnRemoved()
         {
+            Unregister();
             base.OnRemoved();
             if (_beam != null) Destroy(_beam);
             if (_beaconLight != null) Destroy(_beaconLight);

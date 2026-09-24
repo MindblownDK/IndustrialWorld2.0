@@ -167,8 +167,10 @@ namespace VoxelEngine.GridSystem
         /// <summary>
         /// Execute the warp. Returns true when a jump happened.
         /// </summary>
-        public bool TryWarp()
+        public bool TryWarp(bool skipConfirm = false)
         {
+            if (VoxelEngine.UI.ConfirmDialogHud.IsOpen && !skipConfirm)
+                return false;
             if (VoxelEngine.FX.WarpFx.IsPending(this))
             {
                 BuildFeedbackHud.Show("Warp Drive", "Jump imminent…", null, new Color(0.55f, 0.85f, 1f));
@@ -336,12 +338,43 @@ namespace VoxelEngine.GridSystem
                     massHint, null, new Color(1f, 0.7f, 0.25f));
                 return false;
             }
-            if (Grid != null) TryConsumePooledWh(Grid, costWh);
+            string destLabel = targetPlanet != null
+                ? $"{targetPlanet.DisplayName} orbit ({arrivalAltitudeKm:0} km altitude)"
+                : targetSingularity != null
+                    ? $"{targetSingularity.DisplayName} standoff"
+                    : locatorArrivalName != null
+                        ? $"Locator: {locatorArrivalName}"
+                        : $"{distKm:0} km straight ahead";
+
+            if (!skipConfirm)
+            {
+                if (VoxelEngine.UI.ConfirmDialogHud.IsOpen) return false;
+                var dest = destination;
+                var planet = targetPlanet;
+                var locBody = locatorBody;
+                VoxelEngine.UI.ConfirmDialogHud.Show("Jump?",
+                    $"Jump {distKm:0} km to {destLabel} — cost {costWh / 1000f:0.0} kWh (banked {pooled / 1000f:0.0}).",
+                    "Jump", "Abort",
+                    () => { if (this != null) CommitJump(dest, planet, locBody, distKm, originName, destLabel, costWh); });
+                return false;
+            }
+
+            return CommitJump(destination, targetPlanet, locatorBody, distKm, originName, destLabel, costWh);
+        }
+
+        private bool CommitJump(double3 destination, BodyInstance targetPlanet, BodyInstance locatorBody,
+            double distKm, string originName, string destLabel, float costWh)
+        {
+            if (!IsReady) return false;
+            var origin = SpaceOrigin.Instance;
+            var registry = CosmicRegistry.Instance;
+            if (origin == null || registry == null) return false;
+            if (Grid != null)
+            {
+                if (!TryConsumePooledWh(Grid, costWh)) return false;
+            }
             else warpStoredWh = Mathf.Max(0f, warpStoredWh - costWh);
 
-            // ── Execute (async): the FX pre-phase plays first, then the teleport ──
-            // State resets NOW (at initiation) so neither the autopilot gate nor a
-            // second keypress can double-fire while the bubble inflates.
             IsCharging = false;
             Charge01 = 0f;
             Cooldown01 = 1f;
@@ -352,25 +385,22 @@ namespace VoxelEngine.GridSystem
                     ? ResolveSceneBody(registry, targetPlanet != null ? targetPlanet : locatorBody)
                     : null);
 
-                // Arrive co-moving with the destination frame: zero scene velocity so the
-                // grid hangs relative to the target (SE-style orbit arrival).
                 if (Grid != null && Grid.Body != null)
                 {
+                    Grid.Body.position = Grid.transform.position;
                     Grid.Body.linearVelocity = Vector3.zero;
                     Grid.Body.angularVelocity = Vector3.zero;
                 }
-                var pilot = Grid != null && Grid.ActiveCockpit != null ? Grid.ActiveCockpit.Pilot : null;
-                if (pilot != null) pilot.ResetVelocity();
+                var cockpit = Grid != null ? Grid.ActiveCockpit : null;
+                var pilot = cockpit != null ? cockpit.Pilot : null;
+                if (pilot != null)
+                {
+                    pilot.transform.position = cockpit.transform.position;
+                    pilot.ResetVelocity();
+                }
 
-                string targetName = targetPlanet != null
-                    ? $"{targetPlanet.DisplayName} orbit ({arrivalAltitudeKm:0} km altitude)"
-                    : targetSingularity != null
-                        ? $"{targetSingularity.DisplayName} standoff ({(int)targetSingularity.standoffArrivalKm:0} km from horizon)"
-                        : locatorArrivalName != null
-                            ? $"Locator: {locatorArrivalName}"
-                            : $"{distKm:0} km straight ahead";
                 string whereAmI = "";
-                if (targetPlanet == null && targetSingularity == null && locatorArrivalName == null)
+                if (targetPlanet == null && locatorBody == null)
                 {
                     double3 nowAt = origin.GetCosmicKm(transform.position);
                     BodyInstance near = null;
@@ -384,9 +414,9 @@ namespace VoxelEngine.GridSystem
                     }
                     if (near != null) whereAmI = $" - nearest {near.DisplayName} {nearD:0} km";
                 }
-                BuildFeedbackHud.Show("Warp Jump", $"Arrived {targetName} - jumped {distKm:0} km", null, new Color(0.55f, 0.85f, 1f));
-                VoxelEngine.FX.WarpFx.ReportArrival(Grid, $"ARRIVED {targetName} - {originName} TO HERE - {distKm:0} km{whereAmI}");
-                Debug.Log($"[GridWarpDrive] Warp to {targetName} at {destination} km from {originName}.");
+                BuildFeedbackHud.Show("Warp Jump", $"Arrived {destLabel} - jumped {distKm:0} km", null, new Color(0.55f, 0.85f, 1f));
+                VoxelEngine.FX.WarpFx.ReportArrival(Grid, $"ARRIVED {destLabel} - {originName} TO HERE - {distKm:0} km{whereAmI}");
+                Debug.Log($"[GridWarpDrive] Warp to {destLabel} at {destination} km from {originName}.");
             });
             return true;
         }
@@ -431,11 +461,17 @@ namespace VoxelEngine.GridSystem
                 origin.SetFrame(null);
                 if (Grid != null && Grid.Body != null)
                 {
+                    Grid.Body.position = Grid.transform.position;
                     Grid.Body.linearVelocity = Vector3.zero;
                     Grid.Body.angularVelocity = Vector3.zero;
                 }
-                var pilot = Grid != null && Grid.ActiveCockpit != null ? Grid.ActiveCockpit.Pilot : null;
-                if (pilot != null) pilot.ResetVelocity();
+                var cockpit = Grid != null ? Grid.ActiveCockpit : null;
+                var pilot = cockpit != null ? cockpit.Pilot : null;
+                if (pilot != null)
+                {
+                    pilot.transform.position = cockpit.transform.position;
+                    pilot.ResetVelocity();
+                }
 
                 string whereAmI = "";
                 {
