@@ -1,9 +1,29 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.29.0-dev`
+**Current Version:** `12.30.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.30.0-dev] Jump Confirm Slider, Input-System Fix, Seated Autopilot, Seated Save
+
+**Type:** MINOR - the jump confirm actually stays up (it was dying every tick on UnityEngine.Input under Input System only). The wheel now has a drive-count slider: Ctrl frees the mouse to drag it, the last choice is remembered (and saved on the grid) until you change it. F3 while seated flies the hull you are in instead of looking 60 m from a parked pawn. Saving while seated no longer deletes the ship: the player is unparented for the snapshot so the hull is written as its own grid. No recipe or setup changes.
+
+**GitHub title:** `[12.30.0-dev] Jump confirm slider, seated autopilot, seated save`
+
+#### Confirm wheel
+
+ConfirmDialogHud never calls UnityEngine.Input when the Input System package is the handler (that InvalidOperationException was aborting Tick, so the ring never held). Look stays locked until Ctrl; then the mouse is free for the DRIVES slider (1..N enabled drives). A/D still pick JUMP / ABORT. The selection is GridEntity.WarpDrivesToUse (0 = all), restored on load, and the same slider sits on the warp drive panel.
+
+#### Autopilot from the seat
+
+F3 was measuring distance from the disabled player pawn (left at the last foot position). After you flew, that was further than 60 m. Seated F3 now engages ActiveControlGrid directly.
+
+#### Seated save
+
+SaveAll unparents the seated pawn, writes the grid, then reparents. A nested pawn made the hull look like player hierarchy and it did not come back on rejoin.
+
+**Manual steps:** none - code-only. Verify in Unity: press warp (wheel stays up, no Input exception); two-plus drives, Ctrl, drag the slider, jump, reopen (same count); F3 from the seat with a nav target (engages, no "no ship in reach"); sit in a ship, save/quit/rejoin (hull is there).
 
 ### [12.29.0-dev] Confirm Every Jump, Warp Leave-Behind, Beacon Map, Real Dampeners
 

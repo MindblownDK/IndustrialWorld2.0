@@ -129,9 +129,22 @@ namespace VoxelEngine.Navigation
 
         public static void TryEngageNearest()
         {
+            // Seated: the hull you are in is the ship, even if the disabled player
+            // pawn was left at the last foot position (more than EngageReachM away).
+            var seated = GridCockpit.ActiveControlGrid;
+            if (seated != null && seated.Body != null)
+            {
+                var seatedPilot = For(seated);
+                if (seatedPilot == null) { Say("Autopilot failed to attach to that ship.", Warn); return; }
+                if (!seatedPilot.TryEngage(out string seatedReason)) Say(seatedReason, Warn);
+                return;
+            }
+
             var player = Object.FindAnyObjectByType<PlayerController>();
             if (player == null) { Say("No pilot found.", Warn); return; }
             Vector3 at = player.transform.position;
+            var seat = GridCockpit.ActiveControlSeat;
+            if (seat != null) at = seat.transform.position;
             GridEntity nearest = null;
             float best = EngageReachM;
             var grids = Object.FindObjectsByType<GridEntity>(FindObjectsInactive.Exclude);

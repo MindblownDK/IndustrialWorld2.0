@@ -174,6 +174,18 @@ namespace VoxelEngine.Persistence
             }
 
             string path = WorldStatePath();
+            GridCockpit seatedSeat = GridCockpit.ActivePilotSeat;
+            Player.PlayerController seatedPilot = seatedSeat != null ? seatedSeat.Pilot : null;
+            Vector3 seatedWorld = seatedSeat != null ? seatedSeat.transform.position : default;
+            if (seatedPilot != null)
+            {
+                // Player is parented to the cockpit while seated. Leaving them nested
+                // during save made GetComponentInChildren on the hull pick up the pawn
+                // and, on quit, destroyed the grid with the player — so a seated logout
+                // came back with no ship. Unparent for the snapshot, then put them back.
+                seatedPilot.transform.SetParent(null, true);
+                seatedPilot.transform.position = seatedWorld;
+            }
             try
             {
                 var save = new SaveData();
@@ -221,6 +233,19 @@ namespace VoxelEngine.Persistence
                 catch (Exception ex2) { Debug.LogWarning("[WorldState] Offline save: " + ex2.Message); }
             }
             catch (Exception ex) { Debug.LogError("[WorldState] Save failed: " + ex.Message); }
+            finally
+            {
+                if (seatedPilot != null && seatedSeat != null && seatedSeat.Pilot == seatedPilot)
+                {
+                    try
+                    {
+                        seatedPilot.transform.SetParent(seatedSeat.transform, true);
+                        seatedPilot.transform.position = seatedSeat.transform.position;
+                        seatedPilot.transform.localRotation = Quaternion.identity;
+                    }
+                    catch { /* application is quitting */ }
+                }
+            }
         }
 
         private static void WriteAutosaveSnapshot(string worldStatePath)
@@ -1462,7 +1487,8 @@ namespace VoxelEngine.Persistence
                     dampenersOn = grid.DampenersOn,
                     wheelParkingBrake = grid.WheelControlHeld,
                     hydrogenStored = grid.HydrogenStored,
-                    oxygenStored = grid.OxygenStored
+                    oxygenStored = grid.OxygenStored,
+                    warpDrivesToUse = grid.WarpDrivesToUse
                 };
 
                 // Additive 9.34.0: the ship's route book. A recorded haul run is player work,
@@ -3656,6 +3682,8 @@ namespace VoxelEngine.Persistence
             public bool wheelParkingBrake;
             public float hydrogenStored;
             public float oxygenStored;
+            // Additive 12.30.0: how many warp drives the last jump spent. 0 = all.
+            public int warpDrivesToUse;
             // Additive 6.81.0: logical shaft-to-shaft belt links. Old saves omit
             // the collection and continue to restore with no belts.
             public List<SavedMechanicalBelt> mechanicalBelts = new();

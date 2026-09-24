@@ -86,6 +86,13 @@ namespace VoxelEngine.GridSystem
 
             if (GameSettings.WasPressed(InputAction.ExitCockpit)) { Exit(); return; }
 
+            // Confirm wheel owns the cursor (Ctrl frees it for the drive slider).
+            if (VoxelEngine.UI.ConfirmDialogHud.IsOpen)
+            {
+                Grid?.SetFlightInput(Vector3.zero, 0, 0, 0);
+                return;
+            }
+
             // While a full UI panel (terminal/inventory) is open, release control + cursor.
             if (VoxelEngine.UI.UIState.IsBlocking || Grid == null)
             {

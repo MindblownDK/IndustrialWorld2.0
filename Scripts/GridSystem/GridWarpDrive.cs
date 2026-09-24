@@ -27,6 +27,7 @@
 // (structure + cargo — Grid.TotalMass already includes both) pay sqrt(mass / rated),
 // capped at maxMassFactor. Lighter than rated is not a bonus. One full drive still
 // equals one (shorter) hop, because price and hop share the same factor.
+using System.Collections.Generic;
 using Unity.Mathematics;
 using UnityEngine;
 using VoxelEngine.Cosmos;
@@ -315,29 +316,6 @@ namespace VoxelEngine.GridSystem
             float costWh = (float)(distKm * rate);
             float pooled = Grid != null ? PooledStoredWh(Grid) : warpStoredWh;
             float massFactor = Grid != null ? MassFactor(Grid) : 1f;
-            if (pooled < costWh - 0.01f)
-            {
-                double affordableKm = rate > 0f ? pooled / rate : 0d;
-                if (affordableKm >= 100d && affordableKm < distKm - 1d
-                    && !VoxelEngine.UI.ConfirmDialogHud.IsOpen)
-                {
-                    double pct = affordableKm / distKm * 100d;
-                    double leftKm = distKm - affordableKm;
-                    VoxelEngine.UI.ConfirmDialogHud.Show("Partial jump?",
-                        $"Banked {pooled / 1000f:0.0} of {costWh / 1000f:0.0} kWh for {distKm:0} km — " +
-                        $"jump {pct:0}% ({affordableKm:0} km), {100d - pct:0}% ({leftKm:0} km) short?",
-                        "Jump partway", "Abort",
-                        () => { if (this != null) TryWarpPartial(affordableKm, distKm, originName); });
-                    return false;
-                }
-                string massHint = massFactor > 1.02f
-                    ? " Recharge, fit more drives, or dump cargo."
-                    : " Recharge, or fit more drives.";
-                BuildFeedbackHud.Show("Warp Drive",
-                    $"Need {costWh / 1000f:0.0} kWh for {distKm:0} km — banked {pooled / 1000f:0.0} kWh." +
-                    massHint, null, new Color(1f, 0.7f, 0.25f));
-                return false;
-            }
             string destLabel = targetPlanet != null
                 ? $"{targetPlanet.DisplayName} orbit ({arrivalAltitudeKm:0} km altitude)"
                 : targetSingularity != null
@@ -346,19 +324,71 @@ namespace VoxelEngine.GridSystem
                         ? $"Locator: {locatorArrivalName}"
                         : $"{distKm:0} km straight ahead";
 
+            bool shortBank = pooled < costWh - 0.01f;
+            double affordableKm = rate > 0f ? pooled / rate : 0d;
+            if (shortBank && (affordableKm < 100d || affordableKm >= distKm - 1d))
+            {
+                string massHint = massFactor > 1.02f
+                    ? " Recharge, fit more drives, or dump cargo."
+                    : " Recharge, or fit more drives.";
+                BuildFeedbackHud.Show("Warp Drive",
+                    $"Need {costWh / 1000f:0.0} kWh for {distKm:0} km — banked {pooled / 1000f:0.0} kWh." +
+                    massHint, null, new Color(1f, 0.7f, 0.25f));
+                return false;
+            }
+
             if (!skipConfirm)
             {
                 if (VoxelEngine.UI.ConfirmDialogHud.IsOpen) return false;
                 var dest = destination;
                 var planet = targetPlanet;
                 var locBody = locatorBody;
-                VoxelEngine.UI.ConfirmDialogHud.Show("Jump?",
-                    $"Jump {distKm:0} km to {destLabel} — cost {costWh / 1000f:0.0} kWh (banked {pooled / 1000f:0.0}).",
-                    "Jump", "Abort",
-                    () => { if (this != null) CommitJump(dest, planet, locBody, distKm, originName, destLabel, costWh); });
+                int driveMax = Grid != null ? CountEnabledDrives(Grid) : 1;
+                int driveUse = Grid != null ? ResolveDriveUse(Grid) : 1;
+                string Prompt(int _)
+                {
+                    float liveRate = Grid != null ? EffectiveRateWhPerKm(Grid) : energyPerKmWh;
+                    float liveCost = (float)(distKm * liveRate);
+                    float livePool = Grid != null ? PooledStoredWh(Grid) : warpStoredWh;
+                    int used = Grid != null ? ResolveDriveUse(Grid) : 1;
+                    if (livePool < liveCost - 0.01f)
+                    {
+                        double liveAfford = liveRate > 0f ? livePool / liveRate : 0d;
+                        double pct = distKm > 1d ? liveAfford / distKm * 100d : 100d;
+                        return $"Banked {livePool / 1000f:0.0} of {liveCost / 1000f:0.0} kWh for {distKm:0} km — " +
+                               $"jump {pct:0}% ({liveAfford:0} km) with {used} drive(s).";
+                    }
+                    return $"Jump {distKm:0} km to {destLabel} — cost {liveCost / 1000f:0.0} kWh " +
+                           $"(banked {livePool / 1000f:0.0}, {used} drive(s)).";
+                }
+                VoxelEngine.UI.ConfirmDialogHud.Show(
+                    shortBank ? "Partial jump?" : "Jump?",
+                    Prompt(driveUse),
+                    shortBank ? "Jump partway" : "Jump", "Abort",
+                    () =>
+                    {
+                        if (this == null) return;
+                        float liveRate = Grid != null ? EffectiveRateWhPerKm(Grid) : energyPerKmWh;
+                        float liveCost = (float)(distKm * liveRate);
+                        float livePool = Grid != null ? PooledStoredWh(Grid) : warpStoredWh;
+                        if (livePool >= liveCost - 0.01f)
+                            CommitJump(dest, planet, locBody, distKm, originName, destLabel, liveCost);
+                        else
+                        {
+                            double liveAfford = liveRate > 0f ? livePool / liveRate : 0d;
+                            if (liveAfford >= 100d) TryWarpPartial(liveAfford, distKm, originName);
+                            else BuildFeedbackHud.Show("Warp Drive", "Bank drained — recharge and try again.",
+                                null, new Color(1f, 0.7f, 0.25f));
+                        }
+                    },
+                    driveMax, driveUse,
+                    n => { if (Grid != null) SetDriveUse(Grid, n); },
+                    Prompt);
                 return false;
             }
 
+            if (shortBank)
+                return TryWarpPartial(affordableKm, distKm, originName);
             return CommitJump(destination, targetPlanet, locatorBody, distKm, originName, destLabel, costWh);
         }
 
@@ -510,29 +540,13 @@ namespace VoxelEngine.GridSystem
         }
 
         // ── Pooled store ────────────────────────────────────────────────
-        // Every enabled warp drive on a grid throws its battery into one pot.
-        // Costing uses the WORST rate in the pool (never strand a jump), and
-        // consumption drains proportionally so all drives land equally empty.
+        // Selected enabled warp drives on a grid throw their batteries into one pot.
+        // Costing uses the WORST rate in that selection, and consumption drains
+        // proportionally so those drives land equally empty.
 
-        public static float PooledStoredWh(GridEntity grid)
-        {
-            if (grid == null) return 0f;
-            float total = 0f;
-            foreach (var block in grid.AllBlocks)
-                if (block is GridWarpDrive w && w.Enabled) total += Mathf.Max(0f, w.warpStoredWh);
-            return total;
-        }
+        private static readonly List<GridWarpDrive> s_selected = new();
 
-        public static float PooledCapacityWh(GridEntity grid)
-        {
-            if (grid == null) return 0f;
-            float total = 0f;
-            foreach (var block in grid.AllBlocks)
-                if (block is GridWarpDrive w && w.Enabled) total += Mathf.Max(0f, w.warpCapacityWh);
-            return total;
-        }
-
-        public static int PooledDriveCount(GridEntity grid)
+        public static int CountEnabledDrives(GridEntity grid)
         {
             if (grid == null) return 0;
             int n = 0;
@@ -541,30 +555,92 @@ namespace VoxelEngine.GridSystem
             return n;
         }
 
+        /// <summary>How many drives the next jump spends. 0 on the grid means all.</summary>
+        public static int ResolveDriveUse(GridEntity grid)
+        {
+            int total = CountEnabledDrives(grid);
+            if (total <= 0) return 0;
+            int want = grid != null ? grid.WarpDrivesToUse : 0;
+            if (want <= 0) return total;
+            return Mathf.Clamp(want, 1, total);
+        }
+
+        public static void SetDriveUse(GridEntity grid, int count)
+        {
+            if (grid == null) return;
+            int total = CountEnabledDrives(grid);
+            if (total <= 0) { grid.WarpDrivesToUse = 0; return; }
+            int clamped = Mathf.Clamp(count, 1, total);
+            grid.WarpDrivesToUse = clamped >= total ? 0 : clamped;
+        }
+
+        private static List<GridWarpDrive> SelectedDrives(GridEntity grid)
+        {
+            s_selected.Clear();
+            if (grid == null) return s_selected;
+            int want = ResolveDriveUse(grid);
+            foreach (var block in grid.AllBlocks)
+            {
+                if (block is not GridWarpDrive w || !w.Enabled) continue;
+                s_selected.Add(w);
+                if (s_selected.Count >= want) break;
+            }
+            return s_selected;
+        }
+
+        public static float PooledStoredWh(GridEntity grid)
+        {
+            if (grid == null) return 0f;
+            float total = 0f;
+            var drives = SelectedDrives(grid);
+            for (int i = 0; i < drives.Count; i++)
+                total += Mathf.Max(0f, drives[i].warpStoredWh);
+            return total;
+        }
+
+        public static float PooledCapacityWh(GridEntity grid)
+        {
+            if (grid == null) return 0f;
+            float total = 0f;
+            var drives = SelectedDrives(grid);
+            for (int i = 0; i < drives.Count; i++)
+                total += Mathf.Max(0f, drives[i].warpCapacityWh);
+            return total;
+        }
+
+        public static int PooledDriveCount(GridEntity grid) => CountEnabledDrives(grid);
+
         public static float MaxRateWhPerKm(GridEntity grid)
         {
             if (grid == null) return 4f;
             float worst = 0f;
             bool any = false;
-            foreach (var block in grid.AllBlocks)
-                if (block is GridWarpDrive w && w.Enabled)
-                {
-                    if (!any || w.energyPerKmWh > worst) worst = w.energyPerKmWh;
-                    any = true;
-                }
+            var drives = SelectedDrives(grid);
+            for (int i = 0; i < drives.Count; i++)
+            {
+                var w = drives[i];
+                if (!any || w.energyPerKmWh > worst) worst = w.energyPerKmWh;
+                any = true;
+            }
             return any ? Mathf.Max(0.01f, worst) : 4f;
         }
 
-        /// <summary>Drain wh from the pool proportionally. Returns false and drains
+        /// <summary>Drain wh from the selected pool proportionally. Returns false and drains
         /// nothing when the pool is short — the caller refuses the jump instead.</summary>
         public static bool TryConsumePooledWh(GridEntity grid, float wh)
         {
             if (grid == null || wh <= 0f) return true;
-            float total = PooledStoredWh(grid);
+            var drives = SelectedDrives(grid);
+            float total = 0f;
+            for (int i = 0; i < drives.Count; i++)
+                total += Mathf.Max(0f, drives[i].warpStoredWh);
             if (total < wh - 0.01f) return false;
-            foreach (var block in grid.AllBlocks)
-                if (block is GridWarpDrive w && w.Enabled && w.warpStoredWh > 0f)
+            for (int i = 0; i < drives.Count; i++)
+            {
+                var w = drives[i];
+                if (w.warpStoredWh > 0f)
                     w.warpStoredWh = Mathf.Max(0f, w.warpStoredWh - wh * (w.warpStoredWh / total));
+            }
             return true;
         }
 

@@ -464,6 +464,27 @@ namespace VoxelEngine.GridSystem.UI
 
             // ── Controls ──
             p.Add(T.Spacer(4));
+            int driveTotal = drive.Grid != null ? GridWarpDrive.CountEnabledDrives(drive.Grid) : 1;
+            if (driveTotal >= 2 && drive.Grid != null)
+            {
+                var useCaption = new Label($"USE DRIVES  {GridWarpDrive.ResolveDriveUse(drive.Grid)} / {driveTotal}");
+                useCaption.style.fontSize = 11;
+                useCaption.style.unityFontStyleAndWeight = FontStyle.Bold;
+                useCaption.style.color = new StyleColor(Color.white);
+                useCaption.style.marginBottom = 2;
+                p.Add(useCaption);
+                var useSlider = new SliderInt(1, driveTotal);
+                useSlider.value = GridWarpDrive.ResolveDriveUse(drive.Grid);
+                useSlider.RegisterValueChangedCallback(evt =>
+                {
+                    if (drive.Grid == null) return;
+                    GridWarpDrive.SetDriveUse(drive.Grid, evt.newValue);
+                    useCaption.text = $"USE DRIVES  {GridWarpDrive.ResolveDriveUse(drive.Grid)} / {GridWarpDrive.CountEnabledDrives(drive.Grid)}";
+                });
+                p.Add(useSlider);
+                p.Add(T.Muted("How many enabled drives the next jump spends. Remembered until you change it. Ctrl is not needed here — this panel already has the mouse."));
+            }
+            p.Add(T.Spacer(4));
             var btnRow = Row();
             btnRow.Add(T.SmallButton(drive.recharging ? "RECHARGE ON" : "RECHARGE OFF", () =>
             {
@@ -516,7 +537,7 @@ namespace VoxelEngine.GridSystem.UI
                 if (storedVal != null)
                     storedVal.text = $"{drive.warpStoredWh / 1000f:0.00} / {drive.warpCapacityWh / 1000f:0.00} kWh";
                 if (poolVal != null && drive.Grid != null)
-                    poolVal.text = $"{GridWarpDrive.PooledStoredWh(drive.Grid) / 1000f:0.00} kWh · {GridWarpDrive.PooledDriveCount(drive.Grid)} drives";
+                    poolVal.text = $"{GridWarpDrive.PooledStoredWh(drive.Grid) / 1000f:0.00} kWh · {GridWarpDrive.ResolveDriveUse(drive.Grid)}/{GridWarpDrive.PooledDriveCount(drive.Grid)} drives";
                 if (rangeVal != null && drive.Grid != null)
                     rangeVal.text = $"{GridWarpDrive.PoolRangeKm(drive.Grid):N0} km";
                 if (hopVal != null)

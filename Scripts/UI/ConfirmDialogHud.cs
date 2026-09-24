@@ -1,13 +1,11 @@
 // Assets/Scripts/VoxelEngine/UI/ConfirmDialogHud.cs
 //
 // Player-facing binary choice as a two-wedge radial, the same language as the
-// Hammer build wheel: unlock the cursor, point at a wedge, click. Enter/Space
-// takes the accept wedge, Esc / right-click aborts. Used for partial warp jumps
-// (and anything else that cannot decide alone). One dialog at a time.
+// Hammer build wheel. Used for warp jumps (and anything else that cannot decide
+// alone). One dialog at a time.
 //
-// 12.29.0-dev: dark wedges, white labels (no cream/green wash). Hover is the
-// mouse's side of screen centre, or A/D / arrows — never the inner disc as JUMP.
-// Enter only fires the highlighted wedge; Esc / right-click abort.
+// 12.30.0-dev: Input System only (never UnityEngine.Input). Ctrl frees the mouse
+// for the drive-count slider; A/D still pick wedges while the look is locked.
 
 using System;
 using UnityEngine;
@@ -33,17 +31,25 @@ namespace VoxelEngine.UI
         private static VisualElement _overlay;
         private static VisualElement _wheel;
         private static VisualElement _ringElement;
+        private static VisualElement _driveRow;
         private static Label _titleLabel;
         private static Label _detailLabel;
+        private static Label _hintLabel;
+        private static Label _driveLabel;
         private static Label _acceptLabel;
         private static Label _abortLabel;
+        private static SliderInt _driveSlider;
         private static Texture2D _ringTexture;
         private static Action _onAccept;
+        private static Action<int> _onDriveUseChanged;
+        private static Func<int, string> _detailForDriveUse;
         private static bool _pushedBlock;
-        private static int _hovered = 0; // 0 accept, 1 abort, -1 none
+        private static bool _mouseFree;
+        private static int _hovered = -1; // 0 accept, 1 abort, -1 none
         private static IVisualElementScheduledItem _tick;
 
         public static bool IsOpen { get; private set; }
+        public static bool MouseFree => IsOpen && _mouseFree;
 
         public static void EnsureMounted(VisualElement uiRoot)
         {
@@ -100,9 +106,10 @@ namespace VoxelEngine.UI
             disc.style.backgroundColor = new StyleColor(new Color(0.04f, 0.05f, 0.07f, 1f));
             disc.style.paddingLeft = 18;
             disc.style.paddingRight = 18;
-            disc.pickingMode = PickingMode.Ignore;
+            disc.pickingMode = PickingMode.Position;
             UITheme.Radius(disc, 145f);
             UITheme.Border(disc, 2f, UITheme.BorderBright);
+            disc.RegisterCallback<PointerDownEvent>(evt => evt.StopPropagation());
             _wheel.Add(disc);
 
             _titleLabel = new Label("CONFIRM");
@@ -124,13 +131,47 @@ namespace VoxelEngine.UI
             _detailLabel.pickingMode = PickingMode.Ignore;
             disc.Add(_detailLabel);
 
-            var hint = new Label("point or A / D  ·  click / Enter  ·  Esc abort");
-            hint.style.marginTop = 10;
-            hint.style.fontSize = 9;
-            hint.style.color = new StyleColor(UITheme.TextMuted);
-            hint.style.unityTextAlign = TextAnchor.MiddleCenter;
-            hint.pickingMode = PickingMode.Ignore;
-            disc.Add(hint);
+            _driveRow = new VisualElement();
+            _driveRow.style.marginTop = 10;
+            _driveRow.style.width = 230;
+            _driveRow.style.flexDirection = FlexDirection.Column;
+            _driveRow.style.alignItems = Align.Stretch;
+            _driveRow.pickingMode = PickingMode.Position;
+            _driveRow.RegisterCallback<PointerDownEvent>(evt => evt.StopImmediatePropagation());
+            _driveRow.RegisterCallback<PointerMoveEvent>(evt => evt.StopPropagation());
+
+            _driveLabel = new Label("DRIVES");
+            _driveLabel.style.fontSize = 10;
+            _driveLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _driveLabel.style.letterSpacing = 1.1f;
+            _driveLabel.style.color = new StyleColor(Color.white);
+            _driveLabel.style.unityTextAlign = TextAnchor.MiddleCenter;
+            _driveLabel.pickingMode = PickingMode.Ignore;
+            _driveRow.Add(_driveLabel);
+
+            _driveSlider = new SliderInt(1, 1);
+            _driveSlider.style.marginTop = 4;
+            _driveSlider.style.height = 18;
+            _driveSlider.RegisterValueChangedCallback(evt =>
+            {
+                if (!IsOpen) return;
+                int v = evt.newValue;
+                _onDriveUseChanged?.Invoke(v);
+                RefreshDriveCaption(v, _driveSlider.highValue);
+                if (_detailForDriveUse != null && _detailLabel != null)
+                    _detailLabel.text = _detailForDriveUse(v) ?? "";
+            });
+            _driveRow.Add(_driveSlider);
+            disc.Add(_driveRow);
+
+            _hintLabel = new Label("Ctrl frees mouse for slider  ·  A / D  ·  Enter  ·  Esc abort");
+            _hintLabel.style.marginTop = 10;
+            _hintLabel.style.fontSize = 9;
+            _hintLabel.style.color = new StyleColor(UITheme.TextMuted);
+            _hintLabel.style.unityTextAlign = TextAnchor.MiddleCenter;
+            _hintLabel.style.whiteSpace = WhiteSpace.Normal;
+            _hintLabel.pickingMode = PickingMode.Ignore;
+            disc.Add(_hintLabel);
 
             _acceptLabel = MakeWedgeLabel("JUMP", true);
             _abortLabel = MakeWedgeLabel("ABORT", false);
@@ -167,6 +208,10 @@ namespace VoxelEngine.UI
         }
 
         public static void Show(string title, string detail, string acceptText, string abortText, Action onAccept)
+            => Show(title, detail, acceptText, abortText, onAccept, 0, 0, null, null);
+
+        public static void Show(string title, string detail, string acceptText, string abortText, Action onAccept,
+            int driveMax, int driveUse, Action<int> onDriveUseChanged, Func<int, string> detailForDriveUse)
         {
             if (_overlay == null) return;
             if (_titleLabel != null) _titleLabel.text = string.IsNullOrEmpty(title) ? "CONFIRM" : title.ToUpperInvariant();
@@ -174,7 +219,11 @@ namespace VoxelEngine.UI
             if (_acceptLabel != null) _acceptLabel.text = string.IsNullOrEmpty(acceptText) ? "JUMP" : acceptText.ToUpperInvariant();
             if (_abortLabel != null) _abortLabel.text = string.IsNullOrEmpty(abortText) ? "ABORT" : abortText.ToUpperInvariant();
             _onAccept = onAccept;
+            _onDriveUseChanged = onDriveUseChanged;
+            _detailForDriveUse = detailForDriveUse;
             _hovered = -1;
+            _mouseFree = false;
+            ConfigureDriveSlider(driveMax, driveUse);
             if (!IsOpen && !_pushedBlock)
             {
                 UIState.PushBlock();
@@ -183,6 +232,7 @@ namespace VoxelEngine.UI
             IsOpen = true;
             _overlay.style.display = DisplayStyle.Flex;
             _overlay.BringToFront();
+            ApplyCursor();
             PaintRing();
             PaintLabels();
             _tick?.Resume();
@@ -197,6 +247,9 @@ namespace VoxelEngine.UI
             }
             IsOpen = false;
             _onAccept = null;
+            _onDriveUseChanged = null;
+            _detailForDriveUse = null;
+            _mouseFree = false;
             _tick?.Pause();
             if (_overlay != null) _overlay.style.display = DisplayStyle.None;
             if (_pushedBlock)
@@ -204,6 +257,25 @@ namespace VoxelEngine.UI
                 UIState.PopBlock();
                 _pushedBlock = false;
             }
+        }
+
+        private static void ConfigureDriveSlider(int driveMax, int driveUse)
+        {
+            bool show = driveMax >= 2 && _driveSlider != null;
+            if (_driveRow != null)
+                _driveRow.style.display = show ? DisplayStyle.Flex : DisplayStyle.None;
+            if (!show) return;
+            _driveSlider.lowValue = 1;
+            _driveSlider.highValue = driveMax;
+            int v = Mathf.Clamp(driveUse > 0 ? driveUse : driveMax, 1, driveMax);
+            _driveSlider.SetValueWithoutNotify(v);
+            RefreshDriveCaption(v, driveMax);
+        }
+
+        private static void RefreshDriveCaption(int use, int max)
+        {
+            if (_driveLabel != null)
+                _driveLabel.text = $"DRIVES  {use} / {max}";
         }
 
         private static void Accept()
@@ -217,7 +289,17 @@ namespace VoxelEngine.UI
         private static void Tick()
         {
             if (!IsOpen) return;
-            PollMouseHover();
+            if (CtrlPressedThisFrame())
+            {
+                _mouseFree = !_mouseFree;
+                ApplyCursor();
+                if (_hintLabel != null)
+                    _hintLabel.text = _mouseFree
+                        ? "mouse free — drag the slider  ·  Ctrl locks look  ·  Enter  ·  Esc"
+                        : "Ctrl frees mouse for slider  ·  A / D  ·  Enter  ·  Esc abort";
+            }
+            ApplyCursor();
+            if (_mouseFree) PollMouseHover();
             PollSteerKeys();
 
             if (GameSettings.WasPressed(InputAction.Pause))
@@ -230,6 +312,21 @@ namespace VoxelEngine.UI
             {
                 if (_hovered == 1) Hide();
                 else if (_hovered == 0) Accept();
+            }
+        }
+
+        private static void ApplyCursor()
+        {
+            if (!IsOpen) return;
+            if (_mouseFree)
+            {
+                Cursor.lockState = CursorLockMode.None;
+                Cursor.visible = true;
+            }
+            else
+            {
+                Cursor.lockState = CursorLockMode.Locked;
+                Cursor.visible = false;
             }
         }
 
@@ -251,25 +348,35 @@ namespace VoxelEngine.UI
         {
 #if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
             var kb = Keyboard.current;
-            if (kb != null)
-            {
-                if (kb.aKey.wasPressedThisFrame || kb.leftArrowKey.wasPressedThisFrame) SetHovered(1);
-                if (kb.dKey.wasPressedThisFrame || kb.rightArrowKey.wasPressedThisFrame) SetHovered(0);
-                return;
-            }
-#endif
+            if (kb == null) return;
+            if (kb.aKey.wasPressedThisFrame || kb.leftArrowKey.wasPressedThisFrame) SetHovered(1);
+            if (kb.dKey.wasPressedThisFrame || kb.rightArrowKey.wasPressedThisFrame) SetHovered(0);
+#else
             if (Input.GetKeyDown(KeyCode.A) || Input.GetKeyDown(KeyCode.LeftArrow)) SetHovered(1);
             if (Input.GetKeyDown(KeyCode.D) || Input.GetKeyDown(KeyCode.RightArrow)) SetHovered(0);
+#endif
         }
 
         private static bool ConfirmKeyPressed()
         {
 #if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
             var kb = Keyboard.current;
-            if (kb != null && (kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame || kb.spaceKey.wasPressedThisFrame))
-                return true;
-#endif
+            if (kb == null) return false;
+            return kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame || kb.spaceKey.wasPressedThisFrame;
+#else
             return Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter) || Input.GetKeyDown(KeyCode.Space);
+#endif
+        }
+
+        private static bool CtrlPressedThisFrame()
+        {
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
+            var kb = Keyboard.current;
+            if (kb == null) return false;
+            return kb.leftCtrlKey.wasPressedThisFrame || kb.rightCtrlKey.wasPressedThisFrame;
+#else
+            return Input.GetKeyDown(KeyCode.LeftControl) || Input.GetKeyDown(KeyCode.RightControl);
+#endif
         }
 
         private static void SetHovered(int segment)
@@ -278,20 +385,6 @@ namespace VoxelEngine.UI
             _hovered = segment;
             PaintRing();
             PaintLabels();
-        }
-
-        private static int SegmentAt(Vector2 local)
-        {
-            Vector2 delta = local - new Vector2(WheelPx * 0.5f, WheelPx * 0.5f);
-            float radius = delta.magnitude;
-            float innerPx = InnerR / OuterR * ((WheelPx - RingInset * 2f) * 0.5f);
-            float outerPx = (WheelPx - RingInset * 2f) * 0.5f;
-            if (radius < innerPx * 0.85f) return 0; // centre disc = accept
-            if (radius > outerPx + 12f) return -1;
-            // UI y grows down; flip so +x is right, +y is up.
-            float angle = Mathf.Atan2(-delta.y, delta.x) * Mathf.Rad2Deg;
-            if (Mathf.Abs(Mathf.Abs(angle) - 90f) < GapDeg) return -1;
-            return angle >= -90f && angle <= 90f ? 0 : 1;
         }
 
         private static void PaintLabels()

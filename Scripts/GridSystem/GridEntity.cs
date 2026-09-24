@@ -296,6 +296,12 @@ namespace VoxelEngine.GridSystem
 
         // ── Control Seats ──────────────────────────────────────────
         public GridCockpit ActiveCockpit { get; set; }
+
+        /// <summary>
+        /// How many enabled warp drives the next jump spends. 0 means all of them.
+        /// Remembered until the player changes it (confirm slider / drive panel).
+        /// </summary>
+        public int WarpDrivesToUse { get; set; }
         public Transform ActiveControlFrame { get; private set; }
         public Player.PlayerController ActiveControlPilot { get; private set; }
         public bool IsControlled => (ActiveCockpit != null && ActiveCockpit.Pilot != null)
