@@ -15927,6 +15927,8 @@ AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
                 if (drive.powerDrawWatts <= 0f) drive.powerDrawWatts = 45000f;
                 if (drive.cooldownSeconds <= 0f) drive.cooldownSeconds = 180f;
                 if (drive.jumpRangeKm <= 0f) drive.jumpRangeKm = 2500f;
+                if (drive.ratedMassKg <= 0f) drive.ratedMassKg = 100000f;
+                if (drive.maxMassFactor <= 0f || Mathf.Approximately(drive.maxMassFactor, 8f)) drive.maxMassFactor = 12f;
                 if (drive.arrivalAltitudeKm <= 0f) drive.arrivalAltitudeKm = 90f;
 
                 // Visual: industrial drive housing + glowing core. Rebuilt ONLY when the

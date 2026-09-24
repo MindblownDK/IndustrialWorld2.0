@@ -9,7 +9,9 @@
 //     channel the auto-run loops use, never a ghost pilot. A seated pilot keeps
 //     their seat, camera and tools (they are genuinely aboard), the stick
 //     overrides translation the instant it moves and the cruise resumes on
-//     release, and rotation always stays live. See GridEntity.cruiseTranslating.
+//     release. Gyros swing the strongest thrust axis onto the flight line, and
+//     the warp cone onto the target; the mouse is parked so it cannot fight the
+//     nose. See GridEntity.cruiseTranslating.
 //   • Speed is governed by a braking curve, not a wish: v = sqrt(2·a·d) from the
 //     ship's own directional thrust and live mass, capped at MaxCruiseMs. A ship
 //     with no braking thrust along the flight line is refused (or released) with
@@ -285,8 +287,8 @@ namespace VoxelEngine.Navigation
             { Disengage("Autopilot block missing — fit an AutoRunPilot to fly hands-free."); return; }
             // The stick is a take-over, not a suggestion: any manual thrust input
             // disengages (armed on first thrust-free tick so engaging mid-flight
-            // while thrusting does not kick instantly). Mouse aim never triggers
-            // this — a seated pilot aims warp legs by hand while engaged.
+            // while thrusting does not kick instantly). Mouse never triggers this
+            // — the autopilot owns the gyros, including warp aim.
             if (_grid.HasManualThrustInput())
             {
                 if (_stickArmed) { Disengage("Autopilot disabled — player input detected."); return; }
@@ -370,7 +372,7 @@ namespace VoxelEngine.Navigation
             }
 
             if (State != NavFlightState.WarpAim && State != NavFlightState.WarpCharge)
-                _grid.SetAutonomousRotation(0f, 0f, 0f);
+                SteerCruise(desired, rel);
             _grid.SetAutonomousFlight(desired, FlightOwner);
         }
 
@@ -394,7 +396,7 @@ namespace VoxelEngine.Navigation
             {
                 double dKm = d / 1000d;
                 _legIsCapture = bodyTarget && dKm > _drive.minJumpKm * 2d && dKm <= 20000d;
-                bool hopLeg = !_legIsCapture && d > _drive.jumpRangeKm * 1000f + 100000f;
+                bool hopLeg = !_legIsCapture && d > _drive.LiveHopKm * 1000f + 100000f;
                 wantWarp = _legIsCapture || hopLeg;
             }
             if (!wantWarp)
@@ -416,9 +418,10 @@ namespace VoxelEngine.Navigation
 
             // Energy: the leg must be banked before the spool matters. The drive
             // auto-charges for the leg (player toggle untouched); aiming continues
-            // in parallel so the ship is lined up when the bank fills.
-            double legKm = _legIsCapture ? d / 1000d : _drive.jumpRangeKm;
-            _legNeedWh = (float)(legKm * GridWarpDrive.MaxRateWhPerKm(_grid));
+            // in parallel so the ship is lined up when the bank fills. Price and hop
+            // already include the live mass penalty, so a loaded hauler banks more.
+            double legKm = _legIsCapture ? d / 1000d : _drive.LiveHopKm;
+            _legNeedWh = (float)(legKm * GridWarpDrive.EffectiveRateWhPerKm(_grid));
             _legPooledWh = GridWarpDrive.PooledStoredWh(_grid);
             _drive.SetAutoRecharge(_legPooledWh < _legNeedWh - 0.01f);
 
@@ -431,29 +434,18 @@ namespace VoxelEngine.Navigation
             float angle = Vector3.Angle(aimFrame.forward, dir);
             float fireAngle = _legIsCapture ? Mathf.Min(7f, _drive.targetConeDeg * 0.5f) : 2f;
             _aimAngle = angle;
-            bool seated = _grid.IsControlled;
-
-            if (!seated)
+            if (!HasGyroAuthority())
+            { AbandonWarp("no gyro authority — fit gyroscopes to aim the warp cone"); return; }
+            // Point the frame the drive fires along at the target. Seated or not —
+            // the mouse is parked while the autopilot is live, so the gyros have
+            // to do this or the cone never lines up.
+            SteerAxisToward(aimFrame.forward, dir);
+            if (angle < _aimBest - 0.2f) { _aimBest = angle; _aimStalled = 0f; }
+            else
             {
-                if (!HasGyroAuthority())
-                { AbandonWarp("no gyro authority — fit gyroscopes for unmanned warp"); return; }
-                // Cross-product P-controller: the torque axis that swings the nose onto
-                // the target, so the signs work out by construction and the command
-                // fades as the ship lines up.
-                Vector3 axis = Vector3.Cross(aimFrame.forward, dir);
-                Vector3 localAxis = _grid.transform.InverseTransformDirection(axis);
-                if (angle < 0.5f) _grid.SetAutonomousRotation(0f, 0f, 0f);
-                else _grid.SetAutonomousRotation(
-                    Mathf.Clamp(localAxis.y * 2f, -1f, 1f),
-                    Mathf.Clamp(localAxis.x * 2f, -1f, 1f), 0f);
-                if (angle < _aimBest - 0.2f) { _aimBest = angle; _aimStalled = 0f; }
-                else
-                {
-                    _aimStalled += Time.fixedDeltaTime;
-                    if (_aimStalled > 90f) { AbandonWarp("cannot aim the ship"); return; }
-                }
+                _aimStalled += Time.fixedDeltaTime;
+                if (_aimStalled > 90f) { AbandonWarp("cannot aim the ship"); return; }
             }
-            else _grid.SetAutonomousRotation(0f, 0f, 0f); // the mouse owns the gyros
 
             _drive.BeginCharge(); // idempotent: charges, holds at full, never double-starts
             State = angle <= fireAngle ? NavFlightState.WarpCharge : NavFlightState.WarpAim;
@@ -511,6 +503,69 @@ namespace VoxelEngine.Navigation
                 else if (fallback == null) fallback = w;
             }
             return fallback;
+        }
+
+        /// <summary>Cruise: swing the strongest thrust axis onto the commanded
+        /// velocity (or the remaining line to the target when holding still).
+        /// A ship with no gyros still translates; it just keeps its current heading.</summary>
+        private void SteerCruise(Vector3 desired, Vector3 rel)
+        {
+            if (!HasGyroAuthority())
+            {
+                _grid.SetAutonomousRotation(0f, 0f, 0f);
+                return;
+            }
+            Vector3 point = desired.sqrMagnitude > 1f ? desired : rel;
+            if (point.sqrMagnitude < 1f)
+            {
+                _grid.SetAutonomousRotation(0f, 0f, 0f);
+                return;
+            }
+            SteerAxisToward(BestThrustWorldAxis(), point);
+        }
+
+        /// <summary>World-space push direction of the strongest of the six axes.
+        /// That is the hull's "nose" for a cruise: point it at the destination and
+        /// the main engines do the work instead of the weak laterals.</summary>
+        private Vector3 BestThrustWorldAxis()
+        {
+            var t = _grid.GetThrustByDirection();
+            float best = t.fwd;
+            Vector3 local = Vector3.forward;
+            if (t.back  > best) { best = t.back;  local = Vector3.back; }
+            if (t.right > best) { best = t.right; local = Vector3.right; }
+            if (t.left  > best) { best = t.left;  local = Vector3.left; }
+            if (t.up    > best) { best = t.up;    local = Vector3.up; }
+            if (t.down  > best) { best = t.down;  local = Vector3.down; }
+            if (best <= 0f) return _grid.transform.forward;
+            return _grid.transform.TransformDirection(local);
+        }
+
+        /// <summary>P-controller: torque the given world axis onto worldDir.
+        /// Grid-local yaw/pitch, no commanded roll. Full rate past ~25 degrees.</summary>
+        private void SteerAxisToward(Vector3 worldAxis, Vector3 worldDir)
+        {
+            if (worldAxis.sqrMagnitude < 1e-8f || worldDir.sqrMagnitude < 1e-8f)
+            {
+                _grid.SetAutonomousRotation(0f, 0f, 0f);
+                return;
+            }
+            worldAxis.Normalize();
+            worldDir.Normalize();
+            float angle = Vector3.Angle(worldAxis, worldDir);
+            if (angle < 0.5f)
+            {
+                _grid.SetAutonomousRotation(0f, 0f, 0f);
+                return;
+            }
+            Vector3 axis = Vector3.Cross(worldAxis, worldDir);
+            if (axis.sqrMagnitude < 1e-8f)
+                axis = Vector3.Cross(worldAxis, Mathf.Abs(worldAxis.y) < 0.9f ? Vector3.up : Vector3.right);
+            float gain = Mathf.Clamp01(angle / 25f) * 2f;
+            Vector3 localAxis = _grid.transform.InverseTransformDirection(axis.normalized * gain);
+            _grid.SetAutonomousRotation(
+                Mathf.Clamp(localAxis.y, -1f, 1f),
+                Mathf.Clamp(localAxis.x, -1f, 1f), 0f);
         }
 
         private bool HasGyroAuthority()
@@ -580,9 +635,7 @@ namespace VoxelEngine.Navigation
                 var a = Active;
                 if (a == null || !a.Engaged || a._grid == null) return "";
                 if (a.State != NavFlightState.WarpAim && a.State != NavFlightState.WarpCharge) return "";
-                string aim = a._grid.IsControlled
-                    ? $"AIM AT {NavigationTarget.TargetName} — {a._aimAngle:0}° OFF (you aim)"
-                    : $"AIM {a._aimAngle:0.0}° OFF";
+                string aim = $"AIM {a._aimAngle:0.0}° OFF";
                 string chg = a._drive != null
                     ? (a._drive.IsReady ? "DRIVE READY" : $"CHARGE {a._drive.Charge01 * 100f:0}%")
                     : "NO DRIVE";

@@ -441,9 +441,19 @@ namespace VoxelEngine.GridSystem.UI
             var rangeRow = T.StatRow("🎯", "Range now", "—", T.AccentGreen);
             var rangeVal = StatRowValue(rangeRow);
             p.Add(rangeRow);
+            var hopRow = T.StatRow("↕", "Max hop", "—", T.AccentCyan);
+            var hopVal = StatRowValue(hopRow);
+            p.Add(hopRow);
+            var massRow = T.StatRow("⚖", "Hull mass", "—", T.TextSecondary);
+            var massVal = StatRowValue(massRow);
+            p.Add(massRow);
+            var penRow = T.StatRow("⛓", "Mass penalty", "—", T.AccentAmber);
+            var penVal = StatRowValue(penRow);
+            p.Add(penRow);
             var drawRow = T.StatRow("⚡", "Max draw", PowerFormat.Watts(drive.powerDrawWatts), T.AccentAmber);
             p.Add(drawRow);
-            var priceRow = T.StatRow("⛽", "Jump price", $"{drive.energyPerKmWh:0.##} Wh/km", T.TextSecondary);
+            var priceRow = T.StatRow("⛽", "Jump price", "—", T.TextSecondary);
+            var priceVal = StatRowValue(priceRow);
             p.Add(priceRow);
             var spinRow = T.StatRow("🌀", "Spin-up", "—", T.AccentCyan);
             var spinVal = StatRowValue(spinRow);
@@ -472,7 +482,7 @@ namespace VoxelEngine.GridSystem.UI
                 GameUIController.Instance?.RefreshCurrentPanel();
             }, T.BgSlot));
             p.Add(btnRow);
-            p.Add(T.Muted("Range is bought from the pooled battery of every enabled drive on this grid. Far jump, thin bank: fit more drives."));
+            p.Add(T.Muted("Range is bought from the pooled battery of every enabled drive on this grid. Far jump, thin bank: fit more drives. A heavier hull — and the cargo in it — pays more per km and hops shorter."));
 
             // ── Live tick: labels, pill, ring pulse and inflow dots, all in place ──
             p.schedule.Execute(() =>
@@ -509,6 +519,20 @@ namespace VoxelEngine.GridSystem.UI
                     poolVal.text = $"{GridWarpDrive.PooledStoredWh(drive.Grid) / 1000f:0.00} kWh · {GridWarpDrive.PooledDriveCount(drive.Grid)} drives";
                 if (rangeVal != null && drive.Grid != null)
                     rangeVal.text = $"{GridWarpDrive.PoolRangeKm(drive.Grid):N0} km";
+                if (hopVal != null)
+                    hopVal.text = $"{drive.LiveHopKm:N0} km";
+                if (massVal != null && drive.Grid != null)
+                    massVal.text = MassFormat.Format(drive.Grid.TotalMass);
+                else if (massVal != null)
+                    massVal.text = "—";
+                if (penVal != null)
+                {
+                    float f = drive.LiveMassFactor;
+                    penVal.text = f <= 1.02f ? "RATED" : $"{f:0.00}x";
+                    penVal.style.color = new StyleColor(f <= 1.02f ? T.AccentGreen : T.AccentAmber);
+                }
+                if (priceVal != null)
+                    priceVal.text = $"{drive.LiveRateWhPerKm:0.##} Wh/km";
                 if (spinVal != null)
                     spinVal.text = drive.IsReady ? "READY" : (drive.IsCharging ? $"{drive.Charge01 * 100f:0}%" : "IDLE");
                 if (coolVal != null)

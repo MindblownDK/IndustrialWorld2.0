@@ -22,6 +22,11 @@
 // grid bus (see RECHARGE), and all enabled drives on a grid POOL their stores: range
 // is pooled-kWh divided by Wh-per-km, so a far jump with a thin bank needs more drives.
 // Consumption drains the pool proportionally, never one drive first.
+//
+// MASS (12.28.0-dev): hop length and Wh-per-km are rated at ratedMassKg. Heavier hulls
+// (structure + cargo — Grid.TotalMass already includes both) pay sqrt(mass / rated),
+// capped at maxMassFactor. Lighter than rated is not a bonus. One full drive still
+// equals one (shorter) hop, because price and hop share the same factor.
 using Unity.Mathematics;
 using UnityEngine;
 using VoxelEngine.Cosmos;
@@ -41,8 +46,12 @@ namespace VoxelEngine.GridSystem
         [Header("Warp Battery")]
         [Tooltip("Internal energy store per drive (Wh). Enabled drives on a grid pool their stores; range is pool divided by price.")]
         public float warpCapacityWh = 10000f;
-        [Tooltip("Energy price of distance (Wh per km). At default tuning one full drive jumps exactly one fixed hop.")]
+        [Tooltip("Energy price of distance (Wh per km) at rated mass. At default tuning one full drive jumps exactly one hop.")]
         public float energyPerKmWh = 4f;
+        [Tooltip("Hull mass (kg) this drive is rated for. Heavier ships (and their cargo) pay more per km and hop shorter. Lighter is not a bonus.")]
+        public float ratedMassKg = 100000f;
+        [Tooltip("Hard cap on the mass multiplier so a loaded hauler still jumps. 12 = one-twelfth hop, 12x price.")]
+        public float maxMassFactor = 12f;
         [Tooltip("Recharge the internal battery from the grid bus (draws up to the max above).")]
         public bool recharging = true;
         [Tooltip("Banked jump energy (Wh). Persisted with the grid.")]
@@ -191,7 +200,8 @@ namespace VoxelEngine.GridSystem
             Vector3 aimDir = aimFrame.forward.normalized;
 
             double3 gridCosmic = origin.GetCosmicKm(transform.position);
-            double3 destination = gridCosmic + CosmicRegistry.ToDouble3(aimDir) * jumpRangeKm;
+            float hopKm = Grid != null ? EffectiveHopKm(Grid, jumpRangeKm) : jumpRangeKm;
+            double3 destination = gridCosmic + CosmicRegistry.ToDouble3(aimDir) * hopKm;
             BodyInstance targetPlanet = null;
             SingularityInstance targetSingularity = null;
 
@@ -299,9 +309,10 @@ namespace VoxelEngine.GridSystem
                     if (od < bestD) { bestD = od; originName = ob.DisplayName; }
                 }
             }
-            float rate = Grid != null ? MaxRateWhPerKm(Grid) : energyPerKmWh;
+            float rate = Grid != null ? EffectiveRateWhPerKm(Grid) : energyPerKmWh;
             float costWh = (float)(distKm * rate);
             float pooled = Grid != null ? PooledStoredWh(Grid) : warpStoredWh;
+            float massFactor = Grid != null ? MassFactor(Grid) : 1f;
             if (pooled < costWh - 0.01f)
             {
                 double affordableKm = rate > 0f ? pooled / rate : 0d;
@@ -317,9 +328,12 @@ namespace VoxelEngine.GridSystem
                         () => { if (this != null) TryWarpPartial(affordableKm, distKm, originName); });
                     return false;
                 }
+                string massHint = massFactor > 1.02f
+                    ? " Recharge, fit more drives, or dump cargo."
+                    : " Recharge, or fit more drives.";
                 BuildFeedbackHud.Show("Warp Drive",
-                    $"Need {costWh / 1000f:0.0} kWh for {distKm:0} km — banked {pooled / 1000f:0.0} kWh. " +
-                    "Recharge, or fit more drives.", null, new Color(1f, 0.7f, 0.25f));
+                    $"Need {costWh / 1000f:0.0} kWh for {distKm:0} km — banked {pooled / 1000f:0.0} kWh." +
+                    massHint, null, new Color(1f, 0.7f, 0.25f));
                 return false;
             }
             if (Grid != null) TryConsumePooledWh(Grid, costWh);
@@ -354,7 +368,7 @@ namespace VoxelEngine.GridSystem
                         ? $"{targetSingularity.DisplayName} standoff ({(int)targetSingularity.standoffArrivalKm:0} km from horizon)"
                         : locatorArrivalName != null
                             ? $"Locator: {locatorArrivalName}"
-                            : $"{jumpRangeKm:0} km straight ahead";
+                            : $"{distKm:0} km straight ahead";
                 string whereAmI = "";
                 if (targetPlanet == null && targetSingularity == null && locatorArrivalName == null)
                 {
@@ -392,7 +406,7 @@ namespace VoxelEngine.GridSystem
             Transform aimFrame = Grid.ActiveCockpit != null ? Grid.ActiveCockpit.transform : transform;
             Vector3 aimDir = aimFrame.forward.normalized;
             double3 gridCosmic = origin.GetCosmicKm(transform.position);
-            float rate = MaxRateWhPerKm(Grid);
+            float rate = EffectiveRateWhPerKm(Grid);
             float pooled = PooledStoredWh(Grid);
             double affordKm = rate > 0f ? pooled / rate : 0d;
             double hopKm = System.Math.Min(affordKm, affordableKm);
@@ -518,12 +532,49 @@ namespace VoxelEngine.GridSystem
             return true;
         }
 
-        /// <summary>How far the current pool flies, km. Zero when the pot is empty.</summary>
+        /// <summary>How far the current pool flies, km. Zero when the pot is empty.
+        /// Reads the mass-adjusted price, so a loaded hauler sees a shorter number.</summary>
         public static double PoolRangeKm(GridEntity grid)
         {
-            float rate = MaxRateWhPerKm(grid);
+            float rate = EffectiveRateWhPerKm(grid);
             return rate > 0f ? PooledStoredWh(grid) / rate : 0d;
         }
+
+        /// <summary>Mass multiplier on hop and price. 1 at or below rated mass,
+        /// sqrt(live / rated) above it, capped at the drive's maxMassFactor.
+        /// Cargo is already inside Grid.TotalMass — there is no second scale.</summary>
+        public static float MassFactor(GridEntity grid)
+        {
+            if (grid == null) return 1f;
+            float rated = 0f;
+            float cap = 0f;
+            foreach (var block in grid.AllBlocks)
+            {
+                if (block is not GridWarpDrive w || !w.Enabled) continue;
+                if (w.ratedMassKg > rated) rated = w.ratedMassKg;
+                if (w.maxMassFactor > 0f && (cap <= 0f || w.maxMassFactor < cap))
+                    cap = w.maxMassFactor;
+            }
+            if (rated <= 1f) rated = 100000f;
+            if (cap <= 1f) cap = 12f;
+            float mass = Mathf.Max(1f, grid.TotalMass);
+            if (mass <= rated) return 1f;
+            return Mathf.Min(cap, Mathf.Sqrt(mass / rated));
+        }
+
+        /// <summary>Wh per km after the mass penalty. Costing, range and the
+        /// autopilot bank all read this — never the bare energyPerKmWh.</summary>
+        public static float EffectiveRateWhPerKm(GridEntity grid)
+            => MaxRateWhPerKm(grid) * MassFactor(grid);
+
+        /// <summary>Blind-hop length after the mass penalty. Planet-lock jumps
+        /// still travel the real distance; they just pay the heavier price.</summary>
+        public static float EffectiveHopKm(GridEntity grid, float nominalHopKm)
+            => nominalHopKm / Mathf.Max(1f, MassFactor(grid));
+
+        public float LiveHopKm => EffectiveHopKm(Grid, jumpRangeKm);
+        public float LiveRateWhPerKm => Grid != null ? EffectiveRateWhPerKm(Grid) : energyPerKmWh;
+        public float LiveMassFactor => MassFactor(Grid);
 
         /// <summary>Save-load restore: banked energy, recharge toggle and cooldown.
         /// The spin-up never persists — a loaded drive re-spools in 45 seconds.</summary>

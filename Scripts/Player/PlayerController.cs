@@ -169,8 +169,11 @@ namespace VoxelEngine.Player
         private void Awake()
         {
             _cc = GetComponent<CharacterController>();
-            if (VoxelEngine.Settings.GameSettings.InfiniteHealth) infiniteHealth = true;
-            InfiniteHealth = infiniteHealth;
+            // Prefab ticked in the inspector turns the cheat on once; Settings is then
+            // the source of truth so the Testing toggle actually sticks.
+            if (infiniteHealth) VoxelEngine.Settings.GameSettings.InfiniteHealth = true;
+            InfiniteHealth = VoxelEngine.Settings.GameSettings.InfiniteHealth;
+            infiniteHealth = InfiniteHealth;
             _cc.height = standHeight;
             _cc.center = new Vector3(0, standHeight * 0.5f, 0);
             // On spherical bodies the terrain has hills/mountains in every direction. The default
@@ -244,9 +247,8 @@ namespace VoxelEngine.Player
         // ============================================================
         private void Update()
         {
-            InfiniteHealth = infiniteHealth;
-            if (VoxelEngine.Settings.GameSettings.InfiniteHealth != infiniteHealth)
-                VoxelEngine.Settings.GameSettings.InfiniteHealth = infiniteHealth;
+            InfiniteHealth = VoxelEngine.Settings.GameSettings.InfiniteHealth;
+            infiniteHealth = InfiniteHealth;
             // If the spawner hasn't finished placing us yet, freeze entirely (no input, no gravity).
             // Prevents falling-through-ungenerated-chunks AND prevents the player taking
             // control before the saved position has been restored.

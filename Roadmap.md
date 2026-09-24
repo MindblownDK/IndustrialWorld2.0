@@ -1,9 +1,9 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.18.0-dev`
-**Roadmap Version:** `12.18.0-dev`
-**Date:** 2026-09-22
+**Current Version:** `12.28.1-dev`
+**Roadmap Version:** `12.28.1-dev`
+**Date:** 2026-09-24
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
@@ -29,25 +29,28 @@
 
 ## 0. Recently Done
 
-### 12.18.0-dev - Silence Between Stars (Vacuum Ducking)
-- **Ducking added** (`VacuumAudio`): exterior audibility from listener air pressure (sky, ship rooms, station rooms); machine/thruster loops, ambience, weather, positional one-shots and tool hits scale with it. UI, music and pickups bypass.
-- **Preserved:** all mix levels, volumes and behaviour in air. No setup changes.
+### 12.28.1-dev - Autopilot Turns, Godmode, Mass Cap 12x
+- **Orientation** (`NavFlightAutopilot`, `GridEntity`): cruise points strongest thrust axis at the flight line; warp aims the cone, seated or not.
+- **Godmode:** Settings is source of truth; hits and DoT/vacuum/heat skip. Mass cap 12x.
+- **Preserved:** stick take-over, pooling, partial jumps. Step 50 upgrades a leftover 8 cap to 12.
 
-### 12.17.4-dev - Quiet Console (Diagnostics Removed)
-- **Removed:** craft click/refusal traces, float mirrors, the render probe and the unused `DescribeSpace` helper. Floats, toasts, reasons and error guards all stay.
-- **Preserved:** all craft, queue, batch and refresh behaviour. No setup changes.
+### 12.28.0-dev - Jump Mass Penalty
+- **Range follows hull mass** (`GridWarpDrive`): hop and Wh/km scale with `sqrt(TotalMass / 100 t)`, cap 12x as of 12.28.1-dev; cargo already sits in `TotalMass`.
+- **Panel / autopilot:** max hop, hull mass, penalty and live price; fly-to banks the heavier price.
+- **Preserved:** pooling, partial jumps, planet-lock band. Step 50 fills `ratedMassKg` / `maxMassFactor` only when zero.
 
-### 12.17.3-dev - Manual Float Animation (Transition Snap Fix)
-- **Floats fixed** (`BuildFeedbackHud`): probe proved transitions snap to target on fresh elements, so the 2s rise-and-fade runs on per-frame ticks (ease-out rise, linear fade, self-removing). Probe stays to confirm ~0.75 opacity at +500ms.
-- **Prefixes restored:** mass ratios print each side in its own SI unit again (cargo card, grid cargo, grid terminal, overweight float, console dump). No setup changes.
+### 12.27.0-dev - F3, Map Save, Godmode, Partial Jumps
+- **Fixed:** F3 one action per frame; orbital map slots persist; infinite health saved in settings.
+- **Partial jumps:** short bank offers distance / percent / remainder; Accept flies the part the bank buys.
+- **Preserved:** warp FX, pooling, fly-to. No setup changes.
 
-### 12.17.2-dev - Single-Unit Mass Ratios (Cargo Load Fix)
-- **Ratios unified** (`MassFormat.FormatRatio`): inventory CARGO LOAD, grid cargo readout and grid terminal inventory list now print current/max in one shared unit, so overloads read at a glance. Refusals already proven legitimate by the 12.17.1 console ladder.
-- **Float probe added** (`BuildFeedbackHud`): spawn logs the label's live render state (panel, bounds, opacity, display, visibility) to isolate the invisible-float fault. No setup changes.
+### 12.26.0-dev - Autopilot Take-Over, F3, God-Mode, Warp Screen
+- **Autopilot:** requires an AutoRunPilot; stick disengages; F3 hotkey (was P, map-only). Infinite health testing toggle.
+- **Warp screen:** thin speed lines, subtler edge glow. No setup changes.
 
-### 12.17.1-dev - Unmissable Craft Feedback (Diagnostic Ladder)
-- **Ladder added** (`GameUIController`, `CraftingScreen`, `Crafter.DescribeSpace`): failed crafts log `[Craft] Click/Refused` with reason plus space/weight/filter state, float at the button (console-mirrored, throw-safe) and post a returning toast. Bench chrome verified click-safe.
-- **Preserved:** all craft, queue, batch and refresh behaviour. No setup changes.
+### 12.25.1-dev - Warp Smear, Arrival Readout
+- **FX:** bubble far shell only; small streaks. Stretch billboard compile fix.
+- **Arrival:** toast km jumped; cockpit WARP LCD holds ~25 s. No setup changes.
 
 ### Era Transition Feel
 
@@ -934,8 +937,12 @@ one sentence: **a road is the difference between walking a route and being able 
 
 A late-game **Jump Drive** provides charged, coordinate-based faster-than-light travel without replacing normal engines or route planning.
 
-- The player chooses a known destination, beacon, or safe coordinate and sees range, charge cost, mass penalty, cooldown, and arrival error before committing.
-- Maximum range decreases as ship mass and cargo increase.
+*(drive, charge, pool, hop, planet lock, fly-to, jump legs, FX, partial jumps shipped through 12.27.0-dev — `GridWarpDrive`, `NavFlightAutopilot`, `WarpFx`; Setup Step 50 authors the block. 12.28.0-dev adds the mass penalty.)*
+
+**Mass penalty (12.28.0-dev, cap 12.28.1-dev):** `factor = min(maxMassFactor, sqrt(TotalMass / ratedMassKg))` at or above rated mass, else 1. Defaults: rated 100 t, cap 12. Price multiplies, hop divides. One full drive still equals one hop. Cargo is `ContentMass` inside `TotalMass` — do not add a second cargo scale.
+
+- The player chooses a known destination, beacon, or safe coordinate and sees range, charge cost, mass penalty, cooldown, and arrival error before committing. *(drive panel now shows range, cost, mass penalty and cooldown; destination-select UI remains open.)*
+- ~~Maximum range decreases as ship mass and cargo increase.~~ *(12.28.0-dev — `GridWarpDrive.MassFactor` / `EffectiveHopKm` / `EffectiveRateWhPerKm`; Setup Step 50 fills `ratedMassKg` and `maxMassFactor` only when zero.)*
 - The drive requires a large stored-energy charge and cannot operate while critically damaged, obstructed, inside prohibited gravity depths, or without a safe arrival volume.
 - Multiple drives can combine range or reduce charge time according to research and grid configuration.
 - Blind jumps carry larger arrival error and are blocked when collision safety cannot find a valid destination.

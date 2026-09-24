@@ -23,6 +23,11 @@ namespace VoxelEngine.Player
     {
         public static PlayerStats Instance { get; private set; }
 
+        /// <summary>Testing cheat: Settings toggle is source of truth; the controller
+        /// mirrors it. All health drains (hits, DoT, vacuum, heat) honour this.</summary>
+        private bool GodMode =>
+            PlayerController.InfiniteHealth || VoxelEngine.Settings.GameSettings.InfiniteHealth;
+
         /// <summary>
         /// Cause of the current death, set by hazards (solar, singularity, quasar jets)
         /// right before their lethal damage lands. Shown on the death screen, cleared on
@@ -179,10 +184,13 @@ namespace VoxelEngine.Player
             if (_poisonTimer > 0f)
             {
                 _poisonTimer -= Time.deltaTime;
-                Health = Mathf.Max(0f, Health - _poisonDps * Time.deltaTime);
-                OnStatsChanged?.Invoke();
+                if (!GodMode)
+                {
+                    Health = Mathf.Max(0f, Health - _poisonDps * Time.deltaTime);
+                    OnStatsChanged?.Invoke();
+                    if (Health <= 0f) Die();
+                }
                 if (_poisonTimer <= 0f) _poisonDps = 0f;
-                if (Health <= 0f) Die();
             }
 
             // Burn: fire DoT bypasses base physical mitigation and escalates with
@@ -190,13 +198,16 @@ namespace VoxelEngine.Player
             if (_burnTimer > 0f)
             {
                 _burnTimer -= Time.deltaTime;
-                float armorFactor = equippedArmor != null ? equippedArmor.damageReduction : 0f;
-                float heatMultiplier = equipment != null ? equipment.HeatDamageMultiplier : 1f;
-                float effective = _burnDps * (1f + armorFactor * 1.5f) * heatMultiplier;
-                Health = Mathf.Max(0f, Health - effective * Time.deltaTime);
-                OnStatsChanged?.Invoke();
+                if (!GodMode)
+                {
+                    float armorFactor = equippedArmor != null ? equippedArmor.damageReduction : 0f;
+                    float heatMultiplier = equipment != null ? equipment.HeatDamageMultiplier : 1f;
+                    float effective = _burnDps * (1f + armorFactor * 1.5f) * heatMultiplier;
+                    Health = Mathf.Max(0f, Health - effective * Time.deltaTime);
+                    OnStatsChanged?.Invoke();
+                    if (Health <= 0f) Die();
+                }
                 if (_burnTimer <= 0f) _burnDps = 0f;
-                if (Health <= 0f) Die();
             }
 
             // Caustic: liquid-fuel skin damage (9.16.0 Part 3). Armor mitigation is
@@ -204,10 +215,13 @@ namespace VoxelEngine.Player
             if (_causticTimer > 0f)
             {
                 _causticTimer -= Time.deltaTime;
-                Health = Mathf.Max(0f, Health - _causticDps * Time.deltaTime);
-                OnStatsChanged?.Invoke();
+                if (!GodMode)
+                {
+                    Health = Mathf.Max(0f, Health - _causticDps * Time.deltaTime);
+                    OnStatsChanged?.Invoke();
+                    if (Health <= 0f) Die();
+                }
                 if (_causticTimer <= 0f) _causticDps = 0f;
-                if (Health <= 0f) Die();
             }
 
             ApplyEnvironmentalHazards(equipment);
@@ -245,7 +259,7 @@ namespace VoxelEngine.Player
         /// <summary>Suffocation/vacuum damage bypasses physical armor mitigation.</summary>
         private void ApplyOxygenFailureDamage(float amount)
         {
-            if (amount <= 0f) return;
+            if (amount <= 0f || GodMode) return;
             Health = Mathf.Max(0f, Health - amount);
             OnStatsChanged?.Invoke();
             if (Health <= 0f) Die();
@@ -354,6 +368,7 @@ namespace VoxelEngine.Player
 
         private void ApplyEnvironmentalHazards(PlayerEquipment equipment)
         {
+            if (GodMode) return;
             bool tookDamage = false;
 
             // One position-aware sample drives all three environmental channels, so the

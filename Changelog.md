@@ -1,9 +1,49 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.27.0-dev`
+**Current Version:** `12.28.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.28.1-dev] Autopilot Turns the Ship, Godmode That Actually Works, Mass Cap 12x
+
+**Type:** PATCH - engaging fly-to now points the hull: gyros swing the strongest thrust axis onto the flight line, and warp legs aim the drive cone themselves (seated or unmanned). Infinite health stopped working because every frame the prefab checkbox wrote false over the Settings toggle; Settings is now the source of truth and DoT / vacuum / heat honour it too. Mass penalty cap is 12x (was 8x). No recipe changes.
+
+**GitHub title:** `[12.28.1-dev] Autopilot turns the ship, godmode that actually works, mass cap 12x`
+
+#### Autopilot orientation
+
+Cruise used to command velocity with rotation pinned at zero, and a seated warp leg handed the mouse a parked gyro. The ship never lined up, so main engines sat idle and the warp cone never closed. Gyros now own the nose while engaged: cruise points the strongest of the six thrust axes along the commanded velocity (or at the target when holding), warp points the cockpit/grid forward at the destination and fires when the cone is inside the lock. No gyros still translates; warp refuses with the named reason. Stick take-over is unchanged.
+
+#### Infinite health
+
+PlayerController.Update was copying the inspector checkbox onto GameSettings every tick, so the Testing row could never stay on. Settings is the live flag; the checkbox mirrors it. Poison, burn, caustic, vacuum, heat, toxic and radiation drains now skip the same way TakeDamage already did.
+
+#### Mass cap
+
+maxMassFactor default and fallback are 12. Step 50 writes 12 when the field is zero or still the old 8 default; any other authored value is kept.
+
+**Manual steps:** none - code-only. Verify in Unity: F3 with gyros fitted (nose turns onto the target, warp aims and fires without touching the mouse); Settings > Testing > Infinite Health, take a hit and stand in a hazard (no damage, toggle still on after reopen); a 6400 t hull shows 12x / 208 km hop.
+
+### [12.28.0-dev] Jump Mass Penalty - Heavy Hulls Hop Shorter
+
+**Type:** MINOR - maximum warp range now falls as the ship gets heavier. Hop length and Wh-per-km share one live factor, sqrt(hull mass / 100 t), capped at 8x, so one full drive still equals one hop. Cargo already sits in Grid.TotalMass, so filling a hold is the same as adding plates. The drive panel shows max hop, hull mass, the penalty and the live price; the autopilot banks that heavier price. Light ships at or under 100 t are unchanged. No recipe or setup changes.
+
+**GitHub title:** `[12.28.0-dev] Jump mass penalty - heavy hulls hop shorter`
+
+#### How the penalty works
+
+The drive is rated at 100 t. Below that the published 2500 km hop and 4 Wh/km still hold. Above it the factor is sqrt(live mass / 100 t), so 400 t costs 2x and hops 1250 km, 1600 t costs 4x and hops 625 km. The cap is 8x (312 km hop, 32 Wh/km) so a loaded hauler still jumps. Planet-lock jumps still travel the real distance - they just pay the heavier price. Blind hops shrink. Dumping cargo recovers range on the next tick.
+
+#### What the player sees
+
+The warp panel adds Max hop, Hull mass and Mass penalty (RATED in green, or 1.41x in amber) and the jump price now ticks live. A short bank on a heavy ship still offers the partial-jump popup, with the mass-adjusted numbers, and the refuse toast says dump cargo as well as fit more drives.
+
+#### Manual steps
+
+None - code-only. Existing Warp Drive prefabs pick up the new fields at script defaults (100 t / 8x). Re-running Tools > Voxel Engine > Voxel Engine Setup step 50 fills ratedMassKg / maxMassFactor only when they are zero; power, hop, recipe and research are not touched.
+
+Verify in Unity: open a warp drive on a light empty hull (penalty RATED, 2500 km hop, 4 Wh/km); load cargo until well past 100 t (penalty >1, hop shorter, price up, Range now down); fire a blind hop and confirm the shorter distance; dump the cargo and watch hop and price recover.
 
 ### [12.27.0-dev] F3 Double-Toggle Fix, Orbital Map Save, Godmode That Sticks and Partial Jumps
 

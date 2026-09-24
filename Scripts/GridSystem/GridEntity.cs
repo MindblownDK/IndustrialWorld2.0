@@ -156,11 +156,11 @@ namespace VoxelEngine.GridSystem
         float _autoYaw, _autoPitch, _autoRoll;
         bool _autoRotActive;
 
-        /// <summary>Commanded turn rates for an unmanned ship, grid-local, same ±1
-        /// convention as the cockpit's RotationYaw/Pitch/Roll. Applied as gyro torque
-        /// by ApplyAutonomousRotation; a seated pilot's mouse owns the gyros instead,
-        /// so this channel is ignored while controlled. Heartbeat-shared with the
-        /// velocity command: a commander that stops refreshing releases everything.</summary>
+        /// <summary>Commanded turn rates, grid-local, same ±1 convention as the
+        /// cockpit's RotationYaw/Pitch/Roll. Applied as gyro torque by
+        /// ApplyAutonomousRotation for unmanned ships and for a seated autopilot
+        /// cruise (the mouse is parked so it cannot fight the nose). Heartbeat-shared
+        /// with the velocity command: a commander that stops refreshing releases everything.</summary>
         public void SetAutonomousRotation(float yaw, float pitch, float roll)
         {
             _autoYaw = yaw; _autoPitch = pitch; _autoRoll = roll;
@@ -1267,10 +1267,10 @@ namespace VoxelEngine.GridSystem
             }
             // Cruise control (12.22.0-dev): a seated pilot with hands off the translation
             // stick lets a velocity command fly the ship; the instant the stick moves, the
-            // pilot owns translation again and the command resumes on release. Rotation
-            // always stays live (mouse-look drives the gyros every frame), and the dampener
-            // rules already treat a nonzero command as thrusting, so nothing brakes the
-            // cruise. A stale command releases whether or not anyone is seated.
+            // pilot owns translation again and the command resumes on release. While the
+            // command is live the autopilot also owns the gyros (12.28.1-dev) so the hull
+            // can point its strongest thrust axis, or the warp cone, without fighting the
+            // mouse. A stale command releases whether or not anyone is seated.
             if (AutonomousFlightActive && Time.unscaledTime - _autonomousFlightHeartbeat > AUTONOMOUS_FLIGHT_STALE_SECONDS)
                 ClearAutonomousFlight();
             bool cruiseTranslating = IsControlled && AutonomousFlightActive && !HasManualThrustInput();
@@ -1301,12 +1301,17 @@ namespace VoxelEngine.GridSystem
 
             AutonomousDampenersActive = false;
             if (cruiseTranslating) ApplyAutonomousFlightThrust();
+            // Autopilot owns the nose while the command is live, seated or not — otherwise a
+            // piloted cruise never turns (mouse is parked) and warp legs never line up.
+            bool autoOwnsRotation = AutonomousFlightActive && _autoRotActive && !HasManualThrustInput();
+            if (autoOwnsRotation) ApplyAutonomousRotation();
 
             // Control-seat local frame (so "forward" = where the pilot is looking).
             Transform frame = CurrentControlFrame;
 
             // While the cruise owns translation the pilot's stick is idle by definition, so there is
-            // no manual force to add; the gyro section below still runs every tick.
+            // no manual force to add. Gyros below stay with the mouse only when the autopilot
+            // is not already turning the ship.
             if (!cruiseTranslating)
             {
                 // Smooth the pilot's binary key input so thrust ramps up/down instead of
@@ -1348,18 +1353,21 @@ namespace VoxelEngine.GridSystem
                 }
             }
 
-            Vector3 rotInput = new Vector3(RotationPitch, RotationYaw, RotationRoll);
-            // Rotational authority comes from installed, powered-on gyroscopes.
-            // Bigger/heavier ships turn slower; adding more gyros restores authority.
-            float gyroTorque = 0f;
-            foreach (var block in AllBlocks)
-                if (block is GridGyroscope gy && gy.Enabled) gyroTorque += gy.torquePower;
-            if (gyroTorque > 0f && rotInput.sqrMagnitude > 0.0001f)
+            if (!autoOwnsRotation)
             {
-                Vector3 worldTorque = frame.TransformDirection(rotInput);
-                float massFactor = 10000f / Mathf.Max(10000f, _rb.mass);
-                worldTorque *= gyroTorque * 0.0005f * massFactor;
-                _rb.AddTorque(worldTorque, ForceMode.Acceleration);
+                Vector3 rotInput = new Vector3(RotationPitch, RotationYaw, RotationRoll);
+                // Rotational authority comes from installed, powered-on gyroscopes.
+                // Bigger/heavier ships turn slower; adding more gyros restores authority.
+                float gyroTorque = 0f;
+                foreach (var block in AllBlocks)
+                    if (block is GridGyroscope gy && gy.Enabled) gyroTorque += gy.torquePower;
+                if (gyroTorque > 0f && rotInput.sqrMagnitude > 0.0001f)
+                {
+                    Vector3 worldTorque = frame.TransformDirection(rotInput);
+                    float massFactor = 10000f / Mathf.Max(10000f, _rb.mass);
+                    worldTorque *= gyroTorque * 0.0005f * massFactor;
+                    _rb.AddTorque(worldTorque, ForceMode.Acceleration);
+                }
             }
             // Angular damping lets the ship stop spinning cleanly when the pilot releases input.
             // On ice keep it lower so landed grids can skid/rotate instead of feeling glued.
@@ -1453,6 +1461,7 @@ namespace VoxelEngine.GridSystem
         private void ApplyAutonomousRotation()
         {
             if (!_autoRotActive || _rb == null) return;
+            _rb.angularDamping = _touchingIce ? 0.6f : 3f;
             Vector3 rotInput = new Vector3(_autoPitch, _autoYaw, _autoRoll);
             if (rotInput.sqrMagnitude < 0.0001f) return;
             float gyroTorque = 0f;
@@ -1463,7 +1472,6 @@ namespace VoxelEngine.GridSystem
             float massFactor = 10000f / Mathf.Max(10000f, _rb.mass);
             worldTorque *= gyroTorque * 0.0005f * massFactor;
             _rb.AddTorque(worldTorque, ForceMode.Acceleration);
-            _rb.angularDamping = 3f;
         }
 
         private void ApplyAutonomousDampenerThrust()
