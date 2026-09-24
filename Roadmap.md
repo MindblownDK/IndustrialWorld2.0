@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.30.0-dev`
-**Roadmap Version:** `12.30.0-dev`
+**Current Version:** `12.30.1-dev`
+**Roadmap Version:** `12.30.1-dev`
 **Date:** 2026-09-24
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -47,16 +47,6 @@
 - **Orientation** (`NavFlightAutopilot`, `GridEntity`): cruise points strongest thrust axis at the flight line; warp aims the cone, seated or not.
 - **Godmode:** Settings is source of truth; hits and DoT/vacuum/heat skip. Mass cap 12x.
 - **Preserved:** stick take-over, pooling, partial jumps. Step 50 upgrades a leftover 8 cap to 12.
-
-### 12.28.0-dev - Jump Mass Penalty
-- **Range follows hull mass** (`GridWarpDrive`): hop and Wh/km scale with `sqrt(TotalMass / 100 t)`, cap 12x as of 12.28.1-dev; cargo already sits in `TotalMass`.
-- **Panel / autopilot:** max hop, hull mass, penalty and live price; fly-to banks the heavier price.
-- **Preserved:** pooling, partial jumps, planet-lock band. Step 50 fills `ratedMassKg` / `maxMassFactor` only when zero.
-
-### 12.27.0-dev - F3, Map Save, Godmode, Partial Jumps
-- **Fixed:** F3 one action per frame; orbital map slots persist; infinite health saved in settings.
-- **Partial jumps:** short bank offers distance / percent / remainder; Accept flies the part the bank buys.
-- **Preserved:** warp FX, pooling, fly-to. No setup changes.
 
 ### Era Transition Feel
 
@@ -2505,6 +2495,15 @@ t-save backup, Edit World safely renames the folder and updates dropped-item lim
 - **6.16.0-dev:** World settings now also include inventory/container weight multipliers, the default physical drop limit is 1000, and drop-limit warning toasts protect players from silent physical-drop culling.
 - **6.16.1-dev:** Ship Control search compile fix, autosave slots now fully hide when collapsed, and the default autosave cadence is 5 minutes.
 - **6.17.0-dev:** Manual drops above the physical item limit now show a per-world confirm/deny void warning with a remembered show-warning checkbox; confirmed over-limit drops void only the excess instead of blocking the action.
+
+---
+dStatePersistence` local-name collision and replaced the remaining deprecated runtime `GetInstanceID()` calls with `GetEntityId()`.
+- **6.16.0-dev:** World settings now also include inventory/container weight multipliers, the default physical drop limit is 1000, and drop-limit warning toasts protect players from silent physical-drop culling.
+- **6.16.1-dev:** Ship Control search compile fix, autosave slots now fully hide when collapsed, and the default autosave cadence is 5 minutes.
+- **6.17.0-dev:** Manual drops above the physical item limit now show a per-world confirm/deny void warning with a remembered show-warning checkbox; confirmed over-limit drops void only the excess instead of blocking the action.
+
+---
+er-world confirm/deny void warning with a remembered show-warning checkbox; confirmed over-limit drops void only the excess instead of blocking the action.
 
 ---
 dStatePersistence` local-name collision and replaced the remaining deprecated runtime `GetInstanceID()` calls with `GetEntityId()`.
