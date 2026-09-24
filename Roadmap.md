@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.28.1-dev`
-**Roadmap Version:** `12.28.1-dev`
+**Current Version:** `12.28.2-dev`
+**Roadmap Version:** `12.28.2-dev`
 **Date:** 2026-09-24
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,10 @@
 
 ## 0. Recently Done
 
+### 12.28.2-dev - Partial-Jump Wheel
+- **Cursor frees** (`ConfirmDialogHud`): `UIState.PushBlock` on show, two-wedge JUMP / ABORT ring, click / Enter / Esc.
+- **Preserved:** partial-jump maths, pooling, mass penalty. No setup changes.
+
 ### 12.28.1-dev - Autopilot Turns, Godmode, Mass Cap 12x
 - **Orientation** (`NavFlightAutopilot`, `GridEntity`): cruise points strongest thrust axis at the flight line; warp aims the cone, seated or not.
 - **Godmode:** Settings is source of truth; hits and DoT/vacuum/heat skip. Mass cap 12x.
@@ -47,10 +51,6 @@
 ### 12.26.0-dev - Autopilot Take-Over, F3, God-Mode, Warp Screen
 - **Autopilot:** requires an AutoRunPilot; stick disengages; F3 hotkey (was P, map-only). Infinite health testing toggle.
 - **Warp screen:** thin speed lines, subtler edge glow. No setup changes.
-
-### 12.25.1-dev - Warp Smear, Arrival Readout
-- **FX:** bubble far shell only; small streaks. Stretch billboard compile fix.
-- **Arrival:** toast km jumped; cockpit WARP LCD holds ~25 s. No setup changes.
 
 ### Era Transition Feel
 

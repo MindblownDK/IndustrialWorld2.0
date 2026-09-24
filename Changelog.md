@@ -1,9 +1,17 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.28.1-dev`
+**Current Version:** `12.28.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.28.2-dev] Partial-Jump Wheel - Point and Click, No Mouse Lock
+
+**Type:** PATCH - the partial-jump confirm sat under a locked cockpit cursor, so neither button could be reached. It is now a two-wedge radial in the hammer-wheel language: UIState unlocks the look, point at JUMP or ABORT, click. Enter/Space takes the highlighted wedge, Esc / right-click aborts. No recipe or setup changes.
+
+**GitHub title:** `[12.28.2-dev] Partial-jump wheel - point and click, no mouse lock`
+
+**Manual steps:** none - code-only. Verify in Unity: fire a short-banked warp from the seat; the cursor frees, the ring appears, point right and click (or press Enter) to jump partway, Esc or the left wedge aborts; look relocks after.
 
 ### [12.28.1-dev] Autopilot Turns the Ship, Godmode That Actually Works, Mass Cap 12x
 

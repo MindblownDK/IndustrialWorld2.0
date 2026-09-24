@@ -458,7 +458,13 @@ namespace VoxelEngine.UI
             // This remains available even while a port dropdown/filter has focus.
             bool itemPortsClosedThisFrame = false;
             bool pausePressed = GameSettings.WasPressed(InputAction.Pause);
-            if (pausePressed && ItemFilterDialog.CloseActive())
+            if (pausePressed && ConfirmDialogHud.IsOpen)
+            {
+                ConfirmDialogHud.Hide();
+                UIState.PauseConsumedFrame = Time.frameCount;
+                itemPortsClosedThisFrame = true;
+            }
+            else if (pausePressed && ItemFilterDialog.CloseActive())
             {
                 UIState.PauseConsumedFrame = Time.frameCount;
                 itemPortsClosedThisFrame = true;
