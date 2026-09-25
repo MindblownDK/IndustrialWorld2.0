@@ -59,7 +59,7 @@ namespace VoxelEngine.Cosmos
 
         [Header("Proximity Hold (7.20.0)")]
         [Tooltip("Distance (km) within which a body armed as proximityHoldBody is force-held as the scene frame. Small moons / low-gravity bodies whose pull never exceeds the star's at their orbital distance can never win gravity dominance — without this hold their real voxel surface would never stream. CosmosBootstrap arms the hold while the player is near a body that is not the current streaming body; it self-releases once the player leaves ~1.6× this range.")]
-        public float proximityHoldRangeKm = 25f;
+        public float proximityHoldRangeKm = 120f;
         public CelestialBody proximityHoldBody;
         [Tooltip("Player transform (auto-resolved). Scene origin keeps this near zero.")]
         public Transform viewer;
@@ -163,31 +163,40 @@ namespace VoxelEngine.Cosmos
         /// Used by save/load (logging out in deep space) and by the warp drive.
         /// </summary>
         public void TeleportCosmic(double3 newViewerCosmicKm)
+            => TeleportSubjectToCosmic(viewer, newViewerCosmicKm);
+
+        /// <summary>
+        /// Re-anchor so <paramref name="subject"/> (the jumping hull, not a stale pawn)
+        /// lands at destKm. Using the viewer pawn left the ship behind whenever the
+        /// player was parented to the cockpit and skipped as a nested root.
+        /// </summary>
+        public void TeleportSubjectToCosmic(Transform subject, double3 destKm)
         {
-            if (viewer == null)
+            if (subject == null)
             {
-                var pc = FindAnyObjectByType<PlayerController>();
-                if (pc != null) viewer = pc.transform;
-                if (viewer == null) return;
-                RegisterRoot(viewer);
+                if (viewer == null)
+                {
+                    var pc = FindAnyObjectByType<PlayerController>();
+                    if (pc != null) viewer = pc.transform;
+                }
+                subject = viewer;
+                if (subject == null) return;
             }
-            double3 newAnchor = newViewerCosmicKm - CosmicRegistry.ToDouble3(viewer.position) / 1000d;
+            RegisterRoot(subject);
+            double3 newAnchor = destKm - CosmicRegistry.ToDouble3(subject.position) / 1000d;
             double3 delta = newAnchor - AnchorKm;
-            if (math.lengthsq(delta) < 1e-18) return;
-            AnchorKm = newAnchor;
-            // Keep relative geometry: shift every scene root by −delta·1000.
-            Vector3 shift = (Vector3)(float3)(-delta * 1000d);
-            ShiftWorld(shift);
-            ViewerCosmicKm = newViewerCosmicKm;
+            if (math.lengthsq(delta) > 1e-18)
+            {
+                AnchorKm = newAnchor;
+                Vector3 shift = (Vector3)(float3)(-delta * 1000d);
+                ShiftWorld(shift);
+            }
+            ViewerCosmicKm = viewer != null ? GetCosmicKm(viewer.position) : destKm;
             PlaceBodies();
-            // Re-pick the frame WITHOUT applying a velocity delta: a teleport re-anchors
-            // the world, and velocities are the caller's responsibility (the warp drive
-            // zeroes the ship, save-restore zeroes the player). Applying the delta here
-            // used to kick freshly-teleported players sideways at hundreds of m/s.
             var reg = CosmicRegistry.Instance;
             if (reg != null && reg.IsReady)
             {
-                BodyInstance dominant = reg.GetDominantBody(newViewerCosmicKm, out _);
+                BodyInstance dominant = reg.GetDominantBody(destKm, out _);
                 CelestialBody frame = null;
                 if (dominant != null) reg.SceneBodies.TryGetValue(dominant, out frame);
                 SetFrame(frame);
@@ -195,13 +204,17 @@ namespace VoxelEngine.Cosmos
             }
         }
 
-        /// <summary>Set the frame directly (used by save restore to co-move with the right body).</summary>
+        /// <summary>Set the frame directly (used by save restore / warp). Fires OnFrameChanged
+        /// so gravity, grass and voxel streaming actually retarget.</summary>
         public void SetFrame(CelestialBody body)
         {
-            if (body == FrameBody) return;
-            // A direct frame set (teleport / save restore) always supersedes the
-            // proximity hold — the saved/teleported position already picked its frame.
+            if (body == FrameBody)
+            {
+                _frameReady = true;
+                return;
+            }
             proximityHoldBody = null;
+            CelestialBody old = FrameBody;
             FrameBody = body;
             if (body != null)
             {
@@ -216,6 +229,8 @@ namespace VoxelEngine.Cosmos
                 FrameVelocityKmS = double3.zero;
             }
             _frameReady = true;
+            if (old != body)
+                OnFrameChanged?.Invoke(body);
         }
 
         private static BodyInstance FindInstanceOf(CelestialBody body)
@@ -312,10 +327,14 @@ namespace VoxelEngine.Cosmos
             }
         }
 
+        /// <summary>Force a frame re-pick after warp (bypasses spawn-grace / suppress).</summary>
+        public void ForceReevaluateFrame() => ReEvaluateFrame(true);
+
         /// <summary>
         /// Choose the frame body by gravity dominance (with hysteresis) and apply the
         /// frame-velocity delta to every scene object when it changes.
         /// </summary>
+
         private void ReEvaluateFrame(bool force)
         {
             var reg = CosmicRegistry.Instance;
@@ -348,7 +367,10 @@ namespace VoxelEngine.Cosmos
                 var holdInst = FindInstanceOf(proximityHoldBody);
                 if (holdInst != null)
                 {
-                    double holdDist = math.length(holdInst.positionKmD - ViewerCosmicKm);
+                    double holdCenter = math.length(holdInst.positionKmD - ViewerCosmicKm);
+                    double holdRadius = holdInst.settings != null ? holdInst.settings.radiusKm : 0d;
+                    double holdDist = holdCenter - holdRadius;
+                    if (holdDist < 0d) holdDist = 0d;
                     if (holdDist < proximityHoldRangeKm)
                     {
                         candidateBody = proximityHoldBody;

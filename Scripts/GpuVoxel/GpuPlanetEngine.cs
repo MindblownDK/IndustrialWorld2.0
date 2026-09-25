@@ -275,9 +275,29 @@ namespace VoxelEngine.GpuVoxel
 
         // ─────────────────────────── main loop ───────────────────────────
 
+        private bool _farSleep;
+        private const float FarSleepAltitudeM = 400000f;
+
         private void Update()
         {
             if (!ResolveContext()) return;
+
+            if (IsFarFromViewer())
+            {
+                if (!_farSleep)
+                {
+                    _farSleep = true;
+                    SetAllRenderersEnabled(false);
+                }
+                PollSlots();
+                return;
+            }
+            if (_farSleep)
+            {
+                _farSleep = false;
+                SetAllRenderersEnabled(true);
+                _desiredTimer = 0f;
+            }
 
             PumpDesiredJob();
             PumpBuildQueue();
@@ -286,6 +306,23 @@ namespace VoxelEngine.GpuVoxel
             UpdateColliders();
             DepenetrationGuard();
             PumpDiagnostics();
+        }
+
+        private bool IsFarFromViewer()
+        {
+            if (body == null || viewer == null) return true;
+            float alt = Vector3.Distance(viewer.position, body.transform.position) - body.SurfaceRadius;
+            return alt > FarSleepAltitudeM;
+        }
+
+        private void SetAllRenderersEnabled(bool on)
+        {
+            foreach (var kv in _nodes)
+            {
+                var n = kv.Value;
+                if (n != null && n.renderer != null)
+                    n.renderer.enabled = on && !n.hiddenByBubble;
+            }
         }
 
         private float _engineDiagTimer = 12f;

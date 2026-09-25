@@ -47,6 +47,19 @@ namespace VoxelEngine.Fauna
             if (player == null) return;
             Vector3 ppos = player.transform.position;
 
+            bool vacuum = VoxelEngine.GridSystem.AtmosphereManager.IsInSpace(ppos)
+                          || VoxelEngine.Cosmos.GravityProvider.ActiveBody == null;
+            if (vacuum)
+            {
+                for (int i = _alive.Count - 1; i >= 0; i--)
+                {
+                    var a = _alive[i];
+                    if (a != null) Destroy(a.gameObject);
+                    _alive.RemoveAt(i);
+                }
+                return;
+            }
+
             // Cull dead + despawn far.
             for (int i = _alive.Count - 1; i >= 0; i--)
             {

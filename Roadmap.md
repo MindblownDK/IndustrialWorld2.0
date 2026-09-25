@@ -1,9 +1,9 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.31.3-dev`
-**Roadmap Version:** `12.31.3-dev`
-**Date:** 2026-09-24
+**Current Version:** `12.31.4-dev`
+**Roadmap Version:** `12.31.4-dev`
+**Date:** 2026-09-25
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
@@ -29,6 +29,10 @@
 
 ## 0. Recently Done
 
+### 12.31.4-dev - Warp Hull Hop, Vacuum, Planet Handoff
+- **Warp** (`GridWarpDrive`, `SpaceOrigin`): teleport the hull; `OnFrameChanged` on `SetFrame`; force frame after hop.
+- **Vacuum / planets:** no livestock or grass in space; GPU surfaces sleep past 400 km; proximity hold is surface-distance so gravity hands off.
+
 ### 12.31.3-dev - Warp Jump, Save Depth, Fly Hitch
 - **Warp FX:** matching velocity curves so the teleport runs; cheaper streaks. Flat drawer upgrades. Origin sweep 8 s.
 
@@ -42,20 +46,6 @@
 - **Warp** (`WarpFx`): new tunnel, no shake; hops clamped off the star; cosmic grid save/load.
 - **Cockpit:** nested origin skip (no twitch); confirm point-and-click; SOL toasts de-dupe.
 - **Preserved:** confirm-before-jump, drive slider, seated F3. No setup changes.
-
-### 12.30.0-dev - Jump Confirm Slider, Seated Autopilot, Seated Save
-- **Confirm** (`ConfirmDialogHud`): Input System only; Ctrl frees the mouse; drive-count slider remembered on the grid.
-- **F3 / save:** seated engage uses `ActiveControlGrid`; SaveAll unparents the pawn so the hull is written.
-- **Preserved:** always-confirm hops, pooling, mass penalty, thruster dampeners. No setup changes.
-
-### 12.29.0-dev - Confirm Every Jump, Leave-Behind, Beacon Map, Real Dampeners
-- **Always confirm** (`GridWarpDrive.TryWarp`): seated full/partial hops open the wheel; autopilot `skipConfirm`. Arrival snaps `Body` + seated pilot; `ShiftWorld` moves `rb.position`.
-- **Wheel / map / dampeners:** dark wedges, mouse vs screen centre + A/D; powered `GridBeacon` on the orbital map; thruster/gyro dampeners (no velocity snap).
-- **Preserved:** pooling, mass penalty, partial-jump maths, F3 fly-to. No setup changes.
-
-### 12.28.2-dev - Partial-Jump Wheel
-- **Cursor frees** (`ConfirmDialogHud`): `UIState.PushBlock` on show, two-wedge JUMP / ABORT ring, click / Enter / Esc.
-- **Preserved:** partial-jump maths, pooling, mass penalty. No setup changes.
 
 ### Era Transition Feel
 

@@ -1,9 +1,17 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.31.3-dev`
+**Current Version:** `12.31.4-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.31.4-dev] Warp Moves the Hull, Vacuum Life, Planet Handoff
+
+**Type:** PATCH - charged warp re-anchors on the grid hull (not the seated pawn), so ShiftWorld actually carries the ship. SetFrame now fires OnFrameChanged so gravity, grass and voxel streaming retarget. After the hop the frame is force-re-evaluated. Livestock and grass do not spawn in vacuum. Distant planet GPU surfaces sleep above 400 km. Proximity hold uses surface distance (not centre), so approaching a world switches frame and gravity. No recipe or setup changes.
+
+**GitHub title:** `[12.31.4-dev] Warp hull hop, vacuum, planet handoff`
+
+**Manual steps:** none. Verify in Unity: charged warp moves the hull (not only FX); no animals or grass in space; Earth scatter gone when far; flying up to another planet streams its surface and gravity takes over.
 
 ### [12.31.3-dev] Warp Actually Jumps, Save Depth, Less Fly Hitch
 

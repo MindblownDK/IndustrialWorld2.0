@@ -358,6 +358,8 @@ namespace VoxelEngine.GridSystem
                 gameObject.AddComponent<VoxelEngine.Thermal.GridThermalSystem>();
 
             _prevVelocity = _rb.linearVelocity;
+            if (SpaceOrigin.Instance != null)
+                SpaceOrigin.Instance.RegisterRoot(transform);
         }
 
         private void FixedUpdate()

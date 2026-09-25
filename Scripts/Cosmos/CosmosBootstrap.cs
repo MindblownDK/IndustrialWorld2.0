@@ -563,7 +563,7 @@ namespace VoxelEngine.Cosmos
         /// (GpuPlanetEngine) instead of the sky proxy. Kept in sync with
         /// the former proxy window: 60,000 km covers the whole system, so
         /// EVERY planet renders its real voxel surface at all times.</summary>
-        private const double trueLodViewKm = 60000d;
+        private const double trueLodViewKm = 500d;
 
         // ── Real-space infrastructure ──────────────────────────────
 
@@ -572,6 +572,8 @@ namespace VoxelEngine.Cosmos
             if (SpaceOrigin.Instance != null)
             {
                 _spaceOrigin = SpaceOrigin.Instance;
+                if (_spaceOrigin.proximityHoldRangeKm < 120f)
+                    _spaceOrigin.proximityHoldRangeKm = 120f;
                 return;
             }
             var go = new GameObject("SpaceOrigin");

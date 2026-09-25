@@ -107,6 +107,12 @@ namespace VoxelEngine.Cosmos
         private void Update()
         {
             if (body == null || viewer == null || grassBladeMesh == null || grassMaterial == null) return;
+            if (VoxelEngine.GridSystem.AtmosphereManager.IsInSpace(viewer.position)
+                || GravityProvider.ActiveBody == null)
+            {
+                if (_instanceCount > 0) DisposeField();
+                return;
+            }
 
             // 9.18.2 - PLAYER EDITS rebuild the field: mining grass (or the ground under
             // it) must remove its blades immediately, not when the player next walks 12 m.

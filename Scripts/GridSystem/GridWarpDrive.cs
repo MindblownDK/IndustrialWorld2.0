@@ -415,10 +415,8 @@ namespace VoxelEngine.GridSystem
             System.Action jump = () =>
             {
                 Vector3 keepVel = CarryVelocity();
-                origin.TeleportCosmic(destination);
-                origin.SetFrame(targetPlanet != null || locatorBody != null
-                    ? ResolveSceneBody(registry, targetPlanet != null ? targetPlanet : locatorBody)
-                    : null);
+                ApplyWarpHop(origin, registry, destination,
+                    targetPlanet != null ? targetPlanet : locatorBody);
                 FinishArrival(keepVel);
 
                 string whereAmI = "";
@@ -483,8 +481,7 @@ namespace VoxelEngine.GridSystem
             System.Action jump = () =>
             {
                 Vector3 keepVel = CarryVelocity();
-                origin.TeleportCosmic(destination);
-                origin.SetFrame(null);
+                ApplyWarpHop(origin, registry, destination, null);
                 FinishArrival(keepVel);
 
                 string whereAmI = "";
@@ -508,6 +505,25 @@ namespace VoxelEngine.GridSystem
             if (!VoxelEngine.FX.WarpFx.PlayJump(this, jump))
                 jump();
             return true;
+        }
+
+        /// <summary>
+        /// Re-anchor on the hull, not the pawn. Seated viewers are nested under the
+        /// cockpit and were skipped by ShiftWorld, so TeleportCosmic(viewer) left the
+        /// ship behind and only played the FX.
+        /// </summary>
+        private void ApplyWarpHop(SpaceOrigin origin, CosmicRegistry registry, double3 destination, BodyInstance lockBody)
+        {
+            Transform hull = Grid != null ? Grid.transform : transform;
+            origin.RegisterRoot(hull);
+            origin.TeleportSubjectToCosmic(hull, destination);
+            CelestialBody scene = lockBody != null ? ResolveSceneBody(registry, lockBody) : null;
+            if (scene != null)
+            {
+                origin.proximityHoldBody = scene;
+                origin.SetFrame(scene);
+            }
+            origin.ForceReevaluateFrame();
         }
 
         private Vector3 CarryVelocity()
