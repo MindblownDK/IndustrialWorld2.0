@@ -81,6 +81,7 @@ namespace VoxelEngine.UI
         private VoxelEngine.Building.Biofarm _openBiofarm;
         private VoxelEngine.Power.Wind.WindTurbineController _openWindTurbine;
         private VoxelEngine.GridSystem.GridBlock _openGridBlock;
+        private VoxelEngine.Building.PortalControllerBlock _openPortalController;
         private VoxelEngine.GridSystem.GridEntity _openGridTerminal;
         private int _terminalTab; // -1 = All Storage, >=0 = index into the station list
         private VoxelEngine.Crafting.OilRefinery _openOilRefinery;
@@ -833,7 +834,7 @@ namespace VoxelEngine.UI
             _openPatternTerminal = null; _openCraftTerminal = null;
             _openImporter = null; _openExporter = null;
             _openDiskManipulator = null; _openNAS = null; _openPowerstation = null; _openStaticSeasonMonitor = null; _openDronePort = null;
-            _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null;
+            _openStorageDrawer = null; _openDrawerController = null; _openItemDisplay = null; _openPortalController = null;
             _openCrusher = null; _openAssembler = null; _openFunnel = null; _openSplitter = null;
             _openVoltageStation = null;
             _openDefense = null;
@@ -974,6 +975,8 @@ namespace VoxelEngine.UI
                     _openDrawerController = dc; dc.RefreshLinks(); break;
                 case VoxelEngine.Storage.StorageItemDisplayBlock dib:
                     _openItemDisplay = dib; break;
+                case VoxelEngine.Building.PortalControllerBlock portal:
+                    _openPortalController = portal; break;
                 case VoxelEngine.Storage.ServerRack sr:
                     _openServerRack = sr; sr.EnsureContainers();
                     WatchContainer(sr.diskSlots); WatchContainer(sr.ramSlots);
@@ -1343,7 +1346,7 @@ namespace VoxelEngine.UI
                     _openDrawerController != null || _openItemDisplay != null || _openDronePort != null ||
                     _openCrusher != null || _openAssembler != null || _openFunnel != null || _openSplitter != null ||
                     _openPumpjack != null || _openDefense != null || _openArmorUpgradeStation != null || _openWaterTower != null ||
-                    _openRailStation != null || _openRailSwitch != null || _openSteamEngine != null || _openSchedule != null || _openDisplay != null;
+                    _openRailStation != null || _openRailSwitch != null || _openSteamEngine != null || _openSchedule != null || _openDisplay != null || _openPortalController != null;
                 if ((anyRightTargetOpen || CraftingScreen.Visible) && (_productionStatsOpen || _recipeBrowserOpen))
                 {
                     _productionStatsOpen = false;
@@ -1362,7 +1365,7 @@ namespace VoxelEngine.UI
                     _openDrawerController != null || _openItemDisplay != null || _openDronePort != null ||
                     _openCrusher != null || _openAssembler != null || _openFunnel != null || _openSplitter != null ||
                     _openPumpjack != null || _openDefense != null || _openArmorUpgradeStation != null || _openWaterTower != null ||
-                    _openRailStation != null || _openRailSwitch != null || _openSteamEngine != null || _openSchedule != null || _openDisplay != null;
+                    _openRailStation != null || _openRailSwitch != null || _openSteamEngine != null || _openSchedule != null || _openDisplay != null || _openPortalController != null;
                 // The station pane (_openStation) renders its OWN crafting list on
                 // the right, so we suppress the center panel only in that case.
                 // For every other right panel (chest / furnace / storage terminal)
@@ -1409,6 +1412,7 @@ namespace VoxelEngine.UI
                 else if (_openStorageDrawer   != null) _contentLayer.Add(VoxelEngine.Storage.StorageUI.BuildDrawerPanel(_openStorageDrawer, BuildSlot));
                 else if (_openDrawerController!= null) { var mp = VoxelEngine.Storage.StorageUI.BuildDrawerControllerPanel(_openDrawerController); _contentLayer.Add(mp); AppendItemPorts(mp, _openDrawerController); }
                 else if (_openItemDisplay     != null) _contentLayer.Add(VoxelEngine.Storage.StorageUI.BuildItemDisplayPanel(_openItemDisplay, BuildSlot));
+                else if (_openPortalController != null) _contentLayer.Add(VoxelEngine.Building.PortalUI.BuildPanel(_openPortalController));
                 else if (_openGridBlock        != null) { var mp = VoxelEngine.GridSystem.UI.GridBlockUI.BuildPanel(_openGridBlock, BuildSlot); _contentLayer.Add(mp); if (_openGridBlock is VoxelEngine.Transport.IItemPortHost) AppendItemPorts(mp, _openGridBlock); }
                 else if (_openOilRefinery      != null) { var mp = VoxelEngine.Crafting.ProcessorUI.OilRefineryPanel(_openOilRefinery, BuildSlot); _contentLayer.Add(mp); AppendItemPorts(mp, _openOilRefinery); }
                 else if (_openDistillationPlant != null)
@@ -2712,7 +2716,8 @@ namespace VoxelEngine.UI
                    _openDronePort != null || _openItemDisplay != null || _openCrusher != null || _openAssembler != null ||
                    _openFunnel != null || _openSplitter != null || _openGridBlock != null ||
                    _openOilRefinery != null || _openPumpjack != null || _openChemPlant != null || _openStation != null ||
-                   _openArmorUpgradeStation != null || _openVoltageStation != null || _openDefense != null;
+                   _openArmorUpgradeStation != null || _openVoltageStation != null || _openDefense != null ||
+                   _openPortalController != null;
         }
 
         // The equipment console is a physical extension of the inventory terminal.

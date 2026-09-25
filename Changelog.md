@@ -1,9 +1,17 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.38.1-dev`
+**Current Version:** `12.39.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.39.0-dev] Player-Built Portals: Frames, Controllers, Name + Code Pairing
+
+**Type:** MINOR - the warp gate's successor direction ships as a buildable system: portals the player assembles block by block, in any closed shape up to 64x64 cells, linked to each other by a custom NAME and CODE. Portal Frames are static placed blocks (placeable on station hulls and planetary ground alike - they are NOT grid blocks); assembled into a sealed outline they define the aperture. The Portal Controller mounts in front (within 8 m) and owns everything: it re-scans the frame network every 3 s (co-plane check, border flood fill, enclosed-interior extraction, 64x64 cap - a ring gets a ring-shaped aperture, a square a square one), charges the portal (45 s baseline at 60 kW + 60 W per interior cell) and then opens - and the open aperture is the real bill: 20 kW + 1,500 W per cell per second, so a full 64x64 burns about 6.16 MW while open, and losing the supply collapses the portal into a 60 s cooldown. Pairing is the two fields on the panel: two OPEN, valid portals whose trimmed names match (case-insensitive) and whose trimmed codes match exactly link to each other - that pair of strings is the whole address book. While open, the first hull (grid ship) or on-foot player inside the aperture crosses to the partner's mouth: the same floating-origin hop the drive and gate use (TeleportSubjectToCosmic plus SettleGridAfterHop), arriving just outside the linked aperture flying out along its facing at entry speed, collision-vetoed by ArrivalBlocked, with a 6 s re-entry immunity and a 3 s per-side transit lock so nothing ping-pongs. The aperture renders as a generated mesh - one quad per sealed interior cell under a pulsing warp material with a graceful shader fallback - so the portal looks like exactly the portal that was built. The controller panel carries name and code fields (applied live), state, shape and cell count, scan verdict, charge percent, live draw, the open-drain preview, the linked portal's name and the OPEN/CLOSE switch. Name, code, charge and cooldown persist on the placed block (new additive SavedPlacedBlock fields - legacy saves restore exactly as before); a portal never restores open. Authored by the new non-destructive Setup Step 99: PortalFrame_1m and PortalController prefabs (visuals only when missing), static Block_PortalFrame and Block_PortalController items (category Machines), deliberately expensive recipes (frame: 12 Steel Plate + 2 Advanced Circuit + 2 Lithium @ Assembler 12 s; controller: 20 Steel Plate + 10 Advanced Circuit + 4 Uranium Ore + 6 Lithium @ Assembler 60 s), and the Stable Portals research (tier 8, behind Warp Gate). The shipped GridWarpGate stays as-is; this is the design direction going forward.
+
+**GitHub title:** `[12.39.0-dev] Player-built portals: frames, controllers, name + code pairing`
+
+**Manual steps:** Tools -> Voxel Engine -> Voxel Engine Setup -> "99. Build Portals" (run after 98 so the research chain connects; non-destructive). Then verify it compiles.
 
 ### [12.38.1-dev] Compile Fix: Route Types Namespace
 

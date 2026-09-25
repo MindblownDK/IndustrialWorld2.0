@@ -889,6 +889,10 @@ namespace VoxelEngine.Player
                 var railStation = hit.collider.GetComponentInParent<VoxelEngine.Building.RailStation>();
                 if (railStation != null) { UI.GameUIController.Instance?.OpenMachine(railStation); return; }
 
+                // Portal controller: name/code panel (12.39.0-dev).
+                var portalCtrl = hit.collider.GetComponentInParent<VoxelEngine.Building.PortalControllerBlock>();
+                if (portalCtrl != null) { UI.GameUIController.Instance?.OpenMachine(portalCtrl); return; }
+
                 var waterTower = hit.collider.GetComponentInParent<VoxelEngine.Building.WaterTower>();
                 if (waterTower != null) { UI.GameUIController.Instance?.OpenMachine(waterTower); return; }
 

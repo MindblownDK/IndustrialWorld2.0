@@ -553,6 +553,19 @@ namespace VoxelEngine.Persistence
                     entry.displayCustomText = display.customText ?? "";
                 }
 
+                // Portal (12.39.0-dev). Name and code are the player's addressing
+                // scheme between worlds; charge/cooldown keep the cycle honest across
+                // a reload. An open aperture is never restored — it recharges.
+                var portalController = pb.GetComponentInChildren<VoxelEngine.Building.PortalControllerBlock>();
+                if (portalController != null)
+                {
+                    entry.hasPortalState = true;
+                    entry.portalName = portalController.portalName ?? "";
+                    entry.portalCode = portalController.portalCode ?? "";
+                    entry.portalCharge01 = portalController.Charge01;
+                    entry.portalCooldown01 = portalController.Cooldown01;
+                }
+
                 CaptureFactoryRuntime(pb.gameObject, entry);
                 save.placedBlocks.Add(entry);
             }
@@ -2598,6 +2611,10 @@ namespace VoxelEngine.Persistence
                         sb.displayCustomText);
                 }
 
+                var restoredPortal = go.GetComponentInChildren<VoxelEngine.Building.PortalControllerBlock>(true);
+                if (restoredPortal != null && sb.hasPortalState)
+                    restoredPortal.RestorePersistentState(sb.portalName, sb.portalCode, sb.portalCharge01, sb.portalCooldown01);
+
                 var restoredSwitch = go.GetComponentInChildren<VoxelEngine.Building.RailTrack>(true);
                 if (restoredSwitch != null && sb.hasRailSwitch)
                 {
@@ -4010,6 +4027,14 @@ namespace VoxelEngine.Persistence
             public int displayKind;
             public int displaySource;
             public string displayCustomText = "";
+            // Additive 12.39.0-dev: portal controller identity and cycle position.
+            // A portal's name/code is the player's addressing scheme across worlds —
+            // losing it on reload would sever every route the player memorised.
+            public bool hasPortalState;
+            public string portalName = "";
+            public string portalCode = "";
+            public float portalCharge01;
+            public float portalCooldown01;
             public Vector3 pos; public Quaternion rot; public float rotY;
             // Additive body anchor (9.58.2-dev). A placed block stands on a celestial body,
             // and that body moves through the scene as the system runs (orbits, rebases,

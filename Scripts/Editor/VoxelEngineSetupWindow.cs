@@ -885,6 +885,8 @@ namespace VoxelEngine.EditorTools
                 BuildWarpCoilResonance, 62);
             AddWizardButton(scroll, "98. Build Warp Gate\n(Paired fixed-structure transit \u2014 needs 50 \u2014 Non-Destructive)",
                 BuildWarpGateContent, 56);
+            AddWizardButton(scroll, "99. Build Portals\n(Framed paired portals by name + code \u2014 needs 98 \u2014 Non-Destructive)",
+                BuildPortalContent, 56);
 
             AddSpacer(scroll, 20);
         }
@@ -16329,6 +16331,248 @@ AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
                 "• Recipe: 60 Steel Plate + 20 Advanced Circuit + 10 Uranium Ore + 8 Lithium @ Assembler\n" +
                 "• Research: Warp Gate (tier 8) after Warp Drive\n\n" +
                 "In-game: build two gates (ships or stations), set the SAME pairing code on both panels, keep them powered in vacuum — the charged gate opens and delivers the first ship inside to its partner.",
+                "OK");
+        }
+
+        // ============================================================
+        //   STEP 99 - BUILD PORTALS
+        //   Player-built paired portals: Portal Frames seal an aperture
+        //   (square or ring, up to 64x64 cells), the Portal Controller in
+        //   front scans, charges, and links to the partner by NAME + CODE.
+        //   Non-destructive: existing prefabs, items, recipes and research
+        //   are only repaired when a reference is missing.
+        // ============================================================
+        private void BuildPortalContent()
+        {
+            const string BUILD_ROOT = ASSET_ROOT + "/Building";
+            const string PREFABS    = BUILD_ROOT + "/Prefabs";
+            const string ITEMS      = BUILD_ROOT + "/Items";
+            const string RECIPES    = BUILD_ROOT + "/Recipes";
+            const string NODES      = ASSET_ROOT + "/Research/Nodes";
+            foreach (var f in new[] { BUILD_ROOT, PREFABS, ITEMS, RECIPES }) EnsureFolder(f);
+
+            string craftItems = ASSET_ROOT + "/Items";
+            string indItems   = ASSET_ROOT + "/Industrial/Items";
+            var steelPlate  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{indItems}/Item_SteelPlate.asset");
+            var advCircuit  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{indItems}/Item_AdvCircuit.asset");
+            var uraniumOre  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{craftItems}/Item_Uranium.asset");
+            var lithium     = EnsureLithiumResource();
+            var sciT2       = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{craftItems}/Item_ScienceT2.asset");
+            var sciT3       = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{craftItems}/Item_ScienceT3.asset");
+
+            var frameSteel = new Color(0.72f, 0.76f, 0.84f, 1f);
+            var portalGlow = new Color(0.35f, 0.75f, 1f, 1f);
+
+            // ── Frame prefab: a 1 m cell of portal ring ──
+            string framePath = $"{PREFABS}/PortalFrame_1m.prefab";
+            var framePrefab = GetOrCreatePrefab(framePath, "PortalFrame_1m", (root) =>
+            {
+                if (root.GetComponent<VoxelEngine.Building.PortalFrameBlock>() == null)
+                    root.AddComponent<VoxelEngine.Building.PortalFrameBlock>();
+
+                // Visual: solid 1x1x0.3 slab with a glowing rim strip on the front —
+                // assembled outlines read as one continuous ring. Rebuilt ONLY when
+                // the prefab has no visual yet, so designer art survives.
+                if (root.transform.childCount == 0 && root.GetComponent<MeshFilter>() == null)
+                {
+                    var body = MakeColoredMat(PREFABS + "/Mats", "Mat_PortalFrame", frameSteel);
+                    var glow = MakeColoredMat(PREFABS + "/Mats", "Mat_PortalFrameGlow", portalGlow);
+
+                    var slab = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    slab.name = "Slab";
+                    slab.transform.SetParent(root.transform, false);
+                    slab.transform.localScale = new Vector3(1f, 1f, 0.3f);
+                    UnityEngine.Object.DestroyImmediate(slab.GetComponent<Collider>());
+                    slab.GetComponent<Renderer>().sharedMaterial = body;
+
+                    // Emissive rim: four thin strips on the front face.
+                    var rims = new (string, Vector3, Vector3)[]
+                    {
+                        ("Top",    new Vector3(1f,    0.1f,  0.05f), new Vector3(0f,    0.45f, 0.16f)),
+                        ("Bottom", new Vector3(1f,    0.1f,  0.05f), new Vector3(0f,   -0.45f, 0.16f)),
+                        ("Left",   new Vector3(0.1f,  0.9f,  0.05f), new Vector3(-0.45f, 0f,   0.16f)),
+                        ("Right",  new Vector3(0.1f,  0.9f,  0.05f), new Vector3(0.45f,  0f,   0.16f)),
+                    };
+                    foreach (var (rimName, scale, pos) in rims)
+                    {
+                        var rim = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                        rim.name = "Rim" + rimName;
+                        rim.transform.SetParent(root.transform, false);
+                        rim.transform.localScale = scale;
+                        rim.transform.localPosition = pos;
+                        UnityEngine.Object.DestroyImmediate(rim.GetComponent<Collider>());
+                        rim.GetComponent<Renderer>().sharedMaterial = glow;
+                    }
+                }
+
+                var bcol = root.GetComponent<BoxCollider>();
+                if (bcol == null) bcol = root.AddComponent<BoxCollider>();
+                bcol.size = new Vector3(1f, 1f, 0.3f);
+                bcol.center = Vector3.zero;
+            });
+
+            // ── Controller prefab: console + PowerConsumer ──
+            string ctrlPath = $"{PREFABS}/PortalController.prefab";
+            var ctrlPrefab = GetOrCreatePrefab(ctrlPath, "PortalController", (root) =>
+            {
+                // Idle/charge/open watts are driven by PortalControllerBlock every
+                // frame, so the consumer's authored value is left untouched.
+                if (root.GetComponent<PowerConsumer>() == null)
+                    root.AddComponent<PowerConsumer>();
+                if (root.GetComponent<VoxelEngine.Building.PortalControllerBlock>() == null)
+                    root.AddComponent<VoxelEngine.Building.PortalControllerBlock>();
+
+                if (root.transform.childCount == 0 && root.GetComponent<MeshFilter>() == null)
+                {
+                    var body = MakeColoredMat(PREFABS + "/Mats", "Mat_PortalController", new Color(0.25f, 0.28f, 0.33f, 1f));
+                    var glow = MakeColoredMat(PREFABS + "/Mats", "Mat_PortalControllerScreen", portalGlow);
+
+                    var caseBox = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    caseBox.name = "Case";
+                    caseBox.transform.SetParent(root.transform, false);
+                    caseBox.transform.localScale = new Vector3(0.9f, 0.9f, 0.5f);
+                    UnityEngine.Object.DestroyImmediate(caseBox.GetComponent<Collider>());
+                    caseBox.GetComponent<Renderer>().sharedMaterial = body;
+
+                    var screen = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    screen.name = "Screen";
+                    screen.transform.SetParent(root.transform, false);
+                    screen.transform.localScale = new Vector3(0.6f, 0.45f, 0.06f);
+                    screen.transform.localPosition = new Vector3(0f, 0.1f, 0.26f);
+                    UnityEngine.Object.DestroyImmediate(screen.GetComponent<Collider>());
+                    screen.GetComponent<Renderer>().sharedMaterial = glow;
+                }
+
+                var bcol = root.GetComponent<BoxCollider>();
+                if (bcol == null) bcol = root.AddComponent<BoxCollider>();
+                bcol.size = new Vector3(0.9f, 0.9f, 0.5f);
+                bcol.center = Vector3.zero;
+            });
+
+            // ── Items: STATIC placed blocks (BlockItem, not GridBlockItem) ──
+            string frameItemPath = $"{ITEMS}/Block_PortalFrame.asset";
+            var frameItem = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.BlockItem>(frameItemPath);
+            if (frameItem == null)
+            {
+                frameItem = ScriptableObject.CreateInstance<VoxelEngine.Items.BlockItem>();
+                AssetDatabase.CreateAsset(frameItem, frameItemPath);
+            }
+            frameItem.itemId = "portalframe";
+            frameItem.displayName = "Portal Frame";
+            frameItem.description = "One cell of portal ring. Assemble frames into a sealed outline (square or ring, up to 64x64) and mount a Portal Controller within 8 m of it. Frame walls leak no light — only a sealed aperture charges.";
+            frameItem.iconTint = portalGlow;
+            frameItem.maxStack = 100;
+            frameItem.placedPrefab = framePrefab;
+            frameItem.gridSize = Vector3Int.one;
+            frameItem.allowStacking = true;
+            frameItem.blockHealth = 400;
+            frameItem.miningTier = 1;
+            frameItem.massPerUnit = 120f;
+            frameItem.category = "Machines";
+            EditorUtility.SetDirty(frameItem);
+
+            string ctrlItemPath = $"{ITEMS}/Block_PortalController.asset";
+            var ctrlItem = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.BlockItem>(ctrlItemPath);
+            if (ctrlItem == null)
+            {
+                ctrlItem = ScriptableObject.CreateInstance<VoxelEngine.Items.BlockItem>();
+                AssetDatabase.CreateAsset(ctrlItem, ctrlItemPath);
+            }
+            ctrlItem.itemId = "portalcontroller";
+            ctrlItem.displayName = "Portal Controller";
+            ctrlItem.description = "Mount in front of a framed portal (within 8 m). Set a NAME and a CODE; two portals whose name AND code match link across any distance. Charging costs little — an open aperture drains by its size, so the big ones must earn their keep.";
+            ctrlItem.iconTint = portalGlow;
+            ctrlItem.maxStack = 10;
+            ctrlItem.placedPrefab = ctrlPrefab;
+            ctrlItem.gridSize = Vector3Int.one;
+            ctrlItem.allowStacking = true;
+            ctrlItem.blockHealth = 600;
+            ctrlItem.miningTier = 1;
+            ctrlItem.massPerUnit = 300f;
+            ctrlItem.category = "Machines";
+            EditorUtility.SetDirty(ctrlItem);
+
+            // ── Recipes (non-destructive append; deliberately expensive) ──
+            var frameInputs = new System.Collections.Generic.List<VoxelEngine.Crafting.RecipeIngredient>();
+            if (steelPlate != null) frameInputs.Add(new VoxelEngine.Crafting.RecipeIngredient { item = steelPlate, count = 12 });
+            if (advCircuit != null) frameInputs.Add(new VoxelEngine.Crafting.RecipeIngredient { item = advCircuit, count = 2 });
+            if (lithium != null)    frameInputs.Add(new VoxelEngine.Crafting.RecipeIngredient { item = lithium, count = 2 });
+            var frameRecipe = GetOrCreateAsset<VoxelEngine.Crafting.RecipeDefinition>($"{RECIPES}/Recipe_PortalFrame.asset");
+            frameRecipe.displayName = "Portal Frame";
+            frameRecipe.outputItem = frameItem;
+            frameRecipe.outputCount = 1;
+            frameRecipe.requiredStation = VoxelEngine.Crafting.StationTier.Assembler;
+            frameRecipe.craftSeconds = 12f;
+            frameRecipe.unlockedByDefault = false;
+            frameRecipe.inputs = frameInputs.ToArray();
+            EditorUtility.SetDirty(frameRecipe);
+
+            var ctrlInputs = new System.Collections.Generic.List<VoxelEngine.Crafting.RecipeIngredient>();
+            if (steelPlate != null) ctrlInputs.Add(new VoxelEngine.Crafting.RecipeIngredient { item = steelPlate, count = 20 });
+            if (advCircuit != null) ctrlInputs.Add(new VoxelEngine.Crafting.RecipeIngredient { item = advCircuit, count = 10 });
+            if (uraniumOre != null) ctrlInputs.Add(new VoxelEngine.Crafting.RecipeIngredient { item = uraniumOre, count = 4 });
+            if (lithium != null)    ctrlInputs.Add(new VoxelEngine.Crafting.RecipeIngredient { item = lithium, count = 6 });
+            var ctrlRecipe = GetOrCreateAsset<VoxelEngine.Crafting.RecipeDefinition>($"{RECIPES}/Recipe_PortalController.asset");
+            ctrlRecipe.displayName = "Portal Controller";
+            ctrlRecipe.outputItem = ctrlItem;
+            ctrlRecipe.outputCount = 1;
+            ctrlRecipe.requiredStation = VoxelEngine.Crafting.StationTier.Assembler;
+            ctrlRecipe.craftSeconds = 60f;
+            ctrlRecipe.unlockedByDefault = false;
+            ctrlRecipe.inputs = ctrlInputs.ToArray();
+            EditorUtility.SetDirty(ctrlRecipe);
+
+            var recipeRegistry = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeRegistry>($"{ASSET_ROOT}/RecipeRegistry.asset");
+            if (recipeRegistry != null)
+            {
+                if (!recipeRegistry.recipes.Contains(frameRecipe)) { recipeRegistry.recipes.Add(frameRecipe); EditorUtility.SetDirty(recipeRegistry); }
+                if (!recipeRegistry.recipes.Contains(ctrlRecipe))  { recipeRegistry.recipes.Add(ctrlRecipe);  EditorUtility.SetDirty(recipeRegistry); }
+            }
+
+            // ── Research (non-destructive: only creates the node if missing) ──
+            var tree = AssetDatabase.LoadAssetAtPath<VoxelEngine.Research.ResearchTree>($"{ASSET_ROOT}/Research/ResearchTree.asset");
+            if (tree != null)
+            {
+                var node = FindNodeByName(tree, "res_portal");
+                if (node == null)
+                {
+                    node = ScriptableObject.CreateInstance<VoxelEngine.Research.ResearchNode>();
+                    node.nodeId = "res_portal";
+                    node.displayName = "Stable Portals";
+                    node.description = "Unlocks Portal Frames and the Portal Controller. Seal an aperture from frames, name it, code it — and the matching portal is a doorway, not a journey. Apertures drain power by area while open.";
+                    node.category = VoxelEngine.Research.ResearchCategory.Environment;
+                    node.subCategory = VoxelEngine.Research.ResearchSubCategory.Building;
+                    node.tier = 8;
+                    node.column = 7;
+                    node.iconTint = portalGlow;
+                    node.researchSeconds = 1500f;
+                    node.cost = new[]
+                    {
+                        new VoxelEngine.Research.ResearchNode.ScienceCost { pack = sciT2 as VoxelEngine.Items.ScienceItem, count = 150 },
+                        new VoxelEngine.Research.ResearchNode.ScienceCost { pack = sciT3 as VoxelEngine.Items.ScienceItem, count = 120 },
+                    };
+                    var gateNode = FindNodeByName(tree, "res_warpgate");
+                    if (gateNode != null) node.prerequisites = new[] { gateNode };
+                    AssetDatabase.CreateAsset(node, $"{NODES}/res_portal.asset");
+                    tree.nodes.Add(node);
+                }
+                node.unlocksRecipes = new VoxelEngine.Crafting.RecipeDefinition[] { frameRecipe, ctrlRecipe };
+                EditorUtility.SetDirty(node);
+                EditorUtility.SetDirty(tree);
+                VoxelEngine.Research.ResearchRecipeLinker.Register("res_portal", frameRecipe);
+                VoxelEngine.Research.ResearchRecipeLinker.Register("res_portal", ctrlRecipe);
+            }
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            EditorUtility.DisplayDialog("Voxel Engine \u2014 Portals",
+                "Portal system wired (non-destructive):\n\n" +
+                "\u2022 Prefabs: PortalFrame_1m + PortalController (Building/Prefabs)\n" +
+                "\u2022 Items: Block_PortalFrame + Block_PortalController (static blocks)\n" +
+                "\u2022 Recipes: Frame = 12 Steel Plate + 2 Advanced Circuit + 2 Lithium @ Assembler 12 s; " +
+                "Controller = 20 Steel Plate + 10 Advanced Circuit + 4 Uranium Ore + 6 Lithium @ Assembler 60 s\n" +
+                "\u2022 Research: Stable Portals (tier 8) after Warp Gate\n\n" +
+                "In-game: build a sealed outline of frames (square or ring, up to 64x64), mount the controller within 8 m, wire power. On two portals set the SAME name and code \u2014 when both are charged they open to each other. A 64x64 aperture costs about 6.2 MW while open.",
                 "OK");
         }
 

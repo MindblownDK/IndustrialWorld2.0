@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.38.1-dev`
-**Roadmap Version:** `12.38.1-dev`
+**Current Version:** `12.39.0-dev`
+**Roadmap Version:** `12.39.0-dev`
 **Date:** 2026-09-25
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 12.39.0-dev - Player-Built Portals, Name + Code Pairing
+- **Portal system** (`PortalFrameBlock`, `PortalControllerBlock`, `PortalUI`): frames seal any closed outline up to 64x64; the controller charges, pairs by NAME + CODE, and hands ships and players to the partner's mouth. Open drain scales with area - 64x64 is megawatts.
+- **Persistence** (`WorldStatePersistence`): portal name, code, charge and cooldown on the placed block; never restores open.
+- **Setup** (`VoxelEngineSetupWindow`): Step 99 authors frame/controller prefabs, static block items, expensive recipes, Stable Portals research (tier 8 behind Warp Gate).
+
 ### 12.38.0-dev - Warp Gate Prototype
 - **Gate** (`GridWarpGate`): paired fixed-structure transit — matching codes, 25 s aperture, first ship inside hops to the partner's rendezvous, collision-vetoed, at rest.
 - **Setup** (`VoxelEngineSetupWindow`): Step 98 authors prefab, item, recipe, research (tier 8 behind Warp Drive).
@@ -44,10 +49,6 @@
 ### 12.35.0-dev - Warp Coil Resonance Research, Setup Step 97
 - **Research** (`GridWarpDrive`, `ResearchManager`): repeatable Warp Coil Resonance node — 15% faster spin-up per rank, read live by the drive; Coils row shows the rank.
 - **Setup** (`VoxelEngineSetupWindow`): non-destructive Step 97 authors and connects the node (manual run, once).
-
-### 12.34.0-dev - Route Destinations in the Picker, Spin-Up Assist
-- **Drive panel** (`GridWarpDrive`, `GridBlockUI`): route-book destinations as amber rows — the jump lands at the route's live end point (waymarks track, pins ride, frozen stays).
-- **Drive** (`GridWarpDrive`): enabled drives resonate the spin-up — sqrt(count) faster coils; Coils row on the panel.
 
 ### Era Transition Feel
 
@@ -1929,7 +1930,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 17. **Warp Gate Prototype**
     - Experimental travel to distant star systems.
     - Endgame expansion hook.
-    - *(12.38.0-dev ships the interplanetary prototype: `GridWarpGate`, paired by code, aperture transit to the partner's rendezvous; authored by Setup Step 98. Interstellar pairing and gate networks remain open.)*
+    - *(12.38.0-dev ships the interplanetary prototype: `GridWarpGate`, paired by code, aperture transit to the partner's rendezvous; authored by Setup Step 98. 12.39.0-dev starts the successor: player-built portals — frames seal the aperture, controllers pair by name and code, Setup Step 99. Interstellar pairing and portal networks remain open.)*
 
 18. **Coordinate Jump Drive**
     - Charged faster-than-light grid block for known beacons, destinations, and validated safe coordinates.
