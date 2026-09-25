@@ -1,9 +1,17 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.39.1-dev`
+**Current Version:** `12.39.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.39.2-dev] Portal Compile Fix: EntityId as the Transit Key
+
+**Type:** PATCH - follow-up to 12.39.1: Unity 6.5's EntityId is a wrapper struct, and its implicit conversion to int is itself obsoleted as an error, so keying the transit-immunity dictionary by int no longer compiles. The dictionary is now Dictionary<EntityId, float> and the TryGetValue/indexer calls are unchanged. Runtime-only state, nothing persisted - saves are unaffected.
+
+**GitHub title:** `[12.39.2-dev] Portal compile fix: EntityId as the transit key`
+
+**Manual steps:** none. Verify it compiles.
 
 ### [12.39.1-dev] Portal Compile Fix: Unity 6.5 API Drift
 

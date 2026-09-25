@@ -367,7 +367,7 @@ namespace VoxelEngine.Building
         // Transit immunity by transform id: a hull that just arrived is standing next
         // to the linked aperture, which is also open — without the stamp the two
         // portals would play ping-pong with every arrival.
-        private static readonly Dictionary<int, float> s_transitAt = new();
+        private static readonly Dictionary<EntityId, float> s_transitAt = new();
         private const float TransitImmunitySeconds = 6f;
 
         private static bool RecentlyTransited(Transform t)
