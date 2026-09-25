@@ -434,7 +434,9 @@ namespace VoxelEngine.Navigation
             // in parallel so the ship is lined up when the bank fills. Price and hop
             // already include the live mass penalty, so a loaded hauler banks more.
             double legKm = _legIsCapture ? d / 1000d : _drive.LiveHopKm;
-            _legNeedWh = (float)(legKm * GridWarpDrive.EffectiveRateWhPerKm(_grid));
+            // Bank the leg price plus the drive's arrival reserve, or every capture
+            // leg would land a reserve short and re-spool for a second hop.
+            _legNeedWh = (float)(legKm * GridWarpDrive.EffectiveRateWhPerKm(_grid) * (1f + Mathf.Clamp01(_drive.arrivalReserveFraction)));
             _legPooledWh = GridWarpDrive.PooledStoredWh(_grid);
             _drive.SetAutoRecharge(_legPooledWh < _legNeedWh - 0.01f);
 

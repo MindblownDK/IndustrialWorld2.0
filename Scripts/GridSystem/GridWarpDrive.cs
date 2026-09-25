@@ -47,7 +47,7 @@ namespace VoxelEngine.GridSystem
         [Header("Warp Battery")]
         [Tooltip("Internal energy store per drive (Wh). Enabled drives on a grid pool their stores; range is pool divided by price.")]
         public float warpCapacityWh = 10000f;
-        [Tooltip("Energy price of distance (Wh per km) at rated mass. At default tuning one full drive jumps exactly one hop.")]
+        [Tooltip("Energy price of distance (Wh per km) at rated mass. At default tuning one full drive jumps one hop, trimmed by the arrival reserve.")]
         public float energyPerKmWh = 4f;
         [Tooltip("Hull mass (kg) this drive is rated for. Heavier ships (and their cargo) pay more per km and hop shorter. Lighter is not a bonus.")]
         public float ratedMassKg = 100000f;
@@ -76,11 +76,27 @@ namespace VoxelEngine.GridSystem
         [Tooltip("Arrival altitude above the target planet's surface (km).")]
         public float arrivalAltitudeKm = 90f;
 
+        [Header("Warp Safety")]
+        [Tooltip("Drive health fraction below which the coils refuse to spin (repair the drive first). 0 disables the gate.")]
+        [Range(0f, 0.9f)] public float minHealthFraction = 0.35f;
+
+        [Tooltip("Fraction of the jump price kept in the pooled bank as arrival reserve. A full jump must leave this much; a partial hop banks it. 0 disables the reserve.")]
+        [Range(0f, 0.5f)] public float arrivalReserveFraction = 0.1f;
+
+        [Tooltip("Minimum arrival altitude above ANY body surface (km). Arrival points are pushed outside every world before the jump commits.")]
+        public float minArrivalAltitudeKm = 25f;
+
+        [Tooltip("Blind hops scatter their arrival by up to this fraction of the jump distance (lateral, random). Mapped locks stay exact. 0 = no arrival error.")]
+        [Range(0f, 0.05f)] public float blindArrivalErrorFraction = 0.005f;
+
         // ── Runtime state ─────────────────────────────────────────
         public float Charge01 { get; private set; }
         public float Cooldown01 { get; private set; }
         public bool IsCharging { get; private set; }
         public bool IsReady => Charge01 >= 1f && Cooldown01 <= 0f;
+        /// <summary>Battered drives refuse to spin: below this health fraction the coils are scrap until repaired.</summary>
+        public bool Damaged => maxHP > 0f && minHealthFraction > 0f
+            && currentHP < maxHP * Mathf.Clamp01(minHealthFraction);
         public float CurrentChargeWatts { get; private set; }
         public float Fill01 => warpCapacityWh > 0f ? Mathf.Clamp01(warpStoredWh / warpCapacityWh) : 0f;
         public bool WantsCharge => Enabled && Grid != null && warpStoredWh < warpCapacityWh - 0.001f;
@@ -143,6 +159,11 @@ namespace VoxelEngine.GridSystem
         public void BeginCharge()
         {
             if (IsReady || IsCharging) return;
+            if (Damaged)
+            {
+                BuildFeedbackHud.Show("Warp Drive", "Coils damaged — repair the drive first", null, new Color(1f, 0.45f, 0.3f));
+                return;
+            }
             if (Cooldown01 > 0f)
             {
                 BuildFeedbackHud.Show("Warp Drive", $"Cooling down — {Mathf.CeilToInt(Cooldown01 * cooldownSeconds)}s", null, new Color(1f, 0.7f, 0.25f));
@@ -192,6 +213,11 @@ namespace VoxelEngine.GridSystem
             if (!IsReady)
             {
                 ShowNotReadyToast();
+                return false;
+            }
+            if (Damaged)
+            {
+                BuildFeedbackHud.Show("Warp Drive", "Coils damaged — repair the drive first", null, new Color(1f, 0.45f, 0.3f));
                 return false;
             }
 
@@ -307,7 +333,20 @@ namespace VoxelEngine.GridSystem
                 }
             }
 
+            // Collision safety, every jump: blind hops scatter first (no mapped lock —
+            // the coils throw), then the arrival point is clamped off the star and
+            // outside every body, and the veto backstops the clamps. A hopeless
+            // arrival refuses the jump instead of burying the ship.
+            bool blind = targetPlanet == null && targetSingularity == null && locatorBody == null;
+            if (blind)
+                destination = ScatterBlindArrival(destination, aimDir, math.length(destination - gridCosmic));
             destination = ClampAwayFromStar(registry, gridCosmic, destination);
+            destination = ClampToSafeArrival(registry, destination);
+            if (ArrivalUnsafe(registry, destination))
+            {
+                BuildFeedbackHud.Show("Warp Drive", "Collision safety found no valid arrival — jump refused", null, new Color(1f, 0.7f, 0.25f));
+                return false;
+            }
 
             string destLabel = targetPlanet != null
                 ? $"{targetPlanet.DisplayName} orbit ({arrivalAltitudeKm:0} km altitude)"
@@ -352,11 +391,15 @@ namespace VoxelEngine.GridSystem
             }
             float rate = Grid != null ? EffectiveRateWhPerKm(Grid) : energyPerKmWh;
             float costWh = (float)(distKm * rate);
+            // Arrival reserve: a full jump must leave reserveWh in the bank, and a
+            // partial hop keeps the same share — the ship never lands on an empty pot.
+            float reserveWh = costWh * Mathf.Clamp01(arrivalReserveFraction);
+            float requiredWh = costWh + reserveWh;
             float pooled = Grid != null ? PooledStoredWh(Grid) : warpStoredWh;
             float massFactor = Grid != null ? MassFactor(Grid) : 1f;
 
-            bool shortBank = pooled < costWh - 0.01f;
-            double affordableKm = rate > 0f ? pooled / rate : 0d;
+            bool shortBank = pooled < requiredWh - 0.01f;
+            double affordableKm = rate > 0f ? pooled / (rate * (1f + Mathf.Clamp01(arrivalReserveFraction))) : 0d;
             if (shortBank && (affordableKm < 100d || affordableKm >= distKm - 1d))
             {
                 string massHint = massFactor > 1.02f
@@ -380,11 +423,12 @@ namespace VoxelEngine.GridSystem
                 {
                     float liveRate = Grid != null ? EffectiveRateWhPerKm(Grid) : energyPerKmWh;
                     float liveCost = (float)(distKm * liveRate);
+                    float liveReserve = liveCost * Mathf.Clamp01(arrivalReserveFraction);
                     float livePool = Grid != null ? PooledStoredWh(Grid) : warpStoredWh;
                     int used = Grid != null ? ResolveDriveUse(Grid) : 1;
-                    if (livePool < liveCost - 0.01f)
+                    if (livePool < liveCost + liveReserve - 0.01f)
                     {
-                        double liveAfford = liveRate > 0f ? livePool / liveRate : 0d;
+                        double liveAfford = liveRate > 0f ? livePool / (liveRate * (1f + Mathf.Clamp01(arrivalReserveFraction))) : 0d;
                         double pct = distKm > 1d ? liveAfford / distKm * 100d : 100d;
                         return $"Banked {livePool / 1000f:0.0} of {liveCost / 1000f:0.0} kWh for {distKm:0} km — " +
                                $"jump {pct:0}% ({liveAfford:0} km) with {used} drive(s).";
@@ -401,12 +445,13 @@ namespace VoxelEngine.GridSystem
                         if (this == null) return;
                         float liveRate = Grid != null ? EffectiveRateWhPerKm(Grid) : energyPerKmWh;
                         float liveCost = (float)(distKm * liveRate);
+                        float liveReserve = liveCost * Mathf.Clamp01(arrivalReserveFraction);
                         float livePool = Grid != null ? PooledStoredWh(Grid) : warpStoredWh;
-                        if (livePool >= liveCost - 0.01f)
+                        if (livePool >= liveCost + liveReserve - 0.01f)
                             CommitJump(dest, body, distKm, originName, destLabel, liveCost);
                         else
                         {
-                            double liveAfford = liveRate > 0f ? livePool / liveRate : 0d;
+                            double liveAfford = liveRate > 0f ? livePool / (liveRate * (1f + Mathf.Clamp01(arrivalReserveFraction))) : 0d;
                             if (liveAfford >= 100d) TryWarpPartial(liveAfford, distKm, originName, hopDir);
                             else BuildFeedbackHud.Show("Warp Drive", "Bank drained — recharge and try again.",
                                 null, new Color(1f, 0.7f, 0.25f));
@@ -493,7 +538,9 @@ namespace VoxelEngine.GridSystem
             double3 gridCosmic = origin.GetCosmicKm(transform.position);
             float rate = EffectiveRateWhPerKm(Grid);
             float pooled = PooledStoredWh(Grid);
-            double affordKm = rate > 0f ? pooled / rate : 0d;
+            // Partial hops keep the arrival reserve: the ship never lands on an empty pot.
+            double spendableWh = System.Math.Max(0d, pooled - pooled * Mathf.Clamp01(arrivalReserveFraction));
+            double affordKm = rate > 0f ? spendableWh / rate : 0d;
             double hopKm = System.Math.Min(affordKm, affordableKm);
             if (hopKm < 100d)
             {
@@ -501,9 +548,17 @@ namespace VoxelEngine.GridSystem
                 return false;
             }
             float costWh = (float)(hopKm * rate);
-            if (!TryConsumePooledWh(Grid, costWh)) return false;
+            // Safety before spend: clamp the blind arrival and only then drain the
+            // bank — a refused jump keeps every Wh.
             double3 destination = ClampAwayFromStar(registry, gridCosmic,
                 gridCosmic + CosmicRegistry.ToDouble3(aimDir) * hopKm);
+            destination = ClampToSafeArrival(registry, destination);
+            if (ArrivalUnsafe(registry, destination))
+            {
+                BuildFeedbackHud.Show("Warp Drive", "Collision safety found no valid arrival — bank kept", null, new Color(1f, 0.7f, 0.25f));
+                return false;
+            }
+            if (!TryConsumePooledWh(Grid, costWh)) return false;
 
             double pct = fullDistKm > 1d ? hopKm / fullDistKm * 100d : 100d;
             string targetName = $"{hopKm:0} km partial hop ({pct:0}% of {fullDistKm:0} km)";
@@ -643,6 +698,11 @@ namespace VoxelEngine.GridSystem
                 ShowNotReadyToast();
                 return false;
             }
+            if (Damaged)
+            {
+                BuildFeedbackHud.Show("Warp Drive", "Coils damaged — repair the drive first", null, new Color(1f, 0.45f, 0.3f));
+                return false;
+            }
 
             var origin = SpaceOrigin.Instance;
             var registry = CosmicRegistry.Instance;
@@ -661,6 +721,12 @@ namespace VoxelEngine.GridSystem
             double3 centre = TargetCentreKm(target, origin, registry);
             double3 radial = math.normalizesafe(gridCosmic - centre, new double3(0d, 1d, 0d));
             double3 arrival = ClampAwayFromStar(registry, gridCosmic, centre + radial * target.StandoffKm);
+            arrival = ClampToSafeArrival(registry, arrival);
+            if (ArrivalUnsafe(registry, arrival))
+            {
+                BuildFeedbackHud.Show("Warp Drive", "Collision safety found no valid arrival — jump refused", null, new Color(1f, 0.7f, 0.25f));
+                return false;
+            }
             string destLabel = target.Body != null
                 ? $"{target.DisplayName} approach ({arrivalAltitudeKm:0} km shelf)"
                 : $"{target.DisplayName} rendezvous ({target.StandoffKm:0} km off the beacon)";
@@ -738,6 +804,65 @@ namespace VoxelEngine.GridSystem
             if (math.lengthsq(away) < 1e-8) away = from - sun;
             away = math.normalizesafe(away, new double3(0d, 1d, 0d));
             return sun + away * minKm;
+        }
+
+        /// <summary>Lateral arrival scatter for blind hops: a random perpendicular
+        /// offset of up to blindArrivalErrorFraction of the hop length. Mapped locks
+        /// (planet, singularity, locator, picker) never scatter — only unaimed coils do.</summary>
+        private double3 ScatterBlindArrival(double3 destination, Vector3 dir, double distKm)
+        {
+            if (blindArrivalErrorFraction <= 0f || distKm <= 1d) return destination;
+            Vector3 d = dir.normalized;
+            Vector3 helper = Mathf.Abs(d.y) < 0.9f ? Vector3.up : Vector3.right;
+            Vector3 side = Vector3.Cross(d, helper).normalized;
+            Vector3 lift = Vector3.Cross(side, d).normalized;
+            var rng = new System.Random();
+            double mag = distKm * blindArrivalErrorFraction * (0.3d + 0.7d * rng.NextDouble());
+            double ang = rng.NextDouble() * math.PI_DBL * 2d;
+            return destination
+                 + CosmicRegistry.ToDouble3(side) * (math.cos(ang) * mag)
+                 + CosmicRegistry.ToDouble3(lift) * (math.sin(ang) * mag);
+        }
+
+        /// <summary>Push an arrival point outside EVERY charted body: at least
+        /// minArrivalAltitudeKm above each surface. Single sweep — a push that lands
+        /// inside a neighbouring body is caught by the veto below, which refuses.</summary>
+        private double3 ClampToSafeArrival(CosmicRegistry registry, double3 dest)
+        {
+            if (registry == null || registry.Bodies == null) return dest;
+            double3 result = dest;
+            double minAlt = System.Math.Max(1f, minArrivalAltitudeKm);
+            for (int i = 0; i < registry.Bodies.Count; i++)
+            {
+                var b = registry.Bodies[i];
+                if (b == null || b.settings == null) continue;
+                double3 centre = registry.CosmicPositionOf(b);
+                double minDist = System.Math.Max(1d, b.settings.radiusKm) + minAlt;
+                double d = math.length(result - centre);
+                if (d < minDist)
+                {
+                    double3 radial = math.normalizesafe(result - centre, new double3(0d, 1d, 0d));
+                    result = centre + radial * minDist;
+                }
+            }
+            return result;
+        }
+
+        /// <summary>True when the arrival point is still inside a body (or NaN) — the
+        /// collision-safety veto. The clamps resolve normal flow; this is the backstop
+        /// that turns a hopeless arrival into a refused jump instead of a burial.</summary>
+        private bool ArrivalUnsafe(CosmicRegistry registry, double3 dest)
+        {
+            if (double.IsNaN(dest.x) || double.IsNaN(dest.y) || double.IsNaN(dest.z)) return true;
+            if (registry == null || registry.Bodies == null) return false;
+            for (int i = 0; i < registry.Bodies.Count; i++)
+            {
+                var b = registry.Bodies[i];
+                if (b == null || b.settings == null) continue;
+                double d = math.length(dest - registry.CosmicPositionOf(b));
+                if (d < System.Math.Max(1d, b.settings.radiusKm)) return true;
+            }
+            return false;
         }
 
         private static CelestialBody ResolveSceneBody(CosmicRegistry registry, BodyInstance instance)

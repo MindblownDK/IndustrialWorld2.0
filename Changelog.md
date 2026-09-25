@@ -1,9 +1,17 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.32.0-dev`
+**Current Version:** `12.33.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.33.0-dev] Warp Safety: Damage Gate, Arrival Checks, Bank Reserve
+
+**Type:** MINOR - the drive enforces its roadmap safety rules. A drive below 35% health refuses to spin or fire (repair first; the panel state reads DAMAGED). Every arrival is collision-checked: the point is pushed at least 25 km above every charted body's surface (and off the star as before), and a blind hop scatters its arrival laterally by up to 0.5% of the hop length - mapped locks (planet, singularity, locator, picker) stay exact; if collision safety still cannot find a valid arrival the jump is refused with the ship and bank untouched. Jumps keep an arrival reserve: a full jump must leave 10% of the price in the pooled bank and a partial hop banks the same share, so a ship never lands on an empty drive; a refused partial keeps every Wh because the partial now validates the arrival before spending. The autopilot banks the leg price plus the reserve so capture legs still land on their shelf in one hop. Balance note: with defaults, one full drive flies about 91% of a hop (2500 km becomes ~2272 km); set Arrival Reserve Fraction to 0 on the prefab for the old one-hop-per-drive. New prefab fields default in code; Setup Step 50 is untouched. No recipe, research or setup changes.
+
+**GitHub title:** `[12.33.0-dev] Warp safety: damage gate, arrival checks, bank reserve`
+
+**Manual steps:** none - code-only. Existing Warp Drive prefabs pick the new fields up at script defaults (35% health gate, 10% arrival reserve, 25 km arrival floor, 0.5% blind scatter). Verify in Unity: batter a drive below 35% health (state DAMAGED, charging and firing refuse with a toast); fire blind hops repeatedly and watch the arrival point scatter a few km between jumps; fire a locked pick and confirm it lands exact; run the bank down near the price of a long jump and confirm the partial popup keeps roughly the reserve; a full-price jump with a full bank now leaves 10% in the drive.
 
 ### [12.32.0-dev] Warp Arrival Fix, Drive Destination Picker
 

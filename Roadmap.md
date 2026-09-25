@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.32.0-dev`
-**Roadmap Version:** `12.32.0-dev`
+**Current Version:** `12.33.0-dev`
+**Roadmap Version:** `12.33.0-dev`
 **Date:** 2026-09-25
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,10 @@
 
 ## 0. Recently Done
 
+### 12.33.0-dev - Warp Safety: Damage Gate, Arrival Checks, Bank Reserve
+- **Drive** (`GridWarpDrive`): health gate (DAMAGED below 35%), collision-safe arrivals (25 km floor over every body, 0.5% blind scatter, refusal veto), 10% arrival reserve on full and partial jumps.
+- **Autopilot** (`NavFlightAutopilot`): warp legs bank the leg price plus the reserve.
+
 ### 12.32.0-dev - Warp Arrival Fix, Drive Destination Picker
 - **Warp** (`SpaceOrigin`): the jumping hull holds scene-still while the world slides; the anchor change no longer cancels itself, so charged jumps move the hull.
 - **Drive panel** (`GridWarpDrive`, `GridBlockUI`): destination picker — charted bodies plus powered beacons, live distance/price rows, lock-and-jump through the confirm wheel.
@@ -42,9 +46,6 @@
 
 ### 12.31.2-dev - SavedGrid Cosmic Fields Compile Fix
 - **Compile** (`SavedGrid`, `GridWarpDrive`): cosmic fields on the save type; star uses `displayName`.
-
-### 12.31.1-dev - SolarHazard Compile Fix
-- **Compile** (`SolarHazard`): duplicate file tail removed.
 
 ### Era Transition Feel
 
@@ -952,10 +953,10 @@ A late-game **Jump Drive** provides charged, coordinate-based faster-than-light 
 
 - ~~The player chooses a known destination, beacon, or safe coordinate and sees range, charge cost, mass penalty, cooldown, and arrival error before committing.~~ *(12.32.0-dev — drive-panel picker: charted bodies and powered beacons with live distance, live price and affordability colour; lock-and-jump through the confirm wheel; partial jumps fly the target line. Route-book and free-coordinate entries in the picker remain open.)*
 - ~~Maximum range decreases as ship mass and cargo increase.~~ *(12.28.0-dev — `GridWarpDrive.MassFactor` / `EffectiveHopKm` / `EffectiveRateWhPerKm`; Setup Step 50 fills `ratedMassKg` and `maxMassFactor` only when zero.)*
-- The drive requires a large stored-energy charge and cannot operate while critically damaged, obstructed, inside prohibited gravity depths, or without a safe arrival volume.
+- ~~The drive requires a large stored-energy charge and cannot operate while critically damaged, obstructed, inside prohibited gravity depths, or without a safe arrival volume.~~ *(12.33.0-dev — health gate with DAMAGED state, vacuum gate, arrival clamp 25 km over every body plus refusal veto; Setup Step 50 untouched.)*
 - Multiple drives can combine range or reduce charge time according to research and grid configuration.
-- Blind jumps carry larger arrival error and are blocked when collision safety cannot find a valid destination.
-- Jump calculations include territorial warnings, stellar hazards, atmosphere restrictions, and minimum reserve power after arrival.
+- ~~Blind jumps carry larger arrival error and are blocked when collision safety cannot find a valid destination.~~ *(12.33.0-dev — lateral scatter up to 0.5% of the hop; mapped locks stay exact.)*
+- Jump calculations include territorial warnings, stellar hazards, atmosphere restrictions, and minimum reserve power after arrival. *(stellar standoff, vacuum gate and the 10% arrival reserve shipped through 12.33.0-dev; territorial warnings deferred until a territory system exists to warn about.)*
 - Autopilot can use approved jump legs inside recorded interplanetary routes.
 
 ---

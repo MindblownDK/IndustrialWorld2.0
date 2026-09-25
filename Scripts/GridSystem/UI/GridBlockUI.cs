@@ -712,6 +712,7 @@ namespace VoxelEngine.GridSystem.UI
         {
             if (drive == null) return "—";
             if (!drive.Enabled) return "OFFLINE";
+            if (drive.Damaged) return "DAMAGED";
             if (drive.Cooldown01 > 0f) return "COOLDOWN";
             if (drive.IsReady) return "READY";
             if (drive.IsCharging) return "SPINNING UP";
