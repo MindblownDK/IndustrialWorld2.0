@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.39.2-dev`
-**Roadmap Version:** `12.39.2-dev`
+**Current Version:** `12.39.3-dev`
+**Roadmap Version:** `12.39.3-dev`
 **Date:** 2026-09-25
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)

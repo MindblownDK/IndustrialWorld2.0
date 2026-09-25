@@ -1,9 +1,17 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.39.2-dev`
+**Current Version:** `12.39.3-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.39.3-dev] Portal Compile Fix: Setup Window PowerConsumer Qualification
+
+**Type:** PATCH - Setup Step 99 referenced PowerConsumer bare, but VoxelEngineSetupWindow has no using for VoxelEngine.Power (the file's convention is fully qualified references - every other PowerConsumer use in it was already qualified). Both call sites now read VoxelEngine.Power.PowerConsumer. No behaviour change.
+
+**GitHub title:** `[12.39.3-dev] Portal compile fix: setup window PowerConsumer qualification`
+
+**Manual steps:** none. Verify it compiles.
 
 ### [12.39.2-dev] Portal Compile Fix: EntityId as the Transit Key
 

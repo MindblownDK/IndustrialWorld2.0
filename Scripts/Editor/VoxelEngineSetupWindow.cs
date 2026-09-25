@@ -16417,8 +16417,8 @@ AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
             {
                 // Idle/charge/open watts are driven by PortalControllerBlock every
                 // frame, so the consumer's authored value is left untouched.
-                if (root.GetComponent<PowerConsumer>() == null)
-                    root.AddComponent<PowerConsumer>();
+                if (root.GetComponent<VoxelEngine.Power.PowerConsumer>() == null)
+                    root.AddComponent<VoxelEngine.Power.PowerConsumer>();
                 if (root.GetComponent<VoxelEngine.Building.PortalControllerBlock>() == null)
                     root.AddComponent<VoxelEngine.Building.PortalControllerBlock>();
 
