@@ -324,7 +324,7 @@ namespace VoxelEngine.Building
             string name = (portalName ?? "").Trim();
             string code = (portalCode ?? "").Trim();
             if (name.Length == 0 || code.Length == 0) return;
-            foreach (var other in FindObjectsByType<PortalControllerBlock>(FindObjectsSortMode.None))
+            foreach (var other in FindObjectsByType<PortalControllerBlock>())
             {
                 if (other == null || other == this || !other.IsOpen || !other.IsValid) continue;
                 if (!string.Equals((other.portalName ?? "").Trim(), name, System.StringComparison.OrdinalIgnoreCase)) continue;
@@ -372,13 +372,13 @@ namespace VoxelEngine.Building
 
         private static bool RecentlyTransited(Transform t)
         {
-            return s_transitAt.TryGetValue(t.GetInstanceID(), out float at)
+            return s_transitAt.TryGetValue(t.GetEntityId(), out float at)
                 && Time.unscaledTime - at < TransitImmunitySeconds;
         }
 
         private static void MarkTransited(Transform t)
         {
-            s_transitAt[t.GetInstanceID()] = Time.unscaledTime;
+            s_transitAt[t.GetEntityId()] = Time.unscaledTime;
         }
 
         private void TransitShip(GridSystem.GridEntity ship, PortalControllerBlock pair)

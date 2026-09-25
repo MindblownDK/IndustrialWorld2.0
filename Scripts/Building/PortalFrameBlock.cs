@@ -20,11 +20,22 @@ namespace VoxelEngine.Building
         /// <summary>Live frames, for the controller's scans.</summary>
         public static IReadOnlyList<PortalFrameBlock> All => s_all;
 
-        public Bounds Bounds => _bounds.valid ? _bounds
-            : (_bounds = GetComponentInChildren<Collider>() != null
-                ? GetComponentInChildren<Collider>().bounds
-                : new Bounds(transform.position, Vector3.one));
         private Bounds _bounds;
+        private bool _boundsCached;
+
+        public Bounds Bounds
+        {
+            get
+            {
+                if (!_boundsCached)
+                {
+                    var col = GetComponentInChildren<Collider>();
+                    _bounds = col != null ? col.bounds : new Bounds(transform.position, Vector3.one);
+                    _boundsCached = true;
+                }
+                return _bounds;
+            }
+        }
 
         /// <summary>Largest face dimension — the cell size this frame contributes
         /// to the portal grid (frames should be uniform for a clean surface).</summary>

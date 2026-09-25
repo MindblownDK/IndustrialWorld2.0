@@ -1,9 +1,17 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.39.0-dev`
+**Current Version:** `12.39.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.39.1-dev] Portal Compile Fix: Unity 6.5 API Drift
+
+**Type:** PATCH - three Unity 6.5 API corrections in the 12.39 portal scripts, no behaviour change. PortalFrameBlock tested cached bounds with `Bounds.valid`, which does not exist - the cache now uses an explicit flag (and reads the collider once instead of twice). PortalControllerBlock used `FindObjectsByType(FindObjectsSortMode.None)`, deprecated in favour of the parameterless overload, and `GetInstanceID()`, which Unity 6.5 obsoletes as an error - both replaced (`FindObjectsByType<T>()`, `GetEntityId()`); the transit-immunity dictionary keys change type source but nothing is persisted, so saves are unaffected.
+
+**GitHub title:** `[12.39.1-dev] Portal compile fix: Unity 6.5 API drift`
+
+**Manual steps:** none. Verify it compiles.
 
 ### [12.39.0-dev] Player-Built Portals: Frames, Controllers, Name + Code Pairing
 
