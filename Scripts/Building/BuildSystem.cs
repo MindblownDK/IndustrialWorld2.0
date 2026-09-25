@@ -1807,6 +1807,7 @@ namespace VoxelEngine.Building
                 || prefab.GetComponentInChildren<VoxelEngine.Fluids.WaterPipe>(true) != null
                 || prefab.GetComponentInChildren<VoxelEngine.Power.PowerCable>(true) != null
                 || prefab.GetComponentInChildren<VoxelEngine.Networks.DataCable>(true) != null;
+        }
 
         /// <summary>Union of the placed prefab's BoxColliders, as root-relative half
         /// extents — the placement volume for the portal-piece overlap test. Prefab
@@ -1828,7 +1829,6 @@ namespace VoxelEngine.Building
                 }
             }
             return any ? bounds.extents : Vector3.one * 0.42f;
-        }
         }
 
         private static bool IsConduitCollider(Collider collider)

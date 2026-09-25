@@ -1,9 +1,17 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.39.5-dev`
+**Current Version:** `12.39.6-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.39.6-dev] Portal Placement Fix Compile Repair
+
+**Type:** PATCH - 12.39.5 shipped one compile error: the new PortalPieceHalfExtents helper was inserted between IsThinConduitPlacement's final return statement and its closing brace, nesting the helper inside that method (a local function with an accessibility modifier - CS0106). The method now closes before the helper, and the duplicated brace after the helper is removed. No behaviour change beyond what 12.39.5 intended.
+
+**GitHub title:** `[12.39.6-dev] Portal placement fix compile repair`
+
+**Manual steps:** none. Verify it compiles.
 
 ### [12.39.5-dev] Portal Placement Volume Fix, the Controller Monolith
 
