@@ -30,7 +30,7 @@
 using System.Collections.Generic;
 using Unity.Mathematics;
 using UnityEngine;
-using IndustrialWorld.Navigation;
+using VoxelEngine.Navigation;
 using VoxelEngine.Cosmos;
 using VoxelEngine.Items;
 using VoxelEngine.UI;

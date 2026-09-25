@@ -1,9 +1,17 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.38.0-dev`
+**Current Version:** `12.38.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.38.1-dev] Compile Fix: Route Types Namespace
+
+**Type:** PATCH - GridWarpDrive.cs imported IndustrialWorld.Navigation, but RouteWaypoint and RouteBook live in VoxelEngine.Navigation (the Navigation folder carries both namespaces). The using is corrected; every other touched file was audited and already resolves its route types (qualified or correctly used). No gameplay, save or setup change beyond making 12.38 compile.
+
+**GitHub title:** `[12.38.1-dev] Route types namespace compile fix`
+
+**Manual steps:** none. Verify it compiles.
 
 ### [12.38.0-dev] Warp Gate Prototype
 
