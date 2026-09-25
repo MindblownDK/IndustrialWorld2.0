@@ -299,9 +299,3 @@ namespace VoxelEngine.Cosmos
         }
     }
 }
-mals();
-            mesh.RecalculateBounds();
-            return mesh;
-        }
-    }
-}

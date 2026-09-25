@@ -1,9 +1,17 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.31.0-dev`
+**Current Version:** `12.31.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.31.1-dev] SolarHazard Compile Fix
+
+**Type:** PATCH - leftover duplicate closing braces in SolarHazard.cs (CS8803). No gameplay change.
+
+**GitHub title:** `[12.31.1-dev] SolarHazard compile fix`
+
+**Manual steps:** none. Verify it compiles.
 
 ### [12.31.0-dev] Warp Redo, Deep-Space Save, No Sun Hops
 

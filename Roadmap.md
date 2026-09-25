@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.31.0-dev`
-**Roadmap Version:** `12.31.0-dev`
+**Current Version:** `12.31.1-dev`
+**Roadmap Version:** `12.31.1-dev`
 **Date:** 2026-09-24
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,14 @@
 ---
 
 ## 0. Recently Done
+
+### 12.31.1-dev - SolarHazard Compile Fix
+- **Compile** (`SolarHazard`): duplicate file tail removed.
+
+### 12.31.0-dev - Warp Redo, Deep-Space Save, No Sun Hops
+- **Warp** (`WarpFx`): new tunnel, no shake; hops clamped off the star; cosmic grid save/load.
+- **Cockpit:** nested origin skip (no twitch); confirm point-and-click; SOL toasts de-dupe.
+- **Preserved:** confirm-before-jump, drive slider, seated F3. No setup changes.
 
 ### 12.30.0-dev - Jump Confirm Slider, Seated Autopilot, Seated Save
 - **Confirm** (`ConfirmDialogHud`): Input System only; Ctrl frees the mouse; drive-count slider remembered on the grid.
