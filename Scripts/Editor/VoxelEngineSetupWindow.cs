@@ -881,6 +881,10 @@ namespace VoxelEngine.EditorTools
                 () => IndustrialWorld.EditorTools.RailDisplaySetup.RunStep95(), 62);
             AddWizardButton(scroll, "96. Build the Steam Railway\n(Steam engine + grand water tower \u2014 needs 95 \u2014 Non-Destructive)",
                 () => IndustrialWorld.EditorTools.RailSteamSetup.RunStep96(), 62);
+            AddWizardButton(scroll, "97. Build Warp Coil Resonator\n(Upgrade item + recipe + research \u2014 needs 50 \u2014 Non-Destructive)",
+                BuildWarpCoilResonance, 62);
+            AddWizardButton(scroll, "98. Build Warp Gate\n(Paired fixed-structure transit \u2014 needs 50 \u2014 Non-Destructive)",
+                BuildWarpGateContent, 56);
 
             AddSpacer(scroll, 20);
         }
@@ -16044,6 +16048,287 @@ AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
                 "• Recipe: 40 Steel Plate + 12 Advanced Circuit + 8 Uranium Ore + 6 Lithium @ Assembler\n" +
                 "• Research: Warp Drive (tier 7) after Shipbuilding\n\n" +
                 "In-game: place it on a ship, fly to space, press [U] in the cockpit to charge (45 s, 45 kW), then press [U] again to jump to the aimed planet — or 2500 km straight ahead. It is the ONLY warp in the game; everything else is real flight.",
+                "OK");
+        }
+
+        // ============================================================
+        //   STEP 97 - WARP COIL RESONATOR (ITEM + RECIPE + RESEARCH)
+        //   Non-destructive: creates the crafted resonator item and its
+        //   assembler recipe, and the research node that unlocks the
+        //   recipe, only when missing. No prefabs, no tuned values.
+        //   Runtime effect: each resonator installed on a Warp Drive
+        //   trims 15% off its spin-up (GridWarpDrive.resonatorSlots).
+        // ============================================================
+        private void BuildWarpCoilResonance()
+        {
+            const string GRID_ROOT = ASSET_ROOT + "/GridSystem";
+            const string RECIPES = GRID_ROOT + "/Recipes";
+            const string ITEMS = ASSET_ROOT + "/Items";
+            const string NODES = ASSET_ROOT + "/Research/Nodes";
+            foreach (var f in new[] { GRID_ROOT, RECIPES }) EnsureFolder(f);
+
+            string craftItems = ASSET_ROOT + "/Items";
+            var advCircuit = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{ASSET_ROOT}/Industrial/Items/Item_AdvCircuit.asset");
+            var uraniumOre = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{craftItems}/Item_Uranium.asset");
+            var lithium = EnsureLithiumResource();
+            var sciT2 = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{craftItems}/Item_ScienceT2.asset");
+
+            // ── Item (non-destructive) ──
+            string itemPath = $"{ITEMS}/Item_WarpCoilResonator.asset";
+            var item = GetOrCreateAsset<VoxelEngine.Items.ResourceItem>(itemPath);
+            item.itemId = VoxelEngine.GridSystem.GridWarpDrive.ResonatorItemId;
+            item.displayName = "Warp Coil Resonator";
+            item.description = "Tuned superconducting coil pair for the Warp Drive. Install up to three on a drive — each trims 15% off its spin-up time. Crafted with Warp Coil Resonance research.";
+            item.iconTint = new Color(0.55f, 0.85f, 1f);
+            item.maxStack = 20;
+            item.massPerUnit = 2f;
+            item.category = "Power";
+            item.subcategory = VoxelEngine.Items.ResourceCategory.Component;
+            item.fuelSeconds = 0f;
+            EditorUtility.SetDirty(item);
+
+            // ── Recipe (non-destructive append) ──
+            string recipePath = $"{RECIPES}/Recipe_WarpCoilResonator.asset";
+            var recipe = GetOrCreateAsset<VoxelEngine.Crafting.RecipeDefinition>(recipePath);
+            recipe.displayName = "Warp Coil Resonator";
+            recipe.outputItem = item;
+            recipe.outputCount = 1;
+            recipe.requiredStation = VoxelEngine.Crafting.StationTier.Assembler;
+            recipe.craftSeconds = 20f;
+            recipe.unlockedByDefault = false;
+            var inputs = new System.Collections.Generic.List<VoxelEngine.Crafting.RecipeIngredient>();
+            if (advCircuit != null) inputs.Add(new VoxelEngine.Crafting.RecipeIngredient { item = advCircuit, count = 4 });
+            if (lithium != null) inputs.Add(new VoxelEngine.Crafting.RecipeIngredient { item = lithium, count = 6 });
+            if (uraniumOre != null) inputs.Add(new VoxelEngine.Crafting.RecipeIngredient { item = uraniumOre, count = 2 });
+            recipe.inputs = inputs.ToArray();
+            EditorUtility.SetDirty(recipe);
+
+            var recipeRegistry = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeRegistry>($"{ASSET_ROOT}/RecipeRegistry.asset");
+            if (recipeRegistry != null && !recipeRegistry.recipes.Contains(recipe))
+            {
+                recipeRegistry.recipes.Add(recipe);
+                EditorUtility.SetDirty(recipeRegistry);
+            }
+
+            // ── Research (non-destructive: only creates the node if missing) ──
+            var tree = AssetDatabase.LoadAssetAtPath<VoxelEngine.Research.ResearchTree>($"{ASSET_ROOT}/Research/ResearchTree.asset");
+            if (tree == null)
+            {
+                EditorUtility.DisplayDialog("Voxel Engine — Warp Coil Resonator",
+                    "No ResearchTree asset found at " + ASSET_ROOT + "/Research/ResearchTree.asset — run the base research setup first. Item and recipe were still authored.", "OK");
+                return;
+            }
+            bool created = false;
+            var node = FindNodeByName(tree, VoxelEngine.GridSystem.GridWarpDrive.ChargeResearchNodeId);
+            if (node == null)
+            {
+                node = ScriptableObject.CreateInstance<VoxelEngine.Research.ResearchNode>();
+                node.nodeId = VoxelEngine.GridSystem.GridWarpDrive.ChargeResearchNodeId;
+                node.displayName = "Warp Coil Resonance";
+                node.description = "Tuned coil harmonics for the Warp Drive. Unlocks the Warp Coil Resonator — install up to three on a drive, each trimming 15% off its spin-up time.";
+                node.category = VoxelEngine.Research.ResearchCategory.Environment;
+                node.subCategory = VoxelEngine.Research.ResearchSubCategory.Building;
+                node.tier = 7;
+                node.column = 6;
+                node.iconTint = new Color(0.55f, 0.85f, 1f);
+                node.researchSeconds = 600f;
+                node.maxRanks = 1;
+                node.costScalesWithRank = true;
+                var costs = new System.Collections.Generic.List<VoxelEngine.Research.ResearchNode.ScienceCost>();
+                if (sciT2 != null) costs.Add(new VoxelEngine.Research.ResearchNode.ScienceCost { pack = sciT2 as VoxelEngine.Items.ScienceItem, count = 80 });
+                node.cost = costs.ToArray();
+                AssetDatabase.CreateAsset(node, $"{NODES}/{VoxelEngine.GridSystem.GridWarpDrive.ChargeResearchNodeId}.asset");
+                tree.nodes.Add(node);
+                created = true;
+            }
+
+            // Connect (non-destructive): the node always sits behind Warp Drive and
+            // always unlocks the resonator recipe — appended, never reordered.
+            var warpNode = FindNodeByName(tree, "res_warpdrive");
+            if (warpNode != null)
+            {
+                var prereqs = new System.Collections.Generic.List<VoxelEngine.Research.ResearchNode>(node.prerequisites ?? new VoxelEngine.Research.ResearchNode[0]);
+                if (!prereqs.Contains(warpNode)) prereqs.Add(warpNode);
+                node.prerequisites = prereqs.ToArray();
+            }
+            var unlocked = new System.Collections.Generic.List<VoxelEngine.Crafting.RecipeDefinition>(node.unlocksRecipes ?? new VoxelEngine.Crafting.RecipeDefinition[0]);
+            if (!unlocked.Contains(recipe)) unlocked.Add(recipe);
+            node.unlocksRecipes = unlocked.ToArray();
+            EditorUtility.SetDirty(node);
+            EditorUtility.SetDirty(tree);
+            VoxelEngine.Research.ResearchRecipeLinker.Register(VoxelEngine.GridSystem.GridWarpDrive.ChargeResearchNodeId, recipe);
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+
+            EditorUtility.DisplayDialog("Voxel Engine — Warp Coil Resonator",
+                (created ? "Created" : "Found existing") + " the Warp Coil Resonator set:\n\n" +
+                "• Item: Item_WarpCoilResonator (Power / Component)\n" +
+                "• Recipe: 4 Advanced Circuit + 6 Lithium + 2 Uranium Ore @ Assembler\n" +
+                "• Research: Warp Coil Resonance (" + VoxelEngine.GridSystem.GridWarpDrive.ChargeResearchNodeId +
+                ") unlocks the recipe, behind Warp Drive\n" +
+                "• Install up to 3 per drive on the drive panel — each is -15% spin-up\n\n" +
+                "No prefabs or tuned values were touched. Re-run any time.",
+                "OK");
+        }
+
+        // ============================================================
+        //   STEP 98 - WARP GATE (PROTOTYPE)
+        //   Non-destructive: prefab, item, recipe and research are
+        //   created only when missing and always reconnected. Existing
+        //   gate tuning (draw, windows, pairing) is never overwritten.
+        //   Runtime: two gates sharing a pairing code open an aperture;
+        //   the first ship inside transits to the partner's rendezvous.
+        // ============================================================
+        private void BuildWarpGateContent()
+        {
+            const string GRID_ROOT = ASSET_ROOT + "/GridSystem";
+            const string ITEMS     = GRID_ROOT + "/Items";
+            const string PREFABS   = GRID_ROOT + "/Prefabs";
+            const string RECIPES   = GRID_ROOT + "/Recipes";
+            const string NODES     = ASSET_ROOT + "/Research/Nodes";
+            foreach (var f in new[] { GRID_ROOT, ITEMS, PREFABS, RECIPES }) EnsureFolder(f);
+
+            string craftItems = ASSET_ROOT + "/Items";
+            string indItems   = ASSET_ROOT + "/Industrial/Items";
+            var steelPlate  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{indItems}/Item_SteelPlate.asset");
+            var advCircuit  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{indItems}/Item_AdvCircuit.asset");
+            var uraniumOre  = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{craftItems}/Item_Uranium.asset");
+            var lithium     = EnsureLithiumResource();
+            var sciT2       = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{craftItems}/Item_ScienceT2.asset");
+            var sciT3       = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemDefinition>($"{craftItems}/Item_ScienceT3.asset");
+
+            // ── Prefab (non-destructive: existing gate tuning is preserved) ──
+            string prefabPath = $"{PREFABS}/WarpGate_Large.prefab";
+            var gatePrefab = GetOrCreatePrefab(prefabPath, "WarpGate_Large", (root) =>
+            {
+                var gate = root.GetComponent<VoxelEngine.GridSystem.GridWarpGate>();
+                if (gate == null) gate = root.AddComponent<VoxelEngine.GridSystem.GridWarpGate>();
+
+                gate.blockName = "Warp Gate";
+                if (gate.chargeSeconds <= 0f) gate.chargeSeconds = 90f;
+                if (gate.powerDrawWatts <= 0f) gate.powerDrawWatts = 120000f;
+                if (gate.openSeconds <= 0f) gate.openSeconds = 25f;
+                if (gate.cooldownSeconds <= 0f) gate.cooldownSeconds = 120f;
+                if (gate.apertureRadius <= 0f) gate.apertureRadius = 220f;
+                if (gate.arrivalStandoffKm <= 0d) gate.arrivalStandoffKm = 2d;
+
+                // Visual: twin ring housing around a glowing core. Rebuilt ONLY when
+                // the prefab has no visual yet — designer-customised visuals survive.
+                if (root.transform.childCount == 0 && root.GetComponent<MeshFilter>() == null)
+                {
+                    var core = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    core.name = "Core";
+                    core.transform.SetParent(root.transform, false);
+                    core.transform.localScale = new Vector3(0.5f, 0.5f, 0.5f);
+                    UnityEngine.Object.DestroyImmediate(core.GetComponent<Collider>());
+                    core.GetComponent<Renderer>().sharedMaterial =
+                        MakeColoredMat(PREFABS + "/Mats", "Mat_WarpGateCore", new Color(0.35f, 0.75f, 1f, 1f));
+
+                    for (int i = 0; i < 2; i++)
+                    {
+                        var ring = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                        ring.name = i == 0 ? "RingFar" : "RingNear";
+                        ring.transform.SetParent(root.transform, false);
+                        ring.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+                        ring.transform.localPosition = new Vector3(0f, 0f, i == 0 ? 0.45f : -0.45f);
+                        ring.transform.localScale = new Vector3(1.0f, 0.08f, 1.0f);
+                        UnityEngine.Object.DestroyImmediate(ring.GetComponent<Collider>());
+                        ring.GetComponent<Renderer>().sharedMaterial =
+                            MakeColoredMat(PREFABS + "/Mats", "Mat_WarpGateRing", new Color(0.72f, 0.76f, 0.84f, 1f));
+                    }
+                }
+
+                var bcol = root.GetComponent<BoxCollider>();
+                if (bcol == null) bcol = root.AddComponent<BoxCollider>();
+                bcol.size = Vector3.one * VoxelEngine.GridSystem.GridSizeExt.CellSize(VoxelEngine.GridSystem.GridSize.Large);
+            });
+
+            // ── Item (non-destructive) ──
+            string itemPath = $"{ITEMS}/GItem_WarpGate.asset";
+            var item = AssetDatabase.LoadAssetAtPath<VoxelEngine.GridSystem.GridBlockItem>(itemPath);
+            if (item == null)
+            {
+                item = ScriptableObject.CreateInstance<VoxelEngine.GridSystem.GridBlockItem>();
+                AssetDatabase.CreateAsset(item, itemPath);
+            }
+            item.itemId = "gitem_warpgate";
+            item.displayName = "Warp Gate";
+            item.description = "Fixed paired transit structure (prototype). Set the same pairing code on two gates; a charged gate in vacuum opens its aperture and delivers the first ship inside to the partner's rendezvous point. One transit per window.";
+            item.iconTint = new Color(0.35f, 0.75f, 1f);
+            item.maxStack = 10;
+            item.gridSize = VoxelEngine.GridSystem.GridSize.Large;
+            item.blockPrefab = gatePrefab;
+            item.blockMass = 8000f;
+            item.blockHP = 4000f;
+            item.category = "Grid Blocks";
+            EditorUtility.SetDirty(item);
+
+            // ── Recipe (non-destructive append) ──
+            string recipePath = $"{RECIPES}/Recipe_GWarpGate.asset";
+            var recipe = GetOrCreateAsset<VoxelEngine.Crafting.RecipeDefinition>(recipePath);
+            recipe.displayName = "Warp Gate";
+            recipe.outputItem = item;
+            recipe.outputCount = 1;
+            recipe.requiredStation = VoxelEngine.Crafting.StationTier.Assembler;
+            recipe.craftSeconds = 40f;
+            recipe.unlockedByDefault = false;
+            var inputs = new System.Collections.Generic.List<VoxelEngine.Crafting.RecipeIngredient>();
+            if (steelPlate != null) inputs.Add(new VoxelEngine.Crafting.RecipeIngredient { item = steelPlate, count = 60 });
+            if (advCircuit != null) inputs.Add(new VoxelEngine.Crafting.RecipeIngredient { item = advCircuit, count = 20 });
+            if (uraniumOre != null) inputs.Add(new VoxelEngine.Crafting.RecipeIngredient { item = uraniumOre, count = 10 });
+            if (lithium != null)    inputs.Add(new VoxelEngine.Crafting.RecipeIngredient { item = lithium, count = 8 });
+            recipe.inputs = inputs.ToArray();
+            EditorUtility.SetDirty(recipe);
+
+            var recipeRegistry = AssetDatabase.LoadAssetAtPath<VoxelEngine.Crafting.RecipeRegistry>($"{ASSET_ROOT}/RecipeRegistry.asset");
+            if (recipeRegistry != null && !recipeRegistry.recipes.Contains(recipe))
+            {
+                recipeRegistry.recipes.Add(recipe);
+                EditorUtility.SetDirty(recipeRegistry);
+            }
+
+            // ── Research (non-destructive: only creates the node if missing) ──
+            var tree = AssetDatabase.LoadAssetAtPath<VoxelEngine.Research.ResearchTree>($"{ASSET_ROOT}/Research/ResearchTree.asset");
+            if (tree != null)
+            {
+                var node = FindNodeByName(tree, "res_warpgate");
+                if (node == null)
+                {
+                    node = ScriptableObject.CreateInstance<VoxelEngine.Research.ResearchNode>();
+                    node.nodeId = "res_warpgate";
+                    node.displayName = "Warp Gate";
+                    node.description = "Unlocks the Warp Gate — a fixed paired transit structure. Two gates sharing a code open an aperture; the first ship inside is delivered to the partner. The endgame hook for travel beyond one hop of a drive.";
+                    node.category = VoxelEngine.Research.ResearchCategory.Environment;
+                    node.subCategory = VoxelEngine.Research.ResearchSubCategory.Building;
+                    node.tier = 8;
+                    node.column = 6;
+                    node.iconTint = new Color(0.35f, 0.75f, 1f);
+                    node.researchSeconds = 1200f;
+                    node.cost = new[]
+                    {
+                        new VoxelEngine.Research.ResearchNode.ScienceCost { pack = sciT2 as VoxelEngine.Items.ScienceItem, count = 150 },
+                        new VoxelEngine.Research.ResearchNode.ScienceCost { pack = sciT3 as VoxelEngine.Items.ScienceItem, count = 90 },
+                    };
+                    var warpNode = FindNodeByName(tree, "res_warpdrive");
+                    if (warpNode != null) node.prerequisites = new[] { warpNode };
+                    AssetDatabase.CreateAsset(node, $"{NODES}/res_warpgate.asset");
+                    tree.nodes.Add(node);
+                }
+                node.unlocksRecipes = new VoxelEngine.Crafting.RecipeDefinition[] { recipe };
+                EditorUtility.SetDirty(node);
+                EditorUtility.SetDirty(tree);
+                VoxelEngine.Research.ResearchRecipeLinker.Register("res_warpgate", recipe);
+            }
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            EditorUtility.DisplayDialog("Voxel Engine — Warp Gate",
+                "Warp Gate wired (non-destructive):\n\n" +
+                "• Prefab: " + prefabPath + "\n" +
+                "• Item: GItem_WarpGate (Grid Blocks)\n" +
+                "• Recipe: 60 Steel Plate + 20 Advanced Circuit + 10 Uranium Ore + 8 Lithium @ Assembler\n" +
+                "• Research: Warp Gate (tier 8) after Warp Drive\n\n" +
+                "In-game: build two gates (ships or stations), set the SAME pairing code on both panels, keep them powered in vacuum — the charged gate opens and delivers the first ship inside to its partner.",
                 "OK");
         }
 

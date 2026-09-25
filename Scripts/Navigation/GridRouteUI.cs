@@ -336,6 +336,17 @@ namespace VoxelEngine.Navigation
             }, VoxelEngine.UI.UITheme.BgSlot));
             p.Add(modeRow);
 
+            var warpRow = Row();
+            warpRow.Add(VoxelEngine.UI.UITheme.StatRow("⚡", "Warp legs",
+                ap.useWarpLegs ? "on · jumps legs past one hop" : "off · thrusters only",
+                ap.useWarpLegs ? OkInk : VoxelEngine.UI.UITheme.TextSecondary));
+            warpRow.Add(VoxelEngine.UI.UITheme.SmallButton(ap.useWarpLegs ? "ON" : "OFF", () =>
+            {
+                ap.useWarpLegs = !ap.useWarpLegs;
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, VoxelEngine.UI.UITheme.BgSlot));
+            p.Add(warpRow);
+
             var t1 = Row();
             t1.Add(VoxelEngine.UI.UITheme.StatRow("⚡", "Leave at charge", (ap.targetCharge01 * 100f).ToString("0") + " %",
                 ap.WantsPower ? WarnInk : OkInk));

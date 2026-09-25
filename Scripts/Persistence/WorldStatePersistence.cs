@@ -1228,6 +1228,13 @@ namespace VoxelEngine.Persistence
             // Grid batteries and world batteries both persist their one-item charger
             // dock through the existing container snapshot; bulk charge remains in
             // their dedicated saved state fields.
+            var warpDriveStore = go.GetComponentInChildren<VoxelEngine.GridSystem.GridWarpDrive>(true);
+            if (warpDriveStore != null)
+            {
+                warpDriveStore.EnsureResonatorSlots();
+                return SerializeContainer(warpDriveStore.resonatorSlots);
+            }
+
             var gridBattery = go.GetComponentInChildren<VoxelEngine.GridSystem.GridBattery>(true);
             if (gridBattery != null)
             {
@@ -1752,6 +1759,14 @@ namespace VoxelEngine.Persistence
                         savedBlock.warpCooldown01 = warpDrive.Cooldown01;
                     }
 
+                    if (block is GridWarpGate warpGate)
+                    {
+                        savedBlock.hasWarpGateState = true;
+                        savedBlock.warpGateCharge01 = warpGate.Charge01;
+                        savedBlock.warpGateCooldown01 = warpGate.Cooldown01;
+                        savedBlock.warpGatePairingCode = warpGate.pairingCode;
+                    }
+
                     if (block is VoxelEngine.Maritime.GridGearbox gearbox)
                     {
                         savedBlock.hasGearboxState = true;
@@ -2225,6 +2240,9 @@ namespace VoxelEngine.Persistence
 
                 if (saved.hasWarpDriveState && block is GridWarpDrive restoredWarp)
                     restoredWarp.RestorePersistentState(saved.warpStoredWh, saved.warpRecharging, saved.warpCooldown01);
+
+                if (saved.hasWarpGateState && block is GridWarpGate restoredGate)
+                    restoredGate.RestorePersistentState(saved.warpGateCharge01, saved.warpGateCooldown01, saved.warpGatePairingCode);
 
                 if (saved.hasGearboxState && block is VoxelEngine.Maritime.GridGearbox restoredGearbox)
                     restoredGearbox.RestorePersistentSettings(saved.gearboxRatio, saved.gearboxSelectedGear);
@@ -3310,6 +3328,14 @@ namespace VoxelEngine.Persistence
                 return;
             }
 
+            var warpDriveStore = go.GetComponentInChildren<VoxelEngine.GridSystem.GridWarpDrive>(true);
+            if (warpDriveStore != null)
+            {
+                warpDriveStore.EnsureResonatorSlots();
+                DeserializeInto(warpDriveStore.resonatorSlots, sc);
+                return;
+            }
+
             var gridBattery = go.GetComponentInChildren<VoxelEngine.GridSystem.GridBattery>(true);
             if (gridBattery != null)
             {
@@ -3914,6 +3940,10 @@ namespace VoxelEngine.Persistence
             public int gridBatteryMode;
             public bool hasWarpDriveState;
             public float warpStoredWh;
+            public bool hasWarpGateState;
+            public float warpGateCharge01;
+            public float warpGateCooldown01;
+            public int warpGatePairingCode;
             public bool warpRecharging;
             public float warpCooldown01;
             // Additive gearbox setting state. The exact free-form ratio is the

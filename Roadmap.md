@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.33.0-dev`
-**Roadmap Version:** `12.33.0-dev`
+**Current Version:** `12.38.0-dev`
+**Roadmap Version:** `12.38.0-dev`
 **Date:** 2026-09-25
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,23 +29,25 @@
 
 ## 0. Recently Done
 
-### 12.33.0-dev - Warp Safety: Damage Gate, Arrival Checks, Bank Reserve
-- **Drive** (`GridWarpDrive`): health gate (DAMAGED below 35%), collision-safe arrivals (25 km floor over every body, 0.5% blind scatter, refusal veto), 10% arrival reserve on full and partial jumps.
-- **Autopilot** (`NavFlightAutopilot`): warp legs bank the leg price plus the reserve.
+### 12.38.0-dev - Warp Gate Prototype
+- **Gate** (`GridWarpGate`): paired fixed-structure transit — matching codes, 25 s aperture, first ship inside hops to the partner's rendezvous, collision-vetoed, at rest.
+- **Setup** (`VoxelEngineSetupWindow`): Step 98 authors prefab, item, recipe, research (tier 8 behind Warp Drive).
 
-### 12.32.0-dev - Warp Arrival Fix, Drive Destination Picker
-- **Warp** (`SpaceOrigin`): the jumping hull holds scene-still while the world slides; the anchor change no longer cancels itself, so charged jumps move the hull.
-- **Drive panel** (`GridWarpDrive`, `GridBlockUI`): destination picker — charted bodies plus powered beacons, live distance/price rows, lock-and-jump through the confirm wheel.
+### 12.37.0-dev - Route-Book Warp Legs
+- **Auto-run** (`GridRouteAutopilot`): legs past one hop engage the drive — aim, auto-charge, jump, chain hops, cruise the rest; WARP LEGS toggle on the panel.
+- **Honest refusals:** no gyros / cooldown / atmosphere / stall all cruise with a log line; pilot keys outrank everything.
 
-### 12.31.4-dev - Warp Hull Hop, Vacuum, Planet Handoff
-- **Warp** (`GridWarpDrive`, `SpaceOrigin`): teleport the hull; `OnFrameChanged` on `SetFrame`; force frame after hop.
-- **Vacuum / planets:** no livestock or grass in space; GPU surfaces sleep past 400 km; proximity hold is surface-distance so gravity hands off.
+### 12.36.0-dev - Warp Coil Resonator Item, Drive Upgrade Slots
+- **Drive panel** (`GridWarpDrive`, `GridBlockUI`): three RESONATORS slots — the crafted Warp Coil Resonator installs on the drive, -15% spin-up each.
+- **Setup** (`VoxelEngineSetupWindow`): Step 97 authors item + recipe + research link; the node unlocks the recipe (no passive ranks).
 
-### 12.31.3-dev - Warp Jump, Save Depth, Fly Hitch
-- **Warp FX:** matching velocity curves so the teleport runs; cheaper streaks. Flat drawer upgrades. Origin sweep 8 s.
+### 12.35.0-dev - Warp Coil Resonance Research, Setup Step 97
+- **Research** (`GridWarpDrive`, `ResearchManager`): repeatable Warp Coil Resonance node — 15% faster spin-up per rank, read live by the drive; Coils row shows the rank.
+- **Setup** (`VoxelEngineSetupWindow`): non-destructive Step 97 authors and connects the node (manual run, once).
 
-### 12.31.2-dev - SavedGrid Cosmic Fields Compile Fix
-- **Compile** (`SavedGrid`, `GridWarpDrive`): cosmic fields on the save type; star uses `displayName`.
+### 12.34.0-dev - Route Destinations in the Picker, Spin-Up Assist
+- **Drive panel** (`GridWarpDrive`, `GridBlockUI`): route-book destinations as amber rows — the jump lands at the route's live end point (waymarks track, pins ride, frozen stays).
+- **Drive** (`GridWarpDrive`): enabled drives resonate the spin-up — sqrt(count) faster coils; Coils row on the panel.
 
 ### Era Transition Feel
 
@@ -947,17 +949,17 @@ one sentence: **a road is the difference between walking a route and being able 
 
 A late-game **Jump Drive** provides charged, coordinate-based faster-than-light travel without replacing normal engines or route planning.
 
-*(drive, charge, pool, hop, planet lock, fly-to, jump legs, FX, partial jumps shipped through 12.27.0-dev — `GridWarpDrive`, `NavFlightAutopilot`, `WarpFx`; Setup Step 50 authors the block. 12.28.0-dev adds the mass penalty. 12.32.0-dev adds the drive-panel destination picker and fixes the warp arrival no-op.)*
+*(drive, charge, pool, hop, planet lock, fly-to, jump legs, FX, partial jumps shipped through 12.27.0-dev — `GridWarpDrive`, `NavFlightAutopilot`, `WarpFx`; Setup Step 50 authors the block. 12.28.0-dev adds the mass penalty. 12.32.0-dev adds the drive-panel destination picker and fixes the warp arrival no-op. 12.33.0-dev adds the safety gates. 12.34.0-dev adds route-book destinations and the spin-up assist. 12.35.0-dev adds the researched charge-time bonus, which 12.36.0-dev turns into crafted resonator items installed on the drive. 12.37.0-dev adds auto-run warp legs.)*
 
 **Mass penalty (12.28.0-dev, cap 12.28.1-dev):** `factor = min(maxMassFactor, sqrt(TotalMass / ratedMassKg))` at or above rated mass, else 1. Defaults: rated 100 t, cap 12. Price multiplies, hop divides. One full drive still equals one hop. Cargo is `ContentMass` inside `TotalMass` — do not add a second cargo scale.
 
-- ~~The player chooses a known destination, beacon, or safe coordinate and sees range, charge cost, mass penalty, cooldown, and arrival error before committing.~~ *(12.32.0-dev — drive-panel picker: charted bodies and powered beacons with live distance, live price and affordability colour; lock-and-jump through the confirm wheel; partial jumps fly the target line. Route-book and free-coordinate entries in the picker remain open.)*
+- ~~The player chooses a known destination, beacon, or safe coordinate and sees range, charge cost, mass penalty, cooldown, and arrival error before committing.~~ *(12.32.0-dev — drive-panel picker: charted bodies and powered beacons with live distance, live price and affordability colour; lock-and-jump through the confirm wheel; partial jumps fly the target line. Free-coordinate entries in the picker remain open; route-book destinations shipped in 12.34.0-dev.)*
 - ~~Maximum range decreases as ship mass and cargo increase.~~ *(12.28.0-dev — `GridWarpDrive.MassFactor` / `EffectiveHopKm` / `EffectiveRateWhPerKm`; Setup Step 50 fills `ratedMassKg` and `maxMassFactor` only when zero.)*
 - ~~The drive requires a large stored-energy charge and cannot operate while critically damaged, obstructed, inside prohibited gravity depths, or without a safe arrival volume.~~ *(12.33.0-dev — health gate with DAMAGED state, vacuum gate, arrival clamp 25 km over every body plus refusal veto; Setup Step 50 untouched.)*
-- Multiple drives can combine range or reduce charge time according to research and grid configuration.
+- ~~Multiple drives can combine range or reduce charge time according to research and grid configuration.~~ *(range and bank pooling 12.24.0-dev; spin-up assist — sqrt(enabled count) — 12.34.0-dev; item-driven charge time 12.36.0-dev — crafted Warp Coil Resonators installed on the drive (recipe unlocked by the Coil Resonance research, Setup Step 97), -15% spin-up each.)*
 - ~~Blind jumps carry larger arrival error and are blocked when collision safety cannot find a valid destination.~~ *(12.33.0-dev — lateral scatter up to 0.5% of the hop; mapped locks stay exact.)*
 - Jump calculations include territorial warnings, stellar hazards, atmosphere restrictions, and minimum reserve power after arrival. *(stellar standoff, vacuum gate and the 10% arrival reserve shipped through 12.33.0-dev; territorial warnings deferred until a territory system exists to warn about.)*
-- Autopilot can use approved jump legs inside recorded interplanetary routes.
+- ~~Autopilot can use approved jump legs inside recorded interplanetary routes.~~ *(12.37.0-dev — the auto-run loop engages the ship's own warp drive for legs past one hop: aims, banks price plus reserve, fires unconfirmed, chains hops; WARP LEGS toggle on the auto-run panel.)*
 
 ---
 
@@ -1927,6 +1929,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 17. **Warp Gate Prototype**
     - Experimental travel to distant star systems.
     - Endgame expansion hook.
+    - *(12.38.0-dev ships the interplanetary prototype: `GridWarpGate`, paired by code, aperture transit to the partner's rendezvous; authored by Setup Step 98. Interstellar pairing and gate networks remain open.)*
 
 18. **Coordinate Jump Drive**
     - Charged faster-than-light grid block for known beacons, destinations, and validated safe coordinates.
@@ -2278,7 +2281,7 @@ For each version, these are the high-level Unity tasks you will perform manually
 13. ~~Build player heat UI with green/yellow/red indicator.~~ *(9.30.0-dev suit strip; 9.32.0-dev reports the crew's compartment on the same panel)*
 14. ~~Implement atmospheric entry heat simulation.~~ *(9.29.0-dev; concealed-space exhaust and room heat closed by 9.32.0-dev, Step 63)*
 14b. ~~Grid Route Recorder & Energy Calculator: manual route calculation and recorded routes.~~ *(9.34.0-dev, Step 65 — distance, travel time, gravity wells, atmosphere segments, required thrust, power and hydrogen use, reserve margin and named warnings, with routes saved as waypoint lists on the grid. Autopilot remains open.)*
-15. Build coordinate Jump Drive prefab, charge/range calculator, safe-arrival validation, destination UI, and Autopilot route integration. *(prefab, charge/range maths and safe-arrival validation shipped earlier with `GridWarpDrive`; 12.23.0-dev ships the Autopilot legs for nav-target flights (auto-aim/charge/fire with cruise resume); 12.24.0-dev adds the internal-battery fuel model (pooled range, proportional drain, persisted) and the drive panel. 12.32.0-dev ships the destination-select UI for charted bodies and powered beacons on the drive panel. Route-book warp legs remain — 9.34.0-dev ships the route book the picker's route-book entries will hand their selections to)*
+15. Build coordinate Jump Drive prefab, charge/range calculator, safe-arrival validation, destination UI, and Autopilot route integration. *(prefab, charge/range maths and safe-arrival validation shipped earlier with `GridWarpDrive`; 12.23.0-dev ships the Autopilot legs for nav-target flights (auto-aim/charge/fire with cruise resume); 12.24.0-dev adds the internal-battery fuel model (pooled range, proportional drain, persisted) and the drive panel. 12.32.0-dev ships the destination-select UI for charted bodies and powered beacons on the drive panel. route-book autopilot warp legs shipped 12.37.0-dev — 9.34.0-dev shipped the route book both build on)*
 16. Build empire dashboard UI.
 17. **Run setup wizard step (non-destructive)**
     - Step 22 for planetary bases, exo-alloys, nuclear, radiation, and heat systems.
@@ -2345,7 +2348,7 @@ For each version, these are the high-level Unity tasks you will perform manually
 4. Build staged Dyson solar-swarm and sphere construction prefabs, orbital lanes, beam relays, and control UI.
 5. Build the Star Builder / Stellar Forge megastructure and stellar safety UI.
 6. Author Boss Relic Core items and relic-gated Architect research nodes.
-7. Add warp gate prototype prefab.
+7. Add warp gate prototype prefab. *(12.38.0-dev — `GridWarpGate` + Setup Step 98: prefab, item, recipe, research.)*
 8. Finalize save schema v2 migration for boss progression, relics, custom stars, and Dyson construction stages.
 9. **Run setup wizard step (non-destructive)**
    - Step 23 for world forge, Star Builder, Dyson Sphere, boss relic gates, and megastructures.

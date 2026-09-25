@@ -17,7 +17,8 @@
 //      is a real thing a player wants to do, and confirm-once because it is a real way to lose a ship.
 //
 // What it does not do, and will not until its own round: avoid terrain, fly a dock approach, schedule
-// cargo operations, reroute around a hazard, or use a jump leg.
+// cargo operations, reroute around a hazard. (Warp legs shipped in 12.37.0: an armed
+// loop longer than one hop aims, charges and fires the ship's own warp drive.)
 
 using System.Collections.Generic;
 using Unity.Mathematics;
@@ -85,6 +86,10 @@ namespace VoxelEngine.Navigation
         [Tooltip("How long the ship will wait at a pad for its targets before it gives up and says so.")]
         public float serviceTimeoutSeconds = 900f;
 
+        [Header("Warp Legs")]
+        [Tooltip("When armed and a leg is longer than one warp hop, engage the warp drive: aim, auto-charge, jump, keep cruising. Needs a warp drive and gyroscopes aboard; the pilot's keys still outrank it.")]
+        public bool useWarpLegs = true;
+
         // ── Runtime ──────────────────────────────────────────────────────────
         public AutoRunState State { get; private set; } = AutoRunState.Halted;
         public string BlockReason { get; private set; } = "";
@@ -102,6 +107,18 @@ namespace VoxelEngine.Navigation
         float _serviceClock;
         Vector3 _holdPoint;
         bool _holdPointValid;
+
+        // ── Warp legs (12.37.0) ──────────────────────────────────────────────
+        // The same engagement the flight autopilot uses, wired into the shuttle loop:
+        // a leg longer than one hop hands the helm to the drive until it fires.
+        GridWarpDrive _warpDrive;
+        bool _warpGivenUp;             // no gyros: cruise until disarm/re-arm
+        int _warpFails;
+        float _warpRetryAt;            // transient refusals retry after this instant
+        float _aimBest = float.MaxValue;
+        float _aimStalled;
+        float _lastCharge01;
+        float _chargeStallT;
         readonly List<string> _log = new(6);
 
         public IReadOnlyList<string> Log => _log;
@@ -246,6 +263,9 @@ namespace VoxelEngine.Navigation
             BlockReason = "";
             State = State == AutoRunState.Paused ? AutoRunState.Outbound : AutoRunState.Outbound;
             _serviceClock = 0f;
+            _warpGivenUp = false;
+            _warpFails = 0;
+            _warpRetryAt = 0f;
             PushLog("Armed · " + (string.IsNullOrWhiteSpace(endWaymark) ? routeName : endWaymark));
             return true;
         }
@@ -254,6 +274,7 @@ namespace VoxelEngine.Navigation
         {
             State = AutoRunState.Halted;
             ClearOwnedFlight();
+            ClearWarpLeg();
             ServingPad = null;
             if (!string.IsNullOrEmpty(reason)) { BlockReason = reason; PushLog(reason); }
             else PushLog("Disarmed");
@@ -264,7 +285,21 @@ namespace VoxelEngine.Navigation
             if (!IsArmed) return;
             State = AutoRunState.Paused;
             ClearOwnedFlight();
+            ClearWarpLeg();
             PushLog("Paused");
+        }
+
+        /// <summary>Release the warp engagement: the player's toggle stays untouched,
+        /// only the autopilot's borrow of the drive ends.</summary>
+        void ClearWarpLeg()
+        {
+            if (_warpDrive != null) _warpDrive.SetAutoRecharge(false);
+            _warpDrive = null;
+            _aimBest = float.MaxValue;
+            _aimStalled = 0f;
+            _chargeStallT = 0f;
+            _lastCharge01 = 0f;
+            Grid?.SetAutonomousRotation(0f, 0f, 0f);
         }
 
         /// <summary>Reloaded mid-flight, but on purpose not *in* flight: the schedule and the run
@@ -485,11 +520,165 @@ namespace VoxelEngine.Navigation
 
             // Approach profile: full ceiling speed in the open, then a commanded speed that decays with
             // remaining distance so the ship arrives slow instead of arriving *fast* and asking the
+            // Approved jump legs: a leg longer than one warp hop hands the helm to the
+            // drive for this tick — it aims, auto-charges, fires, and keeps cruising.
+            if (useWarpLegs && WarpLegTick(grid, to, dist, cap)) return;
+
             // dampeners to forgive it. This is the line that decides whether a loop reads as a shuttle
             // or as a rock with intentions.
             float profile = cap * Mathf.InverseLerp(holdR * 2.5f, stopDistance + holdR * 6f, dist);
             grid.SetAutonomousFlight(to / Mathf.Max(0.001f, dist) * Mathf.Max(settle * 1.5f, profile),
                 "AUTO RUN — " + WaymarkLabel());
+        }
+
+        // ── Warp legs ────────────────────────────────────────────────────────
+        // The flight autopilot's engagement, wired into the shuttle loop: a leg longer
+        // than one hop (plus 100 km of margin) is bought from the drive instead of the
+        // tanks. The drive aims through the same frame it fires along, banks the leg
+        // price plus the arrival reserve, and fires when the cone is inside two
+        // degrees. Every refusal keeps the ship cruising; nothing here outranks the
+        // pilot's keys, and disarming releases the drive untouched.
+
+        /// <summary>Own the helm for one physics tick when a warp leg is live.
+        /// Returns true when it commanded rotation and/or flight this tick.</summary>
+        bool WarpLegTick(GridEntity grid, Vector3 to, float dist, float cap)
+        {
+            if (_warpGivenUp) return false;
+            if (_warpDrive == null || _warpDrive.Grid != grid || !_warpDrive.Enabled)
+                _warpDrive = FindWarpDrive(grid);
+            if (_warpDrive == null) return false;
+
+            // Only long legs: the hop threshold keeps pads, orbits and moons on thrusters.
+            if (dist <= _warpDrive.LiveHopKm * 1000f + 100000f)
+            {
+                _warpDrive.SetAutoRecharge(false);
+                _aimBest = float.MaxValue;
+                _aimStalled = 0f;
+                return false;
+            }
+            if (_warpDrive.Cooldown01 > 0f || Time.unscaledTime < _warpRetryAt)
+            {
+                _warpDrive.SetAutoRecharge(false);
+                return false;                       // cruise while the coils cool
+            }
+            if (!VoxelEngine.GridSystem.AtmosphereManager.IsInSpace(grid.transform.position))
+            {
+                _warpDrive.SetAutoRecharge(false);
+                return false;                       // climb out on thrust first — no toast spam
+            }
+            if (!HasGyroAuthority(grid))
+            {
+                _warpGivenUp = true;                // permanent until disarm: it will never aim
+                _warpDrive.SetAutoRecharge(false);
+                grid.SetAutonomousRotation(0f, 0f, 0f);
+                PushLog("Warp legs off: no gyroscopes aboard.");
+                return false;
+            }
+
+            // Bank the leg: hop length at the live mass price, plus the drive's arrival
+            // reserve, or every capture would land a reserve short and re-spool.
+            float rate = GridWarpDrive.EffectiveRateWhPerKm(grid);
+            float needWh = (float)(_warpDrive.LiveHopKm * rate * (1f + Mathf.Clamp01(_warpDrive.arrivalReserveFraction)));
+            _warpDrive.SetAutoRecharge(GridWarpDrive.PooledStoredWh(grid) < needWh - 0.01f);
+
+            // Aim the exact frame the drive fires along at the hold point.
+            Vector3 dir = to / Mathf.Max(0.001f, dist);
+            Transform aimFrame = _warpDrive.Grid.ActiveCockpit != null
+                ? _warpDrive.Grid.ActiveCockpit.transform : grid.transform;
+            float angle = Vector3.Angle(aimFrame.forward, dir);
+            SteerAxisToward(grid, aimFrame.forward, dir);
+            if (angle < _aimBest - 0.2f) { _aimBest = angle; _aimStalled = 0f; }
+            else
+            {
+                _aimStalled += Time.fixedDeltaTime;
+                if (_aimStalled > 90f) { AbandonWarpLeg("cannot aim the ship"); return false; }
+            }
+
+            // Charge stall: a starved grid would leave the ship aiming forever.
+            if (_warpDrive.IsCharging)
+            {
+                if (Mathf.Abs(_warpDrive.Charge01 - _lastCharge01) < 0.0005f) _chargeStallT += Time.fixedDeltaTime;
+                else { _chargeStallT = 0f; _lastCharge01 = _warpDrive.Charge01; }
+                if (_chargeStallT > 20f) { AbandonWarpLeg("charge stalled — is the grid powered?"); return false; }
+            }
+            else { _chargeStallT = 0f; _lastCharge01 = _warpDrive.Charge01; }
+
+            // Keep making way while the coils spin; the leg is longer than a hop, so a
+            // full cruise command cannot overshoot anything that matters.
+            grid.SetAutonomousFlight(dir * cap, "AUTO RUN — warp leg · " + WaymarkLabel());
+
+            if (_warpDrive.IsReady && angle <= 2f && GridWarpDrive.PooledStoredWh(grid) >= needWh - 0.01f)
+            {
+                if (_warpDrive.TryWarp(skipConfirm: true))
+                {
+                    _warpFails = 0;
+                    _aimBest = float.MaxValue;
+                    _aimStalled = 0f;
+                    _chargeStallT = 0f;
+                    grid.SetAutonomousRotation(0f, 0f, 0f);
+                    _holdPointValid = false;   // the origin just re-anchored: let Decide re-aim
+                    PushLog("Warp leg jumped · " + GridWarpDrive.PoolRangeKm(grid).ToString("N0") + " km class");
+                    return true;
+                }
+                _warpFails++;
+                if (_warpFails >= 3) AbandonWarpLeg("warp drive refused to fire");
+                else
+                {
+                    _warpRetryAt = Time.unscaledTime + 10f;
+                    PushLog("Warp refused — cruising, will retry.");
+                }
+                return false;
+            }
+            return true;
+        }
+
+        void AbandonWarpLeg(string reason)
+        {
+            _warpRetryAt = Time.unscaledTime + 30f;
+            if (_warpDrive != null) _warpDrive.SetAutoRecharge(false);
+            Grid?.SetAutonomousRotation(0f, 0f, 0f);
+            PushLog("Warp abandoned (" + reason + ") — cruising the rest.");
+        }
+
+        GridWarpDrive FindWarpDrive(GridEntity grid)
+        {
+            foreach (var block in grid.AllBlocks)
+                if (block is GridWarpDrive w && w.Enabled) return w;
+            return null;
+        }
+
+        bool HasGyroAuthority(GridEntity grid)
+        {
+            foreach (var block in grid.AllBlocks)
+                if (block is GridGyroscope gy && gy.Enabled && gy.torquePower > 0f) return true;
+            return false;
+        }
+
+        /// <summary>Swing a world axis onto a world direction through the grid's gyros —
+        /// the same gain curve the flight autopilot uses for its warp aim.</summary>
+        void SteerAxisToward(GridEntity grid, Vector3 worldAxis, Vector3 worldDir)
+        {
+            if (worldAxis.sqrMagnitude < 1e-8f || worldDir.sqrMagnitude < 1e-8f)
+            {
+                grid.SetAutonomousRotation(0f, 0f, 0f);
+                return;
+            }
+            worldAxis.Normalize();
+            worldDir.Normalize();
+            float angle = Vector3.Angle(worldAxis, worldDir);
+            if (angle < 0.5f)
+            {
+                grid.SetAutonomousRotation(0f, 0f, 0f);
+                return;
+            }
+            Vector3 axis = Vector3.Cross(worldAxis, worldDir);
+            if (axis.sqrMagnitude < 1e-8f)
+                axis = Vector3.Cross(worldAxis, Mathf.Abs(worldAxis.y) < 0.9f ? Vector3.up : Vector3.right);
+            float gain = Mathf.Clamp01(angle / 25f) * 2f;
+            Vector3 localAxis = grid.transform.InverseTransformDirection(axis.normalized * gain);
+            grid.SetAutonomousRotation(
+                Mathf.Clamp(localAxis.y, -1f, 1f),
+                Mathf.Clamp(localAxis.x, -1f, 1f), 0f);
         }
 
         static float speedOf(GridEntity g) => g?.Body != null ? g.Body.linearVelocity.magnitude : 0f;

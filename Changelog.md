@@ -1,9 +1,49 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.33.0-dev`
+**Current Version:** `12.38.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.38.0-dev] Warp Gate Prototype
+
+**Type:** MINOR - the Era 7 headline ships as a buildable prototype: the Warp Gate, a fixed paired transit structure. Two gates sharing a pairing code (0-99, cycled on the gate panel; 0 = unpaired) pair up; a gate that is powered, charged (90 s at 120 kW) and in vacuum opens its aperture for a 25-second window, and the first ship whose hull enters the 220 m sphere is delivered to the paired gate's rendezvous point - 2 km off the partner on the approach line, collision-vetoed like every jump (a buried partner refuses transits instead of burying ships), arriving at rest. The hop reuses the drive's exact machinery (TeleportSubjectToCosmic plus the new shared SettleGridAfterHop settle) and the full transit FX (WarpFx gains a drive-less grid overload, so gates get the same tunnel, flash and streaks). One transit consumes the window; the coils then cool 120 s. The drive's commit path is unchanged - FinishArrival and ArrivalUnsafe became thin wrappers over the new public statics, zero behaviour change. The gate panel shows charge, state (OFFLINE/UNPAIRED/CHARGING/READY/OPEN/COOLDOWN), partner, draw, aperture and cooldown; changing the pairing code resets the charge honestly. Gate charge, cooldown and pairing code persist with the grid (no schema change - new dedicated save fields, same pattern as the drive). Authored by the new non-destructive Setup Step 98: prefab (ring housing + core, visuals only when missing), GItem_WarpGate, recipe (60 Steel Plate + 20 Advanced Circuit + 10 Uranium Ore + 8 Lithium @ Assembler), research res_warpgate (tier 8, behind Warp Drive). Prototype scope stated honestly: interplanetary pairing inside the charted system - the interstellar expansion hook stays open.
+
+**GitHub title:** `[12.38.0-dev] Warp gate prototype`
+
+**Manual steps:** one - run Tools > Voxel Engine > Voxel Engine Setup, press button 98 "Build Warp Gate", confirm the dialog. Verify in Unity: build two ships (or a ship and a station) each with a gate and power, set the same code on both panels, fly one hull into the charged gate's aperture, and confirm it arrives 2 km off the partner with the transit FX; flip one gate's code and confirm the state reads UNPAIRED; save/reload and confirm codes and charge come back.
+
+### [12.37.0-dev] Route-Book Warp Legs
+
+**Type:** MINOR - the auto-run shuttle loop now buys long legs from the warp drive instead of the tanks. When an armed loop's remaining leg exceeds one warp hop plus a 100 km margin, the loop engages the ship's own drive: it aims the exact frame the drive fires along through the gyros, banks the leg price plus the arrival reserve from the pooled drive battery (auto-recharge borrows the drive without touching the player's recharge toggle), keeps cruising toward the hold point while the coils spin, and fires without the confirm wheel the moment the cone is inside two degrees. After the jump the loop re-aims from the re-anchored origin and chains the next hop until the leg is short enough to finish on thrusters. Refusals degrade honestly: no drive, cooling, atmosphere, or a short leg all just cruise; a ship without gyroscopes logs that warp legs are off and cruises until re-armed; a stalled charge or three consecutive refusals abandon the leg for 30 seconds and cruise; the pilot's keys outrank everything as always. Disarming or pausing releases the drive and clears the borrowed auto-recharge. A WARP LEGS ON/OFF row sits on the auto-run panel (default on). No recipe, setup or save changes.
+
+**GitHub title:** `[12.37.0-dev] Route-book warp legs`
+
+**Manual steps:** none - code-only. Verify in Unity: arm a shuttle loop whose leg is longer than one hop with a warp drive, gyros and a powered grid aboard, and watch it spin, jump, and continue the loop; watch the WARP LEGS row toggle to OFF and confirm it cruises the whole way; grab the stick mid-charge and confirm the loop yields instantly.
+
+### [12.36.0-dev] Warp Coil Resonator Item, Drive Upgrade Slots
+
+**Type:** MINOR - the coil upgrade is now an item you install, not a research rank. A new crafted item, the Warp Coil Resonator (4 Advanced Circuit + 6 Lithium + 2 Uranium Ore at an Assembler, recipe unlocked by the Warp Coil Resonance research), is installed in three new RESONATORS slots on the warp drive panel - each installed resonator trims 15% off the drive's spin-up (0.85^count, same maths as before, stacking with the drive-count assist). The research node no longer grants a passive rank effect; it unlocks the recipe, like every other machine research - anyone who bought ranks in 12.35 keeps the recipe unlock, ranks just no longer add anything on their own. The resonator slots persist with the ship through the grid container save path (new save branch, no schema change). The panel's Coils row now shows the installed resonator count instead of the research rank. Setup Step 97 is reworked (same button, re-run safely): it authors the item, the recipe, and connects the research node behind Warp Drive; new nodes are single-rank. Balance and prefabs untouched.
+
+**GitHub title:** `[12.36.0-dev] Warp coil resonator item, drive upgrade slots`
+
+**Manual steps:** one - re-run Tools > Voxel Engine > Voxel Engine Setup, press button 97 "Build Warp Coil Resonator", confirm the dialog (it now also authors the item and recipe). Verify in Unity: research Coil Resonance, craft a resonator at an Assembler, open the drive panel, drop it into a RESONATORS slot, and watch the Coils row count it and the spin-up time drop; save and reload the ship and confirm the installed resonators come back.
+
+### [12.35.0-dev] Warp Coil Resonance Research, Setup Step 97
+
+**Type:** MINOR - the warp drive's charge time is now research-driven, closing the last half of the multi-drive roadmap line. A new repeatable research node, Warp Coil Resonance (res_warpcoils, 3 ranks, behind Warp Drive research), trims 15% off the spin-up per rank (0.85^rank - three ranks spool a lone drive in under 28 seconds), stacking with the drive-count assist from 12.34.0-dev. The drive reads the rank live through the new ResearchManager.GetRank(string) overload; with no research manager (menu, tests) the base time is used. Authored by the new Setup Step 97 (Tools > Voxel Engine > Voxel Engine Setup): non-destructive - creates the node only when missing, always connects it behind res_warpdrive, never touches recipes, prefabs or tuned values, and is safe to re-run. The drive panel's Coils row shows the research rank (R1-R3) next to the effective spin-up. No recipe, prefab or balance changes; the node costs 80 Science T2 + 40 Science T3 per rank.
+
+**GitHub title:** `[12.35.0-dev] Warp coil resonance research, setup step 97`
+
+**Manual steps:** one - run Tools > Voxel Engine > Voxel Engine Setup, press button 97 "Build Warp Coil Resonance", and confirm the dialog. It creates Research/Nodes/res_warpcoils.asset and links it behind Warp Drive; re-running only reconnects what is missing. Verify in Unity: research one rank (research UI, tier 7, after Warp Drive), open the drive panel, and confirm the Coils row reads R1 with spin-up down to ~38 s on a solo drive; ranks 2 and 3 bring it to ~32 s and ~27 s.
+
+### [12.34.0-dev] Route Destinations in the Picker, Spin-Up Assist
+
+**Type:** MINOR - the drive-panel destination picker now lists route-book destinations: every committed cosmic route on the ship's own book appears as an amber row and jumps to its final plotted point. The end point resolves live through the existing waypoint rules - waymarks track their block, body pins ride the world, frozen points stay frozen - so a jump lands where the route GOES, not where it was recorded. Scene-local routes (road and water networks on one planet) are skipped; a deleted route greys its row to GONE; a half-written legacy waypoint degrades to its frozen plot. And multiple drives now spool together: every enabled drive on the grid resonates its coils, shortening the commanded drive's spin-up by sqrt of the count (4 drives spin twice as fast, 9 three times). The bank, power draw and cooldown are untouched - assist only shortens the spin. The panel gains a Coils row showing how many drives aid and the effective spin-up time. Research-driven charge time remains open (needs a dedicated bonus research node). No recipe, research or setup changes.
+
+**GitHub title:** `[12.34.0-dev] Route destinations in the picker, spin-up assist`
+
+**Manual steps:** none - code-only. Verify in Unity: record a route in space (or load a ship with one), open the drive panel, and confirm an amber route row with live distance and price; jump it and arrive at the route's end point; rename/delete the route and watch the row grey to GONE; fit two or more enabled drives and confirm the Coils row counts them and the spin-up bar fills faster than a solo drive.
 
 ### [12.33.0-dev] Warp Safety: Damage Gate, Arrival Checks, Bank Reserve
 

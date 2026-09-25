@@ -90,21 +90,30 @@ namespace VoxelEngine.FX
         {
             if (drive == null || drive.Grid == null || onJump == null) return false;
             if (_pending.Contains(drive)) return false;
-            EnsureDriver();
+            var j = new Jump { drive = drive, grid = drive.Grid, onJump = onJump };
+            if (!StartJump(j)) return false;
+            _pending.Add(drive);
+            return true;
+        }
 
-            var grid = drive.Grid;
-            var j = new Jump
-            {
-                drive = drive,
-                grid = grid,
-                onJump = onJump,
-                screenFx = grid.IsControlled,
-                hullSpan = EstimateDiameter(grid)
-            };
+        /// <summary>Drive-less jump for gate transits: same tunnel, streaks and screen
+        /// FX, nothing in the pending set — the gate owns its own one-transit window.</summary>
+        public static bool PlayJump(GridEntity grid, Action onJump)
+        {
+            if (grid == null || onJump == null) return false;
+            var j = new Jump { drive = null, grid = grid, onJump = onJump };
+            return StartJump(j);
+        }
+
+        private static bool StartJump(Jump j)
+        {
+            EnsureDriver();
+            j.screenFx = j.grid.IsControlled;
+            j.hullSpan = EstimateDiameter(j.grid);
 
             try
             {
-                j.tunnel = BuildTunnel(grid, j.hullSpan, out j.tunnelMat);
+                j.tunnel = BuildTunnel(j.grid, j.hullSpan, out j.tunnelMat);
             }
             catch (Exception e)
             {
@@ -112,14 +121,13 @@ namespace VoxelEngine.FX
                 j.tunnel = null;
                 j.tunnelMat = null;
             }
-            try { j.streaks = BuildStreaks(grid, j.hullSpan); }
+            try { j.streaks = BuildStreaks(j.grid, j.hullSpan); }
             catch (Exception e)
             {
                 Debug.LogException(e);
                 j.streaks = null;
             }
 
-            _pending.Add(drive);
             _active.Add(j);
             if (j.screenFx) AudioManager.PlayUI(RiserClip, 0.45f);
             return true;
@@ -164,7 +172,7 @@ namespace VoxelEngine.FX
             for (int i = _active.Count - 1; i >= 0; i--)
             {
                 var j = _active[i];
-                if (j.drive == null || j.grid == null) { Teardown(j); _active.RemoveAt(i); continue; }
+                if (j.grid == null) { Teardown(j); _active.RemoveAt(i); continue; }
                 j.t += dt;
 
                 if (!j.jumped && j.t >= PreSeconds)

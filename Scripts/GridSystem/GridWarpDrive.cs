@@ -30,7 +30,9 @@
 using System.Collections.Generic;
 using Unity.Mathematics;
 using UnityEngine;
+using IndustrialWorld.Navigation;
 using VoxelEngine.Cosmos;
+using VoxelEngine.Items;
 using VoxelEngine.UI;
 
 namespace VoxelEngine.GridSystem
@@ -107,6 +109,55 @@ namespace VoxelEngine.GridSystem
         public bool GridStarved => Grid != null && Grid.PowerAvailability01 < ChargeStallPowerFraction
             && ((recharging || _autoRecharge) || IsCharging);
 
+        /// <summary>Research node id of the Warp Coil Resonance recipe unlock
+        /// (authored by Setup Step 97, non-destructive). The node itself grants no
+        /// passive effect — it unlocks the resonator crafting recipe.</summary>
+        public const string ChargeResearchNodeId = "res_warpcoils";
+
+        /// <summary>itemId of the crafted Warp Coil Resonator upgrade (Setup Step 97).</summary>
+        public const string ResonatorItemId = "warpcoil_resonator";
+
+        [Header("Resonators")]
+        [Tooltip("Installed Warp Coil Resonators (crafted upgrade items). Persisted with the grid.")]
+        public ItemContainer resonatorSlots;
+
+        /// <summary>Create the resonator slots once (save restore and panel both call this).</summary>
+        public ItemContainer EnsureResonatorSlots()
+            => resonatorSlots != null ? resonatorSlots : (resonatorSlots = new ItemContainer("Resonators", 3));
+
+        /// <summary>Installed Warp Coil Resonators across all slots.</summary>
+        public int ResonatorCount
+        {
+            get
+            {
+                if (resonatorSlots == null) return 0;
+                int n = 0;
+                for (int i = 0; i < resonatorSlots.Size; i++)
+                {
+                    var s = resonatorSlots.GetSlot(i);
+                    if (s.item != null && s.item.itemId == ResonatorItemId) n += Mathf.Max(0, s.count);
+                }
+                return n;
+            }
+        }
+
+        /// <summary>Spin-up assist: enabled drives on a grid resonate their coils, so
+        /// the commanded drive spools faster — sqrt of the enabled count (1, 1.41,
+        /// 1.73, 2 …). The bank is untouched; this only shortens the 45-second spin.</summary>
+        public float SpinupAssist => Grid != null
+            ? Mathf.Sqrt(Mathf.Max(1, CountEnabledDrives(Grid)))
+            : 1f;
+
+        /// <summary>Item multiplier on the spin-up: each installed Warp Coil Resonator
+        /// trims 15% off the remaining time (0.85^count — three spool a lone drive in
+        /// 61% of the base time). The recipe is unlocked by the Coil Resonance research.</summary>
+        public float ResonatorChargeFactor => Mathf.Pow(0.85f, Mathf.Min(3, ResonatorCount));
+
+        /// <summary>Spin-up time after the drive-count assist and the installed
+        /// resonators. One drive, no resonators: chargeSeconds exactly.</summary>
+        public float EffectiveChargeSeconds
+            => Mathf.Max(1f, chargeSeconds / Mathf.Max(1f, SpinupAssist) * ResonatorChargeFactor);
+
         public override float PowerDraw => (Enabled && Grid != null && (RechargeEffective || IsCharging)) ? powerDrawWatts : 0f;
 
         private const float ChargeStallPowerFraction = 0.35f; // below this grid power availability, charge stalls
@@ -132,9 +183,11 @@ namespace VoxelEngine.GridSystem
             if (!IsCharging || !Enabled) return;
 
             // Charging consumes grid power; without a sufficient bus the drive stalls.
+            // Neighbouring enabled drives resonate their coils (spin-up assist), so a
+            // four-drive ship spools twice as fast as a lone drive.
             float availability = Grid.PowerAvailability01;
             if (availability >= ChargeStallPowerFraction)
-                Charge01 = Mathf.MoveTowards(Charge01, 1f, Time.deltaTime / Mathf.Max(1f, chargeSeconds));
+                Charge01 = Mathf.MoveTowards(Charge01, 1f, Time.deltaTime / EffectiveChargeSeconds);
 
             if (Charge01 >= 1f)
             {
@@ -596,26 +649,43 @@ namespace VoxelEngine.GridSystem
         }
 
         // ── Charted destinations (drive-panel picker) ───────────────────
-        // The panel lists every charted planet and moon (never the star) plus every
-        // live powered beacon off this grid. A selection is a LOCK: the drive plots
-        // the approach shelf itself — no aim cone, no pilot line of sight — and the
-        // same vacuum, cooldown, charge, fuel and confirm rules apply as to an aimed
-        // jump. Mapped destinations are exact; arrival error remains a blind-hop tax.
+        // The panel lists every charted planet and moon (never the star), every live
+        // powered beacon off this grid, and every route-book destination on this
+        // grid's book. A selection is a LOCK: the drive plots the approach itself —
+        // no aim cone, no pilot line of sight — and the same vacuum, cooldown,
+        // charge, fuel and confirm rules apply as to an aimed jump. Mapped
+        // destinations are exact; arrival error remains a blind-hop tax.
 
         /// <summary>A destination the drive can lock without the pilot aiming at it.</summary>
         public readonly struct WarpTarget
         {
             public readonly string DisplayName;
-            public readonly BodyInstance Body;     // charted body (null for beacons)
-            public readonly GridBeacon Beacon;     // powered beacon (null for bodies)
-            public readonly double StandoffKm;     // arrival distance kept from the centre
+            public readonly BodyInstance Body;          // charted body (null otherwise)
+            public readonly GridBeacon Beacon;          // powered beacon (null otherwise)
+            public readonly string RouteName;           // route-book destination (null otherwise)
+            public readonly RouteWaypoint Waypoint;     // the route's plotted end point
+            public readonly double StandoffKm;          // arrival distance kept from the centre
 
             public WarpTarget(string displayName, BodyInstance body, GridBeacon beacon, double standoffKm)
             {
                 DisplayName = displayName;
                 Body = body;
                 Beacon = beacon;
+                RouteName = null;
+                Waypoint = default;
                 StandoffKm = standoffKm;
+            }
+
+            /// <summary>A route-book destination: the route's final plotted point, resolved
+            /// live (waymarks and body pins track, frozen points stay frozen).</summary>
+            public WarpTarget(string routeName, RouteWaypoint waypoint)
+            {
+                DisplayName = routeName;
+                Body = null;
+                Beacon = null;
+                RouteName = routeName;
+                Waypoint = waypoint;
+                StandoffKm = 0d;
             }
         }
 
@@ -650,27 +720,65 @@ namespace VoxelEngine.GridSystem
                 if (beacon == null || !beacon.IsActive || beacon.Grid == null || beacon.Grid == Grid) continue;
                 results.Add(new WarpTarget(beacon.Grid.name, null, beacon, BeaconRendezvousKm));
             }
+            // Route-book destinations: every committed cosmic route flies to its final
+            // plotted point. Scene-local routes (road / water networks on one planet)
+            // are not places a warp can arrive and are skipped; the end point resolves
+            // live — waymarks and body pins track, frozen points stay frozen.
+            var book = RouteBook.For(Grid, create: false);
+            if (book != null && book.Routes != null)
+            {
+                for (int i = 0; i < book.Routes.Count; i++)
+                {
+                    var route = book.Routes[i];
+                    if (route == null || route.sceneCoordinates) continue;
+                    if (route.waypoints == null || route.waypoints.Count == 0) continue;
+                    if (string.IsNullOrEmpty(route.routeName)) continue;
+                    var last = route.waypoints[route.waypoints.Count - 1];
+                    results.Add(new WarpTarget(route.routeName, last));
+                }
+            }
         }
 
         /// <summary>Live cosmic centre of a target: the body's propagated orbit position,
+        /// the route point resolved through its waymark/body pin (or its frozen plot),
         /// or the beacon's current scene position re-read through the origin — a beacon
         /// on a moving shuttle is locked where it IS when the jump fires.</summary>
         public double3 TargetCentreKm(WarpTarget target, SpaceOrigin origin, CosmicRegistry registry)
         {
             if (target.Body != null) return registry != null ? registry.CosmicPositionOf(target.Body) : double3.zero;
+            if (target.RouteName != null)
+            {
+                // Legacy saves can carry half-written waypoints; degrade to the frozen
+                // plot exactly like the route system's own resolver does.
+                try { return target.Waypoint.ResolvedPositionKm(registry); }
+                catch (System.Exception) { return target.Waypoint.positionKm; }
+            }
             if (target.Beacon != null && origin != null)
                 return origin.GetCosmicKm(target.Beacon.transform.position);
             return double3.zero;
         }
 
         /// <summary>Is the locked destination still jumpable at jump time — the body
-        /// still charted, the beacon still powered and not our own hull light?</summary>
+        /// still charted, the route still in the book, the beacon still powered and
+        /// not our own hull light?</summary>
         public bool TargetAlive(WarpTarget target, CosmicRegistry registry)
         {
             if (target.Body != null && registry != null && registry.Bodies != null)
             {
                 for (int i = 0; i < registry.Bodies.Count; i++)
                     if (ReferenceEquals(registry.Bodies[i], target.Body)) return true;
+                return false;
+            }
+            if (target.RouteName != null)
+            {
+                var book = RouteBook.For(Grid, create: false);
+                if (book == null || book.Routes == null) return false;
+                for (int i = 0; i < book.Routes.Count; i++)
+                {
+                    var r = book.Routes[i];
+                    if (r == null || r.sceneCoordinates) continue;
+                    if (r.routeName == target.RouteName && r.waypoints != null && r.waypoints.Count > 0) return true;
+                }
                 return false;
             }
             return target.Beacon != null && target.Beacon.IsActive
@@ -727,9 +835,11 @@ namespace VoxelEngine.GridSystem
                 BuildFeedbackHud.Show("Warp Drive", "Collision safety found no valid arrival — jump refused", null, new Color(1f, 0.7f, 0.25f));
                 return false;
             }
-            string destLabel = target.Body != null
-                ? $"{target.DisplayName} approach ({arrivalAltitudeKm:0} km shelf)"
-                : $"{target.DisplayName} rendezvous ({target.StandoffKm:0} km off the beacon)";
+            string destLabel = target.RouteName != null
+                ? $"{target.DisplayName} route point"
+                : target.Body != null
+                    ? $"{target.DisplayName} approach ({arrivalAltitudeKm:0} km shelf)"
+                    : $"{target.DisplayName} rendezvous ({target.StandoffKm:0} km off the beacon)";
             Vector3 hopDir = (Vector3)(float3)math.normalizesafe(centre - gridCosmic, new double3(0d, 1d, 0d));
             return ConfirmAndCommit(arrival, target.Body, destLabel, skipConfirm, hopDir);
         }
@@ -763,16 +873,22 @@ namespace VoxelEngine.GridSystem
             return fwd * Mathf.Max(0f, along);
         }
 
-        private void FinishArrival(Vector3 keepVel)
+        private void FinishArrival(Vector3 keepVel) => SettleGridAfterHop(Grid, keepVel);
+
+        /// <summary>Shared post-hop settle: rigidbody snapped onto the hull transform,
+        /// the carried velocity kept, spin killed, a seated pilot reseated, camera
+        /// transients reset. The drive's CommitJump and the warp gates both land
+        /// ships through this.</summary>
+        public static void SettleGridAfterHop(GridEntity grid, Vector3 keepVel)
         {
-            if (Grid != null && Grid.Body != null)
+            if (grid != null && grid.Body != null)
             {
-                Grid.Body.position = Grid.transform.position;
-                Grid.Body.linearVelocity = keepVel;
-                Grid.Body.angularVelocity = Vector3.zero;
-                Grid.AcknowledgeWarpSnap();
+                grid.Body.position = grid.transform.position;
+                grid.Body.linearVelocity = keepVel;
+                grid.Body.angularVelocity = Vector3.zero;
+                grid.AcknowledgeWarpSnap();
             }
-            var cockpit = Grid != null ? Grid.ActiveCockpit : null;
+            var cockpit = grid != null ? grid.ActiveCockpit : null;
             var pilot = cockpit != null ? cockpit.Pilot : null;
             if (pilot != null)
             {
@@ -851,7 +967,12 @@ namespace VoxelEngine.GridSystem
         /// <summary>True when the arrival point is still inside a body (or NaN) — the
         /// collision-safety veto. The clamps resolve normal flow; this is the backstop
         /// that turns a hopeless arrival into a refused jump instead of a burial.</summary>
-        private bool ArrivalUnsafe(CosmicRegistry registry, double3 dest)
+        private bool ArrivalUnsafe(CosmicRegistry registry, double3 dest) => ArrivalBlocked(registry, dest);
+
+        /// <summary>True when the point is NaN or inside any charted body — the shared
+        /// collision-safety veto. The drive refuses its own jumps on this; warp gates
+        /// refuse a transit whose paired arrival volume is buried.</summary>
+        public static bool ArrivalBlocked(CosmicRegistry registry, double3 dest)
         {
             if (double.IsNaN(dest.x) || double.IsNaN(dest.y) || double.IsNaN(dest.z)) return true;
             if (registry == null || registry.Bodies == null) return false;

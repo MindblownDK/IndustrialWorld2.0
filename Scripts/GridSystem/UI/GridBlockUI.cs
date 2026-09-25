@@ -35,7 +35,8 @@ namespace VoxelEngine.GridSystem.UI
                 case GridGasTank gt:        return GasTankPanel(gt, slot);
                 case GridH2O2Generator h2:  return MakeScrollable(H2O2Panel(h2, slot));
                 case GridBattery bat:       return BatteryPanel(bat, slot);
-                case GridWarpDrive wd:        return MakeScrollable(WarpDrivePanel(wd));
+                case GridWarpDrive wd:        return MakeScrollable(WarpDrivePanel(wd, slot));
+                case GridWarpGate wg:         return MakeScrollable(WarpGatePanel(wg));
                 case GridContainmentVault cv: return MakeScrollable(ContainmentVaultPanel(cv, slot));
                 case GridSingularityHarvester sh: return MakeScrollable(HarvesterPanel(sh, slot));
                 case GridLocatorBlock loc:  return MakeScrollable(LocatorPanel(loc));
@@ -312,7 +313,7 @@ namespace VoxelEngine.GridSystem.UI
         private static readonly Color WarpLimeDim = new Color(0.45f, 0.60f, 0.14f);
         private static readonly Color WarpRed = new Color(0.78f, 0.22f, 0.18f);
 
-        private static VisualElement WarpDrivePanel(GridWarpDrive drive)
+        private static VisualElement WarpDrivePanel(GridWarpDrive drive, MachineUIs.SlotBuilder slot)
         {
             var p = T.MachinePanel();
             p.name = "WarpDrivePanel";
@@ -463,6 +464,9 @@ namespace VoxelEngine.GridSystem.UI
             var coolRow = T.StatRow("❄", "Cooldown", "—", T.TextSecondary);
             var coolVal = StatRowValue(coolRow);
             p.Add(coolRow);
+            var coilRow = T.StatRow("🧲", "Coils", "—", T.AccentCyan);
+            var coilVal = StatRowValue(coilRow);
+            p.Add(coilRow);
 
             // ── Controls ──
             p.Add(T.Spacer(4));
@@ -507,6 +511,27 @@ namespace VoxelEngine.GridSystem.UI
             p.Add(btnRow);
             p.Add(T.Muted("Range is bought from the pooled battery of every enabled drive on this grid. Far jump, thin bank: fit more drives. A heavier hull — and the cargo in it — pays more per km and hops shorter."));
 
+            // ── Resonators: crafted coil upgrades, installed on the drive ──
+            p.Add(T.Spacer(4));
+            var resCaption = new Label("RESONATORS");
+            resCaption.style.fontSize = 12;
+            resCaption.style.unityFontStyleAndWeight = FontStyle.Bold;
+            resCaption.style.letterSpacing = 1.2f;
+            resCaption.style.color = new StyleColor(WarpLime);
+            p.Add(resCaption);
+            var resGrid = new VisualElement();
+            resGrid.style.flexDirection = FlexDirection.Row;
+            resGrid.style.marginTop = 4;
+            var resSlots = drive.EnsureResonatorSlots();
+            for (int i = 0; i < resSlots.Size; i++)
+            {
+                var cell = slot(resSlots, i, resSlots.GetSlot(i), false, true);
+                cell.style.marginRight = 6;
+                resGrid.Add(cell);
+            }
+            p.Add(resGrid);
+            p.Add(T.Muted("Warp Coil Resonators cut spin-up 15% each — craft them (recipe from the Coil Resonance research) and install here. Persisted with the ship."));
+
             // ── Destinations: charted worlds + powered beacons, lock & jump ──
             p.Add(T.Spacer(4));
             p.Add(StarshipTheme.HullDivider(WarpLime));
@@ -517,14 +542,14 @@ namespace VoxelEngine.GridSystem.UI
             destCaption.style.color = new StyleColor(WarpLime);
             destCaption.style.marginTop = 6;
             p.Add(destCaption);
-            p.Add(T.Muted("Pick a charted world or a powered beacon — the drive plots the jump itself, no aim cone. Same confirm wheel, same price."));
+            p.Add(T.Muted("Pick a charted world, a powered beacon, or a route point — the drive plots the jump itself, no aim cone. Same confirm wheel, same price."));
 
             var targets = new List<GridWarpDrive.WarpTarget>();
             drive.ChartedTargets(targets);
             var destRows = new List<(VisualElement row, Label name, Label dist, Label cost, GridWarpDrive.WarpTarget target)>();
             if (targets.Count == 0)
             {
-                p.Add(T.Muted("No charted worlds and no powered beacons. Fly, chart, or light a beacon."));
+                p.Add(T.Muted("No charted worlds, powered beacons, or route destinations. Fly, chart, or light a beacon."));
             }
             for (int i = 0; i < targets.Count; i++)
             {
@@ -544,9 +569,9 @@ namespace VoxelEngine.GridSystem.UI
                 row.style.paddingTop = 7; row.style.paddingBottom = 7;
                 row.style.marginTop = 4;
 
-                var glyph = new Label(target.Body != null ? "◉" : "✦");
+                var glyph = new Label(target.RouteName != null ? "◆" : target.Body != null ? "◉" : "✦");
                 glyph.style.fontSize = 15;
-                glyph.style.color = new StyleColor(target.Body != null ? T.AccentCyan : WarpLime);
+                glyph.style.color = new StyleColor(target.RouteName != null ? T.AccentAmber : target.Body != null ? T.AccentCyan : WarpLime);
                 glyph.style.marginRight = 8;
                 glyph.pickingMode = PickingMode.Ignore;
                 row.Add(glyph);
@@ -560,7 +585,10 @@ namespace VoxelEngine.GridSystem.UI
                 nameLabel.style.color = new StyleColor(Color.white);
                 nameLabel.pickingMode = PickingMode.Ignore;
                 nameCol.Add(nameLabel);
-                var kindLabel = new Label(target.Body != null ? $"charted body · {drive.arrivalAltitudeKm:0} km shelf" : $"powered beacon · {GridWarpDrive.BeaconRendezvousKm:0} km rendezvous");
+                var kindLabel = new Label(
+                    target.RouteName != null ? "route book · plotted arrival" :
+                    target.Body != null ? $"charted body · {drive.arrivalAltitudeKm:0} km shelf" :
+                    $"powered beacon · {GridWarpDrive.BeaconRendezvousKm:0} km rendezvous");
                 kindLabel.style.fontSize = 9;
                 kindLabel.style.color = new StyleColor(T.TextMuted);
                 kindLabel.pickingMode = PickingMode.Ignore;
@@ -662,6 +690,15 @@ namespace VoxelEngine.GridSystem.UI
                     spinVal.text = drive.IsReady ? "READY" : (drive.IsCharging ? $"{drive.Charge01 * 100f:0}%" : "IDLE");
                 if (coolVal != null)
                     coolVal.text = drive.Cooldown01 > 0f ? WarpEta(drive.Cooldown01 * drive.cooldownSeconds) : "—";
+                if (coilVal != null)
+                {
+                    int coils = drive.Grid != null ? GridWarpDrive.CountEnabledDrives(drive.Grid) : 1;
+                    int installed = drive.ResonatorCount;
+                    string res = installed > 0 ? $" · {installed} resonator" + (installed == 1 ? "" : "s") : "";
+                    coilVal.text = coils > 1
+                        ? $"{coils} aiding · spin-up {drive.EffectiveChargeSeconds:0}s{res}"
+                        : $"solo · spin-up {drive.EffectiveChargeSeconds:0}s{res}";
+                }
 
                 // Destination rows: live distance, live price, affordability colour.
                 var origin = SpaceOrigin.Instance;
@@ -706,6 +743,80 @@ namespace VoxelEngine.GridSystem.UI
             }).Every(50);
 
             return p;
+        }
+
+        // ── WARP GATE (prototype) ─────────────────────────────────────────────
+        // Fixed pairing structure: charge bar, pairing code cycler, partner readout.
+
+        private static VisualElement WarpGatePanel(GridWarpGate gate)
+        {
+            var p = T.MachinePanel();
+            p.name = "WarpGatePanel";
+            StarshipTheme.Frame(p, T.AccentCyan);
+
+            var (hdr, _, _, stateLabel) = T.HeaderRow("WARP GATE", WarpGateStateWord(gate), T.AccentCyan);
+            p.Add(hdr);
+            p.Add(StarshipTheme.HullDivider(T.AccentCyan));
+
+            var pct = new Label("0%");
+            pct.style.fontSize = 30;
+            pct.style.unityFontStyleAndWeight = FontStyle.Bold;
+            pct.style.color = new StyleColor(Color.white);
+            p.Add(pct);
+            var kw = new Label("0 kW");
+            kw.style.fontSize = 14;
+            kw.style.unityFontStyleAndWeight = FontStyle.Bold;
+            kw.style.color = new StyleColor(T.AccentCyan);
+            p.Add(kw);
+
+            p.Add(T.Spacer(6));
+            var pairRow = Row();
+            pairRow.Add(T.StatRow("⇄", "Pairing code", gate.pairingCode.ToString(), T.AccentBlue));
+            pairRow.Add(T.SmallButton("◀ ▶", () =>
+            {
+                gate.pairingCode = (gate.pairingCode + 1) % 100;
+                gate.ResetCharge();
+                GameUIController.Instance?.RefreshCurrentPanel();
+            }, T.BgSlot));
+            p.Add(pairRow);
+
+            var partnerRow = T.StatRow("◉", "Paired with", gate.PairedName(), T.AccentCyan);
+            Label partnerVal = StatRowValue(partnerRow);
+            p.Add(partnerRow);
+            var drawRow = T.StatRow("⚡", "Charge draw", PowerFormat.Watts(gate.powerDrawWatts), T.AccentAmber);
+            p.Add(drawRow);
+            var apRow = T.StatRow("◯", "Aperture", $"{gate.apertureRadius:0} m · {gate.openSeconds:0} s window", T.TextSecondary);
+            p.Add(apRow);
+            var coolRow = T.StatRow("❄", "Cooldown", "—", T.TextSecondary);
+            Label coolVal = StatRowValue(coolRow);
+            p.Add(coolRow);
+
+            p.Add(T.Muted("Two gates sharing a code pair up. A charged gate in vacuum opens its aperture; the first ship inside is delivered to the paired gate's rendezvous point. One transit per window."));
+
+            p.schedule.Execute(() =>
+            {
+                if (gate == null || p.panel == null) return;
+                pct.text = $"{gate.Charge01 * 100f:0}%";
+                kw.text = PowerFormat.Watts(gate.CurrentChargeWatts);
+                stateLabel.text = WarpGateStateWord(gate);
+                if (partnerVal != null) partnerVal.text = gate.PairedName();
+                if (coolVal != null)
+                    coolVal.text = gate.Cooldown01 > 0f ? WarpEta(gate.Cooldown01 * gate.cooldownSeconds) : "—";
+            }).Every(50);
+
+            return p;
+        }
+
+        private static string WarpGateStateWord(GridWarpGate gate)
+        {
+            if (gate == null) return "—";
+            if (!gate.Enabled) return "OFFLINE";
+            if (gate.IsOpen) return "OPEN";
+            if (gate.Cooldown01 > 0f) return "COOLDOWN";
+            if (gate.pairingCode == 0) return "UNPAIRED";
+            if (gate.Charge01 >= 1f) return "READY";
+            if (gate.Grid != null && !gate.Grid.HasPower) return "NO POWER";
+            return "CHARGING";
         }
 
         private static string WarpStateWord(GridWarpDrive drive)

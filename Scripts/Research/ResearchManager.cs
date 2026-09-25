@@ -183,6 +183,12 @@ namespace VoxelEngine.Research
             return _nodeRanks.TryGetValue(nodeId, out int rank) && rank > 0;
         }
 
+        /// <summary>Rank of a node by id, for systems that only know the node id —
+        /// the warp drive reads its Warp Coil Resonance bonus this way. Zero when the
+        /// node is unresearched or the id is unknown.</summary>
+        public int GetRank(string nodeId)
+            => !string.IsNullOrEmpty(nodeId) && _nodeRanks.TryGetValue(nodeId, out int rank) ? rank : 0;
+
         /// <summary>
         /// Why this node cannot be researched right now, or null if it can. Covers both
         /// the orbital-lab gate and the boss-relic gate; both research entry points funnel
