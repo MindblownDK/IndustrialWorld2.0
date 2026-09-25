@@ -412,7 +412,7 @@ namespace VoxelEngine.GridSystem
             IsCharging = false;
             Charge01 = 0f;
             Cooldown01 = 1f;
-            VoxelEngine.FX.WarpFx.PlayJump(this, () =>
+            System.Action jump = () =>
             {
                 Vector3 keepVel = CarryVelocity();
                 origin.TeleportCosmic(destination);
@@ -439,7 +439,9 @@ namespace VoxelEngine.GridSystem
                 BuildFeedbackHud.Show("Warp Jump", $"Arrived {destLabel} - jumped {distKm:0} km", null, new Color(0.55f, 0.85f, 1f));
                 VoxelEngine.FX.WarpFx.ReportArrival(Grid, $"ARRIVED {destLabel} - {originName} TO HERE - {distKm:0} km{whereAmI}");
                 Debug.Log($"[GridWarpDrive] Warp to {destLabel} at {destination} km from {originName}.");
-            });
+            };
+            if (!VoxelEngine.FX.WarpFx.PlayJump(this, jump))
+                jump();
             return true;
         }
 
@@ -478,23 +480,12 @@ namespace VoxelEngine.GridSystem
             IsCharging = false;
             Charge01 = 0f;
             Cooldown01 = 1f;
-            VoxelEngine.FX.WarpFx.PlayJump(this, () =>
+            System.Action jump = () =>
             {
+                Vector3 keepVel = CarryVelocity();
                 origin.TeleportCosmic(destination);
                 origin.SetFrame(null);
-                if (Grid != null && Grid.Body != null)
-                {
-                    Grid.Body.position = Grid.transform.position;
-                    Grid.Body.linearVelocity = Vector3.zero;
-                    Grid.Body.angularVelocity = Vector3.zero;
-                }
-                var cockpit = Grid != null ? Grid.ActiveCockpit : null;
-                var pilot = cockpit != null ? cockpit.Pilot : null;
-                if (pilot != null)
-                {
-                    pilot.transform.position = cockpit.transform.position;
-                    pilot.ResetVelocity();
-                }
+                FinishArrival(keepVel);
 
                 string whereAmI = "";
                 {
@@ -513,7 +504,9 @@ namespace VoxelEngine.GridSystem
                 BuildFeedbackHud.Show("Warp Jump", $"Arrived {targetName} - jumped {hopKm:0} km", null, new Color(0.55f, 0.85f, 1f));
                 VoxelEngine.FX.WarpFx.ReportArrival(Grid, $"ARRIVED {targetName} - {originName} TO HERE - {hopKm:0} km{whereAmI}");
                 Debug.Log($"[GridWarpDrive] Partial warp {hopKm:0} km of {fullDistKm:0} from {originName}.");
-            });
+            };
+            if (!VoxelEngine.FX.WarpFx.PlayJump(this, jump))
+                jump();
             return true;
         }
 

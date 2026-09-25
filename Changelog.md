@@ -1,9 +1,17 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.31.2-dev`
+**Current Version:** `12.31.3-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.31.3-dev] Warp Actually Jumps, Save Depth, Less Fly Hitch
+
+**Type:** PATCH - warp FX particle velocity curves mixed Constant/TwoConstants so PlayJump threw, left the drive pending, and the teleport never ran. Streaks are constant-mode and cheaper. Packed-drawer upgrades are a flat SavedUpgradeStack so JsonUtility no longer hits depth 10. Restored kinematic hulls no longer set velocity. Origin late-object sweep is 8 s and skips inactive. No recipe or setup changes.
+
+**GitHub title:** `[12.31.3-dev] Warp jump, save depth, fly hitch`
+
+**Manual steps:** none. Verify in Unity: charged warp actually arrives; load a world without the drawerUpgrades spam; fly without a hitch every two seconds.
 
 ### [12.31.2-dev] SavedGrid Cosmic Fields and Star Name Compile Fix
 

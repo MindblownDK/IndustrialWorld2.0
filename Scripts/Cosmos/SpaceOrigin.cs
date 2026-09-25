@@ -307,7 +307,7 @@ namespace VoxelEngine.Cosmos
             _sweepTimer -= Time.fixedDeltaTime;
             if (_sweepTimer <= 0f)
             {
-                _sweepTimer = 2f;
+                _sweepTimer = 8f;
                 RegisterLateObjects();
             }
         }
@@ -454,7 +454,7 @@ namespace VoxelEngine.Cosmos
 
             // Every dynamic Rigidbody (grids, dropped items, debris) re-expresses its
             // velocity in the new frame. Kinematic objects (chunks, LODs) are unaffected.
-            foreach (var rb in FindObjectsByType<Rigidbody>(FindObjectsInactive.Include))
+            foreach (var rb in FindObjectsByType<Rigidbody>(FindObjectsInactive.Exclude))
             {
                 if (rb == null || rb.isKinematic) continue;
                 rb.linearVelocity += deltaMps;
@@ -574,13 +574,13 @@ namespace VoxelEngine.Cosmos
         /// </summary>
         private void RegisterLateObjects()
         {
-            foreach (var rb in FindObjectsByType<Rigidbody>(FindObjectsInactive.Include))
+            foreach (var rb in FindObjectsByType<Rigidbody>(FindObjectsInactive.Exclude))
             {
                 if (rb == null || rb.transform == null) continue;
                 if (IsUnderRegisteredRoot(rb.transform)) continue;
                 RegisterRoot(rb.transform);
             }
-            foreach (var cc in FindObjectsByType<CharacterController>(FindObjectsInactive.Include))
+            foreach (var cc in FindObjectsByType<CharacterController>(FindObjectsInactive.Exclude))
             {
                 if (cc == null || cc.transform == null) continue;
                 if (IsUnderRegisteredRoot(cc.transform)) continue;

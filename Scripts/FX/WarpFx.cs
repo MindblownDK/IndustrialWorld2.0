@@ -90,7 +90,6 @@ namespace VoxelEngine.FX
         {
             if (drive == null || drive.Grid == null || onJump == null) return false;
             if (_pending.Contains(drive)) return false;
-            _pending.Add(drive);
             EnsureDriver();
 
             var grid = drive.Grid;
@@ -103,9 +102,24 @@ namespace VoxelEngine.FX
                 hullSpan = EstimateDiameter(grid)
             };
 
-            j.tunnel = BuildTunnel(grid, j.hullSpan, out j.tunnelMat);
-            j.streaks = BuildStreaks(grid, j.hullSpan);
+            try
+            {
+                j.tunnel = BuildTunnel(grid, j.hullSpan, out j.tunnelMat);
+            }
+            catch (Exception e)
+            {
+                Debug.LogException(e);
+                j.tunnel = null;
+                j.tunnelMat = null;
+            }
+            try { j.streaks = BuildStreaks(grid, j.hullSpan); }
+            catch (Exception e)
+            {
+                Debug.LogException(e);
+                j.streaks = null;
+            }
 
+            _pending.Add(drive);
             _active.Add(j);
             if (j.screenFx) AudioManager.PlayUI(RiserClip, 0.45f);
             return true;
@@ -477,9 +491,9 @@ namespace VoxelEngine.FX
             main.simulationSpace = ParticleSystemSimulationSpace.Local;
             main.startLifetime = 0.55f;
             main.startSpeed = 0f;
-            main.startSize = new ParticleSystem.MinMaxCurve(0.08f, 0.22f);
+            main.startSize = 0.16f;
             main.startColor = new Color(0.75f, 0.92f, 1f, 0.7f);
-            main.maxParticles = 700;
+            main.maxParticles = 180;
             var emission = ps.emission;
             emission.enabled = true;
             emission.rateOverTime = 0f;
@@ -493,7 +507,10 @@ namespace VoxelEngine.FX
             var vel = ps.velocityOverLifetime;
             vel.enabled = true;
             vel.space = ParticleSystemSimulationSpace.Local;
-            vel.z = new ParticleSystem.MinMaxCurve(-diameter * 8f, -diameter * 14f);
+            float along = -diameter * 10f;
+            vel.x = new ParticleSystem.MinMaxCurve(0f);
+            vel.y = new ParticleSystem.MinMaxCurve(0f);
+            vel.z = new ParticleSystem.MinMaxCurve(along);
             var rend = ps.GetComponent<ParticleSystemRenderer>();
             rend.renderMode = ParticleSystemRenderMode.Stretch;
             rend.lengthScale = 4.2f;

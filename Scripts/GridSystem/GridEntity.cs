@@ -658,7 +658,7 @@ namespace VoxelEngine.GridSystem
         /// <summary>Stops a restored ship from retaining stale saved drift when its dampeners have energy.</summary>
         public void StabilizeRestoredVelocityIfPossible()
         {
-            if (_rb == null || !DampenersOn || HasStationaryLock() || !HasAutonomousDampenerEnergy()) return;
+            if (_rb == null || _rb.isKinematic || !DampenersOn || HasStationaryLock() || !HasAutonomousDampenerEnergy()) return;
             _restoreVelocity = Vector3.zero;
             _restoreAngularVelocity = Vector3.zero;
             _rb.linearVelocity = Vector3.zero;
@@ -823,8 +823,6 @@ namespace VoxelEngine.GridSystem
                 _rb.isKinematic = true;
                 _rb.position = position;
                 _rb.rotation = rotation;
-                _rb.linearVelocity = Vector3.zero;
-                _rb.angularVelocity = Vector3.zero;
             }
         }
 

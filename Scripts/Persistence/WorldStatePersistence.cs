@@ -1351,8 +1351,19 @@ namespace VoxelEngine.Persistence
                 saved.drawerStoredCount = payload.storedCount;
                 saved.drawerInstanceId = payload.instanceId;
                 if (payload.upgrades != null && depth < MaxPackedDrawerSaveDepth)
+                {
                     foreach (var up in payload.upgrades)
-                        saved.drawerUpgrades.Add(SerializeStack(up, depth + 1));
+                    {
+                        if (up == null || up.IsEmpty || up.item == null) continue;
+                        saved.drawerUpgrades.Add(new SavedUpgradeStack
+                        {
+                            itemId = up.item.itemId,
+                            count = up.count,
+                            durability = up.durability,
+                            charge = up.charge
+                        });
+                    }
+                }
                 else if (payload.upgrades != null && payload.upgrades.Count > 0)
                     Debug.LogWarning("[WorldState] Packed drawer upgrade nesting exceeded the safe save limit; deeper upgrades were skipped.");
             }
@@ -3565,9 +3576,21 @@ namespace VoxelEngine.Persistence
                     storedCount = e.drawerStoredCount,
                     upgrades = new List<ItemStack>()
                 };
-                if (e.drawerUpgrades != null && depth < MaxPackedDrawerSaveDepth)
+                if (e.drawerUpgrades != null)
+                {
                     foreach (var up in e.drawerUpgrades)
-                        payload.upgrades.Add(DeserializeStack(up, depth + 1));
+                    {
+                        if (up == null || string.IsNullOrEmpty(up.itemId) || up.count <= 0) continue;
+                        if (!_itemById.TryGetValue(up.itemId, out var upItem) || upItem == null) continue;
+                        payload.upgrades.Add(new ItemStack
+                        {
+                            item = upItem,
+                            count = up.count,
+                            durability = up.durability,
+                            charge = up.charge
+                        });
+                    }
+                }
                 return VoxelEngine.Storage.StorageDrawer.CreatePackedDrawerStack(baseBlock, payload);
             }
 
@@ -4184,7 +4207,13 @@ namespace VoxelEngine.Persistence
             public string drawerInstanceId;
             public string drawerStoredItemId;
             public int drawerStoredCount;
-            public List<SavedStack> drawerUpgrades = new();
+            // Non-recursive: JsonUtility cannot serialise SavedStack-in-SavedStack
+            // (depth limit 10). Upgrades are a flat item list.
+            public List<SavedUpgradeStack> drawerUpgrades = new();
+        }
+        [Serializable] private class SavedUpgradeStack
+        {
+            public string itemId; public int count; public int durability; public int charge;
         }
         // ── Static refuel pads (9.36.0-dev) ───────────────────────────────────
         // The pad has no block identity of its own in the save format — it is a world block, placed and

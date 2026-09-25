@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.31.2-dev`
-**Roadmap Version:** `12.31.2-dev`
+**Current Version:** `12.31.3-dev`
+**Roadmap Version:** `12.31.3-dev`
 **Date:** 2026-09-24
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,9 @@
 ---
 
 ## 0. Recently Done
+
+### 12.31.3-dev - Warp Jump, Save Depth, Fly Hitch
+- **Warp FX:** matching velocity curves so the teleport runs; cheaper streaks. Flat drawer upgrades. Origin sweep 8 s.
 
 ### 12.31.2-dev - SavedGrid Cosmic Fields Compile Fix
 - **Compile** (`SavedGrid`, `GridWarpDrive`): cosmic fields on the save type; star uses `displayName`.
