@@ -16363,51 +16363,73 @@ AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
             var frameSteel = new Color(0.72f, 0.76f, 0.84f, 1f);
             var portalGlow = new Color(0.35f, 0.75f, 1f, 1f);
 
-            // ── Frame prefab: a 1 m cell of portal ring ──
-            string framePath = $"{PREFABS}/PortalFrame_1m.prefab";
-            var framePrefab = GetOrCreatePrefab(framePath, "PortalFrame_1m", (root) =>
+            // ── Frame prefab: a 5 m cell of portal ring (12.39.4-dev: 5x the ──
+            // ── original 1 m cell; every scan/power metric derives from the   ──
+            // ── frame's bounds, so the whole system scales with it)          ──
+            string framePath = $"{PREFABS}/PortalFrame_5m.prefab";
+            string legacyFramePath = $"{PREFABS}/PortalFrame_1m.prefab";
+            if (AssetDatabase.LoadMainAssetAtPath(framePath) == null
+                && AssetDatabase.LoadMainAssetAtPath(legacyFramePath) != null)
+            {
+                // Rename, not recreate: the guid follows the asset, so the item's
+                // placedPrefab reference and every placed instance keep working.
+                string renameError = AssetDatabase.RenameAsset(legacyFramePath, "PortalFrame_5m");
+                if (!string.IsNullOrEmpty(renameError))
+                    Debug.LogWarning("[VoxelEngineSetup] Renaming PortalFrame_1m failed: " + renameError);
+                AssetDatabase.SaveAssets();
+                AssetDatabase.Refresh();
+            }
+            var framePrefab = GetOrCreatePrefab(framePath, "PortalFrame_5m", (root) =>
             {
                 if (root.GetComponent<VoxelEngine.Building.PortalFrameBlock>() == null)
                     root.AddComponent<VoxelEngine.Building.PortalFrameBlock>();
 
-                // Visual: solid 1x1x0.3 slab with a glowing rim strip on the front —
-                // assembled outlines read as one continuous ring. Rebuilt ONLY when
-                // the prefab has no visual yet, so designer art survives.
-                if (root.transform.childCount == 0 && root.GetComponent<MeshFilter>() == null)
+                // Visual: solid 5x5x1.5 slab with a glowing rim strip on the front —
+                // assembled outlines read as one continuous ring. Created when missing
+                // and rescaled to the canonical 5 m cell when present (idempotent), so
+                // prefabs authored by earlier steps grow with the system. Designer
+                // children with other names are never touched.
+                var body = MakeColoredMat(PREFABS + "/Mats", "Mat_PortalFrame", frameSteel);
+                var glow = MakeColoredMat(PREFABS + "/Mats", "Mat_PortalFrameGlow", portalGlow);
+
+                var slab = root.transform.Find("Slab");
+                if (slab == null)
                 {
-                    var body = MakeColoredMat(PREFABS + "/Mats", "Mat_PortalFrame", frameSteel);
-                    var glow = MakeColoredMat(PREFABS + "/Mats", "Mat_PortalFrameGlow", portalGlow);
-
-                    var slab = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    slab = GameObject.CreatePrimitive(PrimitiveType.Cube).transform;
                     slab.name = "Slab";
-                    slab.transform.SetParent(root.transform, false);
-                    slab.transform.localScale = new Vector3(1f, 1f, 0.3f);
+                    slab.SetParent(root.transform, false);
                     UnityEngine.Object.DestroyImmediate(slab.GetComponent<Collider>());
-                    slab.GetComponent<Renderer>().sharedMaterial = body;
+                }
+                slab.transform.localScale = new Vector3(5f, 5f, 1.5f);
+                slab.transform.localPosition = Vector3.zero;
+                slab.GetComponent<Renderer>().sharedMaterial = body;
 
-                    // Emissive rim: four thin strips on the front face.
-                    var rims = new (string, Vector3, Vector3)[]
+                // Emissive rim: four strips on the front face.
+                var rims = new (string, Vector3, Vector3)[]
+                {
+                    ("Top",    new Vector3(5f,  0.5f, 0.25f), new Vector3( 0f,     2.25f, 0.8f)),
+                    ("Bottom", new Vector3(5f,  0.5f, 0.25f), new Vector3( 0f,    -2.25f, 0.8f)),
+                    ("Left",   new Vector3(0.5f, 4.5f, 0.25f), new Vector3(-2.25f,  0f,   0.8f)),
+                    ("Right",  new Vector3(0.5f, 4.5f, 0.25f), new Vector3( 2.25f,  0f,   0.8f)),
+                };
+                foreach (var (rimName, scale, pos) in rims)
+                {
+                    var rim = root.transform.Find("Rim" + rimName);
+                    if (rim == null)
                     {
-                        ("Top",    new Vector3(1f,    0.1f,  0.05f), new Vector3(0f,    0.45f, 0.16f)),
-                        ("Bottom", new Vector3(1f,    0.1f,  0.05f), new Vector3(0f,   -0.45f, 0.16f)),
-                        ("Left",   new Vector3(0.1f,  0.9f,  0.05f), new Vector3(-0.45f, 0f,   0.16f)),
-                        ("Right",  new Vector3(0.1f,  0.9f,  0.05f), new Vector3(0.45f,  0f,   0.16f)),
-                    };
-                    foreach (var (rimName, scale, pos) in rims)
-                    {
-                        var rim = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                        rim = GameObject.CreatePrimitive(PrimitiveType.Cube).transform;
                         rim.name = "Rim" + rimName;
-                        rim.transform.SetParent(root.transform, false);
-                        rim.transform.localScale = scale;
-                        rim.transform.localPosition = pos;
+                        rim.SetParent(root.transform, false);
                         UnityEngine.Object.DestroyImmediate(rim.GetComponent<Collider>());
-                        rim.GetComponent<Renderer>().sharedMaterial = glow;
                     }
+                    rim.transform.localScale = scale;
+                    rim.transform.localPosition = pos;
+                    rim.GetComponent<Renderer>().sharedMaterial = glow;
                 }
 
                 var bcol = root.GetComponent<BoxCollider>();
                 if (bcol == null) bcol = root.AddComponent<BoxCollider>();
-                bcol.size = new Vector3(1f, 1f, 0.3f);
+                bcol.size = new Vector3(5f, 5f, 1.5f);
                 bcol.center = Vector3.zero;
             });
 
@@ -16459,7 +16481,7 @@ AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
             }
             frameItem.itemId = "portalframe";
             frameItem.displayName = "Portal Frame";
-            frameItem.description = "One cell of portal ring. Assemble frames into a sealed outline (square or ring, up to 64x64) and mount a Portal Controller within 8 m of it. Frame walls leak no light — only a sealed aperture charges.";
+            frameItem.description = "A 5-metre cell of portal ring. Assemble frames into a sealed outline (square or ring, up to 64x64 cells - 320 m a side) and mount a Portal Controller within 8 m of it. Frame walls leak no light — only a sealed aperture charges.";
             frameItem.iconTint = portalGlow;
             frameItem.maxStack = 100;
             frameItem.placedPrefab = framePrefab;

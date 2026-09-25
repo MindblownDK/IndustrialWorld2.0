@@ -1,9 +1,17 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.39.3-dev`
+**Current Version:** `12.39.4-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.39.4-dev] Portal Frames at 5x Scale
+
+**Type:** PATCH - portal frames grow 5x: the frame cell is now a 5 m slab (5x5x1.5, rims scaled to match) instead of 1 m. Every downstream metric derives from the frames' bounds, so the whole system scales with it - cell size, aperture metrics, the per-cell surface mesh and the transit radius. The 64x64-cell cap now means apertures up to 320 m a side. Per-block power and recipes are unchanged, so a maxed 64x64-cell portal still draws about 6.16 MW while open. Setup Step 99 renames the old PortalFrame_1m prefab to PortalFrame_5m in place (the guid follows the rename, so the item's reference and every placed frame keep working), rescales its authored visuals idempotently, and creates fresh installs at the new size; frames already placed re-size with the prefab and their portal re-scans on the next tick. Frame item description updated.
+
+**GitHub title:** `[12.39.4-dev] Portal frames at 5x scale`
+
+**Manual steps:** Tools -> Voxel Engine -> Voxel Engine Setup -> "99. Build Portals" (re-run to upgrade an existing frame prefab).
 
 ### [12.39.3-dev] Portal Compile Fix: Setup Window PowerConsumer Qualification
 
