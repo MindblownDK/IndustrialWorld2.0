@@ -164,7 +164,7 @@ namespace VoxelEngine.UI
             _driveRow.Add(_driveSlider);
             disc.Add(_driveRow);
 
-            _hintLabel = new Label("Ctrl frees mouse for slider  ·  A / D  ·  Enter  ·  Esc abort");
+            _hintLabel = new Label("point a wedge and click  ·  Ctrl locks look  ·  Esc abort");
             _hintLabel.style.marginTop = 10;
             _hintLabel.style.fontSize = 9;
             _hintLabel.style.color = new StyleColor(UITheme.TextMuted);
@@ -222,7 +222,7 @@ namespace VoxelEngine.UI
             _onDriveUseChanged = onDriveUseChanged;
             _detailForDriveUse = detailForDriveUse;
             _hovered = -1;
-            _mouseFree = false;
+            _mouseFree = true;
             ConfigureDriveSlider(driveMax, driveUse);
             if (!IsOpen && !_pushedBlock)
             {
@@ -295,8 +295,8 @@ namespace VoxelEngine.UI
                 ApplyCursor();
                 if (_hintLabel != null)
                     _hintLabel.text = _mouseFree
-                        ? "mouse free — drag the slider  ·  Ctrl locks look  ·  Enter  ·  Esc"
-                        : "Ctrl frees mouse for slider  ·  A / D  ·  Enter  ·  Esc abort";
+                        ? "point a wedge and click  ·  drag the slider  ·  Ctrl locks look  ·  Esc"
+                        : "A / D pick a wedge  ·  Ctrl frees mouse  ·  Enter  ·  Esc abort";
             }
             ApplyCursor();
             if (_mouseFree) PollMouseHover();

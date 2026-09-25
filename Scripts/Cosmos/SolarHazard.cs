@@ -209,6 +209,14 @@ namespace VoxelEngine.Cosmos
             }
         }
 
+        /// <summary>Closest a warp may arrive to the star, km. Outside the heat warning shell.</summary>
+        public static double SafeWarpStandoffKm(CosmicRegistry registry)
+        {
+            if (registry == null) return 8000d;
+            float warn = ResolveWarningRadiusKm(registry);
+            return System.Math.Max(warn * 1.15f, 4000d);
+        }
+
         /// <summary>Warning radius: 80% of the innermost planet's orbit (or 2200 km fallback).</summary>
         private static float ResolveWarningRadiusKm(CosmicRegistry registry)
         {
@@ -286,6 +294,12 @@ namespace VoxelEngine.Cosmos
             mesh.SetVertices(verts);
             mesh.SetTriangles(tris, 0);
             mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            return mesh;
+        }
+    }
+}
+mals();
             mesh.RecalculateBounds();
             return mesh;
         }

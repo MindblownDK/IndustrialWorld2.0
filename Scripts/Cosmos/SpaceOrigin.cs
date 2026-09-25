@@ -534,29 +534,27 @@ namespace VoxelEngine.Cosmos
             foreach (var root in _roots)
             {
                 if (root == null) continue;
+                // Seated pawn is registered at boot AND parented to the cockpit.
+                // Shifting both double-moves the camera every rebase/warp (twitch
+                // until you re-enter the seat). Children ride with their parent.
+                if (HasRegisteredAncestor(root)) continue;
                 root.position += delta;
-                // A live rigidbody will snap the transform back next physics tick
-                // unless its physics pose is shifted too — that is how a warp can
-                // leave the hull behind the seated camera.
                 var rb = root.GetComponent<Rigidbody>();
                 if (rb != null) rb.position += delta;
             }
 
-            // Rigidbody roots must keep physics in sync with their transforms.
-            foreach (var rb in FindObjectsByType<Rigidbody>(FindObjectsInactive.Include))
-            {
-                if (rb == null) continue;
-                var t = rb.transform;
-                if (t == null) continue;
-                // Skip objects already shifted through a registered ancestor.
-                if (IsUnderRegisteredRoot(t)) continue;
-                t.position += delta;
-                rb.position += delta;
-            }
-
-            // CharacterControllers (player) — already moved with their root, but a
-            // transform move on a CC needs a physics sync to update its internal capsule.
             Physics.SyncTransforms();
+        }
+
+        private bool HasRegisteredAncestor(Transform t)
+        {
+            var p = t != null ? t.parent : null;
+            while (p != null)
+            {
+                if (_roots.Contains(p)) return true;
+                p = p.parent;
+            }
+            return false;
         }
 
         private bool IsUnderRegisteredRoot(Transform t)

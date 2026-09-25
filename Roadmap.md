@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.30.1-dev`
-**Roadmap Version:** `12.30.1-dev`
+**Current Version:** `12.31.0-dev`
+**Roadmap Version:** `12.31.0-dev`
 **Date:** 2026-09-24
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -42,11 +42,6 @@
 ### 12.28.2-dev - Partial-Jump Wheel
 - **Cursor frees** (`ConfirmDialogHud`): `UIState.PushBlock` on show, two-wedge JUMP / ABORT ring, click / Enter / Esc.
 - **Preserved:** partial-jump maths, pooling, mass penalty. No setup changes.
-
-### 12.28.1-dev - Autopilot Turns, Godmode, Mass Cap 12x
-- **Orientation** (`NavFlightAutopilot`, `GridEntity`): cruise points strongest thrust axis at the flight line; warp aims the cone, seated or not.
-- **Godmode:** Settings is source of truth; hits and DoT/vacuum/heat skip. Mass cap 12x.
-- **Preserved:** stick take-over, pooling, partial jumps. Step 50 upgrades a leftover 8 cap to 12.
 
 ### Era Transition Feel
 
@@ -471,6 +466,15 @@ changes what the existing block visuals mean, never what the ship does.
 
 4. **Settled**
    - One a research unlock, not a settings toggle. The three modes are unlocked in
+     sequence by their own nodes so the reader tier follows the machinery tier: damage first
+     (structural awareness), heat second (engine-room awareness), centre of mass last (ship design).
+   - An attempt to use the hotkey with nothing researched says why, in one line, and does nothing else.
+
+4. **Settled**
+   - One feature per round, each with its own version, changelog and setup step. Order, as decided
+     with the shuttle design: **waymarks + connector + auto-run first** (the next round after
+     9.34.0-dev), then the inspector overlay, then the petroleum chain, then asphalt, then the
+     Engine Works. The shuttle round goes first on purpose: it makea settings toggle. The three modes are unlocked in
      sequence by their own nodes so the reader tier follows the machinery tier: damage first
      (structural awareness), heat second (engine-room awareness), centre of mass last (ship design).
    - An attempt to use the hotkey with nothing researched says why, in one line, and does nothing else.

@@ -129,6 +129,7 @@ namespace VoxelEngine.UI
             T.Radius(card, 5);
             T.Border(card, 1, new Color(T.BorderDim.r, T.BorderDim.g, T.BorderDim.b, 0.70f));
             card.pickingMode = PickingMode.Ignore;
+            card.userData = title ?? "";
 
             // Accent left stripe.
             var stripe = new VisualElement();

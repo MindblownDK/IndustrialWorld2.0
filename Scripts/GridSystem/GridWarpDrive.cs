@@ -208,13 +208,15 @@ namespace VoxelEngine.GridSystem
             BodyInstance targetPlanet = null;
             SingularityInstance targetSingularity = null;
 
-            // Planet acquisition: nearest body inside the aim cone within 20 000 km.
+            // Planet acquisition: nearest planet/moon inside the aim cone within 20 000 km.
+            // The star is never a lock — a hop into the sun is refused below as well.
             BodyInstance nearest = null;
             double nearestDist = double.MaxValue;
             for (int i = 0; i < registry.Bodies.Count; i++)
             {
                 var b = registry.Bodies[i];
                 if (b == null || b.settings == null) continue;
+                if (IsStarBody(registry, b)) continue;
                 double3 abs = registry.CosmicPositionOf(b);
                 double d = math.length(abs - gridCosmic);
                 if (d < nearestDist) { nearestDist = d; nearest = b; }
@@ -297,6 +299,8 @@ namespace VoxelEngine.GridSystem
                     }
                 }
             }
+
+            destination = ClampAwayFromStar(registry, gridCosmic, destination);
 
             // ── Fuel check: range is bought, not granted ────────────────────
             double distKm = math.length(destination - gridCosmic);
@@ -410,24 +414,12 @@ namespace VoxelEngine.GridSystem
             Cooldown01 = 1f;
             VoxelEngine.FX.WarpFx.PlayJump(this, () =>
             {
+                Vector3 keepVel = CarryVelocity();
                 origin.TeleportCosmic(destination);
                 origin.SetFrame(targetPlanet != null || locatorBody != null
                     ? ResolveSceneBody(registry, targetPlanet != null ? targetPlanet : locatorBody)
                     : null);
-
-                if (Grid != null && Grid.Body != null)
-                {
-                    Grid.Body.position = Grid.transform.position;
-                    Grid.Body.linearVelocity = Vector3.zero;
-                    Grid.Body.angularVelocity = Vector3.zero;
-                }
-                var cockpit = Grid != null ? Grid.ActiveCockpit : null;
-                var pilot = cockpit != null ? cockpit.Pilot : null;
-                if (pilot != null)
-                {
-                    pilot.transform.position = cockpit.transform.position;
-                    pilot.ResetVelocity();
-                }
+                FinishArrival(keepVel);
 
                 string whereAmI = "";
                 if (targetPlanet == null && locatorBody == null)
@@ -477,7 +469,8 @@ namespace VoxelEngine.GridSystem
             }
             float costWh = (float)(hopKm * rate);
             if (!TryConsumePooledWh(Grid, costWh)) return false;
-            double3 destination = gridCosmic + CosmicRegistry.ToDouble3(aimDir) * hopKm;
+            double3 destination = ClampAwayFromStar(registry, gridCosmic,
+                gridCosmic + CosmicRegistry.ToDouble3(aimDir) * hopKm);
 
             double pct = fullDistKm > 1d ? hopKm / fullDistKm * 100d : 100d;
             string targetName = $"{hopKm:0} km partial hop ({pct:0}% of {fullDistKm:0} km)";
@@ -522,6 +515,58 @@ namespace VoxelEngine.GridSystem
                 Debug.Log($"[GridWarpDrive] Partial warp {hopKm:0} km of {fullDistKm:0} from {originName}.");
             });
             return true;
+        }
+
+        private Vector3 CarryVelocity()
+        {
+            if (Grid == null || Grid.Body == null) return Vector3.zero;
+            Transform aim = Grid.ActiveCockpit != null ? Grid.ActiveCockpit.transform : transform;
+            Vector3 fwd = aim.forward;
+            float along = Vector3.Dot(Grid.Body.linearVelocity, fwd);
+            return fwd * Mathf.Max(0f, along);
+        }
+
+        private void FinishArrival(Vector3 keepVel)
+        {
+            if (Grid != null && Grid.Body != null)
+            {
+                Grid.Body.position = Grid.transform.position;
+                Grid.Body.linearVelocity = keepVel;
+                Grid.Body.angularVelocity = Vector3.zero;
+                Grid.AcknowledgeWarpSnap();
+            }
+            var cockpit = Grid != null ? Grid.ActiveCockpit : null;
+            var pilot = cockpit != null ? cockpit.Pilot : null;
+            if (pilot != null)
+            {
+                pilot.transform.SetParent(cockpit.transform, true);
+                pilot.transform.position = cockpit.transform.position;
+                pilot.transform.localRotation = Quaternion.identity;
+                pilot.ResetVelocity();
+            }
+            VoxelEngine.Player.CameraFeedback.ResetTransient();
+        }
+
+        private static bool IsStarBody(CosmicRegistry registry, BodyInstance b)
+        {
+            if (b == null || registry == null) return false;
+            if (registry.Sun != null && registry.Sun.settings != null && b.settings != null
+                && string.Equals(b.settings.bodyName, registry.Sun.settings.bodyName, System.StringComparison.OrdinalIgnoreCase))
+                return true;
+            return false;
+        }
+
+        private static double3 ClampAwayFromStar(CosmicRegistry registry, double3 from, double3 dest)
+        {
+            if (registry == null || registry.Sun == null) return dest;
+            double3 sun = registry.Sun.positionKmD;
+            double minKm = SolarHazard.SafeWarpStandoffKm(registry);
+            double d = math.length(dest - sun);
+            if (d >= minKm) return dest;
+            double3 away = dest - sun;
+            if (math.lengthsq(away) < 1e-8) away = from - sun;
+            away = math.normalizesafe(away, new double3(0d, 1d, 0d));
+            return sun + away * minKm;
         }
 
         private static CelestialBody ResolveSceneBody(CosmicRegistry registry, BodyInstance instance)

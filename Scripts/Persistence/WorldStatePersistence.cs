@@ -19,6 +19,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
+using Unity.Mathematics;
 using VoxelEngine.Building;
 using VoxelEngine.Building.Tiered;
 using VoxelEngine.Crafting;
@@ -385,15 +386,12 @@ namespace VoxelEngine.Persistence
             var body = VoxelEngine.Cosmos.GravityProvider.ActiveBody;
             if (body == null)
             {
-                // Deep space is a perfectly valid disconnect position (real-space flight) —
-                // but it is a claim about the COSMIC position, not about the scene floats.
-                // 9.57.1-dev: a scene coordinate that is inside a celestial body right now
-                // is never a valid save, whatever the active gravity frame happens to be.
-                // This was the entry point of the restore loop: a stale scene coordinate in
-                // a deep-space frame was accepted, written on every quit, and read back the
-                // next session as a spawn beside the star.
-                if (IsInsideAnyBody(pos)) return false;
+                // Deep space is a valid disconnect. Check that BEFORE the "inside a body"
+                // scene test: after a warp the star mesh can overlap scene origin even
+                // when the player is nowhere near the star in cosmic km, and refusing
+                // the save dropped the ship.
                 if (VoxelEngine.Cosmos.GravityProvider.IsDeepSpace) return true;
+                if (IsInsideAnyBody(pos)) return false;
                 return Mathf.Abs(pos.x) < 100000f && Mathf.Abs(pos.y) < 100000f && Mathf.Abs(pos.z) < 100000f;
             }
             // Space and high-atmosphere locations are valid disconnect positions.
@@ -1439,8 +1437,8 @@ namespace VoxelEngine.Persistence
 
                 RestorePlacedTiered(save);
                 RestorePlacedBlocks(save);
-                int anchoredGrids = RestoreGrids(save);
                 RestorePlayer(save);
+                int anchoredGrids = RestoreGrids(save);
                 RestoreQuarries(save);
                 RestoreRefuelPads(save);
                 RestoreDronePorts(save);
@@ -1490,6 +1488,15 @@ namespace VoxelEngine.Persistence
                     oxygenStored = grid.OxygenStored,
                     warpDrivesToUse = grid.WarpDrivesToUse
                 };
+                var origin = VoxelEngine.Cosmos.SpaceOrigin.Instance;
+                if (origin != null)
+                {
+                    var cosmic = origin.GetCosmicKm(entry.pos);
+                    entry.hasCosmic = true;
+                    entry.cosmicX = cosmic.x;
+                    entry.cosmicY = cosmic.y;
+                    entry.cosmicZ = cosmic.z;
+                }
 
                 // Additive 9.34.0: the ship's route book. A recorded haul run is player work,
                 // so it rides the grid record rather than the recorder block's own state — the
@@ -2675,6 +2682,16 @@ namespace VoxelEngine.Persistence
             position = IsFiniteVector(g.pos) ? g.pos : Vector3.zero;
             rotation = IsFiniteQuaternion(g.rot) ? g.rot.normalized : Quaternion.identity;
             fromAnchor = false;
+
+            if (g.hasCosmic)
+            {
+                var origin = VoxelEngine.Cosmos.SpaceOrigin.Instance;
+                if (origin != null)
+                {
+                    Vector3 fromCosmic = origin.GetScenePos(new double3(g.cosmicX, g.cosmicY, g.cosmicZ));
+                    if (IsFiniteVector(fromCosmic)) position = fromCosmic;
+                }
+            }
 
             if (!g.hasBodyAnchor || string.IsNullOrEmpty(g.anchorBody)) return;
 

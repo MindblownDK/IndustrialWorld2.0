@@ -72,6 +72,12 @@ namespace VoxelEngine.GridSystem
         private const float IceRecoveryGravityMultiplier = 1.75f;
         public Rigidbody Body => _rb;
 
+        /// <summary>Call after a teleport so the next physics tick does not treat the snap as acceleration.</summary>
+        public void AcknowledgeWarpSnap()
+        {
+            if (_rb != null) _prevVelocity = _rb.linearVelocity;
+        }
+
         // ── Power (grid-wide, no cables) ───────────────────────────
         public float PowerGenerated { get; private set; }
         public float PowerConsumed  { get; private set; }

@@ -1,9 +1,33 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.30.1-dev`
+**Current Version:** `12.31.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.31.0-dev] Warp Redo, Deep-Space Save, No Sun Hops
+
+**Type:** MINOR - warp transit is a new tunnel (cockpit overlay + hull streaks, no camera shake). A hop never arrives inside the star. Deep-space logout writes cosmic km on the hull and restores the origin before the grids, so a ship saved in space comes back. Confirm wedges click like the build wheel. Nested origin shifts (seated pawn registered twice) were the cockpit twitch; velocity along the nose is carried through the jump. SOL APPROACH no longer stacks six identical cards. No recipe or setup changes.
+
+**GitHub title:** `[12.31.0-dev] Warp redo, deep-space save, no sun hops`
+
+#### Warp
+
+The old bubble/shake sequence is gone. Pre-charge stretches a forward tunnel, a short flash drops you out, then the streaks fade. Screen FX only for the seated local player; observers still see the hull tunnel. No AddShake. FOV kick is mild and reset on arrival.
+
+#### Sun
+
+Planet-lock skips the star. Every destination is pushed outside SolarHazard.SafeWarpStandoffKm. Heat warnings read the seat/hull, not a parked pawn, and identical toasts refresh in place.
+
+#### Save / twitch / autopilot
+
+Grids save hasCosmic. Load restores the player (and origin) first, then hulls from cosmic km. ShiftWorld no longer double-moves a seated pawn. Arrival snaps the body, reseats the pilot, resets camera transients, and keeps forward speed so F3 cruise has something to work with.
+
+#### Confirm
+
+Mouse is free when the wheel opens. Point left or right and click, same as the building menu. Ctrl still locks look if you want it.
+
+**Manual steps:** none - code-only. Verify in Unity: save/quit in space beside a ship (hull is there on rejoin); warp (tunnel, no shake, no SOL spam, not next to the star); point-and-click JUMP/ABORT; F3 after a hop (ship moves unless you already arrived on the nav target).
 
 ### [12.30.1-dev] Confirm Cursor Compile Fix
 

@@ -111,6 +111,24 @@ namespace VoxelEngine.Player
         }
 
         /// <summary>One-off event shake (explosions, heavy impacts). magnitude 0..1. Works on foot; respects GameSettings.ScreenShake.</summary>
+        /// <summary>Drop leftover shake/FOV after a teleport so the cockpit does not twitch at rest.</summary>
+        public static void ResetTransient()
+        {
+            if (Instance == null) return;
+            Instance._impulse = 0f;
+            Instance._impulseTarget = 0f;
+            Instance._eventShake = 0f;
+            Instance._eventShakeTarget = 0f;
+            Instance._fovSqueeze = 0f;
+            Instance._fovOffset = 0f;
+            if (Instance._cam != null)
+            {
+                Instance._cam.fieldOfView = Instance._baseFov;
+                Instance.transform.localPosition = Vector3.zero;
+                Instance.transform.localRotation = Quaternion.identity;
+            }
+        }
+
         public static void AddShake(float magnitude)
         {
             if (Instance == null || magnitude <= 0f) return;
