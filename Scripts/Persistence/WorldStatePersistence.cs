@@ -3701,6 +3701,10 @@ namespace VoxelEngine.Persistence
             public float oxygenStored;
             // Additive 12.30.0: how many warp drives the last jump spent. 0 = all.
             public int warpDrivesToUse;
+            // Additive 12.31.0: cosmic km so a hull saved in deep space reloads
+            // after the origin re-anchors, instead of at a stale scene coordinate.
+            public bool hasCosmic;
+            public double cosmicX, cosmicY, cosmicZ;
             // Additive 6.81.0: logical shaft-to-shaft belt links. Old saves omit
             // the collection and continue to restore with no belts.
             public List<SavedMechanicalBelt> mechanicalBelts = new();

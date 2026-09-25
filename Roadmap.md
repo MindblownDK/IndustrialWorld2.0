@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.31.1-dev`
-**Roadmap Version:** `12.31.1-dev`
+**Current Version:** `12.31.2-dev`
+**Roadmap Version:** `12.31.2-dev`
 **Date:** 2026-09-24
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,9 @@
 ---
 
 ## 0. Recently Done
+
+### 12.31.2-dev - SavedGrid Cosmic Fields Compile Fix
+- **Compile** (`SavedGrid`, `GridWarpDrive`): cosmic fields on the save type; star uses `displayName`.
 
 ### 12.31.1-dev - SolarHazard Compile Fix
 - **Compile** (`SolarHazard`): duplicate file tail removed.

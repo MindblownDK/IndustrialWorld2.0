@@ -551,7 +551,7 @@ namespace VoxelEngine.GridSystem
         {
             if (b == null || registry == null) return false;
             if (registry.Sun != null && registry.Sun.settings != null && b.settings != null
-                && string.Equals(b.settings.bodyName, registry.Sun.settings.bodyName, System.StringComparison.OrdinalIgnoreCase))
+                && string.Equals(b.settings.bodyName, registry.Sun.settings.displayName, System.StringComparison.OrdinalIgnoreCase))
                 return true;
             return false;
         }

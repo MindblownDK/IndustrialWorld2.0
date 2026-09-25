@@ -1,9 +1,17 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.31.1-dev`
+**Current Version:** `12.31.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.31.2-dev] SavedGrid Cosmic Fields and Star Name Compile Fix
+
+**Type:** PATCH - SavedGrid was missing hasCosmic / cosmicX/Y/Z (the save path wrote them, the type did not declare them). Warp star check uses SunSettings.displayName. No gameplay change beyond making 12.31 compile.
+
+**GitHub title:** `[12.31.2-dev] SavedGrid cosmic fields compile fix`
+
+**Manual steps:** none. Verify it compiles.
 
 ### [12.31.1-dev] SolarHazard Compile Fix
 
