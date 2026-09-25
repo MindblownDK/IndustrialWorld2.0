@@ -165,6 +165,18 @@ namespace VoxelEngine.GridSystem
             Charge01 = 0f;
         }
 
+        /// <summary>Shared "why the drive will not fire right now" toast for every
+        /// entry point (aimed jump, locked destination).</summary>
+        private void ShowNotReadyToast()
+        {
+            if (IsCharging)
+                BuildFeedbackHud.Show("Warp Drive", $"Charging… {Mathf.RoundToInt(Charge01 * 100f)}%", null, new Color(0.55f, 0.85f, 1f));
+            else if (Cooldown01 > 0f)
+                BuildFeedbackHud.Show("Warp Drive", $"Cooling down — {Mathf.CeilToInt(Cooldown01 * cooldownSeconds)}s", null, new Color(1f, 0.7f, 0.25f));
+            else
+                BuildFeedbackHud.Show("Warp Drive", $"Not charged — press [{WarpKeyName}] to charge", null, new Color(1f, 0.7f, 0.25f));
+        }
+
         /// <summary>
         /// Execute the warp. Returns true when a jump happened.
         /// </summary>
@@ -179,12 +191,7 @@ namespace VoxelEngine.GridSystem
             }
             if (!IsReady)
             {
-                if (IsCharging)
-                    BuildFeedbackHud.Show("Warp Drive", $"Charging… {Mathf.RoundToInt(Charge01 * 100f)}%", null, new Color(0.55f, 0.85f, 1f));
-                else if (Cooldown01 > 0f)
-                    BuildFeedbackHud.Show("Warp Drive", $"Cooling down — {Mathf.CeilToInt(Cooldown01 * cooldownSeconds)}s", null, new Color(1f, 0.7f, 0.25f));
-                else
-                    BuildFeedbackHud.Show("Warp Drive", $"Not charged — press [{WarpKeyName}] to charge", null, new Color(1f, 0.7f, 0.25f));
+                ShowNotReadyToast();
                 return false;
             }
 
@@ -302,6 +309,33 @@ namespace VoxelEngine.GridSystem
 
             destination = ClampAwayFromStar(registry, gridCosmic, destination);
 
+            string destLabel = targetPlanet != null
+                ? $"{targetPlanet.DisplayName} orbit ({arrivalAltitudeKm:0} km altitude)"
+                : targetSingularity != null
+                    ? $"{targetSingularity.DisplayName} standoff"
+                    : locatorArrivalName != null
+                        ? $"Locator: {locatorArrivalName}"
+                        : $"{math.length(destination - gridCosmic):0} km straight ahead";
+            return ConfirmAndCommit(destination, targetPlanet != null ? targetPlanet : locatorBody,
+                destLabel, skipConfirm, aimFrame.forward.normalized);
+        }
+
+        /// <summary>
+        /// Shared tail of every jump — aimed or locked: the fuel check against the
+        /// pooled bank, the confirm wheel with live numbers (or the partial share when
+        /// the bank is short), then CommitJump. partialHopDir is where a short bank
+        /// flies the ship: the aim line for an aimed jump, the target line for a
+        /// locked destination.
+        /// </summary>
+        private bool ConfirmAndCommit(double3 destination, BodyInstance lockBody, string destLabel,
+            bool skipConfirm, Vector3 partialHopDir)
+        {
+            var origin = SpaceOrigin.Instance;
+            var registry = CosmicRegistry.Instance;
+            if (origin == null || registry == null) return false;
+
+            double3 gridCosmic = origin.GetCosmicKm(transform.position);
+
             // ── Fuel check: range is bought, not granted ────────────────────
             double distKm = math.length(destination - gridCosmic);
             // Origin snapshot for the arrival readout (nearest charted body by name).
@@ -320,13 +354,6 @@ namespace VoxelEngine.GridSystem
             float costWh = (float)(distKm * rate);
             float pooled = Grid != null ? PooledStoredWh(Grid) : warpStoredWh;
             float massFactor = Grid != null ? MassFactor(Grid) : 1f;
-            string destLabel = targetPlanet != null
-                ? $"{targetPlanet.DisplayName} orbit ({arrivalAltitudeKm:0} km altitude)"
-                : targetSingularity != null
-                    ? $"{targetSingularity.DisplayName} standoff"
-                    : locatorArrivalName != null
-                        ? $"Locator: {locatorArrivalName}"
-                        : $"{distKm:0} km straight ahead";
 
             bool shortBank = pooled < costWh - 0.01f;
             double affordableKm = rate > 0f ? pooled / rate : 0d;
@@ -345,8 +372,8 @@ namespace VoxelEngine.GridSystem
             {
                 if (VoxelEngine.UI.ConfirmDialogHud.IsOpen) return false;
                 var dest = destination;
-                var planet = targetPlanet;
-                var locBody = locatorBody;
+                var body = lockBody;
+                Vector3 hopDir = partialHopDir;
                 int driveMax = Grid != null ? CountEnabledDrives(Grid) : 1;
                 int driveUse = Grid != null ? ResolveDriveUse(Grid) : 1;
                 string Prompt(int _)
@@ -376,11 +403,11 @@ namespace VoxelEngine.GridSystem
                         float liveCost = (float)(distKm * liveRate);
                         float livePool = Grid != null ? PooledStoredWh(Grid) : warpStoredWh;
                         if (livePool >= liveCost - 0.01f)
-                            CommitJump(dest, planet, locBody, distKm, originName, destLabel, liveCost);
+                            CommitJump(dest, body, distKm, originName, destLabel, liveCost);
                         else
                         {
                             double liveAfford = liveRate > 0f ? livePool / liveRate : 0d;
-                            if (liveAfford >= 100d) TryWarpPartial(liveAfford, distKm, originName);
+                            if (liveAfford >= 100d) TryWarpPartial(liveAfford, distKm, originName, hopDir);
                             else BuildFeedbackHud.Show("Warp Drive", "Bank drained — recharge and try again.",
                                 null, new Color(1f, 0.7f, 0.25f));
                         }
@@ -392,11 +419,11 @@ namespace VoxelEngine.GridSystem
             }
 
             if (shortBank)
-                return TryWarpPartial(affordableKm, distKm, originName);
-            return CommitJump(destination, targetPlanet, locatorBody, distKm, originName, destLabel, costWh);
+                return TryWarpPartial(affordableKm, distKm, originName, partialHopDir);
+            return CommitJump(destination, lockBody, distKm, originName, destLabel, costWh);
         }
 
-        private bool CommitJump(double3 destination, BodyInstance targetPlanet, BodyInstance locatorBody,
+        private bool CommitJump(double3 destination, BodyInstance lockBody,
             double distKm, string originName, string destLabel, float costWh)
         {
             if (!IsReady) return false;
@@ -415,12 +442,11 @@ namespace VoxelEngine.GridSystem
             System.Action jump = () =>
             {
                 Vector3 keepVel = CarryVelocity();
-                ApplyWarpHop(origin, registry, destination,
-                    targetPlanet != null ? targetPlanet : locatorBody);
+                ApplyWarpHop(origin, registry, destination, lockBody);
                 FinishArrival(keepVel);
 
                 string whereAmI = "";
-                if (targetPlanet == null && locatorBody == null)
+                if (lockBody == null)
                 {
                     double3 nowAt = origin.GetCosmicKm(transform.position);
                     BodyInstance near = null;
@@ -450,13 +476,20 @@ namespace VoxelEngine.GridSystem
         /// </summary>
         public bool TryWarpPartial(double affordableKm, double fullDistKm, string originName)
         {
+            Transform aimFrame = Grid != null && Grid.ActiveCockpit != null ? Grid.ActiveCockpit.transform : transform;
+            return TryWarpPartial(affordableKm, fullDistKm, originName, aimFrame.forward.normalized);
+        }
+
+        /// <summary>Direction-aware partial hop: the bank flies the ship along hopDir —
+        /// the aim line for an aimed jump, the target line for a locked destination.</summary>
+        public bool TryWarpPartial(double affordableKm, double fullDistKm, string originName, Vector3 hopDir)
+        {
             if (!IsReady || Grid == null) return false;
             var origin = SpaceOrigin.Instance;
             var registry = CosmicRegistry.Instance;
             if (origin == null || registry == null || !registry.IsReady) return false;
 
-            Transform aimFrame = Grid.ActiveCockpit != null ? Grid.ActiveCockpit.transform : transform;
-            Vector3 aimDir = aimFrame.forward.normalized;
+            Vector3 aimDir = hopDir.sqrMagnitude > 0.000001f ? hopDir.normalized : transform.forward.normalized;
             double3 gridCosmic = origin.GetCosmicKm(transform.position);
             float rate = EffectiveRateWhPerKm(Grid);
             float pooled = PooledStoredWh(Grid);
@@ -507,10 +540,139 @@ namespace VoxelEngine.GridSystem
             return true;
         }
 
+        // ── Charted destinations (drive-panel picker) ───────────────────
+        // The panel lists every charted planet and moon (never the star) plus every
+        // live powered beacon off this grid. A selection is a LOCK: the drive plots
+        // the approach shelf itself — no aim cone, no pilot line of sight — and the
+        // same vacuum, cooldown, charge, fuel and confirm rules apply as to an aimed
+        // jump. Mapped destinations are exact; arrival error remains a blind-hop tax.
+
+        /// <summary>A destination the drive can lock without the pilot aiming at it.</summary>
+        public readonly struct WarpTarget
+        {
+            public readonly string DisplayName;
+            public readonly BodyInstance Body;     // charted body (null for beacons)
+            public readonly GridBeacon Beacon;     // powered beacon (null for bodies)
+            public readonly double StandoffKm;     // arrival distance kept from the centre
+
+            public WarpTarget(string displayName, BodyInstance body, GridBeacon beacon, double standoffKm)
+            {
+                DisplayName = displayName;
+                Body = body;
+                Beacon = beacon;
+                StandoffKm = standoffKm;
+            }
+        }
+
+        /// <summary>How close a beacon rendezvous parks the hull off the beacon's grid.
+        /// Close enough to dock from here, far enough to never spawn inside it.</summary>
+        public const double BeaconRendezvousKm = 2d;
+
+        /// <summary>Every destination this drive can lock right now: charted planets and
+        /// moons (never the star) plus live powered beacons not on this grid. Fills the
+        /// caller's list — the panel rebuilds rows on open and live-ticks labels, so
+        /// nothing here runs per frame.</summary>
+        public void ChartedTargets(List<WarpTarget> results)
+        {
+            results.Clear();
+            var registry = CosmicRegistry.Instance;
+            if (registry == null || !registry.IsReady) return;
+            if (registry.Bodies != null)
+            {
+                for (int i = 0; i < registry.Bodies.Count; i++)
+                {
+                    var b = registry.Bodies[i];
+                    if (b == null || b.settings == null) continue;
+                    if (IsStarBody(registry, b)) continue;
+                    double radius = System.Math.Max(1d, b.settings.radiusKm);
+                    results.Add(new WarpTarget(b.DisplayName, b, null, radius + arrivalAltitudeKm));
+                }
+            }
+            var beacons = GridBeacon.All;
+            for (int i = 0; i < beacons.Count; i++)
+            {
+                var beacon = beacons[i];
+                if (beacon == null || !beacon.IsActive || beacon.Grid == null || beacon.Grid == Grid) continue;
+                results.Add(new WarpTarget(beacon.Grid.name, null, beacon, BeaconRendezvousKm));
+            }
+        }
+
+        /// <summary>Live cosmic centre of a target: the body's propagated orbit position,
+        /// or the beacon's current scene position re-read through the origin — a beacon
+        /// on a moving shuttle is locked where it IS when the jump fires.</summary>
+        public double3 TargetCentreKm(WarpTarget target, SpaceOrigin origin, CosmicRegistry registry)
+        {
+            if (target.Body != null) return registry != null ? registry.CosmicPositionOf(target.Body) : double3.zero;
+            if (target.Beacon != null && origin != null)
+                return origin.GetCosmicKm(target.Beacon.transform.position);
+            return double3.zero;
+        }
+
+        /// <summary>Is the locked destination still jumpable at jump time — the body
+        /// still charted, the beacon still powered and not our own hull light?</summary>
+        public bool TargetAlive(WarpTarget target, CosmicRegistry registry)
+        {
+            if (target.Body != null && registry != null && registry.Bodies != null)
+            {
+                for (int i = 0; i < registry.Bodies.Count; i++)
+                    if (ReferenceEquals(registry.Bodies[i], target.Body)) return true;
+                return false;
+            }
+            return target.Beacon != null && target.Beacon.IsActive
+                && target.Beacon.Grid != null && target.Beacon.Grid != Grid;
+        }
+
         /// <summary>
-        /// Re-anchor on the hull, not the pawn. Seated viewers are nested under the
-        /// cockpit and were skipped by ShiftWorld, so TeleportCosmic(viewer) left the
-        /// ship behind and only played the FX.
+        /// Lock a charted destination from the drive panel and jump. The drive plots
+        /// the arrival shelf itself — the near side of a world at the arrival altitude
+        /// (you jump TO a world, the shelf faces you), or the rendezvous point off a
+        /// beacon on the approach line — then runs the same confirm wheel and fuel
+        /// rules as an aimed jump. Returns true when a jump is imminent or happened.
+        /// </summary>
+        public bool TryWarpTo(WarpTarget target, bool skipConfirm = false)
+        {
+            if (VoxelEngine.UI.ConfirmDialogHud.IsOpen && !skipConfirm)
+                return false;
+            if (VoxelEngine.FX.WarpFx.IsPending(this))
+            {
+                BuildFeedbackHud.Show("Warp Drive", "Jump imminent…", null, new Color(0.55f, 0.85f, 1f));
+                return true;
+            }
+            if (!IsReady)
+            {
+                ShowNotReadyToast();
+                return false;
+            }
+
+            var origin = SpaceOrigin.Instance;
+            var registry = CosmicRegistry.Instance;
+            if (origin == null || registry == null || !registry.IsReady)
+            {
+                BuildFeedbackHud.Show("Warp Drive", "No valid star map", null, new Color(1f, 0.7f, 0.25f));
+                return false;
+            }
+            if (!TargetAlive(target, registry))
+            {
+                BuildFeedbackHud.Show("Warp Drive", "Destination lost — reopen the drive panel", null, new Color(1f, 0.7f, 0.25f));
+                return false;
+            }
+
+            double3 gridCosmic = origin.GetCosmicKm(transform.position);
+            double3 centre = TargetCentreKm(target, origin, registry);
+            double3 radial = math.normalizesafe(gridCosmic - centre, new double3(0d, 1d, 0d));
+            double3 arrival = ClampAwayFromStar(registry, gridCosmic, centre + radial * target.StandoffKm);
+            string destLabel = target.Body != null
+                ? $"{target.DisplayName} approach ({arrivalAltitudeKm:0} km shelf)"
+                : $"{target.DisplayName} rendezvous ({target.StandoffKm:0} km off the beacon)";
+            Vector3 hopDir = (Vector3)(float3)math.normalizesafe(centre - gridCosmic, new double3(0d, 1d, 0d));
+            return ConfirmAndCommit(arrival, target.Body, destLabel, skipConfirm, hopDir);
+        }
+
+        /// <summary>
+        /// Re-anchor on the hull, not the pawn. SpaceOrigin holds the jumping hull
+        /// scene-still and slides the cosmos around it (TeleportSubjectToCosmic), so
+        /// the hull's cosmic position becomes the destination; the seated pilot rides
+        /// nested under the cockpit and is skipped with the hull.
         /// </summary>
         private void ApplyWarpHop(SpaceOrigin origin, CosmicRegistry registry, double3 destination, BodyInstance lockBody)
         {

@@ -1,9 +1,17 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.31.4-dev`
+**Current Version:** `12.32.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.32.0-dev] Warp Arrival Fix, Drive Destination Picker
+
+**Type:** MINOR - charged warps move the ship again: the 12.31.4 hull re-anchor registered the hull as a shift root, so ShiftWorld moved it together with the world and cancelled its own anchor change — every jump was a geometric no-op (FX played, kWh drained, the cooldown ran, the ship never moved). The jumping hull now holds its scene position while the rest of the world slides past it, which is what makes the anchor change real; nested riders stay on the hull and save/load restore is strictly more correct. The warp drive panel gains a destination picker (the roadmap's open destination-select line): charted planets and moons (never the star) plus powered beacons off the grid, rows with live distance, live price and affordability colour; a row click locks the target, the drive plots the approach shelf itself (near side of a world at the arrival altitude, 2 km off a beacon on the approach line) and runs the same fuel check and confirm wheel. A short bank still offers Jump partway, now flown along the target line instead of the nose. Rows grey out when the drive is not ready and mark a destroyed beacon GONE. No recipe, research or setup changes.
+
+**GitHub title:** `[12.32.0-dev] Warp arrival fix, destination picker`
+
+**Manual steps:** none - code-only. Verify in Unity: charge a drive in space, fire an aimed jump, and confirm the hull actually arrives (the arrival toast distance matches the new view); open the drive panel, pick a charted world, confirm, and arrive on its near-side shelf with gravity and streaming handing over; pick a powered beacon and arrive 2 km off it; fire a short-banked lock and confirm the partial hop heads toward the target; destroy the beacon's grid and watch its row grey to GONE without errors.
 
 ### [12.31.4-dev] Warp Moves the Hull, Vacuum Life, Planet Handoff
 

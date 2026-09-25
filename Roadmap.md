@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.31.4-dev`
-**Roadmap Version:** `12.31.4-dev`
+**Current Version:** `12.32.0-dev`
+**Roadmap Version:** `12.32.0-dev`
 **Date:** 2026-09-25
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,10 @@
 
 ## 0. Recently Done
 
+### 12.32.0-dev - Warp Arrival Fix, Drive Destination Picker
+- **Warp** (`SpaceOrigin`): the jumping hull holds scene-still while the world slides; the anchor change no longer cancels itself, so charged jumps move the hull.
+- **Drive panel** (`GridWarpDrive`, `GridBlockUI`): destination picker — charted bodies plus powered beacons, live distance/price rows, lock-and-jump through the confirm wheel.
+
 ### 12.31.4-dev - Warp Hull Hop, Vacuum, Planet Handoff
 - **Warp** (`GridWarpDrive`, `SpaceOrigin`): teleport the hull; `OnFrameChanged` on `SetFrame`; force frame after hop.
 - **Vacuum / planets:** no livestock or grass in space; GPU surfaces sleep past 400 km; proximity hold is surface-distance so gravity hands off.
@@ -41,11 +45,6 @@
 
 ### 12.31.1-dev - SolarHazard Compile Fix
 - **Compile** (`SolarHazard`): duplicate file tail removed.
-
-### 12.31.0-dev - Warp Redo, Deep-Space Save, No Sun Hops
-- **Warp** (`WarpFx`): new tunnel, no shake; hops clamped off the star; cosmic grid save/load.
-- **Cockpit:** nested origin skip (no twitch); confirm point-and-click; SOL toasts de-dupe.
-- **Preserved:** confirm-before-jump, drive slider, seated F3. No setup changes.
 
 ### Era Transition Feel
 
@@ -947,11 +946,11 @@ one sentence: **a road is the difference between walking a route and being able 
 
 A late-game **Jump Drive** provides charged, coordinate-based faster-than-light travel without replacing normal engines or route planning.
 
-*(drive, charge, pool, hop, planet lock, fly-to, jump legs, FX, partial jumps shipped through 12.27.0-dev — `GridWarpDrive`, `NavFlightAutopilot`, `WarpFx`; Setup Step 50 authors the block. 12.28.0-dev adds the mass penalty.)*
+*(drive, charge, pool, hop, planet lock, fly-to, jump legs, FX, partial jumps shipped through 12.27.0-dev — `GridWarpDrive`, `NavFlightAutopilot`, `WarpFx`; Setup Step 50 authors the block. 12.28.0-dev adds the mass penalty. 12.32.0-dev adds the drive-panel destination picker and fixes the warp arrival no-op.)*
 
 **Mass penalty (12.28.0-dev, cap 12.28.1-dev):** `factor = min(maxMassFactor, sqrt(TotalMass / ratedMassKg))` at or above rated mass, else 1. Defaults: rated 100 t, cap 12. Price multiplies, hop divides. One full drive still equals one hop. Cargo is `ContentMass` inside `TotalMass` — do not add a second cargo scale.
 
-- The player chooses a known destination, beacon, or safe coordinate and sees range, charge cost, mass penalty, cooldown, and arrival error before committing. *(drive panel now shows range, cost, mass penalty and cooldown; destination-select UI remains open.)*
+- ~~The player chooses a known destination, beacon, or safe coordinate and sees range, charge cost, mass penalty, cooldown, and arrival error before committing.~~ *(12.32.0-dev — drive-panel picker: charted bodies and powered beacons with live distance, live price and affordability colour; lock-and-jump through the confirm wheel; partial jumps fly the target line. Route-book and free-coordinate entries in the picker remain open.)*
 - ~~Maximum range decreases as ship mass and cargo increase.~~ *(12.28.0-dev — `GridWarpDrive.MassFactor` / `EffectiveHopKm` / `EffectiveRateWhPerKm`; Setup Step 50 fills `ratedMassKg` and `maxMassFactor` only when zero.)*
 - The drive requires a large stored-energy charge and cannot operate while critically damaged, obstructed, inside prohibited gravity depths, or without a safe arrival volume.
 - Multiple drives can combine range or reduce charge time according to research and grid configuration.
@@ -2278,7 +2277,7 @@ For each version, these are the high-level Unity tasks you will perform manually
 13. ~~Build player heat UI with green/yellow/red indicator.~~ *(9.30.0-dev suit strip; 9.32.0-dev reports the crew's compartment on the same panel)*
 14. ~~Implement atmospheric entry heat simulation.~~ *(9.29.0-dev; concealed-space exhaust and room heat closed by 9.32.0-dev, Step 63)*
 14b. ~~Grid Route Recorder & Energy Calculator: manual route calculation and recorded routes.~~ *(9.34.0-dev, Step 65 — distance, travel time, gravity wells, atmosphere segments, required thrust, power and hydrogen use, reserve margin and named warnings, with routes saved as waypoint lists on the grid. Autopilot remains open.)*
-15. Build coordinate Jump Drive prefab, charge/range calculator, safe-arrival validation, destination UI, and Autopilot route integration. *(prefab, charge/range maths and safe-arrival validation shipped earlier with `GridWarpDrive`; 12.23.0-dev ships the Autopilot legs for nav-target flights (auto-aim/charge/fire with cruise resume); 12.24.0-dev adds the internal-battery fuel model (pooled range, proportional drain, persisted) and the drive panel. The destination-select UI and route-book warp legs remain — 9.34.0-dev ships the route book the destination picker will hand its selections to)*
+15. Build coordinate Jump Drive prefab, charge/range calculator, safe-arrival validation, destination UI, and Autopilot route integration. *(prefab, charge/range maths and safe-arrival validation shipped earlier with `GridWarpDrive`; 12.23.0-dev ships the Autopilot legs for nav-target flights (auto-aim/charge/fire with cruise resume); 12.24.0-dev adds the internal-battery fuel model (pooled range, proportional drain, persisted) and the drive panel. 12.32.0-dev ships the destination-select UI for charted bodies and powered beacons on the drive panel. Route-book warp legs remain — 9.34.0-dev ships the route book the picker's route-book entries will hand their selections to)*
 16. Build empire dashboard UI.
 17. **Run setup wizard step (non-destructive)**
     - Step 22 for planetary bases, exo-alloys, nuclear, radiation, and heat systems.

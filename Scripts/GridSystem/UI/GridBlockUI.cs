@@ -9,7 +9,9 @@
 
 using UnityEngine;
 using System.Collections.Generic;
+using Unity.Mathematics;
 using UnityEngine.UIElements;
+using VoxelEngine.Cosmos;
 using VoxelEngine.Items;
 using VoxelEngine.UI;
 using T = VoxelEngine.UI.UITheme;
@@ -505,6 +507,108 @@ namespace VoxelEngine.GridSystem.UI
             p.Add(btnRow);
             p.Add(T.Muted("Range is bought from the pooled battery of every enabled drive on this grid. Far jump, thin bank: fit more drives. A heavier hull — and the cargo in it — pays more per km and hops shorter."));
 
+            // ── Destinations: charted worlds + powered beacons, lock & jump ──
+            p.Add(T.Spacer(4));
+            p.Add(StarshipTheme.HullDivider(WarpLime));
+            var destCaption = new Label("DESTINATIONS  ·  LOCK & JUMP");
+            destCaption.style.fontSize = 12;
+            destCaption.style.unityFontStyleAndWeight = FontStyle.Bold;
+            destCaption.style.letterSpacing = 1.2f;
+            destCaption.style.color = new StyleColor(WarpLime);
+            destCaption.style.marginTop = 6;
+            p.Add(destCaption);
+            p.Add(T.Muted("Pick a charted world or a powered beacon — the drive plots the jump itself, no aim cone. Same confirm wheel, same price."));
+
+            var targets = new List<GridWarpDrive.WarpTarget>();
+            drive.ChartedTargets(targets);
+            var destRows = new List<(VisualElement row, Label name, Label dist, Label cost, GridWarpDrive.WarpTarget target)>();
+            if (targets.Count == 0)
+            {
+                p.Add(T.Muted("No charted worlds and no powered beacons. Fly, chart, or light a beacon."));
+            }
+            for (int i = 0; i < targets.Count; i++)
+            {
+                var target = targets[i];
+                var row = new VisualElement();
+                row.style.flexDirection = FlexDirection.Row;
+                row.style.alignItems = Align.Center;
+                row.style.backgroundColor = new StyleColor(T.BgSlot);
+                T.Radius(row, 10);
+                row.style.borderLeftWidth = 2; row.style.borderRightWidth = 2;
+                row.style.borderTopWidth = 2; row.style.borderBottomWidth = 2;
+                row.style.borderLeftColor = new StyleColor(new Color(0f, 0f, 0f, 0f));
+                row.style.borderRightColor = new StyleColor(new Color(0f, 0f, 0f, 0f));
+                row.style.borderTopColor = new StyleColor(new Color(0f, 0f, 0f, 0f));
+                row.style.borderBottomColor = new StyleColor(new Color(0f, 0f, 0f, 0f));
+                row.style.paddingLeft = 10; row.style.paddingRight = 10;
+                row.style.paddingTop = 7; row.style.paddingBottom = 7;
+                row.style.marginTop = 4;
+
+                var glyph = new Label(target.Body != null ? "◉" : "✦");
+                glyph.style.fontSize = 15;
+                glyph.style.color = new StyleColor(target.Body != null ? T.AccentCyan : WarpLime);
+                glyph.style.marginRight = 8;
+                glyph.pickingMode = PickingMode.Ignore;
+                row.Add(glyph);
+
+                var nameCol = new VisualElement();
+                nameCol.style.flexGrow = 1f;
+                nameCol.pickingMode = PickingMode.Ignore;
+                var nameLabel = new Label(target.DisplayName.ToUpperInvariant());
+                nameLabel.style.fontSize = 12;
+                nameLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+                nameLabel.style.color = new StyleColor(Color.white);
+                nameLabel.pickingMode = PickingMode.Ignore;
+                nameCol.Add(nameLabel);
+                var kindLabel = new Label(target.Body != null ? $"charted body · {drive.arrivalAltitudeKm:0} km shelf" : $"powered beacon · {GridWarpDrive.BeaconRendezvousKm:0} km rendezvous");
+                kindLabel.style.fontSize = 9;
+                kindLabel.style.color = new StyleColor(T.TextMuted);
+                kindLabel.pickingMode = PickingMode.Ignore;
+                nameCol.Add(kindLabel);
+                row.Add(nameCol);
+
+                var numCol = new VisualElement();
+                numCol.style.alignItems = Align.FlexEnd;
+                numCol.pickingMode = PickingMode.Ignore;
+                var distLabel = new Label("—");
+                distLabel.style.fontSize = 11;
+                distLabel.style.color = new StyleColor(T.TextSecondary);
+                distLabel.pickingMode = PickingMode.Ignore;
+                numCol.Add(distLabel);
+                var costLabel = new Label("—");
+                costLabel.style.fontSize = 11;
+                costLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+                costLabel.pickingMode = PickingMode.Ignore;
+                numCol.Add(costLabel);
+                row.Add(numCol);
+
+                row.RegisterCallback<PointerEnterEvent>(_ =>
+                {
+                    row.style.borderLeftColor = new StyleColor(WarpLimeDim);
+                    row.style.borderRightColor = new StyleColor(WarpLimeDim);
+                    row.style.borderTopColor = new StyleColor(WarpLimeDim);
+                    row.style.borderBottomColor = new StyleColor(WarpLimeDim);
+                    row.style.scale = new StyleScale(new Scale(new Vector3(1.02f, 1.02f, 1f)));
+                });
+                row.RegisterCallback<PointerLeaveEvent>(_ =>
+                {
+                    row.style.borderLeftColor = new StyleColor(new Color(0f, 0f, 0f, 0f));
+                    row.style.borderRightColor = new StyleColor(new Color(0f, 0f, 0f, 0f));
+                    row.style.borderTopColor = new StyleColor(new Color(0f, 0f, 0f, 0f));
+                    row.style.borderBottomColor = new StyleColor(new Color(0f, 0f, 0f, 0f));
+                    row.style.scale = new StyleScale(new Scale(Vector3.one));
+                });
+                row.RegisterCallback<PointerDownEvent>(_ =>
+                {
+                    if (drive == null || drive.Grid == null) return;
+                    drive.TryWarpTo(target);
+                    GameUIController.Instance?.RefreshCurrentPanel();
+                });
+
+                p.Add(row);
+                destRows.Add((row, nameLabel, distLabel, costLabel, target));
+            }
+
             // ── Live tick: labels, pill, ring pulse and inflow dots, all in place ──
             p.schedule.Execute(() =>
             {
@@ -558,6 +662,47 @@ namespace VoxelEngine.GridSystem.UI
                     spinVal.text = drive.IsReady ? "READY" : (drive.IsCharging ? $"{drive.Charge01 * 100f:0}%" : "IDLE");
                 if (coolVal != null)
                     coolVal.text = drive.Cooldown01 > 0f ? WarpEta(drive.Cooldown01 * drive.cooldownSeconds) : "—";
+
+                // Destination rows: live distance, live price, affordability colour.
+                var origin = SpaceOrigin.Instance;
+                var registry = CosmicRegistry.Instance;
+                bool lockable = drive.IsReady;
+                for (int i = 0; i < destRows.Count; i++)
+                {
+                    var entry = destRows[i];
+                    if (entry.row == null) continue;
+                    if (origin == null || registry == null || !registry.IsReady)
+                    {
+                        if (entry.dist != null) entry.dist.text = "—";
+                        if (entry.cost != null) { entry.cost.text = "NO STAR MAP"; entry.cost.style.color = new StyleColor(T.TextMuted); }
+                        entry.row.style.opacity = 0.45f;
+                        continue;
+                    }
+                    if (!drive.TargetAlive(entry.target, registry))
+                    {
+                        if (entry.cost != null) { entry.cost.text = "GONE"; entry.cost.style.color = new StyleColor(T.TextMuted); }
+                        entry.row.style.opacity = 0.3f;
+                        continue;
+                    }
+                    double3 centre = drive.TargetCentreKm(entry.target, origin, registry);
+                    double3 shipKm = origin.GetCosmicKm(drive.transform.position);
+                    double distKm = math.length(centre - shipKm);
+                    double standoff = System.Math.Max(0d, entry.target.StandoffKm);
+                    double jumpKm = System.Math.Max(0d, distKm - standoff);
+                    float rate = drive.Grid != null ? GridWarpDrive.EffectiveRateWhPerKm(drive.Grid) : drive.energyPerKmWh;
+                    float pooled = drive.Grid != null ? GridWarpDrive.PooledStoredWh(drive.Grid) : drive.warpStoredWh;
+                    double costKWh = jumpKm * rate / 1000f;
+                    bool affordable = pooled >= jumpKm * rate - 0.01f;
+
+                    if (entry.dist != null)
+                        entry.dist.text = distKm >= 1d ? $"{distKm:N0} km" : $"{distKm * 1000d:N0} m";
+                    if (entry.cost != null)
+                    {
+                        entry.cost.text = $"{costKWh:0.0} kWh";
+                        entry.cost.style.color = new StyleColor(affordable ? (lockable ? WarpLime : WarpLimeDim) : T.AccentAmber);
+                    }
+                    entry.row.style.opacity = lockable ? 1f : 0.6f;
+                }
             }).Every(50);
 
             return p;

@@ -167,8 +167,11 @@ namespace VoxelEngine.Cosmos
 
         /// <summary>
         /// Re-anchor so <paramref name="subject"/> (the jumping hull, not a stale pawn)
-        /// lands at destKm. Using the viewer pawn left the ship behind whenever the
-        /// player was parented to the cockpit and skipped as a nested root.
+        /// lands at destKm. The subject is HELD at its scene position while the rest of
+        /// the registered world slides past it: anchor change + subject shift would
+        /// cancel to zero and the whole warp would be a no-op (12.31.4 regression —
+        /// FX played, the bank drained, the cooldown ran, and the ship never moved).
+        /// Nested riders (the seated pilot) are skipped with it and ride on the hull.
         /// </summary>
         public void TeleportSubjectToCosmic(Transform subject, double3 destKm)
         {
@@ -189,7 +192,7 @@ namespace VoxelEngine.Cosmos
             {
                 AnchorKm = newAnchor;
                 Vector3 shift = (Vector3)(float3)(-delta * 1000d);
-                ShiftWorld(shift);
+                ShiftWorld(shift, subject);
             }
             ViewerCosmicKm = viewer != null ? GetCosmicKm(viewer.position) : destKm;
             PlaceBodies();
@@ -548,8 +551,12 @@ namespace VoxelEngine.Cosmos
                            "The body keeps its last valid scene position; fix the offending orbital data.");
         }
 
-        /// <summary>Shift every registered scene root by a uniform delta (rebase / teleport).</summary>
-        private void ShiftWorld(Vector3 delta)
+        /// <summary>Shift every registered scene root by a uniform delta (rebase / teleport).
+        /// keepRoot (optional) is the one subtree that must NOT move: a subject teleport
+        /// re-anchors the cosmos AROUND it, so the jumping hull holds its scene position
+        /// while everything else slides — that is what turns the anchor change into a
+        /// real change of cosmic position.</summary>
+        private void ShiftWorld(Vector3 delta, Transform keepRoot = null)
         {
             if (delta.sqrMagnitude < 1e-9f) return;
 
@@ -560,6 +567,10 @@ namespace VoxelEngine.Cosmos
                 // Shifting both double-moves the camera every rebase/warp (twitch
                 // until you re-enter the seat). Children ride with their parent.
                 if (HasRegisteredAncestor(root)) continue;
+                // Teleport subject: the hull and everything parented under it hold
+                // still while the universe slides. IsChildOf covers the root itself
+                // plus every descendant.
+                if (keepRoot != null && root.IsChildOf(keepRoot)) continue;
                 root.position += delta;
                 var rb = root.GetComponent<Rigidbody>();
                 if (rb != null) rb.position += delta;
