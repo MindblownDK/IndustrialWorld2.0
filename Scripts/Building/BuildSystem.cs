@@ -1750,6 +1750,25 @@ namespace VoxelEngine.Building
                     return false;
             }
 
+            // Portal pieces (12.39.5-dev) are 5 m cells: the small centre probe below
+            // cannot see a partial overlap between two of them, so frames could be
+            // planted inside each other. Portal-sourced blocks get a real volume test
+            // against other placed blocks — flush neighbours (touching, not
+            // interpenetrating) still pass, and terrain stays permissive so a ring
+            // can kiss a slope without being refused.
+            bool isPortalPiece = block.placedPrefab != null
+                && (block.placedPrefab.GetComponent<VoxelEngine.Building.PortalFrameBlock>() != null
+                 || block.placedPrefab.GetComponent<VoxelEngine.Building.PortalControllerBlock>() != null);
+            if (isPortalPiece)
+            {
+                Vector3 half = PortalPieceHalfExtents(block.placedPrefab) * 0.94f;
+                foreach (var col in Physics.OverlapBox(pos, half, rot))
+                {
+                    if (col.isTrigger) continue;
+                    if (col.GetComponentInParent<PlacedBlock>() != null) return false;
+                }
+            }
+
             var overlaps = Physics.OverlapBox(pos, Vector3.one * checkSize, Quaternion.identity);
             foreach (var col in overlaps)
             {
@@ -1788,6 +1807,28 @@ namespace VoxelEngine.Building
                 || prefab.GetComponentInChildren<VoxelEngine.Fluids.WaterPipe>(true) != null
                 || prefab.GetComponentInChildren<VoxelEngine.Power.PowerCable>(true) != null
                 || prefab.GetComponentInChildren<VoxelEngine.Networks.DataCable>(true) != null;
+
+        /// <summary>Union of the placed prefab's BoxColliders, as root-relative half
+        /// extents — the placement volume for the portal-piece overlap test. Prefab
+        /// assets carry identity world poses, so local measures read directly.</summary>
+        private static Vector3 PortalPieceHalfExtents(GameObject prefab)
+        {
+            var bounds = new Bounds(Vector3.zero, Vector3.zero);
+            bool any = false;
+            foreach (var box in prefab.GetComponentsInChildren<BoxCollider>(true))
+            {
+                var t = box.transform;
+                Vector3 center = t.position + t.rotation * Vector3.Scale(box.center, t.lossyScale);
+                Vector3 size = Vector3.Scale(box.size, t.lossyScale);
+                if (!any) { bounds = new Bounds(center, size); any = true; }
+                else
+                {
+                    bounds.Encapsulate(center - size * 0.5f);
+                    bounds.Encapsulate(center + size * 0.5f);
+                }
+            }
+            return any ? bounds.extents : Vector3.one * 0.42f;
+        }
         }
 
         private static bool IsConduitCollider(Collider collider)

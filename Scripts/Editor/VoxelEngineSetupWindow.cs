@@ -16433,7 +16433,12 @@ AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
                 bcol.center = Vector3.zero;
             });
 
-            // ── Controller prefab: console + PowerConsumer ──
+            // ── Controller prefab: the control MONOLITH + PowerConsumer ──
+            // 12.39.5-dev: an absolute unit, ~2.7 x 4.5 x 2.7 m — plinth, pylons,
+            // arch, energy dial, antennae, cooling fins. Every named part is
+            // find-or-create then re-asserted, so re-running the step upgrades
+            // earlier 0.9 m consoles in place and never touches designer parts
+            // under other names.
             string ctrlPath = $"{PREFABS}/PortalController.prefab";
             var ctrlPrefab = GetOrCreatePrefab(ctrlPath, "PortalController", (root) =>
             {
@@ -16444,31 +16449,76 @@ AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
                 if (root.GetComponent<VoxelEngine.Building.PortalControllerBlock>() == null)
                     root.AddComponent<VoxelEngine.Building.PortalControllerBlock>();
 
-                if (root.transform.childCount == 0 && root.GetComponent<MeshFilter>() == null)
+                var hull = MakeColoredMat(PREFABS + "/Mats", "Mat_PortalController", new Color(0.25f, 0.28f, 0.33f, 1f));
+                var trim = MakeColoredMat(PREFABS + "/Mats", "Mat_PortalControllerTrim", frameSteel);
+                var glow = MakeColoredMat(PREFABS + "/Mats", "Mat_PortalControllerScreen", portalGlow);
+
+                void Part(string name, PrimitiveType type, Vector3 scale, Vector3 pos,
+                          Material mat, Vector3 euler)
                 {
-                    var body = MakeColoredMat(PREFABS + "/Mats", "Mat_PortalController", new Color(0.25f, 0.28f, 0.33f, 1f));
-                    var glow = MakeColoredMat(PREFABS + "/Mats", "Mat_PortalControllerScreen", portalGlow);
-
-                    var caseBox = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                    caseBox.name = "Case";
-                    caseBox.transform.SetParent(root.transform, false);
-                    caseBox.transform.localScale = new Vector3(0.9f, 0.9f, 0.5f);
-                    UnityEngine.Object.DestroyImmediate(caseBox.GetComponent<Collider>());
-                    caseBox.GetComponent<Renderer>().sharedMaterial = body;
-
-                    var screen = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                    screen.name = "Screen";
-                    screen.transform.SetParent(root.transform, false);
-                    screen.transform.localScale = new Vector3(0.6f, 0.45f, 0.06f);
-                    screen.transform.localPosition = new Vector3(0f, 0.1f, 0.26f);
-                    UnityEngine.Object.DestroyImmediate(screen.GetComponent<Collider>());
-                    screen.GetComponent<Renderer>().sharedMaterial = glow;
+                    var t = root.transform.Find(name);
+                    if (t == null)
+                    {
+                        var go = GameObject.CreatePrimitive(type);
+                        go.name = name;
+                        UnityEngine.Object.DestroyImmediate(go.GetComponent<Collider>());
+                        t = go.transform;
+                        t.SetParent(root.transform, false);
+                    }
+                    t.localScale = scale;
+                    t.localPosition = pos;
+                    t.localRotation = Quaternion.Euler(euler);
+                    t.GetComponent<Renderer>().sharedMaterial = mat;
                 }
+
+                Part("Base",        PrimitiveType.Cube,     new Vector3(2.6f, 0.4f, 2.6f),      new Vector3(0f, 0.2f, 0f),       hull, Vector3.zero);
+                Part("Case",        PrimitiveType.Cube,     new Vector3(1.8f, 2.0f, 1.6f),      new Vector3(0f, 1.4f, 0f),       hull, Vector3.zero);
+                Part("Screen",      PrimitiveType.Cube,     new Vector3(1.2f, 0.8f, 0.08f),     new Vector3(0f, 1.7f, 0.84f),    glow, Vector3.zero);
+                Part("PlinthTrim",  PrimitiveType.Cube,     new Vector3(2.7f, 0.12f, 2.7f),     new Vector3(0f, 0.46f, 0f),      trim, Vector3.zero);
+                Part("PylonL",      PrimitiveType.Cube,     new Vector3(0.35f, 2.6f, 0.35f),    new Vector3(-1.12f, 1.9f, 0f),   trim, Vector3.zero);
+                Part("PylonR",      PrimitiveType.Cube,     new Vector3(0.35f, 2.6f, 0.35f),    new Vector3(1.12f, 1.9f, 0f),    trim, Vector3.zero);
+                Part("PylonTipL",   PrimitiveType.Cube,     new Vector3(0.45f, 0.18f, 0.45f),   new Vector3(-1.12f, 3.28f, 0f),  glow, Vector3.zero);
+                Part("PylonTipR",   PrimitiveType.Cube,     new Vector3(0.45f, 0.18f, 0.45f),   new Vector3(1.12f, 3.28f, 0f),   glow, Vector3.zero);
+                Part("Arch",        PrimitiveType.Cube,     new Vector3(2.6f, 0.32f, 0.6f),     new Vector3(0f, 3.0f, 0f),       trim, Vector3.zero);
+                Part("Core",        PrimitiveType.Sphere,   new Vector3(0.55f, 0.55f, 0.55f),   new Vector3(0f, 3.0f, 0.2f),     glow, Vector3.zero);
+                Part("FinA",        PrimitiveType.Cube,     new Vector3(1.5f, 0.1f, 0.5f),      new Vector3(0f, 0.9f, -0.95f),   trim, Vector3.zero);
+                Part("FinB",        PrimitiveType.Cube,     new Vector3(1.5f, 0.1f, 0.5f),      new Vector3(0f, 1.5f, -0.95f),   trim, Vector3.zero);
+                Part("FinC",        PrimitiveType.Cube,     new Vector3(1.5f, 0.1f, 0.5f),      new Vector3(0f, 2.1f, -0.95f),   trim, Vector3.zero);
+                Part("ConduitA",    PrimitiveType.Cube,     new Vector3(0.08f, 1.8f, 0.08f),    new Vector3(-0.82f, 1.4f, 0.82f), glow, Vector3.zero);
+                Part("ConduitB",    PrimitiveType.Cube,     new Vector3(0.08f, 1.8f, 0.08f),    new Vector3(0.82f, 1.4f, 0.82f),  glow, Vector3.zero);
+                Part("AntennaL",    PrimitiveType.Cylinder, new Vector3(0.08f, 0.6f, 0.08f),    new Vector3(-1.0f, 3.8f, 0f),    trim, Vector3.zero);
+                Part("AntennaR",    PrimitiveType.Cylinder, new Vector3(0.08f, 0.6f, 0.08f),    new Vector3(1.0f, 3.8f, 0f),     trim, Vector3.zero);
+                Part("AntennaTipL", PrimitiveType.Sphere,   new Vector3(0.16f, 0.16f, 0.16f),   new Vector3(-1.0f, 4.48f, 0f),   glow, Vector3.zero);
+                Part("AntennaTipR", PrimitiveType.Sphere,   new Vector3(0.16f, 0.16f, 0.16f),   new Vector3(1.0f, 4.48f, 0f),    glow, Vector3.zero);
+
+                // The spinning energy dial above the arch: a pivot child so
+                // PortalControllerBlock can rotate the whole assembly while powered.
+                var spin = root.transform.Find("RingSpin");
+                if (spin == null)
+                {
+                    spin = new GameObject("RingSpin").transform;
+                    spin.SetParent(root.transform, false);
+                }
+                spin.localPosition = new Vector3(0f, 3.45f, 0f);
+                spin.localRotation = Quaternion.identity;
+                var disc = spin.Find("Disc");
+                if (disc == null)
+                {
+                    var discGo = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                    discGo.name = "Disc";
+                    UnityEngine.Object.DestroyImmediate(discGo.GetComponent<Collider>());
+                    disc = discGo.transform;
+                    disc.SetParent(spin, false);
+                }
+                disc.localScale = new Vector3(1.7f, 0.05f, 1.7f);
+                disc.localPosition = Vector3.zero;
+                disc.localRotation = Quaternion.identity;
+                disc.GetComponent<Renderer>().sharedMaterial = glow;
 
                 var bcol = root.GetComponent<BoxCollider>();
                 if (bcol == null) bcol = root.AddComponent<BoxCollider>();
-                bcol.size = new Vector3(0.9f, 0.9f, 0.5f);
-                bcol.center = Vector3.zero;
+                bcol.size = new Vector3(2.7f, 4.0f, 2.7f);
+                bcol.center = new Vector3(0f, 2.0f, 0f);
             });
 
             // ── Items: STATIC placed blocks (BlockItem, not GridBlockItem) ──
@@ -16486,7 +16536,7 @@ AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
             frameItem.maxStack = 100;
             frameItem.placedPrefab = framePrefab;
             frameItem.gridSize = Vector3Int.one;
-            frameItem.allowStacking = true;
+            frameItem.allowStacking = false;
             frameItem.blockHealth = 400;
             frameItem.miningTier = 1;
             frameItem.massPerUnit = 120f;
@@ -16502,15 +16552,15 @@ AssetDatabase.SaveAssets(); AssetDatabase.Refresh();
             }
             ctrlItem.itemId = "portalcontroller";
             ctrlItem.displayName = "Portal Controller";
-            ctrlItem.description = "Mount in front of a framed portal (within 8 m). Set a NAME and a CODE; two portals whose name AND code match link across any distance. Charging costs little — an open aperture drains by its size, so the big ones must earn their keep.";
+            ctrlItem.description = "An absolute unit of a control monolith. Mount it in front of the framed aperture (within 8 m), wire serious power, set a NAME and a CODE; two portals whose name AND code match link across any distance. The spinning dial means it is alive. Charging costs little — an open aperture drains by its size, so the big ones must earn their keep.";
             ctrlItem.iconTint = portalGlow;
-            ctrlItem.maxStack = 10;
+            ctrlItem.maxStack = 5;
             ctrlItem.placedPrefab = ctrlPrefab;
             ctrlItem.gridSize = Vector3Int.one;
-            ctrlItem.allowStacking = true;
-            ctrlItem.blockHealth = 600;
+            ctrlItem.allowStacking = false;
+            ctrlItem.blockHealth = 3000;
             ctrlItem.miningTier = 1;
-            ctrlItem.massPerUnit = 300f;
+            ctrlItem.massPerUnit = 2500f;
             ctrlItem.category = "Machines";
             EditorUtility.SetDirty(ctrlItem);
 

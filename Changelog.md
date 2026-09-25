@@ -1,9 +1,17 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.39.4-dev`
+**Current Version:** `12.39.5-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.39.5-dev] Portal Placement Volume Fix, the Controller Monolith
+
+**Type:** PATCH - two portal fixes. Placement: portal frames could be planted inside each other, because the build system validates static placement with a small probe at the target centre, which cannot see a partial overlap between 5 m cells. Portal-sourced blocks (frames and controllers) now get a real volume test - the union of the placed prefab's colliders - against other placed blocks; flush neighbours (touching, not interpenetrating) still pass, frames inside frames are refused, and terrain stays permissive so a ring can still kiss a slope. The portal items no longer allow stacking. The Portal Controller is rebuilt as a 2.7 x 4.5 x 2.7 m monolith: plinth, hull column, glowing screen, steel pylons with lit tips, arch over a glowing core, rear cooling fins, conduit strips, twin antennae and a spinning energy dial that rotates while the block is powered (the prefab upgrade is idempotent - re-running Step 99 grows an existing console in place, designer children are untouched). The unit's stats match its body: 3000 HP, 2500 kg, max stack 5, and its cable connect radius grows to 2.5 m so wires can reach the wider frame. Re-run Setup Step 99 to upgrade the prefab and items.
+
+**GitHub title:** `[12.39.5-dev] Portal placement volume fix, controller monolith`
+
+**Manual steps:** Tools -> Voxel Engine -> Voxel Engine Setup -> "99. Build Portals" (re-run: upgrades the controller prefab to the monolith, rescales existing named parts, applies the item stat changes).
 
 ### [12.39.4-dev] Portal Frames at 5x Scale
 

@@ -79,6 +79,7 @@ namespace VoxelEngine.Building
         private PowerConsumer _power;
         private float _transitLockUntil;
         private float _scanAt;
+        private Transform _spinRing;   // prefab dial, rotated while powered
 
         // Scan results used by the surface mesh (world-space plane basis).
         private Vector3 _planeBase;
@@ -94,7 +95,8 @@ namespace VoxelEngine.Building
         {
             _power = GetComponent<PowerConsumer>();
             if (_power == null) _power = gameObject.AddComponent<PowerConsumer>();
-            _power.connectRadius = 1.6f;
+            _power.connectRadius = 2.5f;   // the monolith is wide; cables reach its body
+            _spinRing = transform.Find("RingSpin");
         }
 
         private void OnEnable()
@@ -122,6 +124,8 @@ namespace VoxelEngine.Building
             }
 
             bool powered = _power != null && _power.IsPowered;
+            if (_spinRing != null && powered)
+                _spinRing.Rotate(Vector3.up, 40f * Time.deltaTime, Space.Self);
 
             if (IsOpen)
             {
