@@ -181,6 +181,7 @@ namespace VoxelEngine.Power
         private void OnEnable()
         {
             if (VoxelEngine.Building.BuildSystem.IsCreatingGhost) return;
+            if (_node != null) _node.onNeighboursChanged += RefreshBinding;
             StartCoroutine(BindAfterPlacement());
         }
 
@@ -195,7 +196,14 @@ namespace VoxelEngine.Power
 
         private void OnDisable()
         {
+            if (_node != null) _node.onNeighboursChanged -= RefreshBinding;
             DisconnectHost();
+        }
+
+        private void RefreshBinding()
+        {
+            if (!isActiveAndEnabled || VoxelEngine.Building.BuildSystem.IsCreatingGhost) return;
+            TryBindTouchingHost();
         }
 
         /// <summary>Returns the exact host-face point used by a mounted cable's
@@ -214,7 +222,9 @@ namespace VoxelEngine.Power
 
             PowerNode best = null;
             Collider bestCollider = null;
+            Vector3 bestSurfacePoint = default;
             float bestDistance = float.MaxValue;
+            var cable = _node as PowerCable;
             Vector3 position = transform.position;
             int count = Physics.OverlapSphereNonAlloc(position, BindRadius, s_hostProbe,
                 ~0, QueryTriggerInteraction.Ignore);
@@ -231,12 +241,25 @@ namespace VoxelEngine.Power
                 if (placed == null || placed.GetComponentInParent<VoxelEngine.GridSystem.GridEntity>() != null)
                     continue;
 
-                Vector3 surface = collider.ClosestPoint(position);
+                // A mounted Energy Pipe may bind only through an open, outward-facing
+                // socket. This keeps the restored manual tap in lockstep with the
+                // automatic graph and the conduit mesh.
+                Vector3 surface;
+                if (cable != null)
+                {
+                    if (!cable.TryGetOpenMachineContact(candidate, out surface)) continue;
+                }
+                else
+                {
+                    surface = collider.ClosestPoint(position);
+                }
+
                 float distance = (surface - position).sqrMagnitude;
                 if (distance >= bestDistance) continue;
                 bestDistance = distance;
                 best = candidate;
                 bestCollider = collider;
+                bestSurfacePoint = surface;
             }
 
             if (best == null)
@@ -245,16 +268,23 @@ namespace VoxelEngine.Power
                 return;
             }
 
-            if (_host != best) DisconnectHost();
+            bool topologyChanged = _host != best;
+            if (topologyChanged) DisconnectHost();
             _host = best;
             _hostCollider = bestCollider;
-            _hostSurfacePoint = bestCollider != null
-                ? bestCollider.ClosestPoint(transform.position)
-                : best.transform.position;
+            _hostSurfacePoint = bestSurfacePoint;
 
-            if (!_node.manualLinks.Contains(best)) _node.manualLinks.Add(best);
-            if (!best.manualLinks.Contains(_node)) best.manualLinks.Add(_node);
-            PowerNetworkManager.Instance?.SetDirty();
+            if (!_node.manualLinks.Contains(best))
+            {
+                _node.manualLinks.Add(best);
+                topologyChanged = true;
+            }
+            if (!best.manualLinks.Contains(_node))
+            {
+                best.manualLinks.Add(_node);
+                topologyChanged = true;
+            }
+            if (topologyChanged) PowerNetworkManager.Instance?.SetDirty();
         }
 
         private void DisconnectHost()

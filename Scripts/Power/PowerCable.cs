@@ -36,7 +36,20 @@ namespace VoxelEngine.Power
         private MeshRenderer _meshRenderer;
         private GameObject _superEnergyBeam;
         private bool _isOverloading;
+
+        // One connection tolerance governs both topology and visuals. A cable link
+        // must never carry power farther than the corresponding socket is treated
+        // as occupied by the mesh.
+        private const float EndpointLinkRadius = 0.85f;
+        private const float EndpointLinkRadiusSqr = EndpointLinkRadius * EndpointLinkRadius;
+        private const float MachineBridgeRadius = 2.0f;
+        private const float MachineBridgeRadiusSqr = MachineBridgeRadius * MachineBridgeRadius;
+        private const float DirectContactSqrEpsilon = 0.005f;
+        private const float EndpointForwardDotMinimum = 0.15f;
+        private const float SocketNormalOppositionMaximum = -0.15f;
+
         private static readonly Collider[] s_endpointTouchProbe = new Collider[32];
+        private static readonly HashSet<PowerCable> s_refreshCandidates = new();
 
         // Track which face each neighbour is connected through
         private readonly Dictionary<PowerNode, CubeFace> _neighbourFaces = new();
@@ -74,19 +87,25 @@ namespace VoxelEngine.Power
 
         public static void RefreshNearbyCables(Vector3 center, float radius = 5f)
         {
-            int count = Physics.OverlapSphereNonAlloc(center, radius, s_endpointTouchProbe, ~0, QueryTriggerInteraction.Ignore);
-            var seen = new HashSet<PowerCable>();
+            // Collect first, then rebuild. RebuildVisuals also uses the shared physics
+            // probe, so rebuilding inside this enumeration could overwrite unread
+            // entries and leave a neighbouring conduit stale.
+            s_refreshCandidates.Clear();
+            int count = Physics.OverlapSphereNonAlloc(center, radius, s_endpointTouchProbe, ~0,
+                QueryTriggerInteraction.Ignore);
             for (int i = 0; i < count; i++)
             {
                 var col = s_endpointTouchProbe[i];
                 s_endpointTouchProbe[i] = null;
-                if (col != null)
-                {
-                    var cable = col.GetComponentInParent<PowerCable>();
-                    if (cable != null && seen.Add(cable))
-                        cable.RebuildVisuals();
-                }
+                var cable = col != null ? col.GetComponentInParent<PowerCable>() : null;
+                if (cable != null && cable.isActiveAndEnabled)
+                    s_refreshCandidates.Add(cable);
             }
+
+            foreach (var cable in s_refreshCandidates)
+                if (cable != null && cable.isActiveAndEnabled)
+                    cable.RebuildVisuals();
+            s_refreshCandidates.Clear();
         }
 
         public override bool CanLinkTo(PowerNode other)
@@ -94,50 +113,159 @@ namespace VoxelEngine.Power
             if (other == null || other == this) return false;
 
             if (other is PowerCable otherCable)
-            {
-                var myEps = EnergyPipeMeshBuilder.GetLocalEndpoints(variant, straightLength);
-                var otherEps = EnergyPipeMeshBuilder.GetLocalEndpoints(otherCable.variant, otherCable.straightLength);
-                for (int i = 0; i < myEps.Count; i++)
-                {
-                    Vector3 myWorld = transform.TransformPoint(myEps[i].Position);
-                    for (int j = 0; j < otherEps.Count; j++)
-                    {
-                        Vector3 otherWorld = otherCable.transform.TransformPoint(otherEps[j].Position);
-                        if ((myWorld - otherWorld).sqrMagnitude <= 0.85f * 0.85f)
-                            return true;
-                    }
-                }
-                return false;
-            }
+                return HasAvailableCompatibleSocket(otherCable);
 
-            // Connecting to a machine, generator, battery, or consumer
-            return TouchesPowerEndpoint(other);
+            // A machine edge uses the same open, outward-facing endpoint rule as
+            // the visual bridge. An occupied or rear-facing socket cannot become an
+            // invisible second power path through a nearby machine collider.
+            return TryGetOpenMachineContact(other, out _);
         }
 
-        private bool TouchesPowerEndpoint(PowerNode other)
+        /// <summary>
+        /// Finds the closest valid machine surface reached by an unoccupied pipe
+        /// socket. SurfacePowerTap uses this after load so its manual edge and the
+        /// automatic topology obey the same physical endpoint contract.
+        /// </summary>
+        public bool TryGetOpenMachineContact(PowerNode other, out Vector3 contactWorld)
         {
-            if (other == null) return false;
-            var myEps = EnergyPipeMeshBuilder.GetLocalEndpoints(variant, straightLength);
-            var otherColliders = other.GetComponentsInChildren<Collider>(true);
+            contactWorld = default;
+            if (other == null || other == this || other is PowerCable) return false;
 
-            for (int i = 0; i < myEps.Count; i++)
+            var colliders = other.GetComponentsInChildren<Collider>(true);
+            if (colliders == null || colliders.Length == 0)
+                return TryGetOpenEndpointNearPoint(other.transform.position, out contactWorld);
+
+            float bestDistanceSqr = float.MaxValue;
+            var endpoints = EnergyPipeMeshBuilder.GetLocalEndpoints(variant, straightLength);
+            for (int e = 0; e < endpoints.Count; e++)
             {
-                Vector3 epWorld = transform.TransformPoint(myEps[i].Position);
-                // Proximity to node transform
-                if ((other.transform.position - epWorld).sqrMagnitude <= 3.5f * 3.5f)
-                    return true;
+                Vector3 endpointWorld = transform.TransformPoint(endpoints[e].Position);
+                Vector3 endpointNormalWorld = transform.TransformDirection(endpoints[e].Normal).normalized;
+                if (HasCableSocketOccupant(endpointWorld, endpointNormalWorld, null)) continue;
 
-                // Proximity to node colliders
-                for (int c = 0; c < otherColliders.Length; c++)
+                for (int c = 0; c < colliders.Length; c++)
                 {
-                    var col = otherColliders[c];
-                    if (col == null || !col.enabled) continue;
-                    Vector3 closest = col.ClosestPoint(epWorld);
-                    if ((closest - epWorld).sqrMagnitude <= 2.2f * 2.2f)
+                    var collider = colliders[c];
+                    if (collider == null || !collider.enabled || collider.isTrigger) continue;
+
+                    Vector3 surface = collider.ClosestPoint(endpointWorld);
+                    float distanceSqr = (surface - endpointWorld).sqrMagnitude;
+                    if (!IsEndpointFacingContact(endpointWorld, endpointNormalWorld, surface, distanceSqr)
+                        || distanceSqr >= bestDistanceSqr) continue;
+
+                    bestDistanceSqr = distanceSqr;
+                    contactWorld = surface;
+                }
+            }
+            return bestDistanceSqr < float.MaxValue;
+        }
+
+        private bool HasAvailableCompatibleSocket(PowerCable otherCable)
+        {
+            if (otherCable == null || otherCable == this || !otherCable.isActiveAndEnabled) return false;
+
+            var myEndpoints = EnergyPipeMeshBuilder.GetLocalEndpoints(variant, straightLength);
+            var otherEndpoints = EnergyPipeMeshBuilder.GetLocalEndpoints(otherCable.variant, otherCable.straightLength);
+            for (int i = 0; i < myEndpoints.Count; i++)
+            {
+                Vector3 myWorld = transform.TransformPoint(myEndpoints[i].Position);
+                Vector3 myNormal = transform.TransformDirection(myEndpoints[i].Normal).normalized;
+                for (int j = 0; j < otherEndpoints.Count; j++)
+                {
+                    Vector3 otherWorld = otherCable.transform.TransformPoint(otherEndpoints[j].Position);
+                    Vector3 otherNormal = otherCable.transform.TransformDirection(otherEndpoints[j].Normal).normalized;
+                    if (!AreSocketEndpointsCompatible(myWorld, myNormal, otherWorld, otherNormal)) continue;
+
+                    // One pipe socket accepts one matching socket. The candidate
+                    // being evaluated is ignored; every third cable is a real clash.
+                    if (HasCableSocketOccupant(myWorld, myNormal, otherCable)) continue;
+                    if (otherCable.HasCableSocketOccupant(otherWorld, otherNormal, this)) continue;
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private bool TryGetOpenEndpointNearPoint(Vector3 targetPosition, out Vector3 contactWorld)
+        {
+            contactWorld = default;
+            float bestDistanceSqr = float.MaxValue;
+            var endpoints = EnergyPipeMeshBuilder.GetLocalEndpoints(variant, straightLength);
+            for (int i = 0; i < endpoints.Count; i++)
+            {
+                Vector3 endpointWorld = transform.TransformPoint(endpoints[i].Position);
+                Vector3 endpointNormalWorld = transform.TransformDirection(endpoints[i].Normal).normalized;
+                if (HasCableSocketOccupant(endpointWorld, endpointNormalWorld, null)) continue;
+
+                float distanceSqr = (targetPosition - endpointWorld).sqrMagnitude;
+                if (!IsEndpointFacingContact(endpointWorld, endpointNormalWorld, targetPosition, distanceSqr)
+                    || distanceSqr >= bestDistanceSqr) continue;
+
+                bestDistanceSqr = distanceSqr;
+                contactWorld = targetPosition;
+            }
+            return bestDistanceSqr < float.MaxValue;
+        }
+
+        private bool HasCableSocketOccupant(Vector3 endpointWorld, Vector3 endpointNormalWorld,
+            PowerCable allowedCable)
+        {
+            int count = Physics.OverlapSphereNonAlloc(endpointWorld, EndpointLinkRadius,
+                s_endpointTouchProbe, ~0, QueryTriggerInteraction.Ignore);
+            if (ContainsCableSocketOccupant(s_endpointTouchProbe, count, true, endpointWorld,
+                    endpointNormalWorld, allowedCable))
+                return true;
+            if (count < s_endpointTouchProbe.Length) return false;
+
+            // Preserve correctness in unusually dense builds where the reusable
+            // non-alloc probe filled completely.
+            var overflow = Physics.OverlapSphere(endpointWorld, EndpointLinkRadius, ~0,
+                QueryTriggerInteraction.Ignore);
+            return ContainsCableSocketOccupant(overflow, overflow.Length, false, endpointWorld,
+                endpointNormalWorld, allowedCable);
+        }
+
+        private bool ContainsCableSocketOccupant(Collider[] colliders, int count, bool clearProbe,
+            Vector3 endpointWorld, Vector3 endpointNormalWorld, PowerCable allowedCable)
+        {
+            int limit = Mathf.Min(count, colliders.Length);
+            for (int i = 0; i < limit; i++)
+            {
+                var collider = colliders[i];
+                if (clearProbe) colliders[i] = null;
+                if (collider == null) continue;
+
+                var cable = collider.GetComponentInParent<PowerCable>();
+                if (cable == null || cable == this || cable == allowedCable || !cable.isActiveAndEnabled)
+                    continue;
+
+                var otherEndpoints = EnergyPipeMeshBuilder.GetLocalEndpoints(cable.variant, cable.straightLength);
+                for (int e = 0; e < otherEndpoints.Count; e++)
+                {
+                    Vector3 otherWorld = cable.transform.TransformPoint(otherEndpoints[e].Position);
+                    Vector3 otherNormal = cable.transform.TransformDirection(otherEndpoints[e].Normal).normalized;
+                    if (AreSocketEndpointsCompatible(endpointWorld, endpointNormalWorld,
+                            otherWorld, otherNormal))
                         return true;
                 }
             }
             return false;
+        }
+
+        private static bool AreSocketEndpointsCompatible(Vector3 firstPosition, Vector3 firstNormal,
+            Vector3 secondPosition, Vector3 secondNormal)
+        {
+            return (firstPosition - secondPosition).sqrMagnitude <= EndpointLinkRadiusSqr
+                && Vector3.Dot(firstNormal, secondNormal) <= SocketNormalOppositionMaximum;
+        }
+
+        private static bool IsEndpointFacingContact(Vector3 endpointWorld, Vector3 endpointNormalWorld,
+            Vector3 contactWorld, float distanceSqr)
+        {
+            if (distanceSqr <= DirectContactSqrEpsilon) return true;
+            if (distanceSqr > MachineBridgeRadiusSqr) return false;
+            return Vector3.Dot((contactWorld - endpointWorld).normalized, endpointNormalWorld)
+                > EndpointForwardDotMinimum;
         }
 
         public void RecordConnectionFace(PowerNode target, CubeFace face)
@@ -166,76 +294,17 @@ namespace VoxelEngine.Power
 
             for (int e = 0; e < myEndpoints.Count; e++)
             {
-                Vector3 epWorld = transform.TransformPoint(myEndpoints[e].Position);
-                Vector3 epNormalWorld = transform.TransformDirection(myEndpoints[e].Normal).normalized;
+                Vector3 endpointWorld = transform.TransformPoint(myEndpoints[e].Position);
+                Vector3 endpointNormalWorld = transform.TransformDirection(myEndpoints[e].Normal).normalized;
 
-                // 1. Check if this socket is connected to another PowerCable's endpoint.
-                // If another cable connects at this socket, it is occupied and must NOT bridge to a machine.
-                bool isSocketConnectedToCable = false;
-                int cableCount = Physics.OverlapSphereNonAlloc(epWorld, 0.45f, s_endpointTouchProbe, ~0, QueryTriggerInteraction.Ignore);
-                for (int i = 0; i < cableCount; i++)
-                {
-                    var col = s_endpointTouchProbe[i];
-                    s_endpointTouchProbe[i] = null;
-                    if (col == null || col.transform == transform || col.transform.IsChildOf(transform)) continue;
-                    var otherCable = col.GetComponentInParent<PowerCable>();
-                    if (otherCable != null)
-                    {
-                        var otherEps = EnergyPipeMeshBuilder.GetLocalEndpoints(otherCable.variant, otherCable.straightLength);
-                        for (int o = 0; o < otherEps.Count; o++)
-                        {
-                            Vector3 otherEpWorld = otherCable.transform.TransformPoint(otherEps[o].Position);
-                            if ((otherEpWorld - epWorld).sqrMagnitude <= 0.45f * 0.45f)
-                            {
-                                isSocketConnectedToCable = true;
-                                break;
-                            }
-                        }
-                        if (isSocketConnectedToCable) break;
-                    }
-                }
+                // The mesh uses the exact same compatible-socket tolerance as the
+                // network graph. A linked socket cannot also grow a machine arm.
+                if (HasCableSocketOccupant(endpointWorld, endpointNormalWorld, null)) continue;
+                if (!TryFindVisualMachineContact(endpointWorld, endpointNormalWorld,
+                        out Vector3 contactWorld)) continue;
 
-                if (isSocketConnectedToCable) continue;
-
-                // 2. This endpoint is open: check if it points towards a machine/generator/battery collider within reach
-                int hitCount = Physics.OverlapSphereNonAlloc(epWorld, 2.0f, s_endpointTouchProbe, ~0, QueryTriggerInteraction.Ignore);
-                float bestDist = float.MaxValue;
-                Vector3 bestContactWorld = Vector3.zero;
-                bool found = false;
-
-                for (int i = 0; i < hitCount; i++)
-                {
-                    var col = s_endpointTouchProbe[i];
-                    s_endpointTouchProbe[i] = null;
-                    if (col == null || !col.enabled || col.isTrigger) continue;
-                    if (col.transform == transform || col.transform.IsChildOf(transform)) continue;
-
-                    var node = col.GetComponentInParent<PowerNode>();
-                    var placed = col.GetComponentInParent<VoxelEngine.Building.PlacedBlock>();
-                    if (node is PowerCable) continue;
-                    if (node == null && placed == null) continue;
-
-                    Vector3 contact = col.ClosestPoint(epWorld);
-                    Vector3 toContact = contact - epWorld;
-                    float d = toContact.sqrMagnitude;
-
-                    // Ensure contact is roughly in front of this endpoint (not backwards or behind)
-                    if (d > 0.005f && d <= 2.0f * 2.0f && d < bestDist)
-                    {
-                        if (Vector3.Dot(toContact.normalized, epNormalWorld) > 0.15f)
-                        {
-                            bestDist = d;
-                            bestContactWorld = contact;
-                            found = true;
-                        }
-                    }
-                }
-
-                if (found)
-                {
-                    if (machineTargetsLocal == null) machineTargetsLocal = new List<Vector3>();
-                    machineTargetsLocal.Add(transform.InverseTransformPoint(bestContactWorld));
-                }
+                if (machineTargetsLocal == null) machineTargetsLocal = new List<Vector3>();
+                machineTargetsLocal.Add(transform.InverseTransformPoint(contactWorld));
             }
 
             // Build procedural dual-conduit mesh for active variant & length
@@ -279,6 +348,54 @@ namespace VoxelEngine.Power
             {
                 box.center = mesh.bounds.center;
                 box.size = Vector3.Max(mesh.bounds.size, new Vector3(0.25f, 0.25f, 0.25f));
+            }
+        }
+
+        private bool TryFindVisualMachineContact(Vector3 endpointWorld, Vector3 endpointNormalWorld,
+            out Vector3 contactWorld)
+        {
+            contactWorld = default;
+            float bestDistanceSqr = float.MaxValue;
+            int count = Physics.OverlapSphereNonAlloc(endpointWorld, MachineBridgeRadius,
+                s_endpointTouchProbe, ~0, QueryTriggerInteraction.Ignore);
+            EvaluateVisualMachineContacts(s_endpointTouchProbe, count, true, endpointWorld,
+                endpointNormalWorld, ref bestDistanceSqr, ref contactWorld);
+
+            if (count == s_endpointTouchProbe.Length)
+            {
+                // A dense factory can fill the reusable probe. The allocating path
+                // is rare, but keeps the closest legitimate machine arm deterministic.
+                var overflow = Physics.OverlapSphere(endpointWorld, MachineBridgeRadius, ~0,
+                    QueryTriggerInteraction.Ignore);
+                EvaluateVisualMachineContacts(overflow, overflow.Length, false, endpointWorld,
+                    endpointNormalWorld, ref bestDistanceSqr, ref contactWorld);
+            }
+            return bestDistanceSqr < float.MaxValue;
+        }
+
+        private void EvaluateVisualMachineContacts(Collider[] colliders, int count, bool clearProbe,
+            Vector3 endpointWorld, Vector3 endpointNormalWorld, ref float bestDistanceSqr,
+            ref Vector3 bestContactWorld)
+        {
+            int limit = Mathf.Min(count, colliders.Length);
+            for (int i = 0; i < limit; i++)
+            {
+                var collider = colliders[i];
+                if (clearProbe) colliders[i] = null;
+                if (collider == null || !collider.enabled || collider.isTrigger) continue;
+                if (collider.transform == transform || collider.transform.IsChildOf(transform)) continue;
+
+                var node = collider.GetComponentInParent<PowerNode>();
+                var placed = collider.GetComponentInParent<VoxelEngine.Building.PlacedBlock>();
+                if (node is PowerCable || (node == null && placed == null)) continue;
+
+                Vector3 contact = collider.ClosestPoint(endpointWorld);
+                float distanceSqr = (contact - endpointWorld).sqrMagnitude;
+                if (!IsEndpointFacingContact(endpointWorld, endpointNormalWorld, contact, distanceSqr)
+                    || distanceSqr >= bestDistanceSqr) continue;
+
+                bestDistanceSqr = distanceSqr;
+                bestContactWorld = contact;
             }
         }
 

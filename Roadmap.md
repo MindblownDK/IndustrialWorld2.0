@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.41.6-dev`
-**Roadmap Version:** `12.41.6-dev`
+**Current Version:** `12.41.7-dev`
+**Roadmap Version:** `12.41.7-dev`
 **Date:** 2026-09-26
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 12.41.7-dev - Endpoint-Validated Energy Pipe Topology
+- **Shared socket contract** (`PowerCable`): topology and visual occupancy now use the same 0.85 m, opposing-face connector rule.
+- **Machine-edge validation** (`PowerCable`, `SurfacePowerTap`): only open, outward-facing pipe endpoints may bridge or restore static machine taps.
+- **Refresh safety** (`PowerCable`): nearby-conduit mesh rebuilds finish their shared physics probe before any refresh begins.
+
 ### 12.41.6-dev - Dynamic Conduit Occupancy Detection and Connected Pipe Visual Updates
 - **Conduit occupancy** (`PowerCable`): occupied sockets connected to another pipe ignore machine bridging.
 - **Directional alignment** (`PowerCable`): machine extensions require open socket outward normal alignment (`Dot > 0.15`).
@@ -48,21 +53,6 @@
 - **Machine power bridging** (`PowerCable`, `PowerNode`, `EnergyPipeMeshBuilder`): direct endpoint-to-collider link topology; automatic visual extension flush to machine faces.
 - **Hotbar scroll lock** (`GameUIController`): blocks hotbar slot cycling when holding V, ensuring smooth straight-pipe length scaling.
 - **Conduit overlap guard** (`BuildSystem`): prevents placing energy pipes/conduits inside existing placed conduits.
-
-### 12.41.2-dev - Connector Socket Snapping, Lattice Outward Alignment, and Glare/Backface Fix
-- **Socket endpoint snapping** (`BuildSystem`, `EnergyPipeMeshBuilder`): exact connector-to-connector snap for all 9 variants (90° risers, bends); overlap prevention.
-- **Lattice face orientation** (`BuildSystem`): straight-out normal default and full 3-axis rotation when attaching energy pipes to machine faces.
-- **Solid connector mesh** (`EnergyPipeMeshBuilder`): fixed front/back face triangle winding order (no see-through); reduced glare with matte industrial finish.
-
-### 12.40.5-dev - Connector Power Transfer and Overload Safety
-- **Connector topology** (`CompactVoltageStation`, `PowerNetworkManager`, `VoltageStationBase`): LV/HV connectors have two total automatic/manual terminals; relays remain the multi-link path.
-- **Power faults** (`VoltageStationBase`): superseded by `12.40.6-dev`; finite manual-wire connector routes retain red-hot removal feedback, while Energy Pipes remain unlimited.
-- **Setup/compile repair** (Setup Step 17, `DataCable`): connector prefabs/items repair to the two-link policy and the stale Data Cable neighbour symbol is removed.
-
-### 12.40.4-dev - Orthogonal Pipe and Cable Riser Links
-- **Status:** superseded by `12.40.6-dev`; utility turns now require real player-placed intermediary segments rather than inferred offset links/risers.
-- **Retained visual correction** (`IndustrialPipeMesh`, `GridCableVisuals`): direct-link visuals still use the correct world-to-local transform on rotated/static surfaces.
-- **Retained scope:** strict direct cable pairs preserve normal placement and static surface tap behaviour.
 
 ### Era Transition Feel
 

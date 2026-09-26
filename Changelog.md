@@ -1,9 +1,27 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.41.6-dev`
+**Current Version:** `12.41.7-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.41.7-dev] Endpoint-Validated Energy Pipe Topology
+
+**Type:** PATCH - makes Energy Pipe topology, mounted surface taps, and procedural conduit bridges use one endpoint contract. A socket now carries power only when its matching connector is physically valid and visibly represented.
+
+**One endpoint contract:** `PowerCable` now uses the same 0.85 m tolerance for network links and visual occupancy. Linked connector faces must oppose each other, and each socket accepts only one compatible neighbouring socket. This prevents a loose near-by conduit from being treated as both a connected cable and an open machine-facing terminal.
+
+**Machine and restored-tap validation:** Cable-to-machine links now require an unoccupied endpoint facing the contacted machine surface (or direct physical contact). `SurfacePowerTap` resolves static mounted pipes through that same check after placement, load, or a neighboring topology change, so an occupied or rear-facing cable end cannot restore an invisible manual machine bridge.
+
+**Safe local visual refresh:** `RefreshNearbyCables` now completes its physics probe before rebuilding any conduit. This prevents a rebuild from overwriting unread shared probe results and leaving a neighbouring pipe mesh stale during rapid placement or dismantling.
+
+**GitHub title:** `[12.41.7-dev] Endpoint-validated Energy Pipe topology`
+
+**Manual steps:** no Voxel Engine Setup run is required. In Unity on `Dev`, let the scripts compile and clear the Console.
+1. With only one generator, one consumer, and Energy Pipes, place a pipe from the generator and extend its open end with a straight pipe or bend. Confirm the old terminal immediately loses its machine bridge, the new terminal owns the only bridge, and the consumer remains powered only through the visible run.
+2. Rotate a pipe so an open connector points away from a nearby powered machine. Confirm that it creates neither a conduit arm nor a power path. Rotate it back toward the machine and confirm the arm and power link return.
+3. Try to crowd a third pipe onto an already joined socket. Confirm it does not create a hidden parallel power connection or an extra machine bridge; use a 4-way or 6-way junction for branches.
+4. Save and reload a world containing a pipe mounted to a static generator, battery, or consumer. Confirm the valid face connection restores, while an occupied socket remains represented only by its linked pipe.
 
 ### [12.41.6-dev] Dynamic Conduit Occupancy Detection and Connected Pipe Visual Updates
 
