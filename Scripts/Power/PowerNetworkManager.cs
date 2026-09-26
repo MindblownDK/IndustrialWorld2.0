@@ -287,9 +287,10 @@ namespace VoxelEngine.Power
                         case PowerGenerator g when g.isOn: supply += g.wattsPerSecond; break;
                         case PowerConsumer  c:             demand += c.wattsPerSecond; break;
                         case PowerBattery   b:
+                            float effectiveIo = Mathf.Max(b.ioRate, 2000f);
                             // Battery can supply up to ioRate from current charge.
-                            batteryCap   += Mathf.Min(b.ioRate, b.charge / Mathf.Max(0.0001f, dt) * 3600f); // W from Wh
-                            batteryStore += Mathf.Min(b.ioRate, (b.capacityWattHours - b.charge) / Mathf.Max(0.0001f, dt) * 3600f);
+                            batteryCap   += Mathf.Min(effectiveIo, b.charge / Mathf.Max(0.0001f, dt) * 3600f); // W from Wh
+                            batteryStore += Mathf.Min(effectiveIo, (b.capacityWattHours - b.charge) / Mathf.Max(0.0001f, dt) * 3600f);
                             // Per-battery flow telemetry for the UI (W in/out this tick).
                             b.lastChargeInW = 0f;
                             b.lastDischargeOutW = 0f;
@@ -346,9 +347,10 @@ namespace VoxelEngine.Power
                     foreach (var n in net.nodes)
                     {
                         if (!(n is PowerBattery b)) continue;
+                        float effectiveIo = Mathf.Max(b.ioRate, 2000f);
                         if (net_fromBattery > 0)
                         {
-                            float pull = Mathf.Min(b.ioRate, net_fromBattery);
+                            float pull = Mathf.Min(effectiveIo, net_fromBattery);
                             float wh   = pull * dt / 3600f;
                             wh = Mathf.Min(wh, b.charge);
                             b.charge -= wh;
@@ -357,7 +359,7 @@ namespace VoxelEngine.Power
                         }
                         if (net_toBattery > 0)
                         {
-                            float push = Mathf.Min(b.ioRate, net_toBattery);
+                            float push = Mathf.Min(effectiveIo, net_toBattery);
                             float wh   = push * dt / 3600f;
                             wh = Mathf.Min(wh, b.capacityWattHours - b.charge);
                             b.charge += wh;
@@ -421,7 +423,8 @@ namespace VoxelEngine.Power
                 float donorExcessWh = Mathf.Max(0f, donor.charge - donorTargetWh);
                 if (donorExcessWh <= 0.0001f) continue;
 
-                float donorWatts = Mathf.Min(donor.ioRate, donorExcessWh * 3600f / dt);
+                float donorEffectiveIo = Mathf.Max(donor.ioRate, 2000f);
+                float donorWatts = Mathf.Min(donorEffectiveIo, donorExcessWh * 3600f / dt);
                 for (int receiverIndex = 0; receiverIndex < net.nodes.Count
                     && donorWatts > 0.0001f && remainingWatts > 0.0001f; receiverIndex++)
                 {
@@ -431,7 +434,8 @@ namespace VoxelEngine.Power
                     float receiverNeedWh = Mathf.Max(0f, receiverTargetWh - receiver.charge);
                     if (receiverNeedWh <= 0.0001f) continue;
 
-                    float receiverWatts = Mathf.Min(receiver.ioRate, receiverNeedWh * 3600f / dt);
+                    float receiverEffectiveIo = Mathf.Max(receiver.ioRate, 2000f);
+                    float receiverWatts = Mathf.Min(receiverEffectiveIo, receiverNeedWh * 3600f / dt);
                     float watts = Mathf.Min(Mathf.Min(donorWatts, receiverWatts), remainingWatts);
                     if (watts <= 0.0001f) continue;
                     float wattHours = watts * dt / 3600f;

@@ -992,6 +992,7 @@ namespace VoxelEngine.Building
                 placedCable.variant = VoxelEngine.Power.EnergyPipeSelection.Variant;
                 placedCable.straightLength = VoxelEngine.Power.EnergyPipeSelection.StraightLength;
                 placedCable.RebuildVisuals();
+                VoxelEngine.Power.PowerCable.RefreshNearbyCables(pos, 6f);
             }
 
             var placedRoad = go.GetComponentInChildren<VoxelEngine.Building.AsphaltRoad>(true);
@@ -1137,6 +1138,7 @@ namespace VoxelEngine.Building
                 placedCable.variant = VoxelEngine.Power.EnergyPipeSelection.Variant;
                 placedCable.straightLength = VoxelEngine.Power.EnergyPipeSelection.StraightLength;
                 placedCable.RebuildVisuals();
+                VoxelEngine.Power.PowerCable.RefreshNearbyCables(block.transform.position, 6f);
             }
 
             // Grid-mounted pipes link on the Detail lattice step (carried over from

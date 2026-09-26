@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.41.4-dev`
-**Roadmap Version:** `12.41.4-dev`
+**Current Version:** `12.41.6-dev`
+**Roadmap Version:** `12.41.6-dev`
 **Date:** 2026-09-26
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,16 @@
 
 ## 0. Recently Done
 
+### 12.41.6-dev - Dynamic Conduit Occupancy Detection and Connected Pipe Visual Updates
+- **Conduit occupancy** (`PowerCable`): occupied sockets connected to another pipe ignore machine bridging.
+- **Directional alignment** (`PowerCable`): machine extensions require open socket outward normal alignment (`Dot > 0.15`).
+- **Connected structure refresh** (`BuildSystem`, `PowerCable`): placement and dismantling automatically rebuild neighboring pipe visuals.
+
+### 12.41.5-dev - Battery Balancing Transfer Throughput and Flexible Pipe Link Tolerance
+- **Battery balancing** (`PowerBattery`, `PowerNetworkManager`): 2,000 W (2 kW) I/O throughput enables rapid real-time energy transfer and equalisation.
+- **Pipe link tolerance** (`PowerCable`): 0.85m endpoint proximity bounds multi-segment pipe runs into seamless networks.
+- **Setup defaults** (`VoxelEngineSetupWindow`): 10,000 Wh battery capacity and 2,000 W standard I/O rate.
+
 ### 12.41.4-dev - Pipe-on-Pipe Network Snapping, Solid Connector Interior, and Machine Face Penetration
 - **Pipe snapping** (`BuildSystem`): restored seamless socket snapping onto pipes and 4-way/6-way junctions; duplicate placement guard (< 0.25m).
 - **Solid connector mesh** (`EnergyPipeMeshBuilder`): orthonormal basis re-alignment and corrected cup wall winding order for 100% solid, opaque interior.
@@ -43,16 +53,6 @@
 - **Socket endpoint snapping** (`BuildSystem`, `EnergyPipeMeshBuilder`): exact connector-to-connector snap for all 9 variants (90° risers, bends); overlap prevention.
 - **Lattice face orientation** (`BuildSystem`): straight-out normal default and full 3-axis rotation when attaching energy pipes to machine faces.
 - **Solid connector mesh** (`EnergyPipeMeshBuilder`): fixed front/back face triangle winding order (no see-through); reduced glare with matte industrial finish.
-
-### 12.41.1-dev - Energy Pipe Connector Housing Revamp, Shape Wheel Alignment, and V-Key Length Adjustment
-- **Shape wheel UI** (`EnergyPipeShapeWheel`): centered half-slice typography and radius math; cream/cyan contrast for 9 variant slices.
-- **Connector overhaul** (`EnergyPipeMeshBuilder`): solid rounded rectangular connector blocks with dual recessed circular sockets (Pic 5) on all variant endpoints.
-- **Placement controls** (`BuildSystem`, `PowerCable`): full rotation when aiming at placed pipes; Hold V + Scroll straight pipe length scaling; dynamic box colliders.
-
-### 12.41.0-dev - Energy Pipe Shape Variant Wheel, Dual-Conduit Aesthetics, and Tier Overload Explosions
-- **Shape variant wheel** (`EnergyPipeShapeWheel`, `EnergyPipeSelection`): 9-slice radial selector + dynamic straight pipe length scaling (1-5m).
-- **Dual-conduit styling** (`EnergyPipeMeshBuilder`, `PowerCable`): parallel shafts with terminal flanges and tier materials (oxidized copper, rusted iron, yellow gold, superconductor beam).
-- **Overload destruction** (`PowerCable`, `PowerNetworkManager`): finite conduit tiers explode and burn red-hot for 2s when carried power exceeds rated capacity.
 
 ### 12.40.5-dev - Connector Power Transfer and Overload Safety
 - **Connector topology** (`CompactVoltageStation`, `PowerNetworkManager`, `VoltageStationBase`): LV/HV connectors have two total automatic/manual terminals; relays remain the multi-link path.

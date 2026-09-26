@@ -3055,7 +3055,7 @@ namespace VoxelEngine.EditorTools
             var genPrefab = MakePowerPrefabInternal<VoxelEngine.Power.PowerGenerator>("Generator_Coal", new Color(0.30f, 0.30f, 0.32f), new Vector3(1.5f, 1.5f, 1.5f), g => { g.wattsPerSecond = 800f; g.isOn = false; g.connectRadius = 1.8f; });
             var batPrefab = MakePowerPrefabInternal<VoxelEngine.Power.PowerBattery>("Battery_Basic", new Color(0.20f, 0.50f, 0.85f), new Vector3(0.8f, 1.2f, 0.8f), b =>
             {
-                b.capacityWattHours = 10000f; b.ioRate = 200f; b.connectRadius = 1.5f;
+                b.capacityWattHours = 10000f; b.ioRate = 2000f; b.connectRadius = 1.5f;
                 // Device charger (6.77): only seed a default — never overwrite a tuned value.
                 if (b.itemChargeRateWatts <= 0f) b.itemChargeRateWatts = 500f;
             });

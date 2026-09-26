@@ -15,10 +15,10 @@ namespace VoxelEngine.Power
     {
         public override PowerNodeKind Kind => PowerNodeKind.Battery;
 
-        public float capacityWattHours = 1000f;
+        public float capacityWattHours = 10000f;
         public float charge;
         [Tooltip("Max watts/sec the battery can charge or discharge.")]
-        public float ioRate = 200f;
+        public float ioRate = 2000f;
 
         [Header("Device Charger")]
         [Tooltip("Watts/sec trickled into the docked item (Portable Battery or power jetpack).")]

@@ -69,6 +69,24 @@ namespace VoxelEngine.Power
             onNeighboursChanged -= RebuildVisuals;
             _neighbourFaces.Clear();
             base.OnDisable();
+            RefreshNearbyCables(transform.position, 5f);
+        }
+
+        public static void RefreshNearbyCables(Vector3 center, float radius = 5f)
+        {
+            int count = Physics.OverlapSphereNonAlloc(center, radius, s_endpointTouchProbe, ~0, QueryTriggerInteraction.Ignore);
+            var seen = new HashSet<PowerCable>();
+            for (int i = 0; i < count; i++)
+            {
+                var col = s_endpointTouchProbe[i];
+                s_endpointTouchProbe[i] = null;
+                if (col != null)
+                {
+                    var cable = col.GetComponentInParent<PowerCable>();
+                    if (cable != null && seen.Add(cable))
+                        cable.RebuildVisuals();
+                }
+            }
         }
 
         public override bool CanLinkTo(PowerNode other)
@@ -85,7 +103,7 @@ namespace VoxelEngine.Power
                     for (int j = 0; j < otherEps.Count; j++)
                     {
                         Vector3 otherWorld = otherCable.transform.TransformPoint(otherEps[j].Position);
-                        if ((myWorld - otherWorld).sqrMagnitude <= 0.45f * 0.45f)
+                        if ((myWorld - otherWorld).sqrMagnitude <= 0.85f * 0.85f)
                             return true;
                     }
                 }
@@ -149,6 +167,37 @@ namespace VoxelEngine.Power
             for (int e = 0; e < myEndpoints.Count; e++)
             {
                 Vector3 epWorld = transform.TransformPoint(myEndpoints[e].Position);
+                Vector3 epNormalWorld = transform.TransformDirection(myEndpoints[e].Normal).normalized;
+
+                // 1. Check if this socket is connected to another PowerCable's endpoint.
+                // If another cable connects at this socket, it is occupied and must NOT bridge to a machine.
+                bool isSocketConnectedToCable = false;
+                int cableCount = Physics.OverlapSphereNonAlloc(epWorld, 0.45f, s_endpointTouchProbe, ~0, QueryTriggerInteraction.Ignore);
+                for (int i = 0; i < cableCount; i++)
+                {
+                    var col = s_endpointTouchProbe[i];
+                    s_endpointTouchProbe[i] = null;
+                    if (col == null || col.transform == transform || col.transform.IsChildOf(transform)) continue;
+                    var otherCable = col.GetComponentInParent<PowerCable>();
+                    if (otherCable != null)
+                    {
+                        var otherEps = EnergyPipeMeshBuilder.GetLocalEndpoints(otherCable.variant, otherCable.straightLength);
+                        for (int o = 0; o < otherEps.Count; o++)
+                        {
+                            Vector3 otherEpWorld = otherCable.transform.TransformPoint(otherEps[o].Position);
+                            if ((otherEpWorld - epWorld).sqrMagnitude <= 0.45f * 0.45f)
+                            {
+                                isSocketConnectedToCable = true;
+                                break;
+                            }
+                        }
+                        if (isSocketConnectedToCable) break;
+                    }
+                }
+
+                if (isSocketConnectedToCable) continue;
+
+                // 2. This endpoint is open: check if it points towards a machine/generator/battery collider within reach
                 int hitCount = Physics.OverlapSphereNonAlloc(epWorld, 2.0f, s_endpointTouchProbe, ~0, QueryTriggerInteraction.Ignore);
                 float bestDist = float.MaxValue;
                 Vector3 bestContactWorld = Vector3.zero;
@@ -167,12 +216,18 @@ namespace VoxelEngine.Power
                     if (node == null && placed == null) continue;
 
                     Vector3 contact = col.ClosestPoint(epWorld);
-                    float d = (contact - epWorld).sqrMagnitude;
-                    if (d < bestDist && d <= 2.0f * 2.0f && d > 0.005f)
+                    Vector3 toContact = contact - epWorld;
+                    float d = toContact.sqrMagnitude;
+
+                    // Ensure contact is roughly in front of this endpoint (not backwards or behind)
+                    if (d > 0.005f && d <= 2.0f * 2.0f && d < bestDist)
                     {
-                        bestDist = d;
-                        bestContactWorld = contact;
-                        found = true;
+                        if (Vector3.Dot(toContact.normalized, epNormalWorld) > 0.15f)
+                        {
+                            bestDist = d;
+                            bestContactWorld = contact;
+                            found = true;
+                        }
                     }
                 }
 
@@ -180,43 +235,6 @@ namespace VoxelEngine.Power
                 {
                     if (machineTargetsLocal == null) machineTargetsLocal = new List<Vector3>();
                     machineTargetsLocal.Add(transform.InverseTransformPoint(bestContactWorld));
-                }
-            }
-
-            // Also check registered logical neighbours
-            if (neighbours != null && neighbours.Count > 0)
-            {
-                for (int i = 0; i < neighbours.Count; i++)
-                {
-                    var nb = neighbours[i];
-                    if (nb != null && !(nb is PowerCable))
-                    {
-                        var cols = nb.GetComponentsInChildren<Collider>(true);
-                        Vector3 targetWorld = nb.transform.position;
-                        if (cols != null && cols.Length > 0)
-                        {
-                            for (int e = 0; e < myEndpoints.Count; e++)
-                            {
-                                Vector3 epWorld = transform.TransformPoint(myEndpoints[e].Position);
-                                float bestD = float.MaxValue;
-                                Vector3 bestCl = targetWorld;
-                                for (int c = 0; c < cols.Length; c++)
-                                {
-                                    if (cols[c] != null && cols[c].enabled)
-                                    {
-                                        Vector3 cl = cols[c].ClosestPoint(epWorld);
-                                        float d = (cl - epWorld).sqrMagnitude;
-                                        if (d < bestD) { bestD = d; bestCl = cl; }
-                                    }
-                                }
-                                if (bestD <= 2.0f * 2.0f && bestD > 0.005f)
-                                {
-                                    if (machineTargetsLocal == null) machineTargetsLocal = new List<Vector3>();
-                                    machineTargetsLocal.Add(transform.InverseTransformPoint(bestCl));
-                                }
-                            }
-                        }
-                    }
                 }
             }
 

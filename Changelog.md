@@ -1,9 +1,39 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.41.4-dev`
+**Current Version:** `12.41.6-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.41.6-dev] Dynamic Conduit Occupancy Detection and Connected Pipe Visual Updates
+
+**Type:** PATCH - automatically updates connected and adjacent pipe structures when new pipes are placed or removed, preventing stale phantom machine bridges when extending existing pipe networks.
+
+**Socket occupancy & directional bridge gating:** In `PowerCable.RebuildVisuals`, each conduit endpoint verifies whether it is already connected to another `PowerCable` socket (`dist <= 0.45m`). Occupied sockets never generate machine bridges. For open sockets, machine surface proximity is gated by endpoint forward alignment (`Dot(toContact, normal) > 0.15`), ensuring pipes only extend toward machine faces directly in front of their open terminal sockets.
+
+**Real-time neighbor visual notification:** Added `PowerCable.RefreshNearbyCables(center, radius)` called whenever a new pipe is placed in `BuildSystem` or dismantled (`OnDisable`). Connecting a new pipe to the end of an existing pipe immediately updates the existing pipe's mesh, seamlessly removing its machine extension and transferring the connection to the new terminal piece.
+
+**GitHub title:** `[12.41.6-dev] Dynamic Conduit Occupancy Detection and Connected Pipe Visual Updates`
+
+**Manual steps:** in Unity on `Dev`, let scripts compile and clear the Console. Run `Tools -> Voxel Engine -> Voxel Engine Setup`, select `6. Build Power Content` and `17. Build Factory Foundations + HV Grid` (safe and non-destructive).
+1. Place a straight Energy Pipe facing a Coal Generator or Machine: confirm the pipe's open socket extends flush into the machine wall.
+2. Snap a second straight pipe (or bend) to the first pipe: confirm the first pipe immediately updates, drops its machine bridge, and the second pipe continues the run cleanly into the machine with no overlapping/stale connections.
+3. Remove a pipe segment: confirm adjacent pipe structures refresh their visual state immediately.
+
+### [12.41.5-dev] Battery Balancing Transfer Throughput and Flexible Pipe Link Tolerance
+
+**Type:** PATCH - enables responsive real-time battery balancing across Energy Pipes and cable networks, increases battery I/O throughput to 2,000 W (2 kW) for rapid charging and discharging, and widens pipe endpoint linking tolerance to 0.85m for robust multi-segment networks.
+
+**Battery-to-battery balancing & transfer:** Upgraded `PowerBattery` default `ioRate` from 200 W to 2,000 W (and `capacityWattHours` to 10,000 Wh). In `PowerNetworkManager.BalanceConnectedBatteries` and `TickNetworks`, battery charge/discharge and inter-battery equalisation throughput now operates at full 2 kW+ speed instead of a slow trickle. Connecting a charged battery to an uncharged or lower-charge battery through Energy Pipes balances charge percentage in real-time.
+
+**Flexible pipe link tolerance:** Widened `PowerCable.CanLinkTo` endpoint proximity tolerance to 0.85m, ensuring multi-segment straight runs, risers, and bends reliably bond into a continuous power network regardless of placement micro-offsets.
+
+**GitHub title:** `[12.41.5-dev] Battery Balancing Transfer Throughput and Flexible Pipe Link Tolerance`
+
+**Manual steps:** in Unity on `Dev`, let scripts compile and clear the Console. Run `Tools -> Voxel Engine -> Voxel Engine Setup`, select `6. Build Power Content` and `17. Build Factory Foundations + HV Grid` (safe and non-destructive).
+1. Place two Batteries in the world: Battery A (charged) and Battery B (empty).
+2. Connect them together using Energy Pipes (e.g. Straight or Bends).
+3. Open the Battery UI / Inspect HUD on both: verify that energy flows actively from Battery A into Battery B and both batteries equalize their charge percentage in real time.
 
 ### [12.41.4-dev] Pipe-on-Pipe Network Snapping, Solid Connector Interior, and Machine Face Penetration
 
