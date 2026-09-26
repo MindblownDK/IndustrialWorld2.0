@@ -6,7 +6,7 @@ namespace VoxelEngine.Simulation
     {
         protected override void Awake()
         {
-            maxConnections = 1;
+            maxConnections = 2;
             wireReach = 15f;
             isHighVoltage = false;
             base.Awake();

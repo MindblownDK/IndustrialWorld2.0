@@ -47,6 +47,15 @@ namespace VoxelEngine.Power
         private Material  _tintedMaterial;    // shared per cable so MPB stays simple
         private readonly List<Vector3> _neighbourPositionsBuf = new(6);
 
+        // Runtime-only overload state. It deliberately is not saved: a cable that
+        // overheats gives the player a short, legible red-hot warning, then is gone.
+        private bool _isOverloadBurning;
+        private float _overloadDestroyAt;
+        private Material _overloadMaterial;
+
+        /// <summary>True while the cable is visibly red-hot before self-destruction.</summary>
+        internal bool IsOverloadBurning => _isOverloadBurning;
+
         // Track which face each neighbour is connected through
         private readonly Dictionary<PowerNode, CubeFace> _neighbourFaces = new();
 
@@ -91,6 +100,55 @@ namespace VoxelEngine.Power
             // When neighbours list is empty (after Unregister), RebuildVisuals clears all arms.
             RebuildVisuals();
             base.OnDisable();
+        }
+
+        private void Update()
+        {
+            if (!_isOverloadBurning) return;
+            ApplyOverloadVisual();
+            if (Time.time >= _overloadDestroyAt)
+                Destroy(gameObject);
+        }
+
+        /// <summary>
+        /// Makes this finite-capacity energy pipe visibly glow red hot for a brief
+        /// warning window, then removes it from the power graph. Repeated trips
+        /// only extend that warning; they never allocate a second burn material.
+        /// </summary>
+        internal void BeginOverloadBurn(float seconds)
+        {
+            float duration = Mathf.Max(0.1f, seconds);
+            _isOverloadBurning = true;
+            _overloadDestroyAt = Mathf.Max(_overloadDestroyAt, Time.time + duration);
+            EnsureOverloadMaterial();
+            ApplyOverloadVisual();
+        }
+
+        private void EnsureOverloadMaterial()
+        {
+            if (_overloadMaterial != null) return;
+            _overloadMaterial = IndustrialPipeMesh.CreateMetalMaterial(
+                new Color(1f, 0.035f, 0.005f, 1f), $"{name}_OverloadHeat",
+                metallic: 0.35f, smoothness: 0.72f);
+            if (_overloadMaterial.HasProperty("_EmissionColor"))
+                _overloadMaterial.SetColor("_EmissionColor", new Color(4f, 0.06f, 0.005f, 1f));
+        }
+
+        private void ApplyOverloadVisual()
+        {
+            if (_visualRoot == null || _overloadMaterial == null) return;
+            float pulse = 2.5f + Mathf.PingPong(Time.time * 7f, 2.5f);
+            if (_overloadMaterial.HasProperty("_EmissionColor"))
+                _overloadMaterial.SetColor("_EmissionColor", new Color(pulse, 0.04f, 0.004f, 1f));
+
+            var renderers = _visualRoot.GetComponentsInChildren<MeshRenderer>(true);
+            for (int i = 0; i < renderers.Length; i++)
+                if (renderers[i] != null) renderers[i].sharedMaterial = _overloadMaterial;
+        }
+
+        private void OnDestroy()
+        {
+            if (_overloadMaterial != null) Destroy(_overloadMaterial);
         }
 
         /// <summary>
@@ -165,6 +223,15 @@ namespace VoxelEngine.Power
 
         private void RebuildVisuals()
         {
+            // Preserve the last complete route while a failed cable is burning.
+            // The connector is removed immediately, which normally rebuilds this
+            // cable to a bare hub before the player can see the red-hot shaft.
+            if (_isOverloadBurning && _visualRoot != null)
+            {
+                ApplyOverloadVisual();
+                return;
+            }
+
             if (_visualRoot == null) EnsureVisualRoot();
             if (_tintedMaterial == null)
             {
@@ -217,6 +284,8 @@ namespace VoxelEngine.Power
                 armThickness,
                 _tintedMaterial,
                 showUnusedFaceCaps);
+
+            if (_isOverloadBurning) ApplyOverloadVisual();
         }
     }
 }

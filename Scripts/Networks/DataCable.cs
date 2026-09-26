@@ -77,7 +77,7 @@ namespace VoxelEngine.Networks
             if (anchor != null) anchor.DisconnectAll();
             // Adjacent cables need to know they just lost a neighbour.
             foreach (var c in _AllCables)
-                if (c != null && IsCardinalNeighbour(transform.position, c.transform.position))
+                if (c != null && IsBoundedNeighbour(transform.position, c.transform.position))
                     c.RebuildVisuals();
             // Force a visual rebuild so this cable's own arms disappear immediately.
             // When anchor has no connections, RebuildVisuals clears all arms.

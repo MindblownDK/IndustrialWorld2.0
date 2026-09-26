@@ -169,14 +169,14 @@ namespace VoxelEngine.Power
                         }
 
                         // Avoid duplicate add (we'll see each pair twice — once from each side).
-                        if (!n.neighbours.Contains(b)) 
+                        if (!n.neighbours.Contains(b))
                         {
                             if (n.neighbours.Count >= n.MaxAutoConnections) continue;
                             if (b.neighbours.Count >= b.MaxAutoConnections) continue;
                             n.neighbours.Add(b);
                             if (!b.neighbours.Contains(n) && b.neighbours.Count < b.MaxAutoConnections)
                                 b.neighbours.Add(n);
-                            
+
                             // Record connection faces for cables connecting to machines
                             RecordConnectionFace(n, b);
                             RecordConnectionFace(b, n);
@@ -186,17 +186,26 @@ namespace VoxelEngine.Power
             }
 
             // Manual wire links are intentional long-range topology edges. Add them
-            // after automatic proximity discovery so compact one-wire connectors can
-            // still auto-tap a nearby generator/consumer AND keep their one manual
-            // wire span to another station.
+            // after automatic proximity discovery so compact two-terminal connectors
+            // can use their remaining terminal for one intentional manual span.
             foreach (var n in snapshot)
             {
                 if (n.manualLinks == null) continue;
                 foreach (var linked in n.manualLinks)
                 {
                     if (linked == null || linked == n || !snapshot.Contains(linked)) continue;
-                    if (!n.neighbours.Contains(linked)) n.neighbours.Add(linked);
-                    if (!linked.neighbours.Contains(n)) linked.neighbours.Add(n);
+
+                    bool nHasLink = n.neighbours.Contains(linked);
+                    bool linkedHasLink = linked.neighbours.Contains(n);
+                    // Manual wires are intentional, but must still honour the same
+                    // physical terminal count as automatic cables. This prevents an
+                    // already-full compact connector from gaining extra reciprocal
+                    // graph edges through the manual-link post-pass.
+                    if (!nHasLink && n.neighbours.Count >= n.MaxAutoConnections) continue;
+                    if (!linkedHasLink && linked.neighbours.Count >= linked.MaxAutoConnections) continue;
+
+                    if (!nHasLink) n.neighbours.Add(linked);
+                    if (!linkedHasLink) linked.neighbours.Add(n);
                 }
             }
 
@@ -288,6 +297,13 @@ namespace VoxelEngine.Power
                     }
                 }
 
+                // A connector is a physical two-terminal part, not an invisible
+                // unlimited junction. Evaluate its two isolated sides before the
+                // legacy network-wide bottleneck caps the transfer; otherwise an
+                // over-capacity run would be silently throttled and never produce
+                // the requested overload consequence.
+                TripOverloadedCompactConnectors(net);
+
                 // Apply network bottleneck — generators can't push more than the slowest cable carries.
                 float maxFlow = net.bottleneckWatts > 0 ? net.bottleneckWatts : float.PositiveInfinity;
                 float supplyEff = Mathf.Min(supply, maxFlow);
@@ -344,6 +360,119 @@ namespace VoxelEngine.Power
                 net.consumedThisTick = demand * ratio;
                 net.storedThisTick   = toBattery - fromBattery;
             }
+        }
+
+        private struct ConnectorSidePower
+        {
+            public float supply;
+            public float demand;
+        }
+
+        /// <summary>
+        /// Evaluates compact connectors as a two-terminal cut in their power graph.
+        /// Only an unambiguous generator-to-load transfer across that cut can trip
+        /// them; networks with an alternate bypass path are left to their own rated
+        /// cable edges instead of producing a false overload.
+        /// </summary>
+        private static void TripOverloadedCompactConnectors(PowerNetwork net)
+        {
+            if (net == null) return;
+            for (int i = 0; i < net.nodes.Count; i++)
+            {
+                var connectorNode = net.nodes[i];
+                if (connectorNode == null || connectorNode.neighbours == null
+                    || connectorNode.neighbours.Count != 2) continue;
+
+                var station = connectorNode.GetComponent<VoxelEngine.Simulation.CompactVoltageStation>();
+                if (station == null || station.IsOverloading) continue;
+
+                PowerNode first = connectorNode.neighbours[0];
+                PowerNode second = connectorNode.neighbours[1];
+                if (first == null || second == null) continue;
+
+                var claimed = new HashSet<PowerNode>();
+                if (!TryMeasureConnectorSide(first, connectorNode, claimed, out ConnectorSidePower firstSide)
+                    || !TryMeasureConnectorSide(second, connectorNode, claimed, out ConnectorSidePower secondSide))
+                    continue;
+
+                // Power crosses the connector from a supplying side to a demanding
+                // side. In a two-terminal topology the larger directional request
+                // is the load carried by both attached cable legs.
+                float forward = Mathf.Min(firstSide.supply, secondSide.demand);
+                float reverse = Mathf.Min(secondSide.supply, firstSide.demand);
+                float throughWatts = Mathf.Max(forward, reverse);
+                if (throughWatts <= 0.0001f) continue;
+
+                float firstCapacity = ConnectionCapacityWatts(connectorNode, first);
+                float secondCapacity = ConnectionCapacityWatts(connectorNode, second);
+                float capacity = Mathf.Min(firstCapacity, secondCapacity);
+                if (float.IsInfinity(capacity) || capacity <= 0f) continue;
+                if (throughWatts <= capacity * 1.001f) continue;
+
+                station.TriggerOverload(throughWatts, capacity,
+                    first as PowerCable, second as PowerCable);
+            }
+        }
+
+        private static bool TryMeasureConnectorSide(PowerNode start, PowerNode blocked,
+                                                    HashSet<PowerNode> claimed,
+                                                    out ConnectorSidePower side)
+        {
+            side = default;
+            if (start == null || blocked == null || claimed == null || claimed.Contains(start))
+                return false;
+
+            var queue = new Queue<PowerNode>();
+            var localSide = new HashSet<PowerNode>();
+            queue.Enqueue(start);
+            localSide.Add(start);
+            claimed.Add(start);
+            while (queue.Count > 0)
+            {
+                var node = queue.Dequeue();
+                if (node == null) continue;
+                if (node is PowerGenerator generator && generator.isOn)
+                    side.supply += Mathf.Max(0f, generator.wattsPerSecond);
+                else if (node is PowerConsumer consumer)
+                    side.demand += Mathf.Max(0f, consumer.wattsPerSecond);
+
+                if (node.neighbours == null) continue;
+                for (int i = 0; i < node.neighbours.Count; i++)
+                {
+                    var next = node.neighbours[i];
+                    if (next == null || next == blocked) continue;
+                    // A reciprocal or cyclic edge inside this same side is normal.
+                    // Only the two different side traversals meeting means there is
+                    // a bypass around this connector and its carried current is ambiguous.
+                    if (localSide.Contains(next)) continue;
+                    if (claimed.Contains(next)) return false;
+                    localSide.Add(next);
+                    claimed.Add(next);
+                    queue.Enqueue(next);
+                }
+            }
+            return true;
+        }
+
+        private static float ConnectionCapacityWatts(PowerNode connector, PowerNode neighbour)
+        {
+            float capacity = float.PositiveInfinity;
+            if (neighbour is PowerCable cable && cable.wire != null)
+            {
+                float cableCapacity = cable.wire.capacityWatts;
+                if (cableCapacity >= 0f && cableCapacity < 1000000000f)
+                    capacity = Mathf.Min(capacity, cableCapacity);
+            }
+
+            if (connector.manualLinkCapacities != null
+                && connector.manualLinkCapacities.TryGetValue(neighbour, out float connectorCapacity)
+                && connectorCapacity > 0f)
+                capacity = Mathf.Min(capacity, connectorCapacity);
+            if (neighbour.manualLinkCapacities != null
+                && neighbour.manualLinkCapacities.TryGetValue(connector, out float neighbourCapacity)
+                && neighbourCapacity > 0f)
+                capacity = Mathf.Min(capacity, neighbourCapacity);
+            return capacity;
         }
 
         // For UI / debugging.

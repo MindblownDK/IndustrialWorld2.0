@@ -24,7 +24,7 @@ namespace VoxelEngine.Simulation
 
         public Vector3 ConnectionPoint => transform.position + transform.TransformDirection(connectionPointOffset);
         public Transform StationTransform => transform;
-        public bool CanConnectMore => _connectedStations.Count < maxConnections;
+        public virtual bool CanConnectMore => _connectedStations.Count < maxConnections;
         public bool IsHighVoltage => isHighVoltage;
 
         public abstract float TotalProduced { get; }
@@ -48,24 +48,31 @@ namespace VoxelEngine.Simulation
         {
             if (other == null || other == (IVoltageStation)this) return;
             if (_connectedStations.Contains(other)) return;
-            if (!CanConnectMore) return;
+
+            var myNode = GetComponent<PowerNode>();
+            var otherNode = other.StationTransform != null
+                ? other.StationTransform.GetComponent<PowerNode>()
+                : null;
+            bool graphEdgeAlreadyCreated = myNode != null && otherNode != null
+                && myNode.manualLinks.Contains(otherNode);
+
+            // The wire tool preflights both endpoints before it calls either side.
+            // When this is the SECOND reciprocal call, the first side has already
+            // inserted the shared PowerNode manual edge; do not reject that normal
+            // bookkeeping step merely because the first connector is now full.
+            if (!CanConnectMore || (!graphEdgeAlreadyCreated && !other.CanConnectMore)) return;
 
             _connectedStations.Add(other);
-            
-            var myNode = GetComponent<PowerNode>();
-            if (myNode != null && other.StationTransform != null)
-            {
-                var otherNode = other.StationTransform.GetComponent<PowerNode>();
-                if (otherNode != null)
-                {
-                    if (!myNode.manualLinks.Contains(otherNode)) myNode.manualLinks.Add(otherNode);
-                    myNode.manualLinkCapacities[otherNode] = capacity;
-                    
-                    if (!otherNode.manualLinks.Contains(myNode)) otherNode.manualLinks.Add(myNode);
-                    otherNode.manualLinkCapacities[myNode] = capacity;
 
-                    PowerNetworkManager.Instance?.SetDirty();
-                }
+            if (myNode != null && otherNode != null)
+            {
+                if (!myNode.manualLinks.Contains(otherNode)) myNode.manualLinks.Add(otherNode);
+                myNode.manualLinkCapacities[otherNode] = capacity;
+
+                if (!otherNode.manualLinks.Contains(myNode)) otherNode.manualLinks.Add(myNode);
+                otherNode.manualLinkCapacities[myNode] = capacity;
+
+                PowerNetworkManager.Instance?.SetDirty();
             }
 
             UpdateWireVisuals();
@@ -106,6 +113,21 @@ namespace VoxelEngine.Simulation
                     DrawCatenary(kvp.Value, ConnectionPoint, kvp.Key.ConnectionPoint);
                 }
             }
+        }
+
+        /// <summary>
+        /// Detaches the owned manual wire visual into world space and turns it
+        /// red-hot. This lets the short overload warning survive even when the
+        /// connector at one end is destroyed immediately afterwards.
+        /// </summary>
+        internal void BeginManualWireOverload(IVoltageStation other, float seconds)
+        {
+            if (other == null || !_wireRenderers.TryGetValue(other, out var line) || line == null) return;
+            _wireRenderers.Remove(other);
+            line.transform.SetParent(null, true);
+            var heat = line.GetComponent<OverheatedManualWire>();
+            if (heat == null) heat = line.gameObject.AddComponent<OverheatedManualWire>();
+            heat.Begin(seconds);
         }
 
         protected void UpdateWireVisuals()
@@ -152,6 +174,50 @@ namespace VoxelEngine.Simulation
             {
                 if (other != null) other.RemoveConnection(this);
             }
+        }
+    }
+
+    [DisallowMultipleComponent]
+    internal sealed class OverheatedManualWire : MonoBehaviour
+    {
+        private LineRenderer _line;
+        private Material _heatMaterial;
+        private float _destroyAt;
+
+        public void Begin(float seconds)
+        {
+            _destroyAt = Mathf.Max(_destroyAt, Time.time + Mathf.Max(0.1f, seconds));
+            if (_line == null) _line = GetComponent<LineRenderer>();
+            if (_line == null) return;
+
+            if (_heatMaterial == null)
+            {
+                _heatMaterial = _line.material;
+                if (_heatMaterial != null)
+                {
+                    _heatMaterial.color = new Color(1f, 0.03f, 0.005f, 1f);
+                    if (_heatMaterial.HasProperty("_BaseColor"))
+                        _heatMaterial.SetColor("_BaseColor", new Color(1f, 0.03f, 0.005f, 1f));
+                }
+            }
+            _line.startColor = new Color(1f, 0.05f, 0.005f, 1f);
+            _line.endColor = new Color(1f, 0.05f, 0.005f, 1f);
+        }
+
+        private void Update()
+        {
+            if (_line != null && _heatMaterial != null)
+            {
+                float pulse = 2.5f + Mathf.PingPong(Time.time * 7f, 2.5f);
+                if (_heatMaterial.HasProperty("_EmissionColor"))
+                    _heatMaterial.SetColor("_EmissionColor", new Color(pulse, 0.04f, 0.004f, 1f));
+            }
+            if (Time.time >= _destroyAt) Destroy(gameObject);
+        }
+
+        private void OnDestroy()
+        {
+            if (_heatMaterial != null) Destroy(_heatMaterial);
         }
     }
 }

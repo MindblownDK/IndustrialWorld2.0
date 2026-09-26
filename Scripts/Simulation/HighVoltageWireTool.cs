@@ -182,6 +182,15 @@ namespace VoxelEngine.Simulation
                 return false;
             }
 
+            // Validate both endpoints before consuming the wire item. Compact
+            // connectors expose one shared two-terminal budget for nearby energy
+            // pipes and manual spans; relays are the intended expansion point.
+            if (!a.CanConnectMore || !b.CanConnectMore)
+            {
+                VoxelEngine.UI.BuildFeedbackHud.Show("Connector Full", "Use a power relay for more than two links.", null, Color.red);
+                return false;
+            }
+
             a.AddConnection(b, capacity);
             b.AddConnection(a, capacity);
             return true;

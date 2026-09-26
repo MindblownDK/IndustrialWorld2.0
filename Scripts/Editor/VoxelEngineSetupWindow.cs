@@ -10017,7 +10017,10 @@ root =>
                     if (oldCable != null) Object.DestroyImmediate(oldCable);
                     EnsureStep17Component<VoxelEngine.Simulation.CompactPowerNode>(root, node =>
                     {
-                        node.maxAutoConnections = assetName.Contains("Relay") ? 8 : 1;
+                        // Connectors are two-terminal parts; relays are the
+                        // deliberate eight-terminal expansion choice. This is safe
+                        // to re-run and only repairs the generated node limit.
+                        node.maxAutoConnections = assetName.Contains("Relay") ? 8 : 2;
                         node.connectRadius = assetName.StartsWith("HV") ? 4f : 3f;
                         node.requireGridAlignedNeighbours = false;
                     });
@@ -10037,8 +10040,8 @@ root =>
             var hvRelayPrefab = CreateCompactPowerNodePrefab("HVPowerRelay", new Color(0.18f, 0.72f, 0.88f), root =>
                 EnsureStep17Component<VoxelEngine.Simulation.HvPowerRelayStation>(root));
 
-            var blockLVConnector = ConfigureBlock(HV_ITEMS, "Block_LVWireConnector", "LV Wire Connector", "Compact low-voltage wall/foundation connector. Can hold 1 wire connection. Max capacity: 100 kW.", new Color(0.22f, 0.78f, 0.42f), lvConnectorPrefab, "Power", 180);
-            var blockHVConnector = ConfigureBlock(HV_ITEMS, "Block_HVWireConnector", "HV Wire Connector", "Compact high-voltage wall/foundation connector. Can hold 1 wire connection. Max capacity: Infinite.", new Color(0.18f, 0.72f, 0.88f), hvConnectorPrefab, "Power", 220);
+            var blockLVConnector = ConfigureBlock(HV_ITEMS, "Block_LVWireConnector", "LV Wire Connector", "Compact low-voltage wall/foundation connector. Supports 2 total cable/wire links; use a relay for more. Max capacity: 100 kW.", new Color(0.22f, 0.78f, 0.42f), lvConnectorPrefab, "Power", 180);
+            var blockHVConnector = ConfigureBlock(HV_ITEMS, "Block_HVWireConnector", "HV Wire Connector", "Compact high-voltage wall/foundation connector. Supports 2 total cable/wire links; use a relay for more. Max capacity: Infinite.", new Color(0.18f, 0.72f, 0.88f), hvConnectorPrefab, "Power", 220);
             var blockLVPowerRelay = ConfigureBlock(HV_ITEMS, "Block_LVPowerRelay", "LV Power Relay", "Compact low-voltage wall/foundation relay for tidy bases. Relays power only; does not produce or consume power. Max connections: 8. Max capacity: 100 kW.", new Color(0.95f, 0.62f, 0.18f), lvRelayPrefab, "Power", 220);
             var blockHVPowerRelay = ConfigureBlock(HV_ITEMS, "Block_HVPowerRelay", "HV Power Relay", "Compact high-voltage wall/foundation relay for long-range grids. Relays power only; does not produce or consume power. Max connections: 8. Max capacity: Infinite.", new Color(0.18f, 0.72f, 0.88f), hvRelayPrefab, "Power", 240);
 

@@ -1,9 +1,19 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.40.4-dev`
+**Current Version:** `12.40.5-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.40.5-dev] Connector Power Transfer and Overload Safety
+
+**Type:** PATCH - repairs compact LV/HV Wire Connector power routing and makes connector terminals a strict two-link part. Connector links now use one shared two-terminal budget across nearby Energy Pipes and player-drawn manual wires; the manual-link topology pass can no longer bypass that budget, and the wire tool checks both endpoints before consuming an item. This restores generator-to-consumer transfer through a connector with two valid links while refusing a third link and directing the player to a Power Relay. Setup Step 17 now repairs generated connector nodes to the two-link limit and updates their item descriptions without changing relay limits or production values. The stale `IsCardinalNeighbour` reference in `DataCable.OnDisable` is corrected to `IsBoundedNeighbour`, resolving CS0103.
+
+**Overload behaviour:** before the regular network bottleneck silently throttles a two-terminal compact connector, the power manager measures the isolated generator-to-demand transfer on its two sides. If that transfer exceeds a finite Energy Pipe or manual-wire rating, the connector trips: it emits a short red overload flash and is destroyed, attached Energy Pipes glow/pulse red-hot for two seconds before destroying themselves, and a drawn manual wire detaches into the world, burns red-hot for the same interval, then disappears. Superconducting/infinite-capacity links do not trip. Overload state is runtime-only and is not saved. No save-schema or public API change is required.
+
+**GitHub title:** `[12.40.5-dev] Connector power transfer and overload safety`
+
+**Manual steps:** in Unity on `Dev`, first let scripts compile and confirm the prior `DataCable.cs(80,34)` CS0103 error is gone. Run `Tools -> Voxel Engine -> Voxel Engine Setup`, then select `17. Build Factory Foundations + HV Grid`; it is idempotent and updates only the generated compact connector limit/description. Place a generator, two Energy Pipes, one LV or HV Wire Connector, and a consumer in a simple isolated line. Keep generation and demand below the selected Energy Pipe rating; after topology settles, verify the consumer is powered through the connector. Attach a third Energy Pipe or manual wire to that connector: it must be refused with `Connector Full` and no wire item consumed. Confirm an LV/HV Power Relay accepts the intended additional links. For overload, use an isolated two-link connector route with a finite-rated Energy Pipe or LV wire and make the generator-to-consumer transfer exceed that rating. Verify the connector flashes and disappears, each attached Energy Pipe or manual wire is visibly red-hot for about two seconds, then the damaged cable/wire is gone and the consumer loses power. Finally verify a below-rated run, infinite-capacity link, normal cable placement, Data Cable removal/replacement, static power taps, and existing saves remain stable.
 
 ### [12.40.4-dev] Orthogonal Pipe and Cable Riser Links
 

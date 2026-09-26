@@ -14,13 +14,16 @@ MonoBehaviour:
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Items.BlockItem
   itemId: block_lvwireconnector
   displayName: LV Wire Connector
-  description: 'Compact low-voltage wall/foundation connector. Can hold 1 wire connection.
-    Max capacity: 100 kW.'
+  description: 'Compact low-voltage wall/foundation connector. Supports 2 total cable/wire
+    links; use a relay for more. Max capacity: 100 kW.'
   icon: {fileID: 21300000, guid: 1f1f39dd76e1b1b9b7e1e0e83ca70861, type: 3}
   iconTint: {r: 0.22, g: 0.78, b: 0.42, a: 1}
   maxStack: 999
   massPerUnit: 1
   category: Power
+  requiresContainment: 0
+  cannotBeCarried: 0
+  isPressurizedCanister: 0
   viewmodelPrefab: {fileID: 0}
   placedPrefab: {fileID: 3774842153196195801, guid: 592ce09838006e24c8cb30ba8d035071, type: 3}
   gridSize: {x: 1, y: 1, z: 1}

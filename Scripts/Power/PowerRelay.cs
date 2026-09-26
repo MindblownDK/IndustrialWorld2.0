@@ -27,7 +27,7 @@ namespace VoxelEngine.Power
     public class LVWireConnector : PowerNode
     {
         public override PowerNodeKind Kind => PowerNodeKind.Cable;
-        public override int MaxAutoConnections => 1;
+        public override int MaxAutoConnections => 2;
 
         protected override void OnEnable()
         {
@@ -40,7 +40,7 @@ namespace VoxelEngine.Power
     public class HVWireConnector : PowerNode
     {
         public override PowerNodeKind Kind => PowerNodeKind.Cable;
-        public override int MaxAutoConnections => 1;
+        public override int MaxAutoConnections => 2;
 
         protected override void OnEnable()
         {
