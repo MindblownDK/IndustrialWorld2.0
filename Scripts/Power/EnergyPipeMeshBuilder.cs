@@ -137,7 +137,7 @@ namespace VoxelEngine.Power
                     break;
             }
 
-            // If connected to machine endpoints with a small gap, extend the conduit flush to the machine face
+            // If connected to machine endpoints with a gap, extend the conduits flush into the machine face
             if (machineTargetsLocal != null && machineTargetsLocal.Count > 0)
             {
                 var endpoints = GetLocalEndpoints(variant, straightLength);
@@ -160,7 +160,7 @@ namespace VoxelEngine.Power
                     Vector3 p1 = targetLocal;
                     Vector3 diff = p1 - p0;
                     float len = diff.magnitude;
-                    if (len > 0.03f && len < 1.4f)
+                    if (len > 0.02f && len < 2.5f)
                     {
                         Vector3 dir = diff / len;
                         Vector3 right = closestEp.Right;
@@ -168,8 +168,10 @@ namespace VoxelEngine.Power
                         if (up.sqrMagnitude < 0.01f) up = closestEp.Up;
                         right = Vector3.Normalize(Vector3.Cross(up, dir));
 
-                        BuildCableSegment(verts, normals, uvs, indices, p0 - right * (CableSeparation * 0.5f), p1 - right * (CableSeparation * 0.5f), CableRadius, 12, len * 2.5f);
-                        BuildCableSegment(verts, normals, uvs, indices, p0 + right * (CableSeparation * 0.5f), p1 + right * (CableSeparation * 0.5f), CableRadius, 12, len * 2.5f);
+                        // Extend dual conduits from endpoint to penetrate slightly into the machine wall (flush, no floating gap)
+                        Vector3 p1Embed = p1 + dir * 0.06f;
+                        BuildCableSegment(verts, normals, uvs, indices, p0 - right * (CableSeparation * 0.5f), p1Embed - right * (CableSeparation * 0.5f), CableRadius, 12, len * 2.5f);
+                        BuildCableSegment(verts, normals, uvs, indices, p0 + right * (CableSeparation * 0.5f), p1Embed + right * (CableSeparation * 0.5f), CableRadius, 12, len * 2.5f);
                         BuildConnectorHousing(verts, normals, uvs, indices, p1, dir, right, up);
                     }
                 }
@@ -397,8 +399,21 @@ namespace VoxelEngine.Power
                                                 Vector3 origin, Vector3 normal, Vector3 right, Vector3 up)
         {
             normal = normal.normalized;
-            right = right.normalized;
-            up = up.normalized;
+            if (normal.sqrMagnitude < 0.001f) normal = Vector3.forward;
+
+            // Re-orthogonalize to guarantee a right-handed orthonormal basis where Cross(right, up) == normal
+            Vector3 orthoUp = Vector3.ProjectOnPlane(up, normal).normalized;
+            if (orthoUp.sqrMagnitude < 0.001f)
+                orthoUp = Vector3.ProjectOnPlane(Vector3.up, normal).normalized;
+            if (orthoUp.sqrMagnitude < 0.001f)
+                orthoUp = Vector3.ProjectOnPlane(Vector3.right, normal).normalized;
+            if (orthoUp.sqrMagnitude < 0.001f)
+                orthoUp = Vector3.ProjectOnPlane(Vector3.forward, normal).normalized;
+
+            Vector3 orthoRight = Vector3.Cross(orthoUp, normal).normalized;
+
+            right = orthoRight;
+            up = orthoUp;
 
             float halfW = FlangeWidth * 0.5f;   // 0.135m
             float halfH = FlangeHeight * 0.5f;  // 0.068m
@@ -408,7 +423,7 @@ namespace VoxelEngine.Power
             Vector3 frontCenter = origin;
             Vector3 backCenter = origin - normal * depth;
 
-            // 8-point rounded rectangle profile in (right, up) coordinates (Clockwise from top)
+            // 8-point rounded rectangle profile in (right, up) coordinates (Clockwise around +normal)
             float rx = halfW - cornerR;
             float ry = halfH - cornerR;
             Vector2[] p = new Vector2[8];
@@ -421,7 +436,7 @@ namespace VoxelEngine.Power
             p[6] = new Vector2(-halfW, -ry);  // left-bottom
             p[7] = new Vector2(-halfW, ry);   // left-top
 
-            // ── 1. Front Face (Opaque, Solid, Wound Clockwise) ───────
+            // ── 1. Front Face (Opaque, Solid, Facing +normal) ─────────
             int frontCenterIdx = verts.Count;
             verts.Add(frontCenter);
             normals.Add(normal);
@@ -435,16 +450,16 @@ namespace VoxelEngine.Power
                 uvs.Add(new Vector2(0.5f + (p[i].x / FlangeWidth) * 0.4f, 0.65f + (p[i].y / FlangeHeight) * 0.2f));
             }
 
-            // Front fan triangles (Clockwise: Center -> i -> next)
+            // Front fan triangles (Facing +normal: Center -> next -> i)
             for (int i = 0; i < 8; i++)
             {
                 int next = (i + 1) % 8;
                 indices.Add(frontCenterIdx);
-                indices.Add(startFront + i);
                 indices.Add(startFront + next);
+                indices.Add(startFront + i);
             }
 
-            // ── 2. Back Face (Opaque, Solid, Wound Clockwise from back) ─
+            // ── 2. Back Face (Opaque, Solid, Facing -normal) ──────────
             int backCenterIdx = verts.Count;
             verts.Add(backCenter);
             normals.Add(-normal);
@@ -458,13 +473,13 @@ namespace VoxelEngine.Power
                 uvs.Add(new Vector2(0.5f + (p[i].x / FlangeWidth) * 0.4f, 0.65f + (p[i].y / FlangeHeight) * 0.2f));
             }
 
-            // Back fan triangles (Clockwise when viewed from -normal: Center -> next -> i)
+            // Back fan triangles (Facing -normal: Center -> i -> next)
             for (int i = 0; i < 8; i++)
             {
                 int next = (i + 1) % 8;
                 indices.Add(backCenterIdx);
-                indices.Add(startBack + next);
                 indices.Add(startBack + i);
+                indices.Add(startBack + next);
             }
 
             // ── 3. Side Walls (Extruding Front to Back) ───────────────
@@ -483,8 +498,8 @@ namespace VoxelEngine.Power
                 verts.Add(b1); normals.Add(wallNormal); uvs.Add(new Vector2(0.6f, 0.60f));
                 verts.Add(b0); normals.Add(wallNormal); uvs.Add(new Vector2(0.4f, 0.60f));
 
-                indices.Add(bIdx); indices.Add(bIdx + 1); indices.Add(bIdx + 2);
-                indices.Add(bIdx); indices.Add(bIdx + 2); indices.Add(bIdx + 3);
+                indices.Add(bIdx); indices.Add(bIdx + 1); indices.Add(bIdx + 3);
+                indices.Add(bIdx + 1); indices.Add(bIdx + 2); indices.Add(bIdx + 3);
             }
 
             // ── 4. Dual Circular Recessed Sockets & Dark Grommet Bezels (Pic 5) ──
@@ -527,7 +542,7 @@ namespace VoxelEngine.Power
                     indices.Add(i1); indices.Add(i2); indices.Add(i3);
                 }
 
-                // B. Recessed socket cup cylinder wall
+                // B. Recessed socket cup cylinder wall (Facing inward toward cup center)
                 int cupStart = verts.Count;
                 for (int s = 0; s <= Sides; s++)
                 {
@@ -550,8 +565,8 @@ namespace VoxelEngine.Power
                     int i2 = cupStart + (s + 1) * 2;
                     int i3 = cupStart + (s + 1) * 2 + 1;
 
-                    indices.Add(i0); indices.Add(i1); indices.Add(i2);
-                    indices.Add(i1); indices.Add(i3); indices.Add(i2);
+                    indices.Add(i0); indices.Add(i2); indices.Add(i1);
+                    indices.Add(i1); indices.Add(i2); indices.Add(i3);
                 }
 
                 // C. Central metal terminal contact pin
@@ -594,8 +609,8 @@ namespace VoxelEngine.Power
                     int i1 = pinStart + s * 2 + 1;
                     int i2 = pinStart + (s + 1) * 2 + 1;
                     indices.Add(pinCapIdx);
-                    indices.Add(i1);
                     indices.Add(i2);
+                    indices.Add(i1);
                 }
 
                 // D. Rear strain-relief collar boot
@@ -623,8 +638,8 @@ namespace VoxelEngine.Power
                     int i2 = bootStart + (s + 1) * 2;
                     int i3 = bootStart + (s + 1) * 2 + 1;
 
-                    indices.Add(i0); indices.Add(i2); indices.Add(i1);
-                    indices.Add(i1); indices.Add(i2); indices.Add(i3);
+                    indices.Add(i0); indices.Add(i1); indices.Add(i2);
+                    indices.Add(i1); indices.Add(i3); indices.Add(i2);
                 }
             }
         }

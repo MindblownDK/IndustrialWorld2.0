@@ -1,9 +1,26 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.41.3-dev`
+**Current Version:** `12.41.4-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.41.4-dev] Pipe-on-Pipe Network Snapping, Solid Connector Interior, and Machine Face Penetration
+
+**Type:** PATCH - fixes pipe snapping onto other pipes and junctions, eliminates invisible backface culling on connector housings and inside socket cups, and guarantees conduits visually connect and penetrate flush into machine prefabs and generators.
+
+**Pipe-on-pipe and junction placement:** Refined placement validation in `BuildSystem` to remove probe over-rejection while preserving duplicate placement protection (`dist < 0.25m`). Players can seamlessly snap straight pipes, bends, 90-degree risers, and 4-way / 6-way junctions onto existing placed pipes and socket endpoints.
+
+**Solid connector housing & socket interior:** Re-orthogonalized the local coordinate frame in `EnergyPipeMeshBuilder.BuildConnectorHousing` to guarantee a strictly right-handed orthonormal basis (`Cross(right, up) == normal`) and corrected triangle winding across the front face, back face, side walls, and inside socket cup cylinder walls. Socket cups and connector blocks render completely solid, opaque, and visible from all viewing angles with no see-through hollow faces.
+
+**Machine visual conduit bridging:** In `PowerCable.RebuildVisuals`, endpoint proximity probes (`Physics.OverlapSphereNonAlloc`) immediately detect adjacent machine colliders and calculate exact surface contact points (`col.ClosestPoint`). Dual conduits now extend directly from pipe endpoints into the machine wall (with 0.06m penetration) capped by a mounting flange, ensuring zero visual gaps.
+
+**GitHub title:** `[12.41.4-dev] Pipe-on-Pipe Network Snapping, Solid Connector Interior, and Machine Face Penetration`
+
+**Manual steps:** in Unity on `Dev`, let scripts compile and clear the Console. Run `Tools -> Voxel Engine -> Voxel Engine Setup`, select `6. Build Power Content` and `17. Build Factory Foundations + HV Grid` (safe and non-destructive). Equip an Energy Pipe:
+1. Aim at an existing placed pipe (straight, bend, or 4-way cross): confirm that new pipes snap directly to its sockets and place cleanly without being blocked.
+2. Inspect the connector block from all angles (both front and rear faces, and looking into the dual circular socket cups): verify that the housing and socket interior are completely solid and opaque (no invisible or backface-culled surfaces).
+3. Place an Energy Pipe facing a Coal Generator or machine prefab: verify that the dual conduits automatically extend flush into the machine's wall with no floating gaps and power flows seamlessly.
 
 ### [12.41.3-dev] Machine Power Network Bridging, Hotbar Scroll Lock, and Conduit Overlap Guard
 

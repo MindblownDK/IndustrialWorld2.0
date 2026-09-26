@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.41.3-dev`
-**Roadmap Version:** `12.41.3-dev`
+**Current Version:** `12.41.4-dev`
+**Roadmap Version:** `12.41.4-dev`
 **Date:** 2026-09-26
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 12.41.4-dev - Pipe-on-Pipe Network Snapping, Solid Connector Interior, and Machine Face Penetration
+- **Pipe snapping** (`BuildSystem`): restored seamless socket snapping onto pipes and 4-way/6-way junctions; duplicate placement guard (< 0.25m).
+- **Solid connector mesh** (`EnergyPipeMeshBuilder`): orthonormal basis re-alignment and corrected cup wall winding order for 100% solid, opaque interior.
+- **Machine visual penetration** (`PowerCable`, `EnergyPipeMeshBuilder`): immediate endpoint overlap detection; dual conduits extend flush into machine wall.
+
 ### 12.41.3-dev - Machine Power Network Bridging, Hotbar Scroll Lock, and Conduit Overlap Guard
 - **Machine power bridging** (`PowerCable`, `PowerNode`, `EnergyPipeMeshBuilder`): direct endpoint-to-collider link topology; automatic visual extension flush to machine faces.
 - **Hotbar scroll lock** (`GameUIController`): blocks hotbar slot cycling when holding V, ensuring smooth straight-pipe length scaling.
@@ -48,11 +53,6 @@
 - **Shape variant wheel** (`EnergyPipeShapeWheel`, `EnergyPipeSelection`): 9-slice radial selector + dynamic straight pipe length scaling (1-5m).
 - **Dual-conduit styling** (`EnergyPipeMeshBuilder`, `PowerCable`): parallel shafts with terminal flanges and tier materials (oxidized copper, rusted iron, yellow gold, superconductor beam).
 - **Overload destruction** (`PowerCable`, `PowerNetworkManager`): finite conduit tiers explode and burn red-hot for 2s when carried power exceeds rated capacity.
-
-### 12.40.7-dev - Energy Pipe Visual Alignment, Overload Fault Destruction, and Battery Equalisation
-- **Conduit visuals** (`IndustrialPipeMesh`, `GridCableVisuals`): sleek cylindrical conduit profile with metallic tier tints; suppresses stray 6-way unlinked face spike nubs.
-- **Power endpoints** (`PowerCable`, `SurfacePowerTap`): dynamic adjacent collider touch reaches batteries/machines/connectors; endpoint arms terminate flush at target faces.
-- **Overload faults** (`CompactVoltageStation`, `VoltageStationBase`, `PowerNetworkManager`): battery-inclusive throughput measurement triggers connector explosion and 2s red-hot burning line destruction.
 
 ### 12.40.5-dev - Connector Power Transfer and Overload Safety
 - **Connector topology** (`CompactVoltageStation`, `PowerNetworkManager`, `VoltageStationBase`): LV/HV connectors have two total automatic/manual terminals; relays remain the multi-link path.

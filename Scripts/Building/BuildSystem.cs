@@ -2383,36 +2383,22 @@ namespace VoxelEngine.Building
                 && HasPlacedBlockVolumeOverlap(pos, placementProfile.portalHalfExtents * 0.94f, rot))
                 return false;
 
-            // Prevent Energy Pipes from being placed overlapping / intersecting inside existing placed pipes
+            // Prevent Energy Pipes from being placed overlapping or occupying the exact same position as an existing conduit
             if (isThin && block != null && block.placedPrefab != null && block.placedPrefab.GetComponentInChildren<VoxelEngine.Power.PowerCable>(true) != null)
             {
-                var heldEndpoints = VoxelEngine.Power.EnergyPipeMeshBuilder.GetLocalEndpoints(
-                    VoxelEngine.Power.EnergyPipeSelection.Variant, VoxelEngine.Power.EnergyPipeSelection.StraightLength);
-                for (int i = 0; i < heldEndpoints.Count; i++)
+                int count = Physics.OverlapSphereNonAlloc(pos, 0.25f, s_placementOverlapProbe, ~0, QueryTriggerInteraction.Ignore);
+                for (int i = 0; i < count; i++)
                 {
-                    Vector3 epWorld = pos + rot * heldEndpoints[i].Position;
-                    int colCount = Physics.OverlapSphereNonAlloc(epWorld, 0.08f, s_placementOverlapProbe, ~0, QueryTriggerInteraction.Ignore);
-                    for (int c = 0; c < colCount; c++)
+                    var col = s_placementOverlapProbe[i];
+                    s_placementOverlapProbe[i] = null;
+                    if (col != null && !col.isTrigger)
                     {
-                        var col = s_placementOverlapProbe[c];
-                        if (col != null && !col.isTrigger)
+                        var targetCable = col.GetComponentInParent<VoxelEngine.Power.PowerCable>();
+                        if (targetCable != null)
                         {
-                            var targetCable = col.GetComponentInParent<VoxelEngine.Power.PowerCable>();
-                            if (targetCable != null)
-                            {
-                                var targetEps = VoxelEngine.Power.EnergyPipeMeshBuilder.GetLocalEndpoints(targetCable.variant, targetCable.straightLength);
-                                bool atValidSocket = false;
-                                for (int t = 0; t < targetEps.Count; t++)
-                                {
-                                    Vector3 targetEpWorld = targetCable.transform.TransformPoint(targetEps[t].Position);
-                                    if ((targetEpWorld - epWorld).sqrMagnitude < 0.03f)
-                                    {
-                                        atValidSocket = true;
-                                        break;
-                                    }
-                                }
-                                if (!atValidSocket) return false;
-                            }
+                            // If centers are too close (< 0.25m), it is an illegal duplicate/overlapping pipe placement
+                            if ((targetCable.transform.position - pos).sqrMagnitude < 0.25f * 0.25f)
+                                return false;
                         }
                     }
                 }
@@ -2475,10 +2461,7 @@ namespace VoxelEngine.Building
             // snapped to. The support-plane pose guarantees it sits outside that
             // host; all other structures and conduits remain collision blockers.
             if (placed != null && placed == surfaceAttachmentHost) return true;
-            // A structural block or another conduit may never engulf a placed pipe/cable
-            if (IsConduitCollider(collider)) return false;
-            // Placed blocks retain their established stacking contract after the
-            // explicit conduit-volume guard above.
+            // Placed blocks retain their established stacking contract
             if (placed != null)
                 return block != null && block.allowStacking;
             // Thin conduits and draped roads may overlap static world geometry.
