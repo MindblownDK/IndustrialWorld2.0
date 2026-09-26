@@ -403,8 +403,9 @@ namespace VoxelEngine.GridSystem
             if (grid == null || origin == null) yield break;
             float originCell = origin.EffectiveCellSize;
             bool isDetail = origin.IsPrecisionAttachment;
-            // liquidOnly means this is a pipe↔pipe search. Keep five-cell reach
-            // for same-plane runs; strict coplanar validation rejects false links.
+            // liquidOnly means this is a pipe↔pipe search. The search covers a
+            // five-cell primary run; the shared bounded-elbow predicate rejects
+            // three-axis diagonals and overlong secondary legs.
             float radius = liquidOnly
                 ? (isDetail
                     ? Mathf.Max(GridSize.Large.CellSize() * 1.5f, 3.25f)
@@ -458,7 +459,7 @@ namespace VoxelEngine.GridSystem
             if (grid == null || a == null || b == null) return false;
             float detail = GridSize.Small.CellSize();
             Vector3 localDelta = grid.transform.InverseTransformVector(b.transform.position - a.transform.position);
-            return PipeAdjacency.IsCoplanarPipeLinkDelta(localDelta, detail, 5f, detail * 0.18f);
+            return PipeAdjacency.IsBendablePipeLinkDelta(localDelta, detail, 5f, detail * 0.18f);
         }
 
         private static bool IsTankPortWithinDetailLink(GridEntity grid, GridBlock pipe, GridBlock tank,

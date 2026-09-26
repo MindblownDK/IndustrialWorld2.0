@@ -123,10 +123,10 @@ namespace VoxelEngine.Fluids
             var snapshot = new List<FluidNode>(_all);
             snapshot.RemoveAll(n => n == null);
 
-            // ── SPATIAL HASH (cell = 5m) — O(N) neighbour discovery ──────
-            // Any two nodes that can legally link (≤ 5 lattice cells in a
-            // cardinal line) sit in the same or adjacent hash cells.
-            const float CELL = 5f;
+            // ── SPATIAL HASH (cell = 5.25m) — O(N) neighbour discovery ───
+            // A five-cell primary run plus one bounded elbow offset still lands
+            // in this or an adjacent hash cell.
+            const float CELL = 5.25f;
             const float CELL_INV = 1f / CELL;
             var hash = new Dictionary<Vector3Int, List<FluidNode>>(snapshot.Count * 2);
             Vector3Int Cell(Vector3 p) => new Vector3Int(
@@ -191,7 +191,7 @@ namespace VoxelEngine.Fluids
                         }
                         else if (nIsPipe && bIsPipe)
                         {
-                            range = step * 5.1f;
+                            range = step * 5.2f;
                         }
                         else
                         {
@@ -202,7 +202,7 @@ namespace VoxelEngine.Fluids
 
                         Vector3 connectionDelta = VoxelEngine.Networks.PipeAdjacency.ConnectionDelta(n, b);
                         bool ok = nIsPipe && bIsPipe
-                            ? VoxelEngine.Networks.PipeAdjacency.IsCoplanarPipeLinkDelta(connectionDelta, step, 5f, step * 0.18f)
+                            ? VoxelEngine.Networks.PipeAdjacency.IsBendablePipeLinkDelta(connectionDelta, step, 5f, step * 0.18f)
                             : involvesPipe
                                 ? VoxelEngine.Networks.PipeAdjacency.IsCardinalLinkDelta(connectionDelta, step, 5f, step * 0.45f)
                                 : VoxelEngine.Networks.PipeAdjacency.IsAxisAlignedWithinDelta(connectionDelta, step, 2.5f, step * 0.45f);

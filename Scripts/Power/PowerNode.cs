@@ -89,22 +89,41 @@ namespace VoxelEngine.Power
             if (requireGridAlignedNeighbours && other.requireGridAlignedNeighbours)
             {
                 float g = Mathf.Max(0.01f, gridSize);
-                float distForGrid = delta.magnitude;
+                Vector3 gridDelta = delta;
+                var thisBlock = GetComponentInParent<VoxelEngine.GridSystem.GridBlock>();
+                var otherBlock = other.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>();
+                if (thisBlock != null && otherBlock != null && thisBlock.Grid != null
+                    && thisBlock.Grid == otherBlock.Grid)
+                {
+                    g = VoxelEngine.GridSystem.GridSizeExt.CellSize(
+                        VoxelEngine.GridSystem.GridSize.Small);
+                    gridDelta = thisBlock.Grid.transform.InverseTransformVector(delta);
+                }
+                float distForGrid = gridDelta.magnitude;
 
                 // On flat worlds, keep the strict one-cardinal-axis rule. On radial
                 // planets the build grid is locally tangent to the surface, so adjacent
                 // cables are often not aligned to global X/Y/Z. In that case, accepting
                 // a single grid-step distance is the robust connection rule.
                 bool radial = VoxelEngine.Cosmos.GravityProvider.IsRadial;
-                if (radial)
+                // Cable pairs may use one explicit, bounded orthogonal riser.
+                // Evaluate this before the legacy flat-world single-axis guard so
+                // terrain height differences are not rejected after PowerCable has
+                // already accepted the same physical route.
+                if (this is PowerCable && other is PowerCable)
+                {
+                    if (!VoxelEngine.Networks.PipeAdjacency.IsBendablePipeLinkDelta(
+                            gridDelta, g, 1f, g * 0.18f, g * 1.05f)) return false;
+                }
+                else if (radial)
                 {
                     if (distForGrid < g * 0.55f || distForGrid > g * 1.35f) return false;
                 }
                 else
                 {
-                    float dx = Mathf.Abs(delta.x) / g;
-                    float dy = Mathf.Abs(delta.y) / g;
-                    float dz = Mathf.Abs(delta.z) / g;
+                    float dx = Mathf.Abs(gridDelta.x) / g;
+                    float dy = Mathf.Abs(gridDelta.y) / g;
+                    float dz = Mathf.Abs(gridDelta.z) / g;
                     const float EPS = 0.15f;
                     int oneAxisCount = 0;
                     if (Mathf.Abs(dx - 1f) < EPS) oneAxisCount++;

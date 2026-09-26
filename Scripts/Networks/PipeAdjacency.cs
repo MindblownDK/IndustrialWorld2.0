@@ -138,6 +138,54 @@ namespace VoxelEngine.Networks
                                                float tolerance = 0f)
             => IsCoplanarPipeLinkDelta(b - a, gridSize, maxCells, tolerance);
 
+        /// <summary>
+        /// A physical conduit route may rise or turn one axis away from its primary
+        /// lattice run. This is deliberately an orthogonal elbow, never a free
+        /// diagonal: one axis carries an integer 1..maxCells run, one secondary
+        /// axis may differ by up to one cell, and the third stays aligned. It lets
+        /// terrain-following static utilities remain connected when adjacent ground
+        /// cells resolve at slightly different heights while preserving a readable
+        /// visual route instead of an arm ending in empty air.
+        /// </summary>
+        public static bool IsBendablePipeLinkDelta(Vector3 delta,
+                                                    float gridSize = DefaultGridSize,
+                                                    float maxCells = 5f,
+                                                    float tolerance = 0f,
+                                                    float maxBendOffset = 0f)
+        {
+            float gs = gridSize > 0f ? gridSize : DefaultGridSize;
+            float strict = tolerance > 0f ? tolerance : Mathf.Max(0.06f, gs * 0.18f);
+            float bend = maxBendOffset > 0f ? maxBendOffset : Mathf.Max(0.55f, gs * 1.05f);
+            float dx = Mathf.Abs(delta.x), dy = Mathf.Abs(delta.y), dz = Mathf.Abs(delta.z);
+            int primary = (dx >= dy && dx >= dz) ? 0 : (dy >= dx && dy >= dz) ? 1 : 2;
+            float along = primary == 0 ? dx : primary == 1 ? dy : dz;
+            float steps = along / gs;
+            float roundedSteps = Mathf.Round(steps);
+            if (roundedSteps < 1f || roundedSteps > Mathf.Max(1f, maxCells)) return false;
+            if (Mathf.Abs(steps - roundedSteps) > Mathf.Max(0.12f, strict / gs)) return false;
+
+            float otherA;
+            float otherB;
+            if (primary == 0) { otherA = dy; otherB = dz; }
+            else if (primary == 1) { otherA = dx; otherB = dz; }
+            else { otherA = dx; otherB = dy; }
+
+            // At most one secondary leg is allowed. Two substantial residual axes
+            // would be a three-dimensional diagonal rather than a clear elbow.
+            bool aBent = otherA > strict;
+            bool bBent = otherB > strict;
+            if (aBent && bBent) return false;
+            float residual = aBent ? otherA : bBent ? otherB : 0f;
+            return residual <= bend + strict;
+        }
+
+        public static bool IsBendablePipeLink(Vector3 a, Vector3 b,
+                                               float gridSize = DefaultGridSize,
+                                               float maxCells = 5f,
+                                               float tolerance = 0f,
+                                               float maxBendOffset = 0f)
+            => IsBendablePipeLinkDelta(b - a, gridSize, maxCells, tolerance, maxBendOffset);
+
         public static Vector3 ConnectionDelta(Component a, Component b)
         {
             if (a == null || b == null) return Vector3.zero;

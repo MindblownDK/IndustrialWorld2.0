@@ -18,7 +18,7 @@ namespace VoxelEngine.Networks
     public class DataCable : MonoBehaviour
     {
         [Header("Grid")]
-        [Tooltip("Build grid size used to detect cardinal neighbours.")]
+        [Tooltip("Build grid size used to detect one primary-step neighbours and bounded elbow risers.")]
         public float gridSize = 1f;
         [Tooltip("Distance tolerance when looking for neighbours one grid step away.")]
         public float positionTolerance = 0.15f;
@@ -136,7 +136,7 @@ namespace VoxelEngine.Networks
             foreach (var other in _AllCables)
             {
                 if (other == null || other == this) continue;
-                if (!IsCardinalNeighbour(transform.position, other.transform.position)) continue;
+                if (!IsBoundedNeighbour(transform.position, other.transform.position)) continue;
                 if (!HasLineOfSight(transform.position, other.transform.position, other.anchor)) continue;
                 // Wrench blacklist — honour explicit player disconnects.
                 if (WrenchBlacklist.IsBlocked(this, other)) continue;
@@ -171,7 +171,7 @@ namespace VoxelEngine.Networks
                     if (IsConnectionShadowed(self, existing.transform.position)) continue;
                     // Wrench blacklist — explicit player disconnect persists.
                     if (WrenchBlacklist.IsBlocked(gameObject, existing.gameObject)) continue;
-                    
+
                     // Check PortConfig if the device has one
                     var portConfig = existing.GetComponent<PortConfig>();
                     if (portConfig != null)
@@ -180,11 +180,11 @@ namespace VoxelEngine.Networks
                         if (!match.HasValue) match = portConfig.GetMatchingFace(self, PortDirection.Output);
                         if (!match.HasValue) continue;
                         if (!portConfig.AcceptsNetworkType(match.Value.face, NetworkType.Data)) continue;
-                        
+
                         // Record which face this connection uses
                         _connectionFaces[existing] = match.Value.face;
                     }
-                    
+
                     desired.Add(existing);
                     continue;
                 }
@@ -286,7 +286,7 @@ namespace VoxelEngine.Networks
             return new Vector3(0, 0, Mathf.Sign(v.z));
         }
 
-        private bool IsCardinalNeighbour(Vector3 a, Vector3 b)
+        private bool IsBoundedNeighbour(Vector3 a, Vector3 b)
         {
             Vector3 d = b - a;
             float gs = gridSize > 0 ? gridSize : 1f;
@@ -296,7 +296,8 @@ namespace VoxelEngine.Networks
                 d = myBlock.Grid.transform.InverseTransformVector(d);
                 gs = VoxelEngine.GridSystem.GridSizeExt.CellSize(VoxelEngine.GridSystem.GridSize.Small);
             }
-            return PipeAdjacency.IsCardinalLinkDelta(d, gs, 1f, gs * 0.12f);
+            return PipeAdjacency.IsBendablePipeLinkDelta(
+                d, gs, 1f, Mathf.Max(positionTolerance, gs * 0.18f), gs * 1.05f);
         }
 
         private bool HasLineOfSight(Vector3 a, Vector3 b, ConnectionAnchor remoteAnchor)
@@ -341,7 +342,7 @@ namespace VoxelEngine.Networks
                 foreach (var c in anchor.connections)
                 {
                     if (c == null) continue;
-                    
+
                     // If we have a recorded face for this connection, use the face point
                     if (_connectionFaces.TryGetValue(c, out var face))
                     {
@@ -352,8 +353,11 @@ namespace VoxelEngine.Networks
                             continue;
                         }
                     }
-                    
-                    _neighbourPositionsBuf.Add(c.transform.position);
+
+                    var otherCable = c.GetComponentInParent<DataCable>();
+                    _neighbourPositionsBuf.Add(otherCable != null && otherCable != this
+                        ? Vector3.Lerp(transform.position, otherCable.transform.position, 0.5f)
+                        : c.transform.position);
                 }
             }
             GridCableVisuals.Rebuild(

@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.40.3-dev`
-**Roadmap Version:** `12.40.3-dev`
+**Current Version:** `12.40.4-dev`
+**Roadmap Version:** `12.40.4-dev`
 **Date:** 2026-09-26
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 12.40.4-dev - Orthogonal Pipe and Cable Riser Links
+- **Pipe topology** (`PipeAdjacency`, Item/Gas/Fluid and grid networks): bounded one-secondary-axis elbow links work across local X/Y/Z while three-axis diagonals remain excluded.
+- **Conduit visuals** (`IndustrialPipeMesh`, `PipeVisualBuilder`, `GridCableVisuals`): pipe and cable midpoint routes retain local offsets and render collared orthogonal risers.
+- **Energy/data cables** (`PowerNode`, `PowerCable`, `DataCable`): cable-pair discovery shares the elbow rule; power visuals use one world-to-local transform on rotated/static surfaces.
+
 ### 12.40.3-dev - Embedded Static Lattice Compile Repair
 - **Build/power source** (`BuildSystem`, `PowerNode`): static lattice and surface-tap helpers are co-located with their owning systems, removing external helper-script import ordering.
 - **Scope**: compile repair only; 12.40.2-dev terrain support, static face lattices, and power-tap behaviour are unchanged.
@@ -47,11 +52,6 @@
 - **Network routing** (`PortalControllerBlock`, `PortalUI`): matching name + code groups may contain many endpoints; each controller selects one persistent destination.
 - **Persistence** (`WorldStatePersistence`): endpoint id, endpoint label, and selected route are additive saved placed-block state; legacy two-end pairs remain automatic.
 - **Scope**: portal content remains authored by existing non-destructive Setup Step 99; no new asset authoring is needed.
-
-### 12.39.7-dev - Rotation-Aware Large Static Edge Snap
-- **Static placement** (`BuildSystem`): static colliders larger than one grid cell now meet on their actual clicked support faces rather than the 1 m centre grid.
-- **Portal Frames**: 5 m cells preview and place flush on every face, including after 90-degree rotation; the overlap guard remains the final authority.
-- **Dedicated systems**: pipe, road, factory, busbar and turbine socket snaps keep their existing paths.
 
 ### Era Transition Feel
 

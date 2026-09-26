@@ -11,10 +11,10 @@ namespace VoxelEngine.Power
     /// determines the segment's capacity. The network's bottleneck is the MINIMUM capacity
     /// along its cables.
     ///
-    /// Connection policy: cables only link to neighbours that sit exactly one grid step
-    /// away on a single cardinal axis (±X / ±Y / ±Z) AND have an unobstructed line of
-    /// sight. This means cables stack vertically, never connect diagonally, and refuse
-    /// to "tunnel" through solid blocks.
+    /// Connection policy: cables link across one primary grid step and can use one
+    /// bounded orthogonal riser when neighbouring terrain resolves slightly higher or
+    /// lower. Three-axis diagonals remain invalid and every candidate still requires
+    /// unobstructed line of sight.
     ///
     /// Port Config: Cables respect machine PortConfig. They only connect to faces that:
     /// - Are enabled
@@ -99,7 +99,7 @@ namespace VoxelEngine.Power
         /// </summary>
         public override bool CanLinkTo(PowerNode other)
         {
-            if (other is PowerCable && !IsStrictCableCardinalNeighbour(other)) return false;
+            if (other is PowerCable && !IsBoundedCableNeighbour(other)) return false;
             if (!base.CanLinkTo(other)) return false;
 
             // Consumers can always tap a nearby energy pipe. Item-port configuration
@@ -130,7 +130,7 @@ namespace VoxelEngine.Power
             return true;
         }
 
-        private bool IsStrictCableCardinalNeighbour(PowerNode other)
+        private bool IsBoundedCableNeighbour(PowerNode other)
         {
             if (other == null) return false;
             var aBlock = GetComponentInParent<VoxelEngine.GridSystem.GridBlock>();
@@ -142,7 +142,8 @@ namespace VoxelEngine.Power
                 step = VoxelEngine.GridSystem.GridSizeExt.CellSize(VoxelEngine.GridSystem.GridSize.Small);
                 delta = aBlock.Grid.transform.InverseTransformVector(delta);
             }
-            return VoxelEngine.Networks.PipeAdjacency.IsCardinalLinkDelta(delta, step, 1f, step * 0.12f);
+            return VoxelEngine.Networks.PipeAdjacency.IsBendablePipeLinkDelta(
+                delta, step, 1f, step * 0.18f, step * 1.05f);
         }
 
         /// <summary>
@@ -171,10 +172,10 @@ namespace VoxelEngine.Power
                 _tintedMaterial = GridCableVisuals.CreateTintedMaterial(tint, $"{name}_CableMat");
             }
 
-            // Pass the *actual* neighbour world positions; GridCableVisuals snaps
-            // each one to the nearest cardinal axis and grows an arm exactly long
-            // enough to bridge the gap. This makes cables visually meet machines
-            // whose centres aren't on the cable grid (server racks, generators).
+            // IndustrialPipeMesh receives world-space targets and converts them once
+            // into this cable's local frame. Cable-to-cable targets use their midpoint:
+            // each cable owns half of a route, so a height mismatch forms one clear
+            // shared riser instead of two overlapping full rectangles.
             _neighbourPositionsBuf.Clear();
             var surfaceTap = GetComponent<SurfacePowerTap>();
             foreach (var nb in neighbours)
@@ -186,30 +187,30 @@ namespace VoxelEngine.Power
                 // the touched collider face rather than draw an arm through it.
                 if (surfaceTap != null && surfaceTap.TryGetHostSurfacePoint(nb, out Vector3 surfacePoint))
                 {
-                    _neighbourPositionsBuf.Add(transform.InverseTransformPoint(surfacePoint));
+                    _neighbourPositionsBuf.Add(surfacePoint);
                     continue;
                 }
 
-                // IndustrialPipeMesh builds under this cable's local transform.
-                // Convert every target point into local space first so cables on
-                // rotated surfaces or wall-mounted relays grow arms in the correct
-                // visible direction instead of following world axes.
+                // Keep face targets in world space; IndustrialPipeMesh performs the
+                // single required local-frame conversion under the visual root.
                 if (_neighbourFaces.TryGetValue(nb, out var face) && face != CubeFace.PosX)
                 {
                     var portConfig = nb.GetComponent<PortConfig>();
                     if (portConfig != null)
                     {
-                        _neighbourPositionsBuf.Add(transform.InverseTransformPoint(portConfig.FaceWorldPoint(face)));
+                        _neighbourPositionsBuf.Add(portConfig.FaceWorldPoint(face));
                         continue;
                     }
                 }
 
-                _neighbourPositionsBuf.Add(transform.InverseTransformPoint(nb.transform.position));
+                _neighbourPositionsBuf.Add(nb is PowerCable
+                    ? Vector3.Lerp(transform.position, nb.transform.position, 0.5f)
+                    : nb.transform.position);
             }
 
             GridCableVisuals.Rebuild(
                 _visualRoot,
-                Vector3.zero,
+                transform.position,
                 _neighbourPositionsBuf,
                 gridSize > 0 ? gridSize : 1f,
                 coreSize,

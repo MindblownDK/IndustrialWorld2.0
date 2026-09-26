@@ -1,9 +1,17 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.40.3-dev`
+**Current Version:** `12.40.4-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.40.4-dev] Orthogonal Pipe and Cable Riser Links
+
+**Type:** PATCH - fixes local X/Y/Z pipe and cable links that were rejected whenever a neighbouring terrain placement introduced a small off-plane offset, and fixes the resulting geometry that previously projected every connection onto one straight nearest-axis arm. Item, gas, and liquid pipe pairs now accept one bounded orthogonal secondary leg alongside their normal 1–5 cell primary lattice run; arbitrary three-axis diagonals and overlong offsets remain rejected. Energy and data cable pairs use the same one-cell bounded elbow rule. The shared industrial conduit mesh retains the secondary local delta and builds a collared ninety-degree riser, including midpoint-owned pipe/cable half-links, so an uneven-ground run visibly reaches its connected endpoint instead of terminating in empty space. Power cable target coordinates are now passed once in world space before local conversion, repairing rotated/surface-mounted cable plane errors. Pipe-pair spatial hashes cover the complete bounded elbow envelope. No save, public API, prefab, item, recipe, research, balance, or Setup change is required.
+
+**GitHub title:** `[12.40.4-dev] Orthogonal Pipe and Cable Riser Links`
+
+**Manual steps:** no Setup run is required. In Unity on `Dev`, first allow the project to compile and clear the Console. On flat terrain, place matching Item, Gas, Water, and Energy Pipe pairs one normal local grid step apart on each of local X, local Y, and local Z; confirm every pair joins and transfers its matching resource/power. Next create a stepped or uneven-terrain run: place two matching pipes one primary grid step apart with the second endpoint roughly 0.25–1.0 cell higher or lower. Confirm the route shows continuous primary shafts and a visible collared right-angle riser at the shared midpoint, with no straight arm ending in air, then verify flow across the pair. Repeat with two Energy Pipes and, where available, two Data Cables; confirm their bundled wire geometry follows the same correct local plane/riser and the Energy Pipe still powers a connected consumer. Repeat once on a rotated grid/static face. Finally, confirm a three-axis diagonal pair, an offset greater than one cell, and a player-wrench-blocked pair do not connect; verify ordinary same-plane pipe/cable runs, static face power taps, Portal Frames, and existing saves remain unchanged.
 
 ### [12.40.3-dev] Embedded Static Lattice Compile Repair
 
