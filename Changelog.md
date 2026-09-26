@@ -1,9 +1,17 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.40.2-dev`
+**Current Version:** `12.40.3-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.40.3-dev] Embedded Static Lattice Compile Repair
+
+**Type:** PATCH - resolves CS0246 when `BuildSystem` was updated without its newly introduced preview helper source file. `StaticSurfaceLatticePreview` now lives in `BuildSystem.cs`, the only script that creates it, so the static utility lattice compiles as one self-contained placement change. The matching runtime `SurfacePowerTap` helper now lives in `PowerNode.cs`, its owning power topology script, eliminating a second fragile cross-file helper dependency. Behaviour is unchanged from 12.40.2-dev: portal ground support, static utility face lattices, and touching static power taps remain intact. No save, API, prefab, item, recipe, research, or Setup change is required.
+
+**GitHub title:** `[12.40.3-dev] Embedded static lattice compile repair`
+
+**Manual steps:** no setup run is required. Replace `Scripts/Building/BuildSystem.cs`, `Scripts/Power/PowerNode.cs`, and `Scripts/Power/PowerCable.cs` together, then let Unity compile. Confirm the prior `StaticSurfaceLatticePreview` CS0246 error is gone before repeating the 12.40.2-dev Portal Frame, static utility lattice, and static Battery-to-consumer Energy Pipe checks.
 
 ### [12.40.2-dev] Static Utility Surface Lattice and Power Taps
 

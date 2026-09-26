@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.40.2-dev`
-**Roadmap Version:** `12.40.2-dev`
+**Current Version:** `12.40.3-dev`
+**Roadmap Version:** `12.40.3-dev`
 **Date:** 2026-09-26
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,10 @@
 
 ## 0. Recently Done
 
+### 12.40.3-dev - Embedded Static Lattice Compile Repair
+- **Build/power source** (`BuildSystem`, `PowerNode`): static lattice and surface-tap helpers are co-located with their owning systems, removing external helper-script import ordering.
+- **Scope**: compile repair only; 12.40.2-dev terrain support, static face lattices, and power-tap behaviour are unchanged.
+
 ### 12.40.2-dev - Static Utility Surface Lattice and Power Taps
 - **Surface build UX** (`BuildSystem`, `StaticSurfaceLatticePreview`): utility pipes/cables/connectors snap to a visible, face-bounded static-block lattice without entering large or irregular hosts.
 - **Power** (`SurfacePowerTap`, `PowerNode`, `PowerCable`): static face-mounted energy cables and wire terminals rebind direct battery/generator/consumer taps after placement and load; cable arms terminate at the touched face.
@@ -48,11 +52,6 @@
 - **Static placement** (`BuildSystem`): static colliders larger than one grid cell now meet on their actual clicked support faces rather than the 1 m centre grid.
 - **Portal Frames**: 5 m cells preview and place flush on every face, including after 90-degree rotation; the overlap guard remains the final authority.
 - **Dedicated systems**: pipe, road, factory, busbar and turbine socket snaps keep their existing paths.
-
-### 12.39.0-dev - Player-Built Portals, Name + Code Pairing
-- **Portal system** (`PortalFrameBlock`, `PortalControllerBlock`, `PortalUI`): frames seal any closed outline up to 64x64; the controller charges, pairs by NAME + CODE, and hands ships and players to the partner's mouth. Open drain scales with area - 64x64 is megawatts.
-- **Persistence** (`WorldStatePersistence`): portal name, code, charge and cooldown on the placed block; never restores open.
-- **Setup** (`VoxelEngineSetupWindow`): Step 99 authors frame/controller prefabs, static block items, expensive recipes, Stable Portals research (tier 8 behind Warp Gate).
 
 ### Era Transition Feel
 
