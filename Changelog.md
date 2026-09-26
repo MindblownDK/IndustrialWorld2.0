@@ -1,9 +1,33 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.39.6-dev`
+**Current Version:** `12.40.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.40.1-dev] Build Placement Hot-Path Cleanup
+
+**Type:** PATCH - audited and tightened both every-frame construction preview paths before import. Standard `BuildSystem` and Hammer/tiered `BuildSystemV2` aiming now use reusable non-alloc raycast buffers and choose the nearest usable hit without sorting; unusually dense 64-hit stacks retain exhaustive fallback queries. Static-anchor/socket discovery and placement-overlap checks now use reusable non-alloc probes with equivalent overflow fallbacks. Large static edge snapping caches each held prefab's collider/classification data and reuses a collider list for the target. Ghost renderers now rebuild material-slot arrays only when validity changes, not every preview frame; the tiered path also removes an unused placement-feedback string build. Placement rules, special pipe/road/factory/busbar/turbine paths, portal overlap protection, save data, and APIs are unchanged.
+
+**GitHub title:** `[12.40.1-dev] Build placement hot-path cleanup`
+
+**Manual steps:** no setup run is required. In Unity, open the Profiler with GC allocation recording, then warm each preview once before sampling. Hold an ordinary block while aiming around terrain and a dense factory, repeat with Portal Frames, and repeat with the Hammer build wheel at ordinary and socketed tiered construction. The stable ghost-preview path should show no managed allocation from ray targeting, nearby anchor/socket probing, placement-overlap probing, or reapplying an unchanged ghost tint. Confirm Portal Frames remain flush, a deliberately intersecting frame is refused, and ordinary blocks, pipes, roads, factory connections, busbars, turbine sockets, and tiered socket snaps retain their placement behaviour.
+
+### [12.40.0-dev] Portal Networks with Destination Selection
+
+**Type:** MINOR - portals now form deterministic multi-endpoint networks. Matching NAME + CODE still identifies the shared network, but each controller now receives a persistent endpoint id and player-editable endpoint label. The controller panel exposes a Destination selector: choose an exact endpoint and every transit through that controller routes there. The endpoint id, label, and selected destination are additive `SavedPlacedBlock` fields, so they persist across save/load without changing or invalidating existing saves; apertures still never restore open. Existing two-portal saves retain automatic pairing when exactly one matching endpoint exists. A network with more than one possible destination deliberately refuses arbitrary routing until the player chooses one. No prefab, item, recipe, research, or Setup Step 99 authoring change is required.
+
+**GitHub title:** `[12.40.0-dev] Portal networks with destination selection`
+
+**Manual steps:** no setup run is required. In Unity, build or load three valid powered portals. Give all controllers the same Name and Code, label their endpoints (for example Home, Mine, and Orbit), press REFRESH ENDPOINTS on Home, select Mine as its Destination, then open all three. Home's Linked to row must name Mine and a player or ship entering Home must exit Mine, never Orbit. Save and reload: Home's endpoint label and selected Mine destination must remain. Finally, make a fresh two-controller Name + Code pair without selecting a destination and confirm its established automatic pairing still works.
+
+### [12.39.7-dev] Large Static Block Edge Snap
+
+**Type:** PATCH - ordinary static placement now resolves a clicked static block's collider support face before the legacy 1 m grid rounding. When either collider is larger than one grid cell along that face, the held prefab uses its resolved rotation and actual enabled collider geometry to land flush just outside the target rather than inside it. This fixes adjacent 5 m Portal Frames on every face, including rotated frames, and gives future large static prefabs the same safe edge snap. Pipes, roads, factory components, power cables/busbars, and wind-turbine sockets retain their existing dedicated placement paths. No prefab, item, recipe, research, save-data, or public API change is required.
+
+**GitHub title:** `[12.39.7-dev] Large static block edge snap`
+
+**Manual steps:** no setup run is required. In Unity, enter a world with grid snap enabled, place a Portal Frame, then aim at each side or top/bottom face with another Portal Frame selected. The ghost must sit flush and remain valid before placement; repeat after rotating the first frame 90 degrees. Finally, extend one static pipe, road, factory connection, busbar, and turbine socket to confirm their dedicated snapping behaviour is unchanged.
 
 ### [12.39.6-dev] Portal Placement Fix Compile Repair
 

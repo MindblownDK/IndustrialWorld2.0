@@ -4,6 +4,7 @@
 // shared secret), live state, the shape the controller sees, the power bill for
 // keeping the aperture open, and the OPEN/CLOSE switch. Static-block panel in the
 // house style, mounted by GameUIController like every other machine.
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UIElements;
 using T = VoxelEngine.UI.UITheme;
@@ -24,8 +25,8 @@ namespace VoxelEngine.Building
             p.Add(hdr);
             p.Add(VoxelEngine.UI.StarshipTheme.HullDivider(PortalCyan));
 
-            // ── Identity: name + code — the pair rule ──
-            var idCaption = new Label("IDENTITY  ·  PORTALS LINK WHEN BOTH MATCH");
+            // ── Identity: name + code define the shared network ──
+            var idCaption = new Label("NETWORK IDENTITY  ·  NAME + CODE MUST MATCH");
             idCaption.style.fontSize = 11;
             idCaption.style.unityFontStyleAndWeight = FontStyle.Bold;
             idCaption.style.letterSpacing = 1f;
@@ -51,6 +52,55 @@ namespace VoxelEngine.Building
                 portal.RefreshLink();
             });
             p.Add(codeField);
+
+            // ── Network routing: labels make endpoints human-readable while
+            // persistent endpoint ids keep the selected route unambiguous. ──
+            p.Add(T.Spacer(6));
+            var routeCaption = new Label("NETWORK ROUTING");
+            routeCaption.style.fontSize = 11;
+            routeCaption.style.unityFontStyleAndWeight = FontStyle.Bold;
+            routeCaption.style.letterSpacing = 1f;
+            routeCaption.style.color = new StyleColor(PortalCyan);
+            p.Add(routeCaption);
+
+            var endpointField = new TextField("This endpoint") { value = portal.endpointLabel ?? "" };
+            endpointField.style.marginTop = 4;
+            IndustrialWorld.Navigation.NavigationFieldStyle.Apply(endpointField);
+            endpointField.RegisterValueChangedCallback(evt => portal.endpointLabel = evt.newValue ?? "");
+            p.Add(endpointField);
+
+            const string AutoDestination = "AUTO  ·  single matching endpoint";
+            var destinationIds = new List<string> { "" };
+            var destinationChoices = new List<string> { AutoDestination };
+            foreach (var destination in portal.GetNetworkDestinations())
+            {
+                destinationIds.Add(destination.EndpointId);
+                destinationChoices.Add(destination.EndpointPickerLabel);
+            }
+            int destinationIndex = 0;
+            string selectedId = portal.selectedDestinationId ?? "";
+            for (int i = 1; i < destinationIds.Count; i++)
+                if (destinationIds[i] == selectedId) { destinationIndex = i; break; }
+            var destinationField = new DropdownField("Destination", destinationChoices, destinationIndex);
+            destinationField.style.marginTop = 2;
+            IndustrialWorld.Navigation.NavigationFieldStyle.Apply(destinationField);
+            destinationField.RegisterValueChangedCallback(evt =>
+            {
+                int choice = destinationChoices.IndexOf(evt.newValue);
+                portal.SelectDestination(choice >= 0 && choice < destinationIds.Count ? destinationIds[choice] : "");
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            });
+            p.Add(destinationField);
+
+            var routeButtons = new VisualElement();
+            routeButtons.style.flexDirection = FlexDirection.Row;
+            var refreshRoute = T.SmallButton("REFRESH ENDPOINTS", () =>
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel(), T.BgSlot);
+            refreshRoute.style.flexGrow = 1f;
+            routeButtons.Add(refreshRoute);
+            p.Add(routeButtons);
+            if (portal.NetworkDestinationCount > 1 && string.IsNullOrWhiteSpace(portal.selectedDestinationId))
+                p.Add(T.Muted("This network has multiple endpoints. Select one before transit; no arbitrary routing."));
 
             // ── Shape ──
             p.Add(T.Spacer(6));
@@ -109,7 +159,7 @@ namespace VoxelEngine.Building
             btnRow.Add(openBtn);
             p.Add(btnRow);
 
-            p.Add(T.Muted("Build a closed loop of Portal Frames (square or ring, up to 64x64), mount the controller within 8 m, feed it power. Two portals link when name AND code match; the first ship or player inside an open aperture crosses to its partner."));
+            p.Add(T.Muted("Build a closed loop of Portal Frames (square or ring, up to 64x64), mount the controller within 8 m, feed it power. NAME + CODE define a portal network; label each endpoint and select the destination for a deterministic route."));
 
             p.schedule.Execute(() =>
             {
@@ -136,8 +186,10 @@ namespace VoxelEngine.Building
                     chargeVal.text = $"{portal.Charge01 * 100f:0}%" + (portal.Cooldown01 > 0f ? " · cooling" : "");
                 if (linkVal != null)
                 {
-                    linkVal.text = portal.Linked != null ? portal.Linked.portalName
-                        : portal.IsOpen ? "no matching open portal" : "\u2014";
+                    linkVal.text = portal.Linked != null ? portal.Linked.EndpointDisplayName
+                        : portal.IsOpen
+                            ? portal.RequiresDestinationSelection ? "select destination" : "destination unavailable"
+                            : "\u2014";
                     linkVal.style.color = new StyleColor(portal.Linked != null ? T.AccentGreen : T.TextSecondary);
                 }
             }).Every(250);

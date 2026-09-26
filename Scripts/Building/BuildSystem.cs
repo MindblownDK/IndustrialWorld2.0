@@ -43,6 +43,10 @@ namespace VoxelEngine.Building
         private BlockItem  _ghostItem;
         private Material   _ghostMaterialValid;
         private Material   _ghostMaterialInvalid;
+        // Renderer material arrays are allocated by Unity when reassigned. Remember
+        // the active ghost tint so a stable valid/invalid preview does not rebuild
+        // those arrays every frame.
+        private Material   _appliedGhostMaterial;
         private Vector3Int _rotSteps;
         private GridPrecisionLatticePreview _precisionLattice;
         private readonly System.Collections.Generic.List<Vector3> _pipeGhostLinks = new(1);
@@ -51,6 +55,20 @@ namespace VoxelEngine.Building
         private Vector3 _pipeGhostLastPosition = new(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
         private int _pipeGhostSeenTopologyVersion = -1;
         private static readonly Collider[] s_pipeGhostProbe = new Collider[32];
+        private static readonly RaycastHit[] s_buildRaycastProbe = new RaycastHit[64];
+        private static readonly Collider[] s_staticAnchorProbe = new Collider[32];
+        private static readonly Collider[] s_placementOverlapProbe = new Collider[64];
+        private readonly System.Collections.Generic.List<Collider> _staticSnapColliders = new(8);
+        private readonly System.Collections.Generic.Dictionary<BlockItem, StaticPlacementPrefabProfile> _staticPlacementProfiles = new();
+
+        private sealed class StaticPlacementPrefabProfile
+        {
+            public Collider[] colliders;
+            public bool isThinConduit;
+            public bool isPortalPiece;
+            public Vector3 portalHalfExtents;
+            public bool usesDedicatedSnap;
+        }
 
         /// <summary>Set while a port snap is rejected because the engine's service
         /// port of that type is already at capacity. The ghost tints red and placement
@@ -149,7 +167,9 @@ namespace VoxelEngine.Building
                 _pipeGhostTargetId = EntityId.None;
                 _pipeGhostLastPosition = new Vector3(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
                 _pipeGhostLinks.Clear();
+                _appliedGhostMaterial = null;
                 StripGhost(_ghost, _ghostMaterialValid);
+                _appliedGhostMaterial = _ghostMaterialValid;
             }
 
             var ray = shootCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0));
@@ -178,7 +198,7 @@ namespace VoxelEngine.Building
                         * Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
                     _ghost.transform.SetPositionAndRotation(chainWorld, chainRot);
                     ConfigurePipeGhostConnection(block, chainGrid, chainWorld, GridSize.Small.CellSize());
-                    ApplyGhostMaterial(_ghost, chainCanPlace ? _ghostMaterialValid : _ghostMaterialInvalid);
+                    ApplyGhostMaterialIfChanged(chainCanPlace ? _ghostMaterialValid : _ghostMaterialInvalid);
                     return;
                 }
                 _ghost.SetActive(false);
@@ -240,7 +260,7 @@ namespace VoxelEngine.Building
                     * Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
                 _ghost.transform.SetPositionAndRotation(worldPosition, worldRotation);
                 ConfigurePipeGhostConnection(block, targetGrid, worldPosition, GridSize.Small.CellSize());
-                ApplyGhostMaterial(_ghost, validPrecision ? _ghostMaterialValid : _ghostMaterialInvalid);
+                ApplyGhostMaterialIfChanged(validPrecision ? _ghostMaterialValid : _ghostMaterialInvalid);
 
                 if (showGhostPort) ShowGhostPortRing(ghostPortWorldPos, ghostPortOutWorld, ghostPortColor);
                 if (s_portCapBlocked && Time.unscaledTime - _portCapFeedbackAt >= PortCapFeedbackInterval)
@@ -265,7 +285,7 @@ namespace VoxelEngine.Building
                 ConfigurePipeGhostConnection(block, null, pos, Mathf.Max(0.01f, gridSize));
 
             bool valid = IsPlacementValid(pos, block, rot);
-            ApplyGhostMaterial(_ghost, valid ? _ghostMaterialValid : _ghostMaterialInvalid);
+            ApplyGhostMaterialIfChanged(valid ? _ghostMaterialValid : _ghostMaterialInvalid);
         }
 
         private void UpdateQuarryPreview()
@@ -284,6 +304,7 @@ namespace VoxelEngine.Building
             HeldBlockName = string.Empty;
             RotationSteps = _rotSteps;
             if (_ghost != null) { Destroy(_ghost); _ghost = null; _ghostItem = null; }
+            _appliedGhostMaterial = null;
             HidePrecisionLattice();
             HideGhostPortRing();
             Quarry.HidePlacementPreview();
@@ -1182,6 +1203,13 @@ namespace VoxelEngine.Building
                 VoxelEngine.Power.Wind.WindTurbineController.TryGetSnapPoint(block.placedPrefab, hit, out pos, out rot))
                 return;
 
+            // Static blocks with a real footprint must not use the one-metre
+            // centre-grid fallback when the player is aiming at another static block.
+            // Resolve their collider faces first so a 5 m frame, or any future large
+            // authored prefab, lands flush instead of one metre inside its neighbour.
+            if (TryGetStaticPlacedBlockEdgeSnapPose(hit, block, out pos, out rot))
+                return;
+
             pos = ComputePlacementPosition(hit, block);
             rot = GravityProvider.GetSurfaceRotation(pos) * Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
         }
@@ -1213,6 +1241,318 @@ namespace VoxelEngine.Building
             pos = target.transform.position + target.transform.TransformDirection(localAxis).normalized * step;
             rot = target.transform.rotation * Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
             return true;
+        }
+
+        /// <summary>
+        /// Snap an ordinary static block to the clicked face of a large static placed
+        /// block. Grid spacing is deliberately not part of this calculation: the two
+        /// collider support planes determine the offset, so authored 1 m, 5 m, or
+        /// asymmetric prefabs all meet edge-to-edge under their resolved rotations.
+        /// Pipes, roads, conveyor/power factory parts and busbars retain their own
+        /// connection rules, which are evaluated before this general fallback.
+        /// </summary>
+        private bool TryGetStaticPlacedBlockEdgeSnapPose(
+            RaycastHit hit, BlockItem held, out Vector3 pos, out Quaternion rot)
+        {
+            pos = default;
+            rot = default;
+            if (!gridSnap || held == null || held.placedPrefab == null || hit.collider == null)
+                return false;
+            var heldProfile = GetStaticPlacementPrefabProfile(held);
+            if (heldProfile.usesDedicatedSnap) return false;
+
+            var target = hit.collider.GetComponentInParent<PlacedBlock>();
+            if (target == null || target.GetComponentInParent<GridEntity>() != null)
+                return false;
+            if (hit.collider.GetComponentInParent<VoxelEngine.Power.PowerBusbar>() != null)
+                return false;
+
+            Vector3 normal = SnapOutwardNormal(target.transform, hit.normal);
+            if (normal.sqrMagnitude < 0.0001f) return false;
+            normal.Normalize();
+
+            // A static neighbour is the orientation authority. This keeps the new
+            // piece co-planar with it on planets and preserves player rotation steps
+            // as a deliberate 90-degree override.
+            rot = target.transform.rotation
+                * Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
+
+            if (!TryGetPlacedBlockColliderProjectionRange(target, normal, out float targetMin, out float targetMax)
+                || !TryGetPrefabColliderProjectionRange(held.placedPrefab, heldProfile.colliders, rot, normal, out float heldMin, out float heldMax))
+                return false;
+
+            // Keep the familiar one-metre lattice for small static blocks. A large
+            // footprint along the clicked face is where centre-grid rounding could
+            // previously put the new object inside the target.
+            float largeThreshold = Mathf.Max(1.05f, Mathf.Max(0.01f, gridSize) + 0.05f);
+            if (targetMax - targetMin <= largeThreshold && heldMax - heldMin <= largeThreshold)
+                return false;
+
+            // Root origins share the clicked face's tangent plane; only the normal
+            // coordinate comes from the collider support distances. The 1 mm gap
+            // avoids a physics contact being interpreted as an overlap while remaining
+            // visually and portal-grid-wise flush.
+            const float contactClearance = 0.001f;
+            float rootNormal = targetMax - heldMin + contactClearance;
+            pos = Vector3.ProjectOnPlane(target.transform.position, normal) + normal * rootNormal;
+            return true;
+        }
+
+        /// <summary>
+        /// Prefab classification is immutable during a play session. Cache it once per
+        /// held item instead of walking the same prefab hierarchy every ghost frame.
+        /// </summary>
+        private StaticPlacementPrefabProfile GetStaticPlacementPrefabProfile(BlockItem held)
+        {
+            if (_staticPlacementProfiles.TryGetValue(held, out var profile)) return profile;
+
+            var prefab = held != null ? held.placedPrefab : null;
+            bool isThinConduit = prefab != null && IsThinConduitPlacement(held);
+            bool isPortalPiece = prefab != null
+                && (prefab.GetComponent<VoxelEngine.Building.PortalFrameBlock>() != null
+                 || prefab.GetComponent<VoxelEngine.Building.PortalControllerBlock>() != null);
+            profile = new StaticPlacementPrefabProfile
+            {
+                colliders = prefab != null ? prefab.GetComponentsInChildren<Collider>(true) : System.Array.Empty<Collider>(),
+                isThinConduit = isThinConduit,
+                isPortalPiece = isPortalPiece,
+                portalHalfExtents = isPortalPiece ? PortalPieceHalfExtents(prefab) : Vector3.zero,
+                usesDedicatedSnap = prefab == null
+                    || isThinConduit
+                    || VoxelEngine.Building.RoadPaver.IsRoadBlock(held)
+                    || prefab.GetComponentInChildren<VoxelEngine.Simulation.ConveyorBelt>(true) != null
+                    || prefab.GetComponentInChildren<VoxelEngine.Simulation.ConveyorChute>(true) != null
+                    || prefab.GetComponentInChildren<VoxelEngine.Simulation.Funnel>(true) != null
+                    || prefab.GetComponentInChildren<VoxelEngine.Power.PowerCable>(true) != null
+                    || prefab.GetComponentInChildren<VoxelEngine.Simulation.CompactVoltageStation>(true) != null
+            };
+            _staticPlacementProfiles[held] = profile;
+            return profile;
+        }
+
+        /// <summary>
+        /// Gets the actual support interval of all enabled colliders on a placed
+        /// static block along <paramref name="normal"/>. Box, sphere and capsule
+        /// colliders retain their oriented/scaled geometry; mesh colliders use their
+        /// transformed mesh bounds as a conservative enclosing support volume.
+        /// </summary>
+        private bool TryGetPlacedBlockColliderProjectionRange(
+            PlacedBlock placed, Vector3 normal, out float min, out float max)
+        {
+            min = float.PositiveInfinity;
+            max = float.NegativeInfinity;
+            bool any = false;
+            if (placed == null) return false;
+
+            _staticSnapColliders.Clear();
+            placed.GetComponentsInChildren<Collider>(true, _staticSnapColliders);
+            for (int i = 0; i < _staticSnapColliders.Count; i++)
+            {
+                var collider = _staticSnapColliders[i];
+                if (collider == null || !collider.enabled || collider.isTrigger) continue;
+                EncapsulateWorldColliderProjection(collider, normal, ref any, ref min, ref max);
+            }
+            return any;
+        }
+
+        /// <summary>
+        /// Gets the support interval a prefab's enabled colliders will occupy when
+        /// instantiated at the world origin with <paramref name="rootRotation"/>.
+        /// This is intentionally calculated from prefab-local collider geometry rather
+        /// than Collider.bounds, which is not a reliable placed-world extent for an
+        /// asset and loses the intended rotation.
+        /// </summary>
+        private static bool TryGetPrefabColliderProjectionRange(
+            GameObject prefab, Collider[] colliders, Quaternion rootRotation, Vector3 normal, out float min, out float max)
+        {
+            min = float.PositiveInfinity;
+            max = float.NegativeInfinity;
+            bool any = false;
+            if (prefab == null) return false;
+
+            Transform root = prefab.transform;
+            Vector3 ToPlacedPoint(Vector3 prefabWorldPoint)
+            {
+                Vector3 rootLocal = root.InverseTransformPoint(prefabWorldPoint);
+                return rootRotation * Vector3.Scale(rootLocal, root.localScale);
+            }
+            Vector3 ToPlacedVector(Vector3 prefabWorldVector)
+            {
+                Vector3 rootLocal = root.InverseTransformVector(prefabWorldVector);
+                return rootRotation * Vector3.Scale(rootLocal, root.localScale);
+            }
+
+            if (colliders == null) return false;
+            for (int i = 0; i < colliders.Length; i++)
+            {
+                var collider = colliders[i];
+                if (collider == null || !collider.enabled || collider.isTrigger) continue;
+
+                if (collider is BoxCollider box)
+                {
+                    Vector3 center = ToPlacedPoint(box.transform.TransformPoint(box.center));
+                    Vector3 halfX = ToPlacedVector(box.transform.TransformVector(Vector3.right * box.size.x * 0.5f));
+                    Vector3 halfY = ToPlacedVector(box.transform.TransformVector(Vector3.up * box.size.y * 0.5f));
+                    Vector3 halfZ = ToPlacedVector(box.transform.TransformVector(Vector3.forward * box.size.z * 0.5f));
+                    EncapsulateProjectedBox(center, halfX, halfY, halfZ, normal, ref any, ref min, ref max);
+                    continue;
+                }
+
+                if (collider is SphereCollider sphere)
+                {
+                    Vector3 center = ToPlacedPoint(sphere.transform.TransformPoint(sphere.center));
+                    Vector3 radiusX = ToPlacedVector(sphere.transform.TransformVector(Vector3.right * sphere.radius));
+                    Vector3 radiusY = ToPlacedVector(sphere.transform.TransformVector(Vector3.up * sphere.radius));
+                    Vector3 radiusZ = ToPlacedVector(sphere.transform.TransformVector(Vector3.forward * sphere.radius));
+                    EncapsulateProjectedSphere(center, radiusX, radiusY, radiusZ, normal, ref any, ref min, ref max);
+                    continue;
+                }
+
+                if (collider is CapsuleCollider capsule)
+                {
+                    EncapsulatePrefabCapsuleProjection(capsule, ToPlacedPoint, ToPlacedVector, normal, ref any, ref min, ref max);
+                    continue;
+                }
+
+                if (collider is MeshCollider mesh && mesh.sharedMesh != null)
+                {
+                    Bounds bounds = mesh.sharedMesh.bounds;
+                    Vector3 center = ToPlacedPoint(mesh.transform.TransformPoint(bounds.center));
+                    Vector3 halfX = ToPlacedVector(mesh.transform.TransformVector(Vector3.right * bounds.extents.x));
+                    Vector3 halfY = ToPlacedVector(mesh.transform.TransformVector(Vector3.up * bounds.extents.y));
+                    Vector3 halfZ = ToPlacedVector(mesh.transform.TransformVector(Vector3.forward * bounds.extents.z));
+                    EncapsulateProjectedBox(center, halfX, halfY, halfZ, normal, ref any, ref min, ref max);
+                }
+            }
+            return any;
+        }
+
+        private static void EncapsulateWorldColliderProjection(
+            Collider collider, Vector3 normal, ref bool any, ref float min, ref float max)
+        {
+            if (collider is BoxCollider box)
+            {
+                Vector3 center = box.transform.TransformPoint(box.center);
+                Vector3 halfX = box.transform.TransformVector(Vector3.right * box.size.x * 0.5f);
+                Vector3 halfY = box.transform.TransformVector(Vector3.up * box.size.y * 0.5f);
+                Vector3 halfZ = box.transform.TransformVector(Vector3.forward * box.size.z * 0.5f);
+                EncapsulateProjectedBox(center, halfX, halfY, halfZ, normal, ref any, ref min, ref max);
+                return;
+            }
+
+            if (collider is SphereCollider sphere)
+            {
+                Vector3 center = sphere.transform.TransformPoint(sphere.center);
+                Vector3 radiusX = sphere.transform.TransformVector(Vector3.right * sphere.radius);
+                Vector3 radiusY = sphere.transform.TransformVector(Vector3.up * sphere.radius);
+                Vector3 radiusZ = sphere.transform.TransformVector(Vector3.forward * sphere.radius);
+                EncapsulateProjectedSphere(center, radiusX, radiusY, radiusZ, normal, ref any, ref min, ref max);
+                return;
+            }
+
+            if (collider is CapsuleCollider capsule)
+            {
+                EncapsulateWorldCapsuleProjection(capsule, normal, ref any, ref min, ref max);
+                return;
+            }
+
+            if (collider is MeshCollider mesh && mesh.sharedMesh != null)
+            {
+                Bounds bounds = mesh.sharedMesh.bounds;
+                Vector3 center = mesh.transform.TransformPoint(bounds.center);
+                Vector3 halfX = mesh.transform.TransformVector(Vector3.right * bounds.extents.x);
+                Vector3 halfY = mesh.transform.TransformVector(Vector3.up * bounds.extents.y);
+                Vector3 halfZ = mesh.transform.TransformVector(Vector3.forward * bounds.extents.z);
+                EncapsulateProjectedBox(center, halfX, halfY, halfZ, normal, ref any, ref min, ref max);
+                return;
+            }
+
+            // Unknown collider subclasses still receive a safe support range. This
+            // fallback is conservative for rotated shapes, preferring a tiny visual
+            // gap to ever placing a large prefab inside an existing static block.
+            Bounds fallback = collider.bounds;
+            float centerProjection = Vector3.Dot(normal, fallback.center);
+            float extent = Mathf.Abs(normal.x) * fallback.extents.x
+                + Mathf.Abs(normal.y) * fallback.extents.y
+                + Mathf.Abs(normal.z) * fallback.extents.z;
+            EncapsulateProjection(centerProjection - extent, centerProjection + extent, ref any, ref min, ref max);
+        }
+
+        private static void EncapsulateProjectedBox(
+            Vector3 center, Vector3 halfX, Vector3 halfY, Vector3 halfZ, Vector3 normal,
+            ref bool any, ref float min, ref float max)
+        {
+            float centerProjection = Vector3.Dot(normal, center);
+            float extent = Mathf.Abs(Vector3.Dot(normal, halfX))
+                + Mathf.Abs(Vector3.Dot(normal, halfY))
+                + Mathf.Abs(Vector3.Dot(normal, halfZ));
+            EncapsulateProjection(centerProjection - extent, centerProjection + extent, ref any, ref min, ref max);
+        }
+
+        private static void EncapsulateProjectedSphere(
+            Vector3 center, Vector3 radiusX, Vector3 radiusY, Vector3 radiusZ, Vector3 normal,
+            ref bool any, ref float min, ref float max)
+        {
+            float centerProjection = Vector3.Dot(normal, center);
+            // Physics scales SphereCollider by its largest transform axis. Match that
+            // conservative physical volume instead of treating a non-uniformly scaled
+            // sphere as an ellipsoid that could underestimate its support plane.
+            float extent = Mathf.Max(radiusX.magnitude, Mathf.Max(radiusY.magnitude, radiusZ.magnitude));
+            EncapsulateProjection(centerProjection - extent, centerProjection + extent, ref any, ref min, ref max);
+        }
+
+        private static void EncapsulateWorldCapsuleProjection(
+            CapsuleCollider capsule, Vector3 normal, ref bool any, ref float min, ref float max)
+        {
+            Vector3 ToWorldPoint(Vector3 localPoint) => capsule.transform.TransformPoint(localPoint);
+            Vector3 ToWorldVector(Vector3 localVector) => capsule.transform.TransformVector(localVector);
+            EncapsulateCapsuleProjection(capsule, ToWorldPoint, ToWorldVector, normal, ref any, ref min, ref max);
+        }
+
+        private static void EncapsulatePrefabCapsuleProjection(
+            CapsuleCollider capsule, System.Func<Vector3, Vector3> toPlacedPoint,
+            System.Func<Vector3, Vector3> toPlacedVector, Vector3 normal,
+            ref bool any, ref float min, ref float max)
+        {
+            EncapsulateCapsuleProjection(capsule, toPlacedPoint, toPlacedVector, normal, ref any, ref min, ref max);
+        }
+
+        private static void EncapsulateCapsuleProjection(
+            CapsuleCollider capsule, System.Func<Vector3, Vector3> toPoint,
+            System.Func<Vector3, Vector3> toVector, Vector3 normal,
+            ref bool any, ref float min, ref float max)
+        {
+            Vector3 axis = capsule.direction == 0 ? Vector3.right
+                : capsule.direction == 2 ? Vector3.forward : Vector3.up;
+            Vector3 center = toPoint(capsule.center);
+            Vector3 axisWorld = toVector(axis);
+            float axisLength = axisWorld.magnitude;
+            if (axisLength < 0.0001f) return;
+
+            float lineHalf = Mathf.Max(0f, capsule.height * 0.5f - capsule.radius) * axisLength;
+            Vector3 radiusX = toVector(Vector3.right * capsule.radius);
+            Vector3 radiusY = toVector(Vector3.up * capsule.radius);
+            Vector3 radiusZ = toVector(Vector3.forward * capsule.radius);
+            float capExtent = Mathf.Sqrt(
+                Mathf.Pow(Vector3.Dot(normal, radiusX), 2f)
+                + Mathf.Pow(Vector3.Dot(normal, radiusY), 2f)
+                + Mathf.Pow(Vector3.Dot(normal, radiusZ), 2f));
+            float extent = Mathf.Abs(Vector3.Dot(normal, axisWorld.normalized)) * lineHalf + capExtent;
+            float centerProjection = Vector3.Dot(normal, center);
+            EncapsulateProjection(centerProjection - extent, centerProjection + extent, ref any, ref min, ref max);
+        }
+
+        private static void EncapsulateProjection(float lower, float upper, ref bool any, ref float min, ref float max)
+        {
+            if (!any)
+            {
+                min = lower;
+                max = upper;
+                any = true;
+                return;
+            }
+            min = Mathf.Min(min, lower);
+            max = Mathf.Max(max, upper);
         }
 
         private static bool IsMatchingStaticPipeFamily(BlockItem held, MonoBehaviour target)
@@ -1671,42 +2011,74 @@ namespace VoxelEngine.Building
             Transform best = null;
             float bestDistance = float.MaxValue;
 
-            void Consider(PlacedBlock placed)
-            {
-                if (placed == null) return;
-                if (placed.GetComponentInParent<GridEntity>() != null) return;
-                float distance = (placed.transform.position - hit.point).sqrMagnitude;
-                if (distance >= bestDistance) return;
-                bestDistance = distance;
-                best = placed.transform;
-            }
-
-            Consider(hit.collider != null ? hit.collider.GetComponentInParent<PlacedBlock>() : null);
+            ConsiderStaticPlacementAnchor(hit.collider != null ? hit.collider.GetComponentInParent<PlacedBlock>() : null,
+                hit.point, ref best, ref bestDistance);
             if (best != null) return best;
 
             float searchRadius = Mathf.Max(spacing * 1.75f, 2f);
-            var overlaps = Physics.OverlapSphere(hit.point, searchRadius, ~0, QueryTriggerInteraction.Ignore);
-            for (int i = 0; i < overlaps.Length; i++)
-                Consider(overlaps[i] != null ? overlaps[i].GetComponentInParent<PlacedBlock>() : null);
+            int count = Physics.OverlapSphereNonAlloc(hit.point, searchRadius, s_staticAnchorProbe,
+                ~0, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < count; i++)
+                ConsiderStaticPlacementAnchor(s_staticAnchorProbe[i] != null
+                    ? s_staticAnchorProbe[i].GetComponentInParent<PlacedBlock>() : null,
+                    hit.point, ref best, ref bestDistance);
+
+            // A packed factory can exceed the reusable probe. Preserve the old exhaustive
+            // result in that rare case instead of silently picking a worse local anchor.
+            if (count >= s_staticAnchorProbe.Length)
+            {
+                var overflow = Physics.OverlapSphere(hit.point, searchRadius, ~0, QueryTriggerInteraction.Ignore);
+                for (int i = 0; i < overflow.Length; i++)
+                    ConsiderStaticPlacementAnchor(overflow[i] != null
+                        ? overflow[i].GetComponentInParent<PlacedBlock>() : null,
+                        hit.point, ref best, ref bestDistance);
+            }
             return best;
+        }
+
+        private static void ConsiderStaticPlacementAnchor(PlacedBlock placed, Vector3 hitPoint,
+            ref Transform best, ref float bestDistance)
+        {
+            if (placed == null || placed.GetComponentInParent<GridEntity>() != null) return;
+            float distance = (placed.transform.position - hitPoint).sqrMagnitude;
+            if (distance >= bestDistance) return;
+            bestDistance = distance;
+            best = placed.transform;
         }
 
         private bool TryRaycastIgnoringSelf(Ray ray, out RaycastHit hit, float maxDistance)
         {
-            var hits = Physics.RaycastAll(ray, maxDistance, ~0, QueryTriggerInteraction.Ignore);
-            System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+            int count = Physics.RaycastNonAlloc(ray, s_buildRaycastProbe, maxDistance,
+                ~0, QueryTriggerInteraction.Ignore);
+
+            // NonAlloc deliberately makes no ordering guarantee when its buffer fills,
+            // so retain the exhaustive legacy query in that rare dense-factory case.
+            if (count >= s_buildRaycastProbe.Length)
+            {
+                var overflow = Physics.RaycastAll(ray, maxDistance, ~0, QueryTriggerInteraction.Ignore);
+                return TryGetNearestBuildRaycastHit(overflow, overflow.Length, out hit);
+            }
+
+            return TryGetNearestBuildRaycastHit(s_buildRaycastProbe, count, out hit);
+        }
+
+        private bool TryGetNearestBuildRaycastHit(RaycastHit[] hits, int count, out RaycastHit hit)
+        {
             Transform selfRoot = transform.root;
-            for (int i = 0; i < hits.Length; i++)
+            float closest = float.MaxValue;
+            hit = default;
+            bool found = false;
+            for (int i = 0; i < count; i++)
             {
                 var candidate = hits[i];
-                if (candidate.collider == null) continue;
+                if (candidate.collider == null || candidate.distance >= closest) continue;
                 if (selfRoot != null && candidate.collider.transform.IsChildOf(selfRoot)) continue;
                 if (VoxelEngine.Player.PlayerRaycastFilter.IsOwnPlayerCollider(candidate.collider, transform)) continue;
+                closest = candidate.distance;
                 hit = candidate;
-                return true;
+                found = true;
             }
-            hit = default;
-            return false;
+            return found;
         }
 
         /// <summary>
@@ -1729,7 +2101,8 @@ namespace VoxelEngine.Building
             // allowStacking is a broader content flag (many ordinary foundations use it),
             // so treating every stackable item as a thin pipe let structural blocks bury
             // existing pipes inside their volume.
-            bool isThin = IsThinConduitPlacement(block);
+            var placementProfile = block != null ? GetStaticPlacementPrefabProfile(block) : null;
+            bool isThin = placementProfile != null && placementProfile.isThinConduit;
             // A road is a surface overlay, not a structure: it is 8 cm thick and it DRAPES onto the
             // terrain, so it always overlaps the ground it was laid on. Judging it by the structural
             // rule would refuse every placement. It is still refused on top of another placed block
@@ -1756,46 +2129,71 @@ namespace VoxelEngine.Building
             // against other placed blocks — flush neighbours (touching, not
             // interpenetrating) still pass, and terrain stays permissive so a ring
             // can kiss a slope without being refused.
-            bool isPortalPiece = block.placedPrefab != null
-                && (block.placedPrefab.GetComponent<VoxelEngine.Building.PortalFrameBlock>() != null
-                 || block.placedPrefab.GetComponent<VoxelEngine.Building.PortalControllerBlock>() != null);
-            if (isPortalPiece)
-            {
-                Vector3 half = PortalPieceHalfExtents(block.placedPrefab) * 0.94f;
-                foreach (var col in Physics.OverlapBox(pos, half, rot))
-                {
-                    if (col.isTrigger) continue;
-                    if (col.GetComponentInParent<PlacedBlock>() != null) return false;
-                }
-            }
+            if (placementProfile != null && placementProfile.isPortalPiece
+                && HasPlacedBlockVolumeOverlap(pos, placementProfile.portalHalfExtents * 0.94f, rot))
+                return false;
 
-            var overlaps = Physics.OverlapBox(pos, Vector3.one * checkSize, Quaternion.identity);
-            foreach (var col in overlaps)
+            return IsPlacementProbeClear(pos, Vector3.one * checkSize, isThin, isSurfaceOverlay, block);
+        }
+
+        /// <summary>Allocation-free portal volume guard for the every-frame ghost verdict.
+        /// The array overflow path retains correctness in exceptionally dense factories.</summary>
+        private static bool HasPlacedBlockVolumeOverlap(Vector3 center, Vector3 halfExtents, Quaternion rotation)
+        {
+            int count = Physics.OverlapBoxNonAlloc(center, halfExtents, s_placementOverlapProbe,
+                rotation, ~0, QueryTriggerInteraction.UseGlobal);
+            for (int i = 0; i < count; i++)
             {
-                if (col.isTrigger) continue; // pickup spheres, etc.
-                // A structural block may never engulf a placed pipe/cable even when
-                // the structural item itself allows normal block stacking.
-                if (IsConduitCollider(col) && !isThin) return false;
-                // Placed blocks: legacy stackable structures retain their established
-                // placement behavior after the explicit conduit-volume guard above.
-                if (col.GetComponentInParent<PlacedBlock>() != null)
-                {
-                    if (!block.allowStacking) return false;
-                    continue;
-                }
-                // Thin stacking blocks (pipes/cables) are allowed to clip slightly into
-                // terrain when building vertical shafts on land — previously IsPlacementValid
-                // blocked any static overlap, so vertical pipe columns on rough ground
-                // could never be started. We now allow thin blocks to ignore static
-                // world geometry; dynamic rigidbodies still block.
-                if (isThin || isSurfaceOverlay) continue;
-                // Block placement on dynamic rigidbodies.
-                if (col.attachedRigidbody != null && !col.attachedRigidbody.isKinematic) return false;
-                // Static world geometry (terrain, rocks, trees): never bury a block
-                // into it — half-buried placements kicked the whole construct.
-                if (col.attachedRigidbody == null) return false;
+                var collider = s_placementOverlapProbe[i];
+                if (collider != null && !collider.isTrigger
+                    && collider.GetComponentInParent<PlacedBlock>() != null)
+                    return true;
             }
+            if (count < s_placementOverlapProbe.Length) return false;
+
+            foreach (var collider in Physics.OverlapBox(center, halfExtents, rotation))
+            {
+                if (collider != null && !collider.isTrigger
+                    && collider.GetComponentInParent<PlacedBlock>() != null)
+                    return true;
+            }
+            return false;
+        }
+
+        /// <summary>Preserves the old structural placement verdict while avoiding an
+        /// allocating OverlapBox every ghost frame under normal collider density.</summary>
+        private static bool IsPlacementProbeClear(Vector3 center, Vector3 halfExtents,
+            bool isThin, bool isSurfaceOverlay, BlockItem block)
+        {
+            int count = Physics.OverlapBoxNonAlloc(center, halfExtents, s_placementOverlapProbe,
+                Quaternion.identity, ~0, QueryTriggerInteraction.UseGlobal);
+            for (int i = 0; i < count; i++)
+                if (!IsPlacementProbeColliderAllowed(s_placementOverlapProbe[i], isThin, isSurfaceOverlay, block))
+                    return false;
+            if (count < s_placementOverlapProbe.Length) return true;
+
+            foreach (var collider in Physics.OverlapBox(center, halfExtents, Quaternion.identity))
+                if (!IsPlacementProbeColliderAllowed(collider, isThin, isSurfaceOverlay, block))
+                    return false;
             return true;
+        }
+
+        private static bool IsPlacementProbeColliderAllowed(Collider collider,
+            bool isThin, bool isSurfaceOverlay, BlockItem block)
+        {
+            if (collider == null || collider.isTrigger) return true;
+            // A structural block may never engulf a placed pipe/cable even when the
+            // structural item itself allows normal block stacking.
+            if (IsConduitCollider(collider) && !isThin) return false;
+            // Placed blocks retain their established stacking contract after the
+            // explicit conduit-volume guard above.
+            if (collider.GetComponentInParent<PlacedBlock>() != null)
+                return block != null && block.allowStacking;
+            // Thin conduits and draped roads may overlap static world geometry.
+            if (isThin || isSurfaceOverlay) return true;
+            if (collider.attachedRigidbody != null && !collider.attachedRigidbody.isKinematic)
+                return false;
+            return collider.attachedRigidbody != null;
         }
 
         private static bool IsThinConduitPlacement(BlockItem block)
@@ -1885,6 +2283,13 @@ namespace VoxelEngine.Building
 
             ApplyGhostMaterial(root, mat);
         }
+        private void ApplyGhostMaterialIfChanged(Material mat)
+        {
+            if (_ghost == null || mat == null || _appliedGhostMaterial == mat) return;
+            ApplyGhostMaterial(_ghost, mat);
+            _appliedGhostMaterial = mat;
+        }
+
         private static void ApplyGhostMaterial(GameObject root, Material mat)
         {
             foreach (var r in root.GetComponentsInChildren<Renderer>(true))

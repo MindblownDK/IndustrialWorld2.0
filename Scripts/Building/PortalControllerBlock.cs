@@ -12,8 +12,9 @@
 //   • POWER  — the whole point of big portals: charge draw and the open drain both
 //              scale with interior cells. A 64x64 aperture is megawatts per second
 //              while open; lose the supply and the portal collapses.
-//   • PAIR   — portals link when NAME and CODE both match (player-set on the
-//              panel). Two portals, one identity: that is the whole address book.
+//   • ROUTE  — NAME + CODE define a portal network. Each controller carries a
+//              persistent endpoint identity and may select one exact destination;
+//              the old automatic link remains only for a two-end network.
 //   • TRANSIT— while open, the first hull (grid ship) or on-foot player inside the
 //              aperture is handed to the linked portal's mouth: the same
 //              floating-origin hop the warp drive uses, arrival just outside the
@@ -46,10 +47,17 @@ namespace VoxelEngine.Building
         public float cooldownSeconds = 60f;
 
         [Header("Portal Identity")]
-        [Tooltip("Portals link when NAME and CODE both match.")]
+        [Tooltip("Portals join a network when NAME and CODE both match.")]
         public string portalName = "Portal";
-        [Tooltip("Portals link when NAME and CODE both match. Keep it secret, keep it safe.")]
+        [Tooltip("Portals join a network when NAME and CODE both match. Keep it secret, keep it safe.")]
         public string portalCode = "";
+
+        // Network routing belongs to the placed controller, never to the shared prefab.
+        // The inspector hides these runtime-authored values; PortalUI is the single
+        // player-facing editor and WorldStatePersistence restores them per block.
+        [HideInInspector] public string endpointId = "";
+        [HideInInspector] public string endpointLabel = "";
+        [HideInInspector] public string selectedDestinationId = "";
 
         [Header("Transit")]
         [Tooltip("Seconds a freshly transited ship ignores every aperture (no ping-pong).")]
@@ -70,6 +78,22 @@ namespace VoxelEngine.Building
         public int InteriorWide { get; private set; }
         public int InteriorHigh { get; private set; }
         public PortalControllerBlock Linked { get; private set; }
+        public string EndpointId
+        {
+            get { EnsureEndpointId(); return endpointId; }
+        }
+        public string EndpointDisplayName
+        {
+            get
+            {
+                string label = (endpointLabel ?? "").Trim();
+                return label.Length > 0 ? label : "Endpoint " + ShortEndpointId;
+            }
+        }
+        public string EndpointPickerLabel => EndpointDisplayName + "  ·  " + ShortEndpointId;
+        public int NetworkDestinationCount => GetNetworkDestinations().Count;
+        public bool RequiresDestinationSelection => string.IsNullOrWhiteSpace(selectedDestinationId)
+            && NetworkDestinationCount > 1;
         public float OpenWatts => IsOpen ? openBaseWatts + openWattsPerCell * InteriorCells : 0f;
         public float CurrentWatts { get; private set; }
         public Vector3 ApertureCentre { get; private set; }
@@ -93,6 +117,7 @@ namespace VoxelEngine.Building
 
         private void Awake()
         {
+            EnsureEndpointId();
             _power = GetComponent<PowerConsumer>();
             if (_power == null) _power = gameObject.AddComponent<PowerConsumer>();
             _power.connectRadius = 2.5f;   // the monolith is wide; cables reach its body
@@ -298,8 +323,12 @@ namespace VoxelEngine.Building
             }
             IsOpen = true;
             RefreshLink();
-            VoxelEngine.UI.BuildFeedbackHud.Show("Portal",
-                Linked != null ? $"OPEN — linked to {Linked.portalName}" : "OPEN — no matching portal yet (name and code)",
+            string linkMessage = Linked != null
+                ? $"OPEN — linked to {Linked.EndpointDisplayName}"
+                : RequiresDestinationSelection
+                    ? "OPEN — select a destination for this network"
+                    : "OPEN — selected destination is not open and valid";
+            VoxelEngine.UI.BuildFeedbackHud.Show("Portal", linkMessage,
                 null, new Color(0.55f, 0.85f, 1f));
         }
 
@@ -320,21 +349,102 @@ namespace VoxelEngine.Building
                 VoxelEngine.UI.BuildFeedbackHud.Show("Portal", $"Collapsed — {why}", null, new Color(1f, 0.7f, 0.25f));
         }
 
-        /// <summary>The other end: same name AND same code, open, valid, oldest first.</summary>
+        /// <summary>
+        /// Returns every other controller with this controller's NAME + CODE. The
+        /// selection list intentionally includes offline/unsealed members: a player
+        /// may configure a route before the far aperture is powered and open.
+        /// </summary>
+        public List<PortalControllerBlock> GetNetworkDestinations()
+        {
+            var result = new List<PortalControllerBlock>();
+            if (!HasNetworkIdentity()) return result;
+
+            foreach (var other in FindObjectsByType<PortalControllerBlock>())
+            {
+                if (!IsNetworkPeer(other)) continue;
+                other.EnsureEndpointId();
+                result.Add(other);
+            }
+            result.Sort((a, b) => string.CompareOrdinal(a.EndpointPickerLabel, b.EndpointPickerLabel));
+            return result;
+        }
+
+        /// <summary>Choose a persistent destination endpoint. Passing an empty id
+        /// restores legacy automatic pairing, which only operates when exactly one
+        /// matching peer exists; a multi-endpoint network always needs a selection.</summary>
+        public void SelectDestination(string destinationId)
+        {
+            selectedDestinationId = (destinationId ?? "").Trim();
+            RefreshLink();
+        }
+
+        /// <summary>
+        /// Resolve the active route. A saved destination id gives a deterministic
+        /// one-way route inside a shared NAME + CODE network. Older two-portal saves
+        /// have no selected id and continue to link automatically when there is exactly
+        /// one matching peer. More than one peer deliberately refuses to guess.
+        /// </summary>
         public void RefreshLink()
         {
             Linked = null;
-            if (!IsOpen) return;
-            string name = (portalName ?? "").Trim();
-            string code = (portalCode ?? "").Trim();
-            if (name.Length == 0 || code.Length == 0) return;
+            if (!IsOpen || !HasNetworkIdentity()) return;
+
+            string wanted = (selectedDestinationId ?? "").Trim();
+            PortalControllerBlock onlyReadyPeer = null;
+            int matchingPeerCount = 0;
             foreach (var other in FindObjectsByType<PortalControllerBlock>())
             {
-                if (other == null || other == this || !other.IsOpen || !other.IsValid) continue;
-                if (!string.Equals((other.portalName ?? "").Trim(), name, System.StringComparison.OrdinalIgnoreCase)) continue;
-                if (!string.Equals((other.portalCode ?? "").Trim(), code, System.StringComparison.Ordinal)) continue;
-                Linked = other;
-                return;   // FindObjectsByType is unordered but stable enough; first match wins
+                if (!IsNetworkPeer(other)) continue;
+                other.EnsureEndpointId();
+
+                if (wanted.Length > 0)
+                {
+                    if (other.IsOpen && other.IsValid
+                        && string.Equals(other.endpointId, wanted, System.StringComparison.Ordinal))
+                    {
+                        Linked = other;
+                        return;
+                    }
+                    continue;
+                }
+
+                // Preserve existing two-end behavior, but never silently send a
+                // traveller through an arbitrary member of a larger network — even
+                // if that second endpoint is currently unpowered or unsealed.
+                matchingPeerCount++;
+                if (matchingPeerCount > 1) return;
+                if (other.IsOpen && other.IsValid) onlyReadyPeer = other;
+            }
+            Linked = onlyReadyPeer;
+        }
+
+        private bool HasNetworkIdentity()
+        {
+            return (portalName ?? "").Trim().Length > 0 && (portalCode ?? "").Trim().Length > 0;
+        }
+
+        private bool IsNetworkPeer(PortalControllerBlock other)
+        {
+            if (other == null || other == this || !other.HasNetworkIdentity() || !HasNetworkIdentity())
+                return false;
+            return string.Equals((other.portalName ?? "").Trim(), (portalName ?? "").Trim(),
+                       System.StringComparison.OrdinalIgnoreCase)
+                && string.Equals((other.portalCode ?? "").Trim(), (portalCode ?? "").Trim(),
+                       System.StringComparison.Ordinal);
+        }
+
+        private void EnsureEndpointId()
+        {
+            if (string.IsNullOrWhiteSpace(endpointId))
+                endpointId = System.Guid.NewGuid().ToString("N");
+        }
+
+        private string ShortEndpointId
+        {
+            get
+            {
+                EnsureEndpointId();
+                return endpointId.Length <= 6 ? endpointId : endpointId.Substring(0, 6).ToUpperInvariant();
             }
         }
 
@@ -404,7 +514,7 @@ namespace VoxelEngine.Building
             }
 
             var subject = ship.transform;
-            string from = portalName, to = pair.portalName;
+            string from = EndpointDisplayName, to = pair.EndpointDisplayName;
             double distKm = math.length(destKm - shipKm);
             VoxelEngine.FX.WarpFx.PlayJump(ship, () =>
             {
@@ -537,13 +647,20 @@ namespace VoxelEngine.Building
 
         /// <summary>Save-load restore: name, code and charge/cooldown. A portal never
         /// restores open — a player re-opens it on their own terms.</summary>
-        public void RestorePersistentState(string name, string code, float charge01, float cooldown01)
+        public void RestorePersistentState(
+            string name, string code, float charge01, float cooldown01,
+            string restoredEndpointId, string restoredEndpointLabel, string restoredDestinationId)
         {
             portalName = name ?? "";
             portalCode = code ?? "";
+            endpointId = restoredEndpointId ?? "";
+            endpointLabel = restoredEndpointLabel ?? "";
+            selectedDestinationId = restoredDestinationId ?? "";
+            EnsureEndpointId();
             Charge01 = Mathf.Clamp01(charge01);
             Cooldown01 = Mathf.Clamp01(cooldown01);
             IsOpen = false;
+            Linked = null;
         }
     }
 }

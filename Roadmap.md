@@ -1,9 +1,9 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.39.6-dev`
-**Roadmap Version:** `12.39.6-dev`
-**Date:** 2026-09-25
+**Current Version:** `12.40.1-dev`
+**Roadmap Version:** `12.40.1-dev`
+**Date:** 2026-09-26
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
@@ -29,6 +29,21 @@
 
 ## 0. Recently Done
 
+### 12.40.1-dev - Allocation-Free Build Preview Hot Path
+- **Build preview** (`BuildSystem`, `BuildSystemV2`): ordinary and Hammer/tiered ray targeting, radial anchor/socket discovery, placement-volume probes, and stable tinting avoid per-frame allocations; exhaustive fallbacks remain on buffer overflow.
+- **Large static snap**: held-prefab collider classification is cached and target collider collection is reused; Portal Frame edge placement remains exact.
+- **Scope**: no save, API, content, or Setup authoring change.
+
+### 12.40.0-dev - Portal Networks, Explicit Destinations
+- **Network routing** (`PortalControllerBlock`, `PortalUI`): matching name + code groups may contain many endpoints; each controller selects one persistent destination.
+- **Persistence** (`WorldStatePersistence`): endpoint id, endpoint label, and selected route are additive saved placed-block state; legacy two-end pairs remain automatic.
+- **Scope**: portal content remains authored by existing non-destructive Setup Step 99; no new asset authoring is needed.
+
+### 12.39.7-dev - Rotation-Aware Large Static Edge Snap
+- **Static placement** (`BuildSystem`): static colliders larger than one grid cell now meet on their actual clicked support faces rather than the 1 m centre grid.
+- **Portal Frames**: 5 m cells preview and place flush on every face, including after 90-degree rotation; the overlap guard remains the final authority.
+- **Dedicated systems**: pipe, road, factory, busbar and turbine socket snaps keep their existing paths.
+
 ### 12.39.0-dev - Player-Built Portals, Name + Code Pairing
 - **Portal system** (`PortalFrameBlock`, `PortalControllerBlock`, `PortalUI`): frames seal any closed outline up to 64x64; the controller charges, pairs by NAME + CODE, and hands ships and players to the partner's mouth. Open drain scales with area - 64x64 is megawatts.
 - **Persistence** (`WorldStatePersistence`): portal name, code, charge and cooldown on the placed block; never restores open.
@@ -37,18 +52,6 @@
 ### 12.38.0-dev - Warp Gate Prototype
 - **Gate** (`GridWarpGate`): paired fixed-structure transit — matching codes, 25 s aperture, first ship inside hops to the partner's rendezvous, collision-vetoed, at rest.
 - **Setup** (`VoxelEngineSetupWindow`): Step 98 authors prefab, item, recipe, research (tier 8 behind Warp Drive).
-
-### 12.37.0-dev - Route-Book Warp Legs
-- **Auto-run** (`GridRouteAutopilot`): legs past one hop engage the drive — aim, auto-charge, jump, chain hops, cruise the rest; WARP LEGS toggle on the panel.
-- **Honest refusals:** no gyros / cooldown / atmosphere / stall all cruise with a log line; pilot keys outrank everything.
-
-### 12.36.0-dev - Warp Coil Resonator Item, Drive Upgrade Slots
-- **Drive panel** (`GridWarpDrive`, `GridBlockUI`): three RESONATORS slots — the crafted Warp Coil Resonator installs on the drive, -15% spin-up each.
-- **Setup** (`VoxelEngineSetupWindow`): Step 97 authors item + recipe + research link; the node unlocks the recipe (no passive ranks).
-
-### 12.35.0-dev - Warp Coil Resonance Research, Setup Step 97
-- **Research** (`GridWarpDrive`, `ResearchManager`): repeatable Warp Coil Resonance node — 15% faster spin-up per rank, read live by the drive; Coils row shows the rank.
-- **Setup** (`VoxelEngineSetupWindow`): non-destructive Step 97 authors and connects the node (manual run, once).
 
 ### Era Transition Feel
 
@@ -1930,7 +1933,7 @@ Statuses are evidence-based and move forward only after code/content review and 
 17. **Warp Gate Prototype**
     - Experimental travel to distant star systems.
     - Endgame expansion hook.
-    - *(12.38.0-dev ships the interplanetary prototype: `GridWarpGate`, paired by code, aperture transit to the partner's rendezvous; authored by Setup Step 98. 12.39.0-dev starts the successor: player-built portals — frames seal the aperture, controllers pair by name and code, Setup Step 99. Interstellar pairing and portal networks remain open.)*
+    - *(12.38.0-dev ships the interplanetary prototype: `GridWarpGate`, paired by code, aperture transit to the partner's rendezvous; authored by Setup Step 98. 12.39.0-dev starts the successor: player-built portals, authored by Setup Step 99. 12.40.0-dev adds explicit multi-endpoint portal routing. Interstellar pairing remains open.)*
 
 18. **Coordinate Jump Drive**
     - Charged faster-than-light grid block for known beacons, destinations, and validated safe coordinates.

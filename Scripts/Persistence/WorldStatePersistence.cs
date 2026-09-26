@@ -562,6 +562,9 @@ namespace VoxelEngine.Persistence
                     entry.hasPortalState = true;
                     entry.portalName = portalController.portalName ?? "";
                     entry.portalCode = portalController.portalCode ?? "";
+                    entry.portalEndpointId = portalController.EndpointId;
+                    entry.portalEndpointLabel = portalController.endpointLabel ?? "";
+                    entry.portalDestinationId = portalController.selectedDestinationId ?? "";
                     entry.portalCharge01 = portalController.Charge01;
                     entry.portalCooldown01 = portalController.Cooldown01;
                 }
@@ -2613,7 +2616,9 @@ namespace VoxelEngine.Persistence
 
                 var restoredPortal = go.GetComponentInChildren<VoxelEngine.Building.PortalControllerBlock>(true);
                 if (restoredPortal != null && sb.hasPortalState)
-                    restoredPortal.RestorePersistentState(sb.portalName, sb.portalCode, sb.portalCharge01, sb.portalCooldown01);
+                    restoredPortal.RestorePersistentState(
+                        sb.portalName, sb.portalCode, sb.portalCharge01, sb.portalCooldown01,
+                        sb.portalEndpointId, sb.portalEndpointLabel, sb.portalDestinationId);
 
                 var restoredSwitch = go.GetComponentInChildren<VoxelEngine.Building.RailTrack>(true);
                 if (restoredSwitch != null && sb.hasRailSwitch)
@@ -4033,6 +4038,11 @@ namespace VoxelEngine.Persistence
             public bool hasPortalState;
             public string portalName = "";
             public string portalCode = "";
+            // 12.40.0-dev additive portal-network routing state. Older saves leave
+            // these empty and receive a fresh endpoint id during restore.
+            public string portalEndpointId = "";
+            public string portalEndpointLabel = "";
+            public string portalDestinationId = "";
             public float portalCharge01;
             public float portalCooldown01;
             public Vector3 pos; public Quaternion rot; public float rotY;

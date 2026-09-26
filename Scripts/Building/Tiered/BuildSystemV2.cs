@@ -38,9 +38,18 @@ namespace VoxelEngine.Building.Tiered
         private TieredBlockDefinition _ghostDef;
         private float _ghostYaw;
         private Material _matValid, _matInvalid;
+        private Material _appliedGhostMaterial;
         private bool _ghostValid;
 
         private Vector3 _ghostPos;
+        // Fixed buffers cover normal building scenes. Saturation intentionally uses
+        // the former allocating exhaustive APIs so no candidate socket or collider
+        // is skipped in unusually dense factories.
+        private static readonly RaycastHit[] s_buildRaycastProbe = new RaycastHit[64];
+        private static readonly Collider[] s_socketOverlapProbe = new Collider[32];
+        private static readonly Collider[] s_placementOverlapProbe = new Collider[64];
+        private readonly HashSet<PlacedTieredBlock> _socketHosts = new(16);
+        private readonly List<BuildSocket> _socketScratch = new(8);
         private Quaternion _ghostRot = Quaternion.identity;
 
         private void Awake()
@@ -105,6 +114,7 @@ namespace VoxelEngine.Building.Tiered
                 _ghostDef = def;
                 _ghost = Instantiate(def.GetPrefab(BuildTier.Wood));
                 _ghost.name = "BuildGhost";
+                _appliedGhostMaterial = null;
                 StripGhost(_ghost);
             }
 
@@ -118,7 +128,7 @@ namespace VoxelEngine.Building.Tiered
 
             ComputeGhostTransform(hit, def);
             _ghost.transform.SetPositionAndRotation(_ghostPos, _ghostRot);
-            ApplyGhostMaterial(_ghost, _ghostValid ? _matValid : _matInvalid);
+            ApplyGhostMaterialIfChanged(_ghostValid ? _matValid : _matInvalid);
 
             // Place on the standard build action (RMB by default).
             if (_ghostValid && GameSettings.WasPressed(InputAction.Build))
@@ -127,12 +137,8 @@ namespace VoxelEngine.Building.Tiered
                 {
                     PayCost(def.placeCost);
                     Place(def, _ghostPos, _ghostRot);
-                    // placement feedback.
-                    var sb = new System.Text.StringBuilder();
-                    if (def.placeCost?.items != null)
-                        foreach (var ing in def.placeCost.items)
-                            if (ing.item != null && ing.count > 0)
-                                sb.Append($"-{ing.count} {ing.item.displayName}  ");
+                    // The feedback HUD receives the primary cost directly; building a
+                    // second formatted summary here was unused work on every placement.
                     VoxelEngine.UI.BuildFeedbackHud.ShowBlockPlaced(
                         def.displayName, def.placeCost?.items?.Length > 0 ? def.placeCost.items[0].item : null,
                         def.placeCost?.items?.Length > 0 ? def.placeCost.items[0].count : 0);
@@ -143,24 +149,39 @@ namespace VoxelEngine.Building.Tiered
         private void HideGhost()
         {
             if (_ghost != null) { Destroy(_ghost); _ghost = null; _ghostDef = null; }
+            _appliedGhostMaterial = null;
         }
 
         private bool TryRaycastIgnoringSelf(Ray ray, out RaycastHit hit, float maxDistance)
         {
-            var hits = Physics.RaycastAll(ray, maxDistance, ~0, QueryTriggerInteraction.Ignore);
-            System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+            int count = Physics.RaycastNonAlloc(ray, s_buildRaycastProbe, maxDistance,
+                ~0, QueryTriggerInteraction.Ignore);
+            if (count >= s_buildRaycastProbe.Length)
+            {
+                // NonAlloc has no complete-ordering guarantee on saturation.
+                var overflow = Physics.RaycastAll(ray, maxDistance, ~0, QueryTriggerInteraction.Ignore);
+                return TryGetNearestBuildRaycastHit(overflow, overflow.Length, out hit);
+            }
+            return TryGetNearestBuildRaycastHit(s_buildRaycastProbe, count, out hit);
+        }
+
+        private bool TryGetNearestBuildRaycastHit(RaycastHit[] hits, int count, out RaycastHit hit)
+        {
             Transform selfRoot = transform.root;
-            for (int i = 0; i < hits.Length; i++)
+            float closest = float.MaxValue;
+            hit = default;
+            bool found = false;
+            for (int i = 0; i < count; i++)
             {
                 var candidate = hits[i];
-                if (candidate.collider == null) continue;
+                if (candidate.collider == null || candidate.distance >= closest) continue;
                 if (selfRoot != null && candidate.collider.transform.IsChildOf(selfRoot)) continue;
                 if (VoxelEngine.Player.PlayerRaycastFilter.IsOwnPlayerCollider(candidate.collider, transform)) continue;
+                closest = candidate.distance;
                 hit = candidate;
-                return true;
+                found = true;
             }
-            hit = default;
-            return false;
+            return found;
         }
 
         // ---------- Snap / placement math ----------
@@ -180,21 +201,17 @@ namespace VoxelEngine.Building.Tiered
                 return;
             }
 
-            var hits = Physics.OverlapSphere(hit.point, socketSnapRadius);
-            var visitedHosts = new HashSet<PlacedTieredBlock>();
-            foreach (var col in hits)
+            _socketHosts.Clear();
+            int socketCandidateCount = Physics.OverlapSphereNonAlloc(hit.point, socketSnapRadius,
+                s_socketOverlapProbe, ~0, QueryTriggerInteraction.UseGlobal);
+            ConsiderSocketCandidates(s_socketOverlapProbe, socketCandidateCount, def.family, hit.point,
+                ref bestSocket, ref bestSqr);
+            if (socketCandidateCount >= s_socketOverlapProbe.Length)
             {
-                var host = col != null ? col.GetComponentInParent<PlacedTieredBlock>() : null;
-                if (host == null || host.definition == null || !visitedHosts.Add(host)) continue;
-
-                var sockets = host.GetComponentsInChildren<BuildSocket>(true);
-                foreach (var sock in sockets)
-                {
-                    if (sock == null || !BuildSocketCompat.AreCompatible(host.definition.family, sock.side, def.family))
-                        continue;
-                    float d = (sock.transform.position - hit.point).sqrMagnitude;
-                    if (d < bestSqr) { bestSqr = d; bestSocket = sock; }
-                }
+                // Retain the former exhaustive result if the reusable local probe fills.
+                var overflow = Physics.OverlapSphere(hit.point, socketSnapRadius, ~0, QueryTriggerInteraction.UseGlobal);
+                ConsiderSocketCandidates(overflow, overflow.Length, def.family, hit.point,
+                    ref bestSocket, ref bestSqr);
             }
 
             if (bestSocket != null)
@@ -342,25 +359,55 @@ namespace VoxelEngine.Building.Tiered
             return true;
         }
 
+        private void ConsiderSocketCandidates(Collider[] colliders, int count, BuildFamily placedFamily,
+            Vector3 hitPoint, ref BuildSocket bestSocket, ref float bestSqr)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                var collider = colliders[i];
+                var host = collider != null ? collider.GetComponentInParent<PlacedTieredBlock>() : null;
+                if (host == null || host.definition == null || !_socketHosts.Add(host)) continue;
+
+                _socketScratch.Clear();
+                host.GetComponentsInChildren<BuildSocket>(true, _socketScratch);
+                for (int socketIndex = 0; socketIndex < _socketScratch.Count; socketIndex++)
+                {
+                    var socket = _socketScratch[socketIndex];
+                    if (socket == null || !BuildSocketCompat.AreCompatible(host.definition.family, socket.side, placedFamily))
+                        continue;
+                    float distance = (socket.transform.position - hitPoint).sqrMagnitude;
+                    if (distance < bestSqr) { bestSqr = distance; bestSocket = socket; }
+                }
+            }
+        }
+
         private bool ValidateOverlap(Vector3 pos, BuildFamily family, PlacedTieredBlock socketHost = null)
         {
             // Don't overlap the player.
             if (Vector3.Distance(pos, transform.position) < 0.6f) return false;
 
-            // Don't overlap dynamic rigidbodies.
-            var overlaps = Physics.OverlapBox(pos, Vector3.one * 0.45f, Quaternion.identity);
-            foreach (var col in overlaps)
-            {
-                if (col == null) continue;
-                if (col.attachedRigidbody != null && !col.attachedRigidbody.isKinematic) return false;
+            int count = Physics.OverlapBoxNonAlloc(pos, Vector3.one * 0.45f,
+                s_placementOverlapProbe, Quaternion.identity, ~0, QueryTriggerInteraction.UseGlobal);
+            for (int i = 0; i < count; i++)
+                if (!IsOverlapColliderAllowed(s_placementOverlapProbe[i], socketHost)) return false;
+            if (count < s_placementOverlapProbe.Length) return true;
 
-                // Block placement inside existing tiered buildings UNLESS we're
-                // socket-snapping to that exact host (adjacent stacking is fine).
-                var host = col.GetComponentInParent<PlacedTieredBlock>();
-                if (host != null && host != socketHost)
-                    return false;
-            }
+            // Preserve exact legacy behaviour if a very dense area fills the probe.
+            foreach (var collider in Physics.OverlapBox(pos, Vector3.one * 0.45f, Quaternion.identity))
+                if (!IsOverlapColliderAllowed(collider, socketHost)) return false;
             return true;
+        }
+
+        private static bool IsOverlapColliderAllowed(Collider collider, PlacedTieredBlock socketHost)
+        {
+            if (collider == null) return true;
+            if (collider.attachedRigidbody != null && !collider.attachedRigidbody.isKinematic)
+                return false;
+
+            // Block placement inside existing tiered buildings UNLESS we're
+            // socket-snapping to that exact host (adjacent stacking is fine).
+            var host = collider.GetComponentInParent<PlacedTieredBlock>();
+            return host == null || host == socketHost;
         }
 
         // ---------- Resource handling ----------
@@ -478,6 +525,13 @@ namespace VoxelEngine.Building.Tiered
             // Hide socket gizmos in the ghost.
             foreach (var sock in root.GetComponentsInChildren<BuildSocket>(true)) sock.enabled = false;
         }
+        private void ApplyGhostMaterialIfChanged(Material mat)
+        {
+            if (_ghost == null || mat == null || _appliedGhostMaterial == mat) return;
+            ApplyGhostMaterial(_ghost, mat);
+            _appliedGhostMaterial = mat;
+        }
+
         private static void ApplyGhostMaterial(GameObject root, Material mat)
         {
             foreach (var r in root.GetComponentsInChildren<Renderer>(true))
