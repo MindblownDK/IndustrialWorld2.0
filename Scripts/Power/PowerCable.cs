@@ -176,9 +176,19 @@ namespace VoxelEngine.Power
             // enough to bridge the gap. This makes cables visually meet machines
             // whose centres aren't on the cable grid (server racks, generators).
             _neighbourPositionsBuf.Clear();
+            var surfaceTap = GetComponent<SurfacePowerTap>();
             foreach (var nb in neighbours)
             {
                 if (nb == null) continue;
+
+                // A cable mounted on a large static power device is logically
+                // linked to the node at its root, but must visibly terminate at
+                // the touched collider face rather than draw an arm through it.
+                if (surfaceTap != null && surfaceTap.TryGetHostSurfacePoint(nb, out Vector3 surfacePoint))
+                {
+                    _neighbourPositionsBuf.Add(transform.InverseTransformPoint(surfacePoint));
+                    continue;
+                }
 
                 // IndustrialPipeMesh builds under this cable's local transform.
                 // Convert every target point into local space first so cables on

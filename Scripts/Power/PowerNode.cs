@@ -51,8 +51,29 @@ namespace VoxelEngine.Power
         /// <summary>Raised after PowerNetworkManager rebuilds topology, so visuals can refresh.</summary>
         public System.Action onNeighboursChanged;
 
-        protected virtual void OnEnable()  { PowerNetworkManager.EnsureInstance(); PowerNetworkManager.Instance.Register(this); }
-        protected virtual void OnDisable() { PowerNetworkManager.Instance?.Unregister(this); }
+        protected virtual void OnEnable()
+        {
+            // Ghost prefabs are instantiated before BuildSystem strips their runtime
+            // behaviours. Registering one for that frame made phantom networks and
+            // surface taps possible during building previews.
+            if (VoxelEngine.Building.BuildSystem.IsCreatingGhost) return;
+
+            PowerNetworkManager.EnsureInstance();
+            PowerNetworkManager.Instance.Register(this);
+
+            // These small utility nodes can intentionally sit directly on a large
+            // static machine face. The tap rebinds itself after save/load from that
+            // physical contact; no fragile object reference needs persistence.
+            if ((this is PowerCable
+                 || GetComponent<VoxelEngine.Simulation.CompactVoltageStation>() != null)
+                && GetComponent<SurfacePowerTap>() == null)
+                gameObject.AddComponent<SurfacePowerTap>();
+        }
+
+        protected virtual void OnDisable()
+        {
+            PowerNetworkManager.Instance?.Unregister(this);
+        }
 
         public virtual bool CanLinkTo(PowerNode other)
         {

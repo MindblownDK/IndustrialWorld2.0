@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.40.1-dev`
-**Roadmap Version:** `12.40.1-dev`
+**Current Version:** `12.40.2-dev`
+**Roadmap Version:** `12.40.2-dev`
 **Date:** 2026-09-26
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 12.40.2-dev - Static Utility Surface Lattice and Power Taps
+- **Surface build UX** (`BuildSystem`, `StaticSurfaceLatticePreview`): utility pipes/cables/connectors snap to a visible, face-bounded static-block lattice without entering large or irregular hosts.
+- **Power** (`SurfacePowerTap`, `PowerNode`, `PowerCable`): static face-mounted energy cables and wire terminals rebind direct battery/generator/consumer taps after placement and load; cable arms terminate at the touched face.
+- **Portal frames**: terrain placement uses the 5 m collider support plane, leaving frames above rather than inside ground.
+
 ### 12.40.1-dev - Allocation-Free Build Preview Hot Path
 - **Build preview** (`BuildSystem`, `BuildSystemV2`): ordinary and Hammer/tiered ray targeting, radial anchor/socket discovery, placement-volume probes, and stable tinting avoid per-frame allocations; exhaustive fallbacks remain on buffer overflow.
 - **Large static snap**: held-prefab collider classification is cached and target collider collection is reused; Portal Frame edge placement remains exact.
@@ -48,10 +53,6 @@
 - **Portal system** (`PortalFrameBlock`, `PortalControllerBlock`, `PortalUI`): frames seal any closed outline up to 64x64; the controller charges, pairs by NAME + CODE, and hands ships and players to the partner's mouth. Open drain scales with area - 64x64 is megawatts.
 - **Persistence** (`WorldStatePersistence`): portal name, code, charge and cooldown on the placed block; never restores open.
 - **Setup** (`VoxelEngineSetupWindow`): Step 99 authors frame/controller prefabs, static block items, expensive recipes, Stable Portals research (tier 8 behind Warp Gate).
-
-### 12.38.0-dev - Warp Gate Prototype
-- **Gate** (`GridWarpGate`): paired fixed-structure transit — matching codes, 25 s aperture, first ship inside hops to the partner's rendezvous, collision-vetoed, at rest.
-- **Setup** (`VoxelEngineSetupWindow`): Step 98 authors prefab, item, recipe, research (tier 8 behind Warp Drive).
 
 ### Era Transition Feel
 

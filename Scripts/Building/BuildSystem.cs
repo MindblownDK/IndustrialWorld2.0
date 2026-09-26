@@ -49,6 +49,9 @@ namespace VoxelEngine.Building
         private Material   _appliedGhostMaterial;
         private Vector3Int _rotSteps;
         private GridPrecisionLatticePreview _precisionLattice;
+        private StaticSurfaceLatticePreview _staticSurfaceLattice;
+        private PlacedBlock _surfaceAttachmentHost;
+        private StaticSurfaceLatticePose _surfaceLatticePose;
         private readonly System.Collections.Generic.List<Vector3> _pipeGhostLinks = new(1);
         private VoxelEngine.Networks.PipeVisualBuilder _pipeGhostVisual;
         private EntityId _pipeGhostTargetId;
@@ -66,8 +69,20 @@ namespace VoxelEngine.Building
             public Collider[] colliders;
             public bool isThinConduit;
             public bool isPortalPiece;
+            public bool isSurfaceAttachment;
             public Vector3 portalHalfExtents;
             public bool usesDedicatedSnap;
+        }
+
+        private struct StaticSurfaceLatticePose
+        {
+            public bool valid;
+            public Vector3 center;
+            public Vector3 axisU;
+            public Vector3 axisV;
+            public float halfU;
+            public float halfV;
+            public float spacing;
         }
 
         /// <summary>Set while a port snap is rejected because the engine's service
@@ -174,6 +189,7 @@ namespace VoxelEngine.Building
 
             var ray = shootCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0));
             HideGhostPortRing();
+            HideStaticSurfaceLattice();
 
             if (!TryRaycastIgnoringSelf(ray, out var hit, reach))
             {
@@ -280,6 +296,7 @@ namespace VoxelEngine.Building
                 ghostBelt.SetBuildShape(ResolveConveyorBuildShape(ghostBelt, hit));
 
             ComputePlacementPose(hit, block, out Vector3 pos, out Quaternion rot);
+            ShowStaticSurfaceLattice();
             _ghost.transform.SetPositionAndRotation(pos, rot);
             if (IsUnifiedPipe(block))
                 ConfigurePipeGhostConnection(block, null, pos, Mathf.Max(0.01f, gridSize));
@@ -306,6 +323,7 @@ namespace VoxelEngine.Building
             if (_ghost != null) { Destroy(_ghost); _ghost = null; _ghostItem = null; }
             _appliedGhostMaterial = null;
             HidePrecisionLattice();
+            HideStaticSurfaceLattice();
             HideGhostPortRing();
             Quarry.HidePlacementPreview();
         }
@@ -313,6 +331,7 @@ namespace VoxelEngine.Building
         private void OnDestroy()
         {
             if (_ghostPortRing != null) Destroy(_ghostPortRing.gameObject);
+            if (_staticSurfaceLattice != null) Destroy(_staticSurfaceLattice.gameObject);
         }
 
         private void HandleRotationInput()
@@ -828,6 +847,25 @@ namespace VoxelEngine.Building
             if (_precisionLattice != null) _precisionLattice.Hide();
         }
 
+        private void ShowStaticSurfaceLattice()
+        {
+            if (!_surfaceLatticePose.valid) return;
+            if (_staticSurfaceLattice == null)
+            {
+                var preview = new GameObject("StaticSurfaceLatticePreview");
+                _staticSurfaceLattice = preview.AddComponent<StaticSurfaceLatticePreview>();
+            }
+            _staticSurfaceLattice.Show(_surfaceLatticePose.center, _surfaceLatticePose.axisU,
+                _surfaceLatticePose.axisV, _surfaceLatticePose.halfU,
+                _surfaceLatticePose.halfV, _surfaceLatticePose.spacing);
+        }
+
+        private void HideStaticSurfaceLattice()
+        {
+            _surfaceLatticePose = default;
+            if (_staticSurfaceLattice != null) _staticSurfaceLattice.Hide();
+        }
+
         // ── Ghost port ring ──────────────────────────────────────────
         // Draws a color-coded disc on the engine hull while the player
         // aims at a surface that will create a new variable port. This
@@ -1188,6 +1226,9 @@ namespace VoxelEngine.Building
         /// </summary>
         private void ComputePlacementPose(RaycastHit hit, BlockItem block, out Vector3 pos, out Quaternion rot)
         {
+            _surfaceAttachmentHost = null;
+            _surfaceLatticePose = default;
+
             if (TryGetStaticPipeSnapPose(hit, block, out pos, out rot))
                 return;
             // Roads go first among the surface snaps: a road cell anchors to the strip it is
@@ -1196,6 +1237,18 @@ namespace VoxelEngine.Building
             if (VoxelEngine.Building.RoadPaver.IsRoadBlock(block)
                 && VoxelEngine.Building.RoadPaver.TryComputePose(hit, block, out pos, out rot))
                 return;
+
+            // Pipes, cables and compact wire terminals can mount directly to every
+            // usable static face. This must precede the factory fallback, whose old
+            // centre-to-centre offset put terminal boxes inside large/odd machines.
+            if (TryGetStaticSurfaceAttachmentPose(hit, block, out pos, out rot,
+                    out var attachmentHost, out var lattice))
+            {
+                _surfaceAttachmentHost = attachmentHost;
+                _surfaceLatticePose = lattice;
+                return;
+            }
+
             if (TryGetFactorySnapPose(hit, block, out pos, out rot))
                 return;
 
@@ -1212,6 +1265,131 @@ namespace VoxelEngine.Building
 
             pos = ComputePlacementPosition(hit, block);
             rot = GravityProvider.GetSurfaceRotation(pos) * Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
+            ApplyPortalSurfaceSupport(hit, block, rot, ref pos);
+        }
+
+        /// <summary>
+        /// Utility pieces are mounted onto a clicked static face, not placed from the
+        /// target's centre. This produces a readable one-metre face lattice on large
+        /// or irregular machines and keeps the held collider fully outside the host.
+        /// </summary>
+        private bool TryGetStaticSurfaceAttachmentPose(RaycastHit hit, BlockItem held,
+            out Vector3 pos, out Quaternion rot, out PlacedBlock host, out StaticSurfaceLatticePose lattice)
+        {
+            pos = default;
+            rot = default;
+            host = null;
+            lattice = default;
+            if (held == null || held.placedPrefab == null || hit.collider == null) return false;
+
+            var profile = GetStaticPlacementPrefabProfile(held);
+            if (!profile.isSurfaceAttachment) return false;
+            // Existing power cables retain their established cardinal extension
+            // path below in TryGetFactorySnapPose; mounting one onto its own thin
+            // face would make a cable run fold back into the host instead.
+            if (held.placedPrefab.GetComponentInChildren<VoxelEngine.Power.PowerCable>(true) != null
+                && hit.collider.GetComponentInParent<VoxelEngine.Power.PowerCable>() != null)
+                return false;
+            host = hit.collider.GetComponentInParent<PlacedBlock>();
+            if (host == null || host.GetComponentInParent<GridEntity>() != null)
+            {
+                host = null;
+                return false;
+            }
+
+            Vector3 normal = SnapOutwardNormal(host.transform, hit.normal);
+            if (normal.sqrMagnitude < 0.0001f)
+            {
+                host = null;
+                return false;
+            }
+            normal.Normalize();
+
+            // Local +Y is the mount normal for compact connectors and utility pipe
+            // prefabs. The target supplies a stable tangent direction even on a
+            // sloped/radial surface; player rotation cycles around the mounted face.
+            Vector3 axisV = Vector3.ProjectOnPlane(host.transform.up, normal);
+            if (axisV.sqrMagnitude < 0.0001f) axisV = Vector3.ProjectOnPlane(host.transform.forward, normal);
+            if (axisV.sqrMagnitude < 0.0001f) axisV = Vector3.ProjectOnPlane(Vector3.forward, normal);
+            if (axisV.sqrMagnitude < 0.0001f) axisV = Vector3.ProjectOnPlane(Vector3.right, normal);
+            if (axisV.sqrMagnitude < 0.0001f)
+            {
+                host = null;
+                return false;
+            }
+            axisV.Normalize();
+            Vector3 axisU = Vector3.Cross(axisV, normal).normalized;
+            axisV = Vector3.Cross(normal, axisU).normalized;
+            rot = Quaternion.LookRotation(axisV, normal) * Quaternion.Euler(0f, _rotSteps.y * 90f, 0f);
+
+            if (!TryGetPlacedBlockColliderProjectionRange(host, normal, out _, out float hostMaxNormal)
+                || !TryGetPlacedBlockColliderProjectionRange(host, axisU, out float hostMinU, out float hostMaxU)
+                || !TryGetPlacedBlockColliderProjectionRange(host, axisV, out float hostMinV, out float hostMaxV)
+                || !TryGetPrefabColliderProjectionRange(held.placedPrefab, profile.colliders, rot, normal,
+                    out float heldMinNormal, out _)
+                || !TryGetPrefabColliderProjectionRange(held.placedPrefab, profile.colliders, rot, axisU,
+                    out float heldMinU, out float heldMaxU)
+                || !TryGetPrefabColliderProjectionRange(held.placedPrefab, profile.colliders, rot, axisV,
+                    out float heldMinV, out float heldMaxV))
+            {
+                host = null;
+                return false;
+            }
+
+            const float clearance = 0.002f;
+            float spacing = Mathf.Max(0.25f, gridSize);
+            float originU = Vector3.Dot(host.transform.position, axisU);
+            float originV = Vector3.Dot(host.transform.position, axisV);
+            float rootU = SnapSurfaceLatticeCoordinate(Vector3.Dot(hit.point, axisU), originU,
+                hostMinU - heldMinU + clearance, hostMaxU - heldMaxU - clearance, spacing);
+            float rootV = SnapSurfaceLatticeCoordinate(Vector3.Dot(hit.point, axisV), originV,
+                hostMinV - heldMinV + clearance, hostMaxV - heldMaxV - clearance, spacing);
+            float rootNormal = hostMaxNormal - heldMinNormal + clearance;
+            pos = axisU * rootU + axisV * rootV + normal * rootNormal;
+
+            lattice = new StaticSurfaceLatticePose
+            {
+                valid = true,
+                center = axisU * ((hostMinU + hostMaxU) * 0.5f)
+                    + axisV * ((hostMinV + hostMaxV) * 0.5f)
+                    + normal * (hostMaxNormal + 0.006f),
+                axisU = axisU,
+                axisV = axisV,
+                halfU = (hostMaxU - hostMinU) * 0.5f,
+                halfV = (hostMaxV - hostMinV) * 0.5f,
+                spacing = spacing
+            };
+            return true;
+        }
+
+        private static float SnapSurfaceLatticeCoordinate(float wanted, float origin,
+            float minimum, float maximum, float spacing)
+        {
+            if (minimum > maximum) return Mathf.Clamp(wanted, maximum, minimum);
+            int minStep = Mathf.CeilToInt((minimum - origin) / spacing);
+            int maxStep = Mathf.FloorToInt((maximum - origin) / spacing);
+            if (minStep > maxStep) return Mathf.Clamp(wanted, minimum, maximum);
+            int step = Mathf.RoundToInt((wanted - origin) / spacing);
+            step = Mathf.Clamp(step, minStep, maxStep);
+            return origin + step * spacing;
+        }
+
+        /// <summary>Portal roots sit at their collider centre, unlike ordinary
+        /// floor blocks. Align their true support plane to terrain so a 5 m frame
+        /// stands on the ground rather than sinking half of its height below it.</summary>
+        private void ApplyPortalSurfaceSupport(RaycastHit hit, BlockItem block, Quaternion rot, ref Vector3 pos)
+        {
+            if (block == null || block.placedPrefab == null || hit.collider == null) return;
+            var profile = GetStaticPlacementPrefabProfile(block);
+            if (!profile.isPortalPiece) return;
+            Vector3 normal = hit.normal.sqrMagnitude > 0.0001f
+                ? hit.normal.normalized
+                : GravityProvider.GetUp(hit.point).normalized;
+            if (!TryGetPrefabColliderProjectionRange(block.placedPrefab, profile.colliders, rot, normal,
+                    out float heldMin, out _)) return;
+            const float clearance = 0.002f;
+            float desiredNormal = Vector3.Dot(hit.point, normal) - heldMin + clearance;
+            pos += normal * (desiredNormal - Vector3.Dot(pos, normal));
         }
 
         /// <summary>
@@ -1311,11 +1489,15 @@ namespace VoxelEngine.Building
             bool isPortalPiece = prefab != null
                 && (prefab.GetComponent<VoxelEngine.Building.PortalFrameBlock>() != null
                  || prefab.GetComponent<VoxelEngine.Building.PortalControllerBlock>() != null);
+            bool isSurfaceAttachment = prefab != null
+                && (isThinConduit
+                 || prefab.GetComponentInChildren<VoxelEngine.Simulation.CompactVoltageStation>(true) != null);
             profile = new StaticPlacementPrefabProfile
             {
                 colliders = prefab != null ? prefab.GetComponentsInChildren<Collider>(true) : System.Array.Empty<Collider>(),
                 isThinConduit = isThinConduit,
                 isPortalPiece = isPortalPiece,
+                isSurfaceAttachment = isSurfaceAttachment,
                 portalHalfExtents = isPortalPiece ? PortalPieceHalfExtents(prefab) : Vector3.zero,
                 usesDedicatedSnap = prefab == null
                     || isThinConduit
@@ -2133,7 +2315,8 @@ namespace VoxelEngine.Building
                 && HasPlacedBlockVolumeOverlap(pos, placementProfile.portalHalfExtents * 0.94f, rot))
                 return false;
 
-            return IsPlacementProbeClear(pos, Vector3.one * checkSize, isThin, isSurfaceOverlay, block);
+            return IsPlacementProbeClear(pos, Vector3.one * checkSize, isThin, isSurfaceOverlay,
+                block, placementProfile != null && placementProfile.isSurfaceAttachment ? _surfaceAttachmentHost : null);
         }
 
         /// <summary>Allocation-free portal volume guard for the every-frame ghost verdict.
@@ -2163,31 +2346,38 @@ namespace VoxelEngine.Building
         /// <summary>Preserves the old structural placement verdict while avoiding an
         /// allocating OverlapBox every ghost frame under normal collider density.</summary>
         private static bool IsPlacementProbeClear(Vector3 center, Vector3 halfExtents,
-            bool isThin, bool isSurfaceOverlay, BlockItem block)
+            bool isThin, bool isSurfaceOverlay, BlockItem block, PlacedBlock surfaceAttachmentHost)
         {
             int count = Physics.OverlapBoxNonAlloc(center, halfExtents, s_placementOverlapProbe,
                 Quaternion.identity, ~0, QueryTriggerInteraction.UseGlobal);
             for (int i = 0; i < count; i++)
-                if (!IsPlacementProbeColliderAllowed(s_placementOverlapProbe[i], isThin, isSurfaceOverlay, block))
+                if (!IsPlacementProbeColliderAllowed(s_placementOverlapProbe[i], isThin, isSurfaceOverlay,
+                        block, surfaceAttachmentHost))
                     return false;
             if (count < s_placementOverlapProbe.Length) return true;
 
             foreach (var collider in Physics.OverlapBox(center, halfExtents, Quaternion.identity))
-                if (!IsPlacementProbeColliderAllowed(collider, isThin, isSurfaceOverlay, block))
+                if (!IsPlacementProbeColliderAllowed(collider, isThin, isSurfaceOverlay,
+                        block, surfaceAttachmentHost))
                     return false;
             return true;
         }
 
         private static bool IsPlacementProbeColliderAllowed(Collider collider,
-            bool isThin, bool isSurfaceOverlay, BlockItem block)
+            bool isThin, bool isSurfaceOverlay, BlockItem block, PlacedBlock surfaceAttachmentHost)
         {
             if (collider == null || collider.isTrigger) return true;
+            var placed = collider.GetComponentInParent<PlacedBlock>();
+            // A mounted utility piece intentionally touches only the face it was
+            // snapped to. The support-plane pose guarantees it sits outside that
+            // host; all other structures and conduits remain collision blockers.
+            if (placed != null && placed == surfaceAttachmentHost) return true;
             // A structural block may never engulf a placed pipe/cable even when the
             // structural item itself allows normal block stacking.
             if (IsConduitCollider(collider) && !isThin) return false;
             // Placed blocks retain their established stacking contract after the
             // explicit conduit-volume guard above.
-            if (collider.GetComponentInParent<PlacedBlock>() != null)
+            if (placed != null)
                 return block != null && block.allowStacking;
             // Thin conduits and draped roads may overlap static world geometry.
             if (isThin || isSurfaceOverlay) return true;

@@ -1,9 +1,17 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.40.1-dev`
+**Current Version:** `12.40.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.40.2-dev] Static Utility Surface Lattice and Power Taps
+
+**Type:** PATCH - Portal Frames now resolve their real collider support plane against the aimed surface, so the 5 m root is lifted by its 2.5 m half-height and stands on terrain instead of being buried. Pipes, energy pipes, data cables, compact relays, and LV/HV Wire Connectors now mount cleanly to ordinary static `PlacedBlock` faces through a cyan 1 m surface lattice. The mount pose uses the actual host and held collider support planes, clamps cells to the visible face, preserves a tiny non-overlap clearance, and permits only the intended host contact during placement validation. Static power cables and compact voltage terminals discover a touching battery/generator/consumer after placement or load and create a direct, face-anchored power tap; cable arms now terminate at that touched surface rather than pointing through a large machine's centre. Existing grid placement, cable extension, ports, roads, conveyors, saves, and public APIs remain compatible. No prefab/item/recipe/research authoring is required.
+
+**GitHub title:** `[12.40.2-dev] Static utility surface lattice and power taps`
+
+**Manual steps:** no Setup run is required. In Unity, first place a new Portal Frame on flat terrain and confirm its lower support plane rests just above the ground; existing already-buried frames are intentionally not moved. Aim an Item/Gas/Water Pipe, Energy Pipe, or LV/HV Wire Connector at a static block face: a cyan lattice must appear, the ghost must stay outside the face, and only valid cells inside the face may be selected. Mount an Energy Pipe to a static Battery, extend its run by clicking cable segments, and mount the final segment to a static powered consumer. After the normal physics/topology settle, confirm the consumer receives power and the end arms visibly meet the two machine faces. Repeat with an LV/HV Wire Connector on a large or irregular powered block, then save/reload and confirm its touching power tap rebinds. Finally, verify normal grid pipe/cable placement, conveyors, roads, portals, and a deliberately intersecting Portal Frame still behave as before.
 
 ### [12.40.1-dev] Build Placement Hot-Path Cleanup
 
