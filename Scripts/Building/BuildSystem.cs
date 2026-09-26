@@ -2475,9 +2475,8 @@ namespace VoxelEngine.Building
             // snapped to. The support-plane pose guarantees it sits outside that
             // host; all other structures and conduits remain collision blockers.
             if (placed != null && placed == surfaceAttachmentHost) return true;
-            // A structural block may never engulf a placed pipe/cable even when the
-            // structural item itself allows normal block stacking.
-            if (IsConduitCollider(collider) && !isThin) return false;
+            // A structural block or another conduit may never engulf a placed pipe/cable
+            if (IsConduitCollider(collider)) return false;
             // Placed blocks retain their established stacking contract after the
             // explicit conduit-volume guard above.
             if (placed != null)

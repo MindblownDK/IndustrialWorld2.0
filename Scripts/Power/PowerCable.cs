@@ -46,7 +46,7 @@ namespace VoxelEngine.Power
             float gs = gridSize > 0 ? gridSize : 1f;
             connectRadius = gs * Mathf.Max(3.0f, straightLength * 1.5f);
 
-            requireGridAlignedNeighbours = true;
+            requireGridAlignedNeighbours = false;
             connectionBlockingLayers = ~(1 << 2);
 
             base.OnEnable();
@@ -74,67 +74,51 @@ namespace VoxelEngine.Power
         public override bool CanLinkTo(PowerNode other)
         {
             if (other == null || other == this) return false;
-            if (other is PowerCable && !IsStrictCableNeighbour(other)) return false;
-            if (!(other is PowerCable) && !TouchesPowerEndpoint(other)) return false;
-            if (!base.CanLinkTo(other)) return false;
 
-            if (other is PowerConsumer) return true;
-
-            var portConfig = other.GetComponent<PortConfig>();
-            if (portConfig != null)
+            if (other is PowerCable otherCable)
             {
-                var match = portConfig.GetMatchingFace(transform.position, PortDirection.Input);
-                if (!match.HasValue) match = portConfig.GetMatchingFace(transform.position, PortDirection.Output);
-                if (!match.HasValue) return false;
-                if (!portConfig.AcceptsNetworkType(match.Value.face, NetworkType.Power)) return false;
+                var myEps = EnergyPipeMeshBuilder.GetLocalEndpoints(variant, straightLength);
+                var otherEps = EnergyPipeMeshBuilder.GetLocalEndpoints(otherCable.variant, otherCable.straightLength);
+                for (int i = 0; i < myEps.Count; i++)
+                {
+                    Vector3 myWorld = transform.TransformPoint(myEps[i].Position);
+                    for (int j = 0; j < otherEps.Count; j++)
+                    {
+                        Vector3 otherWorld = otherCable.transform.TransformPoint(otherEps[j].Position);
+                        if ((myWorld - otherWorld).sqrMagnitude <= 0.45f * 0.45f)
+                            return true;
+                    }
+                }
+                return false;
             }
 
-            return true;
-        }
-
-        private bool IsStrictCableNeighbour(PowerNode other)
-        {
-            if (other == null) return false;
-            var aBlock = GetComponentInParent<VoxelEngine.GridSystem.GridBlock>();
-            var bBlock = other.GetComponentInParent<VoxelEngine.GridSystem.GridBlock>();
-            float step = gridSize > 0f ? gridSize : 1f;
-            Vector3 delta = other.transform.position - transform.position;
-            if (aBlock != null && bBlock != null && aBlock.Grid != null && aBlock.Grid == bBlock.Grid)
-            {
-                step = VoxelEngine.GridSystem.GridSizeExt.CellSize(VoxelEngine.GridSystem.GridSize.Small);
-                delta = aBlock.Grid.transform.InverseTransformVector(delta);
-            }
-
-            float maxReach = step * Mathf.Max(1.2f, straightLength * 1.1f);
-            return delta.magnitude <= maxReach;
+            // Connecting to a machine, generator, battery, or consumer
+            return TouchesPowerEndpoint(other);
         }
 
         private bool TouchesPowerEndpoint(PowerNode other)
         {
             if (other == null) return false;
-            float step = gridSize > 0f ? gridSize : 1f;
-            float maxReach = Mathf.Max(1.5f, step * Mathf.Max(1.5f, straightLength * 1.15f));
-            Vector3 delta = other.transform.position - transform.position;
-            if (delta.sqrMagnitude > maxReach * maxReach * 4f) return false;
+            var myEps = EnergyPipeMeshBuilder.GetLocalEndpoints(variant, straightLength);
+            var otherColliders = other.GetComponentsInChildren<Collider>(true);
 
-            int count = Physics.OverlapSphereNonAlloc(transform.position,
-                maxReach, s_endpointTouchProbe, ~0,
-                QueryTriggerInteraction.Collide);
-            for (int i = 0; i < count; i++)
+            for (int i = 0; i < myEps.Count; i++)
             {
-                var collider = s_endpointTouchProbe[i];
-                s_endpointTouchProbe[i] = null;
-                if (collider == null) continue;
-                if (collider.transform == other.transform
-                    || collider.transform.IsChildOf(other.transform)
-                    || other.transform.IsChildOf(collider.transform))
+                Vector3 epWorld = transform.TransformPoint(myEps[i].Position);
+                // Proximity to node transform
+                if ((other.transform.position - epWorld).sqrMagnitude <= 2.2f * 2.2f)
+                    return true;
+
+                // Proximity to node colliders
+                for (int c = 0; c < otherColliders.Length; c++)
                 {
-                    Vector3 closest = collider.ClosestPoint(transform.position);
-                    if ((closest - transform.position).sqrMagnitude <= maxReach * maxReach)
+                    var col = otherColliders[c];
+                    if (col == null || !col.enabled) continue;
+                    Vector3 closest = col.ClosestPoint(epWorld);
+                    if ((closest - epWorld).sqrMagnitude <= 1.4f * 1.4f)
                         return true;
                 }
             }
-            if (delta.sqrMagnitude <= maxReach * maxReach) return true;
             return false;
         }
 
@@ -158,8 +142,38 @@ namespace VoxelEngine.Power
         {
             EnsureVisualRoot();
 
+            // Collect machine connection points to bridge visual gaps flush to machine surfaces
+            List<Vector3> machineTargetsLocal = null;
+            if (neighbours != null && neighbours.Count > 0)
+            {
+                for (int i = 0; i < neighbours.Count; i++)
+                {
+                    var nb = neighbours[i];
+                    if (nb != null && !(nb is PowerCable))
+                    {
+                        var cols = nb.GetComponentsInChildren<Collider>(true);
+                        Vector3 targetWorld = nb.transform.position;
+                        if (cols != null && cols.Length > 0)
+                        {
+                            float bestD = float.MaxValue;
+                            for (int c = 0; c < cols.Length; c++)
+                            {
+                                if (cols[c] != null && cols[c].enabled)
+                                {
+                                    Vector3 cl = cols[c].ClosestPoint(transform.position);
+                                    float d = (cl - transform.position).sqrMagnitude;
+                                    if (d < bestD) { bestD = d; targetWorld = cl; }
+                                }
+                            }
+                        }
+                        if (machineTargetsLocal == null) machineTargetsLocal = new List<Vector3>();
+                        machineTargetsLocal.Add(transform.InverseTransformPoint(targetWorld));
+                    }
+                }
+            }
+
             // Build procedural dual-conduit mesh for active variant & length
-            var mesh = EnergyPipeMeshBuilder.BuildMesh(variant, straightLength);
+            var mesh = EnergyPipeMeshBuilder.BuildMesh(variant, straightLength, machineTargetsLocal);
             _meshFilter.sharedMesh = mesh;
 
             string tierName = wire != null ? wire.displayName : "Copper";

@@ -431,18 +431,20 @@ namespace VoxelEngine.UI
             var kbWheel = UnityEngine.InputSystem.Keyboard.current;
             ctrl  = kbWheel != null && (kbWheel.leftCtrlKey.isPressed  || kbWheel.rightCtrlKey.isPressed);
             shift = kbWheel != null && (kbWheel.leftShiftKey.isPressed || kbWheel.rightShiftKey.isPressed);
+            bool vKey = kbWheel != null && kbWheel.vKey.isPressed;
             float wheel = UnityEngine.InputSystem.Mouse.current != null
                 ? UnityEngine.InputSystem.Mouse.current.scroll.ReadValue().y : 0f;
 #else
             ctrl  = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
             shift = Input.GetKey(KeyCode.LeftShift)   || Input.GetKey(KeyCode.RightShift);
+            bool vKey = Input.GetKey(KeyCode.V);
             float wheel = Input.mouseScrollDelta.y;
 #endif
-            // Block hotbar cycling while a grid block is held + a modifier is down (rotation).
+            // Block hotbar cycling while a grid block is held + a modifier is down (rotation) or V is held (pipe resize).
             bool rotatingBlock = VoxelEngine.GridSystem.GridBuilder.HoldingGridBlock && (ctrl || shift);
             bool piloting = VoxelEngine.GridSystem.GridCockpit.AnyPilotSeatActive; // control seats own scroll
             // Throttle: at most one slot change per Update, regardless of scroll-unit magnitude.
-            if (!ctrl && !shift && !rotatingBlock && !piloting && !UIState.IsBlocking
+            if (!ctrl && !shift && !vKey && !rotatingBlock && !piloting && !UIState.IsBlocking
                 && !_inventoryOpen && _rightContainer == null && inventory != null && Mathf.Abs(wheel) > 0.01f)
             {
                 int dir = wheel > 0 ? -1 : 1; // wheel up = previous slot, wheel down = next

@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.41.2-dev`
-**Roadmap Version:** `12.41.2-dev`
+**Current Version:** `12.41.3-dev`
+**Roadmap Version:** `12.41.3-dev`
 **Date:** 2026-09-26
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 12.41.3-dev - Machine Power Network Bridging, Hotbar Scroll Lock, and Conduit Overlap Guard
+- **Machine power bridging** (`PowerCable`, `PowerNode`, `EnergyPipeMeshBuilder`): direct endpoint-to-collider link topology; automatic visual extension flush to machine faces.
+- **Hotbar scroll lock** (`GameUIController`): blocks hotbar slot cycling when holding V, ensuring smooth straight-pipe length scaling.
+- **Conduit overlap guard** (`BuildSystem`): prevents placing energy pipes/conduits inside existing placed conduits.
+
 ### 12.41.2-dev - Connector Socket Snapping, Lattice Outward Alignment, and Glare/Backface Fix
 - **Socket endpoint snapping** (`BuildSystem`, `EnergyPipeMeshBuilder`): exact connector-to-connector snap for all 9 variants (90° risers, bends); overlap prevention.
 - **Lattice face orientation** (`BuildSystem`): straight-out normal default and full 3-axis rotation when attaching energy pipes to machine faces.
@@ -48,11 +53,6 @@
 - **Conduit visuals** (`IndustrialPipeMesh`, `GridCableVisuals`): sleek cylindrical conduit profile with metallic tier tints; suppresses stray 6-way unlinked face spike nubs.
 - **Power endpoints** (`PowerCable`, `SurfacePowerTap`): dynamic adjacent collider touch reaches batteries/machines/connectors; endpoint arms terminate flush at target faces.
 - **Overload faults** (`CompactVoltageStation`, `VoltageStationBase`, `PowerNetworkManager`): battery-inclusive throughput measurement triggers connector explosion and 2s red-hot burning line destruction.
-
-### 12.40.6-dev - Direct Conduit Links and Finite Manual Wire Transfer
-- **Utility topology** (`PipeAdjacency`, pipe networks, `IndustrialPipeMesh`): direct placed cardinal/coplanar neighbours only; no inferred elbow geometry or off-plane transfer.
-- **Energy endpoints** (`PowerCable`, `PowerNetwork`): collider-surface contact gates machine/connector links; Energy Pipes are unlimited and ignore `capacityWatts` for transfer/faults.
-- **Wire storage** (`PowerNetworkManager`, `VoltageStationBase`): only finite manual wires constrain/overload routes; connected batteries equalise charge percentage within I/O and wire headroom.
 
 ### 12.40.5-dev - Connector Power Transfer and Overload Safety
 - **Connector topology** (`CompactVoltageStation`, `PowerNetworkManager`, `VoltageStationBase`): LV/HV connectors have two total automatic/manual terminals; relays remain the multi-link path.

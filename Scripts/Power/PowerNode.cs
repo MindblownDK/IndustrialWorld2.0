@@ -82,6 +82,9 @@ namespace VoxelEngine.Power
             // Manual links always allowed.
             if (manualLinks.Contains(other)) return true;
 
+            if (other is PowerCable cable)
+                return cable.CanLinkTo(this);
+
             Vector3 a = transform.position;
             Vector3 b = other.transform.position;
             Vector3 delta = b - a;

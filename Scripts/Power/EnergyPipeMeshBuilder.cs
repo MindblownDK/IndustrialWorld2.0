@@ -96,7 +96,7 @@ namespace VoxelEngine.Power
             return list;
         }
 
-        public static Mesh BuildMesh(EnergyPipeVariant variant, int straightLength = 1)
+        public static Mesh BuildMesh(EnergyPipeVariant variant, int straightLength = 1, List<Vector3> machineTargetsLocal = null)
         {
             var mesh = new Mesh { name = $"EnergyPipe_{variant}_{straightLength}" };
             var verts = new List<Vector3>();
@@ -135,6 +135,44 @@ namespace VoxelEngine.Power
                 case EnergyPipeVariant.Junction6Way:
                     BuildJunction6Way(verts, normals, uvs, indices);
                     break;
+            }
+
+            // If connected to machine endpoints with a small gap, extend the conduit flush to the machine face
+            if (machineTargetsLocal != null && machineTargetsLocal.Count > 0)
+            {
+                var endpoints = GetLocalEndpoints(variant, straightLength);
+                for (int m = 0; m < machineTargetsLocal.Count; m++)
+                {
+                    Vector3 targetLocal = machineTargetsLocal[m];
+                    float bestDist = float.MaxValue;
+                    EndpointInfo closestEp = default;
+                    for (int e = 0; e < endpoints.Count; e++)
+                    {
+                        float d = (endpoints[e].Position - targetLocal).sqrMagnitude;
+                        if (d < bestDist)
+                        {
+                            bestDist = d;
+                            closestEp = endpoints[e];
+                        }
+                    }
+
+                    Vector3 p0 = closestEp.Position;
+                    Vector3 p1 = targetLocal;
+                    Vector3 diff = p1 - p0;
+                    float len = diff.magnitude;
+                    if (len > 0.03f && len < 1.4f)
+                    {
+                        Vector3 dir = diff / len;
+                        Vector3 right = closestEp.Right;
+                        Vector3 up = Vector3.Normalize(Vector3.Cross(dir, right));
+                        if (up.sqrMagnitude < 0.01f) up = closestEp.Up;
+                        right = Vector3.Normalize(Vector3.Cross(up, dir));
+
+                        BuildCableSegment(verts, normals, uvs, indices, p0 - right * (CableSeparation * 0.5f), p1 - right * (CableSeparation * 0.5f), CableRadius, 12, len * 2.5f);
+                        BuildCableSegment(verts, normals, uvs, indices, p0 + right * (CableSeparation * 0.5f), p1 + right * (CableSeparation * 0.5f), CableRadius, 12, len * 2.5f);
+                        BuildConnectorHousing(verts, normals, uvs, indices, p1, dir, right, up);
+                    }
+                }
             }
 
             mesh.SetVertices(verts);

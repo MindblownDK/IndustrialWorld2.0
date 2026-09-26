@@ -1,9 +1,27 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.41.2-dev`
+**Current Version:** `12.41.3-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.41.3-dev] Machine Power Network Bridging, Hotbar Scroll Lock, and Conduit Overlap Guard
+
+**Type:** PATCH - restores seamless power transmission between Energy Pipes and machines (generators, batteries, consumers), adds automatic visual extension bridging flush to machine faces so pipes never float in mid-air, blocks hotbar slot switching while holding V to scale straight pipe length, and strictly prevents placing conduits inside or overlapping existing placed conduits.
+
+**Machine power transfer & visual bridging:** Replaced legacy rigid 1-unit grid delta tests in `PowerCable.CanLinkTo` and `PowerNode.CanLinkTo` with direct endpoint-to-socket and collider surface proximity tests. Energy Pipes now reliably link to generators, batteries, and consumers across all 9 shape variants and lengths. In `RebuildVisuals`, `PowerCable` detects connected machine surfaces and extends its dual conduits and connector flange directly to meet the machine face flush, completely eliminating visual floating gaps.
+
+**Hotbar scroll lock (Hold V + Scroll):** Updated `GameUIController` to suppress hotbar slot cycling whenever the `V` key is held. Holding V and scrolling the mouse wheel now smoothly and exclusively scales the straight energy pipe length (1m to 5m) without inadvertently switching items in the player's hotbar.
+
+**Conduit overlap prevention:** `IsPlacementProbeColliderAllowed` in `BuildSystem` now strictly disallows conduits from overlapping or being placed inside any existing conduit colliders, regardless of block stacking flags.
+
+**GitHub title:** `[12.41.3-dev] Machine Power Network Bridging, Hotbar Scroll Lock, and Conduit Overlap Guard`
+
+**Manual steps:** in Unity on `Dev`, let scripts compile and clear the Console. Run `Tools -> Voxel Engine -> Voxel Engine Setup`, select `6. Build Power Content` and `17. Build Factory Foundations + HV Grid` (safe and non-destructive). Equip an Energy Pipe:
+1. Hold V and scroll the mouse wheel: confirm the straight pipe length scales (1m-5m) smoothly without switching hotbar item slots.
+2. Connect a Coal Generator or Battery to a power consumer using Energy Pipes: confirm power immediately flows across the circuit and machines operate.
+3. Observe the pipe-to-machine interface: confirm the dual conduits extend flush into the machine collider surface without floating gaps.
+4. Attempt to place a pipe directly overlapping or inside an existing placed pipe: verify placement is refused and the ghost remains red.
 
 ### [12.41.2-dev] Connector Socket Snapping, Lattice Outward Alignment, and Glare/Backface Fix
 
