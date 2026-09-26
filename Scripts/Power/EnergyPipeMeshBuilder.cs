@@ -10,7 +10,7 @@ namespace VoxelEngine.Power
     {
         Straight = 0,       // 1m-5m adjustable straight length
         BendRight = 1,      // 90° horizontal bend (straight to right)
-        BendUp = 2,         // 90° vertical bend (straight to up)
+        BendUp = 2,         // 90° vertical bend (straight to up riser)
         StepUp = 3,         // Vertical S-step (straight -> 1 up -> straight)
         StepRight = 4,      // Horizontal S-curve (straight -> 1 right -> straight)
         BendLeftToUp = 5,   // 3D compound curve (left to up)
@@ -20,19 +20,29 @@ namespace VoxelEngine.Power
     }
 
     /// <summary>
-    /// Builds procedural dual-conduit industrial energy pipes matching reference
-    /// geometry with bolted terminal flanges, twin parallel shafts, and tier-specific materials.
+    /// Builds procedural dual-conduit industrial energy cables matching reference
+    /// geometry with authentic rounded rectangular connector housings, recessed dual circular
+    /// port bezels, strain-relief boots, and tier-specific materials.
     /// </summary>
     public static class EnergyPipeMeshBuilder
     {
-        public const float TubeRadius = 0.042f;
-        public const float TubeSeparation = 0.16f;
-        public const float FlangeWidth = 0.30f;
-        public const float FlangeHeight = 0.15f;
-        public const float FlangeDepth = 0.04f;
+        public const float CableRadius = 0.036f;
+        public const float CableSeparation = 0.14f;
+        public const float FlangeWidth = 0.27f;
+        public const float FlangeHeight = 0.135f;
+        public const float FlangeDepth = 0.045f;
+        public const float PortRadius = 0.042f;
 
         private static readonly Dictionary<string, Material> s_materialCache = new();
         private static readonly Dictionary<string, Texture2D> s_textureCache = new();
+
+        public struct EndpointInfo
+        {
+            public Vector3 Position;
+            public Vector3 Normal;
+            public Vector3 Right;
+            public Vector3 Up;
+        }
 
         public static Mesh BuildMesh(EnergyPipeVariant variant, int straightLength = 1)
         {
@@ -92,23 +102,21 @@ namespace VoxelEngine.Power
         {
             Vector3 p0 = Vector3.zero;
             Vector3 p1 = Vector3.forward * length;
-            Vector3 dir = Vector3.forward;
             Vector3 right = Vector3.right;
             Vector3 up = Vector3.up;
 
-            // Twin tubes
-            BuildTubeSegment(verts, normals, uvs, indices, p0 - right * (TubeSeparation * 0.5f), p1 - right * (TubeSeparation * 0.5f), TubeRadius, 12, length * 2f);
-            BuildTubeSegment(verts, normals, uvs, indices, p0 + right * (TubeSeparation * 0.5f), p1 + right * (TubeSeparation * 0.5f), TubeRadius, 12, length * 2f);
+            // Dual parallel cables
+            BuildCableSegment(verts, normals, uvs, indices, p0 - right * (CableSeparation * 0.5f), p1 - right * (CableSeparation * 0.5f), CableRadius, 12, length * 2.5f);
+            BuildCableSegment(verts, normals, uvs, indices, p0 + right * (CableSeparation * 0.5f), p1 + right * (CableSeparation * 0.5f), CableRadius, 12, length * 2.5f);
 
-            // Flange plates at endpoints
-            BuildEndFlange(verts, normals, uvs, indices, p0, -dir, right, up);
-            BuildEndFlange(verts, normals, uvs, indices, p1, dir, right, up);
+            // Connectors at both ends
+            BuildConnectorHousing(verts, normals, uvs, indices, p0, Vector3.back, right, up);
+            BuildConnectorHousing(verts, normals, uvs, indices, p1, Vector3.forward, right, up);
         }
 
         private static void BuildHorizontalBend(List<Vector3> verts, List<Vector3> normals, List<Vector2> uvs, List<int> indices)
         {
-            // 90° bend from +Z to +X centered at (1, 0, 0) relative to start
-            const int Steps = 14;
+            const int Steps = 16;
             Vector3 center = new Vector3(1f, 0f, 0f);
             float radius = 1.0f;
 
@@ -118,26 +126,26 @@ namespace VoxelEngine.Power
             for (int i = 0; i <= Steps; i++)
             {
                 float t = i / (float)Steps;
-                float angle = Mathf.PI * (1f - 0.5f * t); // from 180° to 90°
+                float angle = Mathf.PI * (1f - 0.5f * t); // 180° to 90°
                 Vector3 basePt = center + new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * radius;
                 Vector3 tangent = new Vector3(-Mathf.Sin(angle), 0f, Mathf.Cos(angle)).normalized;
                 Vector3 normal = Vector3.Cross(Vector3.up, tangent).normalized;
 
-                pathLeft[i] = basePt - normal * (TubeSeparation * 0.5f);
-                pathRight[i] = basePt + normal * (TubeSeparation * 0.5f);
+                pathLeft[i] = basePt - normal * (CableSeparation * 0.5f);
+                pathRight[i] = basePt + normal * (CableSeparation * 0.5f);
             }
 
-            BuildTubeAlongPath(verts, normals, uvs, indices, pathLeft, TubeRadius, 12, 2.5f);
-            BuildTubeAlongPath(verts, normals, uvs, indices, pathRight, TubeRadius, 12, 2.5f);
+            BuildCablePath(verts, normals, uvs, indices, pathLeft, CableRadius, 12, 3.0f);
+            BuildCablePath(verts, normals, uvs, indices, pathRight, CableRadius, 12, 3.0f);
 
-            BuildEndFlange(verts, normals, uvs, indices, new Vector3(0f, 0f, 0f), Vector3.back, Vector3.right, Vector3.up);
-            BuildEndFlange(verts, normals, uvs, indices, new Vector3(1f, 0f, 1f), Vector3.right, Vector3.forward, Vector3.up);
+            BuildConnectorHousing(verts, normals, uvs, indices, new Vector3(0f, 0f, 0f), Vector3.back, Vector3.right, Vector3.up);
+            BuildConnectorHousing(verts, normals, uvs, indices, new Vector3(1f, 0f, 1f), Vector3.right, Vector3.back, Vector3.up);
         }
 
         private static void BuildVerticalBend(List<Vector3> verts, List<Vector3> normals, List<Vector2> uvs, List<int> indices)
         {
-            // 90° bend from +Z to +Y
-            const int Steps = 14;
+            // 90° vertical bend from +Z to +Y
+            const int Steps = 16;
             Vector3 center = new Vector3(0f, 1f, 0f);
             float radius = 1.0f;
 
@@ -147,24 +155,24 @@ namespace VoxelEngine.Power
             for (int i = 0; i <= Steps; i++)
             {
                 float t = i / (float)Steps;
-                float angle = Mathf.PI * (1.5f - 0.5f * t); // from 270° to 180°
+                float angle = Mathf.PI * (1.5f + 0.5f * t); // 270° to 360° (0°)
                 Vector3 basePt = center + new Vector3(0f, Mathf.Sin(angle), Mathf.Cos(angle)) * radius;
 
-                pathLeft[i] = basePt - Vector3.right * (TubeSeparation * 0.5f);
-                pathRight[i] = basePt + Vector3.right * (TubeSeparation * 0.5f);
+                pathLeft[i] = basePt - Vector3.right * (CableSeparation * 0.5f);
+                pathRight[i] = basePt + Vector3.right * (CableSeparation * 0.5f);
             }
 
-            BuildTubeAlongPath(verts, normals, uvs, indices, pathLeft, TubeRadius, 12, 2.5f);
-            BuildTubeAlongPath(verts, normals, uvs, indices, pathRight, TubeRadius, 12, 2.5f);
+            BuildCablePath(verts, normals, uvs, indices, pathLeft, CableRadius, 12, 3.0f);
+            BuildCablePath(verts, normals, uvs, indices, pathRight, CableRadius, 12, 3.0f);
 
-            BuildEndFlange(verts, normals, uvs, indices, new Vector3(0f, 0f, 0f), Vector3.back, Vector3.right, Vector3.up);
-            BuildEndFlange(verts, normals, uvs, indices, new Vector3(0f, 1f, 1f), Vector3.up, Vector3.right, Vector3.forward);
+            // Connectors on BOTH ends: bottom entry at (0,0,0) and top riser exit at (0,1,1)
+            BuildConnectorHousing(verts, normals, uvs, indices, new Vector3(0f, 0f, 0f), Vector3.back, Vector3.right, Vector3.up);
+            BuildConnectorHousing(verts, normals, uvs, indices, new Vector3(0f, 1f, 1f), Vector3.up, Vector3.right, Vector3.back);
         }
 
         private static void BuildVerticalStep(List<Vector3> verts, List<Vector3> normals, List<Vector2> uvs, List<int> indices)
         {
-            // S-curve going from (0, 0, 0) forward to (0, 1, 2)
-            const int Steps = 18;
+            const int Steps = 20;
             var pathLeft = new Vector3[Steps + 1];
             var pathRight = new Vector3[Steps + 1];
 
@@ -172,24 +180,23 @@ namespace VoxelEngine.Power
             {
                 float t = i / (float)Steps;
                 float z = t * 2.0f;
-                float y = 0.5f * (1f - Mathf.Cos(t * Mathf.PI)); // smooth S-curve from 0 to 1
+                float y = 0.5f * (1f - Mathf.Cos(t * Mathf.PI));
 
                 Vector3 basePt = new Vector3(0f, y, z);
-                pathLeft[i] = basePt - Vector3.right * (TubeSeparation * 0.5f);
-                pathRight[i] = basePt + Vector3.right * (TubeSeparation * 0.5f);
+                pathLeft[i] = basePt - Vector3.right * (CableSeparation * 0.5f);
+                pathRight[i] = basePt + Vector3.right * (CableSeparation * 0.5f);
             }
 
-            BuildTubeAlongPath(verts, normals, uvs, indices, pathLeft, TubeRadius, 12, 3.5f);
-            BuildTubeAlongPath(verts, normals, uvs, indices, pathRight, TubeRadius, 12, 3.5f);
+            BuildCablePath(verts, normals, uvs, indices, pathLeft, CableRadius, 12, 4.0f);
+            BuildCablePath(verts, normals, uvs, indices, pathRight, CableRadius, 12, 4.0f);
 
-            BuildEndFlange(verts, normals, uvs, indices, new Vector3(0f, 0f, 0f), Vector3.back, Vector3.right, Vector3.up);
-            BuildEndFlange(verts, normals, uvs, indices, new Vector3(0f, 1f, 2f), Vector3.forward, Vector3.right, Vector3.up);
+            BuildConnectorHousing(verts, normals, uvs, indices, new Vector3(0f, 0f, 0f), Vector3.back, Vector3.right, Vector3.up);
+            BuildConnectorHousing(verts, normals, uvs, indices, new Vector3(0f, 1f, 2f), Vector3.forward, Vector3.right, Vector3.up);
         }
 
         private static void BuildHorizontalStep(List<Vector3> verts, List<Vector3> normals, List<Vector2> uvs, List<int> indices)
         {
-            // S-curve going from (0, 0, 0) to (1, 0, 2)
-            const int Steps = 18;
+            const int Steps = 20;
             var pathLeft = new Vector3[Steps + 1];
             var pathRight = new Vector3[Steps + 1];
 
@@ -197,24 +204,28 @@ namespace VoxelEngine.Power
             {
                 float t = i / (float)Steps;
                 float z = t * 2.0f;
-                float x = 0.5f * (1f - Mathf.Cos(t * Mathf.PI)); // smooth S-curve from 0 to 1
+                float x = 0.5f * (1f - Mathf.Cos(t * Mathf.PI));
 
                 Vector3 basePt = new Vector3(x, 0f, z);
-                pathLeft[i] = basePt - Vector3.right * (TubeSeparation * 0.5f);
-                pathRight[i] = basePt + Vector3.right * (TubeSeparation * 0.5f);
+                Vector3 tangent = new Vector3(0.5f * Mathf.PI * Mathf.Sin(t * Mathf.PI), 0f, 2.0f).normalized;
+                Vector3 perp = Vector3.Cross(Vector3.up, tangent).normalized;
+
+                pathLeft[i] = basePt - perp * (CableSeparation * 0.5f);
+                pathRight[i] = basePt + perp * (CableSeparation * 0.5f);
             }
 
-            BuildTubeAlongPath(verts, normals, uvs, indices, pathLeft, TubeRadius, 12, 3.5f);
-            BuildTubeAlongPath(verts, normals, uvs, indices, pathRight, TubeRadius, 12, 3.5f);
+            BuildCablePath(verts, normals, uvs, indices, pathLeft, CableRadius, 12, 4.0f);
+            BuildCablePath(verts, normals, uvs, indices, pathRight, CableRadius, 12, 4.0f);
 
-            BuildEndFlange(verts, normals, uvs, indices, new Vector3(0f, 0f, 0f), Vector3.back, Vector3.right, Vector3.up);
-            BuildEndFlange(verts, normals, uvs, indices, new Vector3(1f, 0f, 2f), Vector3.forward, Vector3.right, Vector3.up);
+            BuildConnectorHousing(verts, normals, uvs, indices, new Vector3(0f, 0f, 0f), Vector3.back, Vector3.right, Vector3.up);
+            BuildConnectorHousing(verts, normals, uvs, indices, new Vector3(1f, 0f, 2f), Vector3.forward, Vector3.right, Vector3.up);
         }
 
         private static void BuildCompoundBend(List<Vector3> verts, List<Vector3> normals, List<Vector2> uvs, List<int> indices, bool isLeft)
         {
             const int Steps = 16;
             float sign = isLeft ? -1f : 1f;
+            Vector3 center = new Vector3(sign, 1f, 0f);
 
             var pathLeft = new Vector3[Steps + 1];
             var pathRight = new Vector3[Steps + 1];
@@ -222,20 +233,21 @@ namespace VoxelEngine.Power
             for (int i = 0; i <= Steps; i++)
             {
                 float t = i / (float)Steps;
-                float x = sign * (1f - t);
-                float y = Mathf.Sin(t * Mathf.PI * 0.5f);
-                float z = (1f - Mathf.Cos(t * Mathf.PI * 0.5f)) * 0.5f;
+                float angle = Mathf.PI * (1.5f + 0.5f * t); // 270° to 360°
+                float x = sign * (1f - Mathf.Sin(t * Mathf.PI * 0.5f));
+                float y = 1f - Mathf.Cos(t * Mathf.PI * 0.5f);
 
-                Vector3 basePt = new Vector3(x, y, z);
-                pathLeft[i] = basePt - Vector3.forward * (TubeSeparation * 0.5f);
-                pathRight[i] = basePt + Vector3.forward * (TubeSeparation * 0.5f);
+                Vector3 basePt = new Vector3(x, y, 0f);
+                pathLeft[i] = basePt - Vector3.forward * (CableSeparation * 0.5f);
+                pathRight[i] = basePt + Vector3.forward * (CableSeparation * 0.5f);
             }
 
-            BuildTubeAlongPath(verts, normals, uvs, indices, pathLeft, TubeRadius, 12, 2.5f);
-            BuildTubeAlongPath(verts, normals, uvs, indices, pathRight, TubeRadius, 12, 2.5f);
+            BuildCablePath(verts, normals, uvs, indices, pathLeft, CableRadius, 12, 3.0f);
+            BuildCablePath(verts, normals, uvs, indices, pathRight, CableRadius, 12, 3.0f);
 
-            BuildEndFlange(verts, normals, uvs, indices, new Vector3(sign, 0f, 0f), -Vector3.right * sign, Vector3.forward, Vector3.up);
-            BuildEndFlange(verts, normals, uvs, indices, new Vector3(0f, 1f, 0.5f), Vector3.up, Vector3.right, Vector3.forward);
+            // Entry connector on the side at (sign, 0, 0) and exit connector at top (0, 1, 0)
+            BuildConnectorHousing(verts, normals, uvs, indices, new Vector3(sign, 0f, 0f), Vector3.right * sign, Vector3.forward * (isLeft ? 1f : -1f), Vector3.up);
+            BuildConnectorHousing(verts, normals, uvs, indices, new Vector3(0f, 1f, 0f), Vector3.up, Vector3.forward * (isLeft ? 1f : -1f), Vector3.right * (isLeft ? -1f : 1f));
         }
 
         private static void BuildJunction4Way(List<Vector3> verts, List<Vector3> normals, List<Vector2> uvs, List<int> indices)
@@ -251,13 +263,13 @@ namespace VoxelEngine.Power
                 Vector3 p0 = center;
                 Vector3 p1 = center + dir * armLen;
 
-                BuildTubeSegment(verts, normals, uvs, indices, p0 - right * (TubeSeparation * 0.5f), p1 - right * (TubeSeparation * 0.5f), TubeRadius, 12, 1.0f);
-                BuildTubeSegment(verts, normals, uvs, indices, p0 + right * (TubeSeparation * 0.5f), p1 + right * (TubeSeparation * 0.5f), TubeRadius, 12, 1.0f);
-                BuildEndFlange(verts, normals, uvs, indices, p1, dir, right, Vector3.up);
+                BuildCableSegment(verts, normals, uvs, indices, p0 - right * (CableSeparation * 0.5f), p1 - right * (CableSeparation * 0.5f), CableRadius, 12, 1.2f);
+                BuildCableSegment(verts, normals, uvs, indices, p0 + right * (CableSeparation * 0.5f), p1 + right * (CableSeparation * 0.5f), CableRadius, 12, 1.2f);
+                BuildConnectorHousing(verts, normals, uvs, indices, p1, dir, right, Vector3.up);
             }
 
-            // Central hub block
-            BuildBox(verts, normals, uvs, indices, center, Vector3.one * 0.28f);
+            // Central junction cube
+            BuildRoundedBox(verts, normals, uvs, indices, center, new Vector3(0.24f, 0.16f, 0.24f));
         }
 
         private static void BuildJunction6Way(List<Vector3> verts, List<Vector3> normals, List<Vector2> uvs, List<int> indices)
@@ -274,20 +286,261 @@ namespace VoxelEngine.Power
                 Vector3 p0 = center;
                 Vector3 p1 = center + dir * armLen;
 
-                BuildTubeSegment(verts, normals, uvs, indices, p0 - right * (TubeSeparation * 0.5f), p1 - right * (TubeSeparation * 0.5f), TubeRadius, 12, 1.0f);
-                BuildTubeSegment(verts, normals, uvs, indices, p0 + right * (TubeSeparation * 0.5f), p1 + right * (TubeSeparation * 0.5f), TubeRadius, 12, 1.0f);
-                BuildEndFlange(verts, normals, uvs, indices, p1, dir, right, up);
+                BuildCableSegment(verts, normals, uvs, indices, p0 - right * (CableSeparation * 0.5f), p1 - right * (CableSeparation * 0.5f), CableRadius, 12, 1.2f);
+                BuildCableSegment(verts, normals, uvs, indices, p0 + right * (CableSeparation * 0.5f), p1 + right * (CableSeparation * 0.5f), CableRadius, 12, 1.2f);
+                BuildConnectorHousing(verts, normals, uvs, indices, p1, dir, right, up);
             }
 
-            // Central hub block
-            BuildBox(verts, normals, uvs, indices, center, Vector3.one * 0.32f);
+            // Central omni hub
+            BuildRoundedBox(verts, normals, uvs, indices, center, new Vector3(0.26f, 0.26f, 0.26f));
         }
 
         // ════════════════════════════════════════════════════════════
-        //  PRIMITIVE BUILDERS
+        //  CONNECTOR HOUSING & SOCKETS (MATCHING REFERENCE PIC 5)
         // ════════════════════════════════════════════════════════════
 
-        private static void BuildTubeSegment(List<Vector3> verts, List<Vector3> normals, List<Vector2> uvs, List<int> indices,
+        /// <summary>
+        /// Builds the solid rounded rectangular connector block shown in Pic 5 with:
+        /// 1. Rounded rectangular body matching cable tier color.
+        /// 2. Two recessed dark circular port socket cups with contact core pins.
+        /// 3. Strain-relief boot collars on the rear face connecting to each cable.
+        /// </summary>
+        public static void BuildConnectorHousing(List<Vector3> verts, List<Vector3> normals, List<Vector2> uvs, List<int> indices,
+                                                Vector3 origin, Vector3 normal, Vector3 right, Vector3 up)
+        {
+            normal = normal.normalized;
+            right = right.normalized;
+            up = up.normalized;
+
+            float halfW = FlangeWidth * 0.5f;
+            float halfH = FlangeHeight * 0.5f;
+            float depth = FlangeDepth;
+            float cornerR = 0.024f;
+
+            Vector3 frontCenter = origin;
+            Vector3 backCenter = origin - normal * depth;
+
+            // ── 1. Rounded Rectangular Housing ────────────────────────
+            // 8-sided rounded rectangle profile on the (right, up) plane
+            Vector2[] profile = new Vector2[8];
+            float rx = halfW - cornerR;
+            float ry = halfH - cornerR;
+            profile[0] = new Vector2(halfW, ry);
+            profile[1] = new Vector2(rx, halfH);
+            profile[2] = new Vector2(-rx, halfH);
+            profile[3] = new Vector2(-halfW, ry);
+            profile[4] = new Vector2(-halfW, -ry);
+            profile[5] = new Vector2(-rx, -halfH);
+            profile[6] = new Vector2(rx, -halfH);
+            profile[7] = new Vector2(halfW, -ry);
+
+            int startFront = verts.Count;
+            // Front face vertices
+            for (int i = 0; i < 8; i++)
+            {
+                verts.Add(frontCenter + right * profile[i].x + up * profile[i].y);
+                normals.Add(normal);
+                uvs.Add(new Vector2(0.5f + (profile[i].x / FlangeWidth) * 0.4f, 0.65f + (profile[i].y / FlangeHeight) * 0.2f));
+            }
+            // Front center
+            int frontCenterIdx = verts.Count;
+            verts.Add(frontCenter);
+            normals.Add(normal);
+            uvs.Add(new Vector2(0.5f, 0.65f));
+
+            // Front face fan triangles
+            for (int i = 0; i < 8; i++)
+            {
+                int next = (i + 1) % 8;
+                indices.Add(frontCenterIdx);
+                indices.Add(startFront + i);
+                indices.Add(startFront + next);
+            }
+
+            int startBack = verts.Count;
+            // Back face vertices
+            for (int i = 0; i < 8; i++)
+            {
+                verts.Add(backCenter + right * profile[i].x + up * profile[i].y);
+                normals.Add(-normal);
+                uvs.Add(new Vector2(0.5f + (profile[i].x / FlangeWidth) * 0.4f, 0.65f + (profile[i].y / FlangeHeight) * 0.2f));
+            }
+            int backCenterIdx = verts.Count;
+            verts.Add(backCenter);
+            normals.Add(-normal);
+            uvs.Add(new Vector2(0.5f, 0.65f));
+
+            // Back face fan triangles
+            for (int i = 0; i < 8; i++)
+            {
+                int next = (i + 1) % 8;
+                indices.Add(backCenterIdx);
+                indices.Add(startBack + next);
+                indices.Add(startBack + i);
+            }
+
+            // Housing side walls (extruding front to back)
+            for (int i = 0; i < 8; i++)
+            {
+                int next = (i + 1) % 8;
+                Vector3 f0 = frontCenter + right * profile[i].x + up * profile[i].y;
+                Vector3 f1 = frontCenter + right * profile[next].x + up * profile[next].y;
+                Vector3 b0 = backCenter + right * profile[i].x + up * profile[i].y;
+                Vector3 b1 = backCenter + right * profile[next].x + up * profile[next].y;
+
+                Vector3 wallNormal = Vector3.Normalize(Vector3.Cross(f1 - f0, normal));
+                AddQuad(verts, normals, uvs, indices, f0, f1, b1, b0, wallNormal, new Vector2(0.5f, 0.65f));
+            }
+
+            // ── 2. Dual Recessed Circular Port Sockets (Pic 5) ────────
+            float[] offsets = { -CableSeparation * 0.5f, CableSeparation * 0.5f };
+            const int PortSides = 12;
+            float outerR = PortRadius;
+            float innerR = PortRadius * 0.82f;
+            float cupDepth = 0.015f;
+            float pinR = 0.020f;
+
+            for (int p = 0; p < offsets.Length; p++)
+            {
+                Vector3 portCenterFront = frontCenter + right * offsets[p] + normal * 0.001f;
+                Vector3 portCenterRecess = portCenterFront - normal * cupDepth;
+
+                // Dark outer grommet / bezel ring sitting slightly raised on the front face
+                int bezelStart = verts.Count;
+                for (int s = 0; s <= PortSides; s++)
+                {
+                    float angle = (s / (float)PortSides) * Mathf.PI * 2f;
+                    Vector3 radial = (right * Mathf.Cos(angle) + up * Mathf.Sin(angle)).normalized;
+
+                    // Outer bezel ring (Region C - dark trim)
+                    verts.Add(portCenterFront + radial * outerR);
+                    normals.Add(normal);
+                    uvs.Add(new Vector2(0.5f + Mathf.Cos(angle) * 0.35f, 0.88f + Mathf.Sin(angle) * 0.09f));
+
+                    // Inner socket lip (Region C - dark trim)
+                    verts.Add(portCenterFront + radial * innerR);
+                    normals.Add(normal);
+                    uvs.Add(new Vector2(0.5f + Mathf.Cos(angle) * 0.25f, 0.88f + Mathf.Sin(angle) * 0.06f));
+                }
+
+                for (int s = 0; s < PortSides; s++)
+                {
+                    int i0 = bezelStart + s * 2;
+                    int i1 = bezelStart + s * 2 + 1;
+                    int i2 = bezelStart + (s + 1) * 2;
+                    int i3 = bezelStart + (s + 1) * 2 + 1;
+
+                    indices.Add(i0); indices.Add(i1); indices.Add(i2);
+                    indices.Add(i1); indices.Add(i3); indices.Add(i2);
+                }
+
+                // Cylindrical recessed cup wall
+                int cupStart = verts.Count;
+                for (int s = 0; s <= PortSides; s++)
+                {
+                    float angle = (s / (float)PortSides) * Mathf.PI * 2f;
+                    Vector3 radial = (right * Mathf.Cos(angle) + up * Mathf.Sin(angle)).normalized;
+
+                    verts.Add(portCenterFront + radial * innerR);
+                    normals.Add(-radial);
+                    uvs.Add(new Vector2(s / (float)PortSides, 0.92f));
+
+                    verts.Add(portCenterRecess + radial * innerR);
+                    normals.Add(-radial);
+                    uvs.Add(new Vector2(s / (float)PortSides, 0.84f));
+                }
+
+                for (int s = 0; s < PortSides; s++)
+                {
+                    int i0 = cupStart + s * 2;
+                    int i1 = cupStart + s * 2 + 1;
+                    int i2 = cupStart + (s + 1) * 2;
+                    int i3 = cupStart + (s + 1) * 2 + 1;
+
+                    indices.Add(i0); indices.Add(i1); indices.Add(i2);
+                    indices.Add(i1); indices.Add(i3); indices.Add(i2);
+                }
+
+                // Recessed cup bottom floor + central contact pin
+                int pinStart = verts.Count;
+                for (int s = 0; s <= PortSides; s++)
+                {
+                    float angle = (s / (float)PortSides) * Mathf.PI * 2f;
+                    Vector3 radial = (right * Mathf.Cos(angle) + up * Mathf.Sin(angle)).normalized;
+
+                    // Inner cup floor
+                    verts.Add(portCenterRecess + radial * innerR);
+                    normals.Add(normal);
+                    uvs.Add(new Vector2(0.5f + Mathf.Cos(angle) * 0.2f, 0.88f + Mathf.Sin(angle) * 0.05f));
+
+                    // Central metallic contact pin
+                    verts.Add(portCenterRecess + radial * pinR + normal * (cupDepth * 0.6f));
+                    normals.Add(normal);
+                    uvs.Add(new Vector2(0.5f + Mathf.Cos(angle) * 0.15f, 0.65f + Mathf.Sin(angle) * 0.05f));
+                }
+
+                for (int s = 0; s < PortSides; s++)
+                {
+                    int i0 = pinStart + s * 2;
+                    int i1 = pinStart + s * 2 + 1;
+                    int i2 = pinStart + (s + 1) * 2;
+                    int i3 = pinStart + (s + 1) * 2 + 1;
+
+                    indices.Add(i0); indices.Add(i1); indices.Add(i2);
+                    indices.Add(i1); indices.Add(i3); indices.Add(i2);
+                }
+
+                // Central pin top cap
+                int pinCenterIdx = verts.Count;
+                verts.Add(portCenterRecess + normal * (cupDepth * 0.6f));
+                normals.Add(normal);
+                uvs.Add(new Vector2(0.5f, 0.65f));
+
+                for (int s = 0; s < PortSides; s++)
+                {
+                    int i1 = pinStart + s * 2 + 1;
+                    int i2 = pinStart + (s + 1) * 2 + 1;
+                    indices.Add(pinCenterIdx);
+                    indices.Add(i1);
+                    indices.Add(i2);
+                }
+
+                // ── 3. Strain-Relief Cable Collar Boots on Rear Face ──
+                Vector3 bootBase = backCenter + right * offsets[p];
+                Vector3 bootTip = bootBase - normal * 0.025f;
+                int bootStart = verts.Count;
+                for (int s = 0; s <= PortSides; s++)
+                {
+                    float angle = (s / (float)PortSides) * Mathf.PI * 2f;
+                    Vector3 radial = (right * Mathf.Cos(angle) + up * Mathf.Sin(angle)).normalized;
+
+                    verts.Add(bootBase + radial * (CableRadius * 1.35f));
+                    normals.Add(-normal + radial * 0.5f);
+                    uvs.Add(new Vector2(s / (float)PortSides, 0.88f));
+
+                    verts.Add(bootTip + radial * CableRadius);
+                    normals.Add(-normal + radial * 0.5f);
+                    uvs.Add(new Vector2(s / (float)PortSides, 0.94f));
+                }
+
+                for (int s = 0; s < PortSides; s++)
+                {
+                    int i0 = bootStart + s * 2;
+                    int i1 = bootStart + s * 2 + 1;
+                    int i2 = bootStart + (s + 1) * 2;
+                    int i3 = bootStart + (s + 1) * 2 + 1;
+
+                    indices.Add(i0); indices.Add(i1); indices.Add(i2);
+                    indices.Add(i1); indices.Add(i3); indices.Add(i2);
+                }
+            }
+        }
+
+        // ════════════════════════════════════════════════════════════
+        //  CABLE CYLINDERS & SMOOTH PATHS
+        // ════════════════════════════════════════════════════════════
+
+        private static void BuildCableSegment(List<Vector3> verts, List<Vector3> normals, List<Vector2> uvs, List<int> indices,
                                              Vector3 start, Vector3 end, float radius, int sides, float uvLength)
         {
             Vector3 dir = (end - start).normalized;
@@ -306,7 +559,7 @@ namespace VoxelEngine.Power
                     Vector3 n = u * Mathf.Cos(angle) + v * Mathf.Sin(angle);
                     verts.Add(center + n * radius);
                     normals.Add(n);
-                    uvs.Add(new Vector2(s / (float)sides, vCoord));
+                    uvs.Add(new Vector2(s / (float)sides, (vCoord % 1.0f) * 0.48f));
                 }
             }
 
@@ -323,45 +576,50 @@ namespace VoxelEngine.Power
             }
         }
 
-        private static void BuildTubeAlongPath(List<Vector3> verts, List<Vector3> normals, List<Vector2> uvs, List<int> indices,
-                                               Vector3[] path, float radius, int sides, float uvScale)
+        private static void BuildCablePath(List<Vector3> verts, List<Vector3> normals, List<Vector2> uvs, List<int> indices,
+                                          Vector3[] path, float radius, int sides, float uvLength)
         {
             if (path == null || path.Length < 2) return;
 
             int rings = path.Length;
             int startIdx = verts.Count;
-            float totalLen = 0f;
-            for (int i = 0; i < rings - 1; i++) totalLen += Vector3.Distance(path[i], path[i + 1]);
 
-            float curLen = 0f;
             for (int r = 0; r < rings; r++)
             {
-                if (r > 0) curLen += Vector3.Distance(path[r - 1], path[r]);
-                Vector3 dir = r < rings - 1 ? (path[r + 1] - path[r]).normalized : (path[r] - path[r - 1]).normalized;
-                Vector3 seed = Mathf.Abs(dir.y) > 0.9f ? Vector3.right : Vector3.up;
-                Vector3 u = Vector3.Normalize(Vector3.Cross(dir, seed));
-                Vector3 v = Vector3.Normalize(Vector3.Cross(dir, u));
+                Vector3 p = path[r];
+                Vector3 tangent = (r == 0) ? (path[1] - path[0]).normalized :
+                                  (r == rings - 1) ? (path[rings - 1] - path[rings - 2]).normalized :
+                                  ((path[r + 1] - path[r - 1]) * 0.5f).normalized;
 
-                float vCoord = (curLen / Mathf.Max(0.001f, totalLen)) * uvScale;
+                Vector3 seed = Mathf.Abs(tangent.y) > 0.9f ? Vector3.right : Vector3.up;
+                Vector3 u = Vector3.Normalize(Vector3.Cross(tangent, seed));
+                Vector3 v = Vector3.Normalize(Vector3.Cross(tangent, u));
+
+                float t = r / (float)(rings - 1);
+                float vCoord = t * uvLength;
+
                 for (int s = 0; s <= sides; s++)
                 {
                     float angle = (s / (float)sides) * Mathf.PI * 2f;
                     Vector3 n = u * Mathf.Cos(angle) + v * Mathf.Sin(angle);
-                    verts.Add(path[r] + n * radius);
+                    verts.Add(p + n * radius);
                     normals.Add(n);
-                    uvs.Add(new Vector2(s / (float)sides, vCoord));
+                    uvs.Add(new Vector2(s / (float)sides, (vCoord % 1.0f) * 0.48f));
                 }
             }
 
             int stride = sides + 1;
             for (int r = 0; r < rings - 1; r++)
             {
+                int base0 = startIdx + r * stride;
+                int base1 = startIdx + (r + 1) * stride;
+
                 for (int s = 0; s < sides; s++)
                 {
-                    int i0 = startIdx + r * stride + s;
-                    int i1 = startIdx + r * stride + s + 1;
-                    int i2 = startIdx + (r + 1) * stride + s;
-                    int i3 = startIdx + (r + 1) * stride + s + 1;
+                    int i0 = base0 + s;
+                    int i1 = base0 + s + 1;
+                    int i2 = base1 + s;
+                    int i3 = base1 + s + 1;
 
                     indices.Add(i0); indices.Add(i2); indices.Add(i1);
                     indices.Add(i1); indices.Add(i2); indices.Add(i3);
@@ -369,122 +627,43 @@ namespace VoxelEngine.Power
             }
         }
 
-        private static void BuildEndFlange(List<Vector3> verts, List<Vector3> normals, List<Vector2> uvs, List<int> indices,
-                                           Vector3 center, Vector3 normal, Vector3 right, Vector3 up)
+        private static void BuildRoundedBox(List<Vector3> verts, List<Vector3> normals, List<Vector2> uvs, List<int> indices,
+                                           Vector3 center, Vector3 size)
         {
-            Vector3 fwd = normal.normalized;
-            Vector3 r = right.normalized * (FlangeWidth * 0.5f);
-            Vector3 u = up.normalized * (FlangeHeight * 0.5f);
-            Vector3 d = fwd * FlangeDepth;
+            Vector3 h = size * 0.5f;
+            Vector3[] faceNormals = { Vector3.forward, Vector3.back, Vector3.right, Vector3.left, Vector3.up, Vector3.down };
+            Vector3[] faceRights = { Vector3.right, Vector3.left, Vector3.back, Vector3.forward, Vector3.right, Vector3.right };
+            Vector3[] faceUps = { Vector3.up, Vector3.up, Vector3.up, Vector3.up, Vector3.forward, Vector3.back };
 
-            // Rounded plate / box
-            BuildBoxOriented(verts, normals, uvs, indices, center - fwd * (FlangeDepth * 0.5f), r * 2f, u * 2f, d);
-
-            // Two circular collar bezels around where tubes enter
-            Vector3 pLeft = center - r * (TubeSeparation / FlangeWidth);
-            Vector3 pRight = center + r * (TubeSeparation / FlangeWidth);
-            BuildCollarRing(verts, normals, uvs, indices, pLeft, fwd, TubeRadius * 1.35f, FlangeDepth * 0.6f);
-            BuildCollarRing(verts, normals, uvs, indices, pRight, fwd, TubeRadius * 1.35f, FlangeDepth * 0.6f);
-
-            // 4 Corner bolts
-            float boltX = FlangeWidth * 0.42f;
-            float boltY = FlangeHeight * 0.35f;
-            BuildBolt(verts, normals, uvs, indices, center - r * (boltX / (FlangeWidth * 0.5f)) - u * (boltY / (FlangeHeight * 0.5f)), fwd);
-            BuildBolt(verts, normals, uvs, indices, center + r * (boltX / (FlangeWidth * 0.5f)) - u * (boltY / (FlangeHeight * 0.5f)), fwd);
-            BuildBolt(verts, normals, uvs, indices, center - r * (boltX / (FlangeWidth * 0.5f)) + u * (boltY / (FlangeHeight * 0.5f)), fwd);
-            BuildBolt(verts, normals, uvs, indices, center + r * (boltX / (FlangeWidth * 0.5f)) + u * (boltY / (FlangeHeight * 0.5f)), fwd);
-        }
-
-        private static void BuildCollarRing(List<Vector3> verts, List<Vector3> normals, List<Vector2> uvs, List<int> indices,
-                                            Vector3 center, Vector3 normal, float radius, float depth)
-        {
-            Vector3 seed = Mathf.Abs(normal.y) > 0.9f ? Vector3.right : Vector3.up;
-            Vector3 u = Vector3.Normalize(Vector3.Cross(normal, seed));
-            Vector3 v = Vector3.Normalize(Vector3.Cross(normal, u));
-            const int sides = 8;
-            int startIdx = verts.Count;
-
-            for (int r = 0; r <= 1; r++)
+            for (int f = 0; f < 6; f++)
             {
-                Vector3 c = center + normal * (r * depth);
-                for (int s = 0; s <= sides; s++)
-                {
-                    float angle = (s / (float)sides) * Mathf.PI * 2f;
-                    Vector3 n = u * Mathf.Cos(angle) + v * Mathf.Sin(angle);
-                    verts.Add(c + n * radius);
-                    normals.Add(n);
-                    uvs.Add(new Vector2(s / (float)sides, r));
-                }
-            }
+                Vector3 n = faceNormals[f];
+                Vector3 r = faceRights[f];
+                Vector3 u = faceUps[f];
+                float extR = Mathf.Abs(Vector3.Dot(r, h));
+                float extU = Mathf.Abs(Vector3.Dot(u, h));
+                float extN = Mathf.Abs(Vector3.Dot(n, h));
 
-            int stride = sides + 1;
-            for (int s = 0; s < sides; s++)
-            {
-                int i0 = startIdx + s;
-                int i1 = startIdx + s + 1;
-                int i2 = startIdx + stride + s;
-                int i3 = startIdx + stride + s + 1;
+                Vector3 p0 = center + n * extN - r * extR - u * extU;
+                Vector3 p1 = center + n * extN + r * extR - u * extU;
+                Vector3 p2 = center + n * extN + r * extR + u * extU;
+                Vector3 p3 = center + n * extN - r * extR + u * extU;
 
-                indices.Add(i0); indices.Add(i2); indices.Add(i1);
-                indices.Add(i1); indices.Add(i2); indices.Add(i3);
+                AddQuad(verts, normals, uvs, indices, p0, p1, p2, p3, n, new Vector2(0.5f, 0.65f));
             }
         }
 
-        private static void BuildBolt(List<Vector3> verts, List<Vector3> normals, List<Vector2> uvs, List<int> indices,
-                                      Vector3 center, Vector3 normal)
+        private static void AddQuad(List<Vector3> verts, List<Vector3> normals, List<Vector2> uvs, List<int> indices,
+                                    Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, Vector3 normal, Vector2 uvCenter)
         {
-            float size = 0.016f;
-            Vector3 seed = Mathf.Abs(normal.y) > 0.9f ? Vector3.right : Vector3.up;
-            Vector3 u = Vector3.Normalize(Vector3.Cross(normal, seed)) * size;
-            Vector3 v = Vector3.Normalize(Vector3.Cross(normal, u)) * size;
-            Vector3 d = normal * (size * 1.2f);
-            BuildBoxOriented(verts, normals, uvs, indices, center + normal * (size * 0.5f), u * 2f, v * 2f, d);
-        }
+            int baseIdx = verts.Count;
+            verts.Add(p0); normals.Add(normal); uvs.Add(uvCenter + new Vector2(-0.1f, -0.1f));
+            verts.Add(p1); normals.Add(normal); uvs.Add(uvCenter + new Vector2(0.1f, -0.1f));
+            verts.Add(p2); normals.Add(normal); uvs.Add(uvCenter + new Vector2(0.1f, 0.1f));
+            verts.Add(p3); normals.Add(normal); uvs.Add(uvCenter + new Vector2(-0.1f, 0.1f));
 
-        private static void BuildBox(List<Vector3> verts, List<Vector3> normals, List<Vector2> uvs, List<int> indices,
-                                     Vector3 center, Vector3 size)
-        {
-            Vector3 r = Vector3.right * (size.x * 0.5f);
-            Vector3 u = Vector3.up * (size.y * 0.5f);
-            Vector3 f = Vector3.forward * (size.z * 0.5f);
-            BuildBoxOriented(verts, normals, uvs, indices, center, r * 2f, u * 2f, f * 2f);
-        }
-
-        private static void BuildBoxOriented(List<Vector3> verts, List<Vector3> normals, List<Vector2> uvs, List<int> indices,
-                                             Vector3 center, Vector3 rVector, Vector3 uVector, Vector3 fVector)
-        {
-            Vector3 r = rVector * 0.5f;
-            Vector3 u = uVector * 0.5f;
-            Vector3 f = fVector * 0.5f;
-
-            Vector3[] faceNormals = { f.normalized, -f.normalized, r.normalized, -r.normalized, u.normalized, -u.normalized };
-            Vector3[][] faceVerts =
-            {
-                new[] { center - r - u + f, center + r - u + f, center + r + u + f, center - r + u + f }, // Front
-                new[] { center + r - u - f, center - r - u - f, center - r + u - f, center + r + u - f }, // Back
-                new[] { center + r - u + f, center + r - u - f, center + r + u - f, center + r + u + f }, // Right
-                new[] { center - r - u - f, center - r - u + f, center - r + u + f, center - r + u - f }, // Left
-                new[] { center - r + u + f, center + r + u + f, center + r + u - f, center - r + u - f }, // Top
-                new[] { center - r - u - f, center + r - u - f, center + r - u + f, center - r - u + f }  // Bottom
-            };
-
-            for (int i = 0; i < 6; i++)
-            {
-                int baseIdx = verts.Count;
-                Vector3 n = faceNormals[i];
-                for (int v = 0; v < 4; v++)
-                {
-                    verts.Add(faceVerts[i][v]);
-                    normals.Add(n);
-                }
-                uvs.Add(new Vector2(0f, 0f));
-                uvs.Add(new Vector2(1f, 0f));
-                uvs.Add(new Vector2(1f, 1f));
-                uvs.Add(new Vector2(0f, 1f));
-
-                indices.Add(baseIdx); indices.Add(baseIdx + 1); indices.Add(baseIdx + 2);
-                indices.Add(baseIdx); indices.Add(baseIdx + 2); indices.Add(baseIdx + 3);
-            }
+            indices.Add(baseIdx); indices.Add(baseIdx + 1); indices.Add(baseIdx + 2);
+            indices.Add(baseIdx); indices.Add(baseIdx + 2); indices.Add(baseIdx + 3);
         }
 
         // ════════════════════════════════════════════════════════════
@@ -512,25 +691,25 @@ namespace VoxelEngine.Power
             var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
             var mat = new Material(shader) { name = key };
 
-            Texture2D hazardTex = GetOrCreateHazardTexture(norm);
-            if (hazardTex != null)
+            Texture2D tex = GetOrCreateCableTexture(norm);
+            if (tex != null)
             {
-                mat.mainTexture = hazardTex;
-                if (mat.HasProperty("_BaseMap")) mat.SetTexture("_BaseMap", hazardTex);
+                mat.mainTexture = tex;
+                if (mat.HasProperty("_BaseMap")) mat.SetTexture("_BaseMap", tex);
             }
 
             switch (norm)
             {
                 case "copper":
                     // Oxidized copper with warm brownish-bronze and subtle patina touches
-                    mat.color = new Color(0.72f, 0.44f, 0.28f, 1f);
+                    mat.color = new Color(0.85f, 0.48f, 0.22f, 1f);
                     if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", mat.color);
                     if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", 0.85f);
                     if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.65f);
                     break;
                 case "iron":
                     // Dark rusted iron charcoal with warm rust highlights
-                    mat.color = new Color(0.42f, 0.40f, 0.38f, 1f);
+                    mat.color = new Color(0.48f, 0.45f, 0.42f, 1f);
                     if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", mat.color);
                     if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", 0.70f);
                     if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.45f);
@@ -543,7 +722,7 @@ namespace VoxelEngine.Power
                     if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.88f);
                     break;
                 case "superconductor":
-                    // Sleek white and cyan with glowing accents
+                    // Sleek white and cyan ceramic with glowing accents
                     mat.color = new Color(0.88f, 0.95f, 1.0f, 1f);
                     if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", mat.color);
                     if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", 0.30f);
@@ -565,57 +744,80 @@ namespace VoxelEngine.Power
             return mat;
         }
 
-        private static Texture2D GetOrCreateHazardTexture(string tierName)
+        private static Texture2D GetOrCreateCableTexture(string normTier)
         {
-            string norm = NormalizeTier(tierName);
-            string key = $"Tex_Hazard_{norm}";
+            string key = $"Tex_EnergyCable_{normTier}";
             if (s_textureCache.TryGetValue(key, out var tex) && tex != null) return tex;
 
-            const int width = 128;
-            const int height = 128;
-            tex = new Texture2D(width, height, TextureFormat.RGBA32, true)
+            const int size = 256;
+            tex = new Texture2D(size, size, TextureFormat.RGBA32, true)
             {
                 name = key,
                 wrapMode = TextureWrapMode.Repeat,
                 filterMode = FilterMode.Bilinear
             };
 
-            Color32 baseColor;
-            Color32 stripeColor;
+            Color32 tierMetalColor;
+            Color32 cableSheathColor;
+            Color32 cableStripeColor;
+            Color32 darkTrimColor = new Color32(28, 28, 32, 255);
 
-            switch (norm)
+            switch (normTier)
             {
                 case "copper":
-                    baseColor = new Color32(45, 42, 38, 255);       // Dark industrial charcoal body
-                    stripeColor = new Color32(185, 110, 65, 255);   // Copper hazard band
+                    tierMetalColor = new Color32(215, 115, 55, 255);      // Rich copper orange (Pic 5)
+                    cableSheathColor = new Color32(42, 40, 38, 255);     // Dark insulated cable sheath
+                    cableStripeColor = new Color32(185, 95, 45, 255);    // Copper hazard/rib band
                     break;
                 case "iron":
-                    baseColor = new Color32(40, 40, 42, 255);       // Dark cast iron body
-                    stripeColor = new Color32(165, 85, 40, 255);    // Rust-orange hazard band
+                    tierMetalColor = new Color32(120, 115, 110, 255);    // Cast iron metal
+                    cableSheathColor = new Color32(36, 36, 38, 255);     // Dark charcoal sheath
+                    cableStripeColor = new Color32(145, 75, 35, 255);    // Rust hazard band
                     break;
                 case "gold":
-                    baseColor = new Color32(35, 32, 25, 255);       // Dark polished body
-                    stripeColor = new Color32(235, 195, 45, 255);   // Vibrant gold hazard band
+                    tierMetalColor = new Color32(245, 205, 45, 255);     // Metallic gold
+                    cableSheathColor = new Color32(38, 34, 26, 255);     // Deep gold-tinged sheath
+                    cableStripeColor = new Color32(230, 190, 40, 255);   // Gold band
                     break;
                 case "superconductor":
-                    baseColor = new Color32(230, 245, 255, 255);   // Pristine white ceramic
-                    stripeColor = new Color32(40, 195, 255, 255);   // Cyan energy band
+                    tierMetalColor = new Color32(225, 245, 255, 255);    // Ceramic white
+                    cableSheathColor = new Color32(20, 30, 45, 255);     // Deep space blue sheath
+                    cableStripeColor = new Color32(35, 190, 255, 255);   // Cyan energy band
                     break;
                 default:
-                    baseColor = new Color32(40, 40, 40, 255);
-                    stripeColor = new Color32(220, 180, 40, 255);
+                    tierMetalColor = new Color32(180, 180, 180, 255);
+                    cableSheathColor = new Color32(40, 40, 40, 255);
+                    cableStripeColor = new Color32(220, 180, 40, 255);
                     break;
             }
 
-            var pixels = new Color32[width * height];
-            for (int y = 0; y < height; y++)
+            var pixels = new Color32[size * size];
+            for (int y = 0; y < size; y++)
             {
-                for (int x = 0; x < width; x++)
+                for (int x = 0; x < size; x++)
                 {
-                    // Diagonal spiral stripe pattern
-                    int stripeVal = (x + y * 2) % 32;
-                    bool isStripe = stripeVal >= 8 && stripeVal <= 18;
-                    pixels[y * width + x] = isStripe ? stripeColor : baseColor;
+                    if (y < 128)
+                    {
+                        // ── Region A: Cable Sheath & Ribs (y: 0..127) ──
+                        float diag = (x + y * 2) % 32;
+                        bool isStripe = diag < 10;
+                        pixels[y * size + x] = isStripe ? cableStripeColor : cableSheathColor;
+                    }
+                    else if (y < 200)
+                    {
+                        // ── Region B: Tier Metal Housing Body (y: 128..199) ──
+                        // Subtle horizontal brushed metal grain
+                        int grain = (x % 4 == 0) ? 6 : 0;
+                        byte r = (byte)Mathf.Clamp(tierMetalColor.r + grain, 0, 255);
+                        byte g = (byte)Mathf.Clamp(tierMetalColor.g + grain, 0, 255);
+                        byte b = (byte)Mathf.Clamp(tierMetalColor.b + grain, 0, 255);
+                        pixels[y * size + x] = new Color32(r, g, b, 255);
+                    }
+                    else
+                    {
+                        // ── Region C: Dark Grommet / Socket Trim (y: 200..255) ──
+                        pixels[y * size + x] = darkTrimColor;
+                    }
                 }
             }
 

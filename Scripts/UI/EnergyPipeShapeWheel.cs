@@ -16,7 +16,7 @@ namespace VoxelEngine.UI
     /// <summary>
     /// Radial selection wheel for Energy Pipe shape variants.
     /// Opens when holding an Energy Pipe and pressing the BuildWheel keybind.
-    /// Also handles Ctrl + Scroll length adjustment for the Straight pipe variant.
+    /// Also handles V + Scroll length adjustment for the Straight pipe variant.
     /// </summary>
     public sealed class EnergyPipeShapeWheel : MonoBehaviour
     {
@@ -30,14 +30,14 @@ namespace VoxelEngine.UI
 
         private static readonly VariantDescriptor[] Descriptors =
         {
-            new() { Variant = EnergyPipeVariant.Straight,      Title = "STRAIGHT",          IconText = "━", Blurb = "Straight dual conduit. Hold Ctrl + Scroll to adjust length (1-5m)." },
+            new() { Variant = EnergyPipeVariant.Straight,      Title = "STRAIGHT",          IconText = "━", Blurb = "Straight dual cable conduit. Hold V + Scroll to adjust length (1-5m)." },
             new() { Variant = EnergyPipeVariant.BendRight,     Title = "90° ELBOW",         IconText = "┓", Blurb = "90-degree horizontal turn to the right." },
             new() { Variant = EnergyPipeVariant.BendUp,        Title = "90° RISER",         IconText = "⤴", Blurb = "90-degree vertical bend going upward." },
-            new() { Variant = EnergyPipeVariant.StepUp,        Title = "VERTICAL STEP",     IconText = "⤹", Blurb = "S-curve rising 1m upward and continuing forward." },
+            new() { Variant = EnergyPipeVariant.StepUp,        Title = "VERT STEP",         IconText = "⤹", Blurb = "S-curve rising 1m upward and continuing forward." },
             new() { Variant = EnergyPipeVariant.StepRight,     Title = "S-CURVE",           IconText = "⤾", Blurb = "Horizontal S-curve offsetting 1m to the right." },
             new() { Variant = EnergyPipeVariant.BendLeftToUp,  Title = "LEFT → UP",         IconText = "↰", Blurb = "3D compound curve entering from left and exiting up." },
             new() { Variant = EnergyPipeVariant.BendRightToUp, Title = "RIGHT → UP",        IconText = "↱", Blurb = "3D compound curve entering from right and exiting up." },
-            new() { Variant = EnergyPipeVariant.Junction4Way,  Title = "4-WAY CROSS",       IconText = "╋", Blurb = "Planar 4-way cross junction with bolted flange ports." },
+            new() { Variant = EnergyPipeVariant.Junction4Way,  Title = "4-WAY CROSS",       IconText = "╋", Blurb = "Planar 4-way cross junction with dual-port connectors." },
             new() { Variant = EnergyPipeVariant.Junction6Way,  Title = "6-WAY HUB",         IconText = "❖", Blurb = "Omni-directional 3D 6-way junction hub." }
         };
 
@@ -77,19 +77,23 @@ namespace VoxelEngine.UI
                 return;
             }
 
-            // Handle Ctrl + Scroll length adjustment for straight pipe
+            // Handle V + Scroll length adjustment for straight pipe (Ctrl is reserved for rotation)
             if (EnergyPipeSelection.Variant == EnergyPipeVariant.Straight)
             {
                 float scroll = GridInput.Scroll;
-                bool ctrl = GridInput.Ctrl;
-                if (ctrl && Mathf.Abs(scroll) > 0.01f)
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
+                bool vHeld = UnityEngine.InputSystem.Keyboard.current != null && UnityEngine.InputSystem.Keyboard.current.vKey.isPressed;
+#else
+                bool vHeld = Input.GetKey(KeyCode.V);
+#endif
+                if (vHeld && Mathf.Abs(scroll) > 0.01f)
                 {
                     int dir = scroll > 0 ? 1 : -1;
                     int oldLen = EnergyPipeSelection.StraightLength;
                     EnergyPipeSelection.AdjustLength(dir);
                     if (EnergyPipeSelection.StraightLength != oldLen)
                     {
-                        BuildFeedbackHud.Show("Pipe Length", $"{EnergyPipeSelection.StraightLength} m (Ctrl+Scroll)", null, UITheme.AccentCyan);
+                        BuildFeedbackHud.Show("Pipe Length", $"{EnergyPipeSelection.StraightLength} m (Hold V + Scroll)", null, UITheme.AccentCyan);
                         ShowPrompt();
                     }
                 }
@@ -197,10 +201,10 @@ namespace VoxelEngine.UI
             }
 
             string variantName = EnergyPipeSelection.GetVariantDisplayName(EnergyPipeSelection.Variant);
-            string ctrlHint = EnergyPipeSelection.Variant == EnergyPipeVariant.Straight
-                ? "  ·  [Ctrl + Scroll to Resize]"
+            string vHint = EnergyPipeSelection.Variant == EnergyPipeVariant.Straight
+                ? "  ·  [Hold V + Scroll to Resize]"
                 : "";
-            _promptLabel.text = $"[{GameSettings.GetKey(InputAction.BuildWheel)}]  ENERGY PIPE SHAPE  ·  {variantName}{ctrlHint}";
+            _promptLabel.text = $"[{GameSettings.GetKey(InputAction.BuildWheel)}]  ENERGY PIPES  ·  {variantName}{vHint}";
             _prompt.style.display = DisplayStyle.Flex;
         }
 
@@ -222,14 +226,17 @@ namespace VoxelEngine.UI
 
         private void Close(bool commit)
         {
+            if (!_open) return;
+            if (_wasBlocking) UIState.PopBlock();
+            _wasBlocking = false;
             _open = false;
-            if (_wasBlocking) { _wasBlocking = false; UIState.PopBlock(); }
+
             if (commit && _hovered >= 0 && _hovered < Descriptors.Length)
             {
-                var desc = Descriptors[_hovered];
-                EnergyPipeSelection.Variant = desc.Variant;
-                BuildFeedbackHud.Show("Pipe Variant", desc.Title, null, UITheme.AccentCyan);
+                EnergyPipeSelection.Variant = Descriptors[_hovered].Variant;
+                BuildFeedbackHud.Show("Energy Pipe Shape", EnergyPipeSelection.GetVariantDisplayName(EnergyPipeSelection.Variant), null, UITheme.AccentCyan);
             }
+
             if (_wheelOverlay != null && _wheelOverlay.parent != null) _wheelOverlay.RemoveFromHierarchy();
             ReleaseRingTexture();
             _wheelOverlay = null;
@@ -298,14 +305,14 @@ namespace VoxelEngine.UI
         {
             var badge = new VisualElement();
             badge.style.position = Position.Absolute;
-            badge.style.left = 110f;
-            badge.style.top = 110f;
-            badge.style.width = 240f;
-            badge.style.height = 240f;
+            badge.style.left = 115f;
+            badge.style.top = 115f;
+            badge.style.width = 230f;
+            badge.style.height = 230f;
             badge.style.alignItems = Align.Center;
             badge.style.justifyContent = Justify.Center;
             badge.style.backgroundColor = new StyleColor(new Color(0.035f, 0.05f, 0.075f, 0.98f));
-            UITheme.Radius(badge, 120f);
+            UITheme.Radius(badge, 115f);
             UITheme.Border(badge, 2f, UITheme.BorderBright);
             badge.pickingMode = PickingMode.Ignore;
             _wheelCenter.Add(badge);
@@ -340,12 +347,12 @@ namespace VoxelEngine.UI
 
         private void BuildRing()
         {
-            _ringElement = new VisualElement();
+            _ringElement = new VisualElement { name = "EnergyPipeShapeRing" };
             _ringElement.style.position = Position.Absolute;
-            _ringElement.style.left = 50f;
-            _ringElement.style.top = 50f;
-            _ringElement.style.width = 360f;
-            _ringElement.style.height = 360f;
+            _ringElement.style.left = 35f;
+            _ringElement.style.top = 35f;
+            _ringElement.style.width = 390f;
+            _ringElement.style.height = 390f;
             _ringElement.pickingMode = PickingMode.Position;
             _wheelCenter.Add(_ringElement);
 
@@ -389,22 +396,23 @@ namespace VoxelEngine.UI
 
         private void BuildRingLabel(int index)
         {
-            const float center = 180f;
-            const float radius = 145f;
+            const float center = 230f;
+            const float radius = 155f;
             float slice = 360f / Descriptors.Length;
-            float angle = (-90f + index * slice) * Mathf.Deg2Rad;
+            // Center of the slice is offset by half a slice
+            float angle = (-90f + index * slice + slice * 0.5f) * Mathf.Deg2Rad;
 
             var labelRoot = new VisualElement();
             labelRoot.style.position = Position.Absolute;
-            labelRoot.style.left = center + Mathf.Cos(angle) * radius - 45f;
-            labelRoot.style.top = center + Mathf.Sin(angle) * radius - 26f;
-            labelRoot.style.width = 90f;
-            labelRoot.style.height = 52f;
+            labelRoot.style.left = center + Mathf.Cos(angle) * radius - 28f;
+            labelRoot.style.top = center + Mathf.Sin(angle) * radius - 22f;
+            labelRoot.style.width = 56f;
+            labelRoot.style.height = 44f;
             labelRoot.style.alignItems = Align.Center;
             labelRoot.style.justifyContent = Justify.Center;
             labelRoot.style.overflow = Overflow.Visible;
             labelRoot.pickingMode = PickingMode.Ignore;
-            UITheme.Radius(labelRoot, 26f);
+            UITheme.Radius(labelRoot, 14f);
             labelRoot.style.transitionProperty = new List<StylePropertyName> { "scale", "background-color" };
             labelRoot.style.transitionDuration = new List<TimeValue> { new(0.10f, TimeUnit.Second), new(0.10f, TimeUnit.Second) };
             _wheelCenter.Add(labelRoot);
@@ -412,21 +420,22 @@ namespace VoxelEngine.UI
 
             bool selected = Descriptors[index].Variant == EnergyPipeSelection.Variant;
             var icon = new Label(Descriptors[index].IconText);
-            icon.style.fontSize = 20f;
+            icon.style.fontSize = 18f;
             icon.style.unityTextAlign = TextAnchor.MiddleCenter;
-            icon.style.color = new StyleColor(selected ? Color.white : new Color(0.20f, 0.22f, 0.24f));
+            icon.style.color = new StyleColor(selected ? Color.white : new Color(0.14f, 0.16f, 0.18f));
             icon.style.unityFontStyleAndWeight = FontStyle.Bold;
             icon.pickingMode = PickingMode.Ignore;
             labelRoot.Add(icon);
             _segmentIcons[index] = icon;
 
             var label = new Label(Descriptors[index].Title);
-            label.style.fontSize = 8f;
+            label.style.fontSize = 7.5f;
             label.style.marginTop = 1f;
-            label.style.letterSpacing = 0.6f;
+            label.style.letterSpacing = 0.3f;
             label.style.unityFontStyleAndWeight = FontStyle.Bold;
-            label.style.color = new StyleColor(selected ? Color.white : new Color(0.24f, 0.26f, 0.28f));
-            label.style.whiteSpace = WhiteSpace.NoWrap;
+            label.style.color = new StyleColor(selected ? Color.white : new Color(0.18f, 0.20f, 0.22f));
+            label.style.whiteSpace = WhiteSpace.Normal;
+            label.style.unityTextAlign = TextAnchor.MiddleCenter;
             label.pickingMode = PickingMode.Ignore;
             labelRoot.Add(label);
             _segmentNames[index] = label;
@@ -443,13 +452,13 @@ namespace VoxelEngine.UI
 
                 bool isSelected = Descriptors[i].Variant == EnergyPipeSelection.Variant;
                 bool isHovered = i == _hovered;
-                Color foreground = isSelected
+                Color foreground = (isSelected || isHovered)
                     ? Color.white
-                    : (isHovered ? new Color(0.04f, 0.62f, 0.88f) : new Color(0.20f, 0.22f, 0.24f));
+                    : new Color(0.14f, 0.16f, 0.18f);
+
                 icon.style.color = new StyleColor(foreground);
                 label.style.color = new StyleColor(foreground);
-                root.style.scale = new StyleScale(new Scale(isHovered ? new Vector3(1.06f, 1.06f, 1f) : Vector3.one));
-                root.style.backgroundColor = new StyleColor(isHovered ? new Color(0.10f, 0.68f, 0.92f, 0.18f) : Color.clear);
+                root.style.scale = new StyleScale(new Scale(isHovered ? new Vector3(1.08f, 1.08f, 1f) : Vector3.one));
             }
         }
 
@@ -462,14 +471,16 @@ namespace VoxelEngine.UI
 
         private int SegmentAt(Vector2 localPosition)
         {
-            Vector2 delta = localPosition - new Vector2(180f, 180f);
+            Vector2 delta = localPosition - new Vector2(195f, 195f);
             float radius = delta.magnitude;
-            if (radius < 100f || radius > 175f) return -1;
+            if (radius < 118f || radius > 192f) return -1;
 
+            float angle = Mathf.Atan2(delta.y, delta.x) * Mathf.Rad2Deg;
+            float normalized = Mathf.Repeat(angle + 90f, 360f);
             float slice = 360f / Descriptors.Length;
-            float normalized = Mathf.Repeat(Mathf.Atan2(delta.y, delta.x) * Mathf.Rad2Deg + 90f + slice * 0.5f, 360f);
-            int segment = Mathf.Clamp(Mathf.FloorToInt(normalized / slice), 0, Descriptors.Length - 1);
-            return segment;
+            float within = normalized % slice;
+            if (within < 3f || within > slice - 3f) return -1;
+            return Mathf.Clamp(Mathf.FloorToInt(normalized / slice), 0, Descriptors.Length - 1);
         }
 
         private void RefreshRingTexture()
@@ -488,10 +499,10 @@ namespace VoxelEngine.UI
 
             var pixels = new Color32[size * size];
             float center = (size - 1) * 0.5f;
-            const float innerRadius = 70f;
-            const float outerRadius = 125f;
+            const float innerRadius = 78f;
+            const float outerRadius = 126f;
+            int selected = (int)EnergyPipeSelection.Variant;
             float slice = 360f / Descriptors.Length;
-            float gap = Mathf.Min(3.0f, slice * 0.04f);
 
             for (int y = 0; y < size; y++)
             {
@@ -499,26 +510,26 @@ namespace VoxelEngine.UI
                 {
                     float dx = x - center;
                     float dy = center - y;
-                    float radius = Mathf.Sqrt(dx * dx + dy * dy);
-                    if (radius < innerRadius || radius > outerRadius) continue;
+                    float r = Mathf.Sqrt(dx * dx + dy * dy);
+                    if (r < innerRadius || r > outerRadius) continue;
 
-                    float normalized = Mathf.Repeat(Mathf.Atan2(dy, dx) * Mathf.Rad2Deg + 90f + slice * 0.5f, 360f);
-                    float withinSegment = normalized % slice;
-                    if (withinSegment < gap || withinSegment > slice - gap) continue;
+                    float angle = Mathf.Atan2(dy, dx) * Mathf.Rad2Deg;
+                    float normalized = Mathf.Repeat(angle + 90f, 360f);
+                    float within = normalized % slice;
+                    if (within < 3.2f || within > slice - 3.2f) continue;
 
-                    int segment = Mathf.Clamp(Mathf.FloorToInt(normalized / slice), 0, Descriptors.Length - 1);
-                    bool isSelected = Descriptors[segment].Variant == EnergyPipeSelection.Variant;
-                    bool isHovered = segment == _hovered;
+                    int seg = Mathf.Clamp(Mathf.FloorToInt(normalized / slice), 0, Descriptors.Length - 1);
+                    Color32 color;
+                    if (seg == selected)
+                        color = new Color32(22, 157, 220, 250);
+                    else if (seg == _hovered)
+                        color = new Color32(70, 188, 232, 252);
+                    else
+                        color = new Color32(245, 242, 232, 255); // Premium cream
 
-                    Color32 baseCream = new Color32(245, 242, 232, 255);
-                    Color32 selectedCyan = new Color32(22, 157, 220, 255);
-                    Color32 hoverAccent = new Color32(70, 188, 232, 255);
-
-                    Color32 color = isSelected ? selectedCyan : (isHovered ? hoverAccent : baseCream);
-                    float edge = Mathf.Min(radius - innerRadius, outerRadius - radius);
-                    float alphaFade = Mathf.Clamp01(edge / 6f);
-                    color.a = (byte)Mathf.RoundToInt(255 * alphaFade * (isSelected || isHovered ? 1f : 0.95f));
-
+                    float edge = Mathf.Min(r - innerRadius, outerRadius - r);
+                    color.a = (byte)Mathf.RoundToInt(color.a * Mathf.Clamp01(edge / 6f));
+                    if (edge < 3.5f) color = new Color32(180, 175, 160, (byte)(color.a * 0.7f));
                     pixels[y * size + x] = color;
                 }
             }
@@ -546,11 +557,10 @@ namespace VoxelEngine.UI
             Vector2 position = Input.mousePosition;
 #endif
             Vector2 fromCenter = position - new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
-            Vector2 target = Vector2.ClampMagnitude(fromCenter * 0.035f, 18f);
-            _parallax = Vector2.Lerp(_parallax, target, 1f - Mathf.Exp(-10f * Time.unscaledDeltaTime));
+            Vector2 target = Vector2.ClampMagnitude(fromCenter * 0.035f, 16f);
             _wheelCenter.style.translate = new StyleTranslate(new Translate(
-                new Length(_parallax.x, LengthUnit.Pixel),
-                new Length(-_parallax.y, LengthUnit.Pixel), 0f));
+                new Length(target.x, LengthUnit.Pixel),
+                new Length(-target.y, LengthUnit.Pixel), 0f));
         }
     }
 }

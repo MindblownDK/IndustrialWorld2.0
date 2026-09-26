@@ -350,6 +350,12 @@ namespace VoxelEngine.Building
 
         private void HandleRotationInput()
         {
+            if (GameSettings.WasPressed(InputAction.BuildRotate))
+            {
+                _rotSteps.y = (_rotSteps.y + 1) % 4;
+                RotationSteps = _rotSteps;
+            }
+
             float scroll = GridInput.Scroll;
             bool ctrl = GridInput.Ctrl;
             bool shift = GridInput.Shift;
@@ -1943,8 +1949,14 @@ namespace VoxelEngine.Building
                 Vector3 localDirection = NearestLocalCardinal(localHit);
                 if (localDirection.sqrMagnitude < 0.01f) localDirection = Vector3.forward;
 
-                pos = targetPipe.transform.position + targetPipe.transform.TransformDirection(localDirection) * Mathf.Max(gridSize, 1f);
-                rot = targetPipe.transform.rotation;
+                float step = Mathf.Max(gridSize, 1f);
+                if (localDirection == Vector3.forward && targetPipe.variant == VoxelEngine.Power.EnergyPipeVariant.Straight)
+                {
+                    step = targetPipe.straightLength;
+                }
+
+                pos = targetPipe.transform.position + targetPipe.transform.TransformDirection(localDirection) * step;
+                rot = targetPipe.transform.rotation * Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
                 return true;
             }
 

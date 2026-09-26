@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.41.0-dev`
-**Roadmap Version:** `12.41.0-dev`
+**Current Version:** `12.41.1-dev`
+**Roadmap Version:** `12.41.1-dev`
 **Date:** 2026-09-26
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,9 +29,14 @@
 
 ## 0. Recently Done
 
+### 12.41.1-dev - Energy Pipe Connector Housing Revamp, Shape Wheel Alignment, and V-Key Length Adjustment
+- **Shape wheel UI** (`EnergyPipeShapeWheel`): centered half-slice typography and radius math; cream/cyan contrast for 9 variant slices.
+- **Connector overhaul** (`EnergyPipeMeshBuilder`): solid rounded rectangular connector blocks with dual recessed circular sockets (Pic 5) on all variant endpoints.
+- **Placement controls** (`BuildSystem`, `PowerCable`): full rotation when aiming at placed pipes; Hold V + Scroll straight pipe length scaling; dynamic box colliders.
+
 ### 12.41.0-dev - Energy Pipe Shape Variant Wheel, Dual-Conduit Aesthetics, and Tier Overload Explosions
-- **Shape variant wheel** (`EnergyPipeShapeWheel`, `EnergyPipeSelection`): 9-slice radial selector + dynamic Ctrl+Scroll straight pipe length scaling (1-5m).
-- **Dual-conduit styling** (`EnergyPipeMeshBuilder`, `PowerCable`): parallel shafts with bolted terminal flanges and tier materials (oxidized copper, rusted iron, yellow gold, superconductor beam).
+- **Shape variant wheel** (`EnergyPipeShapeWheel`, `EnergyPipeSelection`): 9-slice radial selector + dynamic straight pipe length scaling (1-5m).
+- **Dual-conduit styling** (`EnergyPipeMeshBuilder`, `PowerCable`): parallel shafts with terminal flanges and tier materials (oxidized copper, rusted iron, yellow gold, superconductor beam).
 - **Overload destruction** (`PowerCable`, `PowerNetworkManager`): finite conduit tiers explode and burn red-hot for 2s when carried power exceeds rated capacity.
 
 ### 12.40.7-dev - Energy Pipe Visual Alignment, Overload Fault Destruction, and Battery Equalisation

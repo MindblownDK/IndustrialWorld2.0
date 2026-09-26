@@ -193,6 +193,13 @@ namespace VoxelEngine.Power
                 Destroy(_superEnergyBeam);
                 _superEnergyBeam = null;
             }
+
+            // Adjust BoxCollider to tightly encapsulate active shape variant and length
+            if (TryGetComponent<BoxCollider>(out var box) && mesh != null)
+            {
+                box.center = mesh.bounds.center;
+                box.size = Vector3.Max(mesh.bounds.size, new Vector3(0.25f, 0.25f, 0.25f));
+            }
         }
 
         /// <summary>

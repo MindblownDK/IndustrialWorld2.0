@@ -1,9 +1,27 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.41.0-dev`
+**Current Version:** `12.41.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.41.1-dev] Energy Pipe Connector Housing Revamp, Shape Wheel Alignment, and V-Key Length Adjustment
+
+**Type:** PATCH - fixes radial Energy Pipe Shape Wheel segment label centering and texture alignment, refines energy pipe connector housings with rounded rectangular blocks, recessed dual circular port bezels, and strain-relief cable collars matching Pic 5, repairs missing endpoint connectors on vertical risers and compound bends (Pic 2 & 3), enables full rotation when aiming at existing power pipes, and remaps straight pipe length adjustment to Hold V + Scroll to prevent Ctrl rotation conflict.
+
+**Energy Pipe Shape Wheel layout:** Corrects 9-slice radial wheel segment positioning, label centering (half-slice angular offset), and ring texture radius math. Slices render with premium cream backgrounds when unselected (using crisp dark charcoal typography) and vibrant cyan backgrounds when hovered/selected (with white typography). All 9 variant titles and icons fit cleanly without overlap or edge clipping.
+
+**Connector housing and cable revamp:** Connectors on all pipe and conduit variant endpoints are redesigned to match Pic 5:
+- Rounded rectangular solid housing body with corner bevels, finished in the active cable tier material (Copper, Iron, Gold, Superconductor).
+- Two recessed circular dark port socket bezels with inner cylindrical cups and metallic central contact terminals.
+- Rear strain-relief cable boot collars connecting each cylindrical cable cleanly to the back of the housing.
+- Both/all terminal ends on every variant (Straight, 90-degree Horizontal Elbow, 90-degree Vertical Riser, Vertical S-Step, Horizontal S-Curve, Left-to-Up Bend, Right-to-Up Bend, 4-Way Cross, 6-Way Hub) now generate complete connector housings facing the true connection normals.
+
+**Placement rotation and snapping:** When aiming at existing placed Energy Pipes, the placement ghost snaps flush to the nearest cardinal socket/endpoint and responds fully to player rotation controls (`_rotSteps` via BuildRotate / R key, Ctrl + Scroll, and Shift + Scroll). Straight pipe length scaling is remapped from Ctrl+Scroll to Hold V + Scroll, freeing Ctrl exclusively for orientation rotation. Placed `PowerCable` instances dynamically resize their `BoxCollider` to match active variant geometry for precise cursor raycasting.
+
+**GitHub title:** `[12.41.1-dev] Energy Pipe Connector Housing Revamp, Shape Wheel Alignment, and V-Key Length Adjustment`
+
+**Manual steps:** in Unity on `Dev`, let scripts compile and clear the Console. Run `Tools -> Voxel Engine -> Voxel Engine Setup`, select `6. Build Power Content` and `17. Build Factory Foundations + HV Grid` (safe and non-destructive). Equip an Energy Pipe in hand: hold the Build Wheel keybind (default B) to open the Energy Pipe Shape Wheel and verify that all 9 slices display centered icons and titles with high contrast. Select the Straight variant: hold V and scroll the mouse wheel to dynamically scale length between 1m and 5m; hold Ctrl and scroll to rotate the piece in 90-degree increments. Place vertical risers (Bend Up) and compound bends (Left/Right to Up): verify that both ends feature the complete rounded rectangular connector block with recessed dual port rings matching Pic 5. Aim at placed energy pipes and rotate with R or Ctrl+Scroll to confirm full rotational snapping.
 
 ### [12.41.0-dev] Energy Pipe Shape Variant Wheel, Dual-Conduit Aesthetics, and Tier Overload Explosions
 
