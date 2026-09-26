@@ -1,9 +1,27 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.40.7-dev`
+**Current Version:** `12.41.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.41.0-dev] Energy Pipe Shape Variant Wheel, Dual-Conduit Aesthetics, and Tier Overload Explosions
+
+**Type:** MINOR - introduces the radial Energy Pipe Shape Wheel UI for selecting conduit shapes, dynamic length adjustment (Ctrl + Scroll for 1-5m straight runs), dual-conduit procedural geometry with bolted terminal flanges, tier-specific aesthetics (oxidized copper, rusted iron, yellow gold, and superconductor energy beam animation), and active power overload explosions for finite energy pipe tiers (Copper, Iron, Gold).
+
+**Energy Pipe Shape Wheel & Variants:** Holding an Energy Pipe and pressing the BuildWheel keybind opens a 9-slice radial selector (`EnergyPipeShapeWheel` using UI Toolkit) supporting Straight (1-5m), 90-degree Horizontal Elbow, 90-degree Vertical Riser, Vertical S-Step, Horizontal S-Curve, Left-to-Up Compound Bend, Right-to-Up Compound Bend, 4-Way Planar Cross Junction, and 6-Way 3D Omni Hub. For the Straight variant, players can hold Ctrl and scroll the mouse wheel to dynamically scale the placed conduit length from 1m up to 5m in real time with live ghost preview updates.
+
+**Dual-Conduit Aesthetics & Tier Styling:** Procedural mesh generation (`EnergyPipeMeshBuilder`) builds parallel dual conduits with bolted end-flange plates and spiral hazard band styling. Tier materials feature distinct visuals:
+- Copper: Warm oxidized copper bronze with subtle patina undertones.
+- Iron: Dark cast iron steel with warm rust highlights.
+- Gold: Radiant yellow metallic gold.
+- Superconductor: Clean white-cyan ceramic shell with an active animated purple energy beam line core running through the conduit.
+
+**Conduit Overload Explosions:** Finite Energy Pipe tiers enforce their real electrical throughput ratings (Copper: 10,000 W, Iron: 30,000 W, Gold: 50,000 W). When power flow across a circuit exceeds the pipe's capacity, the overloaded pipe triggers an immediate explosion flash, enters the `OverheatedPowerCable` state (pulsating red-hot heat for 2.0 seconds), and is destroyed. Superconductor conduits remain unlimited.
+
+**GitHub title:** `[12.41.0-dev] Energy Pipe Shape Variant Wheel, Dual-Conduit Aesthetics, and Tier Overload Explosions`
+
+**Manual steps:** in Unity on `Dev`, let scripts compile and clear the Console. Run `Tools -> Voxel Engine -> Voxel Engine Setup`, select `6. Build Power Content` and `17. Build Factory Foundations + HV Grid` (safe and non-destructive). Equip any Energy Pipe in hand: hold the Build Wheel keybind (default B) to open the new Energy Pipe Shape Wheel and select between the 9 shape variants. With the Straight pipe selected, hold Ctrl and scroll the mouse wheel to adjust length from 1m to 5m, verifying that the placement ghost updates immediately. Place each shape variant: verify the dual parallel shafts, bolted flange plates, and tier-specific materials render cleanly. For Superconductor Energy Pipes, confirm the glowing purple energy beam core is visible. To test overload explosions, connect a high power source/load (e.g. 15,000 W+) through a 10,000 W Copper Energy Pipe: confirm the pipe immediately triggers an explosion flash, glows fiery red-hot for 2.0 seconds, and disintegrates.
 
 ### [12.40.7-dev] Energy Pipe Visual Alignment, Overload Fault Destruction, and Battery Equalisation
 

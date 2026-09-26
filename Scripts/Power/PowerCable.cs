@@ -7,22 +7,10 @@ using VoxelEngine.Transport;
 namespace VoxelEngine.Power
 {
     /// <summary>
-    /// A cable. Doesn't generate or consume; carries power between nodes. Its WireDefinition
-    /// determines the segment's capacity. The network's bottleneck is the MINIMUM capacity
-    /// along its cables.
-    ///
-    /// Connection policy: cables link only across one direct cardinal grid step.
-    /// A corner requires a player-placed intermediate cable; topology never creates
-    /// a diagonal or inferred L route. Every candidate still requires line of sight.
-    ///
-    /// Port Config: Cables respect machine PortConfig. They only connect to faces that:
-    /// - Are enabled
-    /// - Have direction = Input (machines receiving power) or Output (machines sending power)
-    /// - Accept Power network type
-    ///
-    /// Visuals: a central chunky core cube + up to 6 short arm cubes pointing toward
-    /// each connected neighbour. The arms are spawned/torn down whenever the network
-    /// topology rebuilds, so visuals always match electrical state.
+    /// Industrial energy pipe / cable. Carries electrical power across networks.
+    /// Supports multiple shape variants (Straight 1-5m, 90° bends, S-curves, vertical steps, 4-way/6-way junctions)
+    /// selected via the EnergyPipeShapeWheel. Finite tiers (Copper, Iron, Gold) overload and explode
+    /// if throughput exceeds their rated capacity.
     /// </summary>
     public class PowerCable : PowerNode
     {
@@ -31,20 +19,23 @@ namespace VoxelEngine.Power
         [Header("Tier")]
         public ElectricalPipeDefinition wire;
 
+        [Header("Shape Variant")]
+        public EnergyPipeVariant variant = EnergyPipeVariant.Straight;
+        [Range(1, 5)] public int straightLength = 1;
+
         [Header("Visual")]
-        [Tooltip("Edge length of the central cable hub cube, in metres. A typical 1m grid " +
-                 "block uses ~0.35 for a chunky-but-not-blocky look.")]
+        [Tooltip("Edge length of the central cable hub cube, in metres.")]
         [Range(0.1f, 0.9f)] public float coreSize = 0.35f;
         [Tooltip("Thickness (width × height) of each arm extending toward a neighbour.")]
         [Range(0.05f, 0.6f)] public float armThickness = 0.28f;
-        [Tooltip("If true, the cable also renders a tiny indicator nub on each face that " +
-                 "has NO neighbour, so the player can tell where the cable terminates.")]
         public bool showUnusedFaceCaps = false;
 
         // ── Internals ─────────────────────────────────────────────
-        private Transform _visualRoot;        // parent for all generated meshes
-        private Material  _tintedMaterial;    // shared per cable so MPB stays simple
-        private readonly List<Vector3> _neighbourPositionsBuf = new(6);
+        private Transform _visualRoot;
+        private MeshFilter _meshFilter;
+        private MeshRenderer _meshRenderer;
+        private GameObject _superEnergyBeam;
+        private bool _isOverloading;
         private static readonly Collider[] s_endpointTouchProbe = new Collider[32];
 
         // Track which face each neighbour is connected through
@@ -52,34 +43,24 @@ namespace VoxelEngine.Power
 
         protected override void OnEnable()
         {
-            // Cables live on a 1m grid. The broad-phase needs to reach neighbouring
-            // CABLES at exactly 1 grid step AND larger MACHINES whose centre may be
-            // 1.5–2.5m away (a multi-voxel generator placed beside the cable's cell).
-            // We use a roomier radius and let the per-node CanLinkTo logic enforce
-            // the strict grid-alignment rule only when BOTH ends are cables.
             float gs = gridSize > 0 ? gridSize : 1f;
-            connectRadius = gs * 3.0f;
+            connectRadius = gs * Mathf.Max(3.0f, straightLength * 1.5f);
 
-            // Cables themselves opt into the strict grid+LOS policy. Machines do not,
-            // so a cable-vs-machine link is symmetric-OFF and accepts any face.
             requireGridAlignedNeighbours = true;
-            // Default mask: hit everything EXCEPT Ignore Raycast (Unity layer 2).
             connectionBlockingLayers = ~(1 << 2);
 
             base.OnEnable();
 
-            // Hide the prefab's pre-baked "stretched cube" — we render arms ourselves now.
+            // Hide legacy pre-baked prefab renderers
             var existingRenderers = GetComponentsInChildren<MeshRenderer>(true);
             foreach (var r in existingRenderers)
             {
-                // Tag the children that came from the prefab as "managed" so we can hide
-                // them without nuking the central node script renderer (there is none).
-                if (r.transform != transform) r.enabled = false;
+                if (r.transform != transform && (_visualRoot == null || !r.transform.IsChildOf(_visualRoot)))
+                    r.enabled = false;
             }
 
             EnsureVisualRoot();
             onNeighboursChanged += RebuildVisuals;
-            // Build once immediately so newly placed cables aren't briefly invisible.
             RebuildVisuals();
         }
 
@@ -87,48 +68,25 @@ namespace VoxelEngine.Power
         {
             onNeighboursChanged -= RebuildVisuals;
             _neighbourFaces.Clear();
-            // Force a visual rebuild so this cable's own arms disappear immediately.
-            // When neighbours list is empty (after Unregister), RebuildVisuals clears all arms.
-            RebuildVisuals();
             base.OnDisable();
         }
 
-        /// <summary>
-        /// Override to respect PortConfig on target machines.
-        /// Only connect if the target has an enabled, compatible port.
-        /// </summary>
         public override bool CanLinkTo(PowerNode other)
         {
+            if (other == null || other == this) return false;
             if (other is PowerCable && !IsStrictCableNeighbour(other)) return false;
-            // Machine/connector nodes must actually meet the Energy Pipe at their
-            // collider surface. A broad node radius is only a discovery aid, never
-            // permission to draw an arm through empty space toward a remote prefab.
             if (!(other is PowerCable) && !TouchesPowerEndpoint(other)) return false;
             if (!base.CanLinkTo(other)) return false;
 
-            // Consumers can tap a touching energy pipe. Item-port configuration
-            // is edited through the Item Ports modal and should not accidentally
-            // block machine power unless a future dedicated power socket system is
-            // explicitly added.
             if (other is PowerConsumer) return true;
 
-            // Non-consumer machines with PortConfig need special handling.
             var portConfig = other.GetComponent<PortConfig>();
             if (portConfig != null)
             {
-                // Find if there's a compatible face
                 var match = portConfig.GetMatchingFace(transform.position, PortDirection.Input);
-                if (!match.HasValue)
-                {
-                    // Also check Output direction (for generators that send power)
-                    match = portConfig.GetMatchingFace(transform.position, PortDirection.Output);
-                }
-
+                if (!match.HasValue) match = portConfig.GetMatchingFace(transform.position, PortDirection.Output);
                 if (!match.HasValue) return false;
-
-                // Check if this face accepts power cables
-                if (!portConfig.AcceptsNetworkType(match.Value.face, NetworkType.Power))
-                    return false;
+                if (!portConfig.AcceptsNetworkType(match.Value.face, NetworkType.Power)) return false;
             }
 
             return true;
@@ -146,15 +104,16 @@ namespace VoxelEngine.Power
                 step = VoxelEngine.GridSystem.GridSizeExt.CellSize(VoxelEngine.GridSystem.GridSize.Small);
                 delta = aBlock.Grid.transform.InverseTransformVector(delta);
             }
-            return VoxelEngine.Networks.PipeAdjacency.IsCardinalLinkDelta(
-                delta, step, 1f, step * 0.12f);
+
+            float maxReach = step * Mathf.Max(1.2f, straightLength * 1.1f);
+            return delta.magnitude <= maxReach;
         }
 
         private bool TouchesPowerEndpoint(PowerNode other)
         {
             if (other == null) return false;
             float step = gridSize > 0f ? gridSize : 1f;
-            float maxReach = Mathf.Max(1.4f, step * 1.4f);
+            float maxReach = Mathf.Max(1.5f, step * Mathf.Max(1.5f, straightLength * 1.15f));
             Vector3 delta = other.transform.position - transform.position;
             if (delta.sqrMagnitude > maxReach * maxReach * 4f) return false;
 
@@ -179,9 +138,6 @@ namespace VoxelEngine.Power
             return false;
         }
 
-        /// <summary>
-        /// After connection is established, record which face we're using.
-        /// </summary>
         public void RecordConnectionFace(PowerNode target, CubeFace face)
         {
             _neighbourFaces[target] = face;
@@ -194,76 +150,77 @@ namespace VoxelEngine.Power
             var go = new GameObject("CableVisuals");
             _visualRoot = go.transform;
             _visualRoot.SetParent(transform, worldPositionStays: false);
+            _meshFilter = go.AddComponent<MeshFilter>();
+            _meshRenderer = go.AddComponent<MeshRenderer>();
         }
 
-        private void RebuildVisuals()
+        public void RebuildVisuals()
         {
-            if (_visualRoot == null) EnsureVisualRoot();
-            if (_tintedMaterial == null)
+            EnsureVisualRoot();
+
+            // Build procedural dual-conduit mesh for active variant & length
+            var mesh = EnergyPipeMeshBuilder.BuildMesh(variant, straightLength);
+            _meshFilter.sharedMesh = mesh;
+
+            string tierName = wire != null ? wire.displayName : "Copper";
+            Color tint = wire != null ? wire.tint : new Color(0.85f, 0.45f, 0.20f, 1f);
+            var mat = EnergyPipeMeshBuilder.GetMaterialForTier(tierName, tint);
+            _meshRenderer.sharedMaterial = mat;
+
+            // Superconductor animated purple energy line
+            bool isSuper = tierName != null && tierName.ToLowerInvariant().Contains("super");
+            if (isSuper && _superEnergyBeam == null)
             {
-                Color tint = wire != null ? wire.tint : new Color(0.85f, 0.45f, 0.20f, 1f);
-                _tintedMaterial = GridCableVisuals.CreateTintedMaterial(tint, $"{name}_CableMat");
-            }
+                _superEnergyBeam = new GameObject("SuperconductorEnergyBeam");
+                _superEnergyBeam.transform.SetParent(_visualRoot, worldPositionStays: false);
+                var beamFilter = _superEnergyBeam.AddComponent<MeshFilter>();
+                var beamRenderer = _superEnergyBeam.AddComponent<MeshRenderer>();
+                var beamMesh = EnergyPipeMeshBuilder.BuildMesh(variant, straightLength);
+                beamFilter.sharedMesh = beamMesh;
 
-            // IndustrialPipeMesh receives world-space targets and converts them once
-            // into this cable's local frame. Strict direct cable pairs use a shared
-            // midpoint so their two visual half-arms meet without overlap.
-            _neighbourPositionsBuf.Clear();
-            var surfaceTap = GetComponent<SurfacePowerTap>();
-            foreach (var nb in neighbours)
+                var sh = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+                var beamMat = new Material(sh) { name = "SuperEnergyBeamMat" };
+                beamMat.color = new Color(0.75f, 0.25f, 1.0f, 1f);
+                if (beamMat.HasProperty("_BaseColor")) beamMat.SetColor("_BaseColor", beamMat.color);
+                beamMat.EnableKeyword("_EMISSION");
+                beamMat.globalIlluminationFlags = MaterialGlobalIlluminationFlags.RealtimeEmissive;
+                beamMat.SetColor("_EmissionColor", new Color(4.5f, 1.5f, 6.0f));
+                beamRenderer.sharedMaterial = beamMat;
+                _superEnergyBeam.transform.localScale = Vector3.one * 0.45f;
+            }
+            else if (!isSuper && _superEnergyBeam != null)
             {
-                if (nb == null) continue;
-
-                // A cable mounted on a large static power device is logically
-                // linked to the node at its root, but must visibly terminate at
-                // the touched collider face rather than draw an arm through it.
-                if (surfaceTap != null && surfaceTap.TryGetHostSurfacePoint(nb, out Vector3 surfacePoint))
-                {
-                    _neighbourPositionsBuf.Add(surfacePoint);
-                    continue;
-                }
-
-                // Keep face targets in world space; IndustrialPipeMesh performs the
-                // single required local-frame conversion under the visual root.
-                if (_neighbourFaces.TryGetValue(nb, out var face) && face != CubeFace.PosX)
-                {
-                    var portConfig = nb.GetComponent<PortConfig>();
-                    if (portConfig != null)
-                    {
-                        _neighbourPositionsBuf.Add(portConfig.FaceWorldPoint(face));
-                        continue;
-                    }
-                }
-
-                if (nb is PowerCable)
-                {
-                    _neighbourPositionsBuf.Add(Vector3.Lerp(transform.position, nb.transform.position, 0.5f));
-                }
-                else
-                {
-                    var col = nb.GetComponentInChildren<Collider>();
-                    if (col != null)
-                    {
-                        Vector3 closest = col.ClosestPoint(transform.position);
-                        _neighbourPositionsBuf.Add(closest);
-                    }
-                    else
-                    {
-                        _neighbourPositionsBuf.Add(Vector3.Lerp(transform.position, nb.transform.position, 0.5f));
-                    }
-                }
+                Destroy(_superEnergyBeam);
+                _superEnergyBeam = null;
             }
+        }
 
-            GridCableVisuals.Rebuild(
-                _visualRoot,
-                transform.position,
-                _neighbourPositionsBuf,
-                gridSize > 0 ? gridSize : 1f,
-                coreSize,
-                armThickness,
-                _tintedMaterial,
-                showUnusedFaceCaps);
+        /// <summary>
+        /// Triggered when carried power exceeds this pipe's rated capacityWatts.
+        /// Explodes with fiery flash, sparks, and burns red-hot for 2s before destruction.
+        /// </summary>
+        public void TriggerOverload(float throughWatts)
+        {
+            if (_isOverloading || !isActiveAndEnabled) return;
+            _isOverloading = true;
 
+            const float BurnSeconds = 2.0f;
+            var heat = gameObject.GetComponent<OverheatedPowerCable>() ?? gameObject.AddComponent<OverheatedPowerCable>();
+            heat.Begin(BurnSeconds);
+
+            var flash = new GameObject("EnergyPipeOverloadFlash");
+            flash.transform.position = transform.position;
+            var light = flash.AddComponent<Light>();
+            light.type = LightType.Point;
+            light.color = new Color(1f, 0.25f, 0.05f, 1f);
+            light.intensity = 18f;
+            light.range = 8f;
+            Destroy(flash, 0.25f);
+
+            float cap = wire != null ? wire.capacityWatts : 1000f;
+            string tier = wire != null ? wire.displayName : "Conduit";
+            Debug.LogWarning($"[Power] Energy Pipe overload: {throughWatts:0} W exceeds {cap:0} W rating ({tier}). Conduit burned and destroyed.", this);
+            PowerNetworkManager.Instance?.SetDirty();
         }
     }
 

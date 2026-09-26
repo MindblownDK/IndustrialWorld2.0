@@ -118,6 +118,8 @@ namespace VoxelEngine.Building
                 gameObject.AddComponent<VoxelEngine.Simulation.ConveyorShapeWheel>();
             if (GetComponent<VoxelEngine.Simulation.RoadSurfaceWheel>() == null)
                 gameObject.AddComponent<VoxelEngine.Simulation.RoadSurfaceWheel>();
+            if (GetComponent<VoxelEngine.UI.EnergyPipeShapeWheel>() == null)
+                gameObject.AddComponent<VoxelEngine.UI.EnergyPipeShapeWheel>();
 
             // Create translucent ghost materials.
             _ghostMaterialValid   = MakeGhostMaterial(new Color(0.4f, 0.9f, 0.5f, ghostAlpha));
@@ -185,6 +187,18 @@ namespace VoxelEngine.Building
                 _appliedGhostMaterial = null;
                 StripGhost(_ghost, _ghostMaterialValid);
                 _appliedGhostMaterial = _ghostMaterialValid;
+            }
+
+            var ghostCable = _ghost != null ? _ghost.GetComponentInChildren<VoxelEngine.Power.PowerCable>(true) : null;
+            if (ghostCable != null)
+            {
+                if (ghostCable.variant != VoxelEngine.Power.EnergyPipeSelection.Variant || ghostCable.straightLength != VoxelEngine.Power.EnergyPipeSelection.StraightLength)
+                {
+                    ghostCable.variant = VoxelEngine.Power.EnergyPipeSelection.Variant;
+                    ghostCable.straightLength = VoxelEngine.Power.EnergyPipeSelection.StraightLength;
+                    ghostCable.RebuildVisuals();
+                    StripGhost(_ghost, _appliedGhostMaterial ?? _ghostMaterialValid);
+                }
             }
 
             var ray = shootCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0));
@@ -966,6 +980,14 @@ namespace VoxelEngine.Building
             if (placedBelt != null)
                 placedBelt.SetBuildShape(ResolveConveyorBuildShape(placedBelt, hit));
 
+            var placedCable = go.GetComponentInChildren<VoxelEngine.Power.PowerCable>(true);
+            if (placedCable != null)
+            {
+                placedCable.variant = VoxelEngine.Power.EnergyPipeSelection.Variant;
+                placedCable.straightLength = VoxelEngine.Power.EnergyPipeSelection.StraightLength;
+                placedCable.RebuildVisuals();
+            }
+
             var placedRoad = go.GetComponentInChildren<VoxelEngine.Building.AsphaltRoad>(true);
             if (placedRoad != null) placedRoad.RefreshAfterPlacement();
 
@@ -1102,6 +1124,14 @@ namespace VoxelEngine.Building
             // ghost showed — not merely rounded onto the Detail cell.
             if (portAnchorLocal.HasValue)
                 block.transform.localPosition = portAnchorLocal.Value;
+
+            var placedCable = go.GetComponentInChildren<VoxelEngine.Power.PowerCable>(true);
+            if (placedCable != null)
+            {
+                placedCable.variant = VoxelEngine.Power.EnergyPipeSelection.Variant;
+                placedCable.straightLength = VoxelEngine.Power.EnergyPipeSelection.StraightLength;
+                placedCable.RebuildVisuals();
+            }
 
             // Grid-mounted pipes link on the Detail lattice step (carried over from
             // the retired static placement fork) and refresh visuals + all pipe

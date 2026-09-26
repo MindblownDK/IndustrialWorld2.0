@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.40.7-dev`
-**Roadmap Version:** `12.40.7-dev`
+**Current Version:** `12.41.0-dev`
+**Roadmap Version:** `12.41.0-dev`
 **Date:** 2026-09-26
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 12.41.0-dev - Energy Pipe Shape Variant Wheel, Dual-Conduit Aesthetics, and Tier Overload Explosions
+- **Shape variant wheel** (`EnergyPipeShapeWheel`, `EnergyPipeSelection`): 9-slice radial selector + dynamic Ctrl+Scroll straight pipe length scaling (1-5m).
+- **Dual-conduit styling** (`EnergyPipeMeshBuilder`, `PowerCable`): parallel shafts with bolted terminal flanges and tier materials (oxidized copper, rusted iron, yellow gold, superconductor beam).
+- **Overload destruction** (`PowerCable`, `PowerNetworkManager`): finite conduit tiers explode and burn red-hot for 2s when carried power exceeds rated capacity.
+
 ### 12.40.7-dev - Energy Pipe Visual Alignment, Overload Fault Destruction, and Battery Equalisation
 - **Conduit visuals** (`IndustrialPipeMesh`, `GridCableVisuals`): sleek cylindrical conduit profile with metallic tier tints; suppresses stray 6-way unlinked face spike nubs.
 - **Power endpoints** (`PowerCable`, `SurfacePowerTap`): dynamic adjacent collider touch reaches batteries/machines/connectors; endpoint arms terminate flush at target faces.
@@ -48,10 +53,6 @@
 - **Status:** superseded by `12.40.6-dev`; utility turns now require real player-placed intermediary segments rather than inferred offset links/risers.
 - **Retained visual correction** (`IndustrialPipeMesh`, `GridCableVisuals`): direct-link visuals still use the correct world-to-local transform on rotated/static surfaces.
 - **Retained scope:** strict direct cable pairs preserve normal placement and static surface tap behaviour.
-
-### 12.40.3-dev - Embedded Static Lattice Compile Repair
-- **Build/power source** (`BuildSystem`, `PowerNode`): static lattice and surface-tap helpers are co-located with their owning systems, removing external helper-script import ordering.
-- **Scope**: compile repair only; 12.40.2-dev terrain support, static face lattices, and power-tap behaviour are unchanged.
 
 ### Era Transition Feel
 

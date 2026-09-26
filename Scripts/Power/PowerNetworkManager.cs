@@ -318,6 +318,25 @@ namespace VoxelEngine.Power
                 float excess = Mathf.Max(0, supplyEff - demand);
                 float toBattery = Mathf.Min(excess, Mathf.Min(batteryStore, maxFlow));
 
+                // Check finite Energy Pipe overloads (Copper, Iron, Gold)
+                float totalFlow = Mathf.Max(served, toBattery);
+                if (totalFlow > 0.001f)
+                {
+                    for (int i = 0; i < net.nodes.Count; i++)
+                    {
+                        var n = net.nodes[i];
+                        if (n is PowerCable cable && cable.wire != null
+                            && cable.wire.capacityWatts > 0
+                            && cable.wire.capacityWatts < 100000000f)
+                        {
+                            if (totalFlow > cable.wire.capacityWatts * 1.001f)
+                            {
+                                cable.TriggerOverload(totalFlow);
+                            }
+                        }
+                    }
+                }
+
                 // Apply battery state changes (Wh = W * h, dt is in seconds → /3600).
                 if (fromBattery > 0 || toBattery > 0)
                 {
