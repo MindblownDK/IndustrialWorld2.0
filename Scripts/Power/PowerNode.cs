@@ -162,7 +162,7 @@ namespace VoxelEngine.Power
     [DisallowMultipleComponent]
     public sealed class SurfacePowerTap : MonoBehaviour
     {
-        private const float BindRadius = 0.48f;
+        private const float BindRadius = 0.95f;
         private static readonly Collider[] s_hostProbe = new Collider[32];
 
         private PowerNode _node;

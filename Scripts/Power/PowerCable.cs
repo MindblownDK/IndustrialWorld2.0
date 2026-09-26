@@ -45,7 +45,6 @@ namespace VoxelEngine.Power
         private Transform _visualRoot;        // parent for all generated meshes
         private Material  _tintedMaterial;    // shared per cable so MPB stays simple
         private readonly List<Vector3> _neighbourPositionsBuf = new(6);
-        private const float EndpointTouchDistance = 0.52f;
         private static readonly Collider[] s_endpointTouchProbe = new Collider[32];
 
         // Track which face each neighbour is connected through
@@ -154,20 +153,29 @@ namespace VoxelEngine.Power
         private bool TouchesPowerEndpoint(PowerNode other)
         {
             if (other == null) return false;
+            float step = gridSize > 0f ? gridSize : 1f;
+            float maxReach = Mathf.Max(1.4f, step * 1.4f);
+            Vector3 delta = other.transform.position - transform.position;
+            if (delta.sqrMagnitude > maxReach * maxReach * 4f) return false;
+
             int count = Physics.OverlapSphereNonAlloc(transform.position,
-                EndpointTouchDistance, s_endpointTouchProbe, ~0,
+                maxReach, s_endpointTouchProbe, ~0,
                 QueryTriggerInteraction.Collide);
             for (int i = 0; i < count; i++)
             {
                 var collider = s_endpointTouchProbe[i];
                 s_endpointTouchProbe[i] = null;
-                if (collider == null || (collider.transform != other.transform
-                    && !collider.transform.IsChildOf(other.transform))) continue;
-                Vector3 closest = collider.ClosestPoint(transform.position);
-                if ((closest - transform.position).sqrMagnitude
-                    <= EndpointTouchDistance * EndpointTouchDistance)
-                    return true;
+                if (collider == null) continue;
+                if (collider.transform == other.transform
+                    || collider.transform.IsChildOf(other.transform)
+                    || other.transform.IsChildOf(collider.transform))
+                {
+                    Vector3 closest = collider.ClosestPoint(transform.position);
+                    if ((closest - transform.position).sqrMagnitude <= maxReach * maxReach)
+                        return true;
+                }
             }
+            if (delta.sqrMagnitude <= maxReach * maxReach) return true;
             return false;
         }
 
@@ -227,9 +235,23 @@ namespace VoxelEngine.Power
                     }
                 }
 
-                _neighbourPositionsBuf.Add(nb is PowerCable
-                    ? Vector3.Lerp(transform.position, nb.transform.position, 0.5f)
-                    : nb.transform.position);
+                if (nb is PowerCable)
+                {
+                    _neighbourPositionsBuf.Add(Vector3.Lerp(transform.position, nb.transform.position, 0.5f));
+                }
+                else
+                {
+                    var col = nb.GetComponentInChildren<Collider>();
+                    if (col != null)
+                    {
+                        Vector3 closest = col.ClosestPoint(transform.position);
+                        _neighbourPositionsBuf.Add(closest);
+                    }
+                    else
+                    {
+                        _neighbourPositionsBuf.Add(Vector3.Lerp(transform.position, nb.transform.position, 0.5f));
+                    }
+                }
             }
 
             GridCableVisuals.Rebuild(
@@ -242,6 +264,60 @@ namespace VoxelEngine.Power
                 _tintedMaterial,
                 showUnusedFaceCaps);
 
+        }
+    }
+
+    [DisallowMultipleComponent]
+    public sealed class OverheatedPowerCable : MonoBehaviour
+    {
+        private float _destroyAt;
+        private readonly List<Renderer> _renderers = new();
+        private readonly List<Material> _materials = new();
+
+        public void Begin(float seconds)
+        {
+            _destroyAt = Time.time + Mathf.Max(0.1f, seconds);
+            var cable = GetComponent<PowerCable>();
+            if (cable != null) cable.enabled = false;
+
+            _renderers.Clear();
+            _materials.Clear();
+            GetComponentsInChildren<Renderer>(true, _renderers);
+
+            var sh = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+            foreach (var r in _renderers)
+            {
+                if (r == null) continue;
+                var mat = new Material(sh);
+                mat.color = new Color(1f, 0.15f, 0.02f, 1f);
+                if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", new Color(1f, 0.15f, 0.02f, 1f));
+                mat.EnableKeyword("_EMISSION");
+                mat.globalIlluminationFlags = MaterialGlobalIlluminationFlags.RealtimeEmissive;
+                mat.SetColor("_EmissionColor", new Color(4.5f, 0.35f, 0.02f, 1f));
+                r.sharedMaterial = mat;
+                _materials.Add(mat);
+            }
+        }
+
+        private void Update()
+        {
+            float pulse = 3.0f + Mathf.PingPong(Time.time * 8f, 3.5f);
+            Color glow = new Color(pulse, pulse * 0.18f, 0.01f, 1f);
+            foreach (var m in _materials)
+            {
+                if (m != null && m.HasProperty("_EmissionColor"))
+                    m.SetColor("_EmissionColor", glow);
+            }
+            if (Time.time >= _destroyAt)
+            {
+                Destroy(gameObject);
+            }
+        }
+
+        private void OnDestroy()
+        {
+            foreach (var m in _materials)
+                if (m != null) Destroy(m);
         }
     }
 }

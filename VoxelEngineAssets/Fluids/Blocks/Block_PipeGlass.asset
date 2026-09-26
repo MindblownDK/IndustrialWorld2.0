@@ -15,14 +15,15 @@ MonoBehaviour:
   itemId: block_pipeglass
   displayName: "Liquid Pipe (Glass) \xB7 0.5 m"
   description: "Glass variant of the universal liquid pipe \u2014 same capacity,
-    but transparent.\n\nUses the existing pipe item everywhere. On a Grid it snaps
-    to the 0.5 m Detail lattice; no separate Grid pipe item is required. Pipe links
-    can bridge up to five grid cells in one cardinal direction."
+    but transparent."
   icon: {fileID: 21300000, guid: 61854c076093e46c37d4126a13a18c3b, type: 3}
   iconTint: {r: 0.55, g: 0.75, b: 0.95, a: 1}
   maxStack: 99
   massPerUnit: 1
   category: Fluids
+  requiresContainment: 0
+  cannotBeCarried: 0
+  isPressurizedCanister: 0
   viewmodelPrefab: {fileID: 0}
   placedPrefab: {fileID: 4635805971120797642, guid: 902cd7a9839a9ff41b52367639cce20e, type: 3}
   gridSize: {x: 1, y: 1, z: 1}

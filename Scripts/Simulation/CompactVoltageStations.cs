@@ -47,7 +47,7 @@ namespace VoxelEngine.Simulation
 
         /// <summary>
         /// Trips this compact connector and starts any attached finite-rated
-        /// manual wire visual burning. Energy Pipes are intentionally unlimited.
+        /// manual wire or cable visual burning.
         /// The flash is runtime-only; a new connector must be placed afterwards.
         /// </summary>
         internal bool TriggerOverload(float throughWatts, float capacityWatts,
@@ -58,20 +58,37 @@ namespace VoxelEngine.Simulation
             _overloadTriggered = true;
 
             const float BurnSeconds = 2.0f;
-            if (burnFirstWire) BeginManualWireOverloadTo(firstNode, BurnSeconds);
+            if (burnFirstWire)
+            {
+                BeginManualWireOverloadTo(firstNode, BurnSeconds);
+                if (firstNode is PowerCable firstCable && firstCable != null)
+                {
+                    var heat = firstCable.GetComponent<OverheatedPowerCable>()
+                               ?? firstCable.gameObject.AddComponent<OverheatedPowerCable>();
+                    heat.Begin(BurnSeconds);
+                }
+            }
             if (burnSecondWire && secondNode != firstNode)
+            {
                 BeginManualWireOverloadTo(secondNode, BurnSeconds);
+                if (secondNode is PowerCable secondCable && secondCable != null)
+                {
+                    var heat = secondCable.GetComponent<OverheatedPowerCable>()
+                               ?? secondCable.gameObject.AddComponent<OverheatedPowerCable>();
+                    heat.Begin(BurnSeconds);
+                }
+            }
 
             var flash = new GameObject("ConnectorOverloadFlash");
             flash.transform.position = ConnectionPoint;
             var light = flash.AddComponent<Light>();
             light.type = LightType.Point;
-            light.color = new Color(1f, 0.10f, 0.02f, 1f);
-            light.intensity = 8f;
-            light.range = 4f;
-            Destroy(flash, 0.18f);
+            light.color = new Color(1f, 0.25f, 0.05f, 1f);
+            light.intensity = 15f;
+            light.range = 8f;
+            Destroy(flash, 0.25f);
 
-            Debug.LogWarning($"[Power] Connector overload: {throughWatts:0} W exceeds {capacityWatts:0} W. Connector and the overloaded finite-rated wire span are destroyed.", this);
+            Debug.LogWarning($"[Power] Connector overload: {throughWatts:0} W exceeds {capacityWatts:0} W. Connector and overloaded line are destroyed.", this);
             PowerNetworkManager.Instance?.SetDirty();
             StartCoroutine(DestroyAfterOverloadFlash());
             return true;

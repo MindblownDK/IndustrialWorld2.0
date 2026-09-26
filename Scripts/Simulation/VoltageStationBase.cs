@@ -98,7 +98,8 @@ namespace VoxelEngine.Simulation
 
                 if (_wireRenderers.TryGetValue(other, out var lr))
                 {
-                    Destroy(lr.gameObject);
+                    if (lr != null && lr.GetComponent<OverheatedManualWire>() == null)
+                        Destroy(lr.gameObject);
                     _wireRenderers.Remove(other);
                 }
             }
@@ -122,8 +123,20 @@ namespace VoxelEngine.Simulation
         /// </summary>
         internal void BeginManualWireOverload(IVoltageStation other, float seconds)
         {
-            if (other == null || !_wireRenderers.TryGetValue(other, out var line) || line == null) return;
-            _wireRenderers.Remove(other);
+            if (other == null) return;
+            LineRenderer line = null;
+            if (_wireRenderers.TryGetValue(other, out var ownedLine) && ownedLine != null)
+            {
+                line = ownedLine;
+                _wireRenderers.Remove(other);
+            }
+            else if (other is VoltageStationBase otherBase && otherBase._wireRenderers.TryGetValue(this, out var otherLine) && otherLine != null)
+            {
+                line = otherLine;
+                otherBase._wireRenderers.Remove(this);
+            }
+            if (line == null) return;
+
             line.transform.SetParent(null, true);
             var heat = line.GetComponent<OverheatedManualWire>();
             if (heat == null) heat = line.gameObject.AddComponent<OverheatedManualWire>();
@@ -192,25 +205,27 @@ namespace VoxelEngine.Simulation
 
             if (_heatMaterial == null)
             {
-                _heatMaterial = _line.material;
-                if (_heatMaterial != null)
-                {
-                    _heatMaterial.color = new Color(1f, 0.03f, 0.005f, 1f);
-                    if (_heatMaterial.HasProperty("_BaseColor"))
-                        _heatMaterial.SetColor("_BaseColor", new Color(1f, 0.03f, 0.005f, 1f));
-                }
+                var sh = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+                _heatMaterial = new Material(sh);
+                _heatMaterial.color = new Color(1f, 0.12f, 0.02f, 1f);
+                if (_heatMaterial.HasProperty("_BaseColor"))
+                    _heatMaterial.SetColor("_BaseColor", new Color(1f, 0.12f, 0.02f, 1f));
+                _heatMaterial.EnableKeyword("_EMISSION");
+                _heatMaterial.globalIlluminationFlags = MaterialGlobalIlluminationFlags.RealtimeEmissive;
+                _heatMaterial.SetColor("_EmissionColor", new Color(4.5f, 0.35f, 0.02f, 1f));
+                _line.material = _heatMaterial;
             }
-            _line.startColor = new Color(1f, 0.05f, 0.005f, 1f);
-            _line.endColor = new Color(1f, 0.05f, 0.005f, 1f);
+            _line.startColor = new Color(1f, 0.25f, 0.05f, 1f);
+            _line.endColor = new Color(1f, 0.25f, 0.05f, 1f);
         }
 
         private void Update()
         {
             if (_line != null && _heatMaterial != null)
             {
-                float pulse = 2.5f + Mathf.PingPong(Time.time * 7f, 2.5f);
+                float pulse = 3.0f + Mathf.PingPong(Time.time * 8f, 3.5f);
                 if (_heatMaterial.HasProperty("_EmissionColor"))
-                    _heatMaterial.SetColor("_EmissionColor", new Color(pulse, 0.04f, 0.004f, 1f));
+                    _heatMaterial.SetColor("_EmissionColor", new Color(pulse, pulse * 0.18f, 0.02f, 1f));
             }
             if (Time.time >= _destroyAt) Destroy(gameObject);
         }

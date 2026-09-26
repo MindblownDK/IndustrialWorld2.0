@@ -1,0 +1,35 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 383bc45366d16cc4f84dd51fea42d951, type: 3}
+  m_Name: Tool_WaterBucket
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Items.LiquidCanister
+  itemId: water_bucket
+  displayName: Liquid Canister
+  description: A 10 L canister that holds ONE liquid at a time. RMB on a liquid pool
+    to scoop 0.5 L per click (again and again until full). LMB pours 0.5 L into the
+    world. RMB a liquid tank or water pump to pour the liquid in, and RMB an infinity
+    jack pump to fill the canister with crude oil.
+  icon: {fileID: 0}
+  iconTint: {r: 0.2, g: 0.5, b: 0.85, a: 1}
+  maxStack: 1
+  massPerUnit: 1
+  category: Fluids
+  requiresContainment: 0
+  cannotBeCarried: 0
+  isPressurizedCanister: 0
+  viewmodelPrefab: {fileID: 0}
+  toolType: 4
+  miningTier: 1
+  strength: 60
+  brushRadius: 1.4
+  fireRate: 5
+  maxDurability: 10000

@@ -475,9 +475,9 @@ namespace VoxelEngine.Power
                 if (throughWatts <= capacity * 1.001f) continue;
 
                 bool burnFirstWire = IsFiniteManualWireSpan(firstCapacity)
-                    && firstCapacity <= capacity * 1.001f;
+                    || (first is PowerCable && firstCapacity <= capacity * 1.001f);
                 bool burnSecondWire = IsFiniteManualWireSpan(secondCapacity)
-                    && secondCapacity <= capacity * 1.001f;
+                    || (second is PowerCable && secondCapacity <= capacity * 1.001f);
                 station.TriggerOverload(throughWatts, capacity, first, burnFirstWire,
                     second, burnSecondWire);
             }
@@ -504,6 +504,13 @@ namespace VoxelEngine.Power
                     side.supply += Mathf.Max(0f, generator.wattsPerSecond);
                 else if (node is PowerConsumer consumer)
                     side.demand += Mathf.Max(0f, consumer.wattsPerSecond);
+                else if (node is PowerBattery battery)
+                {
+                    if (battery.charge > 0.001f)
+                        side.supply += battery.ioRate;
+                    if (battery.capacityWattHours - battery.charge > 0.001f)
+                        side.demand += battery.ioRate;
+                }
 
                 if (node.neighbours == null) continue;
                 for (int i = 0; i < node.neighbours.Count; i++)

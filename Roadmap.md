@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.40.6-dev`
-**Roadmap Version:** `12.40.6-dev`
+**Current Version:** `12.40.7-dev`
+**Roadmap Version:** `12.40.7-dev`
 **Date:** 2026-09-26
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 12.40.7-dev - Energy Pipe Visual Alignment, Overload Fault Destruction, and Battery Equalisation
+- **Conduit visuals** (`IndustrialPipeMesh`, `GridCableVisuals`): sleek cylindrical conduit profile with metallic tier tints; suppresses stray 6-way unlinked face spike nubs.
+- **Power endpoints** (`PowerCable`, `SurfacePowerTap`): dynamic adjacent collider touch reaches batteries/machines/connectors; endpoint arms terminate flush at target faces.
+- **Overload faults** (`CompactVoltageStation`, `VoltageStationBase`, `PowerNetworkManager`): battery-inclusive throughput measurement triggers connector explosion and 2s red-hot burning line destruction.
+
 ### 12.40.6-dev - Direct Conduit Links and Finite Manual Wire Transfer
 - **Utility topology** (`PipeAdjacency`, pipe networks, `IndustrialPipeMesh`): direct placed cardinal/coplanar neighbours only; no inferred elbow geometry or off-plane transfer.
 - **Energy endpoints** (`PowerCable`, `PowerNetwork`): collider-surface contact gates machine/connector links; Energy Pipes are unlimited and ignore `capacityWatts` for transfer/faults.
@@ -47,11 +52,6 @@
 ### 12.40.3-dev - Embedded Static Lattice Compile Repair
 - **Build/power source** (`BuildSystem`, `PowerNode`): static lattice and surface-tap helpers are co-located with their owning systems, removing external helper-script import ordering.
 - **Scope**: compile repair only; 12.40.2-dev terrain support, static face lattices, and power-tap behaviour are unchanged.
-
-### 12.40.2-dev - Static Utility Surface Lattice and Power Taps
-- **Surface build UX** (`BuildSystem`, `StaticSurfaceLatticePreview`): utility pipes/cables/connectors snap to a visible, face-bounded static-block lattice without entering large or irregular hosts.
-- **Power** (`SurfacePowerTap`, `PowerNode`, `PowerCable`): static face-mounted energy cables and wire terminals rebind direct battery/generator/consumer taps after placement and load; cable arms terminate at the touched face.
-- **Portal frames**: terrain placement uses the 5 m collider support plane, leaving frames above rather than inside ground.
 
 ### Era Transition Feel
 

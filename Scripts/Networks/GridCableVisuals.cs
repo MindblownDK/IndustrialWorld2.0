@@ -48,26 +48,16 @@ namespace VoxelEngine.Networks
             float coreSize,       // kept for API compat — IndustrialPipeMesh
             float armThickness,   //   sizes via its own profile constants
             Material material,
-            bool showUnusedFaceCaps) // kept for API compat
+            bool showUnusedFaceCaps = false)
         {
             if (visualRoot == null) return;
 
-            // ── Industrial cable visual language ────────────────────
-            // The TIER colour (e.g. orange Copper, grey Iron, gold Gold,
-            // cyan Superconductor) is what the player needs to identify at a
-            // glance. We use it for the WIDE TERMINAL COLLAR at every
-            // junction so each tier reads instantly from across a factory.
-            //
-            // The actual cable SHAFT meanwhile uses a shared "rubber sleeve"
-            // material — a near-black neutral so the bright tier collar
-            // pops against it AND so adjacent cables of different tiers
-            // form visually consistent runs without colour clashing.
-            //
-            // Net result:
-            //   • Shaft       = dark rubber sleeve (every tier)
-            //   • Collar/end  = the wire's tier tint
-            var sleeveMat = SharedSleeveMaterial();
-            var tierMat   = MakeTierAccentVariant(material);
+            // ── Industrial conduit visual language ──────────────────
+            // The shell carries the metallic tier tint (e.g. Copper, Iron,
+            // Gold, Superconductor) matching the sleek aesthetic of gas/liquid
+            // plumbing, while the flange collar uses a polished highlight.
+            var sleeveMat = material != null ? material : SharedSleeveMaterial();
+            var tierMat   = MakeTierAccentVariant(sleeveMat);
 
             IndustrialPipeMesh.Rebuild(
                 visualRoot,
@@ -75,9 +65,10 @@ namespace VoxelEngine.Networks
                 neighbourWorldPositions,
                 gridSize,
                 PipeStyle.WireArm,
-                /* shellMat  */ sleeveMat,  // dark sleeve = visible cable run
+                /* shellMat  */ sleeveMat,
                 /* innerMat  */ null,
-                /* accentMat */ tierMat);   // bright tier-coloured collar
+                /* accentMat */ tierMat,
+                /* showUnusedEndCaps */ showUnusedFaceCaps);
         }
 
         // ── Shared neutral sleeve material ──────────────────────────

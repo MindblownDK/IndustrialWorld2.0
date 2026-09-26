@@ -168,46 +168,34 @@ namespace VoxelEngine.Networks
                     };
                 case PipeStyle.WireArm:
                 default:
-                    // CABLE / WIRE — industrial three-conductor bundle.
-                    //
-                    //   ════╤════                                  ════╤════
-                    //   ════╪════  ╔═══════════════════════╗      ════╪════
-                    //   ════╧════  ║   TIER-COLOURED CLAMP ║      ════╧════
-                    //                ╚═══════════════════════╝
-                    //
-                    // The three slim shafts share the SLEEVE colour (a neutral
-                    // dark rubber-jacket tint baked in PowerCable.RebuildVisuals)
-                    // while the wide terminal CLAMP at every junction shows the
-                    // wire's TIER tint — so the player can read the tier at a
-                    // glance from across the factory without losing the premium
-                    // "real industrial cable" silhouette.
+                    // ENERGY PIPE / POWER CONDUIT — sleek industrial electrical conduit.
+                    // Polished conduit profile with smooth round shafts and refined joint
+                    // collars that match the sleek aesthetic of gas/liquid plumbing.
                     return new StyleProfile
                     {
-                        hubRadius      = 0.10f,   // small sphere, hidden inside the clamp
-                        armRadius      = 0.045f,  // each individual conductor
-                        collarRadius   = 0.26f,   // wide bright tier-coloured clamp
-                        collarLength   = 0.18f,   // chunky terminal block at every junction
-                        capInset       = 0.04f,
-                        shaftSegments  = 12,
-                        useSphereHub   = true,
-                        drawCollar     = true,
-                        drawEndCaps    = true,
-                        endCapInset    = 0.02f,
-                        useBoxArms     = false,
-                        drawSleeveBand = false,
-                        terminalLength = 0f,
-                        terminalRadius = 0f,
-                        armSquareScale = 1f,
-                        squareEndCaps  = false,
-                        endCapRadiusMul= 1.0f,
-                        // Two cosmetic bolts on every terminal — riveted clamp look.
-                        boltCount      = 4,    boltRadius     = 0.018f, boltProtrusion = 0.006f,
-                        // THREE parallel conductors (twinShaft semantics extended
-                        // to "multiShaft" via tripleShaft below). Separation
-                        // 0.13 m so all three fit comfortably inside the 0.26 m
-                        // terminal collar at every junction.
-                        twinShaft      = true,  twinSeparation = 0.13f,
-                        tripleShaft    = true,
+                        hubRadius       = 0.13f,
+                        armRadius       = 0.085f,
+                        collarRadius    = 0.115f,
+                        collarLength    = 0.045f,
+                        capInset        = 0.05f,
+                        shaftSegments   = 14,
+                        useSphereHub    = true,
+                        drawCollar      = true,
+                        drawEndCaps     = true,
+                        endCapInset     = 0.02f,
+                        useBoxArms      = false,
+                        drawSleeveBand  = false,
+                        terminalLength  = 0f,
+                        terminalRadius  = 0f,
+                        armSquareScale  = 1f,
+                        squareEndCaps   = false,
+                        endCapRadiusMul = 1.0f,
+                        boltCount       = 0,
+                        boltRadius      = 0f,
+                        boltProtrusion  = 0f,
+                        twinShaft       = false,
+                        twinSeparation  = 0f,
+                        tripleShaft     = false,
                     };
             }
         }
@@ -282,7 +270,7 @@ namespace VoxelEngine.Networks
             Material shellMat,
             Material innerMat,   // only used by glass shells; pass null for solid
             Material accentMat,  // collars / end terminals; pass null to reuse shell
-            bool showUnusedEndCaps = true)
+            bool showUnusedEndCaps = false)
         {
             if (visualRoot == null) return;
 

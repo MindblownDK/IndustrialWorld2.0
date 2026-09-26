@@ -1,9 +1,23 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.40.6-dev`
+**Current Version:** `12.40.7-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.40.7-dev] Energy Pipe Visual Alignment, Overload Fault Destruction, and Battery Equalisation
+
+**Type:** PATCH - repairs Energy Pipe visual silhouette and endpoint reach, restores full connector explosion and red-hot burning line destruction upon power overload, and resolves power transfer across Energy Pipes connecting to batteries and machines without modifying save schema or public APIs.
+
+**Energy Pipe aesthetics and connectivity:** Energy Pipe mesh generation (`IndustrialPipeMesh.ProfileFor` with `PipeStyle.WireArm`) is refactored from bulky multi-shaft wheels to a sleek, unified cylindrical conduit profile with refined joint collars, matching the polished aesthetic of gas and liquid piping. `GridCableVisuals` passes `showUnusedFaceCaps = false` to suppress 6-way unlinked face spike nubs and applies the authentic metallic tier tint to conduit shafts with polished collar accents. `PowerCable.TouchesPowerEndpoint` dynamically tests adjacent grid cell reach against machine colliders, enabling Energy Pipes to reliably connect to batteries, generators, consumers, and compact wire connectors. In addition, machine endpoint visual arms terminate flush against the target collider face rather than embedding into internal machine origins.
+
+**Overload fault destruction:** `PowerNetworkManager` side-power measurement now accounts for battery discharge availability and charge demand alongside generators and consumers. When electrical transfer across a rated compact connector exceeds its capacity (e.g. >1,500 W on a copper LV wire span), the connector triggers an immediate high-intensity explosion flash, is destroyed, and detaches the overloaded line. Overloaded manual wires and attached cables receive `OverheatedManualWire` and `OverheatedPowerCable` feedback: they glow with pulsating emissive red-hot heat in world space for 2.0 seconds before disintegrating. Station disconnection logic protects active burning wires from premature removal.
+
+**Battery equalisation:** Batteries connected across valid Energy Pipe and wire routes now belong to the unified power network and smoothly redistribute stored energy toward a common capacity-weighted fill percentage within battery I/O limits and available conductor bandwidth.
+
+**GitHub title:** `[12.40.7-dev] Energy Pipe Visual Alignment, Overload Fault Destruction, and Battery Equalisation`
+
+**Manual steps:** in Unity on `Dev`, let scripts compile and clear the Console. Run `Tools -> Voxel Engine -> Voxel Engine Setup`, select `17. Build Factory Foundations + HV Grid`, and run it once (safe and non-destructive). Place Copper, Gold, Iron, or Superconductor Energy Pipes: verify they render with clean cylindrical shafts, sleek joint collars, and no stray spiky end caps. Connect an Energy Pipe directly to a Battery, Coal Generator, Power Light, or LV Wire Connector: verify the connection is established and the visual arm meets the machine collider face flush. Connect two batteries with differing charge levels using Energy Pipes and an LV Wire Connector with a copper wire: verify charge equalisation occurs and power flows across the conduit run. To test overload faults, place a high-demand consumer or battery draw exceeding 1,500 W through a 1,500 W Copper LV Wire connector: verify the connector explodes and is destroyed, while the wire and attached cable glow pulsating red-hot for 2 seconds before disintegrating.
 
 ### [12.40.6-dev] Direct Conduit Links and Finite Manual Wire Transfer
 

@@ -14,13 +14,17 @@ MonoBehaviour:
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Items.BlockItem
   itemId: block_waterpump
   displayName: Water Pump
-  description: Pulls 20 L/s of water into the network while powered (~30 W). Connect
-    cables to power, pipes to tanks.
+  description: "Scans a nearby water or crude-oil pool, shows finite litres or \u221E
+    source status, buffers liquid internally, then sends it through connected pipes
+    and tanks while powered (~30 W)."
   icon: {fileID: 21300000, guid: 8fd02261df801a0f0a031e493aa73087, type: 3}
   iconTint: {r: 0.55, g: 0.3, b: 0.2, a: 1}
   maxStack: 99
   massPerUnit: 1
   category: Fluids
+  requiresContainment: 0
+  cannotBeCarried: 0
+  isPressurizedCanister: 0
   viewmodelPrefab: {fileID: 0}
   placedPrefab: {fileID: 1019405210599672767, guid: af0af7df93cc4dc43a7d78b542d56f71, type: 3}
   gridSize: {x: 1, y: 1, z: 1}
