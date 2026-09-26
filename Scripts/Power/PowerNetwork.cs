@@ -16,21 +16,10 @@ namespace VoxelEngine.Power
         {
             bottleneckWatts = float.PositiveInfinity;
             
-            // Check node-based capacity (Electrical Pipes)
-            foreach (var n in nodes)
-            {
-                if (n is PowerCable c && c.wire != null)
-                {
-                    // Superconductor / infinite capacity check
-                    if (c.wire.capacityWatts < 0 || c.wire.capacityWatts >= 1000000000f)
-                        continue;
+            // Energy Pipes are unlimited transport segments. Their definition still
+            // controls visual/tier identity but never throttles power transfer.
 
-                    if (c.wire.capacityWatts < bottleneckWatts)
-                        bottleneckWatts = c.wire.capacityWatts;
-                }
-            }
-
-            // Check manual link-based capacity (LV Wires)
+            // Check manual wire-link capacity (LV/HV Wires)
             foreach (var n in nodes)
             {
                 foreach (var nb in n.neighbours)

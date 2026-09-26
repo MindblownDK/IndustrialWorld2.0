@@ -159,9 +159,8 @@ namespace VoxelEngine.Gas
             // ── SPATIAL HASH (cell size = 5.25m) ──────────────────────────
             // O(N) neighbour discovery instead of the old O(N^2) double loop
             // that lagged hard once the player laid a hundred+ pipes. The
-            // cell size covers any five-cell primary run plus one bounded
-            // orthogonal elbow, so valid pipe pairs remain in this bucket or
-            // its immediate 3×3×3 neighbours.
+            // cell size covers any valid five-cell direct cardinal run, so pipe
+            // pairs remain in this bucket or its immediate 3×3×3 neighbours.
             const float CELL = 5.25f;
             const float CELL_INV = 1f / CELL;
             var hash = new Dictionary<Vector3Int, List<GasPipe>>(n * 2);
@@ -204,13 +203,13 @@ namespace VoxelEngine.Gas
                         Vector3 pb = b.transform.position;
                         float step = GridStep(a, b, ga);
 
-                        // Pipe pairs may span five primary cells plus one bounded
-                        // orthogonal riser; three-axis diagonals remain excluded.
+                        // Pipe pairs may span five direct cardinal cells. A corner
+                        // requires a real pipe at the corner rather than an inferred link.
                         float range = step * 5.2f;
                         if ((pa - pb).sqrMagnitude > range * range) continue;
 
                         Vector3 connectionDelta = VoxelEngine.Networks.PipeAdjacency.ConnectionDelta(a, b);
-                        if (!VoxelEngine.Networks.PipeAdjacency.IsBendablePipeLinkDelta(connectionDelta, step, 5f, step * 0.18f)) continue;
+                        if (!VoxelEngine.Networks.PipeAdjacency.IsCoplanarPipeLinkDelta(connectionDelta, step, 5f, step * 0.18f)) continue;
 
                         if (VoxelEngine.Networks.WrenchBlacklist.IsBlocked(a, b)) continue;
 

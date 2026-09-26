@@ -777,7 +777,7 @@ namespace VoxelEngine.Building
                     // Static/surface-aligned pipes use their own local XYZ frame.
                     // World axes broke vertical/side runs after pipes were rotated.
                     : candidate.transform.InverseTransformVector(worldDelta);
-                if (!VoxelEngine.Networks.PipeAdjacency.IsBendablePipeLinkDelta(
+                if (!VoxelEngine.Networks.PipeAdjacency.IsCoplanarPipeLinkDelta(
                         alignmentDelta, cellSize, 5f, cellSize * 0.18f)) return;
                 float distance = worldDelta.sqrMagnitude;
                 if (distance >= bestDistance) return;

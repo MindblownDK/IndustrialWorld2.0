@@ -11,7 +11,7 @@ namespace VoxelEngine.Power
     public class ElectricalPipeDefinition : ScriptableObject
     {
         public string displayName = "Copper Electrical Pipe";
-        [Tooltip("Maximum watts per second this pipe can transmit.")]
+        [Tooltip("Legacy tier metadata. Energy Pipes are intentionally unlimited; manually drawn wires carry the enforced throughput ratings.")]
         public float capacityWatts = 10000f;
         [Tooltip("Visual tint of placed pipes of this tier.")]
         public Color tint = new Color(0.85f, 0.45f, 0.20f);

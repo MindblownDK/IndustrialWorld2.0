@@ -143,9 +143,9 @@ namespace VoxelEngine.Transport
             int n = _pipes.Count;
             if (n < 2) return;
 
-            // A five-cell primary run plus one bounded elbow offset fits inside
-            // this cell or its immediate neighbours; the route predicate below
-            // rejects three-axis diagonals and overlong secondary legs.
+            // Five-cell direct cardinal runs fit inside this cell or an immediate
+            // neighbour. A diagonal needs a real intermediate pipe; the predicate
+            // below never invents an L-shaped connection.
             const float CELL = 5.25f;
             const float CELL_INV = 1f / CELL;
             var hash = new Dictionary<Vector3Int, List<ItemPipe>>(n * 2);
@@ -190,7 +190,7 @@ namespace VoxelEngine.Transport
                         if ((pa - pb).sqrMagnitude > range * range) continue;
 
                         Vector3 connectionDelta = VoxelEngine.Networks.PipeAdjacency.ConnectionDelta(a, b);
-                        if (!VoxelEngine.Networks.PipeAdjacency.IsBendablePipeLinkDelta(connectionDelta, step, 5f, step * 0.18f)) continue;
+                        if (!VoxelEngine.Networks.PipeAdjacency.IsCoplanarPipeLinkDelta(connectionDelta, step, 5f, step * 0.18f)) continue;
 
                         if (VoxelEngine.Networks.WrenchBlacklist.IsBlocked(a, b)) continue;
 

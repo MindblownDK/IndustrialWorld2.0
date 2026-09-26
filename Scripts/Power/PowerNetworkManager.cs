@@ -349,6 +349,13 @@ namespace VoxelEngine.Power
                     }
                 }
 
+                // Batteries in the same connected network also equalise their
+                // charge fraction. Manual-wire capacity remains a real limit; Energy
+                // Pipes are unlimited and therefore leave unlimited balancing headroom.
+                float alreadyCarried = Mathf.Max(supplyEff, Mathf.Max(served, toBattery));
+                float balanceHeadroom = Mathf.Max(0f, maxFlow - alreadyCarried);
+                BalanceConnectedBatteries(net, balanceHeadroom, dt);
+
                 // Mark consumers powered/unpowered. We use proportional fairness — if served=80%
                 // of demand, every consumer is "powered" but at 80% rate (we expose ratio for
                 // future use; for now boolean is enough for IsPowered to gate machines).
@@ -362,6 +369,64 @@ namespace VoxelEngine.Power
             }
         }
 
+        /// <summary>
+        /// Moves stored energy from batteries above the connected network's common
+        /// fill ratio to batteries below it. This is internal redistribution only:
+        /// it neither creates nor consumes energy, and it honours each battery's I/O
+        /// rate plus whatever manual-wire throughput remains this tick.
+        /// </summary>
+        private static void BalanceConnectedBatteries(PowerNetwork net, float headroomWatts, float dt)
+        {
+            if (net == null || dt <= 0f || headroomWatts <= 0f) return;
+            float totalCharge = 0f;
+            float totalCapacity = 0f;
+            int batteryCount = 0;
+            for (int i = 0; i < net.nodes.Count; i++)
+            {
+                if (net.nodes[i] is not PowerBattery battery || battery.capacityWattHours <= 0f) continue;
+                // Heal malformed inspector/save values before calculating the shared fill.
+                battery.charge = Mathf.Clamp(battery.charge, 0f, battery.capacityWattHours);
+                totalCharge += battery.charge;
+                totalCapacity += battery.capacityWattHours;
+                batteryCount++;
+            }
+            if (batteryCount < 2 || totalCapacity <= 0f) return;
+
+            float targetFill = Mathf.Clamp01(totalCharge / totalCapacity);
+            float remainingWatts = headroomWatts;
+            for (int donorIndex = 0; donorIndex < net.nodes.Count && remainingWatts > 0.0001f; donorIndex++)
+            {
+                if (net.nodes[donorIndex] is not PowerBattery donor
+                    || donor.capacityWattHours <= 0f) continue;
+                float donorTargetWh = donor.capacityWattHours * targetFill;
+                float donorExcessWh = Mathf.Max(0f, donor.charge - donorTargetWh);
+                if (donorExcessWh <= 0.0001f) continue;
+
+                float donorWatts = Mathf.Min(donor.ioRate, donorExcessWh * 3600f / dt);
+                for (int receiverIndex = 0; receiverIndex < net.nodes.Count
+                    && donorWatts > 0.0001f && remainingWatts > 0.0001f; receiverIndex++)
+                {
+                    if (net.nodes[receiverIndex] is not PowerBattery receiver
+                        || receiver == donor || receiver.capacityWattHours <= 0f) continue;
+                    float receiverTargetWh = receiver.capacityWattHours * targetFill;
+                    float receiverNeedWh = Mathf.Max(0f, receiverTargetWh - receiver.charge);
+                    if (receiverNeedWh <= 0.0001f) continue;
+
+                    float receiverWatts = Mathf.Min(receiver.ioRate, receiverNeedWh * 3600f / dt);
+                    float watts = Mathf.Min(Mathf.Min(donorWatts, receiverWatts), remainingWatts);
+                    if (watts <= 0.0001f) continue;
+                    float wattHours = watts * dt / 3600f;
+
+                    donor.charge = Mathf.Max(donorTargetWh, donor.charge - wattHours);
+                    receiver.charge = Mathf.Min(receiverTargetWh, receiver.charge + wattHours);
+                    donor.lastDischargeOutW += watts;
+                    receiver.lastChargeInW += watts;
+                    donorWatts -= watts;
+                    remainingWatts -= watts;
+                }
+            }
+        }
+
         private struct ConnectorSidePower
         {
             public float supply;
@@ -372,7 +437,7 @@ namespace VoxelEngine.Power
         /// Evaluates compact connectors as a two-terminal cut in their power graph.
         /// Only an unambiguous generator-to-load transfer across that cut can trip
         /// them; networks with an alternate bypass path are left to their own rated
-        /// cable edges instead of producing a false overload.
+        /// manual-wire edges instead of producing a false overload.
         /// </summary>
         private static void TripOverloadedCompactConnectors(PowerNetwork net)
         {
@@ -409,8 +474,12 @@ namespace VoxelEngine.Power
                 if (float.IsInfinity(capacity) || capacity <= 0f) continue;
                 if (throughWatts <= capacity * 1.001f) continue;
 
-                station.TriggerOverload(throughWatts, capacity,
-                    first as PowerCable, second as PowerCable);
+                bool burnFirstWire = IsFiniteManualWireSpan(firstCapacity)
+                    && firstCapacity <= capacity * 1.001f;
+                bool burnSecondWire = IsFiniteManualWireSpan(secondCapacity)
+                    && secondCapacity <= capacity * 1.001f;
+                station.TriggerOverload(throughWatts, capacity, first, burnFirstWire,
+                    second, burnSecondWire);
             }
         }
 
@@ -454,16 +523,12 @@ namespace VoxelEngine.Power
             return true;
         }
 
+        private static bool IsFiniteManualWireSpan(float capacity)
+            => !float.IsInfinity(capacity) && capacity > 0f;
+
         private static float ConnectionCapacityWatts(PowerNode connector, PowerNode neighbour)
         {
             float capacity = float.PositiveInfinity;
-            if (neighbour is PowerCable cable && cable.wire != null)
-            {
-                float cableCapacity = cable.wire.capacityWatts;
-                if (cableCapacity >= 0f && cableCapacity < 1000000000f)
-                    capacity = Mathf.Min(capacity, cableCapacity);
-            }
-
             if (connector.manualLinkCapacities != null
                 && connector.manualLinkCapacities.TryGetValue(neighbour, out float connectorCapacity)
                 && connectorCapacity > 0f)

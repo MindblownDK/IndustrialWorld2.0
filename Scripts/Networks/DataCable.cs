@@ -18,7 +18,7 @@ namespace VoxelEngine.Networks
     public class DataCable : MonoBehaviour
     {
         [Header("Grid")]
-        [Tooltip("Build grid size used to detect one primary-step neighbours and bounded elbow risers.")]
+        [Tooltip("Build grid size used to detect direct cardinal neighbours.")]
         public float gridSize = 1f;
         [Tooltip("Distance tolerance when looking for neighbours one grid step away.")]
         public float positionTolerance = 0.15f;
@@ -77,7 +77,7 @@ namespace VoxelEngine.Networks
             if (anchor != null) anchor.DisconnectAll();
             // Adjacent cables need to know they just lost a neighbour.
             foreach (var c in _AllCables)
-                if (c != null && IsBoundedNeighbour(transform.position, c.transform.position))
+                if (c != null && IsStrictNeighbour(transform.position, c.transform.position))
                     c.RebuildVisuals();
             // Force a visual rebuild so this cable's own arms disappear immediately.
             // When anchor has no connections, RebuildVisuals clears all arms.
@@ -136,7 +136,7 @@ namespace VoxelEngine.Networks
             foreach (var other in _AllCables)
             {
                 if (other == null || other == this) continue;
-                if (!IsBoundedNeighbour(transform.position, other.transform.position)) continue;
+                if (!IsStrictNeighbour(transform.position, other.transform.position)) continue;
                 if (!HasLineOfSight(transform.position, other.transform.position, other.anchor)) continue;
                 // Wrench blacklist — honour explicit player disconnects.
                 if (WrenchBlacklist.IsBlocked(this, other)) continue;
@@ -286,7 +286,7 @@ namespace VoxelEngine.Networks
             return new Vector3(0, 0, Mathf.Sign(v.z));
         }
 
-        private bool IsBoundedNeighbour(Vector3 a, Vector3 b)
+        private bool IsStrictNeighbour(Vector3 a, Vector3 b)
         {
             Vector3 d = b - a;
             float gs = gridSize > 0 ? gridSize : 1f;
@@ -296,8 +296,8 @@ namespace VoxelEngine.Networks
                 d = myBlock.Grid.transform.InverseTransformVector(d);
                 gs = VoxelEngine.GridSystem.GridSizeExt.CellSize(VoxelEngine.GridSystem.GridSize.Small);
             }
-            return PipeAdjacency.IsBendablePipeLinkDelta(
-                d, gs, 1f, Mathf.Max(positionTolerance, gs * 0.18f), gs * 1.05f);
+            return PipeAdjacency.IsCardinalLinkDelta(
+                d, gs, 1f, Mathf.Max(positionTolerance, gs * 0.12f));
         }
 
         private bool HasLineOfSight(Vector3 a, Vector3 b, ConnectionAnchor remoteAnchor)

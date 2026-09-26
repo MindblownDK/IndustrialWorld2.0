@@ -11,10 +11,9 @@ namespace VoxelEngine.Power
     /// determines the segment's capacity. The network's bottleneck is the MINIMUM capacity
     /// along its cables.
     ///
-    /// Connection policy: cables link across one primary grid step and can use one
-    /// bounded orthogonal riser when neighbouring terrain resolves slightly higher or
-    /// lower. Three-axis diagonals remain invalid and every candidate still requires
-    /// unobstructed line of sight.
+    /// Connection policy: cables link only across one direct cardinal grid step.
+    /// A corner requires a player-placed intermediate cable; topology never creates
+    /// a diagonal or inferred L route. Every candidate still requires line of sight.
     ///
     /// Port Config: Cables respect machine PortConfig. They only connect to faces that:
     /// - Are enabled
@@ -46,15 +45,8 @@ namespace VoxelEngine.Power
         private Transform _visualRoot;        // parent for all generated meshes
         private Material  _tintedMaterial;    // shared per cable so MPB stays simple
         private readonly List<Vector3> _neighbourPositionsBuf = new(6);
-
-        // Runtime-only overload state. It deliberately is not saved: a cable that
-        // overheats gives the player a short, legible red-hot warning, then is gone.
-        private bool _isOverloadBurning;
-        private float _overloadDestroyAt;
-        private Material _overloadMaterial;
-
-        /// <summary>True while the cable is visibly red-hot before self-destruction.</summary>
-        internal bool IsOverloadBurning => _isOverloadBurning;
+        private const float EndpointTouchDistance = 0.52f;
+        private static readonly Collider[] s_endpointTouchProbe = new Collider[32];
 
         // Track which face each neighbour is connected through
         private readonly Dictionary<PowerNode, CubeFace> _neighbourFaces = new();
@@ -102,65 +94,20 @@ namespace VoxelEngine.Power
             base.OnDisable();
         }
 
-        private void Update()
-        {
-            if (!_isOverloadBurning) return;
-            ApplyOverloadVisual();
-            if (Time.time >= _overloadDestroyAt)
-                Destroy(gameObject);
-        }
-
-        /// <summary>
-        /// Makes this finite-capacity energy pipe visibly glow red hot for a brief
-        /// warning window, then removes it from the power graph. Repeated trips
-        /// only extend that warning; they never allocate a second burn material.
-        /// </summary>
-        internal void BeginOverloadBurn(float seconds)
-        {
-            float duration = Mathf.Max(0.1f, seconds);
-            _isOverloadBurning = true;
-            _overloadDestroyAt = Mathf.Max(_overloadDestroyAt, Time.time + duration);
-            EnsureOverloadMaterial();
-            ApplyOverloadVisual();
-        }
-
-        private void EnsureOverloadMaterial()
-        {
-            if (_overloadMaterial != null) return;
-            _overloadMaterial = IndustrialPipeMesh.CreateMetalMaterial(
-                new Color(1f, 0.035f, 0.005f, 1f), $"{name}_OverloadHeat",
-                metallic: 0.35f, smoothness: 0.72f);
-            if (_overloadMaterial.HasProperty("_EmissionColor"))
-                _overloadMaterial.SetColor("_EmissionColor", new Color(4f, 0.06f, 0.005f, 1f));
-        }
-
-        private void ApplyOverloadVisual()
-        {
-            if (_visualRoot == null || _overloadMaterial == null) return;
-            float pulse = 2.5f + Mathf.PingPong(Time.time * 7f, 2.5f);
-            if (_overloadMaterial.HasProperty("_EmissionColor"))
-                _overloadMaterial.SetColor("_EmissionColor", new Color(pulse, 0.04f, 0.004f, 1f));
-
-            var renderers = _visualRoot.GetComponentsInChildren<MeshRenderer>(true);
-            for (int i = 0; i < renderers.Length; i++)
-                if (renderers[i] != null) renderers[i].sharedMaterial = _overloadMaterial;
-        }
-
-        private void OnDestroy()
-        {
-            if (_overloadMaterial != null) Destroy(_overloadMaterial);
-        }
-
         /// <summary>
         /// Override to respect PortConfig on target machines.
         /// Only connect if the target has an enabled, compatible port.
         /// </summary>
         public override bool CanLinkTo(PowerNode other)
         {
-            if (other is PowerCable && !IsBoundedCableNeighbour(other)) return false;
+            if (other is PowerCable && !IsStrictCableNeighbour(other)) return false;
+            // Machine/connector nodes must actually meet the Energy Pipe at their
+            // collider surface. A broad node radius is only a discovery aid, never
+            // permission to draw an arm through empty space toward a remote prefab.
+            if (!(other is PowerCable) && !TouchesPowerEndpoint(other)) return false;
             if (!base.CanLinkTo(other)) return false;
 
-            // Consumers can always tap a nearby energy pipe. Item-port configuration
+            // Consumers can tap a touching energy pipe. Item-port configuration
             // is edited through the Item Ports modal and should not accidentally
             // block machine power unless a future dedicated power socket system is
             // explicitly added.
@@ -188,7 +135,7 @@ namespace VoxelEngine.Power
             return true;
         }
 
-        private bool IsBoundedCableNeighbour(PowerNode other)
+        private bool IsStrictCableNeighbour(PowerNode other)
         {
             if (other == null) return false;
             var aBlock = GetComponentInParent<VoxelEngine.GridSystem.GridBlock>();
@@ -200,8 +147,28 @@ namespace VoxelEngine.Power
                 step = VoxelEngine.GridSystem.GridSizeExt.CellSize(VoxelEngine.GridSystem.GridSize.Small);
                 delta = aBlock.Grid.transform.InverseTransformVector(delta);
             }
-            return VoxelEngine.Networks.PipeAdjacency.IsBendablePipeLinkDelta(
-                delta, step, 1f, step * 0.18f, step * 1.05f);
+            return VoxelEngine.Networks.PipeAdjacency.IsCardinalLinkDelta(
+                delta, step, 1f, step * 0.12f);
+        }
+
+        private bool TouchesPowerEndpoint(PowerNode other)
+        {
+            if (other == null) return false;
+            int count = Physics.OverlapSphereNonAlloc(transform.position,
+                EndpointTouchDistance, s_endpointTouchProbe, ~0,
+                QueryTriggerInteraction.Collide);
+            for (int i = 0; i < count; i++)
+            {
+                var collider = s_endpointTouchProbe[i];
+                s_endpointTouchProbe[i] = null;
+                if (collider == null || (collider.transform != other.transform
+                    && !collider.transform.IsChildOf(other.transform))) continue;
+                Vector3 closest = collider.ClosestPoint(transform.position);
+                if ((closest - transform.position).sqrMagnitude
+                    <= EndpointTouchDistance * EndpointTouchDistance)
+                    return true;
+            }
+            return false;
         }
 
         /// <summary>
@@ -223,15 +190,6 @@ namespace VoxelEngine.Power
 
         private void RebuildVisuals()
         {
-            // Preserve the last complete route while a failed cable is burning.
-            // The connector is removed immediately, which normally rebuilds this
-            // cable to a bare hub before the player can see the red-hot shaft.
-            if (_isOverloadBurning && _visualRoot != null)
-            {
-                ApplyOverloadVisual();
-                return;
-            }
-
             if (_visualRoot == null) EnsureVisualRoot();
             if (_tintedMaterial == null)
             {
@@ -240,9 +198,8 @@ namespace VoxelEngine.Power
             }
 
             // IndustrialPipeMesh receives world-space targets and converts them once
-            // into this cable's local frame. Cable-to-cable targets use their midpoint:
-            // each cable owns half of a route, so a height mismatch forms one clear
-            // shared riser instead of two overlapping full rectangles.
+            // into this cable's local frame. Strict direct cable pairs use a shared
+            // midpoint so their two visual half-arms meet without overlap.
             _neighbourPositionsBuf.Clear();
             var surfaceTap = GetComponent<SurfacePowerTap>();
             foreach (var nb in neighbours)
@@ -285,7 +242,6 @@ namespace VoxelEngine.Power
                 _tintedMaterial,
                 showUnusedFaceCaps);
 
-            if (_isOverloadBurning) ApplyOverloadVisual();
         }
     }
 }

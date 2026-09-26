@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.40.5-dev`
-**Roadmap Version:** `12.40.5-dev`
+**Current Version:** `12.40.6-dev`
+**Roadmap Version:** `12.40.6-dev`
 **Date:** 2026-09-26
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,15 +29,20 @@
 
 ## 0. Recently Done
 
+### 12.40.6-dev - Direct Conduit Links and Finite Manual Wire Transfer
+- **Utility topology** (`PipeAdjacency`, pipe networks, `IndustrialPipeMesh`): direct placed cardinal/coplanar neighbours only; no inferred elbow geometry or off-plane transfer.
+- **Energy endpoints** (`PowerCable`, `PowerNetwork`): collider-surface contact gates machine/connector links; Energy Pipes are unlimited and ignore `capacityWatts` for transfer/faults.
+- **Wire storage** (`PowerNetworkManager`, `VoltageStationBase`): only finite manual wires constrain/overload routes; connected batteries equalise charge percentage within I/O and wire headroom.
+
 ### 12.40.5-dev - Connector Power Transfer and Overload Safety
 - **Connector topology** (`CompactVoltageStation`, `PowerNetworkManager`, `VoltageStationBase`): LV/HV connectors have two total automatic/manual terminals; relays remain the multi-link path.
-- **Power faults** (`PowerCable`, manual wire visuals): finite over-capacity connector routes flash, heat red for two seconds, then remove the damaged connector/cable or wire.
+- **Power faults** (`VoltageStationBase`): superseded by `12.40.6-dev`; finite manual-wire connector routes retain red-hot removal feedback, while Energy Pipes remain unlimited.
 - **Setup/compile repair** (Setup Step 17, `DataCable`): connector prefabs/items repair to the two-link policy and the stale Data Cable neighbour symbol is removed.
 
 ### 12.40.4-dev - Orthogonal Pipe and Cable Riser Links
-- **Pipe topology** (`PipeAdjacency`, Item/Gas/Fluid and grid networks): bounded one-secondary-axis elbow links work across local X/Y/Z while three-axis diagonals remain excluded.
-- **Conduit visuals** (`IndustrialPipeMesh`, `PipeVisualBuilder`, `GridCableVisuals`): pipe and cable midpoint routes retain local offsets and render collared orthogonal risers.
-- **Energy/data cables** (`PowerNode`, `PowerCable`, `DataCable`): cable-pair discovery shares the elbow rule; power visuals use one world-to-local transform on rotated/static surfaces.
+- **Status:** superseded by `12.40.6-dev`; utility turns now require real player-placed intermediary segments rather than inferred offset links/risers.
+- **Retained visual correction** (`IndustrialPipeMesh`, `GridCableVisuals`): direct-link visuals still use the correct world-to-local transform on rotated/static surfaces.
+- **Retained scope:** strict direct cable pairs preserve normal placement and static surface tap behaviour.
 
 ### 12.40.3-dev - Embedded Static Lattice Compile Repair
 - **Build/power source** (`BuildSystem`, `PowerNode`): static lattice and surface-tap helpers are co-located with their owning systems, removing external helper-script import ordering.
@@ -47,11 +52,6 @@
 - **Surface build UX** (`BuildSystem`, `StaticSurfaceLatticePreview`): utility pipes/cables/connectors snap to a visible, face-bounded static-block lattice without entering large or irregular hosts.
 - **Power** (`SurfacePowerTap`, `PowerNode`, `PowerCable`): static face-mounted energy cables and wire terminals rebind direct battery/generator/consumer taps after placement and load; cable arms terminate at the touched face.
 - **Portal frames**: terrain placement uses the 5 m collider support plane, leaving frames above rather than inside ground.
-
-### 12.40.1-dev - Allocation-Free Build Preview Hot Path
-- **Build preview** (`BuildSystem`, `BuildSystemV2`): ordinary and Hammer/tiered ray targeting, radial anchor/socket discovery, placement-volume probes, and stable tinting avoid per-frame allocations; exhaustive fallbacks remain on buffer overflow.
-- **Large static snap**: held-prefab collider classification is cached and target collider collection is reused; Portal Frame edge placement remains exact.
-- **Scope**: no save, API, content, or Setup authoring change.
 
 ### Era Transition Feel
 

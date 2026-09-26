@@ -46,27 +46,21 @@ namespace VoxelEngine.Simulation
         }
 
         /// <summary>
-        /// Trips this compact connector and starts the attached finite-capacity
-        /// energy pipes burning. The flash is intentionally runtime-only; a new
-        /// connector must be placed after the damaged parts are destroyed.
+        /// Trips this compact connector and starts any attached finite-rated
+        /// manual wire visual burning. Energy Pipes are intentionally unlimited.
+        /// The flash is runtime-only; a new connector must be placed afterwards.
         /// </summary>
         internal bool TriggerOverload(float throughWatts, float capacityWatts,
-                                    PowerCable firstCable, PowerCable secondCable)
+                                      PowerNode firstNode, bool burnFirstWire,
+                                      PowerNode secondNode, bool burnSecondWire)
         {
             if (_overloadTriggered || !isActiveAndEnabled) return false;
             _overloadTriggered = true;
 
             const float BurnSeconds = 2.0f;
-            firstCable?.BeginOverloadBurn(BurnSeconds);
-            if (secondCable != null && secondCable != firstCable)
-                secondCable.BeginOverloadBurn(BurnSeconds);
-            for (int i = 0; i < _connectedStations.Count; i++)
-            {
-                var other = _connectedStations[i];
-                BeginManualWireOverload(other, BurnSeconds);
-                if (other is VoltageStationBase otherBase)
-                    otherBase.BeginManualWireOverload(this, BurnSeconds);
-            }
+            if (burnFirstWire) BeginManualWireOverloadTo(firstNode, BurnSeconds);
+            if (burnSecondWire && secondNode != firstNode)
+                BeginManualWireOverloadTo(secondNode, BurnSeconds);
 
             var flash = new GameObject("ConnectorOverloadFlash");
             flash.transform.position = ConnectionPoint;
@@ -77,10 +71,28 @@ namespace VoxelEngine.Simulation
             light.range = 4f;
             Destroy(flash, 0.18f);
 
-            Debug.LogWarning($"[Power] Connector overload: {throughWatts:0} W exceeds {capacityWatts:0} W. Connector and attached cable(s) are destroyed.", this);
+            Debug.LogWarning($"[Power] Connector overload: {throughWatts:0} W exceeds {capacityWatts:0} W. Connector and the overloaded finite-rated wire span are destroyed.", this);
             PowerNetworkManager.Instance?.SetDirty();
             StartCoroutine(DestroyAfterOverloadFlash());
             return true;
+        }
+
+        /// <summary>Only the finite manual wire that supplied the limiting
+        /// connector span receives the red-hot fault visual. Unlimited Energy
+        /// Pipes have no voltage-station line renderer and are never selected.</summary>
+        private void BeginManualWireOverloadTo(PowerNode neighbour, float seconds)
+        {
+            if (neighbour == null) return;
+            for (int i = 0; i < _connectedStations.Count; i++)
+            {
+                var other = _connectedStations[i];
+                if (other == null || other.StationTransform == null) continue;
+                if (other.StationTransform.GetComponent<PowerNode>() != neighbour) continue;
+                BeginManualWireOverload(other, seconds);
+                if (other is VoltageStationBase otherBase)
+                    otherBase.BeginManualWireOverload(this, seconds);
+                return;
+            }
         }
 
         private System.Collections.IEnumerator DestroyAfterOverloadFlash()

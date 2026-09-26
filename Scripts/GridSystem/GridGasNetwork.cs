@@ -729,8 +729,8 @@ namespace VoxelEngine.GridSystem
         {
             s_gasProximityResult.Clear();
             if (grid == null || origin == null) yield break;
-            // Five detail primary cells plus one bounded orthogonal riser are
-            // eligible. The shared route predicate filters this bounded probe.
+            // Five direct detail cells are eligible. The shared cardinal predicate
+            // filters this bounded probe; corners require a placed intermediate pipe.
             float radius = origin.IsPrecisionAttachment
                 ? Mathf.Max(GridSize.Large.CellSize() * 1.5f, 3.25f)
                 : Mathf.Max(origin.EffectiveCellSize, GridSize.Small.CellSize()) * 2.0f;
@@ -777,7 +777,7 @@ namespace VoxelEngine.GridSystem
             if (grid == null || a == null || b == null) return false;
             float detail = GridSize.Small.CellSize();
             Vector3 localDelta = grid.transform.InverseTransformVector(b.transform.position - a.transform.position);
-            return PipeAdjacency.IsBendablePipeLinkDelta(localDelta, detail, 5f, detail * 0.18f);
+            return PipeAdjacency.IsCoplanarPipeLinkDelta(localDelta, detail, 5f, detail * 0.18f);
         }
 
         /// <summary>Cryobeds reachable from an endpoint, walking the cached grid topology.</summary>

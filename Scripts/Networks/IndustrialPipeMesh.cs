@@ -332,24 +332,6 @@ namespace VoxelEngine.Networks
                     axisUsed[axisIdx] = true;
 
                     float projected = Mathf.Abs(Vector3.Dot(localDelta, dir));
-                    Vector3 orthogonalDelta = localDelta - dir * projected;
-                    Vector3 bendDir = orthogonalDelta.sqrMagnitude > 1e-6f
-                        ? NearestCardinalAxis(orthogonalDelta)
-                        : Vector3.zero;
-                    float bendLength = bendDir == Vector3.zero
-                        ? 0f
-                        : Mathf.Abs(Vector3.Dot(orthogonalDelta, bendDir));
-                    // Pipe/cable topology only accepts a bounded one-secondary-axis
-                    // elbow. Visual pipe-pair providers intentionally pass a midpoint,
-                    // however, so their primary half-run may be 0.5 or 2.5 cells rather
-                    // than an integer whole run. Validate the residual shape here rather
-                    // than re-running the whole-link lattice predicate and losing that
-                    // legitimate midpoint riser.
-                    float residualRemainder = (orthogonalDelta - bendDir * bendLength).magnitude;
-                    float bendThreshold = Mathf.Max(0.015f, gs * 0.02f);
-                    bool hasOrthogonalBend = bendLength > bendThreshold
-                        && bendLength <= gs * 1.23f
-                        && residualRemainder <= bendThreshold;
                     // Long pipe links may bridge up to five grid cells. Clamp to the
                     // same gameplay limit so visuals never imply a longer connection.
                     float armEnd    = Mathf.Min(projected, gs * 5f);
@@ -462,13 +444,6 @@ namespace VoxelEngine.Networks
                                           collarMat);
                         }
                     }
-
-                    if (hasOrthogonalBend)
-                    {
-                        BuildOrthogonalBend(visualRoot, $"Bend_{axisIdx}_{j}",
-                            dir * armEnd, bendDir, bendLength, p,
-                            shellMat, innerMat, collarMat);
-                    }
                 }
             }
 
@@ -519,77 +494,6 @@ namespace VoxelEngine.Networks
             if (Mathf.Abs(axis.x) > 0.5f) return new Vector3(along, across, across);
             if (Mathf.Abs(axis.y) > 0.5f) return new Vector3(across, along, across);
             return new Vector3(across, across, along);
-        }
-
-        /// <summary>
-        /// Adds the secondary leg of a bounded L route. The first leg is the normal
-        /// arm built by Rebuild; this piece begins at that arm's endpoint and reaches
-        /// the retained local elevation/side offset. Two neighbouring half-links meet
-        /// at their shared midpoint, producing a clean, readable riser rather than a
-        /// diagonal or a shaft that ends in empty space.
-        /// </summary>
-        private static void BuildOrthogonalBend(Transform parent, string name,
-                                                 Vector3 joint, Vector3 direction,
-                                                 float length, StyleProfile p,
-                                                 Material shellMat, Material innerMat,
-                                                 Material collarMat)
-        {
-            if (direction == Vector3.zero || length <= 0.01f) return;
-            Vector3 centre = joint + direction * (length * 0.5f);
-
-            if (p.useBoxArms)
-            {
-                Vector3 size = AxisAlignedBoxSize(direction, length,
-                    p.armRadius * 2f * p.armSquareScale);
-                BuildCube(parent, name, centre, size, shellMat);
-                if (innerMat != null)
-                {
-                    Vector3 innerSize = AxisAlignedBoxSize(direction, length,
-                        p.armRadius * 1.2f);
-                    BuildCube(parent, name + "_Core", centre, innerSize, innerMat);
-                }
-            }
-            else if (p.twinShaft && p.twinSeparation > 0f)
-            {
-                Vector3 perpendicular = Mathf.Abs(direction.y) > 0.5f
-                    ? Vector3.right
-                    : Vector3.up;
-                Vector3 offset = perpendicular * (p.twinSeparation * 0.5f);
-                BuildCylinder(parent, name + "_A", centre + offset, direction,
-                    length, p.armRadius, shellMat);
-                BuildCylinder(parent, name + "_B", centre - offset, direction,
-                    length, p.armRadius, shellMat);
-                if (p.tripleShaft)
-                    BuildCylinder(parent, name + "_C", centre, direction,
-                        length, p.armRadius, shellMat);
-                if (innerMat != null)
-                {
-                    BuildCylinder(parent, name + "_CoreA", centre + offset, direction,
-                        length, p.armRadius * 0.55f, innerMat);
-                    BuildCylinder(parent, name + "_CoreB", centre - offset, direction,
-                        length, p.armRadius * 0.55f, innerMat);
-                    if (p.tripleShaft)
-                        BuildCylinder(parent, name + "_CoreC", centre, direction,
-                            length, p.armRadius * 0.55f, innerMat);
-                }
-            }
-            else
-            {
-                BuildCylinder(parent, name, centre, direction, length,
-                    p.armRadius, shellMat);
-                if (innerMat != null)
-                    BuildCylinder(parent, name + "_Core", centre, direction, length,
-                        p.armRadius * 0.55f, innerMat);
-            }
-
-            // A small collar at the elbow visually explains the ninety-degree route
-            // and hides the junction between the two generated primitives.
-            if (p.drawSleeveBand)
-                BuildCube(parent, name + "_Joint", joint,
-                    Vector3.one * (p.terminalRadius * 2f), collarMat);
-            else if (p.drawCollar)
-                BuildSphere(parent, name + "_Joint", joint,
-                    Vector3.one * (p.collarRadius * 2f), collarMat);
         }
 
         // ────────────────────────────────────────────────────────────

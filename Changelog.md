@@ -1,15 +1,29 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.40.5-dev`
+**Current Version:** `12.40.6-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
 
+### [12.40.6-dev] Direct Conduit Links and Finite Manual Wire Transfer
+
+**Type:** PATCH - corrects utility topology, power endpoint contact, and power-transfer limits without changing save data, item IDs, prefab serialization, or public API. Item, gas, liquid, Energy Pipe, and Data Cable topology now permits only real direct cardinal/coplanar neighbour links. The runtime no longer infers an L/elbow route from an offset pair and the shared conduit mesh no longer renders one. A player must place the intervening pipe or cable segment to turn a run.
+
+**Energy Pipes and endpoints:** an Energy Pipe may discover a broad nearby power node, but it creates a machine/connector link only after its endpoint reaches that target prefab's collider surface. It no longer draws a visual arm or transfers power across nearby empty space. Energy Pipes are unlimited: `ElectricalPipeDefinition.capacityWatts` is retained only as legacy tier metadata and is no longer a network bottleneck, overload input, heat source, or destruction condition.
+
+**Manual wires and batteries:** player-drawn LV/HV wire links retain their finite `manualLinkCapacities` and are the only links that constrain a network's transfer budget. The generated LV tiers remain 1,500 W (copper), 15,000 W (gold), and 50,000 W (graphite). A compact connector overload is now evaluated only against an attached finite manual-wire span; it flashes/removes the connector and uses the existing manual-wire red-hot fault path, never damages an Energy Pipe. Batteries in one valid power network now move stored watt-hours from batteries above the capacity-weighted common fill percentage to those below it. Equalisation honours each battery I/O rate and the unused finite manual-wire capacity for the tick.
+
+**GitHub title:** `[12.40.6-dev] Direct conduit links and finite manual wire transfer`
+
+**Manual steps:** in Unity on `Dev`, let scripts compile and clear the Console. Run `Tools -> Voxel Engine -> Voxel Engine Setup`, select `17. Build Factory Foundations + HV Grid`, and run it once; the setup remains non-destructive/idempotent and preserves existing production values while reconnecting missing generated assets. Verify strict utility placement by placing matching pipe pairs and Energy/Data Cable pairs with only a diagonal or height-offset gap: they must show no joining arm and no transfer. Add the real cardinal intermediary segment(s), then confirm each direct placed link joins normally. Place an Energy Pipe within its broad discovery area but with a visible gap to a generator, consumer, battery, or connector: it must not draw to or power that target. Move/place it so the endpoint reaches the target collider face and confirm it links. For a manual-wire test, use a copper LV wire and demand above 1,500 W; confirm the route is limited/trips through a compact connector rather than treating the wire as unlimited, with the manual line using its red-hot removal feedback. Repeat with gold and graphite LV wire tiers. Set a test Energy Pipe definition's legacy capacity field low, then verify a valid Energy Pipe route does not throttle, heat, or burn because of that field. Finally, connect batteries with visibly different charge percentages through a valid wire network with no external load/source; their stored charge should converge toward one common percentage at their I/O rate and within the available wire throughput. Confirm normal consumers, relays, static surface taps, connector two-link limits, Data Cable placement/removal, and existing saves remain stable.
+
 ### [12.40.5-dev] Connector Power Transfer and Overload Safety
 
-**Type:** PATCH - repairs compact LV/HV Wire Connector power routing and makes connector terminals a strict two-link part. Connector links now use one shared two-terminal budget across nearby Energy Pipes and player-drawn manual wires; the manual-link topology pass can no longer bypass that budget, and the wire tool checks both endpoints before consuming an item. This restores generator-to-consumer transfer through a connector with two valid links while refusing a third link and directing the player to a Power Relay. Setup Step 17 now repairs generated connector nodes to the two-link limit and updates their item descriptions without changing relay limits or production values. The stale `IsCardinalNeighbour` reference in `DataCable.OnDisable` is corrected to `IsBoundedNeighbour`, resolving CS0103.
+**Type:** PATCH - repairs compact LV/HV Wire Connector power routing and makes connector terminals a strict two-link part. Connector links now use one shared two-terminal budget across nearby Energy Pipes and player-drawn manual wires; the manual-link topology pass can no longer bypass that budget, and the wire tool checks both endpoints before consuming an item. This restores generator-to-consumer transfer through a connector with two valid links while refusing a third link and directing the player to a Power Relay. Setup Step 17 now repairs generated connector nodes to the two-link limit and updates their item descriptions without changing relay limits or production values. The stale `IsCardinalNeighbour` reference in `DataCable.OnDisable` is corrected to an internal neighbour predicate, resolving CS0103.
 
 **Overload behaviour:** before the regular network bottleneck silently throttles a two-terminal compact connector, the power manager measures the isolated generator-to-demand transfer on its two sides. If that transfer exceeds a finite Energy Pipe or manual-wire rating, the connector trips: it emits a short red overload flash and is destroyed, attached Energy Pipes glow/pulse red-hot for two seconds before destroying themselves, and a drawn manual wire detaches into the world, burns red-hot for the same interval, then disappears. Superconducting/infinite-capacity links do not trip. Overload state is runtime-only and is not saved. No save-schema or public API change is required.
+
+**Superseded power-limit detail:** `12.40.6-dev` corrects this initial fault scope: Energy Pipes are unlimited and never burn from `capacityWatts`; only finite manual-wire spans can constrain or fault a compact connector.
 
 **GitHub title:** `[12.40.5-dev] Connector power transfer and overload safety`
 
@@ -18,6 +32,8 @@ All release notes are maintained here so `Roadmap.md` remains focused on planned
 ### [12.40.4-dev] Orthogonal Pipe and Cable Riser Links
 
 **Type:** PATCH - fixes local X/Y/Z pipe and cable links that were rejected whenever a neighbouring terrain placement introduced a small off-plane offset, and fixes the resulting geometry that previously projected every connection onto one straight nearest-axis arm. Item, gas, and liquid pipe pairs now accept one bounded orthogonal secondary leg alongside their normal 1–5 cell primary lattice run; arbitrary three-axis diagonals and overlong offsets remain rejected. Energy and data cable pairs use the same one-cell bounded elbow rule. The shared industrial conduit mesh retains the secondary local delta and builds a collared ninety-degree riser, including midpoint-owned pipe/cable half-links, so an uneven-ground run visibly reaches its connected endpoint instead of terminating in empty space. Power cable target coordinates are now passed once in world space before local conversion, repairing rotated/surface-mounted cable plane errors. Pipe-pair spatial hashes cover the complete bounded elbow envelope. No save, public API, prefab, item, recipe, research, balance, or Setup change is required.
+
+**Superseded topology detail:** `12.40.6-dev` removes inferred elbow/riser links and geometry. Turns now require player-placed direct intermediary utility segments.
 
 **GitHub title:** `[12.40.4-dev] Orthogonal Pipe and Cable Riser Links`
 
