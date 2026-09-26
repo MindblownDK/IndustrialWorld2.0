@@ -44,6 +44,58 @@ namespace VoxelEngine.Power
             public Vector3 Up;
         }
 
+        public static List<EndpointInfo> GetLocalEndpoints(EnergyPipeVariant variant, int straightLength = 1)
+        {
+            var list = new List<EndpointInfo>();
+            straightLength = Mathf.Clamp(straightLength, 1, 5);
+            switch (variant)
+            {
+                case EnergyPipeVariant.Straight:
+                    list.Add(new EndpointInfo { Position = Vector3.zero, Normal = Vector3.back, Right = Vector3.right, Up = Vector3.up });
+                    list.Add(new EndpointInfo { Position = Vector3.forward * straightLength, Normal = Vector3.forward, Right = Vector3.right, Up = Vector3.up });
+                    break;
+                case EnergyPipeVariant.BendRight:
+                    list.Add(new EndpointInfo { Position = Vector3.zero, Normal = Vector3.back, Right = Vector3.right, Up = Vector3.up });
+                    list.Add(new EndpointInfo { Position = new Vector3(1f, 0f, 1f), Normal = Vector3.right, Right = Vector3.back, Up = Vector3.up });
+                    break;
+                case EnergyPipeVariant.BendUp:
+                    list.Add(new EndpointInfo { Position = Vector3.zero, Normal = Vector3.back, Right = Vector3.right, Up = Vector3.up });
+                    list.Add(new EndpointInfo { Position = new Vector3(0f, 1f, 1f), Normal = Vector3.up, Right = Vector3.right, Up = Vector3.back });
+                    break;
+                case EnergyPipeVariant.StepUp:
+                    list.Add(new EndpointInfo { Position = Vector3.zero, Normal = Vector3.back, Right = Vector3.right, Up = Vector3.up });
+                    list.Add(new EndpointInfo { Position = new Vector3(0f, 1f, 2f), Normal = Vector3.forward, Right = Vector3.right, Up = Vector3.up });
+                    break;
+                case EnergyPipeVariant.StepRight:
+                    list.Add(new EndpointInfo { Position = Vector3.zero, Normal = Vector3.back, Right = Vector3.right, Up = Vector3.up });
+                    list.Add(new EndpointInfo { Position = new Vector3(1f, 0f, 2f), Normal = Vector3.forward, Right = Vector3.right, Up = Vector3.up });
+                    break;
+                case EnergyPipeVariant.BendLeftToUp:
+                    list.Add(new EndpointInfo { Position = new Vector3(-1f, 0f, 0f), Normal = Vector3.left, Right = Vector3.forward, Up = Vector3.up });
+                    list.Add(new EndpointInfo { Position = new Vector3(0f, 1f, 0f), Normal = Vector3.up, Right = Vector3.forward, Up = Vector3.left });
+                    break;
+                case EnergyPipeVariant.BendRightToUp:
+                    list.Add(new EndpointInfo { Position = new Vector3(1f, 0f, 0f), Normal = Vector3.right, Right = Vector3.back, Up = Vector3.up });
+                    list.Add(new EndpointInfo { Position = new Vector3(0f, 1f, 0f), Normal = Vector3.up, Right = Vector3.back, Up = Vector3.right });
+                    break;
+                case EnergyPipeVariant.Junction4Way:
+                    list.Add(new EndpointInfo { Position = Vector3.forward * 0.5f, Normal = Vector3.forward, Right = Vector3.right, Up = Vector3.up });
+                    list.Add(new EndpointInfo { Position = Vector3.back * 0.5f, Normal = Vector3.back, Right = Vector3.right, Up = Vector3.up });
+                    list.Add(new EndpointInfo { Position = Vector3.right * 0.5f, Normal = Vector3.right, Right = Vector3.back, Up = Vector3.up });
+                    list.Add(new EndpointInfo { Position = Vector3.left * 0.5f, Normal = Vector3.left, Right = Vector3.forward, Up = Vector3.up });
+                    break;
+                case EnergyPipeVariant.Junction6Way:
+                    list.Add(new EndpointInfo { Position = Vector3.forward * 0.5f, Normal = Vector3.forward, Right = Vector3.right, Up = Vector3.up });
+                    list.Add(new EndpointInfo { Position = Vector3.back * 0.5f, Normal = Vector3.back, Right = Vector3.right, Up = Vector3.up });
+                    list.Add(new EndpointInfo { Position = Vector3.right * 0.5f, Normal = Vector3.right, Right = Vector3.back, Up = Vector3.up });
+                    list.Add(new EndpointInfo { Position = Vector3.left * 0.5f, Normal = Vector3.left, Right = Vector3.forward, Up = Vector3.up });
+                    list.Add(new EndpointInfo { Position = Vector3.up * 0.5f, Normal = Vector3.up, Right = Vector3.right, Up = Vector3.back });
+                    list.Add(new EndpointInfo { Position = Vector3.down * 0.5f, Normal = Vector3.down, Right = Vector3.right, Up = Vector3.forward });
+                    break;
+            }
+            return list;
+        }
+
         public static Mesh BuildMesh(EnergyPipeVariant variant, int straightLength = 1)
         {
             var mesh = new Mesh { name = $"EnergyPipe_{variant}_{straightLength}" };
@@ -225,7 +277,6 @@ namespace VoxelEngine.Power
         {
             const int Steps = 16;
             float sign = isLeft ? -1f : 1f;
-            Vector3 center = new Vector3(sign, 1f, 0f);
 
             var pathLeft = new Vector3[Steps + 1];
             var pathRight = new Vector3[Steps + 1];
@@ -233,7 +284,6 @@ namespace VoxelEngine.Power
             for (int i = 0; i <= Steps; i++)
             {
                 float t = i / (float)Steps;
-                float angle = Mathf.PI * (1.5f + 0.5f * t); // 270° to 360°
                 float x = sign * (1f - Mathf.Sin(t * Mathf.PI * 0.5f));
                 float y = 1f - Mathf.Cos(t * Mathf.PI * 0.5f);
 
@@ -312,43 +362,42 @@ namespace VoxelEngine.Power
             right = right.normalized;
             up = up.normalized;
 
-            float halfW = FlangeWidth * 0.5f;
-            float halfH = FlangeHeight * 0.5f;
-            float depth = FlangeDepth;
-            float cornerR = 0.024f;
+            float halfW = FlangeWidth * 0.5f;   // 0.135m
+            float halfH = FlangeHeight * 0.5f;  // 0.068m
+            float depth = FlangeDepth;          // 0.045m
+            float cornerR = 0.022f;
 
             Vector3 frontCenter = origin;
             Vector3 backCenter = origin - normal * depth;
 
-            // ── 1. Rounded Rectangular Housing ────────────────────────
-            // 8-sided rounded rectangle profile on the (right, up) plane
-            Vector2[] profile = new Vector2[8];
+            // 8-point rounded rectangle profile in (right, up) coordinates (Clockwise from top)
             float rx = halfW - cornerR;
             float ry = halfH - cornerR;
-            profile[0] = new Vector2(halfW, ry);
-            profile[1] = new Vector2(rx, halfH);
-            profile[2] = new Vector2(-rx, halfH);
-            profile[3] = new Vector2(-halfW, ry);
-            profile[4] = new Vector2(-halfW, -ry);
-            profile[5] = new Vector2(-rx, -halfH);
-            profile[6] = new Vector2(rx, -halfH);
-            profile[7] = new Vector2(halfW, -ry);
+            Vector2[] p = new Vector2[8];
+            p[0] = new Vector2(-rx, halfH);   // top-left
+            p[1] = new Vector2(rx, halfH);    // top-right
+            p[2] = new Vector2(halfW, ry);    // right-top
+            p[3] = new Vector2(halfW, -ry);   // right-bottom
+            p[4] = new Vector2(rx, -halfH);   // bottom-right
+            p[5] = new Vector2(-rx, -halfH);  // bottom-left
+            p[6] = new Vector2(-halfW, -ry);  // left-bottom
+            p[7] = new Vector2(-halfW, ry);   // left-top
 
-            int startFront = verts.Count;
-            // Front face vertices
-            for (int i = 0; i < 8; i++)
-            {
-                verts.Add(frontCenter + right * profile[i].x + up * profile[i].y);
-                normals.Add(normal);
-                uvs.Add(new Vector2(0.5f + (profile[i].x / FlangeWidth) * 0.4f, 0.65f + (profile[i].y / FlangeHeight) * 0.2f));
-            }
-            // Front center
+            // ── 1. Front Face (Opaque, Solid, Wound Clockwise) ───────
             int frontCenterIdx = verts.Count;
             verts.Add(frontCenter);
             normals.Add(normal);
             uvs.Add(new Vector2(0.5f, 0.65f));
 
-            // Front face fan triangles
+            int startFront = verts.Count;
+            for (int i = 0; i < 8; i++)
+            {
+                verts.Add(frontCenter + right * p[i].x + up * p[i].y);
+                normals.Add(normal);
+                uvs.Add(new Vector2(0.5f + (p[i].x / FlangeWidth) * 0.4f, 0.65f + (p[i].y / FlangeHeight) * 0.2f));
+            }
+
+            // Front fan triangles (Clockwise: Center -> i -> next)
             for (int i = 0; i < 8; i++)
             {
                 int next = (i + 1) % 8;
@@ -357,20 +406,21 @@ namespace VoxelEngine.Power
                 indices.Add(startFront + next);
             }
 
-            int startBack = verts.Count;
-            // Back face vertices
-            for (int i = 0; i < 8; i++)
-            {
-                verts.Add(backCenter + right * profile[i].x + up * profile[i].y);
-                normals.Add(-normal);
-                uvs.Add(new Vector2(0.5f + (profile[i].x / FlangeWidth) * 0.4f, 0.65f + (profile[i].y / FlangeHeight) * 0.2f));
-            }
+            // ── 2. Back Face (Opaque, Solid, Wound Clockwise from back) ─
             int backCenterIdx = verts.Count;
             verts.Add(backCenter);
             normals.Add(-normal);
             uvs.Add(new Vector2(0.5f, 0.65f));
 
-            // Back face fan triangles
+            int startBack = verts.Count;
+            for (int i = 0; i < 8; i++)
+            {
+                verts.Add(backCenter + right * p[i].x + up * p[i].y);
+                normals.Add(-normal);
+                uvs.Add(new Vector2(0.5f + (p[i].x / FlangeWidth) * 0.4f, 0.65f + (p[i].y / FlangeHeight) * 0.2f));
+            }
+
+            // Back fan triangles (Clockwise when viewed from -normal: Center -> next -> i)
             for (int i = 0; i < 8; i++)
             {
                 int next = (i + 1) % 8;
@@ -379,78 +429,83 @@ namespace VoxelEngine.Power
                 indices.Add(startBack + i);
             }
 
-            // Housing side walls (extruding front to back)
+            // ── 3. Side Walls (Extruding Front to Back) ───────────────
             for (int i = 0; i < 8; i++)
             {
                 int next = (i + 1) % 8;
-                Vector3 f0 = frontCenter + right * profile[i].x + up * profile[i].y;
-                Vector3 f1 = frontCenter + right * profile[next].x + up * profile[next].y;
-                Vector3 b0 = backCenter + right * profile[i].x + up * profile[i].y;
-                Vector3 b1 = backCenter + right * profile[next].x + up * profile[next].y;
+                Vector3 f0 = frontCenter + right * p[i].x + up * p[i].y;
+                Vector3 f1 = frontCenter + right * p[next].x + up * p[next].y;
+                Vector3 b0 = backCenter + right * p[i].x + up * p[i].y;
+                Vector3 b1 = backCenter + right * p[next].x + up * p[next].y;
 
-                Vector3 wallNormal = Vector3.Normalize(Vector3.Cross(f1 - f0, normal));
-                AddQuad(verts, normals, uvs, indices, f0, f1, b1, b0, wallNormal, new Vector2(0.5f, 0.65f));
+                Vector3 wallNormal = Vector3.Normalize(Vector3.Cross(f1 - f0, -normal));
+                int bIdx = verts.Count;
+                verts.Add(f0); normals.Add(wallNormal); uvs.Add(new Vector2(0.4f, 0.65f));
+                verts.Add(f1); normals.Add(wallNormal); uvs.Add(new Vector2(0.6f, 0.65f));
+                verts.Add(b1); normals.Add(wallNormal); uvs.Add(new Vector2(0.6f, 0.60f));
+                verts.Add(b0); normals.Add(wallNormal); uvs.Add(new Vector2(0.4f, 0.60f));
+
+                indices.Add(bIdx); indices.Add(bIdx + 1); indices.Add(bIdx + 2);
+                indices.Add(bIdx); indices.Add(bIdx + 2); indices.Add(bIdx + 3);
             }
 
-            // ── 2. Dual Recessed Circular Port Sockets (Pic 5) ────────
+            // ── 4. Dual Circular Recessed Sockets & Dark Grommet Bezels (Pic 5) ──
             float[] offsets = { -CableSeparation * 0.5f, CableSeparation * 0.5f };
-            const int PortSides = 12;
-            float outerR = PortRadius;
-            float innerR = PortRadius * 0.82f;
-            float cupDepth = 0.015f;
-            float pinR = 0.020f;
+            const int Sides = 14;
+            float outerR = PortRadius;          // 0.042m (outer dark rubber bezel)
+            float innerR = PortRadius * 0.78f;  // 0.033m (inner socket cup)
+            float pinR = 0.018f;                // 0.018m (central metal pin)
+            float cupDepth = 0.012f;
 
-            for (int p = 0; p < offsets.Length; p++)
+            for (int k = 0; k < offsets.Length; k++)
             {
-                Vector3 portCenterFront = frontCenter + right * offsets[p] + normal * 0.001f;
-                Vector3 portCenterRecess = portCenterFront - normal * cupDepth;
+                Vector3 portCenter = frontCenter + right * offsets[k] + normal * 0.002f;
+                Vector3 socketFloor = portCenter - normal * cupDepth;
 
-                // Dark outer grommet / bezel ring sitting slightly raised on the front face
+                // A. Raised dark circular bezel ring
                 int bezelStart = verts.Count;
-                for (int s = 0; s <= PortSides; s++)
+                for (int s = 0; s <= Sides; s++)
                 {
-                    float angle = (s / (float)PortSides) * Mathf.PI * 2f;
-                    Vector3 radial = (right * Mathf.Cos(angle) + up * Mathf.Sin(angle)).normalized;
+                    float ang = (s / (float)Sides) * Mathf.PI * 2f;
+                    Vector3 rad = (right * Mathf.Cos(ang) + up * Mathf.Sin(ang)).normalized;
 
-                    // Outer bezel ring (Region C - dark trim)
-                    verts.Add(portCenterFront + radial * outerR);
+                    verts.Add(portCenter + rad * outerR);
                     normals.Add(normal);
-                    uvs.Add(new Vector2(0.5f + Mathf.Cos(angle) * 0.35f, 0.88f + Mathf.Sin(angle) * 0.09f));
+                    uvs.Add(new Vector2(0.5f + Mathf.Cos(ang) * 0.25f, 0.88f + Mathf.Sin(ang) * 0.08f));
 
-                    // Inner socket lip (Region C - dark trim)
-                    verts.Add(portCenterFront + radial * innerR);
+                    verts.Add(portCenter + rad * innerR);
                     normals.Add(normal);
-                    uvs.Add(new Vector2(0.5f + Mathf.Cos(angle) * 0.25f, 0.88f + Mathf.Sin(angle) * 0.06f));
+                    uvs.Add(new Vector2(0.5f + Mathf.Cos(ang) * 0.18f, 0.88f + Mathf.Sin(ang) * 0.06f));
                 }
 
-                for (int s = 0; s < PortSides; s++)
+                for (int s = 0; s < Sides; s++)
                 {
                     int i0 = bezelStart + s * 2;
                     int i1 = bezelStart + s * 2 + 1;
                     int i2 = bezelStart + (s + 1) * 2;
                     int i3 = bezelStart + (s + 1) * 2 + 1;
 
-                    indices.Add(i0); indices.Add(i1); indices.Add(i2);
-                    indices.Add(i1); indices.Add(i3); indices.Add(i2);
+                    indices.Add(i0); indices.Add(i2); indices.Add(i1);
+                    indices.Add(i1); indices.Add(i2); indices.Add(i3);
                 }
 
-                // Cylindrical recessed cup wall
+                // B. Recessed socket cup cylinder wall
                 int cupStart = verts.Count;
-                for (int s = 0; s <= PortSides; s++)
+                for (int s = 0; s <= Sides; s++)
                 {
-                    float angle = (s / (float)PortSides) * Mathf.PI * 2f;
-                    Vector3 radial = (right * Mathf.Cos(angle) + up * Mathf.Sin(angle)).normalized;
+                    float ang = (s / (float)Sides) * Mathf.PI * 2f;
+                    Vector3 rad = (right * Mathf.Cos(ang) + up * Mathf.Sin(ang)).normalized;
 
-                    verts.Add(portCenterFront + radial * innerR);
-                    normals.Add(-radial);
-                    uvs.Add(new Vector2(s / (float)PortSides, 0.92f));
+                    verts.Add(portCenter + rad * innerR);
+                    normals.Add(-rad);
+                    uvs.Add(new Vector2(s / (float)Sides, 0.90f));
 
-                    verts.Add(portCenterRecess + radial * innerR);
-                    normals.Add(-radial);
-                    uvs.Add(new Vector2(s / (float)PortSides, 0.84f));
+                    verts.Add(socketFloor + rad * innerR);
+                    normals.Add(-rad);
+                    uvs.Add(new Vector2(s / (float)Sides, 0.82f));
                 }
 
-                for (int s = 0; s < PortSides; s++)
+                for (int s = 0; s < Sides; s++)
                 {
                     int i0 = cupStart + s * 2;
                     int i1 = cupStart + s * 2 + 1;
@@ -461,77 +516,77 @@ namespace VoxelEngine.Power
                     indices.Add(i1); indices.Add(i3); indices.Add(i2);
                 }
 
-                // Recessed cup bottom floor + central contact pin
+                // C. Central metal terminal contact pin
                 int pinStart = verts.Count;
-                for (int s = 0; s <= PortSides; s++)
+                for (int s = 0; s <= Sides; s++)
                 {
-                    float angle = (s / (float)PortSides) * Mathf.PI * 2f;
-                    Vector3 radial = (right * Mathf.Cos(angle) + up * Mathf.Sin(angle)).normalized;
+                    float ang = (s / (float)Sides) * Mathf.PI * 2f;
+                    Vector3 rad = (right * Mathf.Cos(ang) + up * Mathf.Sin(ang)).normalized;
 
-                    // Inner cup floor
-                    verts.Add(portCenterRecess + radial * innerR);
+                    // Socket floor
+                    verts.Add(socketFloor + rad * innerR);
                     normals.Add(normal);
-                    uvs.Add(new Vector2(0.5f + Mathf.Cos(angle) * 0.2f, 0.88f + Mathf.Sin(angle) * 0.05f));
+                    uvs.Add(new Vector2(0.5f + Mathf.Cos(ang) * 0.15f, 0.88f + Mathf.Sin(ang) * 0.05f));
 
-                    // Central metallic contact pin
-                    verts.Add(portCenterRecess + radial * pinR + normal * (cupDepth * 0.6f));
+                    // Pin top
+                    verts.Add(socketFloor + rad * pinR + normal * (cupDepth * 0.7f));
                     normals.Add(normal);
-                    uvs.Add(new Vector2(0.5f + Mathf.Cos(angle) * 0.15f, 0.65f + Mathf.Sin(angle) * 0.05f));
+                    uvs.Add(new Vector2(0.5f + Mathf.Cos(ang) * 0.10f, 0.65f + Mathf.Sin(ang) * 0.04f));
                 }
 
-                for (int s = 0; s < PortSides; s++)
+                for (int s = 0; s < Sides; s++)
                 {
                     int i0 = pinStart + s * 2;
                     int i1 = pinStart + s * 2 + 1;
                     int i2 = pinStart + (s + 1) * 2;
                     int i3 = pinStart + (s + 1) * 2 + 1;
 
-                    indices.Add(i0); indices.Add(i1); indices.Add(i2);
-                    indices.Add(i1); indices.Add(i3); indices.Add(i2);
+                    indices.Add(i0); indices.Add(i2); indices.Add(i1);
+                    indices.Add(i1); indices.Add(i2); indices.Add(i3);
                 }
 
-                // Central pin top cap
-                int pinCenterIdx = verts.Count;
-                verts.Add(portCenterRecess + normal * (cupDepth * 0.6f));
+                // Pin top cap
+                int pinCapIdx = verts.Count;
+                verts.Add(socketFloor + normal * (cupDepth * 0.7f));
                 normals.Add(normal);
                 uvs.Add(new Vector2(0.5f, 0.65f));
 
-                for (int s = 0; s < PortSides; s++)
+                for (int s = 0; s < Sides; s++)
                 {
                     int i1 = pinStart + s * 2 + 1;
                     int i2 = pinStart + (s + 1) * 2 + 1;
-                    indices.Add(pinCenterIdx);
+                    indices.Add(pinCapIdx);
                     indices.Add(i1);
                     indices.Add(i2);
                 }
 
-                // ── 3. Strain-Relief Cable Collar Boots on Rear Face ──
-                Vector3 bootBase = backCenter + right * offsets[p];
-                Vector3 bootTip = bootBase - normal * 0.025f;
+                // D. Rear strain-relief collar boot
+                Vector3 bootBase = backCenter + right * offsets[k];
+                Vector3 bootTip = bootBase - normal * 0.022f;
                 int bootStart = verts.Count;
-                for (int s = 0; s <= PortSides; s++)
+                for (int s = 0; s <= Sides; s++)
                 {
-                    float angle = (s / (float)PortSides) * Mathf.PI * 2f;
-                    Vector3 radial = (right * Mathf.Cos(angle) + up * Mathf.Sin(angle)).normalized;
+                    float ang = (s / (float)Sides) * Mathf.PI * 2f;
+                    Vector3 rad = (right * Mathf.Cos(ang) + up * Mathf.Sin(ang)).normalized;
 
-                    verts.Add(bootBase + radial * (CableRadius * 1.35f));
-                    normals.Add(-normal + radial * 0.5f);
-                    uvs.Add(new Vector2(s / (float)PortSides, 0.88f));
+                    verts.Add(bootBase + rad * (CableRadius * 1.30f));
+                    normals.Add(-normal + rad * 0.5f);
+                    uvs.Add(new Vector2(s / (float)Sides, 0.88f));
 
-                    verts.Add(bootTip + radial * CableRadius);
-                    normals.Add(-normal + radial * 0.5f);
-                    uvs.Add(new Vector2(s / (float)PortSides, 0.94f));
+                    verts.Add(bootTip + rad * CableRadius);
+                    normals.Add(-normal + rad * 0.5f);
+                    uvs.Add(new Vector2(s / (float)Sides, 0.94f));
                 }
 
-                for (int s = 0; s < PortSides; s++)
+                for (int s = 0; s < Sides; s++)
                 {
                     int i0 = bootStart + s * 2;
                     int i1 = bootStart + s * 2 + 1;
                     int i2 = bootStart + (s + 1) * 2;
                     int i3 = bootStart + (s + 1) * 2 + 1;
 
-                    indices.Add(i0); indices.Add(i1); indices.Add(i2);
-                    indices.Add(i1); indices.Add(i3); indices.Add(i2);
+                    indices.Add(i0); indices.Add(i2); indices.Add(i1);
+                    indices.Add(i1); indices.Add(i2); indices.Add(i3);
                 }
             }
         }
@@ -649,21 +704,15 @@ namespace VoxelEngine.Power
                 Vector3 p2 = center + n * extN + r * extR + u * extU;
                 Vector3 p3 = center + n * extN - r * extR + u * extU;
 
-                AddQuad(verts, normals, uvs, indices, p0, p1, p2, p3, n, new Vector2(0.5f, 0.65f));
+                int baseIdx = verts.Count;
+                verts.Add(p0); normals.Add(n); uvs.Add(new Vector2(0.4f, 0.65f));
+                verts.Add(p1); normals.Add(n); uvs.Add(new Vector2(0.6f, 0.65f));
+                verts.Add(p2); normals.Add(n); uvs.Add(new Vector2(0.6f, 0.60f));
+                verts.Add(p3); normals.Add(n); uvs.Add(new Vector2(0.4f, 0.60f));
+
+                indices.Add(baseIdx); indices.Add(baseIdx + 1); indices.Add(baseIdx + 2);
+                indices.Add(baseIdx); indices.Add(baseIdx + 2); indices.Add(baseIdx + 3);
             }
-        }
-
-        private static void AddQuad(List<Vector3> verts, List<Vector3> normals, List<Vector2> uvs, List<int> indices,
-                                    Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, Vector3 normal, Vector2 uvCenter)
-        {
-            int baseIdx = verts.Count;
-            verts.Add(p0); normals.Add(normal); uvs.Add(uvCenter + new Vector2(-0.1f, -0.1f));
-            verts.Add(p1); normals.Add(normal); uvs.Add(uvCenter + new Vector2(0.1f, -0.1f));
-            verts.Add(p2); normals.Add(normal); uvs.Add(uvCenter + new Vector2(0.1f, 0.1f));
-            verts.Add(p3); normals.Add(normal); uvs.Add(uvCenter + new Vector2(-0.1f, 0.1f));
-
-            indices.Add(baseIdx); indices.Add(baseIdx + 1); indices.Add(baseIdx + 2);
-            indices.Add(baseIdx); indices.Add(baseIdx + 2); indices.Add(baseIdx + 3);
         }
 
         // ════════════════════════════════════════════════════════════
@@ -701,42 +750,42 @@ namespace VoxelEngine.Power
             switch (norm)
             {
                 case "copper":
-                    // Oxidized copper with warm brownish-bronze and subtle patina touches
-                    mat.color = new Color(0.85f, 0.48f, 0.22f, 1f);
+                    // Rich warm oxidized copper bronze (matching Pic 5)
+                    mat.color = new Color(0.85f, 0.44f, 0.20f, 1f);
                     if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", mat.color);
-                    if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", 0.85f);
-                    if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.65f);
+                    if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", 0.35f);
+                    if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.30f);
                     break;
                 case "iron":
                     // Dark rusted iron charcoal with warm rust highlights
-                    mat.color = new Color(0.48f, 0.45f, 0.42f, 1f);
+                    mat.color = new Color(0.45f, 0.44f, 0.42f, 1f);
                     if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", mat.color);
-                    if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", 0.70f);
-                    if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.45f);
+                    if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", 0.25f);
+                    if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.25f);
                     break;
                 case "gold":
                     // Radiant yellow metallic gold
-                    mat.color = new Color(0.96f, 0.82f, 0.20f, 1f);
+                    mat.color = new Color(0.95f, 0.80f, 0.18f, 1f);
                     if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", mat.color);
-                    if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", 0.95f);
-                    if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.88f);
+                    if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", 0.50f);
+                    if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.35f);
                     break;
                 case "superconductor":
                     // Sleek white and cyan ceramic with glowing accents
-                    mat.color = new Color(0.88f, 0.95f, 1.0f, 1f);
+                    mat.color = new Color(0.90f, 0.96f, 1.0f, 1f);
                     if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", mat.color);
-                    if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", 0.30f);
-                    if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.95f);
+                    if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", 0.15f);
+                    if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.40f);
                     mat.EnableKeyword("_EMISSION");
                     mat.globalIlluminationFlags = MaterialGlobalIlluminationFlags.RealtimeEmissive;
                     if (mat.HasProperty("_EmissionColor"))
-                        mat.SetColor("_EmissionColor", new Color(0.20f, 0.75f, 1.0f) * 0.8f);
+                        mat.SetColor("_EmissionColor", new Color(0.15f, 0.65f, 0.95f) * 0.6f);
                     break;
                 default:
                     mat.color = fallbackTint;
                     if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", fallbackTint);
-                    if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", 0.80f);
-                    if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.70f);
+                    if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", 0.30f);
+                    if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.30f);
                     break;
             }
 

@@ -1,9 +1,27 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.41.1-dev`
+**Current Version:** `12.41.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [12.41.2-dev] Connector Socket Snapping, Lattice Outward Alignment, and Glare/Backface Fix
+
+**Type:** PATCH - eliminates see-through backface culling on connector housings, removes washed-out specular glare, enables true socket-to-socket endpoint snapping across all conduit shapes (including 90-degree risers and bends), prevents overlapping/intersecting pipe placement, and supports outward-facing orientation and full 3-axis rotation when mounting energy pipes to machine lattice faces.
+
+**Socket-to-socket endpoint snapping:** When aiming at existing placed `PowerCable` segments, `BuildSystem` queries `EnergyPipeMeshBuilder.GetLocalEndpoints` to resolve the closest target socket (e.g. top of a 90-degree riser, end of a straight run, or junction branch). The held piece's entry connector snaps flush to the target socket, aligns to the outward normal, and rotates around the connection axis with `_rotSteps` (via BuildRotate / R key or Ctrl+Scroll). Placement validation verifies that new pipes connect exclusively at valid sockets and cannot be placed intersecting through existing pipe bodies.
+
+**Lattice face outward alignment:** When placing an Energy Pipe against a machine or block surface in `TryGetStaticSurfaceAttachmentPose`, the pipe defaults to pointing perpendicular (straight out) along the surface normal. Players can freely cycle 90-degree rotation steps across all three axes using the rotation controls to point straight out, up, down, left, or right across the lattice.
+
+**Connector backface and glare correction:** Corrects triangle winding order across the front face, rear face, side bevels, and recessed port socket cups in `BuildConnectorHousing`, ensuring all surfaces render opaque, solid, and without hollow gaps. Adjusts material metallic (0.15 - 0.50) and smoothness (0.25 - 0.40) to eliminate harsh white specular glare and showcase rich saturated tier metal and dark rubber grommets.
+
+**GitHub title:** `[12.41.2-dev] Connector Socket Snapping, Lattice Outward Alignment, and Glare/Backface Fix`
+
+**Manual steps:** in Unity on `Dev`, let scripts compile and clear the Console. Run `Tools -> Voxel Engine -> Voxel Engine Setup`, select `6. Build Power Content` and `17. Build Factory Foundations + HV Grid` (safe and non-destructive). Equip an Energy Pipe:
+1. Aim at a machine face (generator/battery lattice): confirm the ghost can point straight out from the face and rotates cleanly along any axis with R or Ctrl/Shift+Scroll.
+2. Place a 90-degree riser (`BendUp`), then aim at its top connector: verify a second riser or straight pipe snaps directly to the top socket and continues upward or turns without clipping or offsetting into the ground.
+3. Attempt to place a pipe intersecting the middle of an existing pipe: confirm placement is refused and the ghost turns red.
+4. Inspect the connector block: confirm the front face is completely solid (no see-through gaps, no inverted backfaces) and the finish is rich without white specular glare.
 
 ### [12.41.1-dev] Energy Pipe Connector Housing Revamp, Shape Wheel Alignment, and V-Key Length Adjustment
 

@@ -1356,7 +1356,18 @@ namespace VoxelEngine.Building
             axisV.Normalize();
             Vector3 axisU = Vector3.Cross(axisV, normal).normalized;
             axisV = Vector3.Cross(normal, axisU).normalized;
-            rot = Quaternion.LookRotation(axisV, normal) * Quaternion.Euler(0f, _rotSteps.y * 90f, 0f);
+            bool isEnergyPipe = held.placedPrefab.GetComponentInChildren<VoxelEngine.Power.PowerCable>(true) != null;
+            if (isEnergyPipe)
+            {
+                // For Energy Pipes attaching to a machine face:
+                // Base orientation points forward straight out along normal.
+                // _rotSteps enables rotating 90° along all axes (straight out, up, down, left, right).
+                rot = Quaternion.LookRotation(normal, axisV) * Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
+            }
+            else
+            {
+                rot = Quaternion.LookRotation(axisV, normal) * Quaternion.Euler(0f, _rotSteps.y * 90f, 0f);
+            }
 
             if (!TryGetPlacedBlockColliderProjectionRange(host, normal, out _, out float hostMaxNormal)
                 || !TryGetPlacedBlockColliderProjectionRange(host, axisU, out float hostMinU, out float hostMaxU)
@@ -1945,18 +1956,33 @@ namespace VoxelEngine.Building
             var targetPipe = hit.collider.GetComponentInParent<VoxelEngine.Power.PowerCable>();
             if (placingPowerPipe && targetPipe != null)
             {
-                Vector3 localHit = targetPipe.transform.InverseTransformPoint(hit.point);
-                Vector3 localDirection = NearestLocalCardinal(localHit);
-                if (localDirection.sqrMagnitude < 0.01f) localDirection = Vector3.forward;
-
-                float step = Mathf.Max(gridSize, 1f);
-                if (localDirection == Vector3.forward && targetPipe.variant == VoxelEngine.Power.EnergyPipeVariant.Straight)
+                var targetEndpoints = VoxelEngine.Power.EnergyPipeMeshBuilder.GetLocalEndpoints(targetPipe.variant, targetPipe.straightLength);
+                VoxelEngine.Power.EnergyPipeMeshBuilder.EndpointInfo bestTargetEp = default;
+                float bestDist = float.MaxValue;
+                for (int i = 0; i < targetEndpoints.Count; i++)
                 {
-                    step = targetPipe.straightLength;
+                    var ep = targetEndpoints[i];
+                    Vector3 epWorld = targetPipe.transform.TransformPoint(ep.Position);
+                    float d = (epWorld - hit.point).sqrMagnitude;
+                    if (d < bestDist)
+                    {
+                        bestDist = d;
+                        bestTargetEp = ep;
+                    }
                 }
 
-                pos = targetPipe.transform.position + targetPipe.transform.TransformDirection(localDirection) * step;
-                rot = targetPipe.transform.rotation * Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
+                Vector3 targetEpWorldPos = targetPipe.transform.TransformPoint(bestTargetEp.Position);
+                Vector3 targetEpWorldNormal = targetPipe.transform.TransformDirection(bestTargetEp.Normal).normalized;
+                Vector3 targetEpWorldUp = targetPipe.transform.TransformDirection(bestTargetEp.Up).normalized;
+
+                Quaternion alignRot = Quaternion.LookRotation(targetEpWorldNormal, targetEpWorldUp);
+                rot = alignRot * Quaternion.Euler(_rotSteps.x * 90f, _rotSteps.y * 90f, _rotSteps.z * 90f);
+
+                var heldEndpoints = VoxelEngine.Power.EnergyPipeMeshBuilder.GetLocalEndpoints(
+                    VoxelEngine.Power.EnergyPipeSelection.Variant, VoxelEngine.Power.EnergyPipeSelection.StraightLength);
+                Vector3 heldEntryLocal = heldEndpoints.Count > 0 ? heldEndpoints[0].Position : Vector3.zero;
+
+                pos = targetEpWorldPos - rot * heldEntryLocal;
                 return true;
             }
 
@@ -2356,6 +2382,41 @@ namespace VoxelEngine.Building
             if (placementProfile != null && placementProfile.isPortalPiece
                 && HasPlacedBlockVolumeOverlap(pos, placementProfile.portalHalfExtents * 0.94f, rot))
                 return false;
+
+            // Prevent Energy Pipes from being placed overlapping / intersecting inside existing placed pipes
+            if (isThin && block != null && block.placedPrefab != null && block.placedPrefab.GetComponentInChildren<VoxelEngine.Power.PowerCable>(true) != null)
+            {
+                var heldEndpoints = VoxelEngine.Power.EnergyPipeMeshBuilder.GetLocalEndpoints(
+                    VoxelEngine.Power.EnergyPipeSelection.Variant, VoxelEngine.Power.EnergyPipeSelection.StraightLength);
+                for (int i = 0; i < heldEndpoints.Count; i++)
+                {
+                    Vector3 epWorld = pos + rot * heldEndpoints[i].Position;
+                    int colCount = Physics.OverlapSphereNonAlloc(epWorld, 0.08f, s_placementOverlapProbe, ~0, QueryTriggerInteraction.Ignore);
+                    for (int c = 0; c < colCount; c++)
+                    {
+                        var col = s_placementOverlapProbe[c];
+                        if (col != null && !col.isTrigger)
+                        {
+                            var targetCable = col.GetComponentInParent<VoxelEngine.Power.PowerCable>();
+                            if (targetCable != null)
+                            {
+                                var targetEps = VoxelEngine.Power.EnergyPipeMeshBuilder.GetLocalEndpoints(targetCable.variant, targetCable.straightLength);
+                                bool atValidSocket = false;
+                                for (int t = 0; t < targetEps.Count; t++)
+                                {
+                                    Vector3 targetEpWorld = targetCable.transform.TransformPoint(targetEps[t].Position);
+                                    if ((targetEpWorld - epWorld).sqrMagnitude < 0.03f)
+                                    {
+                                        atValidSocket = true;
+                                        break;
+                                    }
+                                }
+                                if (!atValidSocket) return false;
+                            }
+                        }
+                    }
+                }
+            }
 
             return IsPlacementProbeClear(pos, Vector3.one * checkSize, isThin, isSurfaceOverlay,
                 block, placementProfile != null && placementProfile.isSurfaceAttachment ? _surfaceAttachmentHost : null);

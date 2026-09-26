@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.41.1-dev`
-**Roadmap Version:** `12.41.1-dev`
+**Current Version:** `12.41.2-dev`
+**Roadmap Version:** `12.41.2-dev`
 **Date:** 2026-09-26
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,11 @@
 ---
 
 ## 0. Recently Done
+
+### 12.41.2-dev - Connector Socket Snapping, Lattice Outward Alignment, and Glare/Backface Fix
+- **Socket endpoint snapping** (`BuildSystem`, `EnergyPipeMeshBuilder`): exact connector-to-connector snap for all 9 variants (90° risers, bends); overlap prevention.
+- **Lattice face orientation** (`BuildSystem`): straight-out normal default and full 3-axis rotation when attaching energy pipes to machine faces.
+- **Solid connector mesh** (`EnergyPipeMeshBuilder`): fixed front/back face triangle winding order (no see-through); reduced glare with matte industrial finish.
 
 ### 12.41.1-dev - Energy Pipe Connector Housing Revamp, Shape Wheel Alignment, and V-Key Length Adjustment
 - **Shape wheel UI** (`EnergyPipeShapeWheel`): centered half-slice typography and radius math; cream/cyan contrast for 9 variant slices.
