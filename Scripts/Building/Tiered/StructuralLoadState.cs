@@ -7,12 +7,14 @@ namespace VoxelEngine.Building.Tiered
     public sealed class StructuralLoadState : MonoBehaviour
     {
         public int spanFromSupport;
+        public Vector3 supportAnchor;
         public bool armed;
         private float _nextCheck;
 
-        public void Arm(int span)
+        public void Arm(int span, Vector3 anchor)
         {
             spanFromSupport = Mathf.Max(1, span);
+            supportAnchor = anchor;
             armed = true;
             _nextCheck = Time.time + 0.75f;
         }

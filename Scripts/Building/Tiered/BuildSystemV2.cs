@@ -62,6 +62,7 @@ namespace VoxelEngine.Building.Tiered
         private Quaternion _ghostRot = Quaternion.identity;
         private float _railingRise;
         private int _structuralSpan;
+        private Vector3 _structuralAnchor;
 
         private void Awake()
         {
@@ -141,8 +142,20 @@ namespace VoxelEngine.Building.Tiered
             // Final family-level guard lives outside every snap branch. Even an
             // older definition asset with a stale serialized family cannot bypass
             // the two-roof rule selected by the wheel.
-            if (activeFam.Value == BuildFamily.Roof && (_structuralSpan < 1 || _structuralSpan > 2))
-                _ghostValid = false;
+            bool suspendedPanel = activeFam.Value == BuildFamily.Roof
+                || activeFam.Value == BuildFamily.Floor
+                || activeFam.Value == BuildFamily.FloorHatch;
+            if (suspendedPanel)
+            {
+                // A Floor continuing from a Foundation starts one complete module
+                // from that anchor, so two unsupported panels require 15 m. Roofs
+                // still stop at span two before this wider geometric cap matters.
+                const float maximumUnsupportedReach = ConstructionModule * 2f + 0.35f;
+                bool beyondAnchor = _structuralAnchor == Vector3.zero
+                    || Vector3.Distance(_ghostPos, _structuralAnchor) > maximumUnsupportedReach;
+                if (_structuralSpan < 1 || _structuralSpan > 2 || beyondAnchor)
+                    _ghostValid = false;
+            }
             _ghost.transform.SetPositionAndRotation(_ghostPos, _ghostRot);
             if (_ghost.TryGetComponent<TieredRailing>(out var ghostRailing))
                 ghostRailing.Configure(_railingRise);
@@ -207,6 +220,7 @@ namespace VoxelEngine.Building.Tiered
         {
             _railingRise = 0f;
             _structuralSpan = 0;
+            _structuralAnchor = Vector3.zero;
             // 1) Try socket snap: look for the nearest BuildSocket within socketSnapRadius
             //    around the hit point that accepts this family.
             BuildSocket bestSocket = null;
@@ -572,7 +586,7 @@ namespace VoxelEngine.Building.Tiered
             return true;
         }
 
-        private static int ResolveStructuralSpan(PlacedTieredBlock host, BuildFamily incoming)
+        private int ResolveStructuralSpan(PlacedTieredBlock host, BuildFamily incoming)
         {
             if (host == null || host.definition == null) return 0;
             BuildFamily hostFamily = host.definition.family;
@@ -582,14 +596,27 @@ namespace VoxelEngine.Building.Tiered
             // generated Roof carries StructuralLoadState; treating an old asset's
             // incorrect family value as Wall would reset every panel to span one.
             if (incoming == BuildFamily.Roof && load != null && load.armed)
+            {
+                _structuralAnchor = load.supportAnchor;
                 return load.spanFromSupport + 1;
+            }
 
-            if (StructuralLoadState.IsVerticalSupport(hostFamily)) return 1;
-            if (incoming != BuildFamily.Roof && hostFamily == BuildFamily.Foundation) return 1;
+            if (StructuralLoadState.IsVerticalSupport(hostFamily))
+            {
+                float height = hostFamily == BuildFamily.HalfWall ? HalfWallHeight : ConstructionStorey;
+                _structuralAnchor = host.transform.position + host.transform.up * height;
+                return 1;
+            }
+            if (incoming != BuildFamily.Roof && hostFamily == BuildFamily.Foundation)
+            {
+                _structuralAnchor = host.transform.position + host.transform.up * 1.125f;
+                return 1;
+            }
 
             bool compatible = hostFamily == BuildFamily.Floor || hostFamily == BuildFamily.FloorHatch;
-            if (!compatible) return 0;
-            return load != null && load.armed ? load.spanFromSupport + 1 : 0;
+            if (!compatible || load == null || !load.armed) return 0;
+            _structuralAnchor = load.supportAnchor;
+            return load.spanFromSupport + 1;
         }
 
         private static bool HasRoofSupport(Vector3 position)
@@ -712,7 +739,7 @@ namespace VoxelEngine.Building.Tiered
             if (pb == null) pb = go.AddComponent<PlacedTieredBlock>();
             pb.Initialize(def, BuildTier.Wood);
             var load = go.GetComponent<StructuralLoadState>();
-            if (load != null && _structuralSpan > 0) load.Arm(_structuralSpan);
+            if (load != null && _structuralSpan > 0) load.Arm(_structuralSpan, _structuralAnchor);
             TagStationPiece(go, def);
             // Satisfying placement thunk at the build location.
             VoxelEngine.FX.AudioManager.PlayAt(
@@ -739,6 +766,7 @@ namespace VoxelEngine.Building.Tiered
             var def = target.definition;
             var oldLoad = target.GetComponent<StructuralLoadState>();
             int oldSpan = oldLoad != null && oldLoad.armed ? oldLoad.spanFromSupport : 0;
+            Vector3 oldAnchor = oldLoad != null ? oldLoad.supportAnchor : Vector3.zero;
             Destroy(target.gameObject);
 
             var go = Instantiate(def.GetPrefab(next), pos, rot);
@@ -747,7 +775,7 @@ namespace VoxelEngine.Building.Tiered
             if (pb == null) pb = go.AddComponent<PlacedTieredBlock>();
             pb.Initialize(def, next);
             var newLoad = go.GetComponent<StructuralLoadState>();
-            if (newLoad != null && oldSpan > 0) newLoad.Arm(oldSpan);
+            if (newLoad != null && oldSpan > 0) newLoad.Arm(oldSpan, oldAnchor);
             // Re-tag on upgrade: the upgrade path destroys and rebuilds the object, so a
             // station hull would silently stop being a station piece the first time it was
             // upgraded from wood to steel.

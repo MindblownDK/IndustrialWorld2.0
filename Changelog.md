@@ -1,9 +1,48 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `13.7.3-dev`
+**Current Version:** `13.7.5-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [13.7.5-dev] Floors Obey the Same Two-Panel Cantilever
+
+**Type:** PATCH - applies the existing suspended-span placement guard to Floors and Floor Hatches. No save schema, family value, prefab, item, recipe, research or cost changes.
+
+**Fixed - the final placement guard covered Roof only.** Floors already received `StructuralLoadState`, inherited spans and collapsed after support loss, but the pre-placement refusal checked only `BuildFamily.Roof`. A Floor chain could therefore be placed indefinitely and then collapse later, exactly as shown in the screenshot. Floor and Floor Hatch are now included in the authoritative post-transform guard.
+
+**The rule is now consistent across every suspended panel.** Span one and span two are placeable; span three is red and cannot be committed. Every Floor inherits the original Foundation or vertical-support anchor rather than creating a new origin. A new Foundation, Wall, Doorway, Window, Wall Frame, Half Wall or Pillar begins another supported run.
+
+**Foundation geometry receives the correct allowance.** A Floor continuing from a Foundation starts one complete 7.5 m module from the Foundation centre, unlike a Roof whose first centre is half a module from a wall. The shared anchor cap is therefore 15.35 m, enough for two Foundation-supported Floor modules. The explicit span-two check still prevents a third panel for both Floors and Roofs.
+
+**GitHub title:** `[13.7.5-dev] Floors obey the same two-panel cantilever`
+
+**Manual steps:**
+1. Pull `Dev` and let Unity compile. Run Setup Step 102 if Floor and Floor Hatch prefabs have not yet received `StructuralLoadState`.
+2. From one isolated Foundation, place Floor one and Floor two in a straight line.
+3. Attempt Floor three. Its ghost must be red and repeated placement clicks must do nothing.
+4. Repeat sideways from Floor two and with Floor Hatches; no span-three branch may be placed.
+5. Add a Foundation, Wall or Pillar beneath the refused position and confirm it starts a new valid run.
+6. Remove the only support from a placed Floor run and confirm the existing collapse cascade still removes the dependent panels.
+
+### [13.7.4-dev] Roof Span Keeps Its Original Support
+
+**Type:** PATCH - closes lateral span-two expansion by carrying an explicit support anchor through the load path. No save schema, family value, prefab geometry, item, recipe, research or cost changes.
+
+**A Roof now remembers the real support that started its run.** When a Wall, opening frame, Half Wall or Pillar creates span one, the candidate records that support's world-space top as `supportAnchor`. A Roof extending from another armed Roof inherits the same anchor instead of treating the neighbouring panel as a new origin.
+
+**Both conditions must pass.** A Roof must have span one or two and its centre must remain within 11.6 m of the original support anchor. The distance covers the first centre at 3.75 m and the second at 11.25 m, with only a small curved-world tolerance. A row of span-two panels can no longer grow sideways indefinitely by each touching the same lower-span panel.
+
+**Upgrades keep the complete load record.** Tier replacement transfers both `spanFromSupport` and `supportAnchor`, so upgrading cannot reset the permitted reach or manufacture a new support origin.
+
+**GitHub title:** `[13.7.4-dev] Roof span keeps its original support`
+
+**Manual steps:**
+1. Pull `Dev` and let Unity compile. Run Setup Step 102 if the current Roof prefabs have not yet received `StructuralLoadState`.
+2. Start from one isolated Wall or Pillar. Place Roof one and Roof two outward from it.
+3. Try extending farther in the same direction and sideways from Roof two. Every candidate outside the original support's two-panel reach must remain red.
+4. Add another real Wall or Pillar at the refused location. Its new anchor must allow the next two-panel run.
+5. Upgrade Roof one and Roof two, then repeat the extension test; their anchor limit must remain unchanged.
 
 ### [13.7.3-dev] The Wheel Owns the Requested Family
 

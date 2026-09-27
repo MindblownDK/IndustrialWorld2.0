@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `13.7.3-dev`
-**Roadmap Version:** `13.7.3-dev`
+**Current Version:** `13.7.5-dev`
+**Roadmap Version:** `13.7.5-dev`
 **Date:** 2026-09-27
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,16 @@
 
 ## 0. Recently Done
 
+### 13.7.5-dev - Floors Obey the Same Two-Panel Cantilever
+- **Shared guard** (`BuildSystemV2`): Floor and Floor Hatch placement now applies the same span-one/span-two validation as Roof placement.
+- **Foundation reach**: a Foundation anchor permits two 7.5 m Floor modules while a third requires another Foundation, wall, frame or pillar.
+- **Collapse agreement** (`StructuralLoadState`): the placement limit and the existing support-loss cascade now govern the same suspended Floor graph.
+
+### 13.7.4-dev - Roof Span Keeps Its Original Support
+- **Support anchor** (`StructuralLoadState`): every suspended placement records the world-space top of the real wall, frame or pillar that began its load path.
+- **Reach cap** (`BuildSystemV2`): a Roof must remain within 11.6 m of that original anchor as well as carrying span one or two, preventing lateral span-two relays from growing without bound.
+- **Upgrade continuity**: both span and original support anchor transfer across tier replacement.
+
 ### 13.7.3-dev - The Wheel Owns the Requested Family
 - **Authoritative family** (`BuildSystemV2`): snapping and validation use the wheel/token selection rather than trusting a potentially stale serialized definition family.
 - **Roof identity** (`StructuralLoadState`): an armed suspended component is resolved before legacy host-family data, preventing every Roof from being misread as a fresh span-one Wall support.
@@ -43,16 +53,6 @@
 - **Bounded graph** (`BuildSystemV2`): candidate roofs count as span one and may cross only one neighbouring roof before reaching a real vertical support.
 - **Direct load point**: walls and opening frames support roof edges while corner pillars support the same panel through a diagonal corner reach.
 - **Existing worlds**: unsupported placed roofs remain untouched; only new placement validation changes.
-
-### 13.7.0-dev - Roof Loads and Grounded Foundations
-- **Roof span rule** (`BuildSystemV2`): a roof ghost remains valid only within two modules of a wall, opening frame, half wall or pillar whose top reaches its level.
-- **Foundation legs** (`FoundationSupportLegs`, Setup Step 102): four authored corner supports extend independently down to the first solid non-building surface.
-- **Loaded-world placement** (`BuildSystemV2`): a new foundation establishes its root from the aimed terrain surface instead of rounding radial altitude to a construction-grid shell.
-
-### 13.6.5-dev - Maximum Garage Opening
-- **Two interaction surfaces** (`PlayerInteractionTool`): the rolled drum trigger and every jamb/header collider on its Wall Frame toggle the nearest fitted Garage Door.
-- **Maximum aperture** (`TieredPieceFactory`, Setup Step 102): the opening grows to 6.8 m wide by 5.05 m high, leaving only a narrow structural surround inside the 7.5 m by 5.625 m module.
-- **Matched shutter** (`TieredDoor`, `TieredPieceFactory`): the complete shutter and its collider match the aperture while the rolling calculation follows the taller door.
 
 ### Era Transition Feel
 
