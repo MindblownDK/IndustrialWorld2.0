@@ -52,7 +52,8 @@ namespace VoxelEngine.GridSystem.UI
                 case GridPortableReactor pr: return MakeScrollable(ReactorPanel(pr, slot));
                 case GridDockingPort dp:    return DockingPortPanel(dp, slot);
                 case GridLandingGear lg:    return LandingGearPanel(lg);
-                case GridWheel wh:          return WheelPanel(wh);
+                case GridWheel wh:          return MakeScrollable(WheelPanel(wh));
+                case GridWheelTire tire:    return MakeScrollable(WheelTirePanel(tire));
                 case GridSolarPanel sp:     return SolarPanel(sp);
                 case GridHydrogenEngine he: return MakeScrollable(HydrogenEnginePanel(he));
                 case GridDrill dr:          return MakeScrollable(DrillPanel(dr, slot));
@@ -2757,34 +2758,109 @@ namespace VoxelEngine.GridSystem.UI
             return p;
         }
 
-        // ── WHEEL SUSPENSION ─────────────────────────────────────────────────────
+        // ── WHEEL HUB (13.0.0) ───────────────────────────────────────────────────
         private static VisualElement WheelPanel(GridWheel wheel)
         {
             var p = T.MachinePanel();
-            var (hdr, _, _, _) = T.HeaderRow($"Wheel Suspension {wheel.wheelSizeCells}x{wheel.wheelSizeCells}",
-                wheel.IsGrounded ? "GROUNDED" : "AIRBORNE",
-                wheel.IsGrounded ? T.AccentGreen : T.AccentAmber);
+            bool fitted = wheel.HasTire;
+            string status = !fitted ? "NO TIRE" : wheel.IsGrounded ? "GROUNDED" : "AIRBORNE";
+            Color statusColor = !fitted ? T.AccentRed : wheel.IsGrounded ? T.AccentGreen : T.AccentAmber;
+
+            var (hdr, _, _, _) = T.HeaderRow($"Wheel Hub {wheel.sizeClass.Label()}", status, statusColor);
             p.Add(hdr);
             p.Add(IndustrialTheme.HazardDivider());
             p.Add(IndustrialTheme.Lamps(wheel.IsGrounded ? 2 : 1));
-            p.Add(T.StatRow("", "Power Use", PowerFormat.Watts(wheel.PowerDraw), T.AccentGold));
-            p.Add(T.StatRow("", "Drive Force", PowerFormat.Newtons(wheel.driveForce), T.AccentCyan));
-            p.Add(T.StatRow("", "Spring", PowerFormat.Newtons(wheel.springForce), T.AccentCyan));
-            p.Add(T.StatRow("", "Travel", $"{wheel.suspensionLength:0.00} m", T.TextPrimary));
-            p.Add(T.Spacer(6));
 
+            // ── Fitted tire ─────────────────────────────────────────────
+            p.Add(GridUIHelpers.SectionTitle("Tire"));
+            if (fitted)
+            {
+                var tire = wheel.Tire;
+                p.Add(T.StatRow("", "Fitted", $"{tire.sizeClass.Label()} · {tire.blockName}", T.TextPrimary));
+                p.Add(T.StatRow("", "Tread", $"{tire.tread01 * 100f:0}%",
+                    tire.tread01 > 0.5f ? T.AccentGreen : tire.tread01 > 0.2f ? T.AccentAmber : T.AccentRed));
+                p.Add(T.StatRow("", "Grip", $"{tire.EffectiveLateral:0.00} lat · {tire.EffectiveDynamic:0.00} fwd", T.AccentCyan));
+                p.Add(T.SmallButton("Eject Tire", () =>
+                {
+                    var inventory = Object.FindFirstObjectByType<VoxelEngine.Items.Inventory>();
+                    GridWheelMount.Eject(wheel, inventory);
+                    VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+                }, T.AccentAmber));
+            }
+            else
+            {
+                p.Add(T.StatRow("", "Fitted", "None — hub carries no load", T.AccentRed));
+                p.Add(T.StatRow("", "Fitting", "Hold a tire and aim at this hub", T.TextSecondary));
+            }
+
+            // ── Contact patch ───────────────────────────────────────────
+            p.Add(T.Spacer(6));
+            p.Add(GridUIHelpers.SectionTitle("Contact Patch"));
+            p.Add(T.StatRow("", "Surface", wheel.SurfaceName, T.AccentCyan));
+            p.Add(T.StatRow("", "Slip", $"{wheel.WheelSlip * 100f:0}%",
+                wheel.WheelSlip > 0.5f ? T.AccentRed : wheel.WheelSlip > 0.2f ? T.AccentAmber : T.AccentGreen));
+            p.Add(T.StatRow("", "Load", PowerFormat.Newtons(wheel.NormalLoad), T.TextPrimary));
+            p.Add(T.StatRow("", "Compression", $"{wheel.SuspensionCompression01 * 100f:0}%", T.TextPrimary));
+
+            // ── Drivetrain ──────────────────────────────────────────────
+            p.Add(T.Spacer(6));
+            p.Add(GridUIHelpers.SectionTitle("Drivetrain"));
+            p.Add(T.StatRow("", "Power Use", PowerFormat.Watts(wheel.PowerDraw), T.AccentGold));
+            p.Add(T.StatRow("", "Axle Torque", $"{wheel.motorTorque / 1000f:N0} kNm", T.AccentCyan));
+            p.Add(T.StatRow("", "Drive Force", PowerFormat.Newtons(wheel.driveForce), T.AccentCyan));
+            p.Add(T.StatRow("", "Steer Angle", $"{wheel.SteerAngleCurrent:0.0}°", T.TextPrimary));
+
+            // ── Tuning ──────────────────────────────────────────────────
+            p.Add(T.Spacer(6));
             p.Add(GridUIHelpers.SectionTitle("Suspension Tuning"));
             p.Add(SliderRow("Strength", wheel.suspensionStrength, 0.05f, 1f,
                 v => { wheel.suspensionStrength = v; }, "0%", "100%"));
+            p.Add(SliderRow("Ride Height", wheel.restLength, 0.3f, 3.0f,
+                v => { wheel.restLength = Mathf.Min(v, wheel.suspensionLength); }, "0.3m", "3.0m"));
             p.Add(SliderRow("Travel", wheel.suspensionLength, 0.5f, 3.5f,
-                v => { wheel.suspensionLength = v; }, "0.5m", "3.5m"));
+                v => { wheel.suspensionLength = Mathf.Max(v, wheel.restLength); }, "0.5m", "3.5m"));
             p.Add(SliderRow("Steer", wheel.steerAngle, 0f, 45f,
                 v => { wheel.steerAngle = v; }, "0°", "45°"));
+            p.Add(SliderRow("Steer Rate", wheel.steerSpeed, 20f, 220f,
+                v => { wheel.steerSpeed = v; }, "20°/s", "220°/s"));
+
+            p.Add(T.Spacer(6));
             p.Add(T.SmallButton(wheel.isSteerable ? "Steering: ON" : "Steering: OFF", () =>
             {
                 wheel.isSteerable = !wheel.isSteerable;
                 VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
             }, wheel.isSteerable ? T.AccentGreen : T.BgSlot));
+            p.Add(T.SmallButton(wheel.mountSide == WheelMountSide.Right ? "Mount Side: RIGHT" : "Mount Side: LEFT", () =>
+            {
+                wheel.mountSide = wheel.mountSide == WheelMountSide.Right ? WheelMountSide.Left : WheelMountSide.Right;
+                wheel.ApplySizeClass(wheel.sizeClass);
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }, T.BgSlot));
+
+            IndustrialTheme.Frame(p);
+            return p;
+        }
+
+        // ── WHEEL TIRE (13.0.0) ──────────────────────────────────────────────────
+        private static VisualElement WheelTirePanel(GridWheelTire tire)
+        {
+            var p = T.MachinePanel();
+            var (hdr, _, _, _) = T.HeaderRow($"Tire {tire.sizeClass.Label()}",
+                tire.IsMounted ? "FITTED" : "LOOSE",
+                tire.IsMounted ? T.AccentGreen : T.AccentAmber);
+            p.Add(hdr);
+            p.Add(IndustrialTheme.HazardDivider());
+            p.Add(T.StatRow("", "Radius", $"{tire.Radius:0.00} m", T.AccentCyan));
+            p.Add(T.StatRow("", "Width", $"{tire.Width:0.00} m", T.AccentCyan));
+            p.Add(T.StatRow("", "Mass", $"{tire.BlockMass:N0} kg", T.TextPrimary));
+            p.Add(T.StatRow("", "Tread", $"{tire.tread01 * 100f:0}%",
+                tire.tread01 > 0.5f ? T.AccentGreen : tire.tread01 > 0.2f ? T.AccentAmber : T.AccentRed));
+            p.Add(T.StatRow("", "Slip", $"{tire.Slip01 * 100f:0}%", T.TextPrimary));
+            p.Add(T.Spacer(6));
+            p.Add(GridUIHelpers.SectionTitle("Rubber"));
+            p.Add(T.StatRow("", "Static", $"{tire.EffectiveStatic:0.00}", T.TextPrimary));
+            p.Add(T.StatRow("", "Dynamic", $"{tire.EffectiveDynamic:0.00}", T.TextPrimary));
+            p.Add(T.StatRow("", "Lateral", $"{tire.EffectiveLateral:0.00}", T.TextPrimary));
             IndustrialTheme.Frame(p);
             return p;
         }

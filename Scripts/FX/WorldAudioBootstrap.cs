@@ -109,8 +109,10 @@ namespace VoxelEngine.FX
             foreach (var m in FindObjectsByType<GridWheel>(FindObjectsInactive.Exclude))
                 Attach(m, Sfx.WheelMotor, () =>
                 {
-                    if (!m.IsGrounded || m.Grid == null) return 0f;
-                    return Mathf.Clamp01(Mathf.Abs(m.Grid.ThrustInput.z));
+                    if (!m.IsGrounded || m.Grid == null || !m.HasTire) return 0f;
+                    // A spinning, gripless wheel is louder than a rolling one: slip feeds
+                    // the same channel so wheelspin is audible without a second emitter.
+                    return Mathf.Clamp01(Mathf.Max(Mathf.Abs(m.Grid.ThrustInput.z), m.WheelSlip));
                 }, vol: 0.4f, dist: 18f, pitchSpread: 0.25f);
         }
 

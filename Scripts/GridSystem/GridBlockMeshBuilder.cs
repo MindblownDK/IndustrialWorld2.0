@@ -15,7 +15,7 @@ namespace VoxelEngine.GridSystem
         public enum Style
         {
             Armor, Cockpit, Thruster, Battery, Cargo, Drill, Grinder, Refinery,
-            Weapon, DockingPort, Wheel, LandingGear, SolarPanel, Reactor,
+            Weapon, DockingPort, Wheel, WheelTire, LandingGear, SolarPanel, Reactor,
             LiquidTank, GasTank, H2O2, HydrogenEngine, ChemicalPlant, Glass, Demolisher, ItemPipe,
             GasPipe, LiquidPipe, Gyroscope, Beacon, OreDetector, SeasonMonitor, AirVent, AirVentFull, Heatshield, ExhaustScrubber, GasVent, FlareVent, RouteRecorder, RefuelConnector, Generic
         }
@@ -55,6 +55,7 @@ namespace VoxelEngine.GridSystem
                 case Style.Weapon:       BuildWeapon(root, cs, dark, metal); break;
                 case Style.DockingPort:  BuildDockingPort(root, cs, body, metal, glow); break;
                 case Style.Wheel:        BuildWheel(root, cs, dark, metal); break;
+                case Style.WheelTire:    BuildWheelTire(root, cs); break;
                 case Style.LandingGear:  BuildLandingGear(root, cs, metal); break;
                 case Style.HydrogenEngine: BuildHydrogenEngine(root, cs, body, metal, glow); break;
                 case Style.SolarPanel:   BuildSolarPanel(root, cs, metal); break;
@@ -183,75 +184,32 @@ namespace VoxelEngine.GridSystem
             Cyl(r, glow, new Vector3(0, cs*0.27f, 0), cs*0.3f, cs*0.03f); // guide light
         }
 
+        // ── Wheel hub + tire (13.0.0) ───────────────────────────────────────
+        // The one-piece wheel is gone. `GridWheelMeshBuilder` owns both halves so the
+        // hub's rig transforms (SteerPivot / SuspensionCarrier / TireSocket) and the
+        // tire's spin pivot are authored in exactly one place, textures included.
         private static void BuildWheel(GameObject r, float cs, Material body, Material metal)
         {
-            int cells = 3;
-            string lowerName = r.name.ToLowerInvariant();
-            if (lowerName.Contains("2x2")) cells = 2;
-            else if (lowerName.Contains("5x5")) cells = 5;
+            GridWheelMeshBuilder.BuildHub(r, SizeClassFromName(r.name), cs, SideFromName(r.name));
+        }
 
-            float radius = cs * cells * 0.5f;
-            float width = cs * Mathf.Lerp(0.38f, 0.62f, Mathf.InverseLerp(2f, 5f, cells));
-            float mountY = cs * 0.42f;
-            float wheelY = -radius * 0.45f;
-            var rubber = Mat(new Color(0.025f, 0.026f, 0.030f), 0.25f, 0.28f);
-            var rim = Mat(new Color(0.42f, 0.44f, 0.48f), 0.85f, 0.50f);
-            var piston = Mat(new Color(0.72f, 0.74f, 0.78f), 0.95f, 0.68f);
+        private static void BuildWheelTire(GameObject r, float cs)
+        {
+            GridWheelMeshBuilder.BuildTire(r, SizeClassFromName(r.name), cs);
+        }
 
-            // Cell attachment, suspension body and armored shoulders.
-            Box(r, metal, new Vector3(0, mountY, 0), new Vector3(cs * 0.95f, cs * 0.34f, cs * 0.90f));
-            Box(r, body,  new Vector3(0, mountY - cs * 0.27f, 0), new Vector3(cs * 0.56f, cs * 0.45f, cs * 0.56f));
-            Box(r, metal, new Vector3(-width * 0.72f, mountY - cs * 0.20f, 0), new Vector3(cs * 0.16f, cs * 0.42f, cs * 0.62f));
-            Box(r, metal, new Vector3( width * 0.72f, mountY - cs * 0.20f, 0), new Vector3(cs * 0.16f, cs * 0.42f, cs * 0.62f));
+        private static WheelSizeClass SizeClassFromName(string name)
+        {
+            string lower = (name ?? string.Empty).ToLowerInvariant();
+            if (lower.Contains("2x2")) return WheelSizeClass.Size_2x2;
+            if (lower.Contains("5x5")) return WheelSizeClass.Size_5x5;
+            return WheelSizeClass.Size_3x3;
+        }
 
-            // Hydraulic suspension pistons and guide rails.
-            float pistonHeight = Mathf.Abs(mountY - wheelY) * 0.82f;
-            var pistonA = Cyl(r, piston, new Vector3(-width * 0.34f, (mountY + wheelY) * 0.5f, -cs * 0.18f), cs * 0.045f, pistonHeight);
-            pistonA.transform.localRotation = Quaternion.identity;
-            var pistonB = Cyl(r, piston, new Vector3( width * 0.34f, (mountY + wheelY) * 0.5f, -cs * 0.18f), cs * 0.045f, pistonHeight);
-            pistonB.transform.localRotation = Quaternion.identity;
-            Box(r, metal, new Vector3(-width * 0.50f, (mountY + wheelY) * 0.5f, cs * 0.18f), new Vector3(cs * 0.09f, pistonHeight, cs * 0.09f));
-            Box(r, metal, new Vector3( width * 0.50f, (mountY + wheelY) * 0.5f, cs * 0.18f), new Vector3(cs * 0.09f, pistonHeight, cs * 0.09f));
-
-            // Steering fork and axle yoke.
-            Box(r, metal, new Vector3(0, wheelY + radius * 0.18f, 0), new Vector3(width * 1.65f, cs * 0.13f, cs * 0.18f));
-            Box(r, metal, new Vector3(-width * 0.82f, wheelY, 0), new Vector3(cs * 0.13f, radius * 0.90f, cs * 0.16f));
-            Box(r, metal, new Vector3( width * 0.82f, wheelY, 0), new Vector3(cs * 0.13f, radius * 0.90f, cs * 0.16f));
-
-            // Steering pivot used by GridWheel. TireSpinPivot spins the tire separately.
-            var pivot = new GameObject("WheelVisualPivot");
-            pivot.transform.SetParent(r.transform, false);
-            pivot.transform.localPosition = new Vector3(0, wheelY, 0);
-            var spin = new GameObject("TireSpinPivot");
-            spin.transform.SetParent(pivot.transform, false);
-
-            // Tyre, rim side plates, hub and bolts. Cylinder axis along local X.
-            var tyre = Cyl(spin, rubber, V0, radius, width);
-            tyre.transform.localRotation = Quaternion.Euler(0, 0, 90);
-            var sideA = Cyl(spin, rim, new Vector3(-width * 0.52f, 0, 0), radius * 0.54f, cs * 0.055f);
-            sideA.transform.localRotation = Quaternion.Euler(0, 0, 90);
-            var sideB = Cyl(spin, rim, new Vector3( width * 0.52f, 0, 0), radius * 0.54f, cs * 0.055f);
-            sideB.transform.localRotation = Quaternion.Euler(0, 0, 90);
-            var hub = Cyl(spin, metal, V0, radius * 0.26f, width * 1.22f);
-            hub.transform.localRotation = Quaternion.Euler(0, 0, 90);
-
-            // Deep tread blocks around the tyre.
-            int treadCount = cells >= 5 ? 24 : cells == 3 ? 18 : 14;
-            for (int i = 0; i < treadCount; i++)
-            {
-                float a = i / (float)treadCount * Mathf.PI * 2f;
-                var tread = Box(spin, metal,
-                    new Vector3(0, Mathf.Sin(a) * radius * 0.94f, Mathf.Cos(a) * radius * 0.94f),
-                    new Vector3(width * 1.05f, cs * 0.075f, cs * 0.22f));
-                tread.transform.localRotation = Quaternion.Euler(Mathf.Rad2Deg * a, 0, 0);
-            }
-
-            // Rim bolts on the visible side.
-            for (int i = 0; i < 8; i++)
-            {
-                float a = i / 8f * Mathf.PI * 2f;
-                Sphere(spin, metal, new Vector3(width * 0.58f, Mathf.Sin(a) * radius * 0.30f, Mathf.Cos(a) * radius * 0.30f), cs * 0.055f);
-            }
+        private static WheelMountSide SideFromName(string name)
+        {
+            string lower = (name ?? string.Empty).ToLowerInvariant();
+            return lower.Contains("left") ? WheelMountSide.Left : WheelMountSide.Right;
         }
 
         private static void BuildHydrogenEngine(GameObject r, float cs, Material body, Material metal, Material glow)

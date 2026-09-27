@@ -1880,6 +1880,7 @@ namespace VoxelEngine.EditorTools
             if (n.Contains("grinder"))    return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Grinder;
             if (n.Contains("weapon"))     return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Weapon;
             if (n.Contains("docking"))    return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.DockingPort;
+            if (n.Contains("tire"))       return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.WheelTire;
             if (n.Contains("wheel"))      return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.Wheel;
             if (n.Contains("landing"))    return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.LandingGear;
             if (n.Contains("solar"))      return VoxelEngine.GridSystem.GridBlockMeshBuilder.Style.SolarPanel;
@@ -7048,7 +7049,10 @@ root =>
                 float scale = size == VoxelEngine.GridSystem.GridSize.Small ? 3.5f : 8.0f;
                 float floor = size == VoxelEngine.GridSystem.GridSize.Small ? 180f : 2500f;
                 string n = (display ?? string.Empty).ToLowerInvariant();
-                if (n.Contains("armor")) floor = size == VoxelEngine.GridSystem.GridSize.Small ? 450f : 10000f;
+                // Tires are rubber, not frame: they must not inherit the hub's mass floor
+                // or a 5x5 carcass would weigh as much as the suspension carrying it.
+                if (n.Contains("tire")) floor = n.Contains("5x5") ? 4600f : n.Contains("2x2") ? 1300f : 2700f;
+                else if (n.Contains("armor")) floor = size == VoxelEngine.GridSystem.GridSize.Small ? 450f : 10000f;
                 else if (n.Contains("cargo")) floor = size == VoxelEngine.GridSystem.GridSize.Small ? 900f : 8500f;
                 else if (n.Contains("cockpit")) floor = size == VoxelEngine.GridSystem.GridSize.Small ? 700f : 12000f;
                 else if (n.Contains("5x5")) floor = 12000f;
@@ -7094,6 +7098,11 @@ root =>
                         AssetDatabase.CreateAsset(mat, mp);
                         return AssetDatabase.LoadAssetAtPath<Material>(mp);
                     };
+                    // 13.0.0: procedural wheel maps are baked to .png assets. A prefab that
+                    // referenced a runtime-only Texture2D loses it on domain reload, which is
+                    // exactly how a tire ends up untextured after the editor restarts.
+                    VoxelEngine.GridSystem.WheelTextureFactory.TexturePersister =
+                        (tex, key) => PersistGeneratedTexture(tex, key, PREFABS + "/Textures");
 
                     try
                     {
@@ -7146,6 +7155,8 @@ root =>
                     finally
                     {
                         VoxelEngine.GridSystem.GridBlockMeshBuilder.MaterialPersister = null;
+                        VoxelEngine.GridSystem.WheelTextureFactory.TexturePersister = null;
+                        VoxelEngine.GridSystem.WheelTextureFactory.ClearCache();
                     }
                 });
 
@@ -7471,41 +7482,95 @@ root =>
             AddGRecipe("Recipe_GDockingPort", "Docking Port", itemDock, (steelPlate, 5), (circuit, 2), (copperWire, 4));
 
             // -- 8) Mobility & Landing --
-            void MakeWheel(string id, string display, int cells, float mass, float hp,
-                float drive, float spring, float damping, float travel, float watts,
-                params (VoxelEngine.Items.ItemDefinition item, int n)[] cost)
+            // 13.0.0: a wheel is two parts. The hub bolts to the grid and owns spring,
+            // steering and torque; the tire snaps onto the hub socket and owns rubber.
+            // Both are rebuilt non-destructively: an existing prefab keeps any tuning the
+            // player or a designer changed, and only missing wiring is repaired.
+            void MakeWheelHub(string id, string display, VoxelEngine.GridSystem.WheelSizeClass sizeClass,
+                float hp, params (VoxelEngine.Items.ItemDefinition item, int n)[] cost)
             {
-                var pref = MakeGPref<VoxelEngine.GridSystem.GridWheel>(id, new Color(0.12f, 0.12f, 0.12f), Vector3.one,
+                float cs = VoxelEngine.GridSystem.GridSizeExt.CellSize(VoxelEngine.GridSystem.GridSize.Large);
+                var preset = VoxelEngine.GridSystem.WheelTuning.For(sizeClass, cs);
+                var pref = MakeGPref<VoxelEngine.GridSystem.GridWheel>(id, new Color(0.30f, 0.32f, 0.35f), Vector3.one,
                     w =>
                     {
-                        w.wheelSizeCells = cells;
-                        w.driveForce = drive;
-                        w.springForce = spring;
-                        w.damping = damping;
-                        w.suspensionLength = travel;
-                        w.powerDrawWatts = watts;
-                        w.steerAngle = 30f;
+                        w.sizeClass = sizeClass;
+                        w.wheelSizeCells = (int)sizeClass;
+                        w.blockName = display;
+                        w.springForce = preset.SpringStrength;
+                        w.damping = preset.DamperRate;
+                        w.restLength = preset.RestLength;
+                        w.minTravel = preset.MinTravel;
+                        w.suspensionLength = preset.MaxTravel;
+                        w.motorTorque = preset.MotorTorque;
+                        w.brakeTorque = preset.BrakeTorque;
+                        w.handbrakeTorque = preset.HandbrakeTorque;
+                        w.powerDrawWatts = preset.PowerDrawWatts;
+                        w.driveForce = preset.MotorTorque / Mathf.Max(0.25f, preset.TireRadius);
+                        w.steerAngle = preset.MaxSteerAngle;
+                        w.steerSpeed = preset.SteerSpeed;
+                        w.steerReturnSpeed = preset.SteerReturnSpeed;
+                        w.isSteerable = true;
+                        // Mix and match is intentional: any tire fits any hub, and the hub
+                        // re-rates its spring for the radius it ends up carrying.
+                        w.acceptedTireSizes = new VoxelEngine.GridSystem.WheelSizeClass[0];
                         var box = w.GetComponent<BoxCollider>();
                         if (box != null)
                         {
-                            float cs = VoxelEngine.GridSystem.GridSizeExt.CellSize(VoxelEngine.GridSystem.GridSize.Large);
-                            box.size = new Vector3(cs * Mathf.Max(1f, cells * 0.65f), cs * Mathf.Max(1.2f, cells * 0.95f), cs * Mathf.Max(1f, cells * 0.65f));
-                            box.center = new Vector3(0f, -cs * cells * 0.22f, 0f);
+                            box.size = new Vector3(cs, cs, cs);
+                            box.center = Vector3.zero;
                         }
                     });
-                var item = MakeGItem("GItem_" + id, display, Color.white, pref, VoxelEngine.GridSystem.GridSize.Large, mass, hp);
+                var item = MakeGItem("GItem_" + id, display, Color.white, pref,
+                    VoxelEngine.GridSystem.GridSize.Large, preset.HubMass / 8f, hp);
                 AddGRecipe("Recipe_G" + id, display, item, cost);
             }
 
-            MakeWheel("Wheel_2x2", "Wheel Suspension 2x2", 2, 1100, 450,
-                220000f, 120000f, 16000f, 1.0f, 450f,
-                (steelPlate, 3), (ironPlate, 2), (copperWire, 2));
-            MakeWheel("Wheel_3x3", "Wheel Suspension 3x3", 3, 2400, 650,
-                520000f, 210000f, 26000f, 1.45f, 900f,
-                (steelPlate, 5), (ironPlate, 4), (copperWire, 4), (ironGear, 2));
-            MakeWheel("Wheel_5x5", "Wheel Suspension 5x5", 5, 6200, 1000,
-                1350000f, 420000f, 48000f, 2.35f, 1800f,
-                (steelPlate, 10), (ironPlate, 8), (copperWire, 8), (ironGear, 6), (circuit, 1));
+            void MakeWheelTire(string id, string display, VoxelEngine.GridSystem.WheelSizeClass sizeClass,
+                float hp, params (VoxelEngine.Items.ItemDefinition item, int n)[] cost)
+            {
+                float cs = VoxelEngine.GridSystem.GridSizeExt.CellSize(VoxelEngine.GridSystem.GridSize.Large);
+                var preset = VoxelEngine.GridSystem.WheelTuning.For(sizeClass, cs);
+                var pref = MakeGPref<VoxelEngine.GridSystem.GridWheelTire>(id, new Color(0.08f, 0.08f, 0.09f), Vector3.one,
+                    t =>
+                    {
+                        t.sizeClass = sizeClass;
+                        t.blockName = display;
+                        t.radiusScale = 1f;
+                        t.widthScale = 1f;
+                        t.staticFriction = preset.StaticFriction;
+                        t.dynamicFriction = preset.DynamicFriction;
+                        t.lateralGrip = preset.LateralGrip;
+                        // The ghost reads this collider, so it must match the carcass, not a cell.
+                        var box = t.GetComponent<BoxCollider>();
+                        if (box != null)
+                        {
+                            box.size = new Vector3(preset.TireWidth, preset.TireRadius * 2f, preset.TireRadius * 2f);
+                            box.center = Vector3.zero;
+                            box.isTrigger = false;
+                        }
+                    });
+                var item = MakeGItem("GItem_" + id, display, Color.white, pref,
+                    VoxelEngine.GridSystem.GridSize.Large, preset.TireMass / 8f, hp);
+                AddGRecipe("Recipe_G" + id, display, item, cost);
+            }
+
+            MakeWheelHub("WheelHub_2x2", "Wheel Hub 2x2", VoxelEngine.GridSystem.WheelSizeClass.Size_2x2, 450,
+                (steelPlate, 4), (ironPlate, 2), (copperWire, 2), (ironGear, 1));
+            MakeWheelHub("WheelHub_3x3", "Wheel Hub 3x3", VoxelEngine.GridSystem.WheelSizeClass.Size_3x3, 650,
+                (steelPlate, 7), (ironPlate, 4), (copperWire, 4), (ironGear, 3));
+            MakeWheelHub("WheelHub_5x5", "Wheel Hub 5x5", VoxelEngine.GridSystem.WheelSizeClass.Size_5x5, 1000,
+                (steelPlate, 14), (ironPlate, 8), (copperWire, 8), (ironGear, 6), (circuit, 2));
+
+            MakeWheelTire("WheelTire_2x2", "Wheel Tire 2x2", VoxelEngine.GridSystem.WheelSizeClass.Size_2x2, 320,
+                (steelPlate, 2), (ironPlate, 3));
+            MakeWheelTire("WheelTire_3x3", "Wheel Tire 3x3", VoxelEngine.GridSystem.WheelSizeClass.Size_3x3, 460,
+                (steelPlate, 3), (ironPlate, 5));
+            MakeWheelTire("WheelTire_5x5", "Wheel Tire 5x5", VoxelEngine.GridSystem.WheelSizeClass.Size_5x5, 720,
+                (steelPlate, 6), (ironPlate, 9), (ironGear, 2));
+
+            // Surface friction profiles the wheels read every contact (13.0.0).
+            EnsureSurfaceProfiles();
 
             var gearPref = MakeGPref<VoxelEngine.GridSystem.GridLandingGear>("LandingGear_Large", new Color(0.5f, 0.5f, 0.55f), new Vector3(0.8f, 1.0f, 0.8f));
             var itemGear = MakeGItem("GItem_LandingGear", "Landing Gear", Color.white, gearPref, VoxelEngine.GridSystem.GridSize.Large, 480, 450);
@@ -7750,7 +7815,7 @@ root =>
                 $"Step 12 complete — generated {recipes.Count} grid blocks (prefabs + items + recipes) in:\n{GRID_ROOT}\n\n" +
                 "• Cockpit, Thruster, Battery (Small + Large + Giant), Armor\n" +
                 "• Drill, Grinder, Refinery, Weapon, Demolisher (Large)\n" +
-                "• Cargo, Docking Port, 2x2 / 3x3 / 5x5 Wheel Suspensions, Landing Gear\n" +
+                "• Cargo, Docking Port, 2x2 / 3x3 / 5x5 Wheel Hubs + Tires, Landing Gear\n" +
                 "• Solar Panel, Portable Reactor, Hydrogen Engine, Water/Fuel/Gas Tanks, H2/O2 Gen\n" +
                 "• Glass Block, Chemical Plant\n\n" +
                 "Grid Refinery shares the SAME ProcessingRecipes as the Oil Refinery.\n" +
@@ -10651,6 +10716,148 @@ root =>
             lithium.fuelSeconds = 0f;
             EditorUtility.SetDirty(lithium);
             return lithium;
+        }
+
+        /// <summary>
+        /// Bakes a procedurally generated wheel texture to a .png asset. Runtime textures
+        /// do not survive a domain reload inside a prefab, so every generated map is
+        /// written once and re-used from disk on later runs.
+        /// </summary>
+        private static Texture2D PersistGeneratedTexture(Texture2D texture, string key, string folder)
+        {
+            if (texture == null || string.IsNullOrEmpty(key)) return texture;
+            EnsureFolder(folder);
+            string path = $"{folder}/{key}.png";
+            var existing = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+            if (existing != null) return existing;
+
+            var bytes = texture.EncodeToPNG();
+            if (bytes == null || bytes.Length == 0) return texture;
+            System.IO.File.WriteAllBytes(path, bytes);
+            AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
+
+            var importer = AssetImporter.GetAtPath(path) as TextureImporter;
+            if (importer != null)
+            {
+                bool isNormal = key.Contains("_N_") || key.ToLowerInvariant().Contains("normal");
+                importer.textureType = isNormal ? TextureImporterType.NormalMap : TextureImporterType.Default;
+                importer.wrapMode = TextureWrapMode.Repeat;
+                importer.filterMode = FilterMode.Trilinear;
+                importer.anisoLevel = 4;
+                importer.mipmapEnabled = true;
+                importer.SaveAndReimport();
+            }
+            return AssetDatabase.LoadAssetAtPath<Texture2D>(path) ?? texture;
+        }
+
+        /// <summary>
+        /// Builds (or repairs) the surface friction profiles the wheel system samples.
+        /// Non-destructive: an existing profile keeps every tuned multiplier and only has
+        /// its matching keys and library membership repaired.
+        /// </summary>
+        private static void EnsureSurfaceProfiles()
+        {
+            const string surfaceFolder = ASSET_ROOT + "/Environment/Surfaces";
+            const string resourcesFolder = "Assets/Resources";
+            EnsureFolder(ASSET_ROOT + "/Environment");
+            EnsureFolder(surfaceFolder);
+            EnsureFolder(resourcesFolder);
+
+            var library = GetOrCreateAsset<VoxelEngine.Environment.SurfaceProfileLibrary>(
+                $"{resourcesFolder}/{VoxelEngine.Environment.SurfaceProfileLibrary.ResourceName}.asset");
+            if (library.profiles == null) library.profiles = new List<VoxelEngine.Environment.SurfaceProfile>();
+
+            VoxelEngine.Environment.SurfaceProfile Profile(string assetName, string display,
+                float forward, float lateral, float steering, float rolling,
+                Color plume, string[] keywords, VoxelEngine.Materials.MaterialId[] voxels)
+            {
+                string path = $"{surfaceFolder}/{assetName}.asset";
+                var existing = AssetDatabase.LoadAssetAtPath<VoxelEngine.Environment.SurfaceProfile>(path);
+                bool created = existing == null;
+                var profile = GetOrCreateAsset<VoxelEngine.Environment.SurfaceProfile>(path);
+
+                if (created)
+                {
+                    // Only a brand-new asset gets authored tuning. A tuned surface keeps its
+                    // numbers across every later run of this step.
+                    profile.surfaceName = display;
+                    profile.forwardFriction = forward;
+                    profile.lateralGrip = lateral;
+                    profile.steeringResponse = steering;
+                    profile.rollingResistance = rolling;
+                    profile.plumeColor = plume;
+                    profile.debugTint = new Color(plume.r, plume.g, plume.b, 1f);
+                }
+                if (string.IsNullOrWhiteSpace(profile.surfaceName)) profile.surfaceName = display;
+
+                // Keys are connective tissue, not tuning: always repaired, never removed.
+                var keySet = new List<string>();
+                if (profile.terrainLayerKeywords != null) keySet.AddRange(profile.terrainLayerKeywords);
+                foreach (var key in keywords) if (!keySet.Contains(key)) keySet.Add(key);
+                profile.terrainLayerKeywords = keySet.ToArray();
+
+                var matKeys = new List<string>();
+                if (profile.physicsMaterialKeywords != null) matKeys.AddRange(profile.physicsMaterialKeywords);
+                foreach (var key in keywords) if (!matKeys.Contains(key)) matKeys.Add(key);
+                profile.physicsMaterialKeywords = matKeys.ToArray();
+
+                var voxelSet = new List<VoxelEngine.Materials.MaterialId>();
+                if (profile.voxelMaterials != null) voxelSet.AddRange(profile.voxelMaterials);
+                foreach (var voxel in voxels) if (!voxelSet.Contains(voxel)) voxelSet.Add(voxel);
+                profile.voxelMaterials = voxelSet.ToArray();
+
+                EditorUtility.SetDirty(profile);
+                if (!library.profiles.Contains(profile)) library.profiles.Add(profile);
+                return profile;
+            }
+
+            var dirt = Profile("Surface_Dirt", "Dirt", 0.95f, 0.95f, 1.00f, 0.030f,
+                new Color(0.55f, 0.44f, 0.32f, 0.55f),
+                new[] { "dirt", "soil", "earth", "ground" },
+                new[] { VoxelEngine.Materials.MaterialId.Clay });
+
+            Profile("Surface_Grass", "Grass", 0.88f, 0.86f, 0.96f, 0.035f,
+                new Color(0.45f, 0.52f, 0.30f, 0.45f),
+                new[] { "grass", "meadow", "turf" },
+                new[] { VoxelEngine.Materials.MaterialId.Grass, VoxelEngine.Materials.MaterialId.Wood });
+
+            Profile("Surface_Sand", "Sand", 0.62f, 0.58f, 0.80f, 0.085f,
+                new Color(0.80f, 0.71f, 0.48f, 0.60f),
+                new[] { "sand", "dune", "desert", "dust", "regolith", "ash" },
+                new[] { VoxelEngine.Materials.MaterialId.Sand, VoxelEngine.Materials.MaterialId.MartianDust,
+                        VoxelEngine.Materials.MaterialId.VenusAsh });
+
+            Profile("Surface_Rock", "Rock", 1.05f, 1.08f, 1.05f, 0.022f,
+                new Color(0.48f, 0.48f, 0.50f, 0.40f),
+                new[] { "rock", "stone", "basalt", "cliff", "gravel", "crystal" },
+                new[] { VoxelEngine.Materials.MaterialId.Stone, VoxelEngine.Materials.MaterialId.VolcanicBasalt,
+                        VoxelEngine.Materials.MaterialId.CrystalGeode });
+
+            Profile("Surface_Ice", "Ice", 0.18f, 0.14f, 0.45f, 0.008f,
+                new Color(0.78f, 0.88f, 0.95f, 0.35f),
+                new[] { "ice", "frozen", "glacier" },
+                new[] { VoxelEngine.Materials.MaterialId.Ice, VoxelEngine.Materials.MaterialId.WaterVoxel });
+
+            Profile("Surface_Mud", "Mud", 0.55f, 0.48f, 0.75f, 0.095f,
+                new Color(0.34f, 0.28f, 0.20f, 0.65f),
+                new[] { "mud", "bog", "swamp", "marsh" },
+                new[] { VoxelEngine.Materials.MaterialId.AcidBog });
+
+            Profile("Surface_Asphalt", "Asphalt", 1.25f, 1.30f, 1.15f, 0.014f,
+                new Color(0.32f, 0.32f, 0.34f, 0.30f),
+                new[] { "asphalt", "tarmac", "road", "bridge", "pathway" },
+                new VoxelEngine.Materials.MaterialId[0]);
+
+            Profile("Surface_Metal", "Metal Deck", 1.10f, 1.12f, 1.10f, 0.012f,
+                new Color(0.60f, 0.62f, 0.66f, 0.25f),
+                new[] { "metal", "steel", "deck", "hull", "plate" },
+                new[] { VoxelEngine.Materials.MaterialId.Iron });
+
+            if (library.defaultProfile == null) library.defaultProfile = dirt;
+            library.Rebuild();
+            EditorUtility.SetDirty(library);
+            VoxelEngine.Environment.SurfaceProfileLibrary.InvalidateActive();
+            VoxelEngine.Environment.SurfaceSampler.ClearCaches();
         }
 
         private static T GetOrCreateAsset<T>(string path) where T : ScriptableObject

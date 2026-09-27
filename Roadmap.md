@@ -29,6 +29,15 @@
 
 ## 0. Recently Done
 
+### 13.0.0-dev - Modular Wheel Hub and Tire Overhaul with Terrain Surface Friction Engine
+- **Two-part wheel** (`GridWheel`, `GridWheelTire`, `GridWheelMount`): hub owns suspension, steering and torque; the tire snaps onto the hub socket and owns rubber, radius and mass.
+- **Snap placement** (`GridBuilder`, `GridWheelMount`): a held tire draws its ghost on the aimed hub socket and fits there on click, with blocked reasons surfaced to the HUD.
+- **Preset scaling** (`WheelSizeClass`, `WheelTuning`): one table resolves 2x2 / 3x3 / 5x5 geometry, spring, damper, torque, steering and mass; any tire fits any hub with a re-rated spring.
+- **Hand-solved physics** (`WheelSuspensionSolver`): allocation-free raycast spring, friction-circle tire forces and reported slip, with no Unity WheelCollider anywhere.
+- **Surface friction engine** (`SurfaceProfile`, `SurfaceProfileLibrary`, `SurfaceSampler`): asphalt runs, Unity Terrain alphamaps, PhysicsMaterials and voxel materials all resolve to one profile per contact patch.
+- **Feedback** (`WheelSlipFx`, `WorldAudioBootstrap`, `GridBlockUI`): surface-tinted slip plumes, slip-driven motor audio, and a hub panel reporting tire, surface, slip, load and compression.
+- **Procedural dressing** (`GridWheelMeshBuilder`, `WheelTextureFactory`, `VoxelEngineSetupWindow`): wishbone linkages that track the strut plus baked tread, steel and chrome maps.
+
 ### 12.41.7-dev - Endpoint-Validated Energy Pipe Topology
 - **Shared socket contract** (`PowerCable`): topology and visual occupancy now use the same 0.85 m, opposing-face connector rule.
 - **Machine-edge validation** (`PowerCable`, `SurfacePowerTap`): only open, outward-facing pipe endpoints may bridge or restore static machine taps.

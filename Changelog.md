@@ -1,9 +1,39 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `12.41.7-dev`
+**Current Version:** `13.0.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [13.0.0-dev] Modular Wheel Hub and Tire Overhaul with Terrain Surface Friction Engine
+
+**Type:** MAJOR - the one-piece grid wheel is replaced by a two-part hub + tire system with a hand-solved suspension and a surface-aware friction engine. Existing saved vehicles restore their wheel hubs but load with NO tire fitted, so every legacy rig needs tires crafted and snapped on before it drives again.
+
+**Two-part wheel:** `GridWheel` is now the suspension HUB: it bolts to a grid cell and owns the spring, damper, steering knuckle, brake and axle torque. `GridWheelTire` is a separate attachment that snaps onto the hub's `TireSocket` and owns radius, width, mass and rubber friction. A tire is not a lattice block, so a 5x5 carcass hangs outside the cell it is driven from and never blocks a build. A hub with no tire carries no load, makes no torque and reports NO TIRE in its panel.
+
+**Ghost snaps to the hub:** holding a tire switches `GridBuilder` into a dedicated mount path. The ghost is drawn at the hub socket the player is aiming at, never under the crosshair, so the preview is literally the placement. Direct aim beats proximity; otherwise the nearest compatible free socket within 6 m is scored by angle to the view ray. Blocked fittings show the reason (already fitted, wrong size, no hub in range).
+
+**Mix and match sizing:** `WheelSizeClass` (`Size_2x2`, `Size_3x3`, `Size_5x5`) drives one preset table in `WheelTuning` that resolves collider radius, spring rate, damper rate, rest length, travel limits, axle/brake/handbrake torque, steering angle, steering rate and mass for a given cell size. Any tire fits any hub: the hub re-rates its spring and damper by the radius ratio so a 5x5 tire on a 3x3 hub raises the rig instead of bottoming out.
+
+**No WheelCollider:** `WheelSuspensionSolver` is a pure, allocation-free raycast-spring and tire-force solver. Per wheel it produces suspension force from compression and axis velocity, longitudinal force from motor torque over radius, brake force capped by both pad and ground, rolling resistance, and a lateral impulse that cancels sideways slip - then clamps the result to the friction circle of that wheel's own normal load. Whatever the circle refuses is reported as slip instead of being silently applied.
+
+**Terrain surface friction engine:** `SurfaceProfile` (ScriptableObject) carries surface name, forward friction, lateral grip, steering response, rolling resistance and slip FX threshold. `SurfaceProfileLibrary` maps Unity TerrainLayer names, PhysicsMaterial names and voxel `MaterialId` values onto profiles through one dictionary-backed lookup. `SurfaceSampler` resolves a contact patch in priority order: asphalt road run (with its wear multipliers), explicit `SurfaceTag`, Unity Terrain alphamap dominant layer, collider PhysicsMaterial (deriving multipliers when unregistered), then the voxel material below the wheel. Terrain alphamap reads are cached per terrain cell and collider lookups by instance id, so a convoy costs no per-wheel allocation.
+
+**Slip made visible and audible:** `GridWheel.WheelSlip` is exposed for FX and audio. `WheelSlipFx` emits a plume tinted by the current surface profile once slip passes that surface's threshold, and `WorldAudioBootstrap` feeds slip into the wheel motor channel so wheelspin is heard as well as seen. Tread wears from slip, not distance, and worn rubber loses grip down to a floor.
+
+**Visual linkages and procedural textures:** `GridWheelMeshBuilder` authors the hub (mount plate, steering knuckle, upper and lower wishbones, coil-over strut, brake disc and caliper, mount socket) and the tire (crowned carcass, directional lugs, shoulder blocks, dished rim, hub cap, lug nuts). Both wishbones aim at the moving carrier and stretch to reach it every step. `WheelTextureFactory` generates tread rubber, machined hub steel and chromed strut maps with matching normals; the setup tool bakes each map to a .png asset so prefabs never reference a runtime-only texture.
+
+**Save schema:** `SavedGridBlock` gains additive wheel hub fields (mounted tire item id, mount side, size class, steerable flag, suspension strength, ride height, travel, tread). Legacy saves omit them and restore a bare hub - the breaking change this MAJOR bump exists for.
+
+**GitHub title:** `[13.0.0-dev] Modular wheel hub and tire overhaul with terrain surface friction engine`
+
+**Manual steps:** in Unity on `Dev`, let the scripts compile and clear the Console. Run `Tools -> Voxel Engine -> Voxel Engine Setup` and press `12. Build Grid System Content` (non-destructive: existing prefabs, items, recipes and surface profiles keep their tuned values and only get missing wiring repaired).
+1. Confirm the new items exist: `Wheel Hub 2x2 / 3x3 / 5x5` and `Wheel Tire 2x2 / 3x3 / 5x5`, each with an Assembler recipe.
+2. Confirm `Assets/Resources/SurfaceProfileLibrary.asset` exists and lists the eight profiles under `Assets/VoxelEngineAssets/Environment/Surfaces` (Dirt, Grass, Sand, Rock, Ice, Mud, Asphalt, Metal Deck).
+3. In play mode, build a small grid with a cockpit and a battery, place four wheel hubs on the sides, then hold a tire: the ghost should jump onto the hub socket. Click to fit each tire.
+4. Drive it. Check the hub panel shows GROUNDED, the live surface name, slip percentage and load, and that the wishbones follow the strut over bumps.
+5. Drive onto ice or sand and confirm the rig loses drive and steering bite, throws a surface-tinted plume, and that asphalt gives back the most grip.
+6. Save and reload: hubs come back with the same tires, tread and tuning. Any vehicle saved before this version comes back with bare hubs - fit new tires.
 
 ### [12.41.7-dev] Endpoint-Validated Energy Pipe Topology
 

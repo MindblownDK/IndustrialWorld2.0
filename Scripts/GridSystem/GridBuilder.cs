@@ -123,6 +123,14 @@ namespace VoxelEngine.GridSystem
                 hit = beltHit;
                 hasHit = true;
             }
+            // Tires never free-place: they snap onto a wheel hub's mount socket, and the
+            // ghost is drawn at that socket so the preview is the placement (13.0.0).
+            if (GridWheelMount.IsTireItem(gbi))
+            {
+                HandleTirePlacement(gbi, ray, hit, hasHit);
+                return;
+            }
+
             if (!hasHit)
             {
                 HideGhost();
@@ -365,6 +373,60 @@ namespace VoxelEngine.GridSystem
             {
                 inventory.container.Remove(gbi, 1);
             }
+        }
+
+        // ── Wheel tire snapping (13.0.0) ──────────────────────────────────
+        private float _tireFeedbackAt;
+
+        /// <summary>
+        /// Drives the held tire's ghost onto the hub socket the player is aiming at and
+        /// commits the fitting on click. Nothing here touches the lattice: a tire is an
+        /// attachment on the hub, which is what lets a 5x5 carcass hang outside the cell
+        /// it is driven from.
+        /// </summary>
+        private void HandleTirePlacement(GridBlockItem item, Ray ray, RaycastHit hit, bool hasHit)
+        {
+            HidePrecisionLattice();
+            HideGhostPortRing();
+            HideLedStretchGhost();
+            CancelLedStretch(false);
+
+            var snap = GridWheelMount.FindSnap(item, ray, hit, hasHit);
+            bool pressed = GameSettings.WasPressed(InputAction.Build);
+
+            if (snap.Hub == null)
+            {
+                HideGhost();
+                if (pressed) ShowTireFeedback("No Hub In Range", snap.Reason ?? "Aim at a wheel hub", item, false);
+                return;
+            }
+
+            ShowGhost(item, snap.Position, snap.Rotation, valid: snap.Valid);
+            if (!pressed) return;
+
+            if (!snap.Valid)
+            {
+                ShowTireFeedback("Cannot Fit Tire", snap.Reason ?? "Hub is not available", item, false);
+                return;
+            }
+
+            if (GridWheelMount.Commit(in snap, item))
+            {
+                inventory.container.Remove(item, 1);
+                ShowTireFeedback("Tire Fitted", $"{item.displayName} mounted on {snap.Hub.blockName}", item, true);
+            }
+            else
+            {
+                ShowTireFeedback("Cannot Fit Tire", "The hub refused this tire", item, false);
+            }
+        }
+
+        private void ShowTireFeedback(string title, string message, GridBlockItem item, bool positive)
+        {
+            if (Time.unscaledTime - _tireFeedbackAt < 0.35f) return;
+            _tireFeedbackAt = Time.unscaledTime;
+            VoxelEngine.UI.BuildFeedbackHud.Show(title, message, item != null ? item.icon : null,
+                positive ? new Color(0.35f, 0.85f, 0.55f) : new Color(0.90f, 0.30f, 0.20f));
         }
 
         private bool TryRaycastIgnoringSelf(Ray ray, out RaycastHit hit, float maxDistance)

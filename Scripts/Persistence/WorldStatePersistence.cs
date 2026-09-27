@@ -1709,6 +1709,23 @@ namespace VoxelEngine.Persistence
                         savedBlock.steamEngineFiring = engineBlock.firing;
                     }
 
+                    if (block is VoxelEngine.GridSystem.GridWheel hubBlock)
+                    {
+                        // 13.0.0: a hub remembers which tire is bolted to it. The tire is an
+                        // attachment, not a lattice block, so it is not in AllBlocks and would
+                        // otherwise vanish on reload while the hub came back bare.
+                        savedBlock.hasWheelHubState = true;
+                        savedBlock.wheelTireItemId = hubBlock.MountedTireItem != null
+                            ? hubBlock.MountedTireItem.itemId : string.Empty;
+                        savedBlock.wheelMountSide = (int)hubBlock.mountSide;
+                        savedBlock.wheelSizeClass = (int)hubBlock.sizeClass;
+                        savedBlock.wheelSteerable = hubBlock.isSteerable;
+                        savedBlock.wheelSuspensionStrength = hubBlock.suspensionStrength;
+                        savedBlock.wheelRestLength = hubBlock.restLength;
+                        savedBlock.wheelTravel = hubBlock.suspensionLength;
+                        savedBlock.wheelTread01 = hubBlock.Tire != null ? hubBlock.Tire.tread01 : 1f;
+                    }
+
                     if (block is VoxelEngine.GridSystem.GridRailTruck truckBlock)
                     {
                         // The snap policy is a standing decision about a parked train;
@@ -2128,6 +2145,31 @@ namespace VoxelEngine.Persistence
 
                 if (block is VoxelEngine.GridSystem.GridRailTruck restoredTruck && saved.hasRailTruckState)
                     restoredTruck.autoSnap = saved.truckAutoSnap;
+
+                // 13.0.0 wheel hub: tuning first, then refit the exact tire item that was
+                // bolted on. A legacy save has no flag and restores as a bare hub, which is
+                // the intended breaking change — the rig needs tires fitted before it drives.
+                if (block is VoxelEngine.GridSystem.GridWheel restoredHub && saved.hasWheelHubState)
+                {
+                    if (System.Enum.IsDefined(typeof(VoxelEngine.GridSystem.WheelSizeClass), saved.wheelSizeClass))
+                    {
+                        restoredHub.sizeClass = (VoxelEngine.GridSystem.WheelSizeClass)saved.wheelSizeClass;
+                        restoredHub.wheelSizeCells = (int)restoredHub.sizeClass;
+                    }
+                    if (System.Enum.IsDefined(typeof(VoxelEngine.GridSystem.WheelMountSide), saved.wheelMountSide))
+                        restoredHub.mountSide = (VoxelEngine.GridSystem.WheelMountSide)saved.wheelMountSide;
+                    restoredHub.isSteerable = saved.wheelSteerable;
+                    if (saved.wheelSuspensionStrength > 0.01f) restoredHub.suspensionStrength = saved.wheelSuspensionStrength;
+                    if (saved.wheelRestLength > 0.01f) restoredHub.restLength = saved.wheelRestLength;
+                    if (saved.wheelTravel > 0.01f) restoredHub.suspensionLength = saved.wheelTravel;
+
+                    if (!string.IsNullOrEmpty(saved.wheelTireItemId)
+                        && _itemById.TryGetValue(saved.wheelTireItemId, out var tireItem) && tireItem != null
+                        && restoredHub.MountTireFromItem(tireItem) && restoredHub.Tire != null)
+                    {
+                        restoredHub.Tire.tread01 = Mathf.Clamp01(saved.wheelTread01 <= 0f ? 1f : saved.wheelTread01);
+                    }
+                }
 
                 // Named apart from the maritime restoredEngine above: same method,
                 // and C# forbids shadowing it in a sibling pattern branch.
@@ -3895,6 +3937,17 @@ namespace VoxelEngine.Persistence
             public int trainScheduleIndex;
             public bool hasRailTruckState;
             public bool truckAutoSnap = true;
+            // Additive 13.0.0: wheel hub tuning plus the tire bolted to its mount socket.
+            // Legacy saves omit every field and restore a bare hub with authored defaults.
+            public bool hasWheelHubState;
+            public string wheelTireItemId = "";
+            public int wheelMountSide;
+            public int wheelSizeClass = 3;
+            public bool wheelSteerable = true;
+            public float wheelSuspensionStrength;
+            public float wheelRestLength;
+            public float wheelTravel;
+            public float wheelTread01 = 1f;
             // Additive 12.4.0: steam engine boiler state. Water and fire survive a
             // reload; pressure deliberately does not - a banked fire restarting hot
             // between sessions would be a free head of steam.
