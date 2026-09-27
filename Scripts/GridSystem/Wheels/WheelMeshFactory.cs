@@ -192,8 +192,8 @@ namespace VoxelEngine.GridSystem
                 for (int s = 0; s < tubeSides; s++)
                 {
                     int s1 = (s + 1) % tubeSides;
-                    triangles.Add(a + s); triangles.Add(b + s); triangles.Add(b + s1);
-                    triangles.Add(a + s); triangles.Add(b + s1); triangles.Add(a + s1);
+                    triangles.Add(a + s); triangles.Add(b + s1); triangles.Add(b + s);
+                    triangles.Add(a + s); triangles.Add(a + s1); triangles.Add(b + s1);
                 }
             }
 
@@ -230,19 +230,43 @@ namespace VoxelEngine.GridSystem
                 for (int i = 0; i < 4; i++)
                 {
                     int i2 = (i + 1) % 4;
-                    triangles.Add(b + i); triangles.Add(b + 4 + i); triangles.Add(b + 4 + i2);
-                    triangles.Add(b + i); triangles.Add(b + 4 + i2); triangles.Add(b + i2);
+                    triangles.Add(b + i); triangles.Add(b + 4 + i2); triangles.Add(b + 4 + i);
+                    triangles.Add(b + i); triangles.Add(b + i2); triangles.Add(b + 4 + i2);
                 }
-                // Caps.
-                triangles.Add(b + 0); triangles.Add(b + 2); triangles.Add(b + 1);
-                triangles.Add(b + 0); triangles.Add(b + 3); triangles.Add(b + 2);
-                triangles.Add(b + 4); triangles.Add(b + 5); triangles.Add(b + 6);
-                triangles.Add(b + 4); triangles.Add(b + 6); triangles.Add(b + 7);
+                // Caps, wound outward along -X and +X respectively.
+                triangles.Add(b + 0); triangles.Add(b + 1); triangles.Add(b + 2);
+                triangles.Add(b + 0); triangles.Add(b + 2); triangles.Add(b + 3);
+                triangles.Add(b + 4); triangles.Add(b + 6); triangles.Add(b + 5);
+                triangles.Add(b + 4); triangles.Add(b + 7); triangles.Add(b + 6);
             }
 
             Leg(-0.34f);
             Leg(0.34f);
             return Build(vertices, triangles, uvs);
+        });
+
+        /// <summary>
+        /// Telescoping damper, one unit long on +X with the pivot at the chassis end:
+        /// a fat body over the inboard 60% and a thin chromed rod running to the tip.
+        /// Built as a mesh rather than a rotated primitive because a rotated child under
+        /// a non-uniformly scaled parent shears, which is what turned the old damper
+        /// into a cone.
+        /// </summary>
+        public static Mesh Strut() => Get("WheelStrut", () =>
+        {
+            // Authored tip → root, the same direction as the tire and rim profiles, so
+            // the shared Lathe winding puts the normals on the outside.
+            var profile = new List<Vector2>
+            {
+                new Vector2(1.00f, 0.000f), // closed lower eye
+                new Vector2(1.00f, 0.070f),
+                new Vector2(0.60f, 0.070f), // rod
+                new Vector2(0.58f, 0.170f), // step up onto the body
+                new Vector2(0.06f, 0.170f),
+                new Vector2(0.00f, 0.150f),
+                new Vector2(0.00f, 0.000f), // closed chassis eye
+            };
+            return Lathe(profile, 20, null);
         });
 
         // ════════════════════════════════════════════════════════════════════
@@ -283,8 +307,11 @@ namespace VoxelEngine.GridSystem
                 {
                     int a = r * points + p;
                     int b = rNext * points + p;
-                    triangles.Add(a); triangles.Add(a + 1); triangles.Add(b + 1);
-                    triangles.Add(a); triangles.Add(b + 1); triangles.Add(b);
+                    // Wound so the face normal points AWAY from the axis. Get this
+                    // backwards and the mesh renders inside-out: the near wall is culled
+                    // and you see the far inner wall, which reads as a transparent object.
+                    triangles.Add(a); triangles.Add(b + 1); triangles.Add(a + 1);
+                    triangles.Add(a); triangles.Add(b); triangles.Add(b + 1);
                 }
             }
 

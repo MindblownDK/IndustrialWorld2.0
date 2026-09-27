@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `13.1.0-dev`
-**Roadmap Version:** `13.1.0-dev`
+**Current Version:** `13.1.1-dev`
+**Roadmap Version:** `13.1.1-dev`
 **Date:** 2026-09-27
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 13.1.1-dev - Inside-Out Wheel Meshes and Detached Suspension Linkage
+- **Mesh winding** (`WheelMeshFactory`): lathe, coil spring and wishbone faces now point outward, ending the see-through tire, rim and hub; verified by positive signed volume.
+- **Opaque materials** (`WheelTextureFactory`, `VoxelEngineSetupWindow`): wheel materials are pinned to the opaque queue and baked maps import without an alpha source.
+- **Connected linkage** (`WheelLinkage`, `GridWheelMeshBuilder`, `GridWheel`): one poser drives arms, spring and the new telescoping `Strut` mesh, applied at authoring time as well as per step.
+
 ### 13.1.0-dev - Modelled Wheel Geometry and Visibly Compressing Suspension
 - **Construction-safe surfaces** (`SurfaceProfile`, `SurfaceProfileLibrary`, `SurfaceSampler`): no ScriptableObject is created on access; `SurfaceSample.Default` is a plain struct value, ending the constructor exception storm.
 - **Generated geometry** (`WheelMeshFactory`, `GridWheelMeshBuilder`): lathed tire carcass, dished rim, brake disc, coil spring and wishbone replace stacked primitives.
@@ -51,11 +56,6 @@
 - **Shared socket contract** (`PowerCable`): topology and visual occupancy now use the same 0.85 m, opposing-face connector rule.
 - **Machine-edge validation** (`PowerCable`, `SurfacePowerTap`): only open, outward-facing pipe endpoints may bridge or restore static machine taps.
 - **Refresh safety** (`PowerCable`): nearby-conduit mesh rebuilds finish their shared physics probe before any refresh begins.
-
-### 12.41.6-dev - Dynamic Conduit Occupancy Detection and Connected Pipe Visual Updates
-- **Conduit occupancy** (`PowerCable`): occupied sockets connected to another pipe ignore machine bridging.
-- **Directional alignment** (`PowerCable`): machine extensions require open socket outward normal alignment (`Dot > 0.15`).
-- **Connected structure refresh** (`BuildSystem`, `PowerCable`): placement and dismantling automatically rebuild neighboring pipe visuals.
 
 ### Era Transition Feel
 

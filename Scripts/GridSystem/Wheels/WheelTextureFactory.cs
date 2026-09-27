@@ -113,6 +113,7 @@ namespace VoxelEngine.GridSystem
         public static Material Make(string name, Color tint, Texture2D albedo, Texture2D normal,
             float metallic, float smoothness, Vector2 tiling)
         {
+            tint.a = 1f;   // a wheel is never see-through, whatever the caller passed
             var mat = new Material(Lit) { name = name };
             if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", tint);
             mat.color = tint;
@@ -132,6 +133,23 @@ namespace VoxelEngine.GridSystem
             if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", metallic);
             if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", smoothness);
             if (mat.HasProperty("_Glossiness")) mat.SetFloat("_Glossiness", smoothness);
+
+            // Pin the material to the opaque queue explicitly. A code-created material
+            // inherits whatever the shader's defaults happen to be, and a wheel that
+            // lands in the transparent queue reads as a ghost you can see the ground
+            // through — the same symptom an inside-out mesh produces, so neither is
+            // left to chance.
+            if (mat.HasProperty("_Surface")) mat.SetFloat("_Surface", 0f);
+            if (mat.HasProperty("_Blend")) mat.SetFloat("_Blend", 0f);
+            if (mat.HasProperty("_AlphaClip")) mat.SetFloat("_AlphaClip", 0f);
+            if (mat.HasProperty("_SrcBlend")) mat.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.One);
+            if (mat.HasProperty("_DstBlend")) mat.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.Zero);
+            if (mat.HasProperty("_ZWrite")) mat.SetFloat("_ZWrite", 1f);
+            if (mat.HasProperty("_Cull")) mat.SetFloat("_Cull", (float)UnityEngine.Rendering.CullMode.Back);
+            mat.DisableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            mat.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+            mat.DisableKeyword("_ALPHATEST_ON");
+            mat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Geometry;
 
             var persister = GridBlockMeshBuilder.MaterialPersister;
             return persister != null ? persister(mat, name) : mat;

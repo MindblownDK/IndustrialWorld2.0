@@ -1,9 +1,32 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `13.1.0-dev`
+**Current Version:** `13.1.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [13.1.1-dev] Inside-Out Wheel Meshes and Detached Suspension Linkage
+
+**Type:** PATCH - fixes the see-through wheel and hub reported after the 13.1.0-dev setup run, and connects the suspension linkage in the authored prefab. No behaviour, save or API change.
+
+**The wheels were not transparent, they were inside out:** every generated mesh was wound so its face normals pointed at the axis instead of away from it. Unity culls the near wall and draws the far inner wall, which is exactly what a semi-transparent object looks like - the scene grid showing straight through the tire, the caliper visible through the hub plate, and a closed dished rim reading as an open tube. The winding is corrected in the lathe, the coil spring tube and the wishbone, verified by signed volume: every closed generated mesh now encloses positive volume, which is only true when the normals face outward.
+
+**Opaque by construction:** generated wheel materials no longer inherit whatever queue the shader defaulted to. Surface type, blend factors, depth write, cull mode and render queue are pinned to opaque, tint alpha is forced to 1, and baked maps import with no alpha source. The mesh fix alone resolves the reported artefact; this makes the other possible cause impossible too.
+
+**Damper no longer a cone:** the damper was a Unity cylinder rotated 90 degrees inside a pivot that gets scaled non-uniformly along X, and a rotated child under a non-uniform parent scale shears. It is now a generated `Strut` mesh authored along +X - a fat body over the inboard section with a thin chromed rod running to the eye - so stretching it telescopes instead of tapering.
+
+**Linkage is attached in the prefab:** the arms, spring and damper were only posed at runtime, so the authored prefab showed them unrotated at scale 1 and the carrier appeared to float beside a spike. Posing now lives in one place, `WheelLinkage`, called by the mesh builder when the prefab is authored and by `GridWheel` every physics step. Anchors moved onto the mount plate and each one gained a visible bracket, the arms land on the upper and lower ball joints of the knuckle, and the strut foot sits inboard on the lower arm so it still shortens faster than the arms swing.
+
+**Rebuilt meshes reach existing prefabs:** `PersistGeneratedMesh` used to return the mesh already on disk, which would have handed this rebuild the old inside-out geometry. It now copies the new data into the existing asset and keeps its GUID, so prefabs already referencing a wheel mesh pick up the corrected version without a broken reference.
+
+**GitHub title:** `[13.1.1-dev] Inside-out wheel meshes and detached suspension linkage`
+
+**Manual steps:**
+1. Pull `Dev` and let Unity compile.
+2. `Tools -> Voxel Engine -> Voxel Engine Setup` -> `12. Build Grid System Content`. This run overwrites the wheel meshes in place, so the existing prefabs are corrected rather than duplicated.
+3. Select a tire prefab: the rim should now be a solid dished face with the bolted centre, with nothing showing through it.
+4. Select a hub prefab: the wishbones, spring and damper should visibly span from the mount plate brackets to the knuckle at rest.
+5. Play-test a loaded vehicle over a kerb and watch the coil shorten and extend.
 
 ### [13.1.0-dev] Modelled Wheel Geometry and Visibly Compressing Suspension
 

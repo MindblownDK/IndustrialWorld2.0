@@ -469,34 +469,15 @@ namespace VoxelEngine.GridSystem
         }
 
         /// <summary>
-        /// Visual linkage: both arms pivot at the hub frame and point at the moving
-        /// carrier, then stretch to reach it. This is the cue that sells the travel —
-        /// a strut that slides without its wishbones following looks broken.
+        /// Visual linkage. The arms, spring and damper all pivot on the hub frame and
+        /// are aimed and stretched at the moving carrier by the shared poser. This is
+        /// the cue that sells the travel: a strut that slides without its wishbones
+        /// following looks broken, and a spring that never shortens looks painted on.
         /// </summary>
         private void UpdateArms()
         {
             if (_carrier == null) return;
-            Vector3 hub = _carrier.localPosition;
-            AimArm(_upperArm, hub + new Vector3(0f, Mathf.Abs(MountOffsetX) * 0.12f, 0f));
-            AimArm(_lowerArm, hub);
-            // The coil-over lands on the lower arm, slightly inboard of the knuckle, so it
-            // shortens faster than the arms swing. That is the compression the player reads.
-            Vector3 strutFoot = Vector3.Lerp(_spring != null ? _spring.localPosition : hub, hub, 0.86f);
-            AimArm(_spring, strutFoot);
-            AimArm(_damper, strutFoot);
-        }
-
-        private void AimArm(Transform arm, Vector3 targetLocal)
-        {
-            if (arm == null) return;
-            Vector3 origin = arm.localPosition;
-            Vector3 delta = targetLocal - origin;
-            float length = delta.magnitude;
-            if (length < 0.0005f) return;
-            arm.localRotation = Quaternion.FromToRotation(Vector3.right, delta / length);
-            var scale = arm.localScale;
-            // Arms are authored one metre long on local X, so scale is the reach itself.
-            arm.localScale = new Vector3(length, scale.y, scale.z);
+            WheelLinkage.Pose(_upperArm, _lowerArm, _spring, _damper, _carrier.localPosition);
         }
     }
 }

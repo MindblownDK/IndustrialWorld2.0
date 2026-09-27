@@ -10748,6 +10748,8 @@ root =>
             {
                 bool isNormal = key.Contains("_N_") || key.ToLowerInvariant().Contains("normal");
                 importer.textureType = isNormal ? TextureImporterType.NormalMap : TextureImporterType.Default;
+                importer.alphaSource = TextureImporterAlphaSource.None;
+                importer.alphaIsTransparency = false;
                 importer.wrapMode = TextureWrapMode.Repeat;
                 importer.filterMode = FilterMode.Trilinear;
                 importer.anisoLevel = 4;
@@ -10769,7 +10771,16 @@ root =>
             EnsureFolder(folder);
             string path = $"{folder}/{key}.asset";
             var existing = AssetDatabase.LoadAssetAtPath<Mesh>(path);
-            if (existing != null) return existing;
+            if (existing != null)
+            {
+                // Refresh the geometry in place instead of returning the old asset. A
+                // rebuilt mesh must reach prefabs that already reference this asset -
+                // deleting and re-creating it would break those references, so the new
+                // data is copied into the existing object and its GUID is kept.
+                EditorUtility.CopySerialized(mesh, existing);
+                EditorUtility.SetDirty(existing);
+                return existing;
+            }
 
             AssetDatabase.CreateAsset(mesh, path);
             return AssetDatabase.LoadAssetAtPath<Mesh>(path) ?? mesh;

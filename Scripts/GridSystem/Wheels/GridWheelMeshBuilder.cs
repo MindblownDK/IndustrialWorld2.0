@@ -49,30 +49,33 @@ namespace VoxelEngine.GridSystem
             Cylinder(steer.gameObject, chrome, new Vector3(sign * cs * 0.52f, 0f, 0f), cs * 0.07f, cs * 0.55f,
                 new Vector3(90f, 0f, 0f));
 
-            // ── Linkage: unit-length parts pivoted at the chassis end ───────
-            // GridWheel rotates each of these to face the carrier and scales X to reach
-            // it, so every one of them animates with the travel.
-            MakeLink(steer, "UpperArm", new Vector3(sign * cs * 0.52f, cs * 0.26f, 0f),
-                WheelMeshFactory.Wishbone(), steel, cs * 0.30f);
-            MakeLink(steer, "LowerArm", new Vector3(sign * cs * 0.52f, -cs * 0.26f, 0f),
-                WheelMeshFactory.Wishbone(), steel, cs * 0.38f);
+            // ── Linkage anchors ─────────────────────────────────────────────
+            // Every moving part is authored one unit long down local +X with its pivot
+            // ON the anchor, so aiming the pivot at the carrier and scaling X to the
+            // distance makes it physically span the gap. Brackets are drawn at each
+            // anchor so the linkage is visibly bolted to the plate, not floating beside it.
+            Vector3 upperAnchor = new Vector3(sign * cs * 0.47f, cs * 0.30f, 0f);
+            Vector3 lowerAnchor = new Vector3(sign * cs * 0.47f, -cs * 0.34f, 0f);
+            Vector3 strutAnchor = new Vector3(sign * cs * 0.30f, cs * 0.52f, 0f);
 
-            // Coil-over: the spring is one mesh scaled along its length, so its coils
-            // bunch together as the strut compresses.
-            MakeLink(steer, "Spring", new Vector3(sign * cs * 0.34f, cs * 0.44f, 0f),
-                WheelMeshFactory.CoilSpring(), springMat, cs * 0.30f);
-            // Damper body rides inside the spring and telescopes over the rod.
-            MakeLink(steer, "Damper", new Vector3(sign * cs * 0.34f, cs * 0.44f, 0f),
-                null, chrome, cs * 0.10f);
+            Box(steer.gameObject, steel, upperAnchor, new Vector3(cs * 0.10f, cs * 0.16f, cs * 0.34f));
+            Box(steer.gameObject, steel, lowerAnchor, new Vector3(cs * 0.12f, cs * 0.18f, cs * 0.40f));
+            Box(steer.gameObject, steel, strutAnchor, new Vector3(cs * 0.22f, cs * 0.10f, cs * 0.16f));
+
+            MakeLink(steer, "UpperArm", upperAnchor, WheelMeshFactory.Wishbone(), steel, cs * 0.26f);
+            MakeLink(steer, "LowerArm", lowerAnchor, WheelMeshFactory.Wishbone(), steel, cs * 0.34f);
+            // Coil-over: spring outside, telescoping damper running through it.
+            MakeLink(steer, "Spring", strutAnchor, WheelMeshFactory.CoilSpring(), springMat, cs * 0.30f);
+            MakeLink(steer, "Damper", strutAnchor, WheelMeshFactory.Strut(), chrome, cs * 0.20f);
 
             // ── Carrier: everything below the spring ────────────────────────
             var carrier = Child(steer, "SuspensionCarrier", new Vector3(sign * reach, -rest, 0f));
-            // Upright / knuckle.
+            // Upright / knuckle, with the two ball joints the arms land on.
             Box(carrier.gameObject, painted, new Vector3(-sign * cs * 0.06f, 0f, 0f),
-                new Vector3(cs * 0.26f, cs * 0.52f, cs * 0.30f));
-            Cylinder(carrier.gameObject, steel, new Vector3(-sign * cs * 0.06f, cs * 0.24f, 0f), cs * 0.09f, cs * 0.16f,
+                new Vector3(cs * 0.26f, cs * 0.62f, cs * 0.30f));
+            Cylinder(carrier.gameObject, steel, new Vector3(-sign * cs * 0.06f, cs * 0.28f, 0f), cs * 0.10f, cs * 0.20f,
                 new Vector3(90f, 0f, 0f));
-            Cylinder(carrier.gameObject, steel, new Vector3(-sign * cs * 0.06f, -cs * 0.24f, 0f), cs * 0.09f, cs * 0.16f,
+            Cylinder(carrier.gameObject, steel, new Vector3(-sign * cs * 0.06f, -cs * 0.28f, 0f), cs * 0.10f, cs * 0.20f,
                 new Vector3(90f, 0f, 0f));
 
             // Brake disc + caliper, then the drive flange the tire bolts to.
@@ -89,38 +92,30 @@ namespace VoxelEngine.GridSystem
 
             // ── Mount socket the tire snaps onto ────────────────────────────
             Child(carrier, "TireSocket", new Vector3(sign * (cs * 0.20f + preset.TireWidth * 0.5f), 0f, 0f));
+
+            // Pose the linkage at rest so the AUTHORED prefab already looks connected.
+            // Without this the arms sit unrotated at scale 1 and the hub reads as a
+            // carrier floating next to a spike.
+            WheelLinkage.Pose(steer, carrier.localPosition);
         }
 
         /// <summary>
         /// One animated linkage part: an empty pivot at the chassis anchor holding a
-        /// unit-length mesh (or a plain cylinder) that points down +X.
+        /// unit-length mesh that points down +X. Thickness is applied to the visual, so
+        /// the pivot's X scale is free to carry the reach.
         /// </summary>
         private static Transform MakeLink(Transform parent, string name, Vector3 anchor, Mesh mesh,
             Material material, float thickness)
         {
             var link = Child(parent, name, anchor);
-            var visual = link.Find("Visual");
-            if (visual == null)
+            if (link.Find("Visual") == null)
             {
-                GameObject go;
-                if (mesh != null)
-                {
-                    go = new GameObject("Visual");
-                    go.transform.SetParent(link, false);
-                    go.AddComponent<MeshFilter>().sharedMesh = mesh;
-                    go.AddComponent<MeshRenderer>().sharedMaterial = material;
-                }
-                else
-                {
-                    // Plain telescoping tube: a cylinder rotated to lie along +X, with its
-                    // base at the pivot so scaling the pivot stretches it outward only.
-                    go = Primitive(PrimitiveType.Cylinder, link.gameObject, material);
-                    go.name = "Visual";
-                    go.transform.localRotation = Quaternion.Euler(0f, 0f, -90f);
-                    go.transform.localPosition = new Vector3(0.5f, 0f, 0f);
-                    go.transform.localScale = new Vector3(thickness, 0.5f, thickness);
-                    return link;
-                }
+                var go = new GameObject("Visual");
+                go.transform.SetParent(link, false);
+                go.AddComponent<MeshFilter>().sharedMesh = mesh;
+                go.AddComponent<MeshRenderer>().sharedMaterial = material;
+                // No rotation here on purpose: a rotated child under a non-uniformly
+                // scaled parent shears, which is what turned the old damper into a cone.
                 go.transform.localScale = new Vector3(1f, thickness, thickness);
             }
             return link;
