@@ -64,7 +64,7 @@ namespace VoxelEngine.EditorTools
 
         private static readonly Color[] TrimColor =
         {
-            new(0.24f, 0.22f, 0.20f),   // iron banding
+            new(0.36f, 0.25f, 0.15f),   // dark seasoned timber
             new(0.60f, 0.58f, 0.54f),   // mortar and capstone
             new(0.33f, 0.30f, 0.27f),   // rusted bolt work
             new(0.28f, 0.29f, 0.32f),   // hardened fasteners
@@ -91,7 +91,7 @@ namespace VoxelEngine.EditorTools
                 _ => TrimColor[t]
             };
 
-            float metallic = surface == PieceSurface.Trim
+            float metallic = surface == PieceSurface.Trim && t > 0
                 ? Mathf.Max(0.35f, SkinMetallic[t])
                 : SkinMetallic[t];
             float smoothness = surface == PieceSurface.Frame
@@ -168,7 +168,9 @@ namespace VoxelEngine.EditorTools
         {
             PieceSurface.Skin => tier,              // 0 logs, 1 masonry, 2 corrugated, 3 plate
             PieceSurface.Frame => 4 + tier,         // 4 timber, 5 rubble, 6 L-beam, 7 tread
-            _ => 8                                   // hardware speckle
+            // The wood tier's hardware is the framing timber itself - corner posts
+            // and rails. Speckled iron there made a log cabin look bolted together.
+            _ => tier == 0 ? 4 : 8
         };
 
         // ══════════════════════════════════════════════════════════════════

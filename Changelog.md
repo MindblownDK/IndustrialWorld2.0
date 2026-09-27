@@ -1,9 +1,44 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `13.4.2-dev`
+**Current Version:** `13.5.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [13.5.0-dev] Every Box Was Inside Out
+
+**Type:** MINOR - the geometry bug behind every "half invisible" piece is fixed, windows and hatches become fittings you place yourself, the station dome becomes a habitat module, and ladders fold out and can be climbed. Save-compatible: the two new families are appended at 21-22, `BuildTier` is untouched, no cost is overwritten.
+
+**Fixed - every generated box was wound inside out.** This is the single cause of almost everything reported. Unity culls back faces, and the engine's other generated meshes settle the convention: `WheelMeshFactory.Lathe` winds its triangles so that `cross(p1 - p0, p2 - p0)` points AWAY from the surface, and its own comment warns that getting it backwards makes a mesh render inside-out - "the near wall is culled and you see the far inner wall". Every face in `BoxMesh` was wound the other way. The near side of every box was being discarded and you were looking at the inside of the far side.
+
+The tell was in the screenshots all along: the wood pillar, which is a **cylinder**, rendered solid, while the stone pillar, which is **boxes**, was hollow. `CylinderMesh` and `WedgeMesh` were wound correctly; only `BoxMesh` was reversed. Two swapped index lines, and walls, pillars, decks, doors, treads, plates, rivets and every other box in the construction kit now have a front.
+
+**Fixed - a wooden pillar looked like a spring.** Cylinder UVs repeated once per texel, so a 5.3 m post wrapped the log-course texture about forty times and became a stack of rings. Round timber now takes an explicit tile count: a post reads as one log, a rail as one rail.
+
+**Fixed - wood hardware was blacksmith iron.** The wood tier's trim - its corner posts and rails - used the dark speckled metal shared with the upper tiers, so a log cabin came out bolted together. Wood trim is now dark seasoned timber with a timber grain, and is no longer given a metallic response.
+
+**Fixed - the entire orbital station was silently skipped.** Step 102 decided whether a prefab was safe to rebuild by matching child object NAMES, and the station parts are called Panel, Deck, Collar and so on. Every station prefab therefore failed the test, was logged as "custom work" and was never touched - which is why the dome was still the old squashed sphere. Authorship is now judged by the MESH: procedural, in our generated Meshes folder, or a Unity built-in primitive is ours; anything imported is a modeller's work and is left alone. That is both correct and stricter in the way that matters.
+
+**The dome is a habitat module.** It was a blue blob on a plate. It is now something you could live in: a sixteen-bay panelled drum at standing height with a cross-braced door bay and two glazed bays at eye level, banded at the skirt, the waist and the eaves, under a shallow ribbed cap carrying four skylight arcs and a crown plate.
+
+**Windows and hatches are frames now; the fitting is a separate build.** A Window used to be born glazed and a Floor Hatch born with its lid. Both now follow the rule the Doorway already set - the frame is one build and the thing that closes it is another:
+
+* **Window Pane** - a sashed, barred glass insert that snaps into a Window's centre socket. An empty frame is a firing port, and a broken pane no longer costs you the wall.
+* **Hatch Lid** - a hinged lid with a fold-out ladder, snapping into a Floor Hatch.
+
+**The ladder folds out, and you can climb it.** Closed, the lid sits flush and the ladder is furled inside it. Interact and the lid swings up on its hinge while the ladder unrolls downward through the opening; interact again and both fold away. The ladder is climbable only while deployed, so a shut hatch is simply a floor. Climbing rides on the player controller's existing mount switch rather than threading a second state through the walk update: forward and back climb, you stay pinned to the ladder plane, and stepping out or jumping hands control straight back. The release path drops the flag on disable, on destroy and whenever the climber stops being reachable, because a player frozen on a ladder that got destroyed under them is unrecoverable.
+
+**GitHub title:** `[13.5.0-dev] Every box was inside out`
+
+**Manual steps:**
+1. Pull `Dev` and let Unity compile.
+2. `Tools -> Voxel Engine -> Voxel Engine Setup` -> `102. Rebuild Construction at Size-V6`. The station family will rebuild this time - it was being skipped, so expect the dialog's rebuilt count to jump by 32.
+3. `101. Wire the Radial Wheel Family` is unchanged and does not need re-running.
+4. Walk around a wall, a pillar and a foundation at every tier. Nothing should be see-through from any angle.
+5. Check a Wood pillar: one log, not a coil. Check a Wood wall's corner posts: timber, not black iron.
+6. Place a Window, then a Window Pane into it. Place a Floor Hatch, then a Hatch Lid into it.
+7. Interact with the Hatch Lid: the lid swings up and the ladder unrolls. Walk into the ladder and hold forward to climb, back to descend, space to let go. Interact again to fold it away.
+8. Place an orbital Dome and look at it - drum, door bay, glazed bays, banding, ribbed cap.
 
 ### [13.4.2-dev] Hatches That Are Actually Holes
 

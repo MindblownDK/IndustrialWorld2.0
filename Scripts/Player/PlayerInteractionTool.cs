@@ -862,6 +862,15 @@ namespace VoxelEngine.Player
                     return;
                 }
 
+                // Floor hatches answer the same key as doors: the lid swings up and
+                // the ladder unrolls through the opening.
+                var tieredHatch = hit.collider.GetComponentInParent<VoxelEngine.Building.Tiered.TieredHatch>();
+                if (tieredHatch != null)
+                {
+                    tieredHatch.Toggle(transform.position);
+                    return;
+                }
+
                 // 1) Open container if looking at chest / furnace / crafting bench.
                 var ruinChest = hit.collider.GetComponentInParent<VoxelEngine.Exploration.RuinChest>();
                 if (ruinChest != null) { ruinChest.Open(); return; }

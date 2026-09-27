@@ -53,6 +53,8 @@ namespace VoxelEngine.Building.Tiered
                 case BuildFamily.WallFrame:  WallFrame(b);  break;
                 case BuildFamily.GarageDoor: GarageDoor(b); break;
                 case BuildFamily.FloorHatch: FloorHatch(b); break;
+                case BuildFamily.WindowPane: WindowPane(b); break;
+                case BuildFamily.HatchLid:   HatchLid(b);   break;
 
                 default: b.IsoBox(0f, 0f, 0f, 1f, 1f, 1f); break;
             }
@@ -215,6 +217,31 @@ namespace VoxelEngine.Building.Tiered
                 float t = i / 3f;
                 b.Line(P(0.34f, 0.12f - t * 0.34f, 0.34f + t * 0.1f),
                        P(0.66f, 0.12f - t * 0.34f, 0.34f + t * 0.1f));
+            }
+        }
+
+        private static void WindowPane(LineArtBuilder b)
+        {
+            // A glazed pane on its own, with a corner highlight so it reads as glass.
+            const float sx = 1f, sy = 0.66f, sz = 0.07f;
+            b.IsoBox(0f, 0f, 0f, sx, sy, sz);
+            b.IsoFaceLine(sx, sy, 0.5f, 0.04f, 0.5f, 0.96f);
+            b.IsoFaceLine(sx, sy, 0.04f, 0.5f, 0.96f, 0.5f);
+            b.Line(P(0.12f * sx, 0.2f * sy, 0f), P(0.38f * sx, 0.46f * sy, 0f));
+            b.Line(P(0.12f * sx, 0.42f * sy, 0f), P(0.26f * sx, 0.56f * sy, 0f));
+        }
+
+        private static void HatchLid(LineArtBuilder b)
+        {
+            // The lid swung up on its hinge with the ladder unrolled beneath it.
+            b.Closed(P(0f, 0f, 0f), P(1f, 0f, 0f), P(1f, 0f, 1f), P(0f, 0f, 1f));
+            b.Closed(P(0f, 0f, 0f), P(1f, 0f, 0f), P(1f, 0.78f, -0.18f), P(0f, 0.78f, -0.18f));
+            b.Line(P(0.18f, 0f, 0.5f), P(0.18f, -0.95f, 0.5f));
+            b.Line(P(0.82f, 0f, 0.5f), P(0.82f, -0.95f, 0.5f));
+            for (int i = 1; i <= 3; i++)
+            {
+                float t = i / 4f;
+                b.Line(P(0.18f, -0.95f * t, 0.5f), P(0.82f, -0.95f * t, 0.5f));
             }
         }
 

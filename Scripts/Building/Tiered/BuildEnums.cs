@@ -43,8 +43,17 @@ namespace VoxelEngine.Building.Tiered
         WallFrame  = 18,
         /// <summary>Roll-up shutter that fits a Wall Frame.</summary>
         GarageDoor = 19,
-        /// <summary>Floor slab with a square opening, a fold-up lid and a drop ladder.</summary>
-        FloorHatch = 20
+        /// <summary>Floor slab with a square opening. Takes a Hatch Lid.</summary>
+        FloorHatch = 20,
+
+        // ── Fittings (13.5.0-dev) ──
+        // Openings hold their fitting rather than being born with it, exactly as a
+        // Doorway holds a Door: the frame is one build, the thing that closes it
+        // is another, and either can be upgraded or replaced on its own.
+        /// <summary>Glazed pane that fits a Window frame.</summary>
+        WindowPane = 21,
+        /// <summary>Hinged lid with a fold-out ladder that fits a Floor Hatch.</summary>
+        HatchLid = 22
     }
 
     /// <summary>
@@ -97,6 +106,8 @@ namespace VoxelEngine.Building.Tiered
             BuildFamily.WallFrame       => "WALL FRAME",
             BuildFamily.GarageDoor      => "GARAGE DOOR",
             BuildFamily.FloorHatch      => "FLOOR HATCH",
+            BuildFamily.WindowPane      => "WINDOW PANE",
+            BuildFamily.HatchLid        => "HATCH LID",
             _ => family.ToString().ToUpperInvariant(),
         };
 
@@ -127,7 +138,9 @@ namespace VoxelEngine.Building.Tiered
             BuildFamily.StationDome     => "A curved roof for the observation deck",
             BuildFamily.WallFrame       => "A wide opening a vehicle fits through",
             BuildFamily.GarageDoor      => "Rolls up into the drum above the frame",
-            BuildFamily.FloorHatch      => "A way down that closes behind you",
+            BuildFamily.FloorHatch      => "An opening down. Fit a lid to close it",
+            BuildFamily.WindowPane      => "Glazes a window frame. Fit it yourself",
+            BuildFamily.HatchLid        => "Folds open and drops a ladder through",
             _ => "Construction piece",
         };
     }

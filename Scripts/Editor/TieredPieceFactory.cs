@@ -48,8 +48,8 @@ namespace VoxelEngine.EditorTools
         private const float DoorW = 2.60f, DoorH = 3.90f;
         /// <summary>Garage opening: a vehicle-width hole in a wall.</summary>
         private const float GarageW = 5.00f, GarageH = 4.30f;
-        /// <summary>Hatch opening in a floor slab.</summary>
-        private const float HatchW = 2.60f;
+        /// <summary>Hatch opening in a floor slab. Public: the setup step sizes the lid hinge from it.</summary>
+        public const float HatchW = 2.60f;
 
         private const float Texel = 0.55f;   // metres per texture tile
 
@@ -78,8 +78,16 @@ namespace VoxelEngine.EditorTools
                 => Add(surface, BoxMesh(size), Matrix4x4.TRS(centre, Quaternion.Euler(euler), Vector3.one));
 
             /// <summary>A log or pipe lying along its local Y, then rotated into place.</summary>
-            public void Cylinder(PieceSurface surface, Vector3 centre, float radius, float length, Vector3 euler)
-                => Add(surface, CylinderMesh(radius, length),
+            /// <summary>
+            /// A log or pipe lying along its local Y, then rotated into place.
+            /// <paramref name="uvTiles"/> overrides how many times the surface
+            /// repeats along the length: the wall textures are authored as courses
+            /// seen face-on, and letting one repeat per texel turns a single post
+            /// into a stack of forty rings.
+            /// </summary>
+            public void Cylinder(PieceSurface surface, Vector3 centre, float radius, float length, Vector3 euler,
+                                 float uvTiles = 0f)
+                => Add(surface, CylinderMesh(radius, length, 12, uvTiles),
                        Matrix4x4.TRS(centre, Quaternion.Euler(euler), Vector3.one));
 
             /// <summary>A right-triangle prism: the run of a stair, the pitch of a roof.</summary>
@@ -157,8 +165,13 @@ namespace VoxelEngine.EditorTools
                 float uw = Mathf.Max(0.02f, w / Texel), ut = Mathf.Max(0.02f, t / Texel);
                 uvs.Add(new Vector2(0f, 0f)); uvs.Add(new Vector2(uw, 0f));
                 uvs.Add(new Vector2(uw, ut)); uvs.Add(new Vector2(0f, ut));
-                tris.Add(i); tris.Add(i + 2); tris.Add(i + 1);
-                tris.Add(i); tris.Add(i + 3); tris.Add(i + 2);
+                // Wound so cross(p1 - p0, p2 - p0) points ALONG the face normal,
+                // which is the convention the rest of the engine's generated meshes
+                // use (see WheelMeshFactory.Lathe). Reversed, every box renders
+                // inside-out: the near wall is culled and you see the far inner
+                // wall instead, which reads as a half-invisible building piece.
+                tris.Add(i); tris.Add(i + 1); tris.Add(i + 2);
+                tris.Add(i); tris.Add(i + 2); tris.Add(i + 3);
             }
 
             Face(Vector3.forward, new(-h.x, -h.y, h.z), new(h.x, -h.y, h.z), new(h.x, h.y, h.z), new(-h.x, h.y, h.z), size.x, size.y);
@@ -176,7 +189,7 @@ namespace VoxelEngine.EditorTools
             return mesh;
         }
 
-        private static Mesh CylinderMesh(float radius, float length, int sides = 12)
+        private static Mesh CylinderMesh(float radius, float length, int sides = 12, float uvTiles = 0f)
         {
             var verts = new List<Vector3>();
             var norms = new List<Vector3>();
@@ -199,7 +212,7 @@ namespace VoxelEngine.EditorTools
                 norms.Add(d0); norms.Add(d1); norms.Add(d1); norms.Add(d0);
                 float u0 = i / (float)sides * circumference / Texel;
                 float u1 = (i + 1) / (float)sides * circumference / Texel;
-                float vt = length / Texel;
+                float vt = uvTiles > 0f ? uvTiles : length / Texel;
                 uvs.Add(new Vector2(u0, 0f)); uvs.Add(new Vector2(u1, 0f));
                 uvs.Add(new Vector2(u1, vt)); uvs.Add(new Vector2(u0, vt));
                 tris.Add(b); tris.Add(b + 2); tris.Add(b + 1);
@@ -340,18 +353,20 @@ namespace VoxelEngine.EditorTools
 
                     // Round framing timbers with the ends proud of the panel.
                     const float post = 0.23f;
+                    float postTiles = Mathf.Max(1.5f, height * 0.4f);
+                    float railTiles = Mathf.Max(1.5f, width * 0.4f);
                     if ((edges & Edge.Left) != 0)
                         m.Cylinder(PieceSurface.Trim, new Vector3(left + post, centre.y, z + 0.10f),
-                                   post, height + post * 1.2f, Vector3.zero);
+                                   post, height + post * 1.2f, Vector3.zero, postTiles);
                     if ((edges & Edge.Right) != 0)
                         m.Cylinder(PieceSurface.Trim, new Vector3(right - post, centre.y, z + 0.10f),
-                                   post, height + post * 1.2f, Vector3.zero);
+                                   post, height + post * 1.2f, Vector3.zero, postTiles);
                     if ((edges & Edge.Top) != 0)
                         m.Cylinder(PieceSurface.Trim, new Vector3(centre.x, top - post * 0.85f, z + 0.10f),
-                                   post * 0.92f, width, new Vector3(0f, 0f, 90f));
+                                   post * 0.92f, width, new Vector3(0f, 0f, 90f), railTiles);
                     if ((edges & Edge.Bottom) != 0)
                         m.Cylinder(PieceSurface.Trim, new Vector3(centre.x, bottom + post * 0.85f, z + 0.10f),
-                                   post * 0.92f, width, new Vector3(0f, 0f, 90f));
+                                   post * 0.92f, width, new Vector3(0f, 0f, 90f), railTiles);
                     break;
                 }
 
@@ -659,13 +674,15 @@ namespace VoxelEngine.EditorTools
             {
                 case BuildFamily.Foundation: Foundation(m, tier); break;
                 case BuildFamily.Floor:      Floor(m, tier, false); break;
-                case BuildFamily.FloorHatch: Floor(m, tier, true); HatchLid(m, tier); break;
+                case BuildFamily.FloorHatch: Floor(m, tier, true); break;
                 case BuildFamily.Wall:       Wall(m, tier); break;
                 case BuildFamily.Doorway:    CladPanelWithHole(m, tier, Module, Storey, DoorW, DoorH, 0f, WallThick); break;
                 case BuildFamily.WallFrame:  CladPanelWithHole(m, tier, Module, Storey, GarageW, GarageH, 0f, WallThick); GarageTrack(m, tier); break;
                 case BuildFamily.Window:     Window(m, tier); break;
                 case BuildFamily.Door:       DoorLeaf(m, tier); break;
                 case BuildFamily.GarageDoor: GarageDoor(m, tier); break;
+                case BuildFamily.WindowPane: WindowPane(m, tier); break;
+                case BuildFamily.HatchLid:   HatchLidPanel(m, tier); break;
                 case BuildFamily.Stairs:     Stairs(m, tier); break;
                 case BuildFamily.Roof:       Roof(m, tier); break;
                 case BuildFamily.Pillar:     Pillar(m, tier); break;
@@ -902,21 +919,61 @@ namespace VoxelEngine.EditorTools
             }
         }
 
-        private static void HatchLid(PieceMesh m, BuildTier tier)
+        /// <summary>The glazed insert that fits a Window frame.</summary>
+        private static void WindowPane(PieceMesh m, BuildTier tier)
         {
-            // The lid sits folded up on its hinge with the ladder dropped through.
-            m.Box(PieceSurface.Skin, new Vector3(0f, HatchW * 0.5f + 0.4f, -HatchW * 0.5f - 0.1f),
-                  new Vector3(HatchW - 0.1f, 0.14f, HatchW - 0.1f), new Vector3(78f, 0f, 0f));
-            m.Box(PieceSurface.Trim, new Vector3(0f, 0.44f, -HatchW * 0.5f - 0.05f),
-                  new Vector3(HatchW - 0.1f, 0.16f, 0.16f));
+            const float w = 3.6f, h = 2.1f;
+            float y = (Storey - h) * 0.5f + h * 0.5f;
 
-            for (int i = 0; i < 9; i++)
+            m.Box(PieceSurface.Glass, new Vector3(0f, y, 0f), new Vector3(w - 0.22f, h - 0.22f, 0.06f));
+            // Sash: a perimeter frame plus glazing bars, so the pane is a made
+            // object rather than a floating sheet.
+            foreach (float sy in new[] { -1f, 1f })
+                m.Box(PieceSurface.Trim, new Vector3(0f, y + sy * (h * 0.5f - 0.06f), 0f), new Vector3(w, 0.13f, 0.14f));
+            foreach (float sx in new[] { -1f, 1f })
+                m.Box(PieceSurface.Trim, new Vector3(sx * (w * 0.5f - 0.06f), y, 0f), new Vector3(0.13f, h, 0.14f));
+            m.Box(PieceSurface.Trim, new Vector3(0f, y, 0f), new Vector3(0.09f, h - 0.12f, 0.11f));
+            m.Box(PieceSurface.Trim, new Vector3(0f, y, 0f), new Vector3(w - 0.12f, 0.09f, 0.11f));
+        }
+
+        /// <summary>
+        /// The hatch lid itself. Modelled closed and flush at the origin: the
+        /// setup step re-parents it under a hinge at the rear edge, and the
+        /// runtime component swings it from there.
+        /// </summary>
+        private static void HatchLidPanel(PieceMesh m, BuildTier tier)
+        {
+            float w = HatchW - 0.14f;
+            m.Box(PieceSurface.Skin, new Vector3(0f, 0.07f, 0f), new Vector3(w, 0.14f, w));
+            m.Box(PieceSurface.Frame, new Vector3(0f, 0.15f, 0f), new Vector3(w - 0.3f, 0.05f, w - 0.3f));
+            foreach (float sx in new[] { -1f, 1f })
+            foreach (float sz in new[] { -1f, 1f })
+                m.Box(PieceSurface.Trim, new Vector3(sx * w * 0.4f, 0.16f, sz * w * 0.4f), new Vector3(0.16f, 0.06f, 0.16f));
+            // Hinge barrel along the rear edge and a pull handle at the front.
+            m.Cylinder(PieceSurface.Trim, new Vector3(0f, 0.12f, -w * 0.5f), 0.08f, w * 0.85f,
+                       new Vector3(0f, 0f, 90f), 2f);
+            m.Cylinder(PieceSurface.Trim, new Vector3(0f, 0.2f, w * 0.34f), 0.05f, w * 0.34f,
+                       new Vector3(0f, 0f, 90f), 1.5f);
+        }
+
+        /// <summary>
+        /// The fold-out ladder, built pointing DOWN from its own origin with a
+        /// unit height of one metre, so the runtime component can unroll it by
+        /// scaling Y rather than rebuilding geometry every frame.
+        /// </summary>
+        public static void BuildLadder(GameObject root, BuildTier tier, string meshAssetPath)
+        {
+            var m = new PieceMesh();
+            const float width = 0.9f, rungs = 8f;
+
+            foreach (float sx in new[] { -1f, 1f })
+                m.Box(PieceSurface.Trim, new Vector3(sx * width * 0.5f, -0.5f, 0f), new Vector3(0.09f, 1f, 0.09f));
+            for (int i = 0; i < rungs; i++)
             {
-                float y = -0.5f - i * 0.55f;
-                m.Cylinder(PieceSurface.Trim, new Vector3(0f, y, 0.34f), 0.05f, HatchW * 0.55f, new Vector3(0f, 0f, 90f));
+                float y = -(i + 0.5f) / rungs;
+                m.Cylinder(PieceSurface.Trim, new Vector3(0f, y, 0f), 0.045f, width, new Vector3(0f, 0f, 90f), 1f);
             }
-            foreach (float s in new[] { -1f, 1f })
-                m.Cylinder(PieceSurface.Trim, new Vector3(s * HatchW * 0.27f, -2.7f, 0.34f), 0.045f, 5.0f, Vector3.zero);
+            m.Commit(root, tier, meshAssetPath);
         }
 
         private static void Wall(PieceMesh m, BuildTier tier)
@@ -930,12 +987,13 @@ namespace VoxelEngine.EditorTools
         {
             const float w = 3.6f, h = 2.1f;
             float bottom = (Storey - h) * 0.5f;
+            // Frame only. The glazing is a Window Pane the player fits themselves,
+            // the same way a Doorway holds a Door: an empty frame is a firing port,
+            // and a broken pane should not cost you the wall.
             CladPanelWithHole(m, tier, Module, Storey, w, h, bottom, WallThick);
-            m.Box(PieceSurface.Glass, new Vector3(0f, bottom + h * 0.5f, 0f), new Vector3(w - 0.1f, h - 0.1f, 0.05f));
-            m.Box(PieceSurface.Trim, new Vector3(0f, bottom + h * 0.5f, 0f), new Vector3(0.12f, h, WallThick + 0.06f));
             foreach (float s in new[] { -1f, 1f })
-                m.Box(PieceSurface.Trim, new Vector3(s * w * 0.25f, bottom + h * 0.5f, 0.02f),
-                      new Vector3(0.08f, h - 0.1f, 0.08f));
+                m.Box(PieceSurface.Trim, new Vector3(s * (w * 0.5f - 0.06f), bottom + h * 0.5f, 0f),
+                      new Vector3(0.1f, h - 0.12f, WallThick + 0.16f));
         }
 
         private static void DoorLeaf(PieceMesh m, BuildTier tier)
@@ -1065,7 +1123,8 @@ namespace VoxelEngine.EditorTools
         private static void Pillar(PieceMesh m, BuildTier tier)
         {
             if (tier == BuildTier.Wood)
-                m.Cylinder(PieceSurface.Skin, new Vector3(0f, Storey * 0.5f, 0f), 0.30f, Storey - 0.36f, Vector3.zero);
+                m.Cylinder(PieceSurface.Trim, new Vector3(0f, Storey * 0.5f, 0f), 0.30f, Storey - 0.36f,
+                           Vector3.zero, 3f);
             else
                 m.Box(PieceSurface.Skin, new Vector3(0f, Storey * 0.5f, 0f), new Vector3(0.58f, Storey - 0.36f, 0.58f));
 
@@ -1243,47 +1302,139 @@ namespace VoxelEngine.EditorTools
             m.Box(PieceSurface.Frame, new Vector3(0f, Storey - 0.2f, 0f), new Vector3(Module, 0.4f, 0.8f));
         }
 
+        /// <summary>
+        /// A habitat module, not a glass bubble. A panelled drum you can actually
+        /// stand inside carries a door bay and a glazed bay at eye level, banded
+        /// top and bottom, under a shallow ribbed cap with viewport arcs and a
+        /// lit strip running the join. The first pass was a squashed sphere on a
+        /// plate, which read as a drop of water rather than somewhere to live.
+        /// </summary>
         private static void StationDome(PieceMesh m)
         {
-            // A ribbed glazed cap: rings of glass between meridian ribs.
-            const int rings = 5, segs = 16;
-            float radius = HalfModule * 0.96f, height = Storey * 0.72f;
+            const int segs = 16;
+            float radius = HalfModule * 0.94f;
+            float drum = Storey * 0.46f;
+            float cap = Storey * 0.34f;
+
+            // ── Drum: panel bays around the circumference ────────────────
+            for (int i = 0; i < segs; i++)
+            {
+                float a = (i + 0.5f) / segs * Mathf.PI * 2f;
+                Vector3 dir = new(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                float chord = Mathf.PI * 2f * radius / segs;
+                Vector3 centre = dir * radius + new Vector3(0f, drum * 0.5f, 0f);
+                float yaw = -a * Mathf.Rad2Deg;
+
+                // Two bays face outward as a door and a viewport; the rest are hull.
+                bool door = i == 0;
+                bool glazed = i == 4 || i == 12;
+
+                m.Box(PieceSurface.Skin, centre, new Vector3(chord * 0.99f, drum, 0.22f), new Vector3(0f, yaw, 0f));
+
+                if (glazed)
+                {
+                    m.Box(PieceSurface.Glass, centre + new Vector3(0f, drum * 0.08f, 0f),
+                          new Vector3(chord * 0.74f, drum * 0.5f, 0.1f), new Vector3(0f, yaw, 0f));
+                    m.Box(PieceSurface.Trim, centre + new Vector3(0f, drum * 0.08f, 0f),
+                          new Vector3(chord * 0.82f, drum * 0.58f, 0.06f), new Vector3(0f, yaw, 0f));
+                }
+                else if (door)
+                {
+                    m.Box(PieceSurface.Frame, centre + dir * 0.06f + new Vector3(0f, -drum * 0.04f, 0f),
+                          new Vector3(chord * 0.78f, drum * 0.82f, 0.12f), new Vector3(0f, yaw, 0f));
+                    // The cross bracing that marks an airlock face at a glance.
+                    float diag = Mathf.Sqrt(chord * chord + drum * drum) * 0.62f;
+                    float lean = Mathf.Atan2(drum * 0.8f, chord * 0.8f) * Mathf.Rad2Deg;
+                    m.Box(PieceSurface.Trim, centre + dir * 0.13f, new Vector3(0.07f, diag, 0.05f),
+                          new Vector3(0f, yaw, lean - 90f));
+                    m.Box(PieceSurface.Trim, centre + dir * 0.13f, new Vector3(0.07f, diag, 0.05f),
+                          new Vector3(0f, yaw, 90f - lean));
+                }
+                else
+                {
+                    m.Box(PieceSurface.Frame, centre + dir * 0.05f,
+                          new Vector3(chord * 0.8f, drum * 0.66f, 0.07f), new Vector3(0f, yaw, 0f));
+                }
+
+                // Mullion between every bay.
+                float ma = i / (float)segs * Mathf.PI * 2f;
+                Vector3 mdir = new(Mathf.Cos(ma), 0f, Mathf.Sin(ma));
+                m.Box(PieceSurface.Trim, mdir * (radius + 0.03f) + new Vector3(0f, drum * 0.5f, 0f),
+                      new Vector3(0.12f, drum, 0.22f), new Vector3(0f, -ma * Mathf.Rad2Deg, 0f));
+            }
+
+            // ── Banding: skirt, waist and the lit strip under the cap ────
+            Ring(m, PieceSurface.Trim, radius + 0.1f, 0.16f, 0.34f, segs);
+            Ring(m, PieceSurface.Trim, radius + 0.08f, drum - 0.12f, 0.2f, segs);
+            Ring(m, PieceSurface.Frame, radius + 0.12f, drum + 0.02f, 0.12f, segs);
+
+            // ── Cap: shallow ribbed dome with viewport arcs ──────────────
+            const int rings = 4;
             for (int r = 0; r < rings; r++)
             {
                 float t0 = r / (float)rings, t1 = (r + 1) / (float)rings;
-                float y0 = Mathf.Sin(t0 * Mathf.PI * 0.5f) * height;
-                float y1 = Mathf.Sin(t1 * Mathf.PI * 0.5f) * height;
+                float y0 = drum + Mathf.Sin(t0 * Mathf.PI * 0.5f) * cap;
+                float y1 = drum + Mathf.Sin(t1 * Mathf.PI * 0.5f) * cap;
                 float r0 = Mathf.Cos(t0 * Mathf.PI * 0.5f) * radius;
                 float r1 = Mathf.Cos(t1 * Mathf.PI * 0.5f) * radius;
-                for (int s = 0; s < segs; s++)
+                float rm = (r0 + r1) * 0.5f;
+
+                for (int i = 0; i < segs; i++)
                 {
-                    float a = (s + 0.5f) / segs * Mathf.PI * 2f;
-                    Vector3 c = new(Mathf.Cos(a) * (r0 + r1) * 0.5f, (y0 + y1) * 0.5f, Mathf.Sin(a) * (r0 + r1) * 0.5f);
-                    float chord = Mathf.PI * 2f * (r0 + r1) * 0.5f / segs;
-                    m.Box(PieceSurface.Glass, c, new Vector3(chord * 0.9f, (y1 - y0) + (r0 - r1) * 0.4f, 0.09f),
-                          new Vector3(0f, -a * Mathf.Rad2Deg, 0f));
+                    float a = (i + 0.5f) / segs * Mathf.PI * 2f;
+                    Vector3 dir = new(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                    Vector3 centre = dir * rm + new Vector3(0f, (y0 + y1) * 0.5f, 0f);
+                    float chord = Mathf.PI * 2f * rm / segs;
+                    float slab = Mathf.Sqrt((y1 - y0) * (y1 - y0) + (r0 - r1) * (r0 - r1)) * 1.05f;
+                    float tilt = Mathf.Atan2(r0 - r1, y1 - y0) * Mathf.Rad2Deg;
+                    var euler = new Vector3(0f, -a * Mathf.Rad2Deg, 0f);
+
+                    // Two skylight arcs on the lower ring, hull everywhere else.
+                    bool skylight = r == 0 && (i == 2 || i == 6 || i == 10 || i == 14);
+                    m.Box(skylight ? PieceSurface.Glass : PieceSurface.Skin, centre,
+                          new Vector3(chord * 0.98f, slab, 0.16f),
+                          euler + new Vector3(tilt - 90f, 0f, 0f));
                 }
-                m.Cylinder(PieceSurface.Trim, new Vector3(0f, y0, 0f), 0.09f, 0.1f, Vector3.zero);
+
+                Ring(m, PieceSurface.Trim, r1 + 0.04f, y1, 0.1f, segs);
             }
-            for (int s = 0; s < segs; s++)
+
+            // Radial ribs over the cap and a crown plate.
+            for (int i = 0; i < segs; i += 2)
             {
-                float a = s / (float)segs * Mathf.PI * 2f;
+                float a = i / (float)segs * Mathf.PI * 2f;
+                Vector3 dir = new(Mathf.Cos(a), 0f, Mathf.Sin(a));
                 for (int r = 0; r < rings; r++)
                 {
                     float t0 = r / (float)rings, t1 = (r + 1) / (float)rings;
-                    Vector3 p0 = new(Mathf.Cos(a) * Mathf.Cos(t0 * Mathf.PI * 0.5f) * radius,
-                                     Mathf.Sin(t0 * Mathf.PI * 0.5f) * height,
-                                     Mathf.Sin(a) * Mathf.Cos(t0 * Mathf.PI * 0.5f) * radius);
-                    Vector3 p1 = new(Mathf.Cos(a) * Mathf.Cos(t1 * Mathf.PI * 0.5f) * radius,
-                                     Mathf.Sin(t1 * Mathf.PI * 0.5f) * height,
-                                     Mathf.Sin(a) * Mathf.Cos(t1 * Mathf.PI * 0.5f) * radius);
-                    Vector3 mid = (p0 + p1) * 0.5f;
-                    Vector3 dir = p1 - p0;
-                    m.Box(PieceSurface.Trim, mid, new Vector3(0.14f, dir.magnitude, 0.14f),
-                          Quaternion.FromToRotation(Vector3.up, dir.normalized).eulerAngles);
+                    Vector3 p0 = dir * (Mathf.Cos(t0 * Mathf.PI * 0.5f) * radius)
+                                 + new Vector3(0f, drum + Mathf.Sin(t0 * Mathf.PI * 0.5f) * cap, 0f);
+                    Vector3 p1 = dir * (Mathf.Cos(t1 * Mathf.PI * 0.5f) * radius)
+                                 + new Vector3(0f, drum + Mathf.Sin(t1 * Mathf.PI * 0.5f) * cap, 0f);
+                    Vector3 seg = p1 - p0;
+                    m.Box(PieceSurface.Trim, (p0 + p1) * 0.5f + dir * 0.06f,
+                          new Vector3(0.11f, seg.magnitude, 0.11f),
+                          Quaternion.FromToRotation(Vector3.up, seg.normalized).eulerAngles);
                 }
             }
-            m.Box(PieceSurface.Trim, new Vector3(0f, 0.16f, 0f), new Vector3(Module, 0.32f, Module));
+            m.Box(PieceSurface.Trim, new Vector3(0f, drum + cap + 0.04f, 0f), new Vector3(1.1f, 0.12f, 1.1f));
+            m.Box(PieceSurface.Frame, new Vector3(0f, drum + cap + 0.14f, 0f), new Vector3(0.34f, 0.18f, 0.34f));
+
+            // Deck plate so the module reads as sitting on something.
+            m.Box(PieceSurface.Frame, new Vector3(0f, 0.09f, 0f), new Vector3(Module, 0.18f, Module));
+        }
+
+        /// <summary>A banding ring made of short chords around the circumference.</summary>
+        private static void Ring(PieceMesh m, PieceSurface surface, float radius, float y, float thickness, int segs)
+        {
+            for (int i = 0; i < segs; i++)
+            {
+                float a = (i + 0.5f) / segs * Mathf.PI * 2f;
+                Vector3 dir = new(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                float chord = Mathf.PI * 2f * radius / segs;
+                m.Box(surface, dir * radius + new Vector3(0f, y, 0f),
+                      new Vector3(chord * 1.02f, thickness, 0.12f), new Vector3(0f, -a * Mathf.Rad2Deg, 0f));
+            }
         }
 
         private static void AddStationColliders(GameObject root, BuildFamily family)
@@ -1317,7 +1468,9 @@ namespace VoxelEngine.EditorTools
                     break;
                 }
                 case BuildFamily.StationDome:
-                    Box(new Vector3(0f, Storey * 0.36f, 0f), new Vector3(Module, Storey * 0.72f, Module));
+                    Box(new Vector3(0f, 0.09f, 0f), new Vector3(Module, 0.18f, Module));
+                    Box(new Vector3(0f, Storey * 0.23f, 0f), new Vector3(Module * 0.94f, Storey * 0.46f, Module * 0.94f));
+                    Box(new Vector3(0f, Storey * 0.58f, 0f), new Vector3(Module * 0.66f, Storey * 0.28f, Module * 0.66f));
                     break;
                 case BuildFamily.StationDock:
                     Box(new Vector3(0f, Storey * 0.5f, 0f), new Vector3(Module, Storey, 0.9f));
@@ -1400,6 +1553,17 @@ namespace VoxelEngine.EditorTools
                     break;
                 case BuildFamily.GarageDoor:
                     Box(new Vector3(0f, GarageH * 0.5f, 0f), new Vector3(GarageW - 0.2f, GarageH, 0.24f));
+                    break;
+                case BuildFamily.WindowPane:
+                {
+                    const float w = 3.6f, h = 2.1f;
+                    Box(new Vector3(0f, (Storey - h) * 0.5f + h * 0.5f, 0f), new Vector3(w, h, 0.18f));
+                    break;
+                }
+                case BuildFamily.HatchLid:
+                    // The lid's collider lives on the swinging pivot, added by the
+                    // setup step; the root keeps none or a shut hatch would block
+                    // the opening it is hinged into even when standing open.
                     break;
                 case BuildFamily.Pillar:
                     Box(new Vector3(0f, Storey * 0.5f, 0f), new Vector3(0.86f, Storey, 0.86f));

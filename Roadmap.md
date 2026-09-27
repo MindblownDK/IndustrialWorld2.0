@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `13.4.2-dev`
-**Roadmap Version:** `13.4.2-dev`
+**Current Version:** `13.5.0-dev`
+**Roadmap Version:** `13.5.0-dev`
 **Date:** 2026-09-27
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,12 @@
 
 ## 0. Recently Done
 
+### 13.5.0-dev - Every Box Was Inside Out
+- **Winding** (`TieredPieceFactory`): `BoxMesh` triangles were reversed against the engine's own convention, culling the near face of every box; cylinders and wedges were already correct.
+- **Timber** (`TieredPieceFactory`, `TieredSurfaces`): round stock takes an explicit UV tile count so a post is one log, and wood trim is seasoned timber rather than speckled iron.
+- **Station rebuilt** (`TieredRebuildSetup`, `TieredPieceFactory`): authorship is judged by mesh origin rather than object name, so the station family stops being skipped, and the dome becomes a panelled habitat drum with a ribbed cap.
+- **Fittings and ladders** (`BuildEnums`, `TieredHatch`, `ClimbableLadder`, `PlayerInteractionTool`): Window Pane and Hatch Lid are separate placeables, and the hatch folds its ladder out into a climbable volume.
+
 ### 13.4.2-dev - Hatches That Are Actually Holes
 - **Hatch openings** (`TieredPieceFactory`): deck runs are split around the floor opening instead of planking over it; stone and armoured decks were already correct.
 - **Floor collision** (`TieredPieceFactory`): the collider follows the 0.42 m slab, so feet and snapped pieces sit on the surface rather than 4 cm inside it.
@@ -51,11 +57,6 @@
 - **Corrected solids and new icon sets** (`LineArtBuilder`, `MachineShapeIcons`, `JumpTargetIcons`, `IconAtlas`): isometric boxes draw their near faces, and conveyors, armour shapes, pipe fittings, road surfaces and jump destinations all have drawn marks.
 - **Jump drive dial** (`JumpDriveWheel`, `GridCockpit`): the warp key opens the twelve nearest destinations with live distance, price and reachability; the centre carries spin-up, cancel and the aimed jump.
 - **Escape ownership** (`HammerBuildWheel`): the wheel no longer swallows the Pause key, so Escape with an idle hammer opens the pause menu.
-
-### 13.2.0-dev - The Build Dial Rebuilt Around the Flick
-- **Direction-only pointer** (`RadialWheelInput`, `HammerBuildWheel`): the cursor is locked and re-centred on open, selection comes straight from `Atan2` with no smoothing, and deflection past the ring still selects.
-- **Vector dial** (`RadialRing`, `HammerBuildWheel`): `Painter2D` wedges with a pixel-even gap and a growing hover replace the re-rasterised ring texture; one adaptive ring replaces eight-per-page paging.
-- **Drawn piece icons and a spec-card hub** (`BuildPieceIcons`, `LineArtBuilder`, `BuildFamilyInfo`): eighteen isometric line masks replace the Unicode glyphs, and the hub carries icon, name, description and per-ingredient cost against stock.
 
 ### Era Transition Feel
 

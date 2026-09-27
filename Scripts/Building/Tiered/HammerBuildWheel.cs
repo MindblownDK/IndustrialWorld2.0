@@ -41,7 +41,7 @@ namespace VoxelEngine.Building.Tiered
             BuildFamily.Doorway, BuildFamily.Door, BuildFamily.Window,
             BuildFamily.Stairs, BuildFamily.Roof, BuildFamily.Pillar,
             BuildFamily.HalfWall, BuildFamily.WallFrame, BuildFamily.GarageDoor,
-            BuildFamily.FloorHatch
+            BuildFamily.FloorHatch, BuildFamily.WindowPane, BuildFamily.HatchLid
         };
 
         private static readonly BuildFamily[] StationFamilies =

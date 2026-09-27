@@ -42,7 +42,7 @@ namespace VoxelEngine.EditorTools
             BuildFamily.Doorway, BuildFamily.Door, BuildFamily.Window,
             BuildFamily.Stairs, BuildFamily.Roof, BuildFamily.Pillar,
             BuildFamily.HalfWall, BuildFamily.WallFrame, BuildFamily.GarageDoor,
-            BuildFamily.FloorHatch
+            BuildFamily.FloorHatch, BuildFamily.WindowPane, BuildFamily.HatchLid
         };
 
         private static readonly BuildFamily[] Station =
@@ -255,6 +255,7 @@ namespace VoxelEngine.EditorTools
 
             if (!root.TryGetComponent<PlacedTieredBlock>(out _)) root.AddComponent<PlacedTieredBlock>();
             if (family == BuildFamily.Door || family == BuildFamily.GarageDoor) EnsureDoorPivot(root);
+            if (family == BuildFamily.HatchLid) EnsureHatch(root, tier, name);
 
             GameObject saved;
             if (isNew)
@@ -273,18 +274,33 @@ namespace VoxelEngine.EditorTools
         }
 
         /// <summary>
-        /// True when every renderer under the prefab came from this tool. One
-        /// hand-placed mesh anywhere and the whole prefab is off limits.
+        /// True when every renderer under the prefab is one this tool can own.
+        ///
+        /// Judged by the MESH, not by the object's name. The first pass matched
+        /// names, which quietly excluded every orbital station prefab - their
+        /// parts are called Panel, Deck, Collar and so on - so the whole station
+        /// family was reported as "custom work" and never rebuilt at all.
+        /// A mesh qualifies if it is procedural, lives in our generated Meshes
+        /// folder, or is a Unity built-in primitive. Anything imported is a
+        /// modeller's work and the prefab is left alone.
         /// </summary>
         private static bool IsSetupAuthored(GameObject root)
         {
             foreach (var renderer in root.GetComponentsInChildren<Renderer>(true))
             {
-                string n = renderer.gameObject.name;
-                if (!n.StartsWith("Mesh_", System.StringComparison.Ordinal)
-                    && !n.StartsWith("Generated_", System.StringComparison.Ordinal)
-                    && n != "Box")
-                    return false;
+                var filter = renderer.GetComponent<MeshFilter>();
+                var mesh = filter != null ? filter.sharedMesh : null;
+                if (mesh == null) continue;                       // nothing to lose
+
+                string path = AssetDatabase.GetAssetPath(mesh);
+                if (string.IsNullOrEmpty(path)) continue;         // procedural, ours
+                if (path.StartsWith(Meshes, System.StringComparison.Ordinal)) continue;
+                if (path.StartsWith("Library/", System.StringComparison.Ordinal)) continue;
+                if (path.EndsWith("unity default resources", System.StringComparison.Ordinal)) continue;
+                if (path.EndsWith("unity_builtin_extra", System.StringComparison.Ordinal)) continue;
+
+                Debug.Log($"[Step 102] '{root.name}' uses the imported mesh '{path}' — left exactly as it is.");
+                return false;
             }
             return true;
         }
@@ -312,6 +328,54 @@ namespace VoxelEngine.EditorTools
             var door = root.GetComponent<TieredDoor>();
             if (door == null) door = root.AddComponent<TieredDoor>();
             door.doorPivot = pivot.transform;
+        }
+
+        /// <summary>
+        /// Assembles the working hatch: the lid goes under a hinge at its rear
+        /// edge, the ladder is built as its own child hanging from that edge with
+        /// a climbable volume in front of it, and the runtime component is handed
+        /// both. Built closed and furled — opening is the player's business.
+        /// </summary>
+        private static void EnsureHatch(GameObject root, BuildTier tier, string name)
+        {
+            float rear = -(TieredPieceFactory.HatchW - 0.14f) * 0.5f;
+
+            var pivot = new GameObject("Generated_HatchPivot");
+            pivot.transform.SetParent(root.transform, false);
+            pivot.transform.localPosition = new Vector3(0f, 0f, rear);
+
+            var moved = new List<Transform>();
+            foreach (Transform child in root.transform)
+                if (child.name.StartsWith("Mesh_", System.StringComparison.Ordinal)) moved.Add(child);
+            foreach (var child in moved)
+            {
+                child.SetParent(pivot.transform, true);
+                child.localPosition = new Vector3(0f, 0f, -rear);
+            }
+
+            var lidCollider = pivot.AddComponent<BoxCollider>();
+            lidCollider.center = new Vector3(0f, 0.08f, -rear);
+            lidCollider.size = new Vector3(TieredPieceFactory.HatchW - 0.14f, 0.18f, TieredPieceFactory.HatchW - 0.14f);
+
+            // The ladder: one metre tall at unit scale, scaled to length at runtime.
+            var ladder = new GameObject("Generated_Ladder");
+            ladder.transform.SetParent(root.transform, false);
+            ladder.transform.localPosition = new Vector3(0f, -0.08f, rear + 0.34f);
+            ladder.transform.localScale = new Vector3(1f, 5.2f, 1f);
+            TieredPieceFactory.BuildLadder(ladder, tier, $"{Meshes}/{name}_Ladder.asset");
+
+            var volume = new GameObject("Generated_ClimbVolume");
+            volume.transform.SetParent(ladder.transform, false);
+            volume.transform.localPosition = new Vector3(0f, -0.5f, 0.32f);
+            var trigger = volume.AddComponent<BoxCollider>();
+            trigger.isTrigger = true;
+            trigger.size = new Vector3(1.3f, 1f, 0.9f);
+            volume.AddComponent<ClimbableLadder>();
+
+            var hatch = root.GetComponent<TieredHatch>();
+            if (hatch == null) hatch = root.AddComponent<TieredHatch>();
+            hatch.lidPivot = pivot.transform;
+            hatch.ladder = ladder.transform;
         }
 
         // ══════════════════════════════════════════════════════════════════
@@ -361,15 +425,27 @@ namespace VoxelEngine.EditorTools
                     break;
 
                 case BuildFamily.Floor:
-                case BuildFamily.FloorHatch:
                 case BuildFamily.StationFloor:
                     Socket(SocketSide.Top, new Vector3(0f, 0.38f, 0f));
                     Neighbours(0f);
                     Perimeter(0.38f);
                     break;
 
-                case BuildFamily.Wall:
                 case BuildFamily.Window:
+                    Socket(SocketSide.Top, new Vector3(0f, storey, 0f));
+                    Socket(SocketSide.East, new Vector3(m, 0f, 0f));
+                    Socket(SocketSide.West, new Vector3(-m, 0f, 0f));
+                    Socket(SocketSide.Center, Vector3.zero);   // takes a Window Pane
+                    break;
+
+                case BuildFamily.FloorHatch:
+                    Socket(SocketSide.Top, new Vector3(0f, 0.42f, 0f));
+                    Neighbours(0f);
+                    Perimeter(0.42f);
+                    Socket(SocketSide.Center, Vector3.zero);   // takes a Hatch Lid
+                    break;
+
+                case BuildFamily.Wall:
                 case BuildFamily.HalfWall:
                 case BuildFamily.StationHull:
                 case BuildFamily.StationWindow:
@@ -430,6 +506,8 @@ namespace VoxelEngine.EditorTools
                 BuildFamily.WallFrame => (4, 4, 7, 4, 4),
                 BuildFamily.GarageDoor => (2, 4, 0, 6, 5),
                 BuildFamily.FloorHatch => (2, 4, 0, 4, 4),
+                BuildFamily.WindowPane => (0, 2, 0, 2, 2),
+                BuildFamily.HatchLid   => (1, 3, 0, 3, 3),
                 _ => (3, 3, 5, 3, 3),
             };
 
