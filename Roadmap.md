@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `13.6.1-dev`
-**Roadmap Version:** `13.6.1-dev`
+**Current Version:** `13.6.2-dev`
+**Roadmap Version:** `13.6.2-dev`
 **Date:** 2026-09-27
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 13.6.2-dev - The Shutter Rolls Into Its Drum
+- **Rolling shutter** (`TieredDoor`): garage slats curl into the header drum instead of rotating as one rigid leaf, and their blocking colliders release once the opening clears.
+- **Pillar corners** (`BuildSystemV2`): the outer pillar targets are the four true module corners shared by four foundations, with the centre retained as the fifth target.
+- **Surface separation** (`TieredPieceFactory`, Setup Step 102): structural wall relief receives additional depth clearance from its solid backing to remove remaining wall and frame shimmer.
+
 ### 13.6.1-dev - Hinges, Clearances and Stair Guards
 - **Garage motion** (`TieredDoor`, Setup Step 102): garage shutters hinge at the header and fold overhead while ordinary doors retain side-aware lateral swing.
 - **Placement clearances** (`BuildSystemV2`): occupied-root rejection remains strict while neighbouring supports no longer invalidate wall frames; roofs gain a small seating clearance.
@@ -48,11 +53,6 @@
 - **Direct wall join** (`BuildSystemV2`): floors and floor hatches derive their side, height and half-module offset from the wall actually under the crosshair instead of competing in a broad socket search.
 - **Deck continuation** (`BuildSystemV2`): foundations, floors and floor hatches choose the nearest host edge and continue exactly one module in that host's local frame.
 - **Curved-world alignment**: direct joins preserve the aimed piece's complete orientation, including its local up axis on spherical terrain.
-
-### 13.5.6-dev - Floors Land Beside Walls
-- **Floor sockets** (`BuildSocketCompat`): floors and floor hatches use the wall's two half-module edge anchors instead of its centreline top socket.
-- **Foundation reach** (`BuildSystemV2`): the default socket search spans a complete 7.5 m module, so neighbouring foundation anchors remain reachable while aiming near the host's centre.
-- **Setup repair** (`TieredRebuildSetup`, Setup Step 102): re-running construction setup upgrades only recognized old snap-radius defaults and preserves hand-tuned values.
 
 ### Era Transition Feel
 

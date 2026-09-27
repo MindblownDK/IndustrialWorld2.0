@@ -432,13 +432,15 @@ namespace VoxelEngine.Building.Tiered
 
         private static Vector3 NearestCentreOrEdge(Vector3 localHit, float halfModule)
         {
-            // The middle owns the central pillar socket. Outside the middle third,
-            // the nearest cardinal edge wins; corners never create diagonal pillars.
+            // The middle owns the central pillar socket. Everywhere else resolves
+            // to one of the four true module corners, where up to four foundations
+            // meet at ninety degrees. Side midpoints are deliberately not sockets.
             float ax = Mathf.Abs(localHit.x);
             float az = Mathf.Abs(localHit.z);
             if (Mathf.Max(ax, az) < halfModule * 0.34f) return Vector3.zero;
-            if (ax > az) return new Vector3(Mathf.Sign(localHit.x) * halfModule, 0f, 0f);
-            return new Vector3(0f, 0f, Mathf.Sign(localHit.z) * halfModule);
+            float x = Mathf.Approximately(localHit.x, 0f) ? 1f : Mathf.Sign(localHit.x);
+            float z = Mathf.Approximately(localHit.z, 0f) ? 1f : Mathf.Sign(localHit.z);
+            return new Vector3(x * halfModule, 0f, z * halfModule);
         }
 
         private bool TryComputeStairChainTransform(

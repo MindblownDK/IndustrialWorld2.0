@@ -348,7 +348,7 @@ namespace VoxelEngine.EditorTools
                     {
                         float y = bottom + vInset + bh * (i + 0.5f);
                         float relief = (i & 1) == 0 ? 0.015f : 0f;
-                        m.Box(PieceSurface.Skin, new Vector3(centre.x, y, z + 0.067f + relief),
+                        m.Box(PieceSurface.Skin, new Vector3(centre.x, y, z + 0.10f + relief),
                               new Vector3(fieldW, bh * 1.03f, 0.11f));
                     }
 
@@ -394,7 +394,7 @@ namespace VoxelEngine.EditorTools
                             if (x - halfBrick < left + border - 0.01f || x + halfBrick > right - border + 0.01f) continue;
                             float n = Mathf.PerlinNoise(c * 2.3f + r * 0.7f, r * 1.9f);
                             m.Box(PieceSurface.Skin,
-                                  new Vector3(x, bottom + vBorder + rh * (r + 0.5f), z + 0.045f + n * 0.022f),
+                                  new Vector3(x, bottom + vBorder + rh * (r + 0.5f), z + 0.09f + n * 0.022f),
                                   new Vector3(cw * 0.92f, rh * 0.84f, 0.09f));
                         }
                     }
@@ -422,7 +422,7 @@ namespace VoxelEngine.EditorTools
                             float x = left + border + cw * (c + 0.5f);
                             float y = bottom + vBorder + rh * (r + 0.5f);
                             float n = Mathf.PerlinNoise(c * 5.1f + r * 2.7f, r * 3.3f);
-                            m.Box(PieceSurface.Skin, new Vector3(x, y, z + 0.045f + n * 0.02f),
+                            m.Box(PieceSurface.Skin, new Vector3(x, y, z + 0.08f + n * 0.02f),
                                   new Vector3(cw * 0.985f, rh * 0.97f, 0.06f),
                                   new Vector3(0f, 0f, (n - 0.5f) * 1.6f));
                             int screws = Mathf.Max(2, Mathf.RoundToInt(cw / 1.1f));
@@ -1611,3 +1611,5 @@ namespace VoxelEngine.EditorTools
     }
 }
 #endif
+f
+f

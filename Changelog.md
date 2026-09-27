@@ -1,9 +1,30 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `13.6.1-dev`
+**Current Version:** `13.6.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [13.6.2-dev] The Shutter Rolls Into Its Drum
+
+**Type:** PATCH - garage animation/collision, pillar target and generated-surface correction. No save schema, family value, item, recipe, research or tuned cost changes.
+
+**The Garage Door now rolls instead of hinging.** The previous correction moved the pivot to the header but still rotated the complete shutter as one rigid board. `TieredDoor` now identifies the authored shutter skin, clones only the runtime instance mesh and curls its slats through two and a half turns around the header drum. Closing reverses the same deformation. The shared prefab mesh remains untouched.
+
+**An open Garage Door releases the doorway.** The old root collider remained upright even after the visible shutter moved overhead. Garage-door colliders now disable once the roll has cleared 72 percent of the opening and re-enable while closing, so a Crusader or vehicle can pass through the open frame without walking into an invisible wall.
+
+**Pillar targets are centre plus four corners.** The phrase “edge” is now implemented as the actual ninety-degree module corners where as many as four Foundations or Floors meet. The four side-midpoint targets are removed. Aiming within the middle region still selects the centre pillar; aiming outside it selects the matching signed X/Z corner at ±3.75 m on both axes.
+
+**Wall relief has decisive depth clearance.** The first separation pass was too conservative for the project's viewing distances and depth precision. Wood boards, Stone blocks, Iron salvage plates and Steel armour panels now sit farther forward from the solid sheathing while retaining their overall silhouette, eliminating the remaining wall and Wall Frame depth fighting after Step 102 rebuilds their meshes.
+
+**GitHub title:** `[13.6.2-dev] The shutter rolls into its drum`
+
+**Manual steps:**
+1. Pull `Dev`, let Unity compile, then run `Tools -> Voxel Engine -> Voxel Engine Setup -> 102. Rebuild Construction at Size-V6`.
+2. Place a Wall Frame and Garage Door. Open it: the slats must curl into the cylinder above the opening rather than rotate as one panel.
+3. After the opening is mostly clear, walk and drive through it. There must be no invisible collider. Close it and confirm it blocks passage again.
+4. Hold a Pillar over a Foundation or Floor. Aim centrally for the centre target, then toward each corner. The four outer targets must sit at the true corners where four modules can meet; no side-midpoint target should remain.
+5. Inspect newly rebuilt Walls and Wall Frames from shallow angles and at distance. Their boards, masonry or plates must remain stable without flickering against the backing surface.
 
 ### [13.6.1-dev] Hinges, Clearances and Stair Guards
 
