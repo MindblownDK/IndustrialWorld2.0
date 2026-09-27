@@ -261,8 +261,10 @@ namespace VoxelEngine.EditorTools
             new GameObject(SizeMarker).transform.SetParent(root.transform, false);
 
             if (!root.TryGetComponent<PlacedTieredBlock>(out _)) root.AddComponent<PlacedTieredBlock>();
-            if (family == BuildFamily.Door || family == BuildFamily.GarageDoor) EnsureDoorPivot(root);
+            if (family == BuildFamily.Door || family == BuildFamily.GarageDoor) EnsureDoorPivot(root, family);
             if (family == BuildFamily.HatchLid) EnsureHatch(root, tier, name);
+            if (family == BuildFamily.Railing && root.GetComponent<TieredRailing>() == null)
+                root.AddComponent<TieredRailing>();
 
             GameObject saved;
             if (isNew)
@@ -316,12 +318,15 @@ namespace VoxelEngine.EditorTools
         /// A door leaf needs a pivot at its hinge edge for TieredDoor to swing it.
         /// The welded meshes are re-parented under that pivot.
         /// </summary>
-        private static void EnsureDoorPivot(GameObject root)
+        private static void EnsureDoorPivot(GameObject root, BuildFamily family)
         {
+            bool garage = family == BuildFamily.GarageDoor;
             var pivot = new GameObject("Generated_DoorHinge");
             pivot.transform.SetParent(root.transform, false);
-            float hinge = root.name.StartsWith("GarageDoor", System.StringComparison.Ordinal) ? 0f : -1.22f;
-            pivot.transform.localPosition = new Vector3(hinge, 0f, 0f);
+            float hinge = garage ? 0f : -1.22f;
+            pivot.transform.localPosition = garage
+                ? new Vector3(0f, TieredPieceFactory.GarageH, 0f)
+                : new Vector3(hinge, 0f, 0f);
 
             var moved = new List<Transform>();
             foreach (Transform child in root.transform)
@@ -329,12 +334,15 @@ namespace VoxelEngine.EditorTools
             foreach (var child in moved)
             {
                 child.SetParent(pivot.transform, true);
-                child.localPosition = new Vector3(-hinge, 0f, 0f);
+                child.localPosition = garage
+                    ? new Vector3(0f, -TieredPieceFactory.GarageH, 0f)
+                    : new Vector3(-hinge, 0f, 0f);
             }
 
             var door = root.GetComponent<TieredDoor>();
             if (door == null) door = root.AddComponent<TieredDoor>();
             door.doorPivot = pivot.transform;
+            door.opensUp = garage;
         }
 
         /// <summary>

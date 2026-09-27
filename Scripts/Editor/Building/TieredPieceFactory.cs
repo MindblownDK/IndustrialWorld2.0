@@ -47,7 +47,8 @@ namespace VoxelEngine.EditorTools
         /// <summary>Door opening: wide enough for two abreast, tall enough to feel built.</summary>
         private const float DoorW = 2.60f, DoorH = 3.90f;
         /// <summary>Garage opening: a vehicle-width hole in a wall.</summary>
-        private const float GarageW = 5.00f, GarageH = 4.30f;
+        private const float GarageW = 5.00f;
+        public const float GarageH = 4.30f;
         /// <summary>Hatch opening in a floor slab. Public: the setup step sizes the lid hinge from it.</summary>
         public const float HatchW = 2.60f;
 
@@ -347,7 +348,7 @@ namespace VoxelEngine.EditorTools
                     {
                         float y = bottom + vInset + bh * (i + 0.5f);
                         float relief = (i & 1) == 0 ? 0.015f : 0f;
-                        m.Box(PieceSurface.Skin, new Vector3(centre.x, y, z + 0.055f + relief),
+                        m.Box(PieceSurface.Skin, new Vector3(centre.x, y, z + 0.067f + relief),
                               new Vector3(fieldW, bh * 1.03f, 0.11f));
                     }
 
@@ -711,7 +712,10 @@ namespace VoxelEngine.EditorTools
             // a negative box extent produces inside-out geometry, not a recess.
             void Run(PieceSurface surface, float x, float widthX, float thick, float depth, float lift = 0f)
             {
-                float y = top - thick * 0.5f + lift;
+                // Keep the finish physically clear of the structural slab. Its top
+                // face used to be exactly coplanar with the slab top, producing
+                // depth-buffer flicker across every generated deck.
+                float y = top - thick * 0.5f + lift + 0.008f;
                 if (hole <= 0f || Mathf.Abs(x) >= holeHalf)
                 {
                     m.Box(surface, new Vector3(x, y, 0f), new Vector3(widthX, thick, depth));

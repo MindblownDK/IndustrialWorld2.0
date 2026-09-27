@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `13.6.0-dev`
-**Roadmap Version:** `13.6.0-dev`
+**Current Version:** `13.6.1-dev`
+**Roadmap Version:** `13.6.1-dev`
 **Date:** 2026-09-27
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 13.6.1-dev - Hinges, Clearances and Stair Guards
+- **Garage motion** (`TieredDoor`, Setup Step 102): garage shutters hinge at the header and fold overhead while ordinary doors retain side-aware lateral swing.
+- **Placement clearances** (`BuildSystemV2`): occupied-root rejection remains strict while neighbouring supports no longer invalidate wall frames; roofs gain a small seating clearance.
+- **Generated surfaces** (`TieredPieceFactory`, `TieredRailing`): deck finishes and wall relief clear their backing planes, and stair railings shear along the rise while keeping every post vertical.
+
 ### 13.6.0-dev - Construction Fittings and Separate Railings
 - **Ordered wheel** (`HammerBuildWheel`): structural pieces are grouped by purpose, with each door, pane and lid adjacent to its matching opening and the new Railing beside Stairs.
 - **Deterministic joins** (`BuildSystemV2`, `BuildSocketCompat`): openings accept their fittings; walls, half walls, frames, roofs, pillars, floors and stairs use authored edge, centre and height rules.
@@ -48,11 +53,6 @@
 - **Floor sockets** (`BuildSocketCompat`): floors and floor hatches use the wall's two half-module edge anchors instead of its centreline top socket.
 - **Foundation reach** (`BuildSystemV2`): the default socket search spans a complete 7.5 m module, so neighbouring foundation anchors remain reachable while aiming near the host's centre.
 - **Setup repair** (`TieredRebuildSetup`, Setup Step 102): re-running construction setup upgrades only recognized old snap-radius defaults and preserves hand-tuned values.
-
-### 13.5.5-dev - Water Shader Compiles Before Build Anchoring
-- **Shader target** (`VoxelWaterURP`, `VoxelWater`): the full water shader now targets Shader Model 4.5 and its simpler project-owned fallback targets 3.5 instead of inheriting the insufficient default target.
-- **Setup recovery** (`RuntimeShaderSetup`, Setup Step 103): direct shader-asset resolution prefers the full water shader, accepts the project fallback, and upgrades recognized setup-owned URP Lit water materials without touching custom designer shaders.
-- **Runtime fallback** (`WaterMeshBuilder`, `ProceduralWaterPatchRenderer`): liquid rendering uses the same full water, simple water, URP Lit ordering and never constructs a material from an unsupported shader.
 
 ### Era Transition Feel
 

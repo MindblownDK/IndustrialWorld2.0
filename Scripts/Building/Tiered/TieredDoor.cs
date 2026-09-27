@@ -8,6 +8,7 @@ namespace VoxelEngine.Building.Tiered
     public sealed class TieredDoor : MonoBehaviour
     {
         public Transform doorPivot;
+        public bool opensUp;
         [Range(70f, 130f)] public float openAngle = 100f;
         [Min(1f)] public float turnSpeed = 8f;
 
@@ -25,10 +26,10 @@ namespace VoxelEngine.Building.Tiered
         private void Update()
         {
             if (doorPivot == null) return;
-            Quaternion target = _closedRotation * Quaternion.Euler(
-                0f,
-                _open ? _signedOpenAngle : 0f,
-                0f);
+            float angle = _open ? _signedOpenAngle : 0f;
+            Quaternion target = _closedRotation * (opensUp
+                ? Quaternion.Euler(-angle, 0f, 0f)
+                : Quaternion.Euler(0f, angle, 0f));
             doorPivot.localRotation = Quaternion.Slerp(
                 doorPivot.localRotation,
                 target,
@@ -50,6 +51,13 @@ namespace VoxelEngine.Building.Tiered
 
             if (doorPivot == null)
             {
+                _open = true;
+                return;
+            }
+
+            if (opensUp)
+            {
+                _signedOpenAngle = Mathf.Abs(openAngle) * 0.9f;
                 _open = true;
                 return;
             }

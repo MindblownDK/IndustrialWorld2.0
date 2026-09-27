@@ -97,6 +97,7 @@ namespace VoxelEngine.Building.Tiered
             {
                 if (side == SocketSide.Top)
                     return incoming == BuildFamily.Roof     ||
+                           incoming == BuildFamily.HalfWall ||
                            incoming == BuildFamily.Wall     ||
                            incoming == BuildFamily.Doorway  ||
                            incoming == BuildFamily.Window;

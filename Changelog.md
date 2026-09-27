@@ -1,9 +1,34 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `13.6.0-dev`
+**Current Version:** `13.6.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [13.6.1-dev] Hinges, Clearances and Stair Guards
+
+**Type:** PATCH - construction animation, placement, generated-surface and railing-fit corrections. No save schema, family value, recipe, research or tuned existing cost changes.
+
+**Garage Doors now open as Garage Doors.** The shared door component treated every fitting as a side-hinged leaf. Setup Step 102 now authors the Garage Door pivot at the opening header, offsets the generated shutter beneath that pivot and marks it as an overhead fitting. Runtime animation folds it upward around local X to sit over the opening; ordinary Doors retain their player-side-aware local-Y swing.
+
+**A valid Wall Frame is no longer rejected by neighbouring construction.** The placement probe remains strict when another tiered piece already owns the exact target root, preventing duplicate placement. Other tiered colliders touching that root through a shared deck edge or roof support are treated as expected neighbours when a direct host snap is active. This closes the red Wall Frame case without globally disabling overlap checks or allowing dynamic-body overlap.
+
+**Roofs seat above the wall cap.** The wall-top join adds 0.18 m of authored clearance for Roofs only. Floors retain their flush structural join.
+
+**Stair Railings now follow the flight without leaning their posts.** Rotating a complete level railing onto the stair pitch rotated the posts too. `TieredRailing` now clones only the instance meshes and applies a lengthwise vertical shear: each post stays vertical, while the top and middle rails rise the full 5.625 m across the 7.5 m run. Level railings use zero shear, and shared generated mesh assets are never modified.
+
+**Generated skins no longer share depth with their backing.** Deck finish faces previously landed exactly on the slab top, and the rear faces of Wood/Stone relief could land exactly on the solid wall sheathing. The authoring pass now gives those layers a small physical separation, removing the broad depth-buffer flicker without changing the visible dimensions or materials.
+
+**GitHub title:** `[13.6.1-dev] Hinges, clearances and stair guards`
+
+**Manual steps:**
+1. Pull `Dev`, let Unity compile, then run `Tools -> Voxel Engine -> Voxel Engine Setup -> 102. Rebuild Construction at Size-V6`.
+2. Place a Wall Frame and Garage Door. Interact from both sides: the shutter must fold upward under the header rather than swing sideways.
+3. Place a Wall Frame on a Floor with adjacent walls and a Roof already present. The ghost must remain valid unless another piece already occupies that exact root.
+4. Place Roofs on both faces of a Wall. Their eaves should clear and sit on the wall cap rather than intersect it.
+5. Place Railings on both Stair sides. Posts must remain vertical; both horizontal rails must climb with the treads and the lowest post must begin at the stair foot.
+6. Walk around Wood and Stone walls, Foundations and Floors at shallow viewing angles. The cladding and deck finish must remain stable without alternating or shimmering against their backing surfaces.
+7. Recheck Pillars at the centre and four side-midpoints. This round intentionally keeps the five positions requested in 13.6.0-dev; if “the edge” means corners instead of side-midpoints, send one marked screenshot and that layout can be changed without guessing.
 
 ### [13.6.0-dev] Construction Fittings and Separate Railings
 

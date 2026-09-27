@@ -60,6 +60,7 @@ namespace VoxelEngine.Building.Tiered
         private readonly HashSet<PlacedTieredBlock> _socketHosts = new(16);
         private readonly List<BuildSocket> _socketScratch = new(8);
         private Quaternion _ghostRot = Quaternion.identity;
+        private float _railingRise;
 
         private void Awake()
         {
@@ -137,6 +138,8 @@ namespace VoxelEngine.Building.Tiered
 
             ComputeGhostTransform(hit, def);
             _ghost.transform.SetPositionAndRotation(_ghostPos, _ghostRot);
+            if (_ghost.TryGetComponent<TieredRailing>(out var ghostRailing))
+                ghostRailing.Configure(_railingRise);
             ApplyGhostMaterialIfChanged(_ghostValid ? _matValid : _matInvalid);
 
             // Place on the standard build action (RMB by default).
@@ -145,7 +148,7 @@ namespace VoxelEngine.Building.Tiered
                 if (CanAfford(def.placeCost))
                 {
                     PayCost(def.placeCost);
-                    Place(def, _ghostPos, _ghostRot);
+                    Place(def, _ghostPos, _ghostRot, _railingRise);
                     // The feedback HUD receives the primary cost directly; building a
                     // second formatted summary here was unused work on every placement.
                     VoxelEngine.UI.BuildFeedbackHud.ShowBlockPlaced(
@@ -196,6 +199,7 @@ namespace VoxelEngine.Building.Tiered
         // ---------- Snap / placement math ----------
         private void ComputeGhostTransform(RaycastHit hit, TieredBlockDefinition def)
         {
+            _railingRise = 0f;
             // 1) Try socket snap: look for the nearest BuildSocket within socketSnapRadius
             //    around the hit point that accepts this family.
             BuildSocket bestSocket = null;
@@ -330,8 +334,8 @@ namespace VoxelEngine.Building.Tiered
                 {
                     float side = Mathf.Approximately(localHit.x, 0f) ? 1f : Mathf.Sign(localHit.x);
                     position = host.transform.position + host.transform.right * (side * (ConstructionModule - 0.6f) * 0.5f);
-                    float pitch = -Mathf.Atan2(ConstructionStorey, ConstructionModule) * Mathf.Rad2Deg;
-                    rotation = host.transform.rotation * Quaternion.Euler(pitch, 90f, 0f);
+                    rotation = host.transform.rotation * Quaternion.Euler(0f, -90f, 0f);
+                    _railingRise = ConstructionStorey;
                     return true;
                 }
 
@@ -355,8 +359,9 @@ namespace VoxelEngine.Building.Tiered
                 float height = hostFamily == BuildFamily.HalfWall ? HalfWallHeight : ConstructionStorey;
                 float side = ResolveFaceSide(localHit.z, Vector3.Dot(hit.normal, host.transform.forward));
 
+                float roofLift = incoming == BuildFamily.Roof ? 0.18f : 0f;
                 position = host.transform.position
-                    + host.transform.up * height
+                    + host.transform.up * (height + roofLift)
                     + host.transform.forward * (side * ConstructionModule * 0.5f);
                 rotation = Quaternion.AngleAxis(_ghostYaw, host.transform.up) * host.transform.rotation;
                 return true;
@@ -542,16 +547,16 @@ namespace VoxelEngine.Building.Tiered
             int count = Physics.OverlapBoxNonAlloc(pos, Vector3.one * 0.45f,
                 s_placementOverlapProbe, Quaternion.identity, ~0, QueryTriggerInteraction.UseGlobal);
             for (int i = 0; i < count; i++)
-                if (!IsOverlapColliderAllowed(s_placementOverlapProbe[i], socketHost, family)) return false;
+                if (!IsOverlapColliderAllowed(s_placementOverlapProbe[i], socketHost, family, pos)) return false;
             if (count < s_placementOverlapProbe.Length) return true;
 
             // Preserve exact legacy behaviour if a very dense area fills the probe.
             foreach (var collider in Physics.OverlapBox(pos, Vector3.one * 0.45f, Quaternion.identity))
-                if (!IsOverlapColliderAllowed(collider, socketHost, family)) return false;
+                if (!IsOverlapColliderAllowed(collider, socketHost, family, pos)) return false;
             return true;
         }
 
-        private static bool IsOverlapColliderAllowed(Collider collider, PlacedTieredBlock socketHost, BuildFamily incoming)
+        private static bool IsOverlapColliderAllowed(Collider collider, PlacedTieredBlock socketHost, BuildFamily incoming, Vector3 placementPosition)
         {
             if (collider == null) return true;
             if (collider.attachedRigidbody != null && !collider.attachedRigidbody.isKinematic)
@@ -561,6 +566,8 @@ namespace VoxelEngine.Building.Tiered
             // socket-snapping to that exact host (adjacent stacking is fine).
             var host = collider.GetComponentInParent<PlacedTieredBlock>();
             if (host == null || host == socketHost) return true;
+            if (socketHost != null && Vector3.Distance(host.transform.position, placementPosition) > 0.25f)
+                return true;
 
             // A fitting occupies an opening whose root can touch the supporting
             // foundation/deck and the frame at once. Those authored tiered pieces
@@ -594,9 +601,10 @@ namespace VoxelEngine.Building.Tiered
         }
 
         // ---------- Place ----------
-        private void Place(TieredBlockDefinition def, Vector3 pos, Quaternion rot)
+        private void Place(TieredBlockDefinition def, Vector3 pos, Quaternion rot, float railingRise)
         {
             var go = Instantiate(def.GetPrefab(BuildTier.Wood), pos, rot);
+            if (go.TryGetComponent<TieredRailing>(out var railing)) railing.Configure(railingRise);
             go.name = $"{def.displayName} (Wood)";
             var pb = go.GetComponent<PlacedTieredBlock>();
             if (pb == null) pb = go.AddComponent<PlacedTieredBlock>();
