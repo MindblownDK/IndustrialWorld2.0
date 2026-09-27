@@ -565,16 +565,46 @@ namespace VoxelEngine.Building.Tiered
 
         private static bool HasRoofSupport(Vector3 position)
         {
-            const float maxSpan = ConstructionModule * 2f + 0.35f;
-            var colliders = Physics.OverlapSphere(position, maxSpan + ConstructionStorey, ~0, QueryTriggerInteraction.Ignore);
-            var visited = new HashSet<PlacedTieredBlock>();
+            // Count roof modules, not metres to any support in a broad sphere.
+            // Candidate = depth 1; one neighbouring roof = depth 2. We never walk
+            // through a second neighbour, so a long roof chain cannot relay support
+            // forever merely because every panel touches another panel.
+            const float searchRadius = ConstructionModule * 2f + ConstructionStorey;
+            const float neighbourDistance = ConstructionModule + 0.45f;
+            var colliders = Physics.OverlapSphere(position, searchRadius, ~0, QueryTriggerInteraction.Ignore);
+            var blocks = new List<PlacedTieredBlock>();
+            var unique = new HashSet<PlacedTieredBlock>();
             for (int i = 0; i < colliders.Length; i++)
             {
                 var block = colliders[i] != null ? colliders[i].GetComponentInParent<PlacedTieredBlock>() : null;
-                if (block == null || block.definition == null || !visited.Add(block)) continue;
-                BuildFamily family = block.definition.family;
+                if (block != null && block.definition != null && unique.Add(block)) blocks.Add(block);
+            }
+
+            if (HasDirectRoofSupport(position, blocks)) return true;
+
+            float neighbourSqr = neighbourDistance * neighbourDistance;
+            for (int i = 0; i < blocks.Count; i++)
+            {
+                var roof = blocks[i];
+                if (roof.definition.family != BuildFamily.Roof) continue;
+                Vector3 delta = roof.transform.position - position;
+                float vertical = Mathf.Abs(Vector3.Dot(delta, roof.transform.up));
+                Vector3 planar = delta - roof.transform.up * Vector3.Dot(delta, roof.transform.up);
+                if (vertical > 0.75f || planar.sqrMagnitude > neighbourSqr) continue;
+                if (HasDirectRoofSupport(roof.transform.position, blocks)) return true;
+            }
+            return false;
+        }
+
+        private static bool HasDirectRoofSupport(Vector3 roofPosition, List<PlacedTieredBlock> blocks)
+        {
+            const float edgeReach = ConstructionModule * 0.707107f + 0.45f;
+            float edgeReachSqr = edgeReach * edgeReach;
+            for (int i = 0; i < blocks.Count; i++)
+            {
+                var block = blocks[i];
                 float height;
-                switch (family)
+                switch (block.definition.family)
                 {
                     case BuildFamily.Wall:
                     case BuildFamily.Doorway:
@@ -591,10 +621,10 @@ namespace VoxelEngine.Building.Tiered
                 }
 
                 Vector3 supportTop = block.transform.position + block.transform.up * height;
-                Vector3 delta = position - supportTop;
+                Vector3 delta = roofPosition - supportTop;
                 float vertical = Mathf.Abs(Vector3.Dot(delta, block.transform.up));
                 Vector3 planar = delta - block.transform.up * Vector3.Dot(delta, block.transform.up);
-                if (vertical <= 0.75f && planar.sqrMagnitude <= maxSpan * maxSpan) return true;
+                if (vertical <= 0.75f && planar.sqrMagnitude <= edgeReachSqr) return true;
             }
             return false;
         }

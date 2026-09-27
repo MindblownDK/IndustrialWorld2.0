@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `13.7.0-dev`
-**Roadmap Version:** `13.7.0-dev`
+**Current Version:** `13.7.1-dev`
+**Roadmap Version:** `13.7.1-dev`
 **Date:** 2026-09-27
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 13.7.1-dev - Roof Support Cannot Relay Forever
+- **Bounded graph** (`BuildSystemV2`): candidate roofs count as span one and may cross only one neighbouring roof before reaching a real vertical support.
+- **Direct load point**: walls and opening frames support roof edges while corner pillars support the same panel through a diagonal corner reach.
+- **Existing worlds**: unsupported placed roofs remain untouched; only new placement validation changes.
+
 ### 13.7.0-dev - Roof Loads and Grounded Foundations
 - **Roof span rule** (`BuildSystemV2`): a roof ghost remains valid only within two modules of a wall, opening frame, half wall or pillar whose top reaches its level.
 - **Foundation legs** (`FoundationSupportLegs`, Setup Step 102): four authored corner supports extend independently down to the first solid non-building surface.
@@ -48,11 +53,6 @@
 - **Compile repair** (`TieredPieceFactory`): two stray trailing characters after the editor-only compilation guard are removed.
 - **Scope**: generated geometry, snapping, costs and prefabs are unchanged.
 - **Validation**: source braces and the file-ending preprocessor guard are balanced.
-
-### 13.6.2-dev - The Shutter Rolls Into Its Drum
-- **Rolling shutter** (`TieredDoor`): garage slats curl into the header drum instead of rotating as one rigid leaf, and their blocking colliders release once the opening clears.
-- **Pillar corners** (`BuildSystemV2`): the outer pillar targets are the four true module corners shared by four foundations, with the centre retained as the fifth target.
-- **Surface separation** (`TieredPieceFactory`, Setup Step 102): structural wall relief receives additional depth clearance from its solid backing to remove remaining wall and frame shimmer.
 
 ### Era Transition Feel
 

@@ -1,9 +1,30 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `13.7.0-dev`
+**Current Version:** `13.7.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [13.7.1-dev] Roof Support Cannot Relay Forever
+
+**Type:** PATCH - roof placement support validation correction. No save data, public API, prefab, item, recipe, research or balance cost changes.
+
+**Fixed - a roof chain could relay support indefinitely.** The first implementation searched a broad radius for any vertical support. That described distance, but it did not describe the load path through individual roof modules and could allow a long connected run to keep passing validation under dense construction. Validation now performs a bounded two-step roof graph instead.
+
+**The count is explicit.** The candidate Roof is span one. It may either reach a real vertical support directly or pass through exactly one adjacent Roof, span two, which must itself reach a real support. Validation never traverses a second neighbouring Roof, so the third unsupported panel turns red regardless of how many more Roofs continue beyond it.
+
+**Supports still meet the panel where construction actually meets.** Walls, Doorways, Windows and Wall Frames reach a Roof at its edge. Pillars at the new four-corner sockets reach the same Roof diagonally at its corner. Vertical level remains checked in each support's local up frame for curved worlds.
+
+**GitHub title:** `[13.7.1-dev] Roof support cannot relay forever`
+
+**Manual steps:**
+1. Pull `Dev` and let Unity compile. No setup step is required.
+2. Place one Wall or Pillar and build outward from it with Roofs.
+3. Confirm the first Roof is valid and the second connected Roof is valid.
+4. Confirm the third Roof without another vertical support turns red and cannot be placed.
+5. Add a Wall or Pillar under that refused panel and confirm it becomes valid immediately.
+6. Repeat from a corner Pillar and from a Wall Frame to verify both corner and edge load points.
+7. Confirm existing unsupported Roofs still load and remain untouched.
 
 ### [13.7.0-dev] Roof Loads and Grounded Foundations
 
