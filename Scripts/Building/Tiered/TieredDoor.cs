@@ -47,7 +47,11 @@ namespace VoxelEngine.Building.Tiered
                 }
                 bool blocksOpening = _roll < 0.72f;
                 for (int i = 0; i < _doorColliders.Length; i++)
-                    if (_doorColliders[i] != null) _doorColliders[i].enabled = blocksOpening;
+                {
+                    Collider doorCollider = _doorColliders[i];
+                    if (doorCollider != null && !doorCollider.isTrigger)
+                        doorCollider.enabled = blocksOpening;
+                }
                 return;
             }
 

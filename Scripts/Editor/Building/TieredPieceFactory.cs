@@ -1052,13 +1052,15 @@ namespace VoxelEngine.EditorTools
             {
                 float y = sh * (i + 0.5f);
                 m.Box(PieceSurface.Skin, new Vector3(0f, y, 0f), new Vector3(GarageW - 0.2f, sh * 0.92f, 0.13f));
-                m.Box(PieceSurface.Trim, new Vector3(0f, y + sh * 0.46f, 0.02f), new Vector3(GarageW - 0.2f, 0.05f, 0.17f));
+                // The separator belongs to the moving shutter, not the static frame.
+                m.Box(PieceSurface.Skin, new Vector3(0f, y + sh * 0.46f, 0.02f), new Vector3(GarageW - 0.2f, 0.05f, 0.17f));
             }
             foreach (float s in new[] { -1f, 1f })
                 m.Box(PieceSurface.Frame, new Vector3(s * (GarageW * 0.5f - 0.16f), GarageH * 0.5f, -0.09f),
                       new Vector3(0.2f, GarageH, 0.12f));
             m.Cylinder(PieceSurface.Trim, new Vector3(0f, GarageH + 0.3f, 0f), 0.28f, GarageW - 0.1f, new Vector3(0f, 0f, 90f));
-            m.Box(PieceSurface.Trim, new Vector3(0f, 0.1f, 0f), new Vector3(GarageW - 0.2f, 0.2f, 0.2f));
+            // Bottom weather bar rolls with the slats; the header drum stays Trim.
+            m.Box(PieceSurface.Skin, new Vector3(0f, 0.1f, 0f), new Vector3(GarageW - 0.2f, 0.2f, 0.2f));
         }
 
         private static void Stairs(PieceMesh m, BuildTier tier)

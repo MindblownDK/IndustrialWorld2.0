@@ -1,9 +1,28 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `13.6.3-dev`
+**Current Version:** `13.6.4-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [13.6.4-dev] The Rolled Shutter Remains Reachable
+
+**Type:** PATCH - Garage Door interaction, collision and rolling-geometry correction. No save data, public API, family value, item, recipe, research or balance value is changed.
+
+**The header drum remains clickable while the opening is clear.** The 13.6.2 pass correctly disabled the Garage Door collider so the player could walk through, but that collider was also the only raycast target available for closing it. Setup Step 102 now creates `Generated_GarageInteraction`, a permanent trigger volume wrapped tightly around the header cylinder. It is non-blocking, belongs to the Garage Door hierarchy and therefore routes the standard interaction key back to the same `TieredDoor` component.
+
+**Only blocking colliders are disabled.** `TieredDoor` now leaves trigger colliders enabled throughout opening, waiting and closing. The solid shutter collider still releases once the opening is 72 percent clear and returns during closing.
+
+**Every moving shutter part joins the roll.** Slat separators and the bottom weather bar were authored into the static Trim mesh, so the main slat faces curled away while those details remained stretched across the opening. They now belong to the deforming Skin mesh. Only the side tracks and header drum remain static, producing one complete shutter in the roll rather than leaving pieces behind.
+
+**GitHub title:** `[13.6.4-dev] The rolled shutter remains reachable`
+
+**Manual steps:**
+1. Pull `Dev`, let Unity compile, then run `Tools -> Voxel Engine -> Voxel Engine Setup -> 102. Rebuild Construction at Size-V6`.
+2. Place a fresh Wall Frame and Garage Door, then open it fully.
+3. Confirm every slat, separator and the bottom weather bar rolls into the header; only the two side tracks and cylinder should remain fixed.
+4. Walk through the opening, turn back and aim at the header cylinder. The standard interaction must close the door.
+5. Confirm the trigger never blocks movement and the solid shutter blocks passage again while closing.
 
 ### [13.6.3-dev] Tiered Factory Compiles Again
 

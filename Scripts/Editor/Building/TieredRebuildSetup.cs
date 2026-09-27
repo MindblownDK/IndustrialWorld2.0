@@ -339,6 +339,18 @@ namespace VoxelEngine.EditorTools
                     : new Vector3(-hinge, 0f, 0f);
             }
 
+            if (garage)
+            {
+                // The blocking shutter collider is disabled when open, so the
+                // header needs a permanent non-blocking target for closing it.
+                var interaction = new GameObject("Generated_GarageInteraction");
+                interaction.transform.SetParent(root.transform, false);
+                interaction.transform.localPosition = new Vector3(0f, TieredPieceFactory.GarageH + 0.30f, 0f);
+                var trigger = interaction.AddComponent<BoxCollider>();
+                trigger.isTrigger = true;
+                trigger.size = new Vector3(5.4f, 0.85f, 0.85f);
+            }
+
             var door = root.GetComponent<TieredDoor>();
             if (door == null) door = root.AddComponent<TieredDoor>();
             door.doorPivot = pivot.transform;
