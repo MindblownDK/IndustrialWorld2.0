@@ -210,6 +210,66 @@ namespace VoxelEngine.EditorTools
                 Debug.LogWarning($"[Step 100] Locked wedges — definition exists but the base-tier prefab is empty: {string.Join(", ", unfinished)}.");
         }
 
+
+        // ══════════════════════════════════════════════════════════════════
+        //  STEP 101 — the rest of the radial wheel family
+        // ══════════════════════════════════════════════════════════════════
+
+        /// <summary>
+        /// Non-destructive Step 101. Every radial selector in the game now runs on the
+        /// shared dial, and each one is a plain component on the player: conveyor
+        /// shapes, grid armour shapes, energy pipe fittings, road surfaces and the
+        /// jump drive destinations. This step adds the ones that are missing and
+        /// leaves the ones that are already there untouched.
+        /// </summary>
+        public static void RunStep101()
+        {
+            Debug.Log("[VoxelEngineSetupWindow] Step 101 — Radial wheel family setup started.");
+            Debug.Log("[VoxelEngineSetupWindow] Step 101 — Non-destructive: adds only missing components, changes no authored value.");
+
+            var player = FindPlayer();
+            if (player == null)
+            {
+                Debug.LogWarning("[Step 101] No player with an Inventory was found in the open scene. " +
+                                 "Run Step 2 (Spawn Player + UI) first, then re-run this step.");
+                return;
+            }
+
+            int created = 0, present = 0;
+
+            created += EnsureComponent<VoxelEngine.Simulation.ConveyorShapeWheel>(player, "Conveyor shape wheel", ref present);
+            created += EnsureComponent<VoxelEngine.UI.GridShapeWheel>(player, "Grid armour shape wheel", ref present);
+            created += EnsureComponent<VoxelEngine.UI.EnergyPipeShapeWheel>(player, "Energy pipe shape wheel", ref present);
+            created += EnsureComponent<VoxelEngine.Simulation.RoadSurfaceWheel>(player, "Road surface wheel", ref present);
+            created += EnsureComponent<VoxelEngine.GridSystem.JumpDriveWheel>(player, "Jump drive destination wheel", ref present);
+
+            EditorUtility.SetDirty(player);
+            UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(player.scene);
+
+            Debug.Log($"[VoxelEngineSetupWindow] Step 101 complete — {created} wheel(s) added, {present} already present.");
+            EditorUtility.DisplayDialog("Voxel Engine",
+                $"Radial wheel family is wired on '{player.name}'.\n\n" +
+                $"Added: {created}\nAlready present: {present}\n\n" +
+                "Conveyor, grid armour, energy pipe and road surface wheels all open on the Build Wheel key " +
+                "while the matching item is held. The jump drive wheel opens on the Warp Drive key while piloting.",
+                "OK");
+        }
+
+        private static int EnsureComponent<TComponent>(GameObject host, string label, ref int present)
+            where TComponent : Component
+        {
+            var existing = host.GetComponent<TComponent>();
+            if (existing != null)
+            {
+                Debug.Log($"[Step 101] ✓ {label} already present — kept as authored.");
+                present++;
+                return 0;
+            }
+            Undo.AddComponent<TComponent>(host);
+            Debug.Log($"[Step 101] + Added the {label}.");
+            return 1;
+        }
+
         private static GameObject FindPlayer()
         {
             var tagged = GameObject.FindGameObjectWithTag("Player");

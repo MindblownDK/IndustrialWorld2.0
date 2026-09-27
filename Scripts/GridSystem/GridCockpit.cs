@@ -136,7 +136,11 @@ namespace VoxelEngine.GridSystem
             // The warp key (U by default) engages / fires the Warp Drive (the ONLY warp
             // in the game — an expensive, chargeable grid block). First press begins
             // charging; second fires when ready.
-            if (VoxelEngine.Settings.GameSettings.WasPressed(VoxelEngine.Settings.InputAction.WarpDrive))
+            // The Jump Drive dial owns the warp key when one exists: holding it opens
+            // the destination wheel and its centre carries the charge / fire control,
+            // so the key must not also fire the legacy one-shot handler here.
+            if (!JumpDriveWheel.OwnsWarpKey
+                && VoxelEngine.Settings.GameSettings.WasPressed(VoxelEngine.Settings.InputAction.WarpDrive))
                 HandleWarpDriveInput();
 
             ReadFlightInput();

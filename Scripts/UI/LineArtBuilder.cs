@@ -75,6 +75,58 @@ namespace VoxelEngine.UI
 
         public void Circle(Vector2 center, float r, int steps = 40) => Ellipse(center, r, r, steps);
 
+        // ── Isometric solids ──────────────────────────────────────────────
+        // Ground plane is X/Z, height is Y and projects straight up. The camera
+        // sits at (-X, +Y, -Z), so the TOP face and the two NEAR faces (x = 0 and
+        // z = 0) are the visible ones: a box reads as a hexagonal silhouette with
+        // a three-spoke Y meeting at the near-top corner. Getting this backwards
+        // is what leaves an isometric icon looking like an open carton with its
+        // front edges missing.
+
+        public static Vector2 Iso(float x, float y, float z)
+            => new((x - z) * 0.866f, y + (x + z) * 0.5f);
+
+        /// <summary>The nine visible edges of an axis-aligned box.</summary>
+        public void IsoBox(float ox, float oy, float oz, float sx, float sy, float sz)
+        {
+            Vector2 a = Iso(ox,      oy,      oz);        // near-bottom corner
+            Vector2 b = Iso(ox + sx, oy,      oz);
+            Vector2 d = Iso(ox,      oy,      oz + sz);
+            Vector2 e = Iso(ox,      oy + sy, oz);        // near-top corner
+            Vector2 f = Iso(ox + sx, oy + sy, oz);
+            Vector2 g = Iso(ox + sx, oy + sy, oz + sz);
+            Vector2 h = Iso(ox,      oy + sy, oz + sz);
+
+            Closed(a, b, f, g, h, d);   // silhouette
+            Line(e, a);                 // near vertical
+            Line(e, f);                 // top edge running right
+            Line(e, h);                 // top edge running left
+        }
+
+        /// <summary>A rectangle drawn on the near (z = 0) face of a box, in 0..1 face space.</summary>
+        public void IsoFace(float sx, float sy, float u0, float v0, float u1, float v1)
+        {
+            Closed(
+                Iso(u0 * sx, v0 * sy, 0f), Iso(u1 * sx, v0 * sy, 0f),
+                Iso(u1 * sx, v1 * sy, 0f), Iso(u0 * sx, v1 * sy, 0f));
+        }
+
+        /// <summary>A straight line on the near (z = 0) face of a box, in 0..1 face space.</summary>
+        public void IsoFaceLine(float sx, float sy, float u0, float v0, float u1, float v1)
+            => Line(Iso(u0 * sx, v0 * sy, 0f), Iso(u1 * sx, v1 * sy, 0f));
+
+        /// <summary>A regular polygon, first vertex at the top.</summary>
+        public Vector2[] Polygon(Vector2 centre, float radius, int sides)
+        {
+            var pts = new Vector2[Mathf.Max(3, sides)];
+            for (int i = 0; i < pts.Length; i++)
+            {
+                float a = (90f + i * (360f / pts.Length)) * Mathf.Deg2Rad;
+                pts[i] = new Vector2(centre.x + Mathf.Cos(a) * radius, centre.y + Mathf.Sin(a) * radius);
+            }
+            return pts;
+        }
+
         private static Vector2 OnEllipse(Vector2 c, float rx, float ry, float deg)
         {
             float rad = deg * Mathf.Deg2Rad;

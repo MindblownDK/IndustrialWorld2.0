@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `13.2.0-dev`
-**Roadmap Version:** `13.2.0-dev`
+**Current Version:** `13.3.0-dev`
+**Roadmap Version:** `13.3.0-dev`
 **Date:** 2026-09-27
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,12 @@
 
 ## 0. Recently Done
 
+### 13.3.0-dev - One Dial for Every Wheel, and the Jump Drive Joins It
+- **Shared dial** (`RadialWheelController`, `RadialWheelView`): the build, conveyor, armour, pipe, road and jump wheels all run one presenter and one input model; the per-wheel ring textures, parallax and Unicode glyphs are deleted.
+- **Corrected solids and new icon sets** (`LineArtBuilder`, `MachineShapeIcons`, `JumpTargetIcons`, `IconAtlas`): isometric boxes draw their near faces, and conveyors, armour shapes, pipe fittings, road surfaces and jump destinations all have drawn marks.
+- **Jump drive dial** (`JumpDriveWheel`, `GridCockpit`): the warp key opens the twelve nearest destinations with live distance, price and reachability; the centre carries spin-up, cancel and the aimed jump.
+- **Escape ownership** (`HammerBuildWheel`): the wheel no longer swallows the Pause key, so Escape with an idle hammer opens the pause menu.
+
 ### 13.2.0-dev - The Build Dial Rebuilt Around the Flick
 - **Direction-only pointer** (`RadialWheelInput`, `HammerBuildWheel`): the cursor is locked and re-centred on open, selection comes straight from `Atan2` with no smoothing, and deflection past the ring still selects.
 - **Vector dial** (`RadialRing`, `HammerBuildWheel`): `Painter2D` wedges with a pixel-even gap and a growing hover replace the re-rasterised ring texture; one adaptive ring replaces eight-per-page paging.
@@ -43,11 +49,6 @@
 - **Mesh winding** (`WheelMeshFactory`): lathe, coil spring and wishbone faces now point outward, ending the see-through tire, rim and hub; verified by positive signed volume.
 - **Opaque materials** (`WheelTextureFactory`, `VoxelEngineSetupWindow`): wheel materials are pinned to the opaque queue and baked maps import without an alpha source.
 - **Connected linkage** (`WheelLinkage`, `GridWheelMeshBuilder`, `GridWheel`): one poser drives arms, spring and the new telescoping `Strut` mesh, applied at authoring time as well as per step.
-
-### 13.1.0-dev - Modelled Wheel Geometry and Visibly Compressing Suspension
-- **Construction-safe surfaces** (`SurfaceProfile`, `SurfaceProfileLibrary`, `SurfaceSampler`): no ScriptableObject is created on access; `SurfaceSample.Default` is a plain struct value, ending the constructor exception storm.
-- **Generated geometry** (`WheelMeshFactory`, `GridWheelMeshBuilder`): lathed tire carcass, dished rim, brake disc, coil spring and wishbone replace stacked primitives.
-- **Animated linkage** (`GridWheel`, `VoxelEngineSetupWindow`): arms, spring and damper track the carrier each step, and generated meshes are baked to assets during prefab building.
 
 ### 13.0.1-dev - Unity 6.5 Surface Cache API Compliance
 - **Cache keys** (`SurfaceSampler`): collider and terrain alphamap caches drop the obsolete `GetInstanceID` in favour of object and tuple keys, removing recycled-id staleness.

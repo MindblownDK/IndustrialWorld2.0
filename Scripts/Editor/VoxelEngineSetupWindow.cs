@@ -901,6 +901,20 @@ namespace VoxelEngine.EditorTools
             AddWizardButton(scroll, "100. Wire the Hammer Build Wheel\n(Radial build dial \u2014 links + registry audit \u2014 Non-Destructive)",
                 () => VoxelEngine.EditorTools.BuildWheelSetup.RunStep100(), 56);
 
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
+                "Step 101 wires the REST OF THE RADIAL WHEEL FAMILY (non-destructive):\n" +
+                "  \u2022 Conveyor shape wheel (Straight / Ramp / Vertical)\n" +
+                "  \u2022 Grid armour shape wheel (Cube / Slope / Half / Half-slope / Corner / Inverted)\n" +
+                "  \u2022 Energy pipe shape wheel (nine conduit fittings)\n" +
+                "  \u2022 Road surface wheel (Asphalt / Pathway / Drawbridge)\n" +
+                "  \u2022 Jump drive wheel (charted worlds, beacons and route points on the Warp Drive key)\n" +
+                "All five share one dial: same hold-flick-release, same cursor lock, same drawn icons.\n" +
+                "Re-runnable. Idempotent. Adds only the components that are missing.\n" +
+                "Run AFTER step 2.");
+            AddWizardButton(scroll, "101. Wire the Radial Wheel Family\n(Conveyor, armour, pipe, road + jump drive \u2014 Non-Destructive)",
+                () => VoxelEngine.EditorTools.BuildWheelSetup.RunStep101(), 56);
+
             AddSpacer(scroll, 20);
         }
 

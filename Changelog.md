@@ -1,9 +1,48 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `13.2.0-dev`
+**Current Version:** `13.3.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [13.3.0-dev] One Dial for Every Wheel, and the Jump Drive Joins It
+
+**Type:** MINOR - every radial selector in the game now runs on one shared dial, the isometric icon solids are corrected, and the jump drive gains a destination wheel. Save-compatible: no schema change, no component renamed, every public member other systems read is unchanged (`ConveyorShapeWheel.GetMode`, `GridShapeWheel.CurrentShape`, `RoadSurfaceWheel.IsAnyOpen`, `HammerBuildWheel.ActiveFamily` / `IsOpen` / `Open` / `Close` / `ExitBuildMode`).
+
+**Fixed - the icon solids were inside out.** The isometric projection used here puts the camera at minus-X, plus-Y, minus-Z, so the visible faces are the top and the two NEAR faces. The box routine drew the opposite set: it hid the three edges meeting at the near-bottom corner and drew the three that are actually behind the solid. Every piece therefore lost its front-facing edges and read as an open carton with the lid off. The nine visible edges are now the correct nine, and every surface detail - wall studs, door panels, window mullions, the doorway reveal, the stair treads - moved onto the z = 0 face it belongs on. The inverted slope is drawn as the solid that is actually left after the cut rather than as a cube with a cross scratched on it.
+
+**Fixed - Escape with a hammer in hand.** The build wheel was handling the Pause key itself, unconditionally, whenever a hammer was equipped. Standing still with no dial up and no family armed, Escape therefore reported "build mode closed" and consumed the press, so the pause menu could never open. `InGamePauseMenu` already owned that contract correctly - it exits build mode only when the dial is up or a family is armed, and opens the menu otherwise - so the duplicate handler in the wheel is gone entirely. Escape now opens the menu when there is nothing to cancel, and cancels build mode when there is.
+
+**The dial leans into the aim.** The whole wheel now translates up to 17 pixels toward the direction the hand is pointing. It is undamped and unsmoothed, like everything else on the selection path: it reads as the dial acknowledging the hand rather than as drift the hand then has to chase. Combined with the bead that rides out to the groove exactly as the deadzone is left, the wheel now answers before the wedge lights.
+
+**One dial, six wheels.** The feel, the geometry table and the palette moved into `RadialWheelController` and `RadialWheelView`, and every radial selector in the game was rewritten to run through them:
+
+* Hammer build wheel - eighteen construction families.
+* Conveyor shape wheel - straight, ramp, vertical, per speed tier.
+* Grid armour shape wheel - cube, slope, half, half-slope, corner, inverted.
+* Energy pipe shape wheel - nine conduit fittings.
+* Road surface wheel - asphalt, stone pathway, drawbridge.
+* Jump drive wheel - new, see below.
+
+All six share the cursor lock, the re-centred virtual pointer, the pure-angle selection with no smoothing, the release-to-select, the tap-to-pin, the wedge pop, the hover tick and the centre cancel. Four of them were still running the old per-wheel code: a CPU-painted `Texture2D` ring rebuilt pixel by pixel on every hover, an exponential-damped parallax slide, and Unicode glyphs standing in for icons. All of that is deleted, not ported - roughly 1,500 lines of duplicated wheel code collapsed into two shared classes plus six small option providers.
+
+**Drawn icons everywhere.** `MachineShapeIcons` authors the conveyor decks with travel arrows, the armour solids, the pipe fittings as schematic ducts with end collars and bend couplings, and the road surfaces including a drawbridge with its leaf lifted off the hinge. Chevrons were tried first and rejected: they shear under the isometric projection and turn into a squiggle at 58 pixels, so direction is a single shaft with a head. `LineArtBuilder` gained the isometric primitives and `IconAtlas` is now the one cache behind every drawn icon in the game.
+
+**New - the jump drive dial.** A destination could previously only be chosen by right-clicking the drive block and reading a scrolling list, which means leaving the cockpit view in the middle of a burn. Hold the Warp Drive key while piloting and the twelve nearest destinations lay out on the same dial: charted planets, moons, powered beacons and route-book points, each with its own drawn mark. Wedges are live - distance and price recompute while the dial is open, a destination the energy pool cannot reach is dimmed, one that has gone dark is locked out. The hub carries the drive itself: spin-up state, bank in kWh, pooled range, and a centre action that begins the spin-up, cancels it, or fires an aimed jump exactly as the bare key used to. Picking a destination on a cold drive starts the spin-up for it rather than refusing. The block panel is untouched and remains the place for tuning and resonators.
+
+**The warp key has one owner.** `GridCockpit` deferred its one-shot warp handler to the dial, so the key cannot both charge the drive and open the wheel on the same press.
+
+**GitHub title:** `[13.3.0-dev] One dial for every wheel, and the jump drive joins it`
+
+**Manual steps:**
+1. Pull `Dev` and let Unity compile. The Console should be clear.
+2. `Tools -> Voxel Engine -> Voxel Engine Setup` -> `101. Wire the Radial Wheel Family`. Non-destructive: it adds the conveyor, armour, pipe, road and jump-drive wheel components to the player only where they are missing, and leaves anything already there alone.
+3. If you have not run it yet, also run `100. Wire the Hammer Build Wheel` and read its Console audit.
+4. Play. Equip the Building Hammer and confirm the icons are now closed solids with their front edges - a wall, a doorway and a pillar should look solid, not hollow.
+5. Stand still with the hammer, nothing armed, and press Escape. The pause menu must open. Arm a family, press Escape again: it must cancel build mode instead.
+6. Flick around the dial and watch it lean toward your aim.
+7. Hold the Build Wheel key with a conveyor, a shaped grid armour block, an energy pipe and the road paver in turn - each opens the same dial with its own drawn icons.
+8. Board a ship that carries an enabled Warp Drive, take the pilot seat, and hold the Warp Drive key (default `U`). Flick to a destination and release to jump; left click the centre to begin or cancel the spin-up. A quick tap of the key now pins the dial open instead of starting the charge - the charge control is the centre of the dial.
 
 ### [13.2.0-dev] The Build Dial Rebuilt Around the Flick
 
