@@ -18,6 +18,13 @@ namespace VoxelEngine.Building.Tiered
 {
     public class BuildSystemV2 : MonoBehaviour
     {
+        // Authored Size-V6 geometry dimensions. Structural joins must use these,
+        // not the scene's configurable fallback grid, because an older serialized
+        // grid value otherwise moves every join to exactly half its required span.
+        private const float ConstructionModule = 7.5f;
+        private const float ConstructionStorey = 5.625f;
+        private const float HalfWallHeight = 2.8f;
+
         public static BuildSystemV2 Instance { get; private set; }
 
         [Header("Refs")]
@@ -319,13 +326,15 @@ namespace VoxelEngine.Building.Tiered
             Vector3 localHit = host.transform.InverseTransformPoint(hit.point);
             if (incomingDeck && wallHost)
             {
-                float height = hostFamily == BuildFamily.HalfWall ? 2.8f : gridSize * 0.75f;
+                float height = hostFamily == BuildFamily.HalfWall ? HalfWallHeight : ConstructionStorey;
                 float side = Mathf.Abs(localHit.z) > 0.08f
                     ? Mathf.Sign(localHit.z)
                     : Mathf.Sign(Vector3.Dot(hit.normal, host.transform.forward));
                 if (Mathf.Approximately(side, 0f)) side = 1f;
 
-                position = host.transform.TransformPoint(new Vector3(0f, height, side * gridSize * 0.5f));
+                position = host.transform.position
+                    + host.transform.up * height
+                    + host.transform.forward * (side * ConstructionModule * 0.5f);
                 rotation = Quaternion.AngleAxis(_ghostYaw, host.transform.up) * host.transform.rotation;
                 return true;
             }
@@ -339,19 +348,18 @@ namespace VoxelEngine.Building.Tiered
             // the centre and never depends on whether an edge socket happened to
             // fall inside the broad physics query.
             bool useX = Mathf.Abs(localHit.x) > Mathf.Abs(localHit.z);
-            Vector3 localOffset;
             if (useX)
             {
                 float side = Mathf.Approximately(localHit.x, 0f) ? 1f : Mathf.Sign(localHit.x);
-                localOffset = new Vector3(side * gridSize, 0f, 0f);
+                position = host.transform.position
+                    + host.transform.right * (side * ConstructionModule);
             }
             else
             {
                 float side = Mathf.Approximately(localHit.z, 0f) ? 1f : Mathf.Sign(localHit.z);
-                localOffset = new Vector3(0f, 0f, side * gridSize);
+                position = host.transform.position
+                    + host.transform.forward * (side * ConstructionModule);
             }
-
-            position = host.transform.TransformPoint(localOffset);
             rotation = Quaternion.AngleAxis(_ghostYaw, host.transform.up) * host.transform.rotation;
             return true;
         }

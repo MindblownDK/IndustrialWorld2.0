@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `13.5.7-dev`
-**Roadmap Version:** `13.5.7-dev`
+**Current Version:** `13.5.8-dev`
+**Roadmap Version:** `13.5.8-dev`
 **Date:** 2026-09-27
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 13.5.8-dev - Authored Pieces Ignore a Stale Scene Grid
+- **Fixed dimensions** (`BuildSystemV2`): structural joins use the Size-V6 7.5 m module and 5.625 m storey rather than the scene's serialized fallback-grid value.
+- **Exact wall join**: floor roots move one half-module along the wall's normalized forward axis and one storey along its normalized up axis.
+- **Exact deck join**: foundations and floors continue one authored module along normalized host axes without inheriting transform scale.
+
 ### 13.5.7-dev - Structural Snaps Follow the Aimed Piece
 - **Direct wall join** (`BuildSystemV2`): floors and floor hatches derive their side, height and half-module offset from the wall actually under the crosshair instead of competing in a broad socket search.
 - **Deck continuation** (`BuildSystemV2`): foundations, floors and floor hatches choose the nearest host edge and continue exactly one module in that host's local frame.
@@ -48,11 +53,6 @@
 - **Build-safe materials** (`CosmosBootstrap`, `SphereWorld`, `AsteroidVoxelBody`, `WaterMeshBuilder`): procedural terrain and liquids load explicit Resources materials before any named shader fallback.
 - **Shader inclusion** (`RuntimeShaderSetup`, Setup Step 103): every project rendering shader and required URP fallback receives a non-destructive material anchor under Resources.
 - **Build guard** (`RuntimeShaderBuildGuard`): a player build is refused when its terrain, water or custom-shader anchors are missing, preventing a magenta release.
-
-### 13.5.3-dev - Editor-Only Tools Leave the Player Build
-- **Mechanic folders** (`Scripts/Editor`): setup, prefab-generation, authoring, validation, debug and inspector scripts are grouped into sixteen editor-only mechanic folders under the existing editor assembly.
-- **Build exclusion** (`WaterDiagnostics`, `GPUResidentDrawerValidator`): the last two pure diagnostic scripts leave the runtime assembly; water probing is now scheduled only during editor play-mode testing.
-- **Reference safety**: moved scripts retain their `.meta` GUIDs, while runtime mesh builders and gameplay-required authoring fallbacks stay in the player assembly.
 
 ### Era Transition Feel
 

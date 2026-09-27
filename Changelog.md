@@ -1,9 +1,26 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `13.5.7-dev`
+**Current Version:** `13.5.8-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [13.5.8-dev] Authored Pieces Ignore a Stale Scene Grid
+
+**Type:** PATCH - Size-V6 placement-dimension correction. No save data, public API, prefab identity, item, recipe, research or balance value is changed.
+
+**Fixed - the direct placement path trusted the mutable scene grid for authored geometry.** The screenshots identify an exact half-scale failure: a Foundation moved 3.75 m, putting its centre on the old Foundation's edge instead of moving the required 7.5 m; a Floor rose 2.8125 m, putting it halfway up a 5.625 m Wall. Those are precisely the old Size-V5 grid and three-quarters of that grid. The generated Size-V6 pieces are fixed-size assets, so their structural joins cannot be calculated from a stale serialized fallback-grid setting.
+
+**Structural joins now use the dimensions of the assets they join.** Size-V6 construction uses an authored 7.5 m module, 5.625 m full storey and 2.8 m half-wall height. Foundation and deck continuations move one complete module along normalized host axes. Wall-to-floor joins move half a module along the wall face and one complete storey upward. Using normalized axes rather than `TransformPoint` also prevents accidental prefab or parent scale from multiplying the offset.
+
+**GitHub title:** `[13.5.8-dev] Authored pieces ignore a stale scene grid`
+
+**Manual steps:**
+1. Pull `Dev` and let Unity compile. No setup step is required.
+2. Place two Foundations side by side. Their edges must meet; the second Foundation's centre must not sit on the first Foundation's edge.
+3. Place a full Wall and aim a Floor at either face. The Floor underside must meet the wall top at 5.625 m, and its edge must meet the wall plane 3.75 m from the Floor centre.
+4. Continue Floors from all four edges of that Floor. Every centre-to-centre step must be 7.5 m.
+5. Repeat with a Half Wall: the Floor must meet its 2.8 m top.
 
 ### [13.5.7-dev] Structural Snaps Follow the Aimed Piece
 
