@@ -1,9 +1,26 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `13.5.6-dev`
+**Current Version:** `13.5.7-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [13.5.7-dev] Structural Snaps Follow the Aimed Piece
+
+**Type:** PATCH - deterministic construction snapping correction. No save data, public API, prefab identity, item, recipe, research or balance value is changed.
+
+**Fixed - broad socket searching could still choose geometry other than the piece being aimed at.** Correcting the compatibility table was necessary but insufficient: the overlap sphere gathers every construction collider around the hit, then scores every compatible socket by distance to the hit point. In a partly built room that includes the floor behind a wall and neighbouring pieces. A nearby socket from that wider set could therefore beat the wall-face anchor or leave the intended join to fallback placement.
+
+**The three ordinary structural joins are now deterministic.** A floor or floor hatch aimed at a wall derives its side directly in that wall's local frame and places its own edge on the wall at the exact storey height. A foundation aimed at a foundation, and a floor or floor hatch aimed at another deck, chooses the nearest edge of that specific host and continues exactly one complete module. The host's full rotation is retained, so the correction also remains valid away from a planet's equator. Specialized stairs, fittings and orbital pieces continue through the socket system.
+
+**GitHub title:** `[13.5.7-dev] Structural snaps follow the aimed piece`
+
+**Manual steps:**
+1. Pull `Dev` and let Unity compile. No setup step is required; this is runtime placement logic and does not alter generated assets.
+2. Aim at the upper half of either face of a Wall while holding a Floor. The floor edge must sit on that wall, on the aimed side, with its underside flush to the wall top.
+3. Place that floor, then aim near each of its four edges with another Floor. Each ghost must continue one complete module from the aimed floor rather than falling back to the world grid.
+4. Repeat the chain with Floor Hatches and repeat side-by-side placement with Foundations.
+5. Test on visibly curved ground and confirm every new piece keeps the host piece's local up direction.
 
 ### [13.5.6-dev] Floors Land Beside Walls
 

@@ -203,6 +203,17 @@ namespace VoxelEngine.Building.Tiered
                 return;
             }
 
+            // Structural deck placement is resolved from the piece that was actually
+            // aimed at. A wide search can see sockets through a wall or on the deck
+            // behind it, making an unrelated centre socket win by a few centimetres.
+            // These three common joins have an unambiguous answer in the host frame.
+            if (directHost != null && directHost.definition != null &&
+                TryComputeStructuralDeckTransform(hit, directHost, def.family, out _ghostPos, out _ghostRot))
+            {
+                _ghostValid = ValidateOverlap(_ghostPos, def.family, directHost);
+                return;
+            }
+
             _socketHosts.Clear();
             int socketCandidateCount = Physics.OverlapSphereNonAlloc(hit.point, socketSnapRadius,
                 s_socketOverlapProbe, ~0, QueryTriggerInteraction.UseGlobal);
@@ -285,6 +296,64 @@ namespace VoxelEngine.Building.Tiered
 
             _ghostRot = GravityProvider.GetSurfaceRotation(_ghostPos, _ghostYaw);
             _ghostValid = ValidateOverlap(_ghostPos, def.family);
+        }
+
+        private bool TryComputeStructuralDeckTransform(
+            RaycastHit hit,
+            PlacedTieredBlock host,
+            BuildFamily incoming,
+            out Vector3 position,
+            out Quaternion rotation)
+        {
+            position = Vector3.zero;
+            rotation = Quaternion.identity;
+
+            BuildFamily hostFamily = host.definition.family;
+            bool incomingDeck = incoming == BuildFamily.Floor || incoming == BuildFamily.FloorHatch;
+            bool wallHost = hostFamily == BuildFamily.Wall
+                || hostFamily == BuildFamily.Doorway
+                || hostFamily == BuildFamily.Window
+                || hostFamily == BuildFamily.HalfWall
+                || hostFamily == BuildFamily.WallFrame;
+
+            Vector3 localHit = host.transform.InverseTransformPoint(hit.point);
+            if (incomingDeck && wallHost)
+            {
+                float height = hostFamily == BuildFamily.HalfWall ? 2.8f : gridSize * 0.75f;
+                float side = Mathf.Abs(localHit.z) > 0.08f
+                    ? Mathf.Sign(localHit.z)
+                    : Mathf.Sign(Vector3.Dot(hit.normal, host.transform.forward));
+                if (Mathf.Approximately(side, 0f)) side = 1f;
+
+                position = host.transform.TransformPoint(new Vector3(0f, height, side * gridSize * 0.5f));
+                rotation = Quaternion.AngleAxis(_ghostYaw, host.transform.up) * host.transform.rotation;
+                return true;
+            }
+
+            bool sameDeck = (hostFamily == BuildFamily.Foundation && incoming == BuildFamily.Foundation)
+                || ((hostFamily == BuildFamily.Floor || hostFamily == BuildFamily.FloorHatch)
+                    && incomingDeck);
+            if (!sameDeck) return false;
+
+            // Pick the edge nearest the aimed point. This remains deterministic at
+            // the centre and never depends on whether an edge socket happened to
+            // fall inside the broad physics query.
+            bool useX = Mathf.Abs(localHit.x) > Mathf.Abs(localHit.z);
+            Vector3 localOffset;
+            if (useX)
+            {
+                float side = Mathf.Approximately(localHit.x, 0f) ? 1f : Mathf.Sign(localHit.x);
+                localOffset = new Vector3(side * gridSize, 0f, 0f);
+            }
+            else
+            {
+                float side = Mathf.Approximately(localHit.z, 0f) ? 1f : Mathf.Sign(localHit.z);
+                localOffset = new Vector3(0f, 0f, side * gridSize);
+            }
+
+            position = host.transform.TransformPoint(localOffset);
+            rotation = Quaternion.AngleAxis(_ghostYaw, host.transform.up) * host.transform.rotation;
+            return true;
         }
 
         private bool TryComputeStairChainTransform(

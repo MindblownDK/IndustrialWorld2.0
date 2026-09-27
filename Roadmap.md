@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `13.5.6-dev`
-**Roadmap Version:** `13.5.6-dev`
+**Current Version:** `13.5.7-dev`
+**Roadmap Version:** `13.5.7-dev`
 **Date:** 2026-09-27
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 13.5.7-dev - Structural Snaps Follow the Aimed Piece
+- **Direct wall join** (`BuildSystemV2`): floors and floor hatches derive their side, height and half-module offset from the wall actually under the crosshair instead of competing in a broad socket search.
+- **Deck continuation** (`BuildSystemV2`): foundations, floors and floor hatches choose the nearest host edge and continue exactly one module in that host's local frame.
+- **Curved-world alignment**: direct joins preserve the aimed piece's complete orientation, including its local up axis on spherical terrain.
+
 ### 13.5.6-dev - Floors Land Beside Walls
 - **Floor sockets** (`BuildSocketCompat`): floors and floor hatches use the wall's two half-module edge anchors instead of its centreline top socket.
 - **Foundation reach** (`BuildSystemV2`): the default socket search spans a complete 7.5 m module, so neighbouring foundation anchors remain reachable while aiming near the host's centre.
@@ -48,10 +53,6 @@
 - **Mechanic folders** (`Scripts/Editor`): setup, prefab-generation, authoring, validation, debug and inspector scripts are grouped into sixteen editor-only mechanic folders under the existing editor assembly.
 - **Build exclusion** (`WaterDiagnostics`, `GPUResidentDrawerValidator`): the last two pure diagnostic scripts leave the runtime assembly; water probing is now scheduled only during editor play-mode testing.
 - **Reference safety**: moved scripts retain their `.meta` GUIDs, while runtime mesh builders and gameplay-required authoring fallbacks stay in the player assembly.
-
-### 13.5.2-dev - Two That Only Bite Later
-- **Re-runnable rebuild** (`TieredRebuildSetup`): the hatch ladder's mesh asset is cleared with the lid's, so a second pass of step 102 no longer overwrites a loaded asset.
-- **Curved ground** (`ClimbableLadder`): the top-of-ladder hand-back is measured in the volume's own frame instead of against a world-axis-aligned bounding box.
 
 ### Era Transition Feel
 
