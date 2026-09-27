@@ -61,6 +61,7 @@ namespace VoxelEngine.Building.Tiered
         private readonly List<BuildSocket> _socketScratch = new(8);
         private Quaternion _ghostRot = Quaternion.identity;
         private float _railingRise;
+        private int _structuralSpan;
 
         private void Awake()
         {
@@ -200,12 +201,15 @@ namespace VoxelEngine.Building.Tiered
         private void ComputeGhostTransform(RaycastHit hit, TieredBlockDefinition def)
         {
             _railingRise = 0f;
+            _structuralSpan = 0;
             // 1) Try socket snap: look for the nearest BuildSocket within socketSnapRadius
             //    around the hit point that accepts this family.
             BuildSocket bestSocket = null;
             float bestSqr = socketSnapRadius * socketSnapRadius;
 
             var directHost = hit.collider != null ? hit.collider.GetComponentInParent<PlacedTieredBlock>() : null;
+            if (def.family == BuildFamily.Roof || def.family == BuildFamily.Floor || def.family == BuildFamily.FloorHatch)
+                _structuralSpan = ResolveStructuralSpan(directHost, def.family);
             if (def.family == BuildFamily.Stairs &&
                 directHost != null && directHost.definition != null && directHost.definition.family == BuildFamily.Stairs &&
                 TryComputeStairChainTransform(hit, directHost, out _ghostPos, out _ghostRot))
@@ -549,7 +553,7 @@ namespace VoxelEngine.Building.Tiered
         {
             // Don't overlap the player.
             if (Vector3.Distance(pos, transform.position) < 0.6f) return false;
-            if (family == BuildFamily.Roof && !HasRoofSupport(pos)) return false;
+            if (family == BuildFamily.Roof && (_structuralSpan < 1 || _structuralSpan > 2)) return false;
 
             int count = Physics.OverlapBoxNonAlloc(pos, Vector3.one * 0.45f,
                 s_placementOverlapProbe, Quaternion.identity, ~0, QueryTriggerInteraction.UseGlobal);
@@ -561,6 +565,22 @@ namespace VoxelEngine.Building.Tiered
             foreach (var collider in Physics.OverlapBox(pos, Vector3.one * 0.45f, Quaternion.identity))
                 if (!IsOverlapColliderAllowed(collider, socketHost, family, pos)) return false;
             return true;
+        }
+
+        private static int ResolveStructuralSpan(PlacedTieredBlock host, BuildFamily incoming)
+        {
+            if (host == null || host.definition == null) return 0;
+            BuildFamily hostFamily = host.definition.family;
+            if (StructuralLoadState.IsVerticalSupport(hostFamily)) return 1;
+            if (incoming != BuildFamily.Roof && hostFamily == BuildFamily.Foundation) return 1;
+
+            bool compatible = incoming == BuildFamily.Roof
+                ? hostFamily == BuildFamily.Roof
+                : hostFamily == BuildFamily.Floor || hostFamily == BuildFamily.FloorHatch;
+            if (!compatible) return 0;
+
+            var load = host.GetComponent<StructuralLoadState>();
+            return load != null && load.armed ? load.spanFromSupport + 1 : 0;
         }
 
         private static bool HasRoofSupport(Vector3 position)
@@ -682,6 +702,8 @@ namespace VoxelEngine.Building.Tiered
             var pb = go.GetComponent<PlacedTieredBlock>();
             if (pb == null) pb = go.AddComponent<PlacedTieredBlock>();
             pb.Initialize(def, BuildTier.Wood);
+            var load = go.GetComponent<StructuralLoadState>();
+            if (load != null && _structuralSpan > 0) load.Arm(_structuralSpan);
             TagStationPiece(go, def);
             // Satisfying placement thunk at the build location.
             VoxelEngine.FX.AudioManager.PlayAt(
@@ -706,6 +728,8 @@ namespace VoxelEngine.Building.Tiered
             Vector3 pos = target.transform.position;
             Quaternion rot = target.transform.rotation;
             var def = target.definition;
+            var oldLoad = target.GetComponent<StructuralLoadState>();
+            int oldSpan = oldLoad != null && oldLoad.armed ? oldLoad.spanFromSupport : 0;
             Destroy(target.gameObject);
 
             var go = Instantiate(def.GetPrefab(next), pos, rot);
@@ -713,6 +737,8 @@ namespace VoxelEngine.Building.Tiered
             var pb = go.GetComponent<PlacedTieredBlock>();
             if (pb == null) pb = go.AddComponent<PlacedTieredBlock>();
             pb.Initialize(def, next);
+            var newLoad = go.GetComponent<StructuralLoadState>();
+            if (newLoad != null && oldSpan > 0) newLoad.Arm(oldSpan);
             // Re-tag on upgrade: the upgrade path destroys and rebuilds the object, so a
             // station hull would silently stop being a station piece the first time it was
             // upgraded from wood to steel.

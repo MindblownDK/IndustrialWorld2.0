@@ -262,6 +262,9 @@ namespace VoxelEngine.EditorTools
 
             if (!root.TryGetComponent<PlacedTieredBlock>(out _)) root.AddComponent<PlacedTieredBlock>();
             if (family == BuildFamily.Foundation) EnsureFoundationLegs(root);
+            if ((family == BuildFamily.Roof || family == BuildFamily.Floor || family == BuildFamily.FloorHatch)
+                && root.GetComponent<StructuralLoadState>() == null)
+                root.AddComponent<StructuralLoadState>();
             if (family == BuildFamily.Door || family == BuildFamily.GarageDoor) EnsureDoorPivot(root, family);
             if (family == BuildFamily.HatchLid) EnsureHatch(root, tier, name);
             if (family == BuildFamily.Railing && root.GetComponent<TieredRailing>() == null)

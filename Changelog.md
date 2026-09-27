@@ -1,9 +1,31 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `13.7.1-dev`
+**Current Version:** `13.7.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [13.7.2-dev] Structural Span Belongs to the Placed Piece
+
+**Type:** PATCH - replaces proximity-only roof validation with explicit placement span and adds support-loss collapse to newly authored suspended pieces. No save schema, family value, item, recipe, research or tuned cost changes.
+
+**Roof span is now assigned from the exact piece under the crosshair.** A Roof aimed at a Wall, opening frame, Half Wall or Pillar receives span 1. A Roof aimed at an armed span-1 Roof receives span 2. Span 3 or an unknown load path is rejected before placement. Nearby walls elsewhere in a broad physics sphere can no longer accidentally validate the chain, which is why the earlier bounded scan still allowed the photographed run.
+
+**Suspended pieces now own and audit their load path.** Setup Step 102 adds `StructuralLoadState` to Roof, Floor and Floor Hatch prefabs. New placements record their span. Every 0.75 seconds an armed piece accepts either a real support reaching its level or a compatible neighbouring suspended piece with a lower span. If neither remains, the unsupported piece is destroyed; higher-span neighbours then fail on their following checks, producing a bounded outward collapse rather than leaving a floating sheet.
+
+**Floors participate without inheriting the Roof limit.** Foundations and vertical supports begin a Floor load path at span 1, and connected Floors carry increasing spans for collapse ordering. The two-panel maximum remains a Roof placement rule only. Removing one wall does not collapse a deck when another valid support or lower-span route remains nearby.
+
+**Upgrades preserve structure.** Replacing Wood with Stone, Iron or Steel transfers the armed span to the new prefab, so upgrading a supported panel cannot silently detach it from the load graph.
+
+**GitHub title:** `[13.7.2-dev] Structural span belongs to the placed piece`
+
+**Manual steps:**
+1. Pull `Dev`, let Unity compile, then run `Tools -> Voxel Engine -> Voxel Engine Setup -> 102. Rebuild Construction at Size-V6` to add `StructuralLoadState` to all Roof, Floor and Floor Hatch tiers.
+2. Start from one Wall or Pillar. Place Roof one and Roof two; both must succeed. Roof three must remain red regardless of other distant construction visible nearby.
+3. Add a support under Roof three and confirm it becomes valid.
+4. Build two independently supported Roof routes, remove one support and confirm the panels remain when the second lower-span route is still reachable.
+5. Build a Floor from a Wall or Foundation, remove its only support and wait up to two seconds. The Floor and outward dependent Floors should collapse in order.
+6. Upgrade a supported Floor and Roof, then remove their supports and confirm they still participate in collapse.
 
 ### [13.7.1-dev] Roof Support Cannot Relay Forever
 

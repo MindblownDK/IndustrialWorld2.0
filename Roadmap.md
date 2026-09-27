@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `13.7.1-dev`
-**Roadmap Version:** `13.7.1-dev`
+**Current Version:** `13.7.2-dev`
+**Roadmap Version:** `13.7.2-dev`
 **Date:** 2026-09-27
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 13.7.2-dev - Structural Span Belongs to the Placed Piece
+- **Placement state** (`StructuralLoadState`, `BuildSystemV2`): each new suspended Floor or Roof records its exact span from the aimed support; Roof placement refuses span three and above.
+- **Support loss** (`StructuralLoadState`): armed Floors and Roofs periodically verify a real support or a lower-span neighbour and collapse when the final load path disappears.
+- **Tier continuity**: upgrading a suspended piece transfers its structural span to the replacement prefab.
+
 ### 13.7.1-dev - Roof Support Cannot Relay Forever
 - **Bounded graph** (`BuildSystemV2`): candidate roofs count as span one and may cross only one neighbouring roof before reaching a real vertical support.
 - **Direct load point**: walls and opening frames support roof edges while corner pillars support the same panel through a diagonal corner reach.
@@ -48,11 +53,6 @@
 - **Interaction target** (`TieredRebuildSetup`, Setup Step 102): every Garage Door receives a permanent non-blocking trigger around its header drum for closing the rolled shutter.
 - **Collider state** (`TieredDoor`): only solid shutter colliders disable after clearance; interaction triggers remain active throughout the animation.
 - **Complete roll** (`TieredPieceFactory`): slat separators and the bottom weather bar join the moving skin while side tracks and the header drum remain fixed.
-
-### 13.6.3-dev - Tiered Factory Compiles Again
-- **Compile repair** (`TieredPieceFactory`): two stray trailing characters after the editor-only compilation guard are removed.
-- **Scope**: generated geometry, snapping, costs and prefabs are unchanged.
-- **Validation**: source braces and the file-ending preprocessor guard are balanced.
 
 ### Era Transition Feel
 
