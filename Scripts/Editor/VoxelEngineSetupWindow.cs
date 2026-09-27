@@ -888,6 +888,19 @@ namespace VoxelEngine.EditorTools
             AddWizardButton(scroll, "99. Build Portals\n(Framed paired portals by name + code \u2014 needs 98 \u2014 Non-Destructive)",
                 BuildPortalContent, 56);
 
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
+                "Step 100 wires the HAMMER BUILD WHEEL (non-destructive):\n" +
+                "  \u2022 Creates the HammerBuildWheel object + UIDocument on the player when missing\n" +
+                "  \u2022 Links the shared MenuPanelSettings, the Inventory and the TieredBlockRegistry only when they are null\n" +
+                "  \u2022 Raises the sorting order only when it was never set \u2014 an authored value is kept\n" +
+                "  \u2022 Audits every structural and orbital-station family and names the ones that will\n" +
+                "    render as a locked wedge (missing definition or missing base-tier prefab)\n" +
+                "Re-runnable. Idempotent. Nothing already authored is replaced.\n" +
+                "Run AFTER step 2 and step 5 (and step 89 for the station set).");
+            AddWizardButton(scroll, "100. Wire the Hammer Build Wheel\n(Radial build dial \u2014 links + registry audit \u2014 Non-Destructive)",
+                () => VoxelEngine.EditorTools.BuildWheelSetup.RunStep100(), 56);
+
             AddSpacer(scroll, 20);
         }
 

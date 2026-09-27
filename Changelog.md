@@ -1,9 +1,44 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `13.1.2-dev`
+**Current Version:** `13.2.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [13.2.0-dev] The Build Dial Rebuilt Around the Flick
+
+**Type:** MINOR - the hammer build wheel is rebuilt as a direction-driven radial dial with vector wedges and drawn piece icons. Save-compatible: no schema, no component rename, no public API removed. `ActiveFamily`, `IsOpen`, `Open`, `Close` and `ExitBuildMode` all keep their signatures, so `BuildSystemV2`, `PlayerInteractionTool` and the pause menu are untouched.
+
+**Selection is an angle, not a hit test:** the old wheel asked the operating system cursor to land inside an annulus between 154 and 232 pixels of the ring centre, and it selected nothing outside that band - a fast flick overshot the ring and chose nothing. Selection is now pure direction. `RadialWheelInput` integrates raw mouse delta into a unit disc, clamps the length to 1 and leaves the angle completely free, so the hand can travel across the whole desk and the wedge it pointed at is still the wedge that wins. Full deflection takes 13 percent of the shorter screen edge, which is a flick rather than a drag.
+
+**The cursor is locked and re-centred on every open:** the hardware cursor is pinned and hidden while the dial is up and the virtual pointer starts at dead centre every single time. That is what makes the muscle memory work - up is always Foundation, down-left is always Stairs, regardless of where the mouse happened to be sitting when the dial opened. A blocking panel normally hands the cursor back to the operating system, so the lock is re-asserted every frame the dial is open.
+
+**Nothing on the selection path is smoothed:** `Atan2` in, wedge index out, same frame. The old wheel also ran an exponential-damped parallax slide on the whole ring, which made the dial physically drift under the pointer while the pointer was trying to aim at it; that is gone. The only motion left is an 85 millisecond ease-out pop on open, which finishes before a human can react and never moves a wedge.
+
+**Release selects, tap pins:** releasing the build key with a wedge lit selects it and closes, with no confirming click. Releasing inside the centre deadzone within 200 milliseconds instead pins the dial open so it can be read at leisure - left click then confirms, and left click inside the deadzone arms upgrade mode. A second press of the build key re-arms hold-and-release.
+
+**Vector wedges instead of a CPU-painted bitmap:** the ring was a 256 by 256 `Texture2D` re-rasterised pixel by pixel on every hover change - 65 thousand pixels of trigonometry per tick, and a permanently soft edge because the wedge boundary was baked at 256 pixels and then stretched to 560. `RadialRing` draws the wedges with `Painter2D` instead. Boundaries are exact at any resolution, a hover costs one mesh rebuild, the inter-wedge gap is specified in pixels at the mid radius so it stays visually even, and the hovered wedge physically grows 15 pixels outward and 9 inward with a soft halo behind it - something a stretched bitmap could not do without smearing.
+
+**Drawn piece icons replace the Unicode glyphs:** the wheel used characters like the white square and the box drawings cross to stand in for a foundation and a junction, which rendered inconsistently across fonts and read as nothing in particular. `BuildPieceIcons` authors an isometric line drawing for all eighteen families - the nine visible edges of a box for the structural pieces, a hipped roof, a stepped stair, a lathe-free hexagonal hull plate, a docking collar with clamps. `LineArtBuilder` rasterises them once into a white alpha mask using a per-segment bounded distance field, and the dial tints that one mask per state, so idle, hovered, unaffordable and locked all share a single texture.
+
+**One ring, no pages:** eight-per-page paging meant the ten structural families spilled onto a second page that had to be scrolled to. Wedge count now follows the family count, so all ten structural or all eight station pieces sit on one dial. Scroll and Tab both swap between the two sets, and the set only swaps when Orbital Construction is researched.
+
+**The hub reads like a spec card:** the centre used to carry a page counter and a generic glyph, while the piece name and cost were crammed into 7 and 8 point labels around the ring. The ring now carries icons only. The hub carries the hovered piece: its drawn icon, its name, a one-line description from the new `BuildFamilyInfo.Description`, and a cost line per ingredient reading "50 x Wood (985,703)" - the requirement, then what is actually carried, green when it is covered and red when it is not.
+
+**A family with no prefab is honestly dark:** a family with no registry definition, or with an empty wood-tier prefab, now paints as a dark locked wedge and refuses selection with a named reason, instead of silently arming a build mode that could never place anything.
+
+**Audio and colour answer every change:** a rate-limited tick plays on each new wedge, pitched slightly at random so a fast sweep does not machine-gun one note; confirming plays a higher click when the cost is covered and a lower one when it is not. The palette is a warm bone dial with an iron-oxide highlight, unaffordable wedges dropped to 34 percent alpha rather than hidden.
+
+**GitHub title:** `[13.2.0-dev] The build dial rebuilt around the flick`
+
+**Manual steps:**
+1. Pull `Dev` and let Unity compile. The Console should be clear.
+2. `Tools -> Voxel Engine -> Voxel Engine Setup` -> `100. Wire the Hammer Build Wheel`. This is non-destructive: it only creates the wheel object, its `UIDocument` and missing references, and it never replaces a sorting order, panel settings or a registry you already set.
+3. Read the Console output of that step. Any family it names as a locked wedge has no definition or no base-tier prefab - run `5. Build Tiered Building Content` for the structural set and `89. Build the Orbital Station Family` for the station set, then re-run step 100.
+4. Play. Equip the Building Hammer, hold the Build Wheel key (default `B`), flick toward a piece and release. The cursor should vanish, the pointer nub should leave dead centre, and the wedge should light the instant the hand points at it.
+5. Flick well past the edge of the ring and release: it must still select that wedge.
+6. Tap the key and let go without moving: the dial should stay pinned. Left click a wedge to confirm, or left click without leaving the centre to arm upgrade mode.
+7. With Orbital Construction researched, press Tab or scroll while the dial is open and confirm it swaps to the eight station pieces.
 
 ### [13.1.2-dev] Double-Width Tires and a Watertight Carcass
 

@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `13.1.2-dev`
-**Roadmap Version:** `13.1.2-dev`
+**Current Version:** `13.2.0-dev`
+**Roadmap Version:** `13.2.0-dev`
 **Date:** 2026-09-27
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 13.2.0-dev - The Build Dial Rebuilt Around the Flick
+- **Direction-only pointer** (`RadialWheelInput`, `HammerBuildWheel`): the cursor is locked and re-centred on open, selection comes straight from `Atan2` with no smoothing, and deflection past the ring still selects.
+- **Vector dial** (`RadialRing`, `HammerBuildWheel`): `Painter2D` wedges with a pixel-even gap and a growing hover replace the re-rasterised ring texture; one adaptive ring replaces eight-per-page paging.
+- **Drawn piece icons and a spec-card hub** (`BuildPieceIcons`, `LineArtBuilder`, `BuildFamilyInfo`): eighteen isometric line masks replace the Unicode glyphs, and the hub carries icon, name, description and per-ingredient cost against stock.
+
 ### 13.1.2-dev - Double-Width Tires and a Watertight Carcass
 - **Width** (`WheelSizeClass`): tire widths doubled in the preset table; mesh, collider, socket and setup content follow, tire mass unchanged.
 - **Closed carcass** (`WheelMeshFactory`): bead heels and an inner liner shut the tire into a watertight torus, ending the see-through gap at the rim flange.
@@ -47,15 +52,6 @@
 ### 13.0.1-dev - Unity 6.5 Surface Cache API Compliance
 - **Cache keys** (`SurfaceSampler`): collider and terrain alphamap caches drop the obsolete `GetInstanceID` in favour of object and tuple keys, removing recycled-id staleness.
 - **UI lookup** (`GridBlockUI`): Eject Tire uses `FindAnyObjectByType` instead of the deprecated ordering-dependent variant.
-
-### 13.0.0-dev - Modular Wheel Hub and Tire Overhaul with Terrain Surface Friction Engine
-- **Two-part wheel** (`GridWheel`, `GridWheelTire`, `GridWheelMount`): hub owns suspension, steering and torque; the tire snaps onto the hub socket and owns rubber, radius and mass.
-- **Snap placement** (`GridBuilder`, `GridWheelMount`): a held tire draws its ghost on the aimed hub socket and fits there on click, with blocked reasons surfaced to the HUD.
-- **Preset scaling** (`WheelSizeClass`, `WheelTuning`): one table resolves 2x2 / 3x3 / 5x5 geometry, spring, damper, torque, steering and mass; any tire fits any hub with a re-rated spring.
-- **Hand-solved physics** (`WheelSuspensionSolver`): allocation-free raycast spring, friction-circle tire forces and reported slip, with no Unity WheelCollider anywhere.
-- **Surface friction engine** (`SurfaceProfile`, `SurfaceProfileLibrary`, `SurfaceSampler`): asphalt runs, Unity Terrain alphamaps, PhysicsMaterials and voxel materials all resolve to one profile per contact patch.
-- **Feedback** (`WheelSlipFx`, `WorldAudioBootstrap`, `GridBlockUI`): surface-tinted slip plumes, slip-driven motor audio, and a hub panel reporting tire, surface, slip, load and compression.
-- **Procedural dressing** (`GridWheelMeshBuilder`, `WheelTextureFactory`, `VoxelEngineSetupWindow`): wishbone linkages that track the strut plus baked tread, steel and chrome maps.
 
 ### Era Transition Feel
 
@@ -241,7 +237,7 @@ The Building Hammer gains a research-locked **Orbital Station** family with a cl
 - Exterior armor, radiator, solar, cable, and utility attachment surfaces.
 - Pieces are airtight where appropriate and integrate with life support.
 - The family appears in the Hammer wheel only after **Orbital Construction** research is completed.
-- The Hammer wheel uses a paginated segmented donut; mouse-wheel scrolling moves between construction pages so large orbital families do not overcrowd one ring.
+- The Hammer wheel shows one family group per ring with the wedge count following the family count; Tab or the mouse wheel swaps between the structural and orbital-station sets *(13.2.0-dev)*.
 - Locked pages preview their research requirement without exposing unusable pieces as selectable blocks.
 - All blocks, recipes, research nodes, and prefab links are authored non-destructively through the Voxel Engine Setup workflow.
 

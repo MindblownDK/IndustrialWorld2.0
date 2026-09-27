@@ -83,6 +83,34 @@ namespace VoxelEngine.Building.Tiered
             BuildFamily.StationDome     => "DOME",
             _ => family.ToString().ToUpperInvariant(),
         };
+
+        /// <summary>
+        /// One line of flavour shown in the build wheel's hub while a piece is
+        /// hovered. Kept here rather than on the ScriptableObject so a family
+        /// always reads correctly even before its asset has been authored.
+        /// </summary>
+        public static string Description(BuildFamily family) => family switch
+        {
+            BuildFamily.Foundation      => "Every base starts with a foundation",
+            BuildFamily.Wall            => "Keeps the weather and the wildlife out",
+            BuildFamily.Floor           => "A ceiling below, a walkway above",
+            BuildFamily.Doorway         => "A wall with a way through it",
+            BuildFamily.Door            => "Fits a doorway and closes behind you",
+            BuildFamily.Window          => "Daylight in, nothing else",
+            BuildFamily.Stairs          => "The civilised way to the next storey",
+            BuildFamily.Roof            => "Sheds the rain and caps the build",
+            BuildFamily.Pillar          => "Carries the load for almost nothing",
+            BuildFamily.HalfWall        => "Waist-high cover you can work over",
+            BuildFamily.StationHull     => "Pressure-rated shell plating",
+            BuildFamily.StationFloor    => "Decking with a magnetic tread",
+            BuildFamily.StationCorridor => "Sealed run between two modules",
+            BuildFamily.StationJunction => "Where four corridors meet",
+            BuildFamily.StationWindow   => "Reinforced viewport onto the void",
+            BuildFamily.StationAirlock  => "Two doors, never open at once",
+            BuildFamily.StationDock     => "Open collar a ship mates into",
+            BuildFamily.StationDome     => "A curved roof for the observation deck",
+            _ => "Construction piece",
+        };
     }
 
     /// <summary>

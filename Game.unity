@@ -326,6 +326,10 @@ MonoBehaviour:
     _name: Container
     _slots: []
     _minSize: 1
+  _instrumentSlots:
+    _name: Container
+    _slots: []
+    _minSize: 1
 --- !u!114 &200235767
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -405,6 +409,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 75a896fbcef220043a8214cd91565756, type: 3}
   m_Name: 
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Player.PlayerController
+  infiniteHealth: 0
   walkSpeed: 5.5
   sprintMultiplier: 1.6
   crouchMultiplier: 0.45
