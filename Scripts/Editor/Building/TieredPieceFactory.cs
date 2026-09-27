@@ -1611,5 +1611,3 @@ namespace VoxelEngine.EditorTools
     }
 }
 #endif
-f
-f

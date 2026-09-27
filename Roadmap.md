@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `13.6.2-dev`
-**Roadmap Version:** `13.6.2-dev`
+**Current Version:** `13.6.3-dev`
+**Roadmap Version:** `13.6.3-dev`
 **Date:** 2026-09-27
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 13.6.3-dev - Tiered Factory Compiles Again
+- **Compile repair** (`TieredPieceFactory`): two stray trailing characters after the editor-only compilation guard are removed.
+- **Scope**: generated geometry, snapping, costs and prefabs are unchanged.
+- **Validation**: source braces and the file-ending preprocessor guard are balanced.
+
 ### 13.6.2-dev - The Shutter Rolls Into Its Drum
 - **Rolling shutter** (`TieredDoor`): garage slats curl into the header drum instead of rotating as one rigid leaf, and their blocking colliders release once the opening clears.
 - **Pillar corners** (`BuildSystemV2`): the outer pillar targets are the four true module corners shared by four foundations, with the centre retained as the fifth target.
@@ -48,11 +53,6 @@
 - **Fixed dimensions** (`BuildSystemV2`): structural joins use the Size-V6 7.5 m module and 5.625 m storey rather than the scene's serialized fallback-grid value.
 - **Exact wall join**: floor roots move one half-module along the wall's normalized forward axis and one storey along its normalized up axis.
 - **Exact deck join**: foundations and floors continue one authored module along normalized host axes without inheriting transform scale.
-
-### 13.5.7-dev - Structural Snaps Follow the Aimed Piece
-- **Direct wall join** (`BuildSystemV2`): floors and floor hatches derive their side, height and half-module offset from the wall actually under the crosshair instead of competing in a broad socket search.
-- **Deck continuation** (`BuildSystemV2`): foundations, floors and floor hatches choose the nearest host edge and continue exactly one module in that host's local frame.
-- **Curved-world alignment**: direct joins preserve the aimed piece's complete orientation, including its local up axis on spherical terrain.
 
 ### Era Transition Feel
 

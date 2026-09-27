@@ -1,9 +1,22 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `13.6.2-dev`
+**Current Version:** `13.6.3-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [13.6.3-dev] Tiered Factory Compiles Again
+
+**Type:** PATCH - compile repair only. No runtime behaviour, save data, public API, prefab, mesh, item, recipe, research or balance value is changed.
+
+**Fixed - `TieredPieceFactory.cs` ended with two stray `f` characters after `#endif`.** C# interpreted them as invalid top-level statements after the namespace and type declarations, producing CS8803 at line 1614 and CS1002 at line 1615. Both characters are removed. The file now ends at its editor compilation guard, and its braces remain balanced.
+
+**GitHub title:** `[13.6.3-dev] Tiered factory compiles again`
+
+**Manual steps:**
+1. Pull `Dev` and let Unity compile.
+2. Confirm CS8803 and CS1002 are gone.
+3. Once compilation is clear, run Setup Step 102 for the pending 13.6.2 generated construction changes. No setup step is needed for this compile repair itself.
 
 ### [13.6.2-dev] The Shutter Rolls Into Its Drum
 
