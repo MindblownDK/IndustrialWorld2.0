@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `13.7.2-dev`
-**Roadmap Version:** `13.7.2-dev`
+**Current Version:** `13.7.3-dev`
+**Roadmap Version:** `13.7.3-dev`
 **Date:** 2026-09-27
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 13.7.3-dev - The Wheel Owns the Requested Family
+- **Authoritative family** (`BuildSystemV2`): snapping and validation use the wheel/token selection rather than trusting a potentially stale serialized definition family.
+- **Roof identity** (`StructuralLoadState`): an armed suspended component is resolved before legacy host-family data, preventing every Roof from being misread as a fresh span-one Wall support.
+- **Final guard**: the two-span Roof rule runs after every transform branch and immediately before the ghost is displayed or placed.
+
 ### 13.7.2-dev - Structural Span Belongs to the Placed Piece
 - **Placement state** (`StructuralLoadState`, `BuildSystemV2`): each new suspended Floor or Roof records its exact span from the aimed support; Roof placement refuses span three and above.
 - **Support loss** (`StructuralLoadState`): armed Floors and Roofs periodically verify a real support or a lower-span neighbour and collapse when the final load path disappears.
@@ -48,11 +53,6 @@
 - **Two interaction surfaces** (`PlayerInteractionTool`): the rolled drum trigger and every jamb/header collider on its Wall Frame toggle the nearest fitted Garage Door.
 - **Maximum aperture** (`TieredPieceFactory`, Setup Step 102): the opening grows to 6.8 m wide by 5.05 m high, leaving only a narrow structural surround inside the 7.5 m by 5.625 m module.
 - **Matched shutter** (`TieredDoor`, `TieredPieceFactory`): the complete shutter and its collider match the aperture while the rolling calculation follows the taller door.
-
-### 13.6.4-dev - The Rolled Shutter Remains Reachable
-- **Interaction target** (`TieredRebuildSetup`, Setup Step 102): every Garage Door receives a permanent non-blocking trigger around its header drum for closing the rolled shutter.
-- **Collider state** (`TieredDoor`): only solid shutter colliders disable after clearance; interaction triggers remain active throughout the animation.
-- **Complete roll** (`TieredPieceFactory`): slat separators and the bottom weather bar join the moving skin while side tracks and the header drum remain fixed.
 
 ### Era Transition Feel
 

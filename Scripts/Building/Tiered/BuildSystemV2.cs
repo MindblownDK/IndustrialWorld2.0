@@ -137,7 +137,12 @@ namespace VoxelEngine.Building.Tiered
             }
             _ghost.SetActive(true);
 
-            ComputeGhostTransform(hit, def);
+            ComputeGhostTransform(hit, def, activeFam.Value);
+            // Final family-level guard lives outside every snap branch. Even an
+            // older definition asset with a stale serialized family cannot bypass
+            // the two-roof rule selected by the wheel.
+            if (activeFam.Value == BuildFamily.Roof && (_structuralSpan < 1 || _structuralSpan > 2))
+                _ghostValid = false;
             _ghost.transform.SetPositionAndRotation(_ghostPos, _ghostRot);
             if (_ghost.TryGetComponent<TieredRailing>(out var ghostRailing))
                 ghostRailing.Configure(_railingRise);
@@ -198,7 +203,7 @@ namespace VoxelEngine.Building.Tiered
         }
 
         // ---------- Snap / placement math ----------
-        private void ComputeGhostTransform(RaycastHit hit, TieredBlockDefinition def)
+        private void ComputeGhostTransform(RaycastHit hit, TieredBlockDefinition def, BuildFamily requestedFamily)
         {
             _railingRise = 0f;
             _structuralSpan = 0;
@@ -208,13 +213,13 @@ namespace VoxelEngine.Building.Tiered
             float bestSqr = socketSnapRadius * socketSnapRadius;
 
             var directHost = hit.collider != null ? hit.collider.GetComponentInParent<PlacedTieredBlock>() : null;
-            if (def.family == BuildFamily.Roof || def.family == BuildFamily.Floor || def.family == BuildFamily.FloorHatch)
-                _structuralSpan = ResolveStructuralSpan(directHost, def.family);
-            if (def.family == BuildFamily.Stairs &&
+            if (requestedFamily == BuildFamily.Roof || requestedFamily == BuildFamily.Floor || requestedFamily == BuildFamily.FloorHatch)
+                _structuralSpan = ResolveStructuralSpan(directHost, requestedFamily);
+            if (requestedFamily == BuildFamily.Stairs &&
                 directHost != null && directHost.definition != null && directHost.definition.family == BuildFamily.Stairs &&
                 TryComputeStairChainTransform(hit, directHost, out _ghostPos, out _ghostRot))
             {
-                _ghostValid = ValidateOverlap(_ghostPos, def.family, directHost);
+                _ghostValid = ValidateOverlap(_ghostPos, requestedFamily, directHost);
                 return;
             }
 
@@ -223,22 +228,22 @@ namespace VoxelEngine.Building.Tiered
             // behind it, making an unrelated centre socket win by a few centimetres.
             // These three common joins have an unambiguous answer in the host frame.
             if (directHost != null && directHost.definition != null &&
-                TryComputeStructuralDeckTransform(hit, directHost, def.family, out _ghostPos, out _ghostRot))
+                TryComputeStructuralDeckTransform(hit, directHost, requestedFamily, out _ghostPos, out _ghostRot))
             {
-                _ghostValid = ValidateOverlap(_ghostPos, def.family, directHost);
+                _ghostValid = ValidateOverlap(_ghostPos, requestedFamily, directHost);
                 return;
             }
 
             _socketHosts.Clear();
             int socketCandidateCount = Physics.OverlapSphereNonAlloc(hit.point, socketSnapRadius,
                 s_socketOverlapProbe, ~0, QueryTriggerInteraction.UseGlobal);
-            ConsiderSocketCandidates(s_socketOverlapProbe, socketCandidateCount, def.family, hit.point,
+            ConsiderSocketCandidates(s_socketOverlapProbe, socketCandidateCount, requestedFamily, hit.point,
                 ref bestSocket, ref bestSqr);
             if (socketCandidateCount >= s_socketOverlapProbe.Length)
             {
                 // Retain the former exhaustive result if the reusable local probe fills.
                 var overflow = Physics.OverlapSphere(hit.point, socketSnapRadius, ~0, QueryTriggerInteraction.UseGlobal);
-                ConsiderSocketCandidates(overflow, overflow.Length, def.family, hit.point,
+                ConsiderSocketCandidates(overflow, overflow.Length, requestedFamily, hit.point,
                     ref bestSocket, ref bestSqr);
             }
 
@@ -246,10 +251,10 @@ namespace VoxelEngine.Building.Tiered
             {
                 var socketHost = bestSocket.GetComponentInParent<PlacedTieredBlock>();
 
-                if (def.family == BuildFamily.Stairs &&
+                if (requestedFamily == BuildFamily.Stairs &&
                     TryComputeStairTransform(hit, bestSocket, out _ghostPos, out _ghostRot))
                 {
-                    _ghostValid = ValidateOverlap(_ghostPos, def.family, socketHost);
+                    _ghostValid = ValidateOverlap(_ghostPos, requestedFamily, socketHost);
                     return;
                 }
 
@@ -258,7 +263,7 @@ namespace VoxelEngine.Building.Tiered
                 // Euler yaw introduced small rotational drift on spherical surfaces.
                 Vector3 socketUp = bestSocket.transform.up;
                 _ghostRot = Quaternion.AngleAxis(_ghostYaw, socketUp) * bestSocket.transform.rotation;
-                _ghostValid = ValidateOverlap(_ghostPos, def.family, socketHost);
+                _ghostValid = ValidateOverlap(_ghostPos, requestedFamily, socketHost);
                 return;
             }
 
@@ -272,7 +277,7 @@ namespace VoxelEngine.Building.Tiered
             // altitude to an arbitrary 7.5 m shell can bury it after loading a
             // world whose terrain surface is between shells. Use the aimed surface;
             // neighbouring foundations continue through authored sockets.
-            if (gridSnap && def.family != BuildFamily.Foundation)
+            if (gridSnap && requestedFamily != BuildFamily.Foundation)
             {
                 if (GravityProvider.IsRadial && GravityProvider.ActiveBody != null)
                 {
@@ -314,7 +319,7 @@ namespace VoxelEngine.Building.Tiered
             }
 
             _ghostRot = GravityProvider.GetSurfaceRotation(_ghostPos, _ghostYaw);
-            _ghostValid = ValidateOverlap(_ghostPos, def.family);
+            _ghostValid = ValidateOverlap(_ghostPos, requestedFamily);
         }
 
         private bool TryComputeStructuralDeckTransform(
@@ -571,15 +576,19 @@ namespace VoxelEngine.Building.Tiered
         {
             if (host == null || host.definition == null) return 0;
             BuildFamily hostFamily = host.definition.family;
+            var load = host.GetComponent<StructuralLoadState>();
+
+            // Component identity wins over stale serialized definition data. A
+            // generated Roof carries StructuralLoadState; treating an old asset's
+            // incorrect family value as Wall would reset every panel to span one.
+            if (incoming == BuildFamily.Roof && load != null && load.armed)
+                return load.spanFromSupport + 1;
+
             if (StructuralLoadState.IsVerticalSupport(hostFamily)) return 1;
             if (incoming != BuildFamily.Roof && hostFamily == BuildFamily.Foundation) return 1;
 
-            bool compatible = incoming == BuildFamily.Roof
-                ? hostFamily == BuildFamily.Roof
-                : hostFamily == BuildFamily.Floor || hostFamily == BuildFamily.FloorHatch;
+            bool compatible = hostFamily == BuildFamily.Floor || hostFamily == BuildFamily.FloorHatch;
             if (!compatible) return 0;
-
-            var load = host.GetComponent<StructuralLoadState>();
             return load != null && load.armed ? load.spanFromSupport + 1 : 0;
         }
 

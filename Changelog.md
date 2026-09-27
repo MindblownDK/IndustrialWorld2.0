@@ -1,9 +1,28 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `13.7.2-dev`
+**Current Version:** `13.7.3-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [13.7.3-dev] The Wheel Owns the Requested Family
+
+**Type:** PATCH - closes the remaining Roof-span bypass caused by stale serialized family identity. No save data, prefab geometry, item, recipe, research or balance cost changes.
+
+**The requested family is now authoritative for the entire placement pass.** `ComputeGhostTransform` previously received a Roof definition and repeatedly read `def.family` inside each snap and validation branch. If an older generated definition retained the wrong serialized family despite displaying as Roof in the wheel, the placement path could validate it as that other family. The wheel or legacy token selection now supplies `requestedFamily` directly to snapping, socket compatibility, fallback placement and overlap validation.
+
+**An armed load component is resolved before legacy host metadata.** A placed Roof authored by Step 102 carries `StructuralLoadState`. When another Roof targets it, that component's span is incremented before consulting `host.definition.family`. This prevents a stale host value such as Wall from classifying every panel in the chain as a fresh span-one vertical support.
+
+**A final rule runs outside every snap branch.** After the ghost transform is computed, the active wheel family is checked again. A requested Roof with span below one or above two is forced invalid before materials or placement input are processed. No socket, direct transform or fallback return can bypass this guard.
+
+**GitHub title:** `[13.7.3-dev] The wheel owns the requested family`
+
+**Manual steps:**
+1. Pull `Dev`, let Unity compile, and run Setup Step 102 once so placed Roof prefabs carry `StructuralLoadState`.
+2. Begin a fresh run from one Wall or Pillar. Roof one and Roof two must place; Roof three must be red.
+3. Continue aiming at Roof three's outer edge and confirm repeated clicks cannot place it.
+4. Add a Wall or Pillar beneath that location and confirm it becomes valid.
+5. If an old already-placed Roof lacks armed structural state, rebuild the short test chain after Step 102; existing unsupported legacy roofs remain intentionally untouched.
 
 ### [13.7.2-dev] Structural Span Belongs to the Placed Piece
 
