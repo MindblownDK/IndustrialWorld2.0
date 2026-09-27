@@ -53,7 +53,12 @@ namespace VoxelEngine.Building.Tiered
         /// <summary>Glazed pane that fits a Window frame.</summary>
         WindowPane = 21,
         /// <summary>Hinged lid with a fold-out ladder that fits a Floor Hatch.</summary>
-        HatchLid = 22
+        HatchLid = 22,
+
+        // ── Edge safety (13.6.0-dev) ──
+        // Appended: saved family integers must remain stable.
+        /// <summary>Guard rail that fits deck, foundation and stair edges.</summary>
+        Railing = 23
     }
 
     /// <summary>
@@ -108,6 +113,7 @@ namespace VoxelEngine.Building.Tiered
             BuildFamily.FloorHatch      => "FLOOR HATCH",
             BuildFamily.WindowPane      => "WINDOW PANE",
             BuildFamily.HatchLid        => "HATCH LID",
+            BuildFamily.Railing         => "RAILING",
             _ => family.ToString().ToUpperInvariant(),
         };
 
@@ -141,6 +147,7 @@ namespace VoxelEngine.Building.Tiered
             BuildFamily.FloorHatch      => "An opening down. Fit a lid to close it",
             BuildFamily.WindowPane      => "Glazes a window frame. Fit it yourself",
             BuildFamily.HatchLid        => "Folds open and drops a ladder through",
+            BuildFamily.Railing         => "A separate guard for deck and stair edges",
             _ => "Construction piece",
         };
     }

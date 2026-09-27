@@ -1,9 +1,39 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `13.5.8-dev`
+**Current Version:** `13.6.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [13.6.0-dev] Construction Fittings and Separate Railings
+
+**Type:** MINOR - adds the save-compatible Railing construction family and completes the opening/fitting placement pass. `BuildFamily.Railing` is appended at value 23; no existing family, tier, save value or tuned cost is renumbered or overwritten.
+
+**The structural wheel now reads in build order.** Foundations, floors, walls, half walls, pillars, roofs, stairs and railings lead the ring. Every fitting follows its opening: Doorway then Door, Window then Window Pane, Wall Frame then Garage Door, Floor Hatch then Hatch Lid. Step 100 audits the same complete order instead of its older ten-family subset.
+
+**Openings now accept their actual fittings.** The compatibility table explicitly connects Window Pane to Window, Hatch Lid to Floor Hatch and Garage Door to Wall Frame. Door, shutter, pane and lid placement tolerates the expected contact with the supporting tiered deck while continuing to reject dynamic-body overlap, fixing valid fitting ghosts that stayed red.
+
+**Structural edge rules are explicit.** Wall Frame joins Foundation and Floor edges like every other wall. Walls, Half Walls, Doorways, Windows and Wall Frames use the nearest cardinal edge rather than a centre socket. Roofs use the same half-module wall-top join as Floors. Floors can continue from Foundation edges at the Foundation top. Pillars select the deck centre inside the middle region and otherwise select the middle of the nearest of four sides, so adjacent Foundations share sensible pillar positions.
+
+**Stair alignment no longer inherits the old scene grid.** Stair run, rise and chaining use the authored 7.5 m module and 5.625 m storey. The generated flight no longer contains an enormous solid wedge or built-in guard rails: thin treads and risers sit on two exposed sloped stringers, leaving a clean diagonal underside.
+
+**New four-tier Railing family.** Railing is append-only family 23, generated non-destructively by Setup Step 102 with Wood, Stone, Iron and Steel prefabs, definitions, costs, tokens, colliders and a drawn wheel icon. It snaps to all four Foundation/Floor/Floor-Hatch edges and to either side of Stairs; stair placement pitches the same railing prefab along the flight.
+
+**Upgrade information is now exclusive to Upgrade mode.** Merely holding the Building Hammer no longer places the tier and material card over the screen. The card is evaluated only after selecting the wheel's centre Upgrade action; choosing a building family or closing build mode clears that state.
+
+**GitHub title:** `[13.6.0-dev] Construction fittings and separate railings`
+
+**Manual steps:**
+1. Pull `Dev` and let Unity compile.
+2. Open `Tools -> Voxel Engine -> Voxel Engine Setup` and run `102. Rebuild Construction at Size-V6`. This creates the four Railing prefabs and their definition/token and rebuilds Stairs without embedded rails or the solid wedge. Existing tuned definitions remain preserved.
+3. Re-run `100. Wire the Hammer Build Wheel` only if its audit reports a missing family. It is non-destructive.
+4. Open the structural wheel and confirm this order: Foundation, Floor, Wall, Half Wall, Pillar, Roof, Stairs, Railing, Doorway, Door, Window, Window Pane, Wall Frame, Garage Door, Floor Hatch, Hatch Lid.
+5. Place each opening and then its fitting. Door, Garage Door, Window Pane and Hatch Lid ghosts must turn valid at their matching centre socket and nowhere else.
+6. Place Wall Frame and Half Wall on every Foundation/Floor edge. Place Roof and Floor from both faces of a Wall. Continue a Floor from a Foundation edge.
+7. Aim a Pillar near a Foundation centre, then near each cardinal edge. In a square of Foundations, shared side-midpoint positions must coincide.
+8. Place and chain Stairs in both directions. Confirm their landings meet the deck, their underside follows the flight as two open stringers, and no rail is built in.
+9. Place Railings on all four deck edges and both Stair sides. Check all four material tiers by upgrading one Railing.
+10. Hold the Hammer without selecting Upgrade: no cost card should appear. Open the build wheel and select the centre Upgrade action; the card should then appear only while aiming at a tiered piece.
 
 ### [13.5.8-dev] Authored Pieces Ignore a Stale Scene Grid
 

@@ -30,6 +30,7 @@ namespace VoxelEngine.Building.Tiered
     {
         public static HammerBuildWheel Instance { get; private set; }
         public BuildFamily? ActiveFamily { get; private set; }
+        public bool IsUpgradeMode { get; private set; }
         public bool IsOpen => _wheel.IsOpen;
 
         public Inventory inventory;
@@ -37,11 +38,13 @@ namespace VoxelEngine.Building.Tiered
 
         private static readonly BuildFamily[] StructuralFamilies =
         {
-            BuildFamily.Foundation, BuildFamily.Wall, BuildFamily.Floor,
-            BuildFamily.Doorway, BuildFamily.Door, BuildFamily.Window,
-            BuildFamily.Stairs, BuildFamily.Roof, BuildFamily.Pillar,
-            BuildFamily.HalfWall, BuildFamily.WallFrame, BuildFamily.GarageDoor,
-            BuildFamily.FloorHatch, BuildFamily.WindowPane, BuildFamily.HatchLid
+            BuildFamily.Foundation, BuildFamily.Floor, BuildFamily.Wall,
+            BuildFamily.HalfWall, BuildFamily.Pillar, BuildFamily.Roof,
+            BuildFamily.Stairs, BuildFamily.Railing,
+            BuildFamily.Doorway, BuildFamily.Door,
+            BuildFamily.Window, BuildFamily.WindowPane,
+            BuildFamily.WallFrame, BuildFamily.GarageDoor,
+            BuildFamily.FloorHatch, BuildFamily.HatchLid
         };
 
         private static readonly BuildFamily[] StationFamilies =
@@ -235,6 +238,7 @@ namespace VoxelEngine.Building.Tiered
             }
 
             ActiveFamily = family;
+            IsUpgradeMode = false;
             bool affordable = CanAffordFamily(family);
             BuildFeedbackHud.Show($"Build: {BuildFamilyInfo.DisplayName(family)}",
                 CostSummary(family), null, affordable ? T.AccentCyan : T.AccentRed);
@@ -245,6 +249,7 @@ namespace VoxelEngine.Building.Tiered
         private void EnterUpgradeMode()
         {
             ActiveFamily = null;
+            IsUpgradeMode = true;
             BuildFeedbackHud.Show("Building Hammer", "Upgrade mode — strike a piece to raise its tier",
                 null, T.AccentGold);
             AudioManager.PlayUI(SfxLibrary.Get(Sfx.UiClick), 0.6f, 0.94f);
@@ -277,6 +282,7 @@ namespace VoxelEngine.Building.Tiered
         public void ExitBuildMode()
         {
             ActiveFamily = null;
+            IsUpgradeMode = false;
             _wheel.Close(false);
             BuildFeedbackHud.Show("Building Hammer", "Build mode closed", null, T.TextMuted);
         }

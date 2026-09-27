@@ -5374,8 +5374,11 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
             var stack = inventory.ActiveStack;
             bool holdingHammer = !stack.IsEmpty && stack.item != null
                                  && stack.item.GetType().Name == "Hammer";
+            bool upgradeMode = holdingHammer
+                && VoxelEngine.Building.Tiered.HammerBuildWheel.Instance != null
+                && VoxelEngine.Building.Tiered.HammerBuildWheel.Instance.IsUpgradeMode;
             VoxelEngine.Building.Tiered.PlacedTieredBlock target = null;
-            if (holdingHammer)
+            if (upgradeMode)
             {
                 // Use the player's main camera.
                 var cam = Camera.main;
@@ -5386,7 +5389,7 @@ else if (VoxelEngine.Items.HydrogenCanisterItem.IsPortableHydrogenTank(stack.ite
                         target = hit.collider.GetComponentInParent<VoxelEngine.Building.Tiered.PlacedTieredBlock>();
                 }
             }
-            UpgradePromptHud.Tick(target, inventory, holdingHammer);
+            UpgradePromptHud.Tick(target, inventory, upgradeMode);
         }
 
         private void TickFurnaceLiveUI()

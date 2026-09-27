@@ -324,13 +324,36 @@ namespace VoxelEngine.Building.Tiered
                 || hostFamily == BuildFamily.WallFrame;
 
             Vector3 localHit = host.transform.InverseTransformPoint(hit.point);
-            if (incomingDeck && wallHost)
+            if (incoming == BuildFamily.Railing)
+            {
+                if (hostFamily == BuildFamily.Stairs)
+                {
+                    float side = Mathf.Approximately(localHit.x, 0f) ? 1f : Mathf.Sign(localHit.x);
+                    position = host.transform.position + host.transform.right * (side * (ConstructionModule - 0.6f) * 0.5f);
+                    float pitch = -Mathf.Atan2(ConstructionStorey, ConstructionModule) * Mathf.Rad2Deg;
+                    rotation = host.transform.rotation * Quaternion.Euler(pitch, 90f, 0f);
+                    return true;
+                }
+
+                if (hostFamily == BuildFamily.Foundation || hostFamily == BuildFamily.Floor || hostFamily == BuildFamily.FloorHatch)
+                {
+                    float surface = hostFamily == BuildFamily.Foundation ? 1.125f : 0.42f;
+                    bool edgeX = Mathf.Abs(localHit.x) > Mathf.Abs(localHit.z);
+                    float side = edgeX
+                        ? (Mathf.Approximately(localHit.x, 0f) ? 1f : Mathf.Sign(localHit.x))
+                        : (Mathf.Approximately(localHit.z, 0f) ? 1f : Mathf.Sign(localHit.z));
+                    position = host.transform.position + host.transform.up * surface
+                        + (edgeX ? host.transform.right : host.transform.forward) * (side * ConstructionModule * 0.5f);
+                    float edgeYaw = edgeX ? 90f : 0f;
+                    rotation = Quaternion.AngleAxis(_ghostYaw + edgeYaw, host.transform.up) * host.transform.rotation;
+                    return true;
+                }
+            }
+
+            if ((incomingDeck || incoming == BuildFamily.Roof) && wallHost)
             {
                 float height = hostFamily == BuildFamily.HalfWall ? HalfWallHeight : ConstructionStorey;
-                float side = Mathf.Abs(localHit.z) > 0.08f
-                    ? Mathf.Sign(localHit.z)
-                    : Mathf.Sign(Vector3.Dot(hit.normal, host.transform.forward));
-                if (Mathf.Approximately(side, 0f)) side = 1f;
+                float side = ResolveFaceSide(localHit.z, Vector3.Dot(hit.normal, host.transform.forward));
 
                 position = host.transform.position
                     + host.transform.up * height
@@ -339,7 +362,37 @@ namespace VoxelEngine.Building.Tiered
                 return true;
             }
 
-            bool sameDeck = (hostFamily == BuildFamily.Foundation && incoming == BuildFamily.Foundation)
+            bool incomingWall = incoming == BuildFamily.Wall || incoming == BuildFamily.HalfWall
+                || incoming == BuildFamily.Doorway || incoming == BuildFamily.Window
+                || incoming == BuildFamily.WallFrame;
+            if (incomingWall &&
+                (hostFamily == BuildFamily.Foundation || hostFamily == BuildFamily.Floor || hostFamily == BuildFamily.FloorHatch))
+            {
+                float surface = hostFamily == BuildFamily.Foundation ? 1.125f : 0.42f;
+                bool edgeX = Mathf.Abs(localHit.x) > Mathf.Abs(localHit.z);
+                float side = edgeX
+                    ? (Mathf.Approximately(localHit.x, 0f) ? 1f : Mathf.Sign(localHit.x))
+                    : (Mathf.Approximately(localHit.z, 0f) ? 1f : Mathf.Sign(localHit.z));
+                position = host.transform.position + host.transform.up * surface
+                    + (edgeX ? host.transform.right : host.transform.forward) * (side * ConstructionModule * 0.5f);
+                float edgeYaw = edgeX ? side * 90f : (side < 0f ? 180f : 0f);
+                rotation = Quaternion.AngleAxis(_ghostYaw + edgeYaw, host.transform.up) * host.transform.rotation;
+                return true;
+            }
+
+            if (incoming == BuildFamily.Pillar &&
+                (hostFamily == BuildFamily.Foundation || hostFamily == BuildFamily.Floor || hostFamily == BuildFamily.FloorHatch))
+            {
+                float surface = hostFamily == BuildFamily.Foundation ? 1.125f : 0.42f;
+                Vector3 edge = NearestCentreOrEdge(localHit, ConstructionModule * 0.5f);
+                position = host.transform.position + host.transform.up * surface
+                    + host.transform.right * edge.x + host.transform.forward * edge.z;
+                rotation = Quaternion.AngleAxis(_ghostYaw, host.transform.up) * host.transform.rotation;
+                return true;
+            }
+
+            bool sameDeck = (hostFamily == BuildFamily.Foundation
+                    && (incoming == BuildFamily.Foundation || incomingDeck))
                 || ((hostFamily == BuildFamily.Floor || hostFamily == BuildFamily.FloorHatch)
                     && incomingDeck);
             if (!sameDeck) return false;
@@ -347,21 +400,40 @@ namespace VoxelEngine.Building.Tiered
             // Pick the edge nearest the aimed point. This remains deterministic at
             // the centre and never depends on whether an edge socket happened to
             // fall inside the broad physics query.
+            float vertical = hostFamily == BuildFamily.Foundation && incomingDeck ? 1.125f : 0f;
             bool useX = Mathf.Abs(localHit.x) > Mathf.Abs(localHit.z);
             if (useX)
             {
                 float side = Mathf.Approximately(localHit.x, 0f) ? 1f : Mathf.Sign(localHit.x);
-                position = host.transform.position
+                position = host.transform.position + host.transform.up * vertical
                     + host.transform.right * (side * ConstructionModule);
             }
             else
             {
                 float side = Mathf.Approximately(localHit.z, 0f) ? 1f : Mathf.Sign(localHit.z);
-                position = host.transform.position
+                position = host.transform.position + host.transform.up * vertical
                     + host.transform.forward * (side * ConstructionModule);
             }
             rotation = Quaternion.AngleAxis(_ghostYaw, host.transform.up) * host.transform.rotation;
             return true;
+        }
+
+        private static float ResolveFaceSide(float localAxis, float normalDot)
+        {
+            if (Mathf.Abs(localAxis) > 0.08f) return Mathf.Sign(localAxis);
+            if (Mathf.Abs(normalDot) > 0.01f) return Mathf.Sign(normalDot);
+            return 1f;
+        }
+
+        private static Vector3 NearestCentreOrEdge(Vector3 localHit, float halfModule)
+        {
+            // The middle owns the central pillar socket. Outside the middle third,
+            // the nearest cardinal edge wins; corners never create diagonal pillars.
+            float ax = Mathf.Abs(localHit.x);
+            float az = Mathf.Abs(localHit.z);
+            if (Mathf.Max(ax, az) < halfModule * 0.34f) return Vector3.zero;
+            if (ax > az) return new Vector3(Mathf.Sign(localHit.x) * halfModule, 0f, 0f);
+            return new Vector3(0f, 0f, Mathf.Sign(localHit.z) * halfModule);
         }
 
         private bool TryComputeStairChainTransform(
@@ -380,8 +452,10 @@ namespace VoxelEngine.Building.Tiered
 
             rotation = Quaternion.AngleAxis(_ghostYaw, up) * host.transform.rotation;
             Vector3 forward = rotation * Vector3.forward;
-            Vector3 vertical = up * gridSize;
-            position = host.transform.position + (chainUpward ? forward * gridSize + vertical : -forward * gridSize - vertical);
+            Vector3 vertical = up * ConstructionStorey;
+            position = host.transform.position + (chainUpward
+                ? forward * ConstructionModule + vertical
+                : -forward * ConstructionModule - vertical);
             return true;
         }
 
@@ -420,14 +494,14 @@ namespace VoxelEngine.Building.Tiered
             rotation = Quaternion.AngleAxis(_ghostYaw, up) * baseRotation;
 
             Vector3 stairForward = rotation * Vector3.forward;
-            float halfRun = gridSize * 0.5f;
+            float halfRun = ConstructionModule * 0.5f;
             if (descending)
             {
                 // The high edge is local +Z. Keep that edge on the socket while
                 // moving the stair root one complete storey below the threshold.
                 position = socket.transform.position
                     - stairForward * halfRun
-                    - up * gridSize;
+                    - up * ConstructionStorey;
             }
             else
             {
@@ -468,16 +542,16 @@ namespace VoxelEngine.Building.Tiered
             int count = Physics.OverlapBoxNonAlloc(pos, Vector3.one * 0.45f,
                 s_placementOverlapProbe, Quaternion.identity, ~0, QueryTriggerInteraction.UseGlobal);
             for (int i = 0; i < count; i++)
-                if (!IsOverlapColliderAllowed(s_placementOverlapProbe[i], socketHost)) return false;
+                if (!IsOverlapColliderAllowed(s_placementOverlapProbe[i], socketHost, family)) return false;
             if (count < s_placementOverlapProbe.Length) return true;
 
             // Preserve exact legacy behaviour if a very dense area fills the probe.
             foreach (var collider in Physics.OverlapBox(pos, Vector3.one * 0.45f, Quaternion.identity))
-                if (!IsOverlapColliderAllowed(collider, socketHost)) return false;
+                if (!IsOverlapColliderAllowed(collider, socketHost, family)) return false;
             return true;
         }
 
-        private static bool IsOverlapColliderAllowed(Collider collider, PlacedTieredBlock socketHost)
+        private static bool IsOverlapColliderAllowed(Collider collider, PlacedTieredBlock socketHost, BuildFamily incoming)
         {
             if (collider == null) return true;
             if (collider.attachedRigidbody != null && !collider.attachedRigidbody.isKinematic)
@@ -486,7 +560,15 @@ namespace VoxelEngine.Building.Tiered
             // Block placement inside existing tiered buildings UNLESS we're
             // socket-snapping to that exact host (adjacent stacking is fine).
             var host = collider.GetComponentInParent<PlacedTieredBlock>();
-            return host == null || host == socketHost;
+            if (host == null || host == socketHost) return true;
+
+            // A fitting occupies an opening whose root can touch the supporting
+            // foundation/deck and the frame at once. Those authored tiered pieces
+            // are expected neighbours; dynamic bodies remain rejected above.
+            bool fitting = incoming == BuildFamily.Door || incoming == BuildFamily.GarageDoor
+                || incoming == BuildFamily.WindowPane || incoming == BuildFamily.HatchLid
+                || incoming == BuildFamily.Railing;
+            return socketHost != null && fitting;
         }
 
         // ---------- Resource handling ----------

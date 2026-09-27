@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `13.5.8-dev`
-**Roadmap Version:** `13.5.8-dev`
+**Current Version:** `13.6.0-dev`
+**Roadmap Version:** `13.6.0-dev`
 **Date:** 2026-09-27
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 13.6.0-dev - Construction Fittings and Separate Railings
+- **Ordered wheel** (`HammerBuildWheel`): structural pieces are grouped by purpose, with each door, pane and lid adjacent to its matching opening and the new Railing beside Stairs.
+- **Deterministic joins** (`BuildSystemV2`, `BuildSocketCompat`): openings accept their fittings; walls, half walls, frames, roofs, pillars, floors and stairs use authored edge, centre and height rules.
+- **Railing family** (`TieredPieceFactory`, Setup Step 102): append-only family 23 provides four generated tiers for level deck edges and sloped stair edges; stairs no longer include fixed rails or a solid underbody.
+
 ### 13.5.8-dev - Authored Pieces Ignore a Stale Scene Grid
 - **Fixed dimensions** (`BuildSystemV2`): structural joins use the Size-V6 7.5 m module and 5.625 m storey rather than the scene's serialized fallback-grid value.
 - **Exact wall join**: floor roots move one half-module along the wall's normalized forward axis and one storey along its normalized up axis.
@@ -48,11 +53,6 @@
 - **Shader target** (`VoxelWaterURP`, `VoxelWater`): the full water shader now targets Shader Model 4.5 and its simpler project-owned fallback targets 3.5 instead of inheriting the insufficient default target.
 - **Setup recovery** (`RuntimeShaderSetup`, Setup Step 103): direct shader-asset resolution prefers the full water shader, accepts the project fallback, and upgrades recognized setup-owned URP Lit water materials without touching custom designer shaders.
 - **Runtime fallback** (`WaterMeshBuilder`, `ProceduralWaterPatchRenderer`): liquid rendering uses the same full water, simple water, URP Lit ordering and never constructs a material from an unsupported shader.
-
-### 13.5.4-dev - Standalone Builds Keep Their Runtime Shaders
-- **Build-safe materials** (`CosmosBootstrap`, `SphereWorld`, `AsteroidVoxelBody`, `WaterMeshBuilder`): procedural terrain and liquids load explicit Resources materials before any named shader fallback.
-- **Shader inclusion** (`RuntimeShaderSetup`, Setup Step 103): every project rendering shader and required URP fallback receives a non-destructive material anchor under Resources.
-- **Build guard** (`RuntimeShaderBuildGuard`): a player build is refused when its terrain, water or custom-shader anchors are missing, preventing a magenta release.
 
 ### Era Transition Feel
 

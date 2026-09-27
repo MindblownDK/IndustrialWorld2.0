@@ -55,6 +55,7 @@ namespace VoxelEngine.Building.Tiered
                 case BuildFamily.FloorHatch: FloorHatch(b); break;
                 case BuildFamily.WindowPane: WindowPane(b); break;
                 case BuildFamily.HatchLid:   HatchLid(b);   break;
+                case BuildFamily.Railing:    Railing(b);    break;
 
                 default: b.IsoBox(0f, 0f, 0f, 1f, 1f, 1f); break;
             }
@@ -229,6 +230,17 @@ namespace VoxelEngine.Building.Tiered
             b.IsoFaceLine(sx, sy, 0.04f, 0.5f, 0.96f, 0.5f);
             b.Line(P(0.12f * sx, 0.2f * sy, 0f), P(0.38f * sx, 0.46f * sy, 0f));
             b.Line(P(0.12f * sx, 0.42f * sy, 0f), P(0.26f * sx, 0.56f * sy, 0f));
+        }
+
+        private static void Railing(LineArtBuilder b)
+        {
+            const float h = 0.68f;
+            b.Line(P(0f, 0f, 0f), P(0f, h, 0f));
+            b.Line(P(0.33f, 0f, 0f), P(0.33f, h, 0f));
+            b.Line(P(0.66f, 0f, 0f), P(0.66f, h, 0f));
+            b.Line(P(1f, 0f, 0f), P(1f, h, 0f));
+            b.Line(P(0f, h, 0f), P(1f, h, 0f));
+            b.Line(P(0f, h * 0.52f, 0f), P(1f, h * 0.52f, 0f));
         }
 
         private static void HatchLid(LineArtBuilder b)

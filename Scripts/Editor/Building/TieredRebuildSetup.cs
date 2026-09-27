@@ -38,11 +38,13 @@ namespace VoxelEngine.EditorTools
 
         private static readonly BuildFamily[] Structural =
         {
-            BuildFamily.Foundation, BuildFamily.Wall, BuildFamily.Floor,
-            BuildFamily.Doorway, BuildFamily.Door, BuildFamily.Window,
-            BuildFamily.Stairs, BuildFamily.Roof, BuildFamily.Pillar,
-            BuildFamily.HalfWall, BuildFamily.WallFrame, BuildFamily.GarageDoor,
-            BuildFamily.FloorHatch, BuildFamily.WindowPane, BuildFamily.HatchLid
+            BuildFamily.Foundation, BuildFamily.Floor, BuildFamily.Wall,
+            BuildFamily.HalfWall, BuildFamily.Pillar, BuildFamily.Roof,
+            BuildFamily.Stairs, BuildFamily.Railing,
+            BuildFamily.Doorway, BuildFamily.Door,
+            BuildFamily.Window, BuildFamily.WindowPane,
+            BuildFamily.WallFrame, BuildFamily.GarageDoor,
+            BuildFamily.FloorHatch, BuildFamily.HatchLid
         };
 
         private static readonly BuildFamily[] Station =
@@ -104,7 +106,7 @@ namespace VoxelEngine.EditorTools
             EditorUtility.DisplayDialog("Voxel Engine — Step 102",
                 $"Construction rebuilt at {TieredPieceFactory.Module} m modules and {TieredPieceFactory.Storey} m storeys.\n\n" +
                 $"Definitions authored: {created}\nPrefabs rebuilt: {rebuilt}\nLeft untouched (custom work): {skipped}\n\n" +
-                "Wall Frame, Garage Door and Floor Hatch are now on the build wheel.\n\n" +
+                "Openings, separate fittings and the four-tier Railing are on the build wheel.\n\n" +
                 "Existing bases keep their saved family and tier, but pieces placed before this step were " +
                 "authored at the old module and will not line up with new ones.",
                 "OK");
@@ -550,6 +552,7 @@ namespace VoxelEngine.EditorTools
                 BuildFamily.FloorHatch => (2, 4, 0, 4, 4),
                 BuildFamily.WindowPane => (0, 2, 0, 2, 2),
                 BuildFamily.HatchLid   => (1, 3, 0, 3, 3),
+                BuildFamily.Railing    => (2, 2, 2, 3, 3),
                 _ => (3, 3, 5, 3, 3),
             };
 

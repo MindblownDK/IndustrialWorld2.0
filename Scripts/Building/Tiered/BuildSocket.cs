@@ -63,7 +63,9 @@ namespace VoxelEngine.Building.Tiered
                             || incoming == BuildFamily.Doorway
                             || incoming == BuildFamily.Window
                             || incoming == BuildFamily.HalfWall
-                            || incoming == BuildFamily.Stairs;
+                            || incoming == BuildFamily.WallFrame
+                            || incoming == BuildFamily.Stairs
+                            || incoming == BuildFamily.Railing;
                     case SocketSide.North:
                     case SocketSide.South:
                     case SocketSide.East:
@@ -77,10 +79,15 @@ namespace VoxelEngine.Building.Tiered
                 }
             }
 
-            // Doorways accept their separate Door at centre and a descending
-            // staircase at the exterior threshold.
+            // Openings accept only their matching fittings at centre.
             if (host == BuildFamily.Doorway && side == SocketSide.Center)
                 return incoming == BuildFamily.Door;
+            if (host == BuildFamily.WallFrame && side == SocketSide.Center)
+                return incoming == BuildFamily.GarageDoor;
+            if (host == BuildFamily.Window && side == SocketSide.Center)
+                return incoming == BuildFamily.WindowPane;
+            if (host == BuildFamily.FloorHatch && side == SocketSide.Center)
+                return incoming == BuildFamily.HatchLid;
             if (host == BuildFamily.Doorway && side == SocketSide.Bottom)
                 return incoming == BuildFamily.Stairs;
 

@@ -684,6 +684,7 @@ namespace VoxelEngine.EditorTools
                 case BuildFamily.WindowPane: WindowPane(m, tier); break;
                 case BuildFamily.HatchLid:   HatchLidPanel(m, tier); break;
                 case BuildFamily.Stairs:     Stairs(m, tier); break;
+                case BuildFamily.Railing:    Railing(m, tier); break;
                 case BuildFamily.Roof:       Roof(m, tier); break;
                 case BuildFamily.Pillar:     Pillar(m, tier); break;
                 case BuildFamily.HalfWall:   HalfWall(m, tier); break;
@@ -1062,11 +1063,8 @@ namespace VoxelEngine.EditorTools
             float rise = Storey / steps, run = Module / steps;
             float width = Module - 0.6f;
 
-            // Solid wedge underneath: a staircase should not be a flight of
-            // floating planks with daylight between every tread.
-            m.Wedge(PieceSurface.Frame, new Vector3(0f, Storey * 0.5f, 0f),
-                    new Vector3(Module, Storey, width), new Vector3(0f, -90f, 0f));
-
+            // Treads and risers form the flight; the underside remains a clean
+            // diagonal carried by two stringers instead of a full solid wedge.
             for (int i = 0; i < steps; i++)
             {
                 float y = rise * (i + 0.5f);
@@ -1075,22 +1073,32 @@ namespace VoxelEngine.EditorTools
                 m.Box(PieceSurface.Frame, new Vector3(0f, y, z - run * 0.45f), new Vector3(width - 0.2f, rise, 0.12f));
             }
 
-            // Stringers running the pitch, and a handrail on each side.
+            // Two exposed diagonal stringers give the open underside its slope.
             float diag = Mathf.Sqrt(Module * Module + Storey * Storey);
             float pitch = Mathf.Atan2(Storey, Module) * Mathf.Rad2Deg;
             foreach (float s in new[] { -1f, 1f })
-            {
                 m.Box(PieceSurface.Frame, new Vector3(s * width * 0.5f, Storey * 0.5f - 0.2f, 0f),
                       new Vector3(0.22f, 0.5f, diag), new Vector3(-pitch, 0f, 0f));
-                m.Box(PieceSurface.Trim, new Vector3(s * width * 0.5f, Storey * 0.5f + 1.0f, 0f),
-                      new Vector3(0.12f, 0.12f, diag), new Vector3(-pitch, 0f, 0f));
-                for (int i = 1; i < 5; i++)
-                {
-                    float t = i / 5f;
-                    m.Box(PieceSurface.Trim, new Vector3(s * width * 0.5f, Storey * t + 0.55f, -HalfModule + Module * t),
-                          new Vector3(0.1f, 1.1f, 0.1f));
-                }
+        }
+
+        private static void Railing(PieceMesh m, BuildTier tier)
+        {
+            const float height = 1.18f;
+            const float post = 0.14f;
+            const int bays = 4;
+            float railThickness = tier >= BuildTier.Iron ? 0.12f : 0.16f;
+
+            for (int i = 0; i <= bays; i++)
+            {
+                float x = -HalfModule + Module * i / bays;
+                m.Box(PieceSurface.Frame, new Vector3(x, height * 0.5f, 0f),
+                    new Vector3(post, height, post));
             }
+
+            m.Box(PieceSurface.Trim, new Vector3(0f, height, 0f),
+                new Vector3(Module, railThickness, railThickness));
+            m.Box(PieceSurface.Trim, new Vector3(0f, height * 0.53f, 0f),
+                new Vector3(Module, railThickness * 0.8f, railThickness * 0.8f));
         }
 
         private static void Roof(PieceMesh m, BuildTier tier)
@@ -1584,10 +1592,13 @@ namespace VoxelEngine.EditorTools
                     const int steps = 15;
                     float rise = Storey / steps, run = Module / steps;
                     for (int i = 0; i < steps; i++)
-                        Box(new Vector3(0f, rise * (i + 0.5f) * 0.5f, -HalfModule + run * (i + 0.5f)),
-                            new Vector3(Module - 0.6f, rise * (i + 1), run));
+                        Box(new Vector3(0f, rise * (i + 1), -HalfModule + run * (i + 0.5f)),
+                            new Vector3(Module - 0.6f, 0.16f, run));
                     break;
                 }
+                case BuildFamily.Railing:
+                    Box(new Vector3(0f, 0.59f, 0f), new Vector3(Module, 1.18f, 0.22f));
+                    break;
                 default:
                     Box(new Vector3(0f, Storey * 0.5f, 0f), new Vector3(Module, Storey, WallThick + 0.2f));
                     break;

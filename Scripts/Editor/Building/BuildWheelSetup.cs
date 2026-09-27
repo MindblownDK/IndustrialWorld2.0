@@ -28,10 +28,13 @@ namespace VoxelEngine.EditorTools
 
         private static readonly BuildFamily[] StructuralFamilies =
         {
-            BuildFamily.Foundation, BuildFamily.Wall, BuildFamily.Floor,
-            BuildFamily.Doorway, BuildFamily.Door, BuildFamily.Window,
-            BuildFamily.Stairs, BuildFamily.Roof, BuildFamily.Pillar,
-            BuildFamily.HalfWall
+            BuildFamily.Foundation, BuildFamily.Floor, BuildFamily.Wall,
+            BuildFamily.HalfWall, BuildFamily.Pillar, BuildFamily.Roof,
+            BuildFamily.Stairs, BuildFamily.Railing,
+            BuildFamily.Doorway, BuildFamily.Door,
+            BuildFamily.Window, BuildFamily.WindowPane,
+            BuildFamily.WallFrame, BuildFamily.GarageDoor,
+            BuildFamily.FloorHatch, BuildFamily.HatchLid
         };
 
         private static readonly BuildFamily[] StationFamilies =
