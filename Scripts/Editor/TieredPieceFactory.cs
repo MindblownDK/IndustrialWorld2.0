@@ -294,95 +294,209 @@ namespace VoxelEngine.EditorTools
         //  TIER CLADDING — the same surface, told four different ways
         // ══════════════════════════════════════════════════════════════════
 
+        /// <summary>Which edges of a clad panel get the framing timbers / border bars.</summary>
+        [System.Flags]
+        private enum Edge { None = 0, Left = 1, Right = 2, Top = 4, Bottom = 8, All = 15 }
+
         /// <summary>
         /// The strong exterior face of a rectangular panel, in the piece's local
         /// frame. <paramref name="z"/> is the outward face plane.
+        ///
+        /// Every tier starts with a SOLID sheathing box spanning the whole panel.
+        /// The cladding on top of it is relief, never the wall itself - laying
+        /// rounded logs edge to edge and calling that the wall is what left the
+        /// first pass see-through between every course.
         /// </summary>
-        private static void CladSkin(PieceMesh m, BuildTier tier, Vector3 centre, float width, float height, float z, float depth)
+        private static void CladSkin(PieceMesh m, BuildTier tier, Vector3 centre, float width, float height,
+                                     float z, float depth, Edge edges = Edge.All)
         {
+            // The one line that makes a piece solid.
+            m.Box(PieceSurface.Skin, new Vector3(centre.x, centre.y, z - depth * 0.5f),
+                  new Vector3(width, height, depth));
+
+            float left = centre.x - width * 0.5f, right = centre.x + width * 0.5f;
+            float bottom = centre.y - height * 0.5f, top = centre.y + height * 0.5f;
+
             switch (tier)
             {
                 case BuildTier.Wood:
                 {
-                    // Horizontally laid rounded logs, tightly lined.
-                    int courses = Mathf.Max(2, Mathf.RoundToInt(height / 0.62f));
-                    float r = height / (courses * 2f);
-                    for (int i = 0; i < courses; i++)
+                    // Horizontal boards filling the field between round framing
+                    // timbers - the shape of a log-cabin wall, not a stack of pipes.
+                    float inset = (edges & (Edge.Left | Edge.Right)) != 0 ? 0.38f : 0.06f;
+                    float vInset = (edges & (Edge.Top | Edge.Bottom)) != 0 ? 0.34f : 0.04f;
+                    float fieldW = Mathf.Max(0.2f, width - inset * 2f);
+                    float fieldH = Mathf.Max(0.2f, height - vInset * 2f);
+
+                    int boards = Mathf.Max(2, Mathf.RoundToInt(fieldH / 0.46f));
+                    float bh = fieldH / boards;
+                    for (int i = 0; i < boards; i++)
                     {
-                        float y = centre.y - height * 0.5f + r + i * r * 2f;
-                        m.Cylinder(PieceSurface.Skin, new Vector3(centre.x, y, z - r * 0.35f),
-                                   r * 1.02f, width, new Vector3(0f, 0f, 90f));
+                        float y = bottom + vInset + bh * (i + 0.5f);
+                        float relief = (i & 1) == 0 ? 0.015f : 0f;
+                        m.Box(PieceSurface.Skin, new Vector3(centre.x, y, z + 0.055f + relief),
+                              new Vector3(fieldW, bh * 1.03f, 0.11f));
                     }
+
+                    // Round framing timbers with the ends proud of the panel.
+                    const float post = 0.23f;
+                    if ((edges & Edge.Left) != 0)
+                        m.Cylinder(PieceSurface.Trim, new Vector3(left + post, centre.y, z + 0.10f),
+                                   post, height + post * 1.2f, Vector3.zero);
+                    if ((edges & Edge.Right) != 0)
+                        m.Cylinder(PieceSurface.Trim, new Vector3(right - post, centre.y, z + 0.10f),
+                                   post, height + post * 1.2f, Vector3.zero);
+                    if ((edges & Edge.Top) != 0)
+                        m.Cylinder(PieceSurface.Trim, new Vector3(centre.x, top - post * 0.85f, z + 0.10f),
+                                   post * 0.92f, width, new Vector3(0f, 0f, 90f));
+                    if ((edges & Edge.Bottom) != 0)
+                        m.Cylinder(PieceSurface.Trim, new Vector3(centre.x, bottom + post * 0.85f, z + 0.10f),
+                                   post * 0.92f, width, new Vector3(0f, 0f, 90f));
                     break;
                 }
+
                 case BuildTier.Stone:
                 {
-                    // Fitted blocks in running bond, recessed mortar between.
-                    m.Box(PieceSurface.Skin, new Vector3(centre.x, centre.y, z - depth * 0.5f),
-                          new Vector3(width, height, depth));
-                    int rows = Mathf.Max(3, Mathf.RoundToInt(height / 0.78f));
-                    float rh = height / rows;
+                    // Small fitted blocks in running bond inside a heavier quoined
+                    // border, the way a dressed stone wall is actually laid.
+                    float border = (edges & (Edge.Left | Edge.Right)) != 0 ? 0.34f : 0.04f;
+                    float vBorder = (edges & (Edge.Top | Edge.Bottom)) != 0 ? 0.30f : 0.04f;
+                    float fieldW = Mathf.Max(0.2f, width - border * 2f);
+                    float fieldH = Mathf.Max(0.2f, height - vBorder * 2f);
+
+                    int rows = Mathf.Max(3, Mathf.RoundToInt(fieldH / 0.42f));
+                    float rh = fieldH / rows;
+                    int cols = Mathf.Max(3, Mathf.RoundToInt(fieldW / 0.62f));
+                    float cw = fieldW / cols;
                     for (int r = 0; r < rows; r++)
                     {
-                        int cols = 5;
-                        float cw = width / cols;
-                        float offset = (r & 1) == 0 ? 0f : cw * 0.5f;
+                        float off = (r & 1) == 0 ? 0f : cw * 0.5f;
                         for (int c = -1; c <= cols; c++)
                         {
-                            float x = centre.x - width * 0.5f + offset + cw * (c + 0.5f);
-                            if (x < centre.x - width * 0.5f + 0.05f || x > centre.x + width * 0.5f - 0.05f) continue;
+                            float x = left + border + off + cw * (c + 0.5f);
+                            float halfBrick = cw * 0.46f;
+                            if (x - halfBrick < left + border - 0.01f || x + halfBrick > right - border + 0.01f) continue;
+                            float n = Mathf.PerlinNoise(c * 2.3f + r * 0.7f, r * 1.9f);
                             m.Box(PieceSurface.Skin,
-                                  new Vector3(x, centre.y - height * 0.5f + rh * (r + 0.5f), z + 0.035f),
-                                  new Vector3(cw * 0.93f, rh * 0.86f, depth * 0.55f));
+                                  new Vector3(x, bottom + vBorder + rh * (r + 0.5f), z + 0.045f + n * 0.022f),
+                                  new Vector3(cw * 0.92f, rh * 0.84f, 0.09f));
                         }
                     }
+                    StoneBorder(m, edges, left, right, bottom, top, z, border, vBorder);
                     break;
                 }
+
                 case BuildTier.Iron:
                 {
-                    // Patchwork corrugated sheets riveted over a backing plate.
-                    m.Box(PieceSurface.Skin, new Vector3(centre.x, centre.y, z - depth * 0.5f),
-                          new Vector3(width, height, depth));
-                    int sheets = Mathf.Max(2, Mathf.RoundToInt(width / 1.7f));
-                    float sw = width / sheets;
-                    for (int s = 0; s < sheets; s++)
-                    {
-                        float x = centre.x - width * 0.5f + sw * (s + 0.5f);
-                        float lift = (s & 1) == 0 ? 0.045f : 0.025f;
-                        float hh = height * ((s & 1) == 0 ? 0.97f : 0.90f);
-                        m.Box(PieceSurface.Skin, new Vector3(x, centre.y, z + lift),
-                              new Vector3(sw * 0.98f, hh, 0.05f));
-                        for (int b = 0; b < 4; b++)
-                            m.Box(PieceSurface.Trim,
-                                  new Vector3(x, centre.y - hh * 0.5f + hh * (b + 0.5f) / 4f, z + lift + 0.035f),
-                                  new Vector3(sw * 0.9f, 0.05f, 0.03f));
-                    }
-                    break;
-                }
-                default:
-                {
-                    // Armour: heavy plates, bevelled seams, corner rivets.
-                    m.Box(PieceSurface.Skin, new Vector3(centre.x, centre.y, z - depth * 0.5f),
-                          new Vector3(width, height, depth));
-                    int cols = Mathf.Max(2, Mathf.RoundToInt(width / 2.6f));
-                    int rows = Mathf.Max(2, Mathf.RoundToInt(height / 2.6f));
-                    float pw = width / cols, ph = height / rows;
-                    for (int c = 0; c < cols; c++)
+                    // Salvaged plates of mixed size screwed over the sheathing,
+                    // inside a riveted border bar.
+                    float border = (edges & (Edge.Left | Edge.Right)) != 0 ? 0.30f : 0.04f;
+                    float vBorder = (edges & (Edge.Top | Edge.Bottom)) != 0 ? 0.28f : 0.04f;
+                    float fieldW = Mathf.Max(0.2f, width - border * 2f);
+                    float fieldH = Mathf.Max(0.2f, height - vBorder * 2f);
+
+                    int rows = Mathf.Max(2, Mathf.RoundToInt(fieldH / 1.35f));
+                    float rh = fieldH / rows;
                     for (int r = 0; r < rows; r++)
                     {
-                        float x = centre.x - width * 0.5f + pw * (c + 0.5f);
-                        float y = centre.y - height * 0.5f + ph * (r + 0.5f);
-                        m.Box(PieceSurface.Skin, new Vector3(x, y, z + 0.04f),
-                              new Vector3(pw * 0.94f, ph * 0.94f, 0.07f));
-                        foreach (float sx in new[] { -1f, 1f })
-                        foreach (float sy in new[] { -1f, 1f })
-                            m.Box(PieceSurface.Trim,
-                                  new Vector3(x + sx * pw * 0.38f, y + sy * ph * 0.38f, z + 0.085f),
-                                  new Vector3(0.14f, 0.14f, 0.05f));
+                        int cols = 1 + ((r + (int)(width * 3f)) % 2);   // 1 or 2 patches per band
+                        float cw = fieldW / cols;
+                        for (int c = 0; c < cols; c++)
+                        {
+                            float x = left + border + cw * (c + 0.5f);
+                            float y = bottom + vBorder + rh * (r + 0.5f);
+                            float n = Mathf.PerlinNoise(c * 5.1f + r * 2.7f, r * 3.3f);
+                            m.Box(PieceSurface.Skin, new Vector3(x, y, z + 0.045f + n * 0.02f),
+                                  new Vector3(cw * 0.985f, rh * 0.97f, 0.06f),
+                                  new Vector3(0f, 0f, (n - 0.5f) * 1.6f));
+                            int screws = Mathf.Max(2, Mathf.RoundToInt(cw / 1.1f));
+                            for (int k = 0; k < screws; k++)
+                            {
+                                float sx = x - cw * 0.45f + cw * 0.9f * (screws == 1 ? 0.5f : k / (float)(screws - 1));
+                                m.Box(PieceSurface.Trim, new Vector3(sx, y + rh * 0.42f, z + 0.085f), new Vector3(0.1f, 0.1f, 0.04f));
+                                m.Box(PieceSurface.Trim, new Vector3(sx, y - rh * 0.42f, z + 0.085f), new Vector3(0.1f, 0.1f, 0.04f));
+                            }
+                        }
                     }
+                    MetalBorder(m, edges, left, right, bottom, top, z, border, vBorder, 0.075f, 0.6f);
+                    break;
+                }
+
+                default:
+                {
+                    // Armour: wide recessed panels with clean seams, a heavy border
+                    // bar and a run of vent slots - dark, flat and deliberate.
+                    float border = (edges & (Edge.Left | Edge.Right)) != 0 ? 0.32f : 0.04f;
+                    float vBorder = (edges & (Edge.Top | Edge.Bottom)) != 0 ? 0.30f : 0.04f;
+                    float fieldW = Mathf.Max(0.2f, width - border * 2f);
+                    float fieldH = Mathf.Max(0.2f, height - vBorder * 2f);
+
+                    int rows = Mathf.Max(2, Mathf.RoundToInt(fieldH / 1.6f));
+                    float rh = fieldH / rows;
+                    for (int r = 0; r < rows; r++)
+                    {
+                        float y = bottom + vBorder + rh * (r + 0.5f);
+                        m.Box(PieceSurface.Skin, new Vector3(centre.x, y, z + 0.05f),
+                              new Vector3(fieldW * 0.995f, rh * 0.93f, 0.08f));
+                        if (r == rows - 1 && fieldW > 1.6f)
+                            for (int v = 0; v < 5; v++)
+                                m.Box(PieceSurface.Frame,
+                                      new Vector3(centre.x - fieldW * 0.16f + v * fieldW * 0.08f, y, z + 0.095f),
+                                      new Vector3(0.05f, rh * 0.4f, 0.03f));
+                    }
+                    MetalBorder(m, edges, left, right, bottom, top, z, border, vBorder, 0.09f, 0.85f);
                     break;
                 }
             }
+        }
+
+        /// <summary>Quoined stone border: larger blocks turning each framed edge.</summary>
+        private static void StoneBorder(PieceMesh m, Edge edges, float left, float right, float bottom, float top,
+                                        float z, float border, float vBorder)
+        {
+            if ((edges & Edge.Left) != 0) QuoinColumn(m, left + border * 0.5f, bottom, top, z, border);
+            if ((edges & Edge.Right) != 0) QuoinColumn(m, right - border * 0.5f, bottom, top, z, border);
+            if ((edges & Edge.Top) != 0)
+                m.Box(PieceSurface.Trim, new Vector3((left + right) * 0.5f, top - vBorder * 0.5f, z + 0.05f),
+                      new Vector3(right - left, vBorder, 0.13f));
+            if ((edges & Edge.Bottom) != 0)
+                m.Box(PieceSurface.Trim, new Vector3((left + right) * 0.5f, bottom + vBorder * 0.5f, z + 0.05f),
+                      new Vector3(right - left, vBorder, 0.13f));
+        }
+
+        private static void QuoinColumn(PieceMesh m, float x, float bottom, float top, float z, float border)
+        {
+            int blocks = Mathf.Max(3, Mathf.RoundToInt((top - bottom) / 0.75f));
+            float bh = (top - bottom) / blocks;
+            for (int i = 0; i < blocks; i++)
+                m.Box(PieceSurface.Trim, new Vector3(x, bottom + bh * (i + 0.5f), z + 0.055f),
+                      new Vector3(border * (i % 2 == 0 ? 1.9f : 1.35f), bh * 0.9f, 0.14f));
+        }
+
+        /// <summary>Flat border bar with a run of rivets along each framed edge.</summary>
+        private static void MetalBorder(PieceMesh m, Edge edges, float left, float right, float bottom, float top,
+                                        float z, float border, float vBorder, float thick, float rivetSpacing)
+        {
+            void Bar(Vector3 centre, Vector3 size, bool vertical)
+            {
+                m.Box(PieceSurface.Trim, centre, size);
+                float run = vertical ? size.y : size.x;
+                int rivets = Mathf.Max(2, Mathf.RoundToInt(run / rivetSpacing));
+                for (int i = 0; i < rivets; i++)
+                {
+                    float t = rivets == 1 ? 0.5f : i / (float)(rivets - 1);
+                    Vector3 p = vertical
+                        ? new Vector3(centre.x, centre.y - run * 0.46f + run * 0.92f * t, z + thick + 0.04f)
+                        : new Vector3(centre.x - run * 0.46f + run * 0.92f * t, centre.y, z + thick + 0.04f);
+                    m.Box(PieceSurface.Trim, p, new Vector3(0.13f, 0.13f, 0.05f));
+                }
+            }
+
+            float h = top - bottom, w = right - left;
+            if ((edges & Edge.Left) != 0) Bar(new Vector3(left + border * 0.5f, (bottom + top) * 0.5f, z + thick * 0.5f), new Vector3(border, h, thick), true);
+            if ((edges & Edge.Right) != 0) Bar(new Vector3(right - border * 0.5f, (bottom + top) * 0.5f, z + thick * 0.5f), new Vector3(border, h, thick), true);
+            if ((edges & Edge.Top) != 0) Bar(new Vector3((left + right) * 0.5f, top - vBorder * 0.5f, z + thick * 0.5f), new Vector3(w, vBorder, thick), false);
+            if ((edges & Edge.Bottom) != 0) Bar(new Vector3((left + right) * 0.5f, bottom + vBorder * 0.5f, z + thick * 0.5f), new Vector3(w, vBorder, thick), false);
         }
 
         /// <summary>The weak interior face: whatever is holding the cladding up.</summary>
@@ -489,34 +603,48 @@ namespace VoxelEngine.EditorTools
             float sideW = (width - holeW) * 0.5f;
             float holeTop = holeBottom + holeH;
 
+            // Each sub-panel only frames the edges that are genuinely on the
+            // outside of the piece; the edges facing the opening get the reveal
+            // lining instead, so the hole reads as cut rather than assembled.
             if (sideW > 0.05f)
             {
-                foreach (float sx in new[] { -1f, 1f })
-                {
-                    float cx = sx * (halfW - sideW * 0.5f);
-                    CladSkin(m, tier, new Vector3(cx, height * 0.5f, 0f), sideW, height, z, thick);
-                    CladFrame(m, tier, new Vector3(cx, height * 0.5f, 0f), sideW, height, -z);
-                }
+                CladSkin(m, tier, new Vector3(-(halfW - sideW * 0.5f), height * 0.5f, 0f), sideW, height, z, thick,
+                         Edge.Left | Edge.Top | Edge.Bottom);
+                CladFrame(m, tier, new Vector3(-(halfW - sideW * 0.5f), height * 0.5f, 0f), sideW, height, -z);
+                CladSkin(m, tier, new Vector3(halfW - sideW * 0.5f, height * 0.5f, 0f), sideW, height, z, thick,
+                         Edge.Right | Edge.Top | Edge.Bottom);
+                CladFrame(m, tier, new Vector3(halfW - sideW * 0.5f, height * 0.5f, 0f), sideW, height, -z);
             }
             if (holeBottom > 0.05f)
             {
-                CladSkin(m, tier, new Vector3(0f, holeBottom * 0.5f, 0f), holeW, holeBottom, z, thick);
+                CladSkin(m, tier, new Vector3(0f, holeBottom * 0.5f, 0f), holeW, holeBottom, z, thick, Edge.Bottom);
                 CladFrame(m, tier, new Vector3(0f, holeBottom * 0.5f, 0f), holeW, holeBottom, -z);
             }
             if (height - holeTop > 0.05f)
             {
                 float capH = height - holeTop;
-                CladSkin(m, tier, new Vector3(0f, holeTop + capH * 0.5f, 0f), holeW, capH, z, thick);
+                CladSkin(m, tier, new Vector3(0f, holeTop + capH * 0.5f, 0f), holeW, capH, z, thick, Edge.Top);
                 CladFrame(m, tier, new Vector3(0f, holeTop + capH * 0.5f, 0f), holeW, capH, -z);
             }
 
-            // Reveal lining, so the opening reads as cut through a solid wall.
-            m.Box(PieceSurface.Trim, new Vector3(0f, holeTop + 0.07f, 0f), new Vector3(holeW + 0.3f, 0.16f, thick + 0.1f));
+            // Reveal lining: a returned jamb all the way through the wall.
+            Reveal(m, tier, new Vector3(0f, holeTop + 0.1f, 0f), new Vector3(holeW + 0.4f, 0.2f, thick + 0.12f));
             if (holeBottom > 0.05f)
-                m.Box(PieceSurface.Trim, new Vector3(0f, holeBottom - 0.07f, 0f), new Vector3(holeW + 0.3f, 0.16f, thick + 0.1f));
+                Reveal(m, tier, new Vector3(0f, holeBottom - 0.1f, 0f), new Vector3(holeW + 0.4f, 0.2f, thick + 0.12f));
             foreach (float sx in new[] { -1f, 1f })
-                m.Box(PieceSurface.Trim, new Vector3(sx * (holeW * 0.5f + 0.07f), holeBottom + holeH * 0.5f, 0f),
-                      new Vector3(0.16f, holeH + 0.2f, thick + 0.1f));
+                Reveal(m, tier, new Vector3(sx * (holeW * 0.5f + 0.1f), holeBottom + holeH * 0.5f, 0f),
+                       new Vector3(0.2f, holeH + 0.2f, thick + 0.12f));
+        }
+
+        /// <summary>Jamb lining. Timber tiers get a rounded return, metal a flat bar.</summary>
+        private static void Reveal(PieceMesh m, BuildTier tier, Vector3 centre, Vector3 size)
+        {
+            if (tier == BuildTier.Wood && size.x > size.y)
+                m.Cylinder(PieceSurface.Trim, centre, size.y * 0.55f, size.x, new Vector3(0f, 0f, 90f));
+            else if (tier == BuildTier.Wood)
+                m.Cylinder(PieceSurface.Trim, centre, size.x * 0.55f, size.y, Vector3.zero);
+            else
+                m.Box(PieceSurface.Trim, centre, size);
         }
 
         // ══════════════════════════════════════════════════════════════════
@@ -548,67 +676,202 @@ namespace VoxelEngine.EditorTools
             AddColliders(root, family);
         }
 
-        private static void Foundation(PieceMesh m, BuildTier tier)
+        /// <summary>
+        /// The horizontal face of a deck or slab: what you stand on. Relief only —
+        /// the solid volume is laid down by the caller first.
+        /// </summary>
+        private static void DeckSurface(PieceMesh m, BuildTier tier, float top, float size, float hole)
         {
-            const float deck = 0.34f;
-            float top = DeckTop, bottom = top - deck;
+            float holeHalf = hole * 0.5f + 0.1f;
+            bool Skip(float x, float z) => hole > 0f && Mathf.Abs(x) < holeHalf && Mathf.Abs(z) < holeHalf;
 
-            // Deck boards, laid across the module and overlapped so no light leaks.
-            int boards = 10;
-            float bw = Module / boards;
-            for (int i = 0; i < boards; i++)
-                m.Box(PieceSurface.Skin,
-                      new Vector3(-HalfModule + bw * (i + 0.5f), top - deck * 0.5f, 0f),
-                      new Vector3(bw * 1.04f, deck, Module));
-
-            // Perimeter ring beam and corner piers carrying the deck off the ground.
-            foreach (float s in new[] { -1f, 1f })
+            // A board or rib runs the full depth of the slab, so it cannot simply
+            // be dropped when it crosses the opening - it has to be cut into the
+            // two lengths either side of it, or the deck planks its own hatch shut.
+            // lift raises an element above the deck plane (tread ribs); zero keeps
+            // it flush and inset into it (boards, plates). Sizes stay positive:
+            // a negative box extent produces inside-out geometry, not a recess.
+            void Run(PieceSurface surface, float x, float widthX, float thick, float depth, float lift = 0f)
             {
-                m.Box(PieceSurface.Trim, new Vector3(0f, bottom - 0.16f, s * (HalfModule - 0.18f)),
-                      new Vector3(Module, 0.36f, 0.36f));
-                m.Box(PieceSurface.Trim, new Vector3(s * (HalfModule - 0.18f), bottom - 0.16f, 0f),
-                      new Vector3(0.36f, 0.36f, Module - 0.72f));
+                float y = top - thick * 0.5f + lift;
+                if (hole <= 0f || Mathf.Abs(x) >= holeHalf)
+                {
+                    m.Box(surface, new Vector3(x, y, 0f), new Vector3(widthX, thick, depth));
+                    return;
+                }
+                float band = (depth - hole) * 0.5f;
+                if (band <= 0.05f) return;
+                foreach (float s in new[] { -1f, 1f })
+                    m.Box(surface, new Vector3(x, y, s * (depth * 0.5f - band * 0.5f)),
+                          new Vector3(widthX, thick, band));
             }
 
+            switch (tier)
+            {
+                case BuildTier.Wood:
+                {
+                    int boards = Mathf.Max(6, Mathf.RoundToInt(size / 0.72f));
+                    float bw = size / boards;
+                    for (int i = 0; i < boards; i++)
+                        Run(PieceSurface.Skin, -size * 0.5f + bw * (i + 0.5f), bw * 0.94f, 0.09f, size - 0.1f);
+                    break;
+                }
+                case BuildTier.Stone:
+                {
+                    int n = Mathf.Max(6, Mathf.RoundToInt(size / 0.68f));
+                    float cw = size / n;
+                    for (int i = 0; i < n; i++)
+                    for (int j = 0; j < n; j++)
+                    {
+                        float x = -size * 0.5f + cw * (i + 0.5f);
+                        float zz = -size * 0.5f + cw * (j + 0.5f);
+                        if (Skip(x, zz)) continue;
+                        float k = Mathf.PerlinNoise(i * 1.7f, j * 1.7f);
+                        m.Box(PieceSurface.Skin, new Vector3(x, top - 0.04f + k * 0.02f, zz),
+                              new Vector3(cw * 0.9f, 0.1f, cw * 0.9f), new Vector3(0f, (k - 0.5f) * 5f, 0f));
+                    }
+                    break;
+                }
+                case BuildTier.Iron:
+                {
+                    // Plate first, then the raised tread ribs on top of it.
+                    int plates = Mathf.Max(4, Mathf.RoundToInt(size / 1.6f));
+                    float pw = size / plates;
+                    for (int i = 0; i < plates; i++)
+                        Run(PieceSurface.Skin, -size * 0.5f + pw * (i + 0.5f), pw * 0.98f, 0.08f, size - 0.12f);
+
+                    int ribs = Mathf.Max(6, Mathf.RoundToInt(size / 0.5f));
+                    for (int i = 0; i < ribs; i++)
+                        Run(PieceSurface.Trim, -size * 0.5f + size * (i + 0.5f) / ribs, 0.09f, 0.04f, size - 0.3f, 0.04f);
+                    break;
+                }
+                default:
+                {
+                    int panels = 3;
+                    float pw = size / panels;
+                    for (int i = 0; i < panels; i++)
+                    for (int j = 0; j < panels; j++)
+                    {
+                        float x = -size * 0.5f + pw * (i + 0.5f);
+                        float zz = -size * 0.5f + pw * (j + 0.5f);
+                        if (Skip(x, zz)) continue;
+                        m.Box(PieceSurface.Skin, new Vector3(x, top - 0.035f, zz),
+                              new Vector3(pw * 0.94f, 0.07f, pw * 0.94f));
+                    }
+                    break;
+                }
+            }
+        }
+
+        /// <summary>The visible side of a deck: log beams, block courses, ribs or panels.</summary>
+        private static void Skirt(PieceMesh m, BuildTier tier, float top, float bottom, float size)
+        {
+            float h = Mathf.Max(0.12f, top - bottom), mid = (top + bottom) * 0.5f, half = size * 0.5f;
+
+            for (int side = 0; side < 4; side++)
+            {
+                bool alongX = side < 2;
+                float sign = (side % 2 == 0) ? 1f : -1f;
+                Vector3 outward = alongX ? new Vector3(0f, 0f, sign * (half - 0.06f)) : new Vector3(sign * (half - 0.06f), 0f, 0f);
+                Vector3 span = alongX ? new Vector3(size, 0f, 0f) : new Vector3(0f, 0f, size);
+                float run = size;
+
+                switch (tier)
+                {
+                    case BuildTier.Wood:
+                        m.Cylinder(PieceSurface.Trim, outward + new Vector3(0f, top - 0.22f, 0f), 0.22f, run,
+                                   alongX ? new Vector3(0f, 0f, 90f) : new Vector3(90f, 0f, 0f));
+                        m.Cylinder(PieceSurface.Trim, outward + new Vector3(0f, bottom + 0.2f, 0f), 0.2f, run,
+                                   alongX ? new Vector3(0f, 0f, 90f) : new Vector3(90f, 0f, 0f));
+                        break;
+                    case BuildTier.Stone:
+                    {
+                        int rows = Mathf.Max(2, Mathf.RoundToInt(h / 0.42f));
+                        int cols = Mathf.Max(4, Mathf.RoundToInt(run / 0.72f));
+                        for (int r = 0; r < rows; r++)
+                        for (int c = 0; c < cols; c++)
+                        {
+                            float t = (c + 0.5f) / cols - 0.5f + ((r & 1) == 0 ? 0f : 0.5f / cols);
+                            Vector3 p = outward + span * t + new Vector3(0f, bottom + h * (r + 0.5f) / rows, 0f);
+                            m.Box(PieceSurface.Skin, p,
+                                  alongX ? new Vector3(run / cols * 0.9f, h / rows * 0.85f, 0.12f)
+                                         : new Vector3(0.12f, h / rows * 0.85f, run / cols * 0.9f));
+                        }
+                        break;
+                    }
+                    case BuildTier.Iron:
+                    {
+                        int ribs = Mathf.Max(6, Mathf.RoundToInt(run / 0.42f));
+                        for (int c = 0; c < ribs; c++)
+                        {
+                            float t = (c + 0.5f) / ribs - 0.5f;
+                            Vector3 p = outward + span * t + new Vector3(0f, mid, 0f);
+                            m.Box(PieceSurface.Skin, p,
+                                  alongX ? new Vector3(run / ribs * 0.6f, h * 0.94f, 0.1f)
+                                         : new Vector3(0.1f, h * 0.94f, run / ribs * 0.6f));
+                        }
+                        break;
+                    }
+                    default:
+                    {
+                        int panels = 3;
+                        for (int c = 0; c < panels; c++)
+                        {
+                            float t = (c + 0.5f) / panels - 0.5f;
+                            Vector3 p = outward + span * t + new Vector3(0f, mid, 0f);
+                            m.Box(PieceSurface.Skin, p,
+                                  alongX ? new Vector3(run / panels * 0.95f, h * 0.9f, 0.1f)
+                                         : new Vector3(0.1f, h * 0.9f, run / panels * 0.95f));
+                        }
+                        break;
+                    }
+                }
+            }
+
+            // Corner quoins / posts, which is what stops a deck reading as a crate.
             foreach (float x in new[] { -1f, 1f })
             foreach (float z in new[] { -1f, 1f })
             {
-                Vector3 p = new(x * (HalfModule - 0.42f), (bottom - 0.34f) * 0.5f, z * (HalfModule - 0.42f));
-                m.Box(PieceSurface.Frame, new Vector3(p.x, p.y, p.z),
-                      new Vector3(0.60f, bottom - 0.34f, 0.60f));
-                // Knee braces from pier to ring beam.
-                m.Box(PieceSurface.Frame, new Vector3(p.x - x * 0.42f, bottom - 0.48f, p.z),
-                      new Vector3(0.18f, 1.05f, 0.18f), new Vector3(0f, 0f, x * 46f));
-                m.Box(PieceSurface.Frame, new Vector3(p.x, bottom - 0.48f, p.z - z * 0.42f),
-                      new Vector3(0.18f, 1.05f, 0.18f), new Vector3(-z * 46f, 0f, 0f));
+                Vector3 p = new(x * (half - 0.17f), mid, z * (half - 0.17f));
+                if (tier == BuildTier.Wood)
+                    m.Cylinder(PieceSurface.Trim, p, 0.23f, h * 1.02f, Vector3.zero);
+                else
+                    m.Box(PieceSurface.Trim, p, new Vector3(0.42f, h * 1.02f, 0.42f));
             }
+        }
 
-            // Perimeter kerb: a lip that visually locks walls to the deck edge.
-            foreach (float s in new[] { -1f, 1f })
-            {
-                m.Box(PieceSurface.Trim, new Vector3(0f, top + 0.06f, s * (HalfModule - 0.07f)),
-                      new Vector3(Module, 0.12f, 0.14f));
-                m.Box(PieceSurface.Trim, new Vector3(s * (HalfModule - 0.07f), top + 0.06f, 0f),
-                      new Vector3(0.14f, 0.12f, Module - 0.28f));
-            }
+        private static void Foundation(PieceMesh m, BuildTier tier)
+        {
+            const float deck = 0.9f;
+            float top = DeckTop, bottom = top - deck;
+
+            // Solid slab first. Everything after this is relief on its faces.
+            m.Box(PieceSurface.Skin, new Vector3(0f, top - deck * 0.5f, 0f), new Vector3(Module, deck, Module));
+            m.Box(PieceSurface.Frame, new Vector3(0f, bottom + 0.06f, 0f), new Vector3(Module - 0.1f, 0.12f, Module - 0.1f));
+
+            DeckSurface(m, tier, top, Module, 0f);
+            Skirt(m, tier, top, bottom, Module);
+
+            // Piers carrying the deck off uneven ground.
+            foreach (float x in new[] { -1f, 1f })
+            foreach (float z in new[] { -1f, 1f })
+                m.Box(PieceSurface.Frame,
+                      new Vector3(x * (HalfModule - 0.5f), bottom * 0.5f, z * (HalfModule - 0.5f)),
+                      new Vector3(0.62f, bottom, 0.62f));
         }
 
         private static void Floor(PieceMesh m, BuildTier tier, bool hatch)
         {
-            const float slab = 0.38f;
+            const float slab = 0.42f;
             float half = HatchW * 0.5f;
 
             if (!hatch)
             {
-                int boards = 10;
-                float bw = Module / boards;
-                for (int i = 0; i < boards; i++)
-                    m.Box(PieceSurface.Skin, new Vector3(-HalfModule + bw * (i + 0.5f), slab * 0.5f, 0f),
-                          new Vector3(bw * 1.04f, slab, Module));
+                m.Box(PieceSurface.Skin, new Vector3(0f, slab * 0.5f, 0f), new Vector3(Module, slab, Module));
+                DeckSurface(m, tier, slab, Module, 0f);
             }
             else
             {
-                // Deck the slab around a square opening.
                 float band = (Module - HatchW) * 0.5f;
                 foreach (float s in new[] { -1f, 1f })
                 {
@@ -617,26 +880,26 @@ namespace VoxelEngine.EditorTools
                     m.Box(PieceSurface.Skin, new Vector3(0f, slab * 0.5f, s * (HalfModule - band * 0.5f)),
                           new Vector3(HatchW, slab, band));
                 }
+                DeckSurface(m, tier, slab, Module, HatchW);
                 foreach (float s in new[] { -1f, 1f })
                 {
-                    m.Box(PieceSurface.Trim, new Vector3(s * (half + 0.08f), slab * 0.5f + 0.03f, 0f),
-                          new Vector3(0.16f, slab + 0.06f, HatchW + 0.32f));
-                    m.Box(PieceSurface.Trim, new Vector3(0f, slab * 0.5f + 0.03f, s * (half + 0.08f)),
-                          new Vector3(HatchW + 0.32f, slab + 0.06f, 0.16f));
+                    m.Box(PieceSurface.Trim, new Vector3(s * (half + 0.1f), slab * 0.5f + 0.04f, 0f),
+                          new Vector3(0.2f, slab + 0.08f, HatchW + 0.4f));
+                    m.Box(PieceSurface.Trim, new Vector3(0f, slab * 0.5f + 0.04f, s * (half + 0.1f)),
+                          new Vector3(HatchW + 0.4f, slab + 0.08f, 0.2f));
                 }
             }
 
-            // Joists under the slab: the ceiling of the room below.
+            Skirt(m, tier, slab, -0.34f, Module);
+
+            // Joists: the ceiling of the room below.
             int joists = 6;
             for (int i = 0; i < joists; i++)
             {
                 float z = -HalfModule + Module * (i + 0.5f) / joists;
                 if (hatch && Mathf.Abs(z) < half + 0.2f) continue;
-                m.Box(PieceSurface.Frame, new Vector3(0f, -0.17f, z), new Vector3(Module, 0.34f, 0.24f));
+                m.Box(PieceSurface.Frame, new Vector3(0f, -0.17f, z), new Vector3(Module - 0.5f, 0.32f, 0.26f));
             }
-            foreach (float s in new[] { -1f, 1f })
-                m.Box(PieceSurface.Trim, new Vector3(s * (HalfModule - 0.11f), slab * 0.5f, 0f),
-                      new Vector3(0.22f, slab + 0.05f, Module));
         }
 
         private static void HatchLid(PieceMesh m, BuildTier tier)
@@ -659,14 +922,8 @@ namespace VoxelEngine.EditorTools
         private static void Wall(PieceMesh m, BuildTier tier)
         {
             float z = WallThick * 0.5f;
-            CladSkin(m, tier, new Vector3(0f, Storey * 0.5f, 0f), Module, Storey, z, WallThick);
+            CladSkin(m, tier, new Vector3(0f, Storey * 0.5f, 0f), Module, Storey, z, WallThick, Edge.All);
             CladFrame(m, tier, new Vector3(0f, Storey * 0.5f, 0f), Module, Storey, -z);
-
-            foreach (float s in new[] { -1f, 1f })
-                m.Box(PieceSurface.Trim, new Vector3(s * (HalfModule - 0.14f), Storey * 0.5f, 0f),
-                      new Vector3(0.28f, Storey, WallThick + 0.2f));
-            m.Box(PieceSurface.Trim, new Vector3(0f, Storey - 0.13f, 0f), new Vector3(Module, 0.26f, WallThick + 0.2f));
-            m.Box(PieceSurface.Trim, new Vector3(0f, 0.13f, 0f), new Vector3(Module, 0.26f, WallThick + 0.2f));
         }
 
         private static void Window(PieceMesh m, BuildTier tier)
@@ -747,6 +1004,11 @@ namespace VoxelEngine.EditorTools
             float rise = Storey / steps, run = Module / steps;
             float width = Module - 0.6f;
 
+            // Solid wedge underneath: a staircase should not be a flight of
+            // floating planks with daylight between every tread.
+            m.Wedge(PieceSurface.Frame, new Vector3(0f, Storey * 0.5f, 0f),
+                    new Vector3(Module, Storey, width), new Vector3(0f, -90f, 0f));
+
             for (int i = 0; i < steps; i++)
             {
                 float y = rise * (i + 0.5f);
@@ -817,12 +1079,13 @@ namespace VoxelEngine.EditorTools
         {
             const float h = 2.8f;
             float z = WallThick * 0.5f;
-            CladSkin(m, tier, new Vector3(0f, h * 0.5f, 0f), Module, h, z, WallThick);
+            CladSkin(m, tier, new Vector3(0f, h * 0.5f, 0f), Module, h, z, WallThick, Edge.All);
             CladFrame(m, tier, new Vector3(0f, h * 0.5f, 0f), Module, h, -z);
-            m.Box(PieceSurface.Trim, new Vector3(0f, h + 0.11f, 0f), new Vector3(Module, 0.22f, WallThick + 0.34f));
-            foreach (float s in new[] { -1f, 1f })
-                m.Box(PieceSurface.Trim, new Vector3(s * (HalfModule - 0.13f), h * 0.5f, 0f),
-                      new Vector3(0.26f, h, WallThick + 0.2f));
+            // A capping rail you can rest a rifle on.
+            if (tier == BuildTier.Wood)
+                m.Cylinder(PieceSurface.Trim, new Vector3(0f, h + 0.12f, 0f), 0.2f, Module, new Vector3(0f, 0f, 90f));
+            else
+                m.Box(PieceSurface.Trim, new Vector3(0f, h + 0.11f, 0f), new Vector3(Module, 0.22f, WallThick + 0.34f));
         }
 
         // ══════════════════════════════════════════════════════════════════
@@ -1088,15 +1351,15 @@ namespace VoxelEngine.EditorTools
                     Box(new Vector3(0f, DeckTop * 0.5f, 0f), new Vector3(Module, DeckTop, Module));
                     break;
                 case BuildFamily.Floor:
-                    Box(new Vector3(0f, 0.19f, 0f), new Vector3(Module, 0.38f, Module));
+                    Box(new Vector3(0f, 0.21f, 0f), new Vector3(Module, 0.42f, Module));
                     break;
                 case BuildFamily.FloorHatch:
                 {
                     float band = (Module - HatchW) * 0.5f;
                     foreach (float s in new[] { -1f, 1f })
                     {
-                        Box(new Vector3(s * (HalfModule - band * 0.5f), 0.19f, 0f), new Vector3(band, 0.38f, Module));
-                        Box(new Vector3(0f, 0.19f, s * (HalfModule - band * 0.5f)), new Vector3(HatchW, 0.38f, band));
+                        Box(new Vector3(s * (HalfModule - band * 0.5f), 0.21f, 0f), new Vector3(band, 0.42f, Module));
+                        Box(new Vector3(0f, 0.21f, s * (HalfModule - band * 0.5f)), new Vector3(HatchW, 0.42f, band));
                     }
                     break;
                 }

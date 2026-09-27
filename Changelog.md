@@ -1,9 +1,59 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `13.4.0-dev`
+**Current Version:** `13.4.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [13.4.2-dev] Hatches That Are Actually Holes
+
+**Type:** PATCH - three defects found while reviewing the Size-V6 geometry. No save data, no API, no cost, no balance is touched.
+
+**Fixed - the floor hatch was planked shut.** A deck board runs the full depth of a slab, so the board crossing the opening had to be cut into the two lengths either side of it. The guard that was supposed to do that could never fire, and the wood and sheet-metal decks laid straight over the hole: the lid and the ladder were modelled and dropped through a floor that had no opening in it. Deck runs are now genuinely split around the hatch, and the stone and armoured decks - which drop whole cells rather than strips - were already correct and are unchanged.
+
+**Fixed - the floor slab stood 4 cm above its collider.** The slab thickened from 0.38 m to 0.42 m when floors became tiered, and the collider was left behind. Standing on a floor put the player's feet four centimetres inside it, and a piece placed on top of one sat proud of the surface it was snapping to. Both the plain floor and the hatch's four deck bands are corrected. The orbital deck and junction genuinely are 0.38 m and keep it.
+
+**Fixed - an inside-out tread rib.** The sheet-metal deck's raised tread ribs were being generated with a negative box extent, which is not a recess - it is a box wound the wrong way round, lit from inside and invisible from above. Raised elements now carry an explicit lift and keep their extents positive.
+
+**Roadmap housekeeping.** The Recently Done block is capped at five rounds and the oldest is meant to go. The previous edit trimmed the wrong end, dropping 13.1.2 and 13.1.1 while leaving 13.0.1 behind. The block now holds exactly the five newest rounds, 13.4.2 back to 13.2.0, and everything trimmed keeps its permanent home in this file.
+
+**GitHub title:** `[13.4.2-dev] Hatches that are actually holes`
+
+**Manual steps:**
+1. Pull `Dev` and let Unity compile.
+2. `Tools -> Voxel Engine -> Voxel Engine Setup` -> `102. Rebuild Construction at Size-V6`.
+3. Place a Floor Hatch and look down through it - there should be a hole, with the lid folded up on its hinge and the ladder hanging in it. Check the Wood and Sheet Metal tiers in particular; those are the two that were planked over.
+4. Stand on a plain Floor and place a Wall on it - the wall's base should sit flush on the deck surface, not sunk into it.
+
+### [13.4.1-dev] Solid Walls, and Wood That Looks Like a Log Cabin
+
+**Type:** PATCH - a build-geometry bug fix and a surface pass across all four tiers. No save data, no API, no cost is touched.
+
+**Fixed - the pieces were hollow.** The wood tier clad a panel with a stack of rounded logs and nothing behind them. Cylinders laid at exactly twice their radius touch tangentially and never overlap, so every course left a slot you could see, shoot and walk light through - the whole wall was a set of blinds. Every tier now lays a **solid sheathing box spanning the full panel first**, and the cladding is relief on top of it. The one-line fix that should have been there from the start: a wall is a wall, and the detail is decoration.
+
+The same hollowness hit the stairs, which were fifteen floating treads with daylight between them. A solid wedge now sits under the flight.
+
+**Wood, rebuilt against the reference.** The old skin was a stack of fat pipes. It is now what a log-cabin wall actually is: **horizontal boards filling the field between four round framing timbers** - a rounded post down each edge with its end proud of the panel, and a rounded rail across the top and bottom. Boards alternate a millimetre and a half of relief so raking light finds the courses. Half walls get a rounded capping rail instead of a square one, and door and window jambs get a rounded return rather than a flat bar.
+
+**Framing follows the piece, not the panel.** A doorway is built from three clad sub-panels, and the first pass framed all four edges of each one, so posts appeared in mid-air around the opening. Each sub-panel now frames only the edges that are genuinely on the outside of the piece; the edges facing the hole get the jamb lining instead. An opening now reads as cut through a wall rather than assembled from offcuts.
+
+**Stone.** Blocks were too big and the courses too few. The field is now small fitted blocks in running bond at roughly one every 42 cm, each nudged by a noise value so no two sit flush, inside a **quoined border** - alternating long and short corner blocks turning every framed edge, which is what stops dressed stonework reading as wallpaper.
+
+**Sheet metal.** Uniform sheets are replaced by **salvaged plates of mixed size**, one or two per band, each rotated a degree or so off true with screw heads along its top and bottom edge, inside a riveted border bar. It reads as scavenged, which is the point of the tier.
+
+**Armoured.** Wide recessed panels with clean seams inside a heavy border bar, plus a run of vent slots along the top band. Flat, dark and deliberate next to the sheet metal's mess.
+
+**Foundations and floors are tiered too.** They used to be the same plank deck whatever the tier. Each now gets its own deck surface and its own skirt: plank deck with round log edge beams and corner posts; cobble grid with block courses and stone quoins; ribbed plate with a treaded top; recessed dark panels. The slab under all of it is one solid box, so no deck can ever be see-through either.
+
+**GitHub title:** `[13.4.1-dev] Solid walls, and wood that looks like a log cabin`
+
+**Manual steps:**
+1. Pull `Dev` and let Unity compile.
+2. `Tools -> Voxel Engine -> Voxel Engine Setup` -> `102. Rebuild Construction at Size-V6`. Re-running is the intended way to pick this up; it rebuilds the same prefabs in place and still refuses to touch anything carrying custom work.
+3. Place a Wood wall and look through it - you should not be able to. Walk behind it: horizontal boards and round corner posts on the outside, posts and cross-braces on the inside.
+4. Place a Doorway and check the opening has jamb linings and no posts floating in the gap.
+5. Walk up a staircase and look at it from the side - solid underneath.
+6. Upgrade one wall through all four tiers and compare: laid boards, fitted blocks with quoins, mixed salvage plates with screws, dark recessed armour.
 
 ### [13.4.0-dev] Rooms You Can Stand Up In, and Walls With a Strong Side
 

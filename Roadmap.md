@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `13.4.0-dev`
-**Roadmap Version:** `13.4.0-dev`
+**Current Version:** `13.4.2-dev`
+**Roadmap Version:** `13.4.2-dev`
 **Date:** 2026-09-27
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,17 @@
 
 ## 0. Recently Done
 
+### 13.4.2-dev - Hatches That Are Actually Holes
+- **Hatch openings** (`TieredPieceFactory`): deck runs are split around the floor opening instead of planking over it; stone and armoured decks were already correct.
+- **Floor collision** (`TieredPieceFactory`): the collider follows the 0.42 m slab, so feet and snapped pieces sit on the surface rather than 4 cm inside it.
+- **Tread ribs** (`TieredPieceFactory`): raised deck elements carry an explicit lift and keep positive extents, ending an inside-out rib on the sheet-metal deck.
+
+### 13.4.1-dev - Solid Walls, and Wood That Looks Like a Log Cabin
+- **Solidity** (`TieredPieceFactory`): every clad panel lays a full sheathing box before its relief, and stairs get a solid wedge; the see-through log wall and floating treads are gone.
+- **Reference-matched surfaces** (`TieredPieceFactory`): wood is boards between round framing timbers, stone gains quoined borders and finer courses, sheet metal becomes mixed salvage plates with screws, armour becomes recessed panels with vent slots.
+- **Edge-aware framing** (`TieredPieceFactory`): clad sub-panels frame only genuine outside edges, so openings read as cut rather than assembled.
+- **Tiered decks** (`TieredPieceFactory`): foundations and floors carry their own tier surface and skirt instead of one plank deck for all four.
+
 ### 13.4.0-dev - Rooms You Can Stand Up In, and Walls With a Strong Side
 - **Size-V6** (`TieredPieceFactory`, `BuildSystemV2`, `TieredRebuildSetup`): 7.5 m modules and 5.625 m storeys across every hammer family, with grid, snap radius and reach raised to match.
 - **Tier surfaces** (`TieredSurfaces`, `TieredPieceFactory`): each tier is modelled with a clad exterior and a structural interior - logs/braces, masonry/rubble, corrugated scrap/L-beams, armour plate/tread - welded into combined meshes.
@@ -45,15 +56,6 @@
 - **Direction-only pointer** (`RadialWheelInput`, `HammerBuildWheel`): the cursor is locked and re-centred on open, selection comes straight from `Atan2` with no smoothing, and deflection past the ring still selects.
 - **Vector dial** (`RadialRing`, `HammerBuildWheel`): `Painter2D` wedges with a pixel-even gap and a growing hover replace the re-rasterised ring texture; one adaptive ring replaces eight-per-page paging.
 - **Drawn piece icons and a spec-card hub** (`BuildPieceIcons`, `LineArtBuilder`, `BuildFamilyInfo`): eighteen isometric line masks replace the Unicode glyphs, and the hub carries icon, name, description and per-ingredient cost against stock.
-
-### 13.1.2-dev - Double-Width Tires and a Watertight Carcass
-- **Width** (`WheelSizeClass`): tire widths doubled in the preset table; mesh, collider, socket and setup content follow, tire mass unchanged.
-- **Closed carcass** (`WheelMeshFactory`): bead heels and an inner liner shut the tire into a watertight torus, ending the see-through gap at the rim flange.
-- **Fitment** (`GridWheel`, `GridWheelMeshBuilder`): the knuckle plane is fixed at 0.60 cells, the socket alone carries tire half width, and the suspension casts on the tire centre plane.
-
-### 13.0.1-dev - Unity 6.5 Surface Cache API Compliance
-- **Cache keys** (`SurfaceSampler`): collider and terrain alphamap caches drop the obsolete `GetInstanceID` in favour of object and tuple keys, removing recycled-id staleness.
-- **UI lookup** (`GridBlockUI`): Eject Tire uses `FindAnyObjectByType` instead of the deprecated ordering-dependent variant.
 
 ### Era Transition Feel
 
