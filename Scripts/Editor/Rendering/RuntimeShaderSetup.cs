@@ -24,6 +24,14 @@ namespace VoxelEngine.EditorTools
 
         private const string TerrainSourcePath = "Assets/VoxelEngineAssets/VoxelTerrain.mat";
         private const string RenderingShaderRoot = "Assets/Scripts/Rendering";
+        private const string AdvancedWaterShaderPath = RenderingShaderRoot + "/VoxelWaterURP.shader";
+        private const string FallbackWaterShaderPath = RenderingShaderRoot + "/VoxelWater.shader";
+
+        private static readonly string[] SetupOwnedWaterMaterialPaths =
+        {
+            "Assets/VoxelEngineAssets/Fluids/Prefabs/Mat_NativeSphericalWater.mat",
+            "Assets/VoxelEngineAssets/Fluids/Prefabs/Mat_NativeCrudeOil.mat"
+        };
 
         private static readonly string[] BuiltInShaderNames =
         {
@@ -48,14 +56,26 @@ namespace VoxelEngine.EditorTools
             int repaired = 0;
             int preserved = 0;
             var missing = new List<string>();
+            var notes = new List<string>();
 
             Shader terrainShader = FindSupportedShader(
                 "VoxelEngine/VoxelTerrainEnhanced",
                 "VoxelEngine/VoxelTerrainURP");
-            Shader waterShader = FindSupportedShader("VoxelEngine/VoxelWaterURP");
+
+            // Load project water shaders directly so setup does not depend on Shader.Find
+            // discovering an asset before its first material exists. Prefer the full shader;
+            // the simpler in-house shader is a supported, build-safe fallback.
+            Shader advancedWaterShader = AssetDatabase.LoadAssetAtPath<Shader>(AdvancedWaterShaderPath);
+            Shader fallbackWaterShader = AssetDatabase.LoadAssetAtPath<Shader>(FallbackWaterShaderPath);
+            Shader waterShader = IsSupported(advancedWaterShader)
+                ? advancedWaterShader
+                : IsSupported(fallbackWaterShader) ? fallbackWaterShader : null;
 
             if (terrainShader == null) missing.Add("VoxelEngine/VoxelTerrainEnhanced or VoxelEngine/VoxelTerrainURP");
-            if (waterShader == null) missing.Add("VoxelEngine/VoxelWaterURP");
+            if (waterShader == null)
+                missing.Add("VoxelEngine/VoxelWaterURP or VoxelEngine/VoxelWater");
+            else if (waterShader != advancedWaterShader)
+                notes.Add("VoxelEngine/VoxelWaterURP is unsupported on the active graphics API; using VoxelEngine/VoxelWater as the safe fallback.");
 
             if (terrainShader != null)
             {
@@ -68,10 +88,31 @@ namespace VoxelEngine.EditorTools
             {
                 EnsureMaterial(WaterMaterialPath, waterShader, null,
                     ref created, ref repaired, ref preserved);
+                RepairSetupOwnedWaterMaterials(waterShader,
+                    ref repaired, ref preserved);
             }
 
             foreach (Shader shader in FindProjectRuntimeShaders())
             {
+                if (!IsSupported(shader))
+                {
+                    // The water pair has an explicit project-owned fallback in both directions.
+                    // Do not keep the unselected unsupported member anchored in Resources,
+                    // because that would force a broken shader into an otherwise safe player.
+                    bool unselectedWaterShader =
+                        (shader == advancedWaterShader || shader == fallbackWaterShader) &&
+                        waterShader != null && shader != waterShader;
+                    if (unselectedWaterShader)
+                    {
+                        RemoveGeneratedAnchor(shader.name, ref repaired);
+                        continue;
+                    }
+
+                    // Validation below reports every other unsupported runtime shader and blocks
+                    // the build. Creating an anchor cannot make a shader compiler error safe.
+                    continue;
+                }
+
                 EnsureMaterial(AnchorPath(shader.name), shader, null,
                     ref created, ref repaired, ref preserved);
             }
@@ -100,25 +141,30 @@ namespace VoxelEngine.EditorTools
 
             string result =
                 $"Created {created}, repaired {repaired}, preserved {preserved} runtime shader material link(s).";
+            string noteText = notes.Count > 0
+                ? "\n\nNotes:\n" + string.Join("\n", notes)
+                : string.Empty;
 
             if (missing.Count > 0)
             {
                 string detail = string.Join("\n", missing);
-                Debug.LogError("[Setup 103] Runtime shader inclusion is incomplete:\n" + detail);
+                Debug.LogError("[Setup 103] Runtime shader inclusion is incomplete:\n" + detail + noteText);
                 EditorUtility.DisplayDialog(
                     "Voxel Engine - Runtime Shader Inclusion",
-                    result + "\n\nThe setup is incomplete:\n" + detail,
+                    result + "\n\nThe setup is incomplete:\n" + detail + noteText,
                     "OK");
                 return;
             }
 
             Debug.Log("[Setup 103] " + result +
-                      " Terrain, water and every project runtime shader now have build-reachable Resources materials.");
+                      " Terrain, water and every project runtime shader now have build-reachable Resources materials." +
+                      noteText);
             EditorUtility.DisplayDialog(
                 "Voxel Engine - Runtime Shader Inclusion",
                 result +
                 "\n\nTerrain, water, atmosphere, weather, space, damage and portal shaders are now anchored for standalone builds." +
-                "\n\nExisting material properties were preserved. Re-running is safe.",
+                "\n\nExisting material properties were preserved. Re-running is safe." +
+                noteText,
                 "OK");
         }
 
@@ -130,12 +176,36 @@ namespace VoxelEngine.EditorTools
             ValidateMaterial(TerrainMaterialPath, "terrain", problems,
                 "VoxelEngine/VoxelTerrainEnhanced", "VoxelEngine/VoxelTerrainURP");
             ValidateMaterial(WaterMaterialPath, "water", problems,
-                "VoxelEngine/VoxelWaterURP");
+                "VoxelEngine/VoxelWaterURP", "VoxelEngine/VoxelWater");
+
+            Material waterMaterial = AssetDatabase.LoadAssetAtPath<Material>(WaterMaterialPath);
+            string selectedWaterShaderName =
+                waterMaterial != null && waterMaterial.shader != null
+                    ? waterMaterial.shader.name
+                    : string.Empty;
 
             foreach (Shader shader in FindProjectRuntimeShaders())
             {
                 string path = AnchorPath(shader.name);
                 Material anchor = AssetDatabase.LoadAssetAtPath<Material>(path);
+
+                if (!IsSupported(shader))
+                {
+                    bool unselectedWaterShader =
+                        IsProjectWaterShader(shader.name) &&
+                        !string.IsNullOrEmpty(selectedWaterShaderName) &&
+                        shader.name != selectedWaterShaderName;
+                    if (unselectedWaterShader)
+                    {
+                        if (anchor != null)
+                            problems.Add($"unsupported unselected water anchor '{path}' must be removed by rerunning setup step 103");
+                        continue;
+                    }
+
+                    problems.Add($"project runtime shader '{shader.name}' is unsupported on the active graphics API");
+                    continue;
+                }
+
                 if (anchor == null)
                     problems.Add($"missing shader anchor '{path}'");
                 else if (anchor.shader != shader)
@@ -200,6 +270,63 @@ namespace VoxelEngine.EditorTools
             return found;
         }
 
+        private static void RepairSetupOwnedWaterMaterials(
+            Shader shader,
+            ref int repaired,
+            ref int preserved)
+        {
+            for (int i = 0; i < SetupOwnedWaterMaterialPaths.Length; i++)
+            {
+                string path = SetupOwnedWaterMaterialPaths[i];
+                Material material = AssetDatabase.LoadAssetAtPath<Material>(path);
+                if (material == null) continue;
+
+                if (material.shader == shader)
+                {
+                    preserved++;
+                    continue;
+                }
+
+                string currentName = material.shader != null ? material.shader.name : string.Empty;
+                bool knownGeneratedFallback =
+                    string.IsNullOrEmpty(currentName) ||
+                    currentName == "Hidden/InternalErrorShader" ||
+                    currentName == "VoxelEngine/VoxelWaterURP" ||
+                    currentName == "VoxelEngine/VoxelWater" ||
+                    currentName == "Universal Render Pipeline/Lit" ||
+                    currentName == "Standard";
+
+                // An unknown custom shader can be a designer override. Preserve it. Only
+                // upgrade setup-owned materials that still carry a recognized fallback.
+                if (!knownGeneratedFallback)
+                {
+                    preserved++;
+                    Debug.Log($"[Setup 103] Preserved custom shader '{currentName}' on '{path}'.");
+                    continue;
+                }
+
+                material.shader = shader;
+                material.SetOverrideTag("RenderType", "Transparent");
+                if (material.HasProperty("_SrcBlend"))
+                    material.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+                if (material.HasProperty("_DstBlend"))
+                    material.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+                if (material.HasProperty("_ZWrite")) material.SetInt("_ZWrite", 0);
+                if (material.HasProperty("_Cull"))
+                    material.SetInt("_Cull", (int)UnityEngine.Rendering.CullMode.Off);
+                material.renderQueue = 3000;
+
+                if (path.EndsWith("Mat_NativeCrudeOil.mat", StringComparison.Ordinal))
+                    VoxelEngine.WaterSim.LiquidVisualProfile.CrudeOil.ApplyTo(material);
+                else
+                    VoxelEngine.WaterSim.LiquidVisualProfile.Water.ApplyTo(material);
+
+                EditorUtility.SetDirty(material);
+                repaired++;
+                Debug.Log($"[Setup 103] Upgraded setup-owned liquid material '{path}' -> '{shader.name}'.");
+            }
+        }
+
         private static void EnsureMaterial(
             string path,
             Shader shader,
@@ -232,12 +359,31 @@ namespace VoxelEngine.EditorTools
             preserved++;
         }
 
+        private static bool IsProjectWaterShader(string shaderName)
+            => shaderName == "VoxelEngine/VoxelWaterURP" ||
+               shaderName == "VoxelEngine/VoxelWater";
+
+        private static void RemoveGeneratedAnchor(string shaderName, ref int repaired)
+        {
+            string path = AnchorPath(shaderName);
+            if (AssetDatabase.LoadAssetAtPath<Material>(path) == null) return;
+
+            if (AssetDatabase.DeleteAsset(path))
+            {
+                repaired++;
+                Debug.Log($"[Setup 103] Removed unsupported generated shader anchor '{path}'.");
+            }
+        }
+
+        private static bool IsSupported(Shader shader)
+            => shader != null && shader.isSupported;
+
         private static Shader FindSupportedShader(params string[] shaderNames)
         {
             for (int i = 0; i < shaderNames.Length; i++)
             {
                 Shader shader = Shader.Find(shaderNames[i]);
-                if (shader != null && shader.isSupported) return shader;
+                if (IsSupported(shader)) return shader;
             }
             return null;
         }

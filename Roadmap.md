@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `13.5.4-dev`
-**Roadmap Version:** `13.5.4-dev`
+**Current Version:** `13.5.5-dev`
+**Roadmap Version:** `13.5.5-dev`
 **Date:** 2026-09-27
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 13.5.5-dev - Water Shader Compiles Before Build Anchoring
+- **Shader target** (`VoxelWaterURP`, `VoxelWater`): the full water shader now targets Shader Model 4.5 and its simpler project-owned fallback targets 3.5 instead of inheriting the insufficient default target.
+- **Setup recovery** (`RuntimeShaderSetup`, Setup Step 103): direct shader-asset resolution prefers the full water shader, accepts the project fallback, and upgrades recognized setup-owned URP Lit water materials without touching custom designer shaders.
+- **Runtime fallback** (`WaterMeshBuilder`, `ProceduralWaterPatchRenderer`): liquid rendering uses the same full water, simple water, URP Lit ordering and never constructs a material from an unsupported shader.
+
 ### 13.5.4-dev - Standalone Builds Keep Their Runtime Shaders
 - **Build-safe materials** (`CosmosBootstrap`, `SphereWorld`, `AsteroidVoxelBody`, `WaterMeshBuilder`): procedural terrain and liquids load explicit Resources materials before any named shader fallback.
 - **Shader inclusion** (`RuntimeShaderSetup`, Setup Step 103): every project rendering shader and required URP fallback receives a non-destructive material anchor under Resources.
@@ -48,12 +53,6 @@
 - **Ladder reach** (`TieredHatch`, `TieredRebuildSetup`): the ladder unrolls from a fixed origin in the hatch plane at one storey long, instead of sliding clear of the opening.
 - **Letting go** (`ClimbableLadder`): a deliberate release latches until the player leaves the volume, and reaching the top hands control back.
 - **Snapping** (`TieredRebuildSetup`, `BuildSystemV2`): walls gained half-module floor anchors, roofs and stairs gained sockets, the floor's top surface matches its slab, and the socket search radius suits a 7.5 m module.
-
-### 13.5.0-dev - Every Box Was Inside Out
-- **Winding** (`TieredPieceFactory`): `BoxMesh` triangles were reversed against the engine's own convention, culling the near face of every box; cylinders and wedges were already correct.
-- **Timber** (`TieredPieceFactory`, `TieredSurfaces`): round stock takes an explicit UV tile count so a post is one log, and wood trim is seasoned timber rather than speckled iron.
-- **Station rebuilt** (`TieredRebuildSetup`, `TieredPieceFactory`): authorship is judged by mesh origin rather than object name, so the station family stops being skipped, and the dome becomes a panelled habitat drum with a ribbed cap.
-- **Fittings and ladders** (`BuildEnums`, `TieredHatch`, `ClimbableLadder`, `PlayerInteractionTool`): Window Pane and Hatch Lid are separate placeables, and the hatch folds its ladder out into a climbable volume.
 
 ### Era Transition Feel
 

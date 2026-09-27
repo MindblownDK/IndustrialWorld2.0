@@ -217,6 +217,8 @@ namespace VoxelEngine.WaterSim
             if (sh == null || !sh.isSupported)
                 sh = Shader.Find("VoxelEngine/VoxelWaterURP");
             if (sh == null || !sh.isSupported)
+                sh = Shader.Find("VoxelEngine/VoxelWater");
+            if (sh == null || !sh.isSupported)
                 sh = Shader.Find("Universal Render Pipeline/Lit");
             if (sh == null || !sh.isSupported)
                 sh = Shader.Find("Standard");
@@ -256,6 +258,7 @@ namespace VoxelEngine.WaterSim
             string shaderName = mat.shader.name;
             // Only shaders authored for voxel/natively generated topology are valid here.
             return shaderName == "VoxelEngine/VoxelWaterURP" ||
+                   shaderName == "VoxelEngine/VoxelWater" ||
                    shaderName == "Universal Render Pipeline/Lit" ||
                    shaderName == "Standard";
         }

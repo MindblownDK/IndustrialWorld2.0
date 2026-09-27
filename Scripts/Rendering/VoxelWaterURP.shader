@@ -73,6 +73,10 @@ Shader "VoxelEngine/VoxelWaterURP"
             Cull Off
 
             HLSLPROGRAM
+            // The fixed wake arrays, scene-depth sampling and repeated FBM passes exceed
+            // the default Shader Model 2.5 limits. Without an explicit target Unity can
+            // import this shader as unsupported even on Direct3D 11/12.
+            #pragma target 4.5
             #pragma vertex vert
             #pragma fragment frag
             #pragma multi_compile_fog

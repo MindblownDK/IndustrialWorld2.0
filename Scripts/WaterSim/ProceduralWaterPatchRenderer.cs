@@ -131,6 +131,8 @@ namespace VoxelEngine.WaterSim
             if (shader == null || !shader.isSupported)
                 shader = Shader.Find("VoxelEngine/VoxelWaterURP");
             if (shader == null || !shader.isSupported)
+                shader = Shader.Find("VoxelEngine/VoxelWater");
+            if (shader == null || !shader.isSupported)
                 shader = Shader.Find("Universal Render Pipeline/Lit");
             if (shader == null || !shader.isSupported)
                 shader = Shader.Find("Standard");

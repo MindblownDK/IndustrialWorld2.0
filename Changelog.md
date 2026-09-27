@@ -1,9 +1,28 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `13.5.4-dev`
+**Current Version:** `13.5.5-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [13.5.5-dev] Water Shader Compiles Before Build Anchoring
+
+**Type:** PATCH - Setup Step 103 and water-shader compatibility correction. No save data, gameplay API, prefab identity, item, recipe, research or balance value is changed.
+
+**Fixed - Step 103 could not create `VoxelWaterRuntime.mat`.** The full native-water shader uses fixed wake arrays, scene depth and repeated procedural-noise passes but did not declare a shader-model target. Unity could therefore import it against the default Shader Model 2.5 limits and report `VoxelEngine/VoxelWaterURP` as unsupported. Step 103 correctly refused to anchor that unsupported shader, producing the incomplete-setup message instead of hiding a bad player build. The full shader now explicitly targets Shader Model 4.5, suitable for the Windows Direct3D 11/12 build path, and the simpler in-house water shader explicitly targets 3.5.
+
+**Water setup now has a project-owned fallback instead of failing or silently becoming generic URP Lit.** Step 103 loads both water shader assets directly through `AssetDatabase`, prefers `VoxelWaterURP`, and uses `VoxelWater` if the active graphics API cannot support the full shader. The generated water material and build guard accept either project-owned shader. Runtime liquid and procedural-water paths use the same ordered fallback.
+
+**Existing setup-owned water materials are repaired non-destructively.** Earlier setup passes had already assigned generic URP Lit to `Mat_NativeSphericalWater` and `Mat_NativeCrudeOil` when the full shader was unsupported. Step 103 now upgrades only those recognized generated fallbacks, initializes their intended water or crude-oil profile, and preserves any unknown custom designer shader. The older native-water setup path follows the same rule on future reruns.
+
+**GitHub title:** `[13.5.5-dev] Water shader compiles before build anchoring`
+
+**Manual steps:**
+1. Pull `Dev` and let Unity reimport both water shaders.
+2. If Unity does not automatically reimport them, select `Assets/Scripts/Rendering/VoxelWaterURP.shader` and `VoxelWater.shader`, then use `Assets -> Reimport`.
+3. Open `Tools -> Voxel Engine -> Voxel Engine Setup` and run `103. Anchor Runtime Shaders for Builds` again.
+4. The dialog should complete without `VoxelWaterURP` or `VoxelWaterRuntime.mat` in the missing list. It can report that the two existing native liquid materials were repaired.
+5. Make a clean Windows build. If the dialog explicitly says it used `VoxelWater` as the safe fallback, open the `VoxelWaterURP` Shader Inspector and send its remaining compile message before visual sign-off.
 
 ### [13.5.4-dev] Standalone Builds Keep Their Runtime Shaders
 

@@ -3910,9 +3910,17 @@ namespace VoxelEngine.EditorTools
         private static Material EnsureNativeWaterMaterial(string path, string materialName, Color shallow, Color deep,
             float deepWaveAmplitude, float waveSpeed)
         {
-            var shader = Shader.Find("VoxelEngine/VoxelWaterURP")
-                ?? Shader.Find("Universal Render Pipeline/Lit")
-                ?? Shader.Find("Standard");
+            var shader = Shader.Find("VoxelEngine/VoxelWaterURP");
+            if (shader == null || !shader.isSupported)
+                shader = Shader.Find("VoxelEngine/VoxelWater");
+            if (shader == null || !shader.isSupported)
+                shader = Shader.Find("Universal Render Pipeline/Lit");
+            if (shader == null || !shader.isSupported)
+                shader = Shader.Find("Standard");
+            if (shader == null || !shader.isSupported)
+                throw new System.InvalidOperationException(
+                    "No supported native water shader was found. Reimport Assets/Scripts/Rendering and run setup again.");
+
             var material = AssetDatabase.LoadAssetAtPath<Material>(path);
             bool created = material == null;
             if (created)
@@ -3921,10 +3929,19 @@ namespace VoxelEngine.EditorTools
                 AssetDatabase.CreateAsset(material, path);
             }
 
-            // Setup owns the native conversion, but once a non-Crest native material exists,
-            // preserve hand-tuned properties on subsequent runs.
-            bool legacyExternal = material.shader == null || material.shader.name.StartsWith("Crest/");
-            if (created || legacyExternal)
+            // Setup owns the native conversion. Upgrade only recognized generated/external
+            // fallbacks; preserve an unknown shader because it may be a designer override.
+            string currentShaderName = material.shader != null ? material.shader.name : string.Empty;
+            bool recognizedFallback =
+                string.IsNullOrEmpty(currentShaderName) ||
+                currentShaderName.StartsWith("Crest/") ||
+                currentShaderName == "Hidden/InternalErrorShader" ||
+                currentShaderName == "VoxelEngine/VoxelWaterURP" ||
+                currentShaderName == "VoxelEngine/VoxelWater" ||
+                currentShaderName == "Universal Render Pipeline/Lit" ||
+                currentShaderName == "Standard";
+            bool repairShader = currentShaderName != shader.name && recognizedFallback;
+            if (created || repairShader)
             {
                 material.shader = shader;
                 material.name = materialName;

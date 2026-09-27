@@ -43,6 +43,9 @@ Shader "VoxelEngine/VoxelWater"
             Cull Back
 
             HLSLPROGRAM
+            // Keep this simpler in-house fallback above the default Shader Model 2.5
+            // instruction limits while retaining wider hardware support than the full shader.
+            #pragma target 3.5
             #pragma vertex   vert
             #pragma fragment frag
             #pragma multi_compile_instancing
