@@ -261,10 +261,14 @@ namespace VoxelEngine.Building.Tiered
             // 2) Fall back to grid snap or free placement on the hit surface.
             // Construction roots represent the bottom/hinge plane, not the center
             // of a module, so snap to grid intersections instead of cell centers.
-            float surfaceOffset = def.family == BuildFamily.Foundation ? 0.50f : 0.02f;
+            const float surfaceOffset = 0.02f;
             Vector3 raw = hit.point + hit.normal * surfaceOffset;
 
-            if (gridSnap)
+            // A Foundation establishes the construction grid. Snapping its radial
+            // altitude to an arbitrary 7.5 m shell can bury it after loading a
+            // world whose terrain surface is between shells. Use the aimed surface;
+            // neighbouring foundations continue through authored sockets.
+            if (gridSnap && def.family != BuildFamily.Foundation)
             {
                 if (GravityProvider.IsRadial && GravityProvider.ActiveBody != null)
                 {
@@ -545,6 +549,7 @@ namespace VoxelEngine.Building.Tiered
         {
             // Don't overlap the player.
             if (Vector3.Distance(pos, transform.position) < 0.6f) return false;
+            if (family == BuildFamily.Roof && !HasRoofSupport(pos)) return false;
 
             int count = Physics.OverlapBoxNonAlloc(pos, Vector3.one * 0.45f,
                 s_placementOverlapProbe, Quaternion.identity, ~0, QueryTriggerInteraction.UseGlobal);
@@ -556,6 +561,42 @@ namespace VoxelEngine.Building.Tiered
             foreach (var collider in Physics.OverlapBox(pos, Vector3.one * 0.45f, Quaternion.identity))
                 if (!IsOverlapColliderAllowed(collider, socketHost, family, pos)) return false;
             return true;
+        }
+
+        private static bool HasRoofSupport(Vector3 position)
+        {
+            const float maxSpan = ConstructionModule * 2f + 0.35f;
+            var colliders = Physics.OverlapSphere(position, maxSpan + ConstructionStorey, ~0, QueryTriggerInteraction.Ignore);
+            var visited = new HashSet<PlacedTieredBlock>();
+            for (int i = 0; i < colliders.Length; i++)
+            {
+                var block = colliders[i] != null ? colliders[i].GetComponentInParent<PlacedTieredBlock>() : null;
+                if (block == null || block.definition == null || !visited.Add(block)) continue;
+                BuildFamily family = block.definition.family;
+                float height;
+                switch (family)
+                {
+                    case BuildFamily.Wall:
+                    case BuildFamily.Doorway:
+                    case BuildFamily.Window:
+                    case BuildFamily.WallFrame:
+                    case BuildFamily.Pillar:
+                        height = ConstructionStorey;
+                        break;
+                    case BuildFamily.HalfWall:
+                        height = HalfWallHeight;
+                        break;
+                    default:
+                        continue;
+                }
+
+                Vector3 supportTop = block.transform.position + block.transform.up * height;
+                Vector3 delta = position - supportTop;
+                float vertical = Mathf.Abs(Vector3.Dot(delta, block.transform.up));
+                Vector3 planar = delta - block.transform.up * Vector3.Dot(delta, block.transform.up);
+                if (vertical <= 0.75f && planar.sqrMagnitude <= maxSpan * maxSpan) return true;
+            }
+            return false;
         }
 
         private static bool IsOverlapColliderAllowed(Collider collider, PlacedTieredBlock socketHost, BuildFamily incoming, Vector3 placementPosition)

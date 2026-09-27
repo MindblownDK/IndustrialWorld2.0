@@ -1,9 +1,29 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `13.6.5-dev`
+**Current Version:** `13.7.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [13.7.0-dev] Roof Loads and Grounded Foundations
+
+**Type:** MINOR - adds a structural roof-span rule and adaptive Foundation support legs. Save-compatible: no existing family value, placed-piece record or save schema changes; support legs are regenerated prefab children and recalculate from world collision.
+
+**Roofs now require a load path.** A Roof can be placed only when the candidate root lies within two construction modules of a Wall, Doorway, Window, Wall Frame, Half Wall or Pillar whose top reaches the same roof level. Full-height supports contribute at 5.625 m and Half Walls at 2.8 m. Distance is measured in the support's local horizontal plane, so the rule remains correct on curved worlds. Existing Roofs are not removed or damaged; the rule applies only to new placement ghosts.
+
+**Foundations grow four independent legs to solid ground.** Setup Step 102 authors one slim support near each Foundation corner and connects them to `FoundationSupportLegs`. Each leg raycasts along the Foundation's own down axis, ignores the Foundation and other tiered construction, and extends to the first solid terrain/world collider up to 40 m below. Legs update while a ghost moves and settle after placement, allowing a slab to bridge uneven terrain without floating corners or stamping one oversized central column through the landscape.
+
+**The first Foundation after loading no longer snaps below terrain.** A new Foundation establishes a construction run and therefore uses the terrain point actually under the crosshair. It no longer rounds radial altitude to a 7.5 m construction shell, which could choose the shell below a loaded world's surface until aiming at an existing Foundation supplied a correct socket. Subsequent Foundations still continue through exact authored 7.5 m neighbour joins.
+
+**GitHub title:** `[13.7.0-dev] Roof loads and grounded foundations`
+
+**Manual steps:**
+1. Pull `Dev`, let Unity compile, then run `Tools -> Voxel Engine -> Voxel Engine Setup -> 102. Rebuild Construction at Size-V6` to add the generated Foundation legs to all four tiers.
+2. On uneven ground, move a Foundation ghost across a slope. Its four legs should independently reach the solid terrain below; place it and confirm they remain aligned after walking away and returning.
+3. Save and reload the world. Without aiming at existing construction first, select Foundation and aim at untouched terrain. Its slab root must sit on the surface rather than below it.
+4. Build a full-height Wall or Pillar and extend Roofs away from it. The first two-module span must remain valid; the next unsupported extension must turn red.
+5. Add a Pillar or Wall beneath the refused area and confirm the Roof becomes valid again. Repeat with a Wall Frame, Doorway, Window and stacked Half Walls.
+6. Confirm previously placed unsupported Roofs still load unchanged.
 
 ### [13.6.5-dev] Maximum Garage Opening
 

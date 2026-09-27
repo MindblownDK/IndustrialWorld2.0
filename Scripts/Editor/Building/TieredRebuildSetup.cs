@@ -261,6 +261,7 @@ namespace VoxelEngine.EditorTools
             new GameObject(SizeMarker).transform.SetParent(root.transform, false);
 
             if (!root.TryGetComponent<PlacedTieredBlock>(out _)) root.AddComponent<PlacedTieredBlock>();
+            if (family == BuildFamily.Foundation) EnsureFoundationLegs(root);
             if (family == BuildFamily.Door || family == BuildFamily.GarageDoor) EnsureDoorPivot(root, family);
             if (family == BuildFamily.HatchLid) EnsureHatch(root, tier, name);
             if (family == BuildFamily.Railing && root.GetComponent<TieredRailing>() == null)
@@ -312,6 +313,39 @@ namespace VoxelEngine.EditorTools
                 return false;
             }
             return true;
+        }
+
+        private static void EnsureFoundationLegs(GameObject root)
+        {
+            var support = root.GetComponent<FoundationSupportLegs>();
+            if (support == null) support = root.AddComponent<FoundationSupportLegs>();
+
+            Material material = null;
+            foreach (var renderer in root.GetComponentsInChildren<MeshRenderer>(true))
+            {
+                if (renderer.name.StartsWith("Mesh_Frame", System.StringComparison.Ordinal))
+                {
+                    material = renderer.sharedMaterial;
+                    break;
+                }
+            }
+
+            support.legs = new Transform[4];
+            int index = 0;
+            const float inset = 3.18f;
+            foreach (float x in new[] { -inset, inset })
+            foreach (float z in new[] { -inset, inset })
+            {
+                var leg = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                leg.name = $"Generated_FoundationLeg_{index + 1}";
+                leg.transform.SetParent(root.transform, false);
+                leg.transform.localPosition = new Vector3(x, -0.05f, z);
+                leg.transform.localScale = new Vector3(0.34f, 0.1f, 0.34f);
+                Object.DestroyImmediate(leg.GetComponent<Collider>());
+                var renderer = leg.GetComponent<MeshRenderer>();
+                if (renderer != null && material != null) renderer.sharedMaterial = material;
+                support.legs[index++] = leg.transform;
+            }
         }
 
         /// <summary>

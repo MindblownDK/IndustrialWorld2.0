@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `13.6.5-dev`
-**Roadmap Version:** `13.6.5-dev`
+**Current Version:** `13.7.0-dev`
+**Roadmap Version:** `13.7.0-dev`
 **Date:** 2026-09-27
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 13.7.0-dev - Roof Loads and Grounded Foundations
+- **Roof span rule** (`BuildSystemV2`): a roof ghost remains valid only within two modules of a wall, opening frame, half wall or pillar whose top reaches its level.
+- **Foundation legs** (`FoundationSupportLegs`, Setup Step 102): four authored corner supports extend independently down to the first solid non-building surface.
+- **Loaded-world placement** (`BuildSystemV2`): a new foundation establishes its root from the aimed terrain surface instead of rounding radial altitude to a construction-grid shell.
+
 ### 13.6.5-dev - Maximum Garage Opening
 - **Two interaction surfaces** (`PlayerInteractionTool`): the rolled drum trigger and every jamb/header collider on its Wall Frame toggle the nearest fitted Garage Door.
 - **Maximum aperture** (`TieredPieceFactory`, Setup Step 102): the opening grows to 6.8 m wide by 5.05 m high, leaving only a narrow structural surround inside the 7.5 m by 5.625 m module.
@@ -48,11 +53,6 @@
 - **Rolling shutter** (`TieredDoor`): garage slats curl into the header drum instead of rotating as one rigid leaf, and their blocking colliders release once the opening clears.
 - **Pillar corners** (`BuildSystemV2`): the outer pillar targets are the four true module corners shared by four foundations, with the centre retained as the fifth target.
 - **Surface separation** (`TieredPieceFactory`, Setup Step 102): structural wall relief receives additional depth clearance from its solid backing to remove remaining wall and frame shimmer.
-
-### 13.6.1-dev - Hinges, Clearances and Stair Guards
-- **Garage motion** (`TieredDoor`, Setup Step 102): garage shutters hinge at the header and fold overhead while ordinary doors retain side-aware lateral swing.
-- **Placement clearances** (`BuildSystemV2`): occupied-root rejection remains strict while neighbouring supports no longer invalidate wall frames; roofs gain a small seating clearance.
-- **Generated surfaces** (`TieredPieceFactory`, `TieredRailing`): deck finishes and wall relief clear their backing planes, and stair railings shear along the rise while keeping every post vertical.
 
 ### Era Transition Feel
 
