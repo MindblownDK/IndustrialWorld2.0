@@ -29,7 +29,7 @@ namespace VoxelEngine.Building.Tiered
         // Size-V6: one construction module is 7.5 m, so the free-placement grid,
         // the socket search radius and the builder's reach all scale with it.
         public float reach = 12f;
-        public float socketSnapRadius = 7.25f;    // metres around aim point to search for sockets
+        public float socketSnapRadius = 8f;       // spans one full 7.5 m module from the aim point
         public bool  gridSnap = true;
         public float gridSize = 7.5f;
         public float ghostAlpha = 0.55f;

@@ -130,14 +130,15 @@ namespace VoxelEngine.EditorTools
                 system.gridSize = TieredPieceFactory.Module;
                 changed = true;
             }
-            // 5.5 m was still mean at a 7.5 m module: a neighbour socket sits a
-            // full module from the host's centre, which is 3.75 m past its edge,
-            // so the aim had to be threaded into empty space to find it.
+            // A neighbour socket is one complete 7.5 m module from the host's
+            // centre. The former 7.25 m search still missed every neighbour while
+            // aiming near the middle of a foundation, so cover the whole module.
             if (Mathf.Approximately(system.socketSnapRadius, 3.25f)
-                || Mathf.Approximately(system.socketSnapRadius, 5.5f))
+                || Mathf.Approximately(system.socketSnapRadius, 5.5f)
+                || Mathf.Approximately(system.socketSnapRadius, 7.25f))
             {
                 Undo.RecordObject(system, "Socket Snap Radius");
-                system.socketSnapRadius = 7.25f;
+                system.socketSnapRadius = 8f;
                 changed = true;
             }
             if (Mathf.Approximately(system.reach, 8f))

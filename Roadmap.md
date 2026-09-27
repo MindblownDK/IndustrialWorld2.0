@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `13.5.5-dev`
-**Roadmap Version:** `13.5.5-dev`
+**Current Version:** `13.5.6-dev`
+**Roadmap Version:** `13.5.6-dev`
 **Date:** 2026-09-27
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 13.5.6-dev - Floors Land Beside Walls
+- **Floor sockets** (`BuildSocketCompat`): floors and floor hatches use the wall's two half-module edge anchors instead of its centreline top socket.
+- **Foundation reach** (`BuildSystemV2`): the default socket search spans a complete 7.5 m module, so neighbouring foundation anchors remain reachable while aiming near the host's centre.
+- **Setup repair** (`TieredRebuildSetup`, Setup Step 102): re-running construction setup upgrades only recognized old snap-radius defaults and preserves hand-tuned values.
+
 ### 13.5.5-dev - Water Shader Compiles Before Build Anchoring
 - **Shader target** (`VoxelWaterURP`, `VoxelWater`): the full water shader now targets Shader Model 4.5 and its simpler project-owned fallback targets 3.5 instead of inheriting the insufficient default target.
 - **Setup recovery** (`RuntimeShaderSetup`, Setup Step 103): direct shader-asset resolution prefers the full water shader, accepts the project fallback, and upgrades recognized setup-owned URP Lit water materials without touching custom designer shaders.
@@ -47,12 +52,6 @@
 ### 13.5.2-dev - Two That Only Bite Later
 - **Re-runnable rebuild** (`TieredRebuildSetup`): the hatch ladder's mesh asset is cleared with the lid's, so a second pass of step 102 no longer overwrites a loaded asset.
 - **Curved ground** (`ClimbableLadder`): the top-of-ladder hand-back is measured in the volume's own frame instead of against a world-axis-aligned bounding box.
-
-### 13.5.1-dev - The Dome Was Yawed Ninety Degrees
-- **Dome rotation** (`TieredPieceFactory`): tangential panels, mullions, rings and cap bands were yawed by -a instead of 90 - a, and the cap lean was offset by a spurious 90 degrees.
-- **Ladder reach** (`TieredHatch`, `TieredRebuildSetup`): the ladder unrolls from a fixed origin in the hatch plane at one storey long, instead of sliding clear of the opening.
-- **Letting go** (`ClimbableLadder`): a deliberate release latches until the player leaves the volume, and reaching the top hands control back.
-- **Snapping** (`TieredRebuildSetup`, `BuildSystemV2`): walls gained half-module floor anchors, roofs and stairs gained sockets, the floor's top surface matches its slab, and the socket search radius suits a 7.5 m module.
 
 ### Era Transition Feel
 

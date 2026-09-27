@@ -89,11 +89,12 @@ namespace VoxelEngine.Building.Tiered
                 host == BuildFamily.Window || host == BuildFamily.HalfWall)
             {
                 if (side == SocketSide.Top)
-                    return incoming == BuildFamily.Floor    ||
-                           incoming == BuildFamily.Roof     ||
+                    return incoming == BuildFamily.Roof     ||
                            incoming == BuildFamily.Wall     ||
                            incoming == BuildFamily.Doorway  ||
                            incoming == BuildFamily.Window;
+                if (side == SocketSide.TopNorth || side == SocketSide.TopSouth)
+                    return incoming == BuildFamily.Floor || incoming == BuildFamily.FloorHatch;
                 if (side == SocketSide.East || side == SocketSide.West)
                     return incoming == BuildFamily.Wall
                         || incoming == BuildFamily.Doorway

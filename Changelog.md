@@ -1,9 +1,26 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `13.5.5-dev`
+**Current Version:** `13.5.6-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [13.5.6-dev] Floors Land Beside Walls
+
+**Type:** PATCH - construction snapping correction. No save data, public API, prefab identity, material, item, recipe, research or balance value is changed.
+
+**Fixed - floors selected the wall centre instead of either side.** Step 102 had authored the correct half-module anchors on both faces of every wall-like piece, but the compatibility table did not accept floors on those anchors. It accepted a floor on the wall's centreline Top socket instead, so the only legal result put the middle of the floor on the wall. Floors and floor hatches now bind to the two face anchors; the centreline Top socket remains available for stacking walls and placing roofs.
+
+**Fixed - foundation neighbours disappeared while aiming near the middle.** A neighbouring foundation socket is 7.5 m from the host centre, while the search radius was 7.25 m. Aiming near the centre therefore made every side anchor unreachable and fell back to world-grid placement. The default search now spans 8 m, enough to cover one complete module without reaching a second module. Step 102 upgrades only the recognized 3.25 m, 5.5 m and 7.25 m defaults; a designer's custom radius remains untouched.
+
+**GitHub title:** `[13.5.6-dev] Floors land beside walls`
+
+**Manual steps:**
+1. Pull `Dev` and let Unity compile.
+2. Open `Tools -> Voxel Engine -> Voxel Engine Setup` and run `102. Rebuild Construction at Size-V6`.
+3. Place a Foundation, aim near its middle while holding another Foundation, and sweep toward each edge. The ghost should lock one full module beside the existing foundation without requiring the crosshair to sit in empty space.
+4. Place a Wall on the foundation. Hold a Floor and aim at each face near the wall top. The floor should switch between the two sides, with its edge on the wall line; it must never centre itself across the wall.
+5. Repeat the wall test with a Floor Hatch. Then stack a second Wall and place a Roof to confirm the wall's centreline top anchor still serves those families.
 
 ### [13.5.5-dev] Water Shader Compiles Before Build Anchoring
 
