@@ -915,6 +915,24 @@ namespace VoxelEngine.EditorTools
             AddWizardButton(scroll, "101. Wire the Radial Wheel Family\n(Conveyor, armour, pipe, road + jump drive \u2014 Non-Destructive)",
                 () => VoxelEngine.EditorTools.BuildWheelSetup.RunStep101(), 56);
 
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
+                "Step 102 rebuilds ALL HAMMER CONSTRUCTION at Size-V6 with tiered surfaces:\n" +
+                "  \u2022 Module 7.5 m square (double the old footprint), storey 5.625 m (half again the old height)\n" +
+                "  \u2022 Strong exterior / weak interior on every wall-like piece:\n" +
+                "      Wood  \u2014 laid logs outside, posts and cross-braces inside\n" +
+                "      Stone \u2014 fitted masonry outside, rough hewn rubble inside\n" +
+                "      Sheet Metal \u2014 corrugated scrap outside, L-beam grid inside\n" +
+                "      Armoured \u2014 matte plate and rivets outside, tread-plate bracing inside\n" +
+                "  \u2022 New pieces: Wall Frame (wide opening), Garage Door (roll-up shutter), Floor Hatch (lid + ladder)\n" +
+                "  \u2022 Orbital Station rebuilt on the same module so both families share seams\n" +
+                "  \u2022 Every piece welded into combined meshes \u2014 rich detail, three draw calls\n" +
+                "  \u2022 BuildSystemV2 grid, snap radius and reach raised to match (only if still on defaults)\n" +
+                "Re-runnable. Costs are NEVER overwritten, and a prefab carrying custom work is left untouched.\n" +
+                "Run AFTER step 5. Pieces placed before this step keep their save data but were authored at the old module.");
+            AddWizardButton(scroll, "102. Rebuild Construction at Size-V6\n(Bigger modules + tiered strong/weak surfaces + garage and hatch)",
+                () => VoxelEngine.EditorTools.TieredRebuildSetup.RunStep102(), 72);
+
             AddSpacer(scroll, 20);
         }
 

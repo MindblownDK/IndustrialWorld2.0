@@ -34,7 +34,17 @@ namespace VoxelEngine.Building.Tiered
         StationWindow    = 14,
         StationAirlock   = 15,
         StationDock      = 16,
-        StationDome      = 17
+        StationDome      = 17,
+
+        // ── Openings and access (13.4.0-dev) ──
+        // Appended for the same reason the station set was: a save stores the
+        // family as an int, so nothing already placed may be renumbered.
+        /// <summary>Wide wall cutout that accepts a Garage Door or double doors.</summary>
+        WallFrame  = 18,
+        /// <summary>Roll-up shutter that fits a Wall Frame.</summary>
+        GarageDoor = 19,
+        /// <summary>Floor slab with a square opening, a fold-up lid and a drop ladder.</summary>
+        FloorHatch = 20
     }
 
     /// <summary>
@@ -51,8 +61,11 @@ namespace VoxelEngine.Building.Tiered
     public static class BuildFamilyInfo
     {
         /// <summary>Station pieces are gated behind research; structural pieces never are.</summary>
+        // Explicit range, not a "greater than" test: structural families are
+        // appended after the station block, so an open-ended comparison would
+        // silently file every new opening piece under Orbital Station.
         public static BuildFamilyGroup GroupOf(BuildFamily family)
-            => family >= BuildFamily.StationHull
+            => family >= BuildFamily.StationHull && family <= BuildFamily.StationDome
                 ? BuildFamilyGroup.OrbitalStation
                 : BuildFamilyGroup.Structural;
 
@@ -81,6 +94,9 @@ namespace VoxelEngine.Building.Tiered
             BuildFamily.StationAirlock  => "AIRLOCK",
             BuildFamily.StationDock     => "DOCK",
             BuildFamily.StationDome     => "DOME",
+            BuildFamily.WallFrame       => "WALL FRAME",
+            BuildFamily.GarageDoor      => "GARAGE DOOR",
+            BuildFamily.FloorHatch      => "FLOOR HATCH",
             _ => family.ToString().ToUpperInvariant(),
         };
 
@@ -109,6 +125,9 @@ namespace VoxelEngine.Building.Tiered
             BuildFamily.StationAirlock  => "Two doors, never open at once",
             BuildFamily.StationDock     => "Open collar a ship mates into",
             BuildFamily.StationDome     => "A curved roof for the observation deck",
+            BuildFamily.WallFrame       => "A wide opening a vehicle fits through",
+            BuildFamily.GarageDoor      => "Rolls up into the drum above the frame",
+            BuildFamily.FloorHatch      => "A way down that closes behind you",
             _ => "Construction piece",
         };
     }

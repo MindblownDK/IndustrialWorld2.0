@@ -26,10 +26,12 @@ namespace VoxelEngine.Building.Tiered
         public TieredBlockRegistry registry;
 
         [Header("Tuning")]
-        public float reach = 8f;
-        public float socketSnapRadius = 3.25f;    // metres around aim point to search for sockets
+        // Size-V6: one construction module is 7.5 m, so the free-placement grid,
+        // the socket search radius and the builder's reach all scale with it.
+        public float reach = 12f;
+        public float socketSnapRadius = 5.5f;     // metres around aim point to search for sockets
         public bool  gridSnap = true;
-        public float gridSize = 3.75f;
+        public float gridSize = 7.5f;
         public float ghostAlpha = 0.55f;
         public float yawStep = 90f;
 

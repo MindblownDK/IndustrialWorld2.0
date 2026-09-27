@@ -50,6 +50,10 @@ namespace VoxelEngine.Building.Tiered
                 case BuildFamily.StationDock:     Dock(b);      break;
                 case BuildFamily.StationDome:     Dome(b);      break;
 
+                case BuildFamily.WallFrame:  WallFrame(b);  break;
+                case BuildFamily.GarageDoor: GarageDoor(b); break;
+                case BuildFamily.FloorHatch: FloorHatch(b); break;
+
                 default: b.IsoBox(0f, 0f, 0f, 1f, 1f, 1f); break;
             }
         }
@@ -171,6 +175,47 @@ namespace VoxelEngine.Building.Tiered
             const float sx = 1f, sy = 0.46f, sz = 0.16f;
             b.IsoBox(0f, 0f, 0f, sx, sy, sz);
             b.IsoFaceLine(sx, sy, 0.5f, 0.08f, 0.5f, 0.92f);
+        }
+
+        private static void WallFrame(LineArtBuilder b)
+        {
+            const float sx = 1f, sy = 0.95f, sz = 0.14f;
+            b.IsoBox(0f, 0f, 0f, sx, sy, sz);
+            b.IsoFace(sx, sy, 0.12f, 0f, 0.88f, 0.72f);
+            // Head reveal, so the wide opening reads as punched through the wall.
+            b.Line(P(0.12f * sx, 0.72f * sy, 0f), P(0.12f * sx, 0.72f * sy, sz));
+            b.Line(P(0.12f * sx, 0.72f * sy, sz), P(0.88f * sx, 0.72f * sy, sz));
+        }
+
+        private static void GarageDoor(LineArtBuilder b)
+        {
+            const float sx = 1f, sy = 0.86f, sz = 0.12f;
+            b.IsoBox(0f, 0f, 0f, sx, sy, sz);
+            // Shutter slats plus the drum the door rolls into.
+            for (int i = 1; i <= 4; i++)
+            {
+                float v = i / 5f;
+                b.IsoFaceLine(sx, sy, 0.03f, v, 0.97f, v);
+            }
+            b.Line(P(0f, sy + 0.16f, 0f), P(sx, sy + 0.16f, 0f));
+            b.Line(P(0f, sy + 0.16f, 0f), P(0f, sy, 0f));
+            b.Line(P(sx, sy + 0.16f, 0f), P(sx, sy, 0f));
+        }
+
+        private static void FloorHatch(LineArtBuilder b)
+        {
+            b.IsoBox(0f, 0f, 0f, 1f, 0.12f, 1f);
+            // Square opening on the deck with the lid folded up behind it.
+            b.Closed(P(0.28f, 0.12f, 0.28f), P(0.72f, 0.12f, 0.28f),
+                     P(0.72f, 0.12f, 0.72f), P(0.28f, 0.12f, 0.72f));
+            b.Closed(P(0.28f, 0.12f, 0.28f), P(0.72f, 0.12f, 0.28f),
+                     P(0.72f, 0.56f, 0.22f), P(0.28f, 0.56f, 0.22f));
+            for (int i = 1; i <= 2; i++)
+            {
+                float t = i / 3f;
+                b.Line(P(0.34f, 0.12f - t * 0.34f, 0.34f + t * 0.1f),
+                       P(0.66f, 0.12f - t * 0.34f, 0.34f + t * 0.1f));
+            }
         }
 
         // ── Orbital station ───────────────────────────────────────────────

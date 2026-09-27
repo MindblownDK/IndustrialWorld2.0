@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `13.3.0-dev`
-**Roadmap Version:** `13.3.0-dev`
+**Current Version:** `13.4.0-dev`
+**Roadmap Version:** `13.4.0-dev`
 **Date:** 2026-09-27
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,12 @@
 
 ## 0. Recently Done
 
+### 13.4.0-dev - Rooms You Can Stand Up In, and Walls With a Strong Side
+- **Size-V6** (`TieredPieceFactory`, `BuildSystemV2`, `TieredRebuildSetup`): 7.5 m modules and 5.625 m storeys across every hammer family, with grid, snap radius and reach raised to match.
+- **Tier surfaces** (`TieredSurfaces`, `TieredPieceFactory`): each tier is modelled with a clad exterior and a structural interior - logs/braces, masonry/rubble, corrugated scrap/L-beams, armour plate/tread - welded into combined meshes.
+- **New openings** (`BuildEnums`, `BuildPieceIcons`, `HammerBuildWheel`): Wall Frame, Garage Door and Floor Hatch appended at 18-20 with drawn icons and four tiers each.
+- **Station on the same grid** (`TieredPieceFactory`, `TieredRebuildSetup`): the orbital set is rebuilt on the structural module so the two families share seams.
+
 ### 13.3.0-dev - One Dial for Every Wheel, and the Jump Drive Joins It
 - **Shared dial** (`RadialWheelController`, `RadialWheelView`): the build, conveyor, armour, pipe, road and jump wheels all run one presenter and one input model; the per-wheel ring textures, parallax and Unicode glyphs are deleted.
 - **Corrected solids and new icon sets** (`LineArtBuilder`, `MachineShapeIcons`, `JumpTargetIcons`, `IconAtlas`): isometric boxes draw their near faces, and conveyors, armour shapes, pipe fittings, road surfaces and jump destinations all have drawn marks.
@@ -44,11 +50,6 @@
 - **Width** (`WheelSizeClass`): tire widths doubled in the preset table; mesh, collider, socket and setup content follow, tire mass unchanged.
 - **Closed carcass** (`WheelMeshFactory`): bead heels and an inner liner shut the tire into a watertight torus, ending the see-through gap at the rim flange.
 - **Fitment** (`GridWheel`, `GridWheelMeshBuilder`): the knuckle plane is fixed at 0.60 cells, the socket alone carries tire half width, and the suspension casts on the tire centre plane.
-
-### 13.1.1-dev - Inside-Out Wheel Meshes and Detached Suspension Linkage
-- **Mesh winding** (`WheelMeshFactory`): lathe, coil spring and wishbone faces now point outward, ending the see-through tire, rim and hub; verified by positive signed volume.
-- **Opaque materials** (`WheelTextureFactory`, `VoxelEngineSetupWindow`): wheel materials are pinned to the opaque queue and baked maps import without an alpha source.
-- **Connected linkage** (`WheelLinkage`, `GridWheelMeshBuilder`, `GridWheel`): one poser drives arms, spring and the new telescoping `Strut` mesh, applied at authoring time as well as per step.
 
 ### 13.0.1-dev - Unity 6.5 Surface Cache API Compliance
 - **Cache keys** (`SurfaceSampler`): collider and terrain alphamap caches drop the obsolete `GetInstanceID` in favour of object and tuple keys, removing recycled-id staleness.

@@ -1,9 +1,53 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `13.3.0-dev`
+**Current Version:** `13.4.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [13.4.0-dev] Rooms You Can Stand Up In, and Walls With a Strong Side
+
+**Type:** MINOR - construction is rebuilt at double the footprint and half again the height, every tier gets a modelled strong exterior and weak interior, and three opening pieces are added. Save-compatible: `BuildTier` is untouched, the new families are appended at 18-20 so no placed piece is renumbered, and no existing cost is overwritten. Read the migration note at the end before running step 102 on a world you care about.
+
+**Size.** One module was 3.75 m square with a 3.75 m storey, which is a corridor, not a room. It is now **7.5 m square with a 5.625 m storey** - double the footprint in both X and Z, and half again the height. Foundations, floors, walls, doorways, windows, roofs, stairs, pillars, half walls and every orbital station piece move together, because a kit where one piece grew is worse than one where none did. `BuildSystemV2` follows: the free-placement grid goes to 7.5 m, the socket search radius to 5.5 m and the builder's reach to 12 m, and each of those is raised only if it was still sitting on the old default.
+
+**Strong side, weak side.** Every wall-like piece is now modelled with cladding on +Z and structure on -Z, so which way a wall faces is legible from across the valley:
+
+* **Wood** - horizontally laid rounded logs outside; vertical posts with diagonal cross-bracing and a capping plate inside.
+* **Stone** - fitted blocks in running bond with recessed mortar outside; rough-hewn rubble projecting inward around a timber lintel inside.
+* **Sheet Metal** - patchwork corrugated sheets at mixed heights, riveted over a backing plate outside; a grid of L-beams with exposed bolt heads inside.
+* **Armoured** - matte plates with bevelled seams and corner rivets outside; tread plate over heavy diagonal bracing inside.
+
+The four tiers were previously the same grey box with a different tint. They are now four different buildings.
+
+**It is modelled, not textured.** A wall carries fifty-odd real parts - individual logs, studs, braces, rivet blocks - and still costs three draw calls, because `TieredPieceFactory` welds them into one combined mesh per surface at author time and saves it as an asset. UVs are generated from each part's world size at a fixed texel density, so a 7.5 m wall and a 0.3 m rivet strip show the same grain instead of one stretched flat and the other tiled forty times. Colliders are hand-sized boxes rather than a mesh collider on the detail: a wall should be a wall, and the player should not catch on a rivet.
+
+**Surfaces are authored assets.** `TieredSurfaces` synthesises twelve materials - four tiers by skin, frame and trim - plus one shared glazing, each with its own generated albedo: log courses, running-bond masonry, corrugation with rust blooms, armour plate with rivets, sawn timber, rubble, bolted steel, diamond tread. They are real assets in the project, so a designer can retune one and never lose the change.
+
+**Three new pieces.**
+
+* **Wall Frame** - a wide vehicle-sized cutout in a wall, with the drum housing and side rails already fitted. Takes a Garage Door.
+* **Garage Door** - a corrugated roll-up shutter of eleven slats on an overhead drum, sized to the Wall Frame.
+* **Floor Hatch** - a floor slab with a square opening, a lid folded up on its hinge and a ladder dropped through it.
+
+All three are on the hammer wheel with their own drawn isometric icons, and all three exist at every tier.
+
+**Doors read their tier.** A wooden door is split planks banded with iron. Sheet metal gets a small eye hatch. Armoured gets a wide vision slot. Each has modelled hinges and a lever handle rather than a sphere stuck to a cube.
+
+**The orbital station joins the same grid.** The station set was a 2 m kit sitting beside a 3.75 m one, which meant the two families could never meet at a seam. Hull, deck, corridor, junction, viewport, airlock, dock and dome are rebuilt on the identical 7.5 m module, and rebuilt properly: ribbed pressure plating with a service conduit, magnetic tread channels, pressure frames every couple of metres, a bolted airlock hatch with eight dogs, a sixteen-segment docking collar with guide clamps, and a glazed dome built from real meridian ribs and glass panes instead of a squashed sphere.
+
+**GitHub title:** `[13.4.0-dev] Rooms you can stand up in, and walls with a strong side`
+
+**Manual steps:**
+1. Pull `Dev` and let Unity compile.
+2. **Back up the world you care about first.** Step 102 replaces the prefabs that existing placed pieces instantiate, so a base built before this update will re-form at the new size and its pieces will overlap. New worlds are unaffected.
+3. `Tools -> Voxel Engine -> Voxel Engine Setup` -> `102. Rebuild Construction at Size-V6`. It takes a minute: eighty-four prefabs, each with its meshes welded and saved.
+4. Read the summary dialog. Any prefab reported as "left untouched" carries hand-made children or a custom material - that is deliberate, and it will keep the old geometry until you clear the custom work.
+5. Costs are not touched. The three new pieces get an opening price; everything else keeps exactly the balance you tuned.
+6. Play. Equip the hammer, place a Foundation and walk it - it should read as a room. Place a Wall and walk around it: logs on one face, braces on the other.
+7. Upgrade a wall through all four tiers with the hammer and watch the exterior change from logs to masonry to corrugated scrap to armour plate.
+8. Place a Wall Frame, then a Garage Door into it, then a Floor Hatch in an upper floor.
+9. If `BuildSystemV2` in your scene had a hand-tuned grid, snap radius or reach, step 102 left it alone - set the grid to 7.5 manually or nothing will line up.
 
 ### [13.3.0-dev] One Dial for Every Wheel, and the Jump Drive Joins It
 
