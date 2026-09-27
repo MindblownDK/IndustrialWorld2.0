@@ -232,21 +232,34 @@ namespace VoxelEngine.GridSystem
             return go.transform;
         }
 
-        /// <summary>Lateral offset of the mount, so the tire clears the hull it bolts to.</summary>
+        /// <summary>
+        /// Lateral offset of the knuckle: just clear of the hull face it bolts to.
+        /// Deliberately independent of tire width - a real upright does not move when a
+        /// wider tire is fitted, and folding the width in here once stacked it on top of
+        /// the socket offset and pushed the wheel metres off the hull.
+        /// </summary>
         public float MountOffsetX
         {
             get
             {
                 float side = mountSide == WheelMountSide.Left ? -1f : 1f;
-                float tireWidth = Tire != null ? Tire.Width : Preset.TireWidth;
-                return side * (_cellSize * 0.5f + tireWidth * 0.55f);
+                return side * _cellSize * KnuckleClearance;
             }
         }
+
+        /// <summary>Knuckle plane as a fraction of the cell: half a cell to the face plus clearance.</summary>
+        private const float KnuckleClearance = 0.60f;
 
         private void PlaceSocket(float springLength)
         {
             if (_carrier == null) return;
             _carrier.localPosition = new Vector3(MountOffsetX, -Mathf.Max(0f, springLength), 0f);
+            if (_socket == null) return;
+            // The socket carries the tire's own half width, so any tire size sits with its
+            // inner face just clear of the knuckle instead of intersecting the hull.
+            float side = mountSide == WheelMountSide.Left ? -1f : 1f;
+            float halfWidth = (Tire != null ? Tire.Width : Preset.TireWidth) * 0.5f;
+            _socket.localPosition = new Vector3(side * (halfWidth + _cellSize * 0.04f), 0f, 0f);
         }
 
         // ════════════════════════════════════════════════════════════════════
@@ -384,7 +397,11 @@ namespace VoxelEngine.GridSystem
             float mountRatio = Tire != null ? WheelTuning.MountRatio(sizeClass, Tire.sizeClass) : 1f;
             float radius = TireRadius;
             // The suspension top is the carrier's zero: travel is measured from there down.
-            Vector3 originWorld = _steerPivot.TransformPoint(new Vector3(MountOffsetX, 0f, 0f));
+            // Cast on the tire's centre plane, not the knuckle plane - with a wide tire the
+            // two are half a tire apart, and casting inboard puts the contact patch under
+            // the hull instead of under the rubber.
+            float castX = MountOffsetX + (_socket != null ? _socket.localPosition.x : 0f);
+            Vector3 originWorld = _steerPivot.TransformPoint(new Vector3(castX, 0f, 0f));
 
             var input = new WheelSolveInput
             {

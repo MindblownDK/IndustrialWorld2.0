@@ -78,6 +78,12 @@ namespace VoxelEngine.GridSystem
                 new Vector2(-0.540f, 0.760f),
                 new Vector2(-0.520f, 0.640f),
                 new Vector2(-0.500f, 0.560f), // inboard bead seat
+                // Bead heels and the inner liner close the carcass into a watertight
+                // torus. Left open, the two bead mouths let you see straight into the
+                // tire in the gap between the rubber and the rim flange.
+                new Vector2(-0.465f, 0.515f), // inboard bead heel, tucked under the flange
+                new Vector2( 0.465f, 0.515f), // inner liner, riding on the rim barrel
+                new Vector2( 0.500f, 0.560f), // back to the outboard bead seat: loop closed
             };
 
             // Tread displacement: only the crown band is displaced, and the two halves
@@ -93,9 +99,7 @@ namespace VoxelEngine.GridSystem
                 return treadDepth * crown01 * Mathf.Max(lug, rib);
             }
 
-            var mesh = Lathe(profile, segments, Displace);
-            // Close the bead openings so the tire is watertight when seen from inside.
-            return mesh;
+            return Lathe(profile, segments, Displace);
         });
 
         /// <summary>

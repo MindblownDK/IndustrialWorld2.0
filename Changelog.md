@@ -1,9 +1,29 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `13.1.1-dev`
+**Current Version:** `13.1.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [13.1.2-dev] Double-Width Tires and a Watertight Carcass
+
+**Type:** PATCH - visual and fitment polish on the wheel overhaul. Save-compatible: no schema, component or API change.
+
+**Tires are twice as wide:** the preset table is the single source of truth, so doubling tire width there (2x2 0.90 to 1.80 m, 3x3 1.35 to 2.70 m, 5x5 2.05 to 4.10 m) carries through the mesh, the tire collider box, the mount socket and the setup tool without any other edit. Tire mass is deliberately unchanged, so handling and vehicle mass stay exactly where they were tuned.
+
+**Carcass closed:** the tire lathe was an open tube at both beads, so in the gap between the rubber and the rim flange you looked straight into the inside of the tire. The profile now closes into a watertight torus with bead heels tucked under the flange and an inner liner riding on the rim barrel at a radius that overlaps the barrel rather than meeting it. Signed volume is positive, which is only true for a closed surface with outward normals.
+
+**Mount offset no longer double-counts width:** the knuckle plane was computed as half a cell plus 55 percent of the tire width, and the socket then added another half width on top. At the old width that was already generous; at double width it would have hung the wheel metres off the hull. The knuckle now sits at a fixed 0.60 cells, clear of the face plate and independent of the tire, and the socket alone carries the tire's half width - which also means a mismatched tire size still sits with its inner face just clear of the upright.
+
+**Suspension cast follows the rubber:** the raycast origin moved from the knuckle plane to the tire's centre plane. On a wide tire those are half a tire apart, and casting from the knuckle would have put the contact patch under the hull instead of under the tread.
+
+**GitHub title:** `[13.1.2-dev] Double-width tires and a watertight carcass`
+
+**Manual steps:**
+1. Pull `Dev` and let Unity compile.
+2. `Tools -> Voxel Engine -> Voxel Engine Setup` -> `12. Build Grid System Content`. The wheel meshes are overwritten in place, so existing prefabs pick up the wider, closed tire.
+3. Check a tire prefab from a low angle at the rim flange: no gap and no view into the carcass.
+4. Place a hub, fit a tire, and confirm the wheel sits just clear of the hull with the suspension still tracking it.
 
 ### [13.1.1-dev] Inside-Out Wheel Meshes and Detached Suspension Linkage
 

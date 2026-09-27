@@ -116,7 +116,7 @@ namespace VoxelEngine.GridSystem
             {
                 case WheelSizeClass.Size_2x2:
                     return new WheelPreset(sizeClass, 2,
-                        tireRadius: 2.50f * s, tireWidth: 0.90f * s, treadDepth: 0.10f * s, hubRadius: 0.75f * s,
+                        tireRadius: 2.50f * s, tireWidth: 1.80f * s, treadDepth: 0.10f * s, hubRadius: 0.75f * s,
                         springStrength: 185_000f * f, damperRate: 21_000f * f,
                         restLength: 0.80f * s, minTravel: 0.14f * s, maxTravel: 1.15f * s,
                         motorTorque: 560_000f * f, brakeTorque: 780_000f * f, handbrakeTorque: 1_250_000f * f,
@@ -127,7 +127,7 @@ namespace VoxelEngine.GridSystem
 
                 case WheelSizeClass.Size_5x5:
                     return new WheelPreset(sizeClass, 5,
-                        tireRadius: 6.25f * s, tireWidth: 2.05f * s, treadDepth: 0.26f * s, hubRadius: 1.55f * s,
+                        tireRadius: 6.25f * s, tireWidth: 4.10f * s, treadDepth: 0.26f * s, hubRadius: 1.55f * s,
                         springStrength: 470_000f * f, damperRate: 54_000f * f,
                         restLength: 1.85f * s, minTravel: 0.32f * s, maxTravel: 2.60f * s,
                         motorTorque: 8_400_000f * f, brakeTorque: 11_500_000f * f, handbrakeTorque: 18_000_000f * f,
@@ -138,7 +138,7 @@ namespace VoxelEngine.GridSystem
 
                 default:
                     return new WheelPreset(WheelSizeClass.Size_3x3, 3,
-                        tireRadius: 3.75f * s, tireWidth: 1.35f * s, treadDepth: 0.17f * s, hubRadius: 1.10f * s,
+                        tireRadius: 3.75f * s, tireWidth: 2.70f * s, treadDepth: 0.17f * s, hubRadius: 1.10f * s,
                         springStrength: 300_000f * f, damperRate: 34_000f * f,
                         restLength: 1.25f * s, minTravel: 0.22f * s, maxTravel: 1.80f * s,
                         motorTorque: 2_000_000f * f, brakeTorque: 2_750_000f * f, handbrakeTorque: 4_300_000f * f,

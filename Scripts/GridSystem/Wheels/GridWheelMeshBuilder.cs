@@ -28,7 +28,7 @@ namespace VoxelEngine.GridSystem
             var preset = WheelTuning.For(sizeClass, cellSize);
             float cs = cellSize;
             float sign = side == WheelMountSide.Left ? -1f : 1f;
-            float reach = cs * 0.5f + preset.TireWidth * 0.55f;
+            float reach = cs * 0.60f;   // knuckle plane: matches GridWheel.MountOffsetX
             float rest = preset.RestLength;
 
             var painted = WheelTextureFactory.PaintedSteel(new Color(0.31f, 0.33f, 0.36f), new Vector2(1.5f, 1.5f));
@@ -91,7 +91,7 @@ namespace VoxelEngine.GridSystem
                 preset.HubRadius * 0.42f, cs * 0.14f, new Vector3(0f, 0f, 90f));
 
             // ── Mount socket the tire snaps onto ────────────────────────────
-            Child(carrier, "TireSocket", new Vector3(sign * (cs * 0.20f + preset.TireWidth * 0.5f), 0f, 0f));
+            Child(carrier, "TireSocket", new Vector3(sign * (preset.TireWidth * 0.5f + cs * 0.04f), 0f, 0f));
 
             // Pose the linkage at rest so the AUTHORED prefab already looks connected.
             // Without this the arms sit unrotated at scale 1 and the hub reads as a

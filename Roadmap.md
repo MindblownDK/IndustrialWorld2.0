@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `13.1.1-dev`
-**Roadmap Version:** `13.1.1-dev`
+**Current Version:** `13.1.2-dev`
+**Roadmap Version:** `13.1.2-dev`
 **Date:** 2026-09-27
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 13.1.2-dev - Double-Width Tires and a Watertight Carcass
+- **Width** (`WheelSizeClass`): tire widths doubled in the preset table; mesh, collider, socket and setup content follow, tire mass unchanged.
+- **Closed carcass** (`WheelMeshFactory`): bead heels and an inner liner shut the tire into a watertight torus, ending the see-through gap at the rim flange.
+- **Fitment** (`GridWheel`, `GridWheelMeshBuilder`): the knuckle plane is fixed at 0.60 cells, the socket alone carries tire half width, and the suspension casts on the tire centre plane.
+
 ### 13.1.1-dev - Inside-Out Wheel Meshes and Detached Suspension Linkage
 - **Mesh winding** (`WheelMeshFactory`): lathe, coil spring and wishbone faces now point outward, ending the see-through tire, rim and hub; verified by positive signed volume.
 - **Opaque materials** (`WheelTextureFactory`, `VoxelEngineSetupWindow`): wheel materials are pinned to the opaque queue and baked maps import without an alpha source.
@@ -51,11 +56,6 @@
 - **Surface friction engine** (`SurfaceProfile`, `SurfaceProfileLibrary`, `SurfaceSampler`): asphalt runs, Unity Terrain alphamaps, PhysicsMaterials and voxel materials all resolve to one profile per contact patch.
 - **Feedback** (`WheelSlipFx`, `WorldAudioBootstrap`, `GridBlockUI`): surface-tinted slip plumes, slip-driven motor audio, and a hub panel reporting tire, surface, slip, load and compression.
 - **Procedural dressing** (`GridWheelMeshBuilder`, `WheelTextureFactory`, `VoxelEngineSetupWindow`): wishbone linkages that track the strut plus baked tread, steel and chrome maps.
-
-### 12.41.7-dev - Endpoint-Validated Energy Pipe Topology
-- **Shared socket contract** (`PowerCable`): topology and visual occupancy now use the same 0.85 m, opposing-face connector rule.
-- **Machine-edge validation** (`PowerCable`, `SurfacePowerTap`): only open, outward-facing pipe endpoints may bridge or restore static machine taps.
-- **Refresh safety** (`PowerCable`): nearby-conduit mesh rebuilds finish their shared physics probe before any refresh begins.
 
 ### Era Transition Feel
 
