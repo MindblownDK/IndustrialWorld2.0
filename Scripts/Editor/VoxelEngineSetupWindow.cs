@@ -7103,6 +7103,11 @@ root =>
                     // exactly how a tire ends up untextured after the editor restarts.
                     VoxelEngine.GridSystem.WheelTextureFactory.TexturePersister =
                         (tex, key) => PersistGeneratedTexture(tex, key, PREFABS + "/Textures");
+                    // 13.1.0: the same rule applies to procedural meshes. A prefab holding a
+                    // runtime-built Mesh comes back with empty MeshFilters after a reload, so
+                    // every generated wheel mesh is saved as a .asset first.
+                    VoxelEngine.GridSystem.WheelMeshFactory.MeshPersister =
+                        (mesh, key) => PersistGeneratedMesh(mesh, key, ASSET_ROOT + "/GridSystem/Meshes");
 
                     try
                     {
@@ -7157,6 +7162,8 @@ root =>
                         VoxelEngine.GridSystem.GridBlockMeshBuilder.MaterialPersister = null;
                         VoxelEngine.GridSystem.WheelTextureFactory.TexturePersister = null;
                         VoxelEngine.GridSystem.WheelTextureFactory.ClearCache();
+                        VoxelEngine.GridSystem.WheelMeshFactory.MeshPersister = null;
+                        VoxelEngine.GridSystem.WheelMeshFactory.ClearCache();
                     }
                 });
 
@@ -10748,6 +10755,24 @@ root =>
                 importer.SaveAndReimport();
             }
             return AssetDatabase.LoadAssetAtPath<Texture2D>(path) ?? texture;
+        }
+
+        /// <summary>
+        /// Saves a procedurally generated mesh as a .asset so prefabs keep their geometry
+        /// across domain reloads. An already-saved mesh with the same key is re-used, which
+        /// also means every wheel prefab of a given size shares one mesh instance.
+        /// </summary>
+        private static Mesh PersistGeneratedMesh(Mesh mesh, string key, string folder)
+        {
+            if (mesh == null || string.IsNullOrEmpty(key)) return mesh;
+            EnsureFolder(ASSET_ROOT + "/GridSystem");
+            EnsureFolder(folder);
+            string path = $"{folder}/{key}.asset";
+            var existing = AssetDatabase.LoadAssetAtPath<Mesh>(path);
+            if (existing != null) return existing;
+
+            AssetDatabase.CreateAsset(mesh, path);
+            return AssetDatabase.LoadAssetAtPath<Mesh>(path) ?? mesh;
         }
 
         /// <summary>

@@ -31,8 +31,13 @@ namespace VoxelEngine.Environment
     {
         private const float VoxelProbeDepth = 1.25f;
 
-        private static readonly Dictionary<int, SurfaceProfile> s_colliderCache = new Dictionary<int, SurfaceProfile>(128);
-        private static readonly Dictionary<long, SurfaceProfile> s_terrainCache = new Dictionary<long, SurfaceProfile>(256);
+        // Caches key on the objects themselves, not on instance ids: Unity 6.5 deprecated
+        // Object.GetInstanceID, and an object-keyed dictionary is also safer — an id can be
+        // recycled after a destroy and hand the next collider a stale surface.
+        private static readonly Dictionary<Collider, SurfaceProfile> s_colliderCache =
+            new Dictionary<Collider, SurfaceProfile>(128);
+        private static readonly Dictionary<(Terrain terrain, int mapX, int mapZ), SurfaceProfile> s_terrainCache =
+            new Dictionary<(Terrain, int, int), SurfaceProfile>(256);
         private static float[,,] s_alphaScratch;
         private static int s_cacheFrame = -1;
 
@@ -52,7 +57,7 @@ namespace VoxelEngine.Environment
         {
             road = null;
             var library = SurfaceProfileLibrary.Active;
-            SurfaceProfile fallback = library != null ? library.Default : SurfaceProfile.Fallback;
+            SurfaceProfile fallback = library != null ? library.Default : null;
 
             var collider = hit.collider;
             if (collider == null) return new SurfaceSample(fallback);
@@ -82,11 +87,10 @@ namespace VoxelEngine.Environment
             }
 
             // 4) Collider physics material / renderer material name.
-            int key = collider.GetInstanceID();
-            if (!s_colliderCache.TryGetValue(key, out var cached) || cached == null)
+            if (!s_colliderCache.TryGetValue(collider, out var cached) || cached == null)
             {
                 cached = ResolveCollider(library, collider, fallback);
-                s_colliderCache[key] = cached;
+                s_colliderCache[collider] = cached;
             }
             if (cached != null && cached != fallback) return new SurfaceSample(cached);
 
@@ -99,7 +103,7 @@ namespace VoxelEngine.Environment
         public static SurfaceSample SampleAt(Vector3 worldPoint, Vector3 up)
         {
             var library = SurfaceProfileLibrary.Active;
-            SurfaceProfile fallback = library != null ? library.Default : SurfaceProfile.Fallback;
+            SurfaceProfile fallback = library != null ? library.Default : null;
             RoadSurfaceUtility.TryGetRoadBelow(worldPoint, up, 1.25f, out var road);
             if (road != null && road.IsSupported)
             {
@@ -125,7 +129,7 @@ namespace VoxelEngine.Environment
             int mapX = Mathf.Clamp(Mathf.RoundToInt(u * (data.alphamapWidth - 1)), 0, Mathf.Max(0, data.alphamapWidth - 1));
             int mapZ = Mathf.Clamp(Mathf.RoundToInt(v * (data.alphamapHeight - 1)), 0, Mathf.Max(0, data.alphamapHeight - 1));
 
-            long cacheKey = ((long)terrain.GetInstanceID() << 32) ^ ((long)mapX << 16) ^ (uint)mapZ;
+            var cacheKey = (terrain, mapX, mapZ);
             if (s_terrainCache.TryGetValue(cacheKey, out var cached) && cached != null) return cached;
 
             s_alphaScratch = data.GetAlphamaps(mapX, mapZ, 1, 1);

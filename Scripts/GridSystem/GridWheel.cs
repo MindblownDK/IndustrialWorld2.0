@@ -108,6 +108,8 @@ namespace VoxelEngine.GridSystem
         private Transform _socket;
         private Transform _upperArm;
         private Transform _lowerArm;
+        private Transform _spring;
+        private Transform _damper;
         private WheelSolveState _solveState;
         private SurfaceSample _surface = SurfaceSample.Default;
         private float _cellSize = WheelTuning.ReferenceCellSize;
@@ -215,6 +217,8 @@ namespace VoxelEngine.GridSystem
             _socket = FindOrCreate(_carrier, "TireSocket", Vector3.zero);
             _upperArm = _steerPivot.Find("UpperArm");
             _lowerArm = _steerPivot.Find("LowerArm");
+            _spring = _steerPivot.Find("Spring");
+            _damper = _steerPivot.Find("Damper");
             PlaceSocket(restLength);
         }
 
@@ -472,8 +476,14 @@ namespace VoxelEngine.GridSystem
         private void UpdateArms()
         {
             if (_carrier == null) return;
-            AimArm(_upperArm, _carrier.localPosition + new Vector3(0f, Mathf.Abs(MountOffsetX) * 0.12f, 0f));
-            AimArm(_lowerArm, _carrier.localPosition);
+            Vector3 hub = _carrier.localPosition;
+            AimArm(_upperArm, hub + new Vector3(0f, Mathf.Abs(MountOffsetX) * 0.12f, 0f));
+            AimArm(_lowerArm, hub);
+            // The coil-over lands on the lower arm, slightly inboard of the knuckle, so it
+            // shortens faster than the arms swing. That is the compression the player reads.
+            Vector3 strutFoot = Vector3.Lerp(_spring != null ? _spring.localPosition : hub, hub, 0.86f);
+            AimArm(_spring, strutFoot);
+            AimArm(_damper, strutFoot);
         }
 
         private void AimArm(Transform arm, Vector3 targetLocal)

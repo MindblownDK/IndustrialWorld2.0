@@ -1,9 +1,44 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `13.0.0-dev`
+**Current Version:** `13.1.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [13.1.0-dev] Modelled Wheel Geometry and Visibly Compressing Suspension
+
+**Type:** MINOR - the wheel hub and tire are rebuilt on generated meshes instead of stacked primitives, and the suspension linkage now animates with the travel. Save-compatible: no schema, component or API change. Also carries the fix for the construction-time exception storm reported after the last setup run.
+
+**Setup crash fixed:** `SurfaceProfile.Fallback` created a ScriptableObject on first access, and the first access happened inside a MonoBehaviour field initializer (`GridWheel` initialising its surface sample). Unity forbids `ScriptableObject.CreateInstance` during construction, so every `AddComponent`, prefab save, asset import and inspector redraw threw `CreateScriptableObjectInstanceFromType is not allowed to be called from a MonoBehaviour constructor`. The fallback object is gone: a `SurfaceSample` with a null profile already means plain ground, so `SurfaceSample.Default` is now a plain struct value with neutral multipliers and no allocation of any kind. `SurfaceProfileLibrary.Default` and `SurfaceSampler` return null instead of a manufactured asset, and the display name falls back to the `SurfaceProfile.FallbackName` constant.
+
+**Generated wheel meshes:** `WheelMeshFactory` builds the wheel geometry mathematically - a lathed tire carcass with a crowned shoulder and radial tread blocks cut into the crown, a dished rim with a bolt face, a vented brake disc, a helical coil spring and a wishbone arm. Every mesh is unit-sized with the wheel axis on local X, so one mesh serves all three size classes after scaling.
+
+**Tire rebuilt:** the carcass is one lathe surface instead of a cylinder with cubes glued around it, so the tread reads as rubber on a crowned tire rather than a ring of studs. The rim is a dished bronze face with a dark bolted centre, a chromed cap and a lug ring sized to the class (8 / 10 / 12 nuts).
+
+**Hub rebuilt and animated:** the hub keeps its chassis mount and steering knuckle but now carries real upper and lower wishbones, a coil-over with a visible spring, a telescoping damper, a brake disc and a caliper. The wishbones, spring and damper are authored one unit long pointing down local X with their pivot at the chassis anchor, so `GridWheel` aims and stretches all four at the moving carrier every physics step. The strut foot sits inboard on the lower arm, which makes it shorten faster than the arms swing - the spring visibly compresses and rebounds under load instead of the wheel sliding on an invisible axis.
+
+**Meshes are baked to assets:** generated meshes get the same treatment as the generated textures. The setup tool sets `WheelMeshFactory.MeshPersister` while it builds grid prefabs and writes each mesh once to `Assets/VoxelEngineAssets/GridSystem/Meshes`. Without this a prefab would reference a runtime-only mesh and come back with empty mesh filters after a domain reload.
+
+**GitHub title:** `[13.1.0-dev] Modelled wheel geometry and visibly compressing suspension`
+
+**Manual steps:**
+1. Pull `Dev` and let Unity compile. The Console should be clear - in particular no `CreateScriptableObjectInstanceFromType` errors.
+2. `Tools -> Voxel Engine -> Voxel Engine Setup`.
+3. Run `12. Build Grid System Content` again. It rebuilds the six wheel prefabs on the new geometry; this is non-destructive, existing items, recipes and tuned values are kept.
+4. Confirm `Assets/VoxelEngineAssets/GridSystem/Meshes` now holds the generated wheel meshes, and that the hub and tire prefabs preview with geometry (not empty boxes).
+5. Play-test: place a hub, snap a tire on, and drive over a kerb. The wishbones should swing, the coil should shorten under load and extend on rebound.
+
+### [13.0.1-dev] Unity 6.5 Surface Cache API Compliance
+
+**Type:** PATCH - clears two Unity 6.5 compile errors and one warning introduced by the wheel overhaul. No behaviour, save or API change.
+
+**Instance-id free caches:** `SurfaceSampler` no longer calls the obsolete `Object.GetInstanceID`. The collider cache is keyed on the `Collider` itself and the terrain alphamap cache on a `(Terrain, mapX, mapZ)` tuple. This also removes a latent correctness bug: an instance id can be recycled after a destroy and would have handed the next collider a stale surface profile.
+
+**Deprecated lookup replaced:** the wheel hub panel's Eject Tire button now uses `FindAnyObjectByType` instead of the deprecated, ordering-dependent `FindFirstObjectByType`.
+
+**GitHub title:** `[13.0.1-dev] Unity 6.5 surface cache API compliance`
+
+**Manual steps:** none. In Unity on `Dev`, let the scripts compile and confirm the Console is clear. No Voxel Engine Setup run is required - the 13.0.0-dev steps still stand if you have not run them yet.
 
 ### [13.0.0-dev] Modular Wheel Hub and Tire Overhaul with Terrain Surface Friction Engine
 

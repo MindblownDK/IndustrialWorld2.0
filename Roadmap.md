@@ -1,9 +1,9 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `12.41.7-dev`
-**Roadmap Version:** `12.41.7-dev`
-**Date:** 2026-09-26
+**Current Version:** `13.1.0-dev`
+**Roadmap Version:** `13.1.0-dev`
+**Date:** 2026-09-27
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
@@ -29,6 +29,15 @@
 
 ## 0. Recently Done
 
+### 13.1.0-dev - Modelled Wheel Geometry and Visibly Compressing Suspension
+- **Construction-safe surfaces** (`SurfaceProfile`, `SurfaceProfileLibrary`, `SurfaceSampler`): no ScriptableObject is created on access; `SurfaceSample.Default` is a plain struct value, ending the constructor exception storm.
+- **Generated geometry** (`WheelMeshFactory`, `GridWheelMeshBuilder`): lathed tire carcass, dished rim, brake disc, coil spring and wishbone replace stacked primitives.
+- **Animated linkage** (`GridWheel`, `VoxelEngineSetupWindow`): arms, spring and damper track the carrier each step, and generated meshes are baked to assets during prefab building.
+
+### 13.0.1-dev - Unity 6.5 Surface Cache API Compliance
+- **Cache keys** (`SurfaceSampler`): collider and terrain alphamap caches drop the obsolete `GetInstanceID` in favour of object and tuple keys, removing recycled-id staleness.
+- **UI lookup** (`GridBlockUI`): Eject Tire uses `FindAnyObjectByType` instead of the deprecated ordering-dependent variant.
+
 ### 13.0.0-dev - Modular Wheel Hub and Tire Overhaul with Terrain Surface Friction Engine
 - **Two-part wheel** (`GridWheel`, `GridWheelTire`, `GridWheelMount`): hub owns suspension, steering and torque; the tire snaps onto the hub socket and owns rubber, radius and mass.
 - **Snap placement** (`GridBuilder`, `GridWheelMount`): a held tire draws its ghost on the aimed hub socket and fits there on click, with blocked reasons surfaced to the HUD.
@@ -47,21 +56,6 @@
 - **Conduit occupancy** (`PowerCable`): occupied sockets connected to another pipe ignore machine bridging.
 - **Directional alignment** (`PowerCable`): machine extensions require open socket outward normal alignment (`Dot > 0.15`).
 - **Connected structure refresh** (`BuildSystem`, `PowerCable`): placement and dismantling automatically rebuild neighboring pipe visuals.
-
-### 12.41.5-dev - Battery Balancing Transfer Throughput and Flexible Pipe Link Tolerance
-- **Battery balancing** (`PowerBattery`, `PowerNetworkManager`): 2,000 W (2 kW) I/O throughput enables rapid real-time energy transfer and equalisation.
-- **Pipe link tolerance** (`PowerCable`): 0.85m endpoint proximity bounds multi-segment pipe runs into seamless networks.
-- **Setup defaults** (`VoxelEngineSetupWindow`): 10,000 Wh battery capacity and 2,000 W standard I/O rate.
-
-### 12.41.4-dev - Pipe-on-Pipe Network Snapping, Solid Connector Interior, and Machine Face Penetration
-- **Pipe snapping** (`BuildSystem`): restored seamless socket snapping onto pipes and 4-way/6-way junctions; duplicate placement guard (< 0.25m).
-- **Solid connector mesh** (`EnergyPipeMeshBuilder`): orthonormal basis re-alignment and corrected cup wall winding order for 100% solid, opaque interior.
-- **Machine visual penetration** (`PowerCable`, `EnergyPipeMeshBuilder`): immediate endpoint overlap detection; dual conduits extend flush into machine wall.
-
-### 12.41.3-dev - Machine Power Network Bridging, Hotbar Scroll Lock, and Conduit Overlap Guard
-- **Machine power bridging** (`PowerCable`, `PowerNode`, `EnergyPipeMeshBuilder`): direct endpoint-to-collider link topology; automatic visual extension flush to machine faces.
-- **Hotbar scroll lock** (`GameUIController`): blocks hotbar slot cycling when holding V, ensuring smooth straight-pipe length scaling.
-- **Conduit overlap guard** (`BuildSystem`): prevents placing energy pipes/conduits inside existing placed conduits.
 
 ### Era Transition Feel
 

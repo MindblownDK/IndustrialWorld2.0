@@ -48,20 +48,14 @@ namespace VoxelEngine.Environment
         [Tooltip("Voxel materials that resolve to this profile.")]
         public MaterialId[] voxelMaterials = new MaterialId[0];
 
-        /// <summary>Safe fallback used when nothing is authored or the library is missing.</summary>
-        public static SurfaceProfile Fallback
-        {
-            get
-            {
-                if (s_fallback != null) return s_fallback;
-                s_fallback = CreateInstance<SurfaceProfile>();
-                s_fallback.name = "Surface_Default";
-                s_fallback.surfaceName = "Ground";
-                s_fallback.hideFlags = HideFlags.HideAndDontSave;
-                return s_fallback;
-            }
-        }
-        private static SurfaceProfile s_fallback;
+        /// <summary>
+        /// Neutral multipliers used when nothing is authored or the library is missing.
+        /// Deliberately NOT a ScriptableObject: a profile asset created on first access
+        /// could be touched from a MonoBehaviour field initializer, and Unity forbids
+        /// ScriptableObject.CreateInstance during construction. A null profile in a
+        /// SurfaceSample already means "plain ground", so no object needs to exist.
+        /// </summary>
+        public const string FallbackName = "Ground";
 
         /// <summary>
         /// Blends this profile toward another by <paramref name="t"/>. Used where two
@@ -104,13 +98,15 @@ namespace VoxelEngine.Environment
             Profile = profile; Forward = forward; Lateral = lateral; Steering = steering; Rolling = rolling;
         }
 
-        public string Name => Profile != null ? Profile.surfaceName : "Ground";
+        public string Name => Profile != null && !string.IsNullOrEmpty(Profile.surfaceName)
+            ? Profile.surfaceName : SurfaceProfile.FallbackName;
         public bool IsValid => Profile != null;
 
         /// <summary>Scales every multiplier (road wear, wetness, and other global modifiers).</summary>
         public SurfaceSample Scaled(float forward, float lateral)
             => new SurfaceSample(Profile, Forward * forward, Lateral * lateral, Steering, Rolling);
 
-        public static SurfaceSample Default => new SurfaceSample(SurfaceProfile.Fallback);
+        /// <summary>Neutral ground. A plain struct value: safe in a field initializer.</summary>
+        public static SurfaceSample Default => new SurfaceSample(null, 1f, 1f, 1f, 0.025f);
     }
 }

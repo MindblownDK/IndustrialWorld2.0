@@ -2782,7 +2782,7 @@ namespace VoxelEngine.GridSystem.UI
                 p.Add(T.StatRow("", "Grip", $"{tire.EffectiveLateral:0.00} lat · {tire.EffectiveDynamic:0.00} fwd", T.AccentCyan));
                 p.Add(T.SmallButton("Eject Tire", () =>
                 {
-                    var inventory = Object.FindFirstObjectByType<VoxelEngine.Items.Inventory>();
+                    var inventory = Object.FindAnyObjectByType<VoxelEngine.Items.Inventory>();
                     GridWheelMount.Eject(wheel, inventory);
                     VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
                 }, T.AccentAmber));

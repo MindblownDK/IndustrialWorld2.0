@@ -53,7 +53,7 @@ namespace VoxelEngine.Environment
         /// <summary>Editor tooling calls this after rebuilding the asset.</summary>
         public static void InvalidateActive() { s_active = null; s_searched = false; }
 
-        public SurfaceProfile Default => defaultProfile != null ? defaultProfile : SurfaceProfile.Fallback;
+        public SurfaceProfile Default => defaultProfile;
 
         private void OnEnable() => _built = false;
         public void Rebuild() { _built = false; Build(); }
