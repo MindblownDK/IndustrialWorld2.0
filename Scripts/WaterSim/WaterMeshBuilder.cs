@@ -38,6 +38,7 @@ namespace VoxelEngine.WaterSim
         private static Material _oilMat;
         private static Material _externalWaterMat;
         private static Material _externalOilMat;
+        private static bool _missingShaderReported;
 
         // 9.16.0 — one material slot per liquid (enum order: Water, CrudeOil,
         // RefinedOil, LiquidFuel, HeavyFuelOil, MarineGasOil, Coolant).
@@ -112,6 +113,7 @@ namespace VoxelEngine.WaterSim
             _liquidMats[1] = _externalOilMat;
             _waterMat = _externalWaterMat;
             _oilMat = _externalOilMat;
+            _missingShaderReported = false;
         }
 
         public static void Schedule(Chunk c)
@@ -210,16 +212,35 @@ namespace VoxelEngine.WaterSim
             if (_externalWaterMat != null) _liquidMats[0] = _externalWaterMat;
             if (_externalOilMat != null) _liquidMats[1] = _externalOilMat;
 
-            var sh = Shader.Find("VoxelEngine/VoxelWaterURP")
-                  ?? Shader.Find("Universal Render Pipeline/Lit")
-                  ?? Shader.Find("Standard");
+            Material runtimeTemplate = Resources.Load<Material>("VoxelEngineRuntime/VoxelWaterRuntime");
+            var sh = runtimeTemplate != null ? runtimeTemplate.shader : null;
+            if (sh == null || !sh.isSupported)
+                sh = Shader.Find("VoxelEngine/VoxelWaterURP");
+            if (sh == null || !sh.isSupported)
+                sh = Shader.Find("Universal Render Pipeline/Lit");
+            if (sh == null || !sh.isSupported)
+                sh = Shader.Find("Standard");
 
-            // 9.16.0 — every liquid gets its own material from its visual profile.
+            if (sh == null || !sh.isSupported)
+            {
+                if (!_missingShaderReported)
+                {
+                    _missingShaderReported = true;
+                    Debug.LogError("[WaterMeshBuilder] No supported liquid shader is present in this player build. Run Voxel Engine Setup step 103 and rebuild.");
+                }
+                return;
+            }
+
+            // Every liquid receives a private runtime material so its visual profile cannot
+            // mutate the build-anchor material shared through Resources.
             for (int i = 0; i < 7; i++)
             {
                 if (_liquidMats[i] != null) continue;
                 var t = (VoxelEngine.Items.LiquidType)i;
-                var mat = new Material(sh) { name = "VoxelLiquid_" + t };
+                var mat = runtimeTemplate != null && runtimeTemplate.shader == sh
+                    ? new Material(runtimeTemplate)
+                    : new Material(sh);
+                mat.name = "VoxelLiquid_" + t;
                 ConfigureTransparent(mat);
                 LiquidVisualProfile.For(t).ApplyTo(mat);
                 _liquidMats[i] = mat;

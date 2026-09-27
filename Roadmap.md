@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `13.5.3-dev`
-**Roadmap Version:** `13.5.3-dev`
+**Current Version:** `13.5.4-dev`
+**Roadmap Version:** `13.5.4-dev`
 **Date:** 2026-09-27
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 13.5.4-dev - Standalone Builds Keep Their Runtime Shaders
+- **Build-safe materials** (`CosmosBootstrap`, `SphereWorld`, `AsteroidVoxelBody`, `WaterMeshBuilder`): procedural terrain and liquids load explicit Resources materials before any named shader fallback.
+- **Shader inclusion** (`RuntimeShaderSetup`, Setup Step 103): every project rendering shader and required URP fallback receives a non-destructive material anchor under Resources.
+- **Build guard** (`RuntimeShaderBuildGuard`): a player build is refused when its terrain, water or custom-shader anchors are missing, preventing a magenta release.
+
 ### 13.5.3-dev - Editor-Only Tools Leave the Player Build
 - **Mechanic folders** (`Scripts/Editor`): setup, prefab-generation, authoring, validation, debug and inspector scripts are grouped into sixteen editor-only mechanic folders under the existing editor assembly.
 - **Build exclusion** (`WaterDiagnostics`, `GPUResidentDrawerValidator`): the last two pure diagnostic scripts leave the runtime assembly; water probing is now scheduled only during editor play-mode testing.
@@ -49,11 +54,6 @@
 - **Timber** (`TieredPieceFactory`, `TieredSurfaces`): round stock takes an explicit UV tile count so a post is one log, and wood trim is seasoned timber rather than speckled iron.
 - **Station rebuilt** (`TieredRebuildSetup`, `TieredPieceFactory`): authorship is judged by mesh origin rather than object name, so the station family stops being skipped, and the dome becomes a panelled habitat drum with a ribbed cap.
 - **Fittings and ladders** (`BuildEnums`, `TieredHatch`, `ClimbableLadder`, `PlayerInteractionTool`): Window Pane and Hatch Lid are separate placeables, and the hatch folds its ladder out into a climbable volume.
-
-### 13.4.2-dev - Hatches That Are Actually Holes
-- **Hatch openings** (`TieredPieceFactory`): deck runs are split around the floor opening instead of planking over it; stone and armoured decks were already correct.
-- **Floor collision** (`TieredPieceFactory`): the collider follows the 0.42 m slab, so feet and snapped pieces sit on the surface rather than 4 cm inside it.
-- **Tread ribs** (`TieredPieceFactory`): raised deck elements carry an explicit lift and keep positive extents, ending an inside-out rib on the sheet-metal deck.
 
 ### Era Transition Feel
 

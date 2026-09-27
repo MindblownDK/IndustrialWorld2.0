@@ -511,13 +511,22 @@ namespace VoxelEngine.Cosmos
             if (ActiveWorld.Current is SphereWorld sphere && sphere.terrainMaterial != null)
                 return _surfaceMaterial = sphere.terrainMaterial;
 
-            var shared = Resources.Load<Material>("Mat_Terrain");
+            var shared = Resources.Load<Material>("VoxelEngineRuntime/VoxelTerrainRuntime");
+            if (shared == null) shared = Resources.Load<Material>("Mat_Terrain");
             if (shared != null) return _surfaceMaterial = shared;
 
-            Shader shader = Shader.Find("VoxelEngine/VoxelTerrainURP")
-                         ?? Shader.Find("VoxelEngine/VoxelTerrainEnhanced")
-                         ?? Shader.Find("Universal Render Pipeline/Lit")
-                         ?? Shader.Find("Standard");
+            Shader shader = Shader.Find("VoxelEngine/VoxelTerrainURP");
+            if (shader == null || !shader.isSupported)
+                shader = Shader.Find("VoxelEngine/VoxelTerrainEnhanced");
+            if (shader == null || !shader.isSupported)
+                shader = Shader.Find("Universal Render Pipeline/Lit");
+            if (shader == null || !shader.isSupported)
+                shader = Shader.Find("Standard");
+            if (shader == null || !shader.isSupported)
+            {
+                Debug.LogError("[AsteroidVoxelBody] No supported terrain shader is present in this player build. Run Voxel Engine Setup step 103 and rebuild.");
+                return null;
+            }
 
             _surfaceMaterial = new Material(shader) { name = "Mat_AsteroidVoxel" };
             if (_surfaceMaterial.HasProperty("_Smoothness")) _surfaceMaterial.SetFloat("_Smoothness", 0f);

@@ -933,6 +933,18 @@ namespace VoxelEngine.EditorTools
             AddWizardButton(scroll, "102. Rebuild Construction at Size-V6\n(Bigger modules + tiered strong/weak surfaces + garage and hatch)",
                 () => VoxelEngine.EditorTools.TieredRebuildSetup.RunStep102(), 72);
 
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
+                "Step 103 anchors every runtime-created shader for standalone builds:\n" +
+                "  \u2022 Creates dedicated terrain and water materials under Resources/VoxelEngineRuntime\n" +
+                "  \u2022 Creates one build-reachable material anchor for every VoxelEngine runtime shader\n" +
+                "  \u2022 Anchors the URP Lit, Unlit and particle fallbacks used by procedural visuals\n" +
+                "  \u2022 Preserves existing material properties and repairs shader links only\n" +
+                "  \u2022 Adds a pre-build check so missing anchors fail clearly instead of shipping magenta surfaces\n" +
+                "Re-runnable and idempotent. Run once before the next standalone build.");
+            AddWizardButton(scroll, "103. Anchor Runtime Shaders for Builds\n(Terrain + water + procedural shader inclusion - Non-Destructive)",
+                () => VoxelEngine.EditorTools.RuntimeShaderSetup.RunStep103(), 64);
+
             AddSpacer(scroll, 20);
         }
 

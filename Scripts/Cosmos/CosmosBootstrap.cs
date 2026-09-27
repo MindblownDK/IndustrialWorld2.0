@@ -159,7 +159,7 @@ namespace VoxelEngine.Cosmos
             _sphereWorld = world;
             world.body = body;
             var enhancedShader = Shader.Find("VoxelEngine/VoxelTerrainEnhanced");
-            if (enhancedShader != null && terrainMaterial != null)
+            if (enhancedShader != null && enhancedShader.isSupported && terrainMaterial != null && terrainMaterial.shader != enhancedShader)
             {
                 var enhancedMat = new Material(enhancedShader) { name = "Mat_Terrain_Enhanced" };
                 if (terrainMaterial.HasProperty("_BaseColor"))
@@ -1051,7 +1051,10 @@ namespace VoxelEngine.Cosmos
         private void ResolveAssets()
         {
             if (materialRegistry == null) materialRegistry = Resources.Load<MaterialRegistry>("MaterialRegistry");
-            if (terrainMaterial == null)  terrainMaterial  = Resources.Load<Material>("Mat_Terrain");
+            if (terrainMaterial == null)
+                terrainMaterial = Resources.Load<Material>("VoxelEngineRuntime/VoxelTerrainRuntime");
+            if (terrainMaterial == null)
+                terrainMaterial = Resources.Load<Material>("Mat_Terrain");
 
 #if UNITY_EDITOR
             if (materialRegistry == null)

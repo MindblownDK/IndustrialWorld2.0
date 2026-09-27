@@ -205,14 +205,26 @@ namespace VoxelEngine.Cosmos
                                  "authored MaterialRegistry asset for designer overrides.");
                 materialRegistry = MaterialRegistry.CreateRuntimeFallback();
             }
-            if (terrainMaterial == null)  terrainMaterial  = Resources.Load<Material>("Mat_Terrain");
+            if (terrainMaterial == null)
+                terrainMaterial = Resources.Load<Material>("VoxelEngineRuntime/VoxelTerrainRuntime");
+            if (terrainMaterial == null)
+                terrainMaterial = Resources.Load<Material>("Mat_Terrain");
             if (terrainMaterial == null)
             {
-                Debug.LogWarning("[SphereWorld] No terrain material found — creating a URP-Lit fallback.");
-                var terrainShader = Shader.Find("VoxelEngine/VoxelTerrainURP")
-                                  ?? Shader.Find("VoxelEngine/VoxelTerrainEnhanced")
-                                  ?? Shader.Find("Universal Render Pipeline/Lit")
-                                  ?? Shader.Find("Standard");
+                Debug.LogWarning("[SphereWorld] No build-safe terrain material found — creating a shader fallback. Run Voxel Engine Setup step 103 before the next player build.");
+                var terrainShader = Shader.Find("VoxelEngine/VoxelTerrainURP");
+                if (terrainShader == null || !terrainShader.isSupported)
+                    terrainShader = Shader.Find("VoxelEngine/VoxelTerrainEnhanced");
+                if (terrainShader == null || !terrainShader.isSupported)
+                    terrainShader = Shader.Find("Universal Render Pipeline/Lit");
+                if (terrainShader == null || !terrainShader.isSupported)
+                    terrainShader = Shader.Find("Standard");
+                if (terrainShader == null || !terrainShader.isSupported)
+                {
+                    Debug.LogError("[SphereWorld] No supported terrain shader is present in this player build. Run Voxel Engine Setup step 103 and rebuild.");
+                    enabled = false;
+                    return;
+                }
                 terrainMaterial = new Material(terrainShader);
                 terrainMaterial.name = "Mat_Terrain_Fallback";
                 if (terrainMaterial.HasProperty("_BaseColor")) terrainMaterial.SetColor("_BaseColor", new Color(0.72f, 0.72f, 0.72f, 1f));

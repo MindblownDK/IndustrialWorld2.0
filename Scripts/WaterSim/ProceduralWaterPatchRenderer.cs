@@ -126,10 +126,23 @@ namespace VoxelEngine.WaterSim
 
         private Material CreateDefaultMaterial()
         {
-            var shader = Shader.Find("VoxelEngine/VoxelWaterURP")
-                      ?? Shader.Find("Universal Render Pipeline/Lit")
-                      ?? Shader.Find("Standard");
-            var mat = new Material(shader) { name = "ProceduralVoxelWater_Runtime" };
+            Material template = Resources.Load<Material>("VoxelEngineRuntime/VoxelWaterRuntime");
+            var shader = template != null ? template.shader : null;
+            if (shader == null || !shader.isSupported)
+                shader = Shader.Find("VoxelEngine/VoxelWaterURP");
+            if (shader == null || !shader.isSupported)
+                shader = Shader.Find("Universal Render Pipeline/Lit");
+            if (shader == null || !shader.isSupported)
+                shader = Shader.Find("Standard");
+            if (shader == null || !shader.isSupported)
+            {
+                Debug.LogError("[ProceduralWaterPatchRenderer] No supported water shader is present in this player build. Run Voxel Engine Setup step 103 and rebuild.");
+                return null;
+            }
+            var mat = template != null && template.shader == shader
+                ? new Material(template)
+                : new Material(shader);
+            mat.name = "ProceduralVoxelWater_Runtime";
             mat.SetOverrideTag("RenderType", "Transparent");
             mat.SetInt("_SrcBlend", (int)BlendMode.SrcAlpha);
             mat.SetInt("_DstBlend", (int)BlendMode.OneMinusSrcAlpha);

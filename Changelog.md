@@ -1,9 +1,30 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `13.5.3-dev`
+**Current Version:** `13.5.4-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [13.5.4-dev] Standalone Builds Keep Their Runtime Shaders
+
+**Type:** PATCH - standalone rendering and build-safety fix. No save data, gameplay API, prefab identity, item, recipe, research or balance value is changed.
+
+**Fixed - terrain and water could turn magenta only in a player build.** The gameplay scene deliberately leaves `CosmosBootstrap.terrainMaterial` empty. In the Editor, an `AssetDatabase` fallback silently found `Assets/VoxelEngineAssets/VoxelTerrain.mat`, so Play Mode looked correct. `AssetDatabase` does not exist in a player, the material was not under Resources, and the procedural terrain and liquid paths then relied on `Shader.Find`. Unity can strip shaders reached only by name, leaving the standalone player with the internal error material. The editor-tool reorganization did not move these runtime shaders; this was a pre-existing difference between the Editor and player paths.
+
+**New non-destructive Setup Step 103 anchors runtime shaders for builds.** It creates dedicated terrain and water materials under `Assets/Resources/VoxelEngineRuntime`, then creates one small material anchor for every project shader under `Assets/Scripts/Rendering` and for the URP fallbacks used by procedural visuals. Existing generated material properties are preserved; a re-run only creates a missing anchor or repairs a broken shader link.
+
+**Runtime terrain and water now load explicit Resources materials first.** `CosmosBootstrap`, `SphereWorld` and `AsteroidVoxelBody` resolve the build-safe terrain material before any named lookup. `WaterMeshBuilder` and `ProceduralWaterPatchRenderer` clone the build-safe water material before applying live liquid values, so the Resources asset is never mutated during play. Named shader lookup remains only as a hardened fallback, and a completely missing shader now produces one actionable error rather than constructing another magenta material.
+
+**A bad build is stopped before it ships.** `RuntimeShaderBuildGuard` verifies the generated terrain, water and custom-shader anchors at build start. If Step 103 has not been run, Unity refuses the build and names the missing assets instead of producing a player full of magenta surfaces.
+
+**GitHub title:** `[13.5.4-dev] Standalone builds keep their runtime shaders`
+
+**Manual steps:**
+1. Pull `Dev` and let Unity compile.
+2. Open `Tools -> Voxel Engine -> Voxel Engine Setup` and run `103. Anchor Runtime Shaders for Builds`.
+3. Read the summary dialog. It should report the terrain material, water material and shader anchors created or preserved with no missing required shader.
+4. Make a clean Windows build. The Diagnostics Data setting in the Build Profile may stay at its project default; it is unrelated to the magenta materials.
+5. Start a world and verify terrain, water, atmosphere, weather and space effects render normally. If any surface is still magenta, send the shader errors from the standalone player's `Player.log`.
 
 ### [13.5.3-dev] Editor-Only Tools Leave the Player Build
 
