@@ -862,6 +862,34 @@ namespace VoxelEngine.Player
                     return;
                 }
 
+                // The Wall Frame remains a useful handle after its shutter has
+                // rolled out of reach. Clicking either jamb or the header toggles
+                // the nearest fitted overhead door at the same opening.
+                var tieredPiece = hit.collider.GetComponentInParent<VoxelEngine.Building.Tiered.PlacedTieredBlock>();
+                if (tieredPiece != null && tieredPiece.definition != null
+                    && tieredPiece.definition.family == VoxelEngine.Building.Tiered.BuildFamily.WallFrame)
+                {
+                    var nearby = Physics.OverlapSphere(tieredPiece.transform.position, 5.5f, ~0, QueryTriggerInteraction.Collide);
+                    VoxelEngine.Building.Tiered.TieredDoor nearestGarage = null;
+                    float nearestSqr = float.MaxValue;
+                    for (int i = 0; i < nearby.Length; i++)
+                    {
+                        var garage = nearby[i] != null
+                            ? nearby[i].GetComponentInParent<VoxelEngine.Building.Tiered.TieredDoor>()
+                            : null;
+                        if (garage == null || !garage.opensUp) continue;
+                        float sqr = (garage.transform.position - tieredPiece.transform.position).sqrMagnitude;
+                        if (sqr >= nearestSqr) continue;
+                        nearestSqr = sqr;
+                        nearestGarage = garage;
+                    }
+                    if (nearestGarage != null)
+                    {
+                        nearestGarage.Toggle(transform.position);
+                        return;
+                    }
+                }
+
                 // Floor hatches answer the same key as doors: the lid swings up and
                 // the ladder unrolls through the opening.
                 var tieredHatch = hit.collider.GetComponentInParent<VoxelEngine.Building.Tiered.TieredHatch>();
@@ -1436,7 +1464,7 @@ namespace VoxelEngine.Player
 
         private bool TryRaycastIgnoringSelf(Ray ray, out RaycastHit hit, float maxDistance)
         {
-            var hits = Physics.RaycastAll(ray, maxDistance, ~0, QueryTriggerInteraction.Ignore);
+            var hits = Physics.RaycastAll(ray, maxDistance, ~0, QueryTriggerInteraction.Collide);
             System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
             Transform selfRoot = transform.root;
             for (int i = 0; i < hits.Length; i++)
@@ -1445,6 +1473,11 @@ namespace VoxelEngine.Player
                 if (candidate.collider == null) continue;
                 if (selfRoot != null && candidate.collider.transform.IsChildOf(selfRoot)) continue;
                 if (PlayerRaycastFilter.IsOwnPlayerCollider(candidate.collider, transform)) continue;
+                // Interaction rays normally ignore triggers. The one deliberate
+                // exception is the non-blocking barrel target on an open Garage Door.
+                if (candidate.collider.isTrigger
+                    && candidate.collider.GetComponentInParent<VoxelEngine.Building.Tiered.TieredDoor>() == null)
+                    continue;
                 if (IsLiquidSurfaceCollider(candidate.collider)) continue;
                 // The planet-LOD safety shell is physical ground, never an interactable /
                 // minable surface — the real terrain is the streamed voxels behind it.

@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `13.6.4-dev`
-**Roadmap Version:** `13.6.4-dev`
+**Current Version:** `13.6.5-dev`
+**Roadmap Version:** `13.6.5-dev`
 **Date:** 2026-09-27
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 13.6.5-dev - Maximum Garage Opening
+- **Two interaction surfaces** (`PlayerInteractionTool`): the rolled drum trigger and every jamb/header collider on its Wall Frame toggle the nearest fitted Garage Door.
+- **Maximum aperture** (`TieredPieceFactory`, Setup Step 102): the opening grows to 6.8 m wide by 5.05 m high, leaving only a narrow structural surround inside the 7.5 m by 5.625 m module.
+- **Matched shutter** (`TieredDoor`, `TieredPieceFactory`): the complete shutter and its collider match the aperture while the rolling calculation follows the taller door.
+
 ### 13.6.4-dev - The Rolled Shutter Remains Reachable
 - **Interaction target** (`TieredRebuildSetup`, Setup Step 102): every Garage Door receives a permanent non-blocking trigger around its header drum for closing the rolled shutter.
 - **Collider state** (`TieredDoor`): only solid shutter colliders disable after clearance; interaction triggers remain active throughout the animation.
@@ -48,11 +53,6 @@
 - **Garage motion** (`TieredDoor`, Setup Step 102): garage shutters hinge at the header and fold overhead while ordinary doors retain side-aware lateral swing.
 - **Placement clearances** (`BuildSystemV2`): occupied-root rejection remains strict while neighbouring supports no longer invalidate wall frames; roofs gain a small seating clearance.
 - **Generated surfaces** (`TieredPieceFactory`, `TieredRailing`): deck finishes and wall relief clear their backing planes, and stair railings shear along the rise while keeping every post vertical.
-
-### 13.6.0-dev - Construction Fittings and Separate Railings
-- **Ordered wheel** (`HammerBuildWheel`): structural pieces are grouped by purpose, with each door, pane and lid adjacent to its matching opening and the new Railing beside Stairs.
-- **Deterministic joins** (`BuildSystemV2`, `BuildSocketCompat`): openings accept their fittings; walls, half walls, frames, roofs, pillars, floors and stairs use authored edge, centre and height rules.
-- **Railing family** (`TieredPieceFactory`, Setup Step 102): append-only family 23 provides four generated tiers for level deck edges and sloped stair edges; stairs no longer include fixed rails or a solid underbody.
 
 ### Era Transition Feel
 

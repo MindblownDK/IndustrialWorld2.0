@@ -47,8 +47,8 @@ namespace VoxelEngine.EditorTools
         /// <summary>Door opening: wide enough for two abreast, tall enough to feel built.</summary>
         private const float DoorW = 2.60f, DoorH = 3.90f;
         /// <summary>Garage opening: a vehicle-width hole in a wall.</summary>
-        private const float GarageW = 5.00f;
-        public const float GarageH = 4.30f;
+        public const float GarageW = 6.80f;
+        public const float GarageH = 5.05f;
         /// <summary>Hatch opening in a floor slab. Public: the setup step sizes the lid hinge from it.</summary>
         public const float HatchW = 2.60f;
 
@@ -1053,7 +1053,7 @@ namespace VoxelEngine.EditorTools
                 float y = sh * (i + 0.5f);
                 m.Box(PieceSurface.Skin, new Vector3(0f, y, 0f), new Vector3(GarageW - 0.2f, sh * 0.92f, 0.13f));
                 // The separator belongs to the moving shutter, not the static frame.
-                m.Box(PieceSurface.Skin, new Vector3(0f, y + sh * 0.46f, 0.02f), new Vector3(GarageW - 0.2f, 0.05f, 0.17f));
+                m.Box(PieceSurface.Skin, new Vector3(0f, y + sh * 0.46f, 0.02f), new Vector3(GarageW, 0.05f, 0.17f));
             }
             foreach (float s in new[] { -1f, 1f })
                 m.Box(PieceSurface.Frame, new Vector3(s * (GarageW * 0.5f - 0.16f), GarageH * 0.5f, -0.09f),

@@ -1,9 +1,28 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `13.6.4-dev`
+**Current Version:** `13.6.5-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [13.6.5-dev] Maximum Garage Opening
+
+**Type:** PATCH - Garage Door interaction reach and generated opening dimensions. No save data, family value, item, recipe, research or tuned cost changes.
+
+**The rolled shutter can be toggled from both the drum and its frame.** Interaction raycasts now admit only purposeful `TieredDoor` triggers while continuing to skip every unrelated trigger. Right-clicking the rolled drum reaches its permanent header target. Right-clicking either jamb or the header of a Wall Frame searches that opening for the nearest fitted overhead Garage Door and toggles it. The lookup happens only on interaction and remains bounded to 5.5 m around the aimed frame.
+
+**The garage aperture now consumes almost the entire module.** Inside the 7.5 m wide by 5.625 m tall Wall Frame, the cutout grows from 5.0 by 4.3 m to **6.8 by 5.05 m**. That leaves a narrow 0.35 m structural side on each edge and a 0.575 m header instead of surrounding a vehicle opening with most of a wall.
+
+**The shutter exactly matches the new hole.** Slat faces, separators, bottom weather bar and solid closed collider use the full 6.8 m opening width with no former 0.2 m inset. The rolling deformation uses the new 5.05 m height, and Setup Step 102 sizes the clickable drum target from the same authored width so future dimension changes cannot desynchronise it.
+
+**GitHub title:** `[13.6.5-dev] Maximum garage opening`
+
+**Manual steps:**
+1. Pull `Dev`, let Unity compile, then run `Tools -> Voxel Engine -> Voxel Engine Setup -> 102. Rebuild Construction at Size-V6`.
+2. Place a fresh Wall Frame and Garage Door. Closed, the shutter should fill the 6.8 m by 5.05 m cutout with only the slim tracks around it.
+3. Open it fully, aim directly at the rolled drum and right-click; it must close.
+4. Open it again, aim at the left jamb, right jamb and header of the Wall Frame in turn, right-clicking each; every surface must toggle the fitted Garage Door.
+5. Confirm unrelated trigger volumes do not intercept ordinary mining, building or interaction rays.
 
 ### [13.6.4-dev] The Rolled Shutter Remains Reachable
 

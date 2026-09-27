@@ -8,7 +8,7 @@ namespace VoxelEngine.Building.Tiered
     /// <summary>Animated side-hinged door or segmented overhead garage shutter.</summary>
     public sealed class TieredDoor : MonoBehaviour
     {
-        private const float GarageHeight = 4.30f;
+        private const float GarageHeight = 5.05f;
         private const float GarageRollRadius = 0.34f;
 
         public Transform doorPivot;

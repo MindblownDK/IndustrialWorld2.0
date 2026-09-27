@@ -348,7 +348,7 @@ namespace VoxelEngine.EditorTools
                 interaction.transform.localPosition = new Vector3(0f, TieredPieceFactory.GarageH + 0.30f, 0f);
                 var trigger = interaction.AddComponent<BoxCollider>();
                 trigger.isTrigger = true;
-                trigger.size = new Vector3(5.4f, 0.85f, 0.85f);
+                trigger.size = new Vector3(TieredPieceFactory.GarageW + 0.3f, 0.85f, 0.85f);
             }
 
             var door = root.GetComponent<TieredDoor>();
