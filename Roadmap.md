@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `13.5.0-dev`
-**Roadmap Version:** `13.5.0-dev`
+**Current Version:** `13.5.2-dev`
+**Roadmap Version:** `13.5.2-dev`
 **Date:** 2026-09-27
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,16 @@
 
 ## 0. Recently Done
 
+### 13.5.2-dev - Two That Only Bite Later
+- **Re-runnable rebuild** (`TieredRebuildSetup`): the hatch ladder's mesh asset is cleared with the lid's, so a second pass of step 102 no longer overwrites a loaded asset.
+- **Curved ground** (`ClimbableLadder`): the top-of-ladder hand-back is measured in the volume's own frame instead of against a world-axis-aligned bounding box.
+
+### 13.5.1-dev - The Dome Was Yawed Ninety Degrees
+- **Dome rotation** (`TieredPieceFactory`): tangential panels, mullions, rings and cap bands were yawed by -a instead of 90 - a, and the cap lean was offset by a spurious 90 degrees.
+- **Ladder reach** (`TieredHatch`, `TieredRebuildSetup`): the ladder unrolls from a fixed origin in the hatch plane at one storey long, instead of sliding clear of the opening.
+- **Letting go** (`ClimbableLadder`): a deliberate release latches until the player leaves the volume, and reaching the top hands control back.
+- **Snapping** (`TieredRebuildSetup`, `BuildSystemV2`): walls gained half-module floor anchors, roofs and stairs gained sockets, the floor's top surface matches its slab, and the socket search radius suits a 7.5 m module.
+
 ### 13.5.0-dev - Every Box Was Inside Out
 - **Winding** (`TieredPieceFactory`): `BoxMesh` triangles were reversed against the engine's own convention, culling the near face of every box; cylinders and wedges were already correct.
 - **Timber** (`TieredPieceFactory`, `TieredSurfaces`): round stock takes an explicit UV tile count so a post is one log, and wood trim is seasoned timber rather than speckled iron.
@@ -45,18 +55,6 @@
 - **Reference-matched surfaces** (`TieredPieceFactory`): wood is boards between round framing timbers, stone gains quoined borders and finer courses, sheet metal becomes mixed salvage plates with screws, armour becomes recessed panels with vent slots.
 - **Edge-aware framing** (`TieredPieceFactory`): clad sub-panels frame only genuine outside edges, so openings read as cut rather than assembled.
 - **Tiered decks** (`TieredPieceFactory`): foundations and floors carry their own tier surface and skirt instead of one plank deck for all four.
-
-### 13.4.0-dev - Rooms You Can Stand Up In, and Walls With a Strong Side
-- **Size-V6** (`TieredPieceFactory`, `BuildSystemV2`, `TieredRebuildSetup`): 7.5 m modules and 5.625 m storeys across every hammer family, with grid, snap radius and reach raised to match.
-- **Tier surfaces** (`TieredSurfaces`, `TieredPieceFactory`): each tier is modelled with a clad exterior and a structural interior - logs/braces, masonry/rubble, corrugated scrap/L-beams, armour plate/tread - welded into combined meshes.
-- **New openings** (`BuildEnums`, `BuildPieceIcons`, `HammerBuildWheel`): Wall Frame, Garage Door and Floor Hatch appended at 18-20 with drawn icons and four tiers each.
-- **Station on the same grid** (`TieredPieceFactory`, `TieredRebuildSetup`): the orbital set is rebuilt on the structural module so the two families share seams.
-
-### 13.3.0-dev - One Dial for Every Wheel, and the Jump Drive Joins It
-- **Shared dial** (`RadialWheelController`, `RadialWheelView`): the build, conveyor, armour, pipe, road and jump wheels all run one presenter and one input model; the per-wheel ring textures, parallax and Unicode glyphs are deleted.
-- **Corrected solids and new icon sets** (`LineArtBuilder`, `MachineShapeIcons`, `JumpTargetIcons`, `IconAtlas`): isometric boxes draw their near faces, and conveyors, armour shapes, pipe fittings, road surfaces and jump destinations all have drawn marks.
-- **Jump drive dial** (`JumpDriveWheel`, `GridCockpit`): the warp key opens the twelve nearest destinations with live distance, price and reachability; the centre carries spin-up, cancel and the aimed jump.
-- **Escape ownership** (`HammerBuildWheel`): the wheel no longer swallows the Pause key, so Escape with an idle hammer opens the pause menu.
 
 ### Era Transition Feel
 

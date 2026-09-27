@@ -1,9 +1,50 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `13.5.0-dev`
+**Current Version:** `13.5.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [13.5.2-dev] Two That Only Bite Later
+
+**Type:** PATCH - two defects found on review, both in paths that look fine on a first run. No save data, no API, no cost is touched.
+
+**Fixed - re-running the rebuild collided with the ladder mesh.** Step 102 is explicitly re-runnable, and it clears each piece's mesh asset before rebuilding it. The hatch lid builds a *second* asset, the ladder, from a different code path that was never given the same treatment. The first run was clean; the second wrote over an asset that was already loaded. The ladder asset is now cleared alongside the lid's.
+
+**Fixed - the ladder's "reached the top" test assumed the world was flat.** It compared the player against a corner of the climb volume's world-space bounding box. A bounding box is axis aligned to the WORLD, but the ladder deliberately climbs along its own up vector precisely because this game has planets - so anywhere the ground is not level with the world axes, the corner is not the top of the ladder and the hand-back fires early or never at all. The top face is now transformed out of the volume's own frame, which is correct on any surface and costs nothing.
+
+**GitHub title:** `[13.5.2-dev] Two that only bite later`
+
+**Manual steps:**
+1. Pull `Dev` and let Unity compile.
+2. `Tools -> Voxel Engine -> Voxel Engine Setup` -> `102. Rebuild Construction at Size-V6`, then run it a **second** time. It should complete cleanly both times with no asset warnings in the Console.
+3. Climb a hatch ladder somewhere well away from the equator, or anywhere the ground is visibly curved, and check you are still handed onto the floor at the top.
+
+### [13.5.1-dev] The Dome Was Yawed Ninety Degrees
+
+**Type:** PATCH - four corrections to the Size-V6 construction kit. No save data, no API, no cost is touched.
+
+**Fixed - every tangential panel on the dome was rotated ninety degrees off.** A panel's local +Z has to point along the radius it sits on. Rotating +Z about Y by t gives `(sin t, 0, cos t)`, so matching a radius of `(cos a, 0, sin a)` needs **t = 90 - a**; the code used **-a**. That stands every panel on edge and fans the drum open, which is exactly what the screenshot showed. The same error was in the mullions, the banding rings and the cap bands.
+
+The cap had a second, independent error: its panels were leaned by `atan2(r0 - r1, y1 - y0) - 90`, which is neither the slope of the band nor anything near it. A band rises by `y1 - y0` while drawing in by `r1 - r0`, so the lean is `atan2(r1 - r0, y1 - y0)` with no offset. `Quaternion.Euler` applies X before Y, so the panel now tilts in its own frame and is then swung round the drum, in that order.
+
+**Fixed - the ladder hung below the hatch it came out of.** The lid animation slid the whole ladder down by half its length *as well as* unrolling it, so the top rung ended up two and a half metres under the opening with nothing bridging the gap - you could climb it, but never onto it. The ladder now unrolls from a fixed origin in the hatch plane, which is what a furled ladder does and what keeps its top rung at the lip. It is also one full storey long, so it reaches the floor it drops to, and it sits hard against the rear jamb instead of floating mid-opening.
+
+**Fixed - letting go of a ladder did nothing.** `Release` cleared the rider, and `OnTriggerStay` re-grabbed them on the very next frame: release, re-engage, release, forever. Letting go on purpose now latches until the player leaves the volume. Climbing off the top also hands control back on its own - the climb stops at the lip so you step onto the floor instead of rising into the sky.
+
+**Fixed - a storey could never be closed.** Walls carried a single Top socket at their centre line, so a floor snapped to a wall landed *centred on* the wall rather than resting beside it, and nothing lined up. Wall, Half Wall, Doorway, Wall Frame, Hull and Viewport now also carry anchors half a module to either side, which is where a floor's own edge has to land for it to sit on the wall. Roofs and Stairs had no sockets at all and now have them: neighbours and a top for roofs, a head and a foot for a flight. The plain Floor's own top surface was also still reporting the old 0.38 m slab rather than 0.42 m, so anything placed on a floor sat four centimetres low.
+
+**Foundations are easier to line up.** At a 7.5 m module a neighbour socket sits a full module from the host's centre - 3.75 m past its edge - so with a 5.5 m search radius the aim had to be threaded into empty space to find it. The radius is now 7.25 m, which reaches the socket comfortably from anywhere on the host's deck.
+
+**GitHub title:** `[13.5.1-dev] The dome was yawed ninety degrees`
+
+**Manual steps:**
+1. Pull `Dev` and let Unity compile.
+2. `Tools -> Voxel Engine -> Voxel Engine Setup` -> `102. Rebuild Construction at Size-V6`.
+3. If your scene's `BuildSystemV2` still had the 5.5 m snap radius, step 102 raises it to 7.25 m. A hand-tuned value is left alone - set it yourself if foundations still feel fussy.
+4. Place an orbital Dome: a closed panelled drum with glazed bays under a ribbed cap, not a fan of loose panels.
+5. Place a Floor Hatch, fit a Hatch Lid, open it. The top rung should be at the lip. Climb up, and you should be handed onto the floor at the top; press space part way up and you should drop off and stay off.
+6. Build a foundation, a wall on its edge, then a floor onto the wall top - the floor should land beside the wall with its edge on the wall line. Then a roof and a staircase.
 
 ### [13.5.0-dev] Every Box Was Inside Out
 

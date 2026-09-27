@@ -21,11 +21,9 @@ namespace VoxelEngine.Building.Tiered
 
         [Range(60f, 110f)] public float openAngle = 84f;
         [Min(1f)] public float turnSpeed = 7f;
-        [Min(0.5f)] public float ladderDrop = 5.2f;
 
         private Quaternion _closedRotation;
-        private Vector3 _furledScale;
-        private Vector3 _furledPosition;
+        private Vector3 _deployedScale;
         private ClimbableLadder _climb;
         private bool _open;
 
@@ -50,10 +48,12 @@ namespace VoxelEngine.Building.Tiered
 
             if (ladder != null)
             {
-                _furledPosition = ladder.localPosition;
-                _furledScale = ladder.localScale;
-                // Start furled: zero length, tucked at the hinge.
-                ladder.localScale = new Vector3(_furledScale.x, 0.02f, _furledScale.z);
+                // The ladder's authored scale IS its deployed length, and its origin
+                // sits in the hatch plane. Only the length animates: sliding the whole
+                // ladder down as well left it hanging in mid-air below the opening,
+                // with a gap you could not climb up into.
+                _deployedScale = ladder.localScale;
+                ladder.localScale = new Vector3(_deployedScale.x, 0.02f, _deployedScale.z);
                 _climb = ladder.GetComponentInChildren<ClimbableLadder>(true);
             }
             if (_climb != null) _climb.deployed = false;
@@ -71,16 +71,11 @@ namespace VoxelEngine.Building.Tiered
 
             if (ladder != null)
             {
-                // The ladder unrolls: it grows downward from the hinge rather than
-                // sliding as a rigid stick, which is what a furled rope ladder does.
-                float want = _open ? 1f : 0.02f;
+                // Unrolls downward from a fixed origin, which is what a furled
+                // ladder does and what keeps its top rung at the hatch lip.
                 var scale = ladder.localScale;
-                scale.y = Mathf.Lerp(scale.y, _furledScale.y * want, t);
+                scale.y = Mathf.Lerp(scale.y, _deployedScale.y * (_open ? 1f : 0.02f), t);
                 ladder.localScale = scale;
-
-                var pos = ladder.localPosition;
-                pos.y = Mathf.Lerp(pos.y, _furledPosition.y - (_open ? ladderDrop * 0.5f : 0f), t);
-                ladder.localPosition = pos;
             }
 
             if (_climb != null) _climb.deployed = IsDeployed;

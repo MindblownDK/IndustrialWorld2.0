@@ -130,10 +130,14 @@ namespace VoxelEngine.EditorTools
                 system.gridSize = TieredPieceFactory.Module;
                 changed = true;
             }
-            if (Mathf.Approximately(system.socketSnapRadius, 3.25f))
+            // 5.5 m was still mean at a 7.5 m module: a neighbour socket sits a
+            // full module from the host's centre, which is 3.75 m past its edge,
+            // so the aim had to be threaded into empty space to find it.
+            if (Mathf.Approximately(system.socketSnapRadius, 3.25f)
+                || Mathf.Approximately(system.socketSnapRadius, 5.5f))
             {
                 Undo.RecordObject(system, "Socket Snap Radius");
-                system.socketSnapRadius = 5.5f;
+                system.socketSnapRadius = 7.25f;
                 changed = true;
             }
             if (Mathf.Approximately(system.reach, 8f))
@@ -357,19 +361,30 @@ namespace VoxelEngine.EditorTools
             lidCollider.center = new Vector3(0f, 0.08f, -rear);
             lidCollider.size = new Vector3(TieredPieceFactory.HatchW - 0.14f, 0.18f, TieredPieceFactory.HatchW - 0.14f);
 
-            // The ladder: one metre tall at unit scale, scaled to length at runtime.
+            // The ladder is authored one metre tall hanging from its own origin, so
+            // the origin must sit IN the hatch plane and hard against the rear jamb.
+            // Its scale is the deployed length: exactly one storey, which is the
+            // distance to the floor it drops to.
             var ladder = new GameObject("Generated_Ladder");
             ladder.transform.SetParent(root.transform, false);
-            ladder.transform.localPosition = new Vector3(0f, -0.08f, rear + 0.34f);
-            ladder.transform.localScale = new Vector3(1f, 5.2f, 1f);
-            TieredPieceFactory.BuildLadder(ladder, tier, $"{Meshes}/{name}_Ladder.asset");
+            ladder.transform.localPosition = new Vector3(0f, -0.06f, rear + 0.20f);
+            ladder.transform.localScale = new Vector3(1f, TieredPieceFactory.Storey, 1f);
+            // The lid's own mesh is cleared by BuildPrefab, but the ladder is a
+            // second asset built from here and has to be cleared too, or the
+            // second run of an explicitly re-runnable step writes over an asset
+            // that is already loaded.
+            string ladderMesh = $"{Meshes}/{name}_Ladder.asset";
+            AssetDatabase.DeleteAsset(ladderMesh);
+            TieredPieceFactory.BuildLadder(ladder, tier, ladderMesh);
 
+            // Climb volume: spans the ladder exactly, so its top edge is the hatch
+            // lip and the climber is handed back to the floor on arrival.
             var volume = new GameObject("Generated_ClimbVolume");
             volume.transform.SetParent(ladder.transform, false);
-            volume.transform.localPosition = new Vector3(0f, -0.5f, 0.32f);
+            volume.transform.localPosition = new Vector3(0f, -0.5f, 0.34f);
             var trigger = volume.AddComponent<BoxCollider>();
             trigger.isTrigger = true;
-            trigger.size = new Vector3(1.3f, 1f, 0.9f);
+            trigger.size = new Vector3(1.4f, 1f, 1.0f);
             volume.AddComponent<ClimbableLadder>();
 
             var hatch = root.GetComponent<TieredHatch>();
@@ -425,6 +440,11 @@ namespace VoxelEngine.EditorTools
                     break;
 
                 case BuildFamily.Floor:
+                    Socket(SocketSide.Top, new Vector3(0f, 0.42f, 0f));
+                    Neighbours(0f);
+                    Perimeter(0.42f);
+                    break;
+
                 case BuildFamily.StationFloor:
                     Socket(SocketSide.Top, new Vector3(0f, 0.38f, 0f));
                     Neighbours(0f);
@@ -449,10 +469,18 @@ namespace VoxelEngine.EditorTools
                 case BuildFamily.HalfWall:
                 case BuildFamily.StationHull:
                 case BuildFamily.StationWindow:
-                    Socket(SocketSide.Top, new Vector3(0f, family == BuildFamily.HalfWall ? 2.8f : storey, 0f));
+                {
+                    float head = family == BuildFamily.HalfWall ? 2.8f : storey;
+                    Socket(SocketSide.Top, new Vector3(0f, head, 0f));          // stack another wall
                     Socket(SocketSide.East, new Vector3(m, 0f, 0f));
                     Socket(SocketSide.West, new Vector3(-m, 0f, 0f));
+                    // A floor rests BESIDE a wall, not centred on it: its own edge
+                    // has to land on the wall line, so the anchor sits half a module
+                    // to either side. Without these a storey never closes.
+                    Socket(SocketSide.TopNorth, new Vector3(0f, head, half), 0f);
+                    Socket(SocketSide.TopSouth, new Vector3(0f, head, -half), 180f);
                     break;
+                }
 
                 case BuildFamily.Doorway:
                 case BuildFamily.WallFrame:
@@ -461,8 +489,21 @@ namespace VoxelEngine.EditorTools
                     Socket(SocketSide.East, new Vector3(m, 0f, 0f));
                     Socket(SocketSide.West, new Vector3(-m, 0f, 0f));
                     Socket(SocketSide.Center, Vector3.zero);
+                    Socket(SocketSide.TopNorth, new Vector3(0f, storey, half), 0f);
+                    Socket(SocketSide.TopSouth, new Vector3(0f, storey, -half), 180f);
                     // Threshold anchor: stairs snap here and descend a full storey.
                     Socket(SocketSide.Bottom, Vector3.zero);
+                    break;
+
+                case BuildFamily.Roof:
+                    Neighbours(0f);
+                    Socket(SocketSide.Top, new Vector3(0f, storey, 0f));
+                    break;
+
+                case BuildFamily.Stairs:
+                    // The head of the flight: a floor or landing continues from here.
+                    Socket(SocketSide.Top, new Vector3(0f, storey, m));
+                    Socket(SocketSide.Bottom, new Vector3(0f, 0f, -m));
                     break;
 
                 case BuildFamily.Pillar:

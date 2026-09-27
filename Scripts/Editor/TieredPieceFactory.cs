@@ -964,7 +964,7 @@ namespace VoxelEngine.EditorTools
         public static void BuildLadder(GameObject root, BuildTier tier, string meshAssetPath)
         {
             var m = new PieceMesh();
-            const float width = 0.9f, rungs = 8f;
+            const float width = 0.9f, rungs = 10f;
 
             foreach (float sx in new[] { -1f, 1f })
                 m.Box(PieceSurface.Trim, new Vector3(sx * width * 0.5f, -0.5f, 0f), new Vector3(0.09f, 1f, 0.09f));
@@ -1323,7 +1323,11 @@ namespace VoxelEngine.EditorTools
                 Vector3 dir = new(Mathf.Cos(a), 0f, Mathf.Sin(a));
                 float chord = Mathf.PI * 2f * radius / segs;
                 Vector3 centre = dir * radius + new Vector3(0f, drum * 0.5f, 0f);
-                float yaw = -a * Mathf.Rad2Deg;
+                // A panel's local +Z must point along the radius. Rotating +Z about
+                // Y by t gives (sin t, 0, cos t), so matching (cos a, 0, sin a)
+                // needs t = 90 - a. Using -a instead stands every panel on edge and
+                // fans the drum open, which is exactly how the first dome looked.
+                float yaw = 90f - a * Mathf.Rad2Deg;
 
                 // Two bays face outward as a door and a viewport; the rest are hull.
                 bool door = i == 0;
@@ -1360,7 +1364,7 @@ namespace VoxelEngine.EditorTools
                 float ma = i / (float)segs * Mathf.PI * 2f;
                 Vector3 mdir = new(Mathf.Cos(ma), 0f, Mathf.Sin(ma));
                 m.Box(PieceSurface.Trim, mdir * (radius + 0.03f) + new Vector3(0f, drum * 0.5f, 0f),
-                      new Vector3(0.12f, drum, 0.22f), new Vector3(0f, -ma * Mathf.Rad2Deg, 0f));
+                      new Vector3(0.12f, drum, 0.22f), new Vector3(0f, 90f - ma * Mathf.Rad2Deg, 0f));
             }
 
             // ── Banding: skirt, waist and the lit strip under the cap ────
@@ -1386,14 +1390,17 @@ namespace VoxelEngine.EditorTools
                     Vector3 centre = dir * rm + new Vector3(0f, (y0 + y1) * 0.5f, 0f);
                     float chord = Mathf.PI * 2f * rm / segs;
                     float slab = Mathf.Sqrt((y1 - y0) * (y1 - y0) + (r0 - r1) * (r0 - r1)) * 1.05f;
-                    float tilt = Mathf.Atan2(r0 - r1, y1 - y0) * Mathf.Rad2Deg;
-                    var euler = new Vector3(0f, -a * Mathf.Rad2Deg, 0f);
+                    // Lean the panel so its local Y follows the band's slope: the
+                    // band rises by (y1 - y0) while drawing in by (r1 - r0), and
+                    // Quaternion.Euler applies X before Y, so the panel tilts in its
+                    // own frame and is then swung round the drum.
+                    float lean = Mathf.Atan2(r1 - r0, y1 - y0) * Mathf.Rad2Deg;
+                    var euler = new Vector3(lean, 90f - a * Mathf.Rad2Deg, 0f);
 
-                    // Two skylight arcs on the lower ring, hull everywhere else.
+                    // Four skylight arcs on the lower ring, hull everywhere else.
                     bool skylight = r == 0 && (i == 2 || i == 6 || i == 10 || i == 14);
                     m.Box(skylight ? PieceSurface.Glass : PieceSurface.Skin, centre,
-                          new Vector3(chord * 0.98f, slab, 0.16f),
-                          euler + new Vector3(tilt - 90f, 0f, 0f));
+                          new Vector3(chord * 0.98f, slab, 0.16f), euler);
                 }
 
                 Ring(m, PieceSurface.Trim, r1 + 0.04f, y1, 0.1f, segs);
@@ -1433,7 +1440,8 @@ namespace VoxelEngine.EditorTools
                 Vector3 dir = new(Mathf.Cos(a), 0f, Mathf.Sin(a));
                 float chord = Mathf.PI * 2f * radius / segs;
                 m.Box(surface, dir * radius + new Vector3(0f, y, 0f),
-                      new Vector3(chord * 1.02f, thickness, 0.12f), new Vector3(0f, -a * Mathf.Rad2Deg, 0f));
+                      new Vector3(chord * 1.02f, thickness, 0.12f),
+                      new Vector3(0f, 90f - a * Mathf.Rad2Deg, 0f));
             }
         }
 

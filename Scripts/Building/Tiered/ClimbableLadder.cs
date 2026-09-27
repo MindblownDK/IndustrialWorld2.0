@@ -30,6 +30,13 @@ namespace VoxelEngine.Building.Tiered
 
         private PlayerController _rider;
         private CharacterController _riderBody;
+        private BoxCollider _volume;
+        /// <summary>
+        /// Set when the climber lets go on purpose. Without it the trigger simply
+        /// re-grabs them on the very next frame, which is why jumping off did
+        /// nothing: release, re-engage, release, forever.
+        /// </summary>
+        private bool _suppressed;
 
         private void Reset()
         {
@@ -38,23 +45,26 @@ namespace VoxelEngine.Building.Tiered
             box.size = new Vector3(1.2f, 4f, 0.9f);
         }
 
+        private void Awake() => _volume = GetComponent<BoxCollider>();
+
         private void OnDisable() => Release();
         private void OnDestroy() => Release();
 
         private void OnTriggerExit(Collider other)
         {
-            if (_rider != null && other.transform.root == _rider.transform.root) Release();
+            var leaver = other.GetComponentInParent<PlayerController>();
+            if (leaver == null) return;
+            if (_rider != null && leaver == _rider) Release();
+            // Leaving the volume re-arms the ladder for that player.
+            _suppressed = false;
         }
 
         private void OnTriggerStay(Collider other)
         {
             if (!deployed) { Release(); return; }
-            if (_rider == null)
-            {
-                var candidate = other.GetComponentInParent<PlayerController>();
-                if (candidate == null) return;
-                Engage(candidate);
-            }
+            if (_suppressed || _rider != null) return;
+            var candidate = other.GetComponentInParent<PlayerController>();
+            if (candidate != null) Engage(candidate);
         }
 
         private void Engage(PlayerController player)
@@ -71,6 +81,13 @@ namespace VoxelEngine.Building.Tiered
             _riderBody = null;
         }
 
+        /// <summary>Lets go and refuses to re-grab until the player leaves the volume.</summary>
+        private void LetGo()
+        {
+            _suppressed = true;
+            Release();
+        }
+
         private void LateUpdate()
         {
             if (_rider == null) return;
@@ -78,7 +95,7 @@ namespace VoxelEngine.Building.Tiered
 
             // Jumping off is the universal escape, and it must work even if the
             // trigger exit never fires because the player clipped through it.
-            if (JumpPressed()) { Release(); return; }
+            if (JumpPressed()) { LetGo(); return; }
 
             float axis = ClimbAxis();
             // The ladder's own up, not the world's: this game has planets, and a
@@ -91,6 +108,22 @@ namespace VoxelEngine.Building.Tiered
             Vector3 normal = transform.forward;
             Vector3 offNormal = Vector3.Project(toPlane, normal);
             motion += offNormal * Mathf.Clamp01(pinStrength * Time.deltaTime);
+
+            // Climbing off the top: stop at the lip and hand control back, so the
+            // player steps onto the floor instead of rising into the sky.
+            //
+            // Measured in the volume's OWN frame. A world-space bounding box is
+            // axis aligned to the world, so on a planet - where this ladder is
+            // deliberately using its own up rather than the world's - the box
+            // corner is not the top of the ladder and the check fires early or
+            // never. Transforming the local top face across is frame-correct and
+            // costs nothing.
+            if (_volume != null && axis > 0f)
+            {
+                Vector3 top = transform.TransformPoint(
+                    _volume.center + new Vector3(0f, _volume.size.y * 0.5f, 0f));
+                if (Vector3.Dot(top - _rider.transform.position, up) <= 0.15f) { LetGo(); return; }
+            }
 
             _riderBody.Move(motion);
         }
