@@ -1,9 +1,27 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `13.5.2-dev`
+**Current Version:** `13.5.3-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [13.5.3-dev] Editor-Only Tools Leave the Player Build
+
+**Type:** PATCH - build organization only. No save data, gameplay behaviour, public runtime API, prefab content, recipe, item, research or balance value is changed.
+
+**The editor toolchain is now organized by mechanic.** All 61 existing setup, prefab-generation, authoring, validation, debug and custom-inspector scripts have moved out of the flat `Assets/Scripts/Editor` root and into named mechanic folders: Building, Combat, Core, Cosmos, Crafting, Diagnostics, Environment, Farming, GridSystem, Inspectors, Items, Navigation, Nuclear, Power, Rail and Storage. The editor assembly definition remains at the root and is still restricted to the Unity Editor, so every category inherits the same player-build exclusion.
+
+**Two remaining diagnostics no longer compile into the runtime assembly.** `GPUResidentDrawerValidator` moved from Rendering to Editor/Diagnostics and gained a manual validation menu command. `WaterDiagnostics` moved from WaterSim to Editor/Diagnostics; its expensive world-load probe is now scheduled by `EditorApplication` during play-mode testing instead of being called by `FluidManager`. Player builds therefore carry neither diagnostic class nor the water diagnostic state/tick branch.
+
+**Unity references are preserved.** Every moved script kept its existing `.meta` file and GUID. New category folders have tracked folder metadata, so the reorganization does not replace scripts or break serialized references. Runtime mesh builders and authoring fallbacks that gameplay genuinely uses remain in their runtime folders.
+
+**GitHub title:** `[13.5.3-dev] Editor-only tools leave the player build`
+
+**Manual steps:**
+1. Pull `Dev` and let Unity reimport the moved scripts and compile both `VoxelEngine` and `VoxelEngine.Editor`.
+2. Confirm the Console is clear and `Tools -> Voxel Engine -> Voxel Engine Setup` still opens.
+3. Enter Play Mode once. The water diagnostics should still report during editor testing, but they are no longer part of the runtime assembly.
+4. Optional build check: make a Development Build and confirm it contains no `VoxelEngine.Editor` assembly. No Voxel Engine Setup step needs to be run.
 
 ### [13.5.2-dev] Two That Only Bite Later
 

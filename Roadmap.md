@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `13.5.2-dev`
-**Roadmap Version:** `13.5.2-dev`
+**Current Version:** `13.5.3-dev`
+**Roadmap Version:** `13.5.3-dev`
 **Date:** 2026-09-27
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 13.5.3-dev - Editor-Only Tools Leave the Player Build
+- **Mechanic folders** (`Scripts/Editor`): setup, prefab-generation, authoring, validation, debug and inspector scripts are grouped into sixteen editor-only mechanic folders under the existing editor assembly.
+- **Build exclusion** (`WaterDiagnostics`, `GPUResidentDrawerValidator`): the last two pure diagnostic scripts leave the runtime assembly; water probing is now scheduled only during editor play-mode testing.
+- **Reference safety**: moved scripts retain their `.meta` GUIDs, while runtime mesh builders and gameplay-required authoring fallbacks stay in the player assembly.
+
 ### 13.5.2-dev - Two That Only Bite Later
 - **Re-runnable rebuild** (`TieredRebuildSetup`): the hatch ladder's mesh asset is cleared with the lid's, so a second pass of step 102 no longer overwrites a loaded asset.
 - **Curved ground** (`ClimbableLadder`): the top-of-ladder hand-back is measured in the volume's own frame instead of against a world-axis-aligned bounding box.
@@ -49,12 +54,6 @@
 - **Hatch openings** (`TieredPieceFactory`): deck runs are split around the floor opening instead of planking over it; stone and armoured decks were already correct.
 - **Floor collision** (`TieredPieceFactory`): the collider follows the 0.42 m slab, so feet and snapped pieces sit on the surface rather than 4 cm inside it.
 - **Tread ribs** (`TieredPieceFactory`): raised deck elements carry an explicit lift and keep positive extents, ending an inside-out rib on the sheet-metal deck.
-
-### 13.4.1-dev - Solid Walls, and Wood That Looks Like a Log Cabin
-- **Solidity** (`TieredPieceFactory`): every clad panel lays a full sheathing box before its relief, and stairs get a solid wedge; the see-through log wall and floating treads are gone.
-- **Reference-matched surfaces** (`TieredPieceFactory`): wood is boards between round framing timbers, stone gains quoined borders and finer courses, sheet metal becomes mixed salvage plates with screws, armour becomes recessed panels with vent slots.
-- **Edge-aware framing** (`TieredPieceFactory`): clad sub-panels frame only genuine outside edges, so openings read as cut rather than assembled.
-- **Tiered decks** (`TieredPieceFactory`): foundations and floors carry their own tier surface and skirt instead of one plank deck for all four.
 
 ### Era Transition Feel
 
