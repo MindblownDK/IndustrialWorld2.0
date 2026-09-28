@@ -11,6 +11,10 @@
 using System;
 using UnityEngine;
 using UnityEngine.UIElements;
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
+using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.Controls;
+#endif
 
 namespace VoxelEngine.UI
 {
@@ -37,6 +41,7 @@ namespace VoxelEngine.UI
         private static VoxelEngine.Player.PlayerStats _stats;
         private static VoxelEngine.Items.Inventory _inventory;
         private static Action _onSuccess;
+        private static Action _onSetDone;
         private static string _digits = "";
         private static bool _setMode;
         private static bool _pushedBlock;
@@ -69,15 +74,20 @@ namespace VoxelEngine.UI
 
             BuildKeypad();
             BuildMenu();
+
+            // Physical keys work alongside the on-screen pad: digits on the
+            // top row and the numpad, backspace erases, escape closes.
+            _overlay.schedule.Execute(PollKeyboard).Every(30);
         }
 
         // ─────────────────────────── public faces ───────────────────────────
 
-        /// <summary>Green keypad: author a fresh (or replacement) combination.</summary>
-        public static void ShowSet(VoxelEngine.Building.Tiered.CodeLock target)
+        /// <summary>Green keypad: author a fresh (or replacement) combination.
+        /// onDone fires after the code is set - e.g. to open the door behind it.</summary>
+        public static void ShowSet(VoxelEngine.Building.Tiered.CodeLock target, Action onDone = null)
         {
             if (_overlay == null || target == null) return;
-            _target = target; _setMode = true; _onSuccess = null;
+            _target = target; _setMode = true; _onSuccess = null; _onSetDone = onDone;
             _header.text = "SET NEW CODE";
             _header.style.backgroundColor = HeaderSet;
             OpenKeypad();
@@ -112,7 +122,8 @@ namespace VoxelEngine.UI
             IsOpen = false;
             _overlay.style.display = DisplayStyle.None;
             if (_pushedBlock) { UIState.PopBlock(); _pushedBlock = false; }
-            _target = null; _stats = null; _inventory = null; _onSuccess = null;
+            _target = null; _stats = null; _inventory = null;
+            _onSuccess = null; _onSetDone = null;
         }
 
         // ─────────────────────────── internals ───────────────────────────
@@ -152,7 +163,9 @@ namespace VoxelEngine.UI
                 _target.ApplyCode(_digits);
                 BuildFeedbackHud.Show("Code Lock", "Code set - locked", null,
                     new Color(0.55f, 0.80f, 0.35f));
+                var done = _onSetDone;
                 Hide();
+                done?.Invoke();
                 return;
             }
             if (_target.TryEnter(_digits))
@@ -171,6 +184,43 @@ namespace VoxelEngine.UI
             _digits = "";
             UpdateDisplay(true);
         }
+
+        private static void PollKeyboard()
+        {
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
+            if (!IsOpen) return;
+            var keyboard = Keyboard.current;
+            if (keyboard == null) return;
+            if (keyboard.escapeKey.wasPressedThisFrame)
+            {
+                UIState.PauseConsumedFrame = Time.frameCount;
+                Hide();
+                return;
+            }
+            if (_keypadPanel == null || _keypadPanel.resolvedStyle.display == DisplayStyle.None) return;
+            if (keyboard.backspaceKey.wasPressedThisFrame && _digits.Length > 0)
+            {
+                _digits = _digits.Substring(0, _digits.Length - 1);
+                UpdateDisplay(false);
+            }
+            if (Tapped(keyboard.digit0Key, keyboard.numpad0Key)) Press('0');
+            if (Tapped(keyboard.digit1Key, keyboard.numpad1Key)) Press('1');
+            if (Tapped(keyboard.digit2Key, keyboard.numpad2Key)) Press('2');
+            if (Tapped(keyboard.digit3Key, keyboard.numpad3Key)) Press('3');
+            if (Tapped(keyboard.digit4Key, keyboard.numpad4Key)) Press('4');
+            if (Tapped(keyboard.digit5Key, keyboard.numpad5Key)) Press('5');
+            if (Tapped(keyboard.digit6Key, keyboard.numpad6Key)) Press('6');
+            if (Tapped(keyboard.digit7Key, keyboard.numpad7Key)) Press('7');
+            if (Tapped(keyboard.digit8Key, keyboard.numpad8Key)) Press('8');
+            if (Tapped(keyboard.digit9Key, keyboard.numpad9Key)) Press('9');
+#endif
+        }
+
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
+        private static bool Tapped(KeyControl main, KeyControl pad)
+            => (main != null && main.wasPressedThisFrame)
+            || (pad != null && pad.wasPressedThisFrame);
+#endif
 
         private static void UpdateDisplay(bool denied)
         {

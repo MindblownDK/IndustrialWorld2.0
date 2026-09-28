@@ -403,7 +403,8 @@ namespace VoxelEngine.Building.Tiered
         public static bool IsFitting(BuildFamily family)
             => family == BuildFamily.Door || family == BuildFamily.GarageDoor
                 || family == BuildFamily.WindowPane || family == BuildFamily.HatchLid
-                || family == BuildFamily.Gate || family == BuildFamily.BigGate;
+                || family == BuildFamily.Gate || family == BuildFamily.BigGate
+                || family == BuildFamily.DoubleDoor;
 
         /// <summary>
         /// True when other armed pieces currently depend on this one: a fitting

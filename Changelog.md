@@ -1,9 +1,32 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `13.17.0-dev`
+**Current Version:** `13.18.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [13.18.0-dev] Double Doors and Keypad Polish
+
+**Type:** MINOR - new Double Door piece plus the code lock and gate feedback round. Save-compatible: one appended family.
+
+**New piece: Double Door.** Two quick door leaves that fill a Wall Frame opening - the same frame the Garage Door fits, now with a second option. Framed panels with rails and handles at the meeting stiles, swinging apart away from the opener at normal door speed, colliders on the hinges, permanent interaction target in the opening. Sits beside the Garage Door on the STRUCTURAL wheel and takes code locks like every other door.
+
+**Keypad takes real keys.** The code can now be typed on the keyboard: top-row digits and the numpad both work alongside the on-screen buttons, backspace erases a digit, escape closes the pad.
+
+**Fresh locks ask for their code.** Fitting a code lock now opens the SET NEW CODE keypad immediately. If the pad is dismissed without a code, using the door prompts for one (and opens the door once set). After that the flow is unchanged: authorized players just use the door, strangers get the keypad, and clicking the lock itself opens its settings.
+
+**Gate passage - belt and braces.** For anyone whose gates are still solid: prefabs rebuilt before the collider pass carry an old fixed box that cannot swing. TieredDoor now detects such root-level boxes at runtime and releases them once the leaves swing past a quarter open, so gateways clear even before Step 102 is re-run. Re-running Step 102 remains the real fix - it gives the leaves proper swinging colliders.
+
+**Code lock placement fixed.** The garage door lock moved to the side of the opening, so it no longer floats mid-air when the shutter is rolled up. Gate and big gate locks are now larger and mounted further off the leaf face so they read clearly at gate scale. Re-fit existing locks (remove via the lock menu, mount again) to get the new positions.
+
+**GitHub title:** `[13.18.0-dev] Double doors`
+
+**Manual steps:**
+1. Pull `Dev` and let Unity compile.
+2. Run Tools -> Voxel Engine -> Voxel Engine Setup, Step 102 once more: it authors the Double Door and rebuilds every gate/door prefab with swinging colliders.
+3. Place a Wall Frame, fit a Double Door, walk through while it swings.
+4. Walk through an open gate (both before and after re-running Step 102 - both must pass now).
+5. Fit a code lock: the keypad must open by itself; type the code on the numpad.
 
 ### [13.17.0-dev] Code Locks and Open Gateways
 

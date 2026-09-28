@@ -814,10 +814,12 @@ namespace VoxelEngine.Player
                     }
                     else
                     {
-                        VoxelEngine.Building.Tiered.CodeLock.Attach(lockHost);
+                        var fitted = VoxelEngine.Building.Tiered.CodeLock.Attach(lockHost);
                         inventory.container.Remove(stackCodeLock.item, 1);
-                        VoxelEngine.UI.BuildFeedbackHud.Show("Code Lock", "Lock fitted - set a code",
+                        VoxelEngine.UI.BuildFeedbackHud.Show("Code Lock", "Lock fitted",
                             null, new Color(0.55f, 0.80f, 0.35f));
+                        // Straight into the keypad: a freshly mounted lock wants its code.
+                        VoxelEngine.UI.CodeLockHud.ShowSet(fitted);
                     }
                     _nextHit = Time.time + 0.3f;
                     return;
@@ -1537,7 +1539,15 @@ namespace VoxelEngine.Player
             var fittedLock = pieceRoot != null
                 ? pieceRoot.GetComponentInChildren<VoxelEngine.Building.Tiered.CodeLock>()
                 : null;
-            if (fittedLock == null || fittedLock.AllowsUse) return false;
+            if (fittedLock == null) return false;
+            // A mounted lock with no combination yet prompts for one; setting
+            // it authorizes the setter and performs the blocked action.
+            if (!fittedLock.HasCode)
+            {
+                VoxelEngine.UI.CodeLockHud.ShowSet(fittedLock, onGranted);
+                return true;
+            }
+            if (fittedLock.AllowsUse) return false;
             var lockStats = inventory.GetComponent<VoxelEngine.Player.PlayerStats>();
             VoxelEngine.UI.CodeLockHud.ShowEnter(fittedLock, lockStats, onGranted);
             return true;

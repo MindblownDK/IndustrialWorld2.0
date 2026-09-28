@@ -1051,7 +1051,7 @@ namespace VoxelEngine.Building.Tiered
             // are expected neighbours; dynamic bodies remain rejected above.
             bool fitting = incoming == BuildFamily.Door || incoming == BuildFamily.GarageDoor
                 || incoming == BuildFamily.WindowPane || incoming == BuildFamily.HatchLid
-                || incoming == BuildFamily.Railing
+                || incoming == BuildFamily.Railing || incoming == BuildFamily.DoubleDoor
                 || incoming == BuildFamily.Gate || incoming == BuildFamily.BigGate;
             return socketHost != null && fitting;
         }

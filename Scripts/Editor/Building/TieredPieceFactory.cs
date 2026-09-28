@@ -446,6 +446,32 @@ namespace VoxelEngine.EditorTools
                   new Vector3(GateW + 1.5f, 0.6f, WallThick + 0.24f));   // lintel beam
         }
 
+        /// <summary>
+        /// LEFT leaf of the Wall Frame double door, built closed in place; the
+        /// setup mirrors it onto the second hinge. Framed panel with rails and
+        /// a handle at the meeting stile - a door, not a gate.
+        /// </summary>
+        private static void DoubleDoorPiece(PieceMesh m, BuildTier tier)
+        {
+            float w = GarageW - 0.16f, h = GarageH - 0.12f, thick = 0.14f;
+            float leafW = w * 0.5f - 0.05f;
+            float xc = -(leafW * 0.5f + 0.05f);
+
+            m.Box(PieceSurface.Skin, new Vector3(xc, h * 0.5f, 0f),
+                  new Vector3(leafW - 0.16f, h - 0.3f, thick));
+            // Stiles on both edges, rails top / middle / bottom.
+            foreach (float s in new[] { -1f, 1f })
+                m.Box(PieceSurface.Trim, new Vector3(xc + s * (leafW * 0.5f - 0.11f), h * 0.5f, 0f),
+                      new Vector3(0.22f, h, thick + 0.08f));
+            foreach (float t in new[] { 0.06f, 0.52f, 0.97f })
+                m.Box(PieceSurface.Trim, new Vector3(xc, h * t, 0f),
+                      new Vector3(leafW, 0.24f, thick + 0.08f));
+            // Handle bar beside the meeting stile, reachable on both faces.
+            foreach (float s in new[] { -1f, 1f })
+                m.Box(PieceSurface.Trim, new Vector3(-0.34f, h * 0.42f, s * (thick * 0.5f + 0.10f)),
+                      new Vector3(0.12f, 0.55f, 0.10f));
+        }
+
         /// <summary>Heavy swinging gate leaf: planks, three crossbars and a diagonal brace.</summary>
         private static void GateLeafPiece(PieceMesh m, BuildTier tier)
         {
@@ -1009,6 +1035,7 @@ namespace VoxelEngine.EditorTools
                 case BuildFamily.BigGateFrame:              BigGateFramePiece(m, tier); break;
                 case BuildFamily.BigGate:                   BigGateLeafPiece(m, tier); break;
                 case BuildFamily.CompoundWall:              CompoundWallPiece(m, tier); break;
+                case BuildFamily.DoubleDoor:                DoubleDoorPiece(m, tier); break;
                 default:                     Wall(m, tier); break;
             }
             m.Commit(root, tier, meshAssetPath);
@@ -1962,6 +1989,7 @@ namespace VoxelEngine.EditorTools
                 }
                 case BuildFamily.Gate:
                 case BuildFamily.BigGate:
+                case BuildFamily.DoubleDoor:
                     // The leaves carry swinging mesh colliders added on their
                     // hinges by the setup; a root box would wall the opening shut.
                     break;

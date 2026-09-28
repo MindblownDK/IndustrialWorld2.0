@@ -87,7 +87,11 @@ namespace VoxelEngine.Building.Tiered
         /// <summary>Colossal swinging gate that fits a Big Gate Frame.</summary>
         BigGate = 35,
         /// <summary>Heavy freestanding perimeter wall, gate-frame height, for compounds.</summary>
-        CompoundWall = 36
+        CompoundWall = 36,
+
+        // ── Double doors (13.18.0-dev) ──
+        /// <summary>Two quick door leaves filling a Wall Frame opening.</summary>
+        DoubleDoor = 37
     }
 
     /// <summary>
@@ -159,6 +163,7 @@ namespace VoxelEngine.Building.Tiered
             BuildFamily.StationDome     => "DOME",
             BuildFamily.WallFrame       => "WALL FRAME",
             BuildFamily.GarageDoor      => "GARAGE DOOR",
+            BuildFamily.DoubleDoor      => "DOUBLE DOOR",
             BuildFamily.FloorHatch      => "FLOOR HATCH",
             BuildFamily.WindowPane      => "WINDOW PANE",
             BuildFamily.HatchLid        => "HATCH LID",
@@ -193,6 +198,7 @@ namespace VoxelEngine.Building.Tiered
             BuildFamily.StationDome     => "A curved roof for the observation deck",
             BuildFamily.WallFrame       => "A wide opening a vehicle fits through",
             BuildFamily.GarageDoor      => "Rolls up into the drum above the frame",
+            BuildFamily.DoubleDoor      => "Two swift leaves filling a Wall Frame",
             BuildFamily.FloorHatch      => "An opening down. Fit a lid to close it",
             BuildFamily.WindowPane      => "Glazes a window frame. Fit it yourself",
             BuildFamily.HatchLid        => "Folds open and drops a ladder through",

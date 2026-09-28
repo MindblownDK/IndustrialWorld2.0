@@ -52,6 +52,7 @@ namespace VoxelEngine.Building.Tiered
 
                 case BuildFamily.WallFrame:  WallFrame(b);  break;
                 case BuildFamily.GarageDoor: GarageDoor(b); break;
+                case BuildFamily.DoubleDoor: DoubleDoor(b); break;
                 case BuildFamily.FloorHatch: FloorHatch(b); break;
                 case BuildFamily.WindowPane: WindowPane(b); break;
                 case BuildFamily.HatchLid:   HatchLid(b);   break;
@@ -203,6 +204,18 @@ namespace VoxelEngine.Building.Tiered
             // Head reveal, so the wide opening reads as punched through the wall.
             b.Line(P(0.12f * sx, 0.72f * sy, 0f), P(0.12f * sx, 0.72f * sy, sz));
             b.Line(P(0.12f * sx, 0.72f * sy, sz), P(0.88f * sx, 0.72f * sy, sz));
+        }
+
+        private static void DoubleDoor(LineArtBuilder b)
+        {
+            const float sx = 1f, sy = 0.86f, sz = 0.10f;
+            b.IsoBox(0f, 0f, 0f, sx, sy, sz);
+            // Two leaves meeting in the middle, a handle on each side of the split.
+            b.IsoFaceLine(sx, sy, 0.5f, 0.02f, 0.5f, 0.98f);
+            b.IsoFaceLine(sx, sy, 0.42f, 0.38f, 0.42f, 0.52f);
+            b.IsoFaceLine(sx, sy, 0.58f, 0.38f, 0.58f, 0.52f);
+            b.IsoFaceLine(sx, sy, 0.06f, 0.10f, 0.94f, 0.10f);
+            b.IsoFaceLine(sx, sy, 0.06f, 0.90f, 0.94f, 0.90f);
         }
 
         private static void GarageDoor(LineArtBuilder b)

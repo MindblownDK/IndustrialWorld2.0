@@ -43,7 +43,7 @@ namespace VoxelEngine.Building.Tiered
             BuildFamily.Stairs, BuildFamily.Railing,
             BuildFamily.Doorway, BuildFamily.Door,
             BuildFamily.Window, BuildFamily.WindowPane,
-            BuildFamily.WallFrame, BuildFamily.GarageDoor,
+            BuildFamily.WallFrame, BuildFamily.GarageDoor, BuildFamily.DoubleDoor,
             BuildFamily.FloorHatch, BuildFamily.HatchLid
         };
 

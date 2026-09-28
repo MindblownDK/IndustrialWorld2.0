@@ -43,7 +43,7 @@ namespace VoxelEngine.EditorTools
             BuildFamily.Stairs, BuildFamily.Railing,
             BuildFamily.Doorway, BuildFamily.Door,
             BuildFamily.Window, BuildFamily.WindowPane,
-            BuildFamily.WallFrame, BuildFamily.GarageDoor,
+            BuildFamily.WallFrame, BuildFamily.GarageDoor, BuildFamily.DoubleDoor,
             BuildFamily.FloorHatch, BuildFamily.HatchLid,
             // ── Roofing and gates (13.15.0-dev) ──
             BuildFamily.TriangularWall, BuildFamily.TriangularWallInverted,
@@ -66,6 +66,7 @@ namespace VoxelEngine.EditorTools
             BuildFamily.CornerRoof => "Corner Roof",
             BuildFamily.SlantedCornerRoofInverted => "Slanted Corner Roof (Inverted)",
             BuildFamily.PyramidRoof => "Pyramid Roof",
+            BuildFamily.DoubleDoor => "Double Door",
             BuildFamily.GateFrame => "Gate Frame",
             BuildFamily.Gate => "Gate",
             BuildFamily.BigGateFrame => "Big Gate Frame",
@@ -300,7 +301,8 @@ namespace VoxelEngine.EditorTools
                 loadState.loadFamily = family;
             }
             if (family == BuildFamily.Door || family == BuildFamily.GarageDoor
-                || family == BuildFamily.Gate || family == BuildFamily.BigGate) EnsureDoorPivot(root, family);
+                || family == BuildFamily.Gate || family == BuildFamily.BigGate
+                || family == BuildFamily.DoubleDoor) EnsureDoorPivot(root, family);
             if (family == BuildFamily.HatchLid) EnsureHatch(root, tier, name);
             if (family == BuildFamily.Railing && root.GetComponent<TieredRailing>() == null)
                 root.AddComponent<TieredRailing>();
@@ -393,7 +395,8 @@ namespace VoxelEngine.EditorTools
         private static void EnsureDoorPivot(GameObject root, BuildFamily family)
         {
             bool garage = family == BuildFamily.GarageDoor;
-            bool doubleGate = family == BuildFamily.Gate || family == BuildFamily.BigGate;
+            bool doubleGate = family == BuildFamily.Gate || family == BuildFamily.BigGate
+                || family == BuildFamily.DoubleDoor;
             var pivot = new GameObject("Generated_DoorHinge");
             pivot.transform.SetParent(root.transform, false);
             // Gates swing on a side hinge like doors, just further out.
@@ -402,6 +405,7 @@ namespace VoxelEngine.EditorTools
                 BuildFamily.Gate => -(TieredPieceFactory.GateW * 0.5f - 0.12f),
                 BuildFamily.BigGate => -(TieredPieceFactory.BigGateW * 0.5f - 0.18f),
                 BuildFamily.GarageDoor => 0f,
+                BuildFamily.DoubleDoor => -(TieredPieceFactory.GarageW * 0.5f - 0.12f),
                 _ => -1.22f,
             };
             pivot.transform.localPosition = garage
@@ -477,8 +481,12 @@ namespace VoxelEngine.EditorTools
                 // Same closing aid as the Garage Door: the leaves stop blocking
                 // while swung, so the opening keeps a permanent non-blocking
                 // target the interaction ray can always find.
-                float clearW = family == BuildFamily.Gate ? TieredPieceFactory.GateW : TieredPieceFactory.BigGateW;
-                float clearH = family == BuildFamily.Gate ? TieredPieceFactory.GateH : TieredPieceFactory.BigGateH;
+                float clearW = family == BuildFamily.Gate ? TieredPieceFactory.GateW
+                    : family == BuildFamily.DoubleDoor ? TieredPieceFactory.GarageW
+                    : TieredPieceFactory.BigGateW;
+                float clearH = family == BuildFamily.Gate ? TieredPieceFactory.GateH
+                    : family == BuildFamily.DoubleDoor ? TieredPieceFactory.GarageH
+                    : TieredPieceFactory.BigGateH;
                 var interaction = new GameObject("Generated_GateInteraction");
                 interaction.transform.SetParent(root.transform, false);
                 interaction.transform.localPosition = new Vector3(0f, clearH * 0.5f, 0f);
@@ -493,11 +501,13 @@ namespace VoxelEngine.EditorTools
             door.opensUp = garage;
             if (doubleGate)
             {
-                // Double leaves on opposing hinges, turning at a deliberate
-                // constant rate - the big gate slower still to carry its mass.
+                // Double leaves on opposing hinges. Gates turn at a deliberate
+                // constant rate - the big gate slower still to carry its mass -
+                // while the Double Door keeps the quick eased door swing.
                 door.doorPivotB = pivotB.transform;
                 door.openAngle = 105f;
-                door.degreesPerSecond = family == BuildFamily.BigGate ? 16f : 28f;
+                door.degreesPerSecond = family == BuildFamily.BigGate ? 16f
+                    : family == BuildFamily.Gate ? 28f : 0f;
             }
         }
 
@@ -747,6 +757,7 @@ namespace VoxelEngine.EditorTools
             {
                 BuildFamily.WallFrame => (4, 4, 7, 4, 4),
                 BuildFamily.GarageDoor => (2, 4, 0, 6, 5),
+                BuildFamily.DoubleDoor => (3, 4, 0, 6, 5),
                 BuildFamily.FloorHatch => (2, 4, 0, 4, 4),
                 BuildFamily.WindowPane => (0, 2, 0, 2, 2),
                 BuildFamily.HatchLid   => (1, 3, 0, 3, 3),

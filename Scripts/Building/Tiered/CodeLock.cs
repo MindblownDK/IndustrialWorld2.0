@@ -94,18 +94,27 @@ namespace VoxelEngine.Building.Tiered
             Transform parent = pieceRoot.transform;
             Vector3 pos;
             Vector3 euler = Vector3.zero;
+            float scale = 1f;
             switch (family)
             {
                 case BuildFamily.Gate:
                     parent = FindChild(pieceRoot, "Generated_DoorHinge") ?? parent;
-                    pos = new Vector3(2.05f, 1.75f, 0.30f);
+                    pos = new Vector3(2.05f, 1.85f, 0.40f);
+                    scale = 1.35f;   // gates are big; the lock reads from a distance
                     break;
                 case BuildFamily.BigGate:
                     parent = FindChild(pieceRoot, "Generated_DoorHinge") ?? parent;
-                    pos = new Vector3(5.45f, 1.95f, 0.42f);
+                    pos = new Vector3(5.40f, 2.05f, 0.55f);
+                    scale = 1.7f;
                     break;
                 case BuildFamily.GarageDoor:
-                    pos = new Vector3(2.55f, 1.45f, 0.38f);
+                    // On the side of the opening so it does not float in the
+                    // gap once the shutter has rolled up into its drum.
+                    pos = new Vector3(3.16f, 1.45f, 0.40f);
+                    break;
+                case BuildFamily.DoubleDoor:
+                    parent = FindChild(pieceRoot, "Generated_DoorHinge") ?? parent;
+                    pos = new Vector3(2.72f, 1.55f, 0.28f);
                     break;
                 case BuildFamily.HatchLid:
                     parent = FindChild(pieceRoot, "Generated_HatchPivot") ?? parent;
@@ -122,6 +131,7 @@ namespace VoxelEngine.Building.Tiered
             mount.transform.SetParent(parent, false);
             mount.transform.localPosition = pos;
             mount.transform.localRotation = Quaternion.Euler(euler);
+            mount.transform.localScale = Vector3.one * scale;
             return mount.AddComponent<CodeLock>();
         }
 

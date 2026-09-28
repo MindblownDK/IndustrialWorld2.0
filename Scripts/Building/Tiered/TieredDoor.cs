@@ -29,6 +29,7 @@ namespace VoxelEngine.Building.Tiered
         private readonly List<MeshFilter> _shutterFilters = new();
         private readonly List<Vector3[]> _closedVertices = new();
         private Collider[] _doorColliders;
+        private Collider[] _rootColliders = System.Array.Empty<Collider>();
 
         private void Awake()
         {
@@ -38,6 +39,12 @@ namespace VoxelEngine.Building.Tiered
             if (doorPivotB != null) _closedRotationB = doorPivotB.localRotation;
             _signedOpenAngle = Mathf.Abs(openAngle);
             _doorColliders = GetComponentsInChildren<Collider>(true);
+            // Colliders directly on the ROOT of a side-hinged door are the old
+            // closed-pose boxes from prefabs built before 13.17.0 - they cannot
+            // swing, so they walled open doorways shut. They stay solid while
+            // the leaf is closed and release as it opens (rebuilt prefabs carry
+            // their colliders on the hinges and leave this list empty).
+            if (!opensUp) _rootColliders = GetComponents<Collider>();
             if (opensUp) CacheShutterMeshes();
         }
 
@@ -75,6 +82,20 @@ namespace VoxelEngine.Building.Tiered
                 // passage clears physically as they part.
                 Quaternion targetB = _closedRotationB * Quaternion.Euler(0f, -angle, 0f);
                 doorPivotB.localRotation = Turn(doorPivotB.localRotation, targetB);
+            }
+
+            if (_rootColliders.Length > 0)
+            {
+                // Legacy closed-pose boxes: solid while shut, released once the
+                // leaf has swung a quarter of the way open.
+                float travelled = Quaternion.Angle(doorPivot.localRotation, _closedRotation);
+                bool solid = travelled < Mathf.Abs(_signedOpenAngle) * 0.25f;
+                for (int i = 0; i < _rootColliders.Length; i++)
+                {
+                    Collider rootCollider = _rootColliders[i];
+                    if (rootCollider != null && !rootCollider.isTrigger)
+                        rootCollider.enabled = solid;
+                }
             }
         }
 

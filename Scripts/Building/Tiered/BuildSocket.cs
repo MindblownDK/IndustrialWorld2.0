@@ -106,7 +106,7 @@ namespace VoxelEngine.Building.Tiered
             if (host == BuildFamily.Doorway && side == SocketSide.Center)
                 return incoming == BuildFamily.Door;
             if (host == BuildFamily.WallFrame && side == SocketSide.Center)
-                return incoming == BuildFamily.GarageDoor;
+                return incoming == BuildFamily.GarageDoor || incoming == BuildFamily.DoubleDoor;
             if (host == BuildFamily.Window && side == SocketSide.Center)
                 return incoming == BuildFamily.WindowPane;
             if (host == BuildFamily.FloorHatch && side == SocketSide.Center)

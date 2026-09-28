@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `13.17.0-dev`
-**Roadmap Version:** `13.17.0-dev`
+**Current Version:** `13.18.0-dev`
+**Roadmap Version:** `13.18.0-dev`
 **Date:** 2026-09-28
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,12 @@
 ---
 
 ## 0. Recently Done
+
+### 13.18.0-dev - Double Doors and Keypad Polish
+- **Double Door** (family 37): quick double leaves for the Wall Frame, on the STRUCTURAL wheel beside the Garage Door; lockable.
+- **Keypad input** (`CodeLockHud`): keyboard and numpad digits, backspace, escape.
+- **Lock flow** (`PlayerInteractionTool`, `CodeLock`): set-code keypad opens on fitting; unset locks prompt on door use; garage lock moved beside the opening; gate locks enlarged.
+- **Legacy gate passage** (`TieredDoor`): stale closed-pose root colliders release at runtime once the leaves swing open.
 
 ### 13.17.0-dev - Code Locks and Open Gateways
 - **Collider pass** (`TieredPieceFactory`, `TieredRebuildSetup`): real colliders for every 13.15.0 family - open gate frames, swinging leaf colliders, pitch-matched roof slabs, stepped triangular walls; flat Roof deck box; door boxes moved onto their hinges.
