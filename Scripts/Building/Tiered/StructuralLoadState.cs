@@ -12,10 +12,15 @@ namespace VoxelEngine.Building.Tiered
         public bool armed;
         public bool verticalPiece;
         public bool fittingPiece;
+        public bool pillarPiece;
         public PlacedTieredBlock hostPiece;
         private float _nextCheck;
 
         private const float AuditInterval = 0.3f;
+        // An unsupported piece no longer vanishes instantly: it visibly loses
+        // health for about ten seconds and then collapses, giving the player a
+        // window to see it fail and to rebuild the support under it.
+        private const float DecaySeconds = 10f;
 
         public void Arm(int span, Vector3 anchor)
         {
@@ -73,14 +78,92 @@ namespace VoxelEngine.Building.Tiered
         public void RequestImmediateAudit()
             => _nextCheck = Mathf.Min(_nextCheck, Time.time + 0.1f);
 
+        /// <summary>
+        /// Arms a Pillar: it stands while its chain reaches the ground, its base
+        /// rests on solid support, or its top hangs from a live block. A fully
+        /// detached pillar decays with the rest of the building.
+        /// </summary>
+        public void ArmPillar()
+        {
+            loadFamily = BuildFamily.Pillar;
+            pillarPiece = true;
+            armed = true;
+            _nextCheck = Time.time + AuditInterval;
+        }
+
         private void Update()
         {
             if (!armed || Time.time < _nextCheck) return;
             _nextCheck = Time.time + AuditInterval;
             bool stands = fittingPiece ? hostPiece != null
+                : pillarPiece ? HasPillarSupport()
                 : verticalPiece ? HasBase()
                 : HasLoadPath();
-            if (!stands) Destroy(gameObject);
+            if (stands) return;
+            DecayTick();
+        }
+
+        /// <summary>Unsupported: drain health each audit tick, collapse at zero.</summary>
+        private void DecayTick()
+        {
+            var own = GetComponent<PlacedTieredBlock>();
+            if (own == null || own.definition == null) { Destroy(gameObject); return; }
+            int maximum = Mathf.Max(1, own.definition.GetStats(own.tier).hp);
+            own.hp -= Mathf.Max(1, Mathf.CeilToInt(maximum * (AuditInterval / DecaySeconds)));
+            if (own.hp <= 0) { Destroy(gameObject); return; }
+            VoxelEngine.Thermal.BlockDamageVisual.ReportDamage(own,
+                1f - Mathf.Clamp01(own.hp / (float)maximum));
+        }
+
+        /// <summary>
+        /// A pillar stands while (a) its pillar chain reaches the ground, (b) its
+        /// base rests on terrain, a Foundation, a wall line or a live deck - but
+        /// never on another hanging pillar, or two detached pillars would hold
+        /// each other up forever - or (c) its top hangs from any live block, the
+        /// deliberate hanging-chain build.
+        /// </summary>
+        private bool HasPillarSupport()
+        {
+            var own = GetComponent<PlacedTieredBlock>();
+            if (own == null || own.definition == null) return true;
+            if (TryGetComponent<AdjustablePillar>(out var pillar) && pillar.IsSupportGrounded())
+                return true;
+
+            // (b) base contact, excluding pillars (the chain check owns those).
+            var below = Physics.OverlapBox(transform.position - transform.up * 0.15f,
+                new Vector3(0.6f, 0.25f, 0.6f), transform.rotation, ~0, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < below.Length; i++)
+            {
+                Collider collider = below[i];
+                if (collider == null || collider.transform.IsChildOf(transform)) continue;
+                if (BuildSystemV2.IsDynamicBody(collider)) continue;
+                var block = collider.GetComponentInParent<PlacedTieredBlock>();
+                if (block == null) return true; // terrain or static world surface
+                if (block == own || block.definition == null) continue;
+                BuildFamily family = block.definition.family;
+                if (block.GetComponent<AdjustablePillar>() != null || family == BuildFamily.Pillar) continue;
+                if (family == BuildFamily.Foundation
+                    || family == BuildFamily.Floor || family == BuildFamily.FloorHatch
+                    || family == BuildFamily.Stairs) return true;
+                if (IsVerticalSupport(family)
+                    && (TryResolveSupportBase(block, out var deck) || deck != null))
+                    return true;
+            }
+
+            // (c) hanging from a live block above.
+            float height = pillar != null ? pillar.currentHeight : 5.625f;
+            var above = Physics.OverlapBox(transform.position + transform.up * (height + 0.1f),
+                new Vector3(0.5f, 0.3f, 0.5f), transform.rotation, ~0, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < above.Length; i++)
+            {
+                Collider collider = above[i];
+                if (collider == null || collider.transform.IsChildOf(transform)) continue;
+                if (BuildSystemV2.IsDynamicBody(collider)) continue;
+                var block = collider.GetComponentInParent<PlacedTieredBlock>();
+                if (block == own) continue;
+                return true; // any live block or overhanging surface holds the top
+            }
+            return false;
         }
 
         /// <summary>A vertical piece stands while anything carries its base line.</summary>
@@ -269,7 +352,12 @@ namespace VoxelEngine.Building.Tiered
             Vector3 delta = transform.position - top;
             float vertical = Mathf.Abs(Vector3.Dot(delta, support.transform.up));
             Vector3 planar = delta - support.transform.up * Vector3.Dot(delta, support.transform.up);
-            float reach = suspendedFamily == BuildFamily.Roof ? 5.8f : 5.5f;
+            // A deck rests ON a pillar or wall top, but hangs one full module off
+            // a Foundation SIDE - placement grants span one at exactly that
+            // geometry, so the audit must reach it too or the deck it just
+            // allowed is destroyed on the first check.
+            float reach = suspendedFamily == BuildFamily.Roof ? 5.8f
+                : support.definition.family == BuildFamily.Foundation ? 8.1f : 5.5f;
             return vertical < 0.85f && planar.sqrMagnitude <= reach * reach;
         }
 
@@ -321,6 +409,20 @@ namespace VoxelEngine.Building.Tiered
                 if (load.fittingPiece)
                 {
                     if (load.hostPiece == piece) return true;
+                    continue;
+                }
+
+                // A hanging pillar depends on the block its top touches.
+                if (load.pillarPiece)
+                {
+                    var blockPillar = block.GetComponent<AdjustablePillar>();
+                    if (blockPillar != null && blockPillar.IsSupportGrounded()) continue;
+                    float blockHeight = blockPillar != null ? blockPillar.currentHeight : 5.625f;
+                    var tops = Physics.OverlapBox(
+                        block.transform.position + block.transform.up * (blockHeight + 0.1f),
+                        new Vector3(0.5f, 0.3f, 0.5f), block.transform.rotation, ~0, QueryTriggerInteraction.Ignore);
+                    for (int c = 0; c < tops.Length; c++)
+                        if (tops[c] != null && tops[c].transform.IsChildOf(piece.transform)) return true;
                     continue;
                 }
 

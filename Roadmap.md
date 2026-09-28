@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `13.12.0-dev`
-**Roadmap Version:** `13.12.0-dev`
+**Current Version:** `13.13.0-dev`
+**Roadmap Version:** `13.13.0-dev`
 **Date:** 2026-09-28
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 13.13.0-dev - Decay Before the Fall
+- **Foundation adoption fix** (`StructuralLoadState`): the audit reaches 8.1 m for Foundation supports, so a floor hung off a foundation side is adopted instead of destroyed on the first check.
+- **Decay collapse** (`StructuralLoadState`): unsupported pieces drain health with crack visuals for about ten seconds before falling; rebuilding the support mid-decay stops it.
+- **Pillar collapse** (`BuildSystemV2`, `StructuralLoadState`): a pillar stands only via a grounded chain, solid base contact or a live block at its top; fully detached pillars decay, and two detached pillars can never hold each other up.
+
 ### 13.12.0-dev - Fittings Fall With Their Frames
 - **Fitting collapse** (`BuildSystemV2`, `StructuralLoadState`): doors, garage doors, window panes and hatch lids are armed against their host frame and fall with it; frame upgrades re-point the fitting.
 - **Load-bearing readout** (`WorldInspectionHud`, `StructuralLoadState`): the top-left inspection card flags LOAD-BEARING when armed pieces depend on the target - hosted fittings, standing walls or railings, hanging decks or relayed cantilevers.
@@ -43,16 +48,6 @@
 - **Base probe** (`StructuralLoadState`): the wall support-base check uses an overlap box straddling the root line instead of a thin ray that grazed deck-edge colliders.
 - **Priority order**: terrain/Foundation/grounded pillar ground the wall; armed decks pass their best span through; only deck families count as legacy-stable.
 - **Behaviour**: the span-two wall refusal and the audit remain exploit-safe and unchanged.
-
-### 13.10.2-dev - Corner Pillars and Flush Joints
-- **Corner snap** (`BuildSystemV2`): a Floor on a Pillar hangs its 90-degree corner on the pillar and extends diagonally toward the builder, matching the under-deck corner anchors.
-- **Pillar-adjacent joins** (`BuildSystemV2`): aiming at a pillar resolves against the deck it carries, and pillar neighbours never veto the placement overlap check.
-- **Behaviour**: support spans, audits and costs are unchanged.
-
-### 13.10.1-dev - Grounded Supports Win the Audit
-- **Audit ordering** (`StructuralLoadState`): direct grounded supports are adopted before the deck-neighbour relay, so a new pillar under a span-two floor reliably resets it.
-- **Wall support base** (`StructuralLoadState`, `BuildSystemV2`): a wall on a suspended deck is a pass-through continuing that deck's span plus one, closing the infinite wall-on-floor ladder.
-- **Legacy safety**: unarmed restored decks count as stable, so older bases build exactly as before.
 
 ### Era Transition Feel
 

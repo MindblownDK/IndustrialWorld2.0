@@ -979,6 +979,8 @@ namespace VoxelEngine.Building.Tiered
                 go.AddComponent<StructuralLoadState>().ArmFitting(_ghostHost, def.family);
             else if (load == null && RequiresBaseAudit(def.family))
                 go.AddComponent<StructuralLoadState>().ArmVertical(def.family);
+            else if (load == null && (pillar != null || def.family == BuildFamily.Pillar))
+                go.AddComponent<StructuralLoadState>().ArmPillar();
             TagStationPiece(go, def);
             // Satisfying placement thunk at the build location.
             VoxelEngine.FX.AudioManager.PlayAt(
@@ -1012,6 +1014,7 @@ namespace VoxelEngine.Building.Tiered
             Vector3 oldAnchor = oldLoad != null ? oldLoad.supportAnchor : Vector3.zero;
             bool oldVertical = oldLoad != null && oldLoad.armed && oldLoad.verticalPiece;
             bool oldFitting = oldLoad != null && oldLoad.armed && oldLoad.fittingPiece;
+            bool oldPillarAudit = oldLoad != null && oldLoad.armed && oldLoad.pillarPiece;
             PlacedTieredBlock oldHost = oldFitting ? oldLoad.hostPiece : null;
 
             // Upgrading a frame rebuilds its GameObject; any fitting armed against
@@ -1045,6 +1048,11 @@ namespace VoxelEngine.Building.Tiered
             {
                 if (newLoad == null) newLoad = go.AddComponent<StructuralLoadState>();
                 newLoad.ArmFitting(oldHost, def.family);
+            }
+            else if (oldPillarAudit)
+            {
+                if (newLoad == null) newLoad = go.AddComponent<StructuralLoadState>();
+                newLoad.ArmPillar();
             }
             for (int i = 0; i < dependentFittings.Count; i++)
                 if (dependentFittings[i] != null) dependentFittings[i].hostPiece = pb;

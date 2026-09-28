@@ -1,9 +1,30 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `13.12.0-dev`
+**Current Version:** `13.13.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [13.13.0-dev] Decay Before the Fall
+
+**Type:** MINOR - ten-second decay collapse, detached pillars join the collapse system, and a floor-beside-foundation audit fix. Save-compatible: no schema, prefab asset, item, recipe, research or cost change.
+
+**Fixed: a floor placed beside a foundation no longer self-destructs.** A deck rests ON a pillar or wall top, but hangs one full module off a Foundation SIDE - placement grants span one at exactly that geometry, yet the audit's adoption reach stopped at 5.5 m, so the foundation 7.5 m away was never adopted and the audit destroyed the deck it had just allowed. Foundation supports now use an 8.1 m adoption reach, matching placement precisely; pillar and wall reach is unchanged, so no span rule loosens anywhere else.
+
+**Unsupported pieces decay for about ten seconds before collapsing.** Losing a load path no longer deletes a piece instantly: it drains health each audit tick with the standard crack visuals and collapses when health reaches zero - roughly ten seconds from full health, sooner for a piece already battle-damaged. Rebuilding the support during the window stops the decay where it stands (the lost health stays lost until the piece is upgraded). Chains therefore fail progressively: each piece starts decaying the moment its own carrier is gone.
+
+**Detached pillars collapse with the building.** A pillar now stands only while its chain reaches the ground, its base rests on terrain, a Foundation, a wall line or a live deck, or its top hangs from a live block - the deliberate hanging-chain build. A pillar with none of these decays like everything else. Two detached pillars can never hold each other up: base contact deliberately ignores other pillars, and only the grounded-chain check can ground a stack. The inspection card also reads hanging pillars correctly: a deck a pillar hangs from shows LOAD-BEARING.
+
+**Compatibility.** Arming remains unpersisted: pillars placed before this patch or restored from a save never self-collapse. Structural decay refunds nothing; hammer demolition still refunds half.
+
+**GitHub title:** `[13.13.0-dev] Decay before the fall`
+
+**Manual steps:**
+1. Pull `Dev` and let Unity compile. No Setup step is required.
+2. Place a Foundation, then a Floor off each of its four sides: every floor must stay, survive the audit and accept walls.
+3. Demolish a wall under a floor: the floor cracks progressively for about ten seconds, then falls. Rebuild the wall mid-decay: the floor survives with its damage frozen.
+4. Place a grounded pillar with a floor on top, then mine the terrain out from under the pillar: floor and pillar both decay and fall.
+5. Hang a pillar under a supported floor: it stays. Demolish that floor: the pillar decays and falls after it.
 
 ### [13.12.0-dev] Fittings Fall With Their Frames
 
