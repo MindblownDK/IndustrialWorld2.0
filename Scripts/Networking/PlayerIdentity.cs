@@ -53,6 +53,10 @@ namespace VoxelEngine.Networking
                 _localName = string.IsNullOrEmpty(value) ? "Crusader" : value.Trim();
                 PlayerPrefs.SetString(NameKey, _localName);
                 PlayerPrefs.Save();
+                // The roster entry is live, not a snapshot - and when online,
+                // the server updates our avatar's name for everyone.
+                NetworkSession.UpdateDisplayName(LocalId, _localName);
+                if (NetworkBootstrap.Instance != null) NetworkBootstrap.Instance.AnnounceLocalName();
             }
         }
     }

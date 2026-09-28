@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.1.1-dev`
-**Roadmap Version:** `14.1.1-dev`
+**Current Version:** `14.1.2-dev`
+**Roadmap Version:** `14.1.2-dev`
 **Date:** 2026-09-28
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,11 @@
 ---
 
 ## 0. Recently Done
+
+### 14.1.2-dev - Names That Actually Show Up
+- **Identity delivery fixed** (`NetworkBootstrap`, `PlayerAvatar`): avatar identity is applied after spawn and all consumers react to SyncVar changes - nameplates and rosters can no longer miss a late-arriving name.
+- **Live rename** (`PlayerIdentity`, pause menu): the name field works offline AND in-session; changes propagate to every player's roster and nameplate.
+- **Roadmap**: proximity voice chat added as milestone 6, before dedicated servers.
 
 ### 14.1.0-dev - Multiplayer Foundation, Part 2
 - **Fish-Net bridge** (`NetworkBootstrap`, verified against Fish-Net 4.7.3): listen-server host/join, identity handshake keyed by player id, `NetworkSession` driven by real connections.
@@ -89,7 +94,8 @@ These decisions are settled. Every future system is designed against them.
 3. **Building sync:** all placement/upgrade/removal flows route through server RPCs in `BuildSystemV2` / `PlacedTieredBlock`; structural audits (`StructuralLoadState`) run server-side only; results replicate.
 4. **World sync:** voxel chunk edit replication + join-in-progress chunk streaming (the long pole - design payloads early, delta edits not full chunks).
 5. **Simulation sync:** machines, power, fluids, conveyors run server-side; clients render replicated state.
-6. **Dedicated server:** headless build target, server-side persistence, no local player assumptions anywhere in boot code.
+6. **Proximity chat:** positional voice between nearby players - microphone capture, compressed frames relayed through the server, 3D-spatialized playback with distance falloff (whisper-to-shout range like the survival genre expects); muted-player list keyed by player id. Decide build-vs-buy when the milestone starts: a Fish-Net-integrated voice asset (e.g. Dissonance) versus a custom mic -> Opus -> broadcast pipeline riding the existing `NetworkBootstrap` handshake. Optional text chat falls out of the same relay for near-free.
+7. **Dedicated server:** headless build target, server-side persistence, no local player assumptions anywhere in boot code.
 
 ### MP-Readiness Checklist (apply to EVERY new system from now on)
 - **One authority entry point** per gameplay action (a single method that will become the server RPC). No gameplay mutations from UI code - UI raises intents.

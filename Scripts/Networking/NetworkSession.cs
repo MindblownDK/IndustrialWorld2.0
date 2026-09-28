@@ -85,6 +85,15 @@ namespace VoxelEngine.Networking
             PlayerLeft?.Invoke(presence);
         }
 
+        /// <summary>Renames an already-registered presence (identity layer and
+        /// avatars call this; no-op if the player is unknown or the name empty).</summary>
+        public static void UpdateDisplayName(string playerId, string displayName)
+        {
+            if (string.IsNullOrEmpty(playerId) || string.IsNullOrEmpty(displayName)) return;
+            if (_players.TryGetValue(playerId, out var presence))
+                presence.displayName = displayName;
+        }
+
         private static void EnsureLocalPlayer()
         {
             if (_localRegistered && _players.ContainsKey(LocalPlayerId)) return;

@@ -1,9 +1,30 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.1.1-dev`
+**Current Version:** `14.1.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.1.2-dev] Player Names That Actually Show Up
+
+**Type:** PATCH - fixes the missing player names from the first host/join test, adds live rename, and puts proximity chat on the roadmap.
+
+**Root cause of the missing names:** 14.1.0 baked the identity into the avatar's SyncVars BEFORE the server spawned it, and read them exactly once in `OnStartClient`. Values written before spawn can be treated as defaults and delivered late or never - so the roster registration saw an empty id (and skipped, correctly), and the nameplate kept its placeholder. Two rules fix it for good:
+- **`NetworkBootstrap`** now spawns first and applies the identity AFTER - post-spawn SyncVar writes replicate as ordinary reliable updates to current observers and ride the spawn payload for late joiners.
+- **`PlayerAvatar`** no longer reads identity once; it reacts to the SyncVars - registration happens the moment the player id lands (spawn payload or later update), nameplates and roster names follow every name change. Unregistration always removes exactly the id that was registered.
+
+**Live rename, everywhere.** The 14.1.0 roster entry was a one-time snapshot - renaming never updated it. Now:
+- `PlayerIdentity.LocalName` pushes changes into the local roster (`NetworkSession.UpdateDisplayName`) and, when online, re-announces the identity; the server updates that player's avatar name for everyone (`ServerSetName`).
+- The pause menu name field now shows both offline and in-session, and commits on Enter/blur instead of broadcasting every keystroke.
+
+**Roadmap: proximity voice chat is now milestone 6**, before dedicated servers - positional voice with distance falloff, relayed through the server, muted-list keyed by player id; build-vs-buy decision (Fish-Net-integrated voice asset vs custom mic-to-Opus pipeline) when the milestone starts.
+
+**GitHub title:** `[14.1.2-dev] Player names sync fix`
+
+**Manual steps:**
+1. Pull `Dev`, recompile. No setup steps - the avatar prefab and scene wiring from Step 105 are untouched.
+2. Retest host/join: both machines should now show BOTH players in the pause menu roster (yours marked "(you)") and the correct name above the other player's head.
+3. While connected, change your name in the multiplayer tab and press Enter: your roster updates instantly, and within a moment the other machine's roster and your nameplate over there update too.
 
 ### [14.1.1-dev] Fix: Fish-Net Assembly References
 

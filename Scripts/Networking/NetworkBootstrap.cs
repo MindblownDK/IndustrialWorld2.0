@@ -168,7 +168,15 @@ namespace VoxelEngine.Networking
         {
             if (!_serverStarted || connection == null) return;
             if (string.IsNullOrEmpty(msg.PlayerId)) return;
-            if (_avatarsByConnection.ContainsKey(connection.ClientId)) return;
+
+            // Already spawned? Then this is a rename - update for everyone.
+            if (_avatarsByConnection.TryGetValue(connection.ClientId, out var existing))
+            {
+                var existingAvatar = existing != null ? existing.GetComponent<PlayerAvatar>() : null;
+                if (existingAvatar != null) existingAvatar.ServerSetName(msg.PlayerName);
+                return;
+            }
+
             if (avatarPrefab == null)
             {
                 Debug.LogError("[NetworkBootstrap] No avatar prefab assigned - run Setup Step 105 in this scene.");
@@ -176,10 +184,28 @@ namespace VoxelEngine.Networking
             }
 
             NetworkObject nob = Instantiate(avatarPrefab);
-            var avatar = nob.GetComponent<PlayerAvatar>();
-            if (avatar != null) avatar.SetIdentity(msg.PlayerId, msg.PlayerName);
             _networkManager.ServerManager.Spawn(nob, connection);
             _avatarsByConnection[connection.ClientId] = nob;
+
+            // Identity is applied AFTER Spawn: set post-spawn, SyncVars
+            // replicate as ordinary reliable updates to current observers and
+            // ride the spawn payload for late joiners. Values written before
+            // Spawn can be treated as defaults and never delivered - that was
+            // the 14.1.0 missing-names bug.
+            var avatar = nob.GetComponent<PlayerAvatar>();
+            if (avatar != null) avatar.SetIdentity(msg.PlayerId, msg.PlayerName);
+        }
+
+        /// <summary>Re-announce the local identity (e.g. after a rename) so
+        /// the server updates this player's avatar for everyone.</summary>
+        public void AnnounceLocalName()
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(new IdentityBroadcast
+            {
+                PlayerId = PlayerIdentity.LocalId,
+                PlayerName = PlayerIdentity.LocalName
+            });
         }
 
         private void OnRemoteConnectionState(NetworkConnection connection, RemoteConnectionStateArgs args)

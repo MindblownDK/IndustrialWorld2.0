@@ -234,16 +234,18 @@ namespace VoxelEngine.Menu
             panel.Add(status);
             panel.Add(T.Spacer(10));
 
+            // Renames apply live: locally at once, to everyone via the server.
+            panel.Add(T.Muted("YOUR NAME"));
+            var nameField = MpField(VoxelEngine.Networking.PlayerIdentity.LocalName);
+            nameField.isDelayed = true;   // commit on Enter/blur, not every keystroke
+            nameField.RegisterValueChangedCallback(evt =>
+                VoxelEngine.Networking.PlayerIdentity.LocalName = evt.newValue);
+            panel.Add(nameField);
+            panel.Add(T.Spacer(14));
+
             Label playersLabel = null;
             if (!online)
             {
-                panel.Add(T.Muted("YOUR NAME"));
-                var nameField = MpField(VoxelEngine.Networking.PlayerIdentity.LocalName);
-                nameField.RegisterValueChangedCallback(evt =>
-                    VoxelEngine.Networking.PlayerIdentity.LocalName = evt.newValue);
-                panel.Add(nameField);
-                panel.Add(T.Spacer(14));
-
                 panel.Add(PrimaryBtn("◈   HOST THIS WORLD", () =>
                 {
                     ReleaseFreezeForSession();
