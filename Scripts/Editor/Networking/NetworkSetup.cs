@@ -118,13 +118,16 @@ namespace VoxelEngine.EditorTools
         }
 
         /// <summary>Reconnects missing components/references on an existing
-        /// prefab without touching anything that is already set up.</summary>
+        /// prefab without touching anything that is already set up. Missing
+        /// scripts (e.g. after a Fish-Net reimport changed script GUIDs) are
+        /// stripped first - Unity refuses to save a prefab containing them -
+        /// and the required components are re-added right after.</summary>
         private static void RepairPrefab()
         {
             var root = PrefabUtility.LoadPrefabContents(PrefabPath);
             try
             {
-                bool dirty = false;
+                bool dirty = RemoveMissingScripts(root);
                 if (root.GetComponent<NetworkObject>() == null) { root.AddComponent<NetworkObject>(); dirty = true; }
                 if (root.GetComponent<NetworkTransform>() == null) { root.AddComponent<NetworkTransform>(); dirty = true; }
                 var avatar = root.GetComponent<PlayerAvatar>();
@@ -142,25 +145,37 @@ namespace VoxelEngine.EditorTools
             }
         }
 
+        /// <summary>Removes every component whose script no longer resolves,
+        /// on the object and all children. Returns true if any were removed.</summary>
+        private static bool RemoveMissingScripts(GameObject root)
+        {
+            int removed = 0;
+            foreach (var t in root.GetComponentsInChildren<Transform>(true))
+                removed += GameObjectUtility.RemoveMonoBehavioursWithMissingScript(t.gameObject);
+            if (removed > 0)
+                Debug.Log($"[NetworkSetup] Removed {removed} missing-script component(s) from '{root.name}' and re-added the required ones.");
+            return removed > 0;
+        }
+
         // ─────────────────────────── scene wiring ───────────────────────────
 
         private static bool EnsureSceneNetworkObject(NetworkObject prefabNob)
         {
             bool dirty = false;
 
+            // Prefer the real component; fall back to the object by name so a
+            // GUID breakage never leaves a broken 'Network' object behind and
+            // a duplicate beside it.
             var manager = Object.FindFirstObjectByType<NetworkManager>(FindObjectsInactive.Include);
-            GameObject go;
-            if (manager == null)
+            GameObject go = manager != null ? manager.gameObject : GameObject.Find("Network");
+            if (go == null)
             {
                 go = new GameObject("Network");
-                go.AddComponent<NetworkManager>();
                 dirty = true;
             }
-            else
-            {
-                go = manager.gameObject;
-            }
 
+            if (RemoveMissingScripts(go)) dirty = true;
+            if (go.GetComponent<NetworkManager>() == null) { go.AddComponent<NetworkManager>(); dirty = true; }
             if (go.GetComponent<Tugboat>() == null) { go.AddComponent<Tugboat>(); dirty = true; }
 
             var bootstrap = go.GetComponent<NetworkBootstrap>();

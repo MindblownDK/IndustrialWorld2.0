@@ -1,9 +1,27 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.1.2-dev`
+**Current Version:** `14.1.3-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.1.3-dev] Step 105 Self-Heals Broken Prefabs
+
+**Type:** PATCH - editor tooling fix, no runtime changes.
+
+**Step 105 failed with "You are trying to save a Prefab with a missing script."** That happens when a script GUID stops resolving - typically after Fish-Net (or any package) is reimported, moved or cleaned: components on the avatar prefab keep pointing at the old script ids, and Unity refuses to save a prefab containing missing scripts.
+
+**Step 105 now heals this on its own** (`NetworkSetup`):
+- The prefab repair strips every missing-script component from the avatar prefab (root and children) BEFORE saving, then re-adds whatever is required (NetworkObject, NetworkTransform, PlayerAvatar) and reconnects the nameplate.
+- The scene wiring does the same for the 'Network' object - and finds it by name as a fallback, so a GUID breakage can never leave a broken object behind with a duplicate beside it. NetworkManager, Tugboat and NetworkBootstrap are re-added as needed and the avatar prefab is reconnected.
+- Everything stays non-destructive for healthy assets: nothing is removed unless its script is already gone.
+
+**GitHub title:** `[14.1.3-dev] Step 105 self-heal`
+
+**Manual steps:**
+1. Pull `Dev`, recompile.
+2. Open the main game scene and re-run Step 105 - it should now complete, logging how many missing-script components it removed.
+3. Save the scene (Ctrl+S), then do a quick host/join sanity check.
 
 ### [14.1.2-dev] Player Names That Actually Show Up
 
