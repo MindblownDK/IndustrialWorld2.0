@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `13.18.1-dev`
-**Roadmap Version:** `13.18.1-dev`
+**Current Version:** `14.0.0-dev`
+**Roadmap Version:** `14.0.0-dev`
 **Date:** 2026-09-28
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,10 @@
 ---
 
 ## 0. Recently Done
+
+### 14.0.0-dev - Multiplayer Foundation, Part 1
+- **Networking module** (`PlayerIdentity`, `NetworkSession`): stable per-player GUID + session/authority abstraction; gameplay asks the session, never the transport.
+- **Code locks converted** to per-player authorization id lists - first MP-readiness checklist item cleared.
 
 ### 13.18.1-dev - Multiplayer Strategy Locked
 - **Docs only**: Fish-Net client-server strategy (2-8 player listen server first, dedicated later, no P2P) added to `Roadmap.md` section 1 and the README agent guidelines; MP-readiness checklist now applies to every new system.
@@ -84,7 +88,7 @@ These decisions are settled. Every future system is designed against them.
 
 ### MP-Readiness Checklist (apply to EVERY new system from now on)
 - **One authority entry point** per gameplay action (a single method that will become the server RPC). No gameplay mutations from UI code - UI raises intents.
-- **Per-player state is keyed by player id**, never stored as a single bool/field for THE player (example to fix in 14.0.0: `CodeLock.authorized` becomes an authorized-ids list).
+- **Per-player state is keyed by player id**, never stored as a single bool/field for THE player (DONE 14.0.0-dev: `CodeLock.authorizedIds`).
 - **Stable ids over object references** for anything that crosses save/network boundaries (items already use `itemId`; placed pieces will need network ids).
 - **No client-side truth:** damage numbers, costs, unlock checks and randomness must be computable server-side.
 - **Statics are single-player debt:** static gameplay state (not pure helpers) will need a per-instance or server-owned home; avoid adding new static gameplay state.

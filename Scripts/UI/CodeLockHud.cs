@@ -160,7 +160,7 @@ namespace VoxelEngine.UI
             if (_target == null) { Hide(); return; }
             if (_setMode)
             {
-                _target.ApplyCode(_digits);
+                _target.ApplyCode(_digits, VoxelEngine.Networking.PlayerIdentity.LocalId);
                 BuildFeedbackHud.Show("Code Lock", "Code set - locked", null,
                     new Color(0.55f, 0.80f, 0.35f));
                 var done = _onSetDone;
@@ -168,7 +168,7 @@ namespace VoxelEngine.UI
                 done?.Invoke();
                 return;
             }
-            if (_target.TryEnter(_digits))
+            if (_target.TryEnter(_digits, VoxelEngine.Networking.PlayerIdentity.LocalId))
             {
                 BuildFeedbackHud.Show("Code Lock", "Access granted", null,
                     new Color(0.55f, 0.80f, 0.35f));

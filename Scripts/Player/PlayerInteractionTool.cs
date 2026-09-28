@@ -906,7 +906,8 @@ namespace VoxelEngine.Player
                 {
                     var lockStats = inventory.GetComponent<VoxelEngine.Player.PlayerStats>();
                     if (!codeLockHit.HasCode) VoxelEngine.UI.CodeLockHud.ShowSet(codeLockHit);
-                    else if (codeLockHit.authorized) VoxelEngine.UI.CodeLockHud.ShowMenu(codeLockHit, inventory);
+                    else if (codeLockHit.IsAuthorized(VoxelEngine.Networking.PlayerIdentity.LocalId))
+                        VoxelEngine.UI.CodeLockHud.ShowMenu(codeLockHit, inventory);
                     else VoxelEngine.UI.CodeLockHud.ShowEnter(codeLockHit, lockStats, null);
                     return;
                 }
@@ -1547,7 +1548,7 @@ namespace VoxelEngine.Player
                 VoxelEngine.UI.CodeLockHud.ShowSet(fittedLock, onGranted);
                 return true;
             }
-            if (fittedLock.AllowsUse) return false;
+            if (fittedLock.AllowsUse(VoxelEngine.Networking.PlayerIdentity.LocalId)) return false;
             var lockStats = inventory.GetComponent<VoxelEngine.Player.PlayerStats>();
             VoxelEngine.UI.CodeLockHud.ShowEnter(fittedLock, lockStats, onGranted);
             return true;

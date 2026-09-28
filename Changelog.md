@@ -1,9 +1,26 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `13.18.1-dev`
+**Current Version:** `14.0.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.0.0-dev] Multiplayer Foundation - Part 1: Identity and Session
+
+**Type:** MAJOR milestone opener - the networking foundation begins. Pre-release schema change: code lock authorization in saves moved from a single flag to a per-player id list (old saves keep their locks and codes; authorization is simply re-earned by entering the code once).
+
+**New module: `Scripts/Networking` (namespace `VoxelEngine.Networking`).**
+- **PlayerIdentity**: a stable per-installation player id (GUID, persisted) plus a display name. Every piece of per-player state is keyed by this id from now on - and when Fish-Net lands, the id travels with the connection.
+- **NetworkSession**: the single source of truth for the session - Mode (Offline / Host / Client), IsAuthority, and a player registry with join/leave events. Today it always answers "Offline, one local player", but every system that asks it instead of assuming a lone player is already multiplayer-shaped. Gameplay code will never talk to the transport directly; the coming Fish-Net bridge drives this class.
+
+**First checklist conversion done: code locks.** `CodeLock.authorized` (one bool meaning "the player") is now `authorizedIds` - a list of player ids. Setting a new code wipes the list and authorizes the setter; a correct entry adds the enterer permanently; the owner menu opens only for players on the list. Exactly the Rust model, and exactly what the server will replicate later.
+
+**GitHub title:** `[14.0.0-dev] Multiplayer foundation: identity`
+
+**Manual steps:**
+1. Pull `Dev` and let Unity compile. No setup steps this round.
+2. Sanity test: fit a code lock, set a code, relog - you stay authorized; locks from older saves ask for their code once.
+3. **Install Fish-Net now** (Unity Asset Store: "Fish-Networking" by FirstGearGames - free; import the whole package). Do not wire anything up - just import it, confirm the project still compiles, and report the Fish-Net version number (Window -> Package Manager or the FishNet/VERSION.txt file). The next part builds the bridge against exactly that version.
 
 ### [13.18.1-dev] Multiplayer Strategy Locked
 

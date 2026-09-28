@@ -5,6 +5,7 @@
 // CodeLockHud. One lock per piece. The lock rides the leaf (or lid) it guards
 // and shows its state on a light: red = locked, green = open to use.
 
+using System.Collections.Generic;
 using UnityEngine;
 using VoxelEngine.Items;
 
@@ -16,28 +17,40 @@ namespace VoxelEngine.Building.Tiered
 
         public string code = "";
         public bool isLocked;
-        public bool authorized;
+        /// <summary>Player ids allowed through. Keyed per player (MP-readiness
+        /// rule: never a single flag meaning "the player"). 14.0.0-dev.</summary>
+        public List<string> authorizedIds = new();
 
         private Renderer _led;
         private bool _visualBuilt;
 
         public bool HasCode => !string.IsNullOrEmpty(code);
 
-        /// <summary>True when the guarded piece may be operated without the keypad.</summary>
-        public bool AllowsUse => !HasCode || !isLocked || authorized;
+        public bool IsAuthorized(string playerId)
+            => !string.IsNullOrEmpty(playerId) && authorizedIds.Contains(playerId);
 
-        public void ApplyCode(string newCode)
+        /// <summary>True when the guarded piece may be operated by this player
+        /// without the keypad.</summary>
+        public bool AllowsUse(string playerId)
+            => !HasCode || !isLocked || IsAuthorized(playerId);
+
+        /// <summary>Authority entry point: sets (or replaces) the combination.
+        /// A new code wipes the guest list - only the setter stays authorized.</summary>
+        public void ApplyCode(string newCode, string playerId)
         {
             code = newCode;
             isLocked = true;
-            authorized = true;
+            authorizedIds.Clear();
+            if (!string.IsNullOrEmpty(playerId)) authorizedIds.Add(playerId);
             RefreshLed();
         }
 
-        public bool TryEnter(string attempt)
+        /// <summary>Authority entry point: a correct code authorizes the enterer permanently.</summary>
+        public bool TryEnter(string attempt, string playerId)
         {
             if (!HasCode || attempt != code) return false;
-            authorized = true;
+            if (!string.IsNullOrEmpty(playerId) && !authorizedIds.Contains(playerId))
+                authorizedIds.Add(playerId);
             RefreshLed();
             return true;
         }

@@ -1015,10 +1015,10 @@ namespace VoxelEngine.Persistence
                 var codeLock = pb.GetComponentInChildren<CodeLock>(true);
                 if (codeLock != null)
                 {
-                    savedPiece.hasCodeLock    = true;
-                    savedPiece.lockCode       = codeLock.code;
-                    savedPiece.lockLocked     = codeLock.isLocked;
-                    savedPiece.lockAuthorized = codeLock.authorized;
+                    savedPiece.hasCodeLock       = true;
+                    savedPiece.lockCode          = codeLock.code;
+                    savedPiece.lockLocked        = codeLock.isLocked;
+                    savedPiece.lockAuthorizedIds = new List<string>(codeLock.authorizedIds);
                 }
                 save.placedTiered.Add(savedPiece);
             }
@@ -3370,9 +3370,11 @@ namespace VoxelEngine.Persistence
                     var codeLock = CodeLock.Attach(go);
                     if (codeLock != null)
                     {
-                        codeLock.code       = ps.lockCode ?? "";
-                        codeLock.isLocked   = ps.lockLocked;
-                        codeLock.authorized = ps.lockAuthorized;
+                        codeLock.code     = ps.lockCode ?? "";
+                        codeLock.isLocked = ps.lockLocked;
+                        codeLock.authorizedIds = ps.lockAuthorizedIds != null
+                            ? new List<string>(ps.lockAuthorizedIds)
+                            : new List<string>();
                         codeLock.RefreshLed();
                     }
                 }
@@ -4322,10 +4324,10 @@ namespace VoxelEngine.Persistence
             public string family; public int tier;
             public Vector3 pos;   public Quaternion rot; public float rotY;
             public int hp;
-            // Code lock (13.17.0) - additive, save-compatible: legacy saves
-            // deserialize hasCodeLock = false and skip the whole block.
+            // Code lock (13.17.0; ids since 14.0.0 - pre-release schema change,
+            // per-player authorization keyed by player id).
             public bool hasCodeLock; public string lockCode;
-            public bool lockLocked;  public bool lockAuthorized;
+            public bool lockLocked;  public List<string> lockAuthorizedIds;
         }
         [Serializable] private class SavedContainer
         {
