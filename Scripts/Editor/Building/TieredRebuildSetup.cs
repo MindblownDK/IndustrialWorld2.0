@@ -44,7 +44,32 @@ namespace VoxelEngine.EditorTools
             BuildFamily.Doorway, BuildFamily.Door,
             BuildFamily.Window, BuildFamily.WindowPane,
             BuildFamily.WallFrame, BuildFamily.GarageDoor,
-            BuildFamily.FloorHatch, BuildFamily.HatchLid
+            BuildFamily.FloorHatch, BuildFamily.HatchLid,
+            // ── Roofing and gates (13.15.0-dev) ──
+            BuildFamily.TriangularWall, BuildFamily.TriangularWallInverted,
+            BuildFamily.SlantedRoof, BuildFamily.TriangularRoof,
+            BuildFamily.SlantedTriangularRoof, BuildFamily.CornerRoof,
+            BuildFamily.SlantedCornerRoofInverted, BuildFamily.PyramidRoof,
+            BuildFamily.GateFrame, BuildFamily.Gate,
+            BuildFamily.BigGateFrame, BuildFamily.BigGate
+        };
+
+        /// <summary>Human display names; asset file names stay the raw enum word.</summary>
+        private static string FriendlyName(BuildFamily family) => family switch
+        {
+            BuildFamily.TriangularWall => "Triangular Wall",
+            BuildFamily.TriangularWallInverted => "Triangular Wall (Inverted)",
+            BuildFamily.SlantedRoof => "Slanted Roof",
+            BuildFamily.TriangularRoof => "Triangular Roof",
+            BuildFamily.SlantedTriangularRoof => "Slanted Triangular Roof",
+            BuildFamily.CornerRoof => "Corner Roof",
+            BuildFamily.SlantedCornerRoofInverted => "Slanted Corner Roof (Inverted)",
+            BuildFamily.PyramidRoof => "Pyramid Roof",
+            BuildFamily.GateFrame => "Gate Frame",
+            BuildFamily.Gate => "Gate",
+            BuildFamily.BigGateFrame => "Big Gate Frame",
+            BuildFamily.BigGate => "Big Gate",
+            _ => family.ToString(),
         };
 
         private static readonly BuildFamily[] Station =
@@ -180,7 +205,7 @@ namespace VoxelEngine.EditorTools
                 }
                 def = ScriptableObject.CreateInstance<TieredBlockDefinition>();
                 def.family = family;
-                def.displayName = display;
+                def.displayName = FriendlyName(family);
                 ApplyStartingCosts(def, family);
                 AssetDatabase.CreateAsset(def, defPath);
                 created++;
@@ -216,7 +241,7 @@ namespace VoxelEngine.EditorTools
 
             EditorUtility.SetDirty(def);
             if (!registry.definitions.Contains(def)) registry.definitions.Add(def);
-            EnsureToken(family, display);
+            EnsureToken(family, FriendlyName(family));
         }
 
         private static GameObject BuildPrefab(string path, string name, BuildFamily family, BuildTier tier,
@@ -265,13 +290,15 @@ namespace VoxelEngine.EditorTools
             if (family == BuildFamily.Pillar && root.GetComponent<AdjustablePillar>() == null)
                 root.AddComponent<AdjustablePillar>();
             if (family == BuildFamily.Roof || family == BuildFamily.Floor
-                || family == BuildFamily.FloorHatch || family == BuildFamily.Stairs)
+                || family == BuildFamily.FloorHatch || family == BuildFamily.Stairs
+                || BuildFamilyInfo.IsRoofPanel(family))
             {
                 var loadState = root.GetComponent<StructuralLoadState>();
                 if (loadState == null) loadState = root.AddComponent<StructuralLoadState>();
                 loadState.loadFamily = family;
             }
-            if (family == BuildFamily.Door || family == BuildFamily.GarageDoor) EnsureDoorPivot(root, family);
+            if (family == BuildFamily.Door || family == BuildFamily.GarageDoor
+                || family == BuildFamily.Gate || family == BuildFamily.BigGate) EnsureDoorPivot(root, family);
             if (family == BuildFamily.HatchLid) EnsureHatch(root, tier, name);
             if (family == BuildFamily.Railing && root.GetComponent<TieredRailing>() == null)
                 root.AddComponent<TieredRailing>();
@@ -366,7 +393,14 @@ namespace VoxelEngine.EditorTools
             bool garage = family == BuildFamily.GarageDoor;
             var pivot = new GameObject("Generated_DoorHinge");
             pivot.transform.SetParent(root.transform, false);
-            float hinge = garage ? 0f : -1.22f;
+            // Gates swing on a side hinge like doors, just further out.
+            float hinge = family switch
+            {
+                BuildFamily.Gate => -(TieredPieceFactory.GateW * 0.5f - 0.12f),
+                BuildFamily.BigGate => -(TieredPieceFactory.BigGateW * 0.5f - 0.18f),
+                BuildFamily.GarageDoor => 0f,
+                _ => -1.22f,
+            };
             pivot.transform.localPosition = garage
                 ? new Vector3(0f, TieredPieceFactory.GarageH, 0f)
                 : new Vector3(hinge, 0f, 0f);
@@ -562,8 +596,37 @@ namespace VoxelEngine.EditorTools
                     break;
 
                 case BuildFamily.Roof:
+                    // 13.15.0: the flat ceiling panel is a deck and doubles as a
+                    // floor for upper levels, so it carries the full floor set.
+                    Socket(SocketSide.Top, new Vector3(0f, 0.42f, 0f));
                     Neighbours(0f);
-                    Socket(SocketSide.Top, new Vector3(0f, storey, 0f));
+                    Perimeter(0.42f);
+                    break;
+
+                // ── Roofing and gates (13.15.0-dev) ──
+                case BuildFamily.TriangularWall:
+                case BuildFamily.TriangularWallInverted:
+                    Socket(SocketSide.East, new Vector3(m, 0f, 0f));
+                    Socket(SocketSide.West, new Vector3(-m, 0f, 0f));
+                    break;
+
+                case BuildFamily.SlantedRoof:
+                case BuildFamily.TriangularRoof:
+                case BuildFamily.SlantedTriangularRoof:
+                case BuildFamily.CornerRoof:
+                case BuildFamily.SlantedCornerRoofInverted:
+                case BuildFamily.PyramidRoof:
+                    Neighbours(0f);
+                    break;
+
+                case BuildFamily.GateFrame:
+                    Socket(SocketSide.East, new Vector3(m, 0f, 0f));
+                    Socket(SocketSide.West, new Vector3(-m, 0f, 0f));
+                    Socket(SocketSide.Center, Vector3.zero);   // takes a Gate
+                    break;
+
+                case BuildFamily.BigGateFrame:
+                    Socket(SocketSide.Center, Vector3.zero);   // takes a Big Gate
                     break;
 
                 case BuildFamily.Stairs:
@@ -616,6 +679,19 @@ namespace VoxelEngine.EditorTools
                 BuildFamily.WindowPane => (0, 2, 0, 2, 2),
                 BuildFamily.HatchLid   => (1, 3, 0, 3, 3),
                 BuildFamily.Railing    => (2, 2, 2, 3, 3),
+                // ── Roofing and gates (13.15.0-dev) ──
+                BuildFamily.TriangularWall            => (2, 2, 3, 2, 2),
+                BuildFamily.TriangularWallInverted    => (2, 2, 3, 2, 2),
+                BuildFamily.SlantedRoof               => (3, 3, 5, 3, 3),
+                BuildFamily.TriangularRoof            => (2, 2, 3, 2, 2),
+                BuildFamily.SlantedTriangularRoof     => (2, 2, 3, 2, 2),
+                BuildFamily.CornerRoof                => (3, 3, 4, 3, 3),
+                BuildFamily.SlantedCornerRoofInverted => (3, 3, 4, 3, 3),
+                BuildFamily.PyramidRoof               => (4, 3, 5, 3, 3),
+                BuildFamily.GateFrame                 => (6, 6, 10, 6, 6),
+                BuildFamily.Gate                      => (3, 5, 0, 7, 6),
+                BuildFamily.BigGateFrame              => (14, 14, 24, 14, 14),
+                BuildFamily.BigGate                   => (8, 12, 0, 16, 14),
                 _ => (3, 3, 5, 3, 3),
             };
 

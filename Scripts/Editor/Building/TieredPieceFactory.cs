@@ -52,6 +52,18 @@ namespace VoxelEngine.EditorTools
         /// <summary>Hatch opening in a floor slab. Public: the setup step sizes the lid hinge from it.</summary>
         public const float HatchW = 2.60f;
 
+        // ── Roofing and gates (13.15.0-dev) ──
+        /// <summary>Roof pitch: one storey of rise across one module, the 3-4-5 slope.</summary>
+        public static readonly float RoofPitch = Mathf.Atan2(Storey, Module) * Mathf.Rad2Deg;
+        /// <summary>Length of the slanted roof surface along its pitch.</summary>
+        public static readonly float RoofSlope = Mathf.Sqrt(Module * Module + Storey * Storey);
+        /// <summary>Gateway frame: one module wide, one and a half storeys tall. Public: the setup step sizes hinges from these.</summary>
+        public const float GateFrameH = Storey * 1.5f;
+        public const float GateW = 5.20f, GateH = 6.90f;
+        /// <summary>Monumental gate frame: two modules wide, three storeys tall.</summary>
+        public const float BigGateFrameH = Storey * 3f;
+        public const float BigGateW = 12.0f, BigGateH = 14.5f;
+
         private const float Texel = 0.55f;   // metres per texture tile
 
         // ══════════════════════════════════════════════════════════════════
@@ -94,6 +106,21 @@ namespace VoxelEngine.EditorTools
             /// <summary>A right-triangle prism: the run of a stair, the pitch of a roof.</summary>
             public void Wedge(PieceSurface surface, Vector3 centre, Vector3 size, Vector3 euler)
                 => Add(surface, WedgeMesh(size), Matrix4x4.TRS(centre, Quaternion.Euler(euler), Vector3.one));
+
+            /// <summary>A flat right-triangle slab: half a deck cell cut on the diagonal.
+            /// The right angle sits at local (-x, -z); the hypotenuse faces (+x, +z).</summary>
+            public void TriPanel(PieceSurface surface, Vector3 centre, Vector3 size, Vector3 euler)
+                => Add(surface, TriPanelMesh(size), Matrix4x4.TRS(centre, Quaternion.Euler(euler), Vector3.one));
+
+            /// <summary>A four-sided pyramid: square base, apex centred above it.</summary>
+            public void Pyramid(PieceSurface surface, Vector3 centre, Vector3 size, Vector3 euler)
+                => Add(surface, PyramidMesh(size), Matrix4x4.TRS(centre, Quaternion.Euler(euler), Vector3.one));
+
+            /// <summary>A hip/valley roof corner: a square cell with one corner raised
+            /// (outer hip) or one corner dropped from a raised slab (inner valley),
+            /// two planes meeting on the diagonal. The moving corner is at (+x, +z).</summary>
+            public void HipCorner(PieceSurface surface, Vector3 centre, Vector3 size, bool inverted, Vector3 euler)
+                => Add(surface, HipCornerMesh(size, inverted), Matrix4x4.TRS(centre, Quaternion.Euler(euler), Vector3.one));
 
             private void Add(PieceSurface surface, Mesh mesh, Matrix4x4 xform)
             {
@@ -302,6 +329,261 @@ namespace VoxelEngine.EditorTools
             mesh.SetUVs(0, uvs);
             mesh.SetTriangles(tris, 0);
             return mesh;
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        //  ROOFING AND GATES (13.15.0-dev)
+        // ══════════════════════════════════════════════════════════════════
+
+        /// <summary>Angled panel rising one storey across one module, eave at local -Z, origin at eave level.</summary>
+        private static void SlantedRoofPiece(PieceMesh m, BuildTier tier)
+        {
+            Vector3 lift = new(0f, Storey * 0.5f, 0f);
+            Vector3 tilt = new(-RoofPitch, 0f, 0f);
+            var pitchRot = Quaternion.Euler(tilt);
+
+            m.Box(PieceSurface.Frame, lift, new Vector3(Module, 0.24f, RoofSlope), tilt);
+
+            // Cladding courses overlapped like shingles up the pitch.
+            const int courses = 8;
+            for (int i = 0; i < courses; i++)
+            {
+                float t = (i + 0.5f) / courses;
+                float z = -RoofSlope * 0.5f + RoofSlope * t;
+                m.Box(PieceSurface.Skin, lift + pitchRot * new Vector3(0f, 0.17f, z),
+                      new Vector3(Module, 0.12f, RoofSlope / courses * 1.12f), tilt);
+            }
+
+            foreach (float s in new[] { -1f, 1f })   // rake trim on both gable edges
+                m.Box(PieceSurface.Trim, lift + pitchRot * new Vector3(s * (HalfModule - 0.1f), 0.21f, 0f),
+                      new Vector3(0.2f, 0.22f, RoofSlope), tilt);
+            m.Box(PieceSurface.Trim, lift + pitchRot * new Vector3(0f, 0.21f, RoofSlope * 0.5f - 0.1f),
+                  new Vector3(Module, 0.24f, 0.24f), tilt);   // ridge cap
+            m.Box(PieceSurface.Trim, lift + pitchRot * new Vector3(0f, 0.05f, -RoofSlope * 0.5f + 0.1f),
+                  new Vector3(Module, 0.3f, 0.26f), tilt);    // eave board
+        }
+
+        /// <summary>Right-triangle gable wall (or its inverted overhang twin).</summary>
+        private static void TriangularWallPiece(PieceMesh m, BuildTier tier, bool inverted)
+        {
+            Vector3 centre = new(0f, Storey * 0.5f, 0f);
+            m.Wedge(PieceSurface.Skin, centre, new Vector3(Module, Storey, WallThick),
+                    inverted ? new Vector3(180f, 0f, 0f) : Vector3.zero);
+            // Straight edge board along base (or top when inverted) and the riser side.
+            m.Box(PieceSurface.Trim, new Vector3(0f, inverted ? Storey - 0.11f : 0.11f, 0f),
+                  new Vector3(Module, 0.22f, WallThick + 0.06f));
+            m.Box(PieceSurface.Trim, new Vector3(HalfModule - 0.11f, Storey * 0.5f, 0f),
+                  new Vector3(0.22f, Storey, WallThick + 0.06f));
+            // Trim along the hypotenuse.
+            m.Box(PieceSurface.Trim, centre, new Vector3(RoofSlope, 0.22f, WallThick + 0.06f),
+                  new Vector3(0f, 0f, inverted ? -RoofPitch : RoofPitch));
+        }
+
+        /// <summary>Flat triangular deck panel: half a cell cut on the diagonal.</summary>
+        private static void TriangularRoofPiece(PieceMesh m, BuildTier tier)
+        {
+            m.TriPanel(PieceSurface.Frame, new Vector3(0f, 0.21f, 0f),
+                       new Vector3(Module, 0.42f, Module), Vector3.zero);
+            m.TriPanel(PieceSurface.Skin, new Vector3(0f, 0.45f, 0f),
+                       new Vector3(Module - 0.3f, 0.06f, Module - 0.3f), Vector3.zero);
+        }
+
+        /// <summary>Sloped triangular panel blending a slanted roof into triangular walls.</summary>
+        private static void SlantedTriangularRoofPiece(PieceMesh m, BuildTier tier)
+        {
+            Vector3 lift = new(0f, Storey * 0.5f, 0f);
+            Vector3 tilt = new(-RoofPitch, 0f, 0f);
+            m.TriPanel(PieceSurface.Frame, lift, new Vector3(Module, 0.24f, RoofSlope), tilt);
+            m.TriPanel(PieceSurface.Skin, lift + Quaternion.Euler(tilt) * new Vector3(0f, 0.16f, 0f),
+                       new Vector3(Module - 0.2f, 0.1f, RoofSlope - 0.25f), tilt);
+        }
+
+        /// <summary>Outer hip corner: two roof planes meeting on the diagonal ridge.</summary>
+        private static void CornerRoofPiece(PieceMesh m, BuildTier tier)
+        {
+            m.HipCorner(PieceSurface.Skin, new Vector3(0f, Storey * 0.5f, 0f),
+                        new Vector3(Module, Storey, Module), false, Vector3.zero);
+            foreach (float s in new[] { -1f, 1f })   // eave boards along the two low edges
+                m.Box(PieceSurface.Trim,
+                      s < 0f ? new Vector3(0f, 0.12f, -HalfModule + 0.1f) : new Vector3(-HalfModule + 0.1f, 0.12f, 0f),
+                      s < 0f ? new Vector3(Module, 0.26f, 0.24f) : new Vector3(0.24f, 0.26f, Module));
+        }
+
+        /// <summary>Inner valley corner for complex roof intersections.</summary>
+        private static void CornerRoofInvertedPiece(PieceMesh m, BuildTier tier)
+        {
+            m.HipCorner(PieceSurface.Skin, new Vector3(0f, Storey * 0.5f, 0f),
+                        new Vector3(Module, Storey, Module), true, Vector3.zero);
+            m.Box(PieceSurface.Trim, new Vector3(0f, Storey - 0.1f, -HalfModule + 0.1f),
+                  new Vector3(Module, 0.22f, 0.22f));
+            m.Box(PieceSurface.Trim, new Vector3(-HalfModule + 0.1f, Storey - 0.1f, 0f),
+                  new Vector3(0.22f, 0.22f, Module));
+        }
+
+        /// <summary>Four-sided pyramid cap over one module, pitch-matched to the slanted roof.</summary>
+        private static void PyramidRoofPiece(PieceMesh m, BuildTier tier)
+        {
+            float apex = Storey * 0.5f;   // half-module of run at the standard pitch
+            m.Pyramid(PieceSurface.Skin, new Vector3(0f, apex * 0.5f, 0f),
+                      new Vector3(Module, apex, Module), Vector3.zero);
+            foreach (float s in new[] { -1f, 1f })
+            {
+                m.Box(PieceSurface.Trim, new Vector3(0f, 0.12f, s * (HalfModule - 0.1f)),
+                      new Vector3(Module, 0.26f, 0.24f));
+                m.Box(PieceSurface.Trim, new Vector3(s * (HalfModule - 0.1f), 0.12f, 0f),
+                      new Vector3(0.24f, 0.26f, Module));
+            }
+        }
+
+        /// <summary>Gateway frame: a heavy wall panel with a gate-sized opening.</summary>
+        private static void GateFramePiece(PieceMesh m, BuildTier tier)
+        {
+            CladPanelWithHole(m, tier, Module, GateFrameH, GateW, GateH, 0f, WallThick);
+            foreach (float s in new[] { -1f, 1f })   // massive posts flanking the opening
+                m.Box(PieceSurface.Trim, new Vector3(s * (GateW * 0.5f + 0.25f), GateH * 0.5f, 0f),
+                      new Vector3(0.5f, GateH, WallThick + 0.24f));
+            m.Box(PieceSurface.Trim, new Vector3(0f, GateH + 0.3f, 0f),
+                  new Vector3(GateW + 1.5f, 0.6f, WallThick + 0.24f));   // lintel beam
+        }
+
+        /// <summary>Heavy swinging gate leaf: planks, three crossbars and a diagonal brace.</summary>
+        private static void GateLeafPiece(PieceMesh m, BuildTier tier)
+        {
+            GateLeaf(m, tier, GateW - 0.2f, GateH - 0.15f, 0.18f);
+        }
+
+        /// <summary>Monumental gate frame: two modules wide, three storeys tall.</summary>
+        private static void BigGateFramePiece(PieceMesh m, BuildTier tier)
+        {
+            CladPanelWithHole(m, tier, Module * 2f, BigGateFrameH, BigGateW, BigGateH, 0f, 0.45f);
+            foreach (float s in new[] { -1f, 1f })
+                m.Box(PieceSurface.Trim, new Vector3(s * (BigGateW * 0.5f + 0.4f), BigGateH * 0.5f, 0f),
+                      new Vector3(0.8f, BigGateH, 0.85f));
+            m.Box(PieceSurface.Trim, new Vector3(0f, BigGateH + 0.5f, 0f),
+                  new Vector3(BigGateW + 2.4f, 1.0f, 0.85f));
+        }
+
+        /// <summary>Colossal swinging gate leaf.</summary>
+        private static void BigGateLeafPiece(PieceMesh m, BuildTier tier)
+        {
+            GateLeaf(m, tier, BigGateW - 0.3f, BigGateH - 0.2f, 0.3f);
+        }
+
+        /// <summary>Shared gate leaf assembly, sized by the opening it closes.</summary>
+        private static void GateLeaf(PieceMesh m, BuildTier tier, float w, float h, float thick)
+        {
+            // Vertical planks across the width.
+            int planks = Mathf.Max(4, Mathf.RoundToInt(w / 0.9f));
+            float plankW = w / planks;
+            for (int i = 0; i < planks; i++)
+            {
+                float x = -w * 0.5f + plankW * (i + 0.5f);
+                m.Box(PieceSurface.Skin, new Vector3(x, h * 0.5f, 0f),
+                      new Vector3(plankW * 0.94f, h, thick));
+            }
+            // Three crossbars and one diagonal brace.
+            foreach (float t in new[] { 0.12f, 0.5f, 0.88f })
+                m.Box(PieceSurface.Trim, new Vector3(0f, h * t, thick * 0.5f + 0.05f),
+                      new Vector3(w, 0.42f, 0.14f));
+            float diag = Mathf.Sqrt(w * w + h * 0.76f * h * 0.76f) * 0.96f;
+            m.Box(PieceSurface.Trim, new Vector3(0f, h * 0.5f, thick * 0.5f + 0.05f),
+                  new Vector3(diag, 0.4f, 0.13f),
+                  new Vector3(0f, 0f, Mathf.Atan2(h * 0.76f, w) * Mathf.Rad2Deg));
+        }
+
+        private static void AppendTri(List<Vector3> verts, List<Vector3> norms, List<Vector2> uvs, List<int> tris,
+                                      Vector3 p0, Vector3 p1, Vector3 p2)
+        {
+            Vector3 n = Vector3.Cross(p1 - p0, p2 - p0).normalized;
+            int i = verts.Count;
+            verts.Add(p0); verts.Add(p1); verts.Add(p2);
+            norms.Add(n); norms.Add(n); norms.Add(n);
+            uvs.Add(new Vector2(p0.x / Texel, p0.z / Texel));
+            uvs.Add(new Vector2(p1.x / Texel, p1.z / Texel));
+            uvs.Add(new Vector2(p2.x / Texel, p2.z / Texel));
+            tris.Add(i); tris.Add(i + 1); tris.Add(i + 2);
+        }
+
+        private static Mesh FinishMesh(List<Vector3> verts, List<Vector3> norms, List<Vector2> uvs, List<int> tris)
+        {
+            var mesh = new Mesh();
+            mesh.SetVertices(verts);
+            mesh.SetNormals(norms);
+            mesh.SetUVs(0, uvs);
+            mesh.SetTriangles(tris, 0);
+            return mesh;
+        }
+
+        private static Mesh TriPanelMesh(Vector3 size)
+        {
+            Vector3 h = size * 0.5f;
+            // Right angle at (-x, -z); the hypotenuse runs (+x,-z) to (-x,+z).
+            Vector3 a0 = new(-h.x, -h.y, -h.z), b0 = new(h.x, -h.y, -h.z), c0 = new(-h.x, -h.y, h.z);
+            Vector3 a1 = new(-h.x, h.y, -h.z), b1 = new(h.x, h.y, -h.z), c1 = new(-h.x, h.y, h.z);
+
+            var verts = new List<Vector3>(); var norms = new List<Vector3>();
+            var uvs = new List<Vector2>(); var tris = new List<int>();
+            AppendTri(verts, norms, uvs, tris, a1, c1, b1);                   // top
+            AppendTri(verts, norms, uvs, tris, a0, b0, c0);                   // underside
+            AppendTri(verts, norms, uvs, tris, b0, a0, a1); AppendTri(verts, norms, uvs, tris, b0, a1, b1); // -z edge
+            AppendTri(verts, norms, uvs, tris, a0, c0, c1); AppendTri(verts, norms, uvs, tris, a0, c1, a1); // -x edge
+            AppendTri(verts, norms, uvs, tris, c0, b0, b1); AppendTri(verts, norms, uvs, tris, c0, b1, c1); // hypotenuse
+            return FinishMesh(verts, norms, uvs, tris);
+        }
+
+        private static Mesh PyramidMesh(Vector3 size)
+        {
+            Vector3 h = size * 0.5f;
+            Vector3 p00 = new(-h.x, -h.y, -h.z), p10 = new(h.x, -h.y, -h.z);
+            Vector3 p11 = new(h.x, -h.y, h.z), p01 = new(-h.x, -h.y, h.z);
+            Vector3 apex = new(0f, h.y, 0f);
+
+            var verts = new List<Vector3>(); var norms = new List<Vector3>();
+            var uvs = new List<Vector2>(); var tris = new List<int>();
+            AppendTri(verts, norms, uvs, tris, p00, apex, p10);   // -z slope
+            AppendTri(verts, norms, uvs, tris, p10, apex, p11);   // +x slope
+            AppendTri(verts, norms, uvs, tris, p11, apex, p01);   // +z slope
+            AppendTri(verts, norms, uvs, tris, p01, apex, p00);   // -x slope
+            AppendTri(verts, norms, uvs, tris, p00, p10, p11);    // base
+            AppendTri(verts, norms, uvs, tris, p00, p11, p01);
+            return FinishMesh(verts, norms, uvs, tris);
+        }
+
+        private static Mesh HipCornerMesh(Vector3 size, bool inverted)
+        {
+            Vector3 h = size * 0.5f;
+            var verts = new List<Vector3>(); var norms = new List<Vector3>();
+            var uvs = new List<Vector2>(); var tris = new List<int>();
+
+            if (!inverted)
+            {
+                // Square base at -y, the (+x,+z) corner raised to +y: an outer hip.
+                Vector3 p00 = new(-h.x, -h.y, -h.z), p10 = new(h.x, -h.y, -h.z);
+                Vector3 p11 = new(h.x, -h.y, h.z), p01 = new(-h.x, -h.y, h.z);
+                Vector3 apex = new(h.x, h.y, h.z);
+                AppendTri(verts, norms, uvs, tris, p00, apex, p10);   // slope toward -z eave
+                AppendTri(verts, norms, uvs, tris, p00, p01, apex);   // slope toward -x eave
+                AppendTri(verts, norms, uvs, tris, p10, apex, p11);   // +x riser
+                AppendTri(verts, norms, uvs, tris, p01, p11, apex);   // +z riser
+                AppendTri(verts, norms, uvs, tris, p00, p10, p11);    // base
+                AppendTri(verts, norms, uvs, tris, p00, p11, p01);
+            }
+            else
+            {
+                // Raised slab at +y with the (+x,+z) corner dropped to -y: an inner valley.
+                Vector3 t00 = new(-h.x, h.y, -h.z), t10 = new(h.x, h.y, -h.z);
+                Vector3 t01 = new(-h.x, h.y, h.z), drop = new(h.x, -h.y, h.z);
+                Vector3 p00 = new(-h.x, -h.y, -h.z), p10 = new(h.x, -h.y, -h.z), p01 = new(-h.x, -h.y, h.z);
+                AppendTri(verts, norms, uvs, tris, t10, t00, drop);   // valley plane A
+                AppendTri(verts, norms, uvs, tris, t00, t01, drop);   // valley plane B
+                AppendTri(verts, norms, uvs, tris, t00, t10, p10); AppendTri(verts, norms, uvs, tris, t00, p10, p00); // -z face
+                AppendTri(verts, norms, uvs, tris, t01, t00, p00); AppendTri(verts, norms, uvs, tris, t01, p00, p01); // -x face
+                AppendTri(verts, norms, uvs, tris, t10, drop, p10);   // +x face
+                AppendTri(verts, norms, uvs, tris, drop, t01, p01);   // +z face
+                AppendTri(verts, norms, uvs, tris, p00, p10, drop);   // underside
+                AppendTri(verts, norms, uvs, tris, p00, drop, p01);
+            }
+            return FinishMesh(verts, norms, uvs, tris);
         }
 
         // ══════════════════════════════════════════════════════════════════
@@ -689,6 +971,20 @@ namespace VoxelEngine.EditorTools
                 case BuildFamily.Roof:       Roof(m, tier); break;
                 case BuildFamily.Pillar:     Pillar(m, tier); break;
                 case BuildFamily.HalfWall:   HalfWall(m, tier); break;
+
+                // ── Roofing and gates (13.15.0-dev) ──
+                case BuildFamily.TriangularWall:            TriangularWallPiece(m, tier, false); break;
+                case BuildFamily.TriangularWallInverted:    TriangularWallPiece(m, tier, true); break;
+                case BuildFamily.SlantedRoof:               SlantedRoofPiece(m, tier); break;
+                case BuildFamily.TriangularRoof:            TriangularRoofPiece(m, tier); break;
+                case BuildFamily.SlantedTriangularRoof:     SlantedTriangularRoofPiece(m, tier); break;
+                case BuildFamily.CornerRoof:                CornerRoofPiece(m, tier); break;
+                case BuildFamily.SlantedCornerRoofInverted: CornerRoofInvertedPiece(m, tier); break;
+                case BuildFamily.PyramidRoof:               PyramidRoofPiece(m, tier); break;
+                case BuildFamily.GateFrame:                 GateFramePiece(m, tier); break;
+                case BuildFamily.Gate:                      GateLeafPiece(m, tier); break;
+                case BuildFamily.BigGateFrame:              BigGateFramePiece(m, tier); break;
+                case BuildFamily.BigGate:                   BigGateLeafPiece(m, tier); break;
                 default:                     Wall(m, tier); break;
             }
             m.Commit(root, tier, meshAssetPath);
@@ -1107,31 +1403,30 @@ namespace VoxelEngine.EditorTools
                 new Vector3(Module, railThickness * 0.8f, railThickness * 0.8f));
         }
 
+        /// <summary>
+        /// 13.15.0: the Roof family is the FLAT ceiling panel - a deck that can
+        /// double as a floor for upper levels. The old 26-degree panel this
+        /// family used to be lives on, pitch-corrected, as the Slanted Roof.
+        /// </summary>
         private static void Roof(PieceMesh m, BuildTier tier)
         {
-            const float pitch = 26f;
-            float len = Module / Mathf.Cos(pitch * Mathf.Deg2Rad);
-
-            m.Box(PieceSurface.Frame, new Vector3(0f, Module * 0.5f * Mathf.Tan(pitch * Mathf.Deg2Rad) * 0.5f, 0f),
-                  new Vector3(Module, 0.22f, len), new Vector3(pitch, 0f, 0f));
-
-            // Cladding courses running up the pitch, overlapped like shingles.
-            int courses = 7;
+            m.Box(PieceSurface.Frame, new Vector3(0f, 0.21f, 0f), new Vector3(Module, 0.42f, Module));
+            // Ceiling boards running one way on top, so it reads as roofing when
+            // seen from above yet walks like a floor.
+            const int courses = 6;
             for (int i = 0; i < courses; i++)
             {
-                float t = (i + 0.5f) / courses;
-                float z = -len * 0.5f + len * t;
-                var local = Quaternion.Euler(pitch, 0f, 0f) * new Vector3(0f, 0.16f, z);
-                m.Box(PieceSurface.Skin,
-                      local + new Vector3(0f, Module * 0.5f * Mathf.Tan(pitch * Mathf.Deg2Rad) * 0.5f, 0f),
-                      new Vector3(Module, 0.12f, len / courses * 1.12f), new Vector3(pitch, 0f, 0f));
+                float z = -HalfModule + Module / courses * (i + 0.5f);
+                m.Box(PieceSurface.Skin, new Vector3(0f, 0.45f, z),
+                      new Vector3(Module - 0.2f, 0.07f, Module / courses * 1.05f));
             }
-
             foreach (float s in new[] { -1f, 1f })
-                m.Box(PieceSurface.Trim,
-                      Quaternion.Euler(pitch, 0f, 0f) * new Vector3(s * (HalfModule - 0.1f), 0.2f, 0f)
-                      + new Vector3(0f, Module * 0.5f * Mathf.Tan(pitch * Mathf.Deg2Rad) * 0.5f, 0f),
-                      new Vector3(0.2f, 0.2f, len), new Vector3(pitch, 0f, 0f));
+            {
+                m.Box(PieceSurface.Trim, new Vector3(0f, 0.21f, s * (HalfModule - 0.08f)),
+                      new Vector3(Module, 0.44f, 0.16f));
+                m.Box(PieceSurface.Trim, new Vector3(s * (HalfModule - 0.08f), 0.21f, 0f),
+                      new Vector3(0.16f, 0.44f, Module));
+            }
         }
 
         private static void Pillar(PieceMesh m, BuildTier tier)

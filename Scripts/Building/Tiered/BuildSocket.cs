@@ -65,7 +65,11 @@ namespace VoxelEngine.Building.Tiered
                             || incoming == BuildFamily.HalfWall
                             || incoming == BuildFamily.WallFrame
                             || incoming == BuildFamily.Stairs
-                            || incoming == BuildFamily.Railing;
+                            || incoming == BuildFamily.Railing
+                            || incoming == BuildFamily.TriangularWall
+                            || incoming == BuildFamily.TriangularWallInverted
+                            || incoming == BuildFamily.GateFrame
+                            || incoming == BuildFamily.BigGateFrame;
                     case SocketSide.North:
                     case SocketSide.South:
                     case SocketSide.East:
@@ -80,6 +84,22 @@ namespace VoxelEngine.Building.Tiered
             }
 
             // Openings accept only their matching fittings at centre.
+            if (host == BuildFamily.GateFrame && side == SocketSide.Center)
+                return incoming == BuildFamily.Gate;
+            if (host == BuildFamily.BigGateFrame && side == SocketSide.Center)
+                return incoming == BuildFamily.BigGate;
+            if (host == BuildFamily.GateFrame || host == BuildFamily.BigGateFrame)
+                return incoming == BuildFamily.Wall || incoming == BuildFamily.HalfWall
+                    || incoming == BuildFamily.Doorway || incoming == BuildFamily.Window
+                    || incoming == BuildFamily.WallFrame || incoming == BuildFamily.GateFrame;
+            // Triangular walls line up beside other wall pieces.
+            if (host == BuildFamily.TriangularWall || host == BuildFamily.TriangularWallInverted)
+                return incoming == BuildFamily.Wall || incoming == BuildFamily.HalfWall
+                    || incoming == BuildFamily.TriangularWall || incoming == BuildFamily.TriangularWallInverted
+                    || incoming == BuildFamily.Doorway || incoming == BuildFamily.Window;
+            // Roof panels neighbour other roof panels.
+            if (BuildFamilyInfo.IsRoofPanel(host))
+                return BuildFamilyInfo.IsRoofPanel(incoming);
             if (host == BuildFamily.Doorway && side == SocketSide.Center)
                 return incoming == BuildFamily.Door;
             if (host == BuildFamily.WallFrame && side == SocketSide.Center)
@@ -100,9 +120,13 @@ namespace VoxelEngine.Building.Tiered
                            incoming == BuildFamily.HalfWall ||
                            incoming == BuildFamily.Wall     ||
                            incoming == BuildFamily.Doorway  ||
-                           incoming == BuildFamily.Window;
+                           incoming == BuildFamily.Window   ||
+                           incoming == BuildFamily.TriangularWall ||
+                           incoming == BuildFamily.TriangularWallInverted ||
+                           BuildFamilyInfo.IsRoofPanel(incoming);
                 if (side == SocketSide.TopNorth || side == SocketSide.TopSouth)
-                    return incoming == BuildFamily.Floor || incoming == BuildFamily.FloorHatch;
+                    return incoming == BuildFamily.Floor || incoming == BuildFamily.FloorHatch
+                        || incoming == BuildFamily.Roof;
                 if (side == SocketSide.East || side == SocketSide.West)
                     return incoming == BuildFamily.Wall
                         || incoming == BuildFamily.Doorway
@@ -118,30 +142,29 @@ namespace VoxelEngine.Building.Tiered
                 return incoming == BuildFamily.Wall || incoming == BuildFamily.HalfWall;
             }
 
-            // Floors accept walls and pillars on top, stairs on their perimeter,
-            // and more floors one complete module to the side.
-            if (host == BuildFamily.Floor)
+            // Floors and flat roofs accept walls and pillars on top, stairs on
+            // their perimeter, and more decks one complete module to the side.
+            if (host == BuildFamily.Floor || host == BuildFamily.Roof)
             {
                 if (side == SocketSide.Top)
                     return incoming == BuildFamily.Wall ||
                            incoming == BuildFamily.HalfWall ||
                            incoming == BuildFamily.Pillar ||
                            incoming == BuildFamily.Doorway ||
-                           incoming == BuildFamily.Window;
+                           incoming == BuildFamily.Window ||
+                           incoming == BuildFamily.TriangularWall ||
+                           incoming == BuildFamily.TriangularWallInverted ||
+                           incoming == BuildFamily.GateFrame;
                 if (side == SocketSide.TopNorth || side == SocketSide.TopSouth ||
                     side == SocketSide.TopEast || side == SocketSide.TopWest)
                     return incoming == BuildFamily.Stairs;
-                return incoming == BuildFamily.Floor;
+                return incoming == BuildFamily.Floor || incoming == BuildFamily.Roof;
             }
 
             // Floors continue from either stair landing. The authored sockets sit
             // one full module beyond the flight centre at the correct lower/upper level.
             if (host == BuildFamily.Stairs)
                 return incoming == BuildFamily.Floor || incoming == BuildFamily.FloorHatch;
-
-            // Roofs may accept other roofs above.
-            if (host == BuildFamily.Roof)
-                return incoming == BuildFamily.Roof;
 
             return false;
         }

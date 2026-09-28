@@ -1,0 +1,50 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f36bfc5b50d54a24593f2613e8d30e7e, type: 3}
+  m_Name: TBlock_GateFrame
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.Tiered.TieredBlockDefinition
+  family: 32
+  displayName: Gate Frame
+  woodPrefab: {fileID: 6264388044912560458, guid: 24d497d5fce60d94687c5d6dde1eb75e, type: 3}
+  stonePrefab: {fileID: 7142096585878514019, guid: 9d06a273fbed8134ea4620f18a6a72b7, type: 3}
+  ironPrefab: {fileID: 2365935983879763926, guid: d8154993282a67244b23edb24b683b22, type: 3}
+  steelPrefab: {fileID: 1970043992012303176, guid: f7fbb20893d9b7b4aa191c2b89007d5a, type: 3}
+  wood:
+    hp: 200
+    miningTier: 1
+  stone:
+    hp: 500
+    miningTier: 2
+  iron:
+    hp: 1500
+    miningTier: 3
+  steel:
+    hp: 4000
+    miningTier: 4
+  placeCost:
+    items:
+    - item: {fileID: 11400000, guid: 0757598308dac2d4991806a8e934dd77, type: 2}
+      count: 6
+    - item: {fileID: 11400000, guid: 75b750e48370dfd47856fc40436c0e52, type: 2}
+      count: 6
+  woodToStone:
+    items:
+    - item: {fileID: 11400000, guid: 9225024033f905e4187afc15d721e060, type: 2}
+      count: 10
+  stoneToIron:
+    items:
+    - item: {fileID: 11400000, guid: 96a60523ff509c84ba84cf35f6084bde, type: 2}
+      count: 6
+  ironToSteel:
+    items:
+    - item: {fileID: 11400000, guid: 86caa3d29ca1fcb4ab57c4f35cd925b9, type: 2}
+      count: 6

@@ -39,12 +39,25 @@ namespace VoxelEngine.Building.Tiered
         private static readonly BuildFamily[] StructuralFamilies =
         {
             BuildFamily.Foundation, BuildFamily.Floor, BuildFamily.Wall,
-            BuildFamily.HalfWall, BuildFamily.Pillar, BuildFamily.Roof,
+            BuildFamily.HalfWall, BuildFamily.Pillar,
             BuildFamily.Stairs, BuildFamily.Railing,
             BuildFamily.Doorway, BuildFamily.Door,
             BuildFamily.Window, BuildFamily.WindowPane,
             BuildFamily.WallFrame, BuildFamily.GarageDoor,
             BuildFamily.FloorHatch, BuildFamily.HatchLid
+        };
+
+        // 13.15.0: menu two. The flat Roof moved here from the structural page
+        // so every roofing piece lives on one wheel.
+        private static readonly BuildFamily[] RoofsAndGatesFamilies =
+        {
+            BuildFamily.Roof, BuildFamily.SlantedRoof,
+            BuildFamily.TriangularRoof, BuildFamily.SlantedTriangularRoof,
+            BuildFamily.CornerRoof, BuildFamily.SlantedCornerRoofInverted,
+            BuildFamily.PyramidRoof,
+            BuildFamily.TriangularWall, BuildFamily.TriangularWallInverted,
+            BuildFamily.GateFrame, BuildFamily.Gate,
+            BuildFamily.BigGateFrame, BuildFamily.BigGate
         };
 
         private static readonly BuildFamily[] StationFamilies =
@@ -55,14 +68,35 @@ namespace VoxelEngine.Building.Tiered
         };
 
         /// <summary>
-        /// Held per session rather than saved: the wheel should open on the everyday
-        /// pieces, because that is what the player uses most even after the station
-        /// set unlocks.
+        /// Static so the wheel reopens on whichever menu the player used last,
+        /// surviving wheel closes, respawns and scene reloads within the session.
+        /// Starting from the first page on every open forced roof and station
+        /// builders to scroll past the everyday pieces again and again.
         /// </summary>
-        private BuildFamilyGroup _group = BuildFamilyGroup.Structural;
+        private static BuildFamilyGroup _group = BuildFamilyGroup.Structural;
 
-        private BuildFamily[] Families => _group == BuildFamilyGroup.OrbitalStation
-            ? StationFamilies : StructuralFamilies;
+        private BuildFamily[] Families => _group switch
+        {
+            BuildFamilyGroup.OrbitalStation => StationFamilies,
+            BuildFamilyGroup.RoofsAndGates => RoofsAndGatesFamilies,
+            _ => StructuralFamilies,
+        };
+
+        private static string GroupLabelOf(BuildFamilyGroup group) => group switch
+        {
+            BuildFamilyGroup.OrbitalStation => "ORBITAL STATION",
+            BuildFamilyGroup.RoofsAndGates => "ROOFS & GATES",
+            _ => "STRUCTURAL",
+        };
+
+        /// <summary>Menu cycle: structural, roofs and gates, then station when unlocked.</summary>
+        private BuildFamilyGroup NextGroup() => _group switch
+        {
+            BuildFamilyGroup.Structural => BuildFamilyGroup.RoofsAndGates,
+            BuildFamilyGroup.RoofsAndGates => StationGroupUnlocked
+                ? BuildFamilyGroup.OrbitalStation : BuildFamilyGroup.Structural,
+            _ => BuildFamilyGroup.Structural,
+        };
 
         private readonly RadialWheelController _wheel = new();
         private readonly List<string> _detailScratch = new(4);
@@ -144,15 +178,18 @@ namespace VoxelEngine.Building.Tiered
             bool holdingHammer = stack != null && !stack.IsEmpty && stack.item is Hammer;
             if (!holdingHammer) ActiveFamily = null;
 
+            // The remembered menu may be a locked group after a new save or a
+            // research rollback; never show locked content.
+            if (_group == BuildFamilyGroup.OrbitalStation && !StationGroupUnlocked)
+                _group = BuildFamilyGroup.Structural;
+
             // Escape is NOT handled here. InGamePauseMenu already exits build mode when
             // the hammer has a family armed or the dial is up, and opens the pause menu
             // otherwise — owning the key in two places is what made Escape report
             // "build mode closed" while standing idle with a hammer.
 
-            _wheel.GroupLabel = _group == BuildFamilyGroup.OrbitalStation ? "ORBITAL STATION" : "STRUCTURAL";
-            _wheel.SwapHint = StationGroupUnlocked
-                ? "TAB / SCROLL  ·  " + (_group == BuildFamilyGroup.OrbitalStation ? "STRUCTURAL" : "ORBITAL STATION")
-                : string.Empty;
+            _wheel.GroupLabel = GroupLabelOf(_group);
+            _wheel.SwapHint = "TAB / SCROLL  ·  " + GroupLabelOf(NextGroup());
 
             _wheel.Tick(InputAction.BuildWheel, holdingHammer);
         }
@@ -261,20 +298,8 @@ namespace VoxelEngine.Building.Tiered
         /// </summary>
         private void ToggleGroup()
         {
-            if (_group == BuildFamilyGroup.Structural)
-            {
-                if (!StationGroupUnlocked)
-                {
-                    BuildFeedbackHud.Show("Orbital Station pieces locked",
-                        "Research Orbital Construction to unlock the station family.",
-                        null, T.AccentAmber);
-                    return;
-                }
-                _group = BuildFamilyGroup.OrbitalStation;
-            }
-            else _group = BuildFamilyGroup.Structural;
-
-            _wheel.GroupLabel = _group == BuildFamilyGroup.OrbitalStation ? "ORBITAL STATION" : "STRUCTURAL";
+            _group = NextGroup();
+            _wheel.GroupLabel = GroupLabelOf(_group);
             _wheel.Invalidate();
         }
 

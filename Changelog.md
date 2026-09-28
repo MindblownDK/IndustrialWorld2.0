@@ -1,9 +1,53 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `13.13.0-dev`
+**Current Version:** `13.15.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [13.15.0-dev] Roofs, Gables and Gates
+
+**Type:** MINOR - twelve new building pieces, a reworked Roof, a third build-wheel menu and roof chain snapping. Save-compatible: all new families are appended enum values; one deliberate visual change to existing roofs, see below.
+
+**The Roof family is now the flat ceiling panel.** As agreed, family six is rebuilt as a flat deck that can double as a floor for upper levels: full floor socket set, deck span rules, walls and stairs attach to it, pillars carry it and the collapse audit treats it as a deck. EXISTING PLACED ROOFS CHANGE SHAPE from the old 26-degree panel to the flat panel after the Setup step - position, family, tier and cost are untouched.
+
+**Eight roofing and gable pieces.** Slanted Roof (rises exactly one storey across one module - the 3-4-5 pitch, so roofs and walls always meet), Triangular Roof (flat diagonal cap), Slanted Triangular Roof, Corner Roof (true hip: two planes meeting on the diagonal ridge), Slanted Corner Roof (Inverted) (the valley twin), Pyramid Roof (pitch-matched four-sided cap over one module), Triangular Wall (right-triangle gable matching the roof diagonal exactly - two mirrored make a full gable) and Triangular Wall (Inverted) for overhangs. Sloped panels follow the span-two roof rules with the wider adoption reach.
+
+**Roof panels snap like stairs.** A sloped panel seats its eave on a wall head, rising into the building. Aim up or down the slope of an existing panel and the next one continues the pitch a full module out and a full storey up or down; aim at its side and the panel extends the ridge line level. Triangular walls and gates place on deck edges exactly like walls.
+
+**Two gates.** Gate Frame (one module wide, one and a half storeys tall) with its heavy swinging Gate, and Big Gate Frame (two modules wide, three storeys tall) with the colossal Big Gate - both frame-plus-door pairs like Doorway and Door, hinged at the side, upgrade-safe, and full members of the collapse system (frames take the base audit, gates are fittings that fall with their frame).
+
+**The wheel gains menu two.** TAB/SCROLL cycles STRUCTURAL, ROOFS & GATES, then ORBITAL STATION when researched. All thirteen roofing and gate pieces live on menu two, including the flat Roof, and the wheel still remembers the menu you used last.
+
+**GitHub title:** `[13.15.0-dev] Roofs, gables and gates`
+
+**Manual steps:**
+1. Pull `Dev` and let Unity compile.
+2. Run Tools -> Voxel Engine -> Voxel Engine Setup and execute the tiered build step (Step 102). It authors the twelve new definitions, prefabs, meshes and tokens, and rebuilds the Roof prefabs flat. Non-destructive for everything already customised.
+3. Scroll the build wheel: menu two reads ROOFS & GATES with thirteen pieces.
+4. Seat a Slanted Roof on a wall head, then chain: aim high on it to continue up, low to continue down, at its side to extend the ridge. The span-two limit still applies.
+5. Close a gable with a Triangular Wall on the open end - the hypotenuse matches the roof diagonal.
+6. Place a Gate Frame on open ground and on a foundation edge, snap a Gate into it and swing it. Repeat with the Big Gate pair. Demolish a frame: its gate falls with it.
+7. Place a flat Roof as a ceiling, then walk on it and build a wall on top: it behaves as a floor.
+
+### [13.14.0-dev] Building Grows Downward
+
+**Type:** MINOR - downward vertical building and build-wheel menu memory. Save-compatible: no schema, prefab asset, item, recipe, research or cost change.
+
+**Vertical pieces hang below floor edges.** Aiming at the UNDERSIDE of a Floor or Floor Hatch near an edge now hangs the piece below that edge: Walls, Half Walls, Doorways, Windows and Wall Frames drop a full piece height so their head sits flush against the slab bottom, and building continues downward. Aiming at the top surface places upward exactly as before, and Foundations remain top-only. A hanging piece is carried by the deck above its head - relayed through further stacked hanging walls - and decays normally when that deck falls. Hanging pieces never GRANT span or support to anything else, so no cantilever or ladder rule loosens: they keep only themselves alive.
+
+**The build wheel remembers its menu.** The wheel now reopens on whichever menu the player last used - structural or station - surviving wheel closes, respawns and scene reloads within the session, instead of starting from the first page every time. A remembered menu that is locked on the current save falls back to the structural page, so locked content can never appear.
+
+**The load-bearing readout understands hanging pieces.** A deck with pieces hung below it reads LOAD-BEARING.
+
+**GitHub title:** `[13.14.0-dev] Building grows downward`
+
+**Manual steps:**
+1. Pull `Dev` and let Unity compile. No Setup step is required.
+2. Stand under a supported floor, aim at its underside near an edge and place a Wall: it hangs below the edge, head flush with the slab. Continue a second wall below the first.
+3. Demolish the floor: the hanging walls decay and fall with it.
+4. Confirm a hanging wall's bottom edge accepts no floor (hanging pieces carry nothing).
+5. Scroll the build wheel to the station menu, close it, reopen: it opens on station. Aim at the floor with hanging walls: it reads LOAD-BEARING.
 
 ### [13.13.0-dev] Decay Before the Fall
 

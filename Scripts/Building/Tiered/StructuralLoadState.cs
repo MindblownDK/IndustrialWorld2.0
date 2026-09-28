@@ -142,9 +142,7 @@ namespace VoxelEngine.Building.Tiered
                 if (block == own || block.definition == null) continue;
                 BuildFamily family = block.definition.family;
                 if (block.GetComponent<AdjustablePillar>() != null || family == BuildFamily.Pillar) continue;
-                if (family == BuildFamily.Foundation
-                    || family == BuildFamily.Floor || family == BuildFamily.FloorHatch
-                    || family == BuildFamily.Stairs) return true;
+                if (family == BuildFamily.Foundation || BuildFamilyInfo.IsDeck(family)) return true;
                 if (IsVerticalSupport(family)
                     && (TryResolveSupportBase(block, out var deck) || deck != null))
                     return true;
@@ -166,13 +164,45 @@ namespace VoxelEngine.Building.Tiered
             return false;
         }
 
-        /// <summary>A vertical piece stands while anything carries its base line.</summary>
+        /// <summary>
+        /// A vertical piece stands while anything carries its base line - or,
+        /// for a piece hung below a floor, while a live deck sits on its head
+        /// (relayed through stacked hanging walls).
+        /// </summary>
         private bool HasBase()
         {
             var own = GetComponent<PlacedTieredBlock>();
             if (own == null || own.definition == null) return true;
             bool grounded = TryResolveSupportBase(own, out var carryingDeck);
-            return grounded || carryingDeck != null;
+            return grounded || carryingDeck != null || HasOverheadCarrier(own, 4);
+        }
+
+        /// <summary>
+        /// True when a live deck rests against this piece's head, directly or
+        /// through further hanging wall pieces. Hanging pieces never GRANT span
+        /// or support to anything else - they only keep themselves alive - so
+        /// no cantilever or ladder rule changes.
+        /// </summary>
+        private static bool HasOverheadCarrier(PlacedTieredBlock piece, int depth)
+        {
+            if (piece == null || piece.definition == null || depth <= 0) return false;
+            float height = piece.definition.family == BuildFamily.HalfWall ? 2.8f : 5.625f;
+            var above = Physics.OverlapBox(
+                piece.transform.position + piece.transform.up * (height + 0.1f),
+                new Vector3(0.6f, 0.25f, 0.6f), piece.transform.rotation, ~0, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < above.Length; i++)
+            {
+                Collider collider = above[i];
+                if (collider == null || collider.transform.IsChildOf(piece.transform)) continue;
+                if (BuildSystemV2.IsDynamicBody(collider)) continue;
+                var block = collider.GetComponentInParent<PlacedTieredBlock>();
+                if (block == null || block == piece || block.definition == null) continue;
+                BuildFamily family = block.definition.family;
+                if (BuildFamilyInfo.IsDeck(family)) return true;
+                if (family != BuildFamily.Pillar && IsVerticalSupport(family)
+                    && HasOverheadCarrier(block, depth - 1)) return true;
+            }
+            return false;
         }
 
         private bool HasLoadPath()
@@ -213,7 +243,7 @@ namespace VoxelEngine.Building.Tiered
                         && ReachesLevel(block, family))
                         bestCarrierSpan = Mathf.Min(bestCarrierSpan, carryingDeck.spanFromSupport);
                 }
-                else if (other == BuildFamily.Foundation && family != BuildFamily.Roof)
+                else if (other == BuildFamily.Foundation && !BuildFamilyInfo.IsRoofPanel(family))
                     grounded = true;
                 else
                     continue;
@@ -230,9 +260,9 @@ namespace VoxelEngine.Building.Tiered
             for (int i = 0; i < blocks.Count; i++)
             {
                 var load = blocks[i].GetComponent<StructuralLoadState>();
-                bool compatibleDeck = load != null && (loadFamily == BuildFamily.Roof
-                    ? load.loadFamily == BuildFamily.Roof
-                    : load.loadFamily == BuildFamily.Floor || load.loadFamily == BuildFamily.FloorHatch || load.loadFamily == BuildFamily.Stairs);
+                bool compatibleDeck = load != null && (BuildFamilyInfo.IsRoofPanel(loadFamily)
+                    ? BuildFamilyInfo.IsRoofPanel(load.loadFamily)
+                    : BuildFamilyInfo.IsDeck(load.loadFamily));
                 if (compatibleDeck && load.armed && load.spanFromSupport < spanFromSupport)
                     return true;
             }
@@ -297,8 +327,7 @@ namespace VoxelEngine.Building.Tiered
                     }
                     continue;
                 }
-                if (family == BuildFamily.Floor || family == BuildFamily.FloorHatch
-                    || family == BuildFamily.Stairs)
+                if (BuildFamilyInfo.IsDeck(family))
                 {
                     var load = below.GetComponent<StructuralLoadState>();
                     if (load == null || !load.armed) { sawUnarmedDeck = true; continue; }
@@ -356,7 +385,7 @@ namespace VoxelEngine.Building.Tiered
             // a Foundation SIDE - placement grants span one at exactly that
             // geometry, so the audit must reach it too or the deck it just
             // allowed is destroyed on the first check.
-            float reach = suspendedFamily == BuildFamily.Roof ? 5.8f
+            float reach = BuildFamilyInfo.IsRoofPanel(suspendedFamily) ? 5.8f
                 : support.definition.family == BuildFamily.Foundation ? 8.1f : 5.5f;
             return vertical < 0.85f && planar.sqrMagnitude <= reach * reach;
         }
@@ -368,7 +397,8 @@ namespace VoxelEngine.Building.Tiered
 
         public static bool IsFitting(BuildFamily family)
             => family == BuildFamily.Door || family == BuildFamily.GarageDoor
-                || family == BuildFamily.WindowPane || family == BuildFamily.HatchLid;
+                || family == BuildFamily.WindowPane || family == BuildFamily.HatchLid
+                || family == BuildFamily.Gate || family == BuildFamily.BigGate;
 
         /// <summary>
         /// True when other armed pieces currently depend on this one: a fitting
@@ -391,8 +421,7 @@ namespace VoxelEngine.Building.Tiered
             Vector3 up = piece.transform.up;
             Vector3 top = piece.transform.position + up * topHeight;
             var ownLoad = piece.GetComponent<StructuralLoadState>();
-            bool pieceIsDeck = family == BuildFamily.Floor || family == BuildFamily.FloorHatch
-                || family == BuildFamily.Stairs;
+            bool pieceIsDeck = BuildFamilyInfo.IsDeck(family);
             int ownSpan = ownLoad != null && ownLoad.armed && !ownLoad.verticalPiece
                 ? ownLoad.spanFromSupport : 0;
 
@@ -426,13 +455,23 @@ namespace VoxelEngine.Building.Tiered
                     continue;
                 }
 
-                // A vertical piece or railing whose base line rests on this body.
+                // A vertical piece or railing whose base line rests on this body,
+                // or a hanging piece whose head this body carries.
                 if (load.verticalPiece)
                 {
                     var below = Physics.OverlapBox(block.transform.position - block.transform.up * 0.15f,
                         new Vector3(0.6f, 0.25f, 0.6f), block.transform.rotation, ~0, QueryTriggerInteraction.Ignore);
                     for (int c = 0; c < below.Length; c++)
                         if (below[c] != null && below[c].transform.IsChildOf(piece.transform)) return true;
+                    if (!(TryResolveSupportBase(block, out var blockDeck) || blockDeck != null))
+                    {
+                        float blockHeight = block.definition.family == BuildFamily.HalfWall ? 2.8f : 5.625f;
+                        var head = Physics.OverlapBox(
+                            block.transform.position + block.transform.up * (blockHeight + 0.1f),
+                            new Vector3(0.6f, 0.25f, 0.6f), block.transform.rotation, ~0, QueryTriggerInteraction.Ignore);
+                        for (int c = 0; c < head.Length; c++)
+                            if (head[c] != null && head[c].transform.IsChildOf(piece.transform)) return true;
+                    }
                     continue;
                 }
 

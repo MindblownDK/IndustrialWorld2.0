@@ -57,6 +57,20 @@ namespace VoxelEngine.Building.Tiered
                 case BuildFamily.HatchLid:   HatchLid(b);   break;
                 case BuildFamily.Railing:    Railing(b);    break;
 
+                // ── Roofing and gates (13.15.0-dev) ──
+                case BuildFamily.TriangularWall:            TriWall(b, false); break;
+                case BuildFamily.TriangularWallInverted:    TriWall(b, true);  break;
+                case BuildFamily.SlantedRoof:               SlantedRoof(b);    break;
+                case BuildFamily.TriangularRoof:            TriRoof(b);        break;
+                case BuildFamily.SlantedTriangularRoof:     SlantedTriRoof(b); break;
+                case BuildFamily.CornerRoof:                CornerRoof(b);     break;
+                case BuildFamily.SlantedCornerRoofInverted: ValleyCorner(b);   break;
+                case BuildFamily.PyramidRoof:               PyramidRoof(b);    break;
+                case BuildFamily.GateFrame:                 GatePortal(b, false); break;
+                case BuildFamily.Gate:                      GateLeaf(b, false);   break;
+                case BuildFamily.BigGateFrame:              GatePortal(b, true);  break;
+                case BuildFamily.BigGate:                   GateLeaf(b, true);    break;
+
                 default: b.IsoBox(0f, 0f, 0f, 1f, 1f, 1f); break;
             }
         }
@@ -230,6 +244,99 @@ namespace VoxelEngine.Building.Tiered
             b.IsoFaceLine(sx, sy, 0.04f, 0.5f, 0.96f, 0.5f);
             b.Line(P(0.12f * sx, 0.2f * sy, 0f), P(0.38f * sx, 0.46f * sy, 0f));
             b.Line(P(0.12f * sx, 0.42f * sy, 0f), P(0.26f * sx, 0.56f * sy, 0f));
+        }
+
+        // ── Roofing and gates (13.15.0-dev) ──
+
+        private static void TriWall(LineArtBuilder b, bool inverted)
+        {
+            const float h = 0.85f;
+            if (!inverted)
+            {
+                // Rises to full height on the right.
+                b.Closed(P(0f, 0f, 0f), P(1f, 0f, 0f), P(1f, h, 0f));
+                b.Line(P(0.55f, 0f, 0f), P(0.55f, h * 0.55f, 0f));
+            }
+            else
+            {
+                // Hangs from a top point on the left, full on the right.
+                b.Closed(P(0f, h, 0f), P(1f, h, 0f), P(1f, 0f, 0f));
+                b.Line(P(0.55f, h, 0f), P(0.55f, h * 0.45f, 0f));
+            }
+        }
+
+        private static void SlantedRoof(LineArtBuilder b)
+        {
+            const float h = 0.8f;
+            // A pitched panel seen in iso: low eave near, high ridge far.
+            b.Closed(P(0f, 0f, 0f), P(1f, 0f, 0f), P(1f, h, 1f), P(0f, h, 1f));
+            b.Line(P(0f, 0f, 0f), P(0f, h * 0.35f, 0.35f));
+            b.Line(P(1f, 0f, 0f), P(1f, h * 0.35f, 0.35f));
+        }
+
+        private static void TriRoof(LineArtBuilder b)
+        {
+            b.Closed(P(0f, 0f, 0f), P(1f, 0f, 0f), P(0f, 0f, 1f));
+            b.Line(P(0.5f, 0f, 0f), P(0f, 0f, 0.5f));
+        }
+
+        private static void SlantedTriRoof(LineArtBuilder b)
+        {
+            const float h = 0.8f;
+            b.Closed(P(0f, 0f, 0f), P(1f, 0f, 0f), P(0f, h, 1f));
+            b.Line(P(0.5f, 0f, 0f), P(0f, h * 0.5f, 0.5f));
+        }
+
+        private static void CornerRoof(LineArtBuilder b)
+        {
+            const float h = 0.7f;
+            Vector2 a = P(0f, 0f, 0f), c = P(1f, 0f, 0f), d = P(0f, 0f, 1f);
+            Vector2 apex = P(1f, h, 1f);
+            b.Closed(a, c, apex, d);
+            b.Line(a, apex);   // the diagonal hip ridge
+        }
+
+        private static void ValleyCorner(LineArtBuilder b)
+        {
+            const float h = 0.7f;
+            Vector2 a = P(0f, h, 0f), c = P(1f, h, 0f), d = P(0f, h, 1f);
+            Vector2 drop = P(1f, 0f, 1f);
+            b.Closed(a, c, drop, d);
+            b.Line(a, drop);   // the valley line
+        }
+
+        private static void PyramidRoof(LineArtBuilder b)
+        {
+            const float h = 0.75f;
+            Vector2 a = P(0f, 0f, 0f), c = P(1f, 0f, 0f);
+            Vector2 d = P(1f, 0f, 1f), e = P(0f, 0f, 1f);
+            Vector2 apex = P(0.5f, h, 0.5f);
+            b.Closed(a, c, d, e);
+            b.Line(a, apex); b.Line(c, apex);
+            b.Line(d, apex); b.Line(e, apex);
+        }
+
+        private static void GatePortal(LineArtBuilder b, bool big)
+        {
+            float w = big ? 1f : 0.82f, h = big ? 0.95f : 0.8f;
+            float x0 = (1f - w) * 0.5f;
+            // Outer frame with a gate-sized opening.
+            b.Closed(P(x0, 0f, 0f), P(x0 + w, 0f, 0f), P(x0 + w, h, 0f), P(x0, h, 0f));
+            float iw = w * 0.62f, ih = h * 0.78f;
+            float ix = (1f - iw) * 0.5f;
+            b.Line(P(ix, 0f, 0f), P(ix, ih, 0f));
+            b.Line(P(ix + iw, 0f, 0f), P(ix + iw, ih, 0f));
+            b.Line(P(ix, ih, 0f), P(ix + iw, ih, 0f));
+            if (big) b.Line(P(x0, h * 0.9f, 0f), P(x0 + w, h * 0.9f, 0f));
+        }
+
+        private static void GateLeaf(LineArtBuilder b, bool big)
+        {
+            float w = big ? 0.9f : 0.7f, h = big ? 0.95f : 0.8f;
+            float x0 = (1f - w) * 0.5f;
+            b.Closed(P(x0, 0f, 0f), P(x0 + w, 0f, 0f), P(x0 + w, h, 0f), P(x0, h, 0f));
+            b.Line(P(x0, h * 0.5f, 0f), P(x0 + w, h * 0.5f, 0f));
+            b.Line(P(x0, 0f, 0f), P(x0 + w, h, 0f));   // the diagonal brace
         }
 
         private static void Railing(LineArtBuilder b)

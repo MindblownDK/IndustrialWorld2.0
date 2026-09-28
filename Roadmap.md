@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `13.13.0-dev`
-**Roadmap Version:** `13.13.0-dev`
+**Current Version:** `13.15.0-dev`
+**Roadmap Version:** `13.15.0-dev`
 **Date:** 2026-09-28
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,25 +29,20 @@
 
 ## 0. Recently Done
 
+### 13.15.0-dev - Roofs, Gables and Gates
+- **Twelve pieces** (`BuildEnums`, `TieredPieceFactory`, `TieredRebuildSetup`): slanted/triangular/corner/pyramid roof set, triangular walls, and two frame-plus-door gate pairs, all appended families authored by Setup.
+- **Flat Roof** (`TieredPieceFactory`, `BuildSocket`): family six is the flat ceiling deck that doubles as a floor; existing placed roofs change shape after Setup.
+- **Roof chain snap** (`BuildSystemV2`): sloped panels seat their eave on wall heads and chain up, down and sideways like stairs; span-two rules apply.
+- **Menu two** (`HammerBuildWheel`): STRUCTURAL, ROOFS & GATES, ORBITAL STATION, with the last-used menu remembered.
+
+### 13.14.0-dev - Building Grows Downward
+- **Downward building** (`BuildSystemV2`, `StructuralLoadState`): wall-type pieces hang below floor edges when placed against the deck underside; they are carried by the deck above and never grant span or support themselves.
+- **Wheel memory** (`HammerBuildWheel`): the build wheel reopens on the last-used menu, falling back to structural when the remembered menu is locked.
+
 ### 13.13.0-dev - Decay Before the Fall
 - **Foundation adoption fix** (`StructuralLoadState`): the audit reaches 8.1 m for Foundation supports, so a floor hung off a foundation side is adopted instead of destroyed on the first check.
 - **Decay collapse** (`StructuralLoadState`): unsupported pieces drain health with crack visuals for about ten seconds before falling; rebuilding the support mid-decay stops it.
 - **Pillar collapse** (`BuildSystemV2`, `StructuralLoadState`): a pillar stands only via a grounded chain, solid base contact or a live block at its top; fully detached pillars decay, and two detached pillars can never hold each other up.
-
-### 13.12.0-dev - Fittings Fall With Their Frames
-- **Fitting collapse** (`BuildSystemV2`, `StructuralLoadState`): doors, garage doors, window panes and hatch lids are armed against their host frame and fall with it; frame upgrades re-point the fitting.
-- **Load-bearing readout** (`WorldInspectionHud`, `StructuralLoadState`): the top-left inspection card flags LOAD-BEARING when armed pieces depend on the target - hosted fittings, standing walls or railings, hanging decks or relayed cantilevers.
-- **Scope**: read-only check, crosshair target only; pre-patch and save-restored fittings never self-collapse.
-
-### 13.11.0-dev - Collapse Reaches the Walls
-- **Faster audits** (`StructuralLoadState`, `PlacedTieredBlock`): the audit interval drops to 0.3 s and destroyed blocks ping armed neighbours, so chain collapses ripple at about 0.1 s per link.
-- **Vertical collapse** (`BuildSystemV2`, `StructuralLoadState`): walls, half walls, doorways, windows, wall frames and railings arm a base audit at placement and fall when their carrier is destroyed; upgrades preserve the arming.
-- **Scope**: pillars and fitted doors/panes are excluded; pre-patch and save-restored pieces never self-collapse.
-
-### 13.10.3-dev - Walls See What They Stand On
-- **Base probe** (`StructuralLoadState`): the wall support-base check uses an overlap box straddling the root line instead of a thin ray that grazed deck-edge colliders.
-- **Priority order**: terrain/Foundation/grounded pillar ground the wall; armed decks pass their best span through; only deck families count as legacy-stable.
-- **Behaviour**: the span-two wall refusal and the audit remain exploit-safe and unchanged.
 
 ### Era Transition Feel
 

@@ -58,7 +58,34 @@ namespace VoxelEngine.Building.Tiered
         // ── Edge safety (13.6.0-dev) ──
         // Appended: saved family integers must remain stable.
         /// <summary>Guard rail that fits deck, foundation and stair edges.</summary>
-        Railing = 23
+        Railing = 23,
+
+        // ── Roofing and gates (13.15.0-dev) ──
+        // Appended, never inserted: saved family integers must remain stable.
+        /// <summary>Right-triangle wall closing the gable under a slanted roof.</summary>
+        TriangularWall = 24,
+        /// <summary>Upside-down triangular wall for overhangs and overhead geometry.</summary>
+        TriangularWallInverted = 25,
+        /// <summary>Angled roof panel rising one storey across one module.</summary>
+        SlantedRoof = 26,
+        /// <summary>Flat triangular roof panel capping diagonal sections.</summary>
+        TriangularRoof = 27,
+        /// <summary>Sloped triangular roof blending into triangular wall shapes.</summary>
+        SlantedTriangularRoof = 28,
+        /// <summary>Hip piece for outer roof corners: two slopes meeting on the diagonal.</summary>
+        CornerRoof = 29,
+        /// <summary>Valley piece for inner roof corners.</summary>
+        SlantedCornerRoofInverted = 30,
+        /// <summary>Four-sided sloped cap forming a pyramid peak over one module.</summary>
+        PyramidRoof = 31,
+        /// <summary>Freestanding gateway frame, one module wide and 1.5 storeys tall. Takes a Gate.</summary>
+        GateFrame = 32,
+        /// <summary>Heavy swinging gate that fits a Gate Frame.</summary>
+        Gate = 33,
+        /// <summary>Monumental gate frame, two modules wide and three storeys tall. Takes a Big Gate.</summary>
+        BigGateFrame = 34,
+        /// <summary>Colossal swinging gate that fits a Big Gate Frame.</summary>
+        BigGate = 35
     }
 
     /// <summary>
@@ -70,6 +97,8 @@ namespace VoxelEngine.Building.Tiered
     {
         Structural = 0,
         OrbitalStation = 1,
+        /// <summary>Second wheel menu: the roofing set, triangular walls and both gates.</summary>
+        RoofsAndGates = 2,
     }
 
     public static class BuildFamilyInfo
@@ -81,7 +110,25 @@ namespace VoxelEngine.Building.Tiered
         public static BuildFamilyGroup GroupOf(BuildFamily family)
             => family >= BuildFamily.StationHull && family <= BuildFamily.StationDome
                 ? BuildFamilyGroup.OrbitalStation
-                : BuildFamilyGroup.Structural;
+                : family >= BuildFamily.TriangularWall && family <= BuildFamily.BigGate
+                    ? BuildFamilyGroup.RoofsAndGates
+                    : BuildFamilyGroup.Structural;
+
+        /// <summary>
+        /// The sloped/shaped roof panels that obey the span-two roof rules.
+        /// Deliberately EXCLUDES BuildFamily.Roof: since 13.15.0 that family is
+        /// the flat ceiling panel and follows the ordinary deck (Floor) rules,
+        /// so it can double as a floor for upper levels.
+        /// </summary>
+        public static bool IsRoofPanel(BuildFamily family)
+            => family == BuildFamily.SlantedRoof || family == BuildFamily.TriangularRoof
+                || family == BuildFamily.SlantedTriangularRoof || family == BuildFamily.CornerRoof
+                || family == BuildFamily.SlantedCornerRoofInverted || family == BuildFamily.PyramidRoof;
+
+        /// <summary>Walkable deck slabs: floors, hatches, stairs and the flat roof.</summary>
+        public static bool IsDeck(BuildFamily family)
+            => family == BuildFamily.Floor || family == BuildFamily.FloorHatch
+                || family == BuildFamily.Stairs || family == BuildFamily.Roof;
 
         /// <summary>
         /// Research node that unlocks a group, or null when it needs none. Matched by id so

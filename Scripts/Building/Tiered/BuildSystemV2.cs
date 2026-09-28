@@ -149,7 +149,8 @@ namespace VoxelEngine.Building.Tiered
             bool suspendedPanel = activeFam.Value == BuildFamily.Roof
                 || activeFam.Value == BuildFamily.Floor
                 || activeFam.Value == BuildFamily.FloorHatch
-                || activeFam.Value == BuildFamily.Stairs;
+                || activeFam.Value == BuildFamily.Stairs
+                || BuildFamilyInfo.IsRoofPanel(activeFam.Value);
             if (suspendedPanel)
             {
                 // A Floor continuing from a Foundation starts one complete module
@@ -239,11 +240,20 @@ namespace VoxelEngine.Building.Tiered
 
             var directHost = hit.collider != null ? hit.collider.GetComponentInParent<PlacedTieredBlock>() : null;
             if (requestedFamily == BuildFamily.Roof || requestedFamily == BuildFamily.Floor
-                || requestedFamily == BuildFamily.FloorHatch || requestedFamily == BuildFamily.Stairs)
+                || requestedFamily == BuildFamily.FloorHatch || requestedFamily == BuildFamily.Stairs
+                || BuildFamilyInfo.IsRoofPanel(requestedFamily))
                 _structuralSpan = ResolveStructuralSpan(directHost, requestedFamily);
             if (requestedFamily == BuildFamily.Stairs &&
                 directHost != null && directHost.definition != null && directHost.definition.family == BuildFamily.Stairs &&
                 TryComputeStairChainTransform(hit, directHost, out _ghostPos, out _ghostRot))
+            {
+                _ghostValid = ValidateOverlap(_ghostPos, requestedFamily, directHost);
+                return;
+            }
+            if (BuildFamilyInfo.IsRoofPanel(requestedFamily) &&
+                directHost != null && directHost.definition != null
+                && BuildFamilyInfo.IsRoofPanel(directHost.definition.family) &&
+                TryComputeRoofChainTransform(hit, directHost, requestedFamily, out _ghostPos, out _ghostRot))
             {
                 _ghostValid = ValidateOverlap(_ghostPos, requestedFamily, directHost);
                 return;
@@ -376,7 +386,8 @@ namespace VoxelEngine.Building.Tiered
             rotation = Quaternion.identity;
 
             BuildFamily hostFamily = host.definition.family;
-            bool incomingDeck = incoming == BuildFamily.Floor || incoming == BuildFamily.FloorHatch;
+            bool incomingDeck = incoming == BuildFamily.Floor || incoming == BuildFamily.FloorHatch
+                || incoming == BuildFamily.Roof;
             bool wallHost = hostFamily == BuildFamily.Wall
                 || hostFamily == BuildFamily.Doorway
                 || hostFamily == BuildFamily.Window
@@ -435,22 +446,27 @@ namespace VoxelEngine.Building.Tiered
                 }
             }
 
-            if ((incomingDeck || incoming == BuildFamily.Roof) && wallHost)
+            if ((incomingDeck || BuildFamilyInfo.IsRoofPanel(incoming)) && wallHost)
             {
                 float height = hostFamily == BuildFamily.HalfWall ? HalfWallHeight : ConstructionStorey;
                 float side = ResolveFaceSide(localHit.z, Vector3.Dot(hit.normal, host.transform.forward));
 
-                float roofLift = incoming == BuildFamily.Roof ? 0.18f : 0f;
                 position = host.transform.position
-                    + host.transform.up * (height + roofLift)
+                    + host.transform.up * height
                     + host.transform.forward * (side * ConstructionModule * 0.5f);
-                rotation = Quaternion.AngleAxis(_ghostYaw, host.transform.up) * host.transform.rotation;
+                // A sloped panel seats its EAVE on the wall head and rises away
+                // from the aimed side, so gutters land on walls and ridges point
+                // into the building. R still spins it a quarter turn at a time.
+                float baseYaw = BuildFamilyInfo.IsRoofPanel(incoming) ? (side > 0f ? 180f : 0f) : 0f;
+                rotation = Quaternion.AngleAxis(_ghostYaw + baseYaw, host.transform.up) * host.transform.rotation;
                 return true;
             }
 
             bool incomingWall = incoming == BuildFamily.Wall || incoming == BuildFamily.HalfWall
                 || incoming == BuildFamily.Doorway || incoming == BuildFamily.Window
-                || incoming == BuildFamily.WallFrame;
+                || incoming == BuildFamily.WallFrame
+                || incoming == BuildFamily.TriangularWall || incoming == BuildFamily.TriangularWallInverted
+                || incoming == BuildFamily.GateFrame || incoming == BuildFamily.BigGateFrame;
             if (incomingWall &&
                 (hostFamily == BuildFamily.Foundation || hostFamily == BuildFamily.Floor || hostFamily == BuildFamily.FloorHatch))
             {
@@ -459,7 +475,15 @@ namespace VoxelEngine.Building.Tiered
                 float side = edgeX
                     ? (Mathf.Approximately(localHit.x, 0f) ? 1f : Mathf.Sign(localHit.x))
                     : (Mathf.Approximately(localHit.z, 0f) ? 1f : Mathf.Sign(localHit.z));
-                position = host.transform.position + host.transform.up * surface
+                // Aiming at the deck's UNDERSIDE hangs the piece below the edge:
+                // its head sits flush against the slab bottom and the piece grows
+                // downward, so vertical building continues under a floor line.
+                bool underside = hostFamily != BuildFamily.Foundation
+                    && incoming != BuildFamily.GateFrame && incoming != BuildFamily.BigGateFrame
+                    && Vector3.Dot(hit.normal, host.transform.up) < -0.35f;
+                float drop = incoming == BuildFamily.HalfWall ? HalfWallHeight : ConstructionStorey;
+                position = host.transform.position
+                    + host.transform.up * (underside ? -drop : surface)
                     + (edgeX ? host.transform.right : host.transform.forward) * (side * ConstructionModule * 0.5f);
                 float edgeYaw = edgeX ? side * 90f : (side < 0f ? 180f : 0f);
                 rotation = Quaternion.AngleAxis(_ghostYaw + edgeYaw, host.transform.up) * host.transform.rotation;
@@ -611,7 +635,8 @@ namespace VoxelEngine.Building.Tiered
                 var block = collider.GetComponentInParent<PlacedTieredBlock>();
                 if (block == null || block.definition == null) continue;
                 BuildFamily family = block.definition.family;
-                if (family == BuildFamily.Floor || family == BuildFamily.FloorHatch) return block;
+                if (family == BuildFamily.Floor || family == BuildFamily.FloorHatch
+                    || family == BuildFamily.Roof) return block;
             }
             return null;
         }
@@ -662,6 +687,50 @@ namespace VoxelEngine.Building.Tiered
             float x = Mathf.Approximately(localHit.x, 0f) ? 1f : Mathf.Sign(localHit.x);
             float z = Mathf.Approximately(localHit.z, 0f) ? 1f : Mathf.Sign(localHit.z);
             return new Vector3(x * halfModule, 0f, z * halfModule);
+        }
+
+        /// <summary>
+        /// Roof panels chain exactly like stairs: aim up/down the slope of an
+        /// existing panel and the next one continues the pitch a full module out
+        /// and a full storey up or down; aim at its side and the next panel
+        /// extends the ridge line at the same level. Flat triangular caps and
+        /// pyramid/corner pieces chain level in every direction.
+        /// </summary>
+        private bool TryComputeRoofChainTransform(
+            RaycastHit hit,
+            PlacedTieredBlock host,
+            BuildFamily incoming,
+            out Vector3 position,
+            out Quaternion rotation)
+        {
+            position = Vector3.zero;
+            rotation = Quaternion.identity;
+            if (host == null) return false;
+
+            Vector3 up = host.transform.up.normalized;
+            Vector3 localHit = host.transform.InverseTransformPoint(hit.point);
+            rotation = Quaternion.AngleAxis(_ghostYaw, up) * host.transform.rotation;
+
+            bool hostSloped = host.definition.family == BuildFamily.SlantedRoof
+                || host.definition.family == BuildFamily.SlantedTriangularRoof;
+            bool lateral = Mathf.Abs(localHit.x) > Mathf.Abs(localHit.z);
+            if (lateral || !hostSloped)
+            {
+                // Extend along the ridge (or any edge of a level panel).
+                Vector3 step = lateral
+                    ? host.transform.right * (Mathf.Sign(localHit.x) * ConstructionModule)
+                    : host.transform.forward * (Mathf.Sign(localHit.z == 0f ? 1f : localHit.z) * ConstructionModule);
+                position = host.transform.position + step;
+                return true;
+            }
+
+            // Continue the pitch: uphill is the host's +Z, matching the slanted
+            // panel that rises one storey across one module.
+            bool chainUpward = localHit.z >= 0f;
+            Vector3 run = host.transform.forward * ConstructionModule;
+            Vector3 rise = up * ConstructionStorey;
+            position = host.transform.position + (chainUpward ? run + rise : -run - rise);
+            return true;
         }
 
         private bool TryComputeStairChainTransform(
@@ -770,7 +839,7 @@ namespace VoxelEngine.Building.Tiered
             _ghostHost = socketHost;
             // Don't overlap the player.
             if (Vector3.Distance(pos, transform.position) < 0.6f) return false;
-            if (family == BuildFamily.Roof && (_structuralSpan < 1 || _structuralSpan > 2)) return false;
+            if (BuildFamilyInfo.IsRoofPanel(family) && (_structuralSpan < 1 || _structuralSpan > 2)) return false;
 
             int count = Physics.OverlapBoxNonAlloc(pos, Vector3.one * 0.45f,
                 s_placementOverlapProbe, Quaternion.identity, ~0, QueryTriggerInteraction.UseGlobal);
@@ -793,11 +862,9 @@ namespace VoxelEngine.Building.Tiered
             // Component identity wins over stale serialized definition data.
             if (load != null && load.armed)
             {
-                bool compatibleLoad = incoming == BuildFamily.Roof
-                    ? load.loadFamily == BuildFamily.Roof
-                    : incoming == BuildFamily.Stairs
-                        ? load.loadFamily == BuildFamily.Floor || load.loadFamily == BuildFamily.FloorHatch || load.loadFamily == BuildFamily.Stairs
-                        : load.loadFamily == BuildFamily.Floor || load.loadFamily == BuildFamily.FloorHatch || load.loadFamily == BuildFamily.Stairs;
+                bool compatibleLoad = BuildFamilyInfo.IsRoofPanel(incoming)
+                    ? BuildFamilyInfo.IsRoofPanel(load.loadFamily)
+                    : BuildFamilyInfo.IsDeck(load.loadFamily);
                 if (compatibleLoad)
                 {
                     _structuralAnchor = load.supportAnchor;
@@ -827,7 +894,7 @@ namespace VoxelEngine.Building.Tiered
                 _structuralAnchor = host.transform.position + host.transform.up * height;
                 return 1;
             }
-            if (incoming != BuildFamily.Roof && hostFamily == BuildFamily.Foundation)
+            if (!BuildFamilyInfo.IsRoofPanel(incoming) && hostFamily == BuildFamily.Foundation)
             {
                 _structuralAnchor = host.transform.position + host.transform.up * 1.125f;
                 return 1;
@@ -926,7 +993,8 @@ namespace VoxelEngine.Building.Tiered
             // are expected neighbours; dynamic bodies remain rejected above.
             bool fitting = incoming == BuildFamily.Door || incoming == BuildFamily.GarageDoor
                 || incoming == BuildFamily.WindowPane || incoming == BuildFamily.HatchLid
-                || incoming == BuildFamily.Railing;
+                || incoming == BuildFamily.Railing
+                || incoming == BuildFamily.Gate || incoming == BuildFamily.BigGate;
             return socketHost != null && fitting;
         }
 
@@ -961,6 +1029,8 @@ namespace VoxelEngine.Building.Tiered
         /// </summary>
         private static bool RequiresBaseAudit(BuildFamily family)
             => family == BuildFamily.Railing
+                || family == BuildFamily.TriangularWall || family == BuildFamily.TriangularWallInverted
+                || family == BuildFamily.GateFrame || family == BuildFamily.BigGateFrame
                 || (StructuralLoadState.IsVerticalSupport(family) && family != BuildFamily.Pillar);
 
         // ---------- Place ----------

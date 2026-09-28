@@ -1,0 +1,50 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f36bfc5b50d54a24593f2613e8d30e7e, type: 3}
+  m_Name: TBlock_SlantedTriangularRoof
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Building.Tiered.TieredBlockDefinition
+  family: 28
+  displayName: Slanted Triangular Roof
+  woodPrefab: {fileID: 4045576825525802431, guid: 46d4c5edac14bcb4ca086aeea0333ae2, type: 3}
+  stonePrefab: {fileID: 5236490501293078266, guid: 66601000a8002f74dab7b7f42483f8eb, type: 3}
+  ironPrefab: {fileID: 3973150389329949952, guid: 4b96eee201c59104d8669786d91967b3, type: 3}
+  steelPrefab: {fileID: 3421624659992593889, guid: 0e5f4dc8d73737f418ea2a6b6a95f198, type: 3}
+  wood:
+    hp: 200
+    miningTier: 1
+  stone:
+    hp: 500
+    miningTier: 2
+  iron:
+    hp: 1500
+    miningTier: 3
+  steel:
+    hp: 4000
+    miningTier: 4
+  placeCost:
+    items:
+    - item: {fileID: 11400000, guid: 0757598308dac2d4991806a8e934dd77, type: 2}
+      count: 2
+    - item: {fileID: 11400000, guid: 75b750e48370dfd47856fc40436c0e52, type: 2}
+      count: 2
+  woodToStone:
+    items:
+    - item: {fileID: 11400000, guid: 9225024033f905e4187afc15d721e060, type: 2}
+      count: 3
+  stoneToIron:
+    items:
+    - item: {fileID: 11400000, guid: 96a60523ff509c84ba84cf35f6084bde, type: 2}
+      count: 2
+  ironToSteel:
+    items:
+    - item: {fileID: 11400000, guid: 86caa3d29ca1fcb4ab57c4f35cd925b9, type: 2}
+      count: 2
