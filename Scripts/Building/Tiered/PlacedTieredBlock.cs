@@ -34,6 +34,13 @@ namespace VoxelEngine.Building.Tiered
             if (hp <= 0)
             {
                 RefundOnDestroy(recipient);
+                // A fitted code lock survives demolition as an item (13.17.0).
+                var codeLock = GetComponentInChildren<CodeLock>(true);
+                if (codeLock != null && recipient != null)
+                {
+                    var lockItem = CodeLock.ResolveItem();
+                    if (lockItem != null) recipient.Add(lockItem, 1);
+                }
                 Destroy(gameObject);
                 return true;
             }

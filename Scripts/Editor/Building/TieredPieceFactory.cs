@@ -1839,6 +1839,16 @@ namespace VoxelEngine.EditorTools
                 c.size = size;
             }
 
+            // Roof pitches need rotated boxes; a plain child carries them.
+            static GameObject TiltedChild(GameObject parent, string childName, Vector3 position, Vector3 euler)
+            {
+                var child = new GameObject(childName);
+                child.transform.SetParent(parent.transform, false);
+                child.transform.localPosition = position;
+                child.transform.localRotation = Quaternion.Euler(euler);
+                return child;
+            }
+
             switch (family)
             {
                 case BuildFamily.Foundation:
@@ -1910,7 +1920,8 @@ namespace VoxelEngine.EditorTools
                     Box(new Vector3(0f, Storey * 0.5f, 0f), new Vector3(0.86f, Storey, 0.86f));
                     break;
                 case BuildFamily.Roof:
-                    Box(new Vector3(0f, Module * 0.24f, 0f), new Vector3(Module, 0.5f, Module * 1.06f));
+                    // Flat deck panel since 13.15.0 - the old sloped shell hung in the air.
+                    Box(new Vector3(0f, 0.21f, 0f), new Vector3(Module, 0.42f, Module));
                     break;
                 case BuildFamily.Stairs:
                 {
@@ -1924,6 +1935,126 @@ namespace VoxelEngine.EditorTools
                 case BuildFamily.Railing:
                     Box(new Vector3(0f, 0.59f, 0f), new Vector3(Module, 1.18f, 0.22f));
                     break;
+
+                // ── Roofing and gates (13.16.1: these fell into the default full
+                // wall box, which walled every gateway shut and gave sloped roofs
+                // a vertical collider) ──
+                case BuildFamily.GateFrame:
+                {
+                    float side = (Module - GateW) * 0.5f;
+                    foreach (float s in new[] { -1f, 1f })
+                        Box(new Vector3(s * (HalfModule - side * 0.5f), GateFrameH * 0.5f, 0f),
+                            new Vector3(side, GateFrameH, WallThick + 0.3f));
+                    Box(new Vector3(0f, GateH + (GateFrameH - GateH) * 0.5f, 0f),
+                        new Vector3(GateW, GateFrameH - GateH, WallThick + 0.3f));
+                    break;
+                }
+                case BuildFamily.BigGateFrame:
+                {
+                    float width = Module * 2f;
+                    float side = (width - BigGateW) * 0.5f;
+                    foreach (float s in new[] { -1f, 1f })
+                        Box(new Vector3(s * (width * 0.5f - side * 0.5f), BigGateFrameH * 0.5f, 0f),
+                            new Vector3(side, BigGateFrameH, 0.95f));
+                    Box(new Vector3(0f, BigGateH + (BigGateFrameH - BigGateH) * 0.5f, 0f),
+                        new Vector3(BigGateW, BigGateFrameH - BigGateH, 0.95f));
+                    break;
+                }
+                case BuildFamily.Gate:
+                case BuildFamily.BigGate:
+                    // The leaves carry swinging mesh colliders added on their
+                    // hinges by the setup; a root box would wall the opening shut.
+                    break;
+                case BuildFamily.CompoundWall:
+                    Box(new Vector3(0f, GateFrameH * 0.5f, 0f), new Vector3(Module, GateFrameH, 0.65f));
+                    break;
+                case BuildFamily.TriangularWall:
+                case BuildFamily.TriangularWallInverted:
+                {
+                    bool hangs = family == BuildFamily.TriangularWallInverted;
+                    const int steps = 6;
+                    for (int i = 0; i < steps; i++)
+                    {
+                        float h = Storey * (i + 0.5f) / steps;
+                        float x = -HalfModule + Module * (i + 0.5f) / steps;
+                        Box(new Vector3(x, hangs ? Storey - h * 0.5f : h * 0.5f, 0f),
+                            new Vector3(Module / steps, h, WallThick + 0.2f));
+                    }
+                    // Full-height riser post (it is trimmed visually) so the
+                    // ground/base probe always connects at the tall edge.
+                    Box(new Vector3(HalfModule - 0.175f, Storey * 0.5f, 0f),
+                        new Vector3(0.35f, Storey, WallThick + 0.2f));
+                    break;
+                }
+                case BuildFamily.SlantedRoof:
+                {
+                    var plane = TiltedChild(root, "Collider_Slope",
+                        new Vector3(0f, Storey * 0.5f, 0f), new Vector3(-RoofPitch, 0f, 0f));
+                    var slab = plane.AddComponent<BoxCollider>();
+                    slab.center = new Vector3(0f, 0.1f, 0f);
+                    slab.size = new Vector3(Module, 0.45f, RoofSlope);
+                    break;
+                }
+                case BuildFamily.TriangularRoof:
+                    // Half-cell deck cut on the diagonal: full width at -z,
+                    // tapering to the -x corner (TriPanel right angle at -x,-z).
+                    for (int i = 0; i < 3; i++)
+                    {
+                        float w = Module * (1f - (i + 0.5f) / 3f);
+                        Box(new Vector3(-HalfModule + w * 0.5f, 0.21f, -HalfModule + Module * (i + 0.5f) / 3f),
+                            new Vector3(w, 0.42f, Module / 3f));
+                    }
+                    break;
+                case BuildFamily.SlantedTriangularRoof:
+                {
+                    var plane = TiltedChild(root, "Collider_Slope",
+                        new Vector3(0f, Storey * 0.5f, 0f), new Vector3(-RoofPitch, 0f, 0f));
+                    for (int i = 0; i < 3; i++)
+                    {
+                        float w = Module * (1f - (i + 0.5f) / 3f);
+                        var strip = plane.AddComponent<BoxCollider>();
+                        strip.center = new Vector3(-HalfModule + w * 0.5f, 0.1f,
+                            -RoofSlope * 0.5f + RoofSlope * (i + 0.5f) / 3f);
+                        strip.size = new Vector3(w, 0.45f, RoofSlope / 3f);
+                    }
+                    break;
+                }
+                case BuildFamily.CornerRoof:
+                case BuildFamily.SlantedCornerRoofInverted:
+                {
+                    // Two pitch-matched planes meeting on the diagonal, each
+                    // approximated by three tapering strips. Only the tilt signs
+                    // differ between the outer hip and the inner valley.
+                    bool valley = family == BuildFamily.SlantedCornerRoofInverted;
+                    float tiltA = valley ? RoofPitch : -RoofPitch;   // plane with run along z
+                    float tiltB = valley ? -RoofPitch : RoofPitch;   // plane with run along x
+                    var planeA = TiltedChild(root, "Collider_SlopeA",
+                        new Vector3(0f, Storey * 0.5f, 0f), new Vector3(tiltA, 0f, 0f));
+                    var planeB = TiltedChild(root, "Collider_SlopeB",
+                        new Vector3(0f, Storey * 0.5f, 0f), new Vector3(0f, 0f, tiltB));
+                    for (int i = 0; i < 3; i++)
+                    {
+                        float w = Module * (1f - (i + 0.5f) / 3f);
+                        float along = -RoofSlope * 0.5f + RoofSlope * (i + 0.5f) / 3f;
+                        var stripA = planeA.AddComponent<BoxCollider>();
+                        stripA.center = new Vector3(HalfModule - w * 0.5f, 0.1f, along);
+                        stripA.size = new Vector3(w, 0.45f, RoofSlope / 3f);
+                        var stripB = planeB.AddComponent<BoxCollider>();
+                        stripB.center = new Vector3(along, 0.1f, HalfModule - w * 0.5f);
+                        stripB.size = new Vector3(RoofSlope / 3f, 0.45f, w);
+                    }
+                    break;
+                }
+                case BuildFamily.PyramidRoof:
+                {
+                    float apex = Storey * 0.5f;
+                    for (int i = 0; i < 3; i++)
+                    {
+                        float side = Module * (1f - i / 3f);
+                        Box(new Vector3(0f, apex * i / 3f + 0.22f, 0f), new Vector3(side, 0.45f, side));
+                    }
+                    break;
+                }
                 default:
                     Box(new Vector3(0f, Storey * 0.5f, 0f), new Vector3(Module, Storey, WallThick + 0.2f));
                     break;

@@ -792,6 +792,37 @@ namespace VoxelEngine.Player
                     return;
                 }
 
+                // 0b2) Code Lock RMB (13.17.0) — fits the lock on a door, gate,
+                // garage door or floor hatch. The lock item is consumed; setting
+                // the code is the keypad's business afterwards.
+                var stackCodeLock = inventory.ActiveStack;
+                if (!stackCodeLock.IsEmpty && stackCodeLock.item is VoxelEngine.Items.CodeLockItem)
+                {
+                    var lockDoor = hit.collider.GetComponentInParent<VoxelEngine.Building.Tiered.TieredDoor>();
+                    var lockHatch = hit.collider.GetComponentInParent<VoxelEngine.Building.Tiered.TieredHatch>();
+                    GameObject lockHost = lockDoor != null ? lockDoor.gameObject
+                        : lockHatch != null ? lockHatch.gameObject : null;
+                    if (lockHost == null)
+                    {
+                        VoxelEngine.UI.BuildFeedbackHud.Show("Code Lock", "Needs a door, gate or hatch",
+                            null, new Color(1f, 0.6f, 0.2f));
+                    }
+                    else if (lockHost.GetComponentInChildren<VoxelEngine.Building.Tiered.CodeLock>(true) != null)
+                    {
+                        VoxelEngine.UI.BuildFeedbackHud.Show("Code Lock", "Already fitted with a lock",
+                            null, new Color(1f, 0.6f, 0.2f));
+                    }
+                    else
+                    {
+                        VoxelEngine.Building.Tiered.CodeLock.Attach(lockHost);
+                        inventory.container.Remove(stackCodeLock.item, 1);
+                        VoxelEngine.UI.BuildFeedbackHud.Show("Code Lock", "Lock fitted - set a code",
+                            null, new Color(0.55f, 0.80f, 0.35f));
+                    }
+                    _nextHit = Time.time + 0.3f;
+                    return;
+                }
+
                 // 0c) Geological Prospecting Scanner RMB — sub-surface acoustic radar probe.
                 var stackScan = inventory.ActiveStack;
                 if (!stackScan.IsEmpty && stackScan.item is ProspectingScanner scanner)
@@ -855,9 +886,34 @@ namespace VoxelEngine.Player
                 var droppedItem = hit.collider.GetComponentInParent<VoxelEngine.Items.DroppedItem>();
                 if (droppedItem != null) { droppedItem.TryPickup(inventory); return; }
 
+                // Code lock first: clicking the lock itself (or right beside it)
+                // opens the keypad or the owner menu, never the door behind it.
+                var codeLockHit = hit.collider.GetComponentInParent<VoxelEngine.Building.Tiered.CodeLock>();
+                if (codeLockHit == null)
+                {
+                    var lockCarrier = hit.collider.GetComponentInParent<VoxelEngine.Building.Tiered.TieredDoor>() != null
+                        ? hit.collider.GetComponentInParent<VoxelEngine.Building.Tiered.TieredDoor>().GetComponentInChildren<VoxelEngine.Building.Tiered.CodeLock>()
+                        : hit.collider.GetComponentInParent<VoxelEngine.Building.Tiered.TieredHatch>() != null
+                            ? hit.collider.GetComponentInParent<VoxelEngine.Building.Tiered.TieredHatch>().GetComponentInChildren<VoxelEngine.Building.Tiered.CodeLock>()
+                            : null;
+                    if (lockCarrier != null
+                        && (hit.point - lockCarrier.transform.position).sqrMagnitude < 0.6f * 0.6f)
+                        codeLockHit = lockCarrier;
+                }
+                if (codeLockHit != null)
+                {
+                    var lockStats = inventory.GetComponent<VoxelEngine.Player.PlayerStats>();
+                    if (!codeLockHit.HasCode) VoxelEngine.UI.CodeLockHud.ShowSet(codeLockHit);
+                    else if (codeLockHit.authorized) VoxelEngine.UI.CodeLockHud.ShowMenu(codeLockHit, inventory);
+                    else VoxelEngine.UI.CodeLockHud.ShowEnter(codeLockHit, lockStats, null);
+                    return;
+                }
+
                 var tieredDoor = hit.collider.GetComponentInParent<VoxelEngine.Building.Tiered.TieredDoor>();
                 if (tieredDoor != null)
                 {
+                    if (DeniedByCodeLock(tieredDoor.gameObject,
+                        () => tieredDoor.Toggle(transform.position))) return;
                     tieredDoor.Toggle(transform.position);
                     return;
                 }
@@ -889,6 +945,9 @@ namespace VoxelEngine.Player
                     }
                     if (nearestGarage != null)
                     {
+                        var frameDoor = nearestGarage;
+                        if (DeniedByCodeLock(frameDoor.gameObject,
+                            () => frameDoor.Toggle(transform.position))) return;
                         nearestGarage.Toggle(transform.position);
                         return;
                     }
@@ -899,6 +958,8 @@ namespace VoxelEngine.Player
                 var tieredHatch = hit.collider.GetComponentInParent<VoxelEngine.Building.Tiered.TieredHatch>();
                 if (tieredHatch != null)
                 {
+                    if (DeniedByCodeLock(tieredHatch.gameObject,
+                        () => tieredHatch.Toggle(transform.position))) return;
                     tieredHatch.Toggle(transform.position);
                     return;
                 }
@@ -1463,6 +1524,22 @@ namespace VoxelEngine.Player
             }
             // Whether the pose was valid or not, a selected block owns the click.
             // This prevents an interaction panel from opening behind an attempted build.
+            return true;
+        }
+
+        /// <summary>
+        /// True when a fitted, locked code lock stops this player from using the
+        /// piece. In that case the keypad opens instead, and success both
+        /// authorizes the player and performs the blocked action (13.17.0).
+        /// </summary>
+        private bool DeniedByCodeLock(GameObject pieceRoot, System.Action onGranted)
+        {
+            var fittedLock = pieceRoot != null
+                ? pieceRoot.GetComponentInChildren<VoxelEngine.Building.Tiered.CodeLock>()
+                : null;
+            if (fittedLock == null || fittedLock.AllowsUse) return false;
+            var lockStats = inventory.GetComponent<VoxelEngine.Player.PlayerStats>();
+            VoxelEngine.UI.CodeLockHud.ShowEnter(fittedLock, lockStats, onGranted);
             return true;
         }
 

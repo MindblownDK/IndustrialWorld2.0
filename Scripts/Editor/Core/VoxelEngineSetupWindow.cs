@@ -945,6 +945,16 @@ namespace VoxelEngine.EditorTools
             AddWizardButton(scroll, "103. Anchor Runtime Shaders for Builds\n(Terrain + water + procedural shader inclusion - Non-Destructive)",
                 () => VoxelEngine.EditorTools.RuntimeShaderSetup.RunStep103(), 64);
 
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
+                "Step 104 authors the Code Lock:\n" +
+                "  \u2022 Item_CodeLock (crafted at the Crafting Bench: 6 Iron Ingot + 4 Copper Ingot)\n" +
+                "  \u2022 Recipe registered in the RecipeRegistry, item in the persistence catalog\n" +
+                "  \u2022 Fits on doors, gates, garage doors and floor hatches with a right-click\n" +
+                "Re-runnable and idempotent. Existing assets are connected, never replaced.");
+            AddWizardButton(scroll, "104. Build Code Lock\n(Item + recipe + persistence catalog - Non-Destructive)",
+                () => VoxelEngine.EditorTools.CodeLockSetup.RunStep104(), 56);
+
             AddSpacer(scroll, 20);
         }
 

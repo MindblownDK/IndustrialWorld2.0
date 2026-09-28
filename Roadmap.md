@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `13.16.1-dev`
-**Roadmap Version:** `13.16.1-dev`
+**Current Version:** `13.17.0-dev`
+**Roadmap Version:** `13.17.0-dev`
 **Date:** 2026-09-28
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,10 @@
 ---
 
 ## 0. Recently Done
+
+### 13.17.0-dev - Code Locks and Open Gateways
+- **Collider pass** (`TieredPieceFactory`, `TieredRebuildSetup`): real colliders for every 13.15.0 family - open gate frames, swinging leaf colliders, pitch-matched roof slabs, stepped triangular walls; flat Roof deck box; door boxes moved onto their hinges.
+- **Code Locks** (`CodeLock`, `CodeLockItem`, `CodeLockHud`, Setup Step 104): craftable keypad lock for doors, gates, garage doors and hatches - Rust-style set/enter keypads, shock damage on wrong codes, owner menu, full persistence.
 
 ### 13.16.1-dev - Double-Swing Gates
 - **Double leaves** (`TieredRebuildSetup`, `TieredPieceFactory`): both gates split into two leaves on opposing hinges, swinging apart away from the opener.

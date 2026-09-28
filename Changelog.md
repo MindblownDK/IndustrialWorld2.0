@@ -1,9 +1,35 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `13.16.1-dev`
+**Current Version:** `13.17.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [13.17.0-dev] Code Locks and Open Gateways
+
+**Type:** MINOR - new code lock system, plus the collider pass that makes every 13.15.0 piece physically honest. Save-compatible: additive save fields only.
+
+**Why gateways were solid.** None of the roofing-and-gates families had collider definitions, so every one of them fell back to the generic full wall box: gate frames were invisible walls across their own opening, gate leaves a second wall behind that, sloped roofs carried a vertical slab, and the rebuilt flat Roof still wore the old sloped shell floating above the deck. All fixed with real geometry:
+- Gate Frame / Big Gate Frame: jambs and header only - the opening is open.
+- Gate / Big Gate: the leaves carry swinging mesh colliders on their hinges; walk through the moment they part. Regular Doors also had their closed-pose box moved onto the hinge, so an open door no longer blocks its doorway.
+- Compound Wall: full-height box at its real height.
+- Triangular walls: stepped columns following the hypotenuse, plus a solid riser post so the ground probe always connects.
+- Sloped roofs: pitch-matched tilted slabs (tapered strips for the triangular panel, two planes for hip and valley corners, a stepped cap for the pyramid); the flat Roof got its proper deck box. The eave-contact audit now excludes the panel's own collider so the new honest shapes cannot satisfy their own probe.
+
+**New system: Code Locks.** Crafted at the Crafting Bench (6 Iron Ingot + 4 Copper Ingot, unlocked by default). Right-click with the lock on a Door, Gate, Big Gate, Garage Door or Floor Hatch to fit it - the lock rides the leaf or lid, keypad studs on both faces, with a state light: red locked, green open.
+- First use opens the SET NEW CODE keypad (green header): four digits, auto-locks, you are authorized.
+- Strangers using the piece get the ENTER CODE keypad (red header). The right code authorizes them permanently; a wrong code stings for 5 HP.
+- Authorized players use the piece normally, and clicking the lock opens its menu: LOCK / UNLOCK, CHANGE CODE, REMOVE LOCK (returns the item).
+- Demolishing a locked piece hands the lock item to the demolisher; locks and their state survive save/load.
+
+**GitHub title:** `[13.17.0-dev] Code locks`
+
+**Manual steps:**
+1. Pull `Dev` and let Unity compile.
+2. Run Tools -> Voxel Engine -> Voxel Engine Setup, Step 102 once more (rebuilds all piece colliders and gate hinges).
+3. Run new Step 104 (authors the Code Lock item, recipe and catalog entry).
+4. Walk through an open gate and an open door; walk the flat and sloped roofs.
+5. Craft a Code Lock, fit it on a gate, set a code, relog, and try a wrong code.
 
 ### [13.16.1-dev] Double-Swing Gates
 

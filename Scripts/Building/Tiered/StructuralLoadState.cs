@@ -213,7 +213,7 @@ namespace VoxelEngine.Building.Tiered
             // A sloped panel decays the moment nothing touches its eave or rake
             // edges, no matter what the span bookkeeping still believes.
             if (BuildFamilyInfo.IsRoofPanel(family)
-                && !BuildSystemV2.RoofPanelHasEaveContact(transform.position, transform.rotation))
+                && !BuildSystemV2.RoofPanelHasEaveContact(transform.position, transform.rotation, GetComponent<PlacedTieredBlock>()))
                 return false;
             float radius = 8.1f;
             var hits = Physics.OverlapSphere(transform.position, radius, ~0, QueryTriggerInteraction.Ignore);

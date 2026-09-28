@@ -71,20 +71,10 @@ namespace VoxelEngine.Building.Tiered
             {
                 // The mirror hinge carries a 180 degree turn, so the opposite
                 // sign swings its leaf to the same world side as the first.
+                // Both leaves carry their colliders on the hinges, so the
+                // passage clears physically as they part.
                 Quaternion targetB = _closedRotationB * Quaternion.Euler(0f, -angle, 0f);
                 doorPivotB.localRotation = Turn(doorPivotB.localRotation, targetB);
-
-                // Same passage logic as the garage shutter: the leaves stop
-                // blocking once mostly swung, and the permanent trigger in the
-                // opening remains the target for closing them again.
-                float travelled = Quaternion.Angle(doorPivot.localRotation, _closedRotation);
-                bool blocksPassage = travelled < Mathf.Abs(_signedOpenAngle) * 0.7f;
-                for (int i = 0; i < _doorColliders.Length; i++)
-                {
-                    Collider doorCollider = _doorColliders[i];
-                    if (doorCollider != null && !doorCollider.isTrigger)
-                        doorCollider.enabled = blocksPassage;
-                }
             }
         }
 

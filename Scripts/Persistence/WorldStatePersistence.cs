@@ -1003,7 +1003,7 @@ namespace VoxelEngine.Persistence
             foreach (var pb in placed)
             {
                 if (pb == null || pb.definition == null) continue;
-                save.placedTiered.Add(new SavedPlacedTiered
+                var savedPiece = new SavedPlacedTiered
                 {
                     family = pb.definition.family.ToString(),
                     tier   = (int)pb.tier,
@@ -1011,7 +1011,16 @@ namespace VoxelEngine.Persistence
                     rot    = pb.transform.rotation,
                     rotY   = pb.transform.eulerAngles.y,
                     hp     = pb.hp
-                });
+                };
+                var codeLock = pb.GetComponentInChildren<CodeLock>(true);
+                if (codeLock != null)
+                {
+                    savedPiece.hasCodeLock    = true;
+                    savedPiece.lockCode       = codeLock.code;
+                    savedPiece.lockLocked     = codeLock.isLocked;
+                    savedPiece.lockAuthorized = codeLock.authorized;
+                }
+                save.placedTiered.Add(savedPiece);
             }
         }
 
@@ -3355,6 +3364,18 @@ namespace VoxelEngine.Persistence
                 // Cracks from the saved HP (9.30.0).
                 int maxHp = Mathf.Max(1, def.GetStats((BuildTier)ps.tier).hp);
                 VoxelEngine.Thermal.BlockDamageVisual.ReportDamage(pb, 1f - Mathf.Clamp01(pb.hp / (float)maxHp));
+
+                if (ps.hasCodeLock)
+                {
+                    var codeLock = CodeLock.Attach(go);
+                    if (codeLock != null)
+                    {
+                        codeLock.code       = ps.lockCode ?? "";
+                        codeLock.isLocked   = ps.lockLocked;
+                        codeLock.authorized = ps.lockAuthorized;
+                        codeLock.RefreshLed();
+                    }
+                }
             }
         }
 
@@ -4301,6 +4322,10 @@ namespace VoxelEngine.Persistence
             public string family; public int tier;
             public Vector3 pos;   public Quaternion rot; public float rotY;
             public int hp;
+            // Code lock (13.17.0) - additive, save-compatible: legacy saves
+            // deserialize hasCodeLock = false and skip the whole block.
+            public bool hasCodeLock; public string lockCode;
+            public bool lockLocked;  public bool lockAuthorized;
         }
         [Serializable] private class SavedContainer
         {

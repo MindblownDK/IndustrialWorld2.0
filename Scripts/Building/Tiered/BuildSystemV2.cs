@@ -715,7 +715,8 @@ namespace VoxelEngine.Building.Tiered
         /// edge at root level) or flush against either side edge. Terrain does
         /// not count: roofing rests on structure, not on dirt.
         /// </summary>
-        public static bool RoofPanelHasEaveContact(Vector3 position, Quaternion rotation)
+        public static bool RoofPanelHasEaveContact(Vector3 position, Quaternion rotation,
+            PlacedTieredBlock ignore = null)
         {
             Vector3 up = rotation * Vector3.up;
             Vector3 fwd = rotation * Vector3.forward;
@@ -740,7 +741,7 @@ namespace VoxelEngine.Building.Tiered
                 for (int i = 0; i < overlaps.Length; i++)
                 {
                     var block = overlaps[i] != null ? overlaps[i].GetComponentInParent<PlacedTieredBlock>() : null;
-                    if (block != null && block.definition != null) return true;
+                    if (block != null && block.definition != null && block != ignore) return true;
                 }
             }
             return false;

@@ -419,6 +419,26 @@ namespace VoxelEngine.EditorTools
                     : new Vector3(-hinge, 0f, 0f);
             }
 
+            if (!garage)
+            {
+                // Side-hinged leaves must carry their colliders on the hinge so
+                // they swing clear of the opening. The closed-pose boxes the
+                // factory leaves on the root used to wall an open doorway shut.
+                foreach (var rootBox in root.GetComponents<BoxCollider>())
+                {
+                    if (rootBox.isTrigger) continue;
+                    var swung = pivot.AddComponent<BoxCollider>();
+                    swung.center = rootBox.center - pivot.transform.localPosition;
+                    swung.size = rootBox.size;
+                    Object.DestroyImmediate(rootBox);
+                }
+                if (doubleGate)
+                    foreach (Transform child in pivot.transform)
+                        if (child.TryGetComponent<MeshFilter>(out var leafFilter)
+                            && leafFilter.sharedMesh != null && child.GetComponent<Collider>() == null)
+                            child.gameObject.AddComponent<MeshCollider>().sharedMesh = leafFilter.sharedMesh;
+            }
+
             GameObject pivotB = null;
             if (doubleGate)
             {
