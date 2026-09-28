@@ -1,9 +1,23 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.1.0-dev`
+**Current Version:** `14.1.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.1.1-dev] Fix: Fish-Net Assembly References
+
+**Type:** PATCH - compile fix, no behavior changes.
+
+**The 14.1.0 networking scripts could not see Fish-Net.** The project compiles `Scripts/` into its own assembly definitions (`VoxelEngine`, `VoxelEngine.Editor`), and an assembly definition only sees assemblies it explicitly references - Fish-Net lives in its own `FishNet.Runtime` assembly. Both asmdefs now reference `FishNet.Runtime`, which resolves every CS0234/CS0246 error from `NetworkBootstrap`, `PlayerAvatar` and the Step 105 editor tool.
+
+**About the warning wall:** every remaining warning comes from Fish-Net's own package code (obsolete `FindObjectOfType` calls in its demos, `#nullable` annotations in the Synapse transport, and Unity 6's new serialization analyzer inspecting Fish-Net internals). They are harmless, upstream, and not ours to edit - package code must stay untouched so updates stay clean. Optional tidy-up: the `Assets/FishNet/Demos` folder is safe to delete and removes the demo warnings.
+
+**GitHub title:** `[14.1.1-dev] Fix Fish-Net assembly references`
+
+**Manual steps:**
+1. Pull `Dev`, let Unity recompile - the errors should be gone.
+2. Continue with the 14.1.0 steps: open the main game scene, run Setup Step 105, save the scene, then the two-instance host/join test.
 
 ### [14.1.0-dev] Multiplayer Foundation - Part 2: Host and Join
 
