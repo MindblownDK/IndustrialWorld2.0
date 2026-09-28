@@ -264,9 +264,13 @@ namespace VoxelEngine.EditorTools
             if (family == BuildFamily.Foundation) EnsureFoundationLegs(root);
             if (family == BuildFamily.Pillar && root.GetComponent<AdjustablePillar>() == null)
                 root.AddComponent<AdjustablePillar>();
-            if ((family == BuildFamily.Roof || family == BuildFamily.Floor || family == BuildFamily.FloorHatch)
-                && root.GetComponent<StructuralLoadState>() == null)
-                root.AddComponent<StructuralLoadState>();
+            if (family == BuildFamily.Roof || family == BuildFamily.Floor
+                || family == BuildFamily.FloorHatch || family == BuildFamily.Stairs)
+            {
+                var loadState = root.GetComponent<StructuralLoadState>();
+                if (loadState == null) loadState = root.AddComponent<StructuralLoadState>();
+                loadState.loadFamily = family;
+            }
             if (family == BuildFamily.Door || family == BuildFamily.GarageDoor) EnsureDoorPivot(root, family);
             if (family == BuildFamily.HatchLid) EnsureHatch(root, tier, name);
             if (family == BuildFamily.Railing && root.GetComponent<TieredRailing>() == null)

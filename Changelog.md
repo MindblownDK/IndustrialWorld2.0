@@ -1,9 +1,30 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `13.8.1-dev`
+**Current Version:** `13.8.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [13.8.2-dev] Stairs Join the Load Path
+
+**Type:** PATCH - stair structural-span, landing socket, adaptive-Pillar support identity and proportional material-cost correction. No save schema, family value, recipe or research changes.
+
+**Stairs can no longer escape the cantilever rule.** Setup Step 102 now adds `StructuralLoadState` to every Stair tier and records its authored family identity. A Stair aimed at a Floor, Floor Hatch or another Stair inherits that piece's support anchor and adds one span. Stair span three is red and cannot be placed, closing the infinite chain from a Floor already two pieces away from support.
+
+**Floors connect to both Stair landings.** A Stair's existing Bottom socket sits one module beyond the foot at the lower level, and its Top socket sits one module beyond the head at the 5.625 m upper level. `BuildSocketCompat` now accepts Floor and Floor Hatch at both sockets. The nearest socket to the aimed end wins, so aiming at the foot continues the lower deck and aiming at the head continues the upper deck.
+
+**Adaptive Pillars are recognized by component identity.** Placement and periodic load audits accept an `AdjustablePillar` as a support even if an older definition carries stale family metadata. Its measured `currentHeight` remains the support top, fixing a physically grounded Pillar that still failed to authorize the next Floor.
+
+**Tall Pillars cost by storey.** Placement and each tier upgrade multiply the authored cost by `ceil(currentHeight / 5.625 m)`. A one-storey Pillar keeps its existing cost; a Pillar just over one storey costs twice as much, and so on. The Upgrade-mode HUD shows the multiplied requirement and affordability rather than the base cost.
+
+**GitHub title:** `[13.8.2-dev] Stairs join the load path`
+
+**Manual steps:**
+1. Pull `Dev`, let Unity compile, then run `Tools -> Voxel Engine -> Voxel Engine Setup -> 102. Rebuild Construction at Size-V6` to add structural state to all Stair tiers.
+2. From a supported Floor, place Stairs up to span two. Attempt another Stair from a span-two Floor or Stair and confirm the ghost remains red.
+3. Aim a Floor at the bottom end of a Stair and then at its top end. Confirm it snaps one module beyond the corresponding landing at the correct height.
+4. Place an underside-to-ground Pillar and confirm Floors one and two can extend from the supported deck while Floor three remains red.
+5. Build a Pillar taller than one storey and compare inventory consumption with a standard Pillar. Open Upgrade mode and confirm the displayed and charged material requirements use the same storey multiplier.
 
 ### [13.8.1-dev] Adaptive Pillars Carry Their Actual Height
 

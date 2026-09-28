@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `13.8.1-dev`
-**Roadmap Version:** `13.8.1-dev`
+**Current Version:** `13.8.2-dev`
+**Roadmap Version:** `13.8.2-dev`
 **Date:** 2026-09-27
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 13.8.2-dev - Stairs Join the Load Path
+- **Stair span** (`StructuralLoadState`, `BuildSystemV2`): Stairs inherit Floor/Stair support anchors and obey the same two-piece cantilever instead of chaining forever from a span-two Floor.
+- **Landings** (`BuildSocketCompat`): Floor and Floor Hatch snap to the authored lower or upper Stair socket according to the aimed end.
+- **Scaled Pillar cost** (`BuildSystemV2`, `UpgradePromptHud`): placement and every upgrade multiply material requirements by the number of 5.625 m storeys the adaptive Pillar spans.
+
 ### 13.8.1-dev - Adaptive Pillars Carry Their Actual Height
 - **Load point** (`BuildSystemV2`): a variable-height Pillar starts a Floor or Roof load path at its measured top instead of the authored 5.625 m default.
 - **Ongoing support** (`StructuralLoadState`): periodic support checks use `AdjustablePillar.currentHeight`, so grounded Pillars continue supporting the deck they touch.
@@ -48,11 +53,6 @@
 - **Support anchor** (`StructuralLoadState`): every suspended placement records the world-space top of the real wall, frame or pillar that began its load path.
 - **Reach cap** (`BuildSystemV2`): a Roof must remain within 11.6 m of that original anchor as well as carrying span one or two, preventing lateral span-two relays from growing without bound.
 - **Upgrade continuity**: both span and original support anchor transfer across tier replacement.
-
-### 13.7.3-dev - The Wheel Owns the Requested Family
-- **Authoritative family** (`BuildSystemV2`): snapping and validation use the wheel/token selection rather than trusting a potentially stale serialized definition family.
-- **Roof identity** (`StructuralLoadState`): an armed suspended component is resolved before legacy host-family data, preventing every Roof from being misread as a fresh span-one Wall support.
-- **Final guard**: the two-span Roof rule runs after every transform branch and immediately before the ghost is displayed or placed.
 
 ### Era Transition Feel
 

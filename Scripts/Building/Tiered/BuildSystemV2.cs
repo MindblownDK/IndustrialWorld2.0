@@ -145,7 +145,8 @@ namespace VoxelEngine.Building.Tiered
             // the two-roof rule selected by the wheel.
             bool suspendedPanel = activeFam.Value == BuildFamily.Roof
                 || activeFam.Value == BuildFamily.Floor
-                || activeFam.Value == BuildFamily.FloorHatch;
+                || activeFam.Value == BuildFamily.FloorHatch
+                || activeFam.Value == BuildFamily.Stairs;
             if (suspendedPanel)
             {
                 // A Floor continuing from a Foundation starts one complete module
@@ -167,15 +168,18 @@ namespace VoxelEngine.Building.Tiered
             // Place on the standard build action (RMB by default).
             if (_ghostValid && GameSettings.WasPressed(InputAction.Build))
             {
-                if (CanAfford(def.placeCost))
+                int pillarCostMultiplier = activeFam.Value == BuildFamily.Pillar
+                    ? Mathf.Max(1, Mathf.CeilToInt(_pillarHeight / ConstructionStorey))
+                    : 1;
+                if (CanAfford(def.placeCost, pillarCostMultiplier))
                 {
-                    PayCost(def.placeCost);
+                    PayCost(def.placeCost, pillarCostMultiplier);
                     Place(def, _ghostPos, _ghostRot, _railingRise);
                     // The feedback HUD receives the primary cost directly; building a
                     // second formatted summary here was unused work on every placement.
                     VoxelEngine.UI.BuildFeedbackHud.ShowBlockPlaced(
                         def.displayName, def.placeCost?.items?.Length > 0 ? def.placeCost.items[0].item : null,
-                        def.placeCost?.items?.Length > 0 ? def.placeCost.items[0].count : 0);
+                        def.placeCost?.items?.Length > 0 ? def.placeCost.items[0].count * pillarCostMultiplier : 0);
                 }
             }
         }
@@ -231,7 +235,8 @@ namespace VoxelEngine.Building.Tiered
             float bestSqr = socketSnapRadius * socketSnapRadius;
 
             var directHost = hit.collider != null ? hit.collider.GetComponentInParent<PlacedTieredBlock>() : null;
-            if (requestedFamily == BuildFamily.Roof || requestedFamily == BuildFamily.Floor || requestedFamily == BuildFamily.FloorHatch)
+            if (requestedFamily == BuildFamily.Roof || requestedFamily == BuildFamily.Floor
+                || requestedFamily == BuildFamily.FloorHatch || requestedFamily == BuildFamily.Stairs)
                 _structuralSpan = ResolveStructuralSpan(directHost, requestedFamily);
             if (requestedFamily == BuildFamily.Stairs &&
                 directHost != null && directHost.definition != null && directHost.definition.family == BuildFamily.Stairs &&
@@ -623,20 +628,26 @@ namespace VoxelEngine.Building.Tiered
             BuildFamily hostFamily = host.definition.family;
             var load = host.GetComponent<StructuralLoadState>();
 
-            // Component identity wins over stale serialized definition data. A
-            // generated Roof carries StructuralLoadState; treating an old asset's
-            // incorrect family value as Wall would reset every panel to span one.
-            if (incoming == BuildFamily.Roof && load != null && load.armed)
+            // Component identity wins over stale serialized definition data.
+            if (load != null && load.armed)
             {
-                _structuralAnchor = load.supportAnchor;
-                return load.spanFromSupport + 1;
+                bool compatibleLoad = incoming == BuildFamily.Roof
+                    ? load.loadFamily == BuildFamily.Roof
+                    : incoming == BuildFamily.Stairs
+                        ? load.loadFamily == BuildFamily.Floor || load.loadFamily == BuildFamily.FloorHatch || load.loadFamily == BuildFamily.Stairs
+                        : load.loadFamily == BuildFamily.Floor || load.loadFamily == BuildFamily.FloorHatch || load.loadFamily == BuildFamily.Stairs;
+                if (compatibleLoad)
+                {
+                    _structuralAnchor = load.supportAnchor;
+                    return load.spanFromSupport + 1;
+                }
             }
 
-            if (StructuralLoadState.IsVerticalSupport(hostFamily))
+            bool adjustableSupport = host.TryGetComponent<AdjustablePillar>(out var adjustablePillar);
+            if (adjustableSupport || StructuralLoadState.IsVerticalSupport(hostFamily))
             {
                 float height = hostFamily == BuildFamily.HalfWall ? HalfWallHeight : ConstructionStorey;
-                if (hostFamily == BuildFamily.Pillar
-                    && host.TryGetComponent<AdjustablePillar>(out var adjustablePillar))
+                if (adjustableSupport)
                     height = adjustablePillar.currentHeight;
                 _structuralAnchor = host.transform.position + host.transform.up * height;
                 return 1;
@@ -647,10 +658,7 @@ namespace VoxelEngine.Building.Tiered
                 return 1;
             }
 
-            bool compatible = hostFamily == BuildFamily.Floor || hostFamily == BuildFamily.FloorHatch;
-            if (!compatible || load == null || !load.armed) return 0;
-            _structuralAnchor = load.supportAnchor;
-            return load.spanFromSupport + 1;
+            return 0;
         }
 
         private static bool HasRoofSupport(Vector3 position)
@@ -742,24 +750,26 @@ namespace VoxelEngine.Building.Tiered
         }
 
         // ---------- Resource handling ----------
-        private bool CanAfford(TierCost cost)
+        private bool CanAfford(TierCost cost, int multiplier = 1)
         {
+            multiplier = Mathf.Max(1, multiplier);
             if (cost == null || cost.items == null) return true;
             foreach (var ing in cost.items)
             {
                 if (ing.item == null || ing.count <= 0) continue;
-                if (inventory.container.CountOf(ing.item) < ing.count) return false;
+                if (inventory.container.CountOf(ing.item) < ing.count * multiplier) return false;
             }
             return true;
         }
 
-        private void PayCost(TierCost cost)
+        private void PayCost(TierCost cost, int multiplier = 1)
         {
+            multiplier = Mathf.Max(1, multiplier);
             if (cost == null || cost.items == null) return;
             foreach (var ing in cost.items)
             {
                 if (ing.item == null || ing.count <= 0) continue;
-                inventory.container.Remove(ing.item, ing.count);
+                inventory.container.Remove(ing.item, ing.count * multiplier);
             }
         }
 
@@ -792,8 +802,12 @@ namespace VoxelEngine.Building.Tiered
 
             BuildTier next = TieredBlockDefinition.NextTier(target.tier);
             var cost = target.definition.GetUpgradeCost(target.tier);
-            if (!CanAfford(cost)) return false;
-            PayCost(cost);
+            var sizedPillar = target.GetComponent<AdjustablePillar>();
+            int costMultiplier = sizedPillar != null
+                ? Mathf.Max(1, Mathf.CeilToInt(sizedPillar.currentHeight / ConstructionStorey))
+                : 1;
+            if (!CanAfford(cost, costMultiplier)) return false;
+            PayCost(cost, costMultiplier);
 
             // Replace the prefab in place: spawn the new tier at the same transform, copy state.
             Vector3 pos = target.transform.position;

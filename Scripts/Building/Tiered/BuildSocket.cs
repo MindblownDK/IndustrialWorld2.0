@@ -134,9 +134,10 @@ namespace VoxelEngine.Building.Tiered
                 return incoming == BuildFamily.Floor;
             }
 
-            // Stairs typically attach to foundations / floors via their bottom edge.
+            // Floors continue from either stair landing. The authored sockets sit
+            // one full module beyond the flight centre at the correct lower/upper level.
             if (host == BuildFamily.Stairs)
-                return false;
+                return incoming == BuildFamily.Floor || incoming == BuildFamily.FloorHatch;
 
             // Roofs may accept other roofs above.
             if (host == BuildFamily.Roof)

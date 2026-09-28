@@ -104,6 +104,10 @@ namespace VoxelEngine.UI
 
             var nextTier = TieredBlockDefinition.NextTier(tier);
             var cost     = def.GetUpgradeCost(tier);
+            var adjustablePillar = target.GetComponent<AdjustablePillar>();
+            int costMultiplier = adjustablePillar != null
+                ? Mathf.Max(1, Mathf.CeilToInt(adjustablePillar.currentHeight / 5.625f))
+                : 1;
 
             _title.text = $"{def.displayName}  ·  {tier} → {nextTier}  ·  LMB to upgrade";
 
@@ -121,12 +125,13 @@ namespace VoxelEngine.UI
             {
                 var ing  = cost.items[i];
                 if (ing.item == null) continue;
+                int required = ing.count * costMultiplier;
                 int  have = inv != null && inv.container != null ? inv.container.CountOf(ing.item) : 0;
-                bool ok   = have >= ing.count;
+                bool ok   = have >= required;
                 if (!ok) anyMissing = true;
 
                 string col = ok ? "#66DD88" : "#DD5544";
-                sb.Append($"<color={col}>{have}/{ing.count}</color>  <color=#8A92A8>{ing.item.displayName}</color>");
+                sb.Append($"<color={col}>{have}/{required}</color>  <color=#8A92A8>{ing.item.displayName}</color>");
                 if (i < cost.items.Length - 1) sb.Append("     ");
             }
 

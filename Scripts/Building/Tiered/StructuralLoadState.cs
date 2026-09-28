@@ -6,6 +6,7 @@ namespace VoxelEngine.Building.Tiered
     /// <summary>Runtime load path for newly placed suspended Floors and Roofs.</summary>
     public sealed class StructuralLoadState : MonoBehaviour
     {
+        public BuildFamily loadFamily;
         public int spanFromSupport;
         public Vector3 supportAnchor;
         public bool armed;
@@ -39,15 +40,16 @@ namespace VoxelEngine.Building.Tiered
                 var block = hits[i] != null ? hits[i].GetComponentInParent<PlacedTieredBlock>() : null;
                 if (block == null || block == own || block.definition == null || !visited.Add(block)) continue;
                 BuildFamily other = block.definition.family;
-                if (IsVerticalSupport(other) && ReachesLevel(block, family)) return true;
+                bool adjustablePillar = block.GetComponent<AdjustablePillar>() != null;
+                if ((adjustablePillar || IsVerticalSupport(other)) && ReachesLevel(block, family)) return true;
                 if (family != BuildFamily.Roof && other == BuildFamily.Foundation
                     && ReachesLevel(block, family)) return true;
 
                 var load = block.GetComponent<StructuralLoadState>();
-                bool compatibleDeck = family == BuildFamily.Roof
-                    ? other == BuildFamily.Roof
-                    : other == BuildFamily.Floor || other == BuildFamily.FloorHatch;
-                if (compatibleDeck && load != null && load.armed && load.spanFromSupport < spanFromSupport)
+                bool compatibleDeck = load != null && (loadFamily == BuildFamily.Roof
+                    ? load.loadFamily == BuildFamily.Roof
+                    : load.loadFamily == BuildFamily.Floor || load.loadFamily == BuildFamily.FloorHatch || load.loadFamily == BuildFamily.Stairs);
+                if (compatibleDeck && load.armed && load.spanFromSupport < spanFromSupport)
                     return true;
             }
             return false;
@@ -58,8 +60,7 @@ namespace VoxelEngine.Building.Tiered
             float height = support.definition.family == BuildFamily.Foundation
                 ? 1.125f
                 : support.definition.family == BuildFamily.HalfWall ? 2.8f : 5.625f;
-            if (support.definition.family == BuildFamily.Pillar
-                && support.TryGetComponent<AdjustablePillar>(out var adjustablePillar))
+            if (support.TryGetComponent<AdjustablePillar>(out var adjustablePillar))
                 height = adjustablePillar.currentHeight;
             Vector3 top = support.transform.position + support.transform.up * height;
             Vector3 delta = transform.position - top;
