@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.0.0-dev`
-**Roadmap Version:** `14.0.0-dev`
+**Current Version:** `14.1.0-dev`
+**Roadmap Version:** `14.1.0-dev`
 **Date:** 2026-09-28
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,11 @@
 ---
 
 ## 0. Recently Done
+
+### 14.1.0-dev - Multiplayer Foundation, Part 2
+- **Fish-Net bridge** (`NetworkBootstrap`, verified against Fish-Net 4.7.3): listen-server host/join, identity handshake keyed by player id, `NetworkSession` driven by real connections.
+- **Player avatars** (`PlayerAvatar`, Setup Step 105): server-spawned networked bodies with nameplates; transform sync live. World content sync is NOT in yet (milestones 3-5).
+- **Pause menu**: MULTIPLAYER page (host / join / roster / disconnect); no time-freeze while online.
 
 ### 14.0.0-dev - Multiplayer Foundation, Part 1
 - **Networking module** (`PlayerIdentity`, `NetworkSession`): stable per-player GUID + session/authority abstraction; gameplay asks the session, never the transport.
@@ -79,7 +84,7 @@ These decisions are settled. Every future system is designed against them.
 - **Save compatibility:** the game is unreleased - networking refactors may freely break save formats until release. Do not spend effort on migration shims for multiplayer changes.
 
 ### Milestone Plan (14.0.0 - after the current construction arc stabilizes)
-1. **Foundation:** Fish-Net package in, NetworkManager boot flow, host/join UI, player identity (stable per-player id), player spawn + transform/animation sync.
+1. **Foundation:** Fish-Net package in, NetworkManager boot flow, host/join UI, player identity (stable per-player id), player spawn + transform/animation sync. *(DONE 14.0.0-dev + 14.1.0-dev - identity, bridge, host/join UI, avatar spawn + transform sync; animation sync waits for a real character rig.)*
 2. **Player state:** per-player Inventory, PlayerStats, hotbar and equipment sync; interaction raycasts validated server-side.
 3. **Building sync:** all placement/upgrade/removal flows route through server RPCs in `BuildSystemV2` / `PlacedTieredBlock`; structural audits (`StructuralLoadState`) run server-side only; results replicate.
 4. **World sync:** voxel chunk edit replication + join-in-progress chunk streaming (the long pole - design payloads early, delta edits not full chunks).

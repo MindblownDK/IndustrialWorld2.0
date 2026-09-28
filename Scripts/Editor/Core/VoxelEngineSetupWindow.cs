@@ -955,6 +955,16 @@ namespace VoxelEngine.EditorTools
             AddWizardButton(scroll, "104. Build Code Lock\n(Item + recipe + persistence catalog - Non-Destructive)",
                 () => VoxelEngine.EditorTools.CodeLockSetup.RunStep104(), 56);
 
+            AddSpacer(scroll, 6);
+            AddInfo(scroll,
+                "Step 105 wires the multiplayer bootstrap (requires the Fish-Net asset, run in the MAIN GAME scene):\n" +
+                "  \u2022 NetworkPlayerAvatar prefab (networked body + visor + nameplate) under VoxelEngineAssets/Networking\n" +
+                "  \u2022 'Network' scene object with NetworkManager, Tugboat transport and NetworkBootstrap\n" +
+                "  \u2022 Avatar prefab connected to the bootstrap; Fish-Net registers it automatically\n" +
+                "Re-runnable and idempotent. Save the scene afterwards. Host/Join lives in the pause menu.");
+            AddWizardButton(scroll, "105. Wire Multiplayer Bootstrap\n(Avatar prefab + NetworkManager scene object - Non-Destructive)",
+                () => VoxelEngine.EditorTools.NetworkSetup.RunStep105(), 56);
+
             AddSpacer(scroll, 20);
         }
 

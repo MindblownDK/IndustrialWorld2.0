@@ -1,9 +1,44 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.0.0-dev`
+**Current Version:** `14.1.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.1.0-dev] Multiplayer Foundation - Part 2: Host and Join
+
+**Type:** MINOR - the Fish-Net bridge. Built and verified against Fish-Net 4.7.3. Save-compatible; no schema changes.
+
+**You can now host your world and see each other move.** One player hosts (listen server), up to 7 more join over LAN or a port-forwarded address. Each connected player appears as a player-sized avatar with a floating nameplate that follows their real position and view direction. World content is NOT synchronized yet - each side still runs its own world; building/voxel/simulation sync are milestones 3-5. This round is the transport spine everything else will ride on.
+
+**New: `NetworkBootstrap` (`Scripts/Networking`)** - the ONLY class that talks to Fish-Net, exactly as README section 4 demands.
+- Starts/stops the listen server and client connections (Tugboat transport, default port 7770).
+- Identity handshake: after authenticating, a client broadcasts its stable `PlayerIdentity` (id + name) to the server; only then does the server spawn that player's avatar, with the identity baked into the spawn payload. Connection ids never leak out of this file - all state stays keyed by player id.
+- Drives `NetworkSession` (Offline / Host / Client) and sweeps remote presences on disconnect. Gameplay code keeps asking `NetworkSession` and never touches the transport.
+
+**New: `PlayerAvatar` (`Scripts/Networking`)** - the networked body of one player.
+- Server-spawned, one per connection; `SyncVar` id + name; despawned on disconnect.
+- The owning client mirrors its real first-person rig into the avatar every frame; Fish-Net's NetworkTransform replicates it. Owners never see their own avatar. Nameplates billboard toward whoever is looking.
+- Keeps the `NetworkSession` player registry in step with spawns/despawns - on clients AND on (future) dedicated servers.
+- Movement is owner-authoritative for now (standard NetworkTransform); server-side movement validation is a later hardening pass.
+
+**Pause menu gets a MULTIPLAYER page** (`InGamePauseMenu`), same theme as everything else:
+- Offline: your player name, HOST THIS WORLD, and an address field + JOIN GAME.
+- Online: live status line, live player roster, DISCONNECT.
+- The pause menu no longer freezes time while a session is running (the world lives on the server); offline pause behaves exactly as before. Starting a session from a frozen menu unfreezes cleanly, and SAVE & QUIT leaves the session before tearing the world down.
+
+**New: Setup Step 105** (`Scripts/Editor/Networking/NetworkSetup.cs`, wizard button in Voxel Engine Setup):
+- Authors the `NetworkPlayerAvatar` prefab (NetworkObject + NetworkTransform + PlayerAvatar, capsule body, view-direction visor, nameplate) under `VoxelEngineAssets/Networking`.
+- Wires a `Network` object into the open scene: NetworkManager + Tugboat + NetworkBootstrap, avatar prefab connected. Non-destructive and re-runnable; Fish-Net picks the prefab up in its DefaultPrefabObjects collection automatically.
+
+**GitHub title:** `[14.1.0-dev] Multiplayer foundation: host and join`
+
+**Manual steps:**
+1. Pull `Dev` and let Unity compile.
+2. Open the MAIN GAME scene, run **Tools -> Voxel Engine -> Voxel Engine Setup -> Step 105**, then save the scene (Ctrl+S).
+3. Two-machine test (or two builds on one machine): machine A - Esc -> MULTIPLAYER -> HOST THIS WORLD. Machine B - same menu, type A's LAN IP into HOST ADDRESS -> JOIN GAME. Expected: both see the other's capsule avatar with the right name, moving and turning live. Walk, jump, fly - the avatar should track it all.
+4. Also verify: pause menu no longer freezes the world while hosting; DISCONNECT returns both sides to Offline cleanly; hosting again afterwards works.
+5. If the join fails across machines, it is almost always the firewall: allow the game/editor on UDP port 7770 on the host.
 
 ### [14.0.0-dev] Multiplayer Foundation - Part 1: Identity and Session
 

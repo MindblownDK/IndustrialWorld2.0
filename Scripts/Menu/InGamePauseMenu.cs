@@ -32,13 +32,15 @@ namespace VoxelEngine.Menu
         private CursorLockMode _savedLock;
         private bool          _savedVis;
 
-        private enum Page  { Pause, Settings }
+        private enum Page  { Pause, Settings, Multiplayer }
         private enum STab  { Display, Camera, Interface, Audio, Saving, Keybinds }
         private Page _page = Page.Pause;
         private Page _lastBuiltPage = (Page)(-1);
         private STab _tab  = STab.Camera;
         private float _savedScrollY = 0f;
         private bool _hasSavedScroll = false;
+        private bool _frozeTime = false;          // time only freezes offline
+        private string _mpAddress = "localhost";  // last join address typed
 
         // ── Unity Lifecycle ────────────────────────────────────────
         private void Awake()
@@ -76,11 +78,18 @@ namespace VoxelEngine.Menu
         {
             _open = true;
             VoxelEngine.UI.UIState.PushBlock();
-            VoxelEngine.UI.UIState.PushHardPause();   // pause menu = the ONLY time-freezing UI
+            // Freezing time is a single-player luxury: in a session the world
+            // keeps running on the server, so the menu must not stall the tick.
+            _frozeTime = VoxelEngine.Networking.NetworkSession.Mode
+                         == VoxelEngine.Networking.SessionMode.Offline;
             _savedTS   = Time.timeScale;
             _savedLock = Cursor.lockState;
             _savedVis  = Cursor.visible;
-            Time.timeScale      = 0f;
+            if (_frozeTime)
+            {
+                VoxelEngine.UI.UIState.PushHardPause();   // pause menu = the ONLY time-freezing UI
+                Time.timeScale = 0f;
+            }
             Cursor.lockState    = CursorLockMode.None;
             Cursor.visible      = true;
             _page = Page.Pause;
@@ -91,9 +100,8 @@ namespace VoxelEngine.Menu
         private void Close()
         {
             _open = false;
-            VoxelEngine.UI.UIState.PopHardPause();
+            if (_frozeTime) { VoxelEngine.UI.UIState.PopHardPause(); Time.timeScale = _savedTS; _frozeTime = false; }
             VoxelEngine.UI.UIState.PopBlock();
-            Time.timeScale   = _savedTS;
             Cursor.lockState = _savedLock;
             Cursor.visible   = _savedVis;
             HideUI();
@@ -143,8 +151,9 @@ namespace VoxelEngine.Menu
             _root.style.justifyContent  = Justify.Center;
             _root.pickingMode           = PickingMode.Position;
 
-            if (_page == Page.Pause)  BuildPause();
-            else                      BuildSettings();
+            if      (_page == Page.Pause)       BuildPause();
+            else if (_page == Page.Multiplayer) BuildMultiplayer();
+            else                                BuildSettings();
         }
 
         // ── Pause Page ─────────────────────────────────────────────
@@ -181,7 +190,143 @@ namespace VoxelEngine.Menu
             panel.Add(T.Spacer(8));
             panel.Add(PrimaryBtn("⚙   SETTINGS",    () => { _page = Page.Settings; BuildUI(); }, T.BgSlot));
             panel.Add(T.Spacer(8));
+            panel.Add(PrimaryBtn("◉   MULTIPLAYER", () => { _page = Page.Multiplayer; BuildUI(); }, T.BgSlot));
+            panel.Add(T.Spacer(8));
             panel.Add(PrimaryBtn("⬅   SAVE & QUIT", QuitToMenu,                           T.AccentRed));
+        }
+
+        // ── Multiplayer Page ───────────────────────────────────────
+        private void BuildMultiplayer()
+        {
+            var panel = MakePanel(420, 0);
+            _root.Add(panel);
+
+            var hdr = new VisualElement();
+            hdr.style.flexDirection = FlexDirection.Row;
+            hdr.style.alignItems    = Align.Center;
+            hdr.style.marginBottom  = 6;
+            var title = T.Title("MULTIPLAYER");
+            title.style.flexGrow = 1;
+            hdr.Add(title);
+            var backBtn = PrimaryBtn("← BACK", () => { _page = Page.Pause; BuildUI(); }, T.BgSlot);
+            backBtn.style.minWidth  = 90;
+            backBtn.style.minHeight = 30;
+            backBtn.style.fontSize  = 11;
+            hdr.Add(backBtn);
+            panel.Add(hdr);
+            panel.Add(T.AccentDivider());
+            panel.Add(T.Spacer(8));
+
+            var bootstrap = VoxelEngine.Networking.NetworkBootstrap.Instance;
+            if (bootstrap == null)
+            {
+                var missing = T.Muted(
+                    "This scene has no network bootstrap.\n" +
+                    "Run Setup Step 105 (Tools → Voxel Engine → Voxel Engine Setup)\n" +
+                    "in the game scene, then save it.");
+                missing.style.whiteSpace = WhiteSpace.Normal;
+                panel.Add(missing);
+                return;
+            }
+
+            bool online = bootstrap.IsOnline;
+            var status = T.StatLabel(bootstrap.StatusLine, online ? T.AccentGreen : T.TextSecondary);
+            panel.Add(status);
+            panel.Add(T.Spacer(10));
+
+            Label playersLabel = null;
+            if (!online)
+            {
+                panel.Add(T.Muted("YOUR NAME"));
+                var nameField = MpField(VoxelEngine.Networking.PlayerIdentity.LocalName);
+                nameField.RegisterValueChangedCallback(evt =>
+                    VoxelEngine.Networking.PlayerIdentity.LocalName = evt.newValue);
+                panel.Add(nameField);
+                panel.Add(T.Spacer(14));
+
+                panel.Add(PrimaryBtn("◈   HOST THIS WORLD", () =>
+                {
+                    ReleaseFreezeForSession();
+                    bootstrap.StartHost();
+                    BuildUI();
+                }, T.AccentGreen));
+                panel.Add(T.Spacer(14));
+
+                panel.Add(T.Muted("HOST ADDRESS"));
+                var addrField = MpField(_mpAddress);
+                addrField.RegisterValueChangedCallback(evt => _mpAddress = evt.newValue);
+                panel.Add(addrField);
+                panel.Add(T.Spacer(6));
+                panel.Add(PrimaryBtn("→   JOIN GAME", () =>
+                {
+                    ReleaseFreezeForSession();
+                    bootstrap.StartClient(_mpAddress);
+                    BuildUI();
+                }, T.AccentCyan));
+            }
+            else
+            {
+                panel.Add(T.Muted("PLAYERS"));
+                playersLabel = T.Body(PlayerListText());
+                playersLabel.style.whiteSpace = WhiteSpace.Normal;
+                panel.Add(playersLabel);
+                panel.Add(T.Spacer(14));
+                panel.Add(PrimaryBtn("✕   DISCONNECT", () =>
+                {
+                    bootstrap.StopSession();
+                    BuildUI();
+                }, T.AccentRed));
+            }
+
+            // Live refresh: connecting is asynchronous, players come and go.
+            panel.schedule.Execute(() =>
+            {
+                if (!_open || _page != Page.Multiplayer) return;
+                if (bootstrap.IsOnline != online) { BuildUI(); return; }
+                status.text = bootstrap.StatusLine;
+                if (playersLabel != null) playersLabel.text = PlayerListText();
+            }).Every(400);
+        }
+
+        /// <summary>Going online from a frozen pause menu: the world must run
+        /// again the moment a session starts, menu still open or not.</summary>
+        private void ReleaseFreezeForSession()
+        {
+            if (!_frozeTime) return;
+            VoxelEngine.UI.UIState.PopHardPause();
+            Time.timeScale = _savedTS;
+            _frozeTime = false;
+        }
+
+        private TextField MpField(string value)
+        {
+            var f = new TextField { value = value };
+            f.style.minHeight = 30;
+            f.style.fontSize  = 13;
+            f.style.marginTop = 4;
+            var input = f.Q("unity-text-input");
+            if (input != null)
+            {
+                input.style.backgroundColor = new StyleColor(new Color(T.BgSlot.r, T.BgSlot.g, T.BgSlot.b, 0.95f));
+                input.style.color = new StyleColor(T.TextPrimary);
+                T.Radius(input, T.ButtonRadius);
+                T.Border(input, 1, T.BorderDim);
+                input.style.paddingLeft = 8;
+                input.style.paddingRight = 8;
+            }
+            return f;
+        }
+
+        private static string PlayerListText()
+        {
+            var sb = new System.Text.StringBuilder();
+            foreach (var p in VoxelEngine.Networking.NetworkSession.Players)
+            {
+                if (sb.Length > 0) sb.Append('\n');
+                sb.Append("•  ").Append(string.IsNullOrEmpty(p.displayName) ? p.playerId : p.displayName);
+                if (p.playerId == VoxelEngine.Networking.NetworkSession.LocalPlayerId) sb.Append("   (you)");
+            }
+            return sb.Length > 0 ? sb.ToString() : "—";
         }
 
         // ── Settings Page ──────────────────────────────────────────
@@ -318,6 +463,8 @@ namespace VoxelEngine.Menu
 
         private void QuitToMenu()
         {
+            // Leave the session cleanly before tearing the world down.
+            VoxelEngine.Networking.NetworkBootstrap.Instance?.StopSession();
             Time.timeScale = 1f;
             VoxelEngine.UI.UIState.ClearSceneBlocks();
             VoxelEngine.Persistence.WorldStatePersistence.Instance?.SaveAll();
