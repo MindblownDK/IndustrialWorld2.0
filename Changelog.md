@@ -1,9 +1,26 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `13.10.1-dev`
+**Current Version:** `13.10.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [13.10.2-dev] Corner Pillars and Flush Joints
+
+**Type:** PATCH - Floor-on-Pillar corner alignment and pillar-adjacent placement corrections. No save schema, prefab, item, recipe, research or cost change.
+
+**A Floor on a Pillar now lands corner-on-pillar.** The 13.9.0 snap offset the deck half a module along one axis, putting the pillar under the middle of a floor edge. The deck now offsets half a module on both axes, so the pillar carries the floor's 90-degree corner - the point where up to four modules meet - and extends diagonally toward the builder. This matches the corner anchors already used when a pillar is placed under an existing deck, so pillar positions form one consistent lattice from either direction. The corner stays within the 5.5 m support reach, so adoption and the periodic audit behave exactly as before.
+
+**Walls beside pillars are no longer refused.** A pillar sits flush with the deck it carries, so aiming at a pillar-supported edge very often hit the pillar rather than the deck. No wall-to-pillar join exists, so the ghost fell through to free placement, whose overlap rule vetoes anything touching a structure - the wall on that edge was permanently red and read as unsupported. Two corrections close this: aiming at a pillar that carries a Floor or Floor Hatch now resolves the join against that deck (walls, railings and every deck-hosted piece place normally), and a pillar neighbour never vetoes the placement overlap check, because pillar tops deliberately coincide with deck undersides, corners and wall lines.
+
+**GitHub title:** `[13.10.2-dev] Corner pillars and flush joints`
+
+**Manual steps:**
+1. Pull `Dev` and let Unity compile. No Setup step is required.
+2. Aim a Floor at a Pillar top from several positions: the ghost hangs its corner on the pillar and extends diagonally toward you. Place it and confirm the audit keeps it (span one, extendable).
+3. Place a wall on every edge of a pillar-supported floor, including the two edges meeting the pillar corner, and while aiming directly at the pillar itself: the ghost must be green and place at the deck edge.
+4. Place a pillar under an existing Floor corner, then a Floor on a fresh pillar: both use the same corner points.
+5. Confirm a Railing aimed at a pillar-supported edge also snaps to the deck edge instead of refusing.
 
 ### [13.10.1-dev] Grounded Supports Win the Audit
 

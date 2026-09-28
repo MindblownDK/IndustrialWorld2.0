@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `13.10.1-dev`
-**Roadmap Version:** `13.10.1-dev`
+**Current Version:** `13.10.2-dev`
+**Roadmap Version:** `13.10.2-dev`
 **Date:** 2026-09-28
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 13.10.2-dev - Corner Pillars and Flush Joints
+- **Corner snap** (`BuildSystemV2`): a Floor on a Pillar hangs its 90-degree corner on the pillar and extends diagonally toward the builder, matching the under-deck corner anchors.
+- **Pillar-adjacent joins** (`BuildSystemV2`): aiming at a pillar resolves against the deck it carries, and pillar neighbours never veto the placement overlap check.
+- **Behaviour**: support spans, audits and costs are unchanged.
+
 ### 13.10.1-dev - Grounded Supports Win the Audit
 - **Audit ordering** (`StructuralLoadState`): direct grounded supports are adopted before the deck-neighbour relay, so a new pillar under a span-two floor reliably resets it.
 - **Wall support base** (`StructuralLoadState`, `BuildSystemV2`): a wall on a suspended deck is a pass-through continuing that deck's span plus one, closing the infinite wall-on-floor ladder.
@@ -48,11 +53,6 @@
 - **Compile repair** (`BuildSystemV2`): the Pillar-edge axis selector uses a scope-unique local name.
 - **Behaviour**: Floor-on-Pillar direction, position, support and cost logic are unchanged.
 - **Validation**: source braces and formatting remain balanced.
-
-### 13.8.3-dev - Pillars Meet Edges and Stair Undersides
-- **Pillar limit** (`AdjustablePillar`, `BuildSystemV2`): one adaptive Pillar spans at most 1.5 storeys; deeper gaps refuse placement and require stacked supports.
-- **Edge and stair joins** (`BuildSystemV2`, `StructuralLoadState`): Floors rest by an edge on Pillar tops, while underside-aimed Stair Pillars use the exact tread/load point and reset the supported Stair to span one.
-- **Support adoption**: suspended Floors, Hatches and Stairs adopt a newly added direct Pillar/Foundation support during their periodic audit, enabling a fresh two-piece run.
 
 ### Era Transition Feel
 

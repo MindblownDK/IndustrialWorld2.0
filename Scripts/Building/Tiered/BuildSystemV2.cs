@@ -258,6 +258,23 @@ namespace VoxelEngine.Building.Tiered
                 return;
             }
 
+            // A pillar sits flush with the deck it carries, so the aim ray often
+            // hits the pillar when the player means the deck join beside it.
+            // Without this redirect the ghost fell into free placement, where
+            // the overlap rule vetoes anything touching a structure - walls on
+            // a pillar-supported edge were permanently red.
+            if (directHost != null && (directHost.GetComponent<AdjustablePillar>() != null
+                    || (directHost.definition != null && directHost.definition.family == BuildFamily.Pillar)))
+            {
+                var carriedDeck = FindDeckAtPillarTop(directHost);
+                if (carriedDeck != null &&
+                    TryComputeStructuralDeckTransform(hit, carriedDeck, requestedFamily, out _ghostPos, out _ghostRot))
+                {
+                    _ghostValid = ValidateOverlap(_ghostPos, requestedFamily, carriedDeck);
+                    return;
+                }
+            }
+
             _socketHosts.Clear();
             int socketCandidateCount = Physics.OverlapSphereNonAlloc(hit.point, socketSnapRadius,
                 s_socketOverlapProbe, ~0, QueryTriggerInteraction.UseGlobal);
@@ -369,20 +386,19 @@ namespace VoxelEngine.Building.Tiered
                 || host.GetComponent<AdjustablePillar>() != null;
             if (incomingDeck && hostIsPillar)
             {
-                // A pillar carries a floor edge, not its centre. The deck extends
-                // toward the builder, so the piece lands where they are standing
-                // and building continues in their direction.
+                // A pillar carries a floor CORNER - the 90 degree point where up
+                // to four modules meet - matching the corner anchors used when a
+                // pillar is placed under an existing deck. The deck extends
+                // diagonally toward the builder, so the piece lands on the side
+                // they are standing on.
                 Vector3 toBuilder = transform.position - host.transform.position;
-                float alongRight = Vector3.Dot(toBuilder, host.transform.right);
-                float alongForward = Vector3.Dot(toBuilder, host.transform.forward);
-                bool pillarUsesX = Mathf.Abs(alongRight) >= Mathf.Abs(alongForward);
-                float side = pillarUsesX
-                    ? (alongRight >= 0f ? 1f : -1f)
-                    : (alongForward >= 0f ? 1f : -1f);
+                float sideX = Vector3.Dot(toBuilder, host.transform.right) >= 0f ? 1f : -1f;
+                float sideZ = Vector3.Dot(toBuilder, host.transform.forward) >= 0f ? 1f : -1f;
                 float height = host.TryGetComponent<AdjustablePillar>(out var sizedPillar)
                     ? sizedPillar.currentHeight : ConstructionStorey;
                 position = host.transform.position + host.transform.up * height
-                    + (pillarUsesX ? host.transform.right : host.transform.forward) * (side * ConstructionModule * 0.5f);
+                    + host.transform.right * (sideX * ConstructionModule * 0.5f)
+                    + host.transform.forward * (sideZ * ConstructionModule * 0.5f);
                 rotation = Quaternion.AngleAxis(_ghostYaw, host.transform.up) * host.transform.rotation;
                 return true;
             }
@@ -574,6 +590,28 @@ namespace VoxelEngine.Building.Tiered
                 ? rise : ConstructionStorey;
             position = top;
             return true;
+        }
+
+        /// <summary>The Floor or Floor Hatch resting directly on a pillar's top, if any.</summary>
+        private static PlacedTieredBlock FindDeckAtPillarTop(PlacedTieredBlock pillarHost)
+        {
+            if (pillarHost == null) return null;
+            float height = pillarHost.TryGetComponent<AdjustablePillar>(out var pillar)
+                ? pillar.currentHeight : ConstructionStorey;
+            Vector3 top = pillarHost.transform.position + pillarHost.transform.up * height;
+            var hits = Physics.RaycastAll(top - pillarHost.transform.up * 0.1f,
+                pillarHost.transform.up, 1f, ~0, QueryTriggerInteraction.Ignore);
+            System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+            for (int i = 0; i < hits.Length; i++)
+            {
+                Collider collider = hits[i].collider;
+                if (collider == null || collider.transform.IsChildOf(pillarHost.transform)) continue;
+                var block = collider.GetComponentInParent<PlacedTieredBlock>();
+                if (block == null || block.definition == null) continue;
+                BuildFamily family = block.definition.family;
+                if (family == BuildFamily.Floor || family == BuildFamily.FloorHatch) return block;
+            }
+            return null;
         }
 
         /// <summary>Finds the first deck underside above a pillar top so a stacked stage can meet it exactly.</summary>
@@ -868,6 +906,12 @@ namespace VoxelEngine.Building.Tiered
             // socket-snapping to that exact host (adjacent stacking is fine).
             var host = collider.GetComponentInParent<PlacedTieredBlock>();
             if (host == null || host == socketHost) return true;
+            // A pillar is a flush joint piece: its top face deliberately meets
+            // deck undersides, corners and wall lines, so a pillar neighbour
+            // never vetoes structural placement.
+            if (host.GetComponent<AdjustablePillar>() != null
+                || (host.definition != null && host.definition.family == BuildFamily.Pillar))
+                return true;
             if (socketHost != null && Vector3.Distance(host.transform.position, placementPosition) > 0.25f)
                 return true;
 
