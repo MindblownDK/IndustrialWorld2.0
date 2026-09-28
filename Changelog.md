@@ -1,9 +1,29 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `13.8.0-dev`
+**Current Version:** `13.8.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [13.8.1-dev] Adaptive Pillars Carry Their Actual Height
+
+**Type:** PATCH - variable-height Pillar support-point and suspended-span tolerance correction. No save schema, family value, prefab geometry, item, recipe, research or cost changes.
+
+**Fixed - structural checks still treated every Pillar as exactly one storey tall.** An underside-placed Pillar could visibly reach from terrain to a Floor, but both the placement anchor and the periodic collapse audit calculated its top as `root + 5.625 m`. Any Pillar shorter or taller than that missed the deck it physically touched and therefore supplied no load path.
+
+**Adaptive Pillars now carry at their measured top.** When a Pillar begins a Floor or Roof load path, `BuildSystemV2` uses `AdjustablePillar.currentHeight`. `StructuralLoadState` uses the same value during every 0.75-second support audit. The placement verdict and later collapse verdict therefore agree with the visible Pillar.
+
+**The second unsupported Floor receives practical tolerance.** The original anchor remains unchanged and span three remains a hard refusal, but the geometric cap now permits 16 m instead of 15.35 m. Two 7.5 m Floor modules fit reliably across curved terrain and generated surface offsets without accidentally granting a third module.
+
+**GitHub title:** `[13.8.1-dev] Adaptive pillars carry their actual height`
+
+**Manual steps:**
+1. Pull `Dev` and let Unity compile. No setup step is required after 13.8.0 Step 102 has been run.
+2. Place a Floor over uneven terrain, aim beneath it and place a ground-reaching Pillar.
+3. Extend Floor one and Floor two from that supported point. Both must be valid; Floor three must remain red.
+4. Wait several seconds and confirm the Pillar-supported Floors do not collapse.
+5. Remove the Pillar and confirm the unsupported run collapses unless another valid support remains.
+6. Repeat with a short Pillar and a Pillar taller than one storey to verify support follows the visible top in both cases.
 
 ### [13.8.0-dev] Pillars Reach Down From Floors
 

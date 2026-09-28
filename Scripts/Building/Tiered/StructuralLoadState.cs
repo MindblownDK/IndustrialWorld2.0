@@ -58,6 +58,9 @@ namespace VoxelEngine.Building.Tiered
             float height = support.definition.family == BuildFamily.Foundation
                 ? 1.125f
                 : support.definition.family == BuildFamily.HalfWall ? 2.8f : 5.625f;
+            if (support.definition.family == BuildFamily.Pillar
+                && support.TryGetComponent<AdjustablePillar>(out var adjustablePillar))
+                height = adjustablePillar.currentHeight;
             Vector3 top = support.transform.position + support.transform.up * height;
             Vector3 delta = transform.position - top;
             float vertical = Mathf.Abs(Vector3.Dot(delta, support.transform.up));

@@ -151,7 +151,7 @@ namespace VoxelEngine.Building.Tiered
                 // A Floor continuing from a Foundation starts one complete module
                 // from that anchor, so two unsupported panels require 15 m. Roofs
                 // still stop at span two before this wider geometric cap matters.
-                const float maximumUnsupportedReach = ConstructionModule * 2f + 0.35f;
+                const float maximumUnsupportedReach = ConstructionModule * 2f + 1f;
                 bool beyondAnchor = _structuralAnchor == Vector3.zero
                     || Vector3.Distance(_ghostPos, _structuralAnchor) > maximumUnsupportedReach;
                 if (_structuralSpan < 1 || _structuralSpan > 2 || beyondAnchor)
@@ -635,6 +635,9 @@ namespace VoxelEngine.Building.Tiered
             if (StructuralLoadState.IsVerticalSupport(hostFamily))
             {
                 float height = hostFamily == BuildFamily.HalfWall ? HalfWallHeight : ConstructionStorey;
+                if (hostFamily == BuildFamily.Pillar
+                    && host.TryGetComponent<AdjustablePillar>(out var adjustablePillar))
+                    height = adjustablePillar.currentHeight;
                 _structuralAnchor = host.transform.position + host.transform.up * height;
                 return 1;
             }

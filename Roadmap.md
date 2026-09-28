@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `13.8.0-dev`
-**Roadmap Version:** `13.8.0-dev`
+**Current Version:** `13.8.1-dev`
+**Roadmap Version:** `13.8.1-dev`
 **Date:** 2026-09-27
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 13.8.1-dev - Adaptive Pillars Carry Their Actual Height
+- **Load point** (`BuildSystemV2`): a variable-height Pillar starts a Floor or Roof load path at its measured top instead of the authored 5.625 m default.
+- **Ongoing support** (`StructuralLoadState`): periodic support checks use `AdjustablePillar.currentHeight`, so grounded Pillars continue supporting the deck they touch.
+- **Two-panel tolerance**: suspended anchor reach allows one metre of curved-world and generated-geometry tolerance while span three remains strictly refused.
+
 ### 13.8.0-dev - Pillars Reach Down From Floors
 - **Underside placement** (`BuildSystemV2`): aiming a Pillar at a Floor or Floor Hatch underside selects the centre or nearest true corner and searches down to solid terrain.
 - **Adaptive height** (`AdjustablePillar`, Setup Step 102): all four Pillar tiers scale from a grounded root to the underside anchor, including live ghost feedback and tier upgrades.
@@ -48,11 +53,6 @@
 - **Authoritative family** (`BuildSystemV2`): snapping and validation use the wheel/token selection rather than trusting a potentially stale serialized definition family.
 - **Roof identity** (`StructuralLoadState`): an armed suspended component is resolved before legacy host-family data, preventing every Roof from being misread as a fresh span-one Wall support.
 - **Final guard**: the two-span Roof rule runs after every transform branch and immediately before the ghost is displayed or placed.
-
-### 13.7.2-dev - Structural Span Belongs to the Placed Piece
-- **Placement state** (`StructuralLoadState`, `BuildSystemV2`): each new suspended Floor or Roof records its exact span from the aimed support; Roof placement refuses span three and above.
-- **Support loss** (`StructuralLoadState`): armed Floors and Roofs periodically verify a real support or a lower-span neighbour and collapse when the final load path disappears.
-- **Tier continuity**: upgrading a suspended piece transfers its structural span to the replacement prefab.
 
 ### Era Transition Feel
 
