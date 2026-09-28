@@ -69,7 +69,8 @@ namespace VoxelEngine.Building.Tiered
                             || incoming == BuildFamily.TriangularWall
                             || incoming == BuildFamily.TriangularWallInverted
                             || incoming == BuildFamily.GateFrame
-                            || incoming == BuildFamily.BigGateFrame;
+                            || incoming == BuildFamily.BigGateFrame
+                            || incoming == BuildFamily.CompoundWall;
                     case SocketSide.North:
                     case SocketSide.South:
                     case SocketSide.East:
@@ -88,10 +89,12 @@ namespace VoxelEngine.Building.Tiered
                 return incoming == BuildFamily.Gate;
             if (host == BuildFamily.BigGateFrame && side == SocketSide.Center)
                 return incoming == BuildFamily.BigGate;
-            if (host == BuildFamily.GateFrame || host == BuildFamily.BigGateFrame)
+            if (host == BuildFamily.GateFrame || host == BuildFamily.BigGateFrame
+                || host == BuildFamily.CompoundWall)
                 return incoming == BuildFamily.Wall || incoming == BuildFamily.HalfWall
                     || incoming == BuildFamily.Doorway || incoming == BuildFamily.Window
-                    || incoming == BuildFamily.WallFrame || incoming == BuildFamily.GateFrame;
+                    || incoming == BuildFamily.WallFrame || incoming == BuildFamily.GateFrame
+                    || incoming == BuildFamily.CompoundWall;
             // Triangular walls line up beside other wall pieces.
             if (host == BuildFamily.TriangularWall || host == BuildFamily.TriangularWallInverted)
                 return incoming == BuildFamily.Wall || incoming == BuildFamily.HalfWall

@@ -469,6 +469,23 @@ namespace VoxelEngine.EditorTools
             GateLeaf(m, tier, BigGateW - 0.3f, BigGateH - 0.2f, 0.3f);
         }
 
+        /// <summary>Heavy freestanding perimeter wall at gate-frame height.</summary>
+        private static void CompoundWallPiece(PieceMesh m, BuildTier tier)
+        {
+            m.Box(PieceSurface.Skin, new Vector3(0f, GateFrameH * 0.5f, 0f),
+                  new Vector3(Module, GateFrameH, 0.45f));
+            foreach (float s in new[] { -1f, 1f })   // end posts that meet the next segment
+                m.Box(PieceSurface.Trim, new Vector3(s * (HalfModule - 0.3f), GateFrameH * 0.5f, 0f),
+                      new Vector3(0.6f, GateFrameH, 0.7f));
+            m.Box(PieceSurface.Trim, new Vector3(0f, GateFrameH - 0.25f, 0f),
+                  new Vector3(Module, 0.5f, 0.72f));   // parapet cap
+            m.Box(PieceSurface.Trim, new Vector3(0f, 0.3f, 0f),
+                  new Vector3(Module, 0.6f, 0.72f));   // plinth
+            foreach (float y in new[] { GateFrameH * 0.36f, GateFrameH * 0.66f })
+                m.Box(PieceSurface.Frame, new Vector3(0f, y, 0f),
+                      new Vector3(Module, 0.3f, 0.58f));   // stringer courses
+        }
+
         /// <summary>Shared gate leaf assembly, sized by the opening it closes.</summary>
         private static void GateLeaf(PieceMesh m, BuildTier tier, float w, float h, float thick)
         {
@@ -985,6 +1002,7 @@ namespace VoxelEngine.EditorTools
                 case BuildFamily.Gate:                      GateLeafPiece(m, tier); break;
                 case BuildFamily.BigGateFrame:              BigGateFramePiece(m, tier); break;
                 case BuildFamily.BigGate:                   BigGateLeafPiece(m, tier); break;
+                case BuildFamily.CompoundWall:              CompoundWallPiece(m, tier); break;
                 default:                     Wall(m, tier); break;
             }
             m.Commit(root, tier, meshAssetPath);

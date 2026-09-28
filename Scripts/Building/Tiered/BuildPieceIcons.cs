@@ -70,6 +70,7 @@ namespace VoxelEngine.Building.Tiered
                 case BuildFamily.Gate:                      GateLeaf(b, false);   break;
                 case BuildFamily.BigGateFrame:              GatePortal(b, true);  break;
                 case BuildFamily.BigGate:                   GateLeaf(b, true);    break;
+                case BuildFamily.CompoundWall:              CompoundWall(b);      break;
 
                 default: b.IsoBox(0f, 0f, 0f, 1f, 1f, 1f); break;
             }
@@ -328,6 +329,15 @@ namespace VoxelEngine.Building.Tiered
             b.Line(P(ix + iw, 0f, 0f), P(ix + iw, ih, 0f));
             b.Line(P(ix, ih, 0f), P(ix + iw, ih, 0f));
             if (big) b.Line(P(x0, h * 0.9f, 0f), P(x0 + w, h * 0.9f, 0f));
+        }
+
+        private static void CompoundWall(LineArtBuilder b)
+        {
+            const float h = 0.85f;
+            b.Closed(P(0f, 0f, 0f), P(1f, 0f, 0f), P(1f, h, 0f), P(0f, h, 0f));
+            b.Line(P(0f, h * 0.92f, 0f), P(1f, h * 0.92f, 0f));   // parapet cap
+            b.Line(P(0.12f, 0f, 0f), P(0.12f, h, 0f));            // end posts
+            b.Line(P(0.88f, 0f, 0f), P(0.88f, h, 0f));
         }
 
         private static void GateLeaf(LineArtBuilder b, bool big)

@@ -57,7 +57,8 @@ namespace VoxelEngine.Building.Tiered
             BuildFamily.PyramidRoof,
             BuildFamily.TriangularWall, BuildFamily.TriangularWallInverted,
             BuildFamily.GateFrame, BuildFamily.Gate,
-            BuildFamily.BigGateFrame, BuildFamily.BigGate
+            BuildFamily.BigGateFrame, BuildFamily.BigGate,
+            BuildFamily.CompoundWall
         };
 
         private static readonly BuildFamily[] StationFamilies =

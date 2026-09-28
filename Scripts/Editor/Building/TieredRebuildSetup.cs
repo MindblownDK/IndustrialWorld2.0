@@ -51,7 +51,8 @@ namespace VoxelEngine.EditorTools
             BuildFamily.SlantedTriangularRoof, BuildFamily.CornerRoof,
             BuildFamily.SlantedCornerRoofInverted, BuildFamily.PyramidRoof,
             BuildFamily.GateFrame, BuildFamily.Gate,
-            BuildFamily.BigGateFrame, BuildFamily.BigGate
+            BuildFamily.BigGateFrame, BuildFamily.BigGate,
+            BuildFamily.CompoundWall
         };
 
         /// <summary>Human display names; asset file names stay the raw enum word.</summary>
@@ -69,6 +70,7 @@ namespace VoxelEngine.EditorTools
             BuildFamily.Gate => "Gate",
             BuildFamily.BigGateFrame => "Big Gate Frame",
             BuildFamily.BigGate => "Big Gate",
+            BuildFamily.CompoundWall => "Compound Wall",
             _ => family.ToString(),
         };
 
@@ -625,6 +627,11 @@ namespace VoxelEngine.EditorTools
                     Socket(SocketSide.Center, Vector3.zero);   // takes a Gate
                     break;
 
+                case BuildFamily.CompoundWall:
+                    Socket(SocketSide.East, new Vector3(m, 0f, 0f));
+                    Socket(SocketSide.West, new Vector3(-m, 0f, 0f));
+                    break;
+
                 case BuildFamily.BigGateFrame:
                     Socket(SocketSide.Center, Vector3.zero);   // takes a Big Gate
                     break;
@@ -692,6 +699,7 @@ namespace VoxelEngine.EditorTools
                 BuildFamily.Gate                      => (3, 5, 0, 7, 6),
                 BuildFamily.BigGateFrame              => (14, 14, 24, 14, 14),
                 BuildFamily.BigGate                   => (8, 12, 0, 16, 14),
+                BuildFamily.CompoundWall              => (8, 8, 14, 8, 8),
                 _ => (3, 3, 5, 3, 3),
             };
 

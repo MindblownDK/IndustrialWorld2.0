@@ -85,7 +85,9 @@ namespace VoxelEngine.Building.Tiered
         /// <summary>Monumental gate frame, two modules wide and three storeys tall. Takes a Big Gate.</summary>
         BigGateFrame = 34,
         /// <summary>Colossal swinging gate that fits a Big Gate Frame.</summary>
-        BigGate = 35
+        BigGate = 35,
+        /// <summary>Heavy freestanding perimeter wall, gate-frame height, for compounds.</summary>
+        CompoundWall = 36
     }
 
     /// <summary>
@@ -110,7 +112,7 @@ namespace VoxelEngine.Building.Tiered
         public static BuildFamilyGroup GroupOf(BuildFamily family)
             => family >= BuildFamily.StationHull && family <= BuildFamily.StationDome
                 ? BuildFamilyGroup.OrbitalStation
-                : family >= BuildFamily.TriangularWall && family <= BuildFamily.BigGate
+                : family >= BuildFamily.TriangularWall && family <= BuildFamily.CompoundWall
                     ? BuildFamilyGroup.RoofsAndGates
                     : BuildFamilyGroup.Structural;
 

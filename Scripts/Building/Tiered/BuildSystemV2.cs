@@ -161,6 +161,13 @@ namespace VoxelEngine.Building.Tiered
                     || Vector3.Distance(_ghostPos, _structuralAnchor) > maximumUnsupportedReach;
                 if (_structuralSpan < 1 || _structuralSpan > 2 || beyondAnchor)
                     _ghostValid = false;
+                // A sloped panel must PHYSICALLY touch something at its eave -
+                // a wall head, a gable, a deck edge or the panel it chains from.
+                // Span bookkeeping alone let panels ride stale numbers into open
+                // air, standing on nothing.
+                if (_ghostValid && BuildFamilyInfo.IsRoofPanel(activeFam.Value)
+                    && !RoofPanelHasEaveContact(_ghostPos, _ghostRot))
+                    _ghostValid = false;
             }
             _ghost.transform.SetPositionAndRotation(_ghostPos, _ghostRot);
             if (_ghost.TryGetComponent<TieredRailing>(out var ghostRailing))
@@ -326,6 +333,17 @@ namespace VoxelEngine.Building.Tiered
             const float surfaceOffset = 0.02f;
             Vector3 raw = hit.point + hit.normal * surfaceOffset;
 
+            // Ground-standing pieces (walls, gates, compound walls) keep the aimed
+            // surface HEIGHT and only snap horizontally. Rounding their root to the
+            // nearest 7.5 m shell hung gates in mid-air on any terrain between
+            // shells, where they promptly decayed for lack of base contact.
+            bool groundStanding = requestedFamily == BuildFamily.Wall || requestedFamily == BuildFamily.HalfWall
+                || requestedFamily == BuildFamily.Doorway || requestedFamily == BuildFamily.Window
+                || requestedFamily == BuildFamily.WallFrame
+                || requestedFamily == BuildFamily.TriangularWall || requestedFamily == BuildFamily.TriangularWallInverted
+                || requestedFamily == BuildFamily.GateFrame || requestedFamily == BuildFamily.BigGateFrame
+                || requestedFamily == BuildFamily.CompoundWall;
+
             // A Foundation establishes the construction grid. Snapping its radial
             // altitude to an arbitrary 7.5 m shell can bury it after loading a
             // world whose terrain surface is between shells. Use the aimed surface;
@@ -342,7 +360,8 @@ namespace VoxelEngine.Building.Tiered
                     Vector3 up = toPoint.normalized;
 
                     // Round altitude to grid increments for consistent storey heights.
-                    float snappedAlt = Mathf.Round(altitude / gridSize) * gridSize;
+                    float snappedAlt = groundStanding ? altitude
+                        : Mathf.Round(altitude / gridSize) * gridSize;
 
                     Vector3 fwd = Vector3.Cross(up, Vector3.right);
                     if (fwd.sqrMagnitude < 0.001f) fwd = Vector3.Cross(up, Vector3.forward);
@@ -362,7 +381,7 @@ namespace VoxelEngine.Building.Tiered
                 {
                     _ghostPos = new Vector3(
                         Mathf.Round(raw.x / gridSize) * gridSize,
-                        Mathf.Round(raw.y / gridSize) * gridSize,
+                        groundStanding ? raw.y : Mathf.Round(raw.y / gridSize) * gridSize,
                         Mathf.Round(raw.z / gridSize) * gridSize);
                 }
             }
@@ -466,7 +485,8 @@ namespace VoxelEngine.Building.Tiered
                 || incoming == BuildFamily.Doorway || incoming == BuildFamily.Window
                 || incoming == BuildFamily.WallFrame
                 || incoming == BuildFamily.TriangularWall || incoming == BuildFamily.TriangularWallInverted
-                || incoming == BuildFamily.GateFrame || incoming == BuildFamily.BigGateFrame;
+                || incoming == BuildFamily.GateFrame || incoming == BuildFamily.BigGateFrame
+                || incoming == BuildFamily.CompoundWall;
             if (incomingWall &&
                 (hostFamily == BuildFamily.Foundation || hostFamily == BuildFamily.Floor || hostFamily == BuildFamily.FloorHatch))
             {
@@ -480,6 +500,7 @@ namespace VoxelEngine.Building.Tiered
                 // downward, so vertical building continues under a floor line.
                 bool underside = hostFamily != BuildFamily.Foundation
                     && incoming != BuildFamily.GateFrame && incoming != BuildFamily.BigGateFrame
+                    && incoming != BuildFamily.CompoundWall
                     && Vector3.Dot(hit.normal, host.transform.up) < -0.35f;
                 float drop = incoming == BuildFamily.HalfWall ? HalfWallHeight : ConstructionStorey;
                 position = host.transform.position
@@ -687,6 +708,42 @@ namespace VoxelEngine.Building.Tiered
             float x = Mathf.Approximately(localHit.x, 0f) ? 1f : Mathf.Sign(localHit.x);
             float z = Mathf.Approximately(localHit.z, 0f) ? 1f : Mathf.Sign(localHit.z);
             return new Vector3(x * halfModule, 0f, z * halfModule);
+        }
+
+        /// <summary>
+        /// True when a placed block sits under the panel's eave line (local -Z
+        /// edge at root level) or flush against either side edge. Terrain does
+        /// not count: roofing rests on structure, not on dirt.
+        /// </summary>
+        public static bool RoofPanelHasEaveContact(Vector3 position, Quaternion rotation)
+        {
+            Vector3 up = rotation * Vector3.up;
+            Vector3 fwd = rotation * Vector3.forward;
+            Vector3 right = rotation * Vector3.right;
+            // Eave box first, then the two rake edges (for panels joining sideways).
+            Vector3[] centres =
+            {
+                position + fwd * (-ConstructionModule * 0.5f + 0.2f) - up * 0.1f,
+                position + right * (ConstructionModule * 0.5f) + up * 0.5f + fwd * 0f,
+                position - right * (ConstructionModule * 0.5f) + up * 0.5f + fwd * 0f,
+            };
+            Vector3[] halves =
+            {
+                new(ConstructionModule * 0.5f, 0.75f, 0.65f),
+                new(0.5f, 1.2f, ConstructionModule * 0.45f),
+                new(0.5f, 1.2f, ConstructionModule * 0.45f),
+            };
+            for (int probe = 0; probe < centres.Length; probe++)
+            {
+                var overlaps = Physics.OverlapBox(centres[probe], halves[probe], rotation,
+                    ~0, QueryTriggerInteraction.Ignore);
+                for (int i = 0; i < overlaps.Length; i++)
+                {
+                    var block = overlaps[i] != null ? overlaps[i].GetComponentInParent<PlacedTieredBlock>() : null;
+                    if (block != null && block.definition != null) return true;
+                }
+            }
+            return false;
         }
 
         /// <summary>
@@ -1031,6 +1088,7 @@ namespace VoxelEngine.Building.Tiered
             => family == BuildFamily.Railing
                 || family == BuildFamily.TriangularWall || family == BuildFamily.TriangularWallInverted
                 || family == BuildFamily.GateFrame || family == BuildFamily.BigGateFrame
+                || family == BuildFamily.CompoundWall
                 || (StructuralLoadState.IsVerticalSupport(family) && family != BuildFamily.Pillar);
 
         // ---------- Place ----------

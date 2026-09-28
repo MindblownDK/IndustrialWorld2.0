@@ -1,9 +1,28 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `13.15.0-dev`
+**Current Version:** `13.16.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [13.16.0-dev] Gates Touch the Ground
+
+**Type:** MINOR - ground seating for gates and wall pieces, the Compound Wall, and a hard eave-contact rule for sloped roofs. Save-compatible: one appended family.
+
+**Gates and walls seat on the terrain surface.** Free placement snapped every root to the nearest 7.5 m grid shell, including its HEIGHT - so on any terrain between shells a gate hung in mid-air and promptly decayed for lack of base contact. Ground-standing pieces (walls, half walls, doorways, windows, wall frames, triangular walls, both gate frames and the new Compound Wall) now keep the aimed surface height and snap only horizontally, on flat and spherical worlds alike. They land base-on-ground, the base audit finds the terrain, and they stand.
+
+**New piece: Compound Wall.** A heavy freestanding perimeter wall, one module wide at gate-frame height (1.5 storeys), with end posts, parapet cap and plinth. It lines up socket-to-socket with Gate Frames and its own segments, places straight onto the ground like the gates, takes the base audit, and lives on the ROOFS & GATES menu. Build the perimeter from Compound Walls, drop in a Gate Frame where the road enters.
+
+**Sloped roofs must touch something.** A sloped panel is only placeable while a placed block sits under its eave line or flush against a rake edge - a wall head, a gable, a deck edge or the panel it chains from. The same contact check runs in the periodic audit, so a panel whose wall is demolished (or that ever slipped through on stale span numbers, as in the report) starts decaying immediately. Terrain does not count: roofing rests on structure, not on dirt. Sloped panels placed BEFORE this patch that were never armed are not audited - hammer those away manually.
+
+**GitHub title:** `[13.16.0-dev] Gates touch the ground`
+
+**Manual steps:**
+1. Pull `Dev` and let Unity compile.
+2. Run Tools -> Voxel Engine -> Voxel Engine Setup (Step 102) once more: it authors the Compound Wall definition, prefabs and token. Everything else is untouched.
+3. Place a Gate Frame and a Big Gate Frame on open, uneven ground: both seat flush on the surface, accept their gates, and survive the audit.
+4. Chain Compound Walls into a perimeter and hang a Gate Frame between two segments.
+5. Try to place a Slanted Roof in open air or on bare terrain: red. Seat it on a wall head: green. Demolish that wall: the roof decays.
 
 ### [13.15.0-dev] Roofs, Gables and Gates
 

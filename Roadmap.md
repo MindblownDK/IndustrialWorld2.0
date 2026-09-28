@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `13.15.0-dev`
-**Roadmap Version:** `13.15.0-dev`
+**Current Version:** `13.16.0-dev`
+**Roadmap Version:** `13.16.0-dev`
 **Date:** 2026-09-28
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 13.16.0-dev - Gates Touch the Ground
+- **Ground seating** (`BuildSystemV2`): ground-standing pieces keep the aimed surface height in free placement instead of snapping to 7.5 m shells - gates no longer float and decay.
+- **Compound Wall** (`TieredPieceFactory`, `TieredRebuildSetup`): freestanding perimeter wall at gate-frame height, socket-compatible with gate frames, on the ROOFS & GATES menu.
+- **Eave contact** (`BuildSystemV2`, `StructuralLoadState`): sloped roof panels require a placed block at their eave or rake edges, at placement and in every audit; terrain never counts.
+
 ### 13.15.0-dev - Roofs, Gables and Gates
 - **Twelve pieces** (`BuildEnums`, `TieredPieceFactory`, `TieredRebuildSetup`): slanted/triangular/corner/pyramid roof set, triangular walls, and two frame-plus-door gate pairs, all appended families authored by Setup.
 - **Flat Roof** (`TieredPieceFactory`, `BuildSocket`): family six is the flat ceiling deck that doubles as a floor; existing placed roofs change shape after Setup.
@@ -38,11 +43,6 @@
 ### 13.14.0-dev - Building Grows Downward
 - **Downward building** (`BuildSystemV2`, `StructuralLoadState`): wall-type pieces hang below floor edges when placed against the deck underside; they are carried by the deck above and never grant span or support themselves.
 - **Wheel memory** (`HammerBuildWheel`): the build wheel reopens on the last-used menu, falling back to structural when the remembered menu is locked.
-
-### 13.13.0-dev - Decay Before the Fall
-- **Foundation adoption fix** (`StructuralLoadState`): the audit reaches 8.1 m for Foundation supports, so a floor hung off a foundation side is adopted instead of destroyed on the first check.
-- **Decay collapse** (`StructuralLoadState`): unsupported pieces drain health with crack visuals for about ten seconds before falling; rebuilding the support mid-decay stops it.
-- **Pillar collapse** (`BuildSystemV2`, `StructuralLoadState`): a pillar stands only via a grounded chain, solid base contact or a live block at its top; fully detached pillars decay, and two detached pillars can never hold each other up.
 
 ### Era Transition Feel
 

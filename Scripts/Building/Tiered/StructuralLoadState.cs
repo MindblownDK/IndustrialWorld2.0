@@ -210,6 +210,11 @@ namespace VoxelEngine.Building.Tiered
             var own = GetComponent<PlacedTieredBlock>();
             if (own == null || own.definition == null) return true;
             BuildFamily family = own.definition.family;
+            // A sloped panel decays the moment nothing touches its eave or rake
+            // edges, no matter what the span bookkeeping still believes.
+            if (BuildFamilyInfo.IsRoofPanel(family)
+                && !BuildSystemV2.RoofPanelHasEaveContact(transform.position, transform.rotation))
+                return false;
             float radius = 8.1f;
             var hits = Physics.OverlapSphere(transform.position, radius, ~0, QueryTriggerInteraction.Ignore);
             var visited = new HashSet<PlacedTieredBlock>();
