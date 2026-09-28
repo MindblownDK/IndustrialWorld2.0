@@ -11,6 +11,8 @@ namespace VoxelEngine.Building.Tiered
         public Vector3 supportAnchor;
         public bool armed;
         public bool verticalPiece;
+        public bool fittingPiece;
+        public PlacedTieredBlock hostPiece;
         private float _nextCheck;
 
         private const float AuditInterval = 0.3f;
@@ -38,6 +40,22 @@ namespace VoxelEngine.Building.Tiered
         }
 
         /// <summary>
+        /// Arms a fitting (Door, Garage Door, Window Pane, Hatch Lid) against the
+        /// frame that holds it: the fitting lives exactly as long as its host. A
+        /// base probe would be wrong here - a door's base line rests on the floor,
+        /// but its life depends on the doorway.
+        /// </summary>
+        public void ArmFitting(PlacedTieredBlock host, BuildFamily family)
+        {
+            if (host == null) return; // no recorded frame: stay legacy-stable
+            loadFamily = family;
+            hostPiece = host;
+            fittingPiece = true;
+            armed = true;
+            _nextCheck = Time.time + AuditInterval;
+        }
+
+        /// <summary>
         /// Pings every armed piece near a destroyed block so chain collapses
         /// ripple in tenths of a second instead of one audit interval per link.
         /// </summary>
@@ -59,7 +77,10 @@ namespace VoxelEngine.Building.Tiered
         {
             if (!armed || Time.time < _nextCheck) return;
             _nextCheck = Time.time + AuditInterval;
-            if (verticalPiece ? !HasBase() : !HasLoadPath()) Destroy(gameObject);
+            bool stands = fittingPiece ? hostPiece != null
+                : verticalPiece ? HasBase()
+                : HasLoadPath();
+            if (!stands) Destroy(gameObject);
         }
 
         /// <summary>A vertical piece stands while anything carries its base line.</summary>
@@ -256,5 +277,78 @@ namespace VoxelEngine.Building.Tiered
             => family == BuildFamily.Wall || family == BuildFamily.Doorway
                 || family == BuildFamily.Window || family == BuildFamily.WallFrame
                 || family == BuildFamily.HalfWall || family == BuildFamily.Pillar;
+
+        public static bool IsFitting(BuildFamily family)
+            => family == BuildFamily.Door || family == BuildFamily.GarageDoor
+                || family == BuildFamily.WindowPane || family == BuildFamily.HatchLid;
+
+        /// <summary>
+        /// True when other armed pieces currently depend on this one: a fitting
+        /// it hosts, an armed vertical piece standing on its body, an armed deck
+        /// or roof hanging from its top, or a farther cantilever deck relaying
+        /// span through it. Read by the inspection HUD; never affects physics.
+        /// </summary>
+        public static bool IsLoadBearing(PlacedTieredBlock piece)
+        {
+            if (piece == null || piece.definition == null) return false;
+            BuildFamily family = piece.definition.family;
+            if (IsFitting(family)) return false; // fittings carry nothing
+
+            bool isSupport = family == BuildFamily.Foundation || IsVerticalSupport(family)
+                || piece.GetComponent<AdjustablePillar>() != null;
+            float topHeight = piece.TryGetComponent<AdjustablePillar>(out var pillar)
+                ? pillar.currentHeight
+                : family == BuildFamily.Foundation ? 1.125f
+                : family == BuildFamily.HalfWall ? 2.8f : 5.625f;
+            Vector3 up = piece.transform.up;
+            Vector3 top = piece.transform.position + up * topHeight;
+            var ownLoad = piece.GetComponent<StructuralLoadState>();
+            bool pieceIsDeck = family == BuildFamily.Floor || family == BuildFamily.FloorHatch
+                || family == BuildFamily.Stairs;
+            int ownSpan = ownLoad != null && ownLoad.armed && !ownLoad.verticalPiece
+                ? ownLoad.spanFromSupport : 0;
+
+            var hits = Physics.OverlapSphere(piece.transform.position, 9f, ~0, QueryTriggerInteraction.Ignore);
+            var visited = new HashSet<PlacedTieredBlock>();
+            for (int i = 0; i < hits.Length; i++)
+            {
+                var block = hits[i] != null ? hits[i].GetComponentInParent<PlacedTieredBlock>() : null;
+                if (block == null || block == piece || block.definition == null || !visited.Add(block)) continue;
+                var load = block.GetComponent<StructuralLoadState>();
+                if (load == null || !load.armed) continue;
+
+                // A fitting held by this frame falls with it.
+                if (load.fittingPiece)
+                {
+                    if (load.hostPiece == piece) return true;
+                    continue;
+                }
+
+                // A vertical piece or railing whose base line rests on this body.
+                if (load.verticalPiece)
+                {
+                    var below = Physics.OverlapBox(block.transform.position - block.transform.up * 0.15f,
+                        new Vector3(0.6f, 0.25f, 0.6f), block.transform.rotation, ~0, QueryTriggerInteraction.Ignore);
+                    for (int c = 0; c < below.Length; c++)
+                        if (below[c] != null && below[c].transform.IsChildOf(piece.transform)) return true;
+                    continue;
+                }
+
+                // An armed deck or roof hanging from this support's top.
+                if (isSupport)
+                {
+                    Vector3 offset = block.transform.position - top;
+                    float vertical = Vector3.Dot(offset, up);
+                    float planar = (offset - up * vertical).magnitude;
+                    if (planar <= 5.6f && Mathf.Abs(vertical) <= 1f) return true;
+                }
+
+                // A farther cantilever deck relaying its span through this one.
+                if (pieceIsDeck && ownSpan > 0 && load.spanFromSupport > ownSpan
+                    && Vector3.Distance(block.transform.position, piece.transform.position) <= 8.5f)
+                    return true;
+            }
+            return false;
+        }
     }
 }

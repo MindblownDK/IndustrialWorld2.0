@@ -426,7 +426,10 @@ namespace VoxelEngine.UI
                 int maximum = tiered.definition.GetStats(tiered.tier).hp;
                 info.title = tiered.definition.displayName;
                 info.detail = $"{tiered.tier} BUILDING".ToUpperInvariant();
-                info.status = "Building Hammer construction piece";
+                // Warn before the player knocks a leg out from under their base.
+                info.status = StructuralLoadState.IsLoadBearing(tiered)
+                    ? "LOAD-BEARING · other pieces rest on this"
+                    : "Building Hammer construction piece";
                 info.showHealth = maximum > 0;
                 info.health01 = maximum > 0 ? Mathf.Clamp01(tiered.hp / (float)maximum) : 0f;
                 info.healthText = $"{Mathf.Max(0, tiered.hp)}/{maximum}";

@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `13.11.0-dev`
-**Roadmap Version:** `13.11.0-dev`
+**Current Version:** `13.12.0-dev`
+**Roadmap Version:** `13.12.0-dev`
 **Date:** 2026-09-28
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 13.12.0-dev - Fittings Fall With Their Frames
+- **Fitting collapse** (`BuildSystemV2`, `StructuralLoadState`): doors, garage doors, window panes and hatch lids are armed against their host frame and fall with it; frame upgrades re-point the fitting.
+- **Load-bearing readout** (`WorldInspectionHud`, `StructuralLoadState`): the top-left inspection card flags LOAD-BEARING when armed pieces depend on the target - hosted fittings, standing walls or railings, hanging decks or relayed cantilevers.
+- **Scope**: read-only check, crosshair target only; pre-patch and save-restored fittings never self-collapse.
+
 ### 13.11.0-dev - Collapse Reaches the Walls
 - **Faster audits** (`StructuralLoadState`, `PlacedTieredBlock`): the audit interval drops to 0.3 s and destroyed blocks ping armed neighbours, so chain collapses ripple at about 0.1 s per link.
 - **Vertical collapse** (`BuildSystemV2`, `StructuralLoadState`): walls, half walls, doorways, windows, wall frames and railings arm a base audit at placement and fall when their carrier is destroyed; upgrades preserve the arming.
@@ -48,11 +53,6 @@
 - **Audit ordering** (`StructuralLoadState`): direct grounded supports are adopted before the deck-neighbour relay, so a new pillar under a span-two floor reliably resets it.
 - **Wall support base** (`StructuralLoadState`, `BuildSystemV2`): a wall on a suspended deck is a pass-through continuing that deck's span plus one, closing the infinite wall-on-floor ladder.
 - **Legacy safety**: unarmed restored decks count as stable, so older bases build exactly as before.
-
-### 13.10.0-dev - Barrel Items Retired
-- **Item retirement** (Step 10, `ItemIdAliases`): `Item_EmptyBarrel`, `Item_CrudeOilBarrel`, `Recipe_EmptyBarrel` and their icons are deleted; saved stacks resolve to Steel Plate.
-- **Research** (`res_oil_extraction`): Oil Logistics keeps its tree position as the liquid-crude knowledge gate and unlocks no recipe.
-- **Descriptions** (`Block_OilRefinery`, `Block_ChemicalPlant`): machine text now describes the fluid-pipe crude chain instead of barrel recipes.
 
 ### Era Transition Feel
 

@@ -1,9 +1,28 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `13.11.0-dev`
+**Current Version:** `13.12.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [13.12.0-dev] Fittings Fall With Their Frames
+
+**Type:** MINOR - fittings join the collapse system and the inspection HUD warns about load-bearing pieces. Save-compatible: no schema, prefab asset, item, recipe, research or cost change.
+
+**Every piece of a building now collapses with its support.** Doors, Garage Doors, Window Panes and Hatch Lids are armed at placement against the exact frame they were hung in - the Doorway, Wall Frame, Window or Floor Hatch that hosted the snap - and live exactly as long as it. A base probe would be wrong for these: a door's base line rests on the floor, but its life depends on the doorway. When the frame is demolished or collapses, its fitting follows a tenth of a second later through the 13.11.0 cascade, so a felled wall line now takes frames, fittings, railings and decks down together. Tier upgrades are safe in both directions: an upgraded fitting stays armed, and upgrading a frame re-points its hung fitting at the rebuilt object so it does not read its host as destroyed.
+
+**The top-left inspection card warns before you swing.** Aiming at a construction piece now shows LOAD-BEARING in the status line whenever other armed pieces currently depend on it: a fitting it hosts, a wall or railing standing on its body, a deck or roof hanging from its top, or a farther cantilever deck relaying its span through it. Pieces nothing depends on keep the plain description. The check is read-only, runs only for the piece under the crosshair, and never affects physics.
+
+**Compatibility.** As with every audit since 13.8, arming is not persisted: fittings placed before this patch or restored from a save never self-collapse. Pillars remain deliberately exempt from self-collapse - a hanging pillar chain is an intentional build.
+
+**GitHub title:** `[13.12.0-dev] Fittings fall with their frames`
+
+**Manual steps:**
+1. Pull `Dev` and let Unity compile. No Setup step is required.
+2. Build a doorway with a door on a supported floor, then demolish the doorway: the door falls with it. Repeat with a Window plus Window Pane and a Floor Hatch plus Hatch Lid.
+3. Demolish the floor under that doorway instead: floor, doorway and door all cascade within about half a second.
+4. Upgrade a doorway that holds a door to stone: the door must survive, and demolishing the upgraded doorway must still drop it.
+5. Aim at a wall carrying a floor, the floor under a wall, a pillar under a deck and a doorway holding a door: each reads LOAD-BEARING top-left. A lone decorative wall on the ground must not.
 
 ### [13.11.0-dev] Collapse Reaches the Walls
 

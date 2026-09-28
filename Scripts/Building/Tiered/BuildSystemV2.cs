@@ -58,6 +58,8 @@ namespace VoxelEngine.Building.Tiered
         private static readonly Collider[] s_socketOverlapProbe = new Collider[32];
         private static readonly Collider[] s_placementOverlapProbe = new Collider[64];
         private readonly HashSet<PlacedTieredBlock> _socketHosts = new(16);
+        /// <summary>Host the current ghost validated against; consumed by Place() for fittings.</summary>
+        private PlacedTieredBlock _ghostHost;
         private readonly List<BuildSocket> _socketScratch = new(8);
         private Quaternion _ghostRot = Quaternion.identity;
         private float _railingRise;
@@ -762,6 +764,10 @@ namespace VoxelEngine.Building.Tiered
 
         private bool ValidateOverlap(Vector3 pos, BuildFamily family, PlacedTieredBlock socketHost = null)
         {
+            // Every ghost path funnels through here, so this is the one spot that
+            // knows which frame a fitting is being hung in. Place() reads it to
+            // arm the fitting against that host.
+            _ghostHost = socketHost;
             // Don't overlap the player.
             if (Vector3.Distance(pos, transform.position) < 0.6f) return false;
             if (family == BuildFamily.Roof && (_structuralSpan < 1 || _structuralSpan > 2)) return false;
@@ -969,6 +975,8 @@ namespace VoxelEngine.Building.Tiered
             pb.Initialize(def, BuildTier.Wood);
             var load = go.GetComponent<StructuralLoadState>();
             if (load != null && _structuralSpan > 0) load.Arm(_structuralSpan, _structuralAnchor);
+            else if (load == null && StructuralLoadState.IsFitting(def.family))
+                go.AddComponent<StructuralLoadState>().ArmFitting(_ghostHost, def.family);
             else if (load == null && RequiresBaseAudit(def.family))
                 go.AddComponent<StructuralLoadState>().ArmVertical(def.family);
             TagStationPiece(go, def);
@@ -1003,6 +1011,20 @@ namespace VoxelEngine.Building.Tiered
             int oldSpan = oldLoad != null && oldLoad.armed ? oldLoad.spanFromSupport : 0;
             Vector3 oldAnchor = oldLoad != null ? oldLoad.supportAnchor : Vector3.zero;
             bool oldVertical = oldLoad != null && oldLoad.armed && oldLoad.verticalPiece;
+            bool oldFitting = oldLoad != null && oldLoad.armed && oldLoad.fittingPiece;
+            PlacedTieredBlock oldHost = oldFitting ? oldLoad.hostPiece : null;
+
+            // Upgrading a frame rebuilds its GameObject; any fitting armed against
+            // the old object must be re-pointed at the replacement or it would
+            // read its host as destroyed and wrongly collapse.
+            var dependentFittings = new List<StructuralLoadState>();
+            foreach (var near in Physics.OverlapSphere(pos, 6f, ~0, QueryTriggerInteraction.Ignore))
+            {
+                var nearLoad = near != null ? near.GetComponentInParent<StructuralLoadState>() : null;
+                if (nearLoad != null && nearLoad.armed && nearLoad.fittingPiece
+                    && nearLoad.hostPiece == target && !dependentFittings.Contains(nearLoad))
+                    dependentFittings.Add(nearLoad);
+            }
             var oldPillar = target.GetComponent<AdjustablePillar>();
             float oldPillarHeight = oldPillar != null ? oldPillar.currentHeight : ConstructionStorey;
             Destroy(target.gameObject);
@@ -1019,6 +1041,13 @@ namespace VoxelEngine.Building.Tiered
                 if (newLoad == null) newLoad = go.AddComponent<StructuralLoadState>();
                 newLoad.ArmVertical(def.family);
             }
+            else if (oldFitting)
+            {
+                if (newLoad == null) newLoad = go.AddComponent<StructuralLoadState>();
+                newLoad.ArmFitting(oldHost, def.family);
+            }
+            for (int i = 0; i < dependentFittings.Count; i++)
+                if (dependentFittings[i] != null) dependentFittings[i].hostPiece = pb;
             var newPillar = go.GetComponent<AdjustablePillar>();
             if (newPillar != null) newPillar.Configure(oldPillarHeight);
             // Re-tag on upgrade: the upgrade path destroys and rebuilds the object, so a
