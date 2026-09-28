@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `13.16.0-dev`
-**Roadmap Version:** `13.16.0-dev`
+**Current Version:** `13.16.1-dev`
+**Roadmap Version:** `13.16.1-dev`
 **Date:** 2026-09-28
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,11 @@
 ---
 
 ## 0. Recently Done
+
+### 13.16.1-dev - Double-Swing Gates
+- **Double leaves** (`TieredRebuildSetup`, `TieredPieceFactory`): both gates split into two leaves on opposing hinges, swinging apart away from the opener.
+- **Constant slow swing** (`TieredDoor`): gates turn at a fixed degrees-per-second rate; doors keep the quick eased swing.
+- **Garage-door operating logic** (`TieredDoor`, `PlayerInteractionTool`): leaves release their blocking colliders while swung, a permanent trigger fills the opening, and clicking a gate frame toggles the fitted gate.
 
 ### 13.16.0-dev - Gates Touch the Ground
 - **Ground seating** (`BuildSystemV2`): ground-standing pieces keep the aimed surface height in free placement instead of snapping to 7.5 m shells - gates no longer float and decay.

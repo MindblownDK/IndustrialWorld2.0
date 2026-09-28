@@ -12,11 +12,17 @@ namespace VoxelEngine.Building.Tiered
         private const float GarageRollRadius = 0.34f;
 
         public Transform doorPivot;
+        /// <summary>Second hinge of a double gate; both leaves swing apart together.</summary>
+        public Transform doorPivotB;
         public bool opensUp;
         [Range(70f, 130f)] public float openAngle = 100f;
         [Min(1f)] public float turnSpeed = 8f;
+        /// <summary>When above zero the leaves turn at this constant rate instead of
+        /// the eased door swing - heavy gates move slowly to signify their mass.</summary>
+        [Min(0f)] public float degreesPerSecond = 0f;
 
         private Quaternion _closedRotation;
+        private Quaternion _closedRotationB;
         private float _signedOpenAngle;
         private bool _open;
         private float _roll;
@@ -28,6 +34,8 @@ namespace VoxelEngine.Building.Tiered
         {
             if (doorPivot == null) doorPivot = transform.Find("Generated_DoorHinge");
             if (doorPivot != null) _closedRotation = doorPivot.localRotation;
+            if (doorPivotB == null) doorPivotB = transform.Find("Generated_DoorHingeB");
+            if (doorPivotB != null) _closedRotationB = doorPivotB.localRotation;
             _signedOpenAngle = Mathf.Abs(openAngle);
             _doorColliders = GetComponentsInChildren<Collider>(true);
             if (opensUp) CacheShutterMeshes();
@@ -57,9 +65,35 @@ namespace VoxelEngine.Building.Tiered
 
             float angle = _open ? _signedOpenAngle : 0f;
             Quaternion targetRotation = _closedRotation * Quaternion.Euler(0f, angle, 0f);
-            doorPivot.localRotation = Quaternion.Slerp(
-                doorPivot.localRotation, targetRotation,
-                1f - Mathf.Exp(-turnSpeed * Time.deltaTime));
+            doorPivot.localRotation = Turn(doorPivot.localRotation, targetRotation);
+
+            if (doorPivotB != null)
+            {
+                // The mirror hinge carries a 180 degree turn, so the opposite
+                // sign swings its leaf to the same world side as the first.
+                Quaternion targetB = _closedRotationB * Quaternion.Euler(0f, -angle, 0f);
+                doorPivotB.localRotation = Turn(doorPivotB.localRotation, targetB);
+
+                // Same passage logic as the garage shutter: the leaves stop
+                // blocking once mostly swung, and the permanent trigger in the
+                // opening remains the target for closing them again.
+                float travelled = Quaternion.Angle(doorPivot.localRotation, _closedRotation);
+                bool blocksPassage = travelled < Mathf.Abs(_signedOpenAngle) * 0.7f;
+                for (int i = 0; i < _doorColliders.Length; i++)
+                {
+                    Collider doorCollider = _doorColliders[i];
+                    if (doorCollider != null && !doorCollider.isTrigger)
+                        doorCollider.enabled = blocksPassage;
+                }
+            }
+        }
+
+        /// <summary>Constant-rate turn for heavy gates, eased swing for doors.</summary>
+        private Quaternion Turn(Quaternion current, Quaternion target)
+        {
+            return degreesPerSecond > 0f
+                ? Quaternion.RotateTowards(current, target, degreesPerSecond * Time.deltaTime)
+                : Quaternion.Slerp(current, target, 1f - Mathf.Exp(-turnSpeed * Time.deltaTime));
         }
 
         private void CacheShutterMeshes()

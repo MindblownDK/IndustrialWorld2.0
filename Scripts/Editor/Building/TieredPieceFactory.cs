@@ -489,23 +489,29 @@ namespace VoxelEngine.EditorTools
         /// <summary>Shared gate leaf assembly, sized by the opening it closes.</summary>
         private static void GateLeaf(PieceMesh m, BuildTier tier, float w, float h, float thick)
         {
-            // Vertical planks across the width.
-            int planks = Mathf.Max(4, Mathf.RoundToInt(w / 0.9f));
-            float plankW = w / planks;
+            // Only the LEFT leaf of a double gate is modelled, built closed in
+            // place. The setup mirrors the welded mesh onto a second hinge on
+            // the opposite jamb so both halves swing apart like double doors.
+            float leafW = w * 0.5f - 0.06f;          // small centre gap between the leaves
+            float xc = -(leafW * 0.5f + 0.06f);      // centre of the left leaf, closed
+
+            // Vertical planks across the leaf.
+            int planks = Mathf.Max(3, Mathf.RoundToInt(leafW / 0.9f));
+            float plankW = leafW / planks;
             for (int i = 0; i < planks; i++)
             {
-                float x = -w * 0.5f + plankW * (i + 0.5f);
+                float x = xc - leafW * 0.5f + plankW * (i + 0.5f);
                 m.Box(PieceSurface.Skin, new Vector3(x, h * 0.5f, 0f),
                       new Vector3(plankW * 0.94f, h, thick));
             }
-            // Three crossbars and one diagonal brace.
+            // Three crossbars and one diagonal brace per leaf.
             foreach (float t in new[] { 0.12f, 0.5f, 0.88f })
-                m.Box(PieceSurface.Trim, new Vector3(0f, h * t, thick * 0.5f + 0.05f),
-                      new Vector3(w, 0.42f, 0.14f));
-            float diag = Mathf.Sqrt(w * w + h * 0.76f * h * 0.76f) * 0.96f;
-            m.Box(PieceSurface.Trim, new Vector3(0f, h * 0.5f, thick * 0.5f + 0.05f),
+                m.Box(PieceSurface.Trim, new Vector3(xc, h * t, thick * 0.5f + 0.05f),
+                      new Vector3(leafW, 0.42f, 0.14f));
+            float diag = Mathf.Sqrt(leafW * leafW + h * 0.76f * h * 0.76f) * 0.96f;
+            m.Box(PieceSurface.Trim, new Vector3(xc, h * 0.5f, thick * 0.5f + 0.05f),
                   new Vector3(diag, 0.4f, 0.13f),
-                  new Vector3(0f, 0f, Mathf.Atan2(h * 0.76f, w) * Mathf.Rad2Deg));
+                  new Vector3(0f, 0f, Mathf.Atan2(h * 0.76f, leafW) * Mathf.Rad2Deg));
         }
 
         private static void AppendTri(List<Vector3> verts, List<Vector3> norms, List<Vector2> uvs, List<int> tris,

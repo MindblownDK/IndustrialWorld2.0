@@ -1,9 +1,26 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `13.16.0-dev`
+**Current Version:** `13.16.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [13.16.1-dev] Double-Swing Gates
+
+**Type:** PATCH - gate usability rework. Save-compatible; no new pieces.
+
+**Gates now open as double doors.** Both gate sizes carry two leaves on opposing hinges that swing apart away from whoever opens them, instead of one full-width leaf sweeping the entire opening.
+
+**Deliberately slow.** The leaves turn at a constant, stately rate - the Gate takes about four seconds, the Big Gate closer to seven - to carry the mass of the piece. Regular doors keep their quick swing.
+
+**Same operating logic as the Garage Door.** The leaves stop blocking once mostly swung, and a permanent non-blocking target fills the opening, so one look at the gateway and one press always operates the gate - no more chasing a swung-open leaf. Clicking a Gate Frame or Big Gate Frame jamb or lintel also toggles the fitted gate, exactly as the Wall Frame does for its overhead door.
+
+**GitHub title:** `[13.16.1-dev] Double-swing gates`
+
+**Manual steps:**
+1. Pull `Dev` and let Unity compile.
+2. Run Tools -> Voxel Engine -> Voxel Engine Setup (Step 102) once more: it rebuilds the two gate prefabs with the second hinge, mirrored leaf and interaction target. Nothing else changes.
+3. Fit a Gate and a Big Gate; open and close each from both sides, and once by clicking the frame instead of the leaves.
 
 ### [13.16.0-dev] Gates Touch the Ground
 

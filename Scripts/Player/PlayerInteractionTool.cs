@@ -862,12 +862,16 @@ namespace VoxelEngine.Player
                     return;
                 }
 
-                // The Wall Frame remains a useful handle after its shutter has
-                // rolled out of reach. Clicking either jamb or the header toggles
-                // the nearest fitted overhead door at the same opening.
+                // Frames remain useful handles after their leaf has swung or
+                // rolled out of reach. Clicking either jamb or the header of a
+                // Wall Frame or a gate frame toggles the nearest fitted
+                // overhead door or double gate at the same opening.
                 var tieredPiece = hit.collider.GetComponentInParent<VoxelEngine.Building.Tiered.PlacedTieredBlock>();
-                if (tieredPiece != null && tieredPiece.definition != null
-                    && tieredPiece.definition.family == VoxelEngine.Building.Tiered.BuildFamily.WallFrame)
+                bool isDoorFrame = tieredPiece != null && tieredPiece.definition != null
+                    && (tieredPiece.definition.family == VoxelEngine.Building.Tiered.BuildFamily.WallFrame
+                        || tieredPiece.definition.family == VoxelEngine.Building.Tiered.BuildFamily.GateFrame
+                        || tieredPiece.definition.family == VoxelEngine.Building.Tiered.BuildFamily.BigGateFrame);
+                if (isDoorFrame)
                 {
                     var nearby = Physics.OverlapSphere(tieredPiece.transform.position, 5.5f, ~0, QueryTriggerInteraction.Collide);
                     VoxelEngine.Building.Tiered.TieredDoor nearestGarage = null;
@@ -877,7 +881,7 @@ namespace VoxelEngine.Player
                         var garage = nearby[i] != null
                             ? nearby[i].GetComponentInParent<VoxelEngine.Building.Tiered.TieredDoor>()
                             : null;
-                        if (garage == null || !garage.opensUp) continue;
+                        if (garage == null || (!garage.opensUp && garage.doorPivotB == null)) continue;
                         float sqr = (garage.transform.position - tieredPiece.transform.position).sqrMagnitude;
                         if (sqr >= nearestSqr) continue;
                         nearestSqr = sqr;

@@ -393,6 +393,7 @@ namespace VoxelEngine.EditorTools
         private static void EnsureDoorPivot(GameObject root, BuildFamily family)
         {
             bool garage = family == BuildFamily.GarageDoor;
+            bool doubleGate = family == BuildFamily.Gate || family == BuildFamily.BigGate;
             var pivot = new GameObject("Generated_DoorHinge");
             pivot.transform.SetParent(root.transform, false);
             // Gates swing on a side hinge like doors, just further out.
@@ -418,6 +419,27 @@ namespace VoxelEngine.EditorTools
                     : new Vector3(-hinge, 0f, 0f);
             }
 
+            GameObject pivotB = null;
+            if (doubleGate)
+            {
+                // Mirror the left leaf onto a second hinge on the opposite
+                // jamb. The pivot carries the 180 degree turn, so one welded
+                // mesh (with its colliders) serves both halves of the gate.
+                pivotB = new GameObject("Generated_DoorHingeB");
+                pivotB.transform.SetParent(root.transform, false);
+                pivotB.transform.localPosition = new Vector3(-hinge, 0f, 0f);
+                pivotB.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
+                var originals = new List<Transform>();
+                foreach (Transform child in pivot.transform) originals.Add(child);
+                foreach (var child in originals)
+                {
+                    var mirrored = Object.Instantiate(child.gameObject, pivotB.transform);
+                    mirrored.name = child.name + "_Mirror";
+                    mirrored.transform.localPosition = new Vector3(-hinge, 0f, 0f);
+                    mirrored.transform.localRotation = Quaternion.identity;
+                }
+            }
+
             if (garage)
             {
                 // The blocking shutter collider is disabled when open, so the
@@ -430,10 +452,33 @@ namespace VoxelEngine.EditorTools
                 trigger.size = new Vector3(TieredPieceFactory.GarageW + 0.3f, 0.85f, 0.85f);
             }
 
+            if (doubleGate)
+            {
+                // Same closing aid as the Garage Door: the leaves stop blocking
+                // while swung, so the opening keeps a permanent non-blocking
+                // target the interaction ray can always find.
+                float clearW = family == BuildFamily.Gate ? TieredPieceFactory.GateW : TieredPieceFactory.BigGateW;
+                float clearH = family == BuildFamily.Gate ? TieredPieceFactory.GateH : TieredPieceFactory.BigGateH;
+                var interaction = new GameObject("Generated_GateInteraction");
+                interaction.transform.SetParent(root.transform, false);
+                interaction.transform.localPosition = new Vector3(0f, clearH * 0.5f, 0f);
+                var trigger = interaction.AddComponent<BoxCollider>();
+                trigger.isTrigger = true;
+                trigger.size = new Vector3(clearW - 0.4f, clearH - 0.5f, 0.55f);
+            }
+
             var door = root.GetComponent<TieredDoor>();
             if (door == null) door = root.AddComponent<TieredDoor>();
             door.doorPivot = pivot.transform;
             door.opensUp = garage;
+            if (doubleGate)
+            {
+                // Double leaves on opposing hinges, turning at a deliberate
+                // constant rate - the big gate slower still to carry its mass.
+                door.doorPivotB = pivotB.transform;
+                door.openAngle = 105f;
+                door.degreesPerSecond = family == BuildFamily.BigGate ? 16f : 28f;
+            }
         }
 
         /// <summary>
