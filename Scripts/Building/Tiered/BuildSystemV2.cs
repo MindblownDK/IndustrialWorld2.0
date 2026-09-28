@@ -63,6 +63,7 @@ namespace VoxelEngine.Building.Tiered
         private float _railingRise;
         private int _structuralSpan;
         private Vector3 _structuralAnchor;
+        private float _pillarHeight = ConstructionStorey;
 
         private void Awake()
         {
@@ -159,6 +160,8 @@ namespace VoxelEngine.Building.Tiered
             _ghost.transform.SetPositionAndRotation(_ghostPos, _ghostRot);
             if (_ghost.TryGetComponent<TieredRailing>(out var ghostRailing))
                 ghostRailing.Configure(_railingRise);
+            if (_ghost.TryGetComponent<AdjustablePillar>(out var ghostPillar))
+                ghostPillar.Configure(_pillarHeight);
             ApplyGhostMaterialIfChanged(_ghostValid ? _matValid : _matInvalid);
 
             // Place on the standard build action (RMB by default).
@@ -221,6 +224,7 @@ namespace VoxelEngine.Building.Tiered
             _railingRise = 0f;
             _structuralSpan = 0;
             _structuralAnchor = Vector3.zero;
+            _pillarHeight = ConstructionStorey;
             // 1) Try socket snap: look for the nearest BuildSocket within socketSnapRadius
             //    around the hit point that accepts this family.
             BuildSocket bestSocket = null;
@@ -415,10 +419,21 @@ namespace VoxelEngine.Building.Tiered
             if (incoming == BuildFamily.Pillar &&
                 (hostFamily == BuildFamily.Foundation || hostFamily == BuildFamily.Floor || hostFamily == BuildFamily.FloorHatch))
             {
-                float surface = hostFamily == BuildFamily.Foundation ? 1.125f : 0.42f;
                 Vector3 edge = NearestCentreOrEdge(localHit, ConstructionModule * 0.5f);
-                position = host.transform.position + host.transform.up * surface
+                Vector3 anchor = host.transform.position
                     + host.transform.right * edge.x + host.transform.forward * edge.z;
+                bool aimedUnderFloor = hostFamily != BuildFamily.Foundation
+                    && Vector3.Dot(hit.normal.normalized, host.transform.up) < -0.45f;
+                if (aimedUnderFloor && TryFindSolidGround(anchor, -host.transform.up, host, out float drop))
+                {
+                    _pillarHeight = drop;
+                    position = anchor - host.transform.up * drop;
+                }
+                else
+                {
+                    float surface = hostFamily == BuildFamily.Foundation ? 1.125f : 0.42f;
+                    position = anchor + host.transform.up * surface;
+                }
                 rotation = Quaternion.AngleAxis(_ghostYaw, host.transform.up) * host.transform.rotation;
                 return true;
             }
@@ -448,6 +463,22 @@ namespace VoxelEngine.Building.Tiered
             }
             rotation = Quaternion.AngleAxis(_ghostYaw, host.transform.up) * host.transform.rotation;
             return true;
+        }
+
+        private static bool TryFindSolidGround(Vector3 origin, Vector3 down, PlacedTieredBlock host, out float distance)
+        {
+            var hits = Physics.RaycastAll(origin - down * 0.05f, down.normalized, 40f, ~0, QueryTriggerInteraction.Ignore);
+            System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+            for (int i = 0; i < hits.Length; i++)
+            {
+                Collider collider = hits[i].collider;
+                if (collider == null || (host != null && collider.transform.IsChildOf(host.transform))) continue;
+                if (collider.GetComponentInParent<PlacedTieredBlock>() != null) continue;
+                distance = Mathf.Max(0.5f, hits[i].distance - 0.05f);
+                return true;
+            }
+            distance = 0f;
+            return false;
         }
 
         private static float ResolveFaceSide(float localAxis, float normalDot)
@@ -734,6 +765,7 @@ namespace VoxelEngine.Building.Tiered
         {
             var go = Instantiate(def.GetPrefab(BuildTier.Wood), pos, rot);
             if (go.TryGetComponent<TieredRailing>(out var railing)) railing.Configure(railingRise);
+            if (go.TryGetComponent<AdjustablePillar>(out var pillar)) pillar.Configure(_pillarHeight);
             go.name = $"{def.displayName} (Wood)";
             var pb = go.GetComponent<PlacedTieredBlock>();
             if (pb == null) pb = go.AddComponent<PlacedTieredBlock>();
@@ -767,6 +799,8 @@ namespace VoxelEngine.Building.Tiered
             var oldLoad = target.GetComponent<StructuralLoadState>();
             int oldSpan = oldLoad != null && oldLoad.armed ? oldLoad.spanFromSupport : 0;
             Vector3 oldAnchor = oldLoad != null ? oldLoad.supportAnchor : Vector3.zero;
+            var oldPillar = target.GetComponent<AdjustablePillar>();
+            float oldPillarHeight = oldPillar != null ? oldPillar.currentHeight : ConstructionStorey;
             Destroy(target.gameObject);
 
             var go = Instantiate(def.GetPrefab(next), pos, rot);
@@ -776,6 +810,8 @@ namespace VoxelEngine.Building.Tiered
             pb.Initialize(def, next);
             var newLoad = go.GetComponent<StructuralLoadState>();
             if (newLoad != null && oldSpan > 0) newLoad.Arm(oldSpan, oldAnchor);
+            var newPillar = go.GetComponent<AdjustablePillar>();
+            if (newPillar != null) newPillar.Configure(oldPillarHeight);
             // Re-tag on upgrade: the upgrade path destroys and rebuilds the object, so a
             // station hull would silently stop being a station piece the first time it was
             // upgraded from wood to steel.

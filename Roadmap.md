@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `13.7.5-dev`
-**Roadmap Version:** `13.7.5-dev`
+**Current Version:** `13.8.0-dev`
+**Roadmap Version:** `13.8.0-dev`
 **Date:** 2026-09-27
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 13.8.0-dev - Pillars Reach Down From Floors
+- **Underside placement** (`BuildSystemV2`): aiming a Pillar at a Floor or Floor Hatch underside selects the centre or nearest true corner and searches down to solid terrain.
+- **Adaptive height** (`AdjustablePillar`, Setup Step 102): all four Pillar tiers scale from a grounded root to the underside anchor, including live ghost feedback and tier upgrades.
+- **Reload recovery**: a restored grounded Pillar infers its non-standard height from the first Floor or Floor Hatch directly above without adding a save field.
+
 ### 13.7.5-dev - Floors Obey the Same Two-Panel Cantilever
 - **Shared guard** (`BuildSystemV2`): Floor and Floor Hatch placement now applies the same span-one/span-two validation as Roof placement.
 - **Foundation reach**: a Foundation anchor permits two 7.5 m Floor modules while a third requires another Foundation, wall, frame or pillar.
@@ -48,11 +53,6 @@
 - **Placement state** (`StructuralLoadState`, `BuildSystemV2`): each new suspended Floor or Roof records its exact span from the aimed support; Roof placement refuses span three and above.
 - **Support loss** (`StructuralLoadState`): armed Floors and Roofs periodically verify a real support or a lower-span neighbour and collapse when the final load path disappears.
 - **Tier continuity**: upgrading a suspended piece transfers its structural span to the replacement prefab.
-
-### 13.7.1-dev - Roof Support Cannot Relay Forever
-- **Bounded graph** (`BuildSystemV2`): candidate roofs count as span one and may cross only one neighbouring roof before reaching a real vertical support.
-- **Direct load point**: walls and opening frames support roof edges while corner pillars support the same panel through a diagonal corner reach.
-- **Existing worlds**: unsupported placed roofs remain untouched; only new placement validation changes.
 
 ### Era Transition Feel
 

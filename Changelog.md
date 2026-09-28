@@ -1,9 +1,31 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `13.7.5-dev`
+**Current Version:** `13.8.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [13.8.0-dev] Pillars Reach Down From Floors
+
+**Type:** MINOR - adds underside-to-ground Pillar placement across all four construction tiers. Save-compatible: no schema or family value changes; restored variable-height Pillars reconstruct their height from world geometry.
+
+**A Floor underside is now a Pillar placement surface.** Aim upward at the underside of a Floor or Floor Hatch while holding Pillar. The same five structural targets remain available: centre plus four true corners. From that underside anchor the build system raycasts along the floor's local down axis for up to 40 m, ignores tiered construction and selects the first solid terrain/world collider.
+
+**The Pillar grows from ground to deck.** The ghost root moves to the ground hit and `AdjustablePillar` scales the authored 5.625 m Pillar to the measured gap. Meshes, colliders and sockets inherit the same root scale, so the preview, placed support and top connection agree. If no solid ground is found, ordinary top-of-deck Pillar placement remains available rather than manufacturing a floating support.
+
+**All tiers retain the measured height.** Setup Step 102 adds `AdjustablePillar` to Wood, Stone, Iron and Steel Pillar prefabs. Upgrading transfers the measured height before replacing the old tier.
+
+**Reload requires no new save field.** A variable-height Pillar is saved at its grounded root through the existing placed-piece record. On restore, the component raycasts upward to the first Floor or Floor Hatch and reconstructs its height. Standard one-storey Pillars remain unchanged.
+
+**GitHub title:** `[13.8.0-dev] Pillars reach down from floors`
+
+**Manual steps:**
+1. Pull `Dev`, let Unity compile, then run `Tools -> Voxel Engine -> Voxel Engine Setup -> 102. Rebuild Construction at Size-V6` to add `AdjustablePillar` to all four Pillar prefabs.
+2. Build a Floor over uneven or lowered terrain. Stand below it, select Pillar and aim upward at the underside near the centre and each corner.
+3. Confirm the ghost starts on solid ground and ends flush against the Floor underside; move between targets and verify its length updates immediately.
+4. Place the Pillar, upgrade it through all four tiers and confirm its grounded root and top height do not move.
+5. Save and reload. Confirm the variable-height Pillar reconstructs the same height and still meets the Floor.
+6. Aim at a Floor underside where no solid surface exists within 40 m and confirm no false ground-reaching support is created.
 
 ### [13.7.5-dev] Floors Obey the Same Two-Panel Cantilever
 

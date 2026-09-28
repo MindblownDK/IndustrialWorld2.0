@@ -262,6 +262,8 @@ namespace VoxelEngine.EditorTools
 
             if (!root.TryGetComponent<PlacedTieredBlock>(out _)) root.AddComponent<PlacedTieredBlock>();
             if (family == BuildFamily.Foundation) EnsureFoundationLegs(root);
+            if (family == BuildFamily.Pillar && root.GetComponent<AdjustablePillar>() == null)
+                root.AddComponent<AdjustablePillar>();
             if ((family == BuildFamily.Roof || family == BuildFamily.Floor || family == BuildFamily.FloorHatch)
                 && root.GetComponent<StructuralLoadState>() == null)
                 root.AddComponent<StructuralLoadState>();
