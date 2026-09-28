@@ -1,9 +1,24 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `13.18.0-dev`
+**Current Version:** `13.18.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [13.18.1-dev] Multiplayer Strategy Locked
+
+**Type:** PATCH - documentation only, no code changes.
+
+**The multiplayer decisions are now locked and written down** so every future system (human- or agent-built) is designed against them:
+- Fish-Net, client-server only, server-authoritative.
+- First milestone: 2-8 player listen server (one player hosts). Dedicated headless servers after that. True P2P permanently out of scope.
+- Pre-release: multiplayer refactors may break save formats freely.
+- `Roadmap.md` gained section 1 "Multiplayer Strategy (Fish-Net)" with the locked decisions, the 14.0.0 milestone plan (foundation -> player state -> building sync -> world sync -> simulation sync -> dedicated server) and an MP-readiness checklist.
+- `README.md` gained agent guideline section 4 "Multiplayer-Ready Code" enforcing that checklist on all new code: one authority entry point per action, per-player state keyed by player id, stable ids, no client-side truth, no new static gameplay state, server-runnable physics queries.
+
+**GitHub title:** `[13.18.1-dev] Multiplayer strategy locked`
+
+**Manual steps:** none - pull and read.
 
 ### [13.18.0-dev] Double Doors and Keypad Polish
 

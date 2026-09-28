@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `13.18.0-dev`
-**Roadmap Version:** `13.18.0-dev`
+**Current Version:** `13.18.1-dev`
+**Roadmap Version:** `13.18.1-dev`
 **Date:** 2026-09-28
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,9 @@
 ---
 
 ## 0. Recently Done
+
+### 13.18.1-dev - Multiplayer Strategy Locked
+- **Docs only**: Fish-Net client-server strategy (2-8 player listen server first, dedicated later, no P2P) added to `Roadmap.md` section 1 and the README agent guidelines; MP-readiness checklist now applies to every new system.
 
 ### 13.18.0-dev - Double Doors and Keypad Polish
 - **Double Door** (family 37): quick double leaves for the Wall Frame, on the STRUCTURAL wheel beside the Garage Door; lockable.
@@ -58,6 +61,35 @@
 ### 13.14.0-dev - Building Grows Downward
 - **Downward building** (`BuildSystemV2`, `StructuralLoadState`): wall-type pieces hang below floor edges when placed against the deck underside; they are carried by the deck above and never grant span or support themselves.
 - **Wheel memory** (`HammerBuildWheel`): the build wheel reopens on the last-used menu, falling back to structural when the remembered menu is locked.
+
+---
+
+## 1. Multiplayer Strategy (Fish-Net) - LOCKED DECISIONS
+
+These decisions are settled. Every future system is designed against them.
+
+### Locked Decisions
+- **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
+- **Topology:** client-server ONLY. First target is a **listen server** (one player hosts, 2-8 players total). **Dedicated headless servers** come after the listen-server milestone works. **True P2P is permanently out of scope.**
+- **Authority:** the server is authoritative over EVERYTHING that matters: world edits, building placement/damage/decay, machine simulation, fluids, power, inventories, combat, code locks. Clients send intents, never outcomes.
+- **Save compatibility:** the game is unreleased - networking refactors may freely break save formats until release. Do not spend effort on migration shims for multiplayer changes.
+
+### Milestone Plan (14.0.0 - after the current construction arc stabilizes)
+1. **Foundation:** Fish-Net package in, NetworkManager boot flow, host/join UI, player identity (stable per-player id), player spawn + transform/animation sync.
+2. **Player state:** per-player Inventory, PlayerStats, hotbar and equipment sync; interaction raycasts validated server-side.
+3. **Building sync:** all placement/upgrade/removal flows route through server RPCs in `BuildSystemV2` / `PlacedTieredBlock`; structural audits (`StructuralLoadState`) run server-side only; results replicate.
+4. **World sync:** voxel chunk edit replication + join-in-progress chunk streaming (the long pole - design payloads early, delta edits not full chunks).
+5. **Simulation sync:** machines, power, fluids, conveyors run server-side; clients render replicated state.
+6. **Dedicated server:** headless build target, server-side persistence, no local player assumptions anywhere in boot code.
+
+### MP-Readiness Checklist (apply to EVERY new system from now on)
+- **One authority entry point** per gameplay action (a single method that will become the server RPC). No gameplay mutations from UI code - UI raises intents.
+- **Per-player state is keyed by player id**, never stored as a single bool/field for THE player (example to fix in 14.0.0: `CodeLock.authorized` becomes an authorized-ids list).
+- **Stable ids over object references** for anything that crosses save/network boundaries (items already use `itemId`; placed pieces will need network ids).
+- **No client-side truth:** damage numbers, costs, unlock checks and randomness must be computable server-side.
+- **Statics are single-player debt:** static gameplay state (not pure helpers) will need a per-instance or server-owned home; avoid adding new static gameplay state.
+- **Physics queries used for gameplay** (base probes, eave contact, overlap audits) must be runnable on the server - keep them in plain simulation code, never inside camera/UI/input paths.
+- **Separate input from simulation:** read input in player code, apply results through the authority entry point.
 
 ### Era Transition Feel
 
