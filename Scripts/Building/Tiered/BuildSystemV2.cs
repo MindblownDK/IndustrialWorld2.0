@@ -948,6 +948,15 @@ namespace VoxelEngine.Building.Tiered
             }
         }
 
+        /// <summary>
+        /// Wall-type pieces and railings get the lightweight base audit so they
+        /// collapse with the deck that carried them. Pillars are excluded: a
+        /// hanging pillar chain is a deliberate build, governed by its own logic.
+        /// </summary>
+        private static bool RequiresBaseAudit(BuildFamily family)
+            => family == BuildFamily.Railing
+                || (StructuralLoadState.IsVerticalSupport(family) && family != BuildFamily.Pillar);
+
         // ---------- Place ----------
         private void Place(TieredBlockDefinition def, Vector3 pos, Quaternion rot, float railingRise)
         {
@@ -960,6 +969,8 @@ namespace VoxelEngine.Building.Tiered
             pb.Initialize(def, BuildTier.Wood);
             var load = go.GetComponent<StructuralLoadState>();
             if (load != null && _structuralSpan > 0) load.Arm(_structuralSpan, _structuralAnchor);
+            else if (load == null && RequiresBaseAudit(def.family))
+                go.AddComponent<StructuralLoadState>().ArmVertical(def.family);
             TagStationPiece(go, def);
             // Satisfying placement thunk at the build location.
             VoxelEngine.FX.AudioManager.PlayAt(
@@ -991,6 +1002,7 @@ namespace VoxelEngine.Building.Tiered
             var oldLoad = target.GetComponent<StructuralLoadState>();
             int oldSpan = oldLoad != null && oldLoad.armed ? oldLoad.spanFromSupport : 0;
             Vector3 oldAnchor = oldLoad != null ? oldLoad.supportAnchor : Vector3.zero;
+            bool oldVertical = oldLoad != null && oldLoad.armed && oldLoad.verticalPiece;
             var oldPillar = target.GetComponent<AdjustablePillar>();
             float oldPillarHeight = oldPillar != null ? oldPillar.currentHeight : ConstructionStorey;
             Destroy(target.gameObject);
@@ -1002,6 +1014,11 @@ namespace VoxelEngine.Building.Tiered
             pb.Initialize(def, next);
             var newLoad = go.GetComponent<StructuralLoadState>();
             if (newLoad != null && oldSpan > 0) newLoad.Arm(oldSpan, oldAnchor);
+            else if (oldVertical)
+            {
+                if (newLoad == null) newLoad = go.AddComponent<StructuralLoadState>();
+                newLoad.ArmVertical(def.family);
+            }
             var newPillar = go.GetComponent<AdjustablePillar>();
             if (newPillar != null) newPillar.Configure(oldPillarHeight);
             // Re-tag on upgrade: the upgrade path destroys and rebuilds the object, so a

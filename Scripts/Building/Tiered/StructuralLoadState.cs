@@ -1,0 +1,260 @@
+using System.Collections.Generic;
+using UnityEngine;
+
+namespace VoxelEngine.Building.Tiered
+{
+    /// <summary>Runtime load path for newly placed suspended Floors and Roofs.</summary>
+    public sealed class StructuralLoadState : MonoBehaviour
+    {
+        public BuildFamily loadFamily;
+        public int spanFromSupport;
+        public Vector3 supportAnchor;
+        public bool armed;
+        public bool verticalPiece;
+        private float _nextCheck;
+
+        private const float AuditInterval = 0.3f;
+
+        public void Arm(int span, Vector3 anchor)
+        {
+            spanFromSupport = Mathf.Max(1, span);
+            supportAnchor = anchor;
+            armed = true;
+            _nextCheck = Time.time + AuditInterval;
+        }
+
+        /// <summary>
+        /// Arms a wall-type piece (or a railing) with the lightweight base check:
+        /// it survives while something carries its base line and collapses when
+        /// that support is destroyed. Its loadFamily is its own family, so span
+        /// logic never mistakes it for a deck.
+        /// </summary>
+        public void ArmVertical(BuildFamily family)
+        {
+            loadFamily = family;
+            verticalPiece = true;
+            armed = true;
+            _nextCheck = Time.time + AuditInterval;
+        }
+
+        /// <summary>
+        /// Pings every armed piece near a destroyed block so chain collapses
+        /// ripple in tenths of a second instead of one audit interval per link.
+        /// </summary>
+        public static void NotifySupportRemoved(Vector3 position)
+        {
+            var hits = Physics.OverlapSphere(position, 9f, ~0, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < hits.Length; i++)
+            {
+                var load = hits[i] != null ? hits[i].GetComponentInParent<StructuralLoadState>() : null;
+                if (load != null && load.armed) load.RequestImmediateAudit();
+            }
+        }
+
+        /// <summary>The destroyed collider is gone next frame; audit right after.</summary>
+        public void RequestImmediateAudit()
+            => _nextCheck = Mathf.Min(_nextCheck, Time.time + 0.1f);
+
+        private void Update()
+        {
+            if (!armed || Time.time < _nextCheck) return;
+            _nextCheck = Time.time + AuditInterval;
+            if (verticalPiece ? !HasBase() : !HasLoadPath()) Destroy(gameObject);
+        }
+
+        /// <summary>A vertical piece stands while anything carries its base line.</summary>
+        private bool HasBase()
+        {
+            var own = GetComponent<PlacedTieredBlock>();
+            if (own == null || own.definition == null) return true;
+            bool grounded = TryResolveSupportBase(own, out var carryingDeck);
+            return grounded || carryingDeck != null;
+        }
+
+        private bool HasLoadPath()
+        {
+            var own = GetComponent<PlacedTieredBlock>();
+            if (own == null || own.definition == null) return true;
+            BuildFamily family = own.definition.family;
+            float radius = 8.1f;
+            var hits = Physics.OverlapSphere(transform.position, radius, ~0, QueryTriggerInteraction.Ignore);
+            var visited = new HashSet<PlacedTieredBlock>();
+            var blocks = new List<PlacedTieredBlock>(hits.Length);
+            for (int i = 0; i < hits.Length; i++)
+            {
+                var block = hits[i] != null ? hits[i].GetComponentInParent<PlacedTieredBlock>() : null;
+                if (block == null || block == own || block.definition == null || !visited.Add(block)) continue;
+                blocks.Add(block);
+            }
+
+            // Pass 1: a direct grounded support is adopted and resets the span,
+            // so it must win over any deck neighbour that merely relays its own
+            // path. The old single pass returned through whichever block the
+            // physics query happened to list first, which is why a freshly
+            // grounded pillar under a span-two floor often never got adopted.
+            // A wall standing on a suspended deck is remembered as a pass-through
+            // carrier instead: it relays that deck's span but never resets ours.
+            int bestCarrierSpan = int.MaxValue;
+            for (int i = 0; i < blocks.Count; i++)
+            {
+                var block = blocks[i];
+                BuildFamily other = block.definition.family;
+                bool grounded;
+                if (block.TryGetComponent<AdjustablePillar>(out var adjustablePillar))
+                    grounded = adjustablePillar.IsSupportGrounded();
+                else if (IsVerticalSupport(other))
+                {
+                    grounded = TryResolveSupportBase(block, out var carryingDeck);
+                    if (!grounded && carryingDeck != null && carryingDeck.armed
+                        && ReachesLevel(block, family))
+                        bestCarrierSpan = Mathf.Min(bestCarrierSpan, carryingDeck.spanFromSupport);
+                }
+                else if (other == BuildFamily.Foundation && family != BuildFamily.Roof)
+                    grounded = true;
+                else
+                    continue;
+                if (grounded && ReachesLevel(block, family))
+                {
+                    AdoptDirectSupport(block);
+                    return true;
+                }
+            }
+
+            // Pass 2: no direct support in reach - survive through a compatible
+            // neighbouring deck (or a wall pass-through) strictly closer to one.
+            if (bestCarrierSpan < spanFromSupport) return true;
+            for (int i = 0; i < blocks.Count; i++)
+            {
+                var load = blocks[i].GetComponent<StructuralLoadState>();
+                bool compatibleDeck = load != null && (loadFamily == BuildFamily.Roof
+                    ? load.loadFamily == BuildFamily.Roof
+                    : load.loadFamily == BuildFamily.Floor || load.loadFamily == BuildFamily.FloorHatch || load.loadFamily == BuildFamily.Stairs);
+                if (compatibleDeck && load.armed && load.spanFromSupport < spanFromSupport)
+                    return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Resolves what actually carries a wall-type support (Wall, Doorway,
+        /// Window, Wall Frame, Half Wall, legacy Pillar). Solid ground, a
+        /// Foundation or a grounded pillar chain under its base make it a true
+        /// support (returns true). Standing on a suspended deck makes it a
+        /// pass-through: the deck's load state comes back in
+        /// <paramref name="carryingDeck"/> so the caller continues that span
+        /// instead of resetting it - this closes the floor-floor-wall ladder
+        /// that restarted the cantilever forever. An unarmed legacy/restored
+        /// deck counts as stable so old saves keep building normally.
+        /// </summary>
+        public static bool TryResolveSupportBase(PlacedTieredBlock support,
+            out StructuralLoadState carryingDeck, int depth = 6)
+        {
+            carryingDeck = null;
+            if (support == null || depth <= 0) return false;
+            if (support.TryGetComponent<AdjustablePillar>(out var pillar))
+                return pillar.IsSupportGrounded();
+
+            // A wall's root line sits exactly on a deck edge or a foundation rim,
+            // so a thin downward ray grazes those colliders along their boundary
+            // face and misses them - which read as "standing on nothing" and made
+            // a floor on a legitimately supported wall red. A small box straddling
+            // the base line sees everything the wall actually stands on.
+            Transform root = support.transform;
+            Vector3 centre = root.position - root.up * 0.15f;
+            var overlaps = Physics.OverlapBox(centre, new Vector3(0.6f, 0.25f, 0.6f),
+                root.rotation, ~0, QueryTriggerInteraction.Ignore);
+
+            int bestSpan = int.MaxValue;
+            StructuralLoadState bestDeck = null;
+            bool sawUnarmedDeck = false;
+            for (int i = 0; i < overlaps.Length; i++)
+            {
+                Collider collider = overlaps[i];
+                if (collider == null || collider.transform.IsChildOf(root)) continue;
+                if (BuildSystemV2.IsDynamicBody(collider)) continue;
+
+                var below = collider.GetComponentInParent<PlacedTieredBlock>();
+                if (below == null) return true; // terrain or any static world surface
+                if (below == support || below.definition == null) continue;
+                BuildFamily family = below.definition.family;
+                if (family == BuildFamily.Foundation) return true;
+                if (below.TryGetComponent<AdjustablePillar>(out var pillarBelow))
+                {
+                    if (pillarBelow.IsSupportGrounded()) return true;
+                    continue; // a hanging pillar carries nothing
+                }
+                if (IsVerticalSupport(family))
+                {
+                    if (TryResolveSupportBase(below, out var relayedDeck, depth - 1)) return true;
+                    if (relayedDeck != null && relayedDeck.armed && relayedDeck.spanFromSupport < bestSpan)
+                    {
+                        bestSpan = relayedDeck.spanFromSupport;
+                        bestDeck = relayedDeck;
+                    }
+                    continue;
+                }
+                if (family == BuildFamily.Floor || family == BuildFamily.FloorHatch
+                    || family == BuildFamily.Stairs)
+                {
+                    var load = below.GetComponent<StructuralLoadState>();
+                    if (load == null || !load.armed) { sawUnarmedDeck = true; continue; }
+                    if (load.spanFromSupport < bestSpan)
+                    {
+                        bestSpan = load.spanFromSupport;
+                        bestDeck = load;
+                    }
+                }
+                // Railings, doors, panes and other fittings carry nothing and are
+                // deliberately not the "legacy stable" case, or an edge railing
+                // would quietly reopen the wall ladder.
+            }
+
+            if (bestDeck != null)
+            {
+                carryingDeck = bestDeck;
+                return false;
+            }
+            return sawUnarmedDeck; // legacy/restored decks count as stable
+        }
+
+        private void AdoptDirectSupport(PlacedTieredBlock support)
+        {
+            float height = support.definition.family == BuildFamily.Foundation
+                ? 1.125f
+                : support.definition.family == BuildFamily.HalfWall ? 2.8f : 5.625f;
+            if (support.TryGetComponent<AdjustablePillar>(out var pillar)) height = pillar.currentHeight;
+            spanFromSupport = 1;
+            supportAnchor = support.transform.position + support.transform.up * height;
+        }
+
+        private bool ReachesLevel(PlacedTieredBlock support, BuildFamily suspendedFamily)
+        {
+            float height = support.definition.family == BuildFamily.Foundation
+                ? 1.125f
+                : support.definition.family == BuildFamily.HalfWall ? 2.8f : 5.625f;
+            if (support.TryGetComponent<AdjustablePillar>(out var adjustablePillar))
+                height = adjustablePillar.currentHeight;
+            Vector3 top = support.transform.position + support.transform.up * height;
+            if (suspendedFamily == BuildFamily.Stairs && support.TryGetComponent<AdjustablePillar>(out _))
+            {
+                float nearest = float.MaxValue;
+                foreach (var collider in GetComponentsInChildren<Collider>(true))
+                {
+                    if (collider == null) continue;
+                    nearest = Mathf.Min(nearest, Vector3.Distance(collider.ClosestPoint(top), top));
+                }
+                if (nearest <= 0.8f) return true;
+            }
+            Vector3 delta = transform.position - top;
+            float vertical = Mathf.Abs(Vector3.Dot(delta, support.transform.up));
+            Vector3 planar = delta - support.transform.up * Vector3.Dot(delta, support.transform.up);
+            float reach = suspendedFamily == BuildFamily.Roof ? 5.8f : 5.5f;
+            return vertical < 0.85f && planar.sqrMagnitude <= reach * reach;
+        }
+
+        public static bool IsVerticalSupport(BuildFamily family)
+            => family == BuildFamily.Wall || family == BuildFamily.Doorway
+                || family == BuildFamily.Window || family == BuildFamily.WallFrame
+                || family == BuildFamily.HalfWall || family == BuildFamily.Pillar;
+    }
+}

@@ -43,6 +43,14 @@ namespace VoxelEngine.Building.Tiered
             return false;
         }
 
+        private void OnDestroy()
+        {
+            // Scene unload and application quit also call OnDestroy; only a
+            // gameplay demolition should wake the structural audits.
+            if (!gameObject.scene.isLoaded) return;
+            StructuralLoadState.NotifySupportRemoved(transform.position);
+        }
+
         private void RefundOnDestroy(Inventory recipient)
         {
             // Refund 50% of place cost (Rust-ish — discourages tearing things down for full mats).
