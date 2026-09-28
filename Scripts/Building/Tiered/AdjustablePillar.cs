@@ -31,7 +31,7 @@ namespace VoxelEngine.Building.Tiered
 
         public void Configure(float height)
         {
-            currentHeight = Mathf.Clamp(height, 0.5f, 40f);
+            currentHeight = Mathf.Clamp(height, 0.5f, AuthoredHeight * 1.5f);
             Vector3 scale = transform.localScale;
             scale.y = currentHeight / AuthoredHeight;
             transform.localScale = scale;

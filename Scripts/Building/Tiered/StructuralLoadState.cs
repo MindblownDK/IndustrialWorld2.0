@@ -41,9 +41,17 @@ namespace VoxelEngine.Building.Tiered
                 if (block == null || block == own || block.definition == null || !visited.Add(block)) continue;
                 BuildFamily other = block.definition.family;
                 bool adjustablePillar = block.GetComponent<AdjustablePillar>() != null;
-                if ((adjustablePillar || IsVerticalSupport(other)) && ReachesLevel(block, family)) return true;
+                if ((adjustablePillar || IsVerticalSupport(other)) && ReachesLevel(block, family))
+                {
+                    AdoptDirectSupport(block);
+                    return true;
+                }
                 if (family != BuildFamily.Roof && other == BuildFamily.Foundation
-                    && ReachesLevel(block, family)) return true;
+                    && ReachesLevel(block, family))
+                {
+                    AdoptDirectSupport(block);
+                    return true;
+                }
 
                 var load = block.GetComponent<StructuralLoadState>();
                 bool compatibleDeck = load != null && (loadFamily == BuildFamily.Roof
@@ -55,6 +63,16 @@ namespace VoxelEngine.Building.Tiered
             return false;
         }
 
+        private void AdoptDirectSupport(PlacedTieredBlock support)
+        {
+            float height = support.definition.family == BuildFamily.Foundation
+                ? 1.125f
+                : support.definition.family == BuildFamily.HalfWall ? 2.8f : 5.625f;
+            if (support.TryGetComponent<AdjustablePillar>(out var pillar)) height = pillar.currentHeight;
+            spanFromSupport = 1;
+            supportAnchor = support.transform.position + support.transform.up * height;
+        }
+
         private bool ReachesLevel(PlacedTieredBlock support, BuildFamily suspendedFamily)
         {
             float height = support.definition.family == BuildFamily.Foundation
@@ -63,6 +81,16 @@ namespace VoxelEngine.Building.Tiered
             if (support.TryGetComponent<AdjustablePillar>(out var adjustablePillar))
                 height = adjustablePillar.currentHeight;
             Vector3 top = support.transform.position + support.transform.up * height;
+            if (suspendedFamily == BuildFamily.Stairs && support.TryGetComponent<AdjustablePillar>(out _))
+            {
+                float nearest = float.MaxValue;
+                foreach (var collider in GetComponentsInChildren<Collider>(true))
+                {
+                    if (collider == null) continue;
+                    nearest = Mathf.Min(nearest, Vector3.Distance(collider.ClosestPoint(top), top));
+                }
+                if (nearest <= 0.8f) return true;
+            }
             Vector3 delta = transform.position - top;
             float vertical = Mathf.Abs(Vector3.Dot(delta, support.transform.up));
             Vector3 planar = delta - support.transform.up * Vector3.Dot(delta, support.transform.up);

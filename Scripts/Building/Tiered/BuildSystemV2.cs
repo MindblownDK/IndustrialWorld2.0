@@ -64,6 +64,8 @@ namespace VoxelEngine.Building.Tiered
         private int _structuralSpan;
         private Vector3 _structuralAnchor;
         private float _pillarHeight = ConstructionStorey;
+        private bool _pillarGroundFailed;
+        private const float MaximumPillarHeight = ConstructionStorey * 1.5f;
 
         private void Awake()
         {
@@ -158,6 +160,8 @@ namespace VoxelEngine.Building.Tiered
                 if (_structuralSpan < 1 || _structuralSpan > 2 || beyondAnchor)
                     _ghostValid = false;
             }
+            if (activeFam.Value == BuildFamily.Pillar && _pillarGroundFailed)
+                _ghostValid = false;
             _ghost.transform.SetPositionAndRotation(_ghostPos, _ghostRot);
             if (_ghost.TryGetComponent<TieredRailing>(out var ghostRailing))
                 ghostRailing.Configure(_railingRise);
@@ -229,6 +233,7 @@ namespace VoxelEngine.Building.Tiered
             _structuralSpan = 0;
             _structuralAnchor = Vector3.zero;
             _pillarHeight = ConstructionStorey;
+            _pillarGroundFailed = false;
             // 1) Try socket snap: look for the nearest BuildSocket within socketSnapRadius
             //    around the hit point that accepts this family.
             BuildSocket bestSocket = null;
@@ -364,6 +369,22 @@ namespace VoxelEngine.Building.Tiered
                 || hostFamily == BuildFamily.WallFrame;
 
             Vector3 localHit = host.transform.InverseTransformPoint(hit.point);
+            if (incomingDeck && hostFamily == BuildFamily.Pillar)
+            {
+                // A pillar carries a floor edge, not its centre. Choose the side
+                // indicated by the aimed face and put the floor half a module out.
+                bool useX = Mathf.Abs(localHit.x) > Mathf.Abs(localHit.z);
+                float side = useX
+                    ? (Mathf.Approximately(localHit.x, 0f) ? 1f : Mathf.Sign(localHit.x))
+                    : (Mathf.Approximately(localHit.z, 0f) ? 1f : Mathf.Sign(localHit.z));
+                float height = host.TryGetComponent<AdjustablePillar>(out var sizedPillar)
+                    ? sizedPillar.currentHeight : ConstructionStorey;
+                position = host.transform.position + host.transform.up * height
+                    + (useX ? host.transform.right : host.transform.forward) * (side * ConstructionModule * 0.5f);
+                rotation = Quaternion.AngleAxis(_ghostYaw, host.transform.up) * host.transform.rotation;
+                return true;
+            }
+
             if (incoming == BuildFamily.Railing)
             {
                 if (hostFamily == BuildFamily.Stairs)
@@ -422,17 +443,38 @@ namespace VoxelEngine.Building.Tiered
             }
 
             if (incoming == BuildFamily.Pillar &&
-                (hostFamily == BuildFamily.Foundation || hostFamily == BuildFamily.Floor || hostFamily == BuildFamily.FloorHatch))
+                (hostFamily == BuildFamily.Foundation || hostFamily == BuildFamily.Floor
+                    || hostFamily == BuildFamily.FloorHatch || hostFamily == BuildFamily.Stairs))
             {
-                Vector3 edge = NearestCentreOrEdge(localHit, ConstructionModule * 0.5f);
-                Vector3 anchor = host.transform.position
-                    + host.transform.right * edge.x + host.transform.forward * edge.z;
-                bool aimedUnderFloor = hostFamily != BuildFamily.Foundation
-                    && Vector3.Dot(hit.normal.normalized, host.transform.up) < -0.45f;
-                if (aimedUnderFloor && TryFindSolidGround(anchor, -host.transform.up, host, out float drop))
+                Vector3 anchor;
+                if (hostFamily == BuildFamily.Stairs)
                 {
-                    _pillarHeight = drop;
-                    position = anchor - host.transform.up * drop;
+                    // Stairs rise continuously; the aimed underside point is the
+                    // actual load point rather than a flat deck centre/corner.
+                    anchor = hit.point;
+                }
+                else
+                {
+                    Vector3 edge = NearestCentreOrEdge(localHit, ConstructionModule * 0.5f);
+                    anchor = host.transform.position
+                        + host.transform.right * edge.x + host.transform.forward * edge.z;
+                }
+
+                bool aimedUnder = hostFamily != BuildFamily.Foundation
+                    && Vector3.Dot(hit.normal.normalized, host.transform.up) < -0.45f;
+                if (aimedUnder)
+                {
+                    if (TryFindSolidGround(anchor, -host.transform.up, host, MaximumPillarHeight, out float drop))
+                    {
+                        _pillarHeight = drop;
+                        position = anchor - host.transform.up * drop;
+                    }
+                    else
+                    {
+                        _pillarHeight = MaximumPillarHeight;
+                        position = anchor - host.transform.up * MaximumPillarHeight;
+                        _pillarGroundFailed = true;
+                    }
                 }
                 else
                 {
@@ -470,9 +512,11 @@ namespace VoxelEngine.Building.Tiered
             return true;
         }
 
-        private static bool TryFindSolidGround(Vector3 origin, Vector3 down, PlacedTieredBlock host, out float distance)
+        private static bool TryFindSolidGround(Vector3 origin, Vector3 down, PlacedTieredBlock host,
+            float maximumDistance, out float distance)
         {
-            var hits = Physics.RaycastAll(origin - down * 0.05f, down.normalized, 40f, ~0, QueryTriggerInteraction.Ignore);
+            var hits = Physics.RaycastAll(origin - down * 0.05f, down.normalized,
+                maximumDistance, ~0, QueryTriggerInteraction.Ignore);
             System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
             for (int i = 0; i < hits.Length; i++)
             {

@@ -1,9 +1,33 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `13.8.2-dev`
+**Current Version:** `13.8.3-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [13.8.3-dev] Pillars Meet Edges and Stair Undersides
+
+**Type:** PATCH - adaptive-Pillar maximum height, Stair underside support, Floor-on-Pillar alignment and support-adoption correction. No save schema, family value, recipe or research changes.
+
+**One Pillar is now capped at 1.5 storeys.** An underside ground search stops at 8.4375 m. If solid terrain is farther away, the ghost extends only to that maximum, turns red and cannot be placed. The player must stack another Pillar/support stage instead of producing a single oversized column. `AdjustablePillar` enforces the same maximum during placement, upgrade and reload reconstruction.
+
+**Floors meet a Pillar by their edge.** A Floor or Floor Hatch aimed at a Pillar top now chooses the aimed X/Z side and offsets its centre by half a 7.5 m module. The Pillar sits under the Floor edge rather than its middle, while its measured top remains the structural anchor.
+
+**Pillars can support a Stair at the actual underside point.** Aiming beneath a Stair uses the precise hit point on its rising underside, searches down to ground and sizes the Pillar to that local height. During structural audit, a Pillar top within 0.8 m of any Stair collider counts as direct support, instead of comparing only against the Stair root level.
+
+**New supports reset the load path.** When an armed Floor, Floor Hatch or Stair discovers a direct Foundation, Wall or Pillar during its 0.75-second audit, it adopts that support, resets to span one and stores the new support top. Floors and Stairs extending from it can then use span two. This fixes adding a physical Pillar without gaining new placement capacity.
+
+**Tall-Pillar pricing remains proportional within the new limit.** A standard Pillar costs 1x; a Pillar over one storey and up to 1.5 storeys costs 2x for placement and every upgrade, with the multiplied amount shown in Upgrade mode.
+
+**GitHub title:** `[13.8.3-dev] Pillars meet edges and stair undersides`
+
+**Manual steps:**
+1. Pull `Dev` and let Unity compile. Run Setup Step 102 if the current Pillar/Stair prefabs have not received `AdjustablePillar` and `StructuralLoadState`.
+2. Aim beneath a Floor less than 1.5 storeys above ground: place the Pillar and confirm its top meets the Floor edge target. Over a deeper gap, confirm the red ghost refuses and stops at 8.4375 m.
+3. Add a Pillar beneath an existing span-two Floor, wait up to one second, then extend Floors from it. The supported Floor must have reset to span one, allowing one additional span-two Floor.
+4. Aim beneath several points along a Stair. Confirm the Pillar height follows the slope and the Stair remains supported after placement.
+5. Aim a Floor at a Pillar top from each side. Confirm the Floor edge, not its centre, lands on the Pillar.
+6. Verify a 1.5-storey Pillar charges 2x placement and upgrade resources.
 
 ### [13.8.2-dev] Stairs Join the Load Path
 

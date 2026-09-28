@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `13.8.2-dev`
-**Roadmap Version:** `13.8.2-dev`
+**Current Version:** `13.8.3-dev`
+**Roadmap Version:** `13.8.3-dev`
 **Date:** 2026-09-27
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 13.8.3-dev - Pillars Meet Edges and Stair Undersides
+- **Pillar limit** (`AdjustablePillar`, `BuildSystemV2`): one adaptive Pillar spans at most 1.5 storeys; deeper gaps refuse placement and require stacked supports.
+- **Edge and stair joins** (`BuildSystemV2`, `StructuralLoadState`): Floors rest by an edge on Pillar tops, while underside-aimed Stair Pillars use the exact tread/load point and reset the supported Stair to span one.
+- **Support adoption**: suspended Floors, Hatches and Stairs adopt a newly added direct Pillar/Foundation support during their periodic audit, enabling a fresh two-piece run.
+
 ### 13.8.2-dev - Stairs Join the Load Path
 - **Stair span** (`StructuralLoadState`, `BuildSystemV2`): Stairs inherit Floor/Stair support anchors and obey the same two-piece cantilever instead of chaining forever from a span-two Floor.
 - **Landings** (`BuildSocketCompat`): Floor and Floor Hatch snap to the authored lower or upper Stair socket according to the aimed end.
@@ -48,11 +53,6 @@
 - **Shared guard** (`BuildSystemV2`): Floor and Floor Hatch placement now applies the same span-one/span-two validation as Roof placement.
 - **Foundation reach**: a Foundation anchor permits two 7.5 m Floor modules while a third requires another Foundation, wall, frame or pillar.
 - **Collapse agreement** (`StructuralLoadState`): the placement limit and the existing support-loss cascade now govern the same suspended Floor graph.
-
-### 13.7.4-dev - Roof Span Keeps Its Original Support
-- **Support anchor** (`StructuralLoadState`): every suspended placement records the world-space top of the real wall, frame or pillar that began its load path.
-- **Reach cap** (`BuildSystemV2`): a Roof must remain within 11.6 m of that original anchor as well as carrying span one or two, preventing lateral span-two relays from growing without bound.
-- **Upgrade continuity**: both span and original support anchor transfer across tier replacement.
 
 ### Era Transition Feel
 
