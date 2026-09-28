@@ -1,9 +1,26 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.1.3-dev`
+**Current Version:** `14.1.4-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.1.4-dev] Unique Identity Per Game Instance
+
+**Type:** PATCH - fixes the one-entry roster / wandering "(you)" marker from same-machine testing.
+
+**Root cause: both test instances were the SAME player.** Unity stores PlayerPrefs per company/product, so every build of the game on one machine reads the same prefs - both instances loaded the same `ve_player_id` GUID. The server keyed both connections by one id: one roster entry everywhere, "(you)" matched on both screens, and a rename by either player renamed "the" player. Two separate machines were never affected.
+
+**Fix 1: per-instance identity slots (`PlayerIdentity`).** At startup each running instance claims a slot through a system-wide mutex. Slot 0 keeps the original pref keys - nobody's existing identity changes - and every additional concurrent instance gets its own suffixed id and name keys. Real players run one instance per machine and always sit in slot 0; two local test builds now are two different people, with independent names.
+
+**Fix 2: server-side duplicate-identity guard (`NetworkBootstrap`).** If a connection ever presents a player id that is already live in the session, the server admits it under a visible guest id and logs a warning - two connections can never silently collapse into one person again, regardless of what a client claims.
+
+**GitHub title:** `[14.1.4-dev] Unique identity per game instance`
+
+**Manual steps:**
+1. Pull `Dev`, recompile. No setup steps.
+2. Relaunch both instances. The FIRST one launched keeps the existing identity; the second starts fresh as "Crusader" (expected - it finally has its own identity). Rename it in the multiplayer tab.
+3. Verify: the roster now shows BOTH players on both screens, "(you)" marks only yourself on each screen, renames update only the renamed player, and each avatar wears its own nameplate.
 
 ### [14.1.3-dev] Step 105 Self-Heals Broken Prefabs
 

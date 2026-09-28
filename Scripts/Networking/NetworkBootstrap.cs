@@ -50,6 +50,10 @@ namespace VoxelEngine.Networking
         /// can never spawn twice.</summary>
         private readonly Dictionary<int, NetworkObject> _avatarsByConnection = new();
 
+        /// <summary>Server-side: the player id each connection was admitted
+        /// under - the duplicate-identity guard reads this.</summary>
+        private readonly Dictionary<int, string> _playerIdByConnection = new();
+
         public bool IsOnline => _serverStarted || _clientStarted;
 
         /// <summary>One human-readable line for the multiplayer menu.</summary>
@@ -128,6 +132,7 @@ namespace VoxelEngine.Networking
             {
                 _serverStarted = false;
                 _avatarsByConnection.Clear();
+                _playerIdByConnection.Clear();
                 if (!_clientStarted) GoOffline();
             }
         }
@@ -183,6 +188,25 @@ namespace VoxelEngine.Networking
                 return;
             }
 
+            // Duplicate-identity guard: two connections must never share one
+            // player id, or every per-player system collapses them into one
+            // person (roster, '(you)' markers, code locks...). Normally the
+            // per-instance identity slots prevent this; if it still happens,
+            // admit the newcomer under a visible guest id and say so.
+            string playerId = msg.PlayerId;
+            foreach (var entry in _playerIdByConnection)
+            {
+                if (entry.Value == playerId && entry.Key != connection.ClientId)
+                {
+                    Debug.LogWarning(
+                        $"[NetworkBootstrap] Connection {connection.ClientId} presented a player id already in the session " +
+                        "(two game instances sharing an identity?). Admitting it under a guest id.");
+                    playerId = $"{playerId}-guest{connection.ClientId}";
+                    break;
+                }
+            }
+            _playerIdByConnection[connection.ClientId] = playerId;
+
             NetworkObject nob = Instantiate(avatarPrefab);
             _networkManager.ServerManager.Spawn(nob, connection);
             _avatarsByConnection[connection.ClientId] = nob;
@@ -193,7 +217,7 @@ namespace VoxelEngine.Networking
             // Spawn can be treated as defaults and never delivered - that was
             // the 14.1.0 missing-names bug.
             var avatar = nob.GetComponent<PlayerAvatar>();
-            if (avatar != null) avatar.SetIdentity(msg.PlayerId, msg.PlayerName);
+            if (avatar != null) avatar.SetIdentity(playerId, msg.PlayerName);
         }
 
         /// <summary>Re-announce the local identity (e.g. after a rename) so
@@ -211,6 +235,7 @@ namespace VoxelEngine.Networking
         private void OnRemoteConnectionState(NetworkConnection connection, RemoteConnectionStateArgs args)
         {
             if (args.ConnectionState != RemoteConnectionState.Stopped) return;
+            _playerIdByConnection.Remove(connection.ClientId);
             if (!_avatarsByConnection.TryGetValue(connection.ClientId, out var nob)) return;
             _avatarsByConnection.Remove(connection.ClientId);
             if (nob != null && nob.IsSpawned) _networkManager.ServerManager.Despawn(nob);
