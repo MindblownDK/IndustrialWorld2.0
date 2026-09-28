@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `13.10.0-dev`
-**Roadmap Version:** `13.10.0-dev`
+**Current Version:** `13.10.1-dev`
+**Roadmap Version:** `13.10.1-dev`
 **Date:** 2026-09-28
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 13.10.1-dev - Grounded Supports Win the Audit
+- **Audit ordering** (`StructuralLoadState`): direct grounded supports are adopted before the deck-neighbour relay, so a new pillar under a span-two floor reliably resets it.
+- **Wall support base** (`StructuralLoadState`, `BuildSystemV2`): a wall on a suspended deck is a pass-through continuing that deck's span plus one, closing the infinite wall-on-floor ladder.
+- **Legacy safety**: unarmed restored decks count as stable, so older bases build exactly as before.
+
 ### 13.10.0-dev - Barrel Items Retired
 - **Item retirement** (Step 10, `ItemIdAliases`): `Item_EmptyBarrel`, `Item_CrudeOilBarrel`, `Recipe_EmptyBarrel` and their icons are deleted; saved stacks resolve to Steel Plate.
 - **Research** (`res_oil_extraction`): Oil Logistics keeps its tree position as the liquid-crude knowledge gate and unlocks no recipe.
@@ -48,11 +53,6 @@
 - **Pillar limit** (`AdjustablePillar`, `BuildSystemV2`): one adaptive Pillar spans at most 1.5 storeys; deeper gaps refuse placement and require stacked supports.
 - **Edge and stair joins** (`BuildSystemV2`, `StructuralLoadState`): Floors rest by an edge on Pillar tops, while underside-aimed Stair Pillars use the exact tread/load point and reset the supported Stair to span one.
 - **Support adoption**: suspended Floors, Hatches and Stairs adopt a newly added direct Pillar/Foundation support during their periodic audit, enabling a fresh two-piece run.
-
-### 13.8.2-dev - Stairs Join the Load Path
-- **Stair span** (`StructuralLoadState`, `BuildSystemV2`): Stairs inherit Floor/Stair support anchors and obey the same two-piece cantilever instead of chaining forever from a span-two Floor.
-- **Landings** (`BuildSocketCompat`): Floor and Floor Hatch snap to the authored lower or upper Stair socket according to the aimed end.
-- **Scaled Pillar cost** (`BuildSystemV2`, `UpgradePromptHud`): placement and every upgrade multiply material requirements by the number of 5.625 m storeys the adaptive Pillar spans.
 
 ### Era Transition Feel
 

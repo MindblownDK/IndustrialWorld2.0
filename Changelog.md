@@ -1,9 +1,28 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `13.10.0-dev`
+**Current Version:** `13.10.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [13.10.1-dev] Grounded Supports Win the Audit
+
+**Type:** PATCH - structural audit ordering and wall support-base correction. No save schema, prefab, item, recipe, research or cost change.
+
+**A grounded pillar now actually resets the floor above it.** The 0.75-second audit was a single pass over an unordered physics query: a span-two floor usually found its span-one neighbour first, survived through the relay branch and returned before the loop ever reached the new pillar, so the adoption that resets the span to one almost never ran. The audit is now two passes - every direct grounded support (pillar chain, wall, foundation) is evaluated and adopted first, and the deck-neighbour relay only runs when no direct support is in reach. Placing a grounded pillar under a span-two floor reliably resets it within a second, and floors can be extended from it again.
+
+**The wall ladder is closed.** A wall counted as a fresh vertical support no matter what it stood on, so floor, floor, wall-on-the-suspended-floor, floor, floor could repeat forever. `TryResolveSupportBase` now walks straight down from a wall-type piece (Wall, Doorway, Window, Wall Frame, Half Wall, legacy Pillar): terrain, a Foundation or a grounded pillar chain make it a true support; standing on a suspended deck makes it a pass-through that continues that deck's span plus one instead of resetting to one. A wall on a span-two floor therefore offers span three - refused. A wall on a span-one floor still carries the next storey exactly as before, stacked walls resolve through each other, and a deck without an armed load state (anything restored from a save) counts as stable so old bases keep building normally.
+
+**Both sides use the same rule.** Ghost placement (`ResolveStructuralSpan`) and the periodic audit (`HasLoadPath`) share the identical support-base resolution, and in the audit a pass-through wall relays its carrying deck's span so a legitimate floor standing on a wall above a span-one deck is never orphaned by the sphere radius. Pieces placed this session through the old wall exploit will collapse within a second of the patch - pieces from older saves are unaffected because restored load states are not armed.
+
+**GitHub title:** `[13.10.1-dev] Grounded supports win the audit`
+
+**Manual steps:**
+1. Pull `Dev` and let Unity compile. No Setup step is required.
+2. Foundation, two floors out (span two), third refused. Place a pillar under the second floor - underside aim or grounded beside it reaching the deck. Within a second, extend two more floors from it.
+3. Place a wall on that outermost span-two floor and aim a floor at the wall top: the ghost must be red.
+4. Place a wall on a span-one floor and aim a floor at the wall top: the ghost must be green (span two), and the placed floor must survive the audit.
+5. Repeat check 3 after a save/reload of an older base to confirm legacy structures still accept walls and floors normally.
 
 ### [13.10.0-dev] Barrel Items Retired
 

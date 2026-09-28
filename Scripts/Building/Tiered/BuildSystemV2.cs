@@ -766,6 +766,17 @@ namespace VoxelEngine.Building.Tiered
                 return 0; // a hanging pillar chain carries nothing yet
             if (adjustableSupport || StructuralLoadState.IsVerticalSupport(hostFamily))
             {
+                if (!adjustableSupport
+                    && !StructuralLoadState.TryResolveSupportBase(host, out var carryingDeck))
+                {
+                    // A wall standing on a suspended deck is a pass-through, not
+                    // a fresh support: the piece above continues the deck's own
+                    // span. This closes the floor-floor-wall-floor ladder that
+                    // reset the cantilever forever.
+                    if (carryingDeck == null || !carryingDeck.armed) return 0;
+                    _structuralAnchor = carryingDeck.supportAnchor;
+                    return carryingDeck.spanFromSupport + 1;
+                }
                 float height = hostFamily == BuildFamily.HalfWall ? HalfWallHeight : ConstructionStorey;
                 if (adjustableSupport)
                     height = adjustablePillar.currentHeight;
