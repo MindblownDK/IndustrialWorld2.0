@@ -1,9 +1,22 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `13.8.3-dev`
+**Current Version:** `13.8.4-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [13.8.4-dev] Pillar Edge Snap Compiles
+
+**Type:** PATCH - compile repair only. No runtime behaviour, save data, public API, prefab, mesh, item, recipe, research, resource cost or balance value is changed.
+
+**Fixed - the Floor-on-Pillar branch declared `useX` inside a scope whose containing method later declared another `useX`.** C# forbids that shadowing pattern even though the first declaration is inside an earlier conditional block, producing CS0136 at line 376. The local is now named `pillarUsesX`; every read in that branch was updated with no placement-math change.
+
+**GitHub title:** `[13.8.4-dev] Pillar edge snap compiles`
+
+**Manual steps:**
+1. Pull `Dev` and let Unity compile.
+2. Confirm CS0136 is gone.
+3. Continue the 13.8.3 validation. No Setup step is required for this compile-only correction beyond Step 102 already required by 13.8.3.
 
 ### [13.8.3-dev] Pillars Meet Edges and Stair Undersides
 

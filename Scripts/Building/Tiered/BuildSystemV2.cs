@@ -373,14 +373,14 @@ namespace VoxelEngine.Building.Tiered
             {
                 // A pillar carries a floor edge, not its centre. Choose the side
                 // indicated by the aimed face and put the floor half a module out.
-                bool useX = Mathf.Abs(localHit.x) > Mathf.Abs(localHit.z);
-                float side = useX
+                bool pillarUsesX = Mathf.Abs(localHit.x) > Mathf.Abs(localHit.z);
+                float side = pillarUsesX
                     ? (Mathf.Approximately(localHit.x, 0f) ? 1f : Mathf.Sign(localHit.x))
                     : (Mathf.Approximately(localHit.z, 0f) ? 1f : Mathf.Sign(localHit.z));
                 float height = host.TryGetComponent<AdjustablePillar>(out var sizedPillar)
                     ? sizedPillar.currentHeight : ConstructionStorey;
                 position = host.transform.position + host.transform.up * height
-                    + (useX ? host.transform.right : host.transform.forward) * (side * ConstructionModule * 0.5f);
+                    + (pillarUsesX ? host.transform.right : host.transform.forward) * (side * ConstructionModule * 0.5f);
                 rotation = Quaternion.AngleAxis(_ghostYaw, host.transform.up) * host.transform.rotation;
                 return true;
             }

@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `13.8.3-dev`
-**Roadmap Version:** `13.8.3-dev`
+**Current Version:** `13.8.4-dev`
+**Roadmap Version:** `13.8.4-dev`
 **Date:** 2026-09-27
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 13.8.4-dev - Pillar Edge Snap Compiles
+- **Compile repair** (`BuildSystemV2`): the Pillar-edge axis selector uses a scope-unique local name.
+- **Behaviour**: Floor-on-Pillar direction, position, support and cost logic are unchanged.
+- **Validation**: source braces and formatting remain balanced.
+
 ### 13.8.3-dev - Pillars Meet Edges and Stair Undersides
 - **Pillar limit** (`AdjustablePillar`, `BuildSystemV2`): one adaptive Pillar spans at most 1.5 storeys; deeper gaps refuse placement and require stacked supports.
 - **Edge and stair joins** (`BuildSystemV2`, `StructuralLoadState`): Floors rest by an edge on Pillar tops, while underside-aimed Stair Pillars use the exact tread/load point and reset the supported Stair to span one.
@@ -48,11 +53,6 @@
 - **Underside placement** (`BuildSystemV2`): aiming a Pillar at a Floor or Floor Hatch underside selects the centre or nearest true corner and searches down to solid terrain.
 - **Adaptive height** (`AdjustablePillar`, Setup Step 102): all four Pillar tiers scale from a grounded root to the underside anchor, including live ghost feedback and tier upgrades.
 - **Reload recovery**: a restored grounded Pillar infers its non-standard height from the first Floor or Floor Hatch directly above without adding a save field.
-
-### 13.7.5-dev - Floors Obey the Same Two-Panel Cantilever
-- **Shared guard** (`BuildSystemV2`): Floor and Floor Hatch placement now applies the same span-one/span-two validation as Roof placement.
-- **Foundation reach**: a Foundation anchor permits two 7.5 m Floor modules while a third requires another Foundation, wall, frame or pillar.
-- **Collapse agreement** (`StructuralLoadState`): the placement limit and the existing support-loss cascade now govern the same suspended Floor graph.
 
 ### Era Transition Feel
 
