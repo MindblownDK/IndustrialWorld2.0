@@ -27,6 +27,13 @@ namespace VoxelEngine.Items
                 // survives, and the bare duplicate under Items/ is retired.
                 { "iron",   "iron_ore"   },
                 { "copper", "copper_ore" },
+
+                // Barrel retirement: crude is a liquid and the refinery feeds
+                // through fluid pipes, so nothing produces or consumes these two
+                // items anymore. A barrel was pressed steel, so saved stacks come
+                // back as Steel Plate rather than vanishing.
+                { "item_emptybarrel",    "item_steelplate" },
+                { "item_crudeoilbarrel", "item_steelplate" },
             };
 
         /// <summary>The surviving id for <paramref name="itemId"/>, or the id itself when it was never retired.</summary>

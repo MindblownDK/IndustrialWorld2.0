@@ -1,9 +1,57 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `13.8.4-dev`
+**Current Version:** `13.10.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [13.10.0-dev] Barrel Items Retired
+
+**Type:** MINOR - approved content retirement, save-compatible through an item-id alias. No save schema, chunk format or placed-block change; no fresh save required. Closes the open item deferred by 11.0.0-dev.
+
+**Empty Barrel and Crude Oil Barrel are removed.** Since 11.0.0-dev the Jack Pump draws liquid crude into its own tank and the Oil Refinery feeds through fluid pipes, so no recipe in the project produced or consumed either item. Their assets, `Recipe_EmptyBarrel` (both the live copy under `Recipes/` and the stale duplicate under `Industrial/Recipes/`) and their catalog entries are deleted from the repository.
+
+**Saved stacks do not vanish.** `ItemIdAliases` maps `item_emptybarrel` and `item_crudeoilbarrel` to `item_steelplate`. A barrel was pressed steel, so an old save's barrel stacks come back as Steel Plate at the same count. The alias layer already guarantees a live id always wins, so nothing changes for saves that never held a barrel.
+
+**Setup Step 10 performs the retirement and stops recreating the items.** `RetireOrphanedBarrelAssets` deletes the item, recipe and icon assets wherever a working copy still has them, scrubs `Recipe_EmptyBarrel` and null entries from the `RecipeRegistry`, and removes dead references from the `ItemPersistenceCatalog`. The step remains idempotent and safe to re-run; Refined Oil Barrel, Plastic Bar and the whole machine chain are untouched.
+
+**Oil Logistics keeps its place in the tree.** `res_oil_extraction` no longer unlocks the barrel recipe - it unlocks nothing, exactly like the Plastics node - but keeps its position, cost and role as the prerequisite for Oil Refining and Pirate Oil Recovery. Its description, and the Oil Refinery / Chemical Plant block descriptions, now describe the liquid crude chain instead of barrel conversions.
+
+**GitHub title:** `[13.10.0-dev] Barrel items retired`
+
+**Manual steps:**
+1. Pull `Dev` and let Unity compile. Unity will import the four asset deletions; any "missing script/reference" warning at first import is expected and disappears after the next step.
+2. Run `Tools -> Voxel Engine -> Voxel Engine Setup -> 10. Build Industrial Content` once. It deletes the two barrel icons under `ItemIcons/` (they are matched by item id, whatever category folder they sit in), scrubs the recipe registry and persistence catalog, and confirms nothing recreates the retired items.
+3. Open the Research UI: Oil Logistics still sits at Tier 3 Chemistry with Oil Refining and Pirate Oil Recovery behind it, and its details panel lists no unlocked recipe.
+4. Load a save that holds Empty or Crude Oil Barrels: the stacks appear as Steel Plate at the same count.
+5. Confirm the Oil Refinery and Chemical Plant tooltips describe tank/pipe processing and mention no barrels.
+
+### [13.9.0-dev] Pillar Chains Reach the Ground
+
+**Type:** MINOR - new construction capability (hanging pillar stages, pillar chaining, automatic downward growth), plus support-audit and floor-snap corrections. No save schema, prefab component set, family value, recipe or research changes. Existing saves load unchanged.
+
+**A Pillar that cannot reach the ground now places anyway.** The 13.8.3 red-ghost refusal over deep gaps is reversed: aiming beneath a Floor, Floor Hatch or Stair over a gap deeper than 1.5 storeys places a full-length stage hanging in the air. A hanging stage is deliberately not a load-bearing support - `AdjustablePillar.IsSupportGrounded()` walks the chain of stages beneath it (cycle-guarded, depth-capped) and only reports true once the bottom stage touches terrain, a Foundation or another placed piece. The moment the chain touches down, every stage in it becomes a valid support at once.
+
+**Pillars chain from other Pillars.** Aiming a Pillar at the lower half or underside of an existing Pillar hangs a new stage from its root; the stage meets the ground or any placed piece exactly when it is within 1.5 storeys, otherwise it places at full length for the next stage to continue. Aiming at the upper half stacks a stage on the host's top, and when a Floor, Floor Hatch or Stair underside is within reach the stacked stage sizes itself to meet it exactly. Each stage pays the existing per-storey cost multiplier for its own height.
+
+**Grounded Pillars reliably support the deck above.** The structural audit and ghost placement no longer accept any `AdjustablePillar` blindly: a grounded chain counts, a hanging one does not. The Floor-on-Pillar snap now also recognizes a Pillar by component identity, so an older Pillar definition with stale family metadata still carries a deck edge, and the supported Floor resets to span one so building can continue outward from it.
+
+**Mining the ground under a Pillar no longer strands it.** Once per second a placed Pillar probes beneath its root. If the ground was mined away, the Pillar keeps its top edge exactly where the structure expects it and grows downward until it touches ground again, up to the 1.5-storey maximum. Beyond that it becomes a hanging stage: it stops carrying load and the normal structural audit takes over. Players, fauna and loose physics objects never count as ground for any of these probes.
+
+**Floors aimed at a Pillar extend toward the builder.** The deck still rests its edge on the pillar top, but the side is now chosen from where the player stands rather than the aimed face, so the new Floor always grows toward the builder and walking a deck outward feels natural.
+
+**Reload recovery understands chains.** A restored Pillar recovers its non-standard height from the first placed piece directly above it: a chain stage meets the pillar root above, a lone pillar meets the deck underside, and any other piece ends recovery, so a middle stage can no longer stretch through its own chain. Ghost previews are now fully inert - they never probe, resize or move themselves.
+
+**GitHub title:** `[13.9.0-dev] Pillar chains reach the ground`
+
+**Manual steps:**
+1. Pull `Dev` and let Unity compile. No new Setup step is required; if the current Pillar/Stair prefabs have never received `AdjustablePillar` and `StructuralLoadState`, run `Tools -> Voxel Engine -> Voxel Engine Setup -> 102. Rebuild Construction at Size-V6` once.
+2. Aim a Pillar beneath a Floor more than 1.5 storeys above ground: the ghost is green at full length and places as a hanging stage. Confirm a Floor aimed at that hanging stage shows a red ghost.
+3. Aim a Pillar at the lower half of the hanging stage: a second stage hangs from its root. Repeat until one stage meets the ground exactly. Within about a second, confirm Floors can now be placed on the chain and that the suspended Floor above accepts new neighbours again.
+4. Stand on a deck and aim a Floor at a Pillar top from several positions around it: the new Floor edge lands on the pillar and the deck extends toward where you stand.
+5. Place a grounded Pillar, then mine the terrain under it: within a second the Pillar grows down to the new surface with its top unmoved. Mine deeper than 1.5 storeys total and confirm it stops at maximum length and the deck above starts failing its support audit unless another support exists.
+6. Stack a Pillar on top of a grounded Pillar below an existing Floor underside: the new stage sizes itself to close the gap exactly and the Floor adopts the support.
+7. Save and reload with a multi-stage chain: every stage recovers its height and the chain still reports grounded.
 
 ### [13.8.4-dev] Pillar Edge Snap Compiles
 

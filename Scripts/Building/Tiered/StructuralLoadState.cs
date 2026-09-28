@@ -40,8 +40,13 @@ namespace VoxelEngine.Building.Tiered
                 var block = hits[i] != null ? hits[i].GetComponentInParent<PlacedTieredBlock>() : null;
                 if (block == null || block == own || block.definition == null || !visited.Add(block)) continue;
                 BuildFamily other = block.definition.family;
-                bool adjustablePillar = block.GetComponent<AdjustablePillar>() != null;
-                if ((adjustablePillar || IsVerticalSupport(other)) && ReachesLevel(block, family))
+                // A variable-height pillar only counts once its chain touches
+                // ground; a pillar still hanging in the air carries nothing.
+                var adjustablePillar = block.GetComponent<AdjustablePillar>();
+                bool verticalSupport = adjustablePillar != null
+                    ? adjustablePillar.IsSupportGrounded()
+                    : IsVerticalSupport(other);
+                if (verticalSupport && ReachesLevel(block, family))
                 {
                     AdoptDirectSupport(block);
                     return true;

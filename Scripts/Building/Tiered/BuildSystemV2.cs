@@ -64,7 +64,6 @@ namespace VoxelEngine.Building.Tiered
         private int _structuralSpan;
         private Vector3 _structuralAnchor;
         private float _pillarHeight = ConstructionStorey;
-        private bool _pillarGroundFailed;
         private const float MaximumPillarHeight = ConstructionStorey * 1.5f;
 
         private void Awake()
@@ -160,8 +159,6 @@ namespace VoxelEngine.Building.Tiered
                 if (_structuralSpan < 1 || _structuralSpan > 2 || beyondAnchor)
                     _ghostValid = false;
             }
-            if (activeFam.Value == BuildFamily.Pillar && _pillarGroundFailed)
-                _ghostValid = false;
             _ghost.transform.SetPositionAndRotation(_ghostPos, _ghostRot);
             if (_ghost.TryGetComponent<TieredRailing>(out var ghostRailing))
                 ghostRailing.Configure(_railingRise);
@@ -233,7 +230,6 @@ namespace VoxelEngine.Building.Tiered
             _structuralSpan = 0;
             _structuralAnchor = Vector3.zero;
             _pillarHeight = ConstructionStorey;
-            _pillarGroundFailed = false;
             // 1) Try socket snap: look for the nearest BuildSocket within socketSnapRadius
             //    around the hit point that accepts this family.
             BuildSocket bestSocket = null;
@@ -369,14 +365,20 @@ namespace VoxelEngine.Building.Tiered
                 || hostFamily == BuildFamily.WallFrame;
 
             Vector3 localHit = host.transform.InverseTransformPoint(hit.point);
-            if (incomingDeck && hostFamily == BuildFamily.Pillar)
+            bool hostIsPillar = hostFamily == BuildFamily.Pillar
+                || host.GetComponent<AdjustablePillar>() != null;
+            if (incomingDeck && hostIsPillar)
             {
-                // A pillar carries a floor edge, not its centre. Choose the side
-                // indicated by the aimed face and put the floor half a module out.
-                bool pillarUsesX = Mathf.Abs(localHit.x) > Mathf.Abs(localHit.z);
+                // A pillar carries a floor edge, not its centre. The deck extends
+                // toward the builder, so the piece lands where they are standing
+                // and building continues in their direction.
+                Vector3 toBuilder = transform.position - host.transform.position;
+                float alongRight = Vector3.Dot(toBuilder, host.transform.right);
+                float alongForward = Vector3.Dot(toBuilder, host.transform.forward);
+                bool pillarUsesX = Mathf.Abs(alongRight) >= Mathf.Abs(alongForward);
                 float side = pillarUsesX
-                    ? (Mathf.Approximately(localHit.x, 0f) ? 1f : Mathf.Sign(localHit.x))
-                    : (Mathf.Approximately(localHit.z, 0f) ? 1f : Mathf.Sign(localHit.z));
+                    ? (alongRight >= 0f ? 1f : -1f)
+                    : (alongForward >= 0f ? 1f : -1f);
                 float height = host.TryGetComponent<AdjustablePillar>(out var sizedPillar)
                     ? sizedPillar.currentHeight : ConstructionStorey;
                 position = host.transform.position + host.transform.up * height
@@ -384,6 +386,10 @@ namespace VoxelEngine.Building.Tiered
                 rotation = Quaternion.AngleAxis(_ghostYaw, host.transform.up) * host.transform.rotation;
                 return true;
             }
+
+            if (incoming == BuildFamily.Pillar && hostIsPillar &&
+                TryComputePillarChainTransform(hit, host, out position, out rotation))
+                return true;
 
             if (incoming == BuildFamily.Railing)
             {
@@ -464,17 +470,13 @@ namespace VoxelEngine.Building.Tiered
                     && Vector3.Dot(hit.normal.normalized, host.transform.up) < -0.45f;
                 if (aimedUnder)
                 {
-                    if (TryFindSolidGround(anchor, -host.transform.up, host, MaximumPillarHeight, out float drop))
-                    {
-                        _pillarHeight = drop;
-                        position = anchor - host.transform.up * drop;
-                    }
-                    else
-                    {
-                        _pillarHeight = MaximumPillarHeight;
-                        position = anchor - host.transform.up * MaximumPillarHeight;
-                        _pillarGroundFailed = true;
-                    }
+                    // Ground within one pillar: meet it exactly. Farther away: a
+                    // full-length stage hangs in the air - placeable, but it only
+                    // becomes a valid support once the chain built below it
+                    // reaches the surface.
+                    _pillarHeight = TryFindSolidGround(anchor, -host.transform.up, host,
+                        MaximumPillarHeight, out float drop) ? drop : MaximumPillarHeight;
+                    position = anchor - host.transform.up * _pillarHeight;
                 }
                 else
                 {
@@ -513,7 +515,7 @@ namespace VoxelEngine.Building.Tiered
         }
 
         private static bool TryFindSolidGround(Vector3 origin, Vector3 down, PlacedTieredBlock host,
-            float maximumDistance, out float distance)
+            float maximumDistance, out float distance, bool stopAtPlaced = false)
         {
             var hits = Physics.RaycastAll(origin - down * 0.05f, down.normalized,
                 maximumDistance, ~0, QueryTriggerInteraction.Ignore);
@@ -522,13 +524,85 @@ namespace VoxelEngine.Building.Tiered
             {
                 Collider collider = hits[i].collider;
                 if (collider == null || (host != null && collider.transform.IsChildOf(host.transform))) continue;
-                if (collider.GetComponentInParent<PlacedTieredBlock>() != null) continue;
+                if (IsDynamicBody(collider)) continue;
+                if (!stopAtPlaced && collider.GetComponentInParent<PlacedTieredBlock>() != null) continue;
                 distance = Mathf.Max(0.5f, hits[i].distance - 0.05f);
                 return true;
             }
             distance = 0f;
             return false;
         }
+
+        /// <summary>
+        /// Pillar aimed at another pillar. Aiming at the lower half or the underside
+        /// extends the chain downward toward the ground - hanging in the air is
+        /// allowed, the chain simply carries no load until it touches down. Aiming
+        /// at the upper half stacks a new stage on top, sized to meet a deck
+        /// underside exactly when one is within reach.
+        /// </summary>
+        private bool TryComputePillarChainTransform(RaycastHit hit, PlacedTieredBlock host,
+            out Vector3 position, out Quaternion rotation)
+        {
+            position = Vector3.zero;
+            rotation = Quaternion.identity;
+            if (host == null) return false;
+
+            Vector3 up = host.transform.up.normalized;
+            float hostHeight = host.TryGetComponent<AdjustablePillar>(out var hostPillar)
+                ? hostPillar.currentHeight : ConstructionStorey;
+
+            float normalDot = Vector3.Dot(hit.normal.normalized, up);
+            float hitHeight = Vector3.Dot(hit.point - host.transform.position, up);
+            bool extendDown = normalDot < -0.45f
+                || (normalDot < 0.45f && hitHeight < hostHeight * 0.5f);
+
+            rotation = Quaternion.AngleAxis(_ghostYaw, up) * host.transform.rotation;
+            if (extendDown)
+            {
+                // Hang the new stage from the host root. Meet the ground (or any
+                // placed piece) exactly when it is within one pillar, otherwise
+                // place a full-length hanging stage the player keeps extending.
+                Vector3 anchor = host.transform.position;
+                _pillarHeight = TryFindSolidGround(anchor, -up, host, MaximumPillarHeight,
+                    out float drop, stopAtPlaced: true) ? drop : MaximumPillarHeight;
+                position = anchor - up * _pillarHeight;
+                return true;
+            }
+
+            Vector3 top = host.transform.position + up * hostHeight;
+            _pillarHeight = TryFindDeckAbove(top, up, host, MaximumPillarHeight, out float rise)
+                ? rise : ConstructionStorey;
+            position = top;
+            return true;
+        }
+
+        /// <summary>Finds the first deck underside above a pillar top so a stacked stage can meet it exactly.</summary>
+        private static bool TryFindDeckAbove(Vector3 origin, Vector3 up, PlacedTieredBlock host,
+            float maximumDistance, out float rise)
+        {
+            var hits = Physics.RaycastAll(origin + up * 0.05f, up.normalized,
+                maximumDistance, ~0, QueryTriggerInteraction.Ignore);
+            System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+            for (int i = 0; i < hits.Length; i++)
+            {
+                Collider collider = hits[i].collider;
+                if (collider == null || (host != null && collider.transform.IsChildOf(host.transform))) continue;
+                var block = collider.GetComponentInParent<PlacedTieredBlock>();
+                if (block == null || block.definition == null) continue;
+                BuildFamily family = block.definition.family;
+                if (family != BuildFamily.Floor && family != BuildFamily.FloorHatch
+                    && family != BuildFamily.Stairs) continue;
+                rise = Mathf.Clamp(hits[i].distance + 0.05f, 0.5f, maximumDistance);
+                return true;
+            }
+            rise = 0f;
+            return false;
+        }
+
+        /// <summary>Players, fauna and loose physics objects never count as ground or decks.</summary>
+        internal static bool IsDynamicBody(Collider collider)
+            => collider is CharacterController
+                || (collider.attachedRigidbody != null && !collider.attachedRigidbody.isKinematic);
 
         private static float ResolveFaceSide(float localAxis, float normalDot)
         {
@@ -688,6 +762,8 @@ namespace VoxelEngine.Building.Tiered
             }
 
             bool adjustableSupport = host.TryGetComponent<AdjustablePillar>(out var adjustablePillar);
+            if (adjustableSupport && !adjustablePillar.IsSupportGrounded())
+                return 0; // a hanging pillar chain carries nothing yet
             if (adjustableSupport || StructuralLoadState.IsVerticalSupport(hostFamily))
             {
                 float height = hostFamily == BuildFamily.HalfWall ? HalfWallHeight : ConstructionStorey;

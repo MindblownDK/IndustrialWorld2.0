@@ -125,7 +125,7 @@ namespace VoxelEngine.EditorTools
                 "Step 10 expands the game with the full Industrial content pack:\n" +
                 "  • Iron / Copper / Steel PLATES, Iron Gear, Copper Wire, Glass\n" +
                 "  • Electronic & Advanced Circuits\n" +
-                "  • Empty Barrel / Crude-Oil Barrel / Refined-Oil Barrel / Plastic Bar\n" +
+                "  • Refined-Oil Barrel / Plastic Bar (Empty/Crude barrels are retired; crude is a liquid)\n" +
                 "  • Pirate Jack Pump + Oil Refinery prefabs & recipes, plus oil-rich crude seep distribution + Pirate Jack Pump node repair\n" +
                 "  • Wireless Storage Terminal (new block)\n" +
                 "  • Factory research tree expansion (Plating, Electronics,\n" +
@@ -4047,6 +4047,60 @@ namespace VoxelEngine.EditorTools
         //  STEP 10 - INDUSTRIAL CONTENT PACK
         //  (plates, oil chain, plastic, electronics, expanded research)
         // ============================================================
+        /// <summary>
+        /// Barrel retirement: the Empty Barrel and Crude Oil Barrel items are gone.
+        /// The Jack Pump draws liquid crude into its own tank and the refinery feeds
+        /// through fluid pipes, so no recipe produces or consumes either item.
+        /// Re-running Step 10 deletes their assets, recipe and icons wherever a
+        /// working copy still has them, and scrubs dead references from the recipe
+        /// registry and the item persistence catalog. Saved stacks resolve to Steel
+        /// Plate through ItemIdAliases instead of silently vanishing. Idempotent.
+        /// </summary>
+        private static void RetireOrphanedBarrelAssets(VoxelEngine.Crafting.RecipeRegistry registry)
+        {
+            string[] retiredAssets =
+            {
+                "Assets/VoxelEngineAssets/Industrial/Items/Item_EmptyBarrel.asset",
+                "Assets/VoxelEngineAssets/Industrial/Items/Item_CrudeOilBarrel.asset",
+                "Assets/VoxelEngineAssets/Industrial/Recipes/Recipe_EmptyBarrel.asset",
+                "Assets/VoxelEngineAssets/Recipes/Recipe_EmptyBarrel.asset",
+            };
+            int removed = 0;
+            foreach (var path in retiredAssets)
+                if (AssetDatabase.LoadMainAssetAtPath(path) != null && AssetDatabase.DeleteAsset(path)) removed++;
+
+            // Icons live under ItemIcons/<Category>/<itemId>.png and the category
+            // folder can vary, so match by exact file name anywhere in the tree.
+            const string iconRoot = "Assets/VoxelEngineAssets/ItemIcons";
+            string[] retiredIds = { "item_emptybarrel", "item_crudeoilbarrel" };
+            if (AssetDatabase.IsValidFolder(iconRoot))
+            {
+                foreach (var id in retiredIds)
+                {
+                    foreach (var guid in AssetDatabase.FindAssets(id, new[] { iconRoot }))
+                    {
+                        string iconPath = AssetDatabase.GUIDToAssetPath(guid);
+                        if (System.IO.Path.GetFileNameWithoutExtension(iconPath)
+                                .Equals(id, System.StringComparison.OrdinalIgnoreCase)
+                            && AssetDatabase.DeleteAsset(iconPath)) removed++;
+                    }
+                }
+            }
+
+            if (registry != null && registry.recipes != null
+                && registry.recipes.RemoveAll(r => r == null || r.name == "Recipe_EmptyBarrel") > 0)
+                EditorUtility.SetDirty(registry);
+
+            var catalog = AssetDatabase.LoadAssetAtPath<VoxelEngine.Items.ItemPersistenceCatalog>(
+                "Assets/Resources/VoxelEngine/ItemPersistenceCatalog.asset");
+            if (catalog != null && catalog.items != null
+                && catalog.items.RemoveAll(item => item == null) > 0)
+                EditorUtility.SetDirty(catalog);
+
+            if (removed > 0)
+                Debug.Log($"[Step 10] Retired {removed} orphaned barrel asset(s); saved barrel stacks alias to Steel Plate.");
+        }
+
         private void BuildIndustrialContent()
         {
             const string industrialFolder = ASSET_ROOT + "/Industrial";
@@ -4153,8 +4207,12 @@ namespace VoxelEngine.EditorTools
             var glass       = MakeIndustrialResource("Item_Glass",      "Glass",          "Clear pane fused from sand. Used in lab equipment and storage windows.",   new Color(0.70f, 0.88f, 0.95f), VoxelEngine.Items.ResourceCategory.Component, "Materials");
 
             // ─ Oil chain ─
-            var emptyBarrel = MakeIndustrialResource("Item_EmptyBarrel","Empty Barrel",    "Pressed-steel drum. Feedstock for the refinery's oil chain.",               new Color(0.45f, 0.45f, 0.50f), VoxelEngine.Items.ResourceCategory.Component, "Oil", maxStack: 50);
-            var crudeBarrel = MakeIndustrialResource("Item_CrudeOilBarrel","Crude Oil Barrel","Black gold. Feed it to an Oil Refinery to produce Refined Oil.",       new Color(0.10f, 0.08f, 0.06f), VoxelEngine.Items.ResourceCategory.Raw,       "Oil", maxStack: 50);
+            // Crude is a liquid drawn by the Jack Pump into its own tank, and the
+            // refinery feeds through fluid pipes. The Empty Barrel and Crude Oil
+            // Barrel items are retired: nothing produces or consumes them anymore,
+            // and ItemIdAliases maps their saved ids to Steel Plate so old stacks
+            // survive the retirement instead of vanishing.
+            RetireOrphanedBarrelAssets(registry);
             var refinedBarrel = MakeIndustrialResource("Item_RefinedOilBarrel","Refined Oil Barrel","Cracked & distilled oil. Burns clean and feeds plastic synthesis.", new Color(0.50f, 0.30f, 0.10f), VoxelEngine.Items.ResourceCategory.Component, "Oil", maxStack: 50);
             // Refined oil is also a fuel (long burn time): useful in furnaces.
             refinedBarrel.fuelSeconds = 60f; EditorUtility.SetDirty(refinedBarrel);
@@ -4302,9 +4360,9 @@ namespace VoxelEngine.EditorTools
             ConfigureCrudeOilWorlds();
             EnsurePirateJackPumpHeadRuinLoot(pirateJackPumpHead);
             var blockRefinery   = MakeIndustrialBlock("Block_OilRefinery", "Oil Refinery",      new Color(0.30f,0.20f,0.10f), refineryPrefab,
-                "Industrial multi-recipe processor. Crude Oil Barrel → Refined Oil Barrel + Empty Barrel, and Refined Oil + Coal → Plastic Bar + Empty Barrel. 2 input / 4 output / 2 upgrade slots. 400 W base draw.");
+                "Industrial multi-recipe processor. Distils liquid crude from its input tank into Refined Oil and heavier cuts, and polymerises refined feed with Coal into Plastic Bars. 2 input / 4 output / 2 upgrade slots. 400 W base draw.");
             var blockChemPlant  = MakeIndustrialBlock("Block_ChemicalPlant", "Chemical Plant",  new Color(0.40f,0.55f,0.35f), chemPlantPrefab,
-                "Industrial chemistry processor. Refined Oil + Plastic → Liquid Fuel + Empty Barrel. 3 input / 3 output slots. 720 W base draw. Shares recipes with the grid Chemical Plant.");
+                "Industrial chemistry processor. Converts Refined Oil and Plastic into Liquid Fuel through its fluid tanks. 3 input / 3 output slots. 720 W base draw. Shares recipes with the grid Chemical Plant.");
             var blockDock       = MakeIndustrialBlock("Block_StationaryDockingPort", "Docking Pad", new Color(0.55f,0.55f,0.20f), stationaryDockPrefab,
                 "Base-side landing pad. Ships with a Docking Port magnetically lock to it for cargo transfer.");
             var blockWirelessST = MakeIndustrialBlock("Block_WirelessStorageTerminal", "Wireless Storage Terminal", new Color(0.55f,0.30f,0.85f), wstPrefab,
@@ -4465,7 +4523,8 @@ namespace VoxelEngine.EditorTools
             var recAdvCircuit  = AddRecipe("Recipe_AdvCircuit", "Advanced Circuit", circuitAdv, 1, VoxelEngine.Crafting.StationTier.Assembler, false, ((VoxelEngine.Items.ItemDefinition)circuitBasic, 2), ((VoxelEngine.Items.ItemDefinition)plastic, 2), ((VoxelEngine.Items.ItemDefinition)copperWire, 4));
 
             // ── Oil chain (gated by Oil Extraction / Refining / Plastics) ──
-            var recEmptyBarrel = AddRecipe("Recipe_EmptyBarrel", "Empty Barrel", emptyBarrel, 1, VoxelEngine.Crafting.StationTier.Assembler, false, ((VoxelEngine.Items.ItemDefinition)steelPlate, 1), ((VoxelEngine.Items.ItemDefinition)ironPlate, 2));
+            // Recipe_EmptyBarrel is retired with its item; toReplace above still
+            // purges any stale registry entry from an earlier run.
             var recPumpjack = EnsureJackPumpRecipe(registry, blockPumpjack, pirateJackPumpHead,
                 steelPlate, ironGear, circuitBasic, circuitAdv, copperPlate);
             var recRefinery    = AddRecipe("Recipe_OilRefinery", "Oil Refinery", blockRefinery, 1, VoxelEngine.Crafting.StationTier.Assembler, false, ((VoxelEngine.Items.ItemDefinition)steelPlate, 12), ((VoxelEngine.Items.ItemDefinition)ironGear, 8), ((VoxelEngine.Items.ItemDefinition)circuitBasic, 4), ((VoxelEngine.Items.ItemDefinition)copperPlate, 4));
@@ -4632,13 +4691,15 @@ namespace VoxelEngine.EditorTools
                 unlocks: new[] { recAdvCircuit },
                 prereqs: new[] { nElectronics, nAdvMfg });
 
-            // T3 — Oil Logistics: creates Empty Barrels, but not the relic-gated Jack Pump.
+            // T3 — Oil Logistics: the knowledge gate into the liquid crude chain.
+            // It unlocks no recipe of its own since the Empty Barrel retirement;
+            // it remains the prerequisite for Oil Refining and Pirate Oil Recovery.
             var nOilExtraction = MakeOrUpdateEnvNode("res_oil_extraction", "Oil Logistics",
-                "Press steel into Empty Barrels and establish the logistics needed to handle crude oil. Rare Pirate technology is required for a Jack Pump.",
+                "Establish the pipework and tank logistics needed to handle liquid crude oil. Rare Pirate technology is required for a Jack Pump.",
                 tier: 3, col: 4, sub: VoxelEngine.Research.ResearchSubCategory.Chemistry,
                 tint: new Color(0.10f, 0.08f, 0.06f), seconds: 70f,
                 cost: new[] { (sciT2, 20), (sciT3, 10) },
-                unlocks: new[] { recEmptyBarrel },
+                unlocks: new VoxelEngine.Crafting.RecipeDefinition[0],
                 prereqs: new[] { nSteelAlloy });
 
             // T4 — Pirate Oil Recovery: the recipe is deliberately impossible to
@@ -4770,7 +4831,7 @@ namespace VoxelEngine.EditorTools
                 "  • Iron / Copper / Steel Plate, Iron Gear\n" +
                 "  • Copper Wire, Electronic Circuit, Advanced Circuit\n" +
                 "  • Glass (smelted at any furnace from Sand)\n" +
-                "  • Empty / Crude / Refined Oil Barrel, Plastic Bar\n\n" +
+                "  • Refined Oil Barrel, Plastic Bar (Empty/Crude barrels retired)\n\n" +
                 "BLOCKS\n" +
                 "  • Jack Pump (rare Planet_Pirate-only node extractor; requires a Pirate Jack Pump Head)\n" +
                 "  • Oil Refinery (Crude → Refined → Plastic)\n" +
