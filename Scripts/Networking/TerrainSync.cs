@@ -126,20 +126,31 @@ namespace VoxelEngine.Networking
             return list;
         }
 
-        /// <summary>Adopt one edited chunk from the other side. Local edits win the
-        /// merge (identical after a rejoin; true offline conflicts keep each side's own).</summary>
-        public static void ApplyWireChunk(string body, Vector3Int coord, byte[] compressed)
+        /// <summary>Adopt one edited chunk from the wire. Returns true when it was applied.
+        ///
+        /// respectLocalEdits carries the authority rule (fixed 14.8.1):
+        /// - FALSE on clients: everything a client receives on this channel is
+        ///   server-approved truth and OVERWRITES. The old "local edits win"
+        ///   rule silently rejected every host chunk the client had ever
+        ///   touched - and live sync marks replicated chunks modified and saves
+        ///   them, so after one prior session the whole base area was locked
+        ///   out of the catch-up. Stale copies must lose to the server.
+        /// - TRUE on the server ingesting a joiner's upload: the host world is
+        ///   the authority, so chunks the host has its own edit of are refused
+        ///   (and must not be relayed - the caller checks the return value).</summary>
+        public static bool ApplyWireChunk(string body, Vector3Int coord, byte[] compressed,
+            bool respectLocalEdits)
         {
             var world = ActiveWorld.Current as VoxelEngine.Cosmos.SphereWorld;
-            if (world == null || BodyNameOf(world) != body) return;   // other planet
-            if (world.HasLocalEdit(coord)) return;
+            if (world == null || BodyNameOf(world) != body) return false;   // other planet
+            if (respectLocalEdits && world.HasLocalEdit(coord)) return false;
             byte[] raw;
             try { raw = Decompress(compressed); }
-            catch { return; }   // never let a bad payload break the join
+            catch { return false; }   // never let a bad payload break the join
             IsApplyingRemote = true;
             try
             {
-                world.ApplyRemoteChunk(new VoxelEngine.Persistence.ChunkSaveData
+                return world.ApplyRemoteChunk(new VoxelEngine.Persistence.ChunkSaveData
                 { coord = coord, uncompressedVoxelBytes = raw });
             }
             finally { IsApplyingRemote = false; }

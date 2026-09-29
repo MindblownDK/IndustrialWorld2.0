@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.8.0-dev`
-**Roadmap Version:** `14.8.0-dev`
+**Current Version:** `14.8.1-dev`
+**Roadmap Version:** `14.8.1-dev`
 **Date:** 2026-09-28
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,9 @@
 ---
 
 ## 0. Recently Done
+
+### 14.8.1-dev - The Server Wins The Terrain Merge
+- **Join merge authority fix** (`TerrainSync`, `NetworkBootstrap`): clients now always adopt server-sent chunks (stale replicated copies used to block every host edit after one prior session); the server keeps its local-edit filter and relays only accepted chunks. All terrain conflicts converge to the host's version.
 
 ### 14.8.0-dev - Terrain Catch-Up On Join
 - **Edited-chunk join exchange** (`TerrainSync`, `SphereWorld`, `ChunkStorage`, `NetworkBootstrap`): all player-modified chunks of the shared planet transfer both ways on join - disk store + live chunks gathered, deflate-compressed per chunk, loaded chunks overwritten in place, unloaded ones parked in the local store for the streamer; local edits win the merge.

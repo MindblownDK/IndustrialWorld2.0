@@ -1,9 +1,29 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.8.0-dev`
+**Current Version:** `14.8.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.8.1-dev] The Server Wins The Terrain Merge
+
+**Type:** PATCH - bug fix: host terrain did not come down on join (Thomas's find).
+
+**The bug.** The 14.8.0 merge rule was "local edits win" on BOTH sides. But live terrain sync marks every replicated chunk as modified and saves it to the receiving machine's own chunk store - which is exactly right for persistence, and exactly wrong for that merge rule: after one prior shared session, the client owns a STALE COPY of every chunk around the base, so every newer host edit to those chunks was silently refused. The host's offline pit never arrived; the client's fresh marks (in chunks the host never touched) went up fine - which is precisely the asymmetry observed.
+
+**The fix - the authority rule the architecture already promised (server-authoritative everything):**
+- A CLIENT receiving on the terrain channel is receiving server-approved truth: it now ALWAYS overwrites, stale copy or not. Identical chunks from a rejoin overwrite harmlessly.
+- The SERVER keeps the local-edit filter when ingesting a joiner's upload (the host world is the authority), and now relays ONLY the chunks it accepted - a joiner's stale copies can never leak to the other clients (previously every uploaded chunk was relayed regardless).
+- Conflict semantics are now clean and convergent: every disputed chunk resolves to the host's version on every machine. A client's solo offline edit in a chunk the host also edited is lost to the host version - documented, and the honest price of authority.
+
+**GitHub title:** `[14.8.1-dev] The server wins the terrain merge`
+
+**Manual steps:**
+1. Pull `Dev`, recompile on BOTH machines. No setup steps.
+2. Re-run the failing check: host digs a distinctive pit while the client is offline; client joins - the pit is now there, including in areas you both played in before.
+3. Re-run the up check: client digs fresh marks offline, joins - host still sees them.
+4. Conflict check: both dig the SAME spot differently while apart, then join - both machines end up showing the HOST's version of that spot.
+5. Rejoin a few times - no errors, no visual popping.
 
 ### [14.8.0-dev] Terrain Catch-Up On Join
 

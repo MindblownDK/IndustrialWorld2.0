@@ -685,16 +685,21 @@ namespace VoxelEngine.Networking
 
         private void OnServerTerrainChunk(NetworkConnection conn, TerrainChunkBroadcast msg, Channel channel)
         {
-            if (!_serverStarted) return;
-            if (!conn.IsLocalClient)
-                TerrainSync.ApplyWireChunk(msg.Body, new Vector3Int(msg.X, msg.Y, msg.Z), msg.Data);
-            RelayToOthers(conn, msg);
+            if (!_serverStarted || conn.IsLocalClient) return;
+            // Host world is the authority: refuse chunks the host has its own
+            // edit of, and relay ONLY accepted chunks - a joiner's stale copies
+            // must never reach the other clients (14.8.1).
+            bool accepted = TerrainSync.ApplyWireChunk(msg.Body,
+                new Vector3Int(msg.X, msg.Y, msg.Z), msg.Data, respectLocalEdits: true);
+            if (accepted) RelayToOthers(conn, msg);
         }
 
         private void OnClientTerrainChunk(TerrainChunkBroadcast msg, Channel channel)
         {
             if (_serverStarted || WorldMismatch) return;
-            TerrainSync.ApplyWireChunk(msg.Body, new Vector3Int(msg.X, msg.Y, msg.Z), msg.Data);
+            // Server-approved truth: always overwrites local state (14.8.1).
+            TerrainSync.ApplyWireChunk(msg.Body, new Vector3Int(msg.X, msg.Y, msg.Z),
+                msg.Data, respectLocalEdits: false);
         }
 
         /// <summary>Send every edited chunk of the current planet - to a joining
