@@ -19,11 +19,26 @@
 // Phase 1 scope: live tiered pieces only. Not yet synced: pre-session bases
 // (join-in-progress snapshot), code locks on pieces, voxel edits, machines.
 
+using System.Collections.Generic;
 using UnityEngine;
 using VoxelEngine.Building.Tiered;
 
 namespace VoxelEngine.Networking
 {
+    /// <summary>One placed piece on the wire (join-in-progress snapshot, 14.5.0).
+    /// Plain data - Fish-Net generates the serializer where NetworkBootstrap
+    /// embeds it in a broadcast.</summary>
+    public struct PieceSnapshot
+    {
+        public string Family;
+        public int Tier;
+        public Vector3 Position;
+        public Quaternion Rotation;
+        public int Hp;
+        public float RailingRise;
+        public float PillarHeight;
+    }
+
     public static class BuildingSync
     {
         /// <summary>Raised while a remote edit is being applied locally, so
@@ -55,7 +70,8 @@ namespace VoxelEngine.Networking
         private static bool ShouldAnnounce()
             => !IsApplyingRemote
                && NetworkSession.Mode != SessionMode.Offline
-               && NetworkBootstrap.Instance != null;
+               && NetworkBootstrap.Instance != null
+               && !NetworkBootstrap.Instance.WorldMismatch;   // wrong terrain: stay silent
 
         // ─────────────── network -> local world (bootstrap calls these) ───────────────
 
@@ -65,6 +81,53 @@ namespace VoxelEngine.Networking
             var def = ResolveDefinition(family);
             if (def == null) return;
             if (FindPieceAt(family, pos) != null) return;   // already present - duplicate-safe
+            SpawnRemote(def, tier, pos, rot, railingRise, pillarHeight, hp: 0, playSound: true);
+        }
+
+        /// <summary>Join-in-progress merge (14.5.0): apply a chunk of pieces the
+        /// other side already had. Silent, duplicate-safe, cracks from hp.</summary>
+        public static void ApplySnapshot(List<PieceSnapshot> pieces)
+        {
+            if (pieces == null) return;
+            foreach (var p in pieces)
+            {
+                var def = ResolveDefinition(p.Family);
+                if (def == null) continue;
+                if (FindPieceAt(p.Family, p.Position) != null) continue;
+                SpawnRemote(def, p.Tier, p.Position, p.Rotation, p.RailingRise, p.PillarHeight,
+                    p.Hp, playSound: false);
+            }
+        }
+
+        /// <summary>Everything standing right now, as wire-ready snapshot data.</summary>
+        public static List<PieceSnapshot> GatherSnapshot()
+        {
+            var list = new List<PieceSnapshot>();
+            foreach (var pb in Object.FindObjectsByType<PlacedTieredBlock>(FindObjectsSortMode.None))
+            {
+                if (pb == null || pb.definition == null) continue;   // ghosts carry no definition
+                float rise = 0f, height = 0f;
+                if (pb.TryGetComponent<TieredRailing>(out var railing)) rise = railing.AppliedRise;
+                if (pb.TryGetComponent<AdjustablePillar>(out var pillar)) height = pillar.currentHeight;
+                list.Add(new PieceSnapshot
+                {
+                    Family = pb.definition.family.ToString(),
+                    Tier = (int)pb.tier,
+                    Position = pb.transform.position,
+                    Rotation = pb.transform.rotation,
+                    Hp = pb.hp,
+                    RailingRise = rise,
+                    PillarHeight = height
+                });
+            }
+            return list;
+        }
+
+        /// <summary>Restore-style instantiation shared by live placement and the
+        /// snapshot merge. Remote pieces stay UNARMED - see file header.</summary>
+        private static void SpawnRemote(TieredBlockDefinition def, int tier, Vector3 pos,
+            Quaternion rot, float railingRise, float pillarHeight, int hp, bool playSound)
+        {
             var prefab = def.GetPrefab((BuildTier)tier);
             if (prefab == null) return;
 
@@ -79,10 +142,19 @@ namespace VoxelEngine.Networking
                 var pb = go.GetComponent<PlacedTieredBlock>();
                 if (pb == null) pb = go.AddComponent<PlacedTieredBlock>();
                 pb.Initialize(def, (BuildTier)tier);
-                // The neighbor's hammer is audible presence - same thunk, softer.
-                VoxelEngine.FX.AudioManager.PlayAt(
-                    VoxelEngine.FX.SfxLibrary.Get(VoxelEngine.FX.Sfx.Place), pos,
-                    volume: 0.5f, pitch: 1f, maxDistance: 20f);
+                if (hp > 0)
+                {
+                    // Carry damage across the join - cracks match the origin world.
+                    pb.hp = hp;
+                    int maxHp = Mathf.Max(1, def.GetStats((BuildTier)tier).hp);
+                    VoxelEngine.Thermal.BlockDamageVisual.ReportDamage(
+                        pb, 1f - Mathf.Clamp01(pb.hp / (float)maxHp));
+                }
+                if (playSound)
+                    // The neighbor's hammer is audible presence - same thunk, softer.
+                    VoxelEngine.FX.AudioManager.PlayAt(
+                        VoxelEngine.FX.SfxLibrary.Get(VoxelEngine.FX.Sfx.Place), pos,
+                        volume: 0.5f, pitch: 1f, maxDistance: 20f);
             }
             finally { IsApplyingRemote = false; }
         }

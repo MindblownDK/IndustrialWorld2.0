@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.4.0-dev`
-**Roadmap Version:** `14.4.0-dev`
+**Current Version:** `14.5.0-dev`
+**Roadmap Version:** `14.5.0-dev`
 **Date:** 2026-09-28
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,8 +29,12 @@
 
 ## 0. Recently Done
 
+### 14.5.0-dev - Join In Progress
+- **Base snapshot on join** (`BuildingSync`, `NetworkBootstrap`): seed-matching handshake completes with a two-way, chunked, duplicate-safe base exchange - server base down, joiner's solo base up, relayed to all; hp/cracks, railing rise and pillar height carried; rejoin-safe. Closes the 14.4.0 "pre-session bases not synced" item.
+- **Mismatch hardening**: a wrong-seed client no longer sends or applies ANY building traffic. Open (unchanged): code locks on pieces; shared build costs; voxel/machine sync is milestone 4/5.
+
 ### 14.4.0-dev - Shared Ground
-- **Building sync phase 1** (`BuildingSync` new, `NetworkBootstrap`, hooks in `BuildSystemV2`/`PlacedTieredBlock`/`StructuralLoadState`): tiered placement, upgrade, demolition and structural collapse replicate live; remote pieces restore-style and unarmed; positional identity (family + 25 cm). Open (phase 2+): join-in-progress base snapshot; code locks on pieces; shared build costs; voxel/machine sync is milestone 4/5.
+- **Building sync phase 1** (`BuildingSync` new, `NetworkBootstrap`, hooks in `BuildSystemV2`/`PlacedTieredBlock`/`StructuralLoadState`): tiered placement, upgrade, demolition and structural collapse replicate live; remote pieces restore-style and unarmed; positional identity (family + 25 cm). Open items moved to the 14.5.0 row (join-in-progress snapshot shipped there).
 - **World identity handshake** (`NetworkBootstrap`, `InGamePauseMenu`): server sends world name + seed on join; seed mismatch shows a persistent red warning with the host's seed in the multiplayer tab. Open: automatic world adoption on join (deferred - scene reload tears down the connection).
 
 ### 14.3.0-dev - Vitals Over The Wire

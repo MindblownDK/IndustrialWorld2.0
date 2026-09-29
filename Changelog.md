@@ -1,9 +1,34 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.4.0-dev`
+**Current Version:** `14.5.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.5.0-dev] Join In Progress
+
+**Type:** MINOR - multiplayer milestone 3, phase 2: the base snapshot on join. Save-compatible.
+
+**Base snapshot exchange.** 14.4.0 replicated live actions only - anything built before the session stayed invisible. Now the whole standing base crosses the wire the moment a seed-matching client joins:
+- **Two-way merge.** The server sends its base to the joiner AND the joiner sends its own solo-built base up; the server applies it and relays to everyone else. Two players who each built alone on the same seed walk into one merged world - the duplicate guard (family + 25 cm) settles any piece both sides had.
+- **Handshake-gated.** The world-info check from 14.4.0 now completes as a real handshake: the client acks the seed comparison, and only a match opens the exchange. The client uploads its base BEFORE applying incoming chunks (ordered channel), so it can never echo the host's pieces back.
+- **Restore-quality pieces.** Snapshot pieces carry hp - cracks match the origin world on arrival (`BlockDamageVisual`). Railing rise and pillar height ride along (new `TieredRailing.AppliedRise` getter). Everything arrives unarmed and silent - no thunk barrage, no decay audits second-guessing a neighbor's base.
+- **Chunked wire.** 32 pieces per broadcast, any base size.
+
+**Mismatch hardening.** A seed-mismatched client previously still exchanged live building traffic - floating pieces on the wrong terrain. Now mismatch means silence both ways: the client neither announces its own building actions nor applies incoming ones (guards in `BuildingSync.ShouldAnnounce` and every client handler). The red warning in the multiplayer tab remains the fix-it prompt.
+
+**Refactor:** `BuildingSync.SpawnRemote` now backs both live placement and the snapshot merge - one instantiation path, one set of rules.
+
+**Still open (tracked):** code locks on pieces do not cross the wire (snapshot or live); voxel edits, machines and item blocks are milestone 4/5; the placer pays costs alone.
+
+**GitHub title:** `[14.5.0-dev] Join in progress - the base snapshot`
+
+**Manual steps:**
+1. Pull `Dev`, recompile. No setup steps.
+2. Snapshot down: host builds a few pieces while the client is NOT connected, then the client joins (same seed) - the base appears silently on the client, correct tiers/rotations, cracks included if damaged.
+3. Snapshot up (the merge): before joining, build a separate base on the CLIENT's world, then join - it appears on the host too, and both machines now show both bases.
+4. Rejoin check: disconnect and rejoin - no duplicates.
+5. Mismatch check: join with a wrong-seed world - red warning shows, NO buildings transfer in either direction, and pieces placed while mismatched stay local.
 
 ### [14.4.0-dev] Shared Ground
 

@@ -15,6 +15,9 @@ namespace VoxelEngine.Building.Tiered
         private readonly List<Vector3[]> _levelVertices = new();
         private float _appliedRise = float.NaN;
 
+        /// <summary>Rise currently applied (0 when authored-flat) - read by building sync (14.5.0).</summary>
+        public float AppliedRise => float.IsNaN(_appliedRise) ? 0f : _appliedRise;
+
         public void Configure(float riseAcrossLength)
         {
             if (Mathf.Approximately(_appliedRise, riseAcrossLength)) return;

@@ -67,6 +67,23 @@ namespace VoxelEngine.Networking
         public int NewTier;
     }
 
+    /// <summary>Client -> server: reply to WorldInfoBroadcast. Only a matching
+    /// seed invites the base snapshot exchange (14.5.0).</summary>
+    public struct WorldAckBroadcast : IBroadcast
+    {
+        public bool SeedMatches;
+    }
+
+    /// <summary>A chunk of standing pieces (join-in-progress base sync, 14.5.0).
+    /// Server -> joining client with the session's base; joining client -> server
+    /// with its own solo-built base for the merge.</summary>
+    public struct BaseSnapshotBroadcast : IBroadcast
+    {
+        public int ChunkIndex;
+        public int TotalChunks;
+        public List<PieceSnapshot> Pieces;
+    }
+
     [RequireComponent(typeof(NetworkManager))]
     public class NetworkBootstrap : MonoBehaviour
     {
@@ -131,10 +148,13 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.RegisterBroadcast<PiecePlacedBroadcast>(OnServerPiecePlaced);
             _networkManager.ServerManager.RegisterBroadcast<PieceRemovedBroadcast>(OnServerPieceRemoved);
             _networkManager.ServerManager.RegisterBroadcast<PieceUpgradedBroadcast>(OnServerPieceUpgraded);
+            _networkManager.ServerManager.RegisterBroadcast<WorldAckBroadcast>(OnWorldAck);
+            _networkManager.ServerManager.RegisterBroadcast<BaseSnapshotBroadcast>(OnServerBaseSnapshot);
             _networkManager.ClientManager.RegisterBroadcast<WorldInfoBroadcast>(OnWorldInfo);
             _networkManager.ClientManager.RegisterBroadcast<PiecePlacedBroadcast>(OnClientPiecePlaced);
             _networkManager.ClientManager.RegisterBroadcast<PieceRemovedBroadcast>(OnClientPieceRemoved);
             _networkManager.ClientManager.RegisterBroadcast<PieceUpgradedBroadcast>(OnClientPieceUpgraded);
+            _networkManager.ClientManager.RegisterBroadcast<BaseSnapshotBroadcast>(OnClientBaseSnapshot);
         }
 
         private void OnDestroy()
@@ -149,10 +169,13 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.UnregisterBroadcast<PiecePlacedBroadcast>(OnServerPiecePlaced);
             _networkManager.ServerManager.UnregisterBroadcast<PieceRemovedBroadcast>(OnServerPieceRemoved);
             _networkManager.ServerManager.UnregisterBroadcast<PieceUpgradedBroadcast>(OnServerPieceUpgraded);
+            _networkManager.ServerManager.UnregisterBroadcast<WorldAckBroadcast>(OnWorldAck);
+            _networkManager.ServerManager.UnregisterBroadcast<BaseSnapshotBroadcast>(OnServerBaseSnapshot);
             _networkManager.ClientManager.UnregisterBroadcast<WorldInfoBroadcast>(OnWorldInfo);
             _networkManager.ClientManager.UnregisterBroadcast<PiecePlacedBroadcast>(OnClientPiecePlaced);
             _networkManager.ClientManager.UnregisterBroadcast<PieceRemovedBroadcast>(OnClientPieceRemoved);
             _networkManager.ClientManager.UnregisterBroadcast<PieceUpgradedBroadcast>(OnClientPieceUpgraded);
+            _networkManager.ClientManager.UnregisterBroadcast<BaseSnapshotBroadcast>(OnClientBaseSnapshot);
         }
 
         // ─────────────────────────── public API (UI calls these) ───────────────────────────
@@ -381,20 +404,22 @@ namespace VoxelEngine.Networking
 
         private void OnClientPiecePlaced(PiecePlacedBroadcast msg, Channel channel)
         {
-            if (_serverStarted) return;   // host already applied on the server path
+            // Host already applied on the server path; a mismatched client's
+            // terrain cannot host the piece - drop building traffic entirely.
+            if (_serverStarted || WorldMismatch) return;
             BuildingSync.ApplyPlaced(msg.Family, msg.Tier, msg.Position, msg.Rotation,
                 msg.RailingRise, msg.PillarHeight);
         }
 
         private void OnClientPieceRemoved(PieceRemovedBroadcast msg, Channel channel)
         {
-            if (_serverStarted) return;
+            if (_serverStarted || WorldMismatch) return;
             BuildingSync.ApplyRemoved(msg.Family, msg.Position);
         }
 
         private void OnClientPieceUpgraded(PieceUpgradedBroadcast msg, Channel channel)
         {
-            if (_serverStarted) return;
+            if (_serverStarted || WorldMismatch) return;
             BuildingSync.ApplyUpgraded(msg.Family, msg.Position, msg.NewTier);
         }
 
@@ -408,6 +433,56 @@ namespace VoxelEngine.Networking
                 Debug.LogWarning("[NetworkBootstrap] World mismatch - " + HostWorldLine +
                     $", yours: '{(session != null ? session.worldName : "?")}', seed {(session != null ? session.seed.ToString() : "?")}. " +
                     "Terrain and buildings will NOT line up. Create/load a world with the host's seed to share ground.");
+
+            // Handshake reply: a matching seed opens the two-way base exchange
+            // (14.5.0). Our own solo-built base goes up BEFORE any incoming
+            // chunks apply (ordered channel), so the gather never sees remote
+            // pieces and echoes them back.
+            _networkManager.ClientManager.Broadcast(new WorldAckBroadcast { SeedMatches = !WorldMismatch });
+            if (!WorldMismatch) SendBaseSnapshot(null);
+        }
+
+        /// <summary>Server: seed-matching client acknowledged - send it the base.</summary>
+        private void OnWorldAck(NetworkConnection conn, WorldAckBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted || conn.IsLocalClient) return;
+            if (!msg.SeedMatches) return;
+            SendBaseSnapshot(conn);
+        }
+
+        private void OnServerBaseSnapshot(NetworkConnection conn, BaseSnapshotBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (!conn.IsLocalClient) BuildingSync.ApplySnapshot(msg.Pieces);
+            RelayToOthers(conn, msg);
+        }
+
+        private void OnClientBaseSnapshot(BaseSnapshotBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            BuildingSync.ApplySnapshot(msg.Pieces);
+        }
+
+        /// <summary>Gather everything standing and send it chunked - to a specific
+        /// connection when called as server, up to the server when target is null.</summary>
+        private void SendBaseSnapshot(NetworkConnection target)
+        {
+            const int ChunkSize = 32;   // comfortably inside a reliable packet
+            var pieces = BuildingSync.GatherSnapshot();
+            if (pieces.Count == 0) return;
+            int total = Mathf.CeilToInt(pieces.Count / (float)ChunkSize);
+            for (int i = 0; i < total; i++)
+            {
+                var chunk = new BaseSnapshotBroadcast
+                {
+                    ChunkIndex = i,
+                    TotalChunks = total,
+                    Pieces = pieces.GetRange(i * ChunkSize,
+                        Mathf.Min(ChunkSize, pieces.Count - i * ChunkSize))
+                };
+                if (target != null) _networkManager.ServerManager.Broadcast(target, chunk, true);
+                else _networkManager.ClientManager.Broadcast(chunk);
+            }
         }
 
         // ─────────────────────────── teardown ───────────────────────────
