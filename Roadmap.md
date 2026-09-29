@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.2.1-dev`
-**Roadmap Version:** `14.2.1-dev`
+**Current Version:** `14.3.0-dev`
+**Roadmap Version:** `14.3.0-dev`
 **Date:** 2026-09-28
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,10 @@
 ---
 
 ## 0. Recently Done
+
+### 14.3.0-dev - Vitals Over The Wire
+- **Health replication** (`PlayerAvatar`): hurt players wear a red-shifting bar under the nameplate; hidden at full health; quantized, change-driven, late-join correct.
+- **Nameplate fix**: billboards against the viewer's camera up - text stays horizontal anywhere on a spherical world.
 
 ### 14.2.1-dev - Real Crusaders Locked Into The Roadmap
 - **Docs only**: milestone 6 is now the crusader player model - armor visible only when worn and readable by tier, jetpack and oxygen tank on the back, building pose, replicated placement ghosts. Full design section added; proximity chat moves to 7, dedicated server to 8.

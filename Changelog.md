@@ -1,9 +1,28 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.2.1-dev`
+**Current Version:** `14.3.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.3.0-dev] Vitals Over The Wire
+
+**Type:** MINOR - milestone 2 continues: replicated health, plus the nameplate orientation fix. Save-compatible.
+
+**Nameplate fix (the sideways name).** Names billboarded against WORLD up - but the planets are spheres, so away from the pole "up" points sideways and the text rolled with it. Nameplates now level against the VIEWER's camera up, which is the only up that matters for reading text on screen. Correct at any latitude, any camera angle.
+
+**Replicated health bar.** Other players now wear a floating bar under their nameplate:
+- Rust-style honesty: INVISIBLE at full health - it appears only when someone is hurt, drains red as they drop, and vanishes when they heal up.
+- The bar hangs off the nameplate so it inherits the (fixed) billboard rotation for free.
+- Wire format is one quantized integer (0-100), sent only when the value changes, riding the same owner -> ServerRpc -> SyncVar pose channel as held item and crouch - one message per pose change, never per frame. Late joiners get current health in the spawn payload.
+
+**GitHub title:** `[14.3.0-dev] Vitals over the wire`
+
+**Manual steps:**
+1. Pull `Dev`, recompile. No setup steps.
+2. Nameplate check: orbit around the other player - the name stays horizontal and readable from every direction and latitude.
+3. Health check: hurt one player (fall damage, hazard, wrong keypad code...). The OTHER machine sees a bar fade in under their name, red-shifting as health drops; heal to full and it disappears.
+4. Late-join check: hurt the host, then connect the client fresh - the bar should already show the current health on arrival.
 
 ### [14.2.1-dev] Real Crusaders Locked Into The Roadmap
 
