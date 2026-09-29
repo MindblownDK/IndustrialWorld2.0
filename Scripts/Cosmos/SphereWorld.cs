@@ -369,6 +369,65 @@ namespace VoxelEngine.Cosmos
         private static string DescribeStore(ChunkStorage store) =>
             store == null ? "persistence off" : $"store {store.Status}, {store.RegionFileCount} region file(s)";
 
+        // ─────────── terrain join sync (14.8.0) - used by TerrainSync ───────────
+
+        /// <summary>Every player-modified chunk of THIS body: the disk store first,
+        /// then live loaded chunks on top (live state wins). Join-time only.</summary>
+        public List<VoxelEngine.Persistence.ChunkSaveData> GatherModifiedChunks()
+        {
+            var byCoord = new Dictionary<Vector3Int, VoxelEngine.Persistence.ChunkSaveData>();
+            if (_storage != null)
+            {
+                _storage.WaitForIdle();   // any queued writes land before we enumerate
+                foreach (var file in System.IO.Directory.GetFiles(_storage.WorldFolder, "r_*.dat"))
+                {
+                    var parts = System.IO.Path.GetFileNameWithoutExtension(file).Split('_');
+                    if (parts.Length != 3
+                        || !int.TryParse(parts[1], out int rx)
+                        || !int.TryParse(parts[2], out int rz)) continue;
+                    var region = new Vector2Int(rx, rz);
+                    foreach (var kv in VoxelEngine.Persistence.RegionFile.ReadAll(_storage.WorldFolder, region))
+                    {
+                        var data = kv.Value;
+                        if (data.uncompressedVoxelBytes == null) continue;
+                        byCoord[data.coord] = data;
+                    }
+                }
+            }
+            foreach (var kv in _chunks)
+                if (kv.Value.isModified && kv.Value.isGenerated && kv.Value.voxels.IsCreated)
+                    byCoord[kv.Key] = VoxelEngine.Persistence.ChunkSaveData.FromChunk(kv.Value);
+            return new List<VoxelEngine.Persistence.ChunkSaveData>(byCoord.Values);
+        }
+
+        /// <summary>True when this machine has its own edit of the chunk (loaded or
+        /// stored). Local edits win the join merge - identical anyway after a rejoin.</summary>
+        public bool HasLocalEdit(Vector3Int chunkCoord)
+        {
+            if (_chunks.TryGetValue(chunkCoord, out var chunk)) return chunk.isModified;
+            return _storage != null
+                && VoxelEngine.Persistence.RegionFile.TryReadChunk(_storage.WorldFolder, chunkCoord, out _);
+        }
+
+        /// <summary>Adopt a remote-edited chunk: overwrite a loaded chunk in place and
+        /// remesh, or park an unloaded one in the store for the streamer.</summary>
+        public bool ApplyRemoteChunk(VoxelEngine.Persistence.ChunkSaveData data)
+        {
+            if (_chunks.TryGetValue(data.coord, out var chunk) && chunk.voxels.IsCreated)
+            {
+                CompleteGenJobForChunk(chunk);
+                CompleteMeshJobForChunk(chunk);
+                if (!data.RestoreInto(chunk)) return false;
+                chunk.isGenerated = true;
+                chunk.isModified = true;
+                ScheduleMeshJob(chunk);
+                return true;
+            }
+            if (_storage == null) return false;
+            _storage.EnqueueSaveData(data);
+            return true;
+        }
+
         /// <summary>
         /// Re-target the streamer at a different celestial body (real interplanetary
         /// flight), or null to leave the streaming world entirely (deep space).

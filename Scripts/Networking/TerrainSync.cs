@@ -23,11 +23,21 @@
 // made while the other machine was offline (terrain snapshot / chunk deltas
 // are phase 2), fluid sim state, grid-ship voxels.
 
+using System.Collections.Generic;
+using System.IO;
+using System.IO.Compression;
 using UnityEngine;
 using VoxelEngine.Core;
 
 namespace VoxelEngine.Networking
 {
+    /// <summary>One edited chunk ready for the wire (deflate-compressed padded grid).</summary>
+    public struct TerrainChunkData
+    {
+        public Vector3Int Coord;
+        public byte[] Compressed;
+    }
+
     public static class TerrainSync
     {
         /// <summary>Raised while a remote op is being applied locally, so the
@@ -96,6 +106,60 @@ namespace VoxelEngine.Networking
             IsApplyingRemote = true;
             try { VoxelEngine.Combat.Explosion.CarveCrater(world, craterCenter, craterRadius); }
             finally { IsApplyingRemote = false; }
+        }
+
+        // ─────────────── join catch-up (14.8.0) ───────────────
+
+        /// <summary>Planet identity of the world we would gather from.</summary>
+        public static string CurrentBodyName() => BodyNameOf(ActiveWorld.Current);
+
+        /// <summary>Every edited chunk of the current planet, compressed for the wire.
+        /// Join-time only - reads the chunk store, so this is deliberately not cheap.</summary>
+        public static List<TerrainChunkData> GatherWireChunks()
+        {
+            var list = new List<TerrainChunkData>();
+            var world = ActiveWorld.Current as VoxelEngine.Cosmos.SphereWorld;
+            if (world == null) return list;
+            foreach (var data in world.GatherModifiedChunks())
+                list.Add(new TerrainChunkData
+                { Coord = data.coord, Compressed = Compress(data.uncompressedVoxelBytes) });
+            return list;
+        }
+
+        /// <summary>Adopt one edited chunk from the other side. Local edits win the
+        /// merge (identical after a rejoin; true offline conflicts keep each side's own).</summary>
+        public static void ApplyWireChunk(string body, Vector3Int coord, byte[] compressed)
+        {
+            var world = ActiveWorld.Current as VoxelEngine.Cosmos.SphereWorld;
+            if (world == null || BodyNameOf(world) != body) return;   // other planet
+            if (world.HasLocalEdit(coord)) return;
+            byte[] raw;
+            try { raw = Decompress(compressed); }
+            catch { return; }   // never let a bad payload break the join
+            IsApplyingRemote = true;
+            try
+            {
+                world.ApplyRemoteChunk(new VoxelEngine.Persistence.ChunkSaveData
+                { coord = coord, uncompressedVoxelBytes = raw });
+            }
+            finally { IsApplyingRemote = false; }
+        }
+
+        private static byte[] Compress(byte[] raw)
+        {
+            using var ms = new MemoryStream();
+            using (var ds = new DeflateStream(ms, System.IO.Compression.CompressionLevel.Fastest, leaveOpen: true))
+                ds.Write(raw, 0, raw.Length);
+            return ms.ToArray();
+        }
+
+        private static byte[] Decompress(byte[] compressed)
+        {
+            using var input = new MemoryStream(compressed);
+            using var ds = new DeflateStream(input, CompressionMode.Decompress);
+            using var output = new MemoryStream();
+            ds.CopyTo(output);
+            return output.ToArray();
         }
 
         // ─────────────── helpers ───────────────

@@ -123,6 +123,15 @@ namespace VoxelEngine.Networking
         public int CraterRadius;
     }
 
+    /// <summary>One edited terrain chunk for the join catch-up (14.8.0):
+    /// deflate-compressed full padded voxel grid, planet-tagged.</summary>
+    public struct TerrainChunkBroadcast : IBroadcast
+    {
+        public string Body;
+        public int X, Y, Z;
+        public byte[] Data;
+    }
+
     /// <summary>Client -> server: reply to WorldInfoBroadcast. Only a matching
     /// seed invites the base snapshot exchange (14.5.0).</summary>
     public struct WorldAckBroadcast : IBroadcast
@@ -210,6 +219,7 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.RegisterBroadcast<LockRemovedBroadcast>(OnServerLockRemoved);
             _networkManager.ServerManager.RegisterBroadcast<TerrainBrushBroadcast>(OnServerTerrainBrush);
             _networkManager.ServerManager.RegisterBroadcast<ExplosionBroadcast>(OnServerExplosion);
+            _networkManager.ServerManager.RegisterBroadcast<TerrainChunkBroadcast>(OnServerTerrainChunk);
             _networkManager.ServerManager.RegisterBroadcast<WorldAckBroadcast>(OnWorldAck);
             _networkManager.ServerManager.RegisterBroadcast<BaseSnapshotBroadcast>(OnServerBaseSnapshot);
             _networkManager.ClientManager.RegisterBroadcast<WorldInfoBroadcast>(OnWorldInfo);
@@ -222,6 +232,7 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.RegisterBroadcast<LockRemovedBroadcast>(OnClientLockRemoved);
             _networkManager.ClientManager.RegisterBroadcast<TerrainBrushBroadcast>(OnClientTerrainBrush);
             _networkManager.ClientManager.RegisterBroadcast<ExplosionBroadcast>(OnClientExplosion);
+            _networkManager.ClientManager.RegisterBroadcast<TerrainChunkBroadcast>(OnClientTerrainChunk);
             _networkManager.ClientManager.RegisterBroadcast<BaseSnapshotBroadcast>(OnClientBaseSnapshot);
         }
 
@@ -243,6 +254,7 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.UnregisterBroadcast<LockRemovedBroadcast>(OnServerLockRemoved);
             _networkManager.ServerManager.UnregisterBroadcast<TerrainBrushBroadcast>(OnServerTerrainBrush);
             _networkManager.ServerManager.UnregisterBroadcast<ExplosionBroadcast>(OnServerExplosion);
+            _networkManager.ServerManager.UnregisterBroadcast<TerrainChunkBroadcast>(OnServerTerrainChunk);
             _networkManager.ServerManager.UnregisterBroadcast<WorldAckBroadcast>(OnWorldAck);
             _networkManager.ServerManager.UnregisterBroadcast<BaseSnapshotBroadcast>(OnServerBaseSnapshot);
             _networkManager.ClientManager.UnregisterBroadcast<WorldInfoBroadcast>(OnWorldInfo);
@@ -255,6 +267,7 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.UnregisterBroadcast<LockRemovedBroadcast>(OnClientLockRemoved);
             _networkManager.ClientManager.UnregisterBroadcast<TerrainBrushBroadcast>(OnClientTerrainBrush);
             _networkManager.ClientManager.UnregisterBroadcast<ExplosionBroadcast>(OnClientExplosion);
+            _networkManager.ClientManager.UnregisterBroadcast<TerrainChunkBroadcast>(OnClientTerrainChunk);
             _networkManager.ClientManager.UnregisterBroadcast<BaseSnapshotBroadcast>(OnClientBaseSnapshot);
         }
 
@@ -654,7 +667,11 @@ namespace VoxelEngine.Networking
             // chunks apply (ordered channel), so the gather never sees remote
             // pieces and echoes them back.
             _networkManager.ClientManager.Broadcast(new WorldAckBroadcast { SeedMatches = !WorldMismatch });
-            if (!WorldMismatch) SendBaseSnapshot(null);
+            if (!WorldMismatch)
+            {
+                SendBaseSnapshot(null);
+                SendTerrainSnapshot(null);
+            }
         }
 
         /// <summary>Server: seed-matching client acknowledged - send it the base.</summary>
@@ -663,6 +680,41 @@ namespace VoxelEngine.Networking
             if (!_serverStarted || conn.IsLocalClient) return;
             if (!msg.SeedMatches) return;
             SendBaseSnapshot(conn);
+            SendTerrainSnapshot(conn);
+        }
+
+        private void OnServerTerrainChunk(NetworkConnection conn, TerrainChunkBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (!conn.IsLocalClient)
+                TerrainSync.ApplyWireChunk(msg.Body, new Vector3Int(msg.X, msg.Y, msg.Z), msg.Data);
+            RelayToOthers(conn, msg);
+        }
+
+        private void OnClientTerrainChunk(TerrainChunkBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            TerrainSync.ApplyWireChunk(msg.Body, new Vector3Int(msg.X, msg.Y, msg.Z), msg.Data);
+        }
+
+        /// <summary>Send every edited chunk of the current planet - to a joining
+        /// connection when called as server, up to the server when target is null.</summary>
+        private void SendTerrainSnapshot(NetworkConnection target)
+        {
+            var chunks = TerrainSync.GatherWireChunks();
+            if (chunks.Count == 0) return;
+            string body = TerrainSync.CurrentBodyName();
+            foreach (var chunk in chunks)
+            {
+                var msg = new TerrainChunkBroadcast
+                {
+                    Body = body, X = chunk.Coord.x, Y = chunk.Coord.y, Z = chunk.Coord.z,
+                    Data = chunk.Compressed
+                };
+                if (target != null) _networkManager.ServerManager.Broadcast(target, msg, true);
+                else _networkManager.ClientManager.Broadcast(msg);
+            }
+            Debug.Log($"[NetworkBootstrap] Terrain catch-up: {(target != null ? "sent" : "uploaded")} {chunks.Count} edited chunk(s).");
         }
 
         private void OnServerBaseSnapshot(NetworkConnection conn, BaseSnapshotBroadcast msg, Channel channel)

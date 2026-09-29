@@ -226,6 +226,19 @@ namespace VoxelEngine.Persistence
             _idle.Reset();
         }
 
+        /// <summary>Enqueue an already-serialized chunk snapshot (terrain sync, 14.8.0):
+        /// parks a remote-edited chunk the streamer has not loaded yet, so it streams
+        /// in edited later exactly like a locally saved one.</summary>
+        public void EnqueueSaveData(ChunkSaveData snapshot)
+        {
+            if (snapshot.uncompressedVoxelBytes == null) return;
+            var region = RegionFile.ChunkToRegion(snapshot.coord);
+            int local  = RegionFile.LocalIndex(snapshot.coord);
+            var entries = new Dictionary<int, ChunkSaveData> { [local] = snapshot };
+            _writeQueue.Add(new WriteJob { region = region, entries = entries });
+            _idle.Reset();
+        }
+
         /// <summary>Block until all outstanding writes finish (call on quit / scene unload).</summary>
         public void WaitForIdle(int timeoutMs = 5000)
         {

@@ -1,9 +1,36 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.7.0-dev`
+**Current Version:** `14.8.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.8.0-dev] Terrain Catch-Up On Join
+
+**Type:** MINOR - multiplayer milestone 4, phase 2: edited terrain crosses the wire on join. Save-compatible.
+
+**The gap.** 14.7.0 replicated live terrain ops, but anything dug or built while the other machine was offline stayed invisible - a joiner walked over your quarry pit on their own untouched terrain. Now the whole edited surface catches up the moment a seed-matching client joins.
+
+**Edited-chunk exchange.** The chunk persistence layer already knew exactly what to send: only player-modified chunks are ever saved (pristine terrain regenerates from the seed). The join handshake now ships those chunks both ways:
+- **Gather** (`SphereWorld.GatherModifiedChunks`): the disk store is enumerated (after flushing pending writes) and live loaded chunks are layered on top - live state wins. One planet per exchange: the body both players share.
+- **Wire** (`TerrainChunkBroadcast`): one chunk per broadcast - the full padded voxel grid, deflate-compressed exactly like the region files, planet-tagged. Typical edited chunk: a few KB.
+- **Apply** (`SphereWorld.ApplyRemoteChunk`): a LOADED chunk is overwritten in place (gen/mesh jobs completed first for safety) and remeshed; an UNLOADED chunk is parked in the local chunk store via the existing background writer, so it streams in already-edited later - the catch-up covers terrain neither player is even near.
+- **Merge rule:** local edits win. After a rejoin both sides hold identical chunks (live sync marks remote-applied chunks modified), so the skip is a no-op; a true both-edited-offline conflict keeps each side's own chunk and is the documented divergence case - same spirit as the building merge.
+- **Two-way, like buildings:** the joiner uploads its own solo-dug terrain BEFORE applying incoming chunks (ordered channel - the gather can never echo), and the server relays to everyone else.
+
+**New plumbing:** `ChunkStorage.EnqueueSaveData` (park a serialized snapshot without a live chunk), `SphereWorld.HasLocalEdit`, `TerrainSync.GatherWireChunks/ApplyWireChunk` with deflate helpers.
+
+**Limits (tracked):** the exchange covers the planet both players are on - edits on OTHER planets do not transfer until a shared-planet join happens there; a heavily mined world means a bigger join burst (one reliable broadcast per edited chunk); fluid sim state still per-machine.
+
+**GitHub title:** `[14.8.0-dev] Terrain catch-up on join`
+
+**Manual steps:**
+1. Pull `Dev`, recompile. No setup steps.
+2. Catch-up down: host digs a distinctive pit while the client is NOT connected; client joins (same seed) - the pit is there, meshed correctly.
+3. Catch-up up (the merge): client digs its own marks before joining - after join the host sees them too.
+4. Far-terrain check: host edits somewhere far away, client joins near spawn, then travels there - the terrain streams in already edited.
+5. Rejoin check: disconnect/rejoin - no visual pop, no console errors (identical chunks are skipped).
+6. Crater check: host bombs a hillside offline, client joins - the crater is in the ground (and matches a fresh live blast side by side).
 
 ### [14.7.0-dev] The Ground Moves For Everyone
 

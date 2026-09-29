@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.7.0-dev`
-**Roadmap Version:** `14.7.0-dev`
+**Current Version:** `14.8.0-dev`
+**Roadmap Version:** `14.8.0-dev`
 **Date:** 2026-09-28
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,10 @@
 ---
 
 ## 0. Recently Done
+
+### 14.8.0-dev - Terrain Catch-Up On Join
+- **Edited-chunk join exchange** (`TerrainSync`, `SphereWorld`, `ChunkStorage`, `NetworkBootstrap`): all player-modified chunks of the shared planet transfer both ways on join - disk store + live chunks gathered, deflate-compressed per chunk, loaded chunks overwritten in place, unloaded ones parked in the local store for the streamer; local edits win the merge.
+- Open: other-planet edits transfer only when a join happens while both are there; fluid sim state per-machine; grid-ship voxel sync.
 
 ### 14.7.0-dev - The Ground Moves For Everyone
 - **Terrain brush sync** (`TerrainSync` new, `VoxelEditor`, `NetworkBootstrap`): every brush op replicates as (voxel center, radius, strength, subtract, fill) - deterministic on same-seed worlds, floating-origin-proof, planet-tagged; remote ops grant no drops and wake the fluid sim.
@@ -125,7 +129,7 @@ These decisions are settled. Every future system is designed against them.
 1. **Foundation:** Fish-Net package in, NetworkManager boot flow, host/join UI, player identity (stable per-player id), player spawn + transform/animation sync. *(DONE 14.0.0-dev + 14.1.0-dev - identity, bridge, host/join UI, avatar spawn + transform sync; animation sync waits for a real character rig.)*
 2. **Player state:** per-player Inventory, PlayerStats, hotbar and equipment sync; interaction raycasts validated server-side. *(IN PROGRESS - 14.2.0-dev ships the visible half: held item + stance replication on avatars.)*
 3. **Building sync:** all placement/upgrade/removal flows route through server RPCs in `BuildSystemV2` / `PlacedTieredBlock`; structural audits (`StructuralLoadState`) run server-side only; results replicate. *(DONE 14.4.0-14.6.0 - shipped as relayed broadcasts with positional piece identity instead of server-only audits: remote pieces stay unarmed and the origin machine announces its audit results, which converges cascades without moving the simulation; live place/upgrade/remove/damage, two-way join snapshot, doors and code locks all replicate. Open: shared build costs - placer pays alone today.)*
-4. **World sync:** voxel chunk edit replication + join-in-progress chunk streaming (the long pole - design payloads early, delta edits not full chunks). *(IN PROGRESS - 14.7.0-dev ships live op replication: brush edits and explosion craters as deterministic voxel-space ops, no chunk data on the wire. Remaining: join-in-progress terrain catch-up via saved chunk deltas.)*
+4. **World sync:** voxel chunk edit replication + join-in-progress chunk streaming (the long pole - design payloads early, delta edits not full chunks). *(DONE for the shared-planet case - 14.7.0-dev live op replication + 14.8.0-dev edited-chunk join catch-up. Remaining niceties: multi-planet catch-up, fluid sim state.)*
 5. **Simulation sync:** machines, power, fluids, conveyors run server-side; clients render replicated state.
 6. **Real Crusaders (player model and readable loadout):** replace the capsule avatar with a proper crusader player model and make every player's loadout readable at a glance. Full design below - this milestone deliberately sits right before proximity chat because seeing WHO you meet matters as much as hearing them.
 7. **Proximity chat:** positional voice between nearby players - microphone capture, compressed frames relayed through the server, 3D-spatialized playback with distance falloff (whisper-to-shout range like the survival genre expects); muted-player list keyed by player id. Decide build-vs-buy when the milestone starts: a Fish-Net-integrated voice asset (e.g. Dissonance) versus a custom mic -> Opus -> broadcast pipeline riding the existing `NetworkBootstrap` handshake. Optional text chat falls out of the same relay for near-free.
