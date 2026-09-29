@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.3.0-dev`
-**Roadmap Version:** `14.3.0-dev`
+**Current Version:** `14.4.0-dev`
+**Roadmap Version:** `14.4.0-dev`
 **Date:** 2026-09-28
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,10 @@
 ---
 
 ## 0. Recently Done
+
+### 14.4.0-dev - Shared Ground
+- **Building sync phase 1** (`BuildingSync` new, `NetworkBootstrap`, hooks in `BuildSystemV2`/`PlacedTieredBlock`/`StructuralLoadState`): tiered placement, upgrade, demolition and structural collapse replicate live; remote pieces restore-style and unarmed; positional identity (family + 25 cm). Open (phase 2+): join-in-progress base snapshot; code locks on pieces; shared build costs; voxel/machine sync is milestone 4/5.
+- **World identity handshake** (`NetworkBootstrap`, `InGamePauseMenu`): server sends world name + seed on join; seed mismatch shows a persistent red warning with the host's seed in the multiplayer tab. Open: automatic world adoption on join (deferred - scene reload tears down the connection).
 
 ### 14.3.0-dev - Vitals Over The Wire
 - **Health replication** (`PlayerAvatar`): hurt players wear a red-shifting bar under the nameplate; hidden at full health; quantized, change-driven, late-join correct.

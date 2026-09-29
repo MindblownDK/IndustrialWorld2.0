@@ -234,6 +234,19 @@ namespace VoxelEngine.Menu
             panel.Add(status);
             panel.Add(T.Spacer(10));
 
+            bool mismatchShown = bootstrap.WorldMismatch;
+            if (mismatchShown)
+            {
+                var warn = T.StatLabel(
+                    "WORLD MISMATCH - terrain and buildings will not line up.\n"
+                    + bootstrap.HostWorldLine + "\n"
+                    + "Create or load a world with that seed to truly share ground.",
+                    T.AccentRed);
+                warn.style.whiteSpace = WhiteSpace.Normal;
+                panel.Add(warn);
+                panel.Add(T.Spacer(10));
+            }
+
             // Renames apply live: locally at once, to everyone via the server.
             panel.Add(T.Muted("YOUR NAME"));
             var nameField = MpField(VoxelEngine.Networking.PlayerIdentity.LocalName);
@@ -285,6 +298,7 @@ namespace VoxelEngine.Menu
             {
                 if (!_open || _page != Page.Multiplayer) return;
                 if (bootstrap.IsOnline != online) { BuildUI(); return; }
+                if (bootstrap.WorldMismatch != mismatchShown) { BuildUI(); return; }
                 status.text = bootstrap.StatusLine;
                 if (playersLabel != null) playersLabel.text = PlayerListText();
             }).Every(400);

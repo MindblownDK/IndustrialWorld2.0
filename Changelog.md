@@ -1,9 +1,35 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.3.0-dev`
+**Current Version:** `14.4.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.4.0-dev] Shared Ground
+
+**Type:** MINOR - multiplayer milestone 3, phase 1: live building replication plus a world-identity handshake. Save-compatible.
+
+**Building sync (tiered pieces).** For the first time, two players shape the SAME base. Place, upgrade, hammer-demolish and structural collapse now replicate live between every connected machine:
+- `BuildingSync` (new) is the seam between the building system and the network: gameplay announces at its three authority points (placement in `BuildSystemV2.Place`, upgrade in `TryUpgrade`, destruction in `PlacedTieredBlock.Damage` and `StructuralLoadState.DecayTick`), the bootstrap carries it over the wire, and `BuildingSync` applies it on the far side. No Fish-Net types touch gameplay code.
+- Remote pieces are instantiated exactly like save-restored pieces: correct family/tier/rotation, railing rise and pillar height preserved, and deliberately UNARMED - the local decay audit never second-guesses a neighbor's building. Convergence comes from the origin machine announcing every collapse its own audit decides, so cascades tear down identically everywhere.
+- Piece identity is positional (family + snapped position within 25 cm) - the same assumption world saves already make - so no GUIDs, no registry, no schema change.
+- Uniform wire path: everyone (host included) sends as a client; the server applies and relays to all other clients. Duplicate-safe, echo-guarded (`IsApplyingRemote`), and a soft placement thunk plays where a teammate builds.
+
+**World identity handshake.** Building sync only means something on matching terrain. On join, the server now tells each client which world it runs (name + seed). Seed mismatch flips a persistent red warning in the multiplayer tab - host world and seed spelled out, with the fix (create/load a world with that seed) - and logs a console warning. Matching seeds join silently.
+
+**New API:** `WorldStatePersistence.FindTieredByFamily(string)` - runtime tiered-definition lookup mirroring `FindItemById`.
+
+**Phase 1 limits (deliberate, tracked in the roadmap):** same-seed worlds are required (warned, not auto-synced); only live actions replicate - bases built before the session are not yet sent to joiners (join-in-progress snapshot is the next phase); voxel edits, machines and item blocks are milestone 4/5; code locks fitted to pieces do not replicate yet; the placer pays the material cost alone.
+
+**GitHub title:** `[14.4.0-dev] Shared ground - building sync phase 1`
+
+**Manual steps:**
+1. Pull `Dev`, recompile. No setup steps - broadcasts only, no new NetworkObjects.
+2. IMPORTANT: both machines must create/load a world with the SAME SEED (same name recommended). If the client picked wrong, the multiplayer tab shows the host's seed in red - recreate with that seed.
+3. Host + join. Place wood pieces on one machine - they appear on the other with a soft thunk, correct rotation, railings/pillars included.
+4. Upgrade a piece with the hammer - the other machine swaps it to the same tier.
+5. Hammer-demolish a piece - it vanishes on both machines.
+6. Collapse test: build a pillar-supported deck run, demolish the pillar - the decay cascade tears down the same pieces on both machines (~10 s).
 
 ### [14.3.0-dev] Vitals Over The Wire
 

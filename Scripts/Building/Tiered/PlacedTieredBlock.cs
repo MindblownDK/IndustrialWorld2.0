@@ -41,6 +41,8 @@ namespace VoxelEngine.Building.Tiered
                     var lockItem = CodeLock.ResolveItem();
                     if (lockItem != null) recipient.Add(lockItem, 1);
                 }
+                // Multiplayer: the authority point for destruction (14.4.0).
+                VoxelEngine.Networking.BuildingSync.AnnounceRemoved(definition.family, transform.position);
                 Destroy(gameObject);
                 return true;
             }

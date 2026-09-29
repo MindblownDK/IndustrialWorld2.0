@@ -34,6 +34,39 @@ namespace VoxelEngine.Networking
         public string PlayerName;
     }
 
+    /// <summary>Server -> client on join: which world the host is running,
+    /// so the client can warn when terrain will not line up.</summary>
+    public struct WorldInfoBroadcast : IBroadcast
+    {
+        public string WorldName;
+        public int Seed;
+    }
+
+    // ── Building replication (14.4.0). Client -> server -> other clients. ──
+
+    public struct PiecePlacedBroadcast : IBroadcast
+    {
+        public string Family;
+        public int Tier;
+        public Vector3 Position;
+        public Quaternion Rotation;
+        public float RailingRise;
+        public float PillarHeight;
+    }
+
+    public struct PieceRemovedBroadcast : IBroadcast
+    {
+        public string Family;
+        public Vector3 Position;
+    }
+
+    public struct PieceUpgradedBroadcast : IBroadcast
+    {
+        public string Family;
+        public Vector3 Position;
+        public int NewTier;
+    }
+
     [RequireComponent(typeof(NetworkManager))]
     public class NetworkBootstrap : MonoBehaviour
     {
@@ -55,6 +88,12 @@ namespace VoxelEngine.Networking
         private readonly Dictionary<int, string> _playerIdByConnection = new();
 
         public bool IsOnline => _serverStarted || _clientStarted;
+
+        /// <summary>True on a client whose world seed differs from the host's.</summary>
+        public bool WorldMismatch { get; private set; }
+
+        /// <summary>Human line describing the host's world ("name, seed").</summary>
+        public string HostWorldLine { get; private set; } = "";
 
         private string _statusLine = "Offline";
 
@@ -89,6 +128,13 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.OnClientConnectionState += OnClientConnectionState;
             _networkManager.ClientManager.OnAuthenticated += OnLocalClientAuthenticated;
             _networkManager.ServerManager.RegisterBroadcast<IdentityBroadcast>(OnIdentityReceived);
+            _networkManager.ServerManager.RegisterBroadcast<PiecePlacedBroadcast>(OnServerPiecePlaced);
+            _networkManager.ServerManager.RegisterBroadcast<PieceRemovedBroadcast>(OnServerPieceRemoved);
+            _networkManager.ServerManager.RegisterBroadcast<PieceUpgradedBroadcast>(OnServerPieceUpgraded);
+            _networkManager.ClientManager.RegisterBroadcast<WorldInfoBroadcast>(OnWorldInfo);
+            _networkManager.ClientManager.RegisterBroadcast<PiecePlacedBroadcast>(OnClientPiecePlaced);
+            _networkManager.ClientManager.RegisterBroadcast<PieceRemovedBroadcast>(OnClientPieceRemoved);
+            _networkManager.ClientManager.RegisterBroadcast<PieceUpgradedBroadcast>(OnClientPieceUpgraded);
         }
 
         private void OnDestroy()
@@ -100,6 +146,13 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.OnClientConnectionState -= OnClientConnectionState;
             _networkManager.ClientManager.OnAuthenticated -= OnLocalClientAuthenticated;
             _networkManager.ServerManager.UnregisterBroadcast<IdentityBroadcast>(OnIdentityReceived);
+            _networkManager.ServerManager.UnregisterBroadcast<PiecePlacedBroadcast>(OnServerPiecePlaced);
+            _networkManager.ServerManager.UnregisterBroadcast<PieceRemovedBroadcast>(OnServerPieceRemoved);
+            _networkManager.ServerManager.UnregisterBroadcast<PieceUpgradedBroadcast>(OnServerPieceUpgraded);
+            _networkManager.ClientManager.UnregisterBroadcast<WorldInfoBroadcast>(OnWorldInfo);
+            _networkManager.ClientManager.UnregisterBroadcast<PiecePlacedBroadcast>(OnClientPiecePlaced);
+            _networkManager.ClientManager.UnregisterBroadcast<PieceRemovedBroadcast>(OnClientPieceRemoved);
+            _networkManager.ClientManager.UnregisterBroadcast<PieceUpgradedBroadcast>(OnClientPieceUpgraded);
         }
 
         // ─────────────────────────── public API (UI calls these) ───────────────────────────
@@ -229,6 +282,16 @@ namespace VoxelEngine.Networking
             // the 14.1.0 missing-names bug.
             var avatar = nob.GetComponent<PlayerAvatar>();
             if (avatar != null) avatar.SetIdentity(playerId, msg.PlayerName);
+
+            // Tell the newcomer which world this server runs, so their client
+            // can warn when terrain will not line up (different seed).
+            if (!connection.IsLocalClient)
+            {
+                var session = VoxelEngine.Menu.WorldSession.Instance;
+                if (session != null)
+                    _networkManager.ServerManager.Broadcast(connection, new WorldInfoBroadcast
+                    { WorldName = session.worldName, Seed = session.seed }, true);
+            }
         }
 
         /// <summary>Re-announce the local identity (e.g. after a rename) so
@@ -252,12 +315,109 @@ namespace VoxelEngine.Networking
             if (nob != null && nob.IsSpawned) _networkManager.ServerManager.Despawn(nob);
         }
 
+        // ─────────────────────────── building sync wire (14.4.0) ───────────────────────────
+        // One uniform path: every machine (host included) SENDS as a client;
+        // the server applies remote edits locally and relays to everyone else.
+
+        public void SendPiecePlaced(string family, int tier, Vector3 pos, Quaternion rot,
+            float railingRise, float pillarHeight)
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(new PiecePlacedBroadcast
+            {
+                Family = family, Tier = tier, Position = pos, Rotation = rot,
+                RailingRise = railingRise, PillarHeight = pillarHeight
+            });
+        }
+
+        public void SendPieceRemoved(string family, Vector3 pos)
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(new PieceRemovedBroadcast
+            { Family = family, Position = pos });
+        }
+
+        public void SendPieceUpgraded(string family, Vector3 pos, int newTier)
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(new PieceUpgradedBroadcast
+            { Family = family, Position = pos, NewTier = newTier });
+        }
+
+        private void OnServerPiecePlaced(NetworkConnection conn, PiecePlacedBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (!conn.IsLocalClient)
+                BuildingSync.ApplyPlaced(msg.Family, msg.Tier, msg.Position, msg.Rotation,
+                    msg.RailingRise, msg.PillarHeight);
+            RelayToOthers(conn, msg);
+        }
+
+        private void OnServerPieceRemoved(NetworkConnection conn, PieceRemovedBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (!conn.IsLocalClient) BuildingSync.ApplyRemoved(msg.Family, msg.Position);
+            RelayToOthers(conn, msg);
+        }
+
+        private void OnServerPieceUpgraded(NetworkConnection conn, PieceUpgradedBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (!conn.IsLocalClient) BuildingSync.ApplyUpgraded(msg.Family, msg.Position, msg.NewTier);
+            RelayToOthers(conn, msg);
+        }
+
+        /// <summary>Server relay: everyone except the sender and the host's own
+        /// local client (the server path already applied it there).</summary>
+        private void RelayToOthers<T>(NetworkConnection sender, T msg) where T : struct, IBroadcast
+        {
+            foreach (var pair in _networkManager.ServerManager.Clients)
+            {
+                var client = pair.Value;
+                if (client == null || client == sender || client.IsLocalClient) continue;
+                _networkManager.ServerManager.Broadcast(client, msg, true);
+            }
+        }
+
+        private void OnClientPiecePlaced(PiecePlacedBroadcast msg, Channel channel)
+        {
+            if (_serverStarted) return;   // host already applied on the server path
+            BuildingSync.ApplyPlaced(msg.Family, msg.Tier, msg.Position, msg.Rotation,
+                msg.RailingRise, msg.PillarHeight);
+        }
+
+        private void OnClientPieceRemoved(PieceRemovedBroadcast msg, Channel channel)
+        {
+            if (_serverStarted) return;
+            BuildingSync.ApplyRemoved(msg.Family, msg.Position);
+        }
+
+        private void OnClientPieceUpgraded(PieceUpgradedBroadcast msg, Channel channel)
+        {
+            if (_serverStarted) return;
+            BuildingSync.ApplyUpgraded(msg.Family, msg.Position, msg.NewTier);
+        }
+
+        private void OnWorldInfo(WorldInfoBroadcast msg, Channel channel)
+        {
+            if (_serverStarted) return;
+            var session = VoxelEngine.Menu.WorldSession.Instance;
+            WorldMismatch = session == null || session.seed != msg.Seed;
+            HostWorldLine = $"Host world: '{msg.WorldName}', seed {msg.Seed}";
+            if (WorldMismatch)
+                Debug.LogWarning("[NetworkBootstrap] World mismatch - " + HostWorldLine +
+                    $", yours: '{(session != null ? session.worldName : "?")}', seed {(session != null ? session.seed.ToString() : "?")}. " +
+                    "Terrain and buildings will NOT line up. Create/load a world with the host's seed to share ground.");
+        }
+
         // ─────────────────────────── teardown ───────────────────────────
 
         private void GoOffline()
         {
             NetworkSession.SetMode(SessionMode.Offline);
             _statusLine = "Offline";
+            WorldMismatch = false;
+            HostWorldLine = "";
 
             // Sweep any remote presences the avatar callbacks did not get to
             // (e.g. an abrupt disconnect). The local player always stays.

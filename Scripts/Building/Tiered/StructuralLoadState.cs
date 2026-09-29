@@ -110,7 +110,14 @@ namespace VoxelEngine.Building.Tiered
             if (own == null || own.definition == null) { Destroy(gameObject); return; }
             int maximum = Mathf.Max(1, own.definition.GetStats(own.tier).hp);
             own.hp -= Mathf.Max(1, Mathf.CeilToInt(maximum * (AuditInterval / DecaySeconds)));
-            if (own.hp <= 0) { Destroy(gameObject); return; }
+            if (own.hp <= 0)
+            {
+                // Multiplayer: collapses are decided by the machine whose audit
+                // ran them - announce so every world removes the same piece.
+                VoxelEngine.Networking.BuildingSync.AnnounceRemoved(own.definition.family, transform.position);
+                Destroy(gameObject);
+                return;
+            }
             VoxelEngine.Thermal.BlockDamageVisual.ReportDamage(own,
                 1f - Mathf.Clamp01(own.hp / (float)maximum));
         }

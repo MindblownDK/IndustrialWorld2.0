@@ -1115,6 +1115,9 @@ namespace VoxelEngine.Building.Tiered
             VoxelEngine.FX.AudioManager.PlayAt(
                 VoxelEngine.FX.SfxLibrary.Get(VoxelEngine.FX.Sfx.Place), pos,
                 volume: 0.6f, pitch: UnityEngine.Random.Range(0.95f, 1.05f), maxDistance: 20f);
+            // Multiplayer: the authority point for placement (14.4.0).
+            VoxelEngine.Networking.BuildingSync.AnnouncePlaced(def, BuildTier.Wood, pos, rot,
+                railingRise, _pillarHeight);
         }
 
         // ============================================================
@@ -1191,6 +1194,8 @@ namespace VoxelEngine.Building.Tiered
             // station hull would silently stop being a station piece the first time it was
             // upgraded from wood to steel.
             TagStationPiece(go, def);
+            // Multiplayer: the authority point for upgrades (14.4.0).
+            VoxelEngine.Networking.BuildingSync.AnnounceUpgraded(def.family, pos, next);
             return true;
         }
 
