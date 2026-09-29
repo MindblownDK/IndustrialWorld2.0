@@ -1,9 +1,25 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.5.0-dev`
+**Current Version:** `14.5.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.5.1-dev] Cracks Over The Wire
+
+**Type:** PATCH - bug fix: replicated damage visuals.
+
+**The bug (Thomas's find).** Decay cracks never showed on the other machine: `PlacedTieredBlock.Damage` and `StructuralLoadState.DecayTick` reported cracks locally, but nothing crossed the wire until hp hit zero - so a decaying floor bloomed cracks on the machine running the audit while everyone else watched pieces simply pop out of existence. Partial hammer/explosion hits had the same silent gap, and worse: hp quietly diverged between machines until the next snapshot.
+
+**The fix.** A `PieceDamagedBroadcast` (family, position, hp) now rides the same uniform wire path as place/remove/upgrade. Both surviving-damage sites announce after their local crack report; the far side sets the authoritative hp and reports the same damage fraction, so cracks bloom in step everywhere and hp never diverges. Echo-safe by construction: applying remote damage sets hp directly and never re-enters the announce path. Mismatch-guarded like all building traffic.
+
+**GitHub title:** `[14.5.1-dev] Cracks over the wire`
+
+**Manual steps:**
+1. Pull `Dev`, recompile. No setup steps.
+2. Decay check: build a pillar-supported deck run, demolish the pillar - BOTH machines now show the cracks blooming across the ~10 s decay before the pieces fall.
+3. Partial hit check: hammer a wall a few times without destroying it - the same cracks appear on the other machine hit by hit.
+4. Convergence check: after the partial hits, finish the wall from the OTHER machine - it should take the correct remaining hits, not a full-health count.
 
 ### [14.5.0-dev] Join In Progress
 

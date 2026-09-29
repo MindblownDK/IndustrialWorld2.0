@@ -60,6 +60,14 @@ namespace VoxelEngine.Networking
         public Vector3 Position;
     }
 
+    /// <summary>Surviving damage - hp after a decay tick or partial hit (14.5.1).</summary>
+    public struct PieceDamagedBroadcast : IBroadcast
+    {
+        public string Family;
+        public Vector3 Position;
+        public int Hp;
+    }
+
     public struct PieceUpgradedBroadcast : IBroadcast
     {
         public string Family;
@@ -147,12 +155,14 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.RegisterBroadcast<IdentityBroadcast>(OnIdentityReceived);
             _networkManager.ServerManager.RegisterBroadcast<PiecePlacedBroadcast>(OnServerPiecePlaced);
             _networkManager.ServerManager.RegisterBroadcast<PieceRemovedBroadcast>(OnServerPieceRemoved);
+            _networkManager.ServerManager.RegisterBroadcast<PieceDamagedBroadcast>(OnServerPieceDamaged);
             _networkManager.ServerManager.RegisterBroadcast<PieceUpgradedBroadcast>(OnServerPieceUpgraded);
             _networkManager.ServerManager.RegisterBroadcast<WorldAckBroadcast>(OnWorldAck);
             _networkManager.ServerManager.RegisterBroadcast<BaseSnapshotBroadcast>(OnServerBaseSnapshot);
             _networkManager.ClientManager.RegisterBroadcast<WorldInfoBroadcast>(OnWorldInfo);
             _networkManager.ClientManager.RegisterBroadcast<PiecePlacedBroadcast>(OnClientPiecePlaced);
             _networkManager.ClientManager.RegisterBroadcast<PieceRemovedBroadcast>(OnClientPieceRemoved);
+            _networkManager.ClientManager.RegisterBroadcast<PieceDamagedBroadcast>(OnClientPieceDamaged);
             _networkManager.ClientManager.RegisterBroadcast<PieceUpgradedBroadcast>(OnClientPieceUpgraded);
             _networkManager.ClientManager.RegisterBroadcast<BaseSnapshotBroadcast>(OnClientBaseSnapshot);
         }
@@ -168,12 +178,14 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.UnregisterBroadcast<IdentityBroadcast>(OnIdentityReceived);
             _networkManager.ServerManager.UnregisterBroadcast<PiecePlacedBroadcast>(OnServerPiecePlaced);
             _networkManager.ServerManager.UnregisterBroadcast<PieceRemovedBroadcast>(OnServerPieceRemoved);
+            _networkManager.ServerManager.UnregisterBroadcast<PieceDamagedBroadcast>(OnServerPieceDamaged);
             _networkManager.ServerManager.UnregisterBroadcast<PieceUpgradedBroadcast>(OnServerPieceUpgraded);
             _networkManager.ServerManager.UnregisterBroadcast<WorldAckBroadcast>(OnWorldAck);
             _networkManager.ServerManager.UnregisterBroadcast<BaseSnapshotBroadcast>(OnServerBaseSnapshot);
             _networkManager.ClientManager.UnregisterBroadcast<WorldInfoBroadcast>(OnWorldInfo);
             _networkManager.ClientManager.UnregisterBroadcast<PiecePlacedBroadcast>(OnClientPiecePlaced);
             _networkManager.ClientManager.UnregisterBroadcast<PieceRemovedBroadcast>(OnClientPieceRemoved);
+            _networkManager.ClientManager.UnregisterBroadcast<PieceDamagedBroadcast>(OnClientPieceDamaged);
             _networkManager.ClientManager.UnregisterBroadcast<PieceUpgradedBroadcast>(OnClientPieceUpgraded);
             _networkManager.ClientManager.UnregisterBroadcast<BaseSnapshotBroadcast>(OnClientBaseSnapshot);
         }
@@ -360,6 +372,13 @@ namespace VoxelEngine.Networking
             { Family = family, Position = pos });
         }
 
+        public void SendPieceDamaged(string family, Vector3 pos, int hp)
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(new PieceDamagedBroadcast
+            { Family = family, Position = pos, Hp = hp });
+        }
+
         public void SendPieceUpgraded(string family, Vector3 pos, int newTier)
         {
             if (!_clientStarted) return;
@@ -380,6 +399,13 @@ namespace VoxelEngine.Networking
         {
             if (!_serverStarted) return;
             if (!conn.IsLocalClient) BuildingSync.ApplyRemoved(msg.Family, msg.Position);
+            RelayToOthers(conn, msg);
+        }
+
+        private void OnServerPieceDamaged(NetworkConnection conn, PieceDamagedBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (!conn.IsLocalClient) BuildingSync.ApplyDamaged(msg.Family, msg.Position, msg.Hp);
             RelayToOthers(conn, msg);
         }
 
@@ -415,6 +441,12 @@ namespace VoxelEngine.Networking
         {
             if (_serverStarted || WorldMismatch) return;
             BuildingSync.ApplyRemoved(msg.Family, msg.Position);
+        }
+
+        private void OnClientPieceDamaged(PieceDamagedBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            BuildingSync.ApplyDamaged(msg.Family, msg.Position, msg.Hp);
         }
 
         private void OnClientPieceUpgraded(PieceUpgradedBroadcast msg, Channel channel)

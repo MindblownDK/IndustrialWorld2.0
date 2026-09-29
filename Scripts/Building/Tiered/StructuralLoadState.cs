@@ -120,6 +120,9 @@ namespace VoxelEngine.Building.Tiered
             }
             VoxelEngine.Thermal.BlockDamageVisual.ReportDamage(own,
                 1f - Mathf.Clamp01(own.hp / (float)maximum));
+            // Multiplayer: the decay bloom is visible on every machine (14.5.1).
+            VoxelEngine.Networking.BuildingSync.AnnounceDamaged(own.definition.family,
+                transform.position, own.hp);
         }
 
         /// <summary>

@@ -49,6 +49,8 @@ namespace VoxelEngine.Building.Tiered
             // Visible cracks proportional to structural loss (9.30.0).
             int max = Mathf.Max(1, definition.GetStats(tier).hp);
             VoxelEngine.Thermal.BlockDamageVisual.ReportDamage(this, 1f - Mathf.Clamp01(hp / (float)max));
+            // Multiplayer: surviving hits crack on every machine (14.5.1).
+            VoxelEngine.Networking.BuildingSync.AnnounceDamaged(definition.family, transform.position, hp);
             return false;
         }
 

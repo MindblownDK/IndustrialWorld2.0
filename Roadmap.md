@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.5.0-dev`
-**Roadmap Version:** `14.5.0-dev`
+**Current Version:** `14.5.1-dev`
+**Roadmap Version:** `14.5.1-dev`
 **Date:** 2026-09-28
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,9 @@
 ---
 
 ## 0. Recently Done
+
+### 14.5.1-dev - Cracks Over The Wire
+- **Damage replication fix** (`BuildingSync`, `NetworkBootstrap`, hooks in `PlacedTieredBlock`/`StructuralLoadState`): surviving damage (decay ticks, partial hits) now broadcasts hp - cracks bloom on every machine and hp no longer diverges between them.
 
 ### 14.5.0-dev - Join In Progress
 - **Base snapshot on join** (`BuildingSync`, `NetworkBootstrap`): seed-matching handshake completes with a two-way, chunked, duplicate-safe base exchange - server base down, joiner's solo base up, relayed to all; hp/cracks, railing rise and pillar height carried; rejoin-safe. Closes the 14.4.0 "pre-session bases not synced" item.

@@ -67,6 +67,14 @@ namespace VoxelEngine.Networking
             NetworkBootstrap.Instance.SendPieceUpgraded(family.ToString(), pos, (int)newTier);
         }
 
+        /// <summary>Surviving damage (decay tick, partial hit): replicate hp so
+        /// cracks bloom on every machine, not just where the audit ran (14.5.1).</summary>
+        public static void AnnounceDamaged(BuildFamily family, Vector3 pos, int hp)
+        {
+            if (!ShouldAnnounce()) return;
+            NetworkBootstrap.Instance.SendPieceDamaged(family.ToString(), pos, hp);
+        }
+
         private static bool ShouldAnnounce()
             => !IsApplyingRemote
                && NetworkSession.Mode != SessionMode.Offline
@@ -157,6 +165,16 @@ namespace VoxelEngine.Networking
                         volume: 0.5f, pitch: 1f, maxDistance: 20f);
             }
             finally { IsApplyingRemote = false; }
+        }
+
+        public static void ApplyDamaged(string family, Vector3 pos, int hp)
+        {
+            var piece = FindPieceAt(family, pos);
+            if (piece == null || piece.definition == null) return;
+            piece.hp = hp;
+            int maxHp = Mathf.Max(1, piece.definition.GetStats(piece.tier).hp);
+            VoxelEngine.Thermal.BlockDamageVisual.ReportDamage(
+                piece, 1f - Mathf.Clamp01(piece.hp / (float)maxHp));
         }
 
         public static void ApplyRemoved(string family, Vector3 pos)
