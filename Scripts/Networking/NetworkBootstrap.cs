@@ -100,6 +100,29 @@ namespace VoxelEngine.Networking
         public Vector3 Position;
     }
 
+    /// <summary>Voxel brush op in integer voxel space (14.7.0) - deterministic
+    /// and floating-origin-proof; Body names the planet it belongs to.</summary>
+    public struct TerrainBrushBroadcast : IBroadcast
+    {
+        public string Body;
+        public int X, Y, Z;
+        public float Radius;
+        public float Strength;
+        public bool Subtract;
+        public byte Fill;
+    }
+
+    /// <summary>Explosion event (14.7.0): scene position for the fireball/shake,
+    /// crater in voxel space for the terrain. Carries NO damage.</summary>
+    public struct ExplosionBroadcast : IBroadcast
+    {
+        public string Body;
+        public Vector3 Position;
+        public float Radius;
+        public int CraterX, CraterY, CraterZ;
+        public int CraterRadius;
+    }
+
     /// <summary>Client -> server: reply to WorldInfoBroadcast. Only a matching
     /// seed invites the base snapshot exchange (14.5.0).</summary>
     public struct WorldAckBroadcast : IBroadcast
@@ -185,6 +208,8 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.RegisterBroadcast<DoorStateBroadcast>(OnServerDoorState);
             _networkManager.ServerManager.RegisterBroadcast<LockStateBroadcast>(OnServerLockState);
             _networkManager.ServerManager.RegisterBroadcast<LockRemovedBroadcast>(OnServerLockRemoved);
+            _networkManager.ServerManager.RegisterBroadcast<TerrainBrushBroadcast>(OnServerTerrainBrush);
+            _networkManager.ServerManager.RegisterBroadcast<ExplosionBroadcast>(OnServerExplosion);
             _networkManager.ServerManager.RegisterBroadcast<WorldAckBroadcast>(OnWorldAck);
             _networkManager.ServerManager.RegisterBroadcast<BaseSnapshotBroadcast>(OnServerBaseSnapshot);
             _networkManager.ClientManager.RegisterBroadcast<WorldInfoBroadcast>(OnWorldInfo);
@@ -195,6 +220,8 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.RegisterBroadcast<DoorStateBroadcast>(OnClientDoorState);
             _networkManager.ClientManager.RegisterBroadcast<LockStateBroadcast>(OnClientLockState);
             _networkManager.ClientManager.RegisterBroadcast<LockRemovedBroadcast>(OnClientLockRemoved);
+            _networkManager.ClientManager.RegisterBroadcast<TerrainBrushBroadcast>(OnClientTerrainBrush);
+            _networkManager.ClientManager.RegisterBroadcast<ExplosionBroadcast>(OnClientExplosion);
             _networkManager.ClientManager.RegisterBroadcast<BaseSnapshotBroadcast>(OnClientBaseSnapshot);
         }
 
@@ -214,6 +241,8 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.UnregisterBroadcast<DoorStateBroadcast>(OnServerDoorState);
             _networkManager.ServerManager.UnregisterBroadcast<LockStateBroadcast>(OnServerLockState);
             _networkManager.ServerManager.UnregisterBroadcast<LockRemovedBroadcast>(OnServerLockRemoved);
+            _networkManager.ServerManager.UnregisterBroadcast<TerrainBrushBroadcast>(OnServerTerrainBrush);
+            _networkManager.ServerManager.UnregisterBroadcast<ExplosionBroadcast>(OnServerExplosion);
             _networkManager.ServerManager.UnregisterBroadcast<WorldAckBroadcast>(OnWorldAck);
             _networkManager.ServerManager.UnregisterBroadcast<BaseSnapshotBroadcast>(OnServerBaseSnapshot);
             _networkManager.ClientManager.UnregisterBroadcast<WorldInfoBroadcast>(OnWorldInfo);
@@ -224,6 +253,8 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.UnregisterBroadcast<DoorStateBroadcast>(OnClientDoorState);
             _networkManager.ClientManager.UnregisterBroadcast<LockStateBroadcast>(OnClientLockState);
             _networkManager.ClientManager.UnregisterBroadcast<LockRemovedBroadcast>(OnClientLockRemoved);
+            _networkManager.ClientManager.UnregisterBroadcast<TerrainBrushBroadcast>(OnClientTerrainBrush);
+            _networkManager.ClientManager.UnregisterBroadcast<ExplosionBroadcast>(OnClientExplosion);
             _networkManager.ClientManager.UnregisterBroadcast<BaseSnapshotBroadcast>(OnClientBaseSnapshot);
         }
 
@@ -458,6 +489,61 @@ namespace VoxelEngine.Networking
             if (!_clientStarted) return;
             _networkManager.ClientManager.Broadcast(new LockRemovedBroadcast
             { Family = family, Position = pos });
+        }
+
+        public void SendTerrainBrush(string body, Vector3Int center, float radius,
+            float strength, bool subtract, byte fill)
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(new TerrainBrushBroadcast
+            {
+                Body = body, X = center.x, Y = center.y, Z = center.z,
+                Radius = radius, Strength = strength, Subtract = subtract, Fill = fill
+            });
+        }
+
+        public void SendExplosion(string body, Vector3 position, float radius,
+            Vector3Int craterCenter, int craterRadius)
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(new ExplosionBroadcast
+            {
+                Body = body, Position = position, Radius = radius,
+                CraterX = craterCenter.x, CraterY = craterCenter.y, CraterZ = craterCenter.z,
+                CraterRadius = craterRadius
+            });
+        }
+
+        private void OnServerTerrainBrush(NetworkConnection conn, TerrainBrushBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (!conn.IsLocalClient)
+                TerrainSync.ApplyBrush(msg.Body, new Vector3Int(msg.X, msg.Y, msg.Z),
+                    msg.Radius, msg.Strength, msg.Subtract, msg.Fill);
+            RelayToOthers(conn, msg);
+        }
+
+        private void OnServerExplosion(NetworkConnection conn, ExplosionBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (!conn.IsLocalClient)
+                TerrainSync.ApplyExplosion(msg.Body, msg.Position, msg.Radius,
+                    new Vector3Int(msg.CraterX, msg.CraterY, msg.CraterZ), msg.CraterRadius);
+            RelayToOthers(conn, msg);
+        }
+
+        private void OnClientTerrainBrush(TerrainBrushBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            TerrainSync.ApplyBrush(msg.Body, new Vector3Int(msg.X, msg.Y, msg.Z),
+                msg.Radius, msg.Strength, msg.Subtract, msg.Fill);
+        }
+
+        private void OnClientExplosion(ExplosionBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            TerrainSync.ApplyExplosion(msg.Body, msg.Position, msg.Radius,
+                new Vector3Int(msg.CraterX, msg.CraterY, msg.CraterZ), msg.CraterRadius);
         }
 
         private void OnServerDoorState(NetworkConnection conn, DoorStateBroadcast msg, Channel channel)

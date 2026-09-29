@@ -53,10 +53,29 @@ namespace VoxelEngine.Modification
                                         bool subtract, MaterialId fillMaterial = MaterialId.Stone,
                                         bool autoGrant = true)
         {
-            var result = new EditResult();
-            if (world == null) return result;
+            if (world == null) return new EditResult();
+            return ApplyAt(world, registry, world.WorldToVoxel(worldPos), radius, strength,
+                subtract, fillMaterial, autoGrant, announce: true);
+        }
 
-            Vector3Int center = world.WorldToVoxel(worldPos);
+        /// <summary>Remote replication entry (14.7.0): the identical brush at an exact
+        /// voxel center - integer voxel space is floating-origin-proof - with no drops
+        /// granted and no re-announce. Same-seed worlds converge exactly.</summary>
+        public static void ApplyReplicated(IVoxelWorld world, MaterialRegistry registry,
+                                           Vector3Int centerVoxel, float radius, float strength,
+                                           bool subtract, MaterialId fillMaterial)
+        {
+            if (world == null) return;
+            ApplyAt(world, registry, centerVoxel, radius, strength, subtract, fillMaterial,
+                autoGrant: false, announce: false);
+        }
+
+        private static EditResult ApplyAt(IVoxelWorld world, MaterialRegistry registry,
+                                          Vector3Int center, float radius, float strength,
+                                          bool subtract, MaterialId fillMaterial,
+                                          bool autoGrant, bool announce)
+        {
+            var result = new EditResult();
             int r = Mathf.CeilToInt(radius);
             float r2 = radius * radius;
 
@@ -159,6 +178,11 @@ namespace VoxelEngine.Modification
             }
             if (autoGrant) ApplyDrops(registry, drops);
             else           result.drops = drops; // hand the full breakdown back to the caller
+
+            // Multiplayer: every brush that changed terrain replicates (14.7.0).
+            if (announce && result.changed)
+                VoxelEngine.Networking.TerrainSync.AnnounceBrush(world, center, radius,
+                    strength, subtract, (byte)fillMaterial);
             return result;
         }
 

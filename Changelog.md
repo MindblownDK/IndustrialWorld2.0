@@ -1,9 +1,36 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.6.0-dev`
+**Current Version:** `14.7.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.7.0-dev] The Ground Moves For Everyone
+
+**Type:** MINOR - multiplayer milestone 4 begins: live terrain replication. Save-compatible.
+
+**Voxel brush replication.** The long pole starts with its cheapest, strongest cut: every terrain edit that goes through the `VoxelEditor` brush now replicates - pickaxe mining, terrain building/filling, grid drills, ship drills, road demolition. The design leans on two properties the brush already had:
+- **Ops, not data.** A brush op is fully described by five values: integer voxel center, radius, strength, subtract flag, fill material. The brush derives every density delta from the current voxel state, so same-seed worlds that apply the same op stream converge EXACTLY - no chunk data ever crosses the wire.
+- **Integer voxel space is floating-origin-proof.** World positions shift when the origin re-anchors; voxel coordinates never do. The op is announced with the exact center voxel the origin machine used, so the remote brush lands on the identical voxels at any distance from spawn.
+- Remote ops grant NO drops (the miner keeps the ore), wake the fluid sim (water rushes into remote holes too) and remesh exactly like local edits. `TerrainSync` (new) mirrors the `BuildingSync` seam: no Fish-Net types in gameplay code, echo-guarded, mismatch-silent, planet-tagged - an op for a planet you are not on is skipped.
+
+**Explosion replication.** Blasts are now shared events with a careful split:
+- Replicated: the fireball/mushroom VFX, blast light, distance-based camera shake, and the crater (carved by the same shared loop, sent in voxel space).
+- Deliberately NOT replicated: damage. Creature/player damage is milestone 5, and piece damage already converges through building damage sync - re-running it remotely would double-apply.
+
+**Docs:** milestone 3 marked done in the roadmap (open item: shared build costs); the plain-text code-lock note is now a committed hardening item under milestone 8 (dedicated server), per Thomas.
+
+**Phase 1 limits (tracked):** live ops on loaded chunks only - terrain edited while the other machine was offline does not catch up on join yet (terrain snapshot / chunk deltas are phase 2); fluid sim state itself is not synced (each machine runs its own water, converging on the same holes); grid-ship voxels are separate.
+
+**GitHub title:** `[14.7.0-dev] The ground moves for everyone`
+
+**Manual steps:**
+1. Pull `Dev`, recompile. No setup steps.
+2. Mining check: dig with a pickaxe on one machine - the same hole opens on the other, drops go to the digger only.
+3. Building check: fill terrain with the build tool - the same bump grows remotely, same material color.
+4. Water check: dig into a lake edge - water rushes into the new channel on BOTH machines.
+5. Explosion check: detonate anything (grenade, bomb, explosive block) - the other machine sees the fireball, feels the shake if close, and gets the identical crater.
+6. Drill check: run a grid/ship drill - the carve replicates while the ore goes to the drill owner's network only.
 
 ### [14.6.0-dev] Doors And Locks Over The Wire
 

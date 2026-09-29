@@ -43,21 +43,15 @@ namespace VoxelEngine.Combat
 
             // ── 2. Voxel terrain crater (spherical-world safe via IVoxelWorld). ──
             var world = ActiveWorld.Current;
+            Vector3Int craterCenter = default;
+            int craterRadius = 0;
             if (world != null && voxelDamageRadius > 0f)
             {
                 try
                 {
-                    Vector3Int center = world.WorldToVoxel(pos);
-                    int vr = Mathf.Clamp(Mathf.RoundToInt(voxelDamageRadius / VoxelConstants.VOXEL_SIZE), 0, 12);
-                    int vr2 = vr * vr;
-                    for (int dx = -vr; dx <= vr; dx++)
-                    for (int dy = -vr; dy <= vr; dy++)
-                    for (int dz = -vr; dz <= vr; dz++)
-                    {
-                        if (dx * dx + dy * dy + dz * dz > vr2) continue;
-                        var v = new Vector3Int(center.x + dx, center.y + dy, center.z + dz);
-                        if (world.GetVoxelWorld(v).IsSolid) world.SetVoxelWorld(v, Voxel.Empty, remesh: true);
-                    }
+                    craterCenter = world.WorldToVoxel(pos);
+                    craterRadius = Mathf.Clamp(Mathf.RoundToInt(voxelDamageRadius / VoxelConstants.VOXEL_SIZE), 0, 12);
+                    CarveCrater(world, craterCenter, craterRadius);
                 }
                 catch { /* never let a terrain edit crash the explosion */ }
             }
@@ -73,6 +67,27 @@ namespace VoxelEngine.Combat
             // ── 4. Particle VFX (scale grows with blast radius → mushroom clouds on big bombs). ──
             float scale = Mathf.Clamp(radius / 5f, 0.6f, 10f);
             ExplosionFX.Spawn(pos, up, scale, baseMat);
+
+            // ── 5. Multiplayer (14.7.0): the blast is visible everywhere - FX, shake
+            // and crater replicate. Damage does NOT: pieces already converge through
+            // building damage sync, and re-running it here would double-apply.
+            VoxelEngine.Networking.TerrainSync.AnnounceExplosion(pos, radius, craterCenter, craterRadius);
+        }
+
+        /// <summary>Spherical set-to-empty crater. Shared by local detonations and
+        /// remote replication (14.7.0) - identical loop, identical result.</summary>
+        public static void CarveCrater(IVoxelWorld world, Vector3Int center, int vr)
+        {
+            if (world == null || vr <= 0) return;
+            int vr2 = vr * vr;
+            for (int dx = -vr; dx <= vr; dx++)
+            for (int dy = -vr; dy <= vr; dy++)
+            for (int dz = -vr; dz <= vr; dz++)
+            {
+                if (dx * dx + dy * dy + dz * dz > vr2) continue;
+                var v = new Vector3Int(center.x + dx, center.y + dy, center.z + dz);
+                if (world.GetVoxelWorld(v).IsSolid) world.SetVoxelWorld(v, Voxel.Empty, remesh: true);
+            }
         }
     }
 

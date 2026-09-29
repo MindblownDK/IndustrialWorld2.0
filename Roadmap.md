@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.6.0-dev`
-**Roadmap Version:** `14.6.0-dev`
+**Current Version:** `14.7.0-dev`
+**Roadmap Version:** `14.7.0-dev`
 **Date:** 2026-09-28
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,11 @@
 ---
 
 ## 0. Recently Done
+
+### 14.7.0-dev - The Ground Moves For Everyone
+- **Terrain brush sync** (`TerrainSync` new, `VoxelEditor`, `NetworkBootstrap`): every brush op replicates as (voxel center, radius, strength, subtract, fill) - deterministic on same-seed worlds, floating-origin-proof, planet-tagged; remote ops grant no drops and wake the fluid sim.
+- **Explosion sync** (`Explosion`): fireball/shake/crater replicate; damage deliberately does not (building damage sync already converges pieces; creatures are milestone 5).
+- Open (phase 2+): terrain snapshot for join-in-progress (chunk deltas); fluid sim state; grid-ship voxel sync.
 
 ### 14.6.0-dev - Doors And Locks Over The Wire
 - **Door/gate/garage/hatch sync** (`TieredDoor`, `TieredHatch`, `BuildingSync`, `NetworkBootstrap`): every toggle replicates with its swing side; announces live in the components so all code paths are covered; remote application is silent (`SetOpenState`).
@@ -119,12 +124,12 @@ These decisions are settled. Every future system is designed against them.
 ### Milestone Plan (14.0.0 - after the current construction arc stabilizes)
 1. **Foundation:** Fish-Net package in, NetworkManager boot flow, host/join UI, player identity (stable per-player id), player spawn + transform/animation sync. *(DONE 14.0.0-dev + 14.1.0-dev - identity, bridge, host/join UI, avatar spawn + transform sync; animation sync waits for a real character rig.)*
 2. **Player state:** per-player Inventory, PlayerStats, hotbar and equipment sync; interaction raycasts validated server-side. *(IN PROGRESS - 14.2.0-dev ships the visible half: held item + stance replication on avatars.)*
-3. **Building sync:** all placement/upgrade/removal flows route through server RPCs in `BuildSystemV2` / `PlacedTieredBlock`; structural audits (`StructuralLoadState`) run server-side only; results replicate.
-4. **World sync:** voxel chunk edit replication + join-in-progress chunk streaming (the long pole - design payloads early, delta edits not full chunks).
+3. **Building sync:** all placement/upgrade/removal flows route through server RPCs in `BuildSystemV2` / `PlacedTieredBlock`; structural audits (`StructuralLoadState`) run server-side only; results replicate. *(DONE 14.4.0-14.6.0 - shipped as relayed broadcasts with positional piece identity instead of server-only audits: remote pieces stay unarmed and the origin machine announces its audit results, which converges cascades without moving the simulation; live place/upgrade/remove/damage, two-way join snapshot, doors and code locks all replicate. Open: shared build costs - placer pays alone today.)*
+4. **World sync:** voxel chunk edit replication + join-in-progress chunk streaming (the long pole - design payloads early, delta edits not full chunks). *(IN PROGRESS - 14.7.0-dev ships live op replication: brush edits and explosion craters as deterministic voxel-space ops, no chunk data on the wire. Remaining: join-in-progress terrain catch-up via saved chunk deltas.)*
 5. **Simulation sync:** machines, power, fluids, conveyors run server-side; clients render replicated state.
 6. **Real Crusaders (player model and readable loadout):** replace the capsule avatar with a proper crusader player model and make every player's loadout readable at a glance. Full design below - this milestone deliberately sits right before proximity chat because seeing WHO you meet matters as much as hearing them.
 7. **Proximity chat:** positional voice between nearby players - microphone capture, compressed frames relayed through the server, 3D-spatialized playback with distance falloff (whisper-to-shout range like the survival genre expects); muted-player list keyed by player id. Decide build-vs-buy when the milestone starts: a Fish-Net-integrated voice asset (e.g. Dissonance) versus a custom mic -> Opus -> broadcast pipeline riding the existing `NetworkBootstrap` handshake. Optional text chat falls out of the same relay for near-free.
-8. **Dedicated server:** headless build target, server-side persistence, no local player assumptions anywhere in boot code.
+8. **Dedicated server:** headless build target, server-side persistence, no local player assumptions anywhere in boot code. **Security hardening lands here (committed 14.6.0):** code-lock codes currently travel and rest in plain text (same as save files) - move code validation server-side so raw codes never reach other clients, and audit every broadcast for data a client should not see (other players' lock codes, future chest contents). Acceptable for trusted-co-op pre-release, unacceptable for public dedicated servers.
 
 ### MP-Readiness Checklist (apply to EVERY new system from now on)
 - **One authority entry point** per gameplay action (a single method that will become the server RPC). No gameplay mutations from UI code - UI raises intents.
