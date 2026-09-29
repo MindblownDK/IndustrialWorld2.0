@@ -151,6 +151,15 @@ namespace VoxelEngine.Persistence
                 if (def != null) _tieredById[def.family.ToString()] = def;
         }
 
+        /// <summary>Runtime item lookup by stable id (avatars, networking).
+        /// Lazily builds the cache so it works before any save is loaded.</summary>
+        public ItemDefinition FindItemById(string itemId)
+        {
+            if (string.IsNullOrEmpty(itemId)) return null;
+            if (_itemById.Count == 0) BuildItemCache();
+            return _itemById.TryGetValue(itemId, out var item) ? item : null;
+        }
+
         // ============================================================
         //                          SAVE
         // ============================================================

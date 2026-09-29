@@ -1,9 +1,48 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.1.4-dev`
+**Current Version:** `14.2.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.2.1-dev] Real Crusaders Locked Into The Roadmap
+
+**Type:** PATCH - documentation only, no code changes.
+
+**Milestone 6 is now the crusader player model**, deliberately placed just before proximity chat: seeing who you meet matters as much as hearing them. The full design lives in `Roadmap.md` ("Real Crusaders - Player Model & Readable Loadout") so any future agent builds against it:
+- Humanoid crusader body replaces the capsule; unarmored players show a gambeson underlayer - armor is NEVER painted on by default.
+- Armor renders on the model ONLY when worn, attached per equipment slot (Head/Chest/Legs/Back), with tier and type readable at a distance. Held items stay on the existing `HeldToolView` replication.
+- Jetpack and oxygen tank render on the back when worn - flight/dive capability readable from afar.
+- Building is a visible act: an arm-out building pose (replicated like crouch), and the placement ghost replicated so nearby players see what a teammate is about to place (rides milestone 3's piece plumbing).
+- Standing rules: owner never sees own avatar, one ServerRpc per change, everything keyed by stable item ids, unknown items degrade silently.
+
+Proximity chat moves to milestone 7, dedicated server to 8.
+
+**GitHub title:** `[14.2.1-dev] Real crusaders on the roadmap`
+
+**Manual steps:** none - pull whenever convenient.
+
+### [14.2.0-dev] Avatars Come Alive
+
+**Type:** MINOR - milestone 2 (per-player state) begins: the first visible slice is pose replication. Save-compatible.
+
+**Remote players now show what they are doing.** Until now the other player was a sliding capsule; now:
+- **Held items replicate.** The avatar carries the owner's active hotbar item in a hand anchor, using the SAME procedural models as the first-person viewmodel (`HeldToolView.BuildViewmodelFor` opened up for reuse) - pickaxes, axes, rifles, pistols, swords, block cubes, icon items. Colliders are stripped so held models never block interaction rays or physics. Unknown items on the receiving side simply show empty hands.
+- **Crouching replicates.** Crouch or slide and your avatar squashes to match (body, visor and hand all scale down); stand and it pops back.
+- **The flow is MP-clean:** owner watches its local hotbar/stance and calls one ServerRpc ONLY on change; the server writes SyncVars; everyone (including late joiners, via the spawn payload) applies them. No per-frame chatter, no client-to-client trust.
+
+**Supporting changes:**
+- `PlayerController`: `IsCrouched` exposed alongside the existing movement-state properties.
+- `WorldStatePersistence`: public `FindItemById` runtime lookup (lazy cache build) - avatars and future networking resolve items by stable id through the same catalog persistence uses.
+- `NetworkBootstrap`: pure clients see their live ping in the multiplayer menu status line ("Connected - ping 23 ms").
+
+**GitHub title:** `[14.2.0-dev] Avatars come alive`
+
+**Manual steps:**
+1. Pull `Dev`, recompile. No setup steps - the avatar prefab is unchanged (hand anchor and pose changes are runtime-driven).
+2. Two-instance test: scroll through your hotbar - the other screen shows your avatar's hand switching between the actual tool/block models. Empty slot = empty hands.
+3. Crouch and slide - the other avatar squashes and recovers. Sliding shows as crouched (intentional).
+4. On the joining client, open the multiplayer tab: the status line now reads "Connected - ping N ms".
 
 ### [14.1.4-dev] Unique Identity Per Game Instance
 

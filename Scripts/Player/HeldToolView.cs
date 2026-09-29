@@ -255,7 +255,10 @@ namespace VoxelEngine.Player
         // ============================================================
         //          Procedural viewmodel mesh builder (fallback)
         // ============================================================
-        private static GameObject BuildViewmodelFor(ItemDefinition item)
+        /// <summary>Builds the procedural model for an item. Public since
+        /// 14.2.0: PlayerAvatar reuses it so remote players visibly hold the
+        /// same models the first-person viewmodel shows.</summary>
+        public static GameObject BuildViewmodelFor(ItemDefinition item)
         {
             var root = new GameObject("Held_" + item.name);
             

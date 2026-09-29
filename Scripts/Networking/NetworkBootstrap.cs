@@ -56,8 +56,19 @@ namespace VoxelEngine.Networking
 
         public bool IsOnline => _serverStarted || _clientStarted;
 
-        /// <summary>One human-readable line for the multiplayer menu.</summary>
-        public string StatusLine { get; private set; } = "Offline";
+        private string _statusLine = "Offline";
+
+        /// <summary>One human-readable line for the multiplayer menu. Pure
+        /// clients get their live ping appended.</summary>
+        public string StatusLine
+        {
+            get
+            {
+                if (_clientStarted && !_serverStarted)
+                    return $"Connected - ping {_networkManager.TimeManager.RoundTripTime} ms";
+                return _statusLine;
+            }
+        }
 
         // ─────────────────────────── lifecycle ───────────────────────────
 
@@ -97,7 +108,7 @@ namespace VoxelEngine.Networking
         public void StartHost()
         {
             if (IsOnline) return;
-            StatusLine = "Starting host...";
+            _statusLine = "Starting host...";
             _networkManager.ServerManager.StartConnection();
             _networkManager.ClientManager.StartConnection("localhost");
         }
@@ -107,7 +118,7 @@ namespace VoxelEngine.Networking
         {
             if (IsOnline) return;
             address = string.IsNullOrWhiteSpace(address) ? "localhost" : address.Trim();
-            StatusLine = $"Connecting to {address}...";
+            _statusLine = $"Connecting to {address}...";
             _networkManager.ClientManager.StartConnection(address);
         }
 
@@ -126,7 +137,7 @@ namespace VoxelEngine.Networking
             {
                 _serverStarted = true;
                 NetworkSession.SetMode(SessionMode.Host);
-                StatusLine = "Hosting";
+                _statusLine = "Hosting";
             }
             else if (args.ConnectionState == LocalConnectionState.Stopped)
             {
@@ -145,13 +156,13 @@ namespace VoxelEngine.Networking
                 if (!_serverStarted)
                 {
                     NetworkSession.SetMode(SessionMode.Client);
-                    StatusLine = "Connected";
+                    _statusLine = "Connected";
                 }
             }
             else if (args.ConnectionState == LocalConnectionState.Stopped)
             {
                 _clientStarted = false;
-                if (_serverStarted) StatusLine = "Hosting";
+                if (_serverStarted) _statusLine = "Hosting";
                 else GoOffline();
             }
         }
@@ -246,7 +257,7 @@ namespace VoxelEngine.Networking
         private void GoOffline()
         {
             NetworkSession.SetMode(SessionMode.Offline);
-            StatusLine = "Offline";
+            _statusLine = "Offline";
 
             // Sweep any remote presences the avatar callbacks did not get to
             // (e.g. an abrupt disconnect). The local player always stays.

@@ -141,6 +141,7 @@ namespace VoxelEngine.Player
 
         // ===== movement-state exposure (read by HeldToolView / animations) =====
         public bool IsGrounded => _grounded;
+        public bool IsCrouched => _crouched;
         public bool IsSliding => _sliding;
         public bool IsSprinting => _sprinting;
         public bool IsFlying => inspectorFlyToggle;

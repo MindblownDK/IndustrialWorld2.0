@@ -1,16 +1,20 @@
 // Assets/Scripts/VoxelEngine/Networking/PlayerAvatar.cs
 //
-// 14.1.0-dev - Multiplayer Foundation, part 2. (14.1.2-dev: identity is now
-// applied AFTER spawn and everything reacts to SyncVar changes, so names and
-// roster entries can never be missed by a race again.)
+// 14.1.0-dev - Multiplayer Foundation, part 2.
+// 14.1.2-dev - identity applied after spawn, change-driven registration.
+// 14.2.0-dev - avatars come alive: held item + crouch replication.
 //
 // The networked body of one player. The server spawns one per connection,
-// FishNet's NetworkTransform replicates its movement, and this class does
-// three small jobs on top:
-//   1. mirror the OWNING player's local rig into the avatar every frame,
-//   2. keep NetworkSession's presence registry in step with the identity
+// FishNet's NetworkTransform replicates its movement, and this class:
+//   1. mirrors the OWNING player's local rig into the avatar every frame,
+//   2. keeps NetworkSession's presence registry in step with the identity
 //      SyncVars - whenever they arrive, and whenever they change (rename),
-//   3. render a nameplate that faces whoever is looking.
+//   3. renders a nameplate that faces whoever is looking,
+//   4. shows what the player is DOING: the active hotbar item rides in a
+//      hand anchor (same procedural models as the first-person viewmodel),
+//      and crouching squashes the body.
+// Pose flows owner -> ServerRpc -> SyncVars -> everyone, so the server stays
+// the single relay and late joiners get current values in the spawn payload.
 // The owner never sees their own avatar - renderers are disabled locally.
 //
 // Milestone note: movement replication is owner-authoritative for now (the
@@ -25,15 +29,37 @@ namespace VoxelEngine.Networking
 {
     public class PlayerAvatar : NetworkBehaviour
     {
+        private const float CrouchFactor = 0.62f;   // 1.85 m -> ~1.15 m, matches the controller's crouch height
+
         private readonly SyncVar<string> _playerId = new SyncVar<string>();
         private readonly SyncVar<string> _playerName = new SyncVar<string>();
+        private readonly SyncVar<string> _heldItemId = new SyncVar<string>();
+        private readonly SyncVar<bool> _crouched = new SyncVar<bool>();
 
         [Tooltip("Nameplate above the head. Assigned by Setup Step 105.")]
         public TextMesh nameplate;
 
+        [Header("Hand (third-person held item)")]
+        public Vector3 handLocalPosition = new Vector3(0.45f, 1.25f, 0.35f);
+        public Vector3 handLocalEuler = new Vector3(10f, -20f, 0f);
+
         /// <summary>The id this avatar registered into NetworkSession, so it
         /// always unregisters exactly what it registered.</summary>
         private string _registeredId;
+
+        // visuals
+        private Transform _hand;
+        private GameObject _heldModel;
+        private Transform _body;
+        private Transform _visor;
+        private Vector3 _bodyStandPos, _bodyStandScale, _visorStandPos;
+        private bool _poseCached;
+
+        // owner-side mirrors
+        private VoxelEngine.Items.Inventory _inventory;
+        private VoxelEngine.Player.PlayerController _controller;
+        private string _sentHeldItemId;
+        private bool _sentCrouched;
 
         public string PlayerId => _playerId.Value;
         public string PlayerName => _playerName.Value;
@@ -42,12 +68,16 @@ namespace VoxelEngine.Networking
         {
             _playerId.OnChange += OnIdChanged;
             _playerName.OnChange += OnNameChanged;
+            _heldItemId.OnChange += OnHeldItemChanged;
+            _crouched.OnChange += OnCrouchedChanged;
         }
 
         private void OnDestroy()
         {
             _playerId.OnChange -= OnIdChanged;
             _playerName.OnChange -= OnNameChanged;
+            _heldItemId.OnChange -= OnHeldItemChanged;
+            _crouched.OnChange -= OnCrouchedChanged;
             Unregister();   // belt and braces; normally OnStopClient/Server did it
         }
 
@@ -83,6 +113,12 @@ namespace VoxelEngine.Networking
                 foreach (var r in GetComponentsInChildren<Renderer>(true))
                     r.enabled = false;
             }
+            else
+            {
+                // Late joiners: current pose arrived with the spawn payload.
+                ApplyHeldItem(_heldItemId.Value);
+                ApplyCrouch(_crouched.Value);
+            }
         }
 
         public override void OnStopClient()
@@ -116,6 +152,36 @@ namespace VoxelEngine.Networking
             if (stats == null) return;
             var rig = stats.transform;
             transform.SetPositionAndRotation(rig.position, rig.rotation);
+
+            MirrorPose(stats);
+        }
+
+        /// <summary>Owner-side: watch the local hotbar and stance, and tell
+        /// the server only when something actually changes.</summary>
+        private void MirrorPose(VoxelEngine.Player.PlayerStats stats)
+        {
+            if (_inventory == null) _inventory = stats.GetComponent<VoxelEngine.Items.Inventory>();
+            if (_controller == null) _controller = stats.GetComponent<VoxelEngine.Player.PlayerController>();
+
+            string held = "";
+            if (_inventory != null)
+            {
+                var stack = _inventory.ActiveStack;
+                if (stack != null && stack.item != null) held = stack.item.itemId ?? "";
+            }
+            bool crouched = _controller != null && (_controller.IsCrouched || _controller.IsSliding);
+
+            if (held == _sentHeldItemId && crouched == _sentCrouched) return;
+            _sentHeldItemId = held;
+            _sentCrouched = crouched;
+            RpcUpdatePose(held, crouched);
+        }
+
+        [ServerRpc]
+        private void RpcUpdatePose(string heldItemId, bool crouched)
+        {
+            _heldItemId.Value = heldItemId ?? "";
+            _crouched.Value = crouched;
         }
 
         private void LateUpdate()
@@ -166,6 +232,73 @@ namespace VoxelEngine.Networking
             if (nameplate == null) return;
             string name = _playerName.Value;
             nameplate.text = string.IsNullOrEmpty(name) ? "..." : name;
+        }
+
+        // ─────────────────────────── pose visuals ───────────────────────────
+
+        private void OnHeldItemChanged(string previous, string next, bool asServer)
+        {
+            if (asServer || IsOwner) return;   // host applies on its client pass; owners are invisible to themselves
+            ApplyHeldItem(next);
+        }
+
+        private void OnCrouchedChanged(bool previous, bool next, bool asServer)
+        {
+            if (asServer || IsOwner) return;
+            ApplyCrouch(next);
+        }
+
+        private void ApplyHeldItem(string itemId)
+        {
+            if (_heldModel != null) { Destroy(_heldModel); _heldModel = null; }
+            if (string.IsNullOrEmpty(itemId)) return;
+
+            var persistence = VoxelEngine.Persistence.WorldStatePersistence.Instance;
+            var item = persistence != null ? persistence.FindItemById(itemId) : null;
+            if (item == null) return;   // unknown on this side - show empty hands
+
+            EnsureHand();
+            _heldModel = VoxelEngine.Player.HeldToolView.BuildViewmodelFor(item);
+            _heldModel.transform.SetParent(_hand, false);
+            // Display only: held models must never collide with the world or
+            // swallow interaction rays.
+            foreach (var col in _heldModel.GetComponentsInChildren<Collider>(true))
+                Destroy(col);
+        }
+
+        private void ApplyCrouch(bool crouched)
+        {
+            CachePose();
+            float f = crouched ? CrouchFactor : 1f;
+            if (_body != null)
+            {
+                _body.localScale = new Vector3(_bodyStandScale.x, _bodyStandScale.y * f, _bodyStandScale.z);
+                _body.localPosition = new Vector3(_bodyStandPos.x, _bodyStandPos.y * f, _bodyStandPos.z);
+            }
+            if (_visor != null)
+                _visor.localPosition = new Vector3(_visorStandPos.x, _visorStandPos.y * f, _visorStandPos.z);
+            if (_hand != null)
+                _hand.localPosition = new Vector3(handLocalPosition.x, handLocalPosition.y * f, handLocalPosition.z);
+        }
+
+        private void EnsureHand()
+        {
+            if (_hand != null) return;
+            var go = new GameObject("HandAnchor");
+            _hand = go.transform;
+            _hand.SetParent(transform, false);
+            _hand.localPosition = handLocalPosition;
+            _hand.localRotation = Quaternion.Euler(handLocalEuler);
+        }
+
+        private void CachePose()
+        {
+            if (_poseCached) return;
+            _poseCached = true;
+            _body = transform.Find("Body");
+            _visor = transform.Find("Visor");
+            if (_body != null) { _bodyStandPos = _body.localPosition; _bodyStandScale = _body.localScale; }
+            if (_visor != null) _visorStandPos = _visor.localPosition;
         }
     }
 }

@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.1.4-dev`
-**Roadmap Version:** `14.1.4-dev`
+**Current Version:** `14.2.1-dev`
+**Roadmap Version:** `14.2.1-dev`
 **Date:** 2026-09-28
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,14 @@
 ---
 
 ## 0. Recently Done
+
+### 14.2.1-dev - Real Crusaders Locked Into The Roadmap
+- **Docs only**: milestone 6 is now the crusader player model - armor visible only when worn and readable by tier, jetpack and oxygen tank on the back, building pose, replicated placement ghosts. Full design section added; proximity chat moves to 7, dedicated server to 8.
+
+### 14.2.0-dev - Avatars Come Alive
+- **Pose replication** (`PlayerAvatar`): remote players hold their active hotbar item (same procedural models as the first-person viewmodel) and squash when crouching/sliding; owner -> ServerRpc -> SyncVars, change-driven only.
+- **Runtime item lookup** (`WorldStatePersistence.FindItemById`): stable-id item resolution for networking.
+- **Ping display** (`NetworkBootstrap`): live RTT in the multiplayer menu for clients.
 
 ### 14.1.2-dev - Names That Actually Show Up
 - **Identity delivery fixed** (`NetworkBootstrap`, `PlayerAvatar`): avatar identity is applied after spawn and all consumers react to SyncVar changes - nameplates and rosters can no longer miss a late-arriving name.
@@ -90,12 +98,13 @@ These decisions are settled. Every future system is designed against them.
 
 ### Milestone Plan (14.0.0 - after the current construction arc stabilizes)
 1. **Foundation:** Fish-Net package in, NetworkManager boot flow, host/join UI, player identity (stable per-player id), player spawn + transform/animation sync. *(DONE 14.0.0-dev + 14.1.0-dev - identity, bridge, host/join UI, avatar spawn + transform sync; animation sync waits for a real character rig.)*
-2. **Player state:** per-player Inventory, PlayerStats, hotbar and equipment sync; interaction raycasts validated server-side.
+2. **Player state:** per-player Inventory, PlayerStats, hotbar and equipment sync; interaction raycasts validated server-side. *(IN PROGRESS - 14.2.0-dev ships the visible half: held item + stance replication on avatars.)*
 3. **Building sync:** all placement/upgrade/removal flows route through server RPCs in `BuildSystemV2` / `PlacedTieredBlock`; structural audits (`StructuralLoadState`) run server-side only; results replicate.
 4. **World sync:** voxel chunk edit replication + join-in-progress chunk streaming (the long pole - design payloads early, delta edits not full chunks).
 5. **Simulation sync:** machines, power, fluids, conveyors run server-side; clients render replicated state.
-6. **Proximity chat:** positional voice between nearby players - microphone capture, compressed frames relayed through the server, 3D-spatialized playback with distance falloff (whisper-to-shout range like the survival genre expects); muted-player list keyed by player id. Decide build-vs-buy when the milestone starts: a Fish-Net-integrated voice asset (e.g. Dissonance) versus a custom mic -> Opus -> broadcast pipeline riding the existing `NetworkBootstrap` handshake. Optional text chat falls out of the same relay for near-free.
-7. **Dedicated server:** headless build target, server-side persistence, no local player assumptions anywhere in boot code.
+6. **Real Crusaders (player model and readable loadout):** replace the capsule avatar with a proper crusader player model and make every player's loadout readable at a glance. Full design below - this milestone deliberately sits right before proximity chat because seeing WHO you meet matters as much as hearing them.
+7. **Proximity chat:** positional voice between nearby players - microphone capture, compressed frames relayed through the server, 3D-spatialized playback with distance falloff (whisper-to-shout range like the survival genre expects); muted-player list keyed by player id. Decide build-vs-buy when the milestone starts: a Fish-Net-integrated voice asset (e.g. Dissonance) versus a custom mic -> Opus -> broadcast pipeline riding the existing `NetworkBootstrap` handshake. Optional text chat falls out of the same relay for near-free.
+8. **Dedicated server:** headless build target, server-side persistence, no local player assumptions anywhere in boot code.
 
 ### MP-Readiness Checklist (apply to EVERY new system from now on)
 - **One authority entry point** per gameplay action (a single method that will become the server RPC). No gameplay mutations from UI code - UI raises intents.
@@ -105,6 +114,24 @@ These decisions are settled. Every future system is designed against them.
 - **Statics are single-player debt:** static gameplay state (not pure helpers) will need a per-instance or server-owned home; avoid adding new static gameplay state.
 - **Physics queries used for gameplay** (base probes, eave contact, overlap audits) must be runnable on the server - keep them in plain simulation code, never inside camera/UI/input paths.
 - **Separate input from simulation:** read input in player code, apply results through the authority entry point.
+
+### Real Crusaders - Player Model & Readable Loadout (milestone 6 design)
+
+**Reference:** the dark crusader concept Thomas provided - blackened full plate over chainmail, closed helm, torn black cape, and a black tabard with red cross accents. That silhouette is the target feel. The sword in the reference is NOT part of the model: held items stay driven by the existing `HeldToolView` replication from 14.2.0.
+
+**Goal:** in multiplayer, another player should be readable in under a second: what armor they wear, what they hold, whether they can fly, whether they are building. The avatar is information, not decoration.
+
+**1. The base model.** A humanoid crusader body replaces the capsule: head, torso, arms, legs, cape. UNARMORED, the player shows a padded gambeson-style underlayer - armor is never painted on by default. Build approach decided when the milestone starts: procedural primitive rig first (same technique as `HeldToolView` viewmodels - ships immediately, animates by code) versus an imported rigged mesh with an Animator (better looks, needs art). The procedural pass is acceptable as v1; the attachment architecture below must survive either choice.
+
+**2. Armor shows ONLY when worn.** Each equipment slot maps to an attachment point on the model (Head, Chest, Legs, Back at minimum). Equipping a piece attaches its exterior visual to that point; unequipping removes it. Armor TIER and TYPE must be visually distinct at a distance (material/color/shape per tier - e.g. the reference's blackened plate reads as high tier). Replication reuses the exact 14.2.0 pattern: owner watches its equipment, one ServerRpc on change, SyncVars fan out, late joiners get current values in the spawn payload.
+
+**3. Back slot equipment is visible.** A worn jetpack renders on the back; an oxygen tank renders beside or below it. If both are worn, both show. This is also a survival readability feature: you can tell from afar whether a player can fly or dive.
+
+**4. Building is a visible act.** Two parts:
+   - **Building pose:** while a player is in build mode / placing, their avatar raises an arm toward the placement point (hammer out). Replicated as a stance flag exactly like crouch (14.2.0).
+   - **Ghost replication:** the placement ghost (piece + position + rotation) is replicated so nearby players see WHERE and WHAT a teammate is about to place, rendered in the same ghost material locally. Low-rate updates (a few per second) while build mode is active; disappears the moment build mode ends. This lands cleanly AFTER milestone 3 (building sync) since it rides the same piece-identity plumbing.
+
+**5. Rules that hold regardless of art:** nameplate stays above the model; the owner never sees their own avatar; crouch squash is replaced by a real crouch pose when the humanoid lands; all state flows owner -> ServerRpc -> SyncVar - no client-to-client trust; every visual keys off stable item ids so unknown items degrade to "nothing shown", never errors.
 
 ### Era Transition Feel
 
