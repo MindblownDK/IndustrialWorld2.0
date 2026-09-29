@@ -160,6 +160,15 @@ namespace VoxelEngine.Persistence
             return _itemById.TryGetValue(itemId, out var item) ? item : null;
         }
 
+        /// <summary>Runtime block-item lookup by stable id (block sync, 14.9.0).
+        /// Lazily builds the cache so it works before any save is loaded.</summary>
+        public BlockItem FindBlockById(string itemId)
+        {
+            if (string.IsNullOrEmpty(itemId)) return null;
+            if (_blockById.Count == 0) BuildItemCache();
+            return _blockById.TryGetValue(itemId, out var block) ? block : null;
+        }
+
         /// <summary>Runtime tiered-piece lookup by family name (building sync).
         /// Lazily builds the cache so it works before any save is loaded.</summary>
         public TieredBlockDefinition FindTieredByFamily(string family)

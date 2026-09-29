@@ -35,6 +35,8 @@ namespace VoxelEngine.Building
             {
                 // Visible cracks for every hit that does not finish the block (9.30.0).
                 VoxelEngine.Thermal.BlockDamageVisual.ReportDamage(this, Damage01);
+                // Multiplayer: surviving hits crack on every machine (14.9.0).
+                VoxelEngine.Networking.BlockSync.AnnounceDamaged(this);
                 return;
             }
 
@@ -50,6 +52,9 @@ namespace VoxelEngine.Building
             {
                 GiveToPlayerThenDrop(new ItemStack(Item, 1), recipient, transform.position + Vector3.up * 0.6f);
             }
+            // Multiplayer: the authority point for destruction (14.9.0) - the
+            // announce itself skips grid-attached blocks.
+            VoxelEngine.Networking.BlockSync.AnnounceRemoved(this);
             var gridBlock = GetComponent<VoxelEngine.GridSystem.GridBlock>();
             if (gridBlock != null && gridBlock.IsPrecisionAttachment && gridBlock.Grid != null)
                 gridBlock.Grid.GetComponent<VoxelEngine.GridSystem.GridPrecisionAttachmentLayer>()?.RemoveBlock(gridBlock.PrecisionGridPos);

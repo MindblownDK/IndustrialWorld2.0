@@ -1,9 +1,34 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.8.1-dev`
+**Current Version:** `14.9.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.9.0-dev] Machines On Every Machine
+
+**Type:** MINOR - multiplayer milestone 5 begins: item-block replication. Save-compatible.
+
+**The gap.** Only tiered pieces replicated - a furnace, chest, conveyor line or power cable existed solely on the machine that placed it. The other player saw an empty floor where your factory stood.
+
+**Item-block sync (`BlockSync`, the third seam).** Static world blocks placed from the hotbar now replicate live and on join, mirroring the proven BuildingSync pattern:
+- **Live:** placement (hooked at the single authority point in `BuildSystem`), surviving damage with hp + cracks, and destruction (both hooked inside `PlacedBlock.Damage`, covering every caller - mining, explosions, everything). Same uniform wire path, echo-guarded, mismatch-silent.
+- **Looks-right guarantee:** the placement-time cosmetic choices travel with the block - conveyor build shape (with an immediate topology refresh so belt runs connect visually), power cable variant + segment length (with visual rebuild and neighbor refresh), road placement refresh, texture/material overrides, and a power-topology dirty mark so cable networks re-form on the far side.
+- **Join merge:** a chunked `BlockSnapshotBroadcast` rides the same handshake as pieces and terrain - two-way, duplicate-guarded (itemId + 25 cm), hp-converging on rejoin.
+- **Grid exclusion:** blocks attached to movable grids (ships, vehicles) are excluded exactly like the save system excludes them - grids are their own milestone.
+- New API: `WorldStatePersistence.FindBlockById(string)`, completing the lookup trio (items, tiered families, block items).
+
+**What this deliberately does NOT sync yet (the heart of milestone 5, next):** container contents, machine runtime state (recipes, smelt progress, power flow, quarry state), placement payloads (a pre-filled tank arrives empty), and dropped items. The factory LOOKS identical everywhere; it does not yet RUN identically.
+
+**GitHub title:** `[14.9.0-dev] Machines on every machine`
+
+**Manual steps:**
+1. Pull `Dev`, recompile. No setup steps.
+2. Live check: place a furnace, a chest, a few conveyor segments (mix straight/corner/ramp) and a power cable run - all appear on the other machine with the same shapes, orientations and cable style.
+3. Damage check: hammer a placed block without destroying it - cracks match remotely; destroy it - it vanishes on both (drops go to the breaker only).
+4. Join check: build a small factory while the client is offline; client joins - the whole line is standing there.
+5. Merge check: client builds its own machines offline, joins - they appear on the host too.
+6. Grid check: blocks on a ship/vehicle grid stay local (expected - grids are a later milestone).
 
 ### [14.8.1-dev] The Server Wins The Terrain Merge
 

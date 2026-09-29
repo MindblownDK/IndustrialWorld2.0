@@ -1029,6 +1029,8 @@ namespace VoxelEngine.Building
             // pose, so refresh this belt and its neighbours immediately instead of
             // waiting for the periodic connection scan.
             placedBelt?.RefreshTopologyImmediate();
+            // Multiplayer: the authority point for item-block placement (14.9.0).
+            VoxelEngine.Networking.BlockSync.AnnouncePlaced(pb);
             return true;
         }
 

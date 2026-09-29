@@ -123,6 +123,34 @@ namespace VoxelEngine.Networking
         public int CraterRadius;
     }
 
+    /// <summary>One item-block placed live (14.9.0).</summary>
+    public struct BlockPlacedBroadcast : IBroadcast
+    {
+        public BlockSnapshot Snap;
+    }
+
+    /// <summary>Surviving damage on an item-block (14.9.0).</summary>
+    public struct BlockDamagedBroadcast : IBroadcast
+    {
+        public string ItemId;
+        public Vector3 Position;
+        public int Hp;
+    }
+
+    public struct BlockRemovedBroadcast : IBroadcast
+    {
+        public string ItemId;
+        public Vector3 Position;
+    }
+
+    /// <summary>A chunk of standing item-blocks (join merge, 14.9.0).</summary>
+    public struct BlockSnapshotBroadcast : IBroadcast
+    {
+        public int ChunkIndex;
+        public int TotalChunks;
+        public List<BlockSnapshot> Blocks;
+    }
+
     /// <summary>One edited terrain chunk for the join catch-up (14.8.0):
     /// deflate-compressed full padded voxel grid, planet-tagged.</summary>
     public struct TerrainChunkBroadcast : IBroadcast
@@ -219,6 +247,10 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.RegisterBroadcast<LockRemovedBroadcast>(OnServerLockRemoved);
             _networkManager.ServerManager.RegisterBroadcast<TerrainBrushBroadcast>(OnServerTerrainBrush);
             _networkManager.ServerManager.RegisterBroadcast<ExplosionBroadcast>(OnServerExplosion);
+            _networkManager.ServerManager.RegisterBroadcast<BlockPlacedBroadcast>(OnServerBlockPlaced);
+            _networkManager.ServerManager.RegisterBroadcast<BlockDamagedBroadcast>(OnServerBlockDamaged);
+            _networkManager.ServerManager.RegisterBroadcast<BlockRemovedBroadcast>(OnServerBlockRemoved);
+            _networkManager.ServerManager.RegisterBroadcast<BlockSnapshotBroadcast>(OnServerBlockSnapshot);
             _networkManager.ServerManager.RegisterBroadcast<TerrainChunkBroadcast>(OnServerTerrainChunk);
             _networkManager.ServerManager.RegisterBroadcast<WorldAckBroadcast>(OnWorldAck);
             _networkManager.ServerManager.RegisterBroadcast<BaseSnapshotBroadcast>(OnServerBaseSnapshot);
@@ -232,6 +264,10 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.RegisterBroadcast<LockRemovedBroadcast>(OnClientLockRemoved);
             _networkManager.ClientManager.RegisterBroadcast<TerrainBrushBroadcast>(OnClientTerrainBrush);
             _networkManager.ClientManager.RegisterBroadcast<ExplosionBroadcast>(OnClientExplosion);
+            _networkManager.ClientManager.RegisterBroadcast<BlockPlacedBroadcast>(OnClientBlockPlaced);
+            _networkManager.ClientManager.RegisterBroadcast<BlockDamagedBroadcast>(OnClientBlockDamaged);
+            _networkManager.ClientManager.RegisterBroadcast<BlockRemovedBroadcast>(OnClientBlockRemoved);
+            _networkManager.ClientManager.RegisterBroadcast<BlockSnapshotBroadcast>(OnClientBlockSnapshot);
             _networkManager.ClientManager.RegisterBroadcast<TerrainChunkBroadcast>(OnClientTerrainChunk);
             _networkManager.ClientManager.RegisterBroadcast<BaseSnapshotBroadcast>(OnClientBaseSnapshot);
         }
@@ -254,6 +290,10 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.UnregisterBroadcast<LockRemovedBroadcast>(OnServerLockRemoved);
             _networkManager.ServerManager.UnregisterBroadcast<TerrainBrushBroadcast>(OnServerTerrainBrush);
             _networkManager.ServerManager.UnregisterBroadcast<ExplosionBroadcast>(OnServerExplosion);
+            _networkManager.ServerManager.UnregisterBroadcast<BlockPlacedBroadcast>(OnServerBlockPlaced);
+            _networkManager.ServerManager.UnregisterBroadcast<BlockDamagedBroadcast>(OnServerBlockDamaged);
+            _networkManager.ServerManager.UnregisterBroadcast<BlockRemovedBroadcast>(OnServerBlockRemoved);
+            _networkManager.ServerManager.UnregisterBroadcast<BlockSnapshotBroadcast>(OnServerBlockSnapshot);
             _networkManager.ServerManager.UnregisterBroadcast<TerrainChunkBroadcast>(OnServerTerrainChunk);
             _networkManager.ServerManager.UnregisterBroadcast<WorldAckBroadcast>(OnWorldAck);
             _networkManager.ServerManager.UnregisterBroadcast<BaseSnapshotBroadcast>(OnServerBaseSnapshot);
@@ -267,6 +307,10 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.UnregisterBroadcast<LockRemovedBroadcast>(OnClientLockRemoved);
             _networkManager.ClientManager.UnregisterBroadcast<TerrainBrushBroadcast>(OnClientTerrainBrush);
             _networkManager.ClientManager.UnregisterBroadcast<ExplosionBroadcast>(OnClientExplosion);
+            _networkManager.ClientManager.UnregisterBroadcast<BlockPlacedBroadcast>(OnClientBlockPlaced);
+            _networkManager.ClientManager.UnregisterBroadcast<BlockDamagedBroadcast>(OnClientBlockDamaged);
+            _networkManager.ClientManager.UnregisterBroadcast<BlockRemovedBroadcast>(OnClientBlockRemoved);
+            _networkManager.ClientManager.UnregisterBroadcast<BlockSnapshotBroadcast>(OnClientBlockSnapshot);
             _networkManager.ClientManager.UnregisterBroadcast<TerrainChunkBroadcast>(OnClientTerrainChunk);
             _networkManager.ClientManager.UnregisterBroadcast<BaseSnapshotBroadcast>(OnClientBaseSnapshot);
         }
@@ -670,6 +714,7 @@ namespace VoxelEngine.Networking
             if (!WorldMismatch)
             {
                 SendBaseSnapshot(null);
+                SendBlockSnapshot(null);
                 SendTerrainSnapshot(null);
             }
         }
@@ -680,7 +725,102 @@ namespace VoxelEngine.Networking
             if (!_serverStarted || conn.IsLocalClient) return;
             if (!msg.SeedMatches) return;
             SendBaseSnapshot(conn);
+            SendBlockSnapshot(conn);
             SendTerrainSnapshot(conn);
+        }
+
+        public void SendBlockPlaced(BlockSnapshot snap)
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(new BlockPlacedBroadcast { Snap = snap });
+        }
+
+        public void SendBlockDamaged(string itemId, Vector3 pos, int hp)
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(new BlockDamagedBroadcast
+            { ItemId = itemId, Position = pos, Hp = hp });
+        }
+
+        public void SendBlockRemoved(string itemId, Vector3 pos)
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(new BlockRemovedBroadcast
+            { ItemId = itemId, Position = pos });
+        }
+
+        private void OnServerBlockPlaced(NetworkConnection conn, BlockPlacedBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (!conn.IsLocalClient) BlockSync.ApplyPlaced(msg.Snap);
+            RelayToOthers(conn, msg);
+        }
+
+        private void OnServerBlockDamaged(NetworkConnection conn, BlockDamagedBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (!conn.IsLocalClient) BlockSync.ApplyDamaged(msg.ItemId, msg.Position, msg.Hp);
+            RelayToOthers(conn, msg);
+        }
+
+        private void OnServerBlockRemoved(NetworkConnection conn, BlockRemovedBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (!conn.IsLocalClient) BlockSync.ApplyRemoved(msg.ItemId, msg.Position);
+            RelayToOthers(conn, msg);
+        }
+
+        private void OnServerBlockSnapshot(NetworkConnection conn, BlockSnapshotBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (!conn.IsLocalClient) BlockSync.ApplySnapshot(msg.Blocks);
+            RelayToOthers(conn, msg);
+        }
+
+        private void OnClientBlockPlaced(BlockPlacedBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            BlockSync.ApplyPlaced(msg.Snap);
+        }
+
+        private void OnClientBlockDamaged(BlockDamagedBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            BlockSync.ApplyDamaged(msg.ItemId, msg.Position, msg.Hp);
+        }
+
+        private void OnClientBlockRemoved(BlockRemovedBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            BlockSync.ApplyRemoved(msg.ItemId, msg.Position);
+        }
+
+        private void OnClientBlockSnapshot(BlockSnapshotBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            BlockSync.ApplySnapshot(msg.Blocks);
+        }
+
+        /// <summary>Gather all standing item-blocks and send them chunked - to a joining
+        /// connection when called as server, up to the server when target is null.</summary>
+        private void SendBlockSnapshot(NetworkConnection target)
+        {
+            const int ChunkSize = 32;
+            var blocks = BlockSync.GatherSnapshot();
+            if (blocks.Count == 0) return;
+            int total = Mathf.CeilToInt(blocks.Count / (float)ChunkSize);
+            for (int i = 0; i < total; i++)
+            {
+                var chunk = new BlockSnapshotBroadcast
+                {
+                    ChunkIndex = i,
+                    TotalChunks = total,
+                    Blocks = blocks.GetRange(i * ChunkSize,
+                        Mathf.Min(ChunkSize, blocks.Count - i * ChunkSize))
+                };
+                if (target != null) _networkManager.ServerManager.Broadcast(target, chunk, true);
+                else _networkManager.ClientManager.Broadcast(chunk);
+            }
         }
 
         private void OnServerTerrainChunk(NetworkConnection conn, TerrainChunkBroadcast msg, Channel channel)
