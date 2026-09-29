@@ -14,10 +14,11 @@
 // and length) so they LOOK identical everywhere.
 //
 // Phase 1 scope (deliberate): the block itself, its pose, its hp/cracks and
-// its wiring-level visuals. NOT yet synced: container contents, machine
-// runtime state (recipes, progress, power flow - that is the heart of
-// milestone 5), grid-ship attached blocks (grids are their own milestone),
-// and placement payloads (e.g. a pre-filled tank).
+// its wiring-level visuals. Container contents ride the sibling seam
+// (ContainerSync, 14.10.0). NOT yet synced: machine runtime state (recipes,
+// progress, power flow - that is the heart of milestone 5), grid-ship
+// attached blocks (grids are their own milestone), and placement payloads
+// (e.g. a pre-filled tank).
 
 using System.Collections.Generic;
 using UnityEngine;
@@ -215,7 +216,7 @@ namespace VoxelEngine.Networking
         }
 
         /// <summary>Positional identity: nearest same-item block within 25 cm.</summary>
-        private static PlacedBlock FindBlockAt(string itemId, Vector3 pos)
+        internal static PlacedBlock FindBlockAt(string itemId, Vector3 pos)
         {
             PlacedBlock best = null;
             float bestSq = 0.25f * 0.25f;

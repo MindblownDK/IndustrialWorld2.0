@@ -178,6 +178,39 @@ namespace VoxelEngine.Persistence
             return _tieredById.TryGetValue(family, out var def) ? def : null;
         }
 
+        /// <summary>Container contents of a placed block as opaque JSON, produced by
+        /// the exact save-format capture path (container sync, 14.10.0). Returns null
+        /// when the block carries no known container. One entry per slot - empties
+        /// included - and deterministic for equal state, so the network layer can use
+        /// plain string equality as its change check.</summary>
+        public string CaptureContainerJson(GameObject blockRoot)
+        {
+            if (blockRoot == null) return null;
+            var sc = TryFindContainer(blockRoot);
+            return sc != null ? JsonUtility.ToJson(sc) : null;
+        }
+
+        /// <summary>Inverse of CaptureContainerJson: whole-container overwrite of a
+        /// live block from wire JSON along the save-format restore path (14.10.0).</summary>
+        public void RestoreContainerJson(GameObject blockRoot, string json)
+        {
+            if (blockRoot == null || string.IsNullOrEmpty(json)) return;
+            var sc = JsonUtility.FromJson<SavedContainer>(json);
+            if (sc != null) RestoreContainer(blockRoot, sc);
+        }
+
+        /// <summary>True when any slot of the block's container(s) holds items - the
+        /// join-merge filter: a joiner's upload only fills EMPTY host containers.</summary>
+        public bool ContainerHasItems(GameObject blockRoot)
+        {
+            if (blockRoot == null) return false;
+            var sc = TryFindContainer(blockRoot);
+            if (sc == null || sc.entries == null) return false;
+            foreach (var e in sc.entries)
+                if (e != null && !string.IsNullOrEmpty(e.itemId) && e.count > 0) return true;
+            return false;
+        }
+
         // ============================================================
         //                          SAVE
         // ============================================================

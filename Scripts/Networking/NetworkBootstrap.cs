@@ -151,6 +151,22 @@ namespace VoxelEngine.Networking
         public List<BlockSnapshot> Blocks;
     }
 
+    /// <summary>One block's container contents as save-format JSON (14.10.0).</summary>
+    public struct ContainerStateBroadcast : IBroadcast
+    {
+        public string ItemId;
+        public Vector3 Position;
+        public string Json;
+    }
+
+    /// <summary>A chunk of container states (join merge, 14.10.0).</summary>
+    public struct ContainerSnapshotBroadcast : IBroadcast
+    {
+        public int ChunkIndex;
+        public int TotalChunks;
+        public List<ContainerRecord> Records;
+    }
+
     /// <summary>One edited terrain chunk for the join catch-up (14.8.0):
     /// deflate-compressed full padded voxel grid, planet-tagged.</summary>
     public struct TerrainChunkBroadcast : IBroadcast
@@ -251,6 +267,8 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.RegisterBroadcast<BlockDamagedBroadcast>(OnServerBlockDamaged);
             _networkManager.ServerManager.RegisterBroadcast<BlockRemovedBroadcast>(OnServerBlockRemoved);
             _networkManager.ServerManager.RegisterBroadcast<BlockSnapshotBroadcast>(OnServerBlockSnapshot);
+            _networkManager.ServerManager.RegisterBroadcast<ContainerStateBroadcast>(OnServerContainerState);
+            _networkManager.ServerManager.RegisterBroadcast<ContainerSnapshotBroadcast>(OnServerContainerSnapshot);
             _networkManager.ServerManager.RegisterBroadcast<TerrainChunkBroadcast>(OnServerTerrainChunk);
             _networkManager.ServerManager.RegisterBroadcast<WorldAckBroadcast>(OnWorldAck);
             _networkManager.ServerManager.RegisterBroadcast<BaseSnapshotBroadcast>(OnServerBaseSnapshot);
@@ -268,8 +286,14 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.RegisterBroadcast<BlockDamagedBroadcast>(OnClientBlockDamaged);
             _networkManager.ClientManager.RegisterBroadcast<BlockRemovedBroadcast>(OnClientBlockRemoved);
             _networkManager.ClientManager.RegisterBroadcast<BlockSnapshotBroadcast>(OnClientBlockSnapshot);
+            _networkManager.ClientManager.RegisterBroadcast<ContainerStateBroadcast>(OnClientContainerState);
+            _networkManager.ClientManager.RegisterBroadcast<ContainerSnapshotBroadcast>(OnClientContainerSnapshot);
             _networkManager.ClientManager.RegisterBroadcast<TerrainChunkBroadcast>(OnClientTerrainChunk);
             _networkManager.ClientManager.RegisterBroadcast<BaseSnapshotBroadcast>(OnClientBaseSnapshot);
+
+            // Container-contents poller (14.10.0) - idles while offline.
+            if (GetComponent<ContainerSyncManager>() == null)
+                gameObject.AddComponent<ContainerSyncManager>();
         }
 
         private void OnDestroy()
@@ -294,6 +318,8 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.UnregisterBroadcast<BlockDamagedBroadcast>(OnServerBlockDamaged);
             _networkManager.ServerManager.UnregisterBroadcast<BlockRemovedBroadcast>(OnServerBlockRemoved);
             _networkManager.ServerManager.UnregisterBroadcast<BlockSnapshotBroadcast>(OnServerBlockSnapshot);
+            _networkManager.ServerManager.UnregisterBroadcast<ContainerStateBroadcast>(OnServerContainerState);
+            _networkManager.ServerManager.UnregisterBroadcast<ContainerSnapshotBroadcast>(OnServerContainerSnapshot);
             _networkManager.ServerManager.UnregisterBroadcast<TerrainChunkBroadcast>(OnServerTerrainChunk);
             _networkManager.ServerManager.UnregisterBroadcast<WorldAckBroadcast>(OnWorldAck);
             _networkManager.ServerManager.UnregisterBroadcast<BaseSnapshotBroadcast>(OnServerBaseSnapshot);
@@ -311,6 +337,8 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.UnregisterBroadcast<BlockDamagedBroadcast>(OnClientBlockDamaged);
             _networkManager.ClientManager.UnregisterBroadcast<BlockRemovedBroadcast>(OnClientBlockRemoved);
             _networkManager.ClientManager.UnregisterBroadcast<BlockSnapshotBroadcast>(OnClientBlockSnapshot);
+            _networkManager.ClientManager.UnregisterBroadcast<ContainerStateBroadcast>(OnClientContainerState);
+            _networkManager.ClientManager.UnregisterBroadcast<ContainerSnapshotBroadcast>(OnClientContainerSnapshot);
             _networkManager.ClientManager.UnregisterBroadcast<TerrainChunkBroadcast>(OnClientTerrainChunk);
             _networkManager.ClientManager.UnregisterBroadcast<BaseSnapshotBroadcast>(OnClientBaseSnapshot);
         }
@@ -715,6 +743,7 @@ namespace VoxelEngine.Networking
             {
                 SendBaseSnapshot(null);
                 SendBlockSnapshot(null);
+                SendContainerSnapshot(null);
                 SendTerrainSnapshot(null);
             }
         }
@@ -726,6 +755,7 @@ namespace VoxelEngine.Networking
             if (!msg.SeedMatches) return;
             SendBaseSnapshot(conn);
             SendBlockSnapshot(conn);
+            SendContainerSnapshot(conn);
             SendTerrainSnapshot(conn);
         }
 
@@ -817,6 +847,62 @@ namespace VoxelEngine.Networking
                     TotalChunks = total,
                     Blocks = blocks.GetRange(i * ChunkSize,
                         Mathf.Min(ChunkSize, blocks.Count - i * ChunkSize))
+                };
+                if (target != null) _networkManager.ServerManager.Broadcast(target, chunk, true);
+                else _networkManager.ClientManager.Broadcast(chunk);
+            }
+        }
+
+        public void SendContainerState(string itemId, Vector3 pos, string json)
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(new ContainerStateBroadcast
+            { ItemId = itemId, Position = pos, Json = json });
+        }
+
+        private void OnServerContainerState(NetworkConnection conn, ContainerStateBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (!conn.IsLocalClient) ContainerSync.ApplyState(msg.ItemId, msg.Position, msg.Json);
+            RelayToOthers(conn, msg);
+        }
+
+        private void OnClientContainerState(ContainerStateBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            ContainerSync.ApplyState(msg.ItemId, msg.Position, msg.Json);
+        }
+
+        private void OnServerContainerSnapshot(NetworkConnection conn, ContainerSnapshotBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted || conn.IsLocalClient) return;
+            // Joiner upload: only EMPTY host containers accept it, and only the
+            // accepted records are redistributed (14.8.1 rule) - never a blind relay.
+            ContainerSync.ApplyClientSnapshot(msg.Records);
+        }
+
+        private void OnClientContainerSnapshot(ContainerSnapshotBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            ContainerSync.ApplyHostSnapshot(msg.Records);
+        }
+
+        /// <summary>Gather every container-carrying block and send it chunked - to a
+        /// joining connection when called as server, up to the server when target is null.</summary>
+        private void SendContainerSnapshot(NetworkConnection target)
+        {
+            const int ChunkSize = 16;
+            var records = ContainerSync.GatherSnapshot();
+            if (records.Count == 0) return;
+            int total = Mathf.CeilToInt(records.Count / (float)ChunkSize);
+            for (int i = 0; i < total; i++)
+            {
+                var chunk = new ContainerSnapshotBroadcast
+                {
+                    ChunkIndex = i,
+                    TotalChunks = total,
+                    Records = records.GetRange(i * ChunkSize,
+                        Mathf.Min(ChunkSize, records.Count - i * ChunkSize))
                 };
                 if (target != null) _networkManager.ServerManager.Broadcast(target, chunk, true);
                 else _networkManager.ClientManager.Broadcast(chunk);

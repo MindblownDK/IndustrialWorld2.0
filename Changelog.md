@@ -1,9 +1,37 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.9.0-dev`
+**Current Version:** `14.10.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.10.0-dev] What The Chest Holds
+
+**Type:** MINOR - multiplayer milestone 5 continues: container contents over the wire. Save-compatible.
+
+**The gap.** 14.9.0 made the factory LOOK identical everywhere - but every chest, furnace and drawer was an empty shell on the other machine. Items existed only where they were deposited.
+
+**Container sync (`ContainerSync`, riding the save-system seam).** Every well-known container - chests (including their Item-Port face config and filters), storage drawers (payloads, upgrades, controller state), furnace fuel/input/output, electric furnaces, crushers, assemblers, armor stations, pumpjacks and the rest - now replicates through ONE seam: the exact capture/restore path the save system already uses, carried as opaque JSON (`WorldStatePersistence.CaptureContainerJson` / `RestoreContainerJson`). Full fidelity for free - durability, charge, liquid payloads, packed drawers - with zero per-machine special cases, and any container the save system learns about in the future syncs automatically.
+
+**Authority (the 14.8.1 rule applied to items).**
+- The HOST announces every container change - machines still simulate on all peers, but only the host's outcome is truth.
+- A CLIENT announces a block's container only in a short window after the local player interacted with that block (refreshing while a panel stays open) - so your deposits and withdrawals replicate, while your machine's own churn never fights the host.
+- Applies are whole-container overwrites (the wire format carries one entry per slot, empties included), echo-guarded by baseline tracking: an applied remote state is never mistaken for a local change.
+- **Join merge:** a chunked `ContainerSnapshotBroadcast` rides the handshake between the block and terrain snapshots. Host containers always overwrite the joiner's; the joiner's upload only fills containers the host has EMPTY (the contents of freshly merged solo blocks), and only accepted records are redistributed.
+
+**Change detection without plumbing.** A slow round-robin poller (a few blocks per frame, a full pass at most every 0.75 s) captures each block's container JSON and compares strings. The pass cadence is the debounce; no per-container event wiring, no missed mutation path - anything that changes a container is caught, whatever code changed it.
+
+**Known limits (documented, next up):** machine runtime state (smelt progress, recipes, power flow) still simulates per-machine, so a client standing at an actively running machine may see its contents snap to the host's outcome now and then - that disappears when machine simulation itself becomes host-authoritative. Dropped items and placement payloads remain unsynced.
+
+**GitHub title:** `[14.10.0-dev] What the chest holds`
+
+**Manual steps:**
+1. Pull `Dev`, recompile. No setup steps.
+2. Chest check: host drops items into a chest - they appear in the client's view of that chest (open it, contents match). Client deposits into the same chest - the host sees them.
+3. Fidelity check: store a damaged tool and a charged power cell - durability bar and charge match on the other machine. Configure a chest's item ports - faces and filters match remotely.
+4. Furnace check: host smelts - input shrinking and output growing replicate to a watching client.
+5. Join check: fill chests, disconnect, rejoin - contents are there. Client's solo-built chest merges in WITH its items (host had no such container).
+6. Expected quirk: a client watching its own copy of a RUNNING furnace may see contents snap to the host's version occasionally - machine runtime sync is the next milestone-5 step.
 
 ### [14.9.0-dev] Machines On Every Machine
 

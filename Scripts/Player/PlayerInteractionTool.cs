@@ -884,6 +884,12 @@ namespace VoxelEngine.Player
                     return;
                 }
 
+                // Remember which block the local player is working with, so container
+                // sync treats this client's edits here as player-driven (14.10.0).
+                var interactedBlock = hit.collider.GetComponentInParent<VoxelEngine.Building.PlacedBlock>();
+                if (interactedBlock != null)
+                    VoxelEngine.Networking.ContainerSync.NotifyLocalInteraction(interactedBlock);
+
                 // Pickup dropped items from the world.
                 var droppedItem = hit.collider.GetComponentInParent<VoxelEngine.Items.DroppedItem>();
                 if (droppedItem != null) { droppedItem.TryPickup(inventory); return; }
