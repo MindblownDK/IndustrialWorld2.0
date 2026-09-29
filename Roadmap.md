@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.5.1-dev`
-**Roadmap Version:** `14.5.1-dev`
+**Current Version:** `14.6.0-dev`
+**Roadmap Version:** `14.6.0-dev`
 **Date:** 2026-09-28
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,12 +29,17 @@
 
 ## 0. Recently Done
 
+### 14.6.0-dev - Doors And Locks Over The Wire
+- **Door/gate/garage/hatch sync** (`TieredDoor`, `TieredHatch`, `BuildingSync`, `NetworkBootstrap`): every toggle replicates with its swing side; announces live in the components so all code paths are covered; remote application is silent (`SetOpenState`).
+- **Code lock sync** (`CodeLock`): fit/remove replicate the physical lock; one idempotent state broadcast covers code set/change, guest authorization and lock toggles - access rules are consistent on every machine.
+- **Snapshot completeness**: door + lock state ride `PieceSnapshot`; rejoin now converges hp, door and lock state on already-present pieces. Milestone 3 remaining: shared build costs (design decision pending); voxel/machine sync is milestone 4/5.
+
 ### 14.5.1-dev - Cracks Over The Wire
 - **Damage replication fix** (`BuildingSync`, `NetworkBootstrap`, hooks in `PlacedTieredBlock`/`StructuralLoadState`): surviving damage (decay ticks, partial hits) now broadcasts hp - cracks bloom on every machine and hp no longer diverges between them.
 
 ### 14.5.0-dev - Join In Progress
 - **Base snapshot on join** (`BuildingSync`, `NetworkBootstrap`): seed-matching handshake completes with a two-way, chunked, duplicate-safe base exchange - server base down, joiner's solo base up, relayed to all; hp/cracks, railing rise and pillar height carried; rejoin-safe. Closes the 14.4.0 "pre-session bases not synced" item.
-- **Mismatch hardening**: a wrong-seed client no longer sends or applies ANY building traffic. Open (unchanged): code locks on pieces; shared build costs; voxel/machine sync is milestone 4/5.
+- **Mismatch hardening**: a wrong-seed client no longer sends or applies ANY building traffic. Open items: code locks shipped in 14.6.0; shared build costs and voxel/machine sync remain (see the 14.6.0 row).
 
 ### 14.4.0-dev - Shared Ground
 - **Building sync phase 1** (`BuildingSync` new, `NetworkBootstrap`, hooks in `BuildSystemV2`/`PlacedTieredBlock`/`StructuralLoadState`): tiered placement, upgrade, demolition and structural collapse replicate live; remote pieces restore-style and unarmed; positional identity (family + 25 cm). Open items moved to the 14.5.0 row (join-in-progress snapshot shipped there).

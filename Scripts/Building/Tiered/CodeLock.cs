@@ -43,6 +43,7 @@ namespace VoxelEngine.Building.Tiered
             authorizedIds.Clear();
             if (!string.IsNullOrEmpty(playerId)) authorizedIds.Add(playerId);
             RefreshLed();
+            VoxelEngine.Networking.BuildingSync.AnnounceLockState(this);
         }
 
         /// <summary>Authority entry point: a correct code authorizes the enterer permanently.</summary>
@@ -52,6 +53,7 @@ namespace VoxelEngine.Building.Tiered
             if (!string.IsNullOrEmpty(playerId) && !authorizedIds.Contains(playerId))
                 authorizedIds.Add(playerId);
             RefreshLed();
+            VoxelEngine.Networking.BuildingSync.AnnounceLockState(this);
             return true;
         }
 
@@ -59,6 +61,7 @@ namespace VoxelEngine.Building.Tiered
         {
             isLocked = locked;
             RefreshLed();
+            VoxelEngine.Networking.BuildingSync.AnnounceLockState(this);
         }
 
         public void RefreshLed()
@@ -74,6 +77,7 @@ namespace VoxelEngine.Building.Tiered
         {
             var item = ResolveItem();
             if (item != null && inventory != null) inventory.Add(item, 1);
+            VoxelEngine.Networking.BuildingSync.AnnounceLockRemoved(this);
             Destroy(gameObject);
         }
 
@@ -145,7 +149,11 @@ namespace VoxelEngine.Building.Tiered
             mount.transform.localPosition = pos;
             mount.transform.localRotation = Quaternion.Euler(euler);
             mount.transform.localScale = Vector3.one * scale;
-            return mount.AddComponent<CodeLock>();
+            var codeLock = mount.AddComponent<CodeLock>();
+            // Multiplayer: a freshly fitted lock is visible on every machine
+            // (14.6.0). Remote/restore attaches are guarded and stay silent.
+            VoxelEngine.Networking.BuildingSync.AnnounceLockState(codeLock);
+            return codeLock;
         }
 
         private static Transform FindChild(GameObject root, string childName)

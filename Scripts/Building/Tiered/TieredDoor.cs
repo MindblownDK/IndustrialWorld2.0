@@ -145,11 +145,15 @@ namespace VoxelEngine.Building.Tiered
             }
         }
 
+        public bool IsOpen => _open;
+
+        /// <summary>Side the leaf currently swings to, +1 or -1 (replicated with the open state).</summary>
+        public float OpenSideSign => _signedOpenAngle < 0f ? -1f : 1f;
+
         public void Toggle(Vector3 openerPosition)
         {
-            if (_open) { _open = false; return; }
-            if (doorPivot == null) { _open = true; return; }
-            if (opensUp) { _open = true; return; }
+            if (_open) { _open = false; AnnounceState(); return; }
+            if (doorPivot == null || opensUp) { _open = true; AnnounceState(); return; }
 
             Transform pivotParent = doorPivot.parent;
             Vector3 closedNormal = pivotParent != null
@@ -159,12 +163,24 @@ namespace VoxelEngine.Building.Tiered
             float magnitude = Mathf.Abs(openAngle);
             _signedOpenAngle = openerSide >= 0f ? magnitude : -magnitude;
             _open = true;
+            AnnounceState();
         }
 
         public void Toggle()
         {
             _open = !_open;
             if (!opensUp && _open) _signedOpenAngle = Mathf.Abs(openAngle);
+            AnnounceState();
         }
+
+        /// <summary>Remote/snapshot state application - silent, never announces back.</summary>
+        public void SetOpenState(bool open, float sideSign)
+        {
+            if (!opensUp && sideSign != 0f) _signedOpenAngle = Mathf.Abs(openAngle) * Mathf.Sign(sideSign);
+            _open = open;
+        }
+
+        private void AnnounceState()
+            => VoxelEngine.Networking.BuildingSync.AnnounceDoorState(this, _open, OpenSideSign);
     }
 }

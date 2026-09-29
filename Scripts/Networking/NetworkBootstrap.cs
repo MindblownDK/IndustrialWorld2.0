@@ -75,6 +75,31 @@ namespace VoxelEngine.Networking
         public int NewTier;
     }
 
+    /// <summary>Door, gate, garage or hatch toggled (14.6.0).</summary>
+    public struct DoorStateBroadcast : IBroadcast
+    {
+        public string Family;
+        public Vector3 Position;
+        public bool Open;
+        public float Side;
+    }
+
+    /// <summary>Full code-lock state - fit, code, locked flag, guest list (14.6.0).</summary>
+    public struct LockStateBroadcast : IBroadcast
+    {
+        public string Family;
+        public Vector3 Position;
+        public string Code;
+        public bool Locked;
+        public List<string> AuthorizedIds;
+    }
+
+    public struct LockRemovedBroadcast : IBroadcast
+    {
+        public string Family;
+        public Vector3 Position;
+    }
+
     /// <summary>Client -> server: reply to WorldInfoBroadcast. Only a matching
     /// seed invites the base snapshot exchange (14.5.0).</summary>
     public struct WorldAckBroadcast : IBroadcast
@@ -157,6 +182,9 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.RegisterBroadcast<PieceRemovedBroadcast>(OnServerPieceRemoved);
             _networkManager.ServerManager.RegisterBroadcast<PieceDamagedBroadcast>(OnServerPieceDamaged);
             _networkManager.ServerManager.RegisterBroadcast<PieceUpgradedBroadcast>(OnServerPieceUpgraded);
+            _networkManager.ServerManager.RegisterBroadcast<DoorStateBroadcast>(OnServerDoorState);
+            _networkManager.ServerManager.RegisterBroadcast<LockStateBroadcast>(OnServerLockState);
+            _networkManager.ServerManager.RegisterBroadcast<LockRemovedBroadcast>(OnServerLockRemoved);
             _networkManager.ServerManager.RegisterBroadcast<WorldAckBroadcast>(OnWorldAck);
             _networkManager.ServerManager.RegisterBroadcast<BaseSnapshotBroadcast>(OnServerBaseSnapshot);
             _networkManager.ClientManager.RegisterBroadcast<WorldInfoBroadcast>(OnWorldInfo);
@@ -164,6 +192,9 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.RegisterBroadcast<PieceRemovedBroadcast>(OnClientPieceRemoved);
             _networkManager.ClientManager.RegisterBroadcast<PieceDamagedBroadcast>(OnClientPieceDamaged);
             _networkManager.ClientManager.RegisterBroadcast<PieceUpgradedBroadcast>(OnClientPieceUpgraded);
+            _networkManager.ClientManager.RegisterBroadcast<DoorStateBroadcast>(OnClientDoorState);
+            _networkManager.ClientManager.RegisterBroadcast<LockStateBroadcast>(OnClientLockState);
+            _networkManager.ClientManager.RegisterBroadcast<LockRemovedBroadcast>(OnClientLockRemoved);
             _networkManager.ClientManager.RegisterBroadcast<BaseSnapshotBroadcast>(OnClientBaseSnapshot);
         }
 
@@ -180,6 +211,9 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.UnregisterBroadcast<PieceRemovedBroadcast>(OnServerPieceRemoved);
             _networkManager.ServerManager.UnregisterBroadcast<PieceDamagedBroadcast>(OnServerPieceDamaged);
             _networkManager.ServerManager.UnregisterBroadcast<PieceUpgradedBroadcast>(OnServerPieceUpgraded);
+            _networkManager.ServerManager.UnregisterBroadcast<DoorStateBroadcast>(OnServerDoorState);
+            _networkManager.ServerManager.UnregisterBroadcast<LockStateBroadcast>(OnServerLockState);
+            _networkManager.ServerManager.UnregisterBroadcast<LockRemovedBroadcast>(OnServerLockRemoved);
             _networkManager.ServerManager.UnregisterBroadcast<WorldAckBroadcast>(OnWorldAck);
             _networkManager.ServerManager.UnregisterBroadcast<BaseSnapshotBroadcast>(OnServerBaseSnapshot);
             _networkManager.ClientManager.UnregisterBroadcast<WorldInfoBroadcast>(OnWorldInfo);
@@ -187,6 +221,9 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.UnregisterBroadcast<PieceRemovedBroadcast>(OnClientPieceRemoved);
             _networkManager.ClientManager.UnregisterBroadcast<PieceDamagedBroadcast>(OnClientPieceDamaged);
             _networkManager.ClientManager.UnregisterBroadcast<PieceUpgradedBroadcast>(OnClientPieceUpgraded);
+            _networkManager.ClientManager.UnregisterBroadcast<DoorStateBroadcast>(OnClientDoorState);
+            _networkManager.ClientManager.UnregisterBroadcast<LockStateBroadcast>(OnClientLockState);
+            _networkManager.ClientManager.UnregisterBroadcast<LockRemovedBroadcast>(OnClientLockRemoved);
             _networkManager.ClientManager.UnregisterBroadcast<BaseSnapshotBroadcast>(OnClientBaseSnapshot);
         }
 
@@ -400,6 +437,66 @@ namespace VoxelEngine.Networking
             if (!_serverStarted) return;
             if (!conn.IsLocalClient) BuildingSync.ApplyRemoved(msg.Family, msg.Position);
             RelayToOthers(conn, msg);
+        }
+
+        public void SendDoorState(string family, Vector3 pos, bool open, float side)
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(new DoorStateBroadcast
+            { Family = family, Position = pos, Open = open, Side = side });
+        }
+
+        public void SendLockState(string family, Vector3 pos, string code, bool locked, List<string> ids)
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(new LockStateBroadcast
+            { Family = family, Position = pos, Code = code, Locked = locked, AuthorizedIds = ids });
+        }
+
+        public void SendLockRemoved(string family, Vector3 pos)
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(new LockRemovedBroadcast
+            { Family = family, Position = pos });
+        }
+
+        private void OnServerDoorState(NetworkConnection conn, DoorStateBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (!conn.IsLocalClient) BuildingSync.ApplyDoorState(msg.Family, msg.Position, msg.Open, msg.Side);
+            RelayToOthers(conn, msg);
+        }
+
+        private void OnServerLockState(NetworkConnection conn, LockStateBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (!conn.IsLocalClient) BuildingSync.ApplyLockState(msg.Family, msg.Position, msg.Code, msg.Locked, msg.AuthorizedIds);
+            RelayToOthers(conn, msg);
+        }
+
+        private void OnServerLockRemoved(NetworkConnection conn, LockRemovedBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (!conn.IsLocalClient) BuildingSync.ApplyLockRemoved(msg.Family, msg.Position);
+            RelayToOthers(conn, msg);
+        }
+
+        private void OnClientDoorState(DoorStateBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            BuildingSync.ApplyDoorState(msg.Family, msg.Position, msg.Open, msg.Side);
+        }
+
+        private void OnClientLockState(LockStateBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            BuildingSync.ApplyLockState(msg.Family, msg.Position, msg.Code, msg.Locked, msg.AuthorizedIds);
+        }
+
+        private void OnClientLockRemoved(LockRemovedBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            BuildingSync.ApplyLockRemoved(msg.Family, msg.Position);
         }
 
         private void OnServerPieceDamaged(NetworkConnection conn, PieceDamagedBroadcast msg, Channel channel)

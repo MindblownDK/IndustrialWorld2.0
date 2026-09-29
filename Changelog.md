@@ -1,9 +1,38 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.5.1-dev`
+**Current Version:** `14.6.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.6.0-dev] Doors And Locks Over The Wire
+
+**Type:** MINOR - multiplayer milestone 3, phase 3: shared doors, gates, hatches and code locks. Save-compatible.
+
+**Door state replication.** The most visible gap left in building sync: a host could swing a gate open and the client still saw it closed - walking through visibly-shut doors and bouncing off open ones. Every toggle now replicates:
+- All four leaf types covered: side-hinged doors, double gates (both leaves), rolling garage shutters and floor hatches (ladder deploys too).
+- The swing SIDE travels with the state (`OpenSideSign`), so a door opened away from the host swings away on every machine - not mirrored.
+- The announce lives inside `TieredDoor`/`TieredHatch` themselves, so every code path that toggles (direct click, frame click, keypad-gated open) replicates for free. Remote application uses a silent `SetOpenState` that can never echo.
+- Doors animate on arrival - the far machine sees the leaf actually swing, gates grind at their heavy constant rate.
+
+**Code lock replication.** Locks are now real multiplayer objects:
+- Fitting a lock shows the physical lock on every machine immediately; removing it (refund stays with the remover) takes it off everywhere.
+- One idempotent `LockStateBroadcast` (code, locked flag, guest list) covers every keypad authority point: code set, code changed, correct-code guest authorization, lock/unlock toggle. LED color follows everywhere.
+- This makes access REAL across machines: a guest who enters the right code on their machine is authorized on the host's world too, and a locked door denies everyone consistently.
+
+**Snapshot completeness.** `PieceSnapshot` now carries door state and full lock state, so a joiner sees open gates open, deployed hatch ladders deployed, and locked doors locked - and on REJOIN, already-present pieces now converge too: hp/cracks, door state and lock state are adopted from the origin instead of being skipped as duplicates.
+
+**Note (pre-release honesty):** lock codes travel and rest in plain text, exactly like they do in save files. Fine for co-op pre-release; hardening belongs to the dedicated-server milestone.
+
+**GitHub title:** `[14.6.0-dev] Doors and locks over the wire`
+
+**Manual steps:**
+1. Pull `Dev`, recompile. No setup steps.
+2. Door check: open/close a door, a double gate, a garage shutter and a hatch - the other machine shows the same motion, same swing side, ladder included.
+3. Lock check: craft and fit a code lock - the lock body appears on the other machine. Set a code - LED goes red everywhere.
+4. Guest check: from the OTHER machine, enter the correct code - access granted there AND the guest authorization holds on the host (re-open the door from either side).
+5. Join check: with a gate open and a lock fitted, connect a fresh client - gate arrives open, lock arrives red.
+6. Remove check: remove the lock from the keypad menu - it disappears on both machines, item refunded to the remover only.
 
 ### [14.5.1-dev] Cracks Over The Wire
 

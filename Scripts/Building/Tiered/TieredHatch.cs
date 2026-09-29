@@ -81,11 +81,14 @@ namespace VoxelEngine.Building.Tiered
             if (_climb != null) _climb.deployed = IsDeployed;
         }
 
+        public bool IsOpen => _open;
+
         /// <summary>Toggles the hatch. The opener's position is accepted for parity with doors.</summary>
         public void Toggle(Vector3 openerPosition)
         {
             _open = !_open;
             if (!_open && _climb != null) _climb.Release();
+            VoxelEngine.Networking.BuildingSync.AnnounceDoorState(this, _open, 1f);
         }
 
         public void SetOpen(bool open)

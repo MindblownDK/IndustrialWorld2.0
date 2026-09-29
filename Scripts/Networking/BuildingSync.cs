@@ -37,6 +37,14 @@ namespace VoxelEngine.Networking
         public int Hp;
         public float RailingRise;
         public float PillarHeight;
+        // Door/hatch state (14.6.0).
+        public bool DoorOpen;
+        public float DoorSide;
+        // Code lock (14.6.0).
+        public bool HasLock;
+        public string LockCode;
+        public bool LockLocked;
+        public List<string> LockAuthorized;
     }
 
     public static class BuildingSync
@@ -75,6 +83,38 @@ namespace VoxelEngine.Networking
             NetworkBootstrap.Instance.SendPieceDamaged(family.ToString(), pos, hp);
         }
 
+        /// <summary>Door, gate, garage or hatch toggled (14.6.0). Called by the
+        /// components themselves; sideSign keeps the leaf swinging the same way.</summary>
+        public static void AnnounceDoorState(Component doorRoot, bool open, float sideSign)
+        {
+            if (doorRoot == null || !ShouldAnnounce()) return;
+            var pb = doorRoot.GetComponentInParent<PlacedTieredBlock>();
+            if (pb == null || pb.definition == null) return;
+            NetworkBootstrap.Instance.SendDoorState(pb.definition.family.ToString(),
+                pb.transform.position, open, sideSign);
+        }
+
+        /// <summary>Full lock state (fit, code set, guest authorized, lock toggle) - one
+        /// idempotent message covers every keypad authority point (14.6.0).</summary>
+        public static void AnnounceLockState(CodeLock codeLock)
+        {
+            if (codeLock == null || !ShouldAnnounce()) return;
+            var pb = codeLock.GetComponentInParent<PlacedTieredBlock>();
+            if (pb == null || pb.definition == null) return;
+            NetworkBootstrap.Instance.SendLockState(pb.definition.family.ToString(),
+                pb.transform.position, codeLock.code ?? "", codeLock.isLocked,
+                new List<string>(codeLock.authorizedIds));
+        }
+
+        public static void AnnounceLockRemoved(CodeLock codeLock)
+        {
+            if (codeLock == null || !ShouldAnnounce()) return;
+            var pb = codeLock.GetComponentInParent<PlacedTieredBlock>();
+            if (pb == null || pb.definition == null) return;
+            NetworkBootstrap.Instance.SendLockRemoved(pb.definition.family.ToString(),
+                pb.transform.position);
+        }
+
         private static bool ShouldAnnounce()
             => !IsApplyingRemote
                && NetworkSession.Mode != SessionMode.Offline
@@ -101,9 +141,22 @@ namespace VoxelEngine.Networking
             {
                 var def = ResolveDefinition(p.Family);
                 if (def == null) continue;
-                if (FindPieceAt(p.Family, p.Position) != null) continue;
-                SpawnRemote(def, p.Tier, p.Position, p.Rotation, p.RailingRise, p.PillarHeight,
-                    p.Hp, playSound: false);
+                var piece = FindPieceAt(p.Family, p.Position);
+                if (piece == null)
+                    piece = SpawnRemote(def, p.Tier, p.Position, p.Rotation, p.RailingRise,
+                        p.PillarHeight, p.Hp, playSound: false);
+                else if (p.Hp > 0 && p.Hp != piece.hp)
+                {
+                    // Rejoin convergence: an already-present piece adopts the
+                    // origin's hp so cracks and remaining hits stay in step.
+                    piece.hp = p.Hp;
+                    int maxHp = Mathf.Max(1, def.GetStats((BuildTier)p.Tier).hp);
+                    VoxelEngine.Thermal.BlockDamageVisual.ReportDamage(
+                        piece, 1f - Mathf.Clamp01(piece.hp / (float)maxHp));
+                }
+                if (piece == null) continue;
+                ApplyDoorStateTo(piece, p.DoorOpen, p.DoorSide);
+                if (p.HasLock) ApplyLockStateTo(piece, p.LockCode, p.LockLocked, p.LockAuthorized);
             }
         }
 
@@ -117,7 +170,10 @@ namespace VoxelEngine.Networking
                 float rise = 0f, height = 0f;
                 if (pb.TryGetComponent<TieredRailing>(out var railing)) rise = railing.AppliedRise;
                 if (pb.TryGetComponent<AdjustablePillar>(out var pillar)) height = pillar.currentHeight;
-                list.Add(new PieceSnapshot
+                bool doorOpen = false; float doorSide = 0f;
+                if (pb.TryGetComponent<TieredDoor>(out var door)) { doorOpen = door.IsOpen; doorSide = door.OpenSideSign; }
+                else if (pb.TryGetComponent<TieredHatch>(out var hatch)) { doorOpen = hatch.IsOpen; doorSide = 1f; }
+                var snap = new PieceSnapshot
                 {
                     Family = pb.definition.family.ToString(),
                     Tier = (int)pb.tier,
@@ -125,19 +181,30 @@ namespace VoxelEngine.Networking
                     Rotation = pb.transform.rotation,
                     Hp = pb.hp,
                     RailingRise = rise,
-                    PillarHeight = height
-                });
+                    PillarHeight = height,
+                    DoorOpen = doorOpen,
+                    DoorSide = doorSide
+                };
+                var codeLock = pb.GetComponentInChildren<CodeLock>(true);
+                if (codeLock != null)
+                {
+                    snap.HasLock = true;
+                    snap.LockCode = codeLock.code ?? "";
+                    snap.LockLocked = codeLock.isLocked;
+                    snap.LockAuthorized = new List<string>(codeLock.authorizedIds);
+                }
+                list.Add(snap);
             }
             return list;
         }
 
         /// <summary>Restore-style instantiation shared by live placement and the
         /// snapshot merge. Remote pieces stay UNARMED - see file header.</summary>
-        private static void SpawnRemote(TieredBlockDefinition def, int tier, Vector3 pos,
+        private static PlacedTieredBlock SpawnRemote(TieredBlockDefinition def, int tier, Vector3 pos,
             Quaternion rot, float railingRise, float pillarHeight, int hp, bool playSound)
         {
             var prefab = def.GetPrefab((BuildTier)tier);
-            if (prefab == null) return;
+            if (prefab == null) return null;
 
             IsApplyingRemote = true;
             try
@@ -163,6 +230,7 @@ namespace VoxelEngine.Networking
                     VoxelEngine.FX.AudioManager.PlayAt(
                         VoxelEngine.FX.SfxLibrary.Get(VoxelEngine.FX.Sfx.Place), pos,
                         volume: 0.5f, pitch: 1f, maxDistance: 20f);
+                return pb;
             }
             finally { IsApplyingRemote = false; }
         }
@@ -175,6 +243,53 @@ namespace VoxelEngine.Networking
             int maxHp = Mathf.Max(1, piece.definition.GetStats(piece.tier).hp);
             VoxelEngine.Thermal.BlockDamageVisual.ReportDamage(
                 piece, 1f - Mathf.Clamp01(piece.hp / (float)maxHp));
+        }
+
+        public static void ApplyDoorState(string family, Vector3 pos, bool open, float sideSign)
+        {
+            var piece = FindPieceAt(family, pos);
+            if (piece != null) ApplyDoorStateTo(piece, open, sideSign);
+        }
+
+        public static void ApplyLockState(string family, Vector3 pos, string code,
+            bool locked, List<string> authorizedIds)
+        {
+            var piece = FindPieceAt(family, pos);
+            if (piece != null) ApplyLockStateTo(piece, code, locked, authorizedIds);
+        }
+
+        public static void ApplyLockRemoved(string family, Vector3 pos)
+        {
+            var piece = FindPieceAt(family, pos);
+            var codeLock = piece != null ? piece.GetComponentInChildren<CodeLock>(true) : null;
+            if (codeLock == null) return;
+            IsApplyingRemote = true;
+            try { Object.Destroy(codeLock.gameObject); }
+            finally { IsApplyingRemote = false; }
+        }
+
+        private static void ApplyDoorStateTo(PlacedTieredBlock piece, bool open, float sideSign)
+        {
+            if (piece.TryGetComponent<TieredDoor>(out var door)) { door.SetOpenState(open, sideSign); return; }
+            if (piece.TryGetComponent<TieredHatch>(out var hatch)) hatch.SetOpen(open);
+        }
+
+        private static void ApplyLockStateTo(PlacedTieredBlock piece, string code,
+            bool locked, List<string> authorizedIds)
+        {
+            IsApplyingRemote = true;
+            try
+            {
+                var codeLock = piece.GetComponentInChildren<CodeLock>(true);
+                if (codeLock == null) codeLock = CodeLock.Attach(piece.gameObject);
+                if (codeLock == null) return;
+                codeLock.code = code ?? "";
+                codeLock.isLocked = locked;
+                codeLock.authorizedIds = authorizedIds != null
+                    ? new List<string>(authorizedIds) : new List<string>();
+                codeLock.RefreshLed();
+            }
+            finally { IsApplyingRemote = false; }
         }
 
         public static void ApplyRemoved(string family, Vector3 pos)
