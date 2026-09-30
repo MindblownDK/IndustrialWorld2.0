@@ -44,6 +44,8 @@ namespace VoxelEngine.Networking
         private readonly SyncVar<string> _heldItemId = new SyncVar<string>();
         private readonly SyncVar<bool> _crouched = new SyncVar<bool>();
         private readonly SyncVar<int> _healthPct = new SyncVar<int>(100);
+        // 14.14.0: worn armor tier (0 = none -> bare warrior; 1-6 tint the plate rig).
+        private readonly SyncVar<int> _armorTier = new SyncVar<int>(0);
 
         [Tooltip("Nameplate above the head. Assigned by Setup Step 105.")]
         public TextMesh nameplate;
@@ -73,6 +75,7 @@ namespace VoxelEngine.Networking
         private string _sentHeldItemId;
         private bool _sentCrouched;
         private int _sentHealthPct = 100;
+        private int _sentArmorTier;
 
         public string PlayerId => _playerId.Value;
         public string PlayerName => _playerName.Value;
@@ -88,6 +91,7 @@ namespace VoxelEngine.Networking
             _heldItemId.OnChange += OnHeldItemChanged;
             _crouched.OnChange += OnCrouchedChanged;
             _healthPct.OnChange += OnHealthChanged;
+            _armorTier.OnChange += OnArmorChanged;
         }
 
         private void OnDestroy()
@@ -97,6 +101,7 @@ namespace VoxelEngine.Networking
             _heldItemId.OnChange -= OnHeldItemChanged;
             _crouched.OnChange -= OnCrouchedChanged;
             _healthPct.OnChange -= OnHealthChanged;
+            _armorTier.OnChange -= OnArmorChanged;
             Unregister();   // belt and braces; normally OnStopClient/Server did it
         }
 
@@ -138,6 +143,7 @@ namespace VoxelEngine.Networking
                 ApplyHeldItem(_heldItemId.Value);
                 ApplyCrouch(_crouched.Value);
                 ApplyHealth(_healthPct.Value);
+                ApplyArmor(_armorTier.Value);
             }
         }
 
@@ -190,23 +196,28 @@ namespace VoxelEngine.Networking
                 if (stack != null && stack.item != null) held = stack.item.itemId ?? "";
             }
             bool crouched = _controller != null && (_controller.IsCrouched || _controller.IsSliding);
+            var wornArmor = stats.equippedArmor;
+            int armorTier = wornArmor != null ? Mathf.Clamp(wornArmor.tier, 1, 6) : 0;
             int healthPct = stats.MaxHealth > 0f
                 ? Mathf.Clamp(Mathf.RoundToInt(stats.Health / stats.MaxHealth * 100f), 0, 100)
                 : 100;
 
-            if (held == _sentHeldItemId && crouched == _sentCrouched && healthPct == _sentHealthPct) return;
+            if (held == _sentHeldItemId && crouched == _sentCrouched
+                && healthPct == _sentHealthPct && armorTier == _sentArmorTier) return;
             _sentHeldItemId = held;
             _sentCrouched = crouched;
             _sentHealthPct = healthPct;
-            RpcUpdatePose(held, crouched, healthPct);
+            _sentArmorTier = armorTier;
+            RpcUpdatePose(held, crouched, healthPct, armorTier);
         }
 
         [ServerRpc]
-        private void RpcUpdatePose(string heldItemId, bool crouched, int healthPct)
+        private void RpcUpdatePose(string heldItemId, bool crouched, int healthPct, int armorTier)
         {
             _heldItemId.Value = heldItemId ?? "";
             _crouched.Value = crouched;
             _healthPct.Value = Mathf.Clamp(healthPct, 0, 100);
+            _armorTier.Value = Mathf.Clamp(armorTier, 0, 6);
         }
 
         private void LateUpdate()
@@ -281,6 +292,19 @@ namespace VoxelEngine.Networking
         {
             if (asServer || IsOwner) return;
             ApplyHealth(next);
+        }
+
+        private void OnArmorChanged(int previous, int next, bool asServer)
+        {
+            if (asServer || IsOwner) return;
+            ApplyArmor(next);
+        }
+
+        /// <summary>14.14.0: armor is display, not identity - plates only show
+        /// while a suit is actually worn, tinted by tier.</summary>
+        private void ApplyArmor(int tier)
+        {
+            CrusaderModel.SetArmor(transform, tier);
         }
 
         private void ApplyHeldItem(string itemId)

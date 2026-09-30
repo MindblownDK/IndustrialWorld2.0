@@ -884,6 +884,23 @@ namespace VoxelEngine.Persistence
             CaptureLightingRuntime(go, entry);
             CaptureDefenseRuntime(go, entry);
 
+            // 14.14.0: the machine's I/O face config (power/data/fluid/gas ports).
+            // Fixed six-face order straight off the component, so the payload is
+            // deterministic and the machine-sync change check stays honest.
+            var facePortConfig = go.GetComponentInChildren<VoxelEngine.Transport.PortConfig>(true);
+            if (facePortConfig != null && facePortConfig.ports != null)
+            {
+                entry.hasPortConfig = true;
+                foreach (var p in facePortConfig.ports)
+                    entry.facePorts.Add(new SavedFacePort
+                    {
+                        face = (int)p.face,
+                        direction = (int)p.direction,
+                        networkType = (int)p.networkType,
+                        enabled = p.enabled
+                    });
+            }
+
             // 9.57.0-dev: one shared payload carries the live process state of any
             // machine that implements IMachineProcessState — the batch in progress,
             // the locked recipe, the fluid in every tank it owns and the handful of
@@ -3245,6 +3262,28 @@ namespace VoxelEngine.Persistence
             // empty ones the prefab spawned with. Machines are found by interface, so
             // this single hook covers the world machines and the grid machines alike,
             // and a save with no record leaves the machine exactly as it loads today.
+            // 14.14.0: machine I/O face config - applied through the setters so each
+            // face refreshes its indicator and every network manager goes dirty,
+            // exactly as a local edit would.
+            if (saved.hasPortConfig && saved.facePorts != null)
+            {
+                var facePortConfig = go.GetComponentInChildren<VoxelEngine.Transport.PortConfig>(true);
+                if (facePortConfig != null)
+                {
+                    foreach (var p in saved.facePorts)
+                    {
+                        if (p == null) continue;
+                        if (!System.Enum.IsDefined(typeof(VoxelEngine.Transport.CubeFace), p.face)) continue;
+                        var face = (VoxelEngine.Transport.CubeFace)p.face;
+                        if (System.Enum.IsDefined(typeof(VoxelEngine.Transport.PortDirection), p.direction))
+                            facePortConfig.SetDirection(face, (VoxelEngine.Transport.PortDirection)p.direction);
+                        if (System.Enum.IsDefined(typeof(VoxelEngine.Transport.PortNetworkType), p.networkType))
+                            facePortConfig.SetNetworkType(face, (VoxelEngine.Transport.PortNetworkType)p.networkType);
+                        facePortConfig.SetFaceEnabled(face, p.enabled);
+                    }
+                }
+            }
+
             if (saved.machineProcess != null && !saved.machineProcess.IsEmpty)
             {
                 var processMachine = go.GetComponentInChildren<VoxelEngine.Crafting.IMachineProcessState>(true);
@@ -4325,6 +4364,10 @@ namespace VoxelEngine.Persistence
             // Defense runtime (turret ammo / filter / autoMode / fuel buffer). Null for
             // non-defense blocks. Additive — legacy saves leave it null.
             public SavedDefenseState defenseState;
+            // Machine I/O face config (14.14.0). hasPortConfig guards the restore -
+            // JsonUtility materializes empty lists, never null ones.
+            public bool hasPortConfig;
+            public List<SavedFacePort> facePorts = new();
             // Armor Upgrade Station process state. Inputs are stored in `container`; this
             // additive record only resumes elapsed time after those inputs restore.
             public SavedArmorUpgradeStationState armorUpgradeStationState;
@@ -4450,6 +4493,14 @@ namespace VoxelEngine.Persistence
             public int count;
             public float progress;
             public float lateralOffset;
+        }
+        // Machine I/O face config (power/data/fluid/gas ports). Additive 14.14.0 -
+        // this was never persisted before, so player port edits vanished on reload
+        // AND never replicated. Legacy saves leave hasPortConfig false and machines
+        // keep their prefab-authored faces exactly as before.
+        [Serializable] private class SavedFacePort
+        {
+            public int face; public int direction; public int networkType; public bool enabled;
         }
         [Serializable] private class SavedMachineState
         {

@@ -1,9 +1,33 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.13.0-dev`
+**Current Version:** `14.14.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.14.0-dev] Bare Skin And Honest Steel
+
+**Type:** MINOR - milestone 6 continues: worn-armor display on the crusader, plus the machine I/O port config fix. Save-compatible (additive save fields only).
+
+**FIX - machine input/output config now syncs AND persists (`WorldStatePersistence`).** Root cause found: the per-face port configuration on machines (`PortConfig` - power/data/fluid/gas direction, network type, enabled) was never captured ANYWHERE. It did not replicate to other players, and it did not even survive a save/load on a single machine - every port edit silently reset. Item-port routing (chests, filters) was always fine; only the face config was orphaned.
+- `SavedPlacedBlock` gains an additive `hasPortConfig` flag plus a `facePorts` list (fixed six-face order, deterministic payload). Legacy saves leave the flag false and behave exactly as before.
+- Capture rides `CaptureFactoryRuntime`, so the existing machine sync (14.12.0) picks up every port edit automatically - the change detector sees the new payload and broadcasts it like any other machine runtime change.
+- Restore applies through `PortConfig`'s own setters, so each face refreshes its indicator and all four network managers (power, gas, item pipe, fluid) go dirty exactly as if the edit had been made locally - cables and connections rebuild on the remote machine the same frame.
+- Open machine panels repaint via the 14.12.1 `RefreshOpenPanels` path, so the port cards update live while you watch.
+- Bonus: port config now survives save/load for the first time.
+
+**The bare warrior (`CrusaderModel` rebuilt).** Armor is DISPLAY now, not identity. The base body is a realistic bare-chested warrior - muscular build with pecs, abs and delts, chain briefs, calf-high worn-leather boots, dark hair, full beard and readable eyes - so an unarmored player actually looks unarmored:
+- **The brand rune**, tattooed in faded red on the left shoulder, drawn from thin ink strokes riding just off the skin.
+- **The chest ink**, small and dark across the chest: "The lion with little pecker develops big roar - CalleTheLion".
+- Still built entirely at runtime from primitives on the existing avatar prefab - no editor step, self-healing after any FishNet reimport. Same 1.85 m feet-pivot proportions, same `RightArmPivot`/`RightHand`/`BackAnchor` anchors, so held tools, crouch and the upcoming building pose are untouched.
+
+**Worn armor, shown only when worn (`PlayerAvatar` + `CrusaderModel.SetArmor`).** Every plate lives on dedicated armor rigs (body rig + a right-arm rig riding the pose pivot, so plates follow every future arm pose), inactive until a suit is equipped:
+- A new `_armorTier` SyncVar rides the existing change-only pose RPC (held item, crouch, health, now armor). Zero extra traffic when nothing changes; late joiners get it with the SyncVar baseline.
+- Tier reads at a glance: 1 quilted cloth, 2 hardened leather, 3 iron, 4 steel, 5 gilded, 6 dark void-metal - one shared material per tier.
+- The great helm (crown band, cross face opening), tabard and red crusader cross only appear armored; hair and beard tuck away under the helm and return when it comes off.
+- Same host-double-fire guard as every other SyncVar (`asServer || IsOwner`).
+
+**Milestone 6 remaining (next rounds):** jetpack + oxygen tank shown when equipped, the arm-out building pose with a replicated building ghost.
 
 ### [14.13.0-dev] A Real Crusader At Last
 

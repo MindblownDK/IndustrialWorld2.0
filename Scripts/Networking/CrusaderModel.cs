@@ -1,29 +1,37 @@
 // Assets/Scripts/VoxelEngine/Networking/CrusaderModel.cs
 //
 // 14.13.0-dev - Multiplayer milestone 6 begins: Real Crusaders.
+// 14.14.0-dev - the honest body: armor is DISPLAY, not identity. The base
+//              model is now a bare-chested warrior - muscular build, chain
+//              briefs, worn boots, dark hair and beard - carrying the brand
+//              rune on his left shoulder and the crew's chest-ink motto.
+//              Armor plates live on separate rigs that only appear when a
+//              suit is actually equipped, tinted by tier so the read works
+//              at a glance: quilted cloth, hardened leather, iron, steel,
+//              gilded, void-metal.
 //
-// The procedural knight body every other player sees, replacing the
-// placeholder capsule. Built entirely at RUNTIME from primitives on the
-// existing avatar prefab - no editor step, no prefab change, self-healing
-// after any FishNet reimport, and consistent with the game's procedural
-// viewmodel style.
+// Built entirely at RUNTIME from primitives on the existing avatar prefab -
+// no editor step, no prefab change, self-healing after any FishNet
+// reimport, and consistent with the game's procedural viewmodel style.
 //
 // Anatomy (1.85 m, pivot at the feet, +Z forward, matches PlayerController):
-//   - great helm: flat-top cylinder, gold crown band, and the classic
-//     cross-shaped face opening (horizontal eye slit + vertical breath slit),
-//   - white tabard over a steel cuirass, red crusader cross front AND back
-//     so the tier read of a player works from any side,
-//   - pauldrons, mail arms and legs, faulds, leather belt,
+//   - bare torso with pecs, abs and delts; chain briefs; calf-high boots,
+//   - head with hair, beard and eyes (facing reads from the face now -
+//     the helmet only exists while armor is worn),
 //   - the RIGHT arm hangs from its own pivot ("RightArmPivot") so the
-//     building pose (later this milestone) can raise it, and the held tool
-//     rides in "RightHand" underneath it - HeldToolView models exactly as
-//     before,
-//   - "BackAnchor" marks where the jetpack + oxygen tank mount when
-//     equipment display lands (next step of this milestone).
+//     building pose (later this milestone) can raise it; the held tool
+//     rides in "RightHand" underneath it,
+//   - "BackAnchor" marks where the jetpack + oxygen tank mount next,
+//   - tattoos: the brand rune in faded red on the left shoulder, and the
+//     chest ink reading "The lion with little pecker develops big roar -
+//     CalleTheLion",
+//   - "ArmorRig" (on the body) and "RightArmPivot/ArmorRigR" (riding the
+//     arm) hold every armor plate, inactive until SetArmor(tier >= 1).
 //
 // Crouch: PlayerAvatar squashes the "Crusader" root exactly the way it
 // squashed the old capsule - pivot at the feet makes a plain Y scale correct.
 
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace VoxelEngine.Networking
@@ -34,8 +42,12 @@ namespace VoxelEngine.Networking
         public const string RightArmPivotName = "RightArmPivot";
         public const string RightHandName = "RightHand";
         public const string BackAnchorName = "BackAnchor";
+        public const string ArmorRigName = "ArmorRig";
+        public const string ArmorRigRName = "ArmorRigR";
 
-        /// <summary>Build the knight under this avatar root if it is not already
+        private static readonly Dictionary<int, Material> _tierMats = new();
+
+        /// <summary>Build the warrior under this avatar root if he is not already
         /// there. Idempotent and cheap when built; hides the legacy placeholder
         /// capsule instead of destroying it, so the prefab stays untouched.</summary>
         public static Transform EnsureBuilt(Transform avatarRoot)
@@ -52,64 +64,220 @@ namespace VoxelEngine.Networking
             var root = new GameObject(RootName).transform;
             root.SetParent(avatarRoot, false);
 
-            var steel   = Mat(new Color(0.60f, 0.63f, 0.67f), 0.85f, 0.60f);
-            var mail    = Mat(new Color(0.40f, 0.42f, 0.46f), 0.70f, 0.35f);
+            var skin    = Mat(new Color(0.78f, 0.58f, 0.45f), 0.00f, 0.28f);
+            var skinDim = Mat(new Color(0.72f, 0.52f, 0.40f), 0.00f, 0.22f);
+            var hair    = Mat(new Color(0.13f, 0.10f, 0.08f), 0.00f, 0.30f);
+            var eyeInk  = Mat(new Color(0.06f, 0.05f, 0.05f), 0.00f, 0.40f);
+            var chain   = Mat(new Color(0.44f, 0.46f, 0.50f), 0.70f, 0.35f);
+            var boot    = Mat(new Color(0.35f, 0.24f, 0.14f), 0.05f, 0.25f);
+            var runeRed = Mat(new Color(0.62f, 0.09f, 0.07f), 0.00f, 0.15f);
+
+            // ── boots (worn leather, calf high - bare legs above) ──
+            Part(root, PrimitiveType.Cube,    "BootL",     new Vector3(-0.11f, 0.06f, 0.04f), new Vector3(0.17f, 0.12f, 0.29f), boot);
+            Part(root, PrimitiveType.Cube,    "BootR",     new Vector3( 0.11f, 0.06f, 0.04f), new Vector3(0.17f, 0.12f, 0.29f), boot);
+            Part(root, PrimitiveType.Cube,    "BootCuffL", new Vector3(-0.11f, 0.27f, 0f),    new Vector3(0.19f, 0.30f, 0.21f), boot);
+            Part(root, PrimitiveType.Cube,    "BootCuffR", new Vector3( 0.11f, 0.27f, 0f),    new Vector3(0.19f, 0.30f, 0.21f), boot);
+
+            // ── legs (bare) ──
+            Part(root, PrimitiveType.Capsule, "ThighL",    new Vector3(-0.11f, 0.68f, 0f),    new Vector3(0.18f, 0.27f, 0.18f), skin);
+            Part(root, PrimitiveType.Capsule, "ThighR",    new Vector3( 0.11f, 0.68f, 0f),    new Vector3(0.18f, 0.27f, 0.18f), skin);
+
+            // ── chain briefs (the reference look) ──
+            Part(root, PrimitiveType.Cube,    "Briefs",    new Vector3(0f, 0.98f, 0f),        new Vector3(0.34f, 0.16f, 0.25f), chain);
+            Part(root, PrimitiveType.Cube,    "BriefsBelt",new Vector3(0f, 1.06f, 0f),        new Vector3(0.36f, 0.05f, 0.26f), boot);
+
+            // ── torso (bare, muscular: waist -> chest taper, pecs, abs, delts) ──
+            Part(root, PrimitiveType.Cube,    "Waist",     new Vector3(0f, 1.13f, 0f),        new Vector3(0.30f, 0.14f, 0.21f), skin);
+            Part(root, PrimitiveType.Cube,    "Chest",     new Vector3(0f, 1.32f, 0f),        new Vector3(0.40f, 0.28f, 0.24f), skin);
+            Part(root, PrimitiveType.Cube,    "Abs",       new Vector3(0f, 1.15f, 0.105f),    new Vector3(0.22f, 0.22f, 0.03f), skinDim);
+            Part(root, PrimitiveType.Sphere,  "PecL",      new Vector3(-0.10f, 1.38f, 0.115f),new Vector3(0.16f, 0.12f, 0.10f), skin);
+            Part(root, PrimitiveType.Sphere,  "PecR",      new Vector3( 0.10f, 1.38f, 0.115f),new Vector3(0.16f, 0.12f, 0.10f), skin);
+            Part(root, PrimitiveType.Sphere,  "DeltL",     new Vector3(-0.26f, 1.44f, 0f),    new Vector3(0.17f, 0.15f, 0.17f), skin);
+            Part(root, PrimitiveType.Sphere,  "DeltR",     new Vector3( 0.26f, 1.44f, 0f),    new Vector3(0.17f, 0.15f, 0.17f), skin);
+
+            // ── arms (bare; right arm on its pose pivot) ──
+            Part(root, PrimitiveType.Capsule, "ArmL",      new Vector3(-0.30f, 1.14f, 0f),    new Vector3(0.12f, 0.26f, 0.12f), skin);
+            Part(root, PrimitiveType.Sphere,  "HandL",     new Vector3(-0.30f, 0.86f, 0f),    new Vector3(0.13f, 0.13f, 0.13f), skin);
+
+            var armPivot = new GameObject(RightArmPivotName).transform;
+            armPivot.SetParent(root, false);
+            armPivot.localPosition = new Vector3(0.30f, 1.44f, 0f);
+            Part(armPivot, PrimitiveType.Capsule, "ArmR",  new Vector3(0f, -0.30f, 0f),       new Vector3(0.12f, 0.26f, 0.12f), skin);
+            Part(armPivot, PrimitiveType.Sphere,  "HandR", new Vector3(0f, -0.58f, 0f),       new Vector3(0.13f, 0.13f, 0.13f), skin);
+
+            var handAnchor = new GameObject(RightHandName).transform;
+            handAnchor.SetParent(armPivot, false);
+            handAnchor.localPosition = new Vector3(0f, -0.62f, 0.06f);
+            handAnchor.localRotation = Quaternion.Euler(10f, -20f, 0f);   // same grip as always
+
+            // ── head (bare: hair, beard, eyes - facing reads from the face) ──
+            Part(root, PrimitiveType.Cylinder, "Neck",     new Vector3(0f, 1.50f, 0f),        new Vector3(0.14f, 0.05f, 0.14f), skin);
+            Part(root, PrimitiveType.Sphere,   "Head",     new Vector3(0f, 1.70f, 0f),        new Vector3(0.26f, 0.30f, 0.28f), skin);
+            Part(root, PrimitiveType.Sphere,   "Hair",     new Vector3(0f, 1.77f, -0.02f),    new Vector3(0.27f, 0.21f, 0.29f), hair);
+            Part(root, PrimitiveType.Sphere,   "Beard",    new Vector3(0f, 1.61f, 0.075f),    new Vector3(0.18f, 0.12f, 0.12f), hair);
+            Part(root, PrimitiveType.Cube,     "EyeL",     new Vector3(-0.055f, 1.72f, 0.132f), new Vector3(0.035f, 0.016f, 0.012f), eyeInk);
+            Part(root, PrimitiveType.Cube,     "EyeR",     new Vector3( 0.055f, 1.72f, 0.132f), new Vector3(0.035f, 0.016f, 0.012f), eyeInk);
+
+            BuildTattoos(root, runeRed);
+            BuildArmorRigs(root, armPivot);
+
+            // ── equipment anchor (jetpack + oxygen tank, next step) ──
+            var back = new GameObject(BackAnchorName).transform;
+            back.SetParent(root, false);
+            back.localPosition = new Vector3(0f, 1.22f, -0.18f);
+
+            return root;
+        }
+
+        /// <summary>Show or hide the armor display. Tier 0 = bare warrior; tiers
+        /// 1-6 activate the plate rigs and tint them so the tier reads at a
+        /// glance. The helmet replaces hair and beard while worn.</summary>
+        public static void SetArmor(Transform avatarRoot, int tier)
+        {
+            var root = EnsureBuilt(avatarRoot);
+            if (root == null) return;
+
+            bool worn = tier > 0;
+            var rig = root.Find(ArmorRigName);
+            if (rig != null) rig.gameObject.SetActive(worn);
+            var rigR = root.Find(RightArmPivotName + "/" + ArmorRigRName);
+            if (rigR != null) rigR.gameObject.SetActive(worn);
+
+            // The great helm swallows the head - bare hair/beard vanish under it.
+            var hairT = root.Find("Hair");
+            if (hairT != null) hairT.gameObject.SetActive(!worn);
+            var beardT = root.Find("Beard");
+            if (beardT != null) beardT.gameObject.SetActive(!worn);
+
+            if (!worn) return;
+            var mat = TierMaterial(Mathf.Clamp(tier, 1, 6));
+            TintPlates(rig, mat);
+            TintPlates(rigR, mat);
+        }
+
+        // ─────────────────────────── tattoos ───────────────────────────
+
+        private static void BuildTattoos(Transform root, Material runeRed)
+        {
+            // Chest ink: the crew motto, dark ink across the upper chest, readable
+            // from the front like any nameplate (TextMesh faces are -Z readable,
+            // so it turns its back to the model's forward).
+            var inkGo = new GameObject("ChestInk");
+            inkGo.transform.SetParent(root, false);
+            inkGo.transform.localPosition = new Vector3(0f, 1.29f, 0.128f);
+            inkGo.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
+            var ink = inkGo.AddComponent<TextMesh>();
+            ink.text = "The lion with little pecker\ndevelops big roar\n- CalleTheLion";
+            ink.characterSize = 0.010f;
+            ink.fontSize = 30;
+            ink.anchor = TextAnchor.MiddleCenter;
+            ink.alignment = TextAlignment.Center;
+            ink.color = new Color(0.16f, 0.12f, 0.10f, 0.95f);
+
+            // Brand rune on the left shoulder, faded red, drawn from strokes:
+            // a vertical staff with branch tips, the crossing X, and foot hooks.
+            var rune = new GameObject("BrandRune").transform;
+            rune.SetParent(root, false);
+            rune.localPosition = new Vector3(-0.375f, 1.30f, 0f);
+            rune.localRotation = Quaternion.Euler(0f, 90f, 0f);   // strokes face out of the arm
+
+            void Stroke(string name, Vector3 pos, float zRot, Vector3 scale)
+            {
+                var t = Part(rune, PrimitiveType.Cube, name, pos, scale, runeRed);
+                t.localRotation = Quaternion.Euler(0f, 0f, zRot);
+            }
+
+            Stroke("Staff",  new Vector3(0f, 0.010f, 0f),      0f,  new Vector3(0.013f, 0.170f, 0.006f));
+            Stroke("TipL",   new Vector3(-0.022f, 0.085f, 0f),  35f, new Vector3(0.012f, 0.060f, 0.006f));
+            Stroke("TipR",   new Vector3( 0.022f, 0.085f, 0f), -35f, new Vector3(0.012f, 0.060f, 0.006f));
+            Stroke("CrossA", new Vector3(0f, -0.010f, 0f),      40f, new Vector3(0.012f, 0.175f, 0.006f));
+            Stroke("CrossB", new Vector3(0f, -0.010f, 0f),     -40f, new Vector3(0.012f, 0.175f, 0.006f));
+            Stroke("HookL",  new Vector3(-0.048f, -0.088f, 0f), -50f, new Vector3(0.012f, 0.050f, 0.006f));
+            Stroke("HookR",  new Vector3( 0.048f, -0.088f, 0f),  50f, new Vector3(0.012f, 0.050f, 0.006f));
+        }
+
+        // ─────────────────────────── armor rigs ───────────────────────────
+
+        /// <summary>Every plate the tier tint touches is named "Plate*"; fixed-color
+        /// pieces (tabard, cross, slits, crown, belt) keep their own materials.</summary>
+        private static void BuildArmorRigs(Transform root, Transform armPivot)
+        {
+            var steel   = TierMaterial(4);   // placeholder until SetArmor tints
             var dark    = Mat(new Color(0.04f, 0.04f, 0.05f), 0.20f, 0.20f);
             var cloth   = Mat(new Color(0.90f, 0.88f, 0.82f), 0.00f, 0.10f);
             var cross   = Mat(new Color(0.72f, 0.10f, 0.08f), 0.00f, 0.15f);
             var leather = Mat(new Color(0.30f, 0.20f, 0.12f), 0.05f, 0.25f);
             var gold    = Mat(new Color(0.85f, 0.68f, 0.25f), 0.90f, 0.70f);
 
-            // ── legs & feet (mail) ──
-            Part(root, PrimitiveType.Cube,    "FootL", new Vector3(-0.11f, 0.05f, 0.04f), new Vector3(0.16f, 0.10f, 0.28f), mail);
-            Part(root, PrimitiveType.Cube,    "FootR", new Vector3( 0.11f, 0.05f, 0.04f), new Vector3(0.16f, 0.10f, 0.28f), mail);
-            Part(root, PrimitiveType.Capsule, "LegL",  new Vector3(-0.11f, 0.46f, 0f),    new Vector3(0.18f, 0.36f, 0.18f), mail);
-            Part(root, PrimitiveType.Capsule, "LegR",  new Vector3( 0.11f, 0.46f, 0f),    new Vector3(0.18f, 0.36f, 0.18f), mail);
+            var rig = new GameObject(ArmorRigName).transform;
+            rig.SetParent(root, false);
 
-            // ── hips & torso (steel cuirass under a tabard) ──
-            Part(root, PrimitiveType.Cube, "Faulds", new Vector3(0f, 0.86f, 0f), new Vector3(0.42f, 0.18f, 0.30f), steel);
-            Part(root, PrimitiveType.Cube, "Belt",   new Vector3(0f, 0.94f, 0f), new Vector3(0.48f, 0.08f, 0.33f), leather);
-            Part(root, PrimitiveType.Cube, "Torso",  new Vector3(0f, 1.16f, 0f), new Vector3(0.46f, 0.52f, 0.30f), steel);
+            // Greaves, faulds, belt.
+            Part(rig, PrimitiveType.Cube, "PlateGreaveL", new Vector3(-0.11f, 0.55f, 0f), new Vector3(0.21f, 0.42f, 0.21f), steel);
+            Part(rig, PrimitiveType.Cube, "PlateGreaveR", new Vector3( 0.11f, 0.55f, 0f), new Vector3(0.21f, 0.42f, 0.21f), steel);
+            Part(rig, PrimitiveType.Cube, "PlateFaulds",  new Vector3(0f, 0.90f, 0f),     new Vector3(0.42f, 0.18f, 0.30f), steel);
+            Part(rig, PrimitiveType.Cube, "ArmorBelt",    new Vector3(0f, 0.99f, 0f),     new Vector3(0.48f, 0.08f, 0.33f), leather);
 
-            // Tabard + crusader cross, front and back - readable from any side.
-            Part(root, PrimitiveType.Cube, "TabardF", new Vector3(0f, 1.14f, 0.160f),  new Vector3(0.30f, 0.48f, 0.02f), cloth);
-            Part(root, PrimitiveType.Cube, "TabardB", new Vector3(0f, 1.14f, -0.160f), new Vector3(0.30f, 0.48f, 0.02f), cloth);
-            Part(root, PrimitiveType.Cube, "CrossVF", new Vector3(0f, 1.15f, 0.174f),  new Vector3(0.07f, 0.34f, 0.012f), cross);
-            Part(root, PrimitiveType.Cube, "CrossHF", new Vector3(0f, 1.24f, 0.174f),  new Vector3(0.22f, 0.07f, 0.012f), cross);
-            Part(root, PrimitiveType.Cube, "CrossVB", new Vector3(0f, 1.15f, -0.174f), new Vector3(0.07f, 0.34f, 0.012f), cross);
-            Part(root, PrimitiveType.Cube, "CrossHB", new Vector3(0f, 1.24f, -0.174f), new Vector3(0.22f, 0.07f, 0.012f), cross);
+            // Cuirass with tabard + crusader cross front AND back.
+            Part(rig, PrimitiveType.Cube, "PlateCuirass", new Vector3(0f, 1.28f, 0f),      new Vector3(0.46f, 0.44f, 0.30f), steel);
+            Part(rig, PrimitiveType.Cube, "TabardF",      new Vector3(0f, 1.22f, 0.160f),  new Vector3(0.30f, 0.52f, 0.02f), cloth);
+            Part(rig, PrimitiveType.Cube, "TabardB",      new Vector3(0f, 1.22f, -0.160f), new Vector3(0.30f, 0.52f, 0.02f), cloth);
+            Part(rig, PrimitiveType.Cube, "CrossVF",      new Vector3(0f, 1.23f, 0.174f),  new Vector3(0.07f, 0.34f, 0.012f), cross);
+            Part(rig, PrimitiveType.Cube, "CrossHF",      new Vector3(0f, 1.32f, 0.174f),  new Vector3(0.22f, 0.07f, 0.012f), cross);
+            Part(rig, PrimitiveType.Cube, "CrossVB",      new Vector3(0f, 1.23f, -0.174f), new Vector3(0.07f, 0.34f, 0.012f), cross);
+            Part(rig, PrimitiveType.Cube, "CrossHB",      new Vector3(0f, 1.32f, -0.174f), new Vector3(0.22f, 0.07f, 0.012f), cross);
 
-            // ── shoulders & arms ──
-            Part(root, PrimitiveType.Sphere,  "PauldronL", new Vector3(-0.27f, 1.40f, 0f), new Vector3(0.22f, 0.17f, 0.22f), steel);
-            Part(root, PrimitiveType.Sphere,  "PauldronR", new Vector3( 0.27f, 1.40f, 0f), new Vector3(0.22f, 0.17f, 0.22f), steel);
-            Part(root, PrimitiveType.Capsule, "ArmL",      new Vector3(-0.31f, 1.10f, 0f), new Vector3(0.14f, 0.28f, 0.14f), mail);
-            Part(root, PrimitiveType.Sphere,  "GauntletL", new Vector3(-0.31f, 0.80f, 0f), new Vector3(0.16f, 0.16f, 0.16f), steel);
+            // Shoulders + left arm plate + left gauntlet.
+            Part(rig, PrimitiveType.Sphere,  "PlatePauldronL", new Vector3(-0.27f, 1.46f, 0f), new Vector3(0.23f, 0.17f, 0.23f), steel);
+            Part(rig, PrimitiveType.Sphere,  "PlatePauldronR", new Vector3( 0.27f, 1.46f, 0f), new Vector3(0.23f, 0.17f, 0.23f), steel);
+            Part(rig, PrimitiveType.Capsule, "PlateArmL",      new Vector3(-0.30f, 1.14f, 0f), new Vector3(0.15f, 0.27f, 0.15f), steel);
+            Part(rig, PrimitiveType.Sphere,  "PlateGauntletL", new Vector3(-0.30f, 0.86f, 0f), new Vector3(0.17f, 0.17f, 0.17f), steel);
 
-            // Right arm hangs from its own pivot so the building pose can raise it.
-            var armPivot = new GameObject(RightArmPivotName).transform;
-            armPivot.SetParent(root, false);
-            armPivot.localPosition = new Vector3(0.31f, 1.38f, 0f);
-            Part(armPivot, PrimitiveType.Capsule, "ArmR",      new Vector3(0f, -0.28f, 0f), new Vector3(0.14f, 0.28f, 0.14f), mail);
-            Part(armPivot, PrimitiveType.Sphere,  "GauntletR", new Vector3(0f, -0.56f, 0f), new Vector3(0.16f, 0.16f, 0.16f), steel);
+            // Great helm: covers the whole head; the cross face-opening reads facing.
+            Part(rig, PrimitiveType.Cylinder, "PlateHelm", new Vector3(0f, 1.71f, 0f),     new Vector3(0.34f, 0.145f, 0.34f), steel);
+            Part(rig, PrimitiveType.Cylinder, "CrownBand", new Vector3(0f, 1.845f, 0f),    new Vector3(0.355f, 0.012f, 0.355f), gold);
+            Part(rig, PrimitiveType.Cube,     "EyeSlit",   new Vector3(0f, 1.75f, 0.155f), new Vector3(0.20f, 0.030f, 0.035f), dark);
+            Part(rig, PrimitiveType.Cube,     "FaceSlit",  new Vector3(0f, 1.69f, 0.158f), new Vector3(0.030f, 0.14f, 0.030f), dark);
 
-            var hand = new GameObject(RightHandName).transform;
-            hand.SetParent(armPivot, false);
-            hand.localPosition = new Vector3(0f, -0.60f, 0.06f);
-            hand.localRotation = Quaternion.Euler(10f, -20f, 0f);   // same grip as the legacy anchor
+            rig.gameObject.SetActive(false);
 
-            // ── great helm ──
-            Part(root, PrimitiveType.Cylinder, "Helm",      new Vector3(0f, 1.71f, 0f),     new Vector3(0.34f, 0.14f, 0.34f), steel);
-            Part(root, PrimitiveType.Cylinder, "CrownBand", new Vector3(0f, 1.84f, 0f),     new Vector3(0.355f, 0.012f, 0.355f), gold);
-            Part(root, PrimitiveType.Cube,     "EyeSlit",   new Vector3(0f, 1.75f, 0.155f), new Vector3(0.20f, 0.030f, 0.035f), dark);
-            Part(root, PrimitiveType.Cube,     "FaceSlit",  new Vector3(0f, 1.69f, 0.158f), new Vector3(0.030f, 0.14f, 0.030f), dark);
-
-            // ── equipment anchor (jetpack + oxygen tank, next step) ──
-            var back = new GameObject(BackAnchorName).transform;
-            back.SetParent(root, false);
-            back.localPosition = new Vector3(0f, 1.22f, -0.20f);
-
-            return root;
+            // Right-arm plates ride the pose pivot so they follow every arm pose.
+            var rigR = new GameObject(ArmorRigRName).transform;
+            rigR.SetParent(armPivot, false);
+            Part(rigR, PrimitiveType.Capsule, "PlateArmR",      new Vector3(0f, -0.30f, 0f), new Vector3(0.15f, 0.27f, 0.15f), steel);
+            Part(rigR, PrimitiveType.Sphere,  "PlateGauntletR", new Vector3(0f, -0.58f, 0f), new Vector3(0.17f, 0.17f, 0.17f), steel);
+            rigR.gameObject.SetActive(false);
         }
+
+        private static void TintPlates(Transform rig, Material mat)
+        {
+            if (rig == null || mat == null) return;
+            foreach (var r in rig.GetComponentsInChildren<MeshRenderer>(true))
+                if (r.gameObject.name.StartsWith("Plate")) r.sharedMaterial = mat;
+        }
+
+        /// <summary>One shared material per tier - the read at a glance:
+        /// 1 quilted cloth, 2 hardened leather, 3 iron, 4 steel, 5 gilded,
+        /// 6 void-metal.</summary>
+        private static Material TierMaterial(int tier)
+        {
+            if (_tierMats.TryGetValue(tier, out var cached) && cached != null) return cached;
+            Color c; float metallic, smooth;
+            switch (tier)
+            {
+                case 1:  c = new Color(0.72f, 0.62f, 0.46f); metallic = 0.00f; smooth = 0.15f; break;
+                case 2:  c = new Color(0.52f, 0.34f, 0.18f); metallic = 0.25f; smooth = 0.30f; break;
+                case 3:  c = new Color(0.45f, 0.47f, 0.50f); metallic = 0.70f; smooth = 0.35f; break;
+                case 5:  c = new Color(0.83f, 0.66f, 0.24f); metallic = 0.95f; smooth = 0.75f; break;
+                case 6:  c = new Color(0.16f, 0.15f, 0.24f); metallic = 0.90f; smooth = 0.85f; break;
+                default: c = new Color(0.64f, 0.67f, 0.72f); metallic = 0.85f; smooth = 0.60f; break;   // 4: steel
+            }
+            var m = Mat(c, metallic, smooth);
+            _tierMats[tier] = m;
+            return m;
+        }
+
+        // ─────────────────────────── helpers ───────────────────────────
 
         private static Transform Part(Transform parent, PrimitiveType type, string name,
             Vector3 pos, Vector3 scale, Material mat)
