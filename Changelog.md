@@ -1,9 +1,28 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.16.0-dev`
+**Current Version:** `14.17.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.17.0-dev] The Crusader Moves
+
+**Type:** MINOR - milestone 6 finale: real animations on the rigged avatar. Save-compatible.
+
+**Runtime locomotion (`CrusaderAnimator`, new).** The avatar plays the Mixamo clips from `Resources/PlayerAnimations` through a runtime PlayableGraph - no AnimatorController asset, no editor wiring, self-healing like the rest of the avatar (missing clips = bind pose, exactly as before):
+- **Idle**, **sad idle** below 35% health, **walk/run** blended continuously by measured speed, **running slide**, and **jump** while airborne.
+- Motion is derived from the avatar's own network-moved transform, measured against the avatar's OWN up axis (spherical planets - world up is meaningless almost everywhere). Only one new wire bit exists: the slide flag on the pose RPC.
+- Root motion stays OFF - the slide and the weapon-pack clips are not authored in place, and the network transform owns all movement; humanoid retargeting drops the root translation cleanly.
+- Crouch and slide are separate now: sliding plays its animation WITHOUT the crouch squash.
+- The building pose is re-applied after animation every frame, so the raised arm survives the animator's bone writes and still breathes with the underlying clip.
+- Owner avatars stop their graph entirely - nobody pays for animation they cannot see.
+
+**Manual steps (2 minutes, in Unity):**
+1. Move the `PlayerAnimations` folder into `VoxelEngineAssets/Resources/` (drag inside Unity so the metas follow) - the code loads `Resources/PlayerAnimations/<file>`.
+2. Select ALL the animation FBX files (the six clips; the sword pack can wait) - Rig tab - Animation Type: **Humanoid** - Apply.
+3. Select Idle, Sad_idle, Walking, Running, Running_slide - Animation tab - tick **Loop Time** - Apply. (Jumping stays unlooped.)
+
+**Next:** weapon stances from the sword-and-shield pack (plus rifle/pistol once those clips land), then milestone 7: proximity chat.
 
 ### [14.16.0-dev] Backpacks And Blueprints
 

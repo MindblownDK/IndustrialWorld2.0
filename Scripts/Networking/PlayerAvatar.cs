@@ -54,6 +54,8 @@ namespace VoxelEngine.Networking
         private readonly SyncVar<string> _ghostItemId = new SyncVar<string>();
         private readonly SyncVar<Vector3> _ghostPos = new SyncVar<Vector3>();
         private readonly SyncVar<Quaternion> _ghostRot = new SyncVar<Quaternion>(Quaternion.identity);
+        // 14.17.0: motion flags for the locomotion driver (bit 0 = sliding).
+        private readonly SyncVar<int> _motionFlags = new SyncVar<int>(0);
 
         [Tooltip("Nameplate above the head. Assigned by Setup Step 105.")]
         public TextMesh nameplate;
@@ -86,7 +88,20 @@ namespace VoxelEngine.Networking
         private int _sentArmorTier;
         private int _sentSkinTone = -1;   // sentinel: the first mirror pass always sends
         private int _sentEquipFlags = -1;
+        private int _sentMotionFlags = -1;
         private VoxelEngine.Player.PlayerEquipment _equipment;
+        private CrusaderAnimator _locomotion;
+
+        /// <summary>The rig's locomotion driver, when the rigged body is in use.</summary>
+        private CrusaderAnimator Locomotion()
+        {
+            if (_locomotion == null)
+            {
+                var rig = transform.Find(CrusaderModel.RootName + "/" + CrusaderModel.RigName);
+                if (rig != null) _locomotion = rig.GetComponent<CrusaderAnimator>();
+            }
+            return _locomotion;
+        }
 
         public string PlayerId => _playerId.Value;
         public string PlayerName => _playerName.Value;
@@ -108,6 +123,7 @@ namespace VoxelEngine.Networking
             _ghostItemId.OnChange += OnGhostItemChanged;
             _ghostPos.OnChange += OnGhostPosChanged;
             _ghostRot.OnChange += OnGhostRotChanged;
+            _motionFlags.OnChange += OnMotionChanged;
         }
 
         private void OnDestroy()
@@ -123,6 +139,7 @@ namespace VoxelEngine.Networking
             _ghostItemId.OnChange -= OnGhostItemChanged;
             _ghostPos.OnChange -= OnGhostPosChanged;
             _ghostRot.OnChange -= OnGhostRotChanged;
+            _motionFlags.OnChange -= OnMotionChanged;
             if (_ghostReplica != null) { Destroy(_ghostReplica); _ghostReplica = null; }
             Unregister();   // belt and braces; normally OnStopClient/Server did it
         }
@@ -158,6 +175,8 @@ namespace VoxelEngine.Networking
                 // puppet locally so it never pokes into my camera.
                 foreach (var r in GetComponentsInChildren<Renderer>(true))
                     r.enabled = false;
+                var ownLocomotion = Locomotion();
+                if (ownLocomotion != null) ownLocomotion.StopForOwner();
             }
             else
             {
@@ -169,6 +188,7 @@ namespace VoxelEngine.Networking
                 ApplySkinTone(_skinTone.Value);
                 ApplyBackGear(_equipFlags.Value);
                 ApplyGhost(_ghostItemId.Value);
+                ApplyMotion(_motionFlags.Value);
             }
         }
 
@@ -227,7 +247,11 @@ namespace VoxelEngine.Networking
                 var stack = _inventory.ActiveStack;
                 if (stack != null && stack.item != null) held = stack.item.itemId ?? "";
             }
-            bool crouched = _controller != null && (_controller.IsCrouched || _controller.IsSliding);
+            // 14.17.0: crouch and slide are separate now - the slide plays its
+            // own animation and must not also squash the model.
+            bool sliding = _controller != null && _controller.IsSliding;
+            bool crouched = _controller != null && _controller.IsCrouched && !sliding;
+            int motionFlags = sliding ? 1 : 0;
             var wornArmor = stats.equippedArmor;
             int armorTier = wornArmor != null ? Mathf.Clamp(wornArmor.tier, 1, 6) : 0;
             int skinTone = PlayerIdentity.LocalSkinTone;
@@ -244,18 +268,20 @@ namespace VoxelEngine.Networking
 
             if (held == _sentHeldItemId && crouched == _sentCrouched
                 && healthPct == _sentHealthPct && armorTier == _sentArmorTier
-                && skinTone == _sentSkinTone && equipFlags == _sentEquipFlags) return;
+                && skinTone == _sentSkinTone && equipFlags == _sentEquipFlags
+                && motionFlags == _sentMotionFlags) return;
             _sentHeldItemId = held;
             _sentCrouched = crouched;
             _sentHealthPct = healthPct;
             _sentArmorTier = armorTier;
             _sentSkinTone = skinTone;
             _sentEquipFlags = equipFlags;
-            RpcUpdatePose(held, crouched, healthPct, armorTier, skinTone, equipFlags);
+            _sentMotionFlags = motionFlags;
+            RpcUpdatePose(held, crouched, healthPct, armorTier, skinTone, equipFlags, motionFlags);
         }
 
         [ServerRpc]
-        private void RpcUpdatePose(string heldItemId, bool crouched, int healthPct, int armorTier, int skinTone, int equipFlags)
+        private void RpcUpdatePose(string heldItemId, bool crouched, int healthPct, int armorTier, int skinTone, int equipFlags, int motionFlags)
         {
             _heldItemId.Value = heldItemId ?? "";
             _crouched.Value = crouched;
@@ -263,6 +289,7 @@ namespace VoxelEngine.Networking
             _armorTier.Value = Mathf.Clamp(armorTier, 0, 6);
             _skinTone.Value = Mathf.Clamp(skinTone, 0, CrusaderModel.SkinToneCount - 1);
             _equipFlags.Value = equipFlags & 3;
+            _motionFlags.Value = motionFlags & 1;
         }
 
         // ── building-ghost mirror (14.16.0) ──────────────────────────────
@@ -414,6 +441,18 @@ namespace VoxelEngine.Networking
             CrusaderModel.SetBackGear(transform, (flags & 1) != 0, (flags & 2) != 0);
         }
 
+        private void OnMotionChanged(int previous, int next, bool asServer)
+        {
+            if (asServer || IsOwner) return;
+            ApplyMotion(next);
+        }
+
+        private void ApplyMotion(int flags)
+        {
+            var driver = Locomotion();
+            if (driver != null) driver.Sliding = (flags & 1) != 0;
+        }
+
         // ── remote building-ghost replica ──
         private GameObject _ghostReplica;
         private string _ghostReplicaId = "";
@@ -489,6 +528,10 @@ namespace VoxelEngine.Networking
         /// <summary>Rust-style honesty: the bar only appears when hurt.</summary>
         private void ApplyHealth(int pct)
         {
+            // 14.17.0: a badly hurt crusader stands differently (sad idle).
+            var driver = Locomotion();
+            if (driver != null) driver.LowHealth = pct <= 35;
+
             if (pct >= 100)
             {
                 if (_healthBar != null) _healthBar.SetActive(false);

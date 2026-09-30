@@ -215,6 +215,11 @@ namespace VoxelEngine.Networking
             var rigT = root.Find(RigName);
             if (rigT != null)
             {
+                // While the locomotion graph runs, the animator rewrites bones
+                // every frame - the driver re-applies the pose in LateUpdate.
+                var driver = rigT.GetComponent<CrusaderAnimator>();
+                if (driver != null && driver.HasClips) { driver.BuildPose = posed; return; }
+
                 var upper = FindBoneEndingIn(rigT.gameObject, "RightArm");
                 if (upper == null) return;
                 var state = upper.GetComponent<BuildPoseState>();
@@ -400,6 +405,17 @@ namespace VoxelEngine.Networking
                 hand.SetParent(root, false);
                 hand.localPosition = new Vector3(0.30f, 1.05f, 0.10f);
             }
+
+            // Locomotion driver (14.17.0): plays the Resources/PlayerAnimations
+            // clips through a runtime playable graph. A harmless no-op (bind
+            // pose, exactly as before) until that folder exists under Resources.
+            var animator = rigGo.GetComponent<Animator>();
+            if (animator == null) animator = rigGo.AddComponent<Animator>();
+            animator.applyRootMotion = false;   // slide/pack clips are not in-place
+            var upperArmBone = FindBoneEndingIn(rigGo, "RightArm");
+            var driver = rigGo.AddComponent<CrusaderAnimator>();
+            driver.Initialize(animator, root.parent != null ? root.parent : root,
+                upperArmBone, handBone);
 
             // Tattoos hug the actual chest surface: the chest-band sample from
             // above, recentered and scaled exactly like the rig itself.
