@@ -211,6 +211,26 @@ namespace VoxelEngine.Persistence
             return false;
         }
 
+        /// <summary>One item stack as opaque save-format JSON (drop sync, 14.11.0).
+        /// Full fidelity: durability, charge, liquid payloads, packed drawers.</summary>
+        public string CaptureStackJson(ItemStack stack)
+        {
+            if (stack == null || stack.IsEmpty) return null;
+            return JsonUtility.ToJson(SerializeStack(stack));
+        }
+
+        /// <summary>Inverse of CaptureStackJson. Lazily builds the item cache so it
+        /// works before any save is loaded. Returns null when the stack cannot be
+        /// restored (unknown item on this machine).</summary>
+        public ItemStack RestoreStackJson(string json)
+        {
+            if (string.IsNullOrEmpty(json)) return null;
+            if (_itemById.Count == 0) BuildItemCache();
+            var e = JsonUtility.FromJson<SavedStack>(json);
+            var stack = e != null ? DeserializeStack(e) : null;
+            return stack != null && !stack.IsEmpty ? stack : null;
+        }
+
         // ============================================================
         //                          SAVE
         // ============================================================

@@ -43,6 +43,15 @@ namespace VoxelEngine.Items
         private Inventory _dropOwner;
         private bool _ownerLeftPickupRange;
 
+        // ── Network identity (14.11.0) ──────────────────────────────────────
+        // Wire id of this drop, assigned fresh on every (pooled) spawn so a
+        // reused entity can never leak a stale identity. Non-owned drops are
+        // remote copies: they never announce their own settle or expiry, but
+        // picking one up announces its removal like any other.
+        internal string NetId;
+        internal bool NetOwned;
+        internal bool IsSettled => _settled;
+
         public static DroppedItem Spawn(ItemStack stack, Vector3 position, Vector3 tossDir)
         {
             if (stack == null || stack.IsEmpty) return null;
@@ -123,7 +132,13 @@ namespace VoxelEngine.Items
             di._settled = false;
             di._dropOwner = null;
             di._ownerLeftPickupRange = false;
+            di.NetId = VoxelEngine.Networking.DropSync.NewId();
+            di.NetOwned = true;
             go.SetActive(true);
+
+            // Replicate the drop (14.11.0) - no-op while a remote spawn applies,
+            // which then re-tags the entity with the sender's wire id.
+            VoxelEngine.Networking.DropSync.AnnounceSpawned(di, tossDir);
 
             Debug.Log($"[DroppedItem] Spawned {stack.item.displayName} x{stack.count} at {position}");
             return di;
@@ -188,6 +203,9 @@ namespace VoxelEngine.Items
                 _rb.linearDamping = NormalLinearDamping;
                 _rb.angularDamping = NormalAngularDamping;
                 _rb.isKinematic = true;
+                // Converge the rest position everywhere - remote copies simulate
+                // their own toss physics and may have drifted a little (14.11.0).
+                VoxelEngine.Networking.DropSync.AnnounceSettled(this);
             }
 
             if (_settled)
@@ -235,6 +253,7 @@ namespace VoxelEngine.Items
                 Despawn();
                 return true;
             }
+            VoxelEngine.Networking.DropSync.AnnounceUpdated(this);
             return false;
         }
 
@@ -262,6 +281,7 @@ namespace VoxelEngine.Items
                 stack.count = leftover.count;
                 _registeredItemCount = Mathf.Max(0, _registeredItemCount - removed);
                 ActivePhysicalItemCount = Mathf.Max(0, ActivePhysicalItemCount - removed);
+                VoxelEngine.Networking.DropSync.AnnounceUpdated(this);
             }
             return false;
         }
@@ -280,9 +300,42 @@ namespace VoxelEngine.Items
             return _sharedDropMaterial;
         }
 
-        /// <summary>Returns this physical item entity to the shared pool.</summary>
-        private void Despawn()
+        /// <summary>Remote convergence: adopt the owner's rest position and freeze
+        /// exactly the way local settling does (14.11.0).</summary>
+        internal void ForceSettle(Vector3 position)
         {
+            transform.position = position;
+            _settled = true;
+            if (_rb == null) _rb = GetComponent<Rigidbody>();
+            if (_rb != null)
+            {
+                _rb.linearDamping = NormalLinearDamping;
+                _rb.angularDamping = NormalAngularDamping;
+                _rb.isKinematic = true;
+            }
+        }
+
+        /// <summary>Remote convergence: adopt a new stack count after a partial
+        /// pickup or belt insert on another machine, keeping the world-drop
+        /// budget honest. Reaching zero despawns.</summary>
+        internal void NetSetCount(int count)
+        {
+            if (stack == null || stack.IsEmpty) return;
+            int clamped = Mathf.Max(0, count);
+            int delta = stack.count - clamped;
+            if (delta == 0) return;
+            stack.count = clamped;
+            _registeredItemCount = Mathf.Max(0, _registeredItemCount - delta);
+            ActivePhysicalItemCount = Mathf.Max(0, ActivePhysicalItemCount - delta);
+            if (clamped <= 0) Despawn();
+        }
+
+        /// <summary>Returns this physical item entity to the shared pool.</summary>
+        internal void Despawn()
+        {
+            // Every consumption path funnels through here - expiry, full pickup,
+            // belt insert, remote removal - so this is the one removal seam (14.11.0).
+            VoxelEngine.Networking.DropSync.HandleDespawn(this);
             if (_registeredItemCount > 0)
                 ActivePhysicalItemCount = Mathf.Max(0, ActivePhysicalItemCount - _registeredItemCount);
             _registeredItemCount = 0;

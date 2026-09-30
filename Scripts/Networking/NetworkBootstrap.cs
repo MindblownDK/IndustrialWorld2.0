@@ -167,6 +167,42 @@ namespace VoxelEngine.Networking
         public List<ContainerRecord> Records;
     }
 
+    /// <summary>One physical world drop spawned (14.11.0). Stack as save-format JSON.</summary>
+    public struct DropSpawnedBroadcast : IBroadcast
+    {
+        public string Id;
+        public string StackJson;
+        public Vector3 Position;
+        public Vector3 Toss;
+    }
+
+    /// <summary>A drop came to rest - converge its position everywhere (14.11.0).</summary>
+    public struct DropSettledBroadcast : IBroadcast
+    {
+        public string Id;
+        public Vector3 Position;
+    }
+
+    /// <summary>A drop's stack shrank (partial pickup / belt insert, 14.11.0).</summary>
+    public struct DropUpdatedBroadcast : IBroadcast
+    {
+        public string Id;
+        public int Count;
+    }
+
+    public struct DropRemovedBroadcast : IBroadcast
+    {
+        public string Id;
+    }
+
+    /// <summary>A chunk of live world drops (join merge, 14.11.0).</summary>
+    public struct DropSnapshotBroadcast : IBroadcast
+    {
+        public int ChunkIndex;
+        public int TotalChunks;
+        public List<DropRecord> Records;
+    }
+
     /// <summary>One edited terrain chunk for the join catch-up (14.8.0):
     /// deflate-compressed full padded voxel grid, planet-tagged.</summary>
     public struct TerrainChunkBroadcast : IBroadcast
@@ -269,6 +305,11 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.RegisterBroadcast<BlockSnapshotBroadcast>(OnServerBlockSnapshot);
             _networkManager.ServerManager.RegisterBroadcast<ContainerStateBroadcast>(OnServerContainerState);
             _networkManager.ServerManager.RegisterBroadcast<ContainerSnapshotBroadcast>(OnServerContainerSnapshot);
+            _networkManager.ServerManager.RegisterBroadcast<DropSpawnedBroadcast>(OnServerDropSpawned);
+            _networkManager.ServerManager.RegisterBroadcast<DropSettledBroadcast>(OnServerDropSettled);
+            _networkManager.ServerManager.RegisterBroadcast<DropUpdatedBroadcast>(OnServerDropUpdated);
+            _networkManager.ServerManager.RegisterBroadcast<DropRemovedBroadcast>(OnServerDropRemoved);
+            _networkManager.ServerManager.RegisterBroadcast<DropSnapshotBroadcast>(OnServerDropSnapshot);
             _networkManager.ServerManager.RegisterBroadcast<TerrainChunkBroadcast>(OnServerTerrainChunk);
             _networkManager.ServerManager.RegisterBroadcast<WorldAckBroadcast>(OnWorldAck);
             _networkManager.ServerManager.RegisterBroadcast<BaseSnapshotBroadcast>(OnServerBaseSnapshot);
@@ -288,6 +329,11 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.RegisterBroadcast<BlockSnapshotBroadcast>(OnClientBlockSnapshot);
             _networkManager.ClientManager.RegisterBroadcast<ContainerStateBroadcast>(OnClientContainerState);
             _networkManager.ClientManager.RegisterBroadcast<ContainerSnapshotBroadcast>(OnClientContainerSnapshot);
+            _networkManager.ClientManager.RegisterBroadcast<DropSpawnedBroadcast>(OnClientDropSpawned);
+            _networkManager.ClientManager.RegisterBroadcast<DropSettledBroadcast>(OnClientDropSettled);
+            _networkManager.ClientManager.RegisterBroadcast<DropUpdatedBroadcast>(OnClientDropUpdated);
+            _networkManager.ClientManager.RegisterBroadcast<DropRemovedBroadcast>(OnClientDropRemoved);
+            _networkManager.ClientManager.RegisterBroadcast<DropSnapshotBroadcast>(OnClientDropSnapshot);
             _networkManager.ClientManager.RegisterBroadcast<TerrainChunkBroadcast>(OnClientTerrainChunk);
             _networkManager.ClientManager.RegisterBroadcast<BaseSnapshotBroadcast>(OnClientBaseSnapshot);
 
@@ -320,6 +366,11 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.UnregisterBroadcast<BlockSnapshotBroadcast>(OnServerBlockSnapshot);
             _networkManager.ServerManager.UnregisterBroadcast<ContainerStateBroadcast>(OnServerContainerState);
             _networkManager.ServerManager.UnregisterBroadcast<ContainerSnapshotBroadcast>(OnServerContainerSnapshot);
+            _networkManager.ServerManager.UnregisterBroadcast<DropSpawnedBroadcast>(OnServerDropSpawned);
+            _networkManager.ServerManager.UnregisterBroadcast<DropSettledBroadcast>(OnServerDropSettled);
+            _networkManager.ServerManager.UnregisterBroadcast<DropUpdatedBroadcast>(OnServerDropUpdated);
+            _networkManager.ServerManager.UnregisterBroadcast<DropRemovedBroadcast>(OnServerDropRemoved);
+            _networkManager.ServerManager.UnregisterBroadcast<DropSnapshotBroadcast>(OnServerDropSnapshot);
             _networkManager.ServerManager.UnregisterBroadcast<TerrainChunkBroadcast>(OnServerTerrainChunk);
             _networkManager.ServerManager.UnregisterBroadcast<WorldAckBroadcast>(OnWorldAck);
             _networkManager.ServerManager.UnregisterBroadcast<BaseSnapshotBroadcast>(OnServerBaseSnapshot);
@@ -339,6 +390,11 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.UnregisterBroadcast<BlockSnapshotBroadcast>(OnClientBlockSnapshot);
             _networkManager.ClientManager.UnregisterBroadcast<ContainerStateBroadcast>(OnClientContainerState);
             _networkManager.ClientManager.UnregisterBroadcast<ContainerSnapshotBroadcast>(OnClientContainerSnapshot);
+            _networkManager.ClientManager.UnregisterBroadcast<DropSpawnedBroadcast>(OnClientDropSpawned);
+            _networkManager.ClientManager.UnregisterBroadcast<DropSettledBroadcast>(OnClientDropSettled);
+            _networkManager.ClientManager.UnregisterBroadcast<DropUpdatedBroadcast>(OnClientDropUpdated);
+            _networkManager.ClientManager.UnregisterBroadcast<DropRemovedBroadcast>(OnClientDropRemoved);
+            _networkManager.ClientManager.UnregisterBroadcast<DropSnapshotBroadcast>(OnClientDropSnapshot);
             _networkManager.ClientManager.UnregisterBroadcast<TerrainChunkBroadcast>(OnClientTerrainChunk);
             _networkManager.ClientManager.UnregisterBroadcast<BaseSnapshotBroadcast>(OnClientBaseSnapshot);
         }
@@ -744,6 +800,7 @@ namespace VoxelEngine.Networking
                 SendBaseSnapshot(null);
                 SendBlockSnapshot(null);
                 SendContainerSnapshot(null);
+                SendDropSnapshot(null);
                 SendTerrainSnapshot(null);
             }
         }
@@ -756,6 +813,7 @@ namespace VoxelEngine.Networking
             SendBaseSnapshot(conn);
             SendBlockSnapshot(conn);
             SendContainerSnapshot(conn);
+            SendDropSnapshot(conn);
             SendTerrainSnapshot(conn);
         }
 
@@ -898,6 +956,120 @@ namespace VoxelEngine.Networking
             for (int i = 0; i < total; i++)
             {
                 var chunk = new ContainerSnapshotBroadcast
+                {
+                    ChunkIndex = i,
+                    TotalChunks = total,
+                    Records = records.GetRange(i * ChunkSize,
+                        Mathf.Min(ChunkSize, records.Count - i * ChunkSize))
+                };
+                if (target != null) _networkManager.ServerManager.Broadcast(target, chunk, true);
+                else _networkManager.ClientManager.Broadcast(chunk);
+            }
+        }
+
+        public void SendDropSpawned(string id, string stackJson, Vector3 pos, Vector3 toss)
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(new DropSpawnedBroadcast
+            { Id = id, StackJson = stackJson, Position = pos, Toss = toss });
+        }
+
+        public void SendDropSettled(string id, Vector3 pos)
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(new DropSettledBroadcast
+            { Id = id, Position = pos });
+        }
+
+        public void SendDropUpdated(string id, int count)
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(new DropUpdatedBroadcast
+            { Id = id, Count = count });
+        }
+
+        public void SendDropRemoved(string id)
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(new DropRemovedBroadcast { Id = id });
+        }
+
+        private void OnServerDropSpawned(NetworkConnection conn, DropSpawnedBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (!conn.IsLocalClient) DropSync.ApplySpawned(msg.Id, msg.StackJson, msg.Position, msg.Toss);
+            RelayToOthers(conn, msg);
+        }
+
+        private void OnServerDropSettled(NetworkConnection conn, DropSettledBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (!conn.IsLocalClient) DropSync.ApplySettled(msg.Id, msg.Position);
+            RelayToOthers(conn, msg);
+        }
+
+        private void OnServerDropUpdated(NetworkConnection conn, DropUpdatedBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (!conn.IsLocalClient) DropSync.ApplyUpdated(msg.Id, msg.Count);
+            RelayToOthers(conn, msg);
+        }
+
+        private void OnServerDropRemoved(NetworkConnection conn, DropRemovedBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (!conn.IsLocalClient) DropSync.ApplyRemoved(msg.Id);
+            RelayToOthers(conn, msg);
+        }
+
+        private void OnServerDropSnapshot(NetworkConnection conn, DropSnapshotBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (!conn.IsLocalClient) DropSync.ApplySnapshot(msg.Records);
+            RelayToOthers(conn, msg);
+        }
+
+        private void OnClientDropSpawned(DropSpawnedBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            DropSync.ApplySpawned(msg.Id, msg.StackJson, msg.Position, msg.Toss);
+        }
+
+        private void OnClientDropSettled(DropSettledBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            DropSync.ApplySettled(msg.Id, msg.Position);
+        }
+
+        private void OnClientDropUpdated(DropUpdatedBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            DropSync.ApplyUpdated(msg.Id, msg.Count);
+        }
+
+        private void OnClientDropRemoved(DropRemovedBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            DropSync.ApplyRemoved(msg.Id);
+        }
+
+        private void OnClientDropSnapshot(DropSnapshotBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            DropSync.ApplySnapshot(msg.Records);
+        }
+
+        /// <summary>Gather every live world drop and send it chunked - to a joining
+        /// connection when called as server, up to the server when target is null.</summary>
+        private void SendDropSnapshot(NetworkConnection target)
+        {
+            const int ChunkSize = 32;
+            var records = DropSync.GatherSnapshot();
+            if (records.Count == 0) return;
+            int total = Mathf.CeilToInt(records.Count / (float)ChunkSize);
+            for (int i = 0; i < total; i++)
+            {
+                var chunk = new DropSnapshotBroadcast
                 {
                     ChunkIndex = i,
                     TotalChunks = total,

@@ -1,9 +1,35 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.10.0-dev`
+**Current Version:** `14.11.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.11.0-dev] Loot On Common Ground
+
+**Type:** MINOR - multiplayer milestone 5 continues: dropped items over the wire. Save-compatible.
+
+**The gap.** Physical world drops - mined block spills, a destroyed chest's contents, manual drops, creature loot, inventory overflow - existed only on the machine that created them. Your teammate could stand in a field of loot and see bare grass; worse, the same loot could effectively exist twice.
+
+**Drop sync (`DropSync`, two seams).** Every drop path in the game funnels through `DroppedItem.Spawn` (creation) and `DroppedItem.Despawn` (every consumption: expiry, full pickup, conveyor insert). Both are now announced:
+- **Identity by wire id, not position.** Drops are rigidbodies - they roll, bounce and slide on ice - so positional identity would break instantly. Every drop carries a `playerId:serial` id, assigned fresh on every pooled spawn so a reused entity can never leak a stale identity.
+- **Spawn** replicates with the full stack payload as save-format JSON (`WorldStatePersistence.CaptureStackJson` / `RestoreStackJson`) - durability, charge, liquid payloads, packed drawers arrive intact. Toss physics stays local per machine (cheap, close enough for a tumbling cube); the spawning machine's one-time **settle** announcement then converges the exact rest position everywhere.
+- **Pickup and belt inserts** are ownership-blind: whoever consumed the drop reports it - full consumption removes it everywhere, partial pickups and partial belt inserts shrink the stack everywhere. The world-drop budget stays honest on every machine.
+- **Authority note:** every `DroppedItem.Spawn` caller was audited - all are local player actions or local destruction events, never background simulation running on multiple machines - so every machine safely announces the drops it creates. No duplicate source exists.
+- **Join merge:** a chunked `DropSnapshotBroadcast` rides the handshake between the container and terrain snapshots, id-deduplicated, with settled drops frozen at their exact rest position. Pre-session solo drops get their id at gather time and merge in both directions.
+
+**Known limits (documented):** two players grabbing the SAME drop in the same instant can each receive it - the removal broadcasts simply cross on the wire (co-op stakes, vanishingly small window). A drop sitting on a conveyor feeds whichever machine's belt sim grabs it first; belt contents themselves still diverge until machine runtime sync lands - which is now the last big piece of milestone 5, together with placement payloads.
+
+**GitHub title:** `[14.11.0-dev] Loot on common ground`
+
+**Manual steps:**
+1. Pull `Dev`, recompile. No setup steps.
+2. Drop check: throw a stack out of your inventory - the other player sees it land in the same spot (small toss differences snap together the moment it settles).
+3. Pickup check: teammate walks over your drop - it vanishes for you, appears in their inventory. No double-loot.
+4. Partial check: with a nearly full inventory, walk over a big stack - the remainder lying on the ground shows the same count on both machines.
+5. Fidelity check: drop a damaged tool - the pickup on the other machine has the same durability.
+6. Break check: destroy a filled chest - the spilled contents appear for everyone.
+7. Join check: leave drops on the ground, have a player join - the drops are there, resting exactly where you see them.
 
 ### [14.10.0-dev] What The Chest Holds
 
