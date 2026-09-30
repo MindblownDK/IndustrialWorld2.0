@@ -173,39 +173,39 @@ namespace VoxelEngine.Networking
             var rigGo = Object.Instantiate(prefab);
             rigGo.name = RigName;
             var rig = rigGo.transform;
-            rig.SetParent(root, false);
-            rig.localPosition = Vector3.zero;
-            rig.localRotation = Quaternion.identity;
-            rig.localScale = Vector3.one;
+
+            // Measure BEFORE parenting, at the origin with identity rotation
+            // (14.15.2). A skinned mesh is displayed where its BONES put it, so
+            // renderer.bounds is the only truthful box - local bounds pushed
+            // through the renderer transform (14.15.1) landed somewhere else
+            // entirely, which floated the players and put the tattoos at the
+            // shins. At origin/identity, world bounds ARE model space and the
+            // avatar's spawn rotation cannot inflate anything.
+            var prefabScale = rig.localScale;   // keep any import scale the asset carries
+            rig.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
 
             foreach (var col in rigGo.GetComponentsInChildren<Collider>(true))
                 Object.Destroy(col);   // display only - never block rays or physics
 
-            // Local AABB from world-space renderer bounds mapped into root space -
-            // correct regardless of where and how rotated the avatar spawned.
             var renderers = rigGo.GetComponentsInChildren<Renderer>(true);
             if (renderers.Length == 0) { Object.Destroy(rigGo); return false; }
             var min = new Vector3(float.MaxValue, float.MaxValue, float.MaxValue);
             var max = new Vector3(float.MinValue, float.MinValue, float.MinValue);
             foreach (var r in renderers)
             {
-                var b = r.bounds;
-                for (int i = 0; i < 8; i++)
-                {
-                    var corner = new Vector3(
-                        (i & 1) == 0 ? b.min.x : b.max.x,
-                        (i & 2) == 0 ? b.min.y : b.max.y,
-                        (i & 4) == 0 ? b.min.z : b.max.z);
-                    var p = root.InverseTransformPoint(corner);
-                    min = Vector3.Min(min, p);
-                    max = Vector3.Max(max, p);
-                }
+                var b = r.bounds;   // world == model space right now
+                min = Vector3.Min(min, b.min);
+                max = Vector3.Max(max, b.max);
             }
             float rawHeight = max.y - min.y;
             if (rawHeight < 0.05f) { Object.Destroy(rigGo); return false; }
 
+            // Chest front sampled in the same model space, before any reparenting.
+            float chestFrontModel = ChestFrontModelZ(rigGo, min, max);
+
             float s = Height / rawHeight;
-            rig.localScale = Vector3.one * s;
+            rig.SetParent(root, false);   // keeps the local pose: origin, identity
+            rig.localScale = prefabScale * s;
             rig.localPosition = new Vector3(
                 -(min.x + max.x) * 0.5f * s,
                 -min.y * s,
@@ -229,13 +229,92 @@ namespace VoxelEngine.Networking
                 hand.localPosition = new Vector3(0.30f, 1.05f, 0.10f);
             }
 
-            // Tattoos sit just off the model's front face.
-            float frontZ = (max.z - min.z) * 0.5f * s + 0.012f;
+            // Tattoos hug the actual chest surface: the chest-band sample from
+            // above, recentered and scaled exactly like the rig itself.
+            float chestFront = (chestFrontModel - (min.z + max.z) * 0.5f) * s;
             BuildTattoos(root, runeRed,
-                chestInkPos: new Vector3(0f, 1.31f, frontZ),
-                runePos: new Vector3(-0.16f, 1.47f, frontZ),
+                chestInkPos: new Vector3(0f, 1.31f, chestFront + 0.008f),
+                runePos: new Vector3(-0.16f, 1.47f, chestFront + 0.008f),
                 runeRot: Quaternion.identity);
+
+            // Ride the spine so future animations carry the ink with the chest.
+            var spine = FindBoneEndingIn(rigGo, "Spine2");
+            if (spine == null) spine = FindBoneEndingIn(rigGo, "Spine1");
+            if (spine == null) spine = FindBoneEndingIn(rigGo, "Spine");
+            if (spine != null)
+            {
+                var inkT = root.Find("ChestInk");
+                if (inkT != null) inkT.SetParent(spine, true);
+                var runeT = root.Find("BrandRune");
+                if (runeT != null) runeT.SetParent(spine, true);
+            }
             return true;
+        }
+
+        /// <summary>Front (+Z) of the chest in model space. Vertices are read in
+        /// mesh space, pushed through the renderer's transform, then affinely
+        /// remapped per axis from the vertex cloud's own box onto the DISPLAYED
+        /// box - this absorbs any armature/mesh scale mismatch (Mixamo rigs often
+        /// carry a 0.01 armature scale that a plain TransformPoint misses). The
+        /// chest band is 57-84% of height, torso width only, so T-pose arms and
+        /// forward-poking toes never set the reference. Falls back to the box
+        /// front when the mesh is not readable (enable Read/Write on the FBX).</summary>
+        private static float ChestFrontModelZ(GameObject rigGo, Vector3 dispMin, Vector3 dispMax)
+        {
+            float fallback = dispMax.z;
+            SkinnedMeshRenderer body = null;
+            foreach (var smr in rigGo.GetComponentsInChildren<SkinnedMeshRenderer>(true))
+                if (smr.sharedMesh != null
+                    && (body == null || smr.sharedMesh.vertexCount > body.sharedMesh.vertexCount))
+                    body = smr;
+            if (body == null || !body.sharedMesh.isReadable) return fallback;
+            try
+            {
+                var verts = body.sharedMesh.vertices;
+                if (verts.Length == 0) return fallback;
+                var tr = body.transform;
+                var vMin = new Vector3(float.MaxValue, float.MaxValue, float.MaxValue);
+                var vMax = new Vector3(float.MinValue, float.MinValue, float.MinValue);
+                for (int i = 0; i < verts.Length; i++)
+                {
+                    var p = tr.TransformPoint(verts[i]);
+                    vMin = Vector3.Min(vMin, p);
+                    vMax = Vector3.Max(vMax, p);
+                }
+                var vSize = vMax - vMin;
+                var dSize = dispMax - dispMin;
+                if (vSize.x < 1e-4f || vSize.y < 1e-4f || vSize.z < 1e-4f) return fallback;
+
+                float yLo = dispMin.y + 0.57f * dSize.y;
+                float yHi = dispMin.y + 0.84f * dSize.y;
+                float xC = (dispMin.x + dispMax.x) * 0.5f;
+                float xHalf = 0.09f * dSize.y;
+
+                float front = float.MinValue;
+                for (int i = 0; i < verts.Length; i++)
+                {
+                    var p = tr.TransformPoint(verts[i]);
+                    float dy = dispMin.y + (p.y - vMin.y) * dSize.y / vSize.y;
+                    if (dy < yLo || dy > yHi) continue;
+                    float dx = dispMin.x + (p.x - vMin.x) * dSize.x / vSize.x;
+                    if (Mathf.Abs(dx - xC) > xHalf) continue;
+                    float dz = dispMin.z + (p.z - vMin.z) * dSize.z / vSize.z;
+                    if (dz > front) front = dz;
+                }
+                return front > float.MinValue ? front : fallback;
+            }
+            catch { return fallback; }
+        }
+
+        /// <summary>Shortest bone name wins so "Spine" never grabs a longer twin.
+        /// Explicit null checks - never coalesce UnityEngine.Objects.</summary>
+        private static Transform FindBoneEndingIn(GameObject rigGo, string suffix)
+        {
+            Transform best = null;
+            foreach (var t in rigGo.GetComponentsInChildren<Transform>(true))
+                if (t.name.EndsWith(suffix) && (best == null || t.name.Length < best.name.Length))
+                    best = t;
+            return best;
         }
 
         // ─────────────────────────── the primitive fallback ───────────────────────────

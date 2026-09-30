@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.15.0-dev`
-**Roadmap Version:** `14.15.0-dev`
+**Current Version:** `14.15.2-dev`
+**Roadmap Version:** `14.15.2-dev`
 **Date:** 2026-09-28
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,12 @@
 ---
 
 ## 0. Recently Done
+
+### 14.15.2-dev - Feet On The Ground, One Panel Only
+Rig measurement fixed for skinned meshes (renderer.bounds at origin/identity, measured before parenting) - players stand on the ground and tattoos sit on the chest again. Item-Ports overlay no longer duplicates on face clicks (wholesale clear + re-entrancy guard) and now repaints live when the other player edits ports.
+
+### 14.15.1-dev - Ink On Skin
+Tattoos no longer float: bounds are computed rotation-proof through the local matrix chain, tattoo depth is sampled from the body mesh's chest-band vertices (toes no longer set the reference), and both tattoos ride the spine bone so future animations carry them.
 
 ### 14.15.0-dev - The Host Breathes And The Body Is Real
 Critical fix: joining clients froze the host - every uploaded chunk triggered a whole-region disk read on the main thread while racing the chunk writer (sharing violations both ways). Region I/O now serialized under one lock and HasLocalEdit served from the region read cache. Avatar upgraded to the rigged character at Resources/Player.fbx (auto-scaled, tattoos projected, tool anchored to the right-hand bone, primitive body kept as fallback) with six selectable skin tones synced via the pose RPC.

@@ -55,6 +55,10 @@ namespace VoxelEngine.UI
         private VisualElement _hudLayer;
         private VisualElement _topLayer;
         private VisualElement _itemPortsOverlay;
+        // Rebuilds the mounted Item-Ports overlay body in place (14.15.2) - the
+        // overlay is exempt from the full Refresh, so remote port edits repaint
+        // through this instead.
+        private System.Action _itemPortsOverlayRebuild;
         private bool _inventoryOpen;
         public bool IsInventoryOpen => _inventoryOpen;
         private IItemContainer _rightContainer; // chest contents OR furnace etc.
@@ -1170,6 +1174,20 @@ namespace VoxelEngine.UI
         /// be told to repaint when the other side's edit lands (14.12.1).</summary>
         public void RefreshOpenPanels()
         {
+            // A mounted Item-Ports overlay is exempt from the full Refresh (that
+            // would destroy it mid-interaction), so repaint its body in place -
+            // this is what makes the other player's port edits appear live
+            // (14.15.2). Skipped while the player is typing in a filter box so a
+            // remote edit can never eat their input.
+            if (_itemPortsOverlay != null && _itemPortsOverlay.parent != null)
+            {
+                var fc = _itemPortsOverlay.panel != null ? _itemPortsOverlay.panel.focusController : null;
+                bool typing = false;
+                if (fc != null && fc.focusedElement is VisualElement fe)
+                    typing = fe is TextField || fe.GetFirstAncestorOfType<TextField>() != null;
+                if (!typing) _itemPortsOverlayRebuild?.Invoke();
+                return;
+            }
             if (_inventoryOpen) Refresh();
         }
 
@@ -1214,6 +1232,7 @@ namespace VoxelEngine.UI
             if (_itemPortsOverlay != null)
             {
                 _itemPortsOverlay = null;
+                _itemPortsOverlayRebuild = null;
                 PortConfigHud.IsAnyDropdownOpen = false;
             }
             if (_dropVoidOverlay != null) _dropVoidOverlay = null;
@@ -3563,6 +3582,7 @@ namespace VoxelEngine.UI
             if (_itemPortsOverlay != null && _itemPortsOverlay.parent != null)
                 _itemPortsOverlay.RemoveFromHierarchy();
             _itemPortsOverlay = null;
+            _itemPortsOverlayRebuild = null;
             if (refreshAfterClose) Refresh();
         }
 
@@ -3644,7 +3664,18 @@ namespace VoxelEngine.UI
             // captured before the swap and restated after layout resolves, so editing a row
             // never yanks the player back to the top or down to the bottom.
             VisualElement body = null;
+            bool rebuildingBody = false;
             void RebuildBody()
+            {
+                // Re-entrancy guard (14.15.2): a rebuild triggered from inside a
+                // rebuild stacked a second widget under the first - the duplicate
+                // "ITEM PORTS" section that appeared after every face click.
+                if (rebuildingBody) return;
+                rebuildingBody = true;
+                try { RebuildBodyInner(); }
+                finally { rebuildingBody = false; }
+            }
+            void RebuildBodyInner()
             {
                 // Remember where the player was looking BEFORE the swap. On the very first
                 // build there is nothing to remember and nothing is attached yet, so this is
@@ -3652,7 +3683,10 @@ namespace VoxelEngine.UI
                 // "not attached yet, bail out" guard here.
                 float keepY = scroll.scrollOffset.y;
 
-                if (body != null && body.parent == scroll.contentContainer) body.RemoveFromHierarchy();
+                // Clear WHOLESALE (14.15.2). The old version removed the previous
+                // body by reference; any body the reference had lost track of
+                // survived below the fresh one. Nothing can survive a Clear.
+                scroll.contentContainer.Clear();
                 body = VoxelEngine.UI.PortConfigHud.BuildItemPorts(host, routing, onChanged: RebuildBody);
                 body.style.width = Length.Percent(100);
                 scroll.Add(body);
@@ -3671,6 +3705,7 @@ namespace VoxelEngine.UI
             }
 
             _itemPortsOverlay = overlay;
+            _itemPortsOverlayRebuild = RebuildBody;
             _root.Add(overlay);
 
             // Built AFTER the overlay is attached, so the body's own scheduled work and any

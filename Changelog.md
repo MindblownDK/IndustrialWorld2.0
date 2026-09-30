@@ -1,9 +1,36 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.15.0-dev`
+**Current Version:** `14.15.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.15.2-dev] Feet On The Ground, One Panel Only
+
+**Type:** PATCH - three bug fixes: floating players, tattoos at the shins, and the Item-Ports panel duplicating on every click.
+
+**FIX - players stood a meter in the air with the ink at their shins (`CrusaderModel`).** The 14.15.1 bounds change was wrong for skinned meshes: a skinned mesh is displayed where its BONES put it, and the renderer-local bounds pushed through the renderer's transform describe somewhere else entirely (Mixamo rigs often carry armature scale the renderer node knows nothing about). Scale, ground offset and tattoo anchors all inherited the error.
+- The rig is now measured BEFORE parenting, at the origin with identity rotation: there `renderer.bounds` - the truthful, bone-driven box - IS model space, and the avatar's spawn rotation cannot inflate anything. Height, centering and the feet-on-pivot offset are exact again.
+- The chest-front sample maps the mesh's vertex cloud onto the displayed box per axis before filtering the chest band, absorbing any armature/mesh scale mismatch. Toes and T-pose arms still never set the reference.
+
+**FIX - Item-Ports panel duplicated itself on every face click (`GameUIController`).** The overlay rebuilt its body by removing the previous copy BY REFERENCE; any copy the reference had lost track of survived and stacked below the fresh one - the phantom second "ITEM PORTS" section showing the pre-click state. The rebuild now clears the scroll content wholesale (nothing can survive) and carries a re-entrancy guard, so exactly one widget exists no matter what triggers a rebuild.
+
+**FIX - port edits from the other player now appear live in the open Item-Ports overlay.** The overlay was exempt from the remote-repaint path (14.12.1) to protect in-progress interaction, which also meant the other side's edits never showed until reopen - "doesn't auto update". `RefreshOpenPanels` now rebuilds the mounted overlay body in place, skipping only while the player is typing in a filter box so a remote edit can never eat their input. Scroll position survives the repaint.
+
+### [14.15.1-dev] Ink On Skin
+
+**Type:** PATCH - visual fix: the tattoos floated in front of the rigged body.
+
+**Why they floated (`CrusaderModel`).** Two compounding causes:
+- The model's bounding box was assembled from world-space AABB corners, which inflate whenever the avatar's root is rotated at build time - and on a spherical planet it almost always is. Depth (and height) read larger than the body actually is.
+- Even a perfect whole-body box is the wrong depth reference for a chest decal: in bind pose the TOES poke a good decimeter further forward than the pecs.
+
+**The fix.**
+- Bounds now come from each renderer's LOCAL bounds pushed through the renderer-to-root matrix chain - exact regardless of spawn rotation. This also makes the 1.85 m height normalization precise.
+- The tattoo depth is sampled from the body mesh's bind-pose vertices inside the chest band (torso x-range only, so T-pose arms never count): the ink and the brand rune now sit 8 mm off the actual skin. The AABB half-depth remains as fallback when the mesh is not readable.
+- Both tattoos re-parent onto the spine bone (Spine2, then Spine1, then Spine) with their world pose kept - when animations land, the ink moves with the chest instead of hanging in the air.
+
+**One import checkbox (recommended):** select `Player.fbx` - Model tab - enable **Read/Write**. The editor can read the mesh either way, but standalone builds need this for the exact chest depth; without it they fall back to the slightly-forward AABB estimate.
 
 ### [14.15.0-dev] The Host Breathes And The Body Is Real
 
