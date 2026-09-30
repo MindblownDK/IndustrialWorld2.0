@@ -167,6 +167,22 @@ namespace VoxelEngine.Networking
         public List<ContainerRecord> Records;
     }
 
+    /// <summary>One block's machine runtime as save-format JSON (14.12.0).</summary>
+    public struct MachineStateBroadcast : IBroadcast
+    {
+        public string ItemId;
+        public Vector3 Position;
+        public string Json;
+    }
+
+    /// <summary>A chunk of machine runtime states (join merge, 14.12.0).</summary>
+    public struct MachineSnapshotBroadcast : IBroadcast
+    {
+        public int ChunkIndex;
+        public int TotalChunks;
+        public List<MachineRecord> Records;
+    }
+
     /// <summary>One physical world drop spawned (14.11.0). Stack as save-format JSON.</summary>
     public struct DropSpawnedBroadcast : IBroadcast
     {
@@ -305,6 +321,8 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.RegisterBroadcast<BlockSnapshotBroadcast>(OnServerBlockSnapshot);
             _networkManager.ServerManager.RegisterBroadcast<ContainerStateBroadcast>(OnServerContainerState);
             _networkManager.ServerManager.RegisterBroadcast<ContainerSnapshotBroadcast>(OnServerContainerSnapshot);
+            _networkManager.ServerManager.RegisterBroadcast<MachineStateBroadcast>(OnServerMachineState);
+            _networkManager.ServerManager.RegisterBroadcast<MachineSnapshotBroadcast>(OnServerMachineSnapshot);
             _networkManager.ServerManager.RegisterBroadcast<DropSpawnedBroadcast>(OnServerDropSpawned);
             _networkManager.ServerManager.RegisterBroadcast<DropSettledBroadcast>(OnServerDropSettled);
             _networkManager.ServerManager.RegisterBroadcast<DropUpdatedBroadcast>(OnServerDropUpdated);
@@ -329,6 +347,8 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.RegisterBroadcast<BlockSnapshotBroadcast>(OnClientBlockSnapshot);
             _networkManager.ClientManager.RegisterBroadcast<ContainerStateBroadcast>(OnClientContainerState);
             _networkManager.ClientManager.RegisterBroadcast<ContainerSnapshotBroadcast>(OnClientContainerSnapshot);
+            _networkManager.ClientManager.RegisterBroadcast<MachineStateBroadcast>(OnClientMachineState);
+            _networkManager.ClientManager.RegisterBroadcast<MachineSnapshotBroadcast>(OnClientMachineSnapshot);
             _networkManager.ClientManager.RegisterBroadcast<DropSpawnedBroadcast>(OnClientDropSpawned);
             _networkManager.ClientManager.RegisterBroadcast<DropSettledBroadcast>(OnClientDropSettled);
             _networkManager.ClientManager.RegisterBroadcast<DropUpdatedBroadcast>(OnClientDropUpdated);
@@ -340,6 +360,9 @@ namespace VoxelEngine.Networking
             // Container-contents poller (14.10.0) - idles while offline.
             if (GetComponent<ContainerSyncManager>() == null)
                 gameObject.AddComponent<ContainerSyncManager>();
+            // Machine-runtime poller (14.12.0) - same pattern, slower cadence.
+            if (GetComponent<MachineSyncManager>() == null)
+                gameObject.AddComponent<MachineSyncManager>();
         }
 
         private void OnDestroy()
@@ -366,6 +389,8 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.UnregisterBroadcast<BlockSnapshotBroadcast>(OnServerBlockSnapshot);
             _networkManager.ServerManager.UnregisterBroadcast<ContainerStateBroadcast>(OnServerContainerState);
             _networkManager.ServerManager.UnregisterBroadcast<ContainerSnapshotBroadcast>(OnServerContainerSnapshot);
+            _networkManager.ServerManager.UnregisterBroadcast<MachineStateBroadcast>(OnServerMachineState);
+            _networkManager.ServerManager.UnregisterBroadcast<MachineSnapshotBroadcast>(OnServerMachineSnapshot);
             _networkManager.ServerManager.UnregisterBroadcast<DropSpawnedBroadcast>(OnServerDropSpawned);
             _networkManager.ServerManager.UnregisterBroadcast<DropSettledBroadcast>(OnServerDropSettled);
             _networkManager.ServerManager.UnregisterBroadcast<DropUpdatedBroadcast>(OnServerDropUpdated);
@@ -390,6 +415,8 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.UnregisterBroadcast<BlockSnapshotBroadcast>(OnClientBlockSnapshot);
             _networkManager.ClientManager.UnregisterBroadcast<ContainerStateBroadcast>(OnClientContainerState);
             _networkManager.ClientManager.UnregisterBroadcast<ContainerSnapshotBroadcast>(OnClientContainerSnapshot);
+            _networkManager.ClientManager.UnregisterBroadcast<MachineStateBroadcast>(OnClientMachineState);
+            _networkManager.ClientManager.UnregisterBroadcast<MachineSnapshotBroadcast>(OnClientMachineSnapshot);
             _networkManager.ClientManager.UnregisterBroadcast<DropSpawnedBroadcast>(OnClientDropSpawned);
             _networkManager.ClientManager.UnregisterBroadcast<DropSettledBroadcast>(OnClientDropSettled);
             _networkManager.ClientManager.UnregisterBroadcast<DropUpdatedBroadcast>(OnClientDropUpdated);
@@ -800,6 +827,7 @@ namespace VoxelEngine.Networking
                 SendBaseSnapshot(null);
                 SendBlockSnapshot(null);
                 SendContainerSnapshot(null);
+                SendMachineSnapshot(null);
                 SendDropSnapshot(null);
                 SendTerrainSnapshot(null);
             }
@@ -813,6 +841,7 @@ namespace VoxelEngine.Networking
             SendBaseSnapshot(conn);
             SendBlockSnapshot(conn);
             SendContainerSnapshot(conn);
+            SendMachineSnapshot(conn);
             SendDropSnapshot(conn);
             SendTerrainSnapshot(conn);
         }
@@ -956,6 +985,62 @@ namespace VoxelEngine.Networking
             for (int i = 0; i < total; i++)
             {
                 var chunk = new ContainerSnapshotBroadcast
+                {
+                    ChunkIndex = i,
+                    TotalChunks = total,
+                    Records = records.GetRange(i * ChunkSize,
+                        Mathf.Min(ChunkSize, records.Count - i * ChunkSize))
+                };
+                if (target != null) _networkManager.ServerManager.Broadcast(target, chunk, true);
+                else _networkManager.ClientManager.Broadcast(chunk);
+            }
+        }
+
+        public void SendMachineState(string itemId, Vector3 pos, string json)
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(new MachineStateBroadcast
+            { ItemId = itemId, Position = pos, Json = json });
+        }
+
+        private void OnServerMachineState(NetworkConnection conn, MachineStateBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (!conn.IsLocalClient) MachineSync.ApplyState(msg.ItemId, msg.Position, msg.Json);
+            RelayToOthers(conn, msg);
+        }
+
+        private void OnClientMachineState(MachineStateBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            MachineSync.ApplyState(msg.ItemId, msg.Position, msg.Json);
+        }
+
+        private void OnServerMachineSnapshot(NetworkConnection conn, MachineSnapshotBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted || conn.IsLocalClient) return;
+            // Joiner upload: only non-busy host machines accept it, and only the
+            // accepted records are redistributed (14.8.1 rule) - never a blind relay.
+            MachineSync.ApplyClientSnapshot(msg.Records);
+        }
+
+        private void OnClientMachineSnapshot(MachineSnapshotBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            MachineSync.ApplyHostSnapshot(msg.Records);
+        }
+
+        /// <summary>Gather every machine-runtime-carrying block and send it chunked -
+        /// to a joining connection when called as server, up to the server when target is null.</summary>
+        private void SendMachineSnapshot(NetworkConnection target)
+        {
+            const int ChunkSize = 16;
+            var records = MachineSync.GatherSnapshot();
+            if (records.Count == 0) return;
+            int total = Mathf.CeilToInt(records.Count / (float)ChunkSize);
+            for (int i = 0; i < total; i++)
+            {
+                var chunk = new MachineSnapshotBroadcast
                 {
                     ChunkIndex = i,
                     TotalChunks = total,

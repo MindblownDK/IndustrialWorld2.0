@@ -1,9 +1,40 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.11.0-dev`
+**Current Version:** `14.12.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.12.0-dev] The Factory Runs For Everyone
+
+**Type:** MINOR - multiplayer milestone 5, the heart: machine runtime state over the wire. Save-compatible.
+
+**The gap.** The factory LOOKED identical (14.9.0) and HELD identical items (14.10.0) - but every machine ran its own private simulation. Smelt progress, active batches, locked recipes, tank contents, catalyst beds, reactor temperatures: all diverged silently between machines, with containers snapping to the host's outcome as the only visible symptom.
+
+**Machine sync (`MachineSync`, riding the second save-system seam).** The save system captures and restores the LIVE runtime of every factory block through one pair: `CaptureFactoryRuntime` / `RestoreFactoryRuntime`. That payload carries the active batch + locked recipe + every tank + machine-specific numbers of any `IMachineProcessState` machine (furnaces, electric furnaces, oil refineries, distillation plants, catalytic crackers, pumpjacks, chemical plants, flare stacks), crusher and assembler progress + on/off toggles, fluid tank and pump levels, funnel and splitter buffers, defense turret runtime, armor station progress, lighting and maritime port config. It now travels as opaque JSON (`WorldStatePersistence.CaptureMachineRuntimeJson` / `RestoreMachineRuntimeJson`) - identical architecture to container sync, zero per-machine special cases, future machines sync automatically.
+
+**Authority - the proven rules, one deliberate difference:**
+- The HOST announces every runtime change; the host's simulation is truth. Clients KEEP simulating between updates - that is what keeps progress bars moving smoothly - and are converged onto the host's outcome every poller pass (~2.5 s, slower than containers because active machines change every pass by definition; the pass length IS the steady-state bandwidth knob).
+- A CLIENT announces a block's runtime only inside the interaction window (recipe locking and machine toggles are panel actions). One window covers both seams - interacting with a machine syncs its items AND its settings.
+- Join merge: host runtime always overwrites the joiner's; the joiner's upload only lands on blocks whose host runtime is NOT busy (fresh merged solo machines keep their batches), and only accepted records are redistributed.
+
+**Placement payloads (the small bonus that closes another gap).** Placing a block is a player action, so placement now opens the same interaction window - a pre-filled tank or a packed drawer placed by ANY machine announces its birth state through the container/machine pollers instead of silently swallowing it into the change-detection baseline.
+
+**Deliberate exclusions (documented):**
+- Belt/chute item lists churn every frame - live sync strips them, only the one-time join snapshot carries them. The packets you SEE mid-belt are local cosmetics; the flow itself converges at the endpoints through container + runtime sync.
+- Power flow is not a payload: cables, machines and toggles replicate, so every machine derives the same power network locally.
+- Clients still simulate (this is convergence, not lockstep). A machine panel may show a value settle to the host's number within a couple of seconds of opening it. True client-sim-off is dedicated-server territory (milestone 8).
+
+**GitHub title:** `[14.12.0-dev] The factory runs for everyone`
+
+**Manual steps:**
+1. Pull `Dev`, recompile. No setup steps.
+2. Smelt check: host runs a furnace - the client opens it and sees the same recipe, fuel burn and progress (within a couple of seconds of drift).
+3. Recipe check: client locks a recipe on an assembler panel - the host's panel shows the same lock; toggle a machine off - it stops for both.
+4. Tank check: run a pumpjack or refinery - tank litres track on both machines; a placed PRE-FILLED tank arrives full for everyone.
+5. Join check: host mid-smelt, mid-refine, splitters buffering - a joining player finds every machine mid-batch with matching progress, and belts carrying items.
+6. Merge check: client builds a running solo factory, joins - its machines arrive on the host with their batches intact (host had no state for them).
+7. Expected quirk: mid-belt packets may differ between machines - the items arriving at the far end do not.
 
 ### [14.11.0-dev] Loot On Common Ground
 

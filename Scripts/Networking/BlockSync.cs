@@ -50,6 +50,11 @@ namespace VoxelEngine.Networking
         public static void AnnouncePlaced(PlacedBlock block)
         {
             if (!CanAnnounce(block)) return;
+            // Placement is a player action: open the interaction window so the
+            // container and machine pollers announce any payload the block was
+            // born with (a pre-filled tank, a packed drawer's contents) on their
+            // first sighting - even from a client (14.12.0).
+            ContainerSync.NotifyLocalInteraction(block);
             NetworkBootstrap.Instance.SendBlockPlaced(Capture(block));
         }
 

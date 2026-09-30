@@ -211,6 +211,64 @@ namespace VoxelEngine.Persistence
             return false;
         }
 
+        // Cached JSON of a runtime-empty block record, so the machine-sync capture
+        // can cheaply recognize "this block carries no factory runtime at all".
+        private static string _emptyRuntimeTemplateJson;
+
+        /// <summary>Live factory runtime of a placed block as opaque JSON, produced
+        /// by the exact save-format capture path (machine sync, 14.12.0): active
+        /// batch + locked recipe + tank contents + machine-specific numbers
+        /// (IMachineProcessState), crusher/assembler progress, fluid tank/pump
+        /// levels, funnel and splitter state, defense runtime, armor station
+        /// progress, lighting and maritime port config. Returns null when the
+        /// block carries no runtime state at all. Belt/chute item lists ride along
+        /// only when <paramref name="includeTransport"/> is true - they churn every
+        /// frame, so live sync strips them and only the join snapshot carries them.</summary>
+        public string CaptureMachineRuntimeJson(GameObject blockRoot, bool includeTransport)
+        {
+            if (blockRoot == null) return null;
+            var entry = new SavedPlacedBlock();
+            CaptureFactoryRuntime(blockRoot, entry);
+            if (!includeTransport)
+            {
+                entry.conveyorItems.Clear();
+                entry.chuteItems.Clear();
+            }
+            var json = JsonUtility.ToJson(entry);
+            if (_emptyRuntimeTemplateJson == null)
+                _emptyRuntimeTemplateJson = JsonUtility.ToJson(new SavedPlacedBlock());
+            return json == _emptyRuntimeTemplateJson ? null : json;
+        }
+
+        /// <summary>Inverse of CaptureMachineRuntimeJson: overwrite a live block's
+        /// factory runtime from wire JSON along the save-format restore path. Every
+        /// branch inside is guarded by component existence, so a payload only ever
+        /// touches the state its block actually owns (14.12.0).</summary>
+        public void RestoreMachineRuntimeJson(GameObject blockRoot, string json)
+        {
+            if (blockRoot == null || string.IsNullOrEmpty(json)) return;
+            var entry = JsonUtility.FromJson<SavedPlacedBlock>(json);
+            if (entry != null) RestoreFactoryRuntime(blockRoot, entry);
+        }
+
+        /// <summary>Join-merge filter (14.12.0): true when this block's machine
+        /// runtime carries anything a joiner's upload must not overwrite - an active
+        /// or recipe-locked batch, tank or pump contents, buffered transport items.</summary>
+        public bool MachineRuntimeBusy(GameObject blockRoot)
+        {
+            if (blockRoot == null) return false;
+            var entry = new SavedPlacedBlock();
+            CaptureFactoryRuntime(blockRoot, entry);
+            if (entry.machineProcess != null && !entry.machineProcess.IsEmpty) return true;
+            if (entry.machine != null && (entry.machine.progressSeconds > 0f
+                || !string.IsNullOrEmpty(entry.machine.recipeId))) return true;
+            if (entry.hasFluidTankState && entry.fluidTankLitres > 0f) return true;
+            if (entry.hasFluidPumpState && entry.fluidPumpLitres > 0f) return true;
+            if (entry.conveyorItems.Count > 0 || entry.chuteItems.Count > 0) return true;
+            if (entry.funnelState != null || entry.splitterState != null) return true;
+            return false;
+        }
+
         /// <summary>One item stack as opaque save-format JSON (drop sync, 14.11.0).
         /// Full fidelity: durability, charge, liquid payloads, packed drawers.</summary>
         public string CaptureStackJson(ItemStack stack)
