@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.18.0-dev`
-**Roadmap Version:** `14.18.0-dev`
+**Current Version:** `14.18.1-dev`
+**Roadmap Version:** `14.18.1-dev`
 **Date:** 2026-09-28
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,9 @@
 ---
 
 ## 0. Recently Done
+
+### 14.18.1-dev - A Sword Is A Sword
+Stance classification by weapon class (melee WeaponItem) instead of the asset's possibly-stale toolType; ToolType.Sword kept as fallback.
 
 ### 14.18.0-dev - Sword In Hand
 Sword stance from the sword-and-shield pack: idle/walk/run/jump redirected while a sword is held (stance derived from the synced held item, per-clip fallback to the base set), plus replicated attack swings via a swing counter and a one-shot full-body slash on remote avatars.

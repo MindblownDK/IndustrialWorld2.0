@@ -1,9 +1,17 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.18.0-dev`
+**Current Version:** `14.18.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.18.1-dev] A Sword Is A Sword
+
+**Type:** PATCH - the sword stance never activated (stance=0 with a sword in hand).
+
+**Cause:** the stance keyed on the held item's `toolType`, but `Weapon_IronSword.asset` on disk still carries the constructor default `Other` - the serialized value only updates when the setup wizard is re-run, and the asset predates the wizard line that assigns `Sword`.
+
+**Fix:** stance classification now goes by CLASS first - any melee `WeaponItem` activates the sword stance, with the `ToolType.Sword` check kept as a fallback for plain tool items. Stale asset values can no longer silently disable the stance. Re-running Tools - Voxel Engine - Voxel Engine Setup also reasserts the correct toolType on the sword asset (non-destructive), but the code no longer depends on it.
 
 ### [14.18.0-dev] Sword In Hand
 

@@ -537,11 +537,18 @@ namespace VoxelEngine.Networking
             var item = persistence != null ? persistence.FindItemById(itemId) : null;
 
             // 14.18.0: weapon stance follows the held item - no extra wire data.
+            // 14.18.1: classify by CLASS first (any melee WeaponItem is a sword
+            // stance) - asset toolType values can be stale on assets created
+            // before the setup wizard learned to assign them.
             var driver = Locomotion();
             if (driver != null)
             {
+                var weapon = item as VoxelEngine.Combat.WeaponItem;
                 var tool = item as VoxelEngine.Items.ToolItem;
-                driver.Stance = tool != null && tool.toolType == VoxelEngine.Items.ToolType.Sword ? 1 : 0;
+                bool swordStance =
+                    (weapon != null && weapon.attackMode == VoxelEngine.Combat.WeaponItem.AttackMode.Melee)
+                    || (tool != null && tool.toolType == VoxelEngine.Items.ToolType.Sword);
+                driver.Stance = swordStance ? 1 : 0;
             }
 
             if (item == null) return;   // unknown on this side - show empty hands
