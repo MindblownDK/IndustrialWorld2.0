@@ -6,6 +6,10 @@
 // 14.3.0-dev - vitals over the wire: replicated health bar; nameplate
 //              billboards against the VIEWER's up (planets are spheres -
 //              world up is meaningless away from the pole).
+// 14.13.0-dev - Real Crusaders: the placeholder capsule gives way to the
+//              procedural knight (CrusaderModel), built at runtime on the
+//              same prefab - crouch squashes the knight, the held tool
+//              rides in its right hand.
 //
 // The networked body of one player. The server spawns one per connection,
 // FishNet's NetworkTransform replicates its movement, and this class:
@@ -75,6 +79,10 @@ namespace VoxelEngine.Networking
 
         private void Awake()
         {
+            // The crusader body replaces the placeholder capsule (14.13.0). Built
+            // here so it exists before ANY SyncVar callback lands - held item and
+            // crouch callbacks can fire before OnStartClient on late joins.
+            CrusaderModel.EnsureBuilt(transform);
             _playerId.OnChange += OnIdChanged;
             _playerName.OnChange += OnNameChanged;
             _heldItemId.OnChange += OnHeldItemChanged;
@@ -304,7 +312,9 @@ namespace VoxelEngine.Networking
             }
             if (_visor != null)
                 _visor.localPosition = new Vector3(_visorStandPos.x, _visorStandPos.y * f, _visorStandPos.z);
-            if (_hand != null)
+            // Only the legacy root-level anchor needs manual crouch tracking; the
+            // crusader hand lives inside the model and squashes with it (14.13.0).
+            if (_hand != null && _hand.parent == transform)
                 _hand.localPosition = new Vector3(handLocalPosition.x, handLocalPosition.y * f, handLocalPosition.z);
         }
 
@@ -332,6 +342,14 @@ namespace VoxelEngine.Networking
         private void EnsureHand()
         {
             if (_hand != null) return;
+            // Preferred anchor: the crusader's right hand, under the arm pivot -
+            // the tool follows every arm pose (14.13.0).
+            var crusader = transform.Find(CrusaderModel.RootName);
+            if (crusader != null)
+            {
+                var hand = crusader.Find(CrusaderModel.RightArmPivotName + "/" + CrusaderModel.RightHandName);
+                if (hand != null) { _hand = hand; return; }
+            }
             var go = new GameObject("HandAnchor");
             _hand = go.transform;
             _hand.SetParent(transform, false);
@@ -382,7 +400,8 @@ namespace VoxelEngine.Networking
         {
             if (_poseCached) return;
             _poseCached = true;
-            _body = transform.Find("Body");
+            _body = transform.Find(CrusaderModel.RootName);
+            if (_body == null) _body = transform.Find("Body");
             _visor = transform.Find("Visor");
             if (_body != null) { _bodyStandPos = _body.localPosition; _bodyStandScale = _body.localScale; }
             if (_visor != null) _visorStandPos = _visor.localPosition;

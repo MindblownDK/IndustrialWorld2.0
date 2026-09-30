@@ -100,6 +100,9 @@ namespace VoxelEngine.Networking
             // Re-capture rather than trust the wire string: restore may normalize.
             ContainerSyncManager.Instance?.SetBaseline(block,
                 persistence.CaptureContainerJson(block.gameObject));
+            // Slot writes repaint through OnChanged, but chest port config and
+            // drawer state land silently - repaint any open panel (14.12.1).
+            VoxelEngine.UI.GameUIController.Instance?.RefreshOpenPanels();
             return true;
         }
 

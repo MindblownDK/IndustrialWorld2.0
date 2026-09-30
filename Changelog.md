@@ -1,9 +1,42 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.12.0-dev`
+**Current Version:** `14.13.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.13.0-dev] A Real Crusader At Last
+
+**Type:** MINOR - multiplayer milestone 6 begins: the Real Crusaders player model. Save-compatible.
+
+**The knight (`CrusaderModel`).** The placeholder capsule gives way to a procedural crusader, built at RUNTIME from primitives on the existing avatar prefab - no editor step, no prefab change, self-healing after any FishNet reimport, and consistent with the game's procedural viewmodel style. 1.85 m, pivot at the feet, matching the controller exactly:
+- **Great helm** with a gold crown band and the classic cross-shaped face opening (horizontal eye slit + vertical breath slit) - the face reads which way a player is looking better than the old visor cube ever did.
+- **White tabard over a steel cuirass with the red crusader cross front AND back**, pauldrons, mail arms and legs, faulds, leather belt.
+- **The right arm hangs from its own pivot** and the held tool now rides in the knight's right hand - same HeldToolView models as before, and the arm pivot is exactly where the building pose (later this milestone) will take hold.
+- **A back anchor** marks where the jetpack and oxygen tank mount when equipment display lands (next step).
+- Crouch squashes the knight the way it squashed the capsule; nameplate and health bar are untouched; owners still never see their own body.
+- Built in `Awake`, before any SyncVar callback can land - a late joiner's held-item update can arrive before `OnStartClient`, and the hand must already exist.
+
+**Milestone 6 remaining (next rounds):** worn-armor display readable by tier and type, jetpack + oxygen tank shown when equipped, the arm-out building pose with a replicated building ghost.
+
+**GitHub title:** `[14.13.0-dev] A real crusader at last`
+
+**Manual steps:**
+1. Pull `Dev`, recompile. No setup steps - the knight builds itself on the existing avatar prefab.
+2. Look at the other player: a knight with helm, tabard and cross stands where the capsule was, facing the way they face.
+3. Held check: they switch hotbar items - the tool appears in the knight's right hand.
+4. Crouch check: they crouch - the knight squashes; stand - it recovers.
+5. Vitals check: nameplate and the hurt-only health bar behave exactly as before.
+
+### [14.12.1-dev] Panels Repaint When The Other Side Edits
+
+**Type:** PATCH - bug fix: remote machine edits did not repaint an already-open panel (Thomas's find).
+
+**The bug.** Container slot changes repaint open panels through `ItemContainer.OnChanged` - which is why item movements always showed up live. But machine runtime fields (recipe locks, on/off toggles, progress) are plain field writes with no change event: a host staring at an open assembler panel while a client locked a recipe saw nothing until closing and reopening the panel.
+
+**The fix.** `GameUIController.RefreshOpenPanels()` - a public repaint entry that does nothing when no panel is open. Every remote apply now calls it: machine runtime applies (the reported case) and container applies too, because chest port config and drawer state also land silently outside `OnChanged`. Both players can now stare at the same panel and watch each other's edits arrive.
+
+**GitHub title:** included in `[14.13.0-dev] A real crusader at last`
 
 ### [14.12.0-dev] The Factory Runs For Everyone
 

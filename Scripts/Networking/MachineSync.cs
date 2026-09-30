@@ -72,6 +72,9 @@ namespace VoxelEngine.Networking
             // trusted: restore may clamp or normalize.
             MachineSyncManager.Instance?.SetBaseline(block,
                 persistence.CaptureMachineRuntimeJson(block.gameObject, includeTransport: false));
+            // A panel the local player has open must repaint NOW - runtime fields
+            // (recipe locks, toggles) carry no change events the way containers do.
+            VoxelEngine.UI.GameUIController.Instance?.RefreshOpenPanels();
             return true;
         }
 

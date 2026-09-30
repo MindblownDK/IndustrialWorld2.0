@@ -1164,6 +1164,15 @@ namespace VoxelEngine.UI
         private bool _refreshing;
         private bool _refreshQueued;
 
+        /// <summary>Repaint whatever panel is open. Remote sync applies call this:
+        /// machine runtime fields (recipe locks, toggles, progress) carry no change
+        /// events the way containers do, so a panel both players are staring at must
+        /// be told to repaint when the other side's edit lands (14.12.1).</summary>
+        public void RefreshOpenPanels()
+        {
+            if (_inventoryOpen) Refresh();
+        }
+
         private void Refresh()
         {
             // Container changes can arrive while logistics is moving items. Keep the
