@@ -405,8 +405,11 @@ namespace VoxelEngine.Cosmos
         public bool HasLocalEdit(Vector3Int chunkCoord)
         {
             if (_chunks.TryGetValue(chunkCoord, out var chunk)) return chunk.isModified;
-            return _storage != null
-                && VoxelEngine.Persistence.RegionFile.TryReadChunk(_storage.WorldFolder, chunkCoord, out _);
+            // 14.15.0: served from the storage read cache. The old direct
+            // RegionFile.TryReadChunk read the WHOLE region file per query, on the
+            // main thread, racing the writer thread - a joining player's upload
+            // asked this thousands of times and froze the host until disconnect.
+            return _storage != null && _storage.HasStoredChunk(chunkCoord);
         }
 
         /// <summary>Adopt a remote-edited chunk: overwrite a loaded chunk in place and

@@ -1,9 +1,33 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.14.0-dev`
+**Current Version:** `14.15.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.15.0-dev] The Host Breathes And The Body Is Real
+
+**Type:** MINOR - critical join-freeze fix plus the rigged player body with customizable skin. Save-compatible.
+
+**FIX - host no longer freezes while a client is connected (`RegionFile`, `ChunkStorage`, `SphereWorld`).** The logs told the whole story: every chunk a joiner uploads made the host call `HasLocalEdit`, which read the ENTIRE region file from disk - on the main thread, once per chunk, while the background chunk writer was flushing the same files. Result: thousands of whole-file reads (the freeze) plus reader-vs-writer sharing violations in both directions (the `[ChunkStorage] Failed to flush` / `[RegionFile] Failed to read` spam).
+- All region file I/O now goes through one lock, so the writer thread and the main thread can never open the same file against each other again. Both failure messages disappear.
+- `HasLocalEdit` is served from `ChunkStorage`'s existing region read cache: ONE disk read per region instead of one whole-file read per chunk, and the writer keeps cached regions fresh on every flush, so the authority answer stays correct through the whole session.
+- Net effect: the join catch-up costs a handful of cached region reads instead of a disk storm; the host stays responsive with clients connected.
+- The `EditorWindow.Close` NullReferenceException in the same log is Unity editor noise, unrelated to game code.
+
+**The rigged body (`CrusaderModel`).** The avatar now prefers the rigged character at `Resources/Player.fbx`:
+- Instantiated at runtime, auto-scaled to exactly 1.85 m with feet on the pivot, centered, colliders stripped - no editor step and no prefab change beyond moving the FBX into a Resources folder.
+- Both tattoos project onto it: the brand rune in faded red on the upper chest/shoulder, and the chest ink "The lion with little pecker develops big roar - CalleTheLion".
+- The held tool anchors to the rig's right-hand BONE (found by name, finger bones excluded), so when animations arrive the tool rides the hand for free.
+- Armor plates still overlay by tier when a suit is worn; the arm-mounted plates are skipped on the rigged body because bind-pose arms would not line up with fixed plates.
+- The 14.14.0 primitive warrior remains as the automatic fallback whenever the resource is missing - nothing ever breaks, including before the FBX move is done.
+
+**Customizable skin (`PlayerIdentity`, `PlayerAvatar`, pause menu).** Six skin tones, picked via swatches on the multiplayer page right under YOUR NAME:
+- Stored per instance slot like the player name; applies live - the pose mirror picks the change up within a tick and restyles the body for everyone.
+- A new `_skinTone` SyncVar rides the change-only pose RPC (held item, crouch, health, armor, now skin). Late joiners get it with the baseline.
+- On the rigged body the tone tints the character's materials; on the primitive fallback it recolors the bare-skin parts. Tattoos and armor keep their own colors.
+
+**Milestone 6 remaining (next rounds):** jetpack + oxygen tank shown when equipped, the arm-out building pose with a replicated building ghost, then animations on the new rig.
 
 ### [14.14.0-dev] Bare Skin And Honest Steel
 

@@ -254,6 +254,43 @@ namespace VoxelEngine.Menu
             nameField.RegisterValueChangedCallback(evt =>
                 VoxelEngine.Networking.PlayerIdentity.LocalName = evt.newValue);
             panel.Add(nameField);
+            panel.Add(T.Spacer(10));
+
+            // Skin tone (14.15.0): applies live - the avatar's pose mirror picks
+            // the change up within a tick, locally saved like the name.
+            panel.Add(T.Muted("SKIN"));
+            var skinRow = new VisualElement();
+            skinRow.style.flexDirection = FlexDirection.Row;
+            skinRow.style.marginTop = 2;
+            int currentTone = VoxelEngine.Networking.PlayerIdentity.LocalSkinTone;
+            for (int i = 0; i < VoxelEngine.Networking.CrusaderModel.SkinToneCount; i++)
+            {
+                int tone = i;
+                var swatch = new Button(() =>
+                {
+                    VoxelEngine.Networking.PlayerIdentity.LocalSkinTone = tone;
+                    BuildUI();
+                }) { text = "" };
+                swatch.style.width = 36;
+                swatch.style.height = 26;
+                swatch.style.marginRight = 6;
+                swatch.style.backgroundColor =
+                    new StyleColor(VoxelEngine.Networking.CrusaderModel.SkinToneColor(tone));
+                bool selected = tone == currentTone;
+                var borderColor = selected ? Color.white : new Color(0f, 0f, 0f, 0.55f);
+                float borderWidth = selected ? 2f : 1f;
+                swatch.style.borderTopColor = borderColor;
+                swatch.style.borderBottomColor = borderColor;
+                swatch.style.borderLeftColor = borderColor;
+                swatch.style.borderRightColor = borderColor;
+                swatch.style.borderTopWidth = borderWidth;
+                swatch.style.borderBottomWidth = borderWidth;
+                swatch.style.borderLeftWidth = borderWidth;
+                swatch.style.borderRightWidth = borderWidth;
+                T.Radius(swatch, 5);
+                skinRow.Add(swatch);
+            }
+            panel.Add(skinRow);
             panel.Add(T.Spacer(14));
 
             Label playersLabel = null;

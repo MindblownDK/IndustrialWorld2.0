@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.14.0-dev`
-**Roadmap Version:** `14.14.0-dev`
+**Current Version:** `14.15.0-dev`
+**Roadmap Version:** `14.15.0-dev`
 **Date:** 2026-09-28
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,9 @@
 ---
 
 ## 0. Recently Done
+
+### 14.15.0-dev - The Host Breathes And The Body Is Real
+Critical fix: joining clients froze the host - every uploaded chunk triggered a whole-region disk read on the main thread while racing the chunk writer (sharing violations both ways). Region I/O now serialized under one lock and HasLocalEdit served from the region read cache. Avatar upgraded to the rigged character at Resources/Player.fbx (auto-scaled, tattoos projected, tool anchored to the right-hand bone, primitive body kept as fallback) with six selectable skin tones synced via the pose RPC.
 
 ### 14.14.0-dev - Bare Skin And Honest Steel
 Machine I/O port config (power/data/fluid/gas faces) now replicates and persists - it was never captured anywhere before, so edits neither synced nor survived reload. Crusader model rebuilt: realistic bare warrior base (chain briefs, boots, beard, brand-rune shoulder tattoo, chest ink) with armor plates shown ONLY while a suit is equipped, tinted by tier 1-6; worn tier rides the change-only pose RPC.
@@ -165,7 +168,7 @@ These decisions are settled. Every future system is designed against them.
 3. **Building sync:** all placement/upgrade/removal flows route through server RPCs in `BuildSystemV2` / `PlacedTieredBlock`; structural audits (`StructuralLoadState`) run server-side only; results replicate. *(DONE 14.4.0-14.6.0 - shipped as relayed broadcasts with positional piece identity instead of server-only audits: remote pieces stay unarmed and the origin machine announces its audit results, which converges cascades without moving the simulation; live place/upgrade/remove/damage, two-way join snapshot, doors and code locks all replicate. Open: shared build costs - placer pays alone today.)*
 4. **World sync:** voxel chunk edit replication + join-in-progress chunk streaming (the long pole - design payloads early, delta edits not full chunks). *(DONE for the shared-planet case - 14.7.0-dev live op replication + 14.8.0-dev edited-chunk join catch-up. Remaining niceties: multi-planet catch-up, fluid sim state.)*
 5. **Simulation sync:** machines, power, fluids, conveyors run server-side; clients render replicated state. *(DONE 14.9.0-14.12.0 - shipped as host-authoritative convergence rather than server-only simulation: item-block structure (14.9.0), container contents (14.10.0), dropped items (14.11.0) and machine runtime state + placement payloads (14.12.0) all replicate through the save-format capture/restore seams as opaque JSON. Clients keep simulating and converge onto the host's outcome. Accepted gaps: mid-belt packet cosmetics stay per-machine; true client-sim-off moves to the dedicated-server milestone.)*
-6. **Real Crusaders (player model and readable loadout):** replace the capsule avatar with a proper crusader player model and make every player's loadout readable at a glance. Full design below - this milestone deliberately sits right before proximity chat because seeing WHO you meet matters as much as hearing them. *(IN PROGRESS - 14.13.0 shipped the body, 14.14.0 makes it honest: realistic bare warrior base with brand-rune + chest-ink tattoos, armor plates displayed only while equipped and tinted by tier 1-6. Open: jetpack + oxygen tank when equipped, building pose + replicated ghost.)*
+6. **Real Crusaders (player model and readable loadout):** replace the capsule avatar with a proper crusader player model and make every player's loadout readable at a glance. Full design below - this milestone deliberately sits right before proximity chat because seeing WHO you meet matters as much as hearing them. *(IN PROGRESS - 14.13.0 shipped the body, 14.14.0 made armor display-only with tattoos, 14.15.0 swaps in the rigged Player.fbx character with customizable skin tones. Open: jetpack + oxygen tank when equipped, building pose + replicated ghost, animations on the rig.)*
 7. **Proximity chat:** positional voice between nearby players - microphone capture, compressed frames relayed through the server, 3D-spatialized playback with distance falloff (whisper-to-shout range like the survival genre expects); muted-player list keyed by player id. Decide build-vs-buy when the milestone starts: a Fish-Net-integrated voice asset (e.g. Dissonance) versus a custom mic -> Opus -> broadcast pipeline riding the existing `NetworkBootstrap` handshake. Optional text chat falls out of the same relay for near-free.
 8. **Dedicated server:** headless build target, server-side persistence, no local player assumptions anywhere in boot code. **Security hardening lands here (committed 14.6.0):** code-lock codes currently travel and rest in plain text (same as save files) - move code validation server-side so raw codes never reach other clients, and audit every broadcast for data a client should not see (other players' lock codes, future chest contents). Acceptable for trusted-co-op pre-release, unacceptable for public dedicated servers.
 

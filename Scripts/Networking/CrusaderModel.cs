@@ -1,35 +1,28 @@
 // Assets/Scripts/VoxelEngine/Networking/CrusaderModel.cs
 //
 // 14.13.0-dev - Multiplayer milestone 6 begins: Real Crusaders.
-// 14.14.0-dev - the honest body: armor is DISPLAY, not identity. The base
-//              model is now a bare-chested warrior - muscular build, chain
-//              briefs, worn boots, dark hair and beard - carrying the brand
-//              rune on his left shoulder and the crew's chest-ink motto.
-//              Armor plates live on separate rigs that only appear when a
-//              suit is actually equipped, tinted by tier so the read works
-//              at a glance: quilted cloth, hardened leather, iron, steel,
-//              gilded, void-metal.
+// 14.14.0-dev - the honest body: armor is DISPLAY, not identity.
+// 14.15.0-dev - the real body: the avatar now prefers the rigged character
+//              at Resources/Player.fbx (VoxelEngineAssets/Resources/) -
+//              instantiated at runtime, auto-scaled to 1.85 m with feet on
+//              the ground, tattoos projected onto it, skin customizable per
+//              player (six tones, picked in the multiplayer menu, synced).
+//              The held tool rides an anchor on the rig's right-hand BONE,
+//              so future animations carry the tool for free. If the FBX is
+//              missing (not yet moved into a Resources folder) the primitive
+//              warrior below still builds - nothing ever breaks.
 //
-// Built entirely at RUNTIME from primitives on the existing avatar prefab -
-// no editor step, no prefab change, self-healing after any FishNet
-// reimport, and consistent with the game's procedural viewmodel style.
+// Anatomy contract (both bodies): 1.85 m, pivot at the feet, +Z forward,
+// matching PlayerController. "RightHand" anchors the held tool, "BackAnchor"
+// marks the jetpack/oxygen mount, "ArmorRig" holds every armor plate and is
+// inactive until SetArmor(tier >= 1) - armor shows ONLY while worn, tinted
+// by tier: quilted cloth, hardened leather, iron, steel, gilded, void-metal.
 //
-// Anatomy (1.85 m, pivot at the feet, +Z forward, matches PlayerController):
-//   - bare torso with pecs, abs and delts; chain briefs; calf-high boots,
-//   - head with hair, beard and eyes (facing reads from the face now -
-//     the helmet only exists while armor is worn),
-//   - the RIGHT arm hangs from its own pivot ("RightArmPivot") so the
-//     building pose (later this milestone) can raise it; the held tool
-//     rides in "RightHand" underneath it,
-//   - "BackAnchor" marks where the jetpack + oxygen tank mount next,
-//   - tattoos: the brand rune in faded red on the left shoulder, and the
-//     chest ink reading "The lion with little pecker develops big roar -
-//     CalleTheLion",
-//   - "ArmorRig" (on the body) and "RightArmPivot/ArmorRigR" (riding the
-//     arm) hold every armor plate, inactive until SetArmor(tier >= 1).
+// Tattoos on either body: the brand rune in faded red, and the chest ink
+// reading "The lion with little pecker develops big roar - CalleTheLion".
 //
-// Crouch: PlayerAvatar squashes the "Crusader" root exactly the way it
-// squashed the old capsule - pivot at the feet makes a plain Y scale correct.
+// Crouch: PlayerAvatar squashes the "Crusader" root - feet pivot makes a
+// plain Y scale correct for the rig exactly as for the primitives.
 
 using System.Collections.Generic;
 using UnityEngine;
@@ -39,13 +32,34 @@ namespace VoxelEngine.Networking
     public static class CrusaderModel
     {
         public const string RootName = "Crusader";
+        public const string RigName = "Rig";
         public const string RightArmPivotName = "RightArmPivot";
         public const string RightHandName = "RightHand";
         public const string BackAnchorName = "BackAnchor";
         public const string ArmorRigName = "ArmorRig";
         public const string ArmorRigRName = "ArmorRigR";
 
+        private const float Height = 1.85f;
+        private const string RigResourceName = "Player";   // Resources/Player.fbx
+
+        public const int SkinToneCount = 6;
+
         private static readonly Dictionary<int, Material> _tierMats = new();
+
+        /// <summary>The six selectable skin tints (multiplied over the rig's own
+        /// texture). Index 2 is the default.</summary>
+        public static Color SkinToneColor(int index)
+        {
+            switch (Mathf.Clamp(index, 0, SkinToneCount - 1))
+            {
+                case 0:  return new Color(0.98f, 0.86f, 0.76f);
+                case 1:  return new Color(0.94f, 0.76f, 0.62f);
+                case 3:  return new Color(0.62f, 0.42f, 0.28f);
+                case 4:  return new Color(0.42f, 0.28f, 0.18f);
+                case 5:  return new Color(0.28f, 0.18f, 0.12f);
+                default: return new Color(0.85f, 0.64f, 0.48f);   // 2: tan
+            }
+        }
 
         /// <summary>Build the warrior under this avatar root if he is not already
         /// there. Idempotent and cheap when built; hides the legacy placeholder
@@ -64,13 +78,185 @@ namespace VoxelEngine.Networking
             var root = new GameObject(RootName).transform;
             root.SetParent(avatarRoot, false);
 
+            var runeRed = Mat(new Color(0.62f, 0.09f, 0.07f), 0.00f, 0.15f);
+
+            Transform armPivot = null;
+            if (!TryBuildRig(root, runeRed))
+                armPivot = BuildPrimitiveBody(root, runeRed);
+
+            BuildArmorRigs(root, armPivot);
+
+            // ── equipment anchor (jetpack + oxygen tank, next step) ──
+            var back = new GameObject(BackAnchorName).transform;
+            back.SetParent(root, false);
+            back.localPosition = new Vector3(0f, 1.22f, -0.18f);
+
+            return root;
+        }
+
+        /// <summary>Show or hide the armor display. Tier 0 = bare warrior; tiers
+        /// 1-6 activate the plate rigs and tint them so the tier reads at a
+        /// glance. On the primitive body the helmet replaces hair and beard.</summary>
+        public static void SetArmor(Transform avatarRoot, int tier)
+        {
+            var root = EnsureBuilt(avatarRoot);
+            if (root == null) return;
+
+            bool worn = tier > 0;
+            var rig = root.Find(ArmorRigName);
+            if (rig != null) rig.gameObject.SetActive(worn);
+            var rigR = root.Find(RightArmPivotName + "/" + ArmorRigRName);
+            if (rigR != null) rigR.gameObject.SetActive(worn);
+
+            var hairT = root.Find("Hair");
+            if (hairT != null) hairT.gameObject.SetActive(!worn);
+            var beardT = root.Find("Beard");
+            if (beardT != null) beardT.gameObject.SetActive(!worn);
+
+            if (!worn) return;
+            var mat = TierMaterial(Mathf.Clamp(tier, 1, 6));
+            TintPlates(rig, mat);
+            TintPlates(rigR, mat);
+        }
+
+        /// <summary>Apply a player's chosen skin tone. On the rigged body the tint
+        /// multiplies every rig material; on the primitive fallback it recolors the
+        /// bare-skin parts. Tattoos and armor keep their own colors.</summary>
+        public static void SetSkinTone(Transform avatarRoot, int toneIndex)
+        {
+            var root = EnsureBuilt(avatarRoot);
+            if (root == null) return;
+            var tone = SkinToneColor(toneIndex);
+
+            var rig = root.Find(RigName);
+            if (rig != null)
+            {
+                foreach (var r in rig.GetComponentsInChildren<Renderer>(true))
+                    foreach (var m in r.materials)
+                        Tint(m, tone);
+                return;
+            }
+
+            foreach (var r in root.GetComponentsInChildren<MeshRenderer>(true))
+            {
+                if (!SkinParts.Contains(r.gameObject.name)) continue;
+                // "Abs" keeps its slightly darker shading relative to the rest.
+                Tint(r.material, r.gameObject.name == "Abs" ? tone * 0.92f : tone);
+            }
+        }
+
+        /// <summary>Depth-first search by exact name - finds the hand anchor no
+        /// matter which bone it was parented under.</summary>
+        public static Transform FindDeep(Transform node, string name)
+        {
+            if (node == null) return null;
+            if (node.name == name) return node;
+            for (int i = 0; i < node.childCount; i++)
+            {
+                var hit = FindDeep(node.GetChild(i), name);
+                if (hit != null) return hit;
+            }
+            return null;
+        }
+
+        // ─────────────────────────── the rigged body ───────────────────────────
+
+        /// <summary>Instantiate Resources/Player under the root, normalize it to
+        /// 1.85 m with feet at the pivot, anchor the hand on the right-hand bone
+        /// and place the tattoos. Returns false (and cleans up) when the resource
+        /// is absent or unusable - the primitive body takes over.</summary>
+        private static bool TryBuildRig(Transform root, Material runeRed)
+        {
+            var prefab = Resources.Load<GameObject>(RigResourceName);
+            if (prefab == null) return false;
+
+            var rigGo = Object.Instantiate(prefab);
+            rigGo.name = RigName;
+            var rig = rigGo.transform;
+            rig.SetParent(root, false);
+            rig.localPosition = Vector3.zero;
+            rig.localRotation = Quaternion.identity;
+            rig.localScale = Vector3.one;
+
+            foreach (var col in rigGo.GetComponentsInChildren<Collider>(true))
+                Object.Destroy(col);   // display only - never block rays or physics
+
+            // Local AABB from world-space renderer bounds mapped into root space -
+            // correct regardless of where and how rotated the avatar spawned.
+            var renderers = rigGo.GetComponentsInChildren<Renderer>(true);
+            if (renderers.Length == 0) { Object.Destroy(rigGo); return false; }
+            var min = new Vector3(float.MaxValue, float.MaxValue, float.MaxValue);
+            var max = new Vector3(float.MinValue, float.MinValue, float.MinValue);
+            foreach (var r in renderers)
+            {
+                var b = r.bounds;
+                for (int i = 0; i < 8; i++)
+                {
+                    var corner = new Vector3(
+                        (i & 1) == 0 ? b.min.x : b.max.x,
+                        (i & 2) == 0 ? b.min.y : b.max.y,
+                        (i & 4) == 0 ? b.min.z : b.max.z);
+                    var p = root.InverseTransformPoint(corner);
+                    min = Vector3.Min(min, p);
+                    max = Vector3.Max(max, p);
+                }
+            }
+            float rawHeight = max.y - min.y;
+            if (rawHeight < 0.05f) { Object.Destroy(rigGo); return false; }
+
+            float s = Height / rawHeight;
+            rig.localScale = Vector3.one * s;
+            rig.localPosition = new Vector3(
+                -(min.x + max.x) * 0.5f * s,
+                -min.y * s,
+                -(min.z + max.z) * 0.5f * s);
+
+            // Held-tool anchor on the right-hand bone (Mixamo: "mixamorig:RightHand").
+            // Shortest matching name wins so finger bones never steal the anchor.
+            Transform handBone = null;
+            foreach (var t in rigGo.GetComponentsInChildren<Transform>(true))
+                if (t.name.EndsWith(RightHandName)
+                    && (handBone == null || t.name.Length < handBone.name.Length))
+                    handBone = t;
+            var hand = new GameObject(RightHandName).transform;
+            if (handBone != null)
+            {
+                hand.SetParent(handBone, false);   // rides the bone through any animation
+            }
+            else
+            {
+                hand.SetParent(root, false);
+                hand.localPosition = new Vector3(0.30f, 1.05f, 0.10f);
+            }
+
+            // Tattoos sit just off the model's front face.
+            float frontZ = (max.z - min.z) * 0.5f * s + 0.012f;
+            BuildTattoos(root, runeRed,
+                chestInkPos: new Vector3(0f, 1.31f, frontZ),
+                runePos: new Vector3(-0.16f, 1.47f, frontZ),
+                runeRot: Quaternion.identity);
+            return true;
+        }
+
+        // ─────────────────────────── the primitive fallback ───────────────────────────
+
+        private static readonly HashSet<string> SkinParts = new()
+        {
+            "ThighL", "ThighR", "Waist", "Chest", "Abs", "PecL", "PecR",
+            "DeltL", "DeltR", "ArmL", "HandL", "ArmR", "HandR", "Neck", "Head"
+        };
+
+        /// <summary>The hand-built bare warrior (14.14.0) - kept as the fallback so
+        /// the avatar still works before Player.fbx lands in a Resources folder.
+        /// Returns the right-arm pivot for the arm-mounted armor rig.</summary>
+        private static Transform BuildPrimitiveBody(Transform root, Material runeRed)
+        {
             var skin    = Mat(new Color(0.78f, 0.58f, 0.45f), 0.00f, 0.28f);
             var skinDim = Mat(new Color(0.72f, 0.52f, 0.40f), 0.00f, 0.22f);
             var hair    = Mat(new Color(0.13f, 0.10f, 0.08f), 0.00f, 0.30f);
             var eyeInk  = Mat(new Color(0.06f, 0.05f, 0.05f), 0.00f, 0.40f);
             var chain   = Mat(new Color(0.44f, 0.46f, 0.50f), 0.70f, 0.35f);
             var boot    = Mat(new Color(0.35f, 0.24f, 0.14f), 0.05f, 0.25f);
-            var runeRed = Mat(new Color(0.62f, 0.09f, 0.07f), 0.00f, 0.15f);
 
             // ── boots (worn leather, calf high - bare legs above) ──
             Part(root, PrimitiveType.Cube,    "BootL",     new Vector3(-0.11f, 0.06f, 0.04f), new Vector3(0.17f, 0.12f, 0.29f), boot);
@@ -82,11 +268,11 @@ namespace VoxelEngine.Networking
             Part(root, PrimitiveType.Capsule, "ThighL",    new Vector3(-0.11f, 0.68f, 0f),    new Vector3(0.18f, 0.27f, 0.18f), skin);
             Part(root, PrimitiveType.Capsule, "ThighR",    new Vector3( 0.11f, 0.68f, 0f),    new Vector3(0.18f, 0.27f, 0.18f), skin);
 
-            // ── chain briefs (the reference look) ──
+            // ── chain briefs ──
             Part(root, PrimitiveType.Cube,    "Briefs",    new Vector3(0f, 0.98f, 0f),        new Vector3(0.34f, 0.16f, 0.25f), chain);
             Part(root, PrimitiveType.Cube,    "BriefsBelt",new Vector3(0f, 1.06f, 0f),        new Vector3(0.36f, 0.05f, 0.26f), boot);
 
-            // ── torso (bare, muscular: waist -> chest taper, pecs, abs, delts) ──
+            // ── torso (bare, muscular) ──
             Part(root, PrimitiveType.Cube,    "Waist",     new Vector3(0f, 1.13f, 0f),        new Vector3(0.30f, 0.14f, 0.21f), skin);
             Part(root, PrimitiveType.Cube,    "Chest",     new Vector3(0f, 1.32f, 0f),        new Vector3(0.40f, 0.28f, 0.24f), skin);
             Part(root, PrimitiveType.Cube,    "Abs",       new Vector3(0f, 1.15f, 0.105f),    new Vector3(0.22f, 0.22f, 0.03f), skinDim);
@@ -108,9 +294,9 @@ namespace VoxelEngine.Networking
             var handAnchor = new GameObject(RightHandName).transform;
             handAnchor.SetParent(armPivot, false);
             handAnchor.localPosition = new Vector3(0f, -0.62f, 0.06f);
-            handAnchor.localRotation = Quaternion.Euler(10f, -20f, 0f);   // same grip as always
+            handAnchor.localRotation = Quaternion.Euler(10f, -20f, 0f);
 
-            // ── head (bare: hair, beard, eyes - facing reads from the face) ──
+            // ── head (bare: hair, beard, eyes) ──
             Part(root, PrimitiveType.Cylinder, "Neck",     new Vector3(0f, 1.50f, 0f),        new Vector3(0.14f, 0.05f, 0.14f), skin);
             Part(root, PrimitiveType.Sphere,   "Head",     new Vector3(0f, 1.70f, 0f),        new Vector3(0.26f, 0.30f, 0.28f), skin);
             Part(root, PrimitiveType.Sphere,   "Hair",     new Vector3(0f, 1.77f, -0.02f),    new Vector3(0.27f, 0.21f, 0.29f), hair);
@@ -118,53 +304,24 @@ namespace VoxelEngine.Networking
             Part(root, PrimitiveType.Cube,     "EyeL",     new Vector3(-0.055f, 1.72f, 0.132f), new Vector3(0.035f, 0.016f, 0.012f), eyeInk);
             Part(root, PrimitiveType.Cube,     "EyeR",     new Vector3( 0.055f, 1.72f, 0.132f), new Vector3(0.035f, 0.016f, 0.012f), eyeInk);
 
-            BuildTattoos(root, runeRed);
-            BuildArmorRigs(root, armPivot);
-
-            // ── equipment anchor (jetpack + oxygen tank, next step) ──
-            var back = new GameObject(BackAnchorName).transform;
-            back.SetParent(root, false);
-            back.localPosition = new Vector3(0f, 1.22f, -0.18f);
-
-            return root;
-        }
-
-        /// <summary>Show or hide the armor display. Tier 0 = bare warrior; tiers
-        /// 1-6 activate the plate rigs and tint them so the tier reads at a
-        /// glance. The helmet replaces hair and beard while worn.</summary>
-        public static void SetArmor(Transform avatarRoot, int tier)
-        {
-            var root = EnsureBuilt(avatarRoot);
-            if (root == null) return;
-
-            bool worn = tier > 0;
-            var rig = root.Find(ArmorRigName);
-            if (rig != null) rig.gameObject.SetActive(worn);
-            var rigR = root.Find(RightArmPivotName + "/" + ArmorRigRName);
-            if (rigR != null) rigR.gameObject.SetActive(worn);
-
-            // The great helm swallows the head - bare hair/beard vanish under it.
-            var hairT = root.Find("Hair");
-            if (hairT != null) hairT.gameObject.SetActive(!worn);
-            var beardT = root.Find("Beard");
-            if (beardT != null) beardT.gameObject.SetActive(!worn);
-
-            if (!worn) return;
-            var mat = TierMaterial(Mathf.Clamp(tier, 1, 6));
-            TintPlates(rig, mat);
-            TintPlates(rigR, mat);
+            BuildTattoos(root, runeRed,
+                chestInkPos: new Vector3(0f, 1.29f, 0.128f),
+                runePos: new Vector3(-0.375f, 1.30f, 0f),
+                runeRot: Quaternion.Euler(0f, 90f, 0f));   // strokes face out of the arm
+            return armPivot;
         }
 
         // ─────────────────────────── tattoos ───────────────────────────
 
-        private static void BuildTattoos(Transform root, Material runeRed)
+        private static void BuildTattoos(Transform root, Material runeRed,
+            Vector3 chestInkPos, Vector3 runePos, Quaternion runeRot)
         {
-            // Chest ink: the crew motto, dark ink across the upper chest, readable
-            // from the front like any nameplate (TextMesh faces are -Z readable,
-            // so it turns its back to the model's forward).
+            // Chest ink: the crew motto, dark ink, readable from the front like any
+            // nameplate (TextMesh faces are -Z readable, so it turns its back to
+            // the model's forward).
             var inkGo = new GameObject("ChestInk");
             inkGo.transform.SetParent(root, false);
-            inkGo.transform.localPosition = new Vector3(0f, 1.29f, 0.128f);
+            inkGo.transform.localPosition = chestInkPos;
             inkGo.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
             var ink = inkGo.AddComponent<TextMesh>();
             ink.text = "The lion with little pecker\ndevelops big roar\n- CalleTheLion";
@@ -174,12 +331,12 @@ namespace VoxelEngine.Networking
             ink.alignment = TextAlignment.Center;
             ink.color = new Color(0.16f, 0.12f, 0.10f, 0.95f);
 
-            // Brand rune on the left shoulder, faded red, drawn from strokes:
-            // a vertical staff with branch tips, the crossing X, and foot hooks.
+            // Brand rune in faded red, drawn from strokes: a vertical staff with
+            // branch tips, the crossing X, and foot hooks.
             var rune = new GameObject("BrandRune").transform;
             rune.SetParent(root, false);
-            rune.localPosition = new Vector3(-0.375f, 1.30f, 0f);
-            rune.localRotation = Quaternion.Euler(0f, 90f, 0f);   // strokes face out of the arm
+            rune.localPosition = runePos;
+            rune.localRotation = runeRot;
 
             void Stroke(string name, Vector3 pos, float zRot, Vector3 scale)
             {
@@ -199,7 +356,9 @@ namespace VoxelEngine.Networking
         // ─────────────────────────── armor rigs ───────────────────────────
 
         /// <summary>Every plate the tier tint touches is named "Plate*"; fixed-color
-        /// pieces (tabard, cross, slits, crown, belt) keep their own materials.</summary>
+        /// pieces (tabard, cross, slits, crown, belt) keep their own materials.
+        /// armPivot is null on the rigged body - arm plates are primitive-only,
+        /// because bind-pose arms would not line up with fixed plates.</summary>
         private static void BuildArmorRigs(Transform root, Transform armPivot)
         {
             var steel   = TierMaterial(4);   // placeholder until SetArmor tints
@@ -212,13 +371,11 @@ namespace VoxelEngine.Networking
             var rig = new GameObject(ArmorRigName).transform;
             rig.SetParent(root, false);
 
-            // Greaves, faulds, belt.
             Part(rig, PrimitiveType.Cube, "PlateGreaveL", new Vector3(-0.11f, 0.55f, 0f), new Vector3(0.21f, 0.42f, 0.21f), steel);
             Part(rig, PrimitiveType.Cube, "PlateGreaveR", new Vector3( 0.11f, 0.55f, 0f), new Vector3(0.21f, 0.42f, 0.21f), steel);
             Part(rig, PrimitiveType.Cube, "PlateFaulds",  new Vector3(0f, 0.90f, 0f),     new Vector3(0.42f, 0.18f, 0.30f), steel);
             Part(rig, PrimitiveType.Cube, "ArmorBelt",    new Vector3(0f, 0.99f, 0f),     new Vector3(0.48f, 0.08f, 0.33f), leather);
 
-            // Cuirass with tabard + crusader cross front AND back.
             Part(rig, PrimitiveType.Cube, "PlateCuirass", new Vector3(0f, 1.28f, 0f),      new Vector3(0.46f, 0.44f, 0.30f), steel);
             Part(rig, PrimitiveType.Cube, "TabardF",      new Vector3(0f, 1.22f, 0.160f),  new Vector3(0.30f, 0.52f, 0.02f), cloth);
             Part(rig, PrimitiveType.Cube, "TabardB",      new Vector3(0f, 1.22f, -0.160f), new Vector3(0.30f, 0.52f, 0.02f), cloth);
@@ -227,26 +384,27 @@ namespace VoxelEngine.Networking
             Part(rig, PrimitiveType.Cube, "CrossVB",      new Vector3(0f, 1.23f, -0.174f), new Vector3(0.07f, 0.34f, 0.012f), cross);
             Part(rig, PrimitiveType.Cube, "CrossHB",      new Vector3(0f, 1.32f, -0.174f), new Vector3(0.22f, 0.07f, 0.012f), cross);
 
-            // Shoulders + left arm plate + left gauntlet.
             Part(rig, PrimitiveType.Sphere,  "PlatePauldronL", new Vector3(-0.27f, 1.46f, 0f), new Vector3(0.23f, 0.17f, 0.23f), steel);
             Part(rig, PrimitiveType.Sphere,  "PlatePauldronR", new Vector3( 0.27f, 1.46f, 0f), new Vector3(0.23f, 0.17f, 0.23f), steel);
-            Part(rig, PrimitiveType.Capsule, "PlateArmL",      new Vector3(-0.30f, 1.14f, 0f), new Vector3(0.15f, 0.27f, 0.15f), steel);
-            Part(rig, PrimitiveType.Sphere,  "PlateGauntletL", new Vector3(-0.30f, 0.86f, 0f), new Vector3(0.17f, 0.17f, 0.17f), steel);
 
-            // Great helm: covers the whole head; the cross face-opening reads facing.
             Part(rig, PrimitiveType.Cylinder, "PlateHelm", new Vector3(0f, 1.71f, 0f),     new Vector3(0.34f, 0.145f, 0.34f), steel);
             Part(rig, PrimitiveType.Cylinder, "CrownBand", new Vector3(0f, 1.845f, 0f),    new Vector3(0.355f, 0.012f, 0.355f), gold);
             Part(rig, PrimitiveType.Cube,     "EyeSlit",   new Vector3(0f, 1.75f, 0.155f), new Vector3(0.20f, 0.030f, 0.035f), dark);
             Part(rig, PrimitiveType.Cube,     "FaceSlit",  new Vector3(0f, 1.69f, 0.158f), new Vector3(0.030f, 0.14f, 0.030f), dark);
 
-            rig.gameObject.SetActive(false);
+            if (armPivot != null)
+            {
+                Part(rig, PrimitiveType.Capsule, "PlateArmL",      new Vector3(-0.30f, 1.14f, 0f), new Vector3(0.15f, 0.27f, 0.15f), steel);
+                Part(rig, PrimitiveType.Sphere,  "PlateGauntletL", new Vector3(-0.30f, 0.86f, 0f), new Vector3(0.17f, 0.17f, 0.17f), steel);
 
-            // Right-arm plates ride the pose pivot so they follow every arm pose.
-            var rigR = new GameObject(ArmorRigRName).transform;
-            rigR.SetParent(armPivot, false);
-            Part(rigR, PrimitiveType.Capsule, "PlateArmR",      new Vector3(0f, -0.30f, 0f), new Vector3(0.15f, 0.27f, 0.15f), steel);
-            Part(rigR, PrimitiveType.Sphere,  "PlateGauntletR", new Vector3(0f, -0.58f, 0f), new Vector3(0.17f, 0.17f, 0.17f), steel);
-            rigR.gameObject.SetActive(false);
+                var rigR = new GameObject(ArmorRigRName).transform;
+                rigR.SetParent(armPivot, false);
+                Part(rigR, PrimitiveType.Capsule, "PlateArmR",      new Vector3(0f, -0.30f, 0f), new Vector3(0.15f, 0.27f, 0.15f), steel);
+                Part(rigR, PrimitiveType.Sphere,  "PlateGauntletR", new Vector3(0f, -0.58f, 0f), new Vector3(0.17f, 0.17f, 0.17f), steel);
+                rigR.gameObject.SetActive(false);
+            }
+
+            rig.gameObject.SetActive(false);
         }
 
         private static void TintPlates(Transform rig, Material mat)
@@ -291,6 +449,13 @@ namespace VoxelEngine.Networking
             go.transform.localScale = scale;
             go.GetComponent<MeshRenderer>().sharedMaterial = mat;
             return go.transform;
+        }
+
+        private static void Tint(Material m, Color c)
+        {
+            if (m == null) return;
+            m.color = c;
+            if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", c);
         }
 
         private static Material Mat(Color c, float metallic, float smoothness)

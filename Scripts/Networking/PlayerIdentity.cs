@@ -28,6 +28,7 @@ namespace VoxelEngine.Networking
     {
         private const string IdKey = "ve_player_id";
         private const string NameKey = "ve_player_name";
+        private const string SkinKey = "ve_player_skin";
         private const string MutexPrefix = "IndustrialWorld.PlayerSlot.";
         private const int MaxSlots = 16;
 
@@ -79,6 +80,29 @@ namespace VoxelEngine.Networking
 
         private static string IdStoreKey => SlotSuffix.Length == 0 ? IdKey : IdKey + SlotSuffix;
         private static string NameStoreKey => SlotSuffix.Length == 0 ? NameKey : NameKey + SlotSuffix;
+        private static string SkinStoreKey => SlotSuffix.Length == 0 ? SkinKey : SkinKey + SlotSuffix;
+
+        private static int _localSkinTone = -1;
+
+        /// <summary>Chosen skin tone index (14.15.0). Stored per instance slot like
+        /// the name; the avatar's pose mirror picks changes up automatically, so
+        /// setting it while online restyles the body for everyone within a tick.</summary>
+        public static int LocalSkinTone
+        {
+            get
+            {
+                if (_localSkinTone < 0)
+                    _localSkinTone = Mathf.Clamp(
+                        PlayerPrefs.GetInt(SkinStoreKey, 2), 0, CrusaderModel.SkinToneCount - 1);
+                return _localSkinTone;
+            }
+            set
+            {
+                _localSkinTone = Mathf.Clamp(value, 0, CrusaderModel.SkinToneCount - 1);
+                PlayerPrefs.SetInt(SkinStoreKey, _localSkinTone);
+                PlayerPrefs.Save();
+            }
+        }
 
         /// <summary>Slot 0 keeps the original pref keys; later instances get
         /// "_2", "_3"... so every concurrent instance owns its own identity.</summary>

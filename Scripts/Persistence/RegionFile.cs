@@ -45,6 +45,14 @@ namespace VoxelEngine.Persistence
         private const int  VERTICAL_INDEX_STRIDE = 8192;
         private const int  VERTICAL_INDEX_OFFSET = 4096;
 
+        // 14.15.0: ALL region file I/O is serialized through one lock. The chunk
+        // writer thread and the main thread (join-merge authority checks, chunk
+        // streaming) used to open the same region file concurrently - File.Replace
+        // against an open reader throws a sharing violation on Windows, which the
+        // logs showed in both directions during a join. Monitor is reentrant, so
+        // WriteMerged's internal ReadAll is safe.
+        private static readonly object _fileLock = new object();
+
         public static Vector2Int ChunkToRegion(Vector3Int chunkCoord) =>
             new Vector2Int(
                 Mathf.FloorToInt(chunkCoord.x / (float)REGION_SIZE),
@@ -75,6 +83,12 @@ namespace VoxelEngine.Persistence
 
         // ------------- WRITE: merge-update existing file with new entries -------------
         public static void WriteMerged(string worldFolder, Vector2Int region,
+                                       Dictionary<int, ChunkSaveData> entries)
+        {
+            lock (_fileLock) WriteMergedUnlocked(worldFolder, region, entries);
+        }
+
+        private static void WriteMergedUnlocked(string worldFolder, Vector2Int region,
                                        Dictionary<int, ChunkSaveData> entries)
         {
             Directory.CreateDirectory(worldFolder);
@@ -126,6 +140,11 @@ namespace VoxelEngine.Persistence
 
         // ------------- READ: load all entries from one region file -------------
         public static Dictionary<int, ChunkSaveData> ReadAll(string worldFolder, Vector2Int region)
+        {
+            lock (_fileLock) return ReadAllUnlocked(worldFolder, region);
+        }
+
+        private static Dictionary<int, ChunkSaveData> ReadAllUnlocked(string worldFolder, Vector2Int region)
         {
             var result = new Dictionary<int, ChunkSaveData>();
             string path = PathFor(worldFolder, region);

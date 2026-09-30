@@ -202,6 +202,27 @@ namespace VoxelEngine.Persistence
             return true;
         }
 
+        /// <summary>True when the store holds a saved copy of this chunk. Served from
+        /// the region read cache - ONE disk read per region instead of one whole-file
+        /// read per chunk (14.15.0): the join merge asks this for every chunk a joiner
+        /// uploads, and doing it straight off disk on the main thread froze the host
+        /// for the entire catch-up. The writer thread keeps cached regions fresh on
+        /// every flush, so the answer tracks saves made during the session.</summary>
+        public bool HasStoredChunk(Vector3Int chunkCoord)
+        {
+            var region = RegionFile.ChunkToRegion(chunkCoord);
+            int local = RegionFile.LocalIndex(chunkCoord);
+            lock (_readCacheLock)
+            {
+                if (!_readCache.TryGetValue(region, out var entries))
+                {
+                    entries = RegionFile.ReadAll(_worldFolder, region);
+                    _readCache[region] = entries;
+                }
+                return entries.ContainsKey(local);
+            }
+        }
+
         // Drop region from read cache once we've moved far enough away (saves RAM).
         public void EvictRegionFromReadCache(Vector2Int region)
         {

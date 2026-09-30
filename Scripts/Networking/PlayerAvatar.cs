@@ -46,6 +46,8 @@ namespace VoxelEngine.Networking
         private readonly SyncVar<int> _healthPct = new SyncVar<int>(100);
         // 14.14.0: worn armor tier (0 = none -> bare warrior; 1-6 tint the plate rig).
         private readonly SyncVar<int> _armorTier = new SyncVar<int>(0);
+        // 14.15.0: chosen skin tone (multiplied over the body; picked in the menu).
+        private readonly SyncVar<int> _skinTone = new SyncVar<int>(2);
 
         [Tooltip("Nameplate above the head. Assigned by Setup Step 105.")]
         public TextMesh nameplate;
@@ -76,6 +78,7 @@ namespace VoxelEngine.Networking
         private bool _sentCrouched;
         private int _sentHealthPct = 100;
         private int _sentArmorTier;
+        private int _sentSkinTone = -1;   // sentinel: the first mirror pass always sends
 
         public string PlayerId => _playerId.Value;
         public string PlayerName => _playerName.Value;
@@ -92,6 +95,7 @@ namespace VoxelEngine.Networking
             _crouched.OnChange += OnCrouchedChanged;
             _healthPct.OnChange += OnHealthChanged;
             _armorTier.OnChange += OnArmorChanged;
+            _skinTone.OnChange += OnSkinToneChanged;
         }
 
         private void OnDestroy()
@@ -102,6 +106,7 @@ namespace VoxelEngine.Networking
             _crouched.OnChange -= OnCrouchedChanged;
             _healthPct.OnChange -= OnHealthChanged;
             _armorTier.OnChange -= OnArmorChanged;
+            _skinTone.OnChange -= OnSkinToneChanged;
             Unregister();   // belt and braces; normally OnStopClient/Server did it
         }
 
@@ -144,6 +149,7 @@ namespace VoxelEngine.Networking
                 ApplyCrouch(_crouched.Value);
                 ApplyHealth(_healthPct.Value);
                 ApplyArmor(_armorTier.Value);
+                ApplySkinTone(_skinTone.Value);
             }
         }
 
@@ -198,26 +204,30 @@ namespace VoxelEngine.Networking
             bool crouched = _controller != null && (_controller.IsCrouched || _controller.IsSliding);
             var wornArmor = stats.equippedArmor;
             int armorTier = wornArmor != null ? Mathf.Clamp(wornArmor.tier, 1, 6) : 0;
+            int skinTone = PlayerIdentity.LocalSkinTone;
             int healthPct = stats.MaxHealth > 0f
                 ? Mathf.Clamp(Mathf.RoundToInt(stats.Health / stats.MaxHealth * 100f), 0, 100)
                 : 100;
 
             if (held == _sentHeldItemId && crouched == _sentCrouched
-                && healthPct == _sentHealthPct && armorTier == _sentArmorTier) return;
+                && healthPct == _sentHealthPct && armorTier == _sentArmorTier
+                && skinTone == _sentSkinTone) return;
             _sentHeldItemId = held;
             _sentCrouched = crouched;
             _sentHealthPct = healthPct;
             _sentArmorTier = armorTier;
-            RpcUpdatePose(held, crouched, healthPct, armorTier);
+            _sentSkinTone = skinTone;
+            RpcUpdatePose(held, crouched, healthPct, armorTier, skinTone);
         }
 
         [ServerRpc]
-        private void RpcUpdatePose(string heldItemId, bool crouched, int healthPct, int armorTier)
+        private void RpcUpdatePose(string heldItemId, bool crouched, int healthPct, int armorTier, int skinTone)
         {
             _heldItemId.Value = heldItemId ?? "";
             _crouched.Value = crouched;
             _healthPct.Value = Mathf.Clamp(healthPct, 0, 100);
             _armorTier.Value = Mathf.Clamp(armorTier, 0, 6);
+            _skinTone.Value = Mathf.Clamp(skinTone, 0, CrusaderModel.SkinToneCount - 1);
         }
 
         private void LateUpdate()
@@ -307,6 +317,17 @@ namespace VoxelEngine.Networking
             CrusaderModel.SetArmor(transform, tier);
         }
 
+        private void OnSkinToneChanged(int previous, int next, bool asServer)
+        {
+            if (asServer || IsOwner) return;
+            ApplySkinTone(next);
+        }
+
+        private void ApplySkinTone(int tone)
+        {
+            CrusaderModel.SetSkinTone(transform, tone);
+        }
+
         private void ApplyHeldItem(string itemId)
         {
             if (_heldModel != null) { Destroy(_heldModel); _heldModel = null; }
@@ -372,6 +393,9 @@ namespace VoxelEngine.Networking
             if (crusader != null)
             {
                 var hand = crusader.Find(CrusaderModel.RightArmPivotName + "/" + CrusaderModel.RightHandName);
+                // 14.15.0: on the rigged body the anchor hangs off the right-hand
+                // BONE, wherever the skeleton put it - search by name instead.
+                if (hand == null) hand = CrusaderModel.FindDeep(crusader, CrusaderModel.RightHandName);
                 if (hand != null) { _hand = hand; return; }
             }
             var go = new GameObject("HandAnchor");
