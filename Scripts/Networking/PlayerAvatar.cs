@@ -56,6 +56,8 @@ namespace VoxelEngine.Networking
         private readonly SyncVar<Quaternion> _ghostRot = new SyncVar<Quaternion>(Quaternion.identity);
         // 14.17.0: motion flags for the locomotion driver (bit 0 = sliding).
         private readonly SyncVar<int> _motionFlags = new SyncVar<int>(0);
+        // 14.18.0: attack counter - every increment is one visible swing.
+        private readonly SyncVar<int> _attackCount = new SyncVar<int>(0);
 
         [Tooltip("Nameplate above the head. Assigned by Setup Step 105.")]
         public TextMesh nameplate;
@@ -89,6 +91,9 @@ namespace VoxelEngine.Networking
         private int _sentSkinTone = -1;   // sentinel: the first mirror pass always sends
         private int _sentEquipFlags = -1;
         private int _sentMotionFlags = -1;
+        private int _sentSwingCount = -1;
+        private VoxelEngine.Player.HeldToolView _heldToolView;
+        private bool _attackPrimed;   // swallow the initial-state OnChange at join
         private VoxelEngine.Player.PlayerEquipment _equipment;
         private CrusaderAnimator _locomotion;
 
@@ -124,6 +129,7 @@ namespace VoxelEngine.Networking
             _ghostPos.OnChange += OnGhostPosChanged;
             _ghostRot.OnChange += OnGhostRotChanged;
             _motionFlags.OnChange += OnMotionChanged;
+            _attackCount.OnChange += OnAttackChanged;
         }
 
         private void OnDestroy()
@@ -140,6 +146,7 @@ namespace VoxelEngine.Networking
             _ghostPos.OnChange -= OnGhostPosChanged;
             _ghostRot.OnChange -= OnGhostRotChanged;
             _motionFlags.OnChange -= OnMotionChanged;
+            _attackCount.OnChange -= OnAttackChanged;
             if (_ghostReplica != null) { Destroy(_ghostReplica); _ghostReplica = null; }
             Unregister();   // belt and braces; normally OnStopClient/Server did it
         }
@@ -255,6 +262,17 @@ namespace VoxelEngine.Networking
             var wornArmor = stats.equippedArmor;
             int armorTier = wornArmor != null ? Mathf.Clamp(wornArmor.tier, 1, 6) : 0;
             int skinTone = PlayerIdentity.LocalSkinTone;
+            if (_heldToolView == null) _heldToolView = stats.GetComponent<VoxelEngine.Player.HeldToolView>();
+            if (_heldToolView != null)
+            {
+                int swings = _heldToolView.SwingCount;
+                if (_sentSwingCount < 0) _sentSwingCount = swings;   // adopt, never replay history
+                else if (swings != _sentSwingCount)
+                {
+                    _sentSwingCount = swings;
+                    RpcSwing(swings);
+                }
+            }
             if (_equipment == null) _equipment = stats.GetComponent<VoxelEngine.Player.PlayerEquipment>();
             int equipFlags = 0;
             if (_equipment != null)
@@ -290,6 +308,12 @@ namespace VoxelEngine.Networking
             _skinTone.Value = Mathf.Clamp(skinTone, 0, CrusaderModel.SkinToneCount - 1);
             _equipFlags.Value = equipFlags & 3;
             _motionFlags.Value = motionFlags & 1;
+        }
+
+        [ServerRpc]
+        private void RpcSwing(int count)
+        {
+            _attackCount.Value = count;
         }
 
         // ── building-ghost mirror (14.16.0) ──────────────────────────────
@@ -453,6 +477,15 @@ namespace VoxelEngine.Networking
             if (driver != null) driver.Sliding = (flags & 1) != 0;
         }
 
+        private void OnAttackChanged(int previous, int next, bool asServer)
+        {
+            if (asServer || IsOwner) return;
+            // The first delivery is history from before we joined - not a swing.
+            if (!_attackPrimed) { _attackPrimed = true; return; }
+            var driver = Locomotion();
+            if (driver != null) driver.PlayAttack();
+        }
+
         // ── remote building-ghost replica ──
         private GameObject _ghostReplica;
         private string _ghostReplicaId = "";
@@ -493,10 +526,24 @@ namespace VoxelEngine.Networking
         private void ApplyHeldItem(string itemId)
         {
             if (_heldModel != null) { Destroy(_heldModel); _heldModel = null; }
-            if (string.IsNullOrEmpty(itemId)) return;
+            if (string.IsNullOrEmpty(itemId))
+            {
+                var bareDriver = Locomotion();
+                if (bareDriver != null) bareDriver.Stance = 0;   // empty hands, no stance
+                return;
+            }
 
             var persistence = VoxelEngine.Persistence.WorldStatePersistence.Instance;
             var item = persistence != null ? persistence.FindItemById(itemId) : null;
+
+            // 14.18.0: weapon stance follows the held item - no extra wire data.
+            var driver = Locomotion();
+            if (driver != null)
+            {
+                var tool = item as VoxelEngine.Items.ToolItem;
+                driver.Stance = tool != null && tool.toolType == VoxelEngine.Items.ToolType.Sword ? 1 : 0;
+            }
+
             if (item == null) return;   // unknown on this side - show empty hands
 
             EnsureHand();

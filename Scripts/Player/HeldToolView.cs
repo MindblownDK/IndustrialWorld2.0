@@ -211,8 +211,13 @@ namespace VoxelEngine.Player
         }
 
         // Called by ToolFeedback after a successful hit.
+        /// <summary>Total swings this session - PlayerAvatar mirrors changes so
+        /// other players see the attack animation (14.18.0).</summary>
+        public int SwingCount { get; private set; }
+
         public void DoSwing()
         {
+            SwingCount++;   // counted even without a viewmodel - the attack happened
             if (_viewModel == null) return;
             if (_swing != null) StopCoroutine(_swing);
             _swing = StartCoroutine(SwingRoutine());

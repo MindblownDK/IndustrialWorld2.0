@@ -1,9 +1,37 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.17.0-dev`
+**Current Version:** `14.18.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.18.0-dev] Sword In Hand
+
+**Type:** MINOR - weapon stances on the avatar, from the sword-and-shield pack. Save-compatible.
+
+**Sword stance (`CrusaderAnimator`).** While a player holds a sword, other players see the sword-and-shield animation set instead of the base one: idle, walk, run and jump are redirected to the pack clips (slots fall back to the base clips per-file if any pack clip is missing). The stance is derived from the already-synced held item (`ToolType.Sword`) - zero new stance wire data. Empty hands or any non-sword item returns to the base set. Low-health sad idle still wins over the stance idle - a badly hurt crusader looks hurt, sword or not.
+
+**Visible attacks.** Every swing now replicates: `HeldToolView` counts its swings, `PlayerAvatar` mirrors the counter through a light server RPC, and remote avatars play the pack's slash clip full-body once per swing (sword stance only for now - rifle/pistol will reuse the same channel). Attack yields to airborne, releases back into locomotion just before the clip ends, and joiners never replay pre-join history.
+
+**Manual step (one multi-select, in Unity):** select ALL the FBX files inside `Resources/PlayerAnimations/Pro Sword and Shield Pack` - Rig tab - Animation Type: **Humanoid** - Apply. No Loop Time ticks needed - the driver loops by hand since 14.17.1.
+
+**Next:** rifle and pistol stances the moment those clips land in `PlayerAnimations`, then milestone 7: proximity chat.
+
+### [14.17.1-dev] The Crusader Lands
+
+**Type:** PATCH - fixes the avatar being stuck in a frozen mid-air "falling" pose.
+
+**Root causes, all in the new locomotion driver:**
+- All six clip playables advanced from graph start even at zero weight, so any clip without Loop Time finished within seconds and froze on its final frame - by the time a state was shown, you saw a stale frozen frame (a mid-air frame also floats the hips, hence the "constant falling" look).
+- The spawn snap (avatar teleporting to its first network position) read as an enormous vertical speed, so JUMP won the state machine right at spawn.
+- Jump and slide never rewound to frame zero when entered.
+
+**Fixes:**
+- Cyclic clips (idle, sad idle, walk, run, slide) are now looped BY HAND in the driver - the import-side Loop Time tick no longer matters at all (manual step removed for good).
+- Teleports (over 3 m in one frame) reset the motion measurement instead of reading as falling; a short settle grace after spawn/teleport blocks phantom jumps.
+- Jump and slide replay from frame zero on entry; jump holds its landing frame instead of wrapping.
+- Animator culling forced to AlwaysAnimate - rescaled Mixamo skinned bounds are not trusted to keep the skeleton updating.
+- Self-diagnosis: a console warning if any clip is not imported as Humanoid, and one "[Crusader] anim check" line per avatar a few seconds after spawn with measured speed, vertical speed and active state.
 
 ### [14.17.0-dev] The Crusader Moves
 
