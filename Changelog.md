@@ -1,9 +1,21 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.18.1-dev`
+**Current Version:** `14.18.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.18.2-dev] Steel You Can See
+
+**Type:** PATCH - held items showed as flat icon squares instead of real objects.
+
+**Cause:** `BuildViewmodelFor` had a full set of procedural 3D builders - sword, pickaxe, axe, pistol, rifle, grenade, block cube - but the icon-card branch returned early for every item that has an icon, which is every item the setup wizard produces. The 3D builders were unreachable dead code, so every held item rendered as a flat square, in first person and in other players' hands alike.
+
+**Fix (`HeldToolView.cs`):**
+- Real shapes now come first: melee weapons show the sword (pommel, grip, crossguard, tapered blade with fuller), pistols/rifles/grenades their models, pickaxes and axes their tiered tool shapes, block items a textured cube.
+- New shovel viewmodel (shaft, T-grip, angled spade blade) - shovels no longer masquerade as swords.
+- The icon card remains as the fallback for gadgets and shapeless items (igniters, canisters, scanners, materials), and a tinted sphere only when even the icon is missing.
+- Applies everywhere the viewmodel pipeline is used: first-person hand AND remote avatars.
 
 ### [14.18.1-dev] A Sword Is A Sword
 

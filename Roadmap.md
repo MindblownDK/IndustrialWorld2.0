@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.18.1-dev`
-**Roadmap Version:** `14.18.1-dev`
+**Current Version:** `14.18.2-dev`
+**Roadmap Version:** `14.18.2-dev`
 **Date:** 2026-09-28
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,9 @@
 ---
 
 ## 0. Recently Done
+
+### 14.18.2-dev - Steel You Can See
+Held-item viewmodels: the early icon-card return made all 3D builders unreachable - real procedural shapes (sword, pistol, rifle, grenade, pickaxe, axe, new shovel, textured block cube) now render first; icon card only as fallback for shapeless items.
 
 ### 14.18.1-dev - A Sword Is A Sword
 Stance classification by weapon class (melee WeaponItem) instead of the asset's possibly-stale toolType; ToolType.Sword kept as fallback.

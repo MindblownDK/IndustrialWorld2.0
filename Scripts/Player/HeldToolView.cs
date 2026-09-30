@@ -266,36 +266,13 @@ namespace VoxelEngine.Player
         public static GameObject BuildViewmodelFor(ItemDefinition item)
         {
             var root = new GameObject("Held_" + item.name);
-            
-            // 1. If we have an icon but no prefab, use a Quad with the icon sprite
-            if (item.icon != null)
-            {
-                var quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
-                quad.transform.SetParent(root.transform, false);
-                quad.transform.localScale = new Vector3(0.25f, 0.25f, 1f);
-                quad.transform.localRotation = Quaternion.Euler(0, 180, 0); // Face player
-                
-                var renderer = quad.GetComponent<Renderer>();
-                // Use a basic transparent shader
-                var sh = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Unlit/Transparent");
-                var mat = new Material(sh);
-                if (item.icon.texture != null)
-                {
-                    if (mat.HasProperty("_BaseMap")) mat.SetTexture("_BaseMap", item.icon.texture);
-                    else if (mat.HasProperty("_MainTex")) mat.SetTexture("_MainTex", item.icon.texture);
-                }
-                
-                // Set transparency
-                if (mat.HasProperty("_Surface")) mat.SetFloat("_Surface", 1); // Transparent in URP
-                mat.renderQueue = 3000;
-                renderer.sharedMaterial = mat;
-                
-                var col = quad.GetComponent<Collider>();
-                if (col != null) { col.enabled = false; Object.Destroy(col); }
-                
-                return root;
-            }
 
+            // 14.18.2: real shapes FIRST. The icon-card branch used to return
+            // early for every item that has an icon - which is every item the
+            // setup wizard produces - so the 3D builders below were unreachable
+            // and every held item showed as a flat square, in first person and
+            // in other players' hands alike. The icon card is now the FALLBACK
+            // for items that have no meaningful physical shape.
             Color tint = item.iconTint;
             switch (item)
             {
@@ -318,8 +295,16 @@ namespace VoxelEngine.Player
                 case ToolItem tool when tool.toolType == ToolType.Axe:
                     BuildAxe(root, tint, tool.miningTier);
                     break;
-                case ToolItem tool:
+                case ToolItem tool when tool.toolType == ToolType.Shovel:
+                    BuildShovel(root, tint);
+                    break;
+                case ToolItem tool when tool.toolType == ToolType.Sword:
                     BuildSword(root, tint);
+                    break;
+                case ToolItem _:
+                    // Gadgets (igniters, canisters, scanners, ...): a flat icon
+                    // card is more honest than a fake sword.
+                    BuildIconCard(root, item, tint);
                     break;
                 case BlockItem bi:
                     BuildBlockCube(root, tint);
@@ -339,7 +324,7 @@ namespace VoxelEngine.Player
                     }
                     break;
                 default:
-                    BuildSphere(root, tint);
+                    BuildIconCard(root, item, tint);
                     break;
             }
             return root;
@@ -406,6 +391,46 @@ namespace VoxelEngine.Player
                 euler: new Vector3(-30, 0, 30),
                 scale: new Vector3(0.18f, 0.04f, 0.10f),
                 color: headColor);
+        }
+
+        /// <summary>Fallback viewmodel: the item's icon on a small card, or a
+        /// tinted sphere when the item has no icon at all.</summary>
+        private static void BuildIconCard(GameObject root, ItemDefinition item, Color tint)
+        {
+            if (item.icon == null) { BuildSphere(root, tint); return; }
+
+            var quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            quad.transform.SetParent(root.transform, false);
+            quad.transform.localScale = new Vector3(0.25f, 0.25f, 1f);
+            quad.transform.localRotation = Quaternion.Euler(0, 180, 0); // Face player
+
+            var renderer = quad.GetComponent<Renderer>();
+            var sh = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Unlit/Transparent");
+            var mat = new Material(sh);
+            if (item.icon.texture != null)
+            {
+                if (mat.HasProperty("_BaseMap")) mat.SetTexture("_BaseMap", item.icon.texture);
+                else if (mat.HasProperty("_MainTex")) mat.SetTexture("_MainTex", item.icon.texture);
+            }
+            if (mat.HasProperty("_Surface")) mat.SetFloat("_Surface", 1); // Transparent in URP
+            mat.renderQueue = 3000;
+            renderer.sharedMaterial = mat;
+
+            var col = quad.GetComponent<Collider>();
+            if (col != null) { col.enabled = false; Object.Destroy(col); }
+        }
+
+        private static void BuildShovel(GameObject root, Color tint)
+        {
+            Color wood = new Color(0.30f, 0.20f, 0.11f);
+            // Shaft
+            AddPrimitive(root, PrimitiveType.Cylinder, new Vector3(0, 0.02f, 0), Vector3.zero, new Vector3(0.03f, 0.26f, 0.03f), wood);
+            // T-grip at the butt
+            AddPrimitive(root, PrimitiveType.Cylinder, new Vector3(0, -0.26f, 0), new Vector3(90, 0, 0), new Vector3(0.028f, 0.05f, 0.028f), wood);
+            // Blade, slightly angled like a real spade
+            AddPrimitive(root, PrimitiveType.Cube, new Vector3(0, 0.34f, 0.012f), new Vector3(6, 0, 0), new Vector3(0.11f, 0.16f, 0.02f), tint);
+            // Tapered tip (rotated square reads as a point)
+            AddPrimitive(root, PrimitiveType.Cube, new Vector3(0, 0.43f, 0.022f), new Vector3(6, 0, 45), new Vector3(0.075f, 0.075f, 0.018f), tint);
         }
 
         private static void BuildSword(GameObject root, Color tint)
