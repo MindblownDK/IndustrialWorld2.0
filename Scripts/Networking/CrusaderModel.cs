@@ -86,10 +86,21 @@ namespace VoxelEngine.Networking
 
             BuildArmorRigs(root, armPivot);
 
-            // ── equipment anchor (jetpack + oxygen tank, next step) ──
+            // ── equipment anchor (jetpack + oxygen tank) ──
             var back = new GameObject(BackAnchorName).transform;
             back.SetParent(root, false);
             back.localPosition = new Vector3(0f, 1.22f, -0.18f);
+
+            // On the rigged body the anchor rides the spine (like the tattoos),
+            // so back gear follows the chest once animations land.
+            var rigT = root.Find(RigName);
+            if (rigT != null)
+            {
+                var spineB = FindBoneEndingIn(rigT.gameObject, "Spine2");
+                if (spineB == null) spineB = FindBoneEndingIn(rigT.gameObject, "Spine1");
+                if (spineB == null) spineB = FindBoneEndingIn(rigT.gameObject, "Spine");
+                if (spineB != null) back.SetParent(spineB, true);
+            }
 
             return root;
         }
@@ -143,6 +154,120 @@ namespace VoxelEngine.Networking
                 // "Abs" keeps its slightly darker shading relative to the rest.
                 Tint(r.material, r.gameObject.name == "Abs" ? tone * 0.92f : tone);
             }
+        }
+
+        /// <summary>Show or hide the back gear: jetpack (dark pack, orange trim,
+        /// twin nozzles) and oxygen tank (white bottle, cyan cap) on the back
+        /// anchor. Built lazily on first need; toggled by the equip mirror.</summary>
+        public static void SetBackGear(Transform avatarRoot, bool hasJetpack, bool hasOxygen)
+        {
+            var root = EnsureBuilt(avatarRoot);
+            if (root == null) return;
+            var back = FindDeep(root, BackAnchorName);   // may ride a spine bone
+            if (back == null) return;
+
+            var jet = back.Find("GearJetpack");
+            if (hasJetpack && jet == null) jet = BuildJetpackGear(back);
+            var oxy = back.Find("GearOxygen");
+            if (hasOxygen && oxy == null) oxy = BuildOxygenGear(back);
+
+            if (jet != null) jet.gameObject.SetActive(hasJetpack);
+            if (oxy != null) oxy.gameObject.SetActive(hasOxygen);
+        }
+
+        private static Transform BuildJetpackGear(Transform back)
+        {
+            var metal  = Mat(new Color(0.20f, 0.21f, 0.24f), 0.60f, 0.45f);
+            var trim   = Mat(new Color(0.85f, 0.45f, 0.10f), 0.20f, 0.40f);
+            var nozzle = Mat(new Color(0.10f, 0.10f, 0.12f), 0.70f, 0.30f);
+
+            var jet = new GameObject("GearJetpack").transform;
+            jet.SetParent(back, false);
+            Part(jet, PrimitiveType.Cube,     "PackBody", new Vector3(0f, -0.02f, -0.02f),   new Vector3(0.34f, 0.42f, 0.15f), metal);
+            Part(jet, PrimitiveType.Cube,     "PackTrim", new Vector3(0f, 0.16f, -0.025f),   new Vector3(0.355f, 0.06f, 0.155f), trim);
+            Part(jet, PrimitiveType.Cylinder, "NozzleL",  new Vector3(-0.10f, -0.27f, -0.02f), new Vector3(0.075f, 0.05f, 0.075f), nozzle);
+            Part(jet, PrimitiveType.Cylinder, "NozzleR",  new Vector3( 0.10f, -0.27f, -0.02f), new Vector3(0.075f, 0.05f, 0.075f), nozzle);
+            return jet;
+        }
+
+        private static Transform BuildOxygenGear(Transform back)
+        {
+            var bottle = Mat(new Color(0.88f, 0.90f, 0.92f), 0.55f, 0.65f);
+            var cap    = Mat(new Color(0.25f, 0.60f, 0.85f), 0.40f, 0.55f);
+
+            var oxy = new GameObject("GearOxygen").transform;
+            oxy.SetParent(back, false);
+            Part(oxy, PrimitiveType.Capsule, "TankBody", new Vector3(0.15f, 0.03f, -0.045f), new Vector3(0.10f, 0.15f, 0.10f), bottle);
+            Part(oxy, PrimitiveType.Sphere,  "TankCap",  new Vector3(0.15f, 0.20f, -0.045f), new Vector3(0.06f, 0.05f, 0.06f), cap);
+            return oxy;
+        }
+
+        /// <summary>Raise or rest the right arm - the building pose. Works on both
+        /// bodies: the rig swings its right upper-arm BONE from wherever the bind
+        /// pose put it to forward-and-slightly-down (axis-agnostic world-space
+        /// swing), the primitive body rotates its arm pivot. The rest rotation is
+        /// remembered on the bone so the pose always restores exactly.</summary>
+        public static void SetBuildPose(Transform avatarRoot, bool posed)
+        {
+            var root = EnsureBuilt(avatarRoot);
+            if (root == null) return;
+
+            var rigT = root.Find(RigName);
+            if (rigT != null)
+            {
+                var upper = FindBoneEndingIn(rigT.gameObject, "RightArm");
+                if (upper == null) return;
+                var state = upper.GetComponent<BuildPoseState>();
+                if (posed)
+                {
+                    if (state != null && state.posed) return;
+                    if (state == null)
+                    {
+                        state = upper.gameObject.AddComponent<BuildPoseState>();
+                        state.original = upper.localRotation;
+                    }
+                    var hand = FindBoneEndingIn(rigT.gameObject, RightHandName);
+                    Vector3 from = hand != null && hand != upper
+                        ? (hand.position - upper.position).normalized
+                        : root.right;
+                    Vector3 to = (root.forward * 0.94f - root.up * 0.20f).normalized;
+                    upper.rotation = Quaternion.FromToRotation(from, to) * upper.rotation;
+                    state.posed = true;
+                }
+                else if (state != null && state.posed)
+                {
+                    upper.localRotation = state.original;
+                    state.posed = false;
+                }
+                return;
+            }
+
+            var pivot = root.Find(RightArmPivotName);
+            if (pivot == null) return;
+            var pState = pivot.GetComponent<BuildPoseState>();
+            if (posed)
+            {
+                if (pState != null && pState.posed) return;
+                if (pState == null)
+                {
+                    pState = pivot.gameObject.AddComponent<BuildPoseState>();
+                    pState.original = pivot.localRotation;
+                }
+                pivot.localRotation = Quaternion.Euler(-80f, 0f, 0f) * pState.original;
+                pState.posed = true;
+            }
+            else if (pState != null && pState.posed)
+            {
+                pivot.localRotation = pState.original;
+                pState.posed = false;
+            }
+        }
+
+        /// <summary>Remembers a bone's rest rotation while the building pose holds it.</summary>
+        private class BuildPoseState : MonoBehaviour
+        {
+            public Quaternion original;
+            public bool posed;
         }
 
         /// <summary>Depth-first search by exact name - finds the hand anchor no

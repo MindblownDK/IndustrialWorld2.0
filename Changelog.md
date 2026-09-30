@@ -1,9 +1,28 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.15.3-dev`
+**Current Version:** `14.16.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.16.0-dev] Backpacks And Blueprints
+
+**Type:** MINOR - milestone 6 continues: back gear display and the replicated building preview with the arm-out pose. Save-compatible; no editor step.
+
+**Back gear, shown only when carried (`CrusaderModel`, `PlayerAvatar`).** The jetpack (dark pack, orange trim, twin nozzles) and the oxygen tank (white bottle, cyan cap) now appear on every player's back exactly when the real equipment sits in their equipment slots:
+- Two flag bits ride the existing change-only pose RPC - zero extra traffic when nothing changes; late joiners get it with the baseline.
+- The gear mounts on the back anchor, which now rides the spine bone on the rigged body (like the tattoos), so it will follow the chest once animations land. Built lazily from primitives on first need.
+
+**The replicated building preview (`BuildSystem`, `PlayerAvatar`).** When a player aims a placeable block, everyone nearby now sees WHAT they are about to build and WHERE:
+- `BuildSystem.TryGetGhostState` reports the local preview (item id + pose); the avatar mirrors it at up to 10 Hz with a 5 cm / 2 degree deadband - showing or clearing always sends immediately, and nothing at all is sent while no preview is up.
+- Remote machines instantiate the block's placed prefab through the new `BuildSystem.CreateRemoteGhost`: same strip logic and `IsCreatingGhost` guard as the local ghost (colliders off, behaviours dead, never simulated), tinted translucent CYAN so it never reads as your own green/red preview.
+- Ghost pose snaps cell-to-cell exactly like the builder sees it.
+
+**The building pose.** While a player has a preview up, their avatar raises its right arm:
+- On the rigged body the right upper-arm BONE swings from wherever the bind pose put it to forward-and-slightly-down - an axis-agnostic world-space swing, so it works whatever bone axes the FBX shipped with. The rest rotation is remembered on the bone and restores exactly when the preview clears.
+- The primitive fallback rotates its arm pivot the same way. The held tool rides the hand anchor through the pose on both bodies.
+
+**Milestone 6 remaining:** animations on the rig (idle/walk - needs animation clips on the FBX), then milestone 7: proximity chat.
 
 ### [14.15.3-dev] Measured By The Skin
 

@@ -48,6 +48,12 @@ namespace VoxelEngine.Networking
         private readonly SyncVar<int> _armorTier = new SyncVar<int>(0);
         // 14.15.0: chosen skin tone (multiplied over the body; picked in the menu).
         private readonly SyncVar<int> _skinTone = new SyncVar<int>(2);
+        // 14.16.0: worn back gear (bit 0 jetpack, bit 1 oxygen tank).
+        private readonly SyncVar<int> _equipFlags = new SyncVar<int>(0);
+        // 14.16.0: the building preview, mirrored: item id ("" = none) + ghost pose.
+        private readonly SyncVar<string> _ghostItemId = new SyncVar<string>();
+        private readonly SyncVar<Vector3> _ghostPos = new SyncVar<Vector3>();
+        private readonly SyncVar<Quaternion> _ghostRot = new SyncVar<Quaternion>(Quaternion.identity);
 
         [Tooltip("Nameplate above the head. Assigned by Setup Step 105.")]
         public TextMesh nameplate;
@@ -79,6 +85,8 @@ namespace VoxelEngine.Networking
         private int _sentHealthPct = 100;
         private int _sentArmorTier;
         private int _sentSkinTone = -1;   // sentinel: the first mirror pass always sends
+        private int _sentEquipFlags = -1;
+        private VoxelEngine.Player.PlayerEquipment _equipment;
 
         public string PlayerId => _playerId.Value;
         public string PlayerName => _playerName.Value;
@@ -96,6 +104,10 @@ namespace VoxelEngine.Networking
             _healthPct.OnChange += OnHealthChanged;
             _armorTier.OnChange += OnArmorChanged;
             _skinTone.OnChange += OnSkinToneChanged;
+            _equipFlags.OnChange += OnEquipChanged;
+            _ghostItemId.OnChange += OnGhostItemChanged;
+            _ghostPos.OnChange += OnGhostPosChanged;
+            _ghostRot.OnChange += OnGhostRotChanged;
         }
 
         private void OnDestroy()
@@ -107,6 +119,11 @@ namespace VoxelEngine.Networking
             _healthPct.OnChange -= OnHealthChanged;
             _armorTier.OnChange -= OnArmorChanged;
             _skinTone.OnChange -= OnSkinToneChanged;
+            _equipFlags.OnChange -= OnEquipChanged;
+            _ghostItemId.OnChange -= OnGhostItemChanged;
+            _ghostPos.OnChange -= OnGhostPosChanged;
+            _ghostRot.OnChange -= OnGhostRotChanged;
+            if (_ghostReplica != null) { Destroy(_ghostReplica); _ghostReplica = null; }
             Unregister();   // belt and braces; normally OnStopClient/Server did it
         }
 
@@ -150,6 +167,8 @@ namespace VoxelEngine.Networking
                 ApplyHealth(_healthPct.Value);
                 ApplyArmor(_armorTier.Value);
                 ApplySkinTone(_skinTone.Value);
+                ApplyBackGear(_equipFlags.Value);
+                ApplyGhost(_ghostItemId.Value);
             }
         }
 
@@ -192,6 +211,7 @@ namespace VoxelEngine.Networking
                 transform.SetPositionAndRotation(rig.position, rig.rotation);
 
             MirrorPose(stats);
+            MirrorGhost();
         }
 
         /// <summary>Owner-side: watch the local hotbar, stance and health, and
@@ -211,29 +231,78 @@ namespace VoxelEngine.Networking
             var wornArmor = stats.equippedArmor;
             int armorTier = wornArmor != null ? Mathf.Clamp(wornArmor.tier, 1, 6) : 0;
             int skinTone = PlayerIdentity.LocalSkinTone;
+            if (_equipment == null) _equipment = stats.GetComponent<VoxelEngine.Player.PlayerEquipment>();
+            int equipFlags = 0;
+            if (_equipment != null)
+            {
+                if (_equipment.GetBestJetpack() != null) equipFlags |= 1;
+                if (_equipment.EquippedOxygenTank != null) equipFlags |= 2;
+            }
             int healthPct = stats.MaxHealth > 0f
                 ? Mathf.Clamp(Mathf.RoundToInt(stats.Health / stats.MaxHealth * 100f), 0, 100)
                 : 100;
 
             if (held == _sentHeldItemId && crouched == _sentCrouched
                 && healthPct == _sentHealthPct && armorTier == _sentArmorTier
-                && skinTone == _sentSkinTone) return;
+                && skinTone == _sentSkinTone && equipFlags == _sentEquipFlags) return;
             _sentHeldItemId = held;
             _sentCrouched = crouched;
             _sentHealthPct = healthPct;
             _sentArmorTier = armorTier;
             _sentSkinTone = skinTone;
-            RpcUpdatePose(held, crouched, healthPct, armorTier, skinTone);
+            _sentEquipFlags = equipFlags;
+            RpcUpdatePose(held, crouched, healthPct, armorTier, skinTone, equipFlags);
         }
 
         [ServerRpc]
-        private void RpcUpdatePose(string heldItemId, bool crouched, int healthPct, int armorTier, int skinTone)
+        private void RpcUpdatePose(string heldItemId, bool crouched, int healthPct, int armorTier, int skinTone, int equipFlags)
         {
             _heldItemId.Value = heldItemId ?? "";
             _crouched.Value = crouched;
             _healthPct.Value = Mathf.Clamp(healthPct, 0, 100);
             _armorTier.Value = Mathf.Clamp(armorTier, 0, 6);
             _skinTone.Value = Mathf.Clamp(skinTone, 0, CrusaderModel.SkinToneCount - 1);
+            _equipFlags.Value = equipFlags & 3;
+        }
+
+        // ── building-ghost mirror (14.16.0) ──────────────────────────────
+        // The preview follows the aim, so it moves nearly every frame; the mirror
+        // is throttled to 10 Hz with a 5 cm / 2 deg deadband. Showing or clearing
+        // the ghost always sends immediately.
+
+        private float _nextGhostSend;
+        private string _sentGhostId = "";
+        private Vector3 _sentGhostPos;
+        private Quaternion _sentGhostRot = Quaternion.identity;
+
+        private void MirrorGhost()
+        {
+            var bs = VoxelEngine.Building.BuildSystem.Instance;
+            string id = "";
+            Vector3 pos = default;
+            Quaternion rot = Quaternion.identity;
+            if (bs != null && bs.TryGetGhostState(out var gid, out pos, out rot)) id = gid ?? "";
+
+            bool idChanged = id != _sentGhostId;
+            if (!idChanged && id.Length == 0) return;
+            if (!idChanged && Time.unscaledTime < _nextGhostSend) return;
+            if (!idChanged
+                && (pos - _sentGhostPos).sqrMagnitude < 0.0025f
+                && Quaternion.Angle(rot, _sentGhostRot) < 2f) return;
+
+            _sentGhostId = id;
+            _sentGhostPos = pos;
+            _sentGhostRot = rot;
+            _nextGhostSend = Time.unscaledTime + 0.1f;
+            RpcUpdateGhost(id, pos, rot);
+        }
+
+        [ServerRpc]
+        private void RpcUpdateGhost(string itemId, Vector3 pos, Quaternion rot)
+        {
+            _ghostItemId.Value = itemId ?? "";
+            _ghostPos.Value = pos;
+            _ghostRot.Value = rot;
         }
 
         private void LateUpdate()
@@ -332,6 +401,54 @@ namespace VoxelEngine.Networking
         private void ApplySkinTone(int tone)
         {
             CrusaderModel.SetSkinTone(transform, tone);
+        }
+
+        private void OnEquipChanged(int previous, int next, bool asServer)
+        {
+            if (asServer || IsOwner) return;
+            ApplyBackGear(next);
+        }
+
+        private void ApplyBackGear(int flags)
+        {
+            CrusaderModel.SetBackGear(transform, (flags & 1) != 0, (flags & 2) != 0);
+        }
+
+        // ── remote building-ghost replica ──
+        private GameObject _ghostReplica;
+        private string _ghostReplicaId = "";
+
+        private void OnGhostItemChanged(string previous, string next, bool asServer)
+        {
+            if (asServer || IsOwner) return;
+            ApplyGhost(next);
+        }
+
+        private void OnGhostPosChanged(Vector3 previous, Vector3 next, bool asServer)
+        {
+            if (asServer || IsOwner) return;
+            if (_ghostReplica != null) _ghostReplica.transform.position = next;
+        }
+
+        private void OnGhostRotChanged(Quaternion previous, Quaternion next, bool asServer)
+        {
+            if (asServer || IsOwner) return;
+            if (_ghostReplica != null) _ghostReplica.transform.rotation = next;
+        }
+
+        /// <summary>Mirror of the other player's building preview, plus the arm-out
+        /// building pose whenever a preview is showing.</summary>
+        private void ApplyGhost(string itemId)
+        {
+            if (itemId == null) itemId = "";
+            CrusaderModel.SetBuildPose(transform, itemId.Length > 0);
+            if (itemId == _ghostReplicaId && (_ghostReplica != null || itemId.Length == 0)) return;
+            if (_ghostReplica != null) { Destroy(_ghostReplica); _ghostReplica = null; }
+            _ghostReplicaId = itemId;
+            if (itemId.Length == 0) return;
+            _ghostReplica = VoxelEngine.Building.BuildSystem.CreateRemoteGhost(itemId);
+            if (_ghostReplica == null) return;
+            _ghostReplica.transform.SetPositionAndRotation(_ghostPos.Value, _ghostRot.Value);
         }
 
         private void ApplyHeldItem(string itemId)

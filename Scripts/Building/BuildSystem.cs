@@ -2518,6 +2518,47 @@ namespace VoxelEngine.Building
                 || collider.GetComponentInParent<VoxelEngine.Networks.DataCable>() != null;
         }
 
+        // ---------- Remote ghost replicas (14.16.0) ----------
+        // Another player's building preview, mirrored by PlayerAvatar. Built here
+        // so the strip logic and the IsCreatingGhost guard stay in one place.
+        private static Material _remoteGhostMaterial;
+
+        /// <summary>Instantiate a translucent, simulation-dead replica of a block's
+        /// placed prefab for another player's building preview. Cyan, so it never
+        /// reads as the local player's own (green/red) ghost.</summary>
+        public static GameObject CreateRemoteGhost(string itemId)
+        {
+            var persistence = VoxelEngine.Persistence.WorldStatePersistence.Instance;
+            if (persistence == null || string.IsNullOrEmpty(itemId)) return null;
+            var block = persistence.FindItemById(itemId) as BlockItem;
+            if (block == null || block.placedPrefab == null) return null;
+            if (_remoteGhostMaterial == null)
+                _remoteGhostMaterial = MakeGhostMaterial(new Color(0.35f, 0.75f, 0.95f, 0.32f));
+            GameObject ghost;
+            try
+            {
+                IsCreatingGhost = true;
+                ghost = Instantiate(block.placedPrefab);
+            }
+            finally { IsCreatingGhost = false; }
+            ghost.name = "RemoteBuildGhost";
+            StripGhost(ghost, _remoteGhostMaterial);
+            return ghost;
+        }
+
+        /// <summary>What the local ghost shows right now - for the network mirror.
+        /// False whenever no preview is on screen.</summary>
+        public bool TryGetGhostState(out string itemId, out Vector3 position, out Quaternion rotation)
+        {
+            itemId = null; position = default; rotation = default;
+            if (_ghost == null || _ghostItem == null || !_ghost.activeSelf) return false;
+            itemId = _ghostItem.itemId;
+            var t = _ghost.transform;
+            position = t.position;
+            rotation = t.rotation;
+            return true;
+        }
+
         // ---------- Ghost material helpers ----------
         private static Material MakeGhostMaterial(Color color)
         {

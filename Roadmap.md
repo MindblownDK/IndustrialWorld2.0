@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.15.3-dev`
-**Roadmap Version:** `14.15.3-dev`
+**Current Version:** `14.16.0-dev`
+**Roadmap Version:** `14.16.0-dev`
 **Date:** 2026-09-28
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,9 @@
 ---
 
 ## 0. Recently Done
+
+### 14.16.0-dev - Backpacks And Blueprints
+Jetpack + oxygen tank shown on the back exactly when equipped (two flag bits on the pose RPC; gear rides the spine bone). Building previews replicate: cyan simulation-dead ghost of the aimed block at 10 Hz with deadband, plus the arm-out building pose (axis-agnostic bone swing on the rig, arm pivot on the fallback).
 
 ### 14.15.3-dev - Measured By The Skin
 Avatar measured from baked skinned-mesh vertices instead of the conservative renderer box - size, grounding and tattoo placement all exact now. Standing jitter fixed with a movement deadband on the avatar mirror (ground-snap Y oscillation no longer broadcast).
@@ -177,7 +180,7 @@ These decisions are settled. Every future system is designed against them.
 3. **Building sync:** all placement/upgrade/removal flows route through server RPCs in `BuildSystemV2` / `PlacedTieredBlock`; structural audits (`StructuralLoadState`) run server-side only; results replicate. *(DONE 14.4.0-14.6.0 - shipped as relayed broadcasts with positional piece identity instead of server-only audits: remote pieces stay unarmed and the origin machine announces its audit results, which converges cascades without moving the simulation; live place/upgrade/remove/damage, two-way join snapshot, doors and code locks all replicate. Open: shared build costs - placer pays alone today.)*
 4. **World sync:** voxel chunk edit replication + join-in-progress chunk streaming (the long pole - design payloads early, delta edits not full chunks). *(DONE for the shared-planet case - 14.7.0-dev live op replication + 14.8.0-dev edited-chunk join catch-up. Remaining niceties: multi-planet catch-up, fluid sim state.)*
 5. **Simulation sync:** machines, power, fluids, conveyors run server-side; clients render replicated state. *(DONE 14.9.0-14.12.0 - shipped as host-authoritative convergence rather than server-only simulation: item-block structure (14.9.0), container contents (14.10.0), dropped items (14.11.0) and machine runtime state + placement payloads (14.12.0) all replicate through the save-format capture/restore seams as opaque JSON. Clients keep simulating and converge onto the host's outcome. Accepted gaps: mid-belt packet cosmetics stay per-machine; true client-sim-off moves to the dedicated-server milestone.)*
-6. **Real Crusaders (player model and readable loadout):** replace the capsule avatar with a proper crusader player model and make every player's loadout readable at a glance. Full design below - this milestone deliberately sits right before proximity chat because seeing WHO you meet matters as much as hearing them. *(IN PROGRESS - 14.13.0 shipped the body, 14.14.0 made armor display-only with tattoos, 14.15.0 swaps in the rigged Player.fbx character with customizable skin tones. Open: jetpack + oxygen tank when equipped, building pose + replicated ghost, animations on the rig.)*
+6. **Real Crusaders (player model and readable loadout):** replace the capsule avatar with a proper crusader player model and make every player's loadout readable at a glance. Full design below - this milestone deliberately sits right before proximity chat because seeing WHO you meet matters as much as hearing them. *(IN PROGRESS - 14.13.0 shipped the body, 14.14.0 made armor display-only with tattoos, 14.15.0 swapped in the rigged Player.fbx character with customizable skin tones, 14.16.0 added back gear, the replicated building ghost and the building pose. Open: animations on the rig - needs clips.)*
 7. **Proximity chat:** positional voice between nearby players - microphone capture, compressed frames relayed through the server, 3D-spatialized playback with distance falloff (whisper-to-shout range like the survival genre expects); muted-player list keyed by player id. Decide build-vs-buy when the milestone starts: a Fish-Net-integrated voice asset (e.g. Dissonance) versus a custom mic -> Opus -> broadcast pipeline riding the existing `NetworkBootstrap` handshake. Optional text chat falls out of the same relay for near-free.
 8. **Dedicated server:** headless build target, server-side persistence, no local player assumptions anywhere in boot code. **Security hardening lands here (committed 14.6.0):** code-lock codes currently travel and rest in plain text (same as save files) - move code validation server-side so raw codes never reach other clients, and audit every broadcast for data a client should not see (other players' lock codes, future chest contents). Acceptable for trusted-co-op pre-release, unacceptable for public dedicated servers.
 
