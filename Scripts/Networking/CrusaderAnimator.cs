@@ -67,6 +67,8 @@ namespace VoxelEngine.Networking
         private bool _wasAirborne;
         private bool _wasSliding;
         private float _attackTime;      // remaining one-shot attack window
+        private int _lastLoggedStance = -1;
+        private bool _attackLogged;
         private readonly float[] _targets = new float[CLIP_COUNT];
 
         private Transform _avatarRoot;   // the PlayerAvatar transform (network-moved)
@@ -138,11 +140,18 @@ namespace VoxelEngine.Networking
             HasClips = true;
         }
 
-        /// <summary>Play the stance's attack clip once, full body. Safe no-op when
-        /// no stance is active or the clip is missing.</summary>
+        /// <summary>Play the swing clip once, full body. 14.18.4: any held-item
+        /// swing plays it - with a sword it reads as a slash, with a pickaxe or
+        /// axe as the working chop. Safe no-op when the clip is missing.</summary>
         public void PlayAttack()
         {
-            if (!HasClips || Stance != 1 || !_hasClip[ATTACK]) return;
+            if (!HasClips || !_hasClip[ATTACK]) return;
+            if (!_attackLogged)
+            {
+                _attackLogged = true;   // once per stance session - no spam on auto-swing
+                Debug.Log("[Crusader] attack replicated (slash clip "
+                    + _lengths[ATTACK].ToString("F2") + "s)");
+            }
             _playables[ATTACK].SetTime(0.0);
             _attackTime = _lengths[ATTACK] * 0.85f;   // release into locomotion just before the end
         }
@@ -209,6 +218,13 @@ namespace VoxelEngine.Networking
 
             // The stance redirects the core locomotion slots when its clips exist.
             bool sword = Stance == 1;
+            if (Stance != _lastLoggedStance)
+            {
+                _lastLoggedStance = Stance;
+                _attackLogged = false;
+                Debug.Log("[Crusader] stance -> " + Stance + (sword ? " (sword)" : " (none)")
+                    + " swordClips=" + (_hasClip[S_IDLE] ? "loaded" : "MISSING"));
+            }
             int idleSlot = sword && _hasClip[S_IDLE] ? S_IDLE : IDLE;
             int walkSlot = sword && _hasClip[S_WALK] ? S_WALK : WALK;
             int runSlot  = sword && _hasClip[S_RUN]  ? S_RUN  : RUN;
@@ -222,7 +238,7 @@ namespace VoxelEngine.Networking
             _wasAirborne = airborne;
             _wasSliding = Sliding;
             if (_attackTime > 0f) _attackTime -= dt;
-            bool attacking = sword && _attackTime > 0f && _hasClip[ATTACK];
+            bool attacking = _attackTime > 0f && _hasClip[ATTACK];
 
             if (airborne && _hasClip[jumpSlot]) _targets[jumpSlot] = 1f;
             else if (attacking) _targets[ATTACK] = 1f;

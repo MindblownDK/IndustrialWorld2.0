@@ -196,6 +196,7 @@ namespace VoxelEngine.Networking
                 ApplyBackGear(_equipFlags.Value);
                 ApplyGhost(_ghostItemId.Value);
                 ApplyMotion(_motionFlags.Value);
+                _attackPrimed = true;   // initial state consumed - every change from here is a real swing
             }
         }
 
@@ -480,8 +481,8 @@ namespace VoxelEngine.Networking
         private void OnAttackChanged(int previous, int next, bool asServer)
         {
             if (asServer || IsOwner) return;
-            // The first delivery is history from before we joined - not a swing.
-            if (!_attackPrimed) { _attackPrimed = true; return; }
+            // Deliveries before OnStartClient primes are pre-join history, not swings.
+            if (!_attackPrimed) return;
             var driver = Locomotion();
             if (driver != null) driver.PlayAttack();
         }
@@ -560,6 +561,119 @@ namespace VoxelEngine.Networking
             // swallow interaction rays.
             foreach (var col in _heldModel.GetComponentsInChildren<Collider>(true))
                 Destroy(col);
+            AlignHeldModel(item);
+        }
+
+        // ---------- Held-model grip alignment (14.18.4) ----------
+        // The viewmodels are authored for the first-person camera anchor; in a
+        // skeleton hand they need a real grip. The hand frame is derived from
+        // the actual finger and thumb bones, so it is valid in any animated
+        // pose - and because the model is parented to the bone-riding anchor,
+        // one world-space alignment at build time holds forever after.
+
+        private const int GripPalm = 0, GripBlade = 1, GripGun = 2;
+
+        private static int GripArchetypeFor(VoxelEngine.Items.ItemDefinition item, out float shift)
+        {
+            shift = 0f;
+            var weapon = item as VoxelEngine.Combat.WeaponItem;
+            if (weapon != null)
+            {
+                if (weapon.attackMode == VoxelEngine.Combat.WeaponItem.AttackMode.Ranged) { shift = 0.05f; return GripGun; }
+                if (weapon.attackMode == VoxelEngine.Combat.WeaponItem.AttackMode.Melee) { shift = 0.10f; return GripBlade; }
+                return GripPalm;   // thrown: sits in the palm
+            }
+            var tool = item as VoxelEngine.Items.ToolItem;
+            if (tool != null)
+            {
+                switch (tool.toolType)
+                {
+                    case VoxelEngine.Items.ToolType.Pickaxe:
+                    case VoxelEngine.Items.ToolType.Axe:
+                    case VoxelEngine.Items.ToolType.Shovel:
+                        shift = 0.08f;   // fist below the middle of the shaft, head above the hand
+                        return GripBlade;
+                    case VoxelEngine.Items.ToolType.Sword:
+                        shift = 0.10f;   // fist on the grip, crossguard above, pommel below
+                        return GripBlade;
+                }
+            }
+            return GripPalm;
+        }
+
+        private void AlignHeldModel(VoxelEngine.Items.ItemDefinition item)
+        {
+            if (_heldModel == null || _hand == null) return;
+            var handBone = _hand.parent;
+            // Primitive fallback body: no skeleton - keep the legacy placement.
+            if (handBone == null || !handBone.name.EndsWith(CrusaderModel.RightHandName)
+                || handBone.name == CrusaderModel.RightHandName) return;
+
+            // Finger and thumb bones give the hand frame.
+            Transform fingers = null, thumb = null;
+            foreach (Transform child in handBone)
+            {
+                if (child == _hand) continue;
+                if (child.name.Contains("Thumb"))
+                {
+                    if (thumb == null || child.name.Length < thumb.name.Length) thumb = child;
+                }
+                else if (fingers == null || (child.name.Contains("Middle") && !fingers.name.Contains("Middle")))
+                {
+                    fingers = child;
+                }
+            }
+            Vector3 fingerDir = fingers != null
+                ? fingers.position - handBone.position
+                : (handBone.parent != null ? handBone.position - handBone.parent.position : transform.forward);
+            if (fingerDir.sqrMagnitude < 1e-8f) return;
+            fingerDir.Normalize();
+
+            // The blade side of a fist is the thumb side: the grip axis is the
+            // thumb direction with its along-the-fingers part removed.
+            Vector3 grip = thumb != null ? thumb.position - handBone.position : Vector3.Cross(fingerDir, transform.forward);
+            grip -= fingerDir * Vector3.Dot(grip, fingerDir);
+            if (grip.sqrMagnitude < 1e-6f) grip = Vector3.Cross(fingerDir, transform.forward);
+            grip.Normalize();
+
+            float shift;
+            int archetype = GripArchetypeFor(item, out shift);
+            var m = _heldModel.transform;
+            Vector3 palm = handBone.position + fingerDir * 0.07f;
+
+            if (archetype == GripBlade)
+            {
+                // Blade/shaft (+Y of the model) along the grip axis, head/edge
+                // rolled toward the fingers' forward.
+                m.rotation = Quaternion.FromToRotation(m.up, grip) * m.rotation;
+                RollAround(m, grip, fingerDir, false);
+                m.position = palm + grip * shift;
+            }
+            else if (archetype == GripGun)
+            {
+                // Barrel (+Z of the model) perpendicular to the grip axis, top
+                // of the weapon rolled to the thumb side.
+                Vector3 barrel = fingerDir - grip * Vector3.Dot(fingerDir, grip);
+                if (barrel.sqrMagnitude < 1e-6f) barrel = fingerDir;
+                barrel.Normalize();
+                m.rotation = Quaternion.FromToRotation(m.forward, barrel) * m.rotation;
+                RollAround(m, barrel, grip, true);
+                m.position = palm + grip * shift;
+            }
+            else
+            {
+                m.position = palm;   // palm items: centered in the hand
+            }
+        }
+
+        /// <summary>Roll the model around an axis so its projected up/forward
+        /// lines up with the projected target direction.</summary>
+        private static void RollAround(Transform m, Vector3 axis, Vector3 target, bool useUp)
+        {
+            Vector3 current = Vector3.ProjectOnPlane(useUp ? m.up : m.forward, axis);
+            Vector3 desired = Vector3.ProjectOnPlane(target, axis);
+            if (current.sqrMagnitude < 1e-6f || desired.sqrMagnitude < 1e-6f) return;
+            m.rotation = Quaternion.FromToRotation(current.normalized, desired.normalized) * m.rotation;
         }
 
         private void ApplyCrouch(bool crouched)

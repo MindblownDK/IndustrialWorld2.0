@@ -1,9 +1,30 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.18.2-dev`
+**Current Version:** `14.18.4-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.18.4-dev] A Proper Grip
+
+**Type:** PATCH - swing replication and held-item grips on the avatar.
+
+**Swing animation never played:**
+- The join-time prime guard swallowed the FIRST replicated swing whenever no swing had happened before you joined (the initial SyncVar delivery it was waiting for never fires for an unchanged default). Priming now happens in OnStartClient, where initial state is actually consumed - every change after that is a real swing.
+- The swing clip was also gated to the sword stance. Now ANY held-item swing plays it: with a sword it reads as a slash, with a pickaxe or axe as the working chop - miners and lumberjacks visibly work instead of standing still.
+
+**Held items sat wrong in the hand** (sword crooked through the fist, pickaxe head resting inside the palm): the viewmodels are authored for the first-person camera anchor, not for a skeleton hand. New grip alignment in `PlayerAvatar`:
+- The hand frame is derived from the actual finger and thumb bones (valid in any animated pose; the alignment is done once in world space and holds forever because the model is parented to the bone-riding anchor).
+- Blade archetype (sword, pickaxe, axe, shovel): shaft along the fist's grip axis - blade side by the thumb, pommel by the pinky - head rolled toward the fingers' forward, fist placed on the actual grip section of each model.
+- Gun archetype (pistol, rifle): barrel perpendicular to the grip axis along the fingers' forward, top of the weapon rolled to the thumb side, fist on the pistol grip.
+- Palm archetype (grenades, blocks, icon-card items): centered in the palm.
+- Primitive fallback bodies keep the legacy placement (no skeleton to align against).
+
+### [14.18.3-dev] Stance On The Record
+
+**Type:** PATCH - diagnostics only, no behaviour change.
+
+The one-shot anim check prints ~4 seconds after an avatar spawns - with empty hands at that moment it always reads stance=0, which says nothing about whether the sword stance engages later. The driver now logs every stance TRANSITION as it happens ("[Crusader] stance -> 1 (sword) swordClips=loaded"), including whether the pack clips actually loaded, plus one line for the first replicated attack per stance session. Holding the sword and watching the Console now gives an immediate, unambiguous answer.
 
 ### [14.18.2-dev] Steel You Can See
 
