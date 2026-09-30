@@ -1,9 +1,17 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.15.2-dev`
+**Current Version:** `14.15.3-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.15.3-dev] Measured By The Skin
+
+**Type:** PATCH - the avatar was still floating, slightly too small, ink off the chest; standing players jittered up and down on everyone else's screen.
+
+**FIX - the model is now measured from its real baked vertices (`CrusaderModel`).** `renderer.bounds` on a skinned mesh is not the skin: it is the import-time conservative box carried around by the root bone, and it read too big in every axis - which simultaneously made the avatar too small (height normalization divided by too much), floated it (the box bottom sat below the actual feet) and pushed the tattoos forward (the box front sat ahead of the actual chest). The rig is now measured by baking each skinned mesh exactly as displayed (`BakeMesh` - creates a readable copy, no Read/Write import flag required) and taking min/max plus the chest-band front from the true vertex positions. Feet on the pivot, full 1.85 m, ink on the pecs - all from the same ground truth.
+
+**FIX - standing players no longer shake (`PlayerAvatar`).** The owner's avatar mirrored the player transform raw, every frame - and the character controller's ground snap makes a standing player's Y micro-oscillate, so the oscillation was broadcast and replayed on every other screen (most visible standing on structures). The mirror now has a deadband: only real movement (more than ~1.6 cm or 0.4 degrees) moves the networked avatar. Walking, jumping and turning are untouched; standing still is now truly still on the wire.
 
 ### [14.15.2-dev] Feet On The Ground, One Panel Only
 

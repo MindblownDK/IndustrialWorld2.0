@@ -189,19 +189,66 @@ namespace VoxelEngine.Networking
 
             var renderers = rigGo.GetComponentsInChildren<Renderer>(true);
             if (renderers.Length == 0) { Object.Destroy(rigGo); return false; }
+
+            // Ground truth (14.15.3): bake each skinned mesh EXACTLY as displayed
+            // and measure its real vertices. renderer.bounds on a skinned mesh is
+            // just the import-time conservative box moved by the root bone - it
+            // read too big in every axis, which made the avatar too small, lifted
+            // it off the ground and pushed the tattoos off the chest. BakeMesh
+            // needs no Read/Write flag: the baked copy is created readable.
+            var points = new List<Vector3>(16384);
+            foreach (var smr in rigGo.GetComponentsInChildren<SkinnedMeshRenderer>(true))
+            {
+                if (smr.sharedMesh == null) continue;
+                var baked = new Mesh();
+                try
+                {
+                    smr.BakeMesh(baked, true);   // scale baked in; add rotation + position
+                    var vs = baked.vertices;
+                    var bp = smr.transform.position;
+                    var br = smr.transform.rotation;
+                    for (int i = 0; i < vs.Length; i++) points.Add(bp + br * vs[i]);
+                }
+                catch { }
+                finally { Object.Destroy(baked); }
+            }
+            foreach (var mr in rigGo.GetComponentsInChildren<MeshRenderer>(true))
+            {
+                var b = mr.bounds;   // static meshes: exact at origin/identity
+                points.Add(b.min); points.Add(b.max);
+            }
+            if (points.Count == 0)   // last resort: the conservative boxes
+                foreach (var r in renderers)
+                {
+                    var b = r.bounds;
+                    points.Add(b.min); points.Add(b.max);
+                }
+
             var min = new Vector3(float.MaxValue, float.MaxValue, float.MaxValue);
             var max = new Vector3(float.MinValue, float.MinValue, float.MinValue);
-            foreach (var r in renderers)
+            for (int i = 0; i < points.Count; i++)
             {
-                var b = r.bounds;   // world == model space right now
-                min = Vector3.Min(min, b.min);
-                max = Vector3.Max(max, b.max);
+                min = Vector3.Min(min, points[i]);
+                max = Vector3.Max(max, points[i]);
             }
             float rawHeight = max.y - min.y;
             if (rawHeight < 0.05f) { Object.Destroy(rigGo); return false; }
 
-            // Chest front sampled in the same model space, before any reparenting.
-            float chestFrontModel = ChestFrontModelZ(rigGo, min, max);
+            // Chest front from the SAME true points: band at 57-84% of height,
+            // torso width only, so T-pose arms and forward toes never count.
+            float yLo = min.y + 0.57f * rawHeight;
+            float yHi = min.y + 0.84f * rawHeight;
+            float xC = (min.x + max.x) * 0.5f;
+            float xHalf = 0.09f * rawHeight;
+            float chestFrontModel = float.MinValue;
+            for (int i = 0; i < points.Count; i++)
+            {
+                var p = points[i];
+                if (p.y < yLo || p.y > yHi) continue;
+                if (Mathf.Abs(p.x - xC) > xHalf) continue;
+                if (p.z > chestFrontModel) chestFrontModel = p.z;
+            }
+            if (chestFrontModel <= float.MinValue) chestFrontModel = max.z;
 
             float s = Height / rawHeight;
             rig.SetParent(root, false);   // keeps the local pose: origin, identity
@@ -249,61 +296,6 @@ namespace VoxelEngine.Networking
                 if (runeT != null) runeT.SetParent(spine, true);
             }
             return true;
-        }
-
-        /// <summary>Front (+Z) of the chest in model space. Vertices are read in
-        /// mesh space, pushed through the renderer's transform, then affinely
-        /// remapped per axis from the vertex cloud's own box onto the DISPLAYED
-        /// box - this absorbs any armature/mesh scale mismatch (Mixamo rigs often
-        /// carry a 0.01 armature scale that a plain TransformPoint misses). The
-        /// chest band is 57-84% of height, torso width only, so T-pose arms and
-        /// forward-poking toes never set the reference. Falls back to the box
-        /// front when the mesh is not readable (enable Read/Write on the FBX).</summary>
-        private static float ChestFrontModelZ(GameObject rigGo, Vector3 dispMin, Vector3 dispMax)
-        {
-            float fallback = dispMax.z;
-            SkinnedMeshRenderer body = null;
-            foreach (var smr in rigGo.GetComponentsInChildren<SkinnedMeshRenderer>(true))
-                if (smr.sharedMesh != null
-                    && (body == null || smr.sharedMesh.vertexCount > body.sharedMesh.vertexCount))
-                    body = smr;
-            if (body == null || !body.sharedMesh.isReadable) return fallback;
-            try
-            {
-                var verts = body.sharedMesh.vertices;
-                if (verts.Length == 0) return fallback;
-                var tr = body.transform;
-                var vMin = new Vector3(float.MaxValue, float.MaxValue, float.MaxValue);
-                var vMax = new Vector3(float.MinValue, float.MinValue, float.MinValue);
-                for (int i = 0; i < verts.Length; i++)
-                {
-                    var p = tr.TransformPoint(verts[i]);
-                    vMin = Vector3.Min(vMin, p);
-                    vMax = Vector3.Max(vMax, p);
-                }
-                var vSize = vMax - vMin;
-                var dSize = dispMax - dispMin;
-                if (vSize.x < 1e-4f || vSize.y < 1e-4f || vSize.z < 1e-4f) return fallback;
-
-                float yLo = dispMin.y + 0.57f * dSize.y;
-                float yHi = dispMin.y + 0.84f * dSize.y;
-                float xC = (dispMin.x + dispMax.x) * 0.5f;
-                float xHalf = 0.09f * dSize.y;
-
-                float front = float.MinValue;
-                for (int i = 0; i < verts.Length; i++)
-                {
-                    var p = tr.TransformPoint(verts[i]);
-                    float dy = dispMin.y + (p.y - vMin.y) * dSize.y / vSize.y;
-                    if (dy < yLo || dy > yHi) continue;
-                    float dx = dispMin.x + (p.x - vMin.x) * dSize.x / vSize.x;
-                    if (Mathf.Abs(dx - xC) > xHalf) continue;
-                    float dz = dispMin.z + (p.z - vMin.z) * dSize.z / vSize.z;
-                    if (dz > front) front = dz;
-                }
-                return front > float.MinValue ? front : fallback;
-            }
-            catch { return fallback; }
         }
 
         /// <summary>Shortest bone name wins so "Spine" never grabs a longer twin.

@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.15.2-dev`
-**Roadmap Version:** `14.15.2-dev`
+**Current Version:** `14.15.3-dev`
+**Roadmap Version:** `14.15.3-dev`
 **Date:** 2026-09-28
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,9 @@
 ---
 
 ## 0. Recently Done
+
+### 14.15.3-dev - Measured By The Skin
+Avatar measured from baked skinned-mesh vertices instead of the conservative renderer box - size, grounding and tattoo placement all exact now. Standing jitter fixed with a movement deadband on the avatar mirror (ground-snap Y oscillation no longer broadcast).
 
 ### 14.15.2-dev - Feet On The Ground, One Panel Only
 Rig measurement fixed for skinned meshes (renderer.bounds at origin/identity, measured before parenting) - players stand on the ground and tattoos sit on the chest again. Item-Ports overlay no longer duplicates on face clicks (wholesale clear + re-entrancy guard) and now repaints live when the other player edits ports.

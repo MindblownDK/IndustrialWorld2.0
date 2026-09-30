@@ -183,7 +183,13 @@ namespace VoxelEngine.Networking
             var stats = VoxelEngine.Player.PlayerStats.Instance;
             if (stats == null) return;
             var rig = stats.transform;
-            transform.SetPositionAndRotation(rig.position, rig.rotation);
+            // 14.15.3: deadband the mirror. The controller's ground snap makes a
+            // standing player's Y micro-oscillate every frame; copying it raw
+            // broadcast that shake to everyone else's screen. Only real movement
+            // (> ~1.6 cm or > 0.4 deg) moves the networked avatar.
+            if ((rig.position - transform.position).sqrMagnitude > 0.00025f
+                || Quaternion.Angle(rig.rotation, transform.rotation) > 0.4f)
+                transform.SetPositionAndRotation(rig.position, rig.rotation);
 
             MirrorPose(stats);
         }
