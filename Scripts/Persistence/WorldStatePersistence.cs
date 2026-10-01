@@ -605,6 +605,47 @@ namespace VoxelEngine.Persistence
             }
         }
 
+        // ── grid records on the wire (14.25.0) ──────────────────────────
+        //
+        // Same trick as the per-player record in 14.24.0, for the same reason: the
+        // wire format IS the save format. A grid crosses the network as the exact
+        // SavedGrid JSON the host would have written to disk, and the client rebuilds
+        // it through the exact code path that loads one from disk. There is no second
+        // serializer to drift out of step, so "the ship is the same on both machines"
+        // is structural rather than something to keep re-testing.
+
+        /// <summary>One grid as save-shaped JSON, or null when it has nothing to say.</summary>
+        public string CaptureGridJson(VoxelEngine.GridSystem.GridEntity grid)
+        {
+            try
+            {
+                var record = BuildSavedGrid(grid);
+                return record == null ? null : JsonUtility.ToJson(record);
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning("[WorldState] CaptureGridJson: " + ex.Message);
+                return null;
+            }
+        }
+
+        /// <summary>Rebuild a grid from wire JSON. Returns the new entity, or null when
+        /// the payload is unusable - a bad record must never take the join down.</summary>
+        public VoxelEngine.GridSystem.GridEntity ApplyGridRecord(string json)
+        {
+            if (string.IsNullOrEmpty(json)) return null;
+            try
+            {
+                var record = JsonUtility.FromJson<SavedGrid>(json);
+                return record == null ? null : RestoreOneGrid(record, out _);
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning("[WorldState] ApplyGridRecord: " + ex.Message);
+                return null;
+            }
+        }
+
         private static Inventory FindPlayerInventory()
         {
             var player = GameObject.FindGameObjectWithTag("Player");
@@ -1768,370 +1809,381 @@ namespace VoxelEngine.Persistence
         {
             foreach (var grid in FindObjectsByType<GridEntity>(FindObjectsInactive.Exclude))
             {
-                if (grid == null || grid.BlockCount == 0) continue;
+                var entry = BuildSavedGrid(grid);
+                if (entry != null) save.grids.Add(entry);
+            }
+        }
 
-                var entry = new SavedGrid
-                {
-                    // Rigidbody pose is authoritative for interpolated movable grids.
-                    // Transform pose can lag a physics step and was responsible for
-                    // some restored ships reopening at an unintended upright angle.
-                    pos = grid.Body != null ? grid.Body.position : grid.transform.position,
-                    rot = grid.Body != null ? grid.Body.rotation : grid.transform.rotation,
-                    gridSize = (int)grid.gridSize,
-                    gravityScale = grid.gravityScale,
-                    dampenersOn = grid.DampenersOn,
-                    wheelParkingBrake = grid.WheelControlHeld,
-                    hydrogenStored = grid.HydrogenStored,
-                    oxygenStored = grid.OxygenStored,
-                    warpDrivesToUse = grid.WarpDrivesToUse
-                };
-                var origin = VoxelEngine.Cosmos.SpaceOrigin.Instance;
-                if (origin != null)
-                {
-                    var cosmic = origin.GetCosmicKm(entry.pos);
-                    entry.hasCosmic = true;
-                    entry.cosmicX = cosmic.x;
-                    entry.cosmicY = cosmic.y;
-                    entry.cosmicZ = cosmic.z;
-                }
+        /// <summary>Serialize ONE grid. Split out of SaveGrids in 14.25.0 so the same
+        /// record that goes to disk can also go on the wire: a joining client rebuilds a
+        /// grid from exactly the bytes the host would have saved, which is the only way
+        /// the two machines cannot drift apart in what they think the ship IS.</summary>
+        private SavedGrid BuildSavedGrid(GridEntity grid)
+        {
+            if (grid == null || grid.BlockCount == 0) return null;
 
-                // Additive 9.34.0: the ship's route book. A recorded haul run is player work,
-                // so it rides the grid record rather than the recorder block's own state — the
-                // book belongs to the vessel and survives the block being moved or replaced.
-                // Construct registry: the name and class the player gave this hull.
-                var identity = VoxelEngine.GridSystem.GridIdentity.Find(grid);
-                if (identity != null && (identity.HasCustomName || identity.Class != VoxelEngine.GridSystem.GridClass.Vessel))
-                {
-                    entry.identityName = identity.HasCustomName ? identity.DisplayName : "";
-                    entry.identityClass = (int)identity.Class;
-                }
+            var entry = new SavedGrid
+            {
+                // Rigidbody pose is authoritative for interpolated movable grids.
+                // Transform pose can lag a physics step and was responsible for
+                // some restored ships reopening at an unintended upright angle.
+                pos = grid.Body != null ? grid.Body.position : grid.transform.position,
+                rot = grid.Body != null ? grid.Body.rotation : grid.transform.rotation,
+                netId = VoxelEngine.Networking.GridSync.IdOf(grid),
+                gridSize = (int)grid.gridSize,
+                gravityScale = grid.gravityScale,
+                dampenersOn = grid.DampenersOn,
+                wheelParkingBrake = grid.WheelControlHeld,
+                hydrogenStored = grid.HydrogenStored,
+                oxygenStored = grid.OxygenStored,
+                warpDrivesToUse = grid.WarpDrivesToUse
+            };
+            var origin = VoxelEngine.Cosmos.SpaceOrigin.Instance;
+            if (origin != null)
+            {
+                var cosmic = origin.GetCosmicKm(entry.pos);
+                entry.hasCosmic = true;
+                entry.cosmicX = cosmic.x;
+                entry.cosmicY = cosmic.y;
+                entry.cosmicZ = cosmic.z;
+            }
 
-                // A committed orbit is saved as its Keplerian elements, NOT as a pose. The
-                // station must come back on the same orbit at the correct phase for the
-                // reload time, which a frozen position could never express.
-                // Rail bogie (11.31.0). Which cell it sits on is NOT saved: the rail graph
-                // rebuilds from placed track on load, so the bogie re-latches from its
-                // restored world position. Only the player's intent is state.
-                var bogie = grid.GetComponent<VoxelEngine.GridSystem.GridRailBogie>();
-                if (bogie != null)
-                {
-                    bogie.CaptureState(out bool railPowered, out bool railReversed);
-                    entry.hasRailBogie = true;
-                    entry.railPowered = railPowered;
-                    entry.railReversed = railReversed;
-                }
+            // Additive 9.34.0: the ship's route book. A recorded haul run is player work,
+            // so it rides the grid record rather than the recorder block's own state — the
+            // book belongs to the vessel and survives the block being moved or replaced.
+            // Construct registry: the name and class the player gave this hull.
+            var identity = VoxelEngine.GridSystem.GridIdentity.Find(grid);
+            if (identity != null && (identity.HasCustomName || identity.Class != VoxelEngine.GridSystem.GridClass.Vessel))
+            {
+                entry.identityName = identity.HasCustomName ? identity.DisplayName : "";
+                entry.identityClass = (int)identity.Class;
+            }
 
-                var rails = grid.GetComponent<VoxelEngine.Cosmos.OrbitalRails>();
-                if (rails != null && rails.IsOnRails)
-                {
-                    rails.CaptureState(out bool onRails, out double[] elements, out string parentName);
-                    entry.onRails = onRails;
-                    entry.orbitElements = elements;
-                    entry.orbitParent = parentName;
-                }
+            // A committed orbit is saved as its Keplerian elements, NOT as a pose. The
+            // station must come back on the same orbit at the correct phase for the
+            // reload time, which a frozen position could never express.
+            // Rail bogie (11.31.0). Which cell it sits on is NOT saved: the rail graph
+            // rebuilds from placed track on load, so the bogie re-latches from its
+            // restored world position. Only the player's intent is state.
+            var bogie = grid.GetComponent<VoxelEngine.GridSystem.GridRailBogie>();
+            if (bogie != null)
+            {
+                bogie.CaptureState(out bool railPowered, out bool railReversed);
+                entry.hasRailBogie = true;
+                entry.railPowered = railPowered;
+                entry.railReversed = railReversed;
+            }
 
-                var routeBook = grid.GetComponent<VoxelEngine.Navigation.RouteBook>();
-                if (routeBook != null && routeBook.Count > 0)
+            var rails = grid.GetComponent<VoxelEngine.Cosmos.OrbitalRails>();
+            if (rails != null && rails.IsOnRails)
+            {
+                rails.CaptureState(out bool onRails, out double[] elements, out string parentName);
+                entry.onRails = onRails;
+                entry.orbitElements = elements;
+                entry.orbitParent = parentName;
+            }
+
+            var routeBook = grid.GetComponent<VoxelEngine.Navigation.RouteBook>();
+            if (routeBook != null && routeBook.Count > 0)
+            {
+                var shelf = routeBook.Snapshot();
+                for (int r = 0; r < shelf.Count; r++)
                 {
-                    var shelf = routeBook.Snapshot();
-                    for (int r = 0; r < shelf.Count; r++)
+                    var route = shelf[r];
+                    var savedRoute = new SavedRoute { name = route.routeName, speedProfile = route.speedProfileIndex,
+                        travelMode = (int)route.travelMode, sceneCoordinates = route.sceneCoordinates };
+                    if (route.waypoints != null)
                     {
-                        var route = shelf[r];
-                        var savedRoute = new SavedRoute { name = route.routeName, speedProfile = route.speedProfileIndex,
-                            travelMode = (int)route.travelMode, sceneCoordinates = route.sceneCoordinates };
-                        if (route.waypoints != null)
+                        for (int w = 0; w < route.waypoints.Count; w++)
                         {
-                            for (int w = 0; w < route.waypoints.Count; w++)
+                            var wp = route.waypoints[w];
+                            savedRoute.waypoints.Add(new SavedWaypoint
                             {
-                                var wp = route.waypoints[w];
-                                savedRoute.waypoints.Add(new SavedWaypoint
-                                {
-                                    xKm = wp.positionKm.x, yKm = wp.positionKm.y, zKm = wp.positionKm.z,
-                                    bodyId = wp.bodyId, label = wp.label, waymarkName = wp.waymarkName,
-                                    // Additive: a pinned point without its offset would reload as a
-                                    // point inside the planet.
-                                    offXKm = wp.anchorOffsetKm.x, offYKm = wp.anchorOffsetKm.y,
-                                    offZKm = wp.anchorOffsetKm.z,
-                                });
-                            }
+                                xKm = wp.positionKm.x, yKm = wp.positionKm.y, zKm = wp.positionKm.z,
+                                bodyId = wp.bodyId, label = wp.label, waymarkName = wp.waymarkName,
+                                // Additive: a pinned point without its offset would reload as a
+                                // point inside the planet.
+                                offXKm = wp.anchorOffsetKm.x, offYKm = wp.anchorOffsetKm.y,
+                                offZKm = wp.anchorOffsetKm.z,
+                            });
                         }
-                        entry.routes.Add(savedRoute);
                     }
+                    entry.routes.Add(savedRoute);
+                }
+            }
+
+            // Additive 9.35.0: the ship's armed loop. A loop that was mid-service is written down as
+            // *paused at the same leg*: the schedule survives, the flight does not resume at speed.
+            var autopilot = grid.GetComponent<VoxelEngine.Navigation.GridRouteAutopilot>();
+            if (autopilot != null && autopilot.IsArmed)
+            {
+                entry.loops.Add(new SavedRouteLoop
+                {
+                    routeName = autopilot.routeName ?? string.Empty,
+                    startWaymark = autopilot.startWaymark ?? string.Empty,
+                    endWaymark = autopilot.endWaymark ?? string.Empty,
+                    mode = (int)autopilot.mode,
+                    fixedRuns = autopilot.fixedRuns,
+                    runsCompleted = autopilot.RunsCompleted,
+                    targetCharge01 = autopilot.targetCharge01,
+                    targetFuel01 = autopilot.targetFuel01,
+                    targetHydrogen01 = autopilot.targetHydrogen01,
+                    minimumReserve01 = autopilot.minimumReserve01,
+                    haltOnWorstBlockHurt01 = autopilot.haltOnWorstBlockHurt01,
+                    stopWhenCargoFull = autopilot.stopWhenCargoFull,
+                    stopWhenCargoEmpty = autopilot.stopWhenCargoEmpty,
+                });
+            }
+            if (grid.Body != null)
+            {
+                entry.velocity = grid.Body.linearVelocity;
+                entry.angularVelocity = grid.Body.angularVelocity;
+            }
+
+            // ── 10.1.0: anchor the grid to the body it belongs to ──────────────
+            // Without this a hull reloads at a scene coordinate that only described
+            // its place in the frame the save was written in: after the system has run
+            // on, or after a frame switch, that coordinate can be thousands of
+            // kilometres away from where the ship was parked — or inside a planet.
+            // The scene pose stays in the file as the fallback and the diagnostic.
+            CaptureGridBodyAnchor(grid, entry);
+
+            foreach (var block in grid.AllBlocks)
+            {
+                if (block == null) continue;
+                var sourceItem = ResolveGridSourceItem(block);
+                if (sourceItem == null || string.IsNullOrEmpty(sourceItem.itemId))
+                {
+                    Debug.LogWarning($"[WorldState] Skipped grid block '{block.name}' because its source item could not be identified safely.");
+                    continue;
                 }
 
-                // Additive 9.35.0: the ship's armed loop. A loop that was mid-service is written down as
-                // *paused at the same leg*: the schedule survives, the flight does not resume at speed.
-                var autopilot = grid.GetComponent<VoxelEngine.Navigation.GridRouteAutopilot>();
-                if (autopilot != null && autopilot.IsArmed)
+                var savedBlock = new SavedGridBlock
                 {
-                    entry.loops.Add(new SavedRouteLoop
+                    itemId = sourceItem.itemId,
+                    localRotation = block.transform.localRotation,
+                    // Exact pose: ground-lifted machine bottoms and port-centred
+                    // pipe/shaft snaps must restore identically after save/load.
+                    hasLocalPose = true,
+                    localPosition = block.transform.localPosition,
+                    currentHP = block.currentHP,
+                    enabled = block.Enabled,
+                    isPrecision = block.IsPrecisionAttachment,
+                    gridPos = block.GridPos,
+                    precisionPos = block.PrecisionGridPos,
+                    precisionHostPos = block.PrecisionHostGridPos,
+                    container = TryFindContainer(block.gameObject)
+                };
+
+                if (block is GridSatellitePayload payloadBlock)
+                {
+                    // The climate directive is a standing order the player gave, so it
+                    // must survive a reload rather than silently reverting to Monitor.
+                    savedBlock.hasSatellitePayloadState = true;
+                    savedBlock.satelliteDirective = (int)payloadBlock.Directive;
+                }
+                else if (block is VoxelEngine.Gas.GasVent ventBlock)
+                {
+                    // Louvre position and the lifetime counter are the only two things
+                    // a vent remembers; the gas itself is already gone.
+                    savedBlock.hasGasVentState = true;
+                    savedBlock.gasVentOpen = ventBlock.open;
+                    savedBlock.gasVentDumped = ventBlock.TotalDumped;
+                    savedBlock.hasVentilationScaleState = true;
+                    savedBlock.ventilationAutoScale = ventBlock.autoScaleFlow;
+                }
+                else if (block is VoxelEngine.Gas.GridFlareStack flareBlock)
+                {
+                    savedBlock.hasFlareStackState = true;
+                    savedBlock.flareStackOpen = flareBlock.open;
+                    savedBlock.flareStackRecovery = flareBlock.wasteHeatRecovery;
+                    savedBlock.flareStackGasDumped = flareBlock.TotalGasBurned;
+                    savedBlock.flareStackLiquidDumped = flareBlock.TotalLiquidBurned;
+                }
+                else if (block is VoxelEngine.Maritime.GridMaritimeEngine airModeEngine)
+                {
+                    // Which policy the engine follows when its plumbed line runs dry is a
+                    // player decision, so it survives a reload like any other setting.
+                    savedBlock.hasEngineAirModeState = true;
+                    savedBlock.engineAirFallback = airModeEngine.allowAirFallbackOnStarvedLine;
+                }
+
+                if (block is VoxelEngine.GridSystem.GridTrainScheduleBlock scheduleBlock)
+                {
+                    // The service pattern is the player's standing order to the train;
+                    // losing it to a reload would silently turn a scheduled line back
+                    // into a hand-driven one.
+                    savedBlock.hasTrainScheduleState = true;
+                    savedBlock.trainScheduleJson = scheduleBlock.ScheduleJson;
+                    savedBlock.trainScheduleIndex = scheduleBlock.CurrentIndex;
+                }
+
+                if (block is VoxelEngine.GridSystem.GridSteamEngine engineBlock)
+                {
+                    savedBlock.hasSteamEngineState = true;
+                    savedBlock.steamEngineWater = engineBlock.waterStored;
+                    savedBlock.steamEngineFiring = engineBlock.firing;
+                }
+
+                if (block is VoxelEngine.GridSystem.GridWheel hubBlock)
+                {
+                    // 13.0.0: a hub remembers which tire is bolted to it. The tire is an
+                    // attachment, not a lattice block, so it is not in AllBlocks and would
+                    // otherwise vanish on reload while the hub came back bare.
+                    savedBlock.hasWheelHubState = true;
+                    savedBlock.wheelTireItemId = hubBlock.MountedTireItem != null
+                        ? hubBlock.MountedTireItem.itemId : string.Empty;
+                    savedBlock.wheelMountSide = (int)hubBlock.mountSide;
+                    savedBlock.wheelSizeClass = (int)hubBlock.sizeClass;
+                    savedBlock.wheelSteerable = hubBlock.isSteerable;
+                    savedBlock.wheelSuspensionStrength = hubBlock.suspensionStrength;
+                    savedBlock.wheelRestLength = hubBlock.restLength;
+                    savedBlock.wheelTravel = hubBlock.suspensionLength;
+                    savedBlock.wheelTread01 = hubBlock.Tire != null ? hubBlock.Tire.tread01 : 1f;
+                }
+
+                if (block is VoxelEngine.GridSystem.GridRailTruck truckBlock)
+                {
+                    // The snap policy is a standing decision about a parked train;
+                    // a reload must not silently re-enable or disable it.
+                    savedBlock.hasRailTruckState = true;
+                    savedBlock.truckAutoSnap = truckBlock.autoSnap;
+                }
+
+                var gridDisplay = block.GetComponent<VoxelEngine.Building.RailDisplayScreen>();
+                if (gridDisplay != null)
+                {
+                    savedBlock.hasGridDisplayState = true;
+                    savedBlock.gridDisplayKind = (int)gridDisplay.Kind;
+                    savedBlock.gridDisplaySource = (int)gridDisplay.Source;
+                    savedBlock.gridDisplayCustomText = gridDisplay.customText ?? "";
+                }
+                else if (block is GridGasTank gasTankBlock)
+                {
+                    savedBlock.hasGasTankState = true;
+                    savedBlock.gasTankType = (int)gasTankBlock.gasType;
+                    savedBlock.gasTankStored = gasTankBlock.stored;
+                    savedBlock.gasTankMode = (int)gasTankBlock.mode;
+                }
+                else if (block is GridLiquidTank liquidTankBlock)
+                {
+                    savedBlock.hasLiquidTankState = true;
+                    savedBlock.liquidTankType = (int)liquidTankBlock.liquidType;
+                    savedBlock.liquidTankStored = liquidTankBlock.stored;
+                    savedBlock.liquidTankMode = (int)liquidTankBlock.mode;
+                }
+
+                if (block is VoxelEngine.Thermal.GridHeatshield heatshield)
+                {
+                    savedBlock.hasHeatshieldState = true;
+                    savedBlock.heatshieldAblator = heatshield.ablatorRemaining;
+                }
+
+                if (block is VoxelEngine.Pressure.GridAirVent autoVent
+                    || block is VoxelEngine.Pressure.GridExhaustScrubber autoScrub
+                    || block is VoxelEngine.Gas.GasVent autoGas)
+                {
+                    // How hard a ventilation unit is allowed to work is a player decision
+                    // taken on the panel, and on the scrubber it doubles as the rating of a
+                    // gas line that no longer exists in the save, so both survive a reload.
+                    savedBlock.hasVentilationScaleState = true;
+                    savedBlock.ventilationAutoScale = block is VoxelEngine.Pressure.GridAirVent av
+                        ? av.autoScaleFlow : true;
+                    savedBlock.ventilationSupplyFlow = block is VoxelEngine.Pressure.GridExhaustScrubber as2
+                        ? as2.supplyFlowLitresPerSecond : 0f;
+                }
+
+                if (block is GridBattery gridBattery)
+                {
+                    savedBlock.hasGridBatteryState = true;
+                    savedBlock.gridBatteryStoredWh = gridBattery.storedWh;
+                    savedBlock.gridBatteryMode = (int)gridBattery.mode;
+                }
+
+                if (block is GridWarpDrive warpDrive)
+                {
+                    savedBlock.hasWarpDriveState = true;
+                    savedBlock.warpStoredWh = warpDrive.warpStoredWh;
+                    savedBlock.warpRecharging = warpDrive.recharging;
+                    savedBlock.warpCooldown01 = warpDrive.Cooldown01;
+                }
+
+                if (block is GridWarpGate warpGate)
+                {
+                    savedBlock.hasWarpGateState = true;
+                    savedBlock.warpGateCharge01 = warpGate.Charge01;
+                    savedBlock.warpGateCooldown01 = warpGate.Cooldown01;
+                    savedBlock.warpGatePairingCode = warpGate.pairingCode;
+                }
+
+                if (block is VoxelEngine.Maritime.GridGearbox gearbox)
+                {
+                    savedBlock.hasGearboxState = true;
+                    savedBlock.gearboxRatio = gearbox.EffectiveRatio;
+                    savedBlock.gearboxSelectedGear = gearbox.selectedGear;
+                }
+
+                if (block is GridCryobed cryoBlock)
+                {
+                    savedBlock.customName = cryoBlock.blockName;
+                    savedBlock.cryobedClaimed = cryoBlock.claimedByLocalPlayer;
+                    savedBlock.cryobedOxygen = cryoBlock.oxygenStored;
+                }
+
+                var shape = block.GetComponent<GridShapeVariantBlock>();
+                if (shape != null)
+                {
+                    savedBlock.hasShapeVariant = true;
+                    savedBlock.shapeVariant = (int)shape.Variant;
+                }
+
+                // Existing machine, screen, and lighting state is deliberately
+                // stored through the same tested payload used by static blocks.
+                savedBlock.runtime = new SavedPlacedBlock();
+                CaptureFactoryRuntime(block.gameObject, savedBlock.runtime);
+                entry.blocks.Add(savedBlock);
+            }
+
+            // Belts are logical links rather than blocks, so they live on the
+            // grid payload and restore after their shaft endpoints exist.
+            var belts = grid.GetComponent<VoxelEngine.Maritime.MechanicalBeltNetwork>();
+            if (belts != null)
+            {
+                belts.PruneMissingEndpoints();
+                foreach (var link in belts.Links)
+                {
+                    entry.mechanicalBelts.Add(new SavedMechanicalBelt
                     {
-                        routeName = autopilot.routeName ?? string.Empty,
-                        startWaymark = autopilot.startWaymark ?? string.Empty,
-                        endWaymark = autopilot.endWaymark ?? string.Empty,
-                        mode = (int)autopilot.mode,
-                        fixedRuns = autopilot.fixedRuns,
-                        runsCompleted = autopilot.RunsCompleted,
-                        targetCharge01 = autopilot.targetCharge01,
-                        targetFuel01 = autopilot.targetFuel01,
-                        targetHydrogen01 = autopilot.targetHydrogen01,
-                        minimumReserve01 = autopilot.minimumReserve01,
-                        haltOnWorstBlockHurt01 = autopilot.haltOnWorstBlockHurt01,
-                        stopWhenCargoFull = autopilot.stopWhenCargoFull,
-                        stopWhenCargoEmpty = autopilot.stopWhenCargoEmpty,
+                        endpointA = link.endpointA,
+                        endpointB = link.endpointB
                     });
                 }
-                if (grid.Body != null)
-                {
-                    entry.velocity = grid.Body.linearVelocity;
-                    entry.angularVelocity = grid.Body.angularVelocity;
-                }
-
-                // ── 10.1.0: anchor the grid to the body it belongs to ──────────────
-                // Without this a hull reloads at a scene coordinate that only described
-                // its place in the frame the save was written in: after the system has run
-                // on, or after a frame switch, that coordinate can be thousands of
-                // kilometres away from where the ship was parked — or inside a planet.
-                // The scene pose stays in the file as the fallback and the diagnostic.
-                CaptureGridBodyAnchor(grid, entry);
-
-                foreach (var block in grid.AllBlocks)
-                {
-                    if (block == null) continue;
-                    var sourceItem = ResolveGridSourceItem(block);
-                    if (sourceItem == null || string.IsNullOrEmpty(sourceItem.itemId))
-                    {
-                        Debug.LogWarning($"[WorldState] Skipped grid block '{block.name}' because its source item could not be identified safely.");
-                        continue;
-                    }
-
-                    var savedBlock = new SavedGridBlock
-                    {
-                        itemId = sourceItem.itemId,
-                        localRotation = block.transform.localRotation,
-                        // Exact pose: ground-lifted machine bottoms and port-centred
-                        // pipe/shaft snaps must restore identically after save/load.
-                        hasLocalPose = true,
-                        localPosition = block.transform.localPosition,
-                        currentHP = block.currentHP,
-                        enabled = block.Enabled,
-                        isPrecision = block.IsPrecisionAttachment,
-                        gridPos = block.GridPos,
-                        precisionPos = block.PrecisionGridPos,
-                        precisionHostPos = block.PrecisionHostGridPos,
-                        container = TryFindContainer(block.gameObject)
-                    };
-
-                    if (block is GridSatellitePayload payloadBlock)
-                    {
-                        // The climate directive is a standing order the player gave, so it
-                        // must survive a reload rather than silently reverting to Monitor.
-                        savedBlock.hasSatellitePayloadState = true;
-                        savedBlock.satelliteDirective = (int)payloadBlock.Directive;
-                    }
-                    else if (block is VoxelEngine.Gas.GasVent ventBlock)
-                    {
-                        // Louvre position and the lifetime counter are the only two things
-                        // a vent remembers; the gas itself is already gone.
-                        savedBlock.hasGasVentState = true;
-                        savedBlock.gasVentOpen = ventBlock.open;
-                        savedBlock.gasVentDumped = ventBlock.TotalDumped;
-                        savedBlock.hasVentilationScaleState = true;
-                        savedBlock.ventilationAutoScale = ventBlock.autoScaleFlow;
-                    }
-                    else if (block is VoxelEngine.Gas.GridFlareStack flareBlock)
-                    {
-                        savedBlock.hasFlareStackState = true;
-                        savedBlock.flareStackOpen = flareBlock.open;
-                        savedBlock.flareStackRecovery = flareBlock.wasteHeatRecovery;
-                        savedBlock.flareStackGasDumped = flareBlock.TotalGasBurned;
-                        savedBlock.flareStackLiquidDumped = flareBlock.TotalLiquidBurned;
-                    }
-                    else if (block is VoxelEngine.Maritime.GridMaritimeEngine airModeEngine)
-                    {
-                        // Which policy the engine follows when its plumbed line runs dry is a
-                        // player decision, so it survives a reload like any other setting.
-                        savedBlock.hasEngineAirModeState = true;
-                        savedBlock.engineAirFallback = airModeEngine.allowAirFallbackOnStarvedLine;
-                    }
-
-                    if (block is VoxelEngine.GridSystem.GridTrainScheduleBlock scheduleBlock)
-                    {
-                        // The service pattern is the player's standing order to the train;
-                        // losing it to a reload would silently turn a scheduled line back
-                        // into a hand-driven one.
-                        savedBlock.hasTrainScheduleState = true;
-                        savedBlock.trainScheduleJson = scheduleBlock.ScheduleJson;
-                        savedBlock.trainScheduleIndex = scheduleBlock.CurrentIndex;
-                    }
-
-                    if (block is VoxelEngine.GridSystem.GridSteamEngine engineBlock)
-                    {
-                        savedBlock.hasSteamEngineState = true;
-                        savedBlock.steamEngineWater = engineBlock.waterStored;
-                        savedBlock.steamEngineFiring = engineBlock.firing;
-                    }
-
-                    if (block is VoxelEngine.GridSystem.GridWheel hubBlock)
-                    {
-                        // 13.0.0: a hub remembers which tire is bolted to it. The tire is an
-                        // attachment, not a lattice block, so it is not in AllBlocks and would
-                        // otherwise vanish on reload while the hub came back bare.
-                        savedBlock.hasWheelHubState = true;
-                        savedBlock.wheelTireItemId = hubBlock.MountedTireItem != null
-                            ? hubBlock.MountedTireItem.itemId : string.Empty;
-                        savedBlock.wheelMountSide = (int)hubBlock.mountSide;
-                        savedBlock.wheelSizeClass = (int)hubBlock.sizeClass;
-                        savedBlock.wheelSteerable = hubBlock.isSteerable;
-                        savedBlock.wheelSuspensionStrength = hubBlock.suspensionStrength;
-                        savedBlock.wheelRestLength = hubBlock.restLength;
-                        savedBlock.wheelTravel = hubBlock.suspensionLength;
-                        savedBlock.wheelTread01 = hubBlock.Tire != null ? hubBlock.Tire.tread01 : 1f;
-                    }
-
-                    if (block is VoxelEngine.GridSystem.GridRailTruck truckBlock)
-                    {
-                        // The snap policy is a standing decision about a parked train;
-                        // a reload must not silently re-enable or disable it.
-                        savedBlock.hasRailTruckState = true;
-                        savedBlock.truckAutoSnap = truckBlock.autoSnap;
-                    }
-
-                    var gridDisplay = block.GetComponent<VoxelEngine.Building.RailDisplayScreen>();
-                    if (gridDisplay != null)
-                    {
-                        savedBlock.hasGridDisplayState = true;
-                        savedBlock.gridDisplayKind = (int)gridDisplay.Kind;
-                        savedBlock.gridDisplaySource = (int)gridDisplay.Source;
-                        savedBlock.gridDisplayCustomText = gridDisplay.customText ?? "";
-                    }
-                    else if (block is GridGasTank gasTankBlock)
-                    {
-                        savedBlock.hasGasTankState = true;
-                        savedBlock.gasTankType = (int)gasTankBlock.gasType;
-                        savedBlock.gasTankStored = gasTankBlock.stored;
-                        savedBlock.gasTankMode = (int)gasTankBlock.mode;
-                    }
-                    else if (block is GridLiquidTank liquidTankBlock)
-                    {
-                        savedBlock.hasLiquidTankState = true;
-                        savedBlock.liquidTankType = (int)liquidTankBlock.liquidType;
-                        savedBlock.liquidTankStored = liquidTankBlock.stored;
-                        savedBlock.liquidTankMode = (int)liquidTankBlock.mode;
-                    }
-
-                    if (block is VoxelEngine.Thermal.GridHeatshield heatshield)
-                    {
-                        savedBlock.hasHeatshieldState = true;
-                        savedBlock.heatshieldAblator = heatshield.ablatorRemaining;
-                    }
-
-                    if (block is VoxelEngine.Pressure.GridAirVent autoVent
-                        || block is VoxelEngine.Pressure.GridExhaustScrubber autoScrub
-                        || block is VoxelEngine.Gas.GasVent autoGas)
-                    {
-                        // How hard a ventilation unit is allowed to work is a player decision
-                        // taken on the panel, and on the scrubber it doubles as the rating of a
-                        // gas line that no longer exists in the save, so both survive a reload.
-                        savedBlock.hasVentilationScaleState = true;
-                        savedBlock.ventilationAutoScale = block is VoxelEngine.Pressure.GridAirVent av
-                            ? av.autoScaleFlow : true;
-                        savedBlock.ventilationSupplyFlow = block is VoxelEngine.Pressure.GridExhaustScrubber as2
-                            ? as2.supplyFlowLitresPerSecond : 0f;
-                    }
-
-                    if (block is GridBattery gridBattery)
-                    {
-                        savedBlock.hasGridBatteryState = true;
-                        savedBlock.gridBatteryStoredWh = gridBattery.storedWh;
-                        savedBlock.gridBatteryMode = (int)gridBattery.mode;
-                    }
-
-                    if (block is GridWarpDrive warpDrive)
-                    {
-                        savedBlock.hasWarpDriveState = true;
-                        savedBlock.warpStoredWh = warpDrive.warpStoredWh;
-                        savedBlock.warpRecharging = warpDrive.recharging;
-                        savedBlock.warpCooldown01 = warpDrive.Cooldown01;
-                    }
-
-                    if (block is GridWarpGate warpGate)
-                    {
-                        savedBlock.hasWarpGateState = true;
-                        savedBlock.warpGateCharge01 = warpGate.Charge01;
-                        savedBlock.warpGateCooldown01 = warpGate.Cooldown01;
-                        savedBlock.warpGatePairingCode = warpGate.pairingCode;
-                    }
-
-                    if (block is VoxelEngine.Maritime.GridGearbox gearbox)
-                    {
-                        savedBlock.hasGearboxState = true;
-                        savedBlock.gearboxRatio = gearbox.EffectiveRatio;
-                        savedBlock.gearboxSelectedGear = gearbox.selectedGear;
-                    }
-
-                    if (block is GridCryobed cryoBlock)
-                    {
-                        savedBlock.customName = cryoBlock.blockName;
-                        savedBlock.cryobedClaimed = cryoBlock.claimedByLocalPlayer;
-                        savedBlock.cryobedOxygen = cryoBlock.oxygenStored;
-                    }
-
-                    var shape = block.GetComponent<GridShapeVariantBlock>();
-                    if (shape != null)
-                    {
-                        savedBlock.hasShapeVariant = true;
-                        savedBlock.shapeVariant = (int)shape.Variant;
-                    }
-
-                    // Existing machine, screen, and lighting state is deliberately
-                    // stored through the same tested payload used by static blocks.
-                    savedBlock.runtime = new SavedPlacedBlock();
-                    CaptureFactoryRuntime(block.gameObject, savedBlock.runtime);
-                    entry.blocks.Add(savedBlock);
-                }
-
-                // Belts are logical links rather than blocks, so they live on the
-                // grid payload and restore after their shaft endpoints exist.
-                var belts = grid.GetComponent<VoxelEngine.Maritime.MechanicalBeltNetwork>();
-                if (belts != null)
-                {
-                    belts.PruneMissingEndpoints();
-                    foreach (var link in belts.Links)
-                    {
-                        entry.mechanicalBelts.Add(new SavedMechanicalBelt
-                        {
-                            endpointA = link.endpointA,
-                            endpointB = link.endpointB
-                        });
-                    }
-                }
-
-                // Sealed-room atmosphere: the oxygen charge plus whatever heat and foul
-                // gas the volume has trapped (9.32.0). Room shapes are re-solved from the
-                // restored hull, so a rebuilt ship stays valid.
-                var pressure = grid.GetComponent<VoxelEngine.Pressure.GridPressureSystem>();
-                if (pressure != null)
-                {
-                    foreach (var room in pressure.Rooms)
-                    {
-                        if (room == null) continue;
-                        bool hasCharge = room.OxygenLitres > 0.01f;
-                        bool hasAtmosphere = room.IsSealed
-                            && (room.HeatLoadC > 0.01f || room.ExhaustHeatC > 0.01f);
-                        if (!hasCharge && !hasAtmosphere) continue;
-                        entry.roomCharges.Add(new SavedRoomCharge
-                        {
-                            anchor = room.Anchor,
-                            oxygenLitres = room.OxygenLitres,
-                            heatLoadC = room.IsSealed ? room.HeatLoadC : 0f,
-                            exhaustLoadC = room.IsSealed ? room.ExhaustHeatC : 0f
-                        });
-                    }
-                }
-
-                save.grids.Add(entry);
             }
+
+            // Sealed-room atmosphere: the oxygen charge plus whatever heat and foul
+            // gas the volume has trapped (9.32.0). Room shapes are re-solved from the
+            // restored hull, so a rebuilt ship stays valid.
+            var pressure = grid.GetComponent<VoxelEngine.Pressure.GridPressureSystem>();
+            if (pressure != null)
+            {
+                foreach (var room in pressure.Rooms)
+                {
+                    if (room == null) continue;
+                    bool hasCharge = room.OxygenLitres > 0.01f;
+                    bool hasAtmosphere = room.IsSealed
+                        && (room.HeatLoadC > 0.01f || room.ExhaustHeatC > 0.01f);
+                    if (!hasCharge && !hasAtmosphere) continue;
+                    entry.roomCharges.Add(new SavedRoomCharge
+                    {
+                        anchor = room.Anchor,
+                        oxygenLitres = room.OxygenLitres,
+                        heatLoadC = room.IsSealed ? room.HeatLoadC : 0f,
+                        exhaustLoadC = room.IsSealed ? room.ExhaustHeatC : 0f
+                    });
+                }
+            }
+
+            return entry;
         }
 
         /// <summary>
@@ -2165,193 +2217,204 @@ namespace VoxelEngine.Persistence
             if (save.grids == null || save.grids.Count == 0) return 0;
 
             foreach (var savedGrid in save.grids)
-            {
-                if (savedGrid == null || savedGrid.blocks == null || savedGrid.blocks.Count == 0) continue;
-                if (!System.Enum.IsDefined(typeof(GridSize), savedGrid.gridSize))
-                {
-                    Debug.LogWarning("[WorldState] Skipped a movable grid with an unknown grid size.");
-                    continue;
-                }
-
-                // 10.1.0: the anchor decides where the hull comes back. A grid with no anchor
-                // — every save written before this round — resolves to its saved scene pose.
-                ResolveSavedGridPose(savedGrid, out Vector3 gridPosition, out Quaternion gridRotation, out bool fromAnchor);
-                if (fromAnchor) anchored++;
-
-                var grid = GridEntity.Create(gridPosition, (GridSize)savedGrid.gridSize);
-                grid.name = "Grid (restored)";
-                grid.gravityScale = savedGrid.gravityScale > 0f ? savedGrid.gravityScale : grid.gravityScale;
-                grid.DampenersOn = savedGrid.dampenersOn;
-                grid.SetWheelParkingBrake(savedGrid.wheelParkingBrake);
-                grid.RestorePersistentPose(gridPosition, gridRotation,
-                    savedGrid.wheelParkingBrake ? Vector3.zero : savedGrid.velocity,
-                    savedGrid.wheelParkingBrake ? Vector3.zero : savedGrid.angularVelocity);
-                grid.HydrogenStored = Mathf.Max(0f, savedGrid.hydrogenStored);
-                grid.OxygenStored = Mathf.Max(0f, savedGrid.oxygenStored);
-
-                // Structural blocks must be present before Detail blocks can restore
-                // their host-cell relationship and attached pipe topology.
-                RestoreGridBlocks(grid, savedGrid.blocks, false);
-                RestoreGridBlocks(grid, savedGrid.blocks, true);
-
-                // Construct registry (11.13.0). Only attach the component when the save
-                // actually carries an identity, so legacy grids stay componentless.
-                if (!string.IsNullOrEmpty(savedGrid.identityName) || savedGrid.identityClass != 0)
-                {
-                    var identity = VoxelEngine.GridSystem.GridIdentity.Ensure(grid);
-                    identity.SetDisplayName(savedGrid.identityName);
-                    identity.SetGridClass((VoxelEngine.GridSystem.GridClass)savedGrid.identityClass);
-                }
-
-                // Restore a committed orbit last: the blocks must exist first so the grid
-                // has its real mass and bounds before it is parked kinematic on rails.
-                if (savedGrid.hasRailBogie)
-                {
-                    // Deferred a frame: the rail track is restored as placed blocks by this
-                    // same load pass, so latching now would find an empty graph.
-                    StartCoroutine(RestoreRailBogieNextFrame(grid, savedGrid.railPowered, savedGrid.railReversed));
-                }
-
-                if (savedGrid.onRails && savedGrid.orbitElements != null && savedGrid.orbitElements.Length >= 7)
-                {
-                    var rails = grid.gameObject.AddComponent<VoxelEngine.Cosmos.OrbitalRails>();
-                    rails.RestoreState(savedGrid.orbitElements, savedGrid.orbitParent);
-                }
-
-                // Route books restore onto the grid component, created here if the save has one
-                // and the ship somehow lost its recorder: losing a run because a block was
-                // uninstalled would be a worse outcome than an orphaned shelf.
-                if (savedGrid.routes != null && savedGrid.routes.Count > 0)
-                {
-                    var routeBook = VoxelEngine.Navigation.RouteBook.For(grid, create: true);
-                    if (routeBook != null)
-                    {
-                        var restored = new List<VoxelEngine.Navigation.ShipRoute>(savedGrid.routes.Count);
-                        for (int r = 0; r < savedGrid.routes.Count; r++)
-                        {
-                            var sr = savedGrid.routes[r];
-                            if (sr == null || string.IsNullOrWhiteSpace(sr.name)) continue;
-                            var route = new VoxelEngine.Navigation.ShipRoute
-                            {
-                                routeName = sr.name,
-                                travelMode = (VoxelEngine.Navigation.RouteTravelMode)sr.travelMode,
-                                sceneCoordinates = sr.sceneCoordinates,
-                                speedProfileIndex = Mathf.Clamp(sr.speedProfile, 0, 2),
-                            };
-                            if (sr.waypoints != null)
-                            {
-                                for (int w = 0; w < sr.waypoints.Count; w++)
-                                {
-                                    var sw = sr.waypoints[w];
-                                    if (sw == null) continue;
-                                    var restoredWp = new VoxelEngine.Navigation.RouteWaypoint(
-                                        new Unity.Mathematics.double3(sw.xKm, sw.yKm, sw.zKm), null, sw.label);
-                                    if (!string.IsNullOrWhiteSpace(sw.waymarkName))
-                                        restoredWp.waymarkName = sw.waymarkName;
-                                    if (!string.IsNullOrWhiteSpace(sw.bodyId))
-                                    {
-                                        // The anchor is re-derived from the offset rather than trusted
-                                        // from the record: the registry's live position is the truth,
-                                        // and a body whose own place changed shape still gets a sane
-                                        // point relative to it.
-                                        var reg = VoxelEngine.Cosmos.CosmicRegistry.Instance;
-                                        var host = VoxelEngine.Navigation.RouteWaypoint.FindBody(reg, sw.bodyId);
-                                        if (host != null)
-                                        {
-                                            restoredWp.positionKm = reg.CosmicPositionOf(host)
-                                                + new Unity.Mathematics.double3(sw.offXKm, sw.offYKm, sw.offZKm);
-                                            restoredWp.bodyId = sw.bodyId;
-                                            restoredWp.anchorOffsetKm = new Unity.Mathematics.double3(
-                                                sw.offXKm, sw.offYKm, sw.offZKm);
-                                        }
-                                        else
-                                        {
-                                            restoredWp.bodyId = sw.bodyId;
-                                            restoredWp.anchorOffsetKm = new Unity.Mathematics.double3(
-                                                sw.offXKm, sw.offYKm, sw.offZKm);
-                                        }
-                                    }
-                                    route.waypoints.Add(restoredWp);
-                                }
-                            }
-                            if (route.waypoints.Count > 0) restored.Add(route);
-                        }
-                        routeBook.Restore(restored);
-                    }
-                }
-
-                // Additive 9.35.0: reload the armed loop. Restored *paused*, on purpose: a schedule the
-                // player set before quitting should never resume a burn on its own the moment the world
-                // loads. One button press in the panel, and the ship has its job back.
-                if (savedGrid.loops != null && savedGrid.loops.Count > 0)
-                {
-                    var savedLoop = savedGrid.loops[0];
-                    if (savedLoop != null)
-                    {
-                        var ap = grid.GetComponent<VoxelEngine.Navigation.GridRouteAutopilot>();
-                        if (ap == null) ap = grid.gameObject.AddComponent<VoxelEngine.Navigation.GridRouteAutopilot>();
-                        ap.routeName = savedLoop.routeName ?? string.Empty;
-                        ap.startWaymark = savedLoop.startWaymark ?? string.Empty;
-                        ap.endWaymark = savedLoop.endWaymark ?? string.Empty;
-                        ap.mode = (VoxelEngine.Navigation.AutoRunMode)Mathf.Clamp(savedLoop.mode, 0, 2);
-                        ap.fixedRuns = Mathf.Max(1, savedLoop.fixedRuns);
-                        ap.targetCharge01 = Mathf.Clamp01(savedLoop.targetCharge01);
-                        ap.targetFuel01 = Mathf.Clamp01(savedLoop.targetFuel01);
-                        ap.targetHydrogen01 = Mathf.Clamp01(savedLoop.targetHydrogen01);
-                        ap.minimumReserve01 = Mathf.Clamp01(savedLoop.minimumReserve01);
-                        ap.haltOnWorstBlockHurt01 = Mathf.Clamp01(savedLoop.haltOnWorstBlockHurt01);
-                        ap.stopWhenCargoFull = savedLoop.stopWhenCargoFull;
-                        ap.stopWhenCargoEmpty = savedLoop.stopWhenCargoEmpty;
-                        ap.RestorePaused(savedLoop.runsCompleted);
-                    }
-                }
-
-                if (savedGrid.mechanicalBelts != null && savedGrid.mechanicalBelts.Count > 0)
-                {
-                    var links = new List<VoxelEngine.Maritime.MechanicalBeltLink>(savedGrid.mechanicalBelts.Count);
-                    foreach (var savedBelt in savedGrid.mechanicalBelts)
-                    {
-                        if (savedBelt == null) continue;
-                        links.Add(new VoxelEngine.Maritime.MechanicalBeltLink(savedBelt.endpointA, savedBelt.endpointB));
-                    }
-                    VoxelEngine.Maritime.MechanicalBeltNetwork.GetOrAdd(grid)?.RestoreLinks(links);
-                }
-
-                if (savedGrid.roomCharges != null && savedGrid.roomCharges.Count > 0)
-                {
-                    var pressure = VoxelEngine.Pressure.GridPressureSystem.For(grid);
-                    if (pressure != null)
-                    {
-                        pressure.Solve();
-                        foreach (var charge in savedGrid.roomCharges)
-                        {
-                            if (charge == null) continue;
-                            foreach (var room in pressure.Rooms)
-                            {
-                                if (room == null || room.Anchor != charge.anchor) continue;
-                                room.OxygenLitres = Mathf.Clamp(charge.oxygenLitres, 0f, room.CapacityLitres);
-                                // Legacy saves leave both at zero: a room that never
-                                // stored an atmosphere loads as a room that has none.
-                                room.HeatLoadC = Mathf.Clamp(charge.heatLoadC, 0f,
-                                    VoxelEngine.Thermal.ThermalRules.RoomMaxRiseC);
-                                room.ExhaustHeatC = Mathf.Clamp(charge.exhaustLoadC, 0f,
-                                    VoxelEngine.Thermal.ThermalRules.RoomExhaustReferenceC);
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                grid.RecalculateMass();
-                // A powered/hydrogen-fuelled unlocked grid with dampeners on must
-                // never resume a stale serialized drift vector in space.
-                grid.StabilizeRestoredVelocityIfPossible();
-                // Colliders now exist, so resolve only the small post-load terrain
-                // interpenetration before the restore pose releases physics.
-                grid.ResolvePersistentGroundClearance();
-            }
+                if (RestoreOneGrid(savedGrid, out bool fromAnchor) != null && fromAnchor) anchored++;
 
             return anchored;
+        }
+
+        /// <summary>Rebuild ONE grid from its record. Split out of RestoreGrids in 14.25.0
+        /// so a client can apply a single grid handed to it over the network through the
+        /// exact code path that loads one from disk. Returns null when the record is
+        /// unusable. <paramref name="fromAnchor"/> reports whether the pose came from a
+        /// body anchor rather than the raw saved scene coordinate.</summary>
+        private GridEntity RestoreOneGrid(SavedGrid savedGrid, out bool fromAnchor)
+        {
+            fromAnchor = false;
+            if (savedGrid == null || savedGrid.blocks == null || savedGrid.blocks.Count == 0) return null;
+            if (!System.Enum.IsDefined(typeof(GridSize), savedGrid.gridSize))
+            {
+                Debug.LogWarning("[WorldState] Skipped a movable grid with an unknown grid size.");
+                return null;
+            }
+
+            // 10.1.0: the anchor decides where the hull comes back. A grid with no anchor
+            // — every save written before this round — resolves to its saved scene pose.
+            ResolveSavedGridPose(savedGrid, out Vector3 gridPosition, out Quaternion gridRotation, out fromAnchor);
+
+            var grid = GridEntity.Create(gridPosition, (GridSize)savedGrid.gridSize);
+            grid.name = "Grid (restored)";
+            // Claim the saved identity before anything else can mint a fresh one.
+            VoxelEngine.Networking.GridSync.Adopt(grid, savedGrid.netId);
+            grid.gravityScale = savedGrid.gravityScale > 0f ? savedGrid.gravityScale : grid.gravityScale;
+            grid.DampenersOn = savedGrid.dampenersOn;
+            grid.SetWheelParkingBrake(savedGrid.wheelParkingBrake);
+            grid.RestorePersistentPose(gridPosition, gridRotation,
+                savedGrid.wheelParkingBrake ? Vector3.zero : savedGrid.velocity,
+                savedGrid.wheelParkingBrake ? Vector3.zero : savedGrid.angularVelocity);
+            grid.HydrogenStored = Mathf.Max(0f, savedGrid.hydrogenStored);
+            grid.OxygenStored = Mathf.Max(0f, savedGrid.oxygenStored);
+
+            // Structural blocks must be present before Detail blocks can restore
+            // their host-cell relationship and attached pipe topology.
+            RestoreGridBlocks(grid, savedGrid.blocks, false);
+            RestoreGridBlocks(grid, savedGrid.blocks, true);
+
+            // Construct registry (11.13.0). Only attach the component when the save
+            // actually carries an identity, so legacy grids stay componentless.
+            if (!string.IsNullOrEmpty(savedGrid.identityName) || savedGrid.identityClass != 0)
+            {
+                var identity = VoxelEngine.GridSystem.GridIdentity.Ensure(grid);
+                identity.SetDisplayName(savedGrid.identityName);
+                identity.SetGridClass((VoxelEngine.GridSystem.GridClass)savedGrid.identityClass);
+            }
+
+            // Restore a committed orbit last: the blocks must exist first so the grid
+            // has its real mass and bounds before it is parked kinematic on rails.
+            if (savedGrid.hasRailBogie)
+            {
+                // Deferred a frame: the rail track is restored as placed blocks by this
+                // same load pass, so latching now would find an empty graph.
+                StartCoroutine(RestoreRailBogieNextFrame(grid, savedGrid.railPowered, savedGrid.railReversed));
+            }
+
+            if (savedGrid.onRails && savedGrid.orbitElements != null && savedGrid.orbitElements.Length >= 7)
+            {
+                var rails = grid.gameObject.AddComponent<VoxelEngine.Cosmos.OrbitalRails>();
+                rails.RestoreState(savedGrid.orbitElements, savedGrid.orbitParent);
+            }
+
+            // Route books restore onto the grid component, created here if the save has one
+            // and the ship somehow lost its recorder: losing a run because a block was
+            // uninstalled would be a worse outcome than an orphaned shelf.
+            if (savedGrid.routes != null && savedGrid.routes.Count > 0)
+            {
+                var routeBook = VoxelEngine.Navigation.RouteBook.For(grid, create: true);
+                if (routeBook != null)
+                {
+                    var restored = new List<VoxelEngine.Navigation.ShipRoute>(savedGrid.routes.Count);
+                    for (int r = 0; r < savedGrid.routes.Count; r++)
+                    {
+                        var sr = savedGrid.routes[r];
+                        if (sr == null || string.IsNullOrWhiteSpace(sr.name)) continue;
+                        var route = new VoxelEngine.Navigation.ShipRoute
+                        {
+                            routeName = sr.name,
+                            travelMode = (VoxelEngine.Navigation.RouteTravelMode)sr.travelMode,
+                            sceneCoordinates = sr.sceneCoordinates,
+                            speedProfileIndex = Mathf.Clamp(sr.speedProfile, 0, 2),
+                        };
+                        if (sr.waypoints != null)
+                        {
+                            for (int w = 0; w < sr.waypoints.Count; w++)
+                            {
+                                var sw = sr.waypoints[w];
+                                if (sw == null) continue;
+                                var restoredWp = new VoxelEngine.Navigation.RouteWaypoint(
+                                    new Unity.Mathematics.double3(sw.xKm, sw.yKm, sw.zKm), null, sw.label);
+                                if (!string.IsNullOrWhiteSpace(sw.waymarkName))
+                                    restoredWp.waymarkName = sw.waymarkName;
+                                if (!string.IsNullOrWhiteSpace(sw.bodyId))
+                                {
+                                    // The anchor is re-derived from the offset rather than trusted
+                                    // from the record: the registry's live position is the truth,
+                                    // and a body whose own place changed shape still gets a sane
+                                    // point relative to it.
+                                    var reg = VoxelEngine.Cosmos.CosmicRegistry.Instance;
+                                    var host = VoxelEngine.Navigation.RouteWaypoint.FindBody(reg, sw.bodyId);
+                                    if (host != null)
+                                    {
+                                        restoredWp.positionKm = reg.CosmicPositionOf(host)
+                                            + new Unity.Mathematics.double3(sw.offXKm, sw.offYKm, sw.offZKm);
+                                        restoredWp.bodyId = sw.bodyId;
+                                        restoredWp.anchorOffsetKm = new Unity.Mathematics.double3(
+                                            sw.offXKm, sw.offYKm, sw.offZKm);
+                                    }
+                                    else
+                                    {
+                                        restoredWp.bodyId = sw.bodyId;
+                                        restoredWp.anchorOffsetKm = new Unity.Mathematics.double3(
+                                            sw.offXKm, sw.offYKm, sw.offZKm);
+                                    }
+                                }
+                                route.waypoints.Add(restoredWp);
+                            }
+                        }
+                        if (route.waypoints.Count > 0) restored.Add(route);
+                    }
+                    routeBook.Restore(restored);
+                }
+            }
+
+            // Additive 9.35.0: reload the armed loop. Restored *paused*, on purpose: a schedule the
+            // player set before quitting should never resume a burn on its own the moment the world
+            // loads. One button press in the panel, and the ship has its job back.
+            if (savedGrid.loops != null && savedGrid.loops.Count > 0)
+            {
+                var savedLoop = savedGrid.loops[0];
+                if (savedLoop != null)
+                {
+                    var ap = grid.GetComponent<VoxelEngine.Navigation.GridRouteAutopilot>();
+                    if (ap == null) ap = grid.gameObject.AddComponent<VoxelEngine.Navigation.GridRouteAutopilot>();
+                    ap.routeName = savedLoop.routeName ?? string.Empty;
+                    ap.startWaymark = savedLoop.startWaymark ?? string.Empty;
+                    ap.endWaymark = savedLoop.endWaymark ?? string.Empty;
+                    ap.mode = (VoxelEngine.Navigation.AutoRunMode)Mathf.Clamp(savedLoop.mode, 0, 2);
+                    ap.fixedRuns = Mathf.Max(1, savedLoop.fixedRuns);
+                    ap.targetCharge01 = Mathf.Clamp01(savedLoop.targetCharge01);
+                    ap.targetFuel01 = Mathf.Clamp01(savedLoop.targetFuel01);
+                    ap.targetHydrogen01 = Mathf.Clamp01(savedLoop.targetHydrogen01);
+                    ap.minimumReserve01 = Mathf.Clamp01(savedLoop.minimumReserve01);
+                    ap.haltOnWorstBlockHurt01 = Mathf.Clamp01(savedLoop.haltOnWorstBlockHurt01);
+                    ap.stopWhenCargoFull = savedLoop.stopWhenCargoFull;
+                    ap.stopWhenCargoEmpty = savedLoop.stopWhenCargoEmpty;
+                    ap.RestorePaused(savedLoop.runsCompleted);
+                }
+            }
+
+            if (savedGrid.mechanicalBelts != null && savedGrid.mechanicalBelts.Count > 0)
+            {
+                var links = new List<VoxelEngine.Maritime.MechanicalBeltLink>(savedGrid.mechanicalBelts.Count);
+                foreach (var savedBelt in savedGrid.mechanicalBelts)
+                {
+                    if (savedBelt == null) continue;
+                    links.Add(new VoxelEngine.Maritime.MechanicalBeltLink(savedBelt.endpointA, savedBelt.endpointB));
+                }
+                VoxelEngine.Maritime.MechanicalBeltNetwork.GetOrAdd(grid)?.RestoreLinks(links);
+            }
+
+            if (savedGrid.roomCharges != null && savedGrid.roomCharges.Count > 0)
+            {
+                var pressure = VoxelEngine.Pressure.GridPressureSystem.For(grid);
+                if (pressure != null)
+                {
+                    pressure.Solve();
+                    foreach (var charge in savedGrid.roomCharges)
+                    {
+                        if (charge == null) continue;
+                        foreach (var room in pressure.Rooms)
+                        {
+                            if (room == null || room.Anchor != charge.anchor) continue;
+                            room.OxygenLitres = Mathf.Clamp(charge.oxygenLitres, 0f, room.CapacityLitres);
+                            // Legacy saves leave both at zero: a room that never
+                            // stored an atmosphere loads as a room that has none.
+                            room.HeatLoadC = Mathf.Clamp(charge.heatLoadC, 0f,
+                                VoxelEngine.Thermal.ThermalRules.RoomMaxRiseC);
+                            room.ExhaustHeatC = Mathf.Clamp(charge.exhaustLoadC, 0f,
+                                VoxelEngine.Thermal.ThermalRules.RoomExhaustReferenceC);
+                            break;
+                        }
+                    }
+                }
+            }
+
+            grid.RecalculateMass();
+            // A powered/hydrogen-fuelled unlocked grid with dampeners on must
+            // never resume a stale serialized drift vector in space.
+            grid.StabilizeRestoredVelocityIfPossible();
+            // Colliders now exist, so resolve only the small post-load terrain
+            // interpenetration before the restore pose releases physics.
+            grid.ResolvePersistentGroundClearance();
+            return grid;
         }
 
         private void RestoreGridBlocks(GridEntity grid, List<SavedGridBlock> blocks, bool precisionPass)
@@ -4107,6 +4170,12 @@ namespace VoxelEngine.Persistence
         }
         [Serializable] private class SavedGrid
         {
+            // Additive 14.25.0: the grid's stable network id. Saved so a grid keeps the
+            // same identity across a host restart and every client reconnect - a piece is
+            // addressed as (this id, cell), never as a world position, so the address
+            // stays valid while the ship is moving. Empty on pre-14.25.0 saves; the host
+            // mints one on load.
+            public string netId = "";
             public Vector3 pos;
             public Quaternion rot;
             public Vector3 velocity;

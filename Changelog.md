@@ -1,9 +1,39 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.24.1-dev`
+**Current Version:** `14.25.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.25.0-dev] The Same Ship
+
+**Type:** MINOR - movable grids replicate. Save-compatible: the only new saved field is a grid's network id, and a save without one simply gets one minted on load.
+
+**Milestone 9, part one.** Two decisions drive everything here, and the second one is the answer to "no funky business when flying".
+
+**A piece is addressed grid-locally, never in world space.**
+
+Every other sync in this project identifies a thing by where it is - a block at a world position, a chunk at a voxel coordinate. That works because none of those things move. A grid moves; moving is the entire point of one. While a ship is flying, "the block at (104.2, 61.8, -33.0)" names a different cell every frame, and on two machines whose physics have drifted apart it names two different cells at the same instant.
+
+So a piece is now (grid net id, integer cell). The id is stable across a save, a host restart and every reconnect; the cell never changes while the piece is attached. Both halves are exact - no floating point anywhere in an identity - so an edit sent while a ship is under full thrust lands on precisely the cell the sender meant, however far the two hulls have drifted in the meantime. The id is written to the save, which is what makes it survive a world being played offline and later hosted.
+
+**Only the host simulates a grid. Clients are told where it is.**
+
+The alternative - both machines running the same rigidbody from the same inputs and hoping they agree - cannot work, and it gets worse the longer a session runs. Rigidbody integration is not reproducible across machines, thrust depends on power which depends on a hundred block states, and any disagreement compounds because each machine feeds its own wrong position into its own next step. That is exactly the divergence that ends with one player watching a ship fly away while the other is standing on it.
+
+On a client every grid rigidbody is now kinematic and is driven purely by the host's pose stream. GridEntity's whole flight model is skipped on a client, so there is no second simulation to disagree with the first. Between packets the client dead-reckons from the last reported velocity, so a ship under thrust keeps gliding rather than stepping once per arrival; corrections are eased in over about a quarter of a second rather than snapped. An error over 25 m is cut to instead, because that is a warp jump or an origin re-anchor and easing a correction that size would look far worse than a cut. The hull is moved with MovePosition rather than a transform write, so a kinematic ship still sweeps its colliders and pushes what it touches instead of being found already inside it.
+
+**What crosses the wire**
+
+- **Structure** is the whole grid, as the exact save record the host would have written to disk. SaveGrids and RestoreGrids were split so a single grid can be built and rebuilt on its own, and the client restores a ship through the identical code path that loads one from a file. There is no second serializer that can drift out of step with the first - the same trick the per-player record uses, for the same reason. A hull is sent in 2 KB string parts and reassembled by id, so a large ship is never at the mercy of the transport's maximum message size, and a part set that is incomplete is never handed to the restore path.
+- **Pose** is position, rotation and both velocities, sent unreliably 20 times a second and only for hulls that are actually moving. A parked ship costs nothing. A lost pose is never retransmitted: it would be describing the past by the time it arrived, and the next one is already on its way.
+- Grids are sent **last** in the join catch-up, behind terrain. A ship is the heaviest single record in the game and the joiner can stand in a finished world while the fleet arrives. The phase reports itself in the catch-up log like every other.
+
+Traffic is one-way. A client does not get to tell the host where a ship is or what shape it is, so anything arriving from a client on these channels is dropped rather than relayed. The host's own local client is skipped on every send - applying a record to it would destroy and rebuild the very grid the host is simulating.
+
+Structure is resent only when a hull's shape actually changes, checked once a second against a cheap fingerprint of which cells are filled and how hurt each one is. Cargo filling up is the container poller's business and is deliberately not a reason to resend a ship. The first pass after going online records the current shapes without broadcasting anything, because the join catch-up already hands a new client every ship that existed.
+
+**Not in this part, and deliberately:** a player standing on a moving hull is not yet carried by it. That is a rider-attachment system rather than a networking one - it is equally absent in single-player today - and it is the next piece of this milestone rather than something to half-build here. Client-side piloting (a guest sitting in a cockpit and flying the ship) also waits: the pose channel is one-way on purpose until there is a control-authority handoff to go with it.
 
 ### [14.24.1-dev] Nothing Holding You Down
 

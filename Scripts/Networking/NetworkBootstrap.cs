@@ -96,6 +96,38 @@ namespace VoxelEngine.Networking
         public string Json;
     }
 
+    // ── Movable grids (14.25.0). Host -> clients, one way. ──
+    //
+    // A grid record is a whole ship, so it is sent in string PARTS rather than
+    // as one message: a large hull would otherwise be at the mercy of whatever
+    // the transport's maximum message size happens to be, and "your ship is too
+    // big to send" is not a failure mode worth shipping. Parts are reassembled
+    // by net id on the far side.
+    public struct GridRecordBroadcast : IBroadcast
+    {
+        public string NetId;
+        public int Part;
+        public int TotalParts;
+        public string Payload;
+    }
+
+    public struct GridRemovedBroadcast : IBroadcast
+    {
+        public string NetId;
+    }
+
+    /// <summary>Where a grid is, according to the host. Sent unreliably by design:
+    /// a pose that needed retransmitting would be describing the past by the time
+    /// it arrived, and the next one is already on its way.</summary>
+    public struct GridPoseBroadcast : IBroadcast
+    {
+        public string NetId;
+        public Vector3 Position;
+        public Quaternion Rotation;
+        public Vector3 Velocity;
+        public Vector3 AngularVelocity;
+    }
+
     // ── Building replication (14.4.0). Client -> server -> other clients. ──
 
     public struct PiecePlacedBroadcast : IBroadcast
@@ -375,6 +407,9 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.OnAuthenticated += OnLocalClientAuthenticated;
             _networkManager.ServerManager.RegisterBroadcast<IdentityBroadcast>(OnIdentityReceived);
             _networkManager.ServerManager.RegisterBroadcast<PlayerStateBroadcast>(OnServerPlayerState);
+            _networkManager.ServerManager.RegisterBroadcast<GridRecordBroadcast>(OnServerGridRecord);
+            _networkManager.ServerManager.RegisterBroadcast<GridRemovedBroadcast>(OnServerGridRemoved);
+            _networkManager.ServerManager.RegisterBroadcast<GridPoseBroadcast>(OnServerGridPose);
             _networkManager.ServerManager.RegisterBroadcast<ChatBroadcast>(OnServerChat);
             _networkManager.ServerManager.RegisterBroadcast<VoiceBroadcast>(OnServerVoice);
             _networkManager.ServerManager.RegisterBroadcast<PiecePlacedBroadcast>(OnServerPiecePlaced);
@@ -430,6 +465,9 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.RegisterBroadcast<TerrainChunkBroadcast>(OnClientTerrainChunk);
             _networkManager.ClientManager.RegisterBroadcast<BaseSnapshotBroadcast>(OnClientBaseSnapshot);
             _networkManager.ClientManager.RegisterBroadcast<PlayerStateBroadcast>(OnClientPlayerState);
+            _networkManager.ClientManager.RegisterBroadcast<GridRecordBroadcast>(OnClientGridRecord);
+            _networkManager.ClientManager.RegisterBroadcast<GridRemovedBroadcast>(OnClientGridRemoved);
+            _networkManager.ClientManager.RegisterBroadcast<GridPoseBroadcast>(OnClientGridPose);
 
             // Container-contents poller (14.10.0) - idles while offline.
             if (GetComponent<ContainerSyncManager>() == null)
@@ -437,6 +475,10 @@ namespace VoxelEngine.Networking
             // Machine-runtime poller (14.12.0) - same pattern, slower cadence.
             if (GetComponent<MachineSyncManager>() == null)
                 gameObject.AddComponent<MachineSyncManager>();
+            // Movable-grid pose and structure broadcaster (14.25.0) - host only,
+            // and silent for any hull that is parked.
+            if (GetComponent<GridSyncManager>() == null)
+                gameObject.AddComponent<GridSyncManager>();
             // Proximity voice (14.20.0) - idles completely while offline or
             // while the player has voice turned off.
             if (GetComponent<VoiceChat>() == null)
@@ -453,6 +495,9 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.OnAuthenticated -= OnLocalClientAuthenticated;
             _networkManager.ServerManager.UnregisterBroadcast<IdentityBroadcast>(OnIdentityReceived);
             _networkManager.ServerManager.UnregisterBroadcast<PlayerStateBroadcast>(OnServerPlayerState);
+            _networkManager.ServerManager.UnregisterBroadcast<GridRecordBroadcast>(OnServerGridRecord);
+            _networkManager.ServerManager.UnregisterBroadcast<GridRemovedBroadcast>(OnServerGridRemoved);
+            _networkManager.ServerManager.UnregisterBroadcast<GridPoseBroadcast>(OnServerGridPose);
             _networkManager.ServerManager.UnregisterBroadcast<ChatBroadcast>(OnServerChat);
             _networkManager.ServerManager.UnregisterBroadcast<VoiceBroadcast>(OnServerVoice);
             _networkManager.ServerManager.UnregisterBroadcast<PiecePlacedBroadcast>(OnServerPiecePlaced);
@@ -508,6 +553,9 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.UnregisterBroadcast<TerrainChunkBroadcast>(OnClientTerrainChunk);
             _networkManager.ClientManager.UnregisterBroadcast<BaseSnapshotBroadcast>(OnClientBaseSnapshot);
             _networkManager.ClientManager.UnregisterBroadcast<PlayerStateBroadcast>(OnClientPlayerState);
+            _networkManager.ClientManager.UnregisterBroadcast<GridRecordBroadcast>(OnClientGridRecord);
+            _networkManager.ClientManager.UnregisterBroadcast<GridRemovedBroadcast>(OnClientGridRemoved);
+            _networkManager.ClientManager.UnregisterBroadcast<GridPoseBroadcast>(OnClientGridPose);
         }
 
         // ─────────────────────────── public API (UI calls these) ───────────────────────────
@@ -1285,6 +1333,115 @@ namespace VoxelEngine.Networking
         /// <summary>Server: a guest reported its state. The id is taken from
         /// the CONNECTION, never from the message - that is the whole reason
         /// one client cannot overwrite another client's inventory.</summary>
+        // ── movable grids (14.25.0) ──────────────────────────────────────
+        //
+        // One-way traffic, unlike every other sync in this file. A client does
+        // not get to tell the host where a ship is or what shape it is: the host
+        // is the only machine that simulates a grid, so anything arriving from a
+        // client on these channels is either a bug or an attack, and is dropped
+        // rather than relayed.
+
+        /// <summary>Longest string put in one record part. Comfortably inside a
+        /// reliable packet with room for the id and the counters.</summary>
+        private const int GridPartChars = 2048;
+
+        public void SendGridRecord(GridRecord record)
+        {
+            if (!_serverStarted || string.IsNullOrEmpty(record.Json)) return;
+            BroadcastGridRecord(null, record);
+        }
+
+        public void SendGridRemoved(string netId)
+        {
+            if (!_serverStarted || string.IsNullOrEmpty(netId)) return;
+            BroadcastToClients(new GridRemovedBroadcast { NetId = netId }, Channel.Reliable);
+        }
+
+        public void SendGridPose(GridPose pose)
+        {
+            if (!_serverStarted || string.IsNullOrEmpty(pose.NetId)) return;
+            BroadcastToClients(new GridPoseBroadcast
+            {
+                NetId = pose.NetId,
+                Position = pose.Position,
+                Rotation = pose.Rotation,
+                Velocity = pose.Velocity,
+                AngularVelocity = pose.AngularVelocity
+            }, Channel.Unreliable);
+        }
+
+        /// <summary>Split one grid record into parts and send them. A null target
+        /// means every client; a connection means just that one (join catch-up).</summary>
+        private void BroadcastGridRecord(NetworkConnection target, GridRecord record)
+        {
+            string json = record.Json;
+            int total = Mathf.Max(1, Mathf.CeilToInt(json.Length / (float)GridPartChars));
+            for (int i = 0; i < total; i++)
+            {
+                int start = i * GridPartChars;
+                var msg = new GridRecordBroadcast
+                {
+                    NetId = record.NetId,
+                    Part = i,
+                    TotalParts = total,
+                    Payload = json.Substring(start, Mathf.Min(GridPartChars, json.Length - start))
+                };
+                if (target != null) _networkManager.ServerManager.Broadcast(target, msg, true);
+                else BroadcastToClients(msg, Channel.Reliable);
+            }
+        }
+
+        /// <summary>Send to every real client. The host's own local client is skipped:
+        /// it already holds the authoritative copy, and applying a record to it would
+        /// destroy and rebuild the very grid the host is simulating.</summary>
+        private void BroadcastToClients<T>(T msg, Channel channel) where T : struct, IBroadcast
+        {
+            foreach (var pair in _networkManager.ServerManager.Clients)
+            {
+                var client = pair.Value;
+                if (client == null || client.IsLocalClient) continue;
+                _networkManager.ServerManager.Broadcast(client, msg, true, channel);
+            }
+        }
+
+        private void OnServerGridRecord(NetworkConnection conn, GridRecordBroadcast msg, Channel channel)
+        {
+            // Clients do not author grids. Nothing to do, and deliberately no relay.
+        }
+
+        private void OnServerGridRemoved(NetworkConnection conn, GridRemovedBroadcast msg, Channel channel)
+        {
+        }
+
+        private void OnServerGridPose(NetworkConnection conn, GridPoseBroadcast msg, Channel channel)
+        {
+        }
+
+        private void OnClientGridRecord(GridRecordBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            GridSync.ReceiveRecordPart(msg.NetId, msg.Part, msg.TotalParts, msg.Payload);
+        }
+
+        private void OnClientGridRemoved(GridRemovedBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            GridSync.ApplyRemoved(msg.NetId);
+        }
+
+        private void OnClientGridPose(GridPoseBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            GridSync.ApplyPose(new GridPose
+            {
+                NetId = msg.NetId,
+                Position = msg.Position,
+                Rotation = msg.Rotation,
+                Velocity = msg.Velocity,
+                AngularVelocity = msg.AngularVelocity
+            });
+        }
+
         private void OnServerPlayerState(NetworkConnection conn, PlayerStateBroadcast msg, Channel channel)
         {
             if (!_serverStarted || conn == null || conn.IsLocalClient) return;
@@ -1409,6 +1566,8 @@ namespace VoxelEngine.Networking
                 yield return StartCoroutine(SendDropSnapshot(target));
                 if (!StillWorthSending(target)) continue;
                 yield return StartCoroutine(SendTerrainSnapshot(target));
+                if (!StillWorthSending(target)) continue;
+                yield return StartCoroutine(SendGridSnapshot(target));
             }
             _snapshotStream = null;
         }
@@ -1829,6 +1988,26 @@ namespace VoxelEngine.Networking
             LogCatchUpPhase("terrain", sent, clock, startFrame);
         }
 
+        /// <summary>Send every movable grid to a joining client, whole. Grids go LAST
+        /// in the catch-up: a ship is the heaviest single record in the game and the
+        /// joiner can stand in a finished world while the fleet arrives.</summary>
+        private IEnumerator SendGridSnapshot(NetworkConnection target)
+        {
+            if (target == null) yield break;   // clients never upload grids
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            int startFrame = Time.frameCount;
+            int sent = 0;
+
+            foreach (var record in GridSync.StreamSnapshot())
+            {
+                BroadcastGridRecord(target, record);
+                sent++;
+                if (BudgetSpent()) { yield return null; ResetFrameBudget(); }
+            }
+            if (sent == 0) yield break;
+            LogCatchUpPhase("grids", sent, clock, startFrame);
+        }
+
         private void OnServerBaseSnapshot(NetworkConnection conn, BaseSnapshotBroadcast msg, Channel channel)
         {
             if (!_serverStarted) return;
@@ -1889,6 +2068,8 @@ namespace VoxelEngine.Networking
 
             NetworkSession.SetMode(SessionMode.Offline);
             VoxelEngine.Persistence.PlayerRecords.ClearLocal();
+            GridSync.Clear();
+            GridSyncManager.Instance?.ForgetBaseline();
             _statusLine = "Offline";
             WorldMismatch = false;
             HostWorldLine = "";

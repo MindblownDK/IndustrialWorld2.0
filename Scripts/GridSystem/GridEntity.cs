@@ -364,6 +364,17 @@ namespace VoxelEngine.GridSystem
 
         private void FixedUpdate()
         {
+            // 14.25.0: on a client this grid is not simulated at all - GridNetTag
+            // drives it from the host's pose stream. Running the flight model here
+            // too would be a second simulation of the same ship, and two rigidbodies
+            // integrating independently from the same inputs diverge immediately and
+            // never come back. One authority, or none.
+            // Asked of the session rather than of the tag: a grid that somehow has no
+            // tag yet must still not be simulated on a client, and "am I a client" is
+            // not a question that can be got wrong.
+            if (VoxelEngine.Networking.NetworkSession.Mode
+                == VoxelEngine.Networking.SessionMode.Client) return;
+
             if (_restorePoseTicks > 0 && _rb != null)
             {
                 _rb.isKinematic = true;
