@@ -31,7 +31,8 @@ namespace VoxelEngine.UI
         private const string DefaultMenuScene = "MainMenu";
 
         private const float DotPeriod = 0.45f;   // spinner cadence, seconds per step
-        private const float FadeSeconds = 0.22f; // EaseOutCubic entry, per the UI guidelines
+        private const float FadeSeconds = 0.22f;  // EaseOutCubic entry, per the UI guidelines
+        private const float CloseSeconds = 0.30f; // EaseInOutQuad exit once the world is up
 
         private UIDocument _doc;
         private PanelSettings _runtimePanel;
@@ -43,6 +44,7 @@ namespace VoxelEngine.UI
         private Button _backBtn;
 
         private float _fadeStartedAt = -1f;
+        private float _closeStartedAt = -1f;
         private int _dotStep;
         private float _nextDotAt;
         private bool _failureShown;
@@ -80,6 +82,12 @@ namespace VoxelEngine.UI
 
         private void OnDestroy()
         {
+            // THE one thing destroying this object does not do for us. The
+            // overlay was added to the GAME's UIDocument, which belongs to a
+            // different GameObject and outlives this one - so the element stays
+            // on screen after the join succeeds unless it is taken out by hand.
+            // That is why the joining modal hung around over a playable world.
+            if (_overlay != null) { _overlay.RemoveFromHierarchy(); _overlay = null; }
             if (Instance == this) Instance = null;
             if (_runtimePanel != null) Destroy(_runtimePanel);
         }
@@ -104,12 +112,28 @@ namespace VoxelEngine.UI
                 if (t >= 1f) _fadeStartedAt = -1f;
             }
 
+            // Closing: fade the overlay out rather than snapping it away, then
+            // remove it. EaseInOutQuad, like every other panel transition.
+            if (_closeStartedAt >= 0f)
+            {
+                float ct = Mathf.Clamp01((Time.unscaledTime - _closeStartedAt) / CloseSeconds);
+                float e = ct < 0.5f ? 2f * ct * ct : 1f - Mathf.Pow(-2f * ct + 2f, 2f) / 2f;
+                _overlay.style.opacity = 1f - e;
+                if (ct >= 1f) Destroy(gameObject);
+                return;
+            }
+
             bool failed = !string.IsNullOrEmpty(WorldBootGate.Failure);
 
             if (!WorldBootGate.IsHeld && !failed)
             {
                 // The world arrived. Nothing left to narrate.
-                Destroy(gameObject);
+                _title.text = "WELCOME";
+                _status.text = "You are in.";
+                _spinner.style.display = DisplayStyle.None;
+                _overlay.pickingMode = PickingMode.Ignore;   // never eat a click on the way out
+                _closeStartedAt = Time.unscaledTime;
+                _fadeStartedAt = -1f;
                 return;
             }
 

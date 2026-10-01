@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.23.2-dev`
-**Roadmap Version:** `14.23.2-dev`
+**Current Version:** `14.23.3-dev`
+**Roadmap Version:** `14.23.3-dev`
 **Date:** 2026-10-01
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,9 @@
 
 ## 0. Recently Done
 
+### 14.23.3-dev - You Are In
+Main-menu join confirmed working end to end. The joining overlay now removes its own UI element instead of relying on its GameObject being destroyed, and closes on a short confirmation fade.
+
 ### 14.23.2-dev - Nobody Was Listening
 The main-menu join never connected: the auto-join hung off Start, and FishNet's NetworkManager is DontDestroyOnLoad, so Start ran once in the first scene of the session and never again. The join is now driven from the update loop. Duplicate Network objects now name themselves and their scenes.
 
@@ -40,9 +43,6 @@ Milestone 8 part one: MULTIPLAYER is a main-menu page. A join carries an address
 
 ### 14.22.0-dev - Low And Quiet
 Crouch is an animation instead of a vertical squash when crouch clips are present in Resources/PlayerAnimations; the squash remains the automatic fallback when they are not.
-
-### 14.21.1-dev - Heard To The Last Word
-Four live-test fixes: the end of every spoken sentence was being stranded in the listener's jitter buffer; the host froze 5-10 s on a join because the whole catch-up ran in one frame; connected clients were writing their own world save over the top of the host's authority; and animated avatars floated half a metre above the ground because the rig height was solved once in the bind pose.
 
 ---
 

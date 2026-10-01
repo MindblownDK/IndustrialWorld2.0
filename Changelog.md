@@ -1,9 +1,15 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.23.2-dev`
+**Current Version:** `14.23.3-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.23.3-dev] You Are In
+
+**Type:** PATCH - the joining overlay stayed on screen over a world that had finished loading. No save or API change.
+
+**The join screen never left.** It was being closed by destroying the object that owns it, which is the one thing that does NOT take it off screen: the overlay is a UI Toolkit element added to the GAME's document, and that document belongs to a different GameObject which outlives this one. Destroying the owner removed the script and left the panel sitting there over a world the player could already walk around in. The element is now removed explicitly when the overlay goes away, from OnDestroy, so no exit path can leave it behind. On the way out it also stops accepting clicks and says "WELCOME - You are in" for a third of a second while it fades, rather than vanishing mid-sentence: the join ends on a confirmation instead of a blink.
 
 ### [14.23.2-dev] Nobody Was Listening
 
