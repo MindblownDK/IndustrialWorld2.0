@@ -62,6 +62,17 @@ namespace VoxelEngine.Networking
         public string Json;
     }
 
+    /// <summary>A guest's stick and throttle, on their way to the host.</summary>
+    public struct GridFlightInput
+    {
+        public string NetId;
+        public Vector3 Thrust;
+        public float Yaw;
+        public float Pitch;
+        public float Roll;
+        public bool Dampeners;
+    }
+
     /// <summary>Where a grid is, according to the only machine entitled to say.</summary>
     public struct GridPose
     {
@@ -493,12 +504,132 @@ namespace VoxelEngine.Networking
             FindTag(pose.NetId)?.ReceivePose(pose);
         }
 
+        // ── control authority (14.26.0) ──────────────────────────────
+        //
+        // The host simulates every grid, so a guest in a cockpit cannot fly by
+        // moving the hull - it would be overwritten by the next pose packet, and
+        // the host would never learn the ship was meant to be under thrust. What
+        // travels instead is the INPUT: stick and throttle go up, the host flies
+        // the ship it already owns, and the result comes back down the pose
+        // stream like any other motion.
+        //
+        // That costs the guest a round trip of latency on their own controls and
+        // it is the honest version: one machine decides where the ship is, and no
+        // client-side prediction can quietly disagree with it. Prediction can be
+        // layered on later; a divergence built in at the foundation cannot be
+        // taken out later.
+        //
+        // A claim is required before input is accepted. The host validates it
+        // against its own connection table - one pilot per hull, first claim
+        // wins, released when the seat is left or the connection drops - so a
+        // client cannot fly a ship it is not sitting in.
+
+        /// <summary>The grid this machine's local player has claimed, if any.</summary>
+        public static string LocalControlClaim { get; private set; } = "";
+
+        /// <summary>Local player took a cockpit. On a client this asks the host for
+        /// control; on the host it is simply recorded, since the host already flies it.</summary>
+        public static void ClaimControl(GridEntity grid)
+        {
+            if (grid == null) return;
+            string id = IdOf(grid);
+            if (LocalControlClaim == id) return;
+            ReleaseControl();
+            LocalControlClaim = id;
+            if (NetworkSession.Mode == SessionMode.Client && CanSync)
+                NetworkBootstrap.Instance.SendGridControl(id, true);
+        }
+
+        /// <summary>Local player left the seat.</summary>
+        public static void ReleaseControl()
+        {
+            if (string.IsNullOrEmpty(LocalControlClaim)) return;
+            string id = LocalControlClaim;
+            LocalControlClaim = "";
+            if (NetworkSession.Mode == SessionMode.Client && CanSync)
+                NetworkBootstrap.Instance.SendGridControl(id, false);
+        }
+
+        /// <summary>A guest's stick and throttle, on their way to the machine that
+        /// actually flies the ship. Silent unless this is a client holding the claim.</summary>
+        /// <summary>Input packets per second. The cockpit writes the stick every frame;
+        /// sending that rate would be three times the pose stream for a quarter of the
+        /// information. 20 Hz matches the pose cadence, so input and the motion it
+        /// causes arrive on the same clock.</summary>
+        private const float InputHz = 20f;
+        private static float _nextInputAt;
+        private static Vector3 _lastSentThrust;
+        private static float _lastSentYaw, _lastSentPitch, _lastSentRoll;
+        private static bool _lastSentDampeners;
+
+        public static void AnnounceFlightInput(GridEntity grid, Vector3 thrust,
+            float yaw, float pitch, float roll, bool dampeners)
+        {
+            if (NetworkSession.Mode != SessionMode.Client || !CanSync || IsApplyingRemote) return;
+            if (grid == null || string.IsNullOrEmpty(LocalControlClaim)) return;
+            var tag = grid.GetComponent<GridNetTag>();
+            if (tag == null || tag.Id != LocalControlClaim) return;
+
+            // A CHANGE always goes immediately - letting go of the throttle must not
+            // wait for the next slot, because the hull keeps accelerating until it
+            // lands. Only an unchanged stick is rate limited.
+            bool changed = dampeners != _lastSentDampeners
+                           || (thrust - _lastSentThrust).sqrMagnitude > 0.0001f
+                           || Mathf.Abs(yaw - _lastSentYaw) > 0.001f
+                           || Mathf.Abs(pitch - _lastSentPitch) > 0.001f
+                           || Mathf.Abs(roll - _lastSentRoll) > 0.001f;
+            if (!changed && Time.unscaledTime < _nextInputAt) return;
+
+            _nextInputAt = Time.unscaledTime + 1f / InputHz;
+            _lastSentThrust = thrust;
+            _lastSentYaw = yaw;
+            _lastSentPitch = pitch;
+            _lastSentRoll = roll;
+            _lastSentDampeners = dampeners;
+
+            NetworkBootstrap.Instance.SendGridInput(new GridFlightInput
+            {
+                NetId = tag.Id,
+                Thrust = thrust,
+                Yaw = yaw,
+                Pitch = pitch,
+                Roll = roll,
+                Dampeners = dampeners
+            });
+        }
+
+        /// <summary>Host side: drive a grid from a validated guest's input.</summary>
+        public static void ApplyFlightInput(GridFlightInput input)
+        {
+            var grid = Find(input.NetId);
+            if (grid == null) return;
+            IsApplyingRemote = true;
+            try
+            {
+                grid.DampenersOn = input.Dampeners;
+                grid.SetFlightInput(input.Thrust, input.Yaw, input.Pitch, input.Roll);
+            }
+            finally { IsApplyingRemote = false; }
+        }
+
+        /// <summary>Host side: a pilot let go or dropped out. The hull must not keep
+        /// flying on the last input it was given.</summary>
+        public static void CutFlightInput(string netId)
+        {
+            var grid = Find(netId);
+            if (grid == null) return;
+            IsApplyingRemote = true;
+            try { grid.SetFlightInput(Vector3.zero, 0f, 0f, 0f); }
+            finally { IsApplyingRemote = false; }
+        }
+
         /// <summary>Forget everything. Called on teardown so a second session never
         /// resolves an id minted in the first.</summary>
         public static void Clear()
         {
             _byId.Clear();
             _pending.Clear();
+            LocalControlClaim = "";
         }
     }
 

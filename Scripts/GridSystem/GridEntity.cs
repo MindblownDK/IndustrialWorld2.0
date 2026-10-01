@@ -298,6 +298,10 @@ namespace VoxelEngine.GridSystem
             RotationYaw   = yaw;
             RotationPitch = pitch;
             RotationRoll  = roll;
+
+            // 14.26.0: on a client this hull is flown by the host, so the stick has
+            // to travel rather than be applied. No-op anywhere else.
+            VoxelEngine.Networking.GridSync.AnnounceFlightInput(this, thrust, yaw, pitch, roll, DampenersOn);
         }
 
         // ── Control Seats ──────────────────────────────────────────

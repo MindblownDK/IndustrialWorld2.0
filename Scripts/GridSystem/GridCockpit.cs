@@ -509,6 +509,9 @@ namespace VoxelEngine.GridSystem
             ActivePilotSeat = this;
             ActiveControlSeat = this;
             ActiveControlPilot = player;
+            // 14.26.0: ask the host for control of this hull. On the host and
+            // offline this only records the claim - that machine already flies it.
+            VoxelEngine.Networking.GridSync.ClaimControl(Grid);
 
             // Rebuild the HUD now so the on-foot hotbar is hidden immediately on entry
             // (BuildHotbar skips while ActivePilotSeat != null) — the ship toolbar replaces it.
@@ -585,6 +588,7 @@ namespace VoxelEngine.GridSystem
             if (cc != null) cc.enabled = true;
             var rb = Pilot.GetComponent<Rigidbody>();
             if (rb != null) rb.isKinematic = false;
+            VoxelEngine.Networking.GridSync.ReleaseControl();
             Pilot = null;
             if (Grid != null && Grid.ActiveCockpit == this) Grid.ActiveCockpit = null;
             if (ActivePilotSeat == this) ActivePilotSeat = null;

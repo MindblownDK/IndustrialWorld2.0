@@ -1,9 +1,35 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.25.0-dev`
+**Current Version:** `14.26.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.26.0-dev] Standing On It
+
+**Type:** MINOR - the two things part one deliberately left out. No save format and no wire format changed; both additions are new channels and a new local system.
+
+**Milestone 9 is complete.**
+
+**1. A player standing on a moving hull is carried by it.**
+
+A CharacterController is not a rigidbody and Unity will not carry one on a moving platform. The deck slides out from under the capsule and the player is left standing where they were, which on a ship under way reads as being thrown off the back of it. This was true in single-player long before any of it was networked - it simply never came up, because a hull only does it while actually moving, and until a passenger could watch a pilot fly there was rarely anyone standing on a moving deck to notice.
+
+The player now remembers where they stood in the DECK'S OWN frame and is put back there each frame, before they move themselves. Doing it in that order keeps the two contributions independent: the deck contributes its motion, the player contributes theirs, and neither is measured through the other. The anchor is re-measured from the live transform at the end of every frame, after the footing solve has settled, so like the footing recovery it is an absolute solve with a fixed point rather than something that can accumulate.
+
+Three details that matter:
+
+- **Heading is carried too**, or a turning ship swings the player's view around with the hull and leaves them facing a wall. Only the component of the hull's rotation about the player's own up is applied, so a ship pitching does not tip the camera. The angle is read by carrying a reference direction through both rotations and flattening it, rather than by taking Euler angles off a delta quaternion - the latter is unreliable near the poles and this is a game set on spheres.
+- **A single frame's carry over 15 m is refused.** That is a warp jump or a floating-origin re-anchor, not a ride, and dragging a player across one is worse than letting go; the deck picks them up again the next frame.
+- **The anchor clears the moment there is no deck underfoot.** A player who has stepped off must not be yanked back by a ship that has left without them.
+
+**2. A guest can fly.**
+
+The host simulates every grid, so a guest in a cockpit moving the hull locally would be overwritten by the next pose packet and the host would never learn the ship was meant to be under thrust. What travels instead is the INPUT: stick and throttle go up, the host flies the ship it already owns, and the result comes back down the existing pose stream like any other motion. The guest pays a round trip of latency on their own controls, and that is the honest version - one machine decides where the ship is, and no client-side prediction can quietly disagree with it. Prediction can be layered on later; a divergence built into the foundation cannot be taken out later.
+
+Control is a claim, and the claim is held by a CONNECTION in the host's own table rather than by an id named in the message, so a client cannot fly a ship by asking for it. One pilot per hull, first claim wins, and a claim is released when the guest stands up, when they claim a different hull, and - the case that actually matters - when their connection drops. A pilot who crashes out must not leave a ship under power forever, so the throttle is cut and the seat freed.
+
+Input is rate limited to 20 Hz to match the pose cadence, so a guest's stick and the motion it causes arrive on the same clock. A CHANGE is always sent immediately and never waits for the next slot: letting go of the throttle has to land at once, because until it does the hull is still accelerating.
 
 ### [14.25.0-dev] The Same Ship
 

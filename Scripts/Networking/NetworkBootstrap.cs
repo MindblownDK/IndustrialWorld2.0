@@ -116,6 +116,26 @@ namespace VoxelEngine.Networking
         public string NetId;
     }
 
+    /// <summary>A guest claiming or releasing a cockpit. Reliable: a lost release
+    /// would leave a hull owned by somebody who has stood up.</summary>
+    public struct GridControlBroadcast : IBroadcast
+    {
+        public string NetId;
+        public bool Claim;
+    }
+
+    /// <summary>A guest's stick and throttle. Unreliable and continuous - the next
+    /// one is 50 ms away, so a lost frame of input is not worth resending.</summary>
+    public struct GridInputBroadcast : IBroadcast
+    {
+        public string NetId;
+        public Vector3 Thrust;
+        public float Yaw;
+        public float Pitch;
+        public float Roll;
+        public bool Dampeners;
+    }
+
     /// <summary>Where a grid is, according to the host. Sent unreliably by design:
     /// a pose that needed retransmitting would be describing the past by the time
     /// it arrived, and the next one is already on its way.</summary>
@@ -410,6 +430,8 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.RegisterBroadcast<GridRecordBroadcast>(OnServerGridRecord);
             _networkManager.ServerManager.RegisterBroadcast<GridRemovedBroadcast>(OnServerGridRemoved);
             _networkManager.ServerManager.RegisterBroadcast<GridPoseBroadcast>(OnServerGridPose);
+            _networkManager.ServerManager.RegisterBroadcast<GridControlBroadcast>(OnServerGridControl);
+            _networkManager.ServerManager.RegisterBroadcast<GridInputBroadcast>(OnServerGridInput);
             _networkManager.ServerManager.RegisterBroadcast<ChatBroadcast>(OnServerChat);
             _networkManager.ServerManager.RegisterBroadcast<VoiceBroadcast>(OnServerVoice);
             _networkManager.ServerManager.RegisterBroadcast<PiecePlacedBroadcast>(OnServerPiecePlaced);
@@ -498,6 +520,8 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.UnregisterBroadcast<GridRecordBroadcast>(OnServerGridRecord);
             _networkManager.ServerManager.UnregisterBroadcast<GridRemovedBroadcast>(OnServerGridRemoved);
             _networkManager.ServerManager.UnregisterBroadcast<GridPoseBroadcast>(OnServerGridPose);
+            _networkManager.ServerManager.UnregisterBroadcast<GridControlBroadcast>(OnServerGridControl);
+            _networkManager.ServerManager.UnregisterBroadcast<GridInputBroadcast>(OnServerGridInput);
             _networkManager.ServerManager.UnregisterBroadcast<ChatBroadcast>(OnServerChat);
             _networkManager.ServerManager.UnregisterBroadcast<VoiceBroadcast>(OnServerVoice);
             _networkManager.ServerManager.UnregisterBroadcast<PiecePlacedBroadcast>(OnServerPiecePlaced);
@@ -861,6 +885,9 @@ namespace VoxelEngine.Networking
         {
             if (args.ConnectionState != RemoteConnectionState.Stopped) return;
             _playerIdByConnection.Remove(connection.ClientId);
+            // A pilot who crashed out must not leave a hull flying on their last
+            // input. Cut the throttle and free the seat for somebody else.
+            ReleasePilotConnection(connection);
             if (!_avatarsByConnection.TryGetValue(connection.ClientId, out var nob)) return;
             _avatarsByConnection.Remove(connection.ClientId);
             if (nob != null && nob.IsSpawned) _networkManager.ServerManager.Despawn(nob);
@@ -1401,6 +1428,100 @@ namespace VoxelEngine.Networking
                 var client = pair.Value;
                 if (client == null || client.IsLocalClient) continue;
                 _networkManager.ServerManager.Broadcast(client, msg, true, channel);
+            }
+        }
+
+        // ── control authority ────────────────────────────────────────
+        //
+        // One pilot per hull, held by a CONNECTION rather than by a claimed id in
+        // the message, so a client cannot fly a ship by naming it. First claim
+        // wins; the seat is released when the guest stands up, when they claim a
+        // different hull, and when their connection drops - the last of those is
+        // the one that matters, because a pilot who crashes out must not leave a
+        // ship under power forever.
+        private readonly Dictionary<string, NetworkConnection> _gridPilot = new();
+
+        public void SendGridControl(string netId, bool claim)
+        {
+            if (!_clientStarted || string.IsNullOrEmpty(netId)) return;
+            _networkManager.ClientManager.Broadcast(new GridControlBroadcast
+            { NetId = netId, Claim = claim });
+        }
+
+        public void SendGridInput(GridFlightInput input)
+        {
+            if (!_clientStarted || string.IsNullOrEmpty(input.NetId)) return;
+            _networkManager.ClientManager.Broadcast(new GridInputBroadcast
+            {
+                NetId = input.NetId,
+                Thrust = input.Thrust,
+                Yaw = input.Yaw,
+                Pitch = input.Pitch,
+                Roll = input.Roll,
+                Dampeners = input.Dampeners
+            }, Channel.Unreliable);
+        }
+
+        private void OnServerGridControl(NetworkConnection conn, GridControlBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted || conn == null || string.IsNullOrEmpty(msg.NetId)) return;
+
+            if (!msg.Claim)
+            {
+                ReleaseGridPilot(msg.NetId, conn);
+                return;
+            }
+
+            // A guest may only hold one hull at a time, so drop whatever they had.
+            ReleasePilotConnection(conn, except: msg.NetId);
+
+            if (_gridPilot.TryGetValue(msg.NetId, out var holder) && holder != null && holder != conn)
+            {
+                Debug.Log($"[GridSync] Control of '{msg.NetId}' refused for client {conn.ClientId}: already flown by client {holder.ClientId}.");
+                return;
+            }
+            _gridPilot[msg.NetId] = conn;
+            Debug.Log($"[GridSync] Client {conn.ClientId} has control of grid '{msg.NetId}'.");
+        }
+
+        private void OnServerGridInput(NetworkConnection conn, GridInputBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted || conn == null) return;
+            // Validated against the server's own table, never against the message.
+            if (!_gridPilot.TryGetValue(msg.NetId, out var holder) || holder != conn) return;
+
+            GridSync.ApplyFlightInput(new GridFlightInput
+            {
+                NetId = msg.NetId,
+                Thrust = msg.Thrust,
+                Yaw = msg.Yaw,
+                Pitch = msg.Pitch,
+                Roll = msg.Roll,
+                Dampeners = msg.Dampeners
+            });
+        }
+
+        private void ReleaseGridPilot(string netId, NetworkConnection conn)
+        {
+            if (!_gridPilot.TryGetValue(netId, out var holder) || holder != conn) return;
+            _gridPilot.Remove(netId);
+            GridSync.CutFlightInput(netId);
+            Debug.Log($"[GridSync] Client {conn.ClientId} released grid '{netId}'.");
+        }
+
+        /// <summary>Drop every hull this connection was flying. Called when a guest
+        /// claims a different seat and when they disconnect.</summary>
+        private void ReleasePilotConnection(NetworkConnection conn, string except = null)
+        {
+            List<string> dropped = null;
+            foreach (var pair in _gridPilot)
+                if (pair.Value == conn && pair.Key != except)
+                    (dropped ??= new List<string>()).Add(pair.Key);
+            if (dropped == null) return;
+            foreach (var netId in dropped)
+            {
+                _gridPilot.Remove(netId);
+                GridSync.CutFlightInput(netId);
             }
         }
 

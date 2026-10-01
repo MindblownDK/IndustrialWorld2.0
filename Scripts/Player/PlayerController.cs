@@ -74,6 +74,33 @@ namespace VoxelEngine.Player
         /// and cancels downward velocity. Below it the ground stick is left intact.</summary>
         private const float MinRecoveryToCancelFall = 0.02f;
 
+        // ── Standing on a moving deck (14.26.0) ──────────────────────────
+        //
+        // A CharacterController is not a rigidbody and Unity will not carry one on a
+        // moving platform: the deck slides out from under the capsule and the player
+        // is left behind, which on a ship under way reads as being thrown off the
+        // back. This was true in single-player long before any of it was networked -
+        // it just never came up, because a hull only does it while actually moving.
+        //
+        // The fix is to remember where the player stood in the DECK'S OWN frame and
+        // put them back there each frame before they move themselves. That is an
+        // absolute solve, like the footing recovery: the anchor is re-measured from
+        // the live transform every frame, so it has a fixed point and cannot
+        // accumulate. Rotation is carried too, otherwise a turning ship swings the
+        // player's view around with the hull.
+
+        /// <summary>How far below the feet a deck is still considered underfoot.</summary>
+        private const float CarryProbeDepth = 0.45f;
+        /// <summary>A single frame's carry larger than this is a teleport, not a ride -
+        /// a warp jump or a floating-origin re-anchor. Let go rather than be dragged.</summary>
+        private const float MaxCarryStep = 15f;
+
+        private VoxelEngine.GridSystem.GridEntity _carryGrid;
+        private Vector3 _carryLocalPosition;
+        private Quaternion _carryGridRotation = Quaternion.identity;
+        private bool _hasCarryAnchor;
+        private readonly RaycastHit[] _carryProbeHits = new RaycastHit[16];
+
         [Header("Jump / Gravity")]
         public float jumpHeight = 1.4f;
         public float gravity = -22f;
@@ -636,6 +663,13 @@ namespace VoxelEngine.Player
                 }
             }
 
+            // -- carry --
+            // Before the player moves themselves, move them with whatever they are
+            // standing on. Doing it in this order keeps the two independent: the deck
+            // contributes its motion, the player contributes theirs, and neither is
+            // measured through the other.
+            ApplyDeckCarry(up);
+
             // -- move --
             // 14.24.1: the old "small radial anti-stick lift" added a FLAT 1.5 cm
             // along up every grounded frame on a sphere. That is a per-FRAME
@@ -649,6 +683,109 @@ namespace VoxelEngine.Player
 
             if (!inWater)
                 RecoverTerrainFooting(up);
+
+            // Re-anchor LAST, once the final position for this frame is settled, so
+            // next frame's carry is measured from where the player actually ended up.
+            UpdateDeckAnchor(up, inWater);
+        }
+
+        // ── moving decks ────────────────────────────────────────────────
+
+        /// <summary>Put the player back where they stood in the deck's own frame.</summary>
+        private void ApplyDeckCarry(Vector3 up)
+        {
+            if (!_hasCarryAnchor) return;
+            if (_carryGrid == null) { _hasCarryAnchor = false; return; }
+
+            var deck = _carryGrid.transform;
+            Vector3 delta = deck.TransformPoint(_carryLocalPosition) - transform.position;
+
+            float step = delta.magnitude;
+            if (step > MaxCarryStep)
+            {
+                // The hull jumped. Dragging the player across a warp would be worse
+                // than letting them go; the deck will pick them up again next frame.
+                _hasCarryAnchor = false;
+                return;
+            }
+            if (step > 0.0001f) _cc.Move(delta);
+
+            // Carry the heading too. Only the component of the hull's turn about the
+            // player's own up is applied - a ship pitching should not tip the camera.
+            float turn = YawDeltaAbout(_carryGridRotation, deck.rotation, up);
+            if (Mathf.Abs(turn) > 0.0001f)
+            {
+                _yaw += turn;
+                transform.rotation = Quaternion.FromToRotation(Vector3.up, UpVec)
+                                     * Quaternion.Euler(0, _yaw, 0);
+            }
+        }
+
+        /// <summary>Work out which deck is underfoot now and record the player's pose in
+        /// its frame. Clearing the anchor when there is no deck is what stops a player
+        /// who has stepped off from being yanked back by a ship that has left.</summary>
+        private void UpdateDeckAnchor(Vector3 up, bool inWater)
+        {
+            _carryGrid = inWater ? null : FindDeckBelow(up);
+            if (_carryGrid == null)
+            {
+                _hasCarryAnchor = false;
+                return;
+            }
+
+            var deck = _carryGrid.transform;
+            _carryLocalPosition = deck.InverseTransformPoint(transform.position);
+            _carryGridRotation = deck.rotation;
+            _hasCarryAnchor = true;
+        }
+
+        private VoxelEngine.GridSystem.GridEntity FindDeckBelow(Vector3 up)
+        {
+            if (_cc == null || up.sqrMagnitude < 0.0001f) return null;
+            up.Normalize();
+
+            // Start just above the feet so the capsule's own collider is behind the ray.
+            Vector3 origin = transform.position + up * 0.12f;
+            float distance = 0.12f + CarryProbeDepth;
+            int count = Physics.RaycastNonAlloc(origin, -up, _carryProbeHits, distance, ~0,
+                QueryTriggerInteraction.Ignore);
+
+            VoxelEngine.GridSystem.GridEntity best = null;
+            float bestDistance = float.PositiveInfinity;
+            for (int i = 0; i < count; i++)
+            {
+                var hit = _carryProbeHits[i];
+                var collider = hit.collider;
+                if (collider == null || hit.distance >= bestDistance) continue;
+                if (collider.transform == transform || collider.transform.IsChildOf(transform)) continue;
+
+                var grid = collider.GetComponentInParent<VoxelEngine.GridSystem.GridEntity>();
+                if (grid == null) continue;
+
+                bestDistance = hit.distance;
+                best = grid;
+            }
+            return best;
+        }
+
+        /// <summary>The rotation from a to b, reduced to a signed angle about one axis.</summary>
+        private static float YawDeltaAbout(Quaternion a, Quaternion b, Vector3 axis)
+        {
+            if (axis.sqrMagnitude < 0.0001f) return 0f;
+            axis.Normalize();
+
+            // Compare a reference direction carried through both rotations, flattened
+            // onto the plane the player actually turns in. Reading Euler angles off a
+            // delta quaternion is unreliable near the poles; this is not.
+            Vector3 from = Vector3.ProjectOnPlane(a * Vector3.forward, axis);
+            Vector3 to = Vector3.ProjectOnPlane(b * Vector3.forward, axis);
+            if (from.sqrMagnitude < 0.0001f || to.sqrMagnitude < 0.0001f)
+            {
+                from = Vector3.ProjectOnPlane(a * Vector3.up, axis);
+                to = Vector3.ProjectOnPlane(b * Vector3.up, axis);
+                if (from.sqrMagnitude < 0.0001f || to.sqrMagnitude < 0.0001f) return 0f;
+            }
+            return Vector3.SignedAngle(from, to, axis);
         }
 
         private void ApplyFallDamage(float impactDownSpeed)
