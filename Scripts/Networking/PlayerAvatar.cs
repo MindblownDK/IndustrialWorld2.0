@@ -263,7 +263,14 @@ namespace VoxelEngine.Networking
             var wornArmor = stats.equippedArmor;
             int armorTier = wornArmor != null ? Mathf.Clamp(wornArmor.tier, 1, 6) : 0;
             int skinTone = PlayerIdentity.LocalSkinTone;
-            if (_heldToolView == null) _heldToolView = stats.GetComponent<VoxelEngine.Player.HeldToolView>();
+            // 14.18.5: HeldToolView lives on the CAMERA object (setup wizard),
+            // not on the player root - GetComponent on the stats object always
+            // returned null and the swing counter was never read. Search the
+            // children (the camera hangs under the player), with the local
+            // main camera as fallback - this is owner-only code.
+            if (_heldToolView == null) _heldToolView = stats.GetComponentInChildren<VoxelEngine.Player.HeldToolView>(true);
+            if (_heldToolView == null && Camera.main != null)
+                _heldToolView = Camera.main.GetComponent<VoxelEngine.Player.HeldToolView>();
             if (_heldToolView != null)
             {
                 int swings = _heldToolView.SwingCount;

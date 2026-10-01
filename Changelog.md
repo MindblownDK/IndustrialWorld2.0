@@ -1,9 +1,17 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.18.4-dev`
+**Current Version:** `14.18.5-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.18.5-dev] The Swing Heard Round The World
+
+**Type:** PATCH - replicated swings finally fire.
+
+**Cause:** `HeldToolView` is added to the CAMERA object by the setup wizard, not to the player root. The avatar's swing mirror looked it up with `GetComponent` on the player object, always got null, and silently never read the swing counter - so no swing ever left the owning client, which is why no "[Crusader] attack replicated" line ever appeared.
+
+**Fix:** the lookup searches the player's children (the camera hangs under the player), with the local main camera as fallback. Owner-only code path, so the local camera is always the right one.
 
 ### [14.18.4-dev] A Proper Grip
 
