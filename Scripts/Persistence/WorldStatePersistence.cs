@@ -296,6 +296,22 @@ namespace VoxelEngine.Persistence
         {
             if (Menu.WorldSession.Instance == null) return;
 
+            // 14.21.1 - THE HOST OWNS THE WORLD.
+            //
+            // A connected client is running a local copy of a world that the
+            // host is authoritative over. Writing that copy to disk saved the
+            // client's convergence snapshot over their OWN world file - which
+            // is why a client who quit and came back found the host's base and
+            // their own stale inventory in their own save. A client has nothing
+            // to persist: it did not author this world, and the host is already
+            // saving the real one.
+            if (Networking.NetworkSession.Mode == Networking.SessionMode.Client)
+            {
+                Debug.Log("[WorldState] Save skipped: connected as a client. " +
+                          "The host owns this world's save file.");
+                return;
+            }
+
             // THE IMPORTANT GUARD.
             //
             // If the save could not be READ, the in-memory world is empty or partial - not

@@ -719,6 +719,17 @@ namespace VoxelEngine.Networking
 
         private void ApplyCrouch(bool crouched)
         {
+            // 14.22.0: with crouch clips present the skeleton does the work and
+            // the model is never squashed. The squash below is the fallback for
+            // a project whose Resources/PlayerAnimations has no crouch clip -
+            // exactly the behaviour that shipped in 14.13.0.
+            var driver = Locomotion();
+            if (driver != null)
+            {
+                driver.Crouched = crouched;
+                if (driver.HasCrouchClips) { ClearCrouchSquash(); return; }
+            }
+
             CachePose();
             float f = crouched ? CrouchFactor : 1f;
             if (_body != null)
@@ -732,6 +743,20 @@ namespace VoxelEngine.Networking
             // crusader hand lives inside the model and squashes with it (14.13.0).
             if (_hand != null && _hand.parent == transform)
                 _hand.localPosition = new Vector3(handLocalPosition.x, handLocalPosition.y * f, handLocalPosition.z);
+        }
+
+        /// <summary>Undo any squash left over from before the crouch clips were
+        /// available (or from a session that ran without them).</summary>
+        private void ClearCrouchSquash()
+        {
+            CachePose();
+            if (_body != null)
+            {
+                _body.localScale = _bodyStandScale;
+                _body.localPosition = _bodyStandPos;
+            }
+            if (_visor != null) _visor.localPosition = _visorStandPos;
+            if (_hand != null && _hand.parent == transform) _hand.localPosition = handLocalPosition;
         }
 
         /// <summary>Rust-style honesty: the bar only appears when hurt.</summary>

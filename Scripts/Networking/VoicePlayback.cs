@@ -13,9 +13,11 @@
 // only shared state and it is the only thing under a lock - held for a copy
 // and nothing else.
 //
-// Jitter: playback waits for a small cushion of audio before it starts and
-// goes quiet again when the cushion runs dry, instead of stuttering through
-// every late packet.
+// Jitter: playback waits for a small cushion of audio before it starts, then
+// keeps playing. It does NOT re-arm that cushion the instant the ring runs
+// dry - see the starvation note on _playing (14.21.1): doing so stranded the
+// last words of every sentence, because a talk spurt always ends with fewer
+// than a cushion's worth of frames left in the ring.
 
 using UnityEngine;
 
@@ -36,7 +38,19 @@ namespace VoxelEngine.Networking
         private readonly object _gate = new object();
         private readonly float[] _ring = new float[RingSamples];
         private int _readPos, _writePos, _available;
-        private bool _primed;
+
+        /// <summary>True while the stream is live. The cushion is required to
+        /// START a talk spurt, never to CONTINUE one: the ring emptying is a
+        /// normal event (a single late packet does it), and treating it as a
+        /// stop meant the last one or two frames of every sentence sat in the
+        /// ring waiting for a cushion that never came - the speaker had already
+        /// stopped talking. Playback now only stops once the ring is empty AND
+        /// has stayed empty, so nothing is ever left unplayed. (14.21.1)</summary>
+        private bool _playing;
+        private int _starved;
+        /// <summary>Consecutive dry callbacks before the cushion is re-armed.
+        /// At a typical DSP buffer this is roughly a quarter of a second.</summary>
+        private const int StarveLimit = 12;
         private float _tail;           // last emitted sample - decayed to silence on underrun
         private int _rampIn;           // short fade-in when audio resumes after a gap
 
@@ -142,7 +156,11 @@ namespace VoxelEngine.Networking
                     if (_available == RingSamples) _readPos = _writePos;   // overrun: drop the oldest
                     else _available++;
                 }
-                if (!_primed && _available >= VoiceCodec.FrameSamples * PrimeFrames) _primed = true;
+                if (!_playing && _available >= VoiceCodec.FrameSamples * PrimeFrames)
+                {
+                    _playing = true;
+                    _starved = 0;
+                }
             }
         }
 
@@ -173,7 +191,7 @@ namespace VoxelEngine.Networking
             int written = 0;
             lock (_gate)
             {
-                if (_primed)
+                if (_playing)
                 {
                     int take = data.Length < _available ? data.Length : _available;
                     for (int i = 0; i < take; i++)
@@ -183,7 +201,14 @@ namespace VoxelEngine.Networking
                     }
                     _available -= take;
                     written = take;
-                    if (_available == 0) _primed = false;   // wait for a new cushion
+
+                    // Dry is not the same as done. Only a ring that has been
+                    // empty for several callbacks in a row means the speaker
+                    // actually stopped - and by then there is nothing left to
+                    // strand, because we only stop on an EMPTY ring.
+                    if (take < data.Length) _starved++;
+                    else _starved = 0;
+                    if (_available == 0 && _starved >= StarveLimit) _playing = false;
                 }
             }
 

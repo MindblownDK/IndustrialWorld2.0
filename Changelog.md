@@ -1,9 +1,29 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.21.0-dev`
+**Current Version:** `14.22.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.22.0-dev] Low And Quiet
+
+**Type:** MINOR - crouch becomes a real animation when the clips exist. Save-compatible, and additive: without the clips nothing changes at all.
+
+**Crouching squashed the model.** It scaled the crusader to 62% of its height - a knight pressed down by an invisible ceiling rather than a knight kneeling. The locomotion driver now carries two optional slots, a crouch idle and a crouch walk, loaded from `Resources/PlayerAnimations` like every other clip. When a crouch idle is found the skeleton does the work and the squash is never applied; any squash left over from an earlier session is undone the first time crouch is read. When it is NOT found the squash runs exactly as it did in 14.13.0, so a project without the clips sees no change and no error. The crouch walk is optional on its own: without it, a crouching player who shuffles stays in the crouch idle rather than standing up to walk. Crouch loses to airborne, slide and attack, in that order, so a jump out of a crouch still reads as a jump.
+
+**Clip names are matched loosely** - `Crouch_idle`, `Crouching_idle`, `Crouch idle`, `Crouching` for the idle, and `Crouched_walking`, `Crouch_walk`, `Crouched walking`, `Crouch_walking` for the walk - because Mixamo names the same download several different ways depending on how it was exported.
+
+### [14.21.1-dev] Heard To The Last Word
+
+**Type:** PATCH - four faults found in live two-player testing. No save or API change.
+
+**The end of every sentence was thrown away.** This was the listener, not the microphone. Playback waits for a small cushion of audio before it starts, which is right - but it also re-armed that cushion the instant the ring buffer ran dry, which is wrong. A ring running dry is NORMAL; one late packet does it. The real damage came at the end of a talk spurt: a sentence always ends with one or two frames left in the ring, the cushion needs three, and those last frames sat there waiting for audio from a speaker who had already stopped talking. They were never played. Playback now stops only after the ring has been empty for several consecutive callbacks - and since it can only stop on an EMPTY ring, nothing can ever be stranded again. A short release tail was added on the sending side too: the microphone keeps transmitting for 0.3 s after the talk key comes up, because the driver's capture position lags real time and the last word spoken has not become readable yet. The HUD pill still follows the key, not the tail, so an open microphone is never implied after release.
+
+**The host froze for 5-10 seconds when somebody joined.** The join catch-up ran as one synchronous burst: six full-world gathers - every base piece, every item-block, every container, every machine, every dropped item and every edited terrain chunk - plus all of the resulting broadcasts, inside a single frame. The work is unavoidable, so it is spread instead of removed: one gather per frame, with a frame break every few broadcasts inside each one. The join takes the same wall-clock time and the host keeps rendering through it. Two players arriving together are served one after the other rather than interleaving twelve gathers, and a joiner who disconnects mid-catch-up stops the remaining phases instead of serializing a world at a dead connection. The same staging applies to the client's upload half of the exchange, which froze the joining machine for the same reason.
+
+**Both machines were saving the world.** A connected client runs a local copy of a world the host is authoritative over, and it was writing that copy to its own save file - which is why a client who quit and rejoined found the host's base sitting in their own world alongside their own stale inventory. A client has nothing to persist: it did not author this world and the host is already saving the real one. World-state saving is now suppressed while connected as a client, with a line in the console saying so rather than failing silently. **Known remaining half:** the voxel chunk store still writes on the client, because the terrain catch-up uses it to park edited chunks that have not streamed in yet. Making that a session cache that is discarded on disconnect is part of the session-model milestone now on the roadmap.
+
+**Animated avatars floated half a metre off the ground.** The rig's height is solved once, when the model is built, by measuring the lowest vertex of the BIND pose and lifting the rig by exactly that much. Then 14.17.0 put animation on top. Every Mixamo clip carries its own hip height, so the moment Idle or Walking takes over, that solved offset is for a pose the model is no longer in - which is precisely why the avatar looked right on spawn and wrong the moment it moved and stopped. The offset is now re-solved every frame from the CURRENT animated pose: the lowest foot bone is measured against where that same bone sat in the bind pose, and the rig is shifted by the difference. It is eased so a walk-to-idle crossfade does not step the body, clamped so a bad clip cannot launch the model, and skipped while airborne, where the feet are supposed to leave the floor. A skeleton with no recognisable foot bones disables the correction rather than guessing.
 
 ### [14.21.0-dev] The Quiet Corner
 

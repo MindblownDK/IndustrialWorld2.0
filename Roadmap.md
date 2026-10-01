@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.21.0-dev`
-**Roadmap Version:** `14.21.0-dev`
+**Current Version:** `14.22.0-dev`
+**Roadmap Version:** `14.22.0-dev`
 **Date:** 2026-10-01
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,20 +29,20 @@
 
 ## 0. Recently Done
 
+### 14.22.0-dev - Low And Quiet
+Crouch is an animation instead of a vertical squash when crouch clips are present in Resources/PlayerAnimations; the squash remains the automatic fallback when they are not.
+
+### 14.21.1-dev - Heard To The Last Word
+Four live-test fixes: the end of every spoken sentence was being stranded in the listener's jitter buffer; the host froze 5-10 s on a join because the whole catch-up ran in one frame; connected clients were writing their own world save over the top of the host's authority; and animated avatars floated half a metre above the ground because the rig height was solved once in the bind pose.
+
 ### 14.21.0-dev - The Quiet Corner
 Voice talk mode became one four-state control (Off / Push To Talk / Toggle / Open Mic) with the talk key rebindable from the audio page and the capture device always listed. The top-left HUD became one stack: target card, then chat, then the voice pills - chat no longer sits on the gravity readout in the bottom-left corner.
 
 ### 14.20.0-dev - Voices In The Dust
 Milestone 7 phase 2 and final: proximity VOICE - microphone capture, in-house IMA ADPCM at 16 kHz, unreliable 40 ms frames over the existing relay, server-side 60 m filtering, and fully spatialized playback from the speaker's head bone. Push-to-talk or open mic, per-player mute keyed by player id, speaking pills on the HUD, voice controls in Settings - Audio. Milestone 7 COMPLETE.
 
-### 14.19.1-dev - A Key That Answers
-Input-backend fixes: chat, and the conveyor snap toggle, read the Input System instead of the legacy class that throws under the current Player Settings. Logistics-map labels moved out of the painter callback.
-
 ### 14.19.0-dev - Words On The Wind
 Milestone 7 phase 1: proximity text chat - Enter-to-type overlay with fading message cards on the HUD document, server-stamped sender names, 60 m server-side proximity filtering, instant local echo.
-
-### 14.18.6-dev - Quickened Steel
-Swing playback at matched speed (~0.55 s window, 1x-3.5x clamp) with snap-in crossfade on the attack slot.
 
 ---
 
@@ -64,19 +64,22 @@ These decisions are settled. Every future system is designed against them.
 5. **Simulation sync:** machines, power, fluids, conveyors run server-side; clients render replicated state. *(DONE 14.9.0-14.12.0 - shipped as host-authoritative convergence rather than server-only simulation: item-block structure (14.9.0), container contents (14.10.0), dropped items (14.11.0) and machine runtime state + placement payloads (14.12.0) all replicate through the save-format capture/restore seams as opaque JSON. Clients keep simulating and converge onto the host's outcome. Accepted gaps: mid-belt packet cosmetics stay per-machine; true client-sim-off moves to the dedicated-server milestone.)*
 6. **Real Crusaders (player model and readable loadout):** replace the capsule avatar with a proper crusader player model and make every player's loadout readable at a glance. Full design below - this milestone deliberately sits right before proximity chat because seeing WHO you meet matters as much as hearing them. *(NEARLY DONE - 14.13.0 body, 14.14.0 display-only armor + tattoos, 14.15.0 rigged Player.fbx + skin tones, 14.16.0 back gear + replicated ghost + building pose, 14.17.0 locomotion animations, 14.18.0 sword stance + replicated attacks. Open: rifle/pistol stances - waiting on clips.)*
 7. **Proximity chat (DECIDED: text chat AND proximity voice, with real directional sound):** both channels ship. *(DONE 14.19.0 text + 14.20.0 voice. Build-vs-buy resolved as BUILD: a custom mic -> IMA ADPCM -> unreliable broadcast pipeline on the existing `NetworkBootstrap` relay, no third-party voice asset, no extra transport. Playback is a spatialized AudioSource on the speaker's head bone, so direction and distance are real. Mute is keyed by player id. Accepted gaps: no per-player volume trim, no whisper/shout ranges - one 60 m radius shared with text chat.)*
-8. **Grid system multiplayer:** the whole grid/construct layer - building on a moving grid, grid physics and drift, the shape wheel, grid identity and the construct registry, the inspector overlay, waymarks and the auto-run shuttle loop, docking and jump travel - has to behave the same for a passenger as it does for the pilot. Today the grid layer is the largest remaining single-player assumption in the game: grids move, and every piece of replication built so far assumes a world-space position that stays put. Decide the authority model at milestone start: replicate the GRID's transform and keep piece positions grid-local (one small message per grid per tick, pieces ride along for free) versus replicating pieces in world space (simple, but every piece on a moving grid becomes traffic). The first option is almost certainly right and the MP-readiness checklist already points at it - "stable ids over object references" means a piece must be addressable as (grid id, local cell) rather than a world coordinate. Pilot authority, passenger prediction and hand-off when the pilot leaves the seat are part of this milestone, not after it.
+8. **Session model - join a game, not a save file (RAISED 14.21.1 from live testing):** today joining is an IN-WORLD action: both players must already have loaded a world, and the client keeps running - and saving - their own copy of it. That single design decision is behind four separate reported faults: you can only join someone whose save file you already have; the client's inventory is their own local one rather than per-player state the host owns; there is no way to join from the main menu; and both machines write a save. The pieces: (a) a **multiplayer page in the main menu** that connects BEFORE a world is loaded, with the client booting a world shell from the host's world info instead of a local save file; (b) **the host is the only writer** - a client's chunk store becomes a session cache that is discarded on disconnect, not a save folder (the world-state file is already gated, 14.21.1); (c) **per-player state server-side** - inventory, hotbar, equipment, stats and spawn point keyed by player id, stored in the HOST's save, which is the unfinished half of milestone 2; (d) **the host's world settings win** - seed, weight limits, drop caps and the rest travel in the handshake rather than being read from the client's own sidecar. Until this lands, multiplayer is "two people with the same save file", which is not what joining a game means.
 
-9. **Beacon multiplayer:** beacons are how players find each other and find their way back, so they are worth their own milestone rather than being folded into world sync. Beacon placement, naming, range, visibility rules (who can see whose beacon) and the on-screen markers all replicate; a beacon placed by one player appears for everyone who should see it, with the same name and the same range, and survives a rejoin. This milestone also settles whether beacon visibility is global, per-team (see milestone 10) or per-player - that answer should be made WITH teams, which is why these two sit next to each other.
+9. **Grid system multiplayer:** the whole grid/construct layer - building on a moving grid, grid physics and drift, the shape wheel, grid identity and the construct registry, the inspector overlay, waymarks and the auto-run shuttle loop, docking and jump travel - has to behave the same for a passenger as it does for the pilot. Today the grid layer is the largest remaining single-player assumption in the game: grids move, and every piece of replication built so far assumes a world-space position that stays put. Decide the authority model at milestone start: replicate the GRID's transform and keep piece positions grid-local (one small message per grid per tick, pieces ride along for free) versus replicating pieces in world space (simple, but every piece on a moving grid becomes traffic). The first option is almost certainly right and the MP-readiness checklist already points at it - "stable ids over object references" means a piece must be addressable as (grid id, local cell) rather than a world coordinate. Pilot authority, passenger prediction and hand-off when the pilot leaves the seat are part of this milestone, not after it.
 
-10. **Teams:** players create a team, name it, and invite other players to it; invited players accept or decline. Team membership is the grouping every later shared-ownership feature hangs off - shared build costs, friendly fire rules, team beacons, team-visible map markers and eventually base permissions. **Two limits live in the multiplayer / server settings, not in code:** maximum members per team and maximum teams per session, both editable by the host before and during a session. Teams are keyed by stable player id (MP-readiness checklist) so membership survives a rename and a reconnect, and the team roster is part of the save so a session can be resumed with its teams intact.
+10. **Beacon multiplayer:** beacons are how players find each other and find their way back, so they are worth their own milestone rather than being folded into world sync. Beacon placement, naming, range, visibility rules (who can see whose beacon) and the on-screen markers all replicate; a beacon placed by one player appears for everyone who should see it, with the same name and the same range, and survives a rejoin. This milestone also settles whether beacon visibility is global, per-team (see milestone 11) or per-player - that answer should be made WITH teams, which is why these two sit next to each other.
 
-11. **Dedicated server:** headless build target, server-side persistence, no local player assumptions anywhere in boot code. **Security hardening lands here (committed 14.6.0):** code-lock codes currently travel and rest in plain text (same as save files) - move code validation server-side so raw codes never reach other clients, and audit every broadcast for data a client should not see (other players' lock codes, future chest contents). Acceptable for trusted-co-op pre-release, unacceptable for public dedicated servers.
+11. **Teams:** players create a team, name it, and invite other players to it; invited players accept or decline. Team membership is the grouping every later shared-ownership feature hangs off - shared build costs, friendly fire rules, team beacons, team-visible map markers and eventually base permissions. **Two limits live in the multiplayer / server settings, not in code:** maximum members per team and maximum teams per session, both editable by the host before and during a session. Teams are keyed by stable player id (MP-readiness checklist) so membership survives a rename and a reconnect, and the team roster is part of the save so a session can be resumed with its teams intact.
+
+12. **Dedicated server:** headless build target, server-side persistence, no local player assumptions anywhere in boot code. **Security hardening lands here (committed 14.6.0):** code-lock codes currently travel and rest in plain text (same as save files) - move code validation server-side so raw codes never reach other clients, and audit every broadcast for data a client should not see (other players' lock codes, future chest contents). Acceptable for trusted-co-op pre-release, unacceptable for public dedicated servers.
 
 ### Open Scope (named with the version that deferred it)
-- **Grid system multiplayer** (milestone 8, never started): grids move, and every piece of replication so far assumes a world position that stays put.
-- **Beacon multiplayer** (milestone 9, never started): placement, naming, range and visibility do not replicate.
-- **Teams** (milestone 10, never started): no grouping exists, so nothing can be owned or seen "by the team" yet.
-- **Dedicated headless server** (milestone 11, never started): headless build target, server-side persistence, no local-player assumptions in boot code.
+- **Session model** (milestone 8, raised 14.21.1): joining requires the joiner to already hold the same world; no main-menu join; client-side chunk writes; per-player inventory still local.
+- **Grid system multiplayer** (milestone 9, never started): grids move, and every piece of replication so far assumes a world position that stays put.
+- **Beacon multiplayer** (milestone 10, never started): placement, naming, range and visibility do not replicate.
+- **Teams** (milestone 11, never started): no grouping exists, so nothing can be owned or seen "by the team" yet.
+- **Dedicated headless server** (milestone 12, never started): headless build target, server-side persistence, no local-player assumptions in boot code.
 - **Security hardening** (deferred 14.6.0): code-lock codes travel and rest in plain text; move validation server-side and audit every broadcast for data a client should not see.
 - **True client-sim-off** (deferred 14.12.0): clients still simulate and converge onto the host's outcome.
 - **Mid-belt packet cosmetics** (accepted 14.12.0): conveyor packet visuals stay per-machine.
@@ -123,7 +126,7 @@ These decisions are settled. Every future system is designed against them.
 - **One control, four states.** Off / Push To Talk / Toggle / Open Mic is a single row in Settings - Audio. An open microphone is never a surprise: the talk pill stays lit on the HUD for as long as the mic is open, in every mode.
 - **Desktop only, on purpose.** WebGL is closed scope, so there is no browser microphone-permission path and no `UNITY_WEBGL` branch to maintain.
 
-### Teams, Beacons & Shared Ownership - Rules That Bind (milestones 9-10)
+### Teams, Beacons & Shared Ownership - Rules That Bind (milestones 10-11)
 
 - **Teams are the grouping everything else hangs off.** Shared build costs, friendly fire, team beacons, map markers and base permissions all resolve through team membership rather than each inventing their own list of players.
 - **Keyed by stable player id**, never by name or connection - a team survives a rename, a reconnect and a reload (MP-readiness checklist).

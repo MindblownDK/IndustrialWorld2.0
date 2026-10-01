@@ -20,6 +20,21 @@
 // is measured against the avatar's OWN up axis, never world up: spherical
 // planets make world-up meaningless almost everywhere.
 //
+// 14.21.1 - FOOT GROUNDING. The rig's height was solved exactly once, at
+// build time, from the BIND pose (CrusaderModel measures the lowest baked
+// vertex and lifts the rig by it). Then 14.17.0 put animation on top: every
+// Mixamo clip carries its own hip height, so the moment Idle or Walking takes
+// over, the solved offset is for a pose the model is no longer in - the
+// avatar settles half a metre above the ground and stays there. The fix is to
+// re-solve it every frame from the CURRENT animated pose: measure the lowest
+// foot bone and shift the rig so the sole sits back on the avatar's pivot.
+// Skipped while airborne, where the feet are supposed to leave the floor.
+//
+// 14.22.0 - CROUCH. Crouching used to squash the model vertically (a 0.62
+// scale on the root). If crouch clips are present they are used instead and
+// the squash is never applied; without them the squash stays exactly as it
+// was, so this is additive.
+//
 // Root motion stays OFF: the slide (and the future weapon pack clips) are not
 // authored in place, and the network transform owns all movement - humanoid
 // retargeting simply drops the root translation for us.
@@ -42,7 +57,9 @@ namespace VoxelEngine.Networking
         // held. Sword uses the sword-and-shield pack; rifle/pistol slots come
         // when those clips land.
         private const int S_IDLE = 6, S_WALK = 7, S_RUN = 8, S_JUMP = 9, ATTACK = 10;
-        private const int CLIP_COUNT = 11;
+        // Crouch (14.22.0): optional. Missing clips fall back to the old squash.
+        private const int C_IDLE = 11, C_WALK = 12;
+        private const int CLIP_COUNT = 13;
 
         /// <summary>Mirrored slide flag (set by PlayerAvatar).</summary>
         public bool Sliding;
@@ -52,6 +69,13 @@ namespace VoxelEngine.Networking
         public bool BuildPose;
         /// <summary>Weapon stance: 0 none, 1 sword (set by PlayerAvatar from the held item).</summary>
         public int Stance;
+        /// <summary>Mirrored crouch flag (set by PlayerAvatar). Only honoured
+        /// when crouch clips exist - see HasCrouchClips.</summary>
+        public bool Crouched;
+
+        /// <summary>True when real crouch animation is available, so the avatar
+        /// knows not to fall back to squashing the model.</summary>
+        public bool HasCrouchClips => HasClips && _hasClip[C_IDLE];
 
         /// <summary>True once the graph is running with at least the idle clip.</summary>
         public bool HasClips { get; private set; }
@@ -76,6 +100,14 @@ namespace VoxelEngine.Networking
         private Transform _hand;         // right hand bone (pose direction reference)
         private Vector3 _lastPos;
         private bool _hasLastPos;
+
+        // ── foot grounding (14.21.1) ──
+        private Transform _leftFoot, _rightFoot;
+        private float _bindLocalY;      // the bind-pose height CrusaderModel solved
+        private float _bindFootY;       // where the lowest foot bone sat in that pose
+        private float _groundFix;       // smoothed correction currently applied
+        private bool _canGround;
+        private bool _airborneNow;
         private float _speed;            // smoothed planar m/s
         private float _vertical;         // smoothed vertical m/s
 
@@ -99,6 +131,10 @@ namespace VoxelEngine.Networking
             clips[S_RUN]  = LoadClip(sword + "run");
             clips[S_JUMP] = LoadClip(sword + "jump");
             clips[ATTACK] = LoadClip(sword + "slash");
+            // Mixamo exports these under several names depending on how they
+            // were downloaded; accept any of them rather than demanding one.
+            clips[C_IDLE] = LoadClip("Crouch_idle", "Crouching_idle", "Crouch idle", "Crouching");
+            clips[C_WALK] = LoadClip("Crouched_walking", "Crouch_walk", "Crouched walking", "Crouch_walking");
 
             if (animator == null || clips[IDLE] == null)
             {
@@ -138,6 +174,8 @@ namespace VoxelEngine.Networking
             _settle = 0.75f;   // ignore the spawn snap - it looks like a huge fall
             _diagAt = Time.time + 4f;
             HasClips = true;
+
+            PrepareFootGrounding();
         }
 
         /// <summary>Play the swing clip once, full body. 14.18.4: any held-item
@@ -174,11 +212,14 @@ namespace VoxelEngine.Networking
         /// <summary>Load the first clip inside one FBX under Resources/PlayerAnimations.
         /// Addressed by FILE name, because Mixamo names every clip inside
         /// "mixamo.com" - the file name is the only reliable identity.</summary>
-        private static AnimationClip LoadClip(string file)
+        private static AnimationClip LoadClip(params string[] files)
         {
-            var all = Resources.LoadAll<AnimationClip>("PlayerAnimations/" + file);
-            for (int i = 0; i < all.Length; i++)
-                if (all[i] != null) return all[i];
+            for (int f = 0; f < files.Length; f++)
+            {
+                var all = Resources.LoadAll<AnimationClip>("PlayerAnimations/" + files[f]);
+                for (int i = 0; i < all.Length; i++)
+                    if (all[i] != null) return all[i];
+            }
             return null;
         }
 
@@ -243,13 +284,24 @@ namespace VoxelEngine.Networking
             if (airborne && !_wasAirborne) _playables[jumpSlot].SetTime(0.0);   // replay, never a stale frame
             if (Sliding && !_wasSliding) _playables[SLIDE].SetTime(0.0);        // slides start at the drop
             _wasAirborne = airborne;
+            _airborneNow = airborne;
             _wasSliding = Sliding;
             if (_attackTime > 0f) _attackTime -= dt;
             bool attacking = _attackTime > 0f && _hasClip[ATTACK];
 
+            bool crouching = Crouched && _hasClip[C_IDLE] && !airborne && !Sliding && !attacking;
+
             if (airborne && _hasClip[jumpSlot]) _targets[jumpSlot] = 1f;
             else if (attacking) _targets[ATTACK] = 1f;
             else if (Sliding && _hasClip[SLIDE]) _targets[SLIDE] = 1f;
+            else if (crouching)
+            {
+                // A crouch-walk clip is optional: without one, a crouching
+                // player who shuffles stays in the crouch idle rather than
+                // standing up to walk.
+                bool moving = _speed > 0.4f && _hasClip[C_WALK];
+                _targets[moving ? C_WALK : C_IDLE] = 1f;
+            }
             else if (_speed > 0.4f)
             {
                 float run = Mathf.Clamp01((_speed - 2.0f) / 2.5f);
@@ -287,8 +339,99 @@ namespace VoxelEngine.Networking
             }
         }
 
+        // ─────────────────────── foot grounding ───────────────────────
+
+        /// <summary>Records what the bind pose looked like, which is the pose
+        /// CrusaderModel solved the rig's height against. Everything after this
+        /// is measured as a difference from that reference, so a rig with an
+        /// unusual scale or an unusual skeleton still lands correctly.</summary>
+        private void PrepareFootGrounding()
+        {
+            _canGround = false;
+            var parent = transform.parent;
+            if (parent == null) return;
+
+            _leftFoot = FindBone("LeftToeBase") ?? FindBone("LeftFoot");
+            _rightFoot = FindBone("RightToeBase") ?? FindBone("RightFoot");
+            if (_leftFoot == null && _rightFoot == null) return;   // unknown skeleton: do nothing
+
+            _bindLocalY = transform.localPosition.y;
+            if (!TryLowestFoot(parent, out _bindFootY)) return;
+            _groundFix = 0f;
+            _canGround = true;
+        }
+
+        /// <summary>Shortest name wins, so toe bones never lose to their own
+        /// children and "LeftFoot" never matches "LeftFootIK_target".</summary>
+        private Transform FindBone(string suffix)
+        {
+            Transform best = null;
+            var all = GetComponentsInChildren<Transform>(true);
+            for (int i = 0; i < all.Length; i++)
+            {
+                if (!all[i].name.EndsWith(suffix, System.StringComparison.Ordinal)) continue;
+                if (best == null || all[i].name.Length < best.name.Length) best = all[i];
+            }
+            return best;
+        }
+
+        private bool TryLowestFoot(Transform parent, out float y)
+        {
+            y = 0f;
+            bool any = false;
+            if (_leftFoot != null)
+            {
+                y = parent.InverseTransformPoint(_leftFoot.position).y;
+                any = true;
+            }
+            if (_rightFoot != null)
+            {
+                float r = parent.InverseTransformPoint(_rightFoot.position).y;
+                y = any ? Mathf.Min(y, r) : r;
+                any = true;
+            }
+            return any;
+        }
+
+        /// <summary>Puts the sole back on the ground after the animator has
+        /// written the bones. The correction is the difference between where
+        /// the lowest foot sits NOW and where it sat in the bind pose that the
+        /// rig's height was solved against - no absolute assumption about how
+        /// tall the model is or where its hips belong.</summary>
+        private void ApplyFootGrounding()
+        {
+            if (!_canGround) return;
+            var parent = transform.parent;
+            if (parent == null) return;
+
+            float dt = Time.deltaTime;
+            float target = _groundFix;
+
+            // Airborne feet are SUPPOSED to leave the floor; hold the last
+            // correction through a jump instead of gluing the model down.
+            if (!_airborneNow && _settle <= 0f && TryLowestFoot(parent, out float footY))
+            {
+                target = _bindFootY - footY;
+                // A clip that wants more than this is wrong, not expressive.
+                target = Mathf.Clamp(target, -0.6f, 0.6f);
+            }
+
+            // Eased, so a walk/idle crossfade does not step the body.
+            _groundFix = dt > 0f
+                ? Mathf.Lerp(_groundFix, target, 1f - Mathf.Exp(-18f * dt))
+                : target;
+
+            var local = transform.localPosition;
+            local.y = _bindLocalY + _groundFix;
+            transform.localPosition = local;
+        }
+
         private void LateUpdate()
         {
+            // Feet first: the grounding offset moves the whole rig, and the
+            // building pose below is solved from world-space bone positions.
+            ApplyFootGrounding();
+
             // Building pose - applied after the animator so it wins the frame.
             if (!BuildPose || _upperArm == null || _avatarRoot == null) return;
             Vector3 from = _hand != null && _hand != _upperArm

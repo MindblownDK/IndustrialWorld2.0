@@ -59,6 +59,12 @@ namespace VoxelEngine.Networking
         // ── capture state ──
         private const int PacketsPerSecond = 25;        // 40 ms frames
         private const float OpenMicHangover = 0.45f;    // keeps word endings alive
+        /// <summary>How long the microphone keeps transmitting after the talk
+        /// key is released (14.21.1). Releasing the key the instant you finish
+        /// a word clipped that word: the driver's capture position lags real
+        /// time, so the audio you just spoke has not been readable yet. A short
+        /// tail drains what is already in the mic ring before closing.</summary>
+        private const float ReleaseTail = 0.30f;
 
         private AudioClip _micClip;
         private string _micDevice;
@@ -69,6 +75,7 @@ namespace VoxelEngine.Networking
         private int _encoderIndex;
         private ushort _sequence;
         private float _gateUntil;
+        private float _tailUntil;      // keeps the key-driven modes open just past release
         private float _nextDeviceCheck;
 
         // ── receive state ──
@@ -249,28 +256,36 @@ namespace VoxelEngine.Networking
             float rms = Mathf.Sqrt(sum / _frame.Length);
             LocalLevel = Mathf.Clamp01(Mathf.Max(LocalLevel * 0.75f, rms * 8f));
 
-            bool open;
+            // `wanted` is the player's intent this instant; `open` is whether
+            // the wire is live, which lags intent by the release tail.
+            bool wanted;
             switch (GameSettings.VoiceMode)
             {
                 case VoiceTalkMode.OpenMic:
                     if (rms >= GameSettings.VoiceActivation) _gateUntil = Time.unscaledTime + OpenMicHangover;
-                    open = Time.unscaledTime < _gateUntil;
+                    wanted = Time.unscaledTime < _gateUntil;   // hangover already covers the tail
                     break;
 
                 case VoiceTalkMode.Toggle:
                     // Latched in Update; the latch already respects text fields.
-                    open = _toggleLatched;
+                    wanted = _toggleLatched;
                     break;
 
                 default:
                     // Push to talk never fires while a text field owns the keyboard -
                     // typing the bound letter must not go on the air.
-                    open = !VoxelEngine.UI.UIState.TextInputActive
-                           && GameSettings.IsHeld(InputAction.PushToTalk);
+                    wanted = !VoxelEngine.UI.UIState.TextInputActive
+                             && GameSettings.IsHeld(InputAction.PushToTalk);
                     break;
             }
 
-            LocalTransmitting = open && _canSend;
+            bool keyMode = GameSettings.VoiceMode != VoiceTalkMode.OpenMic;
+            if (wanted) _tailUntil = Time.unscaledTime + ReleaseTail;
+            bool open = wanted || (keyMode && Time.unscaledTime < _tailUntil);
+
+            // The pill reflects INTENT, not the drain tail - a pill that
+            // lingers after release reads as a stuck microphone.
+            LocalTransmitting = wanted && _canSend;
             if (!open) { _encoderIndex = 0; return; }
             if (!_canSend) return;   // monitoring only - the meter is live, the wire is not
 

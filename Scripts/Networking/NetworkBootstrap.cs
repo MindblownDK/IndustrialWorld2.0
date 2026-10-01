@@ -16,6 +16,7 @@
 //
 // Built and verified against Fish-Net 4.7.3.
 
+using System.Collections;
 using System.Collections.Generic;
 using FishNet.Broadcast;
 using FishNet.Connection;
@@ -1041,15 +1042,7 @@ namespace VoxelEngine.Networking
             // chunks apply (ordered channel), so the gather never sees remote
             // pieces and echoes them back.
             _networkManager.ClientManager.Broadcast(new WorldAckBroadcast { SeedMatches = !WorldMismatch });
-            if (!WorldMismatch)
-            {
-                SendBaseSnapshot(null);
-                SendBlockSnapshot(null);
-                SendContainerSnapshot(null);
-                SendMachineSnapshot(null);
-                SendDropSnapshot(null);
-                SendTerrainSnapshot(null);
-            }
+            if (!WorldMismatch) StartSnapshotStream(null);
         }
 
         /// <summary>Server: seed-matching client acknowledged - send it the base.</summary>
@@ -1057,12 +1050,64 @@ namespace VoxelEngine.Networking
         {
             if (!_serverStarted || conn.IsLocalClient) return;
             if (!msg.SeedMatches) return;
-            SendBaseSnapshot(conn);
-            SendBlockSnapshot(conn);
-            SendContainerSnapshot(conn);
-            SendMachineSnapshot(conn);
-            SendDropSnapshot(conn);
-            SendTerrainSnapshot(conn);
+            StartSnapshotStream(conn);
+        }
+
+        // ── staged join catch-up (14.21.1) ──────────────────────────────
+        //
+        // This used to be six full-world gathers plus every resulting
+        // broadcast, all inside ONE frame. On a built-up world that is the
+        // 5-10 second freeze the host saw the moment somebody knocked: the
+        // main thread was walking the whole base, every container, every
+        // machine, every drop and every edited chunk before it drew again.
+        //
+        // The work itself is unavoidable - the joiner needs all of it - so it
+        // is spread instead: one gather per frame, and a frame break every few
+        // broadcasts inside each gather. The join takes the same wall time and
+        // the host keeps rendering through it.
+
+        /// <summary>Broadcasts between frame breaks, minus one (power of two).</summary>
+        private const int SnapshotYieldMask = 3;
+
+        private Coroutine _snapshotStream;
+        private readonly Queue<NetworkConnection> _snapshotQueue = new Queue<NetworkConnection>();
+
+        /// <summary>Queue a full catch-up for one target (null = upload to the
+        /// host). Two joiners arriving together are served one after the other
+        /// rather than interleaving six gathers each.</summary>
+        private void StartSnapshotStream(NetworkConnection target)
+        {
+            _snapshotQueue.Enqueue(target);
+            if (_snapshotStream == null) _snapshotStream = StartCoroutine(SnapshotStreamLoop());
+        }
+
+        private IEnumerator SnapshotStreamLoop()
+        {
+            while (_snapshotQueue.Count > 0)
+            {
+                var target = _snapshotQueue.Dequeue();
+                // A client can disconnect mid-catch-up; broadcasting at a dead
+                // connection is wasted serialization, so re-check each phase.
+                yield return StartCoroutine(SendBaseSnapshot(target));
+                if (!StillWorthSending(target)) continue;
+                yield return StartCoroutine(SendBlockSnapshot(target));
+                if (!StillWorthSending(target)) continue;
+                yield return StartCoroutine(SendContainerSnapshot(target));
+                if (!StillWorthSending(target)) continue;
+                yield return StartCoroutine(SendMachineSnapshot(target));
+                if (!StillWorthSending(target)) continue;
+                yield return StartCoroutine(SendDropSnapshot(target));
+                if (!StillWorthSending(target)) continue;
+                yield return StartCoroutine(SendTerrainSnapshot(target));
+            }
+            _snapshotStream = null;
+        }
+
+        private bool StillWorthSending(NetworkConnection target)
+        {
+            if (target == null) return _clientStarted;      // uploading to the host
+            return _serverStarted
+                   && _networkManager.ServerManager.Clients.ContainsKey(target.ClientId);
         }
 
         public void SendBlockPlaced(BlockSnapshot snap)
@@ -1139,11 +1184,11 @@ namespace VoxelEngine.Networking
 
         /// <summary>Gather all standing item-blocks and send them chunked - to a joining
         /// connection when called as server, up to the server when target is null.</summary>
-        private void SendBlockSnapshot(NetworkConnection target)
+        private IEnumerator SendBlockSnapshot(NetworkConnection target)
         {
             const int ChunkSize = 32;
             var blocks = BlockSync.GatherSnapshot();
-            if (blocks.Count == 0) return;
+            if (blocks.Count == 0) yield break;
             int total = Mathf.CeilToInt(blocks.Count / (float)ChunkSize);
             for (int i = 0; i < total; i++)
             {
@@ -1156,6 +1201,7 @@ namespace VoxelEngine.Networking
                 };
                 if (target != null) _networkManager.ServerManager.Broadcast(target, chunk, true);
                 else _networkManager.ClientManager.Broadcast(chunk);
+                if ((i & SnapshotYieldMask) == SnapshotYieldMask) yield return null;
             }
         }
 
@@ -1195,11 +1241,11 @@ namespace VoxelEngine.Networking
 
         /// <summary>Gather every container-carrying block and send it chunked - to a
         /// joining connection when called as server, up to the server when target is null.</summary>
-        private void SendContainerSnapshot(NetworkConnection target)
+        private IEnumerator SendContainerSnapshot(NetworkConnection target)
         {
             const int ChunkSize = 16;
             var records = ContainerSync.GatherSnapshot();
-            if (records.Count == 0) return;
+            if (records.Count == 0) yield break;
             int total = Mathf.CeilToInt(records.Count / (float)ChunkSize);
             for (int i = 0; i < total; i++)
             {
@@ -1212,6 +1258,7 @@ namespace VoxelEngine.Networking
                 };
                 if (target != null) _networkManager.ServerManager.Broadcast(target, chunk, true);
                 else _networkManager.ClientManager.Broadcast(chunk);
+                if ((i & SnapshotYieldMask) == SnapshotYieldMask) yield return null;
             }
         }
 
@@ -1251,11 +1298,11 @@ namespace VoxelEngine.Networking
 
         /// <summary>Gather every machine-runtime-carrying block and send it chunked -
         /// to a joining connection when called as server, up to the server when target is null.</summary>
-        private void SendMachineSnapshot(NetworkConnection target)
+        private IEnumerator SendMachineSnapshot(NetworkConnection target)
         {
             const int ChunkSize = 16;
             var records = MachineSync.GatherSnapshot();
-            if (records.Count == 0) return;
+            if (records.Count == 0) yield break;
             int total = Mathf.CeilToInt(records.Count / (float)ChunkSize);
             for (int i = 0; i < total; i++)
             {
@@ -1268,6 +1315,7 @@ namespace VoxelEngine.Networking
                 };
                 if (target != null) _networkManager.ServerManager.Broadcast(target, chunk, true);
                 else _networkManager.ClientManager.Broadcast(chunk);
+                if ((i & SnapshotYieldMask) == SnapshotYieldMask) yield return null;
             }
         }
 
@@ -1365,11 +1413,11 @@ namespace VoxelEngine.Networking
 
         /// <summary>Gather every live world drop and send it chunked - to a joining
         /// connection when called as server, up to the server when target is null.</summary>
-        private void SendDropSnapshot(NetworkConnection target)
+        private IEnumerator SendDropSnapshot(NetworkConnection target)
         {
             const int ChunkSize = 32;
             var records = DropSync.GatherSnapshot();
-            if (records.Count == 0) return;
+            if (records.Count == 0) yield break;
             int total = Mathf.CeilToInt(records.Count / (float)ChunkSize);
             for (int i = 0; i < total; i++)
             {
@@ -1382,6 +1430,7 @@ namespace VoxelEngine.Networking
                 };
                 if (target != null) _networkManager.ServerManager.Broadcast(target, chunk, true);
                 else _networkManager.ClientManager.Broadcast(chunk);
+                if ((i & SnapshotYieldMask) == SnapshotYieldMask) yield return null;
             }
         }
 
@@ -1406,11 +1455,12 @@ namespace VoxelEngine.Networking
 
         /// <summary>Send every edited chunk of the current planet - to a joining
         /// connection when called as server, up to the server when target is null.</summary>
-        private void SendTerrainSnapshot(NetworkConnection target)
+        private IEnumerator SendTerrainSnapshot(NetworkConnection target)
         {
             var chunks = TerrainSync.GatherWireChunks();
-            if (chunks.Count == 0) return;
+            if (chunks.Count == 0) yield break;
             string body = TerrainSync.CurrentBodyName();
+            int sent = 0;
             foreach (var chunk in chunks)
             {
                 var msg = new TerrainChunkBroadcast
@@ -1420,6 +1470,7 @@ namespace VoxelEngine.Networking
                 };
                 if (target != null) _networkManager.ServerManager.Broadcast(target, msg, true);
                 else _networkManager.ClientManager.Broadcast(msg);
+                if ((++sent & SnapshotYieldMask) == SnapshotYieldMask) yield return null;
             }
             Debug.Log($"[NetworkBootstrap] Terrain catch-up: {(target != null ? "sent" : "uploaded")} {chunks.Count} edited chunk(s).");
         }
@@ -1439,11 +1490,11 @@ namespace VoxelEngine.Networking
 
         /// <summary>Gather everything standing and send it chunked - to a specific
         /// connection when called as server, up to the server when target is null.</summary>
-        private void SendBaseSnapshot(NetworkConnection target)
+        private IEnumerator SendBaseSnapshot(NetworkConnection target)
         {
             const int ChunkSize = 32;   // comfortably inside a reliable packet
             var pieces = BuildingSync.GatherSnapshot();
-            if (pieces.Count == 0) return;
+            if (pieces.Count == 0) yield break;
             int total = Mathf.CeilToInt(pieces.Count / (float)ChunkSize);
             for (int i = 0; i < total; i++)
             {
@@ -1456,6 +1507,7 @@ namespace VoxelEngine.Networking
                 };
                 if (target != null) _networkManager.ServerManager.Broadcast(target, chunk, true);
                 else _networkManager.ClientManager.Broadcast(chunk);
+                if ((i & SnapshotYieldMask) == SnapshotYieldMask) yield return null;
             }
         }
 
@@ -1463,6 +1515,10 @@ namespace VoxelEngine.Networking
 
         private void GoOffline()
         {
+            // Nothing left to catch up to.
+            _snapshotQueue.Clear();
+            if (_snapshotStream != null) { StopCoroutine(_snapshotStream); _snapshotStream = null; }
+
             NetworkSession.SetMode(SessionMode.Offline);
             _statusLine = "Offline";
             WorldMismatch = false;
