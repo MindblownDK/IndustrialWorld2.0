@@ -85,18 +85,6 @@ The project structure is broken down into clean, single-responsibility domains:
 
 ---
 
-## 🚀 Getting Started with Unity 6.5
-
-### Prerequisites
-* **Unity Hub** with **Unity 6.5.x** installed.
-* **Render Pipeline:** Universal Render Pipeline (URP). Keep modern post-processing active (Bloom, ACES Tonemapping, Motion Blur) to support the sleek look.
-
-### Repository Conventions
-* **Main Branch:** Protected. All work must be done via clean feature branches (`feature/your-feature-name`).
-* **Commit Messages:** Must be descriptive and semantic (e.g., `feat(ui): add sleek contextual radial menu for machine upgrades`).
-
----
-
 <p align="center">
   Designed with absolute precision. Focused on simplicity. Built for pure quality.
 </p>
