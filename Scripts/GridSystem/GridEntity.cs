@@ -314,8 +314,17 @@ namespace VoxelEngine.GridSystem
         public int WarpDrivesToUse { get; set; }
         public Transform ActiveControlFrame { get; private set; }
         public Player.PlayerController ActiveControlPilot { get; private set; }
+        // Both clauses below ask THIS machine whether somebody is sitting here, which
+        // is the only question that existed before multiplayer. It is the wrong
+        // question now and it broke two things at once (14.26.3): the host refused to
+        // apply a guest's input, because no pilot was sitting in the host's own copy
+        // of the cockpit, and a watching client drew a ship under full burn with cold
+        // thrusters, because the flight model only lights a nozzle on a hull it
+        // believes is being flown. The third clause asks the replicated seat table,
+        // which has the same answer on every machine.
         public bool IsControlled => (ActiveCockpit != null && ActiveCockpit.Pilot != null)
-                                 || (ActiveControlFrame != null && ActiveControlPilot != null);
+                                 || (ActiveControlFrame != null && ActiveControlPilot != null)
+                                 || VoxelEngine.Networking.GridSync.IsPiloted(this);
 
         public void BeginExternalControl(Transform controlFrame, Player.PlayerController pilot)
         {

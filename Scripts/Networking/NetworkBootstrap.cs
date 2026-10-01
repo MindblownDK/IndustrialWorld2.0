@@ -165,6 +165,12 @@ namespace VoxelEngine.Networking
         public Quaternion Rotation;
         public Vector3 Velocity;
         public Vector3 AngularVelocity;
+        // The stick that produced this motion - what lights a watching player's
+        // view of somebody else's thrusters.
+        public Vector3 Thrust;
+        public float Yaw;
+        public float Pitch;
+        public float Roll;
     }
 
     // ── Building replication (14.4.0). Client -> server -> other clients. ──
@@ -1420,7 +1426,11 @@ namespace VoxelEngine.Networking
                 Position = pose.Position,
                 Rotation = pose.Rotation,
                 Velocity = pose.Velocity,
-                AngularVelocity = pose.AngularVelocity
+                AngularVelocity = pose.AngularVelocity,
+                Thrust = pose.Thrust,
+                Yaw = pose.Yaw,
+                Pitch = pose.Pitch,
+                Roll = pose.Roll
             }, Channel.Unreliable);
         }
 
@@ -1646,7 +1656,11 @@ namespace VoxelEngine.Networking
                 Position = msg.Position,
                 Rotation = msg.Rotation,
                 Velocity = msg.Velocity,
-                AngularVelocity = msg.AngularVelocity
+                AngularVelocity = msg.AngularVelocity,
+                Thrust = msg.Thrust,
+                Yaw = msg.Yaw,
+                Pitch = msg.Pitch,
+                Roll = msg.Roll
             });
         }
 

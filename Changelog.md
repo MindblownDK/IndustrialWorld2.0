@@ -1,9 +1,38 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.26.2-dev`
+**Current Version:** `14.26.3-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.26.3-dev] Who Is Flying This
+
+**Type:** PATCH - the rest of the guest-piloting bug, plus two kinematic-body warnings. No save format or public API change.
+
+**A guest still could not fly, and nobody could see anybody else's thruster plumes. Same cause.**
+
+14.26.1 fixed the client half of this - a client now runs its grid's flight model instead of skipping it - and that was necessary but not sufficient. The remaining fault was one property:
+
+```
+IsControlled => (ActiveCockpit != null && ActiveCockpit.Pilot != null)
+             || (ActiveControlFrame != null && ActiveControlPilot != null)
+```
+
+Both clauses ask THIS machine whether somebody is sitting here. That was the only question that existed before multiplayer, and it is the wrong question now, because the pilot is very often on a different machine. It broke two things that looked unrelated:
+
+- **The host refused a guest's input.** The input arrived, passed the seat check and was written to the hull - and then the flight model declined to act on it, because no pilot was sitting in the host's own copy of that cockpit. The ship was being flown by nobody as far as the only machine that could move it was concerned.
+- **A watching player saw cold thrusters.** The flight model only lights a nozzle on a hull it believes is being flown, so every machine except the pilot's drew a ship under full burn with nothing coming out of it. Each player saw plumes only on the ship they were flying themselves, which is exactly the shape of a question answered locally.
+
+`IsControlled` now also asks the replicated seat table from 14.26.1, which has the same answer on every machine.
+
+**The stick travels with the pose.** Knowing a ship is piloted is not enough to draw it correctly - a watching client has no pilot of its own to ask what the throttle is doing. Thrust and the three rotation axes now ride along in the pose broadcast, which already runs at 20 Hz to the same recipients. Nothing on a client acts on them (the hull is kinematic and every force it asks for is discarded), but the thrusters read them to decide which nozzles are lit and how hard.
+
+A hull holding a hover is also no longer parked as idle. It is barely moving, so the "has this moved enough to be worth sending" test skipped it - while its thrusters were working hard to keep it there. That test now counts the stick as well as the motion, or a watching player sees a ship hanging in the air with nothing holding it up.
+
+**Two kinematic-body warnings, both real and both harmless to fix.**
+
+- Taking a hull over on a client zeroed its velocities *after* making it kinematic. Unity refuses to set a kinematic body's velocity and warns, so this fired once per hull on every client. The two lines now run before the switch, which is also the only order in which they do anything.
+- Landing gear killed impact drift the same way. On a client the hull is already kinematic and driven by the host's pose stream, so there is no drift to kill and nothing to integrate; the velocity writes are skipped there. The gear also no longer claims it made the body kinematic when it was already kinematic, which would have handed a client's hull back to its own physics on unlock.
 
 ### [14.26.2-dev] Your Own Sky
 

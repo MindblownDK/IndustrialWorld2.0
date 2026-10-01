@@ -81,6 +81,14 @@ namespace VoxelEngine.Networking
         public Quaternion Rotation;
         public Vector3 Velocity;
         public Vector3 AngularVelocity;
+
+        // The stick that produced this motion, carried alongside it. A watching
+        // client has no pilot of its own to ask, so without this it has no idea the
+        // thrusters are lit and draws a ship under full burn with cold nozzles.
+        public Vector3 Thrust;
+        public float Yaw;
+        public float Pitch;
+        public float Roll;
     }
 
     /// <summary>
@@ -166,6 +174,19 @@ namespace VoxelEngine.Networking
             _netAngularVelocity = pose.AngularVelocity;
             _netReceivedAt = Time.time;
             _hasNetPose = true;
+
+            // Hand the pilot's stick to the local copy of the ship. Nothing on a
+            // client acts on it - the hull is kinematic and every force it asks for
+            // is discarded - but the thrusters read it to decide which nozzles are
+            // lit and how hard, so this is what makes a watching player see the
+            // plumes of a ship somebody else is flying.
+            if (Grid != null)
+            {
+                Grid.ThrustInput   = pose.Thrust;
+                Grid.RotationYaw   = pose.Yaw;
+                Grid.RotationPitch = pose.Pitch;
+                Grid.RotationRoll  = pose.Roll;
+            }
         }
 
         internal GridPose CapturePose()
@@ -179,7 +200,11 @@ namespace VoxelEngine.Networking
                     Position = body.position,
                     Rotation = body.rotation,
                     Velocity = body.linearVelocity,
-                    AngularVelocity = body.angularVelocity
+                    AngularVelocity = body.angularVelocity,
+                    Thrust = Grid != null ? Grid.ThrustInput : Vector3.zero,
+                    Yaw = Grid != null ? Grid.RotationYaw : 0f,
+                    Pitch = Grid != null ? Grid.RotationPitch : 0f,
+                    Roll = Grid != null ? Grid.RotationRoll : 0f
                 };
             }
             return new GridPose
@@ -188,7 +213,11 @@ namespace VoxelEngine.Networking
                 Position = transform.position,
                 Rotation = transform.rotation,
                 Velocity = Vector3.zero,
-                AngularVelocity = Vector3.zero
+                AngularVelocity = Vector3.zero,
+                Thrust = Grid != null ? Grid.ThrustInput : Vector3.zero,
+                Yaw = Grid != null ? Grid.RotationYaw : 0f,
+                Pitch = Grid != null ? Grid.RotationPitch : 0f,
+                Roll = Grid != null ? Grid.RotationRoll : 0f
             };
         }
 
@@ -199,6 +228,12 @@ namespace VoxelEngine.Networking
             var pose = CapturePose();
             if (pose.Velocity.sqrMagnitude > 0.0004f) return true;           // >2 cm/s
             if (pose.AngularVelocity.sqrMagnitude > 0.0004f) return true;
+            // A ship holding a hover is barely moving and would be parked as idle,
+            // but its thrusters are working hard to keep it there. The stick has to
+            // keep flowing or a watching player sees it hanging in the air with
+            // nothing holding it up.
+            if (pose.Thrust.sqrMagnitude > 0.0001f) return true;
+            if (Mathf.Abs(pose.Yaw) + Mathf.Abs(pose.Pitch) + Mathf.Abs(pose.Roll) > 0.01f) return true;
             if ((pose.Position - lastSentPosition).sqrMagnitude > 0.0001f) return true;   // >1 cm
             return Quaternion.Angle(pose.Rotation, lastSentRotation) > 0.1f;
         }
@@ -215,9 +250,13 @@ namespace VoxelEngine.Networking
             // correction the host never agreed to and never hears about.
             if (!_rb.isKinematic)
             {
-                _rb.isKinematic = true;
+                // Zero the velocities BEFORE going kinematic. Unity refuses to let a
+                // kinematic body's velocity be set and warns every time, and the other
+                // order meant that warning fired on the very frame every hull on a
+                // client was taken over.
                 _rb.linearVelocity = Vector3.zero;
                 _rb.angularVelocity = Vector3.zero;
+                _rb.isKinematic = true;
             }
 
             if (!_hasNetPose) return;
@@ -536,6 +575,22 @@ namespace VoxelEngine.Networking
 
         internal static string SeatKey(string netId, Vector3Int cell)
             => $"{netId}|{cell.x},{cell.y},{cell.z}";
+
+        /// <summary>True when ANY seat on this hull is occupied, by anyone, on any
+        /// machine. This is what tells a watching client that a ship is being flown -
+        /// without it the flight model treats an unmanned hull as drifting and never
+        /// lights a thruster, and the host refuses to apply a guest's input because no
+        /// pilot is sitting in its own copy of the cockpit.</summary>
+        public static bool IsPiloted(GridEntity grid)
+        {
+            if (grid == null || NetworkSession.Mode == SessionMode.Offline) return false;
+            var tag = grid.GetComponent<GridNetTag>();
+            if (tag == null || string.IsNullOrEmpty(tag.Id)) return false;
+            string prefix = tag.Id + "|";
+            foreach (var key in _occupiedSeats)
+                if (key.StartsWith(prefix, System.StringComparison.Ordinal)) return true;
+            return false;
+        }
 
         /// <summary>True when somebody else is already in this seat. Checked before a
         /// player is ever put in it, so the usual case is a clean refusal rather than

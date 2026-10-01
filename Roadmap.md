@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.26.2-dev`
-**Roadmap Version:** `14.26.2-dev`
+**Current Version:** `14.26.3-dev`
+**Roadmap Version:** `14.26.3-dev`
 **Date:** 2026-10-01
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,10 @@
 
 ## 0. Recently Done
 
+### 14.26.3-dev - Who Is Flying This
+A grid asked the local machine whether it had a pilot, so the host refused a guest's input (nobody was sitting in its own copy of the cockpit) and every machine except the pilot's drew a ship under burn with cold thrusters. It asks the replicated seat table now, and the pilot's stick rides along in the pose broadcast so a watching player can see somebody else's plumes. A hovering hull is no longer parked as idle.
+Fixed two kinematic-body velocity warnings: taking a hull over on a client zeroed velocities after going kinematic rather than before, and landing gear tried to kill drift on a body that was never integrating.
+
 ### 14.26.2-dev - Your Own Sky
 Fly mode is per-process state again instead of a PlayerPrefs value shared by every copy of the game on one machine. A second player without a jetpack was clearing the shared flag every frame, so a player who did have one could not stay airborne - flight appeared to require that everyone owned a jetpack. PlayerPrefs now only seeds the value and is written back only when a preference is deliberately saved.
 
@@ -44,10 +48,6 @@ A guest can fly: stick and throttle travel to the host, which flies the ship it 
 Milestone 9 part one: movable grids replicate. A piece is addressed as (stable grid id, integer cell) rather than by world position, so an edit stays correct while the hull is flying. The grid id is saved.
 Only the host simulates a grid; on a client every grid rigidbody is kinematic and driven by the host's pose stream with dead reckoning and eased correction, so there is no second simulation to diverge. Structure crosses the wire as the save record itself, in reassembled parts, resent only when the hull's shape changes.
 Open: riders are not yet carried by a moving hull, and a guest cannot pilot - both are part two.
-
-### 14.24.1-dev - Nothing Holding You Down
-The walk controller no longer drifts upward while standing still: the per-frame anti-stick lift is gone and the footing recovery is an absolute solve in both directions, so the capsule has a fixed resting clearance instead of a floor with no ceiling. Ground probe buffer widened so the solve cannot go blind in a base or a forest.
-Join catch-up no longer freezes the host. All six snapshot gathers are lazy and interruptible, frame breaks are driven by a 4 ms budget that covers the capture as well as the send, and each phase logs its count, wall time and frame span.
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).

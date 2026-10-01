@@ -166,9 +166,17 @@ namespace VoxelEngine.GridSystem
             _joint.enableCollision = false;
 
             // Kill the last bit of impact drift so the ship feels magnetically clamped.
-            Grid.Body.linearVelocity = Vector3.zero;
-            Grid.Body.angularVelocity = Vector3.zero;
-            if (connectedBody == null)
+            // A hull that is already kinematic is a client's copy, driven by the host's
+            // pose stream: Unity refuses to let a kinematic body's velocity be set and
+            // warns about it, and there is no drift to kill because nothing here is
+            // integrating the body in the first place.
+            bool alreadyKinematic = Grid.Body.isKinematic;
+            if (!alreadyKinematic)
+            {
+                Grid.Body.linearVelocity = Vector3.zero;
+                Grid.Body.angularVelocity = Vector3.zero;
+            }
+            if (connectedBody == null && !alreadyKinematic)
             {
                 Grid.Body.isKinematic = true;
                 _madeGridKinematic = true;
