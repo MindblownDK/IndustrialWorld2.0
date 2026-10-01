@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.23.1-dev`
-**Roadmap Version:** `14.23.1-dev`
+**Current Version:** `14.23.2-dev`
+**Roadmap Version:** `14.23.2-dev`
 **Date:** 2026-10-01
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,9 @@
 
 ## 0. Recently Done
 
+### 14.23.2-dev - Nobody Was Listening
+The main-menu join never connected: the auto-join hung off Start, and FishNet's NetworkManager is DontDestroyOnLoad, so Start ran once in the first scene of the session and never again. The join is now driven from the update loop. Duplicate Network objects now name themselves and their scenes.
+
 ### 14.23.1-dev - Feet On The Ground
 First live test of the main-menu join: a PlayerPrefs read in a field initializer was aborting the rest of the menu's initializers, the joining overlay was mounted from a hook that only fires on the first scene of the run, a world build that threw left a blank scene with no message, and a host quitting left guests in an unserved world. Avatar foot grounding was re-solved absolutely - the 14.21.1 version measured a value that already contained its own output and settled at a permanent half-correction.
 
@@ -40,9 +43,6 @@ Crouch is an animation instead of a vertical squash when crouch clips are presen
 
 ### 14.21.1-dev - Heard To The Last Word
 Four live-test fixes: the end of every spoken sentence was being stranded in the listener's jitter buffer; the host froze 5-10 s on a join because the whole catch-up ran in one frame; connected clients were writing their own world save over the top of the host's authority; and animated avatars floated half a metre above the ground because the rig height was solved once in the bind pose.
-
-### 14.21.0-dev - The Quiet Corner
-Voice talk mode became one four-state control (Off / Push To Talk / Toggle / Open Mic) with the talk key rebindable from the audio page and the capture device always listed. The top-left HUD became one stack: target card, then chat, then the voice pills - chat no longer sits on the gravity readout in the bottom-left corner.
 
 ---
 

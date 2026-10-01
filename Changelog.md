@@ -1,9 +1,17 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.23.1-dev`
+**Current Version:** `14.23.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.23.2-dev] Nobody Was Listening
+
+**Type:** PATCH - the main-menu join never actually connected. No save or API change.
+
+**The client sat on "Connecting..." and nothing was ever asked to connect.** Not one trace line reached either console, which ruled out the handshake entirely: the connection attempt itself was never made. The cause is a lifecycle assumption that is wrong for exactly one object in the project. FishNet's NetworkManager marks itself DontDestroyOnLoad, so the Network object outlives every scene change - its Awake and Start run ONCE per play session, in whichever scene it first appeared, and the copy sitting in the next scene is discarded as a duplicate. The auto-join was hung off Start, so it ran before the player had chosen anything, found no pending join, and was never called again. Nothing was broken about the world card, the gate or the overlay; the client was waiting on a request that had not been sent. The join is now driven from the update loop - two field reads a frame, armed once per pending join - which cannot be out-ordered by a scene load, a duplicate object or a script execution order.
+
+**Two Network objects now say so out loud.** The surviving one logs which scene it came from and whether it is carrying the avatar prefab, and a discarded duplicate names both scenes. If the object that persists is not the one the setup step configured, nothing spawns and nothing explains why - that failure is no longer silent.
 
 ### [14.23.1-dev] Feet On The Ground
 

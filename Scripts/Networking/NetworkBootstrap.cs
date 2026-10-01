@@ -332,9 +332,23 @@ namespace VoxelEngine.Networking
 
         private void Awake()
         {
-            if (Instance != null && Instance != this) { Destroy(gameObject); return; }
+            if (Instance != null && Instance != this)
+            {
+                // The survivor is whichever Network object got here first, and
+                // it outlives scene loads. Say so: a duplicate in the scene the
+                // player is standing in is silently discarded, and if THAT is
+                // the one carrying the avatar prefab, nothing will spawn.
+                Debug.LogWarning($"[NetworkBootstrap] A second Network object in scene " +
+                                 $"'{gameObject.scene.name}' was discarded - the one from " +
+                                 $"'{Instance.gameObject.scene.name}' is already live and persists " +
+                                 "across scene loads. Keep exactly one, in the game scene.");
+                Destroy(gameObject);
+                return;
+            }
             Instance = this;
             _networkManager = GetComponent<NetworkManager>();
+            Debug.Log($"[NetworkBootstrap] live from scene '{gameObject.scene.name}', " +
+                      $"avatar prefab {(avatarPrefab != null ? "assigned" : "MISSING")}.");
         }
 
         /// <summary>Wired in Start, not Awake: NetworkManager creates its
@@ -401,12 +415,6 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.RegisterBroadcast<DropSnapshotBroadcast>(OnClientDropSnapshot);
             _networkManager.ClientManager.RegisterBroadcast<TerrainChunkBroadcast>(OnClientTerrainChunk);
             _networkManager.ClientManager.RegisterBroadcast<BaseSnapshotBroadcast>(OnClientBaseSnapshot);
-
-            // A join started from the main menu finishes here: the address rode
-            // through the scene load on WorldSession and the world is waiting
-            // on the handshake. No pending join means this line does nothing,
-            // so a solo world boots exactly as before.
-            TryAutoJoin();
 
             // Container-contents poller (14.10.0) - idles while offline.
             if (GetComponent<ContainerSyncManager>() == null)
@@ -509,12 +517,42 @@ namespace VoxelEngine.Networking
         /// Generous: a cold host has to open its world and answer.</summary>
         private const float JoinTimeoutSeconds = 20f;
 
+        private bool _autoJoinAttempted;
+
+        /// <summary>Watches for a pending main-menu join.
+        ///
+        /// 14.23.2 - this MUST NOT hang off Start(). FishNet's NetworkManager
+        /// marks itself DontDestroyOnLoad, so the Network object outlives every
+        /// scene change and its Awake/Start run exactly ONCE per play session,
+        /// in whichever scene it first appeared; the copy sitting in the next
+        /// scene is destroyed as a duplicate by the Awake guard above. Start()
+        /// therefore fired before the player had chosen anything, found no
+        /// pending join, and was never called again - which is why the client
+        /// sat on "Connecting..." forever with nothing having been asked to
+        /// connect, and why not one [Join] line reached either console.
+        /// Polling here costs two field reads a frame and cannot be
+        /// out-ordered by a scene load, a duplicate or an execution order.</summary>
+        private void Update()
+        {
+            var pending = VoxelEngine.Menu.WorldSession.Instance;
+            if (pending == null || !pending.IsRemoteJoin)
+            {
+                _autoJoinAttempted = false;   // back in the menu: armed for the next one
+                _returningToMenu = false;
+                return;
+            }
+            if (_autoJoinAttempted || pending.hostWorldAdopted || IsOnline) return;
+            TryAutoJoin();
+        }
+
         /// <summary>Connect straight away when the player chose a host in the
         /// main menu. No-op in every other case.</summary>
         private void TryAutoJoin()
         {
             var session = VoxelEngine.Menu.WorldSession.Instance;
             if (session == null || !session.IsRemoteJoin || session.hostWorldAdopted) return;
+            if (_autoJoinAttempted) return;
+            _autoJoinAttempted = true;
 
             Debug.Log($"[Join] 1/6 auto-connecting to {session.pendingJoinAddress} with world generation held.");
             VoxelEngine.Menu.WorldBootGate.Report($"Connecting to {session.pendingJoinAddress}...");
