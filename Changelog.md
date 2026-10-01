@@ -1,9 +1,33 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.26.3-dev`
+**Current Version:** `14.27.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.27.0-dev] Every Lever On The Ship
+
+**Type:** MINOR - a new replication channel. No save format change; existing saves and worlds are unaffected.
+
+**Milestone 9 replicated where a ship is and what its pilot is asking of it. It did not replicate the levers.**
+
+Landing gear was the one that showed, so it is worth being clear that it was never only landing gear. Gear, docking clamps, rail couplers, pistons and sliding doors were all purely local: a player pressed the key, their own copy of the ship responded, and no other machine ever heard. On the host - the only machine whose physics are real - a guest's gear never locked at all, so the ship stayed free to drift while the guest watched it sitting clamped to the pad.
+
+Five symptoms, one problem, so this is **one channel rather than five bespoke messages**. A block is addressed the way milestone 9 addresses everything on a hull: **(grid net id, integer cell)** - exact, stable while the ship is moving, and the same address on every machine.
+
+The shape is request, authority, state:
+
+1. A client never performs the action, it asks the host.
+2. The host performs it for real against its own physics, by calling the same methods a single-player game calls. Every rule those methods already enforce - gear needing a surface, a dock needing a free port, a coupler needing a truck - therefore applies to a guest exactly as it does to the host, with no second copy of those rules to drift out of step.
+3. The host tells everyone what actually happened, including the client that asked.
+
+**No prediction, deliberately.** Gear that visibly clamps and then lets go again because the host disagreed is worse than gear that takes a moment to clamp, and docking is a hard physical join that should not be guessed at. What a client IS allowed to run locally is the part with no physics in it - a door's travel, a piston's extension - because those are animations whose destination the host has already approved.
+
+**What a client must never do is touch the host's simulation**, and two places were doing exactly that. Landing gear and docking clamps both released the hull back to its own physics engine on unlock, with `isKinematic = false`. On a client that hull is kinematic *because the host drives it*, not because the gear made it so, and handing it back would have let a client's physics start moving a ship nobody else agreed had moved. Both now check whether they were the ones who made it kinematic in the first place. The docking port also got the velocity-write fix landing gear got in 14.26.3, for the same reason and with the same warning behind it.
+
+**Joining mid-session now includes the levers.** A ship that was already sitting on its gear when you arrived used to look like it was floating. Lever state is sent as the tail of the existing grid catch-up phase - hulls have to exist before their gear can be reported down - and only engaged blocks are sent, so a fleet parked with everything retracted costs nothing.
+
+The action id is an explicit byte and the values must never be renumbered. An old client and a new host disagreeing about what a 3 means would dock a ship when asked to open a door.
 
 ### [14.26.3-dev] Who Is Flying This
 

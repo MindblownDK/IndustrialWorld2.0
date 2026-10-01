@@ -40,7 +40,9 @@ namespace VoxelEngine.GridSystem
             Grid != null ? Grid.GetComponent<GridRailBogie>() : null;
 
         /// <summary>True when this car is towed by something.</summary>
-        public bool IsCoupled => OwnBogie != null && OwnBogie.LeadBogie != null;
+        public bool IsCoupled => (OwnBogie != null && OwnBogie.LeadBogie != null)
+                              || (VoxelEngine.Networking.NetworkSession.Mode
+                                  == VoxelEngine.Networking.SessionMode.Client && _netCoupled);
 
         /// <summary>
         /// Couples this car behind the nearest eligible one.
@@ -84,9 +86,21 @@ namespace VoxelEngine.GridSystem
         /// <summary>One press toggles, which is what a coupler lever does.</summary>
         public void Toggle()
         {
+            if (VoxelEngine.Networking.GridActionSync.Deferred(
+                    this, VoxelEngine.Networking.GridAction.RailCoupler, !IsCoupled)) return;
             if (IsCoupled) Uncouple();
             else TryCouple(out _);
         }
+
+        /// <summary>Adopt the host's answer. Coupling is a physical join between two
+        /// constructs and belongs to the host alone, so a client records the result
+        /// rather than performing it.</summary>
+        internal void ApplyNetworkCoupled(bool coupled)
+        {
+            _netCoupled = coupled;
+        }
+
+        private bool _netCoupled;
 
         public string StatusLabel
         {

@@ -233,9 +233,13 @@ namespace VoxelEngine.GridSystem
 
         public void Toggle()
         {
+            if (VoxelEngine.Networking.GridActionSync.Deferred(
+                    this, VoxelEngine.Networking.GridAction.SlidingDoor, !_targetOpen)) return;
             _targetOpen = !_targetOpen;
         }
 
+        /// <summary>A client runs the door's travel itself: it is an animation, and the
+        /// end state it is heading for came from the host.</summary>
         public void SetOpen(bool open)
         {
             _targetOpen = open;

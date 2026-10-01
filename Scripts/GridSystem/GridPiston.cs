@@ -30,12 +30,25 @@ namespace VoxelEngine.GridSystem
             if (pistonBase == null) pistonBase = transform.Find("Base")?.gameObject;
         }
 
+        public bool IsExtended => isExtended;
+
         public void Toggle()
         {
-            isExtended = !isExtended;
+            if (VoxelEngine.Networking.GridActionSync.Deferred(
+                    this, VoxelEngine.Networking.GridAction.Piston, !isExtended)) return;
+            SetExtended(!isExtended);
+        }
+
+        /// <summary>Drive the piston to a known end state. A client is allowed to run
+        /// this travel itself - it is an animation whose destination the host has
+        /// already agreed to, not a physics decision.</summary>
+        public void SetExtended(bool extended)
+        {
+            isExtended = extended;
             float goal = isExtended ? targetLength : 0f;
-            
+
             if (_moveCoroutine != null) StopCoroutine(_moveCoroutine);
+            if (!isActiveAndEnabled) { currentLength = goal; return; }
             _moveCoroutine = StartCoroutine(MovePiston(goal));
         }
 

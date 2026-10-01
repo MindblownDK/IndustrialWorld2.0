@@ -27,7 +27,17 @@ namespace VoxelEngine.GridSystem
 
         public ItemContainer container;
 
-        public bool IsDocked => _joint != null;
+        // Same reasoning as the landing gear: a client has no joint, so the host's
+        // answer is what "docked" means there.
+        private bool _netDocked;
+        public bool IsDocked => _joint != null || _netDocked;
+
+        /// <summary>Adopt the host's answer without re-enacting the join.</summary>
+        internal void ApplyNetworkDock(bool docked)
+        {
+            _netDocked = docked;
+            if (!docked) _manuallyUndocked = true;
+        }
         public BaseDock ConnectedBaseDock { get; private set; }
 
         private FixedJoint _joint;
@@ -117,6 +127,8 @@ namespace VoxelEngine.GridSystem
         /// <summary>Lock onto a docking port / base dock the connector is facing.</summary>
         public void TryDock()
         {
+            if (VoxelEngine.Networking.GridActionSync.Deferred(
+                    this, VoxelEngine.Networking.GridAction.DockingPort, true)) return;
             _manuallyUndocked = false;
             TryDockInternal();
         }
@@ -144,9 +156,16 @@ namespace VoxelEngine.GridSystem
             ConnectedBaseDock = baseDock;
             if (ConnectedBaseDock != null) ConnectedBaseDock.isOccupied = true;
 
-            Grid.Body.linearVelocity = Vector3.zero;
-            Grid.Body.angularVelocity = Vector3.zero;
-            if (_joint.connectedBody == null)
+            // A hull that is already kinematic is a client's copy driven by the host's
+            // pose stream. Unity refuses to set a kinematic body's velocity and warns,
+            // and there is no drift to kill because nothing here integrates the body.
+            bool alreadyKinematic = Grid.Body.isKinematic;
+            if (!alreadyKinematic)
+            {
+                Grid.Body.linearVelocity = Vector3.zero;
+                Grid.Body.angularVelocity = Vector3.zero;
+            }
+            if (_joint.connectedBody == null && !alreadyKinematic)
             {
                 Grid.Body.isKinematic = true;
                 _madeGridKinematic = true;
@@ -157,6 +176,8 @@ namespace VoxelEngine.GridSystem
 
         public void Disconnect()
         {
+            if (VoxelEngine.Networking.GridActionSync.Deferred(
+                    this, VoxelEngine.Networking.GridAction.DockingPort, false)) return;
             DisconnectInternal(manual: true);
         }
 

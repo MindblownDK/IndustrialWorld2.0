@@ -135,6 +135,26 @@ namespace VoxelEngine.Networking
         public bool Occupied;
     }
 
+    /// <summary>A player pulling a lever on a ship: gear, clamp, coupler, piston,
+    /// door. Client -> host as a REQUEST; the host decides and answers with state.
+    /// Reliable, because a dropped lock is a ship that drifts away.</summary>
+    public struct GridActionBroadcast : IBroadcast
+    {
+        public string NetId;
+        public Vector3Int Cell;
+        public byte Action;
+        public bool State;
+    }
+
+    /// <summary>Host -> everyone: what that lever actually ended up doing.</summary>
+    public struct GridActionStateBroadcast : IBroadcast
+    {
+        public string NetId;
+        public Vector3Int Cell;
+        public byte Action;
+        public bool State;
+    }
+
     /// <summary>Host -> one client: you did not get that seat. The backstop for two
     /// players reaching for the same cockpit in the same instant.</summary>
     public struct GridSeatDeniedBroadcast : IBroadcast
@@ -457,6 +477,8 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.RegisterBroadcast<GridPoseBroadcast>(OnServerGridPose);
             _networkManager.ServerManager.RegisterBroadcast<GridControlBroadcast>(OnServerGridControl);
             _networkManager.ServerManager.RegisterBroadcast<GridSeatStateBroadcast>(OnServerGridSeatState);
+            _networkManager.ServerManager.RegisterBroadcast<GridActionBroadcast>(OnServerGridAction);
+            _networkManager.ServerManager.RegisterBroadcast<GridActionStateBroadcast>(OnServerGridActionState);
             _networkManager.ServerManager.RegisterBroadcast<GridSeatDeniedBroadcast>(OnServerGridSeatDenied);
             _networkManager.ServerManager.RegisterBroadcast<GridInputBroadcast>(OnServerGridInput);
             _networkManager.ServerManager.RegisterBroadcast<ChatBroadcast>(OnServerChat);
@@ -518,6 +540,7 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.RegisterBroadcast<GridRemovedBroadcast>(OnClientGridRemoved);
             _networkManager.ClientManager.RegisterBroadcast<GridPoseBroadcast>(OnClientGridPose);
             _networkManager.ClientManager.RegisterBroadcast<GridSeatStateBroadcast>(OnClientGridSeatState);
+            _networkManager.ClientManager.RegisterBroadcast<GridActionStateBroadcast>(OnClientGridActionState);
             _networkManager.ClientManager.RegisterBroadcast<GridSeatDeniedBroadcast>(OnClientGridSeatDenied);
 
             // Container-contents poller (14.10.0) - idles while offline.
@@ -551,6 +574,8 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.UnregisterBroadcast<GridPoseBroadcast>(OnServerGridPose);
             _networkManager.ServerManager.UnregisterBroadcast<GridControlBroadcast>(OnServerGridControl);
             _networkManager.ServerManager.UnregisterBroadcast<GridSeatStateBroadcast>(OnServerGridSeatState);
+            _networkManager.ServerManager.UnregisterBroadcast<GridActionBroadcast>(OnServerGridAction);
+            _networkManager.ServerManager.UnregisterBroadcast<GridActionStateBroadcast>(OnServerGridActionState);
             _networkManager.ServerManager.UnregisterBroadcast<GridSeatDeniedBroadcast>(OnServerGridSeatDenied);
             _networkManager.ServerManager.UnregisterBroadcast<GridInputBroadcast>(OnServerGridInput);
             _networkManager.ServerManager.UnregisterBroadcast<ChatBroadcast>(OnServerChat);
@@ -612,6 +637,7 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.UnregisterBroadcast<GridRemovedBroadcast>(OnClientGridRemoved);
             _networkManager.ClientManager.UnregisterBroadcast<GridPoseBroadcast>(OnClientGridPose);
             _networkManager.ClientManager.UnregisterBroadcast<GridSeatStateBroadcast>(OnClientGridSeatState);
+            _networkManager.ClientManager.UnregisterBroadcast<GridActionStateBroadcast>(OnClientGridActionState);
             _networkManager.ClientManager.UnregisterBroadcast<GridSeatDeniedBroadcast>(OnClientGridSeatDenied);
         }
 
@@ -1519,6 +1545,43 @@ namespace VoxelEngine.Networking
             { NetId = netId, Cell = cell, Occupied = occupied }, Channel.Reliable);
         }
 
+        // ── block actions (14.27.0) ──────────────────────────────────
+        public void SendGridAction(string netId, Vector3Int cell, GridAction action, bool state)
+        {
+            if (!_clientStarted || string.IsNullOrEmpty(netId)) return;
+            _networkManager.ClientManager.Broadcast(new GridActionBroadcast
+            { NetId = netId, Cell = cell, Action = (byte)action, State = state });
+        }
+
+        /// <summary>Host -> everyone, or host -> one client for join catch-up.</summary>
+        public void SendGridActionState(string netId, Vector3Int cell, GridAction action,
+            bool state, NetworkConnection target = null)
+        {
+            if (!_serverStarted || string.IsNullOrEmpty(netId)) return;
+            var msg = new GridActionStateBroadcast
+            { NetId = netId, Cell = cell, Action = (byte)action, State = state };
+
+            if (target != null) _networkManager.ServerManager.Broadcast(target, msg, true);
+            else BroadcastToClients(msg, Channel.Reliable);
+        }
+
+        private void OnServerGridAction(NetworkConnection conn, GridActionBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted || conn == null || string.IsNullOrEmpty(msg.NetId)) return;
+            // The real block methods run, so every rule they already enforce - gear
+            // needing a surface, a dock needing a free port - still applies to a
+            // guest exactly as it does to the host.
+            GridActionSync.PerformRequest(msg.NetId, msg.Cell, (GridAction)msg.Action, msg.State);
+        }
+
+        private void OnServerGridActionState(NetworkConnection conn, GridActionStateBroadcast msg, Channel channel) { }
+
+        private void OnClientGridActionState(GridActionStateBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            GridActionSync.ApplyState(msg.NetId, msg.Cell, (GridAction)msg.Action, msg.State);
+        }
+
         public void SendGridInput(GridFlightInput input)
         {
             if (!_clientStarted || string.IsNullOrEmpty(input.NetId)) return;
@@ -2227,6 +2290,11 @@ namespace VoxelEngine.Networking
                 if (BudgetSpent()) { yield return null; ResetFrameBudget(); }
             }
             if (sent == 0) yield break;
+            // Levers last: a hull has to exist before its gear can be reported down.
+            // Cheap next to the records themselves - only blocks that are actually
+            // engaged are sent, so a fleet parked with its gear up costs nothing.
+            GridActionSync.SendSnapshot(target);
+
             LogCatchUpPhase("grids", sent, clock, startFrame);
         }
 

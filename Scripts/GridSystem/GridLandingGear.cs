@@ -18,7 +18,19 @@ namespace VoxelEngine.GridSystem
                + "The player unlocks it manually with P or the terminal button.")]
         public float lockStrength = 500000f;
 
-        public bool IsLocked => _joint != null;
+        // On a client there is no joint to look at - the host owns the physics - so
+        // the replicated answer stands in for it. Without this a guest's gear reads as
+        // unlocked no matter what the host actually did with it.
+        private bool _netLocked;
+        public bool IsLocked => _joint != null || _netLocked;
+
+        /// <summary>Adopt the host's answer. No joint, no rigidbody ownership: a client
+        /// mirrors what the gear IS, it does not re-enact how it got there.</summary>
+        internal void ApplyNetworkLock(bool locked)
+        {
+            _netLocked = locked;
+            if (!locked) _manuallyUnlocked = true;
+        }
         public bool isDeployed => IsLocked; // legacy alias
 
         public override float PowerDraw => Enabled ? 5f : 0f;
@@ -89,6 +101,8 @@ namespace VoxelEngine.GridSystem
         /// several directions so the gear grabs ground, walls, ceilings, bases, or another ship.</summary>
         public void TryLock()
         {
+            if (VoxelEngine.Networking.GridActionSync.Deferred(
+                    this, VoxelEngine.Networking.GridAction.LandingGear, true)) return;
             _manuallyUnlocked = false;
             _autoLockGraceTimer = 0f;
             TryLockInternal();
@@ -187,6 +201,8 @@ namespace VoxelEngine.GridSystem
 
         public void Unlock()
         {
+            if (VoxelEngine.Networking.GridActionSync.Deferred(
+                    this, VoxelEngine.Networking.GridAction.LandingGear, false)) return;
             UnlockInternal(manual: true);
         }
 
@@ -209,7 +225,12 @@ namespace VoxelEngine.GridSystem
                         staticDocked = true;
                         break;
                     }
-                if (!staticDocked) Grid.Body.isKinematic = false;
+                // A client's hull is kinematic because the host drives it, not because
+                // this gear made it so. Releasing it here would hand the ship back to a
+                // physics engine that has no business moving it.
+                bool drivenRemotely = VoxelEngine.Networking.NetworkSession.Mode
+                                      == VoxelEngine.Networking.SessionMode.Client;
+                if (!staticDocked && !drivenRemotely) Grid.Body.isKinematic = false;
                 _madeGridKinematic = false;
             }
 

@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.26.3-dev`
-**Roadmap Version:** `14.26.3-dev`
+**Current Version:** `14.27.0-dev`
+**Roadmap Version:** `14.27.0-dev`
 **Date:** 2026-10-01
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,10 @@
 
 ## 0. Recently Done
 
+### 14.27.0-dev - Every Lever On The Ship
+Landing gear, docking clamps, rail couplers, pistons and sliding doors were all local-only - a guest's gear never locked on the host, so the ship stayed free to drift while they watched it clamped. One replication channel covers all five, addressed as (grid id, cell) like everything else on a hull: a client requests, the host performs it with the same methods single-player uses so every existing rule still applies, and the host answers with what actually happened. No prediction on anything physical; animations still run locally.
+Clients no longer hand a kinematic hull back to their own physics on unlock or undock. Join catch-up now includes engaged levers, so a ship parked on its gear does not look like it is floating.
+
 ### 14.26.3-dev - Who Is Flying This
 A grid asked the local machine whether it had a pilot, so the host refused a guest's input (nobody was sitting in its own copy of the cockpit) and every machine except the pilot's drew a ship under burn with cold thrusters. It asks the replicated seat table now, and the pilot's stick rides along in the pose broadcast so a watching player can see somebody else's plumes. A hovering hull is no longer parked as idle.
 Fixed two kinematic-body velocity warnings: taking a hull over on a client zeroed velocities after going kinematic rather than before, and landing gear tried to kill drift on a body that was never integrating.
@@ -43,11 +47,6 @@ Cockpit occupancy is replicated and arbitrated by the host, addressed as (grid i
 ### 14.26.0-dev - Standing On It
 Milestone 9 COMPLETE. A player standing on a moving hull is now carried by it, position and heading, anchored in the deck's own frame and re-measured each frame - this was missing in single-player too, not just over the network.
 A guest can fly: stick and throttle travel to the host, which flies the ship it already owns and returns the result on the pose stream. Control is a claim held against the host's connection table, one pilot per hull, cut when the seat is left or the connection drops.
-
-### 14.25.0-dev - The Same Ship
-Milestone 9 part one: movable grids replicate. A piece is addressed as (stable grid id, integer cell) rather than by world position, so an edit stays correct while the hull is flying. The grid id is saved.
-Only the host simulates a grid; on a client every grid rigidbody is kinematic and driven by the host's pose stream with dead reckoning and eased correction, so there is no second simulation to diverge. Structure crosses the wire as the save record itself, in reassembled parts, resent only when the hull's shape changes.
-Open: riders are not yet carried by a moving hull, and a guest cannot pilot - both are part two.
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
