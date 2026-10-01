@@ -101,12 +101,14 @@ namespace VoxelEngine.Networking
         private Vector3 _lastPos;
         private bool _hasLastPos;
 
-        // ── foot grounding (14.21.1) ──
+        // ── foot grounding (14.21.1, re-solved absolutely in 14.23.1) ──
         private Transform _leftFoot, _rightFoot;
-        private float _bindLocalY;      // the bind-pose height CrusaderModel solved
-        private float _bindFootY;       // where the lowest foot bone sat in that pose
-        private float _groundFix;       // smoothed correction currently applied
+        private float _boneToSole;      // foot bone height above the sole, a constant of the mesh
+        private float _groundY;         // the rig height currently applied (parent space)
+        private float _restY;           // the first solved height - centre of the sanity clamp
+        private bool _hasRestY;
         private bool _canGround;
+        private bool _groundLogged;
         private bool _airborneNow;
         private float _speed;            // smoothed planar m/s
         private float _vertical;         // smoothed vertical m/s
@@ -341,23 +343,44 @@ namespace VoxelEngine.Networking
 
         // ─────────────────────── foot grounding ───────────────────────
 
-        /// <summary>Records what the bind pose looked like, which is the pose
-        /// CrusaderModel solved the rig's height against. Everything after this
-        /// is measured as a difference from that reference, so a rig with an
-        /// unusual scale or an unusual skeleton still lands correctly.</summary>
+        /// <summary>Measures the one thing that does not change: how far the
+        /// lowest foot BONE sits above the sole of the mesh. Everything else is
+        /// solved per frame from that constant, so this no longer depends on
+        /// when it runs relative to the rig being positioned - which is what
+        /// made the previous version float.</summary>
         private void PrepareFootGrounding()
         {
             _canGround = false;
+            _hasRestY = false;
             var parent = transform.parent;
             if (parent == null) return;
 
             _leftFoot = FindBone("LeftToeBase") ?? FindBone("LeftFoot");
             _rightFoot = FindBone("RightToeBase") ?? FindBone("RightFoot");
-            if (_leftFoot == null && _rightFoot == null) return;   // unknown skeleton: do nothing
+            if (_leftFoot == null && _rightFoot == null)
+            {
+                Debug.LogWarning("[Crusader] no foot bone named *LeftFoot/*LeftToeBase (or the right-side " +
+                                 "equivalent) on this rig - foot grounding is OFF and the model will sit " +
+                                 "wherever the build-time height solve put it.");
+                return;
+            }
 
-            _bindLocalY = transform.localPosition.y;
-            if (!TryLowestFoot(parent, out _bindFootY)) return;
-            _groundFix = 0f;
+            if (!TryLowestFoot(parent, out float footY)) return;
+            if (!TryLowestVertex(parent, out float soleY))
+            {
+                Debug.LogWarning("[Crusader] could not bake a skinned mesh to find the sole - foot grounding is OFF.");
+                return;
+            }
+
+            // Both measured in the same space at the same instant, so the rig's
+            // current height cancels out of the difference entirely.
+            _boneToSole = footY - soleY;
+            if (_boneToSole < 0f || _boneToSole > 0.5f)
+            {
+                Debug.LogWarning($"[Crusader] implausible foot-bone-to-sole distance ({_boneToSole:F3} m) - " +
+                                 "foot grounding is OFF rather than guessing.");
+                return;
+            }
             _canGround = true;
         }
 
@@ -393,36 +416,91 @@ namespace VoxelEngine.Networking
             return any;
         }
 
-        /// <summary>Puts the sole back on the ground after the animator has
-        /// written the bones. The correction is the difference between where
-        /// the lowest foot sits NOW and where it sat in the bind pose that the
-        /// rig's height was solved against - no absolute assumption about how
-        /// tall the model is or where its hips belong.</summary>
+        /// <summary>The true sole: the lowest skinned VERTEX as currently posed,
+        /// in the avatar root's space. Baked once, never per frame - this is
+        /// only ever used to learn the bone-to-sole constant.</summary>
+        private bool TryLowestVertex(Transform parent, out float y)
+        {
+            y = float.MaxValue;
+            bool any = false;
+            var skins = GetComponentsInChildren<SkinnedMeshRenderer>(true);
+            for (int i = 0; i < skins.Length; i++)
+            {
+                var smr = skins[i];
+                if (smr == null || smr.sharedMesh == null) continue;
+                var baked = new Mesh();
+                try
+                {
+                    smr.BakeMesh(baked, true);
+                    var verts = baked.vertices;
+                    var bp = smr.transform.position;
+                    var br = smr.transform.rotation;
+                    for (int v = 0; v < verts.Length; v++)
+                    {
+                        float vy = parent.InverseTransformPoint(bp + br * verts[v]).y;
+                        if (vy < y) { y = vy; any = true; }
+                    }
+                }
+                catch { }
+                finally { Destroy(baked); }
+            }
+            if (!any) y = 0f;
+            return any;
+        }
+
+        /// <summary>Puts the sole back on the avatar root's own ground plane
+        /// after the animator has written the bones.
+        ///
+        /// 14.23.1 - this is now an ABSOLUTE solve. The previous version
+        /// measured the foot against a bind reference and treated the result as
+        /// an offset, but the measurement already contained the offset it was
+        /// computing, so it fed back on itself and settled wherever the clamp
+        /// let it - which is the half-metre float that survived 14.21.1. The
+        /// rig height is now derived from scratch every frame: take the foot
+        /// bone's height with the current correction removed, drop it by the
+        /// bone-to-sole constant, and that IS where the rig has to sit for the
+        /// sole to touch y = 0. Nothing it computes depends on what it last
+        /// applied.</summary>
         private void ApplyFootGrounding()
         {
             if (!_canGround) return;
             var parent = transform.parent;
             if (parent == null) return;
+            if (!TryLowestFoot(parent, out float footNow)) return;
 
-            float dt = Time.deltaTime;
-            float target = _groundFix;
+            float rigNow = transform.localPosition.y;
+            float footAtZero = footNow - rigNow;     // where the foot would be with no correction
+            float want = _boneToSole - footAtZero;   // ...so the sole lands exactly on y = 0
+
+            if (!_hasRestY)
+            {
+                _hasRestY = true;
+                _restY = want;
+                _groundY = want;
+                if (!_groundLogged)
+                {
+                    _groundLogged = true;
+                    Debug.Log($"[Crusader] foot grounding solved: boneToSole {_boneToSole:F3} m, " +
+                              $"rig height {want:F3} m (was {rigNow:F3} m).");
+                }
+            }
+
+            // A clip that wants more than this is wrong, not expressive. The
+            // clamp is centred on the first solve rather than on anything
+            // another component wrote, so a bad write cannot anchor it.
+            want = Mathf.Clamp(want, _restY - 0.6f, _restY + 0.6f);
 
             // Airborne feet are SUPPOSED to leave the floor; hold the last
             // correction through a jump instead of gluing the model down.
-            if (!_airborneNow && _settle <= 0f && TryLowestFoot(parent, out float footY))
-            {
-                target = _bindFootY - footY;
-                // A clip that wants more than this is wrong, not expressive.
-                target = Mathf.Clamp(target, -0.6f, 0.6f);
-            }
+            if (_airborneNow || _settle > 0f) want = _groundY;
 
-            // Eased, so a walk/idle crossfade does not step the body.
-            _groundFix = dt > 0f
-                ? Mathf.Lerp(_groundFix, target, 1f - Mathf.Exp(-18f * dt))
-                : target;
+            float dt = Time.deltaTime;
+            _groundY = dt > 0f
+                ? Mathf.Lerp(_groundY, want, 1f - Mathf.Exp(-18f * dt))
+                : want;
 
             var local = transform.localPosition;
-            local.y = _bindLocalY + _groundFix;
+            local.y = _groundY;
             transform.localPosition = local;
         }
 

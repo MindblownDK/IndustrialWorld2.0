@@ -56,9 +56,13 @@ namespace VoxelEngine.Menu
             if (IsHeld) Status = status ?? "";
         }
 
+        /// <summary>Records a failure. Deliberately NOT conditional on the
+        /// gate still being held: the world build runs inside Open(), so a
+        /// build that throws reports after the gate has already lowered, and
+        /// that report is the most important one there is.</summary>
         public static void Fail(string reason)
         {
-            if (!IsHeld || HasFailed) return;   // keep the FIRST reason: it is the cause
+            if (HasFailed) return;   // keep the FIRST reason: it is the cause
             Failure = string.IsNullOrEmpty(reason) ? "The join failed." : reason;
             Status = Failure;
             Debug.LogWarning("[WorldBootGate] " + Failure);

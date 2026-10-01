@@ -57,8 +57,11 @@ namespace VoxelEngine.Menu
         private string _menuStatus = string.Empty;
 
         // Multiplayer page: remembered between sessions so a friend's address
-        // is typed once, not every evening.
-        private string _joinAddress = VoxelEngine.Settings.GameSettings.LastHostAddress;
+        // is typed once, not every evening. Read in Awake, NEVER here - a field
+        // initializer runs inside the MonoBehaviour constructor, where Unity
+        // forbids PlayerPrefs, and the throw there kills every initializer
+        // BELOW it (which is how this one nulled the planet-seed lists).
+        private string _joinAddress = "";
         private string _expandedAutosaveWorld = string.Empty;
 
         // ── Cosmos: solar-system picker + per-planet editable seeds ──
@@ -117,6 +120,9 @@ namespace VoxelEngine.Menu
             // Standing in the menu means no join is in flight. Clearing here
             // is what guarantees the boot gate can never be left raised by an
             // abandoned attempt and stall the next single-player world.
+            // Safe here, unsafe as a field initializer: see _joinAddress.
+            _joinAddress = VoxelEngine.Settings.GameSettings.LastHostAddress;
+
             _session.ClearRemoteJoin();
 
             // Joined worlds are caches, not saves. The menu is the one place

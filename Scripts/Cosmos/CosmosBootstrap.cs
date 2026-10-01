@@ -127,7 +127,25 @@ namespace VoxelEngine.Cosmos
             _booted = true;
             bool wasDeferred = _deferredBoot;
             _deferredBoot = false;
+            if (wasDeferred) Debug.Log("[Join] 4/6 CosmosBootstrap.BootWorld starting (deferred world build).");
 
+            // A half-built world is worse than a reported failure: the player
+            // ends up in an empty scene with a working HUD and no way to tell
+            // what went wrong. Anything thrown in here is caught, named, and
+            // surfaced on the joining screen.
+            try { BuildWorld(wasDeferred); }
+            catch (System.Exception ex)
+            {
+                Debug.LogError("[Join] world build FAILED: " + ex);
+                VoxelEngine.Menu.WorldBootGate.Fail("The world could not be built: " + ex.Message);
+                return;
+            }
+
+            if (wasDeferred) Debug.Log("[Join] 5/6 world build complete.");
+        }
+
+        private void BuildWorld(bool wasDeferred)
+        {
             ResolvePlanetTemplate();
             ResolveAssets();
             ResolveViewerReference();
@@ -1121,7 +1139,15 @@ namespace VoxelEngine.Cosmos
 
         private void Update()
         {
-            if (_deferredBoot) return;   // waiting on the host's world card
+            if (_deferredBoot)
+            {
+                // Safety net: if anything released the gate without the event
+                // reaching us, build here rather than sit in an empty scene.
+                if (VoxelEngine.Menu.WorldBootGate.IsHeld) return;
+                Debug.LogWarning("[Join] gate opened without notifying CosmosBootstrap - building now.");
+                BootWorld();
+                return;
+            }
             if (viewer == null || _awaitingViewerSurfacePlacement) TryResolveViewerAndAnchor();
             UpdateAtmosphereSpaceCamera();
 

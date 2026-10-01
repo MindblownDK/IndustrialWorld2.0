@@ -47,11 +47,24 @@ namespace VoxelEngine.UI
         private float _nextDotAt;
         private bool _failureShown;
 
-        /// <summary>Created automatically on scene load, and only when a join
-        /// is actually in flight. No prefab, no setup step, nothing for a solo
-        /// world to carry.</summary>
+        /// <summary>Created automatically on EVERY scene load, and only when a
+        /// join is actually in flight. No prefab, no setup step, nothing for a
+        /// solo world to carry.
+        ///
+        /// The subscription is what matters here: RuntimeInitializeOnLoadMethod
+        /// fires once, after the FIRST scene of the run - which is the main
+        /// menu, where no join is pending. Mounting from it directly meant the
+        /// overlay never appeared in the game scene, which is exactly the empty
+        /// screen a joining player was left staring at.</summary>
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-        private static void AutoMount()
+        private static void InstallHook()
+        {
+            SceneManager.sceneLoaded -= OnSceneLoaded;
+            SceneManager.sceneLoaded += OnSceneLoaded;
+            OnSceneLoaded(default, default);   // cover the scene already loaded
+        }
+
+        private static void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         {
             if (!WorldBootGate.IsHeld) return;
             if (Instance != null) return;

@@ -1,9 +1,23 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.23.0-dev`
+**Current Version:** `14.23.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.23.1-dev] Feet On The Ground
+
+**Type:** PATCH - four faults from the first live test of the main-menu join, plus the real cause of the floating avatars. No save or API change.
+
+**A settings read ran in a constructor and silently broke the menu.** The remembered host address was read from PlayerPrefs in a field initializer, and Unity runs those inside the MonoBehaviour constructor, where PlayerPrefs is forbidden. The throw did more than log: it aborted every field initializer declared BELOW it, which is why the planet-name and planet-seed lists came up null and the menu then threw a NullReferenceException of its own. The address is read in Awake now, where it belongs, and the lists initialize again.
+
+**The joining screen never appeared.** It was mounted from a RuntimeInitializeOnLoadMethod, which fires exactly once, after the FIRST scene of the run - the main menu, where no join is pending. It therefore never ran again for the scene it exists to cover. It now hooks scene loading itself, so it appears on whichever scene a join is held in.
+
+**A world that fails to build now says so.** If anything threw partway through building the host's world, the exception was swallowed and the player was left in an empty scene with a working HUD and no explanation. The build is wrapped, any failure is named on the joining screen instead of vanishing, and the whole handshake logs a numbered trace - connect, world info, adopt, build, complete - so a join that goes wrong says where it stopped rather than leaving a blank screen to interpret. A second safety net builds the world from the normal update loop if the gate is ever released without the message reaching the builder.
+
+**The host quitting left the guests standing in a world nobody was serving.** Closing the game now hangs up the session properly rather than letting the process vanish and the clients wait for a transport timeout. On the other side, a guest who joined from the main menu has no world of their own to fall back into, so when the connection ends they are returned to the main menu instead of being left in a host's world with no host.
+
+**The avatars were still floating, and the 14.21.1 fix is why.** The correction measured the foot bone against a bind-pose reference and treated the result as an offset to apply - but the measurement was taken from the live transform, which already had the previous frame's offset in it. It was feeding on its own output. That loop does not diverge, it settles: it parks at whatever height satisfies "half of what I measure", which is a stable, permanent float that no amount of easing or clamping would ever remove, and it also made the result depend on whether the rig had been positioned before or after the correction was first prepared. It is now an absolute solve. One constant is measured once - how far the lowest foot bone sits above the sole of the actual baked mesh, a property of the model that never changes - and every frame the rig height is derived from scratch: take where the foot bone would be with no correction at all, drop it by that constant, and that is exactly where the rig must sit for the sole to touch the ground plane. Nothing it computes depends on what it last applied. The sanity clamp is centred on the first solved height rather than on a value written by another component, so a bad write can no longer anchor it, and a rig with no recognisable foot bones, an unbakeable mesh or an implausible sole distance says so in the console and leaves the model alone instead of guessing.
 
 ### [14.23.0-dev] Somebody Else's World
 

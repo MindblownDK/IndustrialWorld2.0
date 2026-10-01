@@ -516,6 +516,7 @@ namespace VoxelEngine.Networking
             var session = VoxelEngine.Menu.WorldSession.Instance;
             if (session == null || !session.IsRemoteJoin || session.hostWorldAdopted) return;
 
+            Debug.Log($"[Join] 1/6 auto-connecting to {session.pendingJoinAddress} with world generation held.");
             VoxelEngine.Menu.WorldBootGate.Report($"Connecting to {session.pendingJoinAddress}...");
             StartClient(session.pendingJoinAddress);
             StartCoroutine(JoinWatchdog());
@@ -580,9 +581,50 @@ namespace VoxelEngine.Networking
             else if (args.ConnectionState == LocalConnectionState.Stopped)
             {
                 _clientStarted = false;
-                if (_serverStarted) _statusLine = "Hosting";
-                else GoOffline();
+                if (_serverStarted) { _statusLine = "Hosting"; return; }
+
+                GoOffline();
+
+                // A guest who joined from the main menu has no world of their
+                // own to fall back into - the one they are standing in belongs
+                // to a host who is no longer there. Leaving them in it was the
+                // "host quit and nothing happened" fault: send them home.
+                var session = VoxelEngine.Menu.WorldSession.Instance;
+                if (session != null && session.IsRemoteJoin) ReturnGuestToMenu("The host closed the session.");
             }
+        }
+
+        /// <summary>Tear down a guest session and go back to the main menu.
+        /// Only ever called for a client that joined from the menu.</summary>
+        private void ReturnGuestToMenu(string reason)
+        {
+            if (_returningToMenu) return;
+            _returningToMenu = true;
+            Debug.Log("[Join] returning to the main menu: " + reason);
+
+            var session = VoxelEngine.Menu.WorldSession.Instance;
+            if (session != null) session.ClearRemoteJoin();
+            else VoxelEngine.Menu.WorldBootGate.Reset();
+
+            VoxelEngine.UI.UIState.ClearSceneBlocks();
+            Time.timeScale = 1f;
+
+            string menuScene = "MainMenu";
+            var pause = FindAnyObjectByType<VoxelEngine.Menu.InGamePauseMenu>(FindObjectsInactive.Include);
+            if (pause != null && !string.IsNullOrEmpty(pause.mainMenuScene)) menuScene = pause.mainMenuScene;
+
+            try { UnityEngine.SceneManagement.SceneManager.LoadScene(menuScene); }
+            catch (System.Exception ex) { Debug.LogError("[Join] could not load the menu scene: " + ex.Message); }
+        }
+
+        private bool _returningToMenu;
+
+        /// <summary>Closing the game must hang up properly. Without this the
+        /// host's process just vanishes and every client sits in a world
+        /// nobody is serving until the transport finally times out.</summary>
+        private void OnApplicationQuit()
+        {
+            if (IsOnline) StopSession();
         }
 
         /// <summary>The local client is fully in - introduce ourselves so the
@@ -653,13 +695,23 @@ namespace VoxelEngine.Networking
             if (!connection.IsLocalClient)
             {
                 var session = VoxelEngine.Menu.WorldSession.Instance;
-                if (session != null)
+                if (session == null)
+                {
+                    Debug.LogError("[Join] HOST has no WorldSession - cannot describe this world to the " +
+                                   "joining client, so they will never be able to build it.");
+                }
+                else
+                {
+                    string card = session.ExportWorldCardJson();
+                    Debug.Log($"[Join] host sending world card for '{session.worldName}' " +
+                              $"(seed {session.seed}, {card.Length} chars) to client {connection.ClientId}.");
                     _networkManager.ServerManager.Broadcast(connection, new WorldInfoBroadcast
                     {
                         WorldName = session.worldName,
                         Seed = session.seed,
-                        WorldCard = session.ExportWorldCardJson(),
+                        WorldCard = card,
                     }, true);
+                }
             }
         }
 
@@ -1090,6 +1142,9 @@ namespace VoxelEngine.Networking
             // wholesale - so the seed warning below is skipped entirely.
             if (session != null && session.IsRemoteJoin && !session.hostWorldAdopted)
             {
+                Debug.Log($"[Join] 2/6 world info received from host: '{msg.WorldName}', seed {msg.Seed}, " +
+                          $"card {(string.IsNullOrEmpty(msg.WorldCard) ? "MISSING" : msg.WorldCard.Length + " chars")}.");
+
                 if (string.IsNullOrEmpty(msg.WorldCard) || !session.AdoptWorldCardJson(msg.WorldCard))
                 {
                     VoxelEngine.Menu.WorldBootGate.Fail(
@@ -1103,6 +1158,9 @@ namespace VoxelEngine.Networking
                 WorldMismatch = false;
                 HostWorldLine = $"Host world: '{session.hostWorldDisplayName}', seed {session.seed}";
                 VoxelEngine.Menu.WorldBootGate.Report("Building " + session.hostWorldDisplayName + "...");
+                Debug.Log($"[Join] 3/6 world card adopted: system '{session.chosenSystemName}', " +
+                          $"seed {session.seed}, spawn planet {session.spawnPlanetIndex}, " +
+                          $"seed table {(session.seedState != null ? "present" : "MISSING")}.");
 
                 // Generate the host's planet, then ask for everything built on
                 // it. Order matters: the world must exist before snapshots land.
@@ -1113,6 +1171,7 @@ namespace VoxelEngine.Networking
                 _networkManager.ClientManager.Broadcast(new WorldAckBroadcast { SeedMatches = true });
                 StartSnapshotStream(null);
                 _statusLine = "Connected to " + session.hostWorldDisplayName;
+                Debug.Log("[Join] 6/6 handshake acknowledged - requesting the host's base and terrain.");
                 return;
             }
 
