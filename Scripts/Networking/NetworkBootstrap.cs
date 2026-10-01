@@ -83,6 +83,19 @@ namespace VoxelEngine.Networking
         public string WorldCard;
     }
 
+    /// <summary>Per-player state (14.24.0). Client -> server as an upload of
+    /// "this is what I am carrying"; server -> client once at join as "this is
+    /// what you left here". The payload is the save file's own player block as
+    /// JSON, so the wire format cannot drift away from the save format.
+    ///
+    /// PlayerId is advisory on the way UP: the server uses its own connection
+    /// table instead, so a client cannot write over somebody else's record.</summary>
+    public struct PlayerStateBroadcast : IBroadcast
+    {
+        public string PlayerId;
+        public string Json;
+    }
+
     // ── Building replication (14.4.0). Client -> server -> other clients. ──
 
     public struct PiecePlacedBroadcast : IBroadcast
@@ -361,6 +374,7 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.OnClientConnectionState += OnClientConnectionState;
             _networkManager.ClientManager.OnAuthenticated += OnLocalClientAuthenticated;
             _networkManager.ServerManager.RegisterBroadcast<IdentityBroadcast>(OnIdentityReceived);
+            _networkManager.ServerManager.RegisterBroadcast<PlayerStateBroadcast>(OnServerPlayerState);
             _networkManager.ServerManager.RegisterBroadcast<ChatBroadcast>(OnServerChat);
             _networkManager.ServerManager.RegisterBroadcast<VoiceBroadcast>(OnServerVoice);
             _networkManager.ServerManager.RegisterBroadcast<PiecePlacedBroadcast>(OnServerPiecePlaced);
@@ -415,6 +429,7 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.RegisterBroadcast<DropSnapshotBroadcast>(OnClientDropSnapshot);
             _networkManager.ClientManager.RegisterBroadcast<TerrainChunkBroadcast>(OnClientTerrainChunk);
             _networkManager.ClientManager.RegisterBroadcast<BaseSnapshotBroadcast>(OnClientBaseSnapshot);
+            _networkManager.ClientManager.RegisterBroadcast<PlayerStateBroadcast>(OnClientPlayerState);
 
             // Container-contents poller (14.10.0) - idles while offline.
             if (GetComponent<ContainerSyncManager>() == null)
@@ -437,6 +452,7 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.OnClientConnectionState -= OnClientConnectionState;
             _networkManager.ClientManager.OnAuthenticated -= OnLocalClientAuthenticated;
             _networkManager.ServerManager.UnregisterBroadcast<IdentityBroadcast>(OnIdentityReceived);
+            _networkManager.ServerManager.UnregisterBroadcast<PlayerStateBroadcast>(OnServerPlayerState);
             _networkManager.ServerManager.UnregisterBroadcast<ChatBroadcast>(OnServerChat);
             _networkManager.ServerManager.UnregisterBroadcast<VoiceBroadcast>(OnServerVoice);
             _networkManager.ServerManager.UnregisterBroadcast<PiecePlacedBroadcast>(OnServerPiecePlaced);
@@ -491,6 +507,7 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.UnregisterBroadcast<DropSnapshotBroadcast>(OnClientDropSnapshot);
             _networkManager.ClientManager.UnregisterBroadcast<TerrainChunkBroadcast>(OnClientTerrainChunk);
             _networkManager.ClientManager.UnregisterBroadcast<BaseSnapshotBroadcast>(OnClientBaseSnapshot);
+            _networkManager.ClientManager.UnregisterBroadcast<PlayerStateBroadcast>(OnClientPlayerState);
         }
 
         // ─────────────────────────── public API (UI calls these) ───────────────────────────
@@ -545,6 +562,17 @@ namespace VoxelEngine.Networking
             TryAutoJoin();
         }
 
+        private void LateUpdate()
+        {
+            // Guest -> host state upload. Offline and hosting both skip on the
+            // first condition, so this costs one bool test a frame in the cases
+            // that are not multiplayer at all.
+            if (!_clientStarted || _serverStarted) return;
+            if (Time.unscaledTime < _nextPlayerStateUploadAt) return;
+            _nextPlayerStateUploadAt = Time.unscaledTime + PlayerStateUploadSeconds;
+            UploadLocalPlayerState();
+        }
+
         /// <summary>Connect straight away when the player chose a host in the
         /// main menu. No-op in every other case.</summary>
         private void TryAutoJoin()
@@ -582,6 +610,9 @@ namespace VoxelEngine.Networking
         /// <summary>Leave the session (client) or shut it down (host).</summary>
         public void StopSession()
         {
+            // Last word before hanging up: leaving with a pickaxe swing
+            // unreported is a bug the player would blame on the save.
+            UploadLocalPlayerState();
             if (_clientStarted) _networkManager.ClientManager.StopConnection();
             if (_serverStarted) _networkManager.ServerManager.StopConnection(true);
         }
@@ -750,6 +781,19 @@ namespace VoxelEngine.Networking
                         WorldCard = card,
                     }, true);
                 }
+
+                // 14.24.0 - and what this player left here last time. Sent even
+                // when empty: "I have never seen you" is a real answer, and the
+                // joining client waits for one rather than guessing.
+                // Keyed by the id the SERVER settled on, not the one the client
+                // claimed - a duplicate identity is renamed above, and reading
+                // the record under the claimed name would hand a guest somebody
+                // else's inventory.
+                string stored = VoxelEngine.Persistence.PlayerRecords.Get(playerId);
+                Debug.Log($"[Join] host sending player record for '{playerId}': " +
+                          (string.IsNullOrEmpty(stored) ? "none on file (first visit)." : stored.Length + " chars."));
+                _networkManager.ServerManager.Broadcast(connection, new PlayerStateBroadcast
+                { PlayerId = playerId, Json = stored ?? "" }, true);
             }
         }
 
@@ -1226,6 +1270,49 @@ namespace VoxelEngine.Networking
             // pieces and echoes them back.
             _networkManager.ClientManager.Broadcast(new WorldAckBroadcast { SeedMatches = !WorldMismatch });
             if (!WorldMismatch) StartSnapshotStream(null);
+        }
+
+        // ───────────── per-player state (14.24.0, milestone 8c) ─────────────
+
+        /// <summary>Seconds between a guest telling the host what it is
+        /// carrying. Frequent enough that a crash costs a few swings of a
+        /// pickaxe, rare enough to be invisible: the record is a few hundred
+        /// bytes on a reliable channel.</summary>
+        private const float PlayerStateUploadSeconds = 10f;
+
+        private float _nextPlayerStateUploadAt;
+
+        /// <summary>Server: a guest reported its state. The id is taken from
+        /// the CONNECTION, never from the message - that is the whole reason
+        /// one client cannot overwrite another client's inventory.</summary>
+        private void OnServerPlayerState(NetworkConnection conn, PlayerStateBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted || conn == null || conn.IsLocalClient) return;
+            if (string.IsNullOrEmpty(msg.Json)) return;
+            if (!_playerIdByConnection.TryGetValue(conn.ClientId, out string playerId)) return;
+            if (string.IsNullOrEmpty(playerId)) return;
+            VoxelEngine.Persistence.PlayerRecords.Store(playerId, msg.Json);
+        }
+
+        /// <summary>Client: the host has told us what we left in this world.</summary>
+        private void OnClientPlayerState(PlayerStateBroadcast msg, Channel channel)
+        {
+            if (_serverStarted) return;   // a host is not a guest in its own world
+            VoxelEngine.Persistence.PlayerRecords.ReceiveLocalRecord(msg.Json);
+        }
+
+        /// <summary>Client: send the host what we are carrying. Called on a
+        /// timer and again on the way out, so the host's copy is never more
+        /// than one interval behind what actually happened.</summary>
+        private void UploadLocalPlayerState()
+        {
+            if (!_clientStarted || _serverStarted) return;
+            var persistence = VoxelEngine.Persistence.WorldStatePersistence.Instance;
+            if (persistence == null) return;
+            string json = persistence.CaptureLocalPlayerJson();
+            if (string.IsNullOrEmpty(json)) return;   // mid-load or mid-teleport: say nothing
+            _networkManager.ClientManager.Broadcast(new PlayerStateBroadcast
+            { PlayerId = PlayerIdentity.LocalId, Json = json });
         }
 
         /// <summary>Server: seed-matching client acknowledged - send it the base.</summary>
@@ -1708,6 +1795,7 @@ namespace VoxelEngine.Networking
                 VoxelEngine.Menu.WorldBootGate.Fail("Lost the connection to the host before the world arrived.");
 
             NetworkSession.SetMode(SessionMode.Offline);
+            VoxelEngine.Persistence.PlayerRecords.ClearLocal();
             _statusLine = "Offline";
             WorldMismatch = false;
             HostWorldLine = "";

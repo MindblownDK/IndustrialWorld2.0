@@ -28,6 +28,11 @@ namespace VoxelEngine.Player
         [Range(8, 64)] public int drySpawnSearchAttempts = 24;
 
         private CharacterController _cc;
+        /// <summary>How long a guest waits for the host to say what they left
+        /// here. Short: the answer rides the same handshake as the world, so if
+        /// it has not arrived by now it is not coming.</summary>
+        private const float RemoteRecordWaitSeconds = 8f;
+
         private const float SpawnGroundClearance = 1.15f;
         private const float DrySeaClearance = 0.25f;
         private readonly RaycastHit[] _spawnRayHits = new RaycastHit[16];
@@ -102,6 +107,38 @@ namespace VoxelEngine.Player
             }
 
             bool hasSavedPos = TryReadSavedPlayerPosition(out Vector3 savedPos);
+
+            // 14.24.0 - a guest's state belongs to the HOST, not to this
+            // machine's disk. Wait for the host's answer (a record, or "never
+            // seen you", both of which settle it), then take the pose from it
+            // so a returning visitor reappears where they logged off instead of
+            // back at the world spawn with whatever they happened to be
+            // carrying locally. Single player never enters this block.
+            if (session != null && session.IsRemoteJoin)
+            {
+                float deadline = Time.unscaledTime + RemoteRecordWaitSeconds;
+                while (!VoxelEngine.Persistence.PlayerRecords.LocalSettled)
+                {
+                    if (Time.unscaledTime > deadline)
+                    {
+                        Debug.LogWarning("[PlayerSpawner] The host never sent this player's record - " +
+                                         "starting fresh rather than waiting any longer.");
+                        VoxelEngine.Persistence.PlayerRecords.SettleLocalEmpty();
+                        break;
+                    }
+                    yield return null;
+                }
+
+                if (VoxelEngine.Persistence.PlayerRecords.TryTakeLocalRecord(out string record)
+                    && Persistence.WorldStatePersistence.Instance != null
+                    && Persistence.WorldStatePersistence.Instance.ApplyNetworkPlayerRecord(record, out var hostPos))
+                {
+                    savedPos = hostPos;
+                    hasSavedPos = true;
+                    Debug.Log("[PlayerSpawner] Restored from the host's record for this player at " + hostPos);
+                }
+            }
+
             // If we died offline, ignore saved pos — force world spawn path
             if (offlineDied) hasSavedPos = false;
 

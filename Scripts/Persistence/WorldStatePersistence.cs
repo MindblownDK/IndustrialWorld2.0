@@ -373,6 +373,11 @@ namespace VoxelEngine.Persistence
                 save.bossRelics = VoxelEngine.Combat.BossRelicLedger.SaveTo();
                 SaveStationRooms(save);
                 SaveCargoFlights(save);
+
+                // 14.24.0 - guests are part of this world now. Their records
+                // live in their own sidecar, so an existing save's schema is
+                // untouched and a world that was never hosted never grows one.
+                PlayerRecords.Save();
                 string json = JsonUtility.ToJson(save, prettyPrint: true);
                 string temporaryPath = path + ".tmp";
                 string backupPath = path + ".previous";
@@ -493,11 +498,28 @@ namespace VoxelEngine.Persistence
 
         private bool SavePlayer(SaveData save)
         {
+            if (!TryBuildSavedPlayer(out var captured)) return false;
+            save.player = captured;
+
+            // 9.57.1-dev: the cosmic clock, so the solar system is where the save left it
+            // (orbits, seasons and lighting all read this). Legacy saves have 0 and load at t=0.
+            var clock = VoxelEngine.Cosmos.CosmicRegistry.Instance;
+            save.cosmicSimulationSeconds = clock != null ? clock.SimulationSeconds : 0d;
+            return true;
+        }
+
+        /// <summary>Everything that belongs to ONE player: where they are, what
+        /// they carry, what they wear. Extracted in 14.24.0 because this record
+        /// is no longer only a save block - on a multiplayer session it is also
+        /// what a guest's state looks like in the host's keeping.</summary>
+        private bool TryBuildSavedPlayer(out SavedPlayer result)
+        {
+            result = null;
             var inv = FindPlayerInventory();
             if (inv == null || !IsSafePlayerSavePosition(inv.transform.position)) return false;
             var origin = VoxelEngine.Cosmos.SpaceOrigin.Instance;
             var equipment = inv.GetComponent<VoxelEngine.Player.PlayerEquipment>();
-            save.player = new SavedPlayer
+            result = new SavedPlayer
             {
                 pos = inv.transform.position,
                 rotY = inv.transform.eulerAngles.y,
@@ -527,18 +549,60 @@ namespace VoxelEngine.Persistence
             if (frameBody != null && frameBody.settings != null)
             {
                 Vector3 bodyLocal = frameBody.transform.InverseTransformPoint(inv.transform.position);
-                save.player.hasAnchor = true;
-                save.player.anchorBody = frameBody.settings.bodyName;
-                save.player.anchorLocalX = bodyLocal.x;
-                save.player.anchorLocalY = bodyLocal.y;
-                save.player.anchorLocalZ = bodyLocal.z;
+                result.hasAnchor = true;
+                result.anchorBody = frameBody.settings.bodyName;
+                result.anchorLocalX = bodyLocal.x;
+                result.anchorLocalY = bodyLocal.y;
+                result.anchorLocalZ = bodyLocal.z;
             }
-
-            // 9.57.1-dev: the cosmic clock, so the solar system is where the save left it
-            // (orbits, seasons and lighting all read this). Legacy saves have 0 and load at t=0.
-            var registry = VoxelEngine.Cosmos.CosmicRegistry.Instance;
-            save.cosmicSimulationSeconds = registry != null ? registry.SimulationSeconds : 0d;
             return true;
+        }
+
+        // ───────────── per-player records over the wire (14.24.0) ─────────────
+        //
+        // A guest's inventory used to be their own local business, which meant
+        // two people could mine the same ore and both keep it, and a guest who
+        // came back found whatever they happened to have on their own machine.
+        // The record below is the same block the save file has always used, so
+        // nothing new had to be invented to describe a player - it simply
+        // travels and is kept by the HOST instead of by whoever is carrying it.
+
+        /// <summary>This machine's player as JSON, for upload to the host.
+        /// Empty string when the player is not in a saveable state (mid-load,
+        /// mid-teleport, no inventory yet) - never a half-filled record.</summary>
+        public string CaptureLocalPlayerJson()
+        {
+            try
+            {
+                if (!TryBuildSavedPlayer(out var record)) return "";
+                return JsonUtility.ToJson(record);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning("[WorldState] CaptureLocalPlayerJson: " + ex.Message);
+                return "";
+            }
+        }
+
+        /// <summary>Apply a record handed down by the host. Reports the pose it
+        /// resolved so the spawner can place the player there instead of at the
+        /// world spawn - a returning guest reappears where they logged off.</summary>
+        public bool ApplyNetworkPlayerRecord(string json, out Vector3 restoredPosition)
+        {
+            restoredPosition = default;
+            if (string.IsNullOrEmpty(json)) return false;
+            try
+            {
+                var record = JsonUtility.FromJson<SavedPlayer>(json);
+                if (record == null) return false;
+                RestorePlayer(record, 0d);   // 0: never touch the host's cosmic clock
+                return TryResolveSavedPlayerPosition(record, out restoredPosition, out _);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning("[WorldState] ApplyNetworkPlayerRecord: " + ex.Message);
+                return false;
+            }
         }
 
         private static Inventory FindPlayerInventory()
@@ -1624,6 +1688,12 @@ namespace VoxelEngine.Persistence
         public void LoadAll()
         {
             if (_loaded) return;
+
+            // Guest records are independent of the world file: a world can have
+            // visitors recorded and still be loading for the first time this
+            // session, so this is read before the early return below.
+            PlayerRecords.Load();
+
             string path = WorldStatePath();
             if (!File.Exists(path)) { _loaded = true; return; }
 
@@ -2503,8 +2573,15 @@ namespace VoxelEngine.Persistence
             }
         }
 
-        private void RestorePlayer(SaveData save)
+        private void RestorePlayer(SaveData save) => RestorePlayer(save.player, save.cosmicSimulationSeconds);
+
+        /// <summary>Puts one player back: pose, inventory, equipment, hotbar.
+        /// <paramref name="cosmicSimulationSeconds"/> is 0 for a record that did
+        /// not come from this machine's own save - a guest must never wind the
+        /// host's solar system back to whenever they last logged off.</summary>
+        private void RestorePlayer(SavedPlayer record, double cosmicSimulationSeconds)
         {
+            var save = new SaveData { player = record, cosmicSimulationSeconds = cosmicSimulationSeconds };
             if (save.player == null) return;
             var inv = FindAnyObjectByType<Inventory>();
             if (inv == null) return;

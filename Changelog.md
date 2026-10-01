@@ -1,9 +1,27 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.23.3-dev`
+**Current Version:** `14.24.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.24.0-dev] What You Left Here
+
+**Type:** MINOR - the host now owns and saves every player's state. Save-compatible: no existing file changes format, and a world that has never been hosted never grows the new one.
+
+**Milestone 8 is complete.** This is part (c), the last piece and the one that was also the unfinished half of milestone 2: inventory, hotbar, equipment and spawn point keyed by stable player id and stored in the HOST's save.
+
+**A guest's pockets were their own business, and that was the bug.** Two people could mine the same ore and both keep it, because each machine was just believing its own inventory. A visitor who came back brought whatever happened to be on their own disk rather than what they left in your world. And nothing a guest did was in your world afterwards at all - they could spend an evening in your base and the save would not know they had ever been there. The host now keeps one record per player and hands it back on the next visit: you log in where you logged off, carrying what you were carrying, in the world that remembers you.
+
+**The record is the save file's own player block.** Nothing new was invented to describe a player - position with its body anchor, the inventory container, the jetpack, helmet, oxygen, armor and instrument slots, and the active hotbar index are exactly the fields a save has always written. It travels as opaque JSON, which means the wire format and the save format cannot drift apart: a field added to one is carried by the other for free, and neither has to understand what a player is.
+
+**Records are keyed by the id the SERVER settled on.** Not by the id the message claimed. A client uploading its state is identified by its connection, so no client can write over another client's inventory, and the duplicate-identity rename that has guarded avatar spawning since 14.1.0 now guards records too - a second connection claiming an existing player id gets its own record, not somebody else's.
+
+**Where it lives.** A sidecar beside the world it belongs to, not inside the world file: the existing save schema is untouched, an old save loads exactly as before, and a world that was never hosted never grows the file. It is written on the host's normal save cadence, so guests persist on the same autosave, quit and manual save as everything else the host owns. The writer refuses to write an empty set over a non-empty file and refuses to write into a world it did not read from - there is no legitimate way for a world to go from having visitors to having none, so that state means something upstream lost them, and overwriting good records with it is how an evening's work would disappear.
+
+**A guest waits for the answer before spawning.** Joining already held world generation until the host's world card arrived; it now also waits for the host to say what this player left here. "I have never seen you" is a real answer and settles the wait immediately, so a first-time visitor is not delayed at all. A host that never answers costs eight seconds and then starts the guest fresh with a line in the console, rather than hanging.
+
+**Known limit:** a guest uploads every ten seconds and once more on the way out. A client that is killed outright - task manager, power cut - can therefore lose up to ten seconds of its own progress, which is the same exposure the single-player autosave has always had. Nothing else is lost: the world, the base and every other player are the host's and were already safe.
 
 ### [14.23.3-dev] You Are In
 

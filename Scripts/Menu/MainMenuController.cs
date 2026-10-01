@@ -129,6 +129,10 @@ namespace VoxelEngine.Menu
             // where nothing is streaming, so it is the safe place to sweep
             // them off disk.
             _session.PurgeJoinedCaches();
+
+            // Player records belong to the world that was open. Standing here
+            // means none is, so none may be carried into the next one.
+            VoxelEngine.Persistence.PlayerRecords.Clear();
         }
 
         private void OnEnable() => BuildUI();
