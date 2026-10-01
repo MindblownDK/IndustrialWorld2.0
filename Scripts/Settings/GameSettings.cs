@@ -120,7 +120,56 @@ namespace VoxelEngine.Settings
         public static bool  InvertY          { get => PlayerPrefs.GetInt(K_INVERT_Y, DEFAULT_INVERT_Y ? 1 : 0) != 0; set { PlayerPrefs.SetInt(K_INVERT_Y, value ? 1 : 0); Notify(); } }
 
         // ----- Gameplay -----
-        public static bool  FlyMode          { get => PlayerPrefs.GetInt(K_FLY_MODE, 0) != 0; set { PlayerPrefs.SetInt(K_FLY_MODE, value ? 1 : 0); Notify(); } }
+        // ── FlyMode (14.26.2) ───────────────────────────────────────
+        //
+        // Whether you are flying RIGHT NOW is player state, not a preference, and it
+        // must never have been written to PlayerPrefs. PlayerPrefs is keyed by company
+        // and product name, so every copy of the game on one machine shares it - two
+        // Editor clones, or a build next to the Editor, are all reading and writing a
+        // single value.
+        //
+        // That turned into a cross-player bug the moment two people played: the fly
+        // model kicks a player out of flight when they lose flight permission, and it
+        // did so by writing this shared key. So a second player with no jetpack sat
+        // there clearing the flag every frame, and the first player - who did have a
+        // jetpack - could not stay airborne. Flight appeared to require that EVERYONE
+        // owned a jetpack.
+        //
+        // The live value is per-process now. PlayerPrefs is read once to seed it, so
+        // the dev convenience of starting in fly mode survives, and it is only written
+        // back when something deliberately saves a preference rather than on every
+        // toggle in the air.
+        private static bool _flyMode;
+        private static bool _flyModeSeeded;
+
+        public static bool FlyMode
+        {
+            get
+            {
+                if (!_flyModeSeeded)
+                {
+                    _flyMode = PlayerPrefs.GetInt(K_FLY_MODE, 0) != 0;
+                    _flyModeSeeded = true;
+                }
+                return _flyMode;
+            }
+            set
+            {
+                _flyModeSeeded = true;
+                if (_flyMode == value) return;
+                _flyMode = value;
+                Notify();
+            }
+        }
+
+        /// <summary>Write the current fly mode out as a saved preference. Only the
+        /// settings screen and the editor inspector call this - gameplay must not, or
+        /// the shared-key problem above comes straight back.</summary>
+        public static void PersistFlyModePreference()
+        {
+            PlayerPrefs.SetInt(K_FLY_MODE, FlyMode ? 1 : 0);
+            PlayerPrefs.Save();
+        }
         public static bool  ScreenShake      { get => PlayerPrefs.GetInt("ve_screenshake", 1) != 0; set { PlayerPrefs.SetInt("ve_screenshake", value ? 1 : 0); Notify(); } }
         public static bool  InfiniteHealth    { get => PlayerPrefs.GetInt("ve_infinitehealth", 0) != 0; set { PlayerPrefs.SetInt("ve_infinitehealth", value ? 1 : 0); Notify(); } }
 
@@ -417,6 +466,7 @@ namespace VoxelEngine.Settings
             ResolutionWidth  = Screen.currentResolution.width;
             ResolutionHeight = Screen.currentResolution.height;
             FlyMode          = false;
+            PersistFlyModePreference();
             VoiceMode        = VoiceTalkMode.PushToTalk;
             VoiceActivation  = DEFAULT_VOICE_GATE;
             VoiceVolume      = DEFAULT_VOICE_VOL;

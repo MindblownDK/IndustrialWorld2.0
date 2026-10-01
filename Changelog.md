@@ -1,9 +1,48 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.26.0-dev`
+**Current Version:** `14.26.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.26.2-dev] Your Own Sky
+
+**Type:** PATCH - one bug fix. No save format and no public API removed; `GameSettings.PersistFlyModePreference()` is added.
+
+**A player with a jetpack could only fly if every other player also had one.**
+
+Whether you are flying right now is player state, not a preference, and it should never have been written to PlayerPrefs. PlayerPrefs is keyed by company and product name, so every copy of the game running on one machine shares a single store - two Editor clones, or a build sitting next to the Editor, are all reading and writing the same value. Fly mode lived there, so it was not one player's flight state, it was the machine's.
+
+That stayed invisible for as long as only one player existed. It became a cross-player bug the moment there were two. The flight model kicks a player out of the air the instant they lose flight permission, and it did so by writing that shared key - so a second player with no jetpack sat there clearing the flag every frame, and the first player, who did have a jetpack and every right to fly, was pulled back down as fast as they could press the key. Flight looked like it required that EVERYONE owned a jetpack.
+
+The live value is per-process now. PlayerPrefs is still read once to seed it, so the dev convenience of starting a session in fly mode survives, and it is written back only when something deliberately saves a preference - the settings screen and the editor inspector toggle - rather than on every toggle in the air.
+
+Worth noting for later: fly mode was the only setting in the whole store that gameplay wrote to during play, which is why it was the only one that could do this. Anything added to that store in future should be a preference the player sets, never state the game updates while running.
+
+### [14.26.1-dev] Somebody Is Already Flying
+
+**Type:** PATCH - two bug fixes, both in code shipped by 14.25.0 and 14.26.0. No save format and no public API changed.
+
+**1. A guest could not fly, and thruster plumes were dead for everyone but the pilot.**
+
+One cause, and it was mine. 14.25.0 stopped a client simulating a grid by returning at the top of the flight model outright. That was too blunt: the flight model does far more than move a hull. It is also what recalculates the ship's power, which is exactly what the cockpit reads to decide whether the ship is flyable at all, and what sets each thruster's output, which is exactly what the plume particles read. A client skipping all of it saw an unpowered ship with dead thrusters and locked-out controls - so a guest in a seat was refused flight before their input ever reached the claim check, and nobody except the pilot ever saw a plume.
+
+What actually has to be suppressed is MOTION, and that was already handled one layer down: a client's grid rigidbody is held kinematic, and Unity ignores AddForce and AddTorque on a kinematic body entirely. So the early return is gone. Every system now runs on both machines and produces the right readings and the right visuals, every force a client asks for is discarded by the physics engine rather than by a guard, and the hull's actual position still comes from the host's pose stream alone.
+
+One authority over where the ship IS; both machines agreeing about what it is DOING. The blanket return conflated those two and broke the second to protect the first.
+
+The restore-pose path no longer hands a client's body back to the physics engine when it finishes, which it was briefly doing before the pose driver took it back.
+
+**2. Two players could sit in the same cockpit.**
+
+The seat check was `if (Pilot != null) return;` and Pilot is only ever that one machine's answer. Neither machine was told the other had sat down, so both saw an empty chair and both took it.
+
+Occupancy is replicated now, and a seat is addressed the way milestone 9 addresses everything else on a hull: **(grid net id, integer cell)**. The grid id alone would not do - a ship can have several cockpits and they are occupied independently - and a world position would stop being an address the moment the ship moved.
+
+- The host arbitrates in its own seat table. Its own seated player is held in that same table with a null connection, so a guest cannot sit down on top of the host either.
+- Occupancy is broadcast to everyone, so a client refuses a taken seat **before** putting a player in it. The normal case is a clean "Cockpit occupied" rather than being seated and bounced a round trip later.
+- A direct refusal to the losing client is the backstop for the only case the broadcast cannot cover: two players reaching for the same chair in the same instant. The loser stands back up and is told why.
+- One seat per player - claiming a second frees the first - and every seat a connection held is freed when it drops, along with cutting that hull's throttle. A pilot who crashes out must not leave a cockpit locked forever any more than they should leave a ship under power.
 
 ### [14.26.0-dev] Standing On It
 

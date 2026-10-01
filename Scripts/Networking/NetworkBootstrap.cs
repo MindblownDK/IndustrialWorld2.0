@@ -121,7 +121,26 @@ namespace VoxelEngine.Networking
     public struct GridControlBroadcast : IBroadcast
     {
         public string NetId;
+        public Vector3Int Cell;
         public bool Claim;
+    }
+
+    /// <summary>Host -> everyone: this cockpit is taken, or free again. Sent so a
+    /// client can refuse a seat BEFORE putting a player in it, rather than seating
+    /// them and bouncing them a round trip later.</summary>
+    public struct GridSeatStateBroadcast : IBroadcast
+    {
+        public string NetId;
+        public Vector3Int Cell;
+        public bool Occupied;
+    }
+
+    /// <summary>Host -> one client: you did not get that seat. The backstop for two
+    /// players reaching for the same cockpit in the same instant.</summary>
+    public struct GridSeatDeniedBroadcast : IBroadcast
+    {
+        public string NetId;
+        public Vector3Int Cell;
     }
 
     /// <summary>A guest's stick and throttle. Unreliable and continuous - the next
@@ -431,6 +450,8 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.RegisterBroadcast<GridRemovedBroadcast>(OnServerGridRemoved);
             _networkManager.ServerManager.RegisterBroadcast<GridPoseBroadcast>(OnServerGridPose);
             _networkManager.ServerManager.RegisterBroadcast<GridControlBroadcast>(OnServerGridControl);
+            _networkManager.ServerManager.RegisterBroadcast<GridSeatStateBroadcast>(OnServerGridSeatState);
+            _networkManager.ServerManager.RegisterBroadcast<GridSeatDeniedBroadcast>(OnServerGridSeatDenied);
             _networkManager.ServerManager.RegisterBroadcast<GridInputBroadcast>(OnServerGridInput);
             _networkManager.ServerManager.RegisterBroadcast<ChatBroadcast>(OnServerChat);
             _networkManager.ServerManager.RegisterBroadcast<VoiceBroadcast>(OnServerVoice);
@@ -490,6 +511,8 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.RegisterBroadcast<GridRecordBroadcast>(OnClientGridRecord);
             _networkManager.ClientManager.RegisterBroadcast<GridRemovedBroadcast>(OnClientGridRemoved);
             _networkManager.ClientManager.RegisterBroadcast<GridPoseBroadcast>(OnClientGridPose);
+            _networkManager.ClientManager.RegisterBroadcast<GridSeatStateBroadcast>(OnClientGridSeatState);
+            _networkManager.ClientManager.RegisterBroadcast<GridSeatDeniedBroadcast>(OnClientGridSeatDenied);
 
             // Container-contents poller (14.10.0) - idles while offline.
             if (GetComponent<ContainerSyncManager>() == null)
@@ -521,6 +544,8 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.UnregisterBroadcast<GridRemovedBroadcast>(OnServerGridRemoved);
             _networkManager.ServerManager.UnregisterBroadcast<GridPoseBroadcast>(OnServerGridPose);
             _networkManager.ServerManager.UnregisterBroadcast<GridControlBroadcast>(OnServerGridControl);
+            _networkManager.ServerManager.UnregisterBroadcast<GridSeatStateBroadcast>(OnServerGridSeatState);
+            _networkManager.ServerManager.UnregisterBroadcast<GridSeatDeniedBroadcast>(OnServerGridSeatDenied);
             _networkManager.ServerManager.UnregisterBroadcast<GridInputBroadcast>(OnServerGridInput);
             _networkManager.ServerManager.UnregisterBroadcast<ChatBroadcast>(OnServerChat);
             _networkManager.ServerManager.UnregisterBroadcast<VoiceBroadcast>(OnServerVoice);
@@ -580,6 +605,8 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.UnregisterBroadcast<GridRecordBroadcast>(OnClientGridRecord);
             _networkManager.ClientManager.UnregisterBroadcast<GridRemovedBroadcast>(OnClientGridRemoved);
             _networkManager.ClientManager.UnregisterBroadcast<GridPoseBroadcast>(OnClientGridPose);
+            _networkManager.ClientManager.UnregisterBroadcast<GridSeatStateBroadcast>(OnClientGridSeatState);
+            _networkManager.ClientManager.UnregisterBroadcast<GridSeatDeniedBroadcast>(OnClientGridSeatDenied);
         }
 
         // ─────────────────────────── public API (UI calls these) ───────────────────────────
@@ -1439,13 +1466,47 @@ namespace VoxelEngine.Networking
         // different hull, and when their connection drops - the last of those is
         // the one that matters, because a pilot who crashes out must not leave a
         // ship under power forever.
-        private readonly Dictionary<string, NetworkConnection> _gridPilot = new();
+        // Keyed by SEAT, not by hull: a ship can have several cockpits and they are
+        // occupied independently. The host's own seated player is held here too, with
+        // a null connection, so a guest cannot sit down on top of the host.
+        private readonly Dictionary<string, NetworkConnection> _seatPilot = new();
+        private readonly Dictionary<string, (string NetId, Vector3Int Cell)> _seatAddress = new();
 
-        public void SendGridControl(string netId, bool claim)
+        public void SendGridControl(string netId, Vector3Int cell, bool claim)
         {
             if (!_clientStarted || string.IsNullOrEmpty(netId)) return;
             _networkManager.ClientManager.Broadcast(new GridControlBroadcast
-            { NetId = netId, Claim = claim });
+            { NetId = netId, Cell = cell, Claim = claim });
+        }
+
+        /// <summary>The host's own player sitting down. It goes through the same table
+        /// as a guest's claim so there is one answer to "who is in that seat".</summary>
+        public void HostTakeSeat(string netId, Vector3Int cell)
+        {
+            if (!_serverStarted || string.IsNullOrEmpty(netId)) return;
+            string key = GridSync.SeatKey(netId, cell);
+            if (_seatPilot.ContainsKey(key)) return;
+            _seatPilot[key] = null;                      // null == the host itself
+            _seatAddress[key] = (netId, cell);
+            AnnounceSeatState(netId, cell, true);
+        }
+
+        public void HostLeaveSeat(string netId, Vector3Int cell)
+        {
+            if (!_serverStarted || string.IsNullOrEmpty(netId)) return;
+            string key = GridSync.SeatKey(netId, cell);
+            if (!_seatPilot.TryGetValue(key, out var holder) || holder != null) return;
+            _seatPilot.Remove(key);
+            _seatAddress.Remove(key);
+            GridSync.CutFlightInput(netId);
+            AnnounceSeatState(netId, cell, false);
+        }
+
+        private void AnnounceSeatState(string netId, Vector3Int cell, bool occupied)
+        {
+            GridSync.SetSeatOccupied(netId, cell, occupied);
+            BroadcastToClients(new GridSeatStateBroadcast
+            { NetId = netId, Cell = cell, Occupied = occupied }, Channel.Reliable);
         }
 
         public void SendGridInput(GridFlightInput input)
@@ -1465,30 +1526,45 @@ namespace VoxelEngine.Networking
         private void OnServerGridControl(NetworkConnection conn, GridControlBroadcast msg, Channel channel)
         {
             if (!_serverStarted || conn == null || string.IsNullOrEmpty(msg.NetId)) return;
+            string key = GridSync.SeatKey(msg.NetId, msg.Cell);
 
             if (!msg.Claim)
             {
-                ReleaseGridPilot(msg.NetId, conn);
+                if (!_seatPilot.TryGetValue(key, out var leaving) || leaving != conn) return;
+                _seatPilot.Remove(key);
+                _seatAddress.Remove(key);
+                GridSync.CutFlightInput(msg.NetId);
+                AnnounceSeatState(msg.NetId, msg.Cell, false);
                 return;
             }
 
-            // A guest may only hold one hull at a time, so drop whatever they had.
-            ReleasePilotConnection(conn, except: msg.NetId);
+            // One seat per player, so free whatever they were in before.
+            ReleasePilotConnection(conn, exceptKey: key);
 
-            if (_gridPilot.TryGetValue(msg.NetId, out var holder) && holder != null && holder != conn)
+            if (_seatPilot.TryGetValue(key, out var holder) && holder != conn)
             {
-                Debug.Log($"[GridSync] Control of '{msg.NetId}' refused for client {conn.ClientId}: already flown by client {holder.ClientId}.");
+                string who = holder == null ? "the host" : $"client {holder.ClientId}";
+                Debug.Log($"[GridSync] Seat {msg.Cell} on '{msg.NetId}' refused for client {conn.ClientId}: occupied by {who}.");
+                _networkManager.ServerManager.Broadcast(conn,
+                    new GridSeatDeniedBroadcast { NetId = msg.NetId, Cell = msg.Cell }, true);
                 return;
             }
-            _gridPilot[msg.NetId] = conn;
-            Debug.Log($"[GridSync] Client {conn.ClientId} has control of grid '{msg.NetId}'.");
+
+            _seatPilot[key] = conn;
+            _seatAddress[key] = (msg.NetId, msg.Cell);
+            AnnounceSeatState(msg.NetId, msg.Cell, true);
+            Debug.Log($"[GridSync] Client {conn.ClientId} has seat {msg.Cell} on grid '{msg.NetId}'.");
         }
 
         private void OnServerGridInput(NetworkConnection conn, GridInputBroadcast msg, Channel channel)
         {
             if (!_serverStarted || conn == null) return;
-            // Validated against the server's own table, never against the message.
-            if (!_gridPilot.TryGetValue(msg.NetId, out var holder) || holder != conn) return;
+            // Validated against the server's own seat table, never against the message.
+            bool holdsASeat = false;
+            foreach (var pair in _seatPilot)
+                if (pair.Value == conn && _seatAddress.TryGetValue(pair.Key, out var addr)
+                    && addr.NetId == msg.NetId) { holdsASeat = true; break; }
+            if (!holdsASeat) return;
 
             GridSync.ApplyFlightInput(new GridFlightInput
             {
@@ -1501,27 +1577,38 @@ namespace VoxelEngine.Networking
             });
         }
 
-        private void ReleaseGridPilot(string netId, NetworkConnection conn)
+        private void OnServerGridSeatState(NetworkConnection conn, GridSeatStateBroadcast msg, Channel channel) { }
+        private void OnServerGridSeatDenied(NetworkConnection conn, GridSeatDeniedBroadcast msg, Channel channel) { }
+
+        private void OnClientGridSeatState(GridSeatStateBroadcast msg, Channel channel)
         {
-            if (!_gridPilot.TryGetValue(netId, out var holder) || holder != conn) return;
-            _gridPilot.Remove(netId);
-            GridSync.CutFlightInput(netId);
-            Debug.Log($"[GridSync] Client {conn.ClientId} released grid '{netId}'.");
+            if (_serverStarted || WorldMismatch) return;
+            GridSync.SetSeatOccupied(msg.NetId, msg.Cell, msg.Occupied);
         }
 
-        /// <summary>Drop every hull this connection was flying. Called when a guest
-        /// claims a different seat and when they disconnect.</summary>
-        private void ReleasePilotConnection(NetworkConnection conn, string except = null)
+        private void OnClientGridSeatDenied(GridSeatDeniedBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            GridSync.ReportSeatDenied(msg.NetId, msg.Cell);
+        }
+
+        /// <summary>Free every seat this connection held. Called when a guest sits
+        /// somewhere else and when they disconnect - a pilot who crashed out must not
+        /// leave a hull under power, or a cockpit locked forever.</summary>
+        private void ReleasePilotConnection(NetworkConnection conn, string exceptKey = null)
         {
             List<string> dropped = null;
-            foreach (var pair in _gridPilot)
-                if (pair.Value == conn && pair.Key != except)
+            foreach (var pair in _seatPilot)
+                if (pair.Value == conn && pair.Key != exceptKey)
                     (dropped ??= new List<string>()).Add(pair.Key);
             if (dropped == null) return;
-            foreach (var netId in dropped)
+            foreach (var key in dropped)
             {
-                _gridPilot.Remove(netId);
-                GridSync.CutFlightInput(netId);
+                _seatPilot.Remove(key);
+                if (!_seatAddress.TryGetValue(key, out var addr)) continue;
+                _seatAddress.Remove(key);
+                GridSync.CutFlightInput(addr.NetId);
+                AnnounceSeatState(addr.NetId, addr.Cell, false);
             }
         }
 

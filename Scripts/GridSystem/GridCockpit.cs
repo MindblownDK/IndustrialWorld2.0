@@ -80,6 +80,30 @@ namespace VoxelEngine.GridSystem
             VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
         }
 
+        private void OnEnable()
+        {
+            VoxelEngine.Networking.GridSync.SeatDenied += OnSeatDenied;
+        }
+
+        private void OnDisable()
+        {
+            VoxelEngine.Networking.GridSync.SeatDenied -= OnSeatDenied;
+        }
+
+        /// <summary>The host gave this seat to somebody else. Only possible when two
+        /// players reached for it in the same instant, but the loser has to stand back
+        /// up or they are sitting in a cockpit the host does not think they own.</summary>
+        private void OnSeatDenied(string netId, Vector3Int cell)
+        {
+            if (Pilot == null || Grid == null || cell != SeatCell) return;
+            var tag = Grid.GetComponent<VoxelEngine.Networking.GridNetTag>();
+            if (tag == null || tag.Id != netId) return;
+
+            Exit();
+            VoxelEngine.UI.BuildFeedbackHud.Show("Cockpit occupied",
+                "Another player reached the seat first.");
+        }
+
         private void Update()
         {
             if (Pilot == null) return;
@@ -474,9 +498,22 @@ namespace VoxelEngine.GridSystem
             }
         }
 
+        /// <summary>The cell this seat occupies on its hull. A seat is addressed the
+        /// same way a block is - (grid, integer cell) - so the address survives the
+        /// ship moving and a hull with several cockpits has several seats.</summary>
+        private Vector3Int SeatCell => GridPos;   // GridCockpit IS a GridBlock
+
         public void Enter(Player.PlayerController player)
         {
-            if (Pilot != null) return;
+            // Pilot is only this MACHINE's answer. Before 14.26.1 that was the whole
+            // check, so two players on two machines each saw an empty seat and both
+            // sat in it. Occupancy is replicated now and asked first.
+            if (Pilot != null || VoxelEngine.Networking.GridSync.IsSeatOccupied(Grid, SeatCell))
+            {
+                VoxelEngine.UI.BuildFeedbackHud.Show("Cockpit occupied",
+                    "Another player is flying from this seat.");
+                return;
+            }
 
             Pilot = player;
             CaptureDefaultCameraPose(player);
@@ -511,7 +548,7 @@ namespace VoxelEngine.GridSystem
             ActiveControlPilot = player;
             // 14.26.0: ask the host for control of this hull. On the host and
             // offline this only records the claim - that machine already flies it.
-            VoxelEngine.Networking.GridSync.ClaimControl(Grid);
+            VoxelEngine.Networking.GridSync.ClaimControl(Grid, SeatCell);
 
             // Rebuild the HUD now so the on-foot hotbar is hidden immediately on entry
             // (BuildHotbar skips while ActivePilotSeat != null) — the ship toolbar replaces it.

@@ -526,18 +526,50 @@ namespace VoxelEngine.Networking
 
         /// <summary>The grid this machine's local player has claimed, if any.</summary>
         public static string LocalControlClaim { get; private set; } = "";
+        private static Vector3Int _localControlCell;
+
+        // A seat is addressed the same way a block is: (grid net id, integer cell).
+        // A hull can have several cockpits and they are occupied independently, so
+        // the grid id alone is not an address for one - and the cell is exact and
+        // stays correct while the ship is moving, which a world position does not.
+        private static readonly HashSet<string> _occupiedSeats = new();
+
+        internal static string SeatKey(string netId, Vector3Int cell)
+            => $"{netId}|{cell.x},{cell.y},{cell.z}";
+
+        /// <summary>True when somebody else is already in this seat. Checked before a
+        /// player is ever put in it, so the usual case is a clean refusal rather than
+        /// being seated and then bounced.</summary>
+        public static bool IsSeatOccupied(GridEntity grid, Vector3Int cell)
+        {
+            if (grid == null || NetworkSession.Mode == SessionMode.Offline) return false;
+            var tag = grid.GetComponent<GridNetTag>();
+            if (tag == null || string.IsNullOrEmpty(tag.Id)) return false;
+            return _occupiedSeats.Contains(SeatKey(tag.Id, cell));
+        }
+
+        /// <summary>Host -> everyone: this seat is taken, or free again.</summary>
+        public static void SetSeatOccupied(string netId, Vector3Int cell, bool occupied)
+        {
+            string key = SeatKey(netId, cell);
+            if (occupied) _occupiedSeats.Add(key);
+            else _occupiedSeats.Remove(key);
+        }
 
         /// <summary>Local player took a cockpit. On a client this asks the host for
         /// control; on the host it is simply recorded, since the host already flies it.</summary>
-        public static void ClaimControl(GridEntity grid)
+        public static void ClaimControl(GridEntity grid, Vector3Int cell)
         {
             if (grid == null) return;
             string id = IdOf(grid);
-            if (LocalControlClaim == id) return;
             ReleaseControl();
             LocalControlClaim = id;
+            _localControlCell = cell;
+
             if (NetworkSession.Mode == SessionMode.Client && CanSync)
-                NetworkBootstrap.Instance.SendGridControl(id, true);
+                NetworkBootstrap.Instance.SendGridControl(id, cell, true);
+            else if (NetworkSession.Mode == SessionMode.Host && CanSync)
+                NetworkBootstrap.Instance.HostTakeSeat(id, cell);
         }
 
         /// <summary>Local player left the seat.</summary>
@@ -545,10 +577,22 @@ namespace VoxelEngine.Networking
         {
             if (string.IsNullOrEmpty(LocalControlClaim)) return;
             string id = LocalControlClaim;
+            var cell = _localControlCell;
             LocalControlClaim = "";
+
             if (NetworkSession.Mode == SessionMode.Client && CanSync)
-                NetworkBootstrap.Instance.SendGridControl(id, false);
+                NetworkBootstrap.Instance.SendGridControl(id, cell, false);
+            else if (NetworkSession.Mode == SessionMode.Host && CanSync)
+                NetworkBootstrap.Instance.HostLeaveSeat(id, cell);
         }
+
+        /// <summary>The host refused a seat we had already sat down in. Rare - it only
+        /// happens when two players reach for the same cockpit in the same instant -
+        /// but it has to be handled or the loser sits in a seat they do not own.</summary>
+        public static event System.Action<string, Vector3Int> SeatDenied;
+
+        internal static void ReportSeatDenied(string netId, Vector3Int cell)
+            => SeatDenied?.Invoke(netId, cell);
 
         /// <summary>A guest's stick and throttle, on their way to the machine that
         /// actually flies the ship. Silent unless this is a client holding the claim.</summary>
@@ -630,6 +674,7 @@ namespace VoxelEngine.Networking
             _byId.Clear();
             _pending.Clear();
             LocalControlClaim = "";
+            _occupiedSeats.Clear();
         }
     }
 

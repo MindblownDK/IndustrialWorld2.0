@@ -368,16 +368,23 @@ namespace VoxelEngine.GridSystem
 
         private void FixedUpdate()
         {
-            // 14.25.0: on a client this grid is not simulated at all - GridNetTag
-            // drives it from the host's pose stream. Running the flight model here
-            // too would be a second simulation of the same ship, and two rigidbodies
-            // integrating independently from the same inputs diverge immediately and
-            // never come back. One authority, or none.
-            // Asked of the session rather than of the tag: a grid that somehow has no
-            // tag yet must still not be simulated on a client, and "am I a client" is
-            // not a question that can be got wrong.
-            if (VoxelEngine.Networking.NetworkSession.Mode
-                == VoxelEngine.Networking.SessionMode.Client) return;
+            // 14.25.0 stopped a client simulating a grid by returning here outright.
+            // That was too blunt and 14.26.1 undid it: the flight model does far more
+            // than move the hull. It is also what recalculates power, which is what
+            // the cockpit reads to decide whether the ship is flyable at all, and what
+            // sets each thruster's output, which is what the plume particles read. A
+            // client that skipped all of it saw an unpowered ship with dead thrusters
+            // and locked controls.
+            //
+            // What actually has to be suppressed is MOTION, and that is already
+            // handled a layer down: GridNetTag holds a client's rigidbody kinematic,
+            // and Unity ignores AddForce and AddTorque on a kinematic body entirely.
+            // So the systems all run and produce the right readings and the right
+            // visuals, every force they ask for is discarded, and the hull's actual
+            // position still comes from the host's pose stream alone. One authority
+            // over where the ship IS; both machines agreeing about what it is DOING.
+            bool drivenRemotely = VoxelEngine.Networking.NetworkSession.Mode
+                                  == VoxelEngine.Networking.SessionMode.Client;
 
             if (_restorePoseTicks > 0 && _rb != null)
             {
@@ -391,7 +398,7 @@ namespace VoxelEngine.GridSystem
                     _restoreGroundClearanceTicks--;
                 }
                 _restorePoseTicks--;
-                if (_restorePoseTicks == 0)
+                if (_restorePoseTicks == 0 && !drivenRemotely)
                 {
                     _rb.isKinematic = false;
                     _rb.linearVelocity = _restoreVelocity;

@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.26.0-dev`
-**Roadmap Version:** `14.26.0-dev`
+**Current Version:** `14.26.2-dev`
+**Roadmap Version:** `14.26.2-dev`
 **Date:** 2026-10-01
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,13 @@
 
 ## 0. Recently Done
 
+### 14.26.2-dev - Your Own Sky
+Fly mode is per-process state again instead of a PlayerPrefs value shared by every copy of the game on one machine. A second player without a jetpack was clearing the shared flag every frame, so a player who did have one could not stay airborne - flight appeared to require that everyone owned a jetpack. PlayerPrefs now only seeds the value and is written back only when a preference is deliberately saved.
+
+### 14.26.1-dev - Somebody Is Already Flying
+A client no longer skips the whole grid flight model, only its motion - skipping all of it left the ship unpowered on a client, which locked a guest out of the controls and killed thruster plumes for everyone but the pilot. Motion is suppressed by the kinematic body, not by a guard.
+Cockpit occupancy is replicated and arbitrated by the host, addressed as (grid id, cell) so a hull with several seats works and the address survives the ship moving. A taken seat is refused with "Cockpit occupied", and a dropped connection frees its seats and cuts that hull's throttle.
+
 ### 14.26.0-dev - Standing On It
 Milestone 9 COMPLETE. A player standing on a moving hull is now carried by it, position and heading, anchored in the deck's own frame and re-measured each frame - this was missing in single-player too, not just over the network.
 A guest can fly: stick and throttle travel to the host, which flies the ship it already owns and returns the result on the pose stream. Control is a claim held against the host's connection table, one pilot per hull, cut when the seat is left or the connection drops.
@@ -41,18 +48,6 @@ Open: riders are not yet carried by a moving hull, and a guest cannot pilot - bo
 ### 14.24.1-dev - Nothing Holding You Down
 The walk controller no longer drifts upward while standing still: the per-frame anti-stick lift is gone and the footing recovery is an absolute solve in both directions, so the capsule has a fixed resting clearance instead of a floor with no ceiling. Ground probe buffer widened so the solve cannot go blind in a base or a forest.
 Join catch-up no longer freezes the host. All six snapshot gathers are lazy and interruptible, frame breaks are driven by a 4 ms budget that covers the capture as well as the send, and each phase logs its count, wall time and frame span.
-
-### 14.24.0-dev - What You Left Here
-Milestone 8 COMPLETE. Per-player state is host-owned: inventory, equipment, hotbar and pose are kept by the host in a sidecar keyed by stable player id, handed back on the next visit, and saved on the host's normal cadence. Records are keyed by the id the server settled on, so no client can write over another's. Guests wait for the host's answer before spawning.
-
-### 14.23.3-dev - You Are In
-Main-menu join confirmed working end to end. The joining overlay now removes its own UI element instead of relying on its GameObject being destroyed, and closes on a short confirmation fade.
-
----
-
-## 1. Multiplayer Strategy (Fish-Net) - LOCKED DECISIONS
-
-These decisions are settled. Every future system is designed against them.
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -72,7 +67,7 @@ These decisions are settled. Every future system is designed against them.
 
 9. **Grid system multiplayer:** the whole grid/construct layer - building on a moving grid, grid physics and drift, the shape wheel, grid identity and the construct registry, the inspector overlay, waymarks and the auto-run shuttle loop, docking and jump travel - has to behave the same for a passenger as it does for the pilot. Today the grid layer is the largest remaining single-player assumption in the game: grids move, and every piece of replication built so far assumes a world-space position that stays put. Decide the authority model at milestone start: replicate the GRID's transform and keep piece positions grid-local (one small message per grid per tick, pieces ride along for free) versus replicating pieces in world space (simple, but every piece on a moving grid becomes traffic). The first option is almost certainly right and the MP-readiness checklist already points at it - "stable ids over object references" means a piece must be addressable as (grid id, local cell) rather than a world coordinate. Pilot authority, passenger prediction and hand-off when the pilot leaves the seat are part of this milestone, not after it. **PART ONE DONE 14.25.0** - authority model decided and built: grid-local piece identity (stable grid id + integer cell, id saved), host-only grid simulation, kinematic client hulls driven by a 20 Hz pose stream with dead reckoning, structure carried as the save record itself. **DONE 14.26.0** - riders are carried by a moving deck (position and heading) and a guest can fly via input handoff with a connection-held control claim. **Known limit:** structure is resent whole rather than as per-cell deltas, and a guest's own controls cost a round trip (no client-side prediction).
 
-10. **Beacon multiplayer:** beacons are how players find each other and find their way back, so they are worth their own milestone rather than being folded into world sync. Beacon placement, naming, range, visibility rules (who can see whose beacon) and the on-screen markers all replicate; a beacon placed by one player appears for everyone who should see it, with the same name and the same range, and survives a rejoin. This milestone also settles whether beacon visibility is global, per-team (see milestone 11) or per-player - that answer should be made WITH teams, which is why these two sit next to each other.
+10. **Beacon multiplayer:** beacons are how players find each other and find their way back, so they are worth their own milestone rather than being folded into world sync. Beacon placement, naming, range, visibility rules (who can see whose beacon) and the on-screen markers all replicate; a beacon placed by one player appears for everyone who should see it, with the same name and the same range, and survives a rejoin. **Visibility is DECIDED (user, pre-10.0):** it is a per-beacon setting with three values - share global, share team, and do not share - chosen on the beacon itself rather than being one global rule. The team value is stored and honoured as soon as milestone 11 lands; until then it behaves as do-not-share for anyone outside the owner.
 
 11. **Teams:** players create a team, name it, and invite other players to it; invited players accept or decline. Team membership is the grouping every later shared-ownership feature hangs off - shared build costs, friendly fire rules, team beacons, team-visible map markers and eventually base permissions. **Two limits live in the multiplayer / server settings, not in code:** maximum members per team and maximum teams per session, both editable by the host before and during a session. Teams are keyed by stable player id (MP-readiness checklist) so membership survives a rename and a reconnect, and the team roster is part of the save so a session can be resumed with its teams intact.
 
@@ -138,7 +133,9 @@ These decisions are settled. Every future system is designed against them.
 - **Invite and accept, never auto-join.** A player is only ever added to a team by their own confirmation.
 - **The limits are host settings, not constants.** Max members per team and max teams per session live in the multiplayer / server settings, editable by the host.
 - **Teams are saved with the session**, so resuming a world resumes its teams.
-- **Beacon visibility is decided WITH teams** (global / per-team / per-player), which is why beacons sit next to teams in the plan rather than inside world sync.
+- **Beacon sharing is a PER-BEACON setting, not one global rule (DECIDED).** Three values, chosen on the beacon itself: **share global** (everyone in the session sees it), **share team** (only the owner's team sees it), and **do not share** (owner only). The default for a newly placed beacon is do-not-share, so nothing a player builds leaks to the session until they say so.
+- **The team value is stored from day one and honoured as soon as teams exist.** Beacons ship before teams, so until milestone 11 lands a beacon set to share-team behaves as do-not-share for everyone except its owner. The setting is never silently rewritten - a player who chose share-team gets exactly that the moment they have a team, with no revisiting of old beacons.
+- **Sharing is enforced where the beacon is SENT, not where it is drawn.** A client is never told about a beacon it has no right to see, so hiding a marker is not what keeps it secret.
 
 ### Era Transition Feel
 

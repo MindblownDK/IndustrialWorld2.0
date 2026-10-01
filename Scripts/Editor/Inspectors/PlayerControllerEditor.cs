@@ -27,6 +27,9 @@ namespace VoxelEngine.EditorTools
             if (GUILayout.Button(label, GUILayout.Height(34)))
             {
                 GameSettings.FlyMode = !isFly;
+                // The inspector toggle IS a saved dev preference, so it persists.
+                // Gameplay toggling deliberately does not - see GameSettings.FlyMode.
+                GameSettings.PersistFlyModePreference();
             }
             GUI.backgroundColor = prev;
             EditorGUILayout.HelpBox(
