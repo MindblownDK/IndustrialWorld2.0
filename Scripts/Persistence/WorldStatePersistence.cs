@@ -72,6 +72,19 @@ namespace VoxelEngine.Persistence
         private void Start()
         {
             BuildItemCache();
+
+            // 14.23.0 - a world joined from the main menu has no local save to
+            // restore; its machines, containers and dropped items all arrive
+            // from the host. Reading the (empty, freshly wiped) join cache here
+            // would only race the handshake. Single player is untouched: the
+            // session is only a remote join when the player typed an address.
+            var session = VoxelEngine.Menu.WorldSession.Instance;
+            if (session != null && session.IsRemoteJoin)
+            {
+                Debug.Log("[WorldStatePersistence] Remote join - world state comes from the host, skipping LoadAll.");
+                return;
+            }
+
             // Restore IMMEDIATELY so that PlayerSpawner sees the saved position when it polls.
             LoadAll();
         }

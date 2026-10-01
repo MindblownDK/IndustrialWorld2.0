@@ -74,6 +74,7 @@ namespace VoxelEngine.Settings
         private const string K_VOICE_GATE   = "ve.voiceActivation";
         private const string K_VOICE_VOL    = "ve.voiceVolume";
         private const string K_VOICE_DEV    = "ve.voiceDevice";
+        private const string K_LAST_HOST    = "ve.lastHostAddress";
         private const string K_VOICE_MUTED  = "ve.voiceMuted";
         private const string K_VERSION      = "ve.settingsVersion";
 
@@ -185,6 +186,15 @@ namespace VoxelEngine.Settings
             PlayerPrefs.SetString(K_VOICE_MUTED, string.Join(",", set));
             PlayerPrefs.Save();
             Notify();
+        }
+
+        // ----- Multiplayer -----
+        /// <summary>Last address the player joined from the main menu, so a
+        /// friend's address is typed once and not every evening.</summary>
+        public static string LastHostAddress
+        {
+            get => PlayerPrefs.GetString(K_LAST_HOST, "");
+            set { PlayerPrefs.SetString(K_LAST_HOST, (value ?? "").Trim()); PlayerPrefs.Save(); }
         }
 
         // ----- Saving -----

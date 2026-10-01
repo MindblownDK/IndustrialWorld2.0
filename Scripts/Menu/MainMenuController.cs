@@ -32,7 +32,7 @@ namespace VoxelEngine.Menu
         private VisualElement _root;
         private WorldSession  _session;
 
-        private enum Page { Main, Saves, NewWorld, EditWorld, Settings }
+        private enum Page { Main, Saves, NewWorld, EditWorld, Multiplayer, Settings }
         private Page _page = Page.Main;
         private Page _lastBuiltPage = (Page)(-1);
 
@@ -55,6 +55,10 @@ namespace VoxelEngine.Menu
         private bool   _editShowDropVoidWarning = true;
         private bool   _editAllowRuinLootRespawn = WorldSession.DefaultAllowRuinLootRespawn;
         private string _menuStatus = string.Empty;
+
+        // Multiplayer page: remembered between sessions so a friend's address
+        // is typed once, not every evening.
+        private string _joinAddress = VoxelEngine.Settings.GameSettings.LastHostAddress;
         private string _expandedAutosaveWorld = string.Empty;
 
         // ── Cosmos: solar-system picker + per-planet editable seeds ──
@@ -109,6 +113,16 @@ namespace VoxelEngine.Menu
                 var go = new GameObject("WorldSession");
                 _session = go.AddComponent<WorldSession>();
             }
+
+            // Standing in the menu means no join is in flight. Clearing here
+            // is what guarantees the boot gate can never be left raised by an
+            // abandoned attempt and stall the next single-player world.
+            _session.ClearRemoteJoin();
+
+            // Joined worlds are caches, not saves. The menu is the one place
+            // where nothing is streaming, so it is the safe place to sweep
+            // them off disk.
+            _session.PurgeJoinedCaches();
         }
 
         private void OnEnable() => BuildUI();
@@ -170,6 +184,7 @@ namespace VoxelEngine.Menu
                 case Page.Saves:    BuildSavesPage();    break;
                 case Page.NewWorld: BuildNewWorldPage(); break;
                 case Page.EditWorld: BuildEditWorldPage(); break;
+                case Page.Multiplayer: BuildMultiplayerPage(); break;
                 case Page.Settings: BuildSettingsPage(); break;
             }
         }
@@ -214,6 +229,8 @@ namespace VoxelEngine.Menu
             panel.Add(PrimaryBtn("PLAY",      () => { _page = Page.Saves;    BuildUI(); }, T.AccentCyan, LucideIcons.Play));
             panel.Add(T.Spacer(8));
             panel.Add(PrimaryBtn("NEW WORLD", () => { _page = Page.NewWorld; BuildUI(); }, T.AccentTeal, LucideIcons.Plus));
+            panel.Add(T.Spacer(8));
+            panel.Add(PrimaryBtn("MULTIPLAYER", () => { _menuStatus = string.Empty; _page = Page.Multiplayer; BuildUI(); }, T.AccentGreen, LucideIcons.Globe));
             panel.Add(T.Spacer(8));
             panel.Add(PrimaryBtn("SETTINGS",  () => { _page = Page.Settings; BuildUI(); }, T.BgSlot,    LucideIcons.Settings));
             panel.Add(T.Spacer(8));
@@ -673,6 +690,63 @@ namespace VoxelEngine.Menu
         }
 
         // ════════════════════════════════════════════════════════════
+        //                   MULTIPLAYER PAGE  (14.23.0)
+        // ════════════════════════════════════════════════════════════
+        //
+        // Joining used to live in the in-game pause menu, which meant the only
+        // way to reach a friend's world was to load a world of your own first
+        // - and it had to be built from the same seed or nothing lined up.
+        // From here you type an address and arrive in THEIR world: the host
+        // sends its seed, its per-planet seed table and its world rules in the
+        // handshake, and the client builds from that.
+        private void BuildMultiplayerPage()
+        {
+            var panel = MakePanel(520, 0);
+            _root.Add(panel);
+
+            panel.Add(PageHeader("MULTIPLAYER", "BACK", () => { _menuStatus = string.Empty; _page = Page.Main; BuildUI(); }));
+            panel.Add(T.AccentDivider());
+            panel.Add(T.Spacer(10));
+
+            var blurb = T.Muted("Join a friend's world directly. You do not need their save - " +
+                                "the world is sent to you when you connect.");
+            blurb.style.whiteSpace = WhiteSpace.Normal;
+            panel.Add(blurb);
+            panel.Add(T.Spacer(14));
+
+            panel.Add(FormLabel("Host Address"));
+            var addrField = new TextField { value = _joinAddress };
+            StyleField(addrField);
+            addrField.RegisterValueChangedCallback(e => _joinAddress = e.newValue);
+            panel.Add(addrField);
+            panel.Add(T.Spacer(4));
+
+            var hint = T.Muted("IP address or hostname. Use localhost to join a game on this computer.");
+            hint.style.whiteSpace = WhiteSpace.Normal;
+            panel.Add(hint);
+            panel.Add(T.Spacer(16));
+
+            panel.Add(PrimaryBtn("JOIN GAME", JoinHost, T.AccentCyan, LucideIcons.Play));
+            panel.Add(T.Spacer(16));
+
+            panel.Add(T.AccentDivider());
+            panel.Add(T.Spacer(8));
+            var hostNote = T.Muted("To host: load one of your own worlds, then open the pause menu " +
+                                   "and choose HOST THIS WORLD.");
+            hostNote.style.whiteSpace = WhiteSpace.Normal;
+            panel.Add(hostNote);
+
+            if (!string.IsNullOrEmpty(_menuStatus))
+            {
+                panel.Add(T.Spacer(10));
+                var status = T.Body(_menuStatus);
+                status.style.color = new StyleColor(T.AccentRed);
+                status.style.whiteSpace = WhiteSpace.Normal;
+                panel.Add(status);
+            }
+        }
+
+        // ════════════════════════════════════════════════════════════
         //                     SETTINGS PAGE
         // ════════════════════════════════════════════════════════════
         private void BuildSettingsPage()
@@ -795,6 +869,40 @@ namespace VoxelEngine.Menu
             Time.timeScale = 1f;
             try { SceneManager.LoadScene(gameSceneName); }
             catch (Exception ex) { Debug.LogError("[MainMenu] Could not load scene: " + ex.Message); }
+        }
+
+        /// <summary>Load the game scene as a guest in somebody else's world.
+        /// No world is generated here and no save is touched: the scene comes
+        /// up with world generation held, NetworkBootstrap connects, and the
+        /// host's world card releases the gate.</summary>
+        private void JoinHost()
+        {
+            string address = (_joinAddress ?? "").Trim();
+            if (string.IsNullOrEmpty(address))
+            {
+                _menuStatus = "Enter the host's address first.";
+                BuildUI();
+                return;
+            }
+
+            VoxelEngine.Settings.GameSettings.LastHostAddress = address;
+            _menuStatus = string.Empty;
+
+            // A placeholder world identity, replaced the moment the host's
+            // card arrives. It exists only so nothing downstream reads a null
+            // world name before the handshake lands.
+            _session.worldName  = WorldSession.JoinedCacheFolderName(address);
+            _session.isNewWorld = false;
+            _session.BeginRemoteJoin(address);
+
+            UIState.ClearSceneBlocks();
+            Time.timeScale = 1f;
+            try { SceneManager.LoadScene(gameSceneName); }
+            catch (Exception ex)
+            {
+                _session.ClearRemoteJoin();
+                Debug.LogError("[MainMenu] Could not load scene: " + ex.Message);
+            }
         }
 
         private void CreateAndLoadWorld()

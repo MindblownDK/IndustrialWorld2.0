@@ -1,9 +1,23 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.22.0-dev`
+**Current Version:** `14.23.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.23.0-dev] Somebody Else's World
+
+**Type:** MINOR - a new main-menu page and a new join path. Save-compatible: no save file changes format, and nothing an existing world holds is read differently.
+
+**You can now join a friend from the main menu, without owning their world.** Until today joining was something you did from inside a world you had already loaded, which made multiplayer mean "two people who happen to hold the same save file". Worse, holding the same file was not enough - the two worlds also had to have been created with the same seed, in the same solar system, with the same per-planet seeds, or the ground did not line up and you fell through each other's terrain. MULTIPLAYER is now a page on the main menu: type the host's address, press JOIN GAME, and you arrive in THEIR world. The address is remembered between sessions so a friend's IP is typed once.
+
+**How a world travels.** The seed alone was never enough to rebuild a planet - the world is the seed PLUS the chosen solar system, the per-planet seed table and the world rules. All of it now rides in the handshake as a world card, which the client adopts whole: seed, system, planet seeds, spawn planet, orbit pace, drop cap, inventory and container weight limits, the drop-into-void warning and ruin loot respawn. The host's settings win, because it is the host's world. A host running an older build sends no card, and the joining client says so in plain words instead of generating the wrong planet and quietly disagreeing about where the ground is.
+
+**Connect first, then build.** A joining client cannot generate terrain before the host answers, so world generation is held behind a boot gate and released by the handshake. While it is held the client does not generate a planet, does not restore a save and does not spawn the player into empty space - it shows a JOINING screen that says what it is waiting on. The gate is raised only by a main-menu join and is lowered before any world exists in every other case, so a single-player boot runs the identical code in the identical order: the same gate check that holds a guest is a no-op for everyone else. If the host never answers, the attempt times out after 20 seconds; if the connection drops before the world arrives, or the host is too old to send a card, the join screen says which of those happened and offers the way back to the menu rather than leaving a player in a black room wondering whether the game crashed.
+
+**A joined world is a cache, not a save.** This closes the known remaining half of the 14.21.1 save fault. World-state saving was already suppressed on a client, but the voxel chunk store still wrote to disk, because the terrain catch-up uses it to park edited chunks the streamer has not loaded yet. Those writes now land in a session cache folder that is created empty on every join, never appears in the saves list, and is swept off disk the next time the main menu opens. A guest can no longer end up with a half-copy of someone else's world sitting among their own saves, and cannot be shown stale terrain from a previous visit that the host has since changed.
+
+**Not in this entry:** a guest still carries their own inventory, hotbar, equipment and stats rather than per-player state the host owns and saves. That is the last part of the session milestone and is next.
 
 ### [14.22.0-dev] Low And Quiet
 

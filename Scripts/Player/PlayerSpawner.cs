@@ -51,6 +51,13 @@ namespace VoxelEngine.Player
         {
             ReadyForPlayerControl = false;
 
+            // 14.23.0 - on a main-menu join there is no planet to stand on
+            // until the host's world card arrives. Spawning now would place
+            // the player in empty space and drop them through it. The gate is
+            // only ever held on a remote join, so offline spawning is
+            // unchanged: the loop below exits on its first check.
+            while (VoxelEngine.Menu.WorldBootGate.IsHeld) yield return null;
+
             // Give one frame for VoxelWorld / WorldStatePersistence to initialise.
             yield return null;
 

@@ -75,6 +75,12 @@ namespace VoxelEngine.Networking
     {
         public string WorldName;
         public int Seed;
+
+        /// <summary>14.23.0 - the host's world card (JSON): seed, the cosmos
+        /// sidecar and the world rules. A client that joined from the main
+        /// menu builds its world from this instead of from a local save.
+        /// Empty from an older host, which falls back to the seed check.</summary>
+        public string WorldCard;
     }
 
     // ── Building replication (14.4.0). Client -> server -> other clients. ──
@@ -396,6 +402,12 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.RegisterBroadcast<TerrainChunkBroadcast>(OnClientTerrainChunk);
             _networkManager.ClientManager.RegisterBroadcast<BaseSnapshotBroadcast>(OnClientBaseSnapshot);
 
+            // A join started from the main menu finishes here: the address rode
+            // through the scene load on WorldSession and the world is waiting
+            // on the handshake. No pending join means this line does nothing,
+            // so a solo world boots exactly as before.
+            TryAutoJoin();
+
             // Container-contents poller (14.10.0) - idles while offline.
             if (GetComponent<ContainerSyncManager>() == null)
                 gameObject.AddComponent<ContainerSyncManager>();
@@ -491,6 +503,41 @@ namespace VoxelEngine.Networking
             address = string.IsNullOrWhiteSpace(address) ? "localhost" : address.Trim();
             _statusLine = $"Connecting to {address}...";
             _networkManager.ClientManager.StartConnection(address);
+        }
+
+        /// <summary>Seconds to wait for the host's world card before giving up.
+        /// Generous: a cold host has to open its world and answer.</summary>
+        private const float JoinTimeoutSeconds = 20f;
+
+        /// <summary>Connect straight away when the player chose a host in the
+        /// main menu. No-op in every other case.</summary>
+        private void TryAutoJoin()
+        {
+            var session = VoxelEngine.Menu.WorldSession.Instance;
+            if (session == null || !session.IsRemoteJoin || session.hostWorldAdopted) return;
+
+            VoxelEngine.Menu.WorldBootGate.Report($"Connecting to {session.pendingJoinAddress}...");
+            StartClient(session.pendingJoinAddress);
+            StartCoroutine(JoinWatchdog());
+        }
+
+        /// <summary>A join that never answers must not leave the player in an
+        /// empty grey room forever - fail it with something readable.</summary>
+        private IEnumerator JoinWatchdog()
+        {
+            float deadline = Time.unscaledTime + JoinTimeoutSeconds;
+            while (Time.unscaledTime < deadline)
+            {
+                if (!VoxelEngine.Menu.WorldBootGate.IsPending) yield break;  // adopted, or already failed
+                yield return null;
+            }
+            if (!VoxelEngine.Menu.WorldBootGate.IsPending) yield break;
+
+            VoxelEngine.Menu.WorldBootGate.Fail(
+                "No answer from the host. Check the address and that they are hosting, " +
+                "and that port forwarding is open on their side.");
+            _statusLine = "Join timed out";
+            StopSession();
         }
 
         /// <summary>Leave the session (client) or shut it down (host).</summary>
@@ -608,7 +655,11 @@ namespace VoxelEngine.Networking
                 var session = VoxelEngine.Menu.WorldSession.Instance;
                 if (session != null)
                     _networkManager.ServerManager.Broadcast(connection, new WorldInfoBroadcast
-                    { WorldName = session.worldName, Seed = session.seed }, true);
+                    {
+                        WorldName = session.worldName,
+                        Seed = session.seed,
+                        WorldCard = session.ExportWorldCardJson(),
+                    }, true);
             }
         }
 
@@ -1030,6 +1081,41 @@ namespace VoxelEngine.Networking
         {
             if (_serverStarted) return;
             var session = VoxelEngine.Menu.WorldSession.Instance;
+
+            // ── main-menu join (14.23.0) ──────────────────────────────
+            //
+            // The player picked an address, not a save. World generation has
+            // been held since the scene loaded; this message is what releases
+            // it. There is nothing to mismatch - we adopt the host's world
+            // wholesale - so the seed warning below is skipped entirely.
+            if (session != null && session.IsRemoteJoin && !session.hostWorldAdopted)
+            {
+                if (string.IsNullOrEmpty(msg.WorldCard) || !session.AdoptWorldCardJson(msg.WorldCard))
+                {
+                    VoxelEngine.Menu.WorldBootGate.Fail(
+                        "This host is running an older version that cannot share its world. " +
+                        "Ask them to update, or load a matching save and join from the pause menu.");
+                    _statusLine = "Join failed - host too old";
+                    StopSession();
+                    return;
+                }
+
+                WorldMismatch = false;
+                HostWorldLine = $"Host world: '{session.hostWorldDisplayName}', seed {session.seed}";
+                VoxelEngine.Menu.WorldBootGate.Report("Building " + session.hostWorldDisplayName + "...");
+
+                // Generate the host's planet, then ask for everything built on
+                // it. Order matters: the world must exist before snapshots land.
+                VoxelEngine.Menu.WorldBootGate.Open();
+                if (VoxelEngine.Cosmos.CosmosBootstrap.Instance != null)
+                    VoxelEngine.Cosmos.CosmosBootstrap.Instance.BootWorld();
+
+                _networkManager.ClientManager.Broadcast(new WorldAckBroadcast { SeedMatches = true });
+                StartSnapshotStream(null);
+                _statusLine = "Connected to " + session.hostWorldDisplayName;
+                return;
+            }
+
             WorldMismatch = session == null || session.seed != msg.Seed;
             HostWorldLine = $"Host world: '{msg.WorldName}', seed {msg.Seed}";
             if (WorldMismatch)
@@ -1518,6 +1604,11 @@ namespace VoxelEngine.Networking
             // Nothing left to catch up to.
             _snapshotQueue.Clear();
             if (_snapshotStream != null) { StopCoroutine(_snapshotStream); _snapshotStream = null; }
+
+            // Dropped before the world arrived: say so instead of leaving the
+            // join overlay spinning on a connection that no longer exists.
+            if (VoxelEngine.Menu.WorldBootGate.IsPending)
+                VoxelEngine.Menu.WorldBootGate.Fail("Lost the connection to the host before the world arrived.");
 
             NetworkSession.SetMode(SessionMode.Offline);
             _statusLine = "Offline";

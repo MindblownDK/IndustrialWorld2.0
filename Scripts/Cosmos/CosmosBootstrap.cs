@@ -95,9 +95,39 @@ namespace VoxelEngine.Cosmos
         /// <summary>The HOME body (world spawn planet) — used by respawn fallbacks.</summary>
         public CelestialBody HomeBody => _body;
 
+        private bool _deferredBoot;
+        private bool _booted;
+
         private void Awake()
         {
             if (Instance == null) Instance = this;
+
+            // 14.23.0 - a client joining from the main menu does not know the
+            // seed, the per-planet seed table or the chosen system yet; all of
+            // it arrives in the handshake. Building now would generate the
+            // WRONG planet and then have to throw it away. The gate is only
+            // ever held on a remote join, so single player reaches BootWorld
+            // on this very line exactly as it always did.
+            if (VoxelEngine.Menu.WorldBootGate.IsHeld)
+            {
+                _deferredBoot = true;
+                VoxelEngine.Menu.WorldBootGate.Opened += BootWorld;
+                return;
+            }
+
+            BootWorld();
+        }
+
+        /// <summary>Builds the solar system, the home body and the streamer.
+        /// Runs from Awake in single player, and from the handshake on a
+        /// remote join. Idempotent: a second call does nothing.</summary>
+        public void BootWorld()
+        {
+            if (_booted) return;
+            _booted = true;
+            bool wasDeferred = _deferredBoot;
+            _deferredBoot = false;
+
             ResolvePlanetTemplate();
             ResolveAssets();
             ResolveViewerReference();
@@ -368,10 +398,16 @@ namespace VoxelEngine.Cosmos
             Debug.Log($"[CosmosBootstrap] Spawned '{body.DisplayName}' at {_bodyGO.transform.position}, " +
                       $"seed {seed}, radius {body.settings.radiusKm:0.##} km, radial gravity ACTIVE. " +
                       $"Real Keplerian orbits: {registry.Bodies.Count} bodies, {registry.Asteroids.Count} belt rocks.");
+
+            // Start() already ran and returned empty-handed while the gate was
+            // held, and it will not run again - do its one job here instead.
+            if (wasDeferred) TryResolveViewerAndAnchor();
         }
 
         private void OnDestroy()
         {
+            VoxelEngine.Menu.WorldBootGate.Opened -= BootWorld;
+            if (Instance == this) Instance = null;
             SpaceOrigin.OnFrameChanged -= HandleFrameChange;
             RestoreAtmosphereSpaceCamera();
             Shader.SetGlobalFloat("_VoxelAtmosphereDensity01", 1f);
@@ -1077,6 +1113,7 @@ namespace VoxelEngine.Cosmos
 
         private void Start()
         {
+            if (_deferredBoot) return;   // no world yet - BootWorld does this
             TryResolveViewerAndAnchor();
         }
 
@@ -1084,6 +1121,7 @@ namespace VoxelEngine.Cosmos
 
         private void Update()
         {
+            if (_deferredBoot) return;   // waiting on the host's world card
             if (viewer == null || _awaitingViewerSurfacePlacement) TryResolveViewerAndAnchor();
             UpdateAtmosphereSpaceCamera();
 

@@ -149,6 +149,159 @@ namespace VoxelEngine.Menu
 
         public const int AutosaveSlotCount = 3;
 
+        // ── Remote join (14.23.0, milestone 8) ────────────────────
+        //
+        // Joining used to be an in-world action, which is why both players had
+        // to already hold the same save. A join started from the main menu
+        // instead carries an address through the scene load; the world itself
+        // arrives from the host in the handshake and is adopted below.
+
+        /// <summary>Host address a main-menu join is heading for ("" = none).</summary>
+        [System.NonSerialized] public string pendingJoinAddress = "";
+
+        /// <summary>True while this session is somebody else's world.</summary>
+        public bool IsRemoteJoin => !string.IsNullOrEmpty(pendingJoinAddress);
+
+        /// <summary>True once the host's world card has been applied.</summary>
+        [System.NonSerialized] public bool hostWorldAdopted;
+
+        /// <summary>The host's name for this world, for UI only. The local
+        /// worldName is a throwaway cache folder on a remote join.</summary>
+        [System.NonSerialized] public string hostWorldDisplayName = "";
+
+        /// <summary>Begin a main-menu join. The scene is loaded immediately
+        /// afterwards with world generation held.</summary>
+        public void BeginRemoteJoin(string address)
+        {
+            pendingJoinAddress = string.IsNullOrWhiteSpace(address) ? "localhost" : address.Trim();
+            hostWorldAdopted = false;
+            hostWorldDisplayName = "";
+            isNewWorld = false;
+            WorldBootGate.Hold($"Connecting to {pendingJoinAddress}...");
+        }
+
+        /// <summary>Back to single player. Called when the join is abandoned
+        /// or the session ends, so a later solo load is never treated as one.</summary>
+        public void ClearRemoteJoin()
+        {
+            pendingJoinAddress = "";
+            hostWorldAdopted = false;
+            hostWorldDisplayName = "";
+            WorldBootGate.Reset();
+        }
+
+        /// <summary>Everything a joining client needs to build the same world:
+        /// the seed, the per-planet seed table, the chosen system, and the
+        /// world rules. Sent by the host in the handshake. Serialized as JSON
+        /// so adding a field later cannot break an older client's parse -
+        /// missing fields simply keep their defaults.</summary>
+        [System.Serializable]
+        public class WorldCard
+        {
+            public string worldName;
+            public int seed;
+            public string cosmosJson;          // the cosmos sidecar, verbatim
+            public int maxDroppedItems;
+            public int inventoryWeightPercent;
+            public int containerWeightPercent;
+            public bool showDropVoidWarning;
+            public bool allowRuinLootRespawn;
+            public float fullVoxelRadiusKm;
+        }
+
+        /// <summary>Host side: describe this world for a joining client.</summary>
+        public string ExportWorldCardJson()
+        {
+            var card = new WorldCard
+            {
+                worldName = worldName,
+                seed = seed,
+                cosmosJson = ExportCosmosJson(),
+                maxDroppedItems = maxDroppedItems,
+                inventoryWeightPercent = inventoryWeightPercent,
+                containerWeightPercent = containerWeightPercent,
+                showDropVoidWarning = showDropVoidWarning,
+                allowRuinLootRespawn = allowRuinLootRespawn,
+                fullVoxelRadiusKm = fullVoxelRadiusKm,
+            };
+            try { return JsonUtility.ToJson(card); }
+            catch (Exception ex) { Debug.LogWarning("[WorldSession] ExportWorldCardJson: " + ex.Message); return ""; }
+        }
+
+        /// <summary>Client side: become the host's world. The local worldName
+        /// is deliberately NOT the host's - a joined world is a cache, not a
+        /// save, so it lives in its own folder that is wiped on every join and
+        /// can never be mistaken for one of the player's own saves.</summary>
+        public bool AdoptWorldCardJson(string json)
+        {
+            if (string.IsNullOrEmpty(json)) return false;
+            WorldCard card;
+            try { card = JsonUtility.FromJson<WorldCard>(json); }
+            catch (Exception ex) { Debug.LogWarning("[WorldSession] AdoptWorldCardJson: " + ex.Message); return false; }
+            if (card == null) return false;
+
+            hostWorldDisplayName = string.IsNullOrEmpty(card.worldName) ? "Host world" : card.worldName;
+            seed = card.seed;
+            maxDroppedItems = Mathf.Clamp(card.maxDroppedItems <= 0 ? DefaultMaxDroppedItems : card.maxDroppedItems, 1, 10000);
+            inventoryWeightPercent = Mathf.Clamp(card.inventoryWeightPercent <= 0 ? DefaultInventoryWeightPercent : card.inventoryWeightPercent, 25, 1000);
+            containerWeightPercent = Mathf.Clamp(card.containerWeightPercent <= 0 ? DefaultContainerWeightPercent : card.containerWeightPercent, 25, 1000);
+            showDropVoidWarning = card.showDropVoidWarning;
+            allowRuinLootRespawn = card.allowRuinLootRespawn;
+            if (card.fullVoxelRadiusKm > 0f) fullVoxelRadiusKm = card.fullVoxelRadiusKm;
+
+            worldName = JoinedCacheFolderName(hostWorldDisplayName);
+            WipeJoinedCache();
+            ImportCosmosJson(card.cosmosJson);
+
+            hostWorldAdopted = true;
+            Debug.Log($"[WorldSession] Adopted host world '{hostWorldDisplayName}' (seed {seed}) " +
+                      $"into session cache '{worldName}'.");
+            return true;
+        }
+
+        /// <summary>Cache folder for a joined world. The leading marker keeps
+        /// it out of the saves list and says what it is at a glance on disk.</summary>
+        public static string JoinedCacheFolderName(string hostWorld) =>
+            "__joined_" + SanitizeWorldFolderName(hostWorld);
+
+        /// <summary>A joined world is rebuilt from the host every time, so the
+        /// cache starts empty - stale chunks from a previous visit would show
+        /// terrain the host has since changed.</summary>
+        private void WipeJoinedCache()
+        {
+            try
+            {
+                string folder = WorldFolderPath(worldName);
+                if (Directory.Exists(folder)) Directory.Delete(folder, true);
+                Directory.CreateDirectory(folder);
+            }
+            catch (Exception ex) { Debug.LogWarning("[WorldSession] WipeJoinedCache: " + ex.Message); }
+        }
+
+        /// <summary>True for a folder this class created as a join cache, so
+        /// the saves list can skip it.</summary>
+        public static bool IsJoinedCacheFolder(string folderName) =>
+            !string.IsNullOrEmpty(folderName) && folderName.StartsWith("__joined_", StringComparison.Ordinal);
+
+        /// <summary>Delete every join cache left behind by previous sessions.
+        /// Called from the main menu, where nothing is streaming and no writer
+        /// thread is alive, so it cannot race a save. Keeps visited worlds from
+        /// quietly piling up gigabytes the player never chose to keep.</summary>
+        public void PurgeJoinedCaches()
+        {
+            try
+            {
+                if (!Directory.Exists(WorldsRoot)) return;
+                foreach (var dir in Directory.GetDirectories(WorldsRoot))
+                {
+                    if (!IsJoinedCacheFolder(new DirectoryInfo(dir).Name)) continue;
+                    try { Directory.Delete(dir, true); }
+                    catch (Exception ex) { Debug.LogWarning("[WorldSession] PurgeJoinedCaches: " + ex.Message); }
+                }
+            }
+            catch (Exception ex) { Debug.LogWarning("[WorldSession] PurgeJoinedCaches: " + ex.Message); }
+        }
+
         public string CosmosSidecarPath =>
             Path.Combine(WorldFolderPath(worldName), "cosmos.json");
         public string WorldSettingsPath => WorldSettingsPathFor(worldName);
@@ -236,6 +389,11 @@ namespace VoxelEngine.Menu
             foreach (var dir in Directory.GetDirectories(WorldsRoot))
             {
                 var info = new DirectoryInfo(dir);
+
+                // A joined world is a session cache, not a save - it is wiped
+                // on every join and belongs to the host. Never list it.
+                if (IsJoinedCacheFolder(info.Name)) continue;
+
                 long size = 0;
                 foreach (var f in info.GetFiles("*.dat", SearchOption.TopDirectoryOnly))
                     size += f.Length;
@@ -671,6 +829,43 @@ namespace VoxelEngine.Menu
                 return seedState != null;
             }
             catch (System.Exception ex) { Debug.LogWarning("[WorldSession] LoadCosmosSidecar: " + ex.Message); return false; }
+        }
+
+        /// <summary>The cosmos sidecar as JSON, without touching the disk -
+        /// the handshake sends exactly what the file would have contained.</summary>
+        public string ExportCosmosJson()
+        {
+            try
+            {
+                return JsonUtility.ToJson(new CosmosSidecar
+                {
+                    chosenSystemName = chosenSystemName ?? "",
+                    seedState        = seedState,
+                    spawnPlanetIndex = spawnPlanetIndex,
+                    orbitPace        = orbitPace,
+                });
+            }
+            catch (System.Exception ex) { Debug.LogWarning("[WorldSession] ExportCosmosJson: " + ex.Message); return ""; }
+        }
+
+        /// <summary>Apply a cosmos sidecar received over the wire. Without this
+        /// the seed alone is not enough: the per-planet seed table and the
+        /// chosen system decide what the terrain actually looks like, so a
+        /// client with only the world seed would generate a different planet.</summary>
+        public bool ImportCosmosJson(string json)
+        {
+            if (string.IsNullOrEmpty(json)) return false;
+            try
+            {
+                var data = JsonUtility.FromJson<CosmosSidecar>(json);
+                if (data == null) return false;
+                chosenSystemName = data.chosenSystemName ?? "";
+                seedState        = data.seedState;
+                spawnPlanetIndex = data.spawnPlanetIndex;
+                orbitPace        = data.orbitPace;
+                return seedState != null;
+            }
+            catch (System.Exception ex) { Debug.LogWarning("[WorldSession] ImportCosmosJson: " + ex.Message); return false; }
         }
 
         [System.Serializable]
