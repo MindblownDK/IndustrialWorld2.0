@@ -34,6 +34,21 @@ namespace VoxelEngine.Networking
         public string PlayerName;
     }
 
+    /// <summary>Client -> server: one chat line (14.19.0). The server stamps
+    /// the sender's name itself - clients are never trusted to sign text.</summary>
+    public struct ChatBroadcast : IBroadcast
+    {
+        public string Text;
+    }
+
+    /// <summary>Server -> client: a chat line that passed the proximity check,
+    /// stamped with the sender's display name.</summary>
+    public struct ChatRelayBroadcast : IBroadcast
+    {
+        public string SenderName;
+        public string Text;
+    }
+
     /// <summary>Server -> client on join: which world the host is running,
     /// so the client can warn when terrain will not line up.</summary>
     public struct WorldInfoBroadcast : IBroadcast
@@ -306,6 +321,7 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.OnClientConnectionState += OnClientConnectionState;
             _networkManager.ClientManager.OnAuthenticated += OnLocalClientAuthenticated;
             _networkManager.ServerManager.RegisterBroadcast<IdentityBroadcast>(OnIdentityReceived);
+            _networkManager.ServerManager.RegisterBroadcast<ChatBroadcast>(OnServerChat);
             _networkManager.ServerManager.RegisterBroadcast<PiecePlacedBroadcast>(OnServerPiecePlaced);
             _networkManager.ServerManager.RegisterBroadcast<PieceRemovedBroadcast>(OnServerPieceRemoved);
             _networkManager.ServerManager.RegisterBroadcast<PieceDamagedBroadcast>(OnServerPieceDamaged);
@@ -332,6 +348,7 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.RegisterBroadcast<WorldAckBroadcast>(OnWorldAck);
             _networkManager.ServerManager.RegisterBroadcast<BaseSnapshotBroadcast>(OnServerBaseSnapshot);
             _networkManager.ClientManager.RegisterBroadcast<WorldInfoBroadcast>(OnWorldInfo);
+            _networkManager.ClientManager.RegisterBroadcast<ChatRelayBroadcast>(OnClientChat);
             _networkManager.ClientManager.RegisterBroadcast<PiecePlacedBroadcast>(OnClientPiecePlaced);
             _networkManager.ClientManager.RegisterBroadcast<PieceRemovedBroadcast>(OnClientPieceRemoved);
             _networkManager.ClientManager.RegisterBroadcast<PieceDamagedBroadcast>(OnClientPieceDamaged);
@@ -374,6 +391,7 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.OnClientConnectionState -= OnClientConnectionState;
             _networkManager.ClientManager.OnAuthenticated -= OnLocalClientAuthenticated;
             _networkManager.ServerManager.UnregisterBroadcast<IdentityBroadcast>(OnIdentityReceived);
+            _networkManager.ServerManager.UnregisterBroadcast<ChatBroadcast>(OnServerChat);
             _networkManager.ServerManager.UnregisterBroadcast<PiecePlacedBroadcast>(OnServerPiecePlaced);
             _networkManager.ServerManager.UnregisterBroadcast<PieceRemovedBroadcast>(OnServerPieceRemoved);
             _networkManager.ServerManager.UnregisterBroadcast<PieceDamagedBroadcast>(OnServerPieceDamaged);
@@ -400,6 +418,7 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.UnregisterBroadcast<WorldAckBroadcast>(OnWorldAck);
             _networkManager.ServerManager.UnregisterBroadcast<BaseSnapshotBroadcast>(OnServerBaseSnapshot);
             _networkManager.ClientManager.UnregisterBroadcast<WorldInfoBroadcast>(OnWorldInfo);
+            _networkManager.ClientManager.UnregisterBroadcast<ChatRelayBroadcast>(OnClientChat);
             _networkManager.ClientManager.UnregisterBroadcast<PiecePlacedBroadcast>(OnClientPiecePlaced);
             _networkManager.ClientManager.UnregisterBroadcast<PieceRemovedBroadcast>(OnClientPieceRemoved);
             _networkManager.ClientManager.UnregisterBroadcast<PieceDamagedBroadcast>(OnClientPieceDamaged);
@@ -769,6 +788,99 @@ namespace VoxelEngine.Networking
 
         /// <summary>Server relay: everyone except the sender and the host's own
         /// local client (the server path already applied it there).</summary>
+        // ─────────────────────────── proximity text chat (14.19.0) ───────────────────────────
+
+        /// <summary>How far words carry, in metres. Phase 2 (proximity voice)
+        /// will reuse this range as its shout radius.</summary>
+        public const float ChatRange = 60f;
+
+        /// <summary>Send one chat line from the local player. Works as host or
+        /// as client; offline there is nobody to talk to, so it is a no-op.</summary>
+        public void SendChatMessage(string text)
+        {
+            text = (text ?? "").Trim();
+            if (text.Length == 0 || _networkManager == null) return;
+            if (text.Length > 240) text = text.Substring(0, 240);
+            if (_serverStarted) ServerDistributeChat(null, text);
+            else if (NetworkSession.Mode != SessionMode.Offline)
+                _networkManager.ClientManager.Broadcast(new ChatBroadcast { Text = text });
+        }
+
+        private void OnServerChat(NetworkConnection conn, ChatBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted || conn == null) return;
+            var text = (msg.Text ?? "").Trim();
+            if (text.Length == 0) return;
+            if (text.Length > 240) text = text.Substring(0, 240);
+            ServerDistributeChat(conn, text);
+        }
+
+        /// <summary>Server-side distribution with the proximity rule: only
+        /// players whose avatars stand within ChatRange of the speaker hear
+        /// the words. A missing avatar (mid-spawn) errs on delivering - a
+        /// swallowed message is worse than a loud one. Sender null = the host
+        /// itself is speaking.</summary>
+        private void ServerDistributeChat(NetworkConnection sender, string text)
+        {
+            string name;
+            Vector3 pos;
+            bool hasPos = TryGetChatSource(sender, out name, out pos);
+            var relay = new ChatRelayBroadcast { SenderName = name, Text = text };
+
+            // The host is a listener too (its own messages are locally echoed
+            // by the overlay, so only remote senders are shown here).
+            if (sender != null)
+            {
+                var cam = Camera.main;
+                if (!hasPos || cam == null
+                    || (cam.transform.position - pos).sqrMagnitude <= ChatRange * ChatRange)
+                    VoxelEngine.UI.ChatOverlay.AddMessage(name, text);
+            }
+
+            foreach (var pair in _networkManager.ServerManager.Clients)
+            {
+                var client = pair.Value;
+                if (client == null || client.IsLocalClient) continue;
+                if (sender != null && client == sender) continue;
+                if (hasPos && _avatarsByConnection.TryGetValue(client.ClientId, out var go) && go != null
+                    && (go.transform.position - pos).sqrMagnitude > ChatRange * ChatRange) continue;
+                _networkManager.ServerManager.Broadcast(client, relay, true);
+            }
+        }
+
+        private bool TryGetChatSource(NetworkConnection sender, out string name, out Vector3 pos)
+        {
+            name = sender == null ? PlayerIdentity.LocalName : ("Crusader " + sender.ClientId);
+            pos = Vector3.zero;
+            bool hasPos = false;
+            int clientId = -1;
+            if (sender != null) clientId = sender.ClientId;
+            else if (_networkManager.ClientManager.Connection != null)
+                clientId = _networkManager.ClientManager.Connection.ClientId;
+            if (clientId >= 0 && _avatarsByConnection.TryGetValue(clientId, out var go) && go != null)
+            {
+                pos = go.transform.position;
+                hasPos = true;
+                var avatar = go.GetComponent<PlayerAvatar>();
+                if (avatar != null && !string.IsNullOrEmpty(avatar.PlayerName)) name = avatar.PlayerName;
+            }
+            if (sender == null)
+            {
+                // The host's truest position is its own camera (the avatar
+                // mirrors it, but the camera never lags).
+                var cam = Camera.main;
+                if (cam != null) { pos = cam.transform.position; hasPos = true; }
+                name = PlayerIdentity.LocalName;
+            }
+            return hasPos;
+        }
+
+        private void OnClientChat(ChatRelayBroadcast msg, Channel channel)
+        {
+            if (_serverStarted) return;   // the host was shown via the server path
+            VoxelEngine.UI.ChatOverlay.AddMessage(msg.SenderName, msg.Text);
+        }
+
         private void RelayToOthers<T>(NetworkConnection sender, T msg) where T : struct, IBroadcast
         {
             foreach (var pair in _networkManager.ServerManager.Clients)

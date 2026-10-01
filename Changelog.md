@@ -1,9 +1,19 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.18.6-dev`
+**Current Version:** `14.19.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.19.0-dev] Words On The Wind
+
+**Type:** MINOR - milestone 7 phase 1: proximity TEXT chat. Save-compatible.
+
+**Chat overlay (`ChatOverlay`, new).** A sleek bottom-left overlay on the existing HUD document: messages appear as compact dark cards (sender name in bold), stay 10 seconds, fade out over 2.5 more; the last 8 are kept while typing. Enter opens the input line, Enter sends, Escape cancels. While typing, ALL movement and hotkeys are suppressed through the existing UIState.TextInputActive capture (chat is part of the GameUIController keyboard-capture list). Rich-text injection is neutralized - names and messages always render as plain text. Enter does nothing in offline sessions.
+
+**Proximity relay (`NetworkBootstrap`).** Two new broadcasts: ChatBroadcast (client to server, text only - the server stamps the sender name itself, clients are never trusted to sign text) and ChatRelayBroadcast (server to each listener). The server delivers a line only to players whose avatars stand within 60 m of the speaker; a mid-spawn missing avatar errs on delivering. The sender always sees an instant local echo. Phase 2 - proximity VOICE with real directional sound - rides this same relay and reuses ChatRange as its shout radius.
+
+**No manual steps.** The overlay creates itself from GameUIController.Start.
 
 ### [14.18.6-dev] Quickened Steel
 

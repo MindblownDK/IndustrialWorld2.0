@@ -234,6 +234,9 @@ namespace VoxelEngine.UI
 
         private void Start()
         {
+            // Proximity text chat rides this HUD's UIDocument (14.19.0).
+            ChatOverlay.EnsureExists();
+
             if (inventory == null) inventory = FindAnyObjectByType<Inventory>();
             if (inventory != null)
             {
@@ -319,7 +322,8 @@ namespace VoxelEngine.UI
             VoxelEngine.UI.UIState.TextInputActive = _searchHasFocus || RecipeBrowserUI.IsSearchFocused
                 || VoxelEngine.Research.ResearchUI.IsSearchFocused
                 || VoxelEngine.Maritime.MaritimeBlockUI.IsNumericInputFocused
-                || SteampunkTheme.IsTextInputFocused;
+                || SteampunkTheme.IsTextInputFocused
+                || ChatOverlay.IsTyping;
 
             // Live-update the open furnace panel in-place every frame (no rebuild needed).
             TickFurnaceLiveUI();
@@ -489,7 +493,8 @@ namespace VoxelEngine.UI
                 || VoxelEngine.Research.ResearchUI.IsSearchFocused
                 || VoxelEngine.Maritime.MaritimeBlockUI.IsNumericInputFocused
                 || SteampunkTheme.IsTextInputFocused
-                || PortConfigHud.IsAnyDropdownOpen;
+                || PortConfigHud.IsAnyDropdownOpen
+                || ChatOverlay.IsTyping;
 
             // Toggle inventory / ship terminal — but NOT while typing in a search/name field.
             bool weAreOpen = _inventoryOpen || _rightContainer != null || _openGridTerminal != null;

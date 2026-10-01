@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.18.6-dev`
-**Roadmap Version:** `14.18.6-dev`
+**Current Version:** `14.19.0-dev`
+**Roadmap Version:** `14.19.0-dev`
 **Date:** 2026-09-28
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -28,6 +28,9 @@
 ---
 
 ## 0. Recently Done
+
+### 14.19.0-dev - Words On The Wind
+Milestone 7 phase 1: proximity text chat - Enter-to-type overlay with fading message cards on the HUD document, server-stamped sender names, 60 m server-side proximity filtering, instant local echo. Voice phase rides the same relay next.
 
 ### 14.18.6-dev - Quickened Steel
 Swing playback at matched speed (~0.55 s window, 1x-3.5x clamp) with snap-in crossfade on the attack slot.
