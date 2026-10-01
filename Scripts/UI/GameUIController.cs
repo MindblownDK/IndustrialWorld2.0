@@ -234,8 +234,10 @@ namespace VoxelEngine.UI
 
         private void Start()
         {
-            // Proximity text chat rides this HUD's UIDocument (14.19.0).
+            // Proximity text chat rides this HUD's UIDocument (14.19.0),
+            // and the voice speaking indicators sit right under it (14.20.0).
             ChatOverlay.EnsureExists();
+            VoiceHud.EnsureExists();
 
             if (inventory == null) inventory = FindAnyObjectByType<Inventory>();
             if (inventory != null)

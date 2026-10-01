@@ -28,6 +28,7 @@
 // standard NetworkTransform setup). Server validation of movement belongs to
 // a later hardening pass, once per-player state (milestone 2) is in.
 
+using System.Collections.Generic;
 using FishNet.Object;
 using FishNet.Object.Synchronizing;
 using UnityEngine;
@@ -110,6 +111,36 @@ namespace VoxelEngine.Networking
 
         public string PlayerId => _playerId.Value;
         public string PlayerName => _playerName.Value;
+
+        // ── live avatar lookup (14.20.0) ──────────────────────────────────
+        // Proximity voice needs "where does player X stand" every frame. A
+        // dictionary kept by the existing register/unregister pair costs
+        // nothing and replaces a per-frame scene scan.
+
+        private static readonly Dictionary<string, PlayerAvatar> _byPlayerId = new();
+
+        /// <summary>The spawned avatar for a player id, or null when that
+        /// player has no body in this scene (yet).</summary>
+        public static PlayerAvatar Find(string playerId)
+        {
+            if (string.IsNullOrEmpty(playerId)) return null;
+            if (!_byPlayerId.TryGetValue(playerId, out var avatar)) return null;
+            if (avatar == null) { _byPlayerId.Remove(playerId); return null; }
+            return avatar;
+        }
+
+        /// <summary>Where this player's voice comes out: the head bone when the
+        /// rigged body is in use, the primitive head otherwise, and the avatar
+        /// root as the last resort. Cached - the bone never moves in hierarchy.</summary>
+        public Transform VoiceAnchor()
+        {
+            if (_voiceAnchor != null) return _voiceAnchor;
+            _voiceAnchor = CrusaderModel.FindHeadAnchor(transform);
+            if (_voiceAnchor == null) _voiceAnchor = transform;
+            return _voiceAnchor;
+        }
+
+        private Transform _voiceAnchor;
 
         private void Awake()
         {
@@ -389,6 +420,7 @@ namespace VoxelEngine.Networking
             string id = _playerId.Value;
             if (string.IsNullOrEmpty(id)) return;   // identity not delivered yet - OnIdChanged retries
             _registeredId = id;
+            _byPlayerId[id] = this;
             NetworkSession.RegisterPlayer(id, _playerName.Value);
             NetworkSession.UpdateDisplayName(id, _playerName.Value);
         }
@@ -396,6 +428,8 @@ namespace VoxelEngine.Networking
         private void Unregister()
         {
             if (_registeredId == null) return;
+            if (_byPlayerId.TryGetValue(_registeredId, out var held) && held == this)
+                _byPlayerId.Remove(_registeredId);
             NetworkSession.UnregisterPlayer(_registeredId);
             _registeredId = null;
         }

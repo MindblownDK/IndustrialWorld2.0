@@ -1,9 +1,9 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.19.0-dev`
-**Roadmap Version:** `14.19.0-dev`
-**Date:** 2026-09-28
+**Current Version:** `14.20.0-dev`
+**Roadmap Version:** `14.20.0-dev`
+**Date:** 2026-10-01
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
 
@@ -29,168 +29,20 @@
 
 ## 0. Recently Done
 
+### 14.20.0-dev - Voices In The Dust
+Milestone 7 phase 2 and final: proximity VOICE - microphone capture, in-house IMA ADPCM at 16 kHz, unreliable 40 ms frames over the existing relay, server-side 60 m filtering, and fully spatialized playback from the speaker's head bone. Push-to-talk or open mic, per-player mute keyed by player id, speaking pills on the HUD, voice controls in Settings - Audio. Milestone 7 COMPLETE.
+
+### 14.19.1-dev - A Key That Answers
+Input-backend fixes: chat, and the conveyor snap toggle, read the Input System instead of the legacy class that throws under the current Player Settings. Logistics-map labels moved out of the painter callback.
+
 ### 14.19.0-dev - Words On The Wind
-Milestone 7 phase 1: proximity text chat - Enter-to-type overlay with fading message cards on the HUD document, server-stamped sender names, 60 m server-side proximity filtering, instant local echo. Voice phase rides the same relay next.
+Milestone 7 phase 1: proximity text chat - Enter-to-type overlay with fading message cards on the HUD document, server-stamped sender names, 60 m server-side proximity filtering, instant local echo.
 
 ### 14.18.6-dev - Quickened Steel
 Swing playback at matched speed (~0.55 s window, 1x-3.5x clamp) with snap-in crossfade on the attack slot.
 
 ### 14.18.5-dev - The Swing Heard Round The World
 Swing mirror fixed: HeldToolView lives on the camera object - lookup now searches the player's children with Camera.main fallback.
-
-### 14.18.4-dev - A Proper Grip
-Swing replication fixed (prime in OnStartClient; swing clip plays for any held item, not just swords) and bone-derived grip alignment for held models: blade, gun and palm archetypes.
-
-### 14.18.3-dev - Stance On The Record
-Diagnostics: stance-transition console log with pack-clip load status, one-shot attack-replication log.
-
-### 14.18.2-dev - Steel You Can See
-Held-item viewmodels: the early icon-card return made all 3D builders unreachable - real procedural shapes (sword, pistol, rifle, grenade, pickaxe, axe, new shovel, textured block cube) now render first; icon card only as fallback for shapeless items.
-
-### 14.18.1-dev - A Sword Is A Sword
-Stance classification by weapon class (melee WeaponItem) instead of the asset's possibly-stale toolType; ToolType.Sword kept as fallback.
-
-### 14.18.0-dev - Sword In Hand
-Sword stance from the sword-and-shield pack: idle/walk/run/jump redirected while a sword is held (stance derived from the synced held item, per-clip fallback to the base set), plus replicated attack swings via a swing counter and a one-shot full-body slash on remote avatars.
-
-### 14.17.1-dev - The Crusader Lands
-Locomotion driver fixes: manual clip looping (Loop Time import tick now irrelevant), teleport/spawn-snap guard with settle grace, jump/slide rewind on entry, AlwaysAnimate culling, humanoid-import warnings and a per-avatar anim-check console line.
-
-### 14.17.0-dev - The Crusader Moves
-Runtime PlayableGraph locomotion on the rigged avatar: idle, sad idle at low health, speed-blended walk/run, running slide (new slide bit on the pose RPC; slide no longer crouch-squashes), jump while airborne. Building pose reapplied post-animation. Owner graphs stopped. Clips load from Resources/PlayerAnimations by file name.
-
-### 14.16.0-dev - Backpacks And Blueprints
-Jetpack + oxygen tank shown on the back exactly when equipped (two flag bits on the pose RPC; gear rides the spine bone). Building previews replicate: cyan simulation-dead ghost of the aimed block at 10 Hz with deadband, plus the arm-out building pose (axis-agnostic bone swing on the rig, arm pivot on the fallback).
-
-### 14.15.3-dev - Measured By The Skin
-Avatar measured from baked skinned-mesh vertices instead of the conservative renderer box - size, grounding and tattoo placement all exact now. Standing jitter fixed with a movement deadband on the avatar mirror (ground-snap Y oscillation no longer broadcast).
-
-### 14.15.2-dev - Feet On The Ground, One Panel Only
-Rig measurement fixed for skinned meshes (renderer.bounds at origin/identity, measured before parenting) - players stand on the ground and tattoos sit on the chest again. Item-Ports overlay no longer duplicates on face clicks (wholesale clear + re-entrancy guard) and now repaints live when the other player edits ports.
-
-### 14.15.1-dev - Ink On Skin
-Tattoos no longer float: bounds are computed rotation-proof through the local matrix chain, tattoo depth is sampled from the body mesh's chest-band vertices (toes no longer set the reference), and both tattoos ride the spine bone so future animations carry them.
-
-### 14.15.0-dev - The Host Breathes And The Body Is Real
-Critical fix: joining clients froze the host - every uploaded chunk triggered a whole-region disk read on the main thread while racing the chunk writer (sharing violations both ways). Region I/O now serialized under one lock and HasLocalEdit served from the region read cache. Avatar upgraded to the rigged character at Resources/Player.fbx (auto-scaled, tattoos projected, tool anchored to the right-hand bone, primitive body kept as fallback) with six selectable skin tones synced via the pose RPC.
-
-### 14.14.0-dev - Bare Skin And Honest Steel
-Machine I/O port config (power/data/fluid/gas faces) now replicates and persists - it was never captured anywhere before, so edits neither synced nor survived reload. Crusader model rebuilt: realistic bare warrior base (chain briefs, boots, beard, brand-rune shoulder tattoo, chest ink) with armor plates shown ONLY while a suit is equipped, tinted by tier 1-6; worn tier rides the change-only pose RPC.
-
-### 14.13.0-dev - A Real Crusader At Last
-
-- Milestone 6 begins: procedural crusader knight replaces the avatar capsule - runtime-built on the existing prefab (no editor step), helm with cross face-opening, tabard with front/back cross, poseable right arm carrying the held tool, back anchor reserved for jetpack + oxygen tank.
-- 14.12.1 fix folded in: remote machine/container applies repaint any open panel live (GameUIController.RefreshOpenPanels).
-- Milestone 6 remaining: worn-armor display (tier/type readable), jetpack + oxygen tank when equipped, arm-out building pose + replicated building ghost.
-
-### 14.12.0-dev - The Factory Runs For Everyone
-
-- Machine runtime state (batches, recipes, tanks, machine-specific numbers, funnel/splitter buffers, defense/armor/lighting runtime) replicates through the save-system CaptureFactoryRuntime seam as opaque JSON - host-authoritative convergence at ~2.5 s cadence, clients keep simulating between updates.
-- Placement payloads close: placing opens the interaction window, so pre-filled blocks announce their birth state from any machine.
-- Milestone 5 functionally COMPLETE. Remaining known gaps (accepted): mid-belt packet cosmetics per machine, client sim still runs (true sim-off is milestone 8), grid-ship blocks are their own milestone.
-
-### 14.11.0-dev - Loot On Common Ground
-
-- Physical world drops replicate live and on join: wire-id identity (drops move - no positional identity), save-format JSON stack payloads, local toss physics converged by a one-time settle announcement.
-- Ownership-blind consumption: pickups and belt inserts announce from whichever machine performed them; full and partial consumption both replicate.
-- Open (milestone 5 core, LAST pieces): machine runtime state (recipes/progress/power flow), placement payloads.
-
-### 14.10.0-dev - What The Chest Holds
-
-- Container contents replicate live and on join through the save-system capture/restore seam as opaque JSON - every container type, full fidelity, zero per-machine cases.
-- Authority: host announces all changes; clients announce only player-driven edits (interaction window); join merge fills only empty host containers and redistributes only accepted records.
-- Open (milestone 5 core, next): machine runtime state (recipes/progress/power flow), dropped items, placement payloads.
-
-### 14.9.0-dev - Machines On Every Machine
-- **Item-block sync** (`BlockSync` new, hooks in `BuildSystem`/`PlacedBlock`, `NetworkBootstrap`): hotbar-placed world blocks (machines, chests, conveyors, cables, roads, lights) replicate live (place/damage/remove) and via a chunked two-way join snapshot; conveyor shapes and cable variants travel with the block; grid-attached blocks excluded like the save system does.
-- Open (milestone 5 core, next): container contents, machine runtime state (recipes/progress/power), placement payloads, dropped items.
-
-### 14.8.1-dev - The Server Wins The Terrain Merge
-- **Join merge authority fix** (`TerrainSync`, `NetworkBootstrap`): clients now always adopt server-sent chunks (stale replicated copies used to block every host edit after one prior session); the server keeps its local-edit filter and relays only accepted chunks. All terrain conflicts converge to the host's version.
-
-### 14.8.0-dev - Terrain Catch-Up On Join
-- **Edited-chunk join exchange** (`TerrainSync`, `SphereWorld`, `ChunkStorage`, `NetworkBootstrap`): all player-modified chunks of the shared planet transfer both ways on join - disk store + live chunks gathered, deflate-compressed per chunk, loaded chunks overwritten in place, unloaded ones parked in the local store for the streamer; local edits win the merge.
-- Open: other-planet edits transfer only when a join happens while both are there; fluid sim state per-machine; grid-ship voxel sync.
-
-### 14.7.0-dev - The Ground Moves For Everyone
-- **Terrain brush sync** (`TerrainSync` new, `VoxelEditor`, `NetworkBootstrap`): every brush op replicates as (voxel center, radius, strength, subtract, fill) - deterministic on same-seed worlds, floating-origin-proof, planet-tagged; remote ops grant no drops and wake the fluid sim.
-- **Explosion sync** (`Explosion`): fireball/shake/crater replicate; damage deliberately does not (building damage sync already converges pieces; creatures are milestone 5).
-- Open (phase 2+): terrain snapshot for join-in-progress (chunk deltas); fluid sim state; grid-ship voxel sync.
-
-### 14.6.0-dev - Doors And Locks Over The Wire
-- **Door/gate/garage/hatch sync** (`TieredDoor`, `TieredHatch`, `BuildingSync`, `NetworkBootstrap`): every toggle replicates with its swing side; announces live in the components so all code paths are covered; remote application is silent (`SetOpenState`).
-- **Code lock sync** (`CodeLock`): fit/remove replicate the physical lock; one idempotent state broadcast covers code set/change, guest authorization and lock toggles - access rules are consistent on every machine.
-- **Snapshot completeness**: door + lock state ride `PieceSnapshot`; rejoin now converges hp, door and lock state on already-present pieces. Milestone 3 remaining: shared build costs (design decision pending); voxel/machine sync is milestone 4/5.
-
-### 14.5.1-dev - Cracks Over The Wire
-- **Damage replication fix** (`BuildingSync`, `NetworkBootstrap`, hooks in `PlacedTieredBlock`/`StructuralLoadState`): surviving damage (decay ticks, partial hits) now broadcasts hp - cracks bloom on every machine and hp no longer diverges between them.
-
-### 14.5.0-dev - Join In Progress
-- **Base snapshot on join** (`BuildingSync`, `NetworkBootstrap`): seed-matching handshake completes with a two-way, chunked, duplicate-safe base exchange - server base down, joiner's solo base up, relayed to all; hp/cracks, railing rise and pillar height carried; rejoin-safe. Closes the 14.4.0 "pre-session bases not synced" item.
-- **Mismatch hardening**: a wrong-seed client no longer sends or applies ANY building traffic. Open items: code locks shipped in 14.6.0; shared build costs and voxel/machine sync remain (see the 14.6.0 row).
-
-### 14.4.0-dev - Shared Ground
-- **Building sync phase 1** (`BuildingSync` new, `NetworkBootstrap`, hooks in `BuildSystemV2`/`PlacedTieredBlock`/`StructuralLoadState`): tiered placement, upgrade, demolition and structural collapse replicate live; remote pieces restore-style and unarmed; positional identity (family + 25 cm). Open items moved to the 14.5.0 row (join-in-progress snapshot shipped there).
-- **World identity handshake** (`NetworkBootstrap`, `InGamePauseMenu`): server sends world name + seed on join; seed mismatch shows a persistent red warning with the host's seed in the multiplayer tab. Open: automatic world adoption on join (deferred - scene reload tears down the connection).
-
-### 14.3.0-dev - Vitals Over The Wire
-- **Health replication** (`PlayerAvatar`): hurt players wear a red-shifting bar under the nameplate; hidden at full health; quantized, change-driven, late-join correct.
-- **Nameplate fix**: billboards against the viewer's camera up - text stays horizontal anywhere on a spherical world.
-
-### 14.2.1-dev - Real Crusaders Locked Into The Roadmap
-- **Docs only**: milestone 6 is now the crusader player model - armor visible only when worn and readable by tier, jetpack and oxygen tank on the back, building pose, replicated placement ghosts. Full design section added; proximity chat moves to 7, dedicated server to 8.
-
-### 14.2.0-dev - Avatars Come Alive
-- **Pose replication** (`PlayerAvatar`): remote players hold their active hotbar item (same procedural models as the first-person viewmodel) and squash when crouching/sliding; owner -> ServerRpc -> SyncVars, change-driven only.
-- **Runtime item lookup** (`WorldStatePersistence.FindItemById`): stable-id item resolution for networking.
-- **Ping display** (`NetworkBootstrap`): live RTT in the multiplayer menu for clients.
-
-### 14.1.2-dev - Names That Actually Show Up
-- **Identity delivery fixed** (`NetworkBootstrap`, `PlayerAvatar`): avatar identity is applied after spawn and all consumers react to SyncVar changes - nameplates and rosters can no longer miss a late-arriving name.
-- **Live rename** (`PlayerIdentity`, pause menu): the name field works offline AND in-session; changes propagate to every player's roster and nameplate.
-- **Roadmap**: proximity voice chat added as milestone 6, before dedicated servers.
-
-### 14.1.0-dev - Multiplayer Foundation, Part 2
-- **Fish-Net bridge** (`NetworkBootstrap`, verified against Fish-Net 4.7.3): listen-server host/join, identity handshake keyed by player id, `NetworkSession` driven by real connections.
-- **Player avatars** (`PlayerAvatar`, Setup Step 105): server-spawned networked bodies with nameplates; transform sync live. World content sync is NOT in yet (milestones 3-5).
-- **Pause menu**: MULTIPLAYER page (host / join / roster / disconnect); no time-freeze while online.
-
-### 14.0.0-dev - Multiplayer Foundation, Part 1
-- **Networking module** (`PlayerIdentity`, `NetworkSession`): stable per-player GUID + session/authority abstraction; gameplay asks the session, never the transport.
-- **Code locks converted** to per-player authorization id lists - first MP-readiness checklist item cleared.
-
-### 13.18.1-dev - Multiplayer Strategy Locked
-- **Docs only**: Fish-Net client-server strategy (2-8 player listen server first, dedicated later, no P2P) added to `Roadmap.md` section 1 and the README agent guidelines; MP-readiness checklist now applies to every new system.
-
-### 13.18.0-dev - Double Doors and Keypad Polish
-- **Double Door** (family 37): quick double leaves for the Wall Frame, on the STRUCTURAL wheel beside the Garage Door; lockable.
-- **Keypad input** (`CodeLockHud`): keyboard and numpad digits, backspace, escape.
-- **Lock flow** (`PlayerInteractionTool`, `CodeLock`): set-code keypad opens on fitting; unset locks prompt on door use; garage lock moved beside the opening; gate locks enlarged.
-- **Legacy gate passage** (`TieredDoor`): stale closed-pose root colliders release at runtime once the leaves swing open.
-
-### 13.17.0-dev - Code Locks and Open Gateways
-- **Collider pass** (`TieredPieceFactory`, `TieredRebuildSetup`): real colliders for every 13.15.0 family - open gate frames, swinging leaf colliders, pitch-matched roof slabs, stepped triangular walls; flat Roof deck box; door boxes moved onto their hinges.
-- **Code Locks** (`CodeLock`, `CodeLockItem`, `CodeLockHud`, Setup Step 104): craftable keypad lock for doors, gates, garage doors and hatches - Rust-style set/enter keypads, shock damage on wrong codes, owner menu, full persistence.
-
-### 13.16.1-dev - Double-Swing Gates
-- **Double leaves** (`TieredRebuildSetup`, `TieredPieceFactory`): both gates split into two leaves on opposing hinges, swinging apart away from the opener.
-- **Constant slow swing** (`TieredDoor`): gates turn at a fixed degrees-per-second rate; doors keep the quick eased swing.
-- **Garage-door operating logic** (`TieredDoor`, `PlayerInteractionTool`): leaves release their blocking colliders while swung, a permanent trigger fills the opening, and clicking a gate frame toggles the fitted gate.
-
-### 13.16.0-dev - Gates Touch the Ground
-- **Ground seating** (`BuildSystemV2`): ground-standing pieces keep the aimed surface height in free placement instead of snapping to 7.5 m shells - gates no longer float and decay.
-- **Compound Wall** (`TieredPieceFactory`, `TieredRebuildSetup`): freestanding perimeter wall at gate-frame height, socket-compatible with gate frames, on the ROOFS & GATES menu.
-- **Eave contact** (`BuildSystemV2`, `StructuralLoadState`): sloped roof panels require a placed block at their eave or rake edges, at placement and in every audit; terrain never counts.
-
-### 13.15.0-dev - Roofs, Gables and Gates
-- **Twelve pieces** (`BuildEnums`, `TieredPieceFactory`, `TieredRebuildSetup`): slanted/triangular/corner/pyramid roof set, triangular walls, and two frame-plus-door gate pairs, all appended families authored by Setup.
-- **Flat Roof** (`TieredPieceFactory`, `BuildSocket`): family six is the flat ceiling deck that doubles as a floor; existing placed roofs change shape after Setup.
-- **Roof chain snap** (`BuildSystemV2`): sloped panels seat their eave on wall heads and chain up, down and sideways like stairs; span-two rules apply.
-- **Menu two** (`HammerBuildWheel`): STRUCTURAL, ROOFS & GATES, ORBITAL STATION, with the last-used menu remembered.
-
-### 13.14.0-dev - Building Grows Downward
-- **Downward building** (`BuildSystemV2`, `StructuralLoadState`): wall-type pieces hang below floor edges when placed against the deck underside; they are carried by the deck above and never grant span or support themselves.
-- **Wheel memory** (`HammerBuildWheel`): the build wheel reopens on the last-used menu, falling back to structural when the remembered menu is locked.
 
 ---
 
@@ -211,8 +63,18 @@ These decisions are settled. Every future system is designed against them.
 4. **World sync:** voxel chunk edit replication + join-in-progress chunk streaming (the long pole - design payloads early, delta edits not full chunks). *(DONE for the shared-planet case - 14.7.0-dev live op replication + 14.8.0-dev edited-chunk join catch-up. Remaining niceties: multi-planet catch-up, fluid sim state.)*
 5. **Simulation sync:** machines, power, fluids, conveyors run server-side; clients render replicated state. *(DONE 14.9.0-14.12.0 - shipped as host-authoritative convergence rather than server-only simulation: item-block structure (14.9.0), container contents (14.10.0), dropped items (14.11.0) and machine runtime state + placement payloads (14.12.0) all replicate through the save-format capture/restore seams as opaque JSON. Clients keep simulating and converge onto the host's outcome. Accepted gaps: mid-belt packet cosmetics stay per-machine; true client-sim-off moves to the dedicated-server milestone.)*
 6. **Real Crusaders (player model and readable loadout):** replace the capsule avatar with a proper crusader player model and make every player's loadout readable at a glance. Full design below - this milestone deliberately sits right before proximity chat because seeing WHO you meet matters as much as hearing them. *(NEARLY DONE - 14.13.0 body, 14.14.0 display-only armor + tattoos, 14.15.0 rigged Player.fbx + skin tones, 14.16.0 back gear + replicated ghost + building pose, 14.17.0 locomotion animations, 14.18.0 sword stance + replicated attacks. Open: rifle/pistol stances - waiting on clips.)*
-7. **Proximity chat (DECIDED: text chat AND proximity voice, with real directional sound):** both channels ship. Text chat first - proximity-scoped messages relayed through the server into a sleek chat overlay. Then positional voice: microphone capture, compressed frames relayed through the server, 3D-spatialized DIRECTIONAL playback (you hear which side the speaker stands on) with distance falloff, whisper-to-shout range; muted-player list keyed by player id. Decide build-vs-buy when the voice phase starts: a Fish-Net-integrated voice asset (e.g. Dissonance) versus a custom mic -> Opus -> broadcast pipeline riding the existing `NetworkBootstrap` handshake - the directional-sound requirement (AudioSource spatialBlend 1 on the speaking avatar's head) works with either.
+7. **Proximity chat (DECIDED: text chat AND proximity voice, with real directional sound):** both channels ship. *(DONE 14.19.0 text + 14.20.0 voice. Build-vs-buy resolved as BUILD: a custom mic -> IMA ADPCM -> unreliable broadcast pipeline on the existing `NetworkBootstrap` relay, no third-party voice asset, no extra transport. Playback is a spatialized AudioSource on the speaker's head bone, so direction and distance are real. Mute is keyed by player id. Accepted gaps: no per-player volume trim, no whisper/shout ranges - one 60 m radius shared with text chat.)*
 8. **Dedicated server:** headless build target, server-side persistence, no local player assumptions anywhere in boot code. **Security hardening lands here (committed 14.6.0):** code-lock codes currently travel and rest in plain text (same as save files) - move code validation server-side so raw codes never reach other clients, and audit every broadcast for data a client should not see (other players' lock codes, future chest contents). Acceptable for trusted-co-op pre-release, unacceptable for public dedicated servers.
+
+### Open Scope (named with the version that deferred it)
+- **Dedicated headless server** (milestone 8, never started): headless build target, server-side persistence, no local-player assumptions in boot code.
+- **Security hardening** (deferred 14.6.0): code-lock codes travel and rest in plain text; move validation server-side and audit every broadcast for data a client should not see.
+- **True client-sim-off** (deferred 14.12.0): clients still simulate and converge onto the host's outcome.
+- **Mid-belt packet cosmetics** (accepted 14.12.0): conveyor packet visuals stay per-machine.
+- **Multi-planet join catch-up and fluid-sim state** (deferred 14.8.0): only the shared planet transfers on join.
+- **Shared build costs** (deferred 14.6.0): the placer pays for a piece alone.
+- **Rifle and pistol stances** (deferred 14.18.0): waiting on clips in `Resources/PlayerAnimations`.
+- **Per-player voice volume trim and whisper/shout ranges** (deferred 14.20.0): one 60 m radius serves both chat channels.
 
 ### MP-Readiness Checklist (apply to EVERY new system from now on)
 - **One authority entry point** per gameplay action (a single method that will become the server RPC). No gameplay mutations from UI code - UI raises intents.
@@ -240,6 +102,14 @@ These decisions are settled. Every future system is designed against them.
    - **Ghost replication:** the placement ghost (piece + position + rotation) is replicated so nearby players see WHERE and WHAT a teammate is about to place, rendered in the same ghost material locally. Low-rate updates (a few per second) while build mode is active; disappears the moment build mode ends. This lands cleanly AFTER milestone 3 (building sync) since it rides the same piece-identity plumbing.
 
 **5. Rules that hold regardless of art:** nameplate stays above the model; the owner never sees their own avatar; crouch squash is replaced by a real crouch pose when the humanoid lands; all state flows owner -> ServerRpc -> SyncVar - no client-to-client trust; every visual keys off stable item ids so unknown items degrade to "nothing shown", never errors.
+
+### Proximity Voice - Rules That Bind (milestone 7)
+
+- **The server owns the radius.** A frame is only sent to listeners inside 60 m of the speaker; range is never a client-side volume curve, so it cannot be modded off.
+- **Positional or nothing.** Voice always plays from the speaker's head bone with `spatialBlend 1` and linear falloff. A voice with no body (speaker not yet spawned) plays at the listener instead of being dropped.
+- **Identity is stamped by the server.** Clients send audio only; the speaker's id and name are attached server-side, exactly as text chat does.
+- **Unreliable, self-contained frames.** 40 ms per packet, each one decodable alone. Loss costs one frame and never corrupts the stream.
+- **Mute is local, by player id, and permanent** until the player undoes it.
 
 ### Era Transition Feel
 
@@ -2673,7 +2543,8 @@ For each version, these are the high-level Unity tasks you will perform manually
 - **6.27.1-dev:** Fixed grid biofarm UI not opening (missing from `GridBlockHasUI`), added variable ports on all biofarms like grid tanks (`GridTankVariablePorts` for liquid+gas on `GridBiofarm` + `GridH2O2Generator`, port markers for gas+liquid, visual arms in `WaterPipe`/`GasPipe` for both static `Building.Biofarm` and grid `GridBiofarm`), and fixed vertical pipe connection on land (`PipeAdjacency` vertical tolerance 0.65m, `IsPlacementValid` allows thin stacking blocks to ignore terrain for vertical shafts).
 - **6.27.2-dev:** Enforced pipe-only water for biofarm (removed adjacent-tank cheat + voxel water fallback, now requires nearby `WaterPipe` whose network has a `WaterTank`), fixed diagonal pipe connections on grid and land by switching `PipeAdjacency` to Euclidean `sqrt(other1²+other2²)` checks for all axes (prevents diagonal with both offsets 0.5), and fixed grid ghost port not committing (added `GridBiofarm` to `TryGetGridTankVariablePortSnap` / `IsMatchingTankBlockForPipe` in both `BuildSystem` and `GridBuilder`, ensured `EnsureGridTankPorts` creates gas+liquid fixed ports and variable `Port_*_V` ports persist via `WorldStatePersistence`).
 
-### 11.6 Multiplayer — LAST ROADMAP MILESTONE — ❌ MISSING
+### 11.6 Multiplayer — SUPERSEDED BY SECTION 1 — 🚧 IN PROGRESS
+- Live plan, status and open scope: **section 1, Multiplayer Strategy**. Milestones 1-7 are shipped; milestone 8 (dedicated server) is open.
 - This is the final roadmap milestone after all single-player systems are complete.
 - Support self-hosted server creation on Windows and Linux.
 - Support LAN discovery/connection and direct connection to self-hosted servers.
@@ -2688,28 +2559,6 @@ For each version, these are the high-level Unity tasks you will perform manually
 - Main-menu world cards: primary Play button; Edit and Saves controls together; Clone and a smaller Delete control stacked beside them.
 - **6.15.0-dev:** Background autosaves now rotate into three visible slot files, the Saves page exposes restore controls with current-save backup, Edit World safely renames the folder and updates dropped-item limits only, and save cards use the requested management layout.
 - **6.15.1-dev:** Unity compile cleanup fixed the `WorldStatePersistence` local-name collision and replaced the remaining deprecated runtime `GetInstanceID()` calls with `GetEntityId()`.
-- **6.16.0-dev:** World settings now also include inventory/container weight multipliers, the default physical drop limit is 1000, and drop-limit warning toasts protect players from silent physical-drop culling.
-- **6.16.1-dev:** Ship Control search compile fix, autosave slots now fully hide when collapsed, and the default autosave cadence is 5 minutes.
-- **6.17.0-dev:** Manual drops above the physical item limit now show a per-world confirm/deny void warning with a remembered show-warning checkbox; confirmed over-limit drops void only the excess instead of blocking the action.
-
----
-t-save backup, Edit World safely renames the folder and updates dropped-item limits only, and save cards use the requested management layout.
-- **6.15.1-dev:** Unity compile cleanup fixed the `WorldStatePersistence` local-name collision and replaced the remaining deprecated runtime `GetInstanceID()` calls with `GetEntityId()`.
-- **6.16.0-dev:** World settings now also include inventory/container weight multipliers, the default physical drop limit is 1000, and drop-limit warning toasts protect players from silent physical-drop culling.
-- **6.16.1-dev:** Ship Control search compile fix, autosave slots now fully hide when collapsed, and the default autosave cadence is 5 minutes.
-- **6.17.0-dev:** Manual drops above the physical item limit now show a per-world confirm/deny void warning with a remembered show-warning checkbox; confirmed over-limit drops void only the excess instead of blocking the action.
-
----
-dStatePersistence` local-name collision and replaced the remaining deprecated runtime `GetInstanceID()` calls with `GetEntityId()`.
-- **6.16.0-dev:** World settings now also include inventory/container weight multipliers, the default physical drop limit is 1000, and drop-limit warning toasts protect players from silent physical-drop culling.
-- **6.16.1-dev:** Ship Control search compile fix, autosave slots now fully hide when collapsed, and the default autosave cadence is 5 minutes.
-- **6.17.0-dev:** Manual drops above the physical item limit now show a per-world confirm/deny void warning with a remembered show-warning checkbox; confirmed over-limit drops void only the excess instead of blocking the action.
-
----
-er-world confirm/deny void warning with a remembered show-warning checkbox; confirmed over-limit drops void only the excess instead of blocking the action.
-
----
-dStatePersistence` local-name collision and replaced the remaining deprecated runtime `GetInstanceID()` calls with `GetEntityId()`.
 - **6.16.0-dev:** World settings now also include inventory/container weight multipliers, the default physical drop limit is 1000, and drop-limit warning toasts protect players from silent physical-drop culling.
 - **6.16.1-dev:** Ship Control search compile fix, autosave slots now fully hide when collapsed, and the default autosave cadence is 5 minutes.
 - **6.17.0-dev:** Manual drops above the physical item limit now show a per-world confirm/deny void warning with a remembered show-warning checkbox; confirmed over-limit drops void only the excess instead of blocking the action.

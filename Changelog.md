@@ -1,9 +1,47 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.19.0-dev`
+**Current Version:** `14.20.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.20.0-dev] Voices In The Dust
+
+**Type:** MINOR - milestone 7 phase 2 and final: proximity VOICE with real directional sound. Save-compatible.
+
+**Build, not buy.** The roadmap left this decision open until the voice phase started. A Fish-Net voice asset would have brought its own transport, its own identity model and a licence; everything needed already existed here - a handshake, stable player ids, a server-side proximity rule and a relay. The whole pipeline is four new files and rides the text-chat plumbing shipped in 14.19.0.
+
+**The codec (`VoiceCodec`, new).** IMA ADPCM at 16 kHz mono, 4 bits per sample: speech costs 8 KB/s on the wire instead of 32 KB/s raw, with no native plugin and no platform exceptions. Opus compresses harder but cannot ship as pure C#, and a managed port would cost more CPU than the bandwidth it saves at 2-8 players. Every 40 ms frame carries its own predictor and step index in a three-byte header, so each frame decodes standalone - a packet lost on the unreliable channel costs exactly one frame and can never corrupt the ones after it. Allocation-free: callers own the buffers.
+
+**Capture (`VoiceChat`, new).** The microphone is opened at whatever rate the device actually supports (device caps are read, not assumed) and resampled to the codec rate, one captured block mapping to exactly one 40 ms frame. Push to talk is the default; open mic is a setting, with an activation threshold and a 0.45 s hangover so word endings are not clipped. Push to talk never fires while a text field owns the keyboard - typing the bound key must not go on the air. The capture ring keeps draining even while silent, so the first words after keying up are live, not stale. Added automatically by `NetworkBootstrap` - no scene setup step.
+
+**Relay (`NetworkBootstrap`).** Two broadcasts, mirroring the chat pair exactly: `VoiceBroadcast` (client to server, audio only) and `VoiceRelayBroadcast` (server to each listener, stamped with the speaker's player id and display name - clients are never trusted to sign audio). Frames travel on the UNRELIABLE channel by design: a re-sent 40 ms of speech arrives far too late to be worth hearing. The server sends a frame only to players standing within 60 m of the speaker - the same radius as text chat, so there is one proximity rule to learn, and range is enforced on the server rather than faked with a client-side volume curve. Oversized or malformed packets are dropped on arrival.
+
+**Playback (`VoicePlayback`, new).** One fully spatialized AudioSource per speaker, riding that player's head bone (the rig's bone when the rigged body is in use, the primitive head otherwise), with `spatialBlend` 1, zero doppler, linear falloff from 4 m to the 60 m limit and a little spread so a close speaker is not a pinpoint. You hear which side someone stands on, hear them walk behind you, and hear them fade out as they leave. Decoded frames cross to the audio thread through a single locked ring buffer; playback waits for a 120 ms cushion before starting and goes quiet when it runs dry, so jitter is silence rather than stutter. Underruns decay the last sample to zero and resumes fade in - no clicks. A speaker with no avatar yet plays at the listener instead of being dropped. Frames carry a sequence number and a wrap-safe reorder guard drops anything that is not strictly newer, because an unreliable channel delivers out of order often enough to hear: a late frame played after a newer one is a stutter and a duplicate is a stammer.
+
+**Reading the room (`VoiceHud`, new).** Slim pills under the chat overlay: one per player being heard plus a "YOU" pill while transmitting, each with a live level bar. Pills ease in over 0.12 s and out over 0.25 s with an EaseOutCubic slide, are picking-transparent, and draw nothing at all in single player. A dead microphone is visible on the HUD instead of needing another player to confirm it.
+
+**Settings (Settings - Audio).** Voice on/off, Push To Talk vs Open Mic, voice volume (to 200% for quiet speakers), the activation threshold for open mic, a live input meter, and a capture-device chooser when more than one microphone exists. Below that, a per-player list with one mute button each. The meter is honest offline too: while that page is on screen the microphone runs for the meter alone and nothing is transmitted, and it closes again half a second after the page goes away - the mic is never held open behind the player's back. A capture failure says so in words under the meter instead of being silent about being silent.
+
+**Mute is keyed by player id**, never by name or connection, so it survives a rename, a reconnect and the next session (MP-readiness checklist). Muted players are dropped before any audio object is created for them.
+
+**New keybind: Push To Talk, default Backquote** (the key left of 1) - the only comfortable hold key no vehicle, build or map hotkey already claims. Rebindable in Settings - Keybinds like everything else; the keybind migration fills it in automatically for existing profiles.
+
+**The version constant was telling the wrong story.** `GameVersion` still read 13.5.5-dev, so the console banner, the main-menu footer and anything stamping a save reported a build that is forty-odd releases old. It now reads 14.20.0-dev, which is what every one of those surfaces was supposed to be showing all along.
+
+**No manual steps.** `VoiceChat` is added by `NetworkBootstrap`, the HUD by `GameUIController`.
+
+**Open (deferred):** per-player volume trim and separate whisper/shout ranges - one 60 m radius serves both chat channels for now.
+
+### [14.19.1-dev] A Key That Answers
+
+**Type:** PATCH - three runtime exceptions, no behaviour change beyond them working.
+
+**Chat never opened.** `ChatOverlay` read Enter and Escape through the legacy `UnityEngine.Input` class, which THROWS an `InvalidOperationException` while Active Input Handling is set to the Input System package - so the very first press raised an exception instead of opening the chat line. Both keys now read `Keyboard.current`, with the legacy call kept behind the same preprocessor guard the rest of the project uses. Closing chat with Escape also claims the frame now, so the pause menu cannot open on the same press regardless of script execution order. The HUD document lookup is cached as well; it was running a scene-wide search every frame.
+
+**The conveyor snap toggle had the identical bug.** `ConveyorSnapSystem` called `Input.GetKeyDown` unguarded in `Update`, so simply holding a conveyor threw once per frame. Same fix: the inspector's `KeyCode` is mapped to an Input System key by name, so changing it in the inspector keeps working.
+
+**The logistics map threw on every repaint.** `LogisticsMapScreen` wrote its pooled `Label` text from inside the `generateVisualContent` callback, which UI Toolkit forbids - "VisualElements cannot change their render data under an active visual tree". Labels are now placed by a separate pass that runs on the same triggers as the repaint (`InvalidateView`: pan, zoom, layer toggle, refresh, contact click, and canvas resize), so geometry and labels still update on the same frame. The grid spacing is a shared helper, so the drawn grid and the printed scale cannot disagree.
 
 ### [14.19.0-dev] Words On The Wind
 

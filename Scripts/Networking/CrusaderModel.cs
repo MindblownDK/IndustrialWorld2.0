@@ -289,6 +289,25 @@ namespace VoxelEngine.Networking
             return null;
         }
 
+        /// <summary>The head of whichever body this avatar ended up with - the
+        /// rig's head bone ("mixamorig:Head"), the primitive body's "Head", or
+        /// null when neither exists. Proximity voice speaks from here, so a
+        /// crouching or sliding player's voice stays attached to their face
+        /// (14.20.0). Shortest matching name wins, so "HeadTop_End" and other
+        /// leaf bones never steal the anchor.</summary>
+        public static Transform FindHeadAnchor(Transform avatarRoot)
+        {
+            if (avatarRoot == null) return null;
+            var root = avatarRoot.Find(RootName);
+            if (root == null) root = avatarRoot;
+
+            Transform best = null;
+            foreach (var t in root.GetComponentsInChildren<Transform>(true))
+                if (t.name.EndsWith("Head") && (best == null || t.name.Length < best.name.Length))
+                    best = t;
+            return best;
+        }
+
         // ─────────────────────────── the rigged body ───────────────────────────
 
         /// <summary>Instantiate Resources/Player under the root, normalize it to

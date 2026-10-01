@@ -1,6 +1,8 @@
 // Assets/Scripts/VoxelEngine/UI/ChatOverlay.cs
 //
 // 14.19.0-dev - milestone 7, phase 1: proximity TEXT chat.
+// 14.19.1-dev - input read through the Input System (the legacy UnityEngine.Input
+//               calls threw the moment Enter was pressed, so chat never opened).
 //
 // A sleek bottom-left overlay on the existing HUD UIDocument: recent messages
 // as softly fading cards, an input line that opens on Enter, closes on Escape,
@@ -18,6 +20,9 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UIElements;
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
+using UnityEngine.InputSystem;
+#endif
 
 namespace VoxelEngine.UI
 {
@@ -33,6 +38,7 @@ namespace VoxelEngine.UI
         private const float ShowSeconds = 10f;
         private const float FadeSeconds = 2.5f;
 
+        private UIDocument _doc;
         private VisualElement _rootHost;
         private VisualElement _container;
         private VisualElement _messageColumn;
@@ -114,15 +120,15 @@ namespace VoxelEngine.UI
             return true;
         }
 
-        private static UIDocument FindDocument()
+        /// <summary>Cached: the scan is only paid for when the cached document
+        /// has gone away (scene change), never once per frame.</summary>
+        private UIDocument FindDocument()
         {
+            if (_doc != null) return _doc;
             var controller = GameUIController.Instance;
-            if (controller != null)
-            {
-                var doc = controller.GetComponent<UIDocument>();
-                if (doc != null) return doc;
-            }
-            return FindAnyObjectByType<UIDocument>();
+            if (controller != null) _doc = controller.GetComponent<UIDocument>();
+            if (_doc == null) _doc = FindAnyObjectByType<UIDocument>();
+            return _doc;
         }
 
         private void AddEntry(string sender, string text)
@@ -178,7 +184,7 @@ namespace VoxelEngine.UI
                 }
             }
 
-            bool enter = Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter);
+            bool enter = EnterPressed();
             if (!_inputOpen)
             {
                 // Only in multiplayer, and never steal Enter from another text field.
@@ -186,11 +192,42 @@ namespace VoxelEngine.UI
                     && VoxelEngine.Networking.NetworkSession.Mode != VoxelEngine.Networking.SessionMode.Offline)
                     OpenInput();
             }
-            else
+            else if (EscapePressed())
             {
-                if (Input.GetKeyDown(KeyCode.Escape)) CloseInput(false);
-                else if (enter) CloseInput(true);
+                CloseInput(false);
+                // Script execution order between this overlay and the HUD is not
+                // fixed: claim the frame so the pause menu cannot also open.
+                UIState.PauseConsumedFrame = Time.frameCount;
             }
+            else if (enter)
+            {
+                CloseInput(true);
+            }
+        }
+
+        // Input is read through the Input System, with the legacy path kept for
+        // projects that still run the old backend. Calling UnityEngine.Input
+        // while "Active Input Handling" is Input System THROWS - that exception
+        // is what kept the chat line from ever opening (14.19.1).
+        private static bool EnterPressed()
+        {
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
+            var kb = Keyboard.current;
+            if (kb == null) return false;
+            return kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame;
+#else
+            return Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter);
+#endif
+        }
+
+        private static bool EscapePressed()
+        {
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
+            var kb = Keyboard.current;
+            return kb != null && kb.escapeKey.wasPressedThisFrame;
+#else
+            return Input.GetKeyDown(KeyCode.Escape);
+#endif
         }
 
         private void OpenInput()

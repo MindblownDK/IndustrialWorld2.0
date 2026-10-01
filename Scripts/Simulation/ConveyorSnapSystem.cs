@@ -1,7 +1,15 @@
 // Assets/Scripts/VoxelEngine/Simulation/ConveyorSnapSystem.cs
+//
+// 14.19.1-dev: the snap toggle read the legacy UnityEngine.Input, which THROWS
+// while "Active Input Handling" is the Input System package - holding a
+// conveyor raised an exception every frame. Read through the Input System,
+// with the legacy call kept for the old backend.
 using UnityEngine;
 using UnityEngine.UIElements;
 using VoxelEngine.UI;
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
+using UnityEngine.InputSystem;
+#endif
 
 namespace VoxelEngine.Simulation
 {
@@ -29,7 +37,7 @@ namespace VoxelEngine.Simulation
 
         private void Update()
         {
-            if (Input.GetKeyDown(toggleSnapKey) && IsHoldingConveyor)
+            if (TogglePressed() && IsHoldingConveyor)
             {
                 BeltSnapEnabled = !BeltSnapEnabled;
                 UpdateHUD();
@@ -46,6 +54,28 @@ namespace VoxelEngine.Simulation
                 SnappedBelt = null;
                 if (_hudRoot != null) _hudRoot.style.display = DisplayStyle.None;
             }
+        }
+
+        /// <summary>True on the frame the bound snap key goes down.</summary>
+        private bool TogglePressed()
+        {
+#if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
+            var kb = Keyboard.current;
+            if (kb == null) return false;
+            // The binding is authored as a legacy KeyCode in the inspector;
+            // map it by name so an inspector change keeps working.
+            if (!System.Enum.TryParse<Key>(toggleSnapKey.ToString(), true, out var key)) return false;
+            if (key == Key.None || (int)key <= 0) return false;
+            try
+            {
+                var control = kb[key];
+                return control != null && control.wasPressedThisFrame;
+            }
+            catch (System.ArgumentOutOfRangeException) { return false; }
+            catch (System.IndexOutOfRangeException) { return false; }
+#else
+            return Input.GetKeyDown(toggleSnapKey);
+#endif
         }
 
         private void CalculateSnap()

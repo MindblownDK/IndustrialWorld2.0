@@ -6,6 +6,7 @@
 // On launch, MigrateIfNeeded() repairs old saves so every action has a default.
 
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 #if ENABLE_INPUT_SYSTEM || VE_HAS_INPUT_SYSTEM
 using UnityEngine.InputSystem;
@@ -31,7 +32,8 @@ namespace VoxelEngine.Settings
         LogisticsMap,      // local-surface map of rail, drone, road and base networks (11.16.0-dev)
         ConstructRegistry, // name/classify the piloted construct and commit it to orbit (11.13.0-dev)
         GridInspector,  // the Grid Inspector Overlay hotkey (9.37.0-dev): one key walks OFF → HEAT → DAMAGE → CENTRE OF MASS
-        Autopilot       // fly-to-nav-target cruise control (12.22.0-dev)
+        Autopilot,      // fly-to-nav-target cruise control (12.22.0-dev)
+        PushToTalk      // hold to speak on proximity voice (14.20.0-dev)
     }
 
     public static class GameSettings
@@ -54,11 +56,17 @@ namespace VoxelEngine.Settings
         private const string K_VIEWDIST     = "ve.viewDistance";
         private const string K_KEY_PREFIX   = "ve.key.";
         private const string K_FLY_MODE     = "ve.flyMode";
+        private const string K_VOICE_ON     = "ve.voiceEnabled";
+        private const string K_VOICE_OPEN   = "ve.voiceOpenMic";
+        private const string K_VOICE_GATE   = "ve.voiceActivation";
+        private const string K_VOICE_VOL    = "ve.voiceVolume";
+        private const string K_VOICE_DEV    = "ve.voiceDevice";
+        private const string K_VOICE_MUTED  = "ve.voiceMuted";
         private const string K_VERSION      = "ve.settingsVersion";
 
         // Bump this when default keybinds change to force a one-time migration
         // that fills in missing or invalid bindings on old saves.
-        private const int    CURRENT_VERSION = 19;
+        private const int    CURRENT_VERSION = 20;
 
         // ----- defaults -----
         public const float DEFAULT_FOV       = 75f;
@@ -72,6 +80,8 @@ namespace VoxelEngine.Settings
         public const int   DEFAULT_VSYNC     = 1;
         public const int   DEFAULT_VIEWDIST  = 6;
         public const int   DEFAULT_AUTOSAVE  = 300;  // seconds; 0 = disabled
+        public const float DEFAULT_VOICE_VOL = 1.0f;
+        public const float DEFAULT_VOICE_GATE = 0.035f;  // RMS; quiet room noise sits well below this
         // Discrete autosave choices offered in the UI (seconds). 0 = "Off".
         public static readonly int[] AUTOSAVE_CHOICES = { 0, 15, 30, 60, 120, 300 };
 
@@ -104,6 +114,49 @@ namespace VoxelEngine.Settings
         public static float MasterVolume     { get => PlayerPrefs.GetFloat(K_VOL, DEFAULT_VOLUME); set { PlayerPrefs.SetFloat(K_VOL, value); Apply(); } }
         public static float MusicVolume      { get => PlayerPrefs.GetFloat(K_VOL_MUSIC, DEFAULT_MUSIC); set { PlayerPrefs.SetFloat(K_VOL_MUSIC, value); Apply(); } }
         public static float SfxVolume        { get => PlayerPrefs.GetFloat(K_VOL_SFX, DEFAULT_SFX); set { PlayerPrefs.SetFloat(K_VOL_SFX, value); Apply(); } }
+
+        // ----- Proximity voice (14.20.0-dev) -----
+        /// <summary>Master switch for the microphone. Off = nothing is captured
+        /// and nothing is played back, so a player who never wants voice pays
+        /// no CPU and no bandwidth for it.</summary>
+        public static bool  VoiceEnabled     { get => PlayerPrefs.GetInt(K_VOICE_ON, 1) != 0; set { PlayerPrefs.SetInt(K_VOICE_ON, value ? 1 : 0); Notify(); } }
+        /// <summary>True = voice-activated, false = push to talk (the default).</summary>
+        public static bool  VoiceOpenMic     { get => PlayerPrefs.GetInt(K_VOICE_OPEN, 0) != 0; set { PlayerPrefs.SetInt(K_VOICE_OPEN, value ? 1 : 0); Notify(); } }
+        /// <summary>Open-mic trigger level as microphone RMS, 0.005 - 0.25.</summary>
+        public static float VoiceActivation  { get => Mathf.Clamp(PlayerPrefs.GetFloat(K_VOICE_GATE, DEFAULT_VOICE_GATE), 0.005f, 0.25f); set { PlayerPrefs.SetFloat(K_VOICE_GATE, Mathf.Clamp(value, 0.005f, 0.25f)); Notify(); } }
+        /// <summary>Playback volume for other players' voices, 0 - 2.</summary>
+        public static float VoiceVolume      { get => Mathf.Clamp(PlayerPrefs.GetFloat(K_VOICE_VOL, DEFAULT_VOICE_VOL), 0f, 2f); set { PlayerPrefs.SetFloat(K_VOICE_VOL, Mathf.Clamp(value, 0f, 2f)); Notify(); } }
+        /// <summary>Chosen capture device name; empty = the system default.</summary>
+        public static string VoiceDevice     { get => PlayerPrefs.GetString(K_VOICE_DEV, ""); set { PlayerPrefs.SetString(K_VOICE_DEV, value ?? ""); Notify(); } }
+
+        // Muted players are keyed by STABLE PLAYER ID, never by name or
+        // connection - a mute must survive a rename, a reconnect and a new
+        // session (MP-readiness checklist).
+        private static HashSet<string> _mutedCache;
+
+        private static HashSet<string> MutedSet()
+        {
+            if (_mutedCache != null) return _mutedCache;
+            _mutedCache = new HashSet<string>();
+            string raw = PlayerPrefs.GetString(K_VOICE_MUTED, "");
+            if (!string.IsNullOrEmpty(raw))
+                foreach (var part in raw.Split(','))
+                    if (part.Length > 0) _mutedCache.Add(part);
+            return _mutedCache;
+        }
+
+        public static bool IsPlayerMuted(string playerId)
+            => !string.IsNullOrEmpty(playerId) && MutedSet().Contains(playerId);
+
+        public static void SetPlayerMuted(string playerId, bool muted)
+        {
+            if (string.IsNullOrEmpty(playerId)) return;
+            var set = MutedSet();
+            if (muted ? !set.Add(playerId) : !set.Remove(playerId)) return;
+            PlayerPrefs.SetString(K_VOICE_MUTED, string.Join(",", set));
+            PlayerPrefs.Save();
+            Notify();
+        }
 
         // ----- Saving -----
         /// <summary>Background autosave cadence in seconds. 0 disables autosave.</summary>
@@ -171,6 +224,10 @@ namespace VoxelEngine.Settings
             InputAction.ConstructRegistry => "N",
             InputAction.GridInspector   => "K",
             InputAction.Autopilot       => "F3",
+            // Backquote: the one easy-to-hold key left of the number row that
+            // no vehicle, build or map hotkey already claims. Rebindable like
+            // everything else, in Settings - Keybinds.
+            InputAction.PushToTalk      => "Backquote",
             _ => "None"
         };
 
@@ -224,6 +281,9 @@ namespace VoxelEngine.Settings
             string ap = PlayerPrefs.GetString(K_KEY_PREFIX + InputAction.Autopilot, "");
             if (string.IsNullOrEmpty(ap) || ap == "P")
                 PlayerPrefs.SetString(K_KEY_PREFIX + InputAction.Autopilot, "F3");
+
+            // v20: push-to-talk is new; old profiles have no binding for it and
+            // the loop above already filled it with the default. Nothing else to do.
 
             PlayerPrefs.SetInt(K_VERSION, CURRENT_VERSION);
             PlayerPrefs.Save();
@@ -304,6 +364,11 @@ namespace VoxelEngine.Settings
             ResolutionWidth  = Screen.currentResolution.width;
             ResolutionHeight = Screen.currentResolution.height;
             FlyMode          = false;
+            VoiceEnabled     = true;
+            VoiceOpenMic     = false;
+            VoiceActivation  = DEFAULT_VOICE_GATE;
+            VoiceVolume      = DEFAULT_VOICE_VOL;
+            VoiceDevice      = "";
             // Reset every keybind to its hard-coded default (NOT to whatever was previously saved).
             foreach (InputAction a in System.Enum.GetValues(typeof(InputAction)))
                 PlayerPrefs.SetString(K_KEY_PREFIX + a, DefaultKey(a));

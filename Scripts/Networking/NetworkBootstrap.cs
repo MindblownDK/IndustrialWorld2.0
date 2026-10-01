@@ -49,6 +49,25 @@ namespace VoxelEngine.Networking
         public string Text;
     }
 
+    /// <summary>Client -> server: one 40 ms voice frame (14.20.0). Carries no
+    /// identity - the server stamps the speaker from the connection, exactly
+    /// like text chat, so nobody can speak in another player's name.</summary>
+    public struct VoiceBroadcast : IBroadcast
+    {
+        public byte[] Data;
+        public ushort Sequence;
+    }
+
+    /// <summary>Server -> client: a voice frame that passed the proximity
+    /// check, stamped with the speaker's player id and display name.</summary>
+    public struct VoiceRelayBroadcast : IBroadcast
+    {
+        public string SenderId;
+        public string SenderName;
+        public byte[] Data;
+        public ushort Sequence;
+    }
+
     /// <summary>Server -> client on join: which world the host is running,
     /// so the client can warn when terrain will not line up.</summary>
     public struct WorldInfoBroadcast : IBroadcast
@@ -322,6 +341,7 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.OnAuthenticated += OnLocalClientAuthenticated;
             _networkManager.ServerManager.RegisterBroadcast<IdentityBroadcast>(OnIdentityReceived);
             _networkManager.ServerManager.RegisterBroadcast<ChatBroadcast>(OnServerChat);
+            _networkManager.ServerManager.RegisterBroadcast<VoiceBroadcast>(OnServerVoice);
             _networkManager.ServerManager.RegisterBroadcast<PiecePlacedBroadcast>(OnServerPiecePlaced);
             _networkManager.ServerManager.RegisterBroadcast<PieceRemovedBroadcast>(OnServerPieceRemoved);
             _networkManager.ServerManager.RegisterBroadcast<PieceDamagedBroadcast>(OnServerPieceDamaged);
@@ -349,6 +369,7 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.RegisterBroadcast<BaseSnapshotBroadcast>(OnServerBaseSnapshot);
             _networkManager.ClientManager.RegisterBroadcast<WorldInfoBroadcast>(OnWorldInfo);
             _networkManager.ClientManager.RegisterBroadcast<ChatRelayBroadcast>(OnClientChat);
+            _networkManager.ClientManager.RegisterBroadcast<VoiceRelayBroadcast>(OnClientVoice);
             _networkManager.ClientManager.RegisterBroadcast<PiecePlacedBroadcast>(OnClientPiecePlaced);
             _networkManager.ClientManager.RegisterBroadcast<PieceRemovedBroadcast>(OnClientPieceRemoved);
             _networkManager.ClientManager.RegisterBroadcast<PieceDamagedBroadcast>(OnClientPieceDamaged);
@@ -380,6 +401,10 @@ namespace VoxelEngine.Networking
             // Machine-runtime poller (14.12.0) - same pattern, slower cadence.
             if (GetComponent<MachineSyncManager>() == null)
                 gameObject.AddComponent<MachineSyncManager>();
+            // Proximity voice (14.20.0) - idles completely while offline or
+            // while the player has voice turned off.
+            if (GetComponent<VoiceChat>() == null)
+                gameObject.AddComponent<VoiceChat>();
         }
 
         private void OnDestroy()
@@ -392,6 +417,7 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.OnAuthenticated -= OnLocalClientAuthenticated;
             _networkManager.ServerManager.UnregisterBroadcast<IdentityBroadcast>(OnIdentityReceived);
             _networkManager.ServerManager.UnregisterBroadcast<ChatBroadcast>(OnServerChat);
+            _networkManager.ServerManager.UnregisterBroadcast<VoiceBroadcast>(OnServerVoice);
             _networkManager.ServerManager.UnregisterBroadcast<PiecePlacedBroadcast>(OnServerPiecePlaced);
             _networkManager.ServerManager.UnregisterBroadcast<PieceRemovedBroadcast>(OnServerPieceRemoved);
             _networkManager.ServerManager.UnregisterBroadcast<PieceDamagedBroadcast>(OnServerPieceDamaged);
@@ -419,6 +445,7 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.UnregisterBroadcast<BaseSnapshotBroadcast>(OnServerBaseSnapshot);
             _networkManager.ClientManager.UnregisterBroadcast<WorldInfoBroadcast>(OnWorldInfo);
             _networkManager.ClientManager.UnregisterBroadcast<ChatRelayBroadcast>(OnClientChat);
+            _networkManager.ClientManager.UnregisterBroadcast<VoiceRelayBroadcast>(OnClientVoice);
             _networkManager.ClientManager.UnregisterBroadcast<PiecePlacedBroadcast>(OnClientPiecePlaced);
             _networkManager.ClientManager.UnregisterBroadcast<PieceRemovedBroadcast>(OnClientPieceRemoved);
             _networkManager.ClientManager.UnregisterBroadcast<PieceDamagedBroadcast>(OnClientPieceDamaged);
@@ -879,6 +906,86 @@ namespace VoxelEngine.Networking
         {
             if (_serverStarted) return;   // the host was shown via the server path
             VoxelEngine.UI.ChatOverlay.AddMessage(msg.SenderName, msg.Text);
+        }
+
+        // ─────────────────────────── proximity voice (14.20.0) ───────────────────────────
+
+        /// <summary>How far a voice carries, in metres. Deliberately the same
+        /// radius as text chat: one proximity rule the player can learn once.</summary>
+        public const float VoiceRange = ChatRange;
+
+        /// <summary>Send one encoded voice frame. Unreliable by design - a
+        /// re-sent 40 ms of speech would arrive far too late to be useful, and
+        /// every frame decodes on its own.</summary>
+        public void SendVoiceFrame(byte[] data, int length, ushort sequence)
+        {
+            if (data == null || length <= 0 || _networkManager == null) return;
+            if (length > VoiceCodec.MaxPacketBytes) return;
+
+            // The wire struct owns its array; copy out exactly the used bytes.
+            if (_voiceWire == null || _voiceWire.Length != length) _voiceWire = new byte[length];
+            System.Array.Copy(data, _voiceWire, length);
+
+            if (_serverStarted) ServerDistributeVoice(null, _voiceWire, sequence);
+            else if (_clientStarted)
+                _networkManager.ClientManager.Broadcast(
+                    new VoiceBroadcast { Data = _voiceWire, Sequence = sequence }, Channel.Unreliable);
+        }
+
+        /// <summary>Reused send buffer - Broadcast serializes synchronously, so
+        /// one array is enough and voice costs no per-frame garbage.</summary>
+        private byte[] _voiceWire;
+
+        private void OnServerVoice(NetworkConnection conn, VoiceBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted || conn == null) return;
+            if (msg.Data == null || msg.Data.Length == 0) return;
+            if (msg.Data.Length > VoiceCodec.MaxPacketBytes) return;   // malformed or hostile
+            ServerDistributeVoice(conn, msg.Data, msg.Sequence);
+        }
+
+        /// <summary>Same proximity rule as text chat, same reasoning: only
+        /// players standing within VoiceRange of the speaker are sent the
+        /// frame, so a voice never travels further than the server allows it
+        /// to - the range is not a client-side volume trick.</summary>
+        private void ServerDistributeVoice(NetworkConnection sender, byte[] data, ushort sequence)
+        {
+            string name;
+            Vector3 pos;
+            bool hasPos = TryGetChatSource(sender, out name, out pos);
+            string senderId = sender == null
+                ? PlayerIdentity.LocalId
+                : (_playerIdByConnection.TryGetValue(sender.ClientId, out var id) ? id : null);
+            if (string.IsNullOrEmpty(senderId)) return;   // pre-handshake: nobody to attribute it to
+
+            // The host hears remote speakers through the server path.
+            if (sender != null)
+            {
+                var cam = Camera.main;
+                if (!hasPos || cam == null
+                    || (cam.transform.position - pos).sqrMagnitude <= VoiceRange * VoiceRange)
+                    VoiceChat.Deliver(senderId, name, data, data.Length, sequence);
+            }
+
+            var relay = new VoiceRelayBroadcast
+            { SenderId = senderId, SenderName = name, Data = data, Sequence = sequence };
+
+            foreach (var pair in _networkManager.ServerManager.Clients)
+            {
+                var client = pair.Value;
+                if (client == null || client.IsLocalClient) continue;
+                if (sender != null && client == sender) continue;
+                if (hasPos && _avatarsByConnection.TryGetValue(client.ClientId, out var go) && go != null
+                    && (go.transform.position - pos).sqrMagnitude > VoiceRange * VoiceRange) continue;
+                _networkManager.ServerManager.Broadcast(client, relay, true, Channel.Unreliable);
+            }
+        }
+
+        private void OnClientVoice(VoiceRelayBroadcast msg, Channel channel)
+        {
+            if (_serverStarted) return;   // the host already heard it on the server path
+            if (msg.Data == null || msg.Data.Length == 0) return;
+            VoiceChat.Deliver(msg.SenderId, msg.SenderName, msg.Data, msg.Data.Length, msg.Sequence);
         }
 
         private void RelayToOthers<T>(NetworkConnection sender, T msg) where T : struct, IBroadcast

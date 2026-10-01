@@ -13,6 +13,12 @@
 // Painted through `generateVisualContent` with pooled Labels in a picking-ignored
 // overlay — never `MeshGenerationContext.DrawText`, which needs a paint-time font and
 // is not dependable across Unity versions. That lesson came from the orbital map.
+//
+// 14.19.1-dev: the label pass is a SEPARATE pass (`LayoutLabels`), never run from
+// inside the painter. Touching a VisualElement's text during `generateVisualContent`
+// throws "VisualElements cannot change their render data under an active visual
+// tree" — the paint now only paints, and every view change goes through
+// `InvalidateView()` so geometry and labels update together, same frame.
 
 using System.Collections.Generic;
 using UnityEngine;
@@ -94,9 +100,12 @@ namespace VoxelEngine.UI
             _canvas.RegisterCallback<WheelEvent>(e =>
             {
                 _zoom = Mathf.Clamp(_zoom * (e.delta.y > 0 ? 0.88f : 1.14f), 0.05f, 40f);
-                _canvas.MarkDirtyRepaint();
+                InvalidateView();
                 e.StopPropagation();
             });
+            // Labels are positioned against the canvas rect, so a resize moves
+            // every one of them - relayout on geometry just like on pan.
+            _canvas.RegisterCallback<GeometryChangedEvent>(_ => InvalidateView());
             _canvas.RegisterCallback<PointerDownEvent>(e =>
             {
                 _dragging = true;
@@ -108,7 +117,7 @@ namespace VoxelEngine.UI
             {
                 if (!_dragging) return;
                 _pan = _panStart + ((Vector2)e.position - _dragStart);
-                _canvas.MarkDirtyRepaint();
+                InvalidateView();
             });
             _canvas.RegisterCallback<PointerUpEvent>(e =>
             {
@@ -195,7 +204,7 @@ namespace VoxelEngine.UI
         private static void AddLayerToggle(string label, Color ink,
             System.Func<bool> get, System.Action<bool> set)
         {
-            var row = new Button(() => { set(!get()); RefreshLayerButtons(); _canvas.MarkDirtyRepaint(); })
+            var row = new Button(() => { set(!get()); RefreshLayerButtons(); InvalidateView(); })
             { text = label };
             row.name = "layer:" + label;
             row.style.height = 22;
@@ -263,6 +272,7 @@ namespace VoxelEngine.UI
             Refresh();
             FrameAll();
             RefreshLayerButtons();
+            InvalidateView();   // FrameAll changed the scale after Refresh painted
         }
 
         public static void Close()
@@ -289,7 +299,17 @@ namespace VoxelEngine.UI
                 $"{LogisticsMapData.TrainCount} TRAINS   ·   {LogisticsMapData.PortCount} PORTS   ·   " +
                 $"{LogisticsMapData.ZoneCount} BASES   ·   {LogisticsMapData.DepositCount} DEPOSITS";
 
-            _canvas?.MarkDirtyRepaint();
+            InvalidateView();
+        }
+
+        /// <summary>Repaints the canvas AND re-places the pooled labels. One
+        /// entry point, because the two must never drift apart - and because
+        /// labels may not be touched from inside the painter.</summary>
+        private static void InvalidateView()
+        {
+            if (_canvas == null) return;
+            _canvas.MarkDirtyRepaint();
+            LayoutLabels();
         }
 
         /// <summary>Fits the whole network in view, so the map never opens on empty space.</summary>
@@ -429,7 +449,7 @@ namespace VoxelEngine.UI
             {
                 _anchor = marker.World;
                 _pan = Vector2.zero;
-                _canvas.MarkDirtyRepaint();
+                InvalidateView();
             });
 
             return row;
@@ -548,15 +568,23 @@ namespace VoxelEngine.UI
         private static bool OnScreen(Vector2 p, Rect r, float margin)
             => p.x > -margin && p.y > -margin && p.x < r.width + margin && p.y < r.height + margin;
 
-        private static void DrawGrid(Painter2D painter, Rect r, Vector2 centre, float metresPerPixel)
+        /// <summary>Round grid spacing for the current zoom, in metres. Shared by
+        /// the painter and the label pass so the drawn grid and the printed scale
+        /// can never disagree.</summary>
+        private static float GridStep(float metresPerPixel)
         {
-            // A scale grid that picks a round spacing for the current zoom, so the player
-            // can always read distance off the map without a legend.
             float target = 120f * metresPerPixel;
             float step = Mathf.Pow(10f, Mathf.Floor(Mathf.Log10(Mathf.Max(1f, target))));
             if (target / step > 5f) step *= 5f;
             else if (target / step > 2f) step *= 2f;
+            return step;
+        }
 
+        private static void DrawGrid(Painter2D painter, Rect r, Vector2 centre, float metresPerPixel)
+        {
+            // A scale grid that picks a round spacing for the current zoom, so the player
+            // can always read distance off the map without a legend.
+            float step = GridStep(metresPerPixel);
             float pixelStep = step / metresPerPixel;
             if (pixelStep < 8f) return;
 
@@ -579,15 +607,11 @@ namespace VoxelEngine.UI
                 painter.LineTo(new Vector2(r.width, y));
                 painter.Stroke();
             }
-
-            SetLabel(0, new Vector2(r.width - 120f, r.height - 34f),
-                $"GRID {step:0} m", new Color(0.40f, 0.48f, 0.58f), 9);
         }
 
         private static void DrawMarkers(Painter2D painter, Rect r, Vector2 centre, float metresPerPixel)
         {
             var markers = LogisticsMapData.Markers;
-            int labelIndex = 1;   // 0 is the grid scale label
 
             for (int i = 0; i < markers.Count; i++)
             {
@@ -664,21 +688,57 @@ namespace VoxelEngine.UI
                         break;
                 }
 
-                if (metresPerPixel < 3f || m.Alert || m.Kind == MapOverlayKind.Player)
-                {
-                    string text = string.IsNullOrEmpty(m.Detail) ? m.Label : $"{m.Label}  {m.Detail}";
-                    SetLabel(labelIndex++, p + new Vector2(9f, -7f), text, ink, 9);
-                }
             }
-
-            HideLabelsFrom(labelIndex);
         }
 
         // ── Pooled labels ────────────────────────────────────────────────────────
         // Pooled rather than drawn, for the reason recorded on the orbital map:
         // MeshGenerationContext.DrawText needs a font resolved at paint time and is not
         // dependable across Unity versions.
+        //
+        // The pass runs OUTSIDE the painter (14.19.1): UI Toolkit forbids changing an
+        // element's render data while the visual tree is being generated, and setting
+        // Label.text from inside generateVisualContent threw every single repaint.
         private static readonly List<Label> _labelPool = new();
+
+        /// <summary>Places every map label for the current view. Mirrors the
+        /// painter's projection exactly, and runs on the same triggers.</summary>
+        private static void LayoutLabels()
+        {
+            if (_canvas == null || _labelLayer == null) return;
+            Rect r = _canvas.contentRect;
+            if (!_open || r.width < 10f || r.height < 10f) { HideLabelsFrom(0); return; }
+
+            Vector2 centre = new Vector2(r.width * 0.5f, r.height * 0.5f) + _pan;
+            float metresPerPixel = _baseScale / Mathf.Max(0.0001f, _zoom);
+
+            int used = 0;
+
+            // The scale readout, only while the grid itself is actually drawn.
+            float step = GridStep(metresPerPixel);
+            if (step / metresPerPixel >= 8f)
+                SetLabel(used++, new Vector2(r.width - 120f, r.height - 34f),
+                    $"GRID {step:0} m", new Color(0.40f, 0.48f, 0.58f), 9);
+
+            var markers = LogisticsMapData.Markers;
+            for (int i = 0; i < markers.Count; i++)
+            {
+                var m = markers[i];
+                if (metresPerPixel >= 3f && !m.Alert && m.Kind != MapOverlayKind.Player) continue;
+                if (!_showRail && (m.Kind == MapOverlayKind.RailStation || m.Kind == MapOverlayKind.Train)) continue;
+                if (!_showDrones && m.Kind == MapOverlayKind.DronePort) continue;
+                if (!_showDeposits && m.Kind == MapOverlayKind.Deposit) continue;
+
+                Vector2 p = Project(m.World, centre, metresPerPixel);
+                if (!OnScreen(p, r, 30f)) continue;
+
+                string text = string.IsNullOrEmpty(m.Detail) ? m.Label : $"{m.Label}  {m.Detail}";
+                SetLabel(used++, p + new Vector2(9f, -7f), text,
+                    m.Alert ? AlertInk : InkFor(m.Kind), 9);
+            }
+
+            HideLabelsFrom(used);
+        }
 
         private static void SetLabel(int index, Vector2 position, string text, Color colour, int size)
         {

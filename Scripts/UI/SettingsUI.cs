@@ -132,6 +132,184 @@ namespace VoxelEngine.UI
                 p.Add(Hint("Music & SFX channels become independent once the GameAudioMixer " +
                            "asset is added. Until then, Master controls overall volume."));
             }
+
+            p.Add(T.Divider());
+            VoiceSection(p, rebuild);
+        }
+
+        /// <summary>Proximity voice (14.20.0-dev). Lives in the Audio tab rather
+        /// than a tab of its own: a player looking for "why can nobody hear me"
+        /// looks under Audio, and the mute list belongs beside the volume that
+        /// governs it.</summary>
+        private static void VoiceSection(VisualElement p, Action rebuild)
+        {
+            p.Add(SectionLabel("Proximity Voice"));
+
+            p.Add(ToggleRow("Voice Chat",
+                $"Speak to players within {Mathf.RoundToInt(VoxelEngine.Networking.NetworkBootstrap.VoiceRange)} m. " +
+                "Voices come from the speaker's position, so you hear which side they stand on.",
+                GameSettings.VoiceEnabled, on => { GameSettings.VoiceEnabled = on; rebuild?.Invoke(); }));
+
+            if (!GameSettings.VoiceEnabled) return;
+
+            p.Add(T.Spacer(10));
+            p.Add(Segmented(new List<string> { "Push To Talk", "Open Mic" },
+                GameSettings.VoiceOpenMic ? 1 : 0,
+                i => { GameSettings.VoiceOpenMic = i == 1; rebuild?.Invoke(); }));
+            p.Add(Hint(GameSettings.VoiceOpenMic
+                ? "Your microphone transmits whenever it is louder than the activation level below."
+                : $"Hold [{GameSettings.GetKey(InputAction.PushToTalk)}] to speak. Rebind it under Keybinds."));
+
+            p.Add(T.Spacer(12));
+            p.Add(PercentSliderRow("Voice Volume",
+                Mathf.RoundToInt(GameSettings.VoiceVolume * 50f),
+                v => GameSettings.VoiceVolume = v / 50f));
+            p.Add(Hint("100% is normal; the slider reaches 200% for quiet speakers."));
+
+            if (GameSettings.VoiceOpenMic)
+            {
+                p.Add(T.Spacer(12));
+                p.Add(IntSliderRow("Mic Activation", 1, 50,
+                    Mathf.RoundToInt(GameSettings.VoiceActivation * 200f), "",
+                    v => GameSettings.VoiceActivation = v / 200f));
+                p.Add(Hint("Raise this until the meter below stops reacting to your room."));
+            }
+
+            p.Add(T.Spacer(12));
+            p.Add(MicMeterRow());
+
+            // Capture device. Only worth showing when there is a choice to make.
+            var devices = new List<string>(Microphone.devices);
+            if (devices.Count == 0)
+            {
+                p.Add(T.Spacer(8));
+                p.Add(Hint("No microphone detected. Plug one in and reopen this page."));
+            }
+            else if (devices.Count > 1)
+            {
+                int current = Mathf.Max(0, devices.IndexOf(GameSettings.VoiceDevice));
+                p.Add(T.Spacer(12));
+                p.Add(DropdownRow("Microphone", devices, current,
+                    i => { GameSettings.VoiceDevice = devices[i]; rebuild?.Invoke(); }));
+            }
+
+            MuteList(p, rebuild);
+        }
+
+        /// <summary>Live input meter - the fastest way to prove a microphone
+        /// works without asking another player to listen.</summary>
+        private static VisualElement MicMeterRow()
+        {
+            var column = new VisualElement();
+
+            var row = new VisualElement();
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
+            column.Add(row);
+
+            var label = new Label("Input Level");
+            label.style.color = new StyleColor(T.TextPrimary);
+            label.style.fontSize = 13;
+            label.style.flexGrow = 1;
+            row.Add(label);
+
+            var track = new VisualElement();
+            track.style.width = 160;
+            track.style.height = 8;
+            track.style.backgroundColor = new StyleColor(new Color(1f, 1f, 1f, 0.12f));
+            T.Radius(track, 4f);
+
+            var fill = new VisualElement();
+            fill.style.height = 8;
+            fill.style.width = Length.Percent(0);
+            fill.style.backgroundColor = new StyleColor(T.AccentTeal);
+            T.Radius(fill, 4f);
+            track.Add(fill);
+            row.Add(track);
+
+            var status = new Label("");
+            status.style.color = new StyleColor(new Color(0.95f, 0.62f, 0.45f));
+            status.style.fontSize = 11;
+            status.style.marginTop = 6;
+            status.style.whiteSpace = WhiteSpace.Normal;
+            status.style.display = DisplayStyle.None;
+            column.Add(status);
+
+            // Driven by the scheduler so the meter lives as long as the panel.
+            track.schedule.Execute(() =>
+            {
+                // Keeps the microphone open while this page is visible, and only
+                // while it is visible - the meter must tell the truth offline too.
+                VoxelEngine.Networking.VoiceChat.RequestLocalMonitor();
+                float level = VoxelEngine.Networking.VoiceChat.LocalLevel;
+                fill.style.width = Length.Percent(Mathf.Clamp01(level) * 100f);
+                fill.style.backgroundColor = new StyleColor(
+                    VoxelEngine.Networking.VoiceChat.LocalTransmitting
+                        ? new Color(0.42f, 0.92f, 0.62f) : T.AccentTeal);
+
+                // Capture failures are quiet by nature - say them out loud here
+                // rather than letting the player wonder why nobody answers.
+                string problem = VoxelEngine.Networking.VoiceChat.LocalStatus;
+                status.text = problem;
+                status.style.display = string.IsNullOrEmpty(problem)
+                    ? DisplayStyle.None : DisplayStyle.Flex;
+            }).Every(33);
+
+            return column;
+        }
+
+        /// <summary>Per-player mute, keyed by stable player id so it survives a
+        /// rename, a reconnect and the next session.</summary>
+        private static void MuteList(VisualElement p, Action rebuild)
+        {
+            var others = new List<VoxelEngine.Networking.PlayerPresence>();
+            foreach (var presence in VoxelEngine.Networking.NetworkSession.Players)
+                if (presence != null && presence.playerId != VoxelEngine.Networking.PlayerIdentity.LocalId)
+                    others.Add(presence);
+
+            p.Add(T.Spacer(14));
+            p.Add(SectionLabel("Players"));
+
+            if (others.Count == 0)
+            {
+                p.Add(Hint("Nobody else is in this session."));
+                return;
+            }
+
+            for (int i = 0; i < others.Count; i++)
+            {
+                var presence = others[i];
+                bool muted = GameSettings.IsPlayerMuted(presence.playerId);
+
+                var row = new VisualElement();
+                row.style.flexDirection = FlexDirection.Row;
+                row.style.alignItems = Align.Center;
+                row.style.marginBottom = 5;
+                row.style.paddingTop = 6; row.style.paddingBottom = 6;
+                row.style.paddingLeft = 10; row.style.paddingRight = 10;
+                row.style.backgroundColor = new StyleColor(T.BgCard);
+                T.Radius(row, 5f);
+
+                var name = new Label(string.IsNullOrEmpty(presence.displayName)
+                    ? "Crusader" : presence.displayName);
+                name.style.color = new StyleColor(muted ? T.TextMuted : T.TextSecondary);
+                name.style.fontSize = 12;
+                name.style.flexGrow = 1;
+                name.style.minHeight = 22;
+                row.Add(name);
+
+                string id = presence.playerId;
+                var btn = T.SmallButton(muted ? "Muted" : "Audible", null,
+                    muted ? T.AccentGold : T.AccentTeal);
+                btn.style.minWidth = 96;
+                btn.clickable.clicked += () =>
+                {
+                    GameSettings.SetPlayerMuted(id, !GameSettings.IsPlayerMuted(id));
+                    rebuild?.Invoke();
+                };
+                row.Add(btn);
+                p.Add(row);
+            }
         }
 
         /// <summary>Interface theming and production-planner presentation — now full custom editor.</summary>
