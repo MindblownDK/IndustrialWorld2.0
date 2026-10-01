@@ -1,6 +1,10 @@
 // Assets/Scripts/VoxelEngine/UI/VoiceHud.cs
 //
 // 14.20.0-dev - milestone 7, phase 2: who is talking, at a glance.
+// 14.21.0-dev - the column now TRACKS the chat overlay's real bottom edge
+//               instead of guessing an offset from the bottom of the screen,
+//               so the top-left stack (target card, chat, voices) can never
+//               overlap itself or the gravity readout in the bottom corner.
 //
 // A column of slim pills under the chat overlay: one per player currently
 // being heard, plus the local microphone pill while transmitting. Each pill
@@ -37,10 +41,16 @@ namespace VoxelEngine.UI
             public bool Wanted;
         }
 
+        /// <summary>Where the column sits when chat has not been built yet -
+        /// chat's own baseline plus its message viewport.</summary>
+        private const float FallbackTop = 330f;
+        private const float ChatGap = 8f;
+
         private UIDocument _doc;
         private VisualElement _rootHost;
         private VisualElement _column;
         private readonly List<Pill> _pool = new();
+        private float _top = FallbackTop;
 
         public static void EnsureExists()
         {
@@ -81,8 +91,8 @@ namespace VoxelEngine.UI
 
             _column = new VisualElement { name = "VoiceHud" };
             _column.style.position = Position.Absolute;
-            _column.style.left = 14;
-            _column.style.bottom = 74;
+            _column.style.left = 16;          // flush with chat and the target card
+            _column.style.top = _top;
             _column.style.width = 300;
             _column.style.alignItems = Align.FlexStart;
             _column.pickingMode = PickingMode.Ignore;
@@ -150,6 +160,8 @@ namespace VoxelEngine.UI
         {
             if (!EnsureBuilt()) return;
 
+            FollowChat();
+
             int used = 0;
             bool offline = VoxelEngine.Networking.NetworkSession.Mode
                            == VoxelEngine.Networking.SessionMode.Offline;
@@ -170,6 +182,23 @@ namespace VoxelEngine.UI
             }
 
             for (int i = used; i < _pool.Count; i++) Apply(i, null, 0f, LocalInk, false);
+        }
+
+        /// <summary>Sits the column just under the chat overlay. Chat's height
+        /// changes when its input line opens, so the target is eased rather
+        /// than snapped - the pills glide down with the chat box instead of
+        /// jumping, which is the same rule every other transition here follows.</summary>
+        private void FollowChat()
+        {
+            float chatBottom = ChatOverlay.BottomEdge;
+            float wanted = chatBottom > 1f ? chatBottom + ChatGap : FallbackTop;
+
+            // First placement is instant; there is nothing to glide away from.
+            if (_top <= 0f) _top = wanted;
+            else _top = Mathf.Lerp(_top, wanted, 1f - Mathf.Exp(-14f * Time.unscaledDeltaTime));
+
+            if (Mathf.Abs(_top - wanted) < 0.3f) _top = wanted;
+            _column.style.top = _top;
         }
 
         /// <summary>Drives one pill toward its target state. Presence eases in

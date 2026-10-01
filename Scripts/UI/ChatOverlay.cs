@@ -3,8 +3,12 @@
 // 14.19.0-dev - milestone 7, phase 1: proximity TEXT chat.
 // 14.19.1-dev - input read through the Input System (the legacy UnityEngine.Input
 //               calls threw the moment Enter was pressed, so chat never opened).
+// 14.21.0-dev - moved to the TOP-LEFT column, directly under the target card
+//               (WorldInspectionHud). It used to sit bottom-left, on top of the
+//               gravity readout. The three top-left HUD elements now form one
+//               stack: target card, then chat, then the voice pills.
 //
-// A sleek bottom-left overlay on the existing HUD UIDocument: recent messages
+// A sleek top-left overlay on the existing HUD UIDocument: recent messages
 // as softly fading cards, an input line that opens on Enter, closes on Escape,
 // sends on Enter. While the input is open, UIState.TextInputActive keeps all
 // player movement/hotkeys suppressed (GameUIController includes IsTyping in
@@ -38,6 +42,19 @@ namespace VoxelEngine.UI
         private const float ShowSeconds = 10f;
         private const float FadeSeconds = 2.5f;
 
+        // ── top-left stack geometry ──
+        /// <summary>Where chat sits when the target card is hidden. Chosen to
+        /// clear a typical card, so chat does NOT bob up and down every time
+        /// the player glances at a block - it only ever moves down, and only
+        /// for a card tall enough to actually reach it.</summary>
+        private const float BaselineTop = 152f;
+        private const float InspectionGap = 10f;
+        /// <summary>Fixed message viewport. A fixed height is what keeps the
+        /// bottom edge still, which is what keeps the voice pills under it
+        /// still. Messages are bottom-aligned inside it and the oldest one is
+        /// clipped at the top, exactly as it read when chat grew upward.</summary>
+        private const float MessageViewport = 170f;
+
         private UIDocument _doc;
         private VisualElement _rootHost;
         private VisualElement _container;
@@ -47,6 +64,20 @@ namespace VoxelEngine.UI
 
         private struct Entry { public Label Label; public float Born; }
         private readonly List<Entry> _entries = new List<Entry>();
+        private float _appliedTop = -1f;
+
+        /// <summary>Bottom edge of the whole overlay in panel pixels, or 0 when
+        /// chat has not been built. The voice HUD stacks under this.</summary>
+        public static float BottomEdge
+        {
+            get
+            {
+                var self = Instance;
+                if (self == null || self._container == null || self._container.panel == null) return 0f;
+                float bottom = self._container.layout.yMax;
+                return float.IsNaN(bottom) ? 0f : bottom;
+            }
+        }
 
         public static void EnsureExists()
         {
@@ -88,15 +119,18 @@ namespace VoxelEngine.UI
             _entries.Clear();
             _inputOpen = false;
 
-            _container = new VisualElement();
+            _container = new VisualElement { name = "ChatOverlay" };
             _container.style.position = Position.Absolute;
-            _container.style.left = 14;
-            _container.style.bottom = 110;
+            _container.style.left = 16;          // flush with the target card above
+            _container.style.top = BaselineTop;
             _container.style.width = 430;
             _container.pickingMode = PickingMode.Ignore;
+            _appliedTop = BaselineTop;
 
             _messageColumn = new VisualElement();
+            _messageColumn.style.height = MessageViewport;
             _messageColumn.style.justifyContent = Justify.FlexEnd;
+            _messageColumn.style.overflow = Overflow.Hidden;
             _messageColumn.pickingMode = PickingMode.Ignore;
             _container.Add(_messageColumn);
 
@@ -168,6 +202,8 @@ namespace VoxelEngine.UI
         {
             if (!EnsureBuilt()) return;
 
+            LayoutUnderTargetCard();
+
             // Fade and expire message cards (frozen fully visible while typing).
             for (int i = _entries.Count - 1; i >= 0; i--)
             {
@@ -203,6 +239,17 @@ namespace VoxelEngine.UI
             {
                 CloseInput(true);
             }
+        }
+
+        /// <summary>Keeps chat clear of the target card above it. Only ever
+        /// pushes DOWN from the baseline: a card short enough to leave room is
+        /// ignored, so the chat log is not permanently in motion.</summary>
+        private void LayoutUnderTargetCard()
+        {
+            float wanted = Mathf.Max(BaselineTop, WorldInspectionHud.BottomEdge + InspectionGap);
+            if (Mathf.Abs(wanted - _appliedTop) < 0.5f) return;
+            _appliedTop = wanted;
+            _container.style.top = wanted;
         }
 
         // Input is read through the Input System, with the legacy path kept for

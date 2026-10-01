@@ -36,6 +36,17 @@ namespace VoxelEngine.Settings
         PushToTalk      // hold to speak on proximity voice (14.20.0-dev)
     }
 
+    /// <summary>How the microphone decides it is your turn to speak.
+    /// One control, four states - including Off, so the whole feature is
+    /// reachable from a single row in Settings - Audio.</summary>
+    public enum VoiceTalkMode
+    {
+        Off = 0,          // nothing captured, nothing played, no CPU, no bandwidth
+        PushToTalk = 1,   // hold the key (the default)
+        Toggle = 2,       // tap the same key on, tap it off
+        OpenMic = 3       // transmits whenever you are louder than the threshold
+    }
+
     public static class GameSettings
     {
         // ----- PlayerPrefs keys -----
@@ -56,7 +67,9 @@ namespace VoxelEngine.Settings
         private const string K_VIEWDIST     = "ve.viewDistance";
         private const string K_KEY_PREFIX   = "ve.key.";
         private const string K_FLY_MODE     = "ve.flyMode";
-        private const string K_VOICE_ON     = "ve.voiceEnabled";
+        private const string K_VOICE_MODE   = "ve.voiceMode";
+        private const string K_VOICE_ON     = "ve.voiceEnabled";   // pre-v21, migrated
+        // pre-v21, migrated
         private const string K_VOICE_OPEN   = "ve.voiceOpenMic";
         private const string K_VOICE_GATE   = "ve.voiceActivation";
         private const string K_VOICE_VOL    = "ve.voiceVolume";
@@ -66,7 +79,7 @@ namespace VoxelEngine.Settings
 
         // Bump this when default keybinds change to force a one-time migration
         // that fills in missing or invalid bindings on old saves.
-        private const int    CURRENT_VERSION = 20;
+        private const int    CURRENT_VERSION = 21;
 
         // ----- defaults -----
         public const float DEFAULT_FOV       = 75f;
@@ -116,12 +129,28 @@ namespace VoxelEngine.Settings
         public static float SfxVolume        { get => PlayerPrefs.GetFloat(K_VOL_SFX, DEFAULT_SFX); set { PlayerPrefs.SetFloat(K_VOL_SFX, value); Apply(); } }
 
         // ----- Proximity voice (14.20.0-dev) -----
+        /// <summary>Off / Push To Talk / Toggle / Open Mic. This is the single
+        /// source of truth: the two older booleans below are derived from it so
+        /// nothing can report a state the mode does not actually have.</summary>
+        public static VoiceTalkMode VoiceMode
+        {
+            get
+            {
+                int raw = PlayerPrefs.GetInt(K_VOICE_MODE, (int)VoiceTalkMode.PushToTalk);
+                return raw < 0 || raw > (int)VoiceTalkMode.OpenMic
+                    ? VoiceTalkMode.PushToTalk : (VoiceTalkMode)raw;
+            }
+            set { PlayerPrefs.SetInt(K_VOICE_MODE, (int)value); Notify(); }
+        }
+
         /// <summary>Master switch for the microphone. Off = nothing is captured
         /// and nothing is played back, so a player who never wants voice pays
         /// no CPU and no bandwidth for it.</summary>
-        public static bool  VoiceEnabled     { get => PlayerPrefs.GetInt(K_VOICE_ON, 1) != 0; set { PlayerPrefs.SetInt(K_VOICE_ON, value ? 1 : 0); Notify(); } }
-        /// <summary>True = voice-activated, false = push to talk (the default).</summary>
-        public static bool  VoiceOpenMic     { get => PlayerPrefs.GetInt(K_VOICE_OPEN, 0) != 0; set { PlayerPrefs.SetInt(K_VOICE_OPEN, value ? 1 : 0); Notify(); } }
+        public static bool  VoiceEnabled     => VoiceMode != VoiceTalkMode.Off;
+        /// <summary>True while the gate is the microphone level rather than a key.</summary>
+        public static bool  VoiceOpenMic     => VoiceMode == VoiceTalkMode.OpenMic;
+        /// <summary>True while the talk key latches instead of being held.</summary>
+        public static bool  VoiceToggleToTalk => VoiceMode == VoiceTalkMode.Toggle;
         /// <summary>Open-mic trigger level as microphone RMS, 0.005 - 0.25.</summary>
         public static float VoiceActivation  { get => Mathf.Clamp(PlayerPrefs.GetFloat(K_VOICE_GATE, DEFAULT_VOICE_GATE), 0.005f, 0.25f); set { PlayerPrefs.SetFloat(K_VOICE_GATE, Mathf.Clamp(value, 0.005f, 0.25f)); Notify(); } }
         /// <summary>Playback volume for other players' voices, 0 - 2.</summary>
@@ -285,6 +314,20 @@ namespace VoxelEngine.Settings
             // v20: push-to-talk is new; old profiles have no binding for it and
             // the loop above already filled it with the default. Nothing else to do.
 
+            // v21: the voice on/off switch and the push-to-talk/open-mic switch
+            // became one four-state mode (Off / Push To Talk / Toggle / Open Mic).
+            // Fold the two old booleans into it so a 14.20 profile keeps exactly
+            // the behaviour it had, then leave the old keys alone - unread keys
+            // cost nothing and a player who rolls a build back keeps their choice.
+            if (!PlayerPrefs.HasKey(K_VOICE_MODE))
+            {
+                bool wasOn   = PlayerPrefs.GetInt(K_VOICE_ON, 1) != 0;
+                bool wasOpen = PlayerPrefs.GetInt(K_VOICE_OPEN, 0) != 0;
+                PlayerPrefs.SetInt(K_VOICE_MODE, (int)(!wasOn
+                    ? VoiceTalkMode.Off
+                    : wasOpen ? VoiceTalkMode.OpenMic : VoiceTalkMode.PushToTalk));
+            }
+
             PlayerPrefs.SetInt(K_VERSION, CURRENT_VERSION);
             PlayerPrefs.Save();
             Debug.Log("[GameSettings] Migrated keybinds to version " + CURRENT_VERSION);
@@ -364,8 +407,7 @@ namespace VoxelEngine.Settings
             ResolutionWidth  = Screen.currentResolution.width;
             ResolutionHeight = Screen.currentResolution.height;
             FlyMode          = false;
-            VoiceEnabled     = true;
-            VoiceOpenMic     = false;
+            VoiceMode        = VoiceTalkMode.PushToTalk;
             VoiceActivation  = DEFAULT_VOICE_GATE;
             VoiceVolume      = DEFAULT_VOICE_VOL;
             VoiceDevice      = "";

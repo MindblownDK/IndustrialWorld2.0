@@ -734,7 +734,7 @@ namespace VoxelEngine.Menu
         // main menu and the in-game pause menu can never drift apart.
         private void DisplayTab(VisualElement p)  => SettingsUI.DisplayTab(p, BuildUI);
         private void CameraTab(VisualElement p)   => SettingsUI.CameraTab(p, BuildUI);
-        private void AudioTab(VisualElement p)    => SettingsUI.AudioTab(p, BuildUI);
+        private void AudioTab(VisualElement p)    => SettingsUI.AudioTab(p, BuildUI, this);
         private void SavingTab(VisualElement p)   => SettingsUI.SavingTab(p, BuildUI);
         private void KeybindTab(VisualElement p)  => SettingsUI.KeybindTab(p, this, BuildUI);
 

@@ -1,9 +1,25 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.20.0-dev`
+**Current Version:** `14.21.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.21.0-dev] The Quiet Corner
+
+**Type:** MINOR - a new voice talk mode, voice controls reorganised, and the top-left HUD rebuilt as a single stack. Save-compatible; settings migrate automatically.
+
+**Toggle to talk.** Holding a key is not how everyone wants to speak, and a long conversation on push-to-talk is a cramp. The microphone now has four states instead of two switches: Off, Push To Talk, Toggle and Open Mic, all on one row in Settings - Audio. Toggle taps the talk key open and taps it closed. The latch is read once per FRAME rather than once per captured audio block - a frame can drain zero blocks or two, and either would have missed or doubled a keypress - and it never fires while a text field owns the keyboard, so typing the bound letter in chat cannot open your microphone. Leaving a session or switching voice off clears the latch, so you can never come back to a world already transmitting.
+
+**One control instead of two.** Turning voice off, holding a key, latching a key and letting the room open the mic are all the same decision, so they are now the same control. The old voice on/off toggle and the push-to-talk/open-mic pair are gone, folded into the mode row. Settings version 21 migrates existing profiles: a 14.20 profile keeps exactly the behaviour it had, and the old keys are left in place so rolling a build back does not lose the choice.
+
+**The talk key is rebindable from the audio page.** It is the one key a player wants to change while they are testing a microphone, and sending them to another tab to do it was rude. The Keybinds tab still owns it too - this is a second door to the same setting, not a second setting.
+
+**The microphone chooser is always visible.** It used to appear only when more than one capture device existed, which hid the answer to the first question anyone asks when nobody can hear them. The list now always shows while voice is on, with "System Default" as the first entry so a player can always get back to whatever the OS says after unplugging the headset they picked. If a previously chosen device is gone, the page says so by name instead of silently falling back.
+
+**The meter tells the truth offline.** While the audio page is open the microphone runs for the input meter alone and nothing is transmitted; it closes again half a second after the page goes away. The mic is never held open behind the player's back. A capture failure now prints under the meter in words rather than being silent about being silent.
+
+**The top-left HUD is one stack now.** Chat used to sit in the bottom-left corner, directly on top of the gravity readout. Chat has moved up under the target card - the overlay that describes what you are looking at - and the voice pills sit under chat, so the three informational overlays read as one column and the bottom-left corner belongs to the gravity readout again. The stack measures itself rather than trusting magic numbers: chat reads the target card's real bottom edge, which moves when a status line wraps or the integrity bar appears, and the voice pills follow chat's real bottom edge. Chat only ever moves DOWN from its resting position, and only for a card tall enough to actually reach it, so the log is not permanently in motion while you look around. The pills ease to their new position rather than snapping when the chat input opens. The message area is a fixed viewport with messages bottom-aligned and the oldest clipped at the top, so it reads exactly as it did when it grew upward, but its bottom edge stays still.
 
 ### [14.20.0-dev] Voices In The Dust
 

@@ -172,6 +172,21 @@ namespace VoxelEngine.UI
             healthTrack.Add(_healthFill);
         }
 
+        /// <summary>Bottom edge of the target card in panel pixels, or 0 while
+        /// it is hidden. The chat overlay sits under this card (14.21.0), and
+        /// the card's height changes with its content - a status line can wrap,
+        /// the integrity bar comes and goes - so the thing below it has to read
+        /// the real measured edge rather than trust a magic number.</summary>
+        public static float BottomEdge
+        {
+            get
+            {
+                if (_card == null || !_visible) return 0f;
+                float bottom = _card.layout.yMax;
+                return float.IsNaN(bottom) ? 0f : bottom;
+            }
+        }
+
         public static void BindInventoryItem(VisualElement element, ItemStack stack)
         {
             if (element == null || stack == null || stack.IsEmpty || stack.item == null) return;

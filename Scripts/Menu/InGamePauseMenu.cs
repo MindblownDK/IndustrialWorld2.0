@@ -455,7 +455,7 @@ namespace VoxelEngine.Menu
         // menu) so polish & new options stay in lock-step across both menus.
         private void DisplayTab(VisualElement p)  => SettingsUI.DisplayTab(p, BuildUI);
         private void CameraTab(VisualElement p)   => SettingsUI.CameraTab(p, BuildUI);
-        private void AudioTab(VisualElement p)    => SettingsUI.AudioTab(p, BuildUI);
+        private void AudioTab(VisualElement p)    => SettingsUI.AudioTab(p, BuildUI, this);
         private void SavingTab(VisualElement p)   => SettingsUI.SavingTab(p, BuildUI);
         private void KeybindTab(VisualElement p)  => SettingsUI.KeybindTab(p, this, BuildUI);
 

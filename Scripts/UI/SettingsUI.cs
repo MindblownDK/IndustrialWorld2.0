@@ -115,7 +115,7 @@ namespace VoxelEngine.UI
         }
 
         /// <summary>Audio — Master / Music / SFX, all on a clean 0–100 scale.</summary>
-        public static void AudioTab(VisualElement p, Action rebuild)
+        public static void AudioTab(VisualElement p, Action rebuild, MonoBehaviour host = null)
         {
             p.Add(PercentSliderRow("Master Volume", Mathf.RoundToInt(GameSettings.MasterVolume * 100f),
                 v => GameSettings.MasterVolume = v / 100f));
@@ -134,31 +134,54 @@ namespace VoxelEngine.UI
             }
 
             p.Add(T.Divider());
-            VoiceSection(p, rebuild);
+            VoiceSection(p, host, rebuild);
         }
 
         /// <summary>Proximity voice (14.20.0-dev). Lives in the Audio tab rather
         /// than a tab of its own: a player looking for "why can nobody hear me"
         /// looks under Audio, and the mute list belongs beside the volume that
         /// governs it.</summary>
-        private static void VoiceSection(VisualElement p, Action rebuild)
+        private static void VoiceSection(VisualElement p, MonoBehaviour host, Action rebuild)
         {
             p.Add(SectionLabel("Proximity Voice"));
 
-            p.Add(ToggleRow("Voice Chat",
-                $"Speak to players within {Mathf.RoundToInt(VoxelEngine.Networking.NetworkBootstrap.VoiceRange)} m. " +
-                "Voices come from the speaker's position, so you hear which side they stand on.",
-                GameSettings.VoiceEnabled, on => { GameSettings.VoiceEnabled = on; rebuild?.Invoke(); }));
+            // One control, four states. Turning voice off, holding a key,
+            // latching a key and letting the room open the mic are the same
+            // decision, so they are the same row - not a toggle plus a toggle.
+            var mode = GameSettings.VoiceMode;
+            p.Add(Segmented(new List<string> { "Off", "Push To Talk", "Toggle", "Open Mic" },
+                (int)mode,
+                i => { GameSettings.VoiceMode = (VoiceTalkMode)i; rebuild?.Invoke(); }));
 
-            if (!GameSettings.VoiceEnabled) return;
+            string talkKey = GameSettings.GetKey(InputAction.PushToTalk);
+            p.Add(Hint(mode switch
+            {
+                VoiceTalkMode.Off =>
+                    $"Voice is off. Nothing is captured and nothing is played back - other players within " +
+                    $"{Mathf.RoundToInt(VoxelEngine.Networking.NetworkBootstrap.VoiceRange)} m can still be read in text chat.",
+                VoiceTalkMode.PushToTalk =>
+                    $"Hold [{talkKey}] to speak. Release it and the microphone closes immediately.",
+                VoiceTalkMode.Toggle =>
+                    $"Tap [{talkKey}] to open the microphone and tap it again to close it. The voice bar on " +
+                    "the HUD stays lit the whole time it is open, so an open mic is never a surprise.",
+                _ =>
+                    "Your microphone transmits whenever it is louder than the activation level below."
+            }));
 
-            p.Add(T.Spacer(10));
-            p.Add(Segmented(new List<string> { "Push To Talk", "Open Mic" },
-                GameSettings.VoiceOpenMic ? 1 : 0,
-                i => { GameSettings.VoiceOpenMic = i == 1; rebuild?.Invoke(); }));
-            p.Add(Hint(GameSettings.VoiceOpenMic
-                ? "Your microphone transmits whenever it is louder than the activation level below."
-                : $"Hold [{GameSettings.GetKey(InputAction.PushToTalk)}] to speak. Rebind it under Keybinds."));
+            if (mode == VoiceTalkMode.Off) return;
+
+            p.Add(T.Spacer(12));
+            p.Add(Hint($"Voices carry {Mathf.RoundToInt(VoxelEngine.Networking.NetworkBootstrap.VoiceRange)} m " +
+                       "and come from the speaker's position, so you hear which side they stand on."));
+
+            // The talk key is rebindable from here as well as from Keybinds -
+            // it is the one key you want to change while you are testing a mic,
+            // and sending the player to another tab to do it would be rude.
+            if (mode != VoiceTalkMode.OpenMic)
+            {
+                p.Add(T.Spacer(12));
+                p.Add(TalkKeyRow(host, rebuild));
+            }
 
             p.Add(T.Spacer(12));
             p.Add(PercentSliderRow("Voice Volume",
@@ -166,7 +189,7 @@ namespace VoxelEngine.UI
                 v => GameSettings.VoiceVolume = v / 50f));
             p.Add(Hint("100% is normal; the slider reaches 200% for quiet speakers."));
 
-            if (GameSettings.VoiceOpenMic)
+            if (mode == VoiceTalkMode.OpenMic)
             {
                 p.Add(T.Spacer(12));
                 p.Add(IntSliderRow("Mic Activation", 1, 50,
@@ -178,22 +201,98 @@ namespace VoxelEngine.UI
             p.Add(T.Spacer(12));
             p.Add(MicMeterRow());
 
-            // Capture device. Only worth showing when there is a choice to make.
-            var devices = new List<string>(Microphone.devices);
-            if (devices.Count == 0)
+            MicDeviceRow(p, rebuild);
+            MuteList(p, rebuild);
+        }
+
+        /// <summary>Rebind the talk key without leaving the audio page.</summary>
+        private static VisualElement TalkKeyRow(MonoBehaviour host, Action rebuild)
+        {
+            var row = new VisualElement();
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
+            row.style.paddingTop = 6;
+            row.style.paddingBottom = 6;
+            row.style.paddingLeft = 10;
+            row.style.paddingRight = 10;
+            row.style.backgroundColor = new StyleColor(T.BgCard);
+            T.Radius(row, 5f);
+
+            var label = new Label("Talk Key");
+            label.style.color = new StyleColor(T.TextSecondary);
+            label.style.fontSize = 12;
+            label.style.flexGrow = 1;
+            label.style.minHeight = 22;
+            row.Add(label);
+
+            var btn = T.SmallButton(GameSettings.GetKey(InputAction.PushToTalk), null, T.AccentTeal);
+            btn.style.minWidth = 120;
+            btn.clickable.clicked += () =>
             {
-                p.Add(T.Spacer(8));
-                p.Add(Hint("No microphone detected. Plug one in and reopen this page."));
-            }
-            else if (devices.Count > 1)
+                btn.text = "Press key…";
+                btn.style.backgroundColor = new StyleColor(
+                    new Color(T.AccentGold.r, T.AccentGold.g, T.AccentGold.b, 0.80f));
+                CaptureTalkKey(host, rebuild);
+            };
+            row.Add(btn);
+
+            return row;
+        }
+
+        /// <summary>Runs the one-shot key capture. The keybind tab borrows its
+        /// menu's MonoBehaviour; the audio tab may not have one, so the capture
+        /// gets a throwaway object that is destroyed the moment it reports.</summary>
+        private static void CaptureTalkKey(MonoBehaviour host, Action rebuild)
+        {
+            GameObject owned = null;
+            KeyRebindCapture capture;
+            if (host != null) capture = host.gameObject.AddComponent<KeyRebindCapture>();
+            else
             {
-                int current = Mathf.Max(0, devices.IndexOf(GameSettings.VoiceDevice));
-                p.Add(T.Spacer(12));
-                p.Add(DropdownRow("Microphone", devices, current,
-                    i => { GameSettings.VoiceDevice = devices[i]; rebuild?.Invoke(); }));
+                owned = new GameObject("TalkKeyRebindCapture");
+                capture = owned.AddComponent<KeyRebindCapture>();
             }
 
-            MuteList(p, rebuild);
+            capture.onCaptured = code =>
+            {
+                GameSettings.SetKey(InputAction.PushToTalk, code);
+                if (owned != null) UnityEngine.Object.Destroy(owned);
+                rebuild?.Invoke();
+            };
+        }
+
+        /// <summary>Capture device chooser. Always shown while voice is on, even
+        /// with a single microphone: "which microphone is this actually using"
+        /// is the first question asked when nobody can hear you.</summary>
+        private static void MicDeviceRow(VisualElement p, Action rebuild)
+        {
+            string[] devices = Microphone.devices;
+            p.Add(T.Spacer(12));
+
+            if (devices == null || devices.Length == 0)
+            {
+                p.Add(Hint("No microphone detected. Plug one in, then reopen this page."));
+                return;
+            }
+
+            // Entry 0 is the system default, so a player can always get back to
+            // "whatever Windows says" after unplugging the headset they picked.
+            var choices = new List<string> { "System Default" };
+            for (int i = 0; i < devices.Length; i++) choices.Add(devices[i]);
+
+            string chosen = GameSettings.VoiceDevice;
+            int index = 0;
+            if (!string.IsNullOrEmpty(chosen))
+            {
+                int found = choices.IndexOf(chosen);
+                index = found > 0 ? found : 0;
+            }
+
+            p.Add(DropdownRow("Microphone", choices, index,
+                i => { GameSettings.VoiceDevice = i <= 0 ? "" : choices[i]; rebuild?.Invoke(); }));
+
+            if (index == 0 && !string.IsNullOrEmpty(chosen))
+                p.Add(Hint($"\"{chosen}\" is no longer connected - falling back to the system default."));
         }
 
         /// <summary>Live input meter - the fastest way to prove a microphone

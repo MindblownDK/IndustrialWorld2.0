@@ -97,12 +97,17 @@ namespace VoxelEngine.Networking
             if (!online && _speakerList.Count > 0) ClearSpeakers();
 
             _canSend = online;
-            if (!online && Time.unscaledTime >= _monitorUntil)
+            if (!online)
             {
-                if (_micClip != null) StopCapture();
-                LocalTransmitting = false;
-                LocalLevel = 0f;
-                return;
+                // Never come back from a session already keyed up.
+                _toggleLatched = false;
+                if (Time.unscaledTime >= _monitorUntil)
+                {
+                    if (_micClip != null) StopCapture();
+                    LocalTransmitting = false;
+                    LocalLevel = 0f;
+                    return;
+                }
             }
 
             TickCapture();
@@ -112,6 +117,11 @@ namespace VoxelEngine.Networking
         /// <summary>False while the mic is only feeding the settings meter.</summary>
         private bool _canSend;
 
+        /// <summary>Toggle-to-talk latch. Edge detection has to happen once per
+        /// FRAME, not once per captured block - a frame can drain zero blocks or
+        /// two, and either would miss or double a keypress.</summary>
+        private bool _toggleLatched;
+
         // ─────────────────────────── microphone ───────────────────────────
 
         private void TickCapture()
@@ -119,10 +129,21 @@ namespace VoxelEngine.Networking
             if (!GameSettings.VoiceEnabled)
             {
                 if (_micClip != null) StopCapture();
+                _toggleLatched = false;
                 LocalTransmitting = false;
                 LocalLevel = Mathf.MoveTowards(LocalLevel, 0f, Time.unscaledDeltaTime * 3f);
                 return;
             }
+
+            if (GameSettings.VoiceToggleToTalk)
+            {
+                // The talk key never latches while a text field owns the
+                // keyboard - typing the bound letter must not open the mic.
+                if (!VoxelEngine.UI.UIState.TextInputActive
+                    && GameSettings.WasPressed(InputAction.PushToTalk))
+                    _toggleLatched = !_toggleLatched;
+            }
+            else _toggleLatched = false;
 
             if (_micClip == null)
             {
@@ -214,6 +235,7 @@ namespace VoxelEngine.Networking
                 _micClip = null;
             }
             _captureBlock = System.Array.Empty<float>();
+            _toggleLatched = false;
             LocalTransmitting = false;
         }
 
@@ -228,17 +250,24 @@ namespace VoxelEngine.Networking
             LocalLevel = Mathf.Clamp01(Mathf.Max(LocalLevel * 0.75f, rms * 8f));
 
             bool open;
-            if (GameSettings.VoiceOpenMic)
+            switch (GameSettings.VoiceMode)
             {
-                if (rms >= GameSettings.VoiceActivation) _gateUntil = Time.unscaledTime + OpenMicHangover;
-                open = Time.unscaledTime < _gateUntil;
-            }
-            else
-            {
-                // Push to talk never fires while a text field owns the keyboard -
-                // typing the bound letter must not go on the air.
-                open = !VoxelEngine.UI.UIState.TextInputActive
-                       && GameSettings.IsHeld(InputAction.PushToTalk);
+                case VoiceTalkMode.OpenMic:
+                    if (rms >= GameSettings.VoiceActivation) _gateUntil = Time.unscaledTime + OpenMicHangover;
+                    open = Time.unscaledTime < _gateUntil;
+                    break;
+
+                case VoiceTalkMode.Toggle:
+                    // Latched in Update; the latch already respects text fields.
+                    open = _toggleLatched;
+                    break;
+
+                default:
+                    // Push to talk never fires while a text field owns the keyboard -
+                    // typing the bound letter must not go on the air.
+                    open = !VoxelEngine.UI.UIState.TextInputActive
+                           && GameSettings.IsHeld(InputAction.PushToTalk);
+                    break;
             }
 
             LocalTransmitting = open && _canSend;
