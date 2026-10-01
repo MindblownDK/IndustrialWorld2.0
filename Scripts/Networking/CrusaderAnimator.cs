@@ -152,8 +152,15 @@ namespace VoxelEngine.Networking
                 Debug.Log("[Crusader] attack replicated (slash clip "
                     + _lengths[ATTACK].ToString("F2") + "s)");
             }
+            // 14.18.6: the pack slash is a full theatrical windup-and-recover,
+            // far longer than the actual swing cadence (sword cooldown 0.45 s).
+            // Play it fast enough to fit a snappy window so the animation keeps
+            // up with the action instead of dragging behind it.
+            const float window = 0.55f;
+            float speed = Mathf.Clamp(_lengths[ATTACK] * 0.85f / window, 1f, 3.5f);
+            _playables[ATTACK].SetSpeed(speed);
             _playables[ATTACK].SetTime(0.0);
-            _attackTime = _lengths[ATTACK] * 0.85f;   // release into locomotion just before the end
+            _attackTime = _lengths[ATTACK] * 0.85f / speed;   // release just before the clip ends
         }
 
         /// <summary>Owner avatars are invisible to their own player - stop paying
@@ -254,10 +261,12 @@ namespace VoxelEngine.Networking
             else if (LowHealth && _hasClip[SAD]) _targets[SAD] = 1f;   // hurt beats stance
             else _targets[idleSlot] = 1f;
 
-            // Crossfade and normalize.
+            // Crossfade and normalize. Attacks blend much faster than
+            // locomotion - a swing must snap in, not ease in.
             float k = 1f - Mathf.Exp(-9f * dt);
+            float kFast = 1f - Mathf.Exp(-22f * dt);
             for (int i = 0; i < CLIP_COUNT; i++)
-                _weights[i] = Mathf.Lerp(_weights[i], _targets[i], k);
+                _weights[i] = Mathf.Lerp(_weights[i], _targets[i], i == ATTACK ? kFast : k);
             float total = 0f;
             for (int i = 0; i < CLIP_COUNT; i++) total += _weights[i];
             if (total < 0.0001f) { _weights[IDLE] = 1f; total = 1f; }

@@ -1,9 +1,15 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.18.5-dev`
+**Current Version:** `14.18.6-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.18.6-dev] Quickened Steel
+
+**Type:** PATCH - the replicated swing kept up poorly with the actual attack cadence.
+
+The pack's slash clip is a full theatrical windup-slash-recover, far longer than the sword's real 0.45 s swing cooldown, so the animation dragged behind the action. The swing now plays at matched speed (clip compressed into a ~0.55 s window, speed clamped 1x-3.5x) and blends in much faster than locomotion (snap-in crossfade for the attack slot only) - the visible slash lands when the hit lands, and auto-swinging reads as continuous fast strikes.
 
 ### [14.18.5-dev] The Swing Heard Round The World
 
