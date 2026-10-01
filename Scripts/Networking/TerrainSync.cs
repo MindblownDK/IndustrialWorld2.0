@@ -116,14 +116,19 @@ namespace VoxelEngine.Networking
         /// <summary>Every edited chunk of the current planet, compressed for the wire.
         /// Join-time only - reads the chunk store, so this is deliberately not cheap.</summary>
         public static List<TerrainChunkData> GatherWireChunks()
+            => new List<TerrainChunkData>(StreamWireChunks());
+
+        /// <summary>Lazy form of GatherWireChunks (14.24.1). Reading the region files
+        /// and deflating every edited chunk is the most expensive thing the host does
+        /// on a join; yielding per chunk lets the caller compress a few per frame
+        /// instead of stalling the whole world for seconds. Enumerate it once.</summary>
+        public static IEnumerable<TerrainChunkData> StreamWireChunks()
         {
-            var list = new List<TerrainChunkData>();
             var world = ActiveWorld.Current as VoxelEngine.Cosmos.SphereWorld;
-            if (world == null) return list;
-            foreach (var data in world.GatherModifiedChunks())
-                list.Add(new TerrainChunkData
-                { Coord = data.coord, Compressed = Compress(data.uncompressedVoxelBytes) });
-            return list;
+            if (world == null) yield break;
+            foreach (var data in world.StreamModifiedChunks())
+                yield return new TerrainChunkData
+                { Coord = data.coord, Compressed = Compress(data.uncompressedVoxelBytes) };
         }
 
         /// <summary>Adopt one edited chunk from the wire. Returns true when it was applied.

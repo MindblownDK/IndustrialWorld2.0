@@ -136,20 +136,24 @@ namespace VoxelEngine.Networking
         /// Empty containers are included on purpose - an empty host container
         /// must clear a joiner's stale copy.</summary>
         public static List<ContainerRecord> GatherSnapshot()
+            => new List<ContainerRecord>(StreamSnapshot());
+
+        /// <summary>Lazy form of GatherSnapshot (14.24.1), yielding one record at a
+        /// time so a join can serialize a few containers per frame instead of
+        /// walking the whole world in one stalled frame. Enumerate it once.</summary>
+        public static IEnumerable<ContainerRecord> StreamSnapshot()
         {
-            var list = new List<ContainerRecord>();
             var persistence = VoxelEngine.Persistence.WorldStatePersistence.Instance;
-            if (persistence == null) return list;
+            if (persistence == null) yield break;
             foreach (var block in Object.FindObjectsByType<PlacedBlock>(FindObjectsSortMode.None))
             {
                 if (block == null || block.Item == null) continue;
                 if (block.GetComponent<VoxelEngine.GridSystem.GridBlock>()?.Grid != null) continue;
                 var json = persistence.CaptureContainerJson(block.gameObject);
                 if (json == null) continue;
-                list.Add(new ContainerRecord
-                { ItemId = block.Item.itemId, Position = block.transform.position, Json = json });
+                yield return new ContainerRecord
+                { ItemId = block.Item.itemId, Position = block.transform.position, Json = json };
             }
-            return list;
         }
     }
 

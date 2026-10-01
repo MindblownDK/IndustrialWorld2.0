@@ -61,6 +61,19 @@ namespace VoxelEngine.Player
         [Tooltip("Minimum local-up component of a surface normal that counts as walkable terrain.")]
         [Range(0.05f, 0.95f)] public float walkableGroundNormalMin = 0.18f;
 
+        // Footing settle (14.24.1). These are the downward half of the footing
+        // solve and are deliberately constants, not inspector fields: they are a
+        // correctness guard against upward drift, not a feel knob.
+        /// <summary>Hover below this is left alone, so the lift and settle halves cannot buzz.</summary>
+        private const float FootSettleDeadband = 0.005f;
+        /// <summary>Largest hover treated as a footing error. Anything taller is a real fall.</summary>
+        private const float MaxFootSettle = 0.35f;
+        /// <summary>How fast a hover is given back, in metres per second.</summary>
+        private const float FootSettleSpeed = 3f;
+        /// <summary>Lift above which the footing recovery counts as catching a fall
+        /// and cancels downward velocity. Below it the ground stick is left intact.</summary>
+        private const float MinRecoveryToCancelFall = 0.02f;
+
         [Header("Jump / Gravity")]
         public float jumpHeight = 1.4f;
         public float gravity = -22f;
@@ -134,7 +147,12 @@ namespace VoxelEngine.Player
             _spawnGraceUntil = Time.time + Mathf.Max(0.5f, seconds);
         }
         // Reused by terrain support probes to avoid per-frame raycast allocations.
-        private readonly RaycastHit[] _terrainProbeHits = new RaycastHit[12];
+        // 14.24.1: 12 was not enough. This probe runs on EVERY layer and the ray is
+        // over 3 m long, so inside a base or a forest the buffer overflowed - and an
+        // overflowed RaycastNonAlloc returns an ARBITRARY subset, not the nearest
+        // ones, so the ground itself could be the hit that got dropped. The footing
+        // solve then went blind exactly where the player most needed it held down.
+        private readonly RaycastHit[] _terrainProbeHits = new RaycastHit[32];
 
         // ===== Editor inspector helpers (for the in-inspector toggle button) =====
         [HideInInspector] public bool inspectorFlyToggle;
@@ -619,12 +637,15 @@ namespace VoxelEngine.Player
             }
 
             // -- move --
-            // Keep the small radial anti-stick lift, then run a post-move footing
-            // recovery below for both flat and spherical terrain.
-            Vector3 moveVec = _velocity * dt;
-            if (_grounded && GravityProvider.IsRadial)
-                moveVec += up * 0.015f;
-            _cc.Move(moveVec);
+            // 14.24.1: the old "small radial anti-stick lift" added a FLAT 1.5 cm
+            // along up every grounded frame on a sphere. That is a per-FRAME
+            // nudge, not a per-second one - 0.9 m/s at 60 fps - and the footing
+            // recovery below could only ever push UP, so nothing gave it back.
+            // Standing still, the player slowly climbed off the planet until the
+            // ground check lost the surface. Anti-stick is now the job of the
+            // footing recovery, which solves to an absolute clearance in BOTH
+            // directions and therefore has a fixed point instead of a drift.
+            _cc.Move(_velocity * dt);
 
             if (!inWater)
                 RecoverTerrainFooting(up);
@@ -848,9 +869,18 @@ namespace VoxelEngine.Player
         }
 
         /// <summary>
-        /// Corrects a controller that has been nudged fractionally into a terrain mesh
-        /// after a move. This runs after collision resolution so uphill traversal stays
-        /// smooth without snapping the player upward while airborne.
+        /// Holds the capsule at a fixed clearance above the walkable ground after a
+        /// move: lifts it out of a terrain mesh it was nudged into, and settles it
+        /// back down when it ends up hovering. This runs after collision resolution
+        /// so uphill traversal stays smooth without snapping the player upward while
+        /// airborne.
+        ///
+        /// 14.24.1 - the settle half is new and is what makes this safe. The solve is
+        /// ABSOLUTE: the target is always "feet exactly footClearance above the
+        /// ground", measured fresh each frame, so it has a fixed point. The old
+        /// lift-only version had no fixed point at all - any upward nudge from
+        /// elsewhere in the move pipeline simply stayed, and a per-frame nudge
+        /// accumulated into a slow climb off the planet.
         /// </summary>
         private void RecoverTerrainFooting(Vector3 up)
         {
@@ -861,15 +891,38 @@ namespace VoxelEngine.Player
             if (!TryGetWalkableGround(transform.position, up, recoveryBelow, out var hit)) return;
 
             float feetAboveGround = Vector3.Dot(transform.position - hit.point, up);
-            float correction = footClearance - feetAboveGround;
-            if (correction <= 0.001f) return;
+            float correction = footClearance - feetAboveGround;   // + lift, - settle
 
-            // Recover a bad overlap over a few frames rather than teleporting up
-            // a cliff in one frame.
-            correction = Mathf.Min(correction, maxRise);
-            _cc.Move(up * correction);
-            if (VerticalSpeed(up) < 0f)
-                _velocity = Vector3.ProjectOnPlane(_velocity, up);
+            if (correction > 0.001f)
+            {
+                // Recover a bad overlap over a few frames rather than teleporting up
+                // a cliff in one frame.
+                correction = Mathf.Min(correction, maxRise);
+                _cc.Move(up * correction);
+
+                // Only a REAL recovery cancels the fall. A sub-centimetre maintenance
+                // nudge used to wipe the downward stick velocity too, which meant the
+                // one force holding the player on the ground was deleted on most
+                // frames - the other half of the 14.24.1 climb. Keep the stick.
+                if (correction > MinRecoveryToCancelFall && VerticalSpeed(up) < 0f)
+                    _velocity = Vector3.ProjectOnPlane(_velocity, up);
+                _grounded = true;
+                return;
+            }
+
+            // Hovering. The deadband is wider on this side than the 1 mm lift band
+            // so the two halves can never buzz against each other.
+            if (correction > -FootSettleDeadband) return;
+            if (!_grounded) return;                       // genuinely airborne: gravity owns it
+            if (VerticalSpeed(up) > 0.01f) return;        // jumping or launched: leave it alone
+
+            float hover = -correction;
+            if (hover > MaxFootSettle) return;            // a real drop, not a hover
+
+            // Rate-capped so stepping off a low ledge still reads as a step down
+            // rather than a snap, but the target it converges to is absolute.
+            float step = Mathf.Max(FootSettleDeadband, FootSettleSpeed * Time.deltaTime);
+            _cc.Move(-up * Mathf.Min(hover, step));
             _grounded = true;
         }
 

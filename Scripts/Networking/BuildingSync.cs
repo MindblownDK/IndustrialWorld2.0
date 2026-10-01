@@ -162,8 +162,13 @@ namespace VoxelEngine.Networking
 
         /// <summary>Everything standing right now, as wire-ready snapshot data.</summary>
         public static List<PieceSnapshot> GatherSnapshot()
+            => new List<PieceSnapshot>(StreamSnapshot());
+
+        /// <summary>Lazy form of GatherSnapshot (14.24.1), yielding one piece at a
+        /// time so a join can capture a few per frame instead of walking the whole
+        /// base in one stalled frame. Enumerate it once.</summary>
+        public static IEnumerable<PieceSnapshot> StreamSnapshot()
         {
-            var list = new List<PieceSnapshot>();
             foreach (var pb in Object.FindObjectsByType<PlacedTieredBlock>(FindObjectsSortMode.None))
             {
                 if (pb == null || pb.definition == null) continue;   // ghosts carry no definition
@@ -193,9 +198,8 @@ namespace VoxelEngine.Networking
                     snap.LockLocked = codeLock.isLocked;
                     snap.LockAuthorized = new List<string>(codeLock.authorizedIds);
                 }
-                list.Add(snap);
+                yield return snap;
             }
-            return list;
         }
 
         /// <summary>Restore-style instantiation shared by live placement and the

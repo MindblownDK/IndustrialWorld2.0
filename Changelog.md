@@ -1,9 +1,42 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.24.0-dev`
+**Current Version:** `14.24.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.24.1-dev] Nothing Holding You Down
+
+**Type:** PATCH - two bug fixes. No save format, no wire format and no public API changed.
+
+**1. The player slowly climbed off the planet while standing still.**
+
+The move step added a flat upward nudge every grounded frame on a spherical world, described in the code as a "small radial anti-stick lift". 1.5 cm sounds small, but it was per FRAME rather than per second: 0.9 m/s of upward forcing at 60 fps, and faster the better the machine. Nothing in the pipeline could give it back. The footing recovery that ran immediately after it only ever pushed UP - it had no downward half at all - so the capsule had a floor but no ceiling, and the camera rode the drift up with it.
+
+The footing recovery made it worse rather than better. Every time it fired it also cancelled the player's downward velocity, including for sub-centimetre maintenance nudges on perfectly flat ground. The constant downward stick that holds a walker on a sphere is the one force that could have answered the lift, and it was being deleted on most frames.
+
+Three changes, all in the same direction:
+
+- The per-frame anti-stick lift is gone. There is now no unconditional upward term in the walk pipeline at all.
+- The footing recovery is an absolute solve in BOTH directions. The target is "feet exactly the configured clearance above the walkable ground", re-measured from the live transform each frame, so it has a fixed point: it lifts a capsule that has sunk into a mesh, and it settles one that is hovering. A hover is given back at 3 m/s and only up to 35 cm, so a real fall is still a fall and stepping off a ledge still reads as a step down. Anti-stick is now this solve's job, done properly.
+- Only a recovery worth more than 2 cm counts as catching a fall and cancels downward velocity. Maintenance nudges leave the ground stick intact.
+
+This is the same class of defect as the avatar foot float fixed in 14.23.1: a correction measured against a position that already contains the correction has no fixed point, and anything that nudges in one direction only will drift forever. Both halves are now absolute solves.
+
+The ground probe buffer went from 12 hits to 32 while this was being read. The probe runs on every layer over a 3 m ray, so inside a base or a forest it overflowed - and an overflowed non-allocating raycast returns an arbitrary subset rather than the nearest hits, meaning the ground itself could be the hit that was dropped. The footing solve went blind in exactly the places where the player most needs it held down.
+
+**2. The host froze for about five seconds whenever a client joined.**
+
+14.21.1 spread the join catch-up over frames and this survived it, because only half the work was being spread. The frame breaks sat around the BROADCAST loops, but each of the six phases still opened with a synchronous full-world gather: a scene-wide object walk plus a JSON capture per object, and for terrain a blocking read of every region file off disk plus a deflate per edited chunk. Six of those in six frames is the same five seconds, served as six very long frames instead of one. The host stopped drawing either way.
+
+- Every gather is now lazy. Base pieces, item blocks, containers, machines, drops and terrain chunks each yield one record at a time instead of building a finished list, so the expensive per-item work can be interrupted.
+- Frame breaks are driven by a time budget of 4 ms per frame rather than a fixed item count, and they now cover the capture as well as the send. A cheap record and a chunk that takes 3 ms to deflate each cost what they cost, and the frame ends when the budget does. The host's frame time during a join is bounded by construction however large the world grows.
+- The terrain phase captures and sends interleaved. A compressed chunk is a complete wire message on its own, so there is nothing to gain from holding them all in memory first, and the deflate is the cost the budget most needs to break up.
+- Each phase now logs its item count, wall time and the number of frames it spanned. A phase reporting hundreds of milliseconds "across 1 frame" is the signature of a gather that is still synchronous - which is exactly how this one was found, and how the next one will be.
+
+The join still moves the same bytes and takes the same wall time. It no longer does it with the host's frame held open.
+
+The chunk walk is now enumerated across frames rather than inside one, so live chunks are re-validated at the point they are read rather than when they were listed, and the merge rule is unchanged: a loaded chunk still beats the stored copy of the same coordinate.
 
 ### [14.24.0-dev] What You Left Here
 

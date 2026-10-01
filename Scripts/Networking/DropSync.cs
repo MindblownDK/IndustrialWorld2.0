@@ -164,10 +164,15 @@ namespace VoxelEngine.Networking
         /// <summary>Every live drop, wire-ready. Pre-session drops that never met
         /// the network get an id here so the snapshot can carry them.</summary>
         public static List<DropRecord> GatherSnapshot()
+            => new List<DropRecord>(StreamSnapshot());
+
+        /// <summary>Lazy form of GatherSnapshot (14.24.1), yielding one record at a
+        /// time so a join can serialize a few drops per frame instead of walking the
+        /// whole world in one stalled frame. Enumerate it once.</summary>
+        public static IEnumerable<DropRecord> StreamSnapshot()
         {
-            var list = new List<DropRecord>();
             var persistence = VoxelEngine.Persistence.WorldStatePersistence.Instance;
-            if (persistence == null) return list;
+            if (persistence == null) yield break;
             foreach (var drop in Object.FindObjectsByType<DroppedItem>(FindObjectsSortMode.None))
             {
                 if (drop == null || drop.stack == null || drop.stack.IsEmpty) continue;
@@ -179,15 +184,14 @@ namespace VoxelEngine.Networking
                 }
                 var json = persistence.CaptureStackJson(drop.stack);
                 if (json == null) continue;
-                list.Add(new DropRecord
+                yield return new DropRecord
                 {
                     Id = drop.NetId,
                     StackJson = json,
                     Position = drop.transform.position,
                     Settled = drop.IsSettled
-                });
+                };
             }
-            return list;
         }
     }
 }

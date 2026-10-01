@@ -1335,12 +1335,40 @@ namespace VoxelEngine.Networking
         // is spread instead: one gather per frame, and a frame break every few
         // broadcasts inside each gather. The join takes the same wall time and
         // the host keeps rendering through it.
+        //
+        // 14.24.1 - that was only half the job and the freeze survived it. The
+        // frame breaks sat around the BROADCAST loops, but each phase still
+        // began with a synchronous full-world gather: FindObjectsByType plus a
+        // JSON capture per object, and for terrain a blocking read of every
+        // region file off disk plus a deflate per edited chunk. Six of those in
+        // six frames is the same five seconds, just served as six very long
+        // frames instead of one. So:
+        //
+        //   1. Every gather is now a lazy IEnumerable (Stream*), yielding one
+        //      record at a time instead of returning a finished list.
+        //   2. Frame breaks are driven by a TIME BUDGET rather than a fixed
+        //      item count, and cover the capture as well as the send. A record
+        //      that is cheap to build and a chunk that takes 3 ms to deflate
+        //      both cost what they cost, and the frame ends when the budget
+        //      does - so the host's frame time is bounded by construction
+        //      however big the world gets.
+        //   3. Each phase logs its item count and wall time, so a future
+        //      regression names itself instead of being guessed at.
 
-        /// <summary>Broadcasts between frame breaks, minus one (power of two).</summary>
-        private const int SnapshotYieldMask = 3;
+        /// <summary>Main-thread milliseconds the catch-up may spend per frame.
+        /// Small enough to stay invisible at 60 fps (16.7 ms/frame).</summary>
+        private const float SnapshotFrameBudgetMs = 4f;
 
         private Coroutine _snapshotStream;
         private readonly Queue<NetworkConnection> _snapshotQueue = new Queue<NetworkConnection>();
+        private readonly System.Diagnostics.Stopwatch _snapshotFrameClock = new System.Diagnostics.Stopwatch();
+
+        /// <summary>True when this frame's catch-up budget is spent. The caller
+        /// yields on true; the clock restarts on the far side of the frame break.</summary>
+        private bool BudgetSpent()
+            => _snapshotFrameClock.Elapsed.TotalMilliseconds >= SnapshotFrameBudgetMs;
+
+        private void ResetFrameBudget() => _snapshotFrameClock.Restart();
 
         /// <summary>Queue a full catch-up for one target (null = upload to the
         /// host). Two joiners arriving together are served one after the other
@@ -1351,10 +1379,22 @@ namespace VoxelEngine.Networking
             if (_snapshotStream == null) _snapshotStream = StartCoroutine(SnapshotStreamLoop());
         }
 
+        /// <summary>One line per catch-up phase. "across 1 frame" on a phase that
+        /// took hundreds of ms is the signature of a gather that is still
+        /// synchronous - that is exactly how the 14.24.1 freeze was found.</summary>
+        private static void LogCatchUpPhase(string phase, int count,
+            System.Diagnostics.Stopwatch clock, int startFrame)
+        {
+            Debug.Log($"[Join] catch-up {phase}: {count} item(s) in "
+                      + $"{clock.Elapsed.TotalMilliseconds:F0} ms across "
+                      + $"{Mathf.Max(1, Time.frameCount - startFrame)} frame(s).");
+        }
+
         private IEnumerator SnapshotStreamLoop()
         {
             while (_snapshotQueue.Count > 0)
             {
+                ResetFrameBudget();
                 var target = _snapshotQueue.Dequeue();
                 // A client can disconnect mid-catch-up; broadcasting at a dead
                 // connection is wasted serialization, so re-check each phase.
@@ -1457,7 +1497,15 @@ namespace VoxelEngine.Networking
         private IEnumerator SendBlockSnapshot(NetworkConnection target)
         {
             const int ChunkSize = 32;
-            var blocks = BlockSync.GatherSnapshot();
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            int startFrame = Time.frameCount;
+
+            var blocks = new List<BlockSnapshot>();
+            foreach (var snap in BlockSync.StreamSnapshot())
+            {
+                blocks.Add(snap);
+                if (BudgetSpent()) { yield return null; ResetFrameBudget(); }
+            }
             if (blocks.Count == 0) yield break;
             int total = Mathf.CeilToInt(blocks.Count / (float)ChunkSize);
             for (int i = 0; i < total; i++)
@@ -1471,8 +1519,9 @@ namespace VoxelEngine.Networking
                 };
                 if (target != null) _networkManager.ServerManager.Broadcast(target, chunk, true);
                 else _networkManager.ClientManager.Broadcast(chunk);
-                if ((i & SnapshotYieldMask) == SnapshotYieldMask) yield return null;
+                if (BudgetSpent()) { yield return null; ResetFrameBudget(); }
             }
+            LogCatchUpPhase("item blocks", blocks.Count, clock, startFrame);
         }
 
         public void SendContainerState(string itemId, Vector3 pos, string json)
@@ -1514,7 +1563,15 @@ namespace VoxelEngine.Networking
         private IEnumerator SendContainerSnapshot(NetworkConnection target)
         {
             const int ChunkSize = 16;
-            var records = ContainerSync.GatherSnapshot();
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            int startFrame = Time.frameCount;
+
+            var records = new List<ContainerRecord>();
+            foreach (var record in ContainerSync.StreamSnapshot())
+            {
+                records.Add(record);
+                if (BudgetSpent()) { yield return null; ResetFrameBudget(); }
+            }
             if (records.Count == 0) yield break;
             int total = Mathf.CeilToInt(records.Count / (float)ChunkSize);
             for (int i = 0; i < total; i++)
@@ -1528,8 +1585,9 @@ namespace VoxelEngine.Networking
                 };
                 if (target != null) _networkManager.ServerManager.Broadcast(target, chunk, true);
                 else _networkManager.ClientManager.Broadcast(chunk);
-                if ((i & SnapshotYieldMask) == SnapshotYieldMask) yield return null;
+                if (BudgetSpent()) { yield return null; ResetFrameBudget(); }
             }
+            LogCatchUpPhase("containers", records.Count, clock, startFrame);
         }
 
         public void SendMachineState(string itemId, Vector3 pos, string json)
@@ -1571,7 +1629,15 @@ namespace VoxelEngine.Networking
         private IEnumerator SendMachineSnapshot(NetworkConnection target)
         {
             const int ChunkSize = 16;
-            var records = MachineSync.GatherSnapshot();
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            int startFrame = Time.frameCount;
+
+            var records = new List<MachineRecord>();
+            foreach (var record in MachineSync.StreamSnapshot())
+            {
+                records.Add(record);
+                if (BudgetSpent()) { yield return null; ResetFrameBudget(); }
+            }
             if (records.Count == 0) yield break;
             int total = Mathf.CeilToInt(records.Count / (float)ChunkSize);
             for (int i = 0; i < total; i++)
@@ -1585,8 +1651,9 @@ namespace VoxelEngine.Networking
                 };
                 if (target != null) _networkManager.ServerManager.Broadcast(target, chunk, true);
                 else _networkManager.ClientManager.Broadcast(chunk);
-                if ((i & SnapshotYieldMask) == SnapshotYieldMask) yield return null;
+                if (BudgetSpent()) { yield return null; ResetFrameBudget(); }
             }
+            LogCatchUpPhase("machines", records.Count, clock, startFrame);
         }
 
         public void SendDropSpawned(string id, string stackJson, Vector3 pos, Vector3 toss)
@@ -1686,7 +1753,15 @@ namespace VoxelEngine.Networking
         private IEnumerator SendDropSnapshot(NetworkConnection target)
         {
             const int ChunkSize = 32;
-            var records = DropSync.GatherSnapshot();
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            int startFrame = Time.frameCount;
+
+            var records = new List<DropRecord>();
+            foreach (var record in DropSync.StreamSnapshot())
+            {
+                records.Add(record);
+                if (BudgetSpent()) { yield return null; ResetFrameBudget(); }
+            }
             if (records.Count == 0) yield break;
             int total = Mathf.CeilToInt(records.Count / (float)ChunkSize);
             for (int i = 0; i < total; i++)
@@ -1700,8 +1775,9 @@ namespace VoxelEngine.Networking
                 };
                 if (target != null) _networkManager.ServerManager.Broadcast(target, chunk, true);
                 else _networkManager.ClientManager.Broadcast(chunk);
-                if ((i & SnapshotYieldMask) == SnapshotYieldMask) yield return null;
+                if (BudgetSpent()) { yield return null; ResetFrameBudget(); }
             }
+            LogCatchUpPhase("drops", records.Count, clock, startFrame);
         }
 
         private void OnServerTerrainChunk(NetworkConnection conn, TerrainChunkBroadcast msg, Channel channel)
@@ -1727,11 +1803,16 @@ namespace VoxelEngine.Networking
         /// connection when called as server, up to the server when target is null.</summary>
         private IEnumerator SendTerrainSnapshot(NetworkConnection target)
         {
-            var chunks = TerrainSync.GatherWireChunks();
-            if (chunks.Count == 0) yield break;
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            int startFrame = Time.frameCount;
             string body = TerrainSync.CurrentBodyName();
             int sent = 0;
-            foreach (var chunk in chunks)
+
+            // Capture and send interleaved: a compressed chunk is a wire message
+            // on its own, so there is nothing to gain from holding them all in
+            // memory first - and the deflate is the expensive part the budget is
+            // really there to break up.
+            foreach (var chunk in TerrainSync.StreamWireChunks())
             {
                 var msg = new TerrainChunkBroadcast
                 {
@@ -1740,9 +1821,12 @@ namespace VoxelEngine.Networking
                 };
                 if (target != null) _networkManager.ServerManager.Broadcast(target, msg, true);
                 else _networkManager.ClientManager.Broadcast(msg);
-                if ((++sent & SnapshotYieldMask) == SnapshotYieldMask) yield return null;
+                sent++;
+                if (BudgetSpent()) { yield return null; ResetFrameBudget(); }
             }
-            Debug.Log($"[NetworkBootstrap] Terrain catch-up: {(target != null ? "sent" : "uploaded")} {chunks.Count} edited chunk(s).");
+            if (sent == 0) yield break;
+            Debug.Log($"[NetworkBootstrap] Terrain catch-up: {(target != null ? "sent" : "uploaded")} {sent} edited chunk(s).");
+            LogCatchUpPhase("terrain", sent, clock, startFrame);
         }
 
         private void OnServerBaseSnapshot(NetworkConnection conn, BaseSnapshotBroadcast msg, Channel channel)
@@ -1763,7 +1847,15 @@ namespace VoxelEngine.Networking
         private IEnumerator SendBaseSnapshot(NetworkConnection target)
         {
             const int ChunkSize = 32;   // comfortably inside a reliable packet
-            var pieces = BuildingSync.GatherSnapshot();
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            int startFrame = Time.frameCount;
+
+            var pieces = new List<PieceSnapshot>();
+            foreach (var piece in BuildingSync.StreamSnapshot())
+            {
+                pieces.Add(piece);
+                if (BudgetSpent()) { yield return null; ResetFrameBudget(); }
+            }
             if (pieces.Count == 0) yield break;
             int total = Mathf.CeilToInt(pieces.Count / (float)ChunkSize);
             for (int i = 0; i < total; i++)
@@ -1777,8 +1869,9 @@ namespace VoxelEngine.Networking
                 };
                 if (target != null) _networkManager.ServerManager.Broadcast(target, chunk, true);
                 else _networkManager.ClientManager.Broadcast(chunk);
-                if ((i & SnapshotYieldMask) == SnapshotYieldMask) yield return null;
+                if (BudgetSpent()) { yield return null; ResetFrameBudget(); }
             }
+            LogCatchUpPhase("base pieces", pieces.Count, clock, startFrame);
         }
 
         // ─────────────────────────── teardown ───────────────────────────

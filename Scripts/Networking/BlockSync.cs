@@ -129,15 +129,19 @@ namespace VoxelEngine.Networking
 
         /// <summary>Everything standing (non-grid, item-backed), wire-ready.</summary>
         public static List<BlockSnapshot> GatherSnapshot()
+            => new List<BlockSnapshot>(StreamSnapshot());
+
+        /// <summary>Lazy form of GatherSnapshot (14.24.1), yielding one block at a
+        /// time so a join can capture a few per frame instead of walking the whole
+        /// world in one stalled frame. Enumerate it once.</summary>
+        public static IEnumerable<BlockSnapshot> StreamSnapshot()
         {
-            var list = new List<BlockSnapshot>();
             foreach (var block in Object.FindObjectsByType<PlacedBlock>(FindObjectsSortMode.None))
             {
                 if (block == null || block.Item == null) continue;
                 if (block.GetComponent<VoxelEngine.GridSystem.GridBlock>()?.Grid != null) continue;
-                list.Add(Capture(block));
+                yield return Capture(block);
             }
-            return list;
         }
 
         // ─────────────── helpers ───────────────

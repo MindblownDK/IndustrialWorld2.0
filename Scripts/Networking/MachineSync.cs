@@ -106,20 +106,24 @@ namespace VoxelEngine.Networking
         /// <summary>Every standing block that carries machine runtime, wire-ready.
         /// The join snapshot is the one place transport item lists ride along.</summary>
         public static List<MachineRecord> GatherSnapshot()
+            => new List<MachineRecord>(StreamSnapshot());
+
+        /// <summary>Lazy form of GatherSnapshot (14.24.1), yielding one record at a
+        /// time so a join can serialize a few machines per frame instead of walking
+        /// the whole world in one stalled frame. Enumerate it once.</summary>
+        public static IEnumerable<MachineRecord> StreamSnapshot()
         {
-            var list = new List<MachineRecord>();
             var persistence = VoxelEngine.Persistence.WorldStatePersistence.Instance;
-            if (persistence == null) return list;
+            if (persistence == null) yield break;
             foreach (var block in Object.FindObjectsByType<PlacedBlock>(FindObjectsSortMode.None))
             {
                 if (block == null || block.Item == null) continue;
                 if (block.GetComponent<VoxelEngine.GridSystem.GridBlock>()?.Grid != null) continue;
                 var json = persistence.CaptureMachineRuntimeJson(block.gameObject, includeTransport: true);
                 if (json == null) continue;
-                list.Add(new MachineRecord
-                { ItemId = block.Item.itemId, Position = block.transform.position, Json = json });
+                yield return new MachineRecord
+                { ItemId = block.Item.itemId, Position = block.transform.position, Json = json };
             }
-            return list;
         }
     }
 

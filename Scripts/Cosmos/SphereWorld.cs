@@ -374,11 +374,27 @@ namespace VoxelEngine.Cosmos
         /// <summary>Every player-modified chunk of THIS body: the disk store first,
         /// then live loaded chunks on top (live state wins). Join-time only.</summary>
         public List<VoxelEngine.Persistence.ChunkSaveData> GatherModifiedChunks()
+            => new List<VoxelEngine.Persistence.ChunkSaveData>(StreamModifiedChunks());
+
+        /// <summary>Lazy form of GatherModifiedChunks, yielding one chunk at a time so
+        /// a caller on the main thread can spend a frame budget and keep rendering
+        /// (14.24.1 - this walk reads every region file off disk and was the bulk of
+        /// the host's join freeze). Same result and same merge rule as the list form:
+        /// a live loaded chunk always beats the stored copy of the same coord, which
+        /// is why the live coords are collected up front. Enumerate it once.</summary>
+        public IEnumerable<VoxelEngine.Persistence.ChunkSaveData> StreamModifiedChunks()
         {
-            var byCoord = new Dictionary<Vector3Int, VoxelEngine.Persistence.ChunkSaveData>();
+            // Cheap pass: coords only, no voxel copy. Anything in here wins the
+            // merge, so the stored copy of the same coord is skipped below.
+            var liveCoords = new HashSet<Vector3Int>();
+            foreach (var kv in _chunks)
+                if (kv.Value.isModified && kv.Value.isGenerated && kv.Value.voxels.IsCreated)
+                    liveCoords.Add(kv.Key);
+
             if (_storage != null)
             {
                 _storage.WaitForIdle();   // any queued writes land before we enumerate
+                var seen = new HashSet<Vector3Int>();
                 foreach (var file in System.IO.Directory.GetFiles(_storage.WorldFolder, "r_*.dat"))
                 {
                     var parts = System.IO.Path.GetFileNameWithoutExtension(file).Split('_');
@@ -390,14 +406,20 @@ namespace VoxelEngine.Cosmos
                     {
                         var data = kv.Value;
                         if (data.uncompressedVoxelBytes == null) continue;
-                        byCoord[data.coord] = data;
+                        if (liveCoords.Contains(data.coord)) continue;   // live copy wins
+                        if (!seen.Add(data.coord)) continue;             // one send per coord
+                        yield return data;
                     }
                 }
             }
-            foreach (var kv in _chunks)
-                if (kv.Value.isModified && kv.Value.isGenerated && kv.Value.voxels.IsCreated)
-                    byCoord[kv.Key] = VoxelEngine.Persistence.ChunkSaveData.FromChunk(kv.Value);
-            return new List<VoxelEngine.Persistence.ChunkSaveData>(byCoord.Values);
+
+            // Re-checked at the point of use, not just when the coords were
+            // collected: this enumeration spans frames now, so the streamer can
+            // have unloaded and disposed a chunk in between.
+            foreach (var coord in liveCoords)
+                if (_chunks.TryGetValue(coord, out var chunk)
+                    && chunk != null && chunk.isGenerated && chunk.voxels.IsCreated)
+                    yield return VoxelEngine.Persistence.ChunkSaveData.FromChunk(chunk);
         }
 
         /// <summary>True when this machine has its own edit of the chunk (loaded or

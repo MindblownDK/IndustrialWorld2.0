@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.24.0-dev`
-**Roadmap Version:** `14.24.0-dev`
+**Current Version:** `14.24.1-dev`
+**Roadmap Version:** `14.24.1-dev`
 **Date:** 2026-10-01
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,10 @@
 
 ## 0. Recently Done
 
+### 14.24.1-dev - Nothing Holding You Down
+The walk controller no longer drifts upward while standing still: the per-frame anti-stick lift is gone and the footing recovery is an absolute solve in both directions, so the capsule has a fixed resting clearance instead of a floor with no ceiling. Ground probe buffer widened so the solve cannot go blind in a base or a forest.
+Join catch-up no longer freezes the host. All six snapshot gathers are lazy and interruptible, frame breaks are driven by a 4 ms budget that covers the capture as well as the send, and each phase logs its count, wall time and frame span.
+
 ### 14.24.0-dev - What You Left Here
 Milestone 8 COMPLETE. Per-player state is host-owned: inventory, equipment, hotbar and pose are kept by the host in a sidecar keyed by stable player id, handed back on the next visit, and saved on the host's normal cadence. Records are keyed by the id the server settled on, so no client can write over another's. Guests wait for the host's answer before spawning.
 
@@ -40,9 +44,6 @@ The main-menu join never connected: the auto-join hung off Start, and FishNet's 
 
 ### 14.23.1-dev - Feet On The Ground
 First live test of the main-menu join: a PlayerPrefs read in a field initializer was aborting the rest of the menu's initializers, the joining overlay was mounted from a hook that only fires on the first scene of the run, a world build that threw left a blank scene with no message, and a host quitting left guests in an unserved world. Avatar foot grounding was re-solved absolutely - the 14.21.1 version measured a value that already contained its own output and settled at a permanent half-correction.
-
-### 14.23.0-dev - Somebody Else's World
-Milestone 8 part one: MULTIPLAYER is a main-menu page. A join carries an address through the scene load, world generation is held behind a boot gate until the host's world card (seed, per-planet seed table, chosen system and world rules) arrives in the handshake, and the client then builds the host's planet rather than one of its own saves. A joined world lives in a wiped-on-entry `__joined_` cache folder that never appears in the saves list, which closes the client-side chunk-write half of the 14.21.1 save fault. The gate is a no-op when no join is pending, so single-player boot is byte-for-byte the same path.
 
 ---
 
