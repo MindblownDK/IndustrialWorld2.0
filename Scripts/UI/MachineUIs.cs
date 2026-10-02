@@ -1278,13 +1278,28 @@ namespace VoxelEngine.UI
         {
             if (r == null) return T.MachinePanel();
             var p = T.MachinePanel();
-            p.Add(BuildHeader("📡", r.BeaconName, r.isOn ? "● BROADCASTING" : "○ DARK",
-                r.isOn ? T.AccentCyan : T.AccentDim, T.AccentCyan));
 
-            p.Add(T.StatRow("💡", "Power Use", $"{r.powerDrawWatts:0} W", T.AccentGold));
+            // One honest tri-state: broadcasting (on + supplied), on but the
+            // grid will not pay for it, or switched off.
+            bool broadcasting = r.IsActive;
+            string status = broadcasting ? "● BROADCASTING" : r.isOn ? "○ NO POWER" : "○ OFF";
+            Color statusCol = broadcasting ? T.AccentCyan : r.isOn ? T.AccentAmber : T.AccentDim;
+            p.Add(BuildHeader("📡", r.BeaconName, status, statusCol, T.AccentCyan));
+
+            p.Add(T.StatRow("💡", "Power Use",
+                broadcasting ? $"{r.PowerDraw:0} W · SUPPLIED"
+                             : r.isOn ? $"{r.PowerDraw:0} W · NO SUPPLY" : "0 W",
+                broadcasting || !r.isOn ? T.AccentGold : T.AccentRed));
             p.Add(T.StatRow("📊", "Beam Height", $"{r.beamHeight:0} m", T.AccentCyan));
             p.Add(T.StatRow("🔄", "Dish Rotation", $"{r.dishRotationSpeed:0}°/s", T.AccentTeal));
-            p.Add(T.Spacer(6));
+            p.Add(T.Spacer(2));
+
+            if (!r.HasPowerLink)
+                p.Add(T.Muted("This tower has no power link. Re-run Tools > Voxel Engine > Voxel Engine Setup, then bring a power cable or generator within 4 m of the base."));
+            else if (r.isOn && !r.IsPowerSupplied)
+                p.Add(T.Muted("The switch is on but no powered network reaches the tower - connect a generator or cable within 4 m of the base."));
+
+            p.Add(T.Spacer(4));
 
             System.Action notify = () =>
             {
@@ -1305,7 +1320,7 @@ namespace VoxelEngine.UI
 
             p.Add(T.Spacer(4));
             p.Add(T.Muted("A coastal radar mast with a sky beam. While broadcasting, it shows an on-screen marker to everyone the sharing rule allows."));
-            StarshipTheme.Frame(p, r.isOn ? T.AccentCyan : T.AccentDim);
+            StarshipTheme.Frame(p, statusCol);
             return p;
         }
 

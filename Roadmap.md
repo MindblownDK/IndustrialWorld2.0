@@ -1,7 +1,7 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.32.0-dev`
+**Current Version:** `14.32.1-dev`
 **Roadmap Version:** `14.30.0-dev`
 **Date:** 2026-10-02
 **Status:** Working dev version.
@@ -29,6 +29,9 @@
 
 ## 0. Recently Done
 
+### 14.32.1-dev - A Tower Pays Its Way
+The Stationary Radar Beacon was never wired into the power system at all: the switch was a bare toggle, the panel printed its 10 W unconditionally and BROADCASTING appeared whenever the switch was up. The regenerated prefab now carries a PowerConsumer (10 W, 4 m auto-connect), demand follows the switch, broadcasting follows the network's verdict, and an unpowered or switched-off tower goes dark on every screen at once - beam, HUD marker, orbital contact, warp rendezvous. The panel reports BROADCASTING / NO POWER / OFF honestly and names what to connect when the grid will not pay.
+
 ### 14.32.0-dev - A Ghost Worth Seeing
 The 14.31.0 play round's four reports, fixed at their sources: build previews that drew nothing for any block (both ghost systems built their materials through raw transparent-state property writes; one shared helper now applies URP's canonical keyword state, and both builders trace their preview state to the console one line per change so a silent failure can never hide again); the beacon name box that kicked the player out mid-word (the 4 Hz panel rebuild destroyed the field while typing - one shared themed text-field factory now guards focus, and the grid cryobed's field with it); the radar item wearing iron ore's icon (a duplicated-asset inheritance the self-healer could never repair; the setup tool authors a proper sticker and rebinds); and a custom colour mixer to the left of the preset swatches - R/G/B sliders, live retint while dragging, one commit on release, rebuild deferred for the whole drag.
 A held item whose prefab link is missing now says so on screen instead of failing silently, and the static build system self-heals lost camera/inventory references like its siblings always did.
@@ -47,11 +50,6 @@ Accepted gaps live in Open Scope: the block itself is visible world geometry, se
 Milestone 9 CLOSED. A client's building reaches the host: a placed block travels as its own save-record JSON and is rebuilt through the restore path a save file uses, a removal travels as (grid id, cell), and a brand-new hull uploads once as a whole record the host accepts only for an id it has never seen. The host echoes the resulting structure to everyone, so the builder's copy is confirmed - or corrected - by the machine that owns the hull.
 The precision lattice is now part of the structure fingerprint, so a lattice weld triggers a resend on every machine - the host's own edits included.
 Accepted gaps live in Open Scope: whole-record resends, echo-confirmed builds (no prediction), no refund on a refused cell.
-
-### 14.28.1-dev - A Hold That Was Never There
-A grid cargo container was never in the save seam, so its contents were neither replicated nor written to the save file - a ship's hold came back empty from disk. Covered now through the item-store interface those blocks already implement, on both sides of the seam at once. This also ends the deletion: a client's items were lost to a structure resend because the host's record did not contain the hold.
-Clients no longer run fluid or gas transfers - the host owns a ship's contents - which stops two players overwriting each other's tank type, and an accepted state now briefly suppresses this machine's own announcements for that block so two open panels cannot contradict each other indefinitely.
-OPEN: a client placing a block on a grid is still not replicated to the host.
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).

@@ -1,9 +1,19 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.32.0-dev`
+**Current Version:** `14.32.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.32.1-dev] A Tower Pays Its Way
+
+**Type:** PATCH - the Stationary Radar Beacon was never wired into the power system: its switch was a bare toggle, the panel printed "10 W" unconditionally and the header said BROADCASTING whenever the switch was up, so the tower beamed and reported power with nothing supplying it. Save format unchanged.
+
+The tower is a real static power consumer now. The setup tool's regenerated prefab carries a `PowerConsumer` (10 W demand, 4 m auto-connect to reach a cable or generator parked beside the 2 m base), and the component follows the pattern every other static consumer already uses: demand follows the switch - an enabled tower asks for its 10 W whether or not the grid can pay, a switched-off one asks for nothing - and broadcasting follows the network's verdict. An unpowered or switched-off tower is dark on every screen at once: beam, dish, lamp, the HUD marker, the orbital contact and the warp rendezvous all gate on the one honest state, because the visibility rule already asked "is this beacon lit?" - the tower was simply lying about the answer.
+
+The panel tells the truth in three states now: BROADCASTING (on and supplied), NO POWER (on but no powered network reaches the tower, with a line saying what to connect), and OFF. A tower placed from a prefab that predates the power link says so by name instead of broadcasting for free. Placement previews stay inert as ever - the power node's registration already honours the build system's creating-ghost latch.
+
+**Manual step:** re-run Tools > Voxel Engine > Voxel Engine Setup so the regenerated prefab carries the power link, and bring a generator or power cable within 4 m of a tower's base to keep it broadcasting.
 
 ### [14.32.0-dev] A Ghost Worth Seeing
 

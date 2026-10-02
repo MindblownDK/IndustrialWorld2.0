@@ -11,6 +11,7 @@ GameObject:
   - component: {fileID: 8927467729345376569}
   - component: {fileID: 1153704654114163822}
   - component: {fileID: 7705375311293790040}
+  - component: {fileID: 2546359445962672091}
   m_Layer: 0
   m_Name: StationaryRadarBeacon
   m_TagString: Untagged
@@ -71,3 +72,22 @@ MonoBehaviour:
   beamColor: {r: 0.3, g: 0.85, b: 1, a: 0.35}
   dishRotationSpeed: 45
   isOn: 1
+--- !u!114 &2546359445962672091
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3582573728557537515}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b231df31f45343346a2b14ed69ac7e7a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Power.PowerConsumer
+  connectRadius: 4
+  requireGridAlignedNeighbours: 0
+  gridSize: 1
+  connectionBlockingLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  wattsPerSecond: 10

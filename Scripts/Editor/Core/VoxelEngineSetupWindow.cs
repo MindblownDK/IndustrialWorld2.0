@@ -7916,6 +7916,13 @@ root =>
             var radarComp = radarRoot.AddComponent<VoxelEngine.GridSystem.StationaryRadarBeacon>();
             radarComp.beamHeight = 150f;
             radarComp.dishRotationSpeed = 45f;
+            // The tower is a real power consumer (14.32.1): it demands its
+            // 10 W from the static power network and only broadcasts while the
+            // network pays. 4 m auto-connect reaches a cable or generator
+            // parked next to the tower's 2 m base.
+            var radarPower = radarRoot.AddComponent<VoxelEngine.Power.PowerConsumer>();
+            radarPower.wattsPerSecond = 10f;
+            radarPower.connectRadius = 4f;
             var radarPrefab = PrefabUtility.SaveAsPrefabAsset(radarRoot, radarPrefabPath);
             Object.DestroyImmediate(radarRoot);
 

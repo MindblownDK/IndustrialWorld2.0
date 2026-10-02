@@ -29,6 +29,7 @@ namespace VoxelEngine.GridSystem
         private Material _beamMat;
         private Material _sensorMat;
         private bool _isGhost;   // build-preview copy: inert, never a real beacon
+        private VoxelEngine.Power.PowerConsumer _power;
 
         // ── Beacon identity (14.30.0-dev) ──────────────────────────────────
         private string _beaconId = "";
@@ -49,7 +50,29 @@ namespace VoxelEngine.GridSystem
 
         public BeaconShare BeaconShareMode { get => _share; set => _share = value; }
         public float BeaconRangeM { get => _rangeM; set => _rangeM = Mathf.Max(0f, value); }
-        public bool BeaconLit => isOn;
+
+        /// <summary>True when the switch is on AND the power network is
+        /// actually supplying the tower. Broadcasting, the beam, the marker,
+        /// the orbital contact and the warp rendezvous all follow this one
+        /// verdict: demand follows the switch, success follows the grid.</summary>
+        public bool IsActive => isOn && _power != null && _power.IsPowered;
+
+        /// <summary>The power network's verdict for this tower, independent of
+        /// the switch - the panel shows both so "on but dark" is legible.</summary>
+        public bool IsPowerSupplied => _power != null && _power.IsPowered;
+
+        /// <summary>False only on a prefab that predates the power link - the
+        /// panel says so instead of letting the tower broadcast for free.</summary>
+        public bool HasPowerLink => _power != null;
+
+        /// <summary>Watts the tower demands right now: full demand while
+        /// switched on, zero while off. Supply is the network's answer, not ours.</summary>
+        public float PowerDraw => isOn ? powerDrawWatts : 0f;
+
+        // A beacon that is switched off, or one the grid cannot pay for, is not
+        // broadcasting: the marker channel, the map contact and the rendezvous
+        // all gate on this, so an unpowered tower disappears from every screen.
+        public bool BeaconLit => IsActive;
         public Vector3 BeaconWorldPosition => transform.position;
 
         /// <summary>beamColor is the single source of truth for the tint; the
@@ -88,6 +111,7 @@ namespace VoxelEngine.GridSystem
 
         private void Awake()
         {
+            _power = GetComponent<VoxelEngine.Power.PowerConsumer>();
             CreateVisuals();
 
             // A build-preview ghost is a drawing of a tower, not a tower: no
@@ -136,7 +160,13 @@ namespace VoxelEngine.GridSystem
 
         private void Update()
         {
-            if (isOn)
+            // Demand follows the switch (the grid-beacon lesson): an enabled
+            // tower asks for its watts whether or not the network can pay, so
+            // an unpowered tower reads as a deficit instead of as success.
+            if (_power != null)
+                _power.wattsPerSecond = isOn ? powerDrawWatts : 0f;
+
+            if (IsActive)
             {
                 if (_beam != null && !_beam.activeSelf) _beam.SetActive(true);
                 if (_beaconLight != null) _beaconLight.enabled = true;
