@@ -450,6 +450,10 @@ namespace VoxelEngine.Networking
             var persistence = VoxelEngine.Persistence.WorldStatePersistence.Instance;
             if (persistence == null) return;
 
+            // Whatever happens below, this id is now a hull the network speaks for -
+            // a client that invented it stops treating it as its own private ship.
+            GridBuildSync.MarkHostBorn(record.NetId);
+
             IsApplyingRemote = true;
             try
             {
@@ -561,6 +565,11 @@ namespace VoxelEngine.Networking
 
         private static readonly Dictionary<string, PendingRecord> _pending = new();
 
+        // Records on their way UP from clients (14.29.0) are reassembled apart from
+        // the host's own stream: the two directions have different rules, and a
+        // half-arrived upload must never block the host's record for the same id.
+        private static readonly Dictionary<string, PendingRecord> _pendingFromClients = new();
+
         /// <summary>A record part that has gone this long without its siblings is
         /// abandoned. The host resends on its own schedule, so a dropped set costs a
         /// moment rather than a permanently wrong ship.</summary>
@@ -568,9 +577,37 @@ namespace VoxelEngine.Networking
 
         public static void ReceiveRecordPart(string netId, int part, int totalParts, string payload)
         {
-            if (string.IsNullOrEmpty(netId) || totalParts <= 0 || part < 0 || part >= totalParts) return;
+            if (!Assemble(_pending, netId, part, totalParts, payload, out string json)) return;
+            ApplyRecord(new GridRecord { NetId = netId, Json = json });
+        }
 
-            if (!_pending.TryGetValue(netId, out var pending) || pending.Parts.Length != totalParts)
+        /// <summary>A record a CLIENT uploaded (14.29.0): the only way a hull is born
+        /// on a client's machine. Accepted ONLY for an id the host has never heard of
+        /// - a client can start a new ship, it can never overwrite an existing one.
+        /// The accepted hull is announced straight back out, so every machine
+        /// (including the one that built it) converges on the host's copy.</summary>
+        public static void ReceiveClientRecordPart(string netId, int part, int totalParts, string payload)
+        {
+            if (NetworkSession.Mode != SessionMode.Host) return;
+            if (Find(netId) != null) { _pendingFromClients.Remove(netId); return; }
+            if (!Assemble(_pendingFromClients, netId, part, totalParts, payload, out string json)) return;
+
+            ApplyRecord(new GridRecord { NetId = netId, Json = json });
+            var grid = Find(netId);
+            if (grid == null) return;
+            GridSyncManager.Instance?.RecordShape(grid);
+            AnnounceStructure(grid);
+        }
+
+        /// <summary>Shared part reassembly. True exactly once per complete set, with
+        /// the concatenated JSON; false while parts are still outstanding.</summary>
+        private static bool Assemble(Dictionary<string, PendingRecord> map, string netId,
+            int part, int totalParts, string payload, out string json)
+        {
+            json = null;
+            if (string.IsNullOrEmpty(netId) || totalParts <= 0 || part < 0 || part >= totalParts) return false;
+
+            if (!map.TryGetValue(netId, out var pending) || pending.Parts.Length != totalParts)
             {
                 pending = new PendingRecord
                 {
@@ -578,7 +615,7 @@ namespace VoxelEngine.Networking
                     Filled = 0,
                     StartedAt = Time.time
                 };
-                _pending[netId] = pending;
+                map[netId] = pending;
             }
 
             if (pending.Parts[part] == null) pending.Filled++;
@@ -586,25 +623,26 @@ namespace VoxelEngine.Networking
 
             if (pending.Filled < totalParts)
             {
-                SweepStalePending();
-                return;
+                SweepStalePending(map);
+                return false;
             }
 
-            _pending.Remove(netId);
-            ApplyRecord(new GridRecord { NetId = netId, Json = string.Concat(pending.Parts) });
+            map.Remove(netId);
+            json = string.Concat(pending.Parts);
+            return true;
         }
 
-        private static void SweepStalePending()
+        private static void SweepStalePending(Dictionary<string, PendingRecord> map)
         {
             List<string> stale = null;
-            foreach (var kv in _pending)
+            foreach (var kv in map)
                 if (Time.time - kv.Value.StartedAt > PartTimeoutSeconds)
                     (stale ??= new List<string>()).Add(kv.Key);
             if (stale == null) return;
             foreach (var key in stale)
             {
-                _pending.Remove(key);
-                Debug.LogWarning($"[GridSync] Incomplete grid record for '{key}' timed out; waiting for the host to resend.");
+                map.Remove(key);
+                Debug.LogWarning($"[GridSync] Incomplete grid record for '{key}' timed out; waiting for a resend.");
             }
         }
 
@@ -866,6 +904,7 @@ namespace VoxelEngine.Networking
         {
             _byId.Clear();
             _pending.Clear();
+            _pendingFromClients.Clear();
             LocalControlClaim = "";
             _occupiedSeats.Clear();
         }
@@ -915,6 +954,17 @@ namespace VoxelEngine.Networking
         private void OnDestroy()
         {
             if (Instance == this) Instance = null;
+        }
+
+        /// <summary>Remember a hull's CURRENT shape as already announced. Called after
+        /// a client's build request is performed and echoed (14.29.0), so the poll pass
+        /// a moment later does not resend a record everyone just received.</summary>
+        public void RecordShape(GridEntity grid)
+        {
+            if (grid == null) return;
+            var tag = grid.GetComponent<GridNetTag>();
+            if (tag == null || string.IsNullOrEmpty(tag.Id)) return;
+            _structureHash[tag.Id] = StructureHashOf(grid);
         }
 
         /// <summary>Called when a session ends so the next one seeds its own baseline
@@ -1001,6 +1051,21 @@ namespace VoxelEngine.Networking
                     if (block == null) continue;
                     hash = hash * 31 + Mathf.RoundToInt(block.Damage01 * 16f);
                     hash = hash * 31 + (block.Enabled ? 1 : 0);
+                }
+                // The precision lattice is part of the shape too (14.29.0). It was
+                // invisible here before, so a pipe welded onto the lattice never
+                // triggered a resend at all - on the host's own edits included.
+                var layer = grid.PrecisionAttachments;
+                if (layer != null)
+                {
+                    foreach (var kv in layer.Blocks)
+                    {
+                        hash = hash * 31 + kv.Key.GetHashCode();
+                        var block = kv.Value;
+                        if (block == null) continue;
+                        hash = hash * 31 + Mathf.RoundToInt(block.Damage01 * 16f);
+                        hash = hash * 31 + (block.Enabled ? 1 : 0);
+                    }
                 }
                 return hash;
             }

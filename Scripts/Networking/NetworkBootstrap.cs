@@ -144,6 +144,20 @@ namespace VoxelEngine.Networking
         public string Json;
     }
 
+    /// <summary>A CLIENT building on a hull (14.29.0): one block placed or removed.
+    /// A placement carries the block's full save-record JSON so the host rebuilds it
+    /// through the restore path; a removal carries only the address. Reliable and
+    /// ordered - a lost placement is a block that silently never existed.</summary>
+    public struct GridBuildBroadcast : IBroadcast
+    {
+        public string NetId;
+        public Vector3Int Cell;
+        public Vector3Int PrecisionCell;
+        public bool Precision;
+        public bool Place;
+        public string Json;
+    }
+
     /// <summary>A player pulling a lever on a ship: gear, clamp, coupler, piston,
     /// door. Client -> host as a REQUEST; the host decides and answers with state.
     /// Reliable, because a dropped lock is a ship that drifts away.</summary>
@@ -488,6 +502,7 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.RegisterBroadcast<GridSeatStateBroadcast>(OnServerGridSeatState);
             _networkManager.ServerManager.RegisterBroadcast<GridActionBroadcast>(OnServerGridAction);
             _networkManager.ServerManager.RegisterBroadcast<GridBlockStateBroadcast>(OnServerGridBlockState);
+            _networkManager.ServerManager.RegisterBroadcast<GridBuildBroadcast>(OnServerGridBuild);
             _networkManager.ServerManager.RegisterBroadcast<GridActionStateBroadcast>(OnServerGridActionState);
             _networkManager.ServerManager.RegisterBroadcast<GridSeatDeniedBroadcast>(OnServerGridSeatDenied);
             _networkManager.ServerManager.RegisterBroadcast<GridInputBroadcast>(OnServerGridInput);
@@ -566,6 +581,10 @@ namespace VoxelEngine.Networking
             // and silent for any hull that is parked.
             if (GetComponent<GridSyncManager>() == null)
                 gameObject.AddComponent<GridSyncManager>();
+            // Client grid-build flusher (14.29.0) - a guest's placements travel
+            // to the host at end of frame; idles everywhere else.
+            if (GetComponent<GridBuildSyncManager>() == null)
+                gameObject.AddComponent<GridBuildSyncManager>();
             // Proximity voice (14.20.0) - idles completely while offline or
             // while the player has voice turned off.
             if (GetComponent<VoiceChat>() == null)
@@ -589,6 +608,7 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.UnregisterBroadcast<GridSeatStateBroadcast>(OnServerGridSeatState);
             _networkManager.ServerManager.UnregisterBroadcast<GridActionBroadcast>(OnServerGridAction);
             _networkManager.ServerManager.UnregisterBroadcast<GridBlockStateBroadcast>(OnServerGridBlockState);
+            _networkManager.ServerManager.UnregisterBroadcast<GridBuildBroadcast>(OnServerGridBuild);
             _networkManager.ServerManager.UnregisterBroadcast<GridActionStateBroadcast>(OnServerGridActionState);
             _networkManager.ServerManager.UnregisterBroadcast<GridSeatDeniedBroadcast>(OnServerGridSeatDenied);
             _networkManager.ServerManager.UnregisterBroadcast<GridInputBroadcast>(OnServerGridInput);
@@ -1615,6 +1635,52 @@ namespace VoxelEngine.Networking
             { NetId = state.NetId, Cell = state.Cell, Json = state.Json });
         }
 
+        /// <summary>Client -> host (14.29.0): the local player placed or removed a
+        /// block on a hull the host already owns.</summary>
+        public void RequestGridBuild(string netId, Vector3Int cell, bool precision,
+            Vector3Int precisionCell, bool place, string json)
+        {
+            if (!_clientStarted || string.IsNullOrEmpty(netId)) return;
+            _networkManager.ClientManager.Broadcast(new GridBuildBroadcast
+            {
+                NetId = netId,
+                Cell = cell,
+                Precision = precision,
+                PrecisionCell = precisionCell,
+                Place = place,
+                Json = json ?? ""
+            });
+        }
+
+        /// <summary>Client -> host (14.29.0): a brand-new hull this client just
+        /// started, as a whole record. The host accepts it ONLY for an id it has
+        /// never heard of - see GridSync.ReceiveClientRecordPart.</summary>
+        public void RequestGridRecord(GridRecord record)
+        {
+            if (!_clientStarted || string.IsNullOrEmpty(record.NetId) || string.IsNullOrEmpty(record.Json)) return;
+            string json = record.Json;
+            int total = Mathf.Max(1, Mathf.CeilToInt(json.Length / (float)GridPartChars));
+            for (int i = 0; i < total; i++)
+            {
+                int start = i * GridPartChars;
+                _networkManager.ClientManager.Broadcast(new GridRecordBroadcast
+                {
+                    NetId = record.NetId,
+                    Part = i,
+                    TotalParts = total,
+                    Payload = json.Substring(start, Mathf.Min(GridPartChars, json.Length - start))
+                });
+            }
+        }
+
+        private void OnServerGridBuild(NetworkConnection conn, GridBuildBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted || conn == null || string.IsNullOrEmpty(msg.NetId)) return;
+            // The real placement and removal paths run, so every rule they enforce
+            // applies to a guest's building exactly as it does to the host's own.
+            GridBuildSync.HostPerform(msg.NetId, msg.Cell, msg.Precision, msg.PrecisionCell, msg.Place, msg.Json);
+        }
+
         private void OnServerGridBlockState(NetworkConnection conn, GridBlockStateBroadcast msg, Channel channel)
         {
             if (!_serverStarted || conn == null) return;
@@ -1756,7 +1822,13 @@ namespace VoxelEngine.Networking
 
         private void OnServerGridRecord(NetworkConnection conn, GridRecordBroadcast msg, Channel channel)
         {
-            // Clients do not author grids. Nothing to do, and deliberately no relay.
+            // Clients do not author EXISTING grids - a record for a hull the host
+            // already holds is dropped inside ReceiveClientRecordPart, and there is
+            // deliberately no relay. The one thing a client may do (14.29.0) is
+            // start a brand-new hull: a record for an id the host has never heard
+            // of is adopted and immediately announced back to everyone.
+            if (!_serverStarted || conn == null) return;
+            GridSync.ReceiveClientRecordPart(msg.NetId, msg.Part, msg.TotalParts, msg.Payload);
         }
 
         private void OnServerGridRemoved(NetworkConnection conn, GridRemovedBroadcast msg, Channel channel)
@@ -2442,6 +2514,7 @@ namespace VoxelEngine.Networking
             VoxelEngine.Persistence.PlayerRecords.ClearLocal();
             GridSync.Clear();
             GridStateSync.Clear();
+            GridBuildSync.Clear();
             GridSyncManager.Instance?.ForgetBaseline();
             _statusLine = "Offline";
             WorldMismatch = false;

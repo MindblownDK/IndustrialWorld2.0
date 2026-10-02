@@ -2325,6 +2325,30 @@ namespace VoxelEngine.Persistence
             ApplyGridBlockState(block, block.gameObject, saved);
         }
 
+        /// <summary>Build one NEW block onto an existing grid from the same JSON the
+        /// save file holds for it (14.29.0). This is the host-side half of grid build
+        /// authority: a client that placed a block captures it through
+        /// <see cref="CaptureGridBlockJson"/> and the host recreates it here through
+        /// the restore path a save file uses, so every rule that path enforces - an
+        /// occupied cell refused, an unknown item skipped - applies to a guest's
+        /// building exactly as it applies to a loaded world. False when nothing was
+        /// added, and adding nothing is always safe.</summary>
+        public bool ApplyGridBlockAddJson(VoxelEngine.GridSystem.GridEntity grid, string json)
+        {
+            if (grid == null || string.IsNullOrEmpty(json)) return false;
+            try
+            {
+                if (_itemById.Count == 0) BuildItemCache();
+                var saved = JsonUtility.FromJson<SavedGridBlock>(json);
+                return saved != null && RestoreOneGridBlock(grid, saved) != null;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning("[WorldState] ApplyGridBlockAddJson: " + ex.Message);
+                return false;
+            }
+        }
+
         private ItemDefinition ResolveGridSourceItem(GridBlock block)
         {
             if (block == null) return null;
@@ -2556,10 +2580,24 @@ namespace VoxelEngine.Persistence
             foreach (var saved in blocks)
             {
                 if (saved == null || saved.isPrecision != precisionPass) continue;
+                RestoreOneGridBlock(grid, saved);
+            }
+        }
+
+        /// <summary>Rebuild ONE block onto an existing grid from its saved record.
+        /// Pulled out of the whole-grid restore loop (14.29.0) so a single block a
+        /// CLIENT built can be added to the host's hull through the exact code path
+        /// a save file uses - same prefab resolution, same state application, no
+        /// second builder to drift out of step with the first. Returns null when the
+        /// record is unusable or the cell is already taken.</summary>
+        private GridBlock RestoreOneGridBlock(GridEntity grid, SavedGridBlock saved)
+        {
+            if (grid == null || saved == null) return null;
+            {   // body kept at loop depth: lifted verbatim from RestoreGridBlocks
                 if (!_itemById.TryGetValue(saved.itemId, out var sourceItem) || sourceItem == null)
                 {
                     Debug.LogWarning($"[WorldState] Skipped grid block '{saved.itemId}' because its source item is unavailable.");
-                    continue;
+                    return null;
                 }
 
                 GameObject prefab = sourceItem is GridBlockItem gridItem ? gridItem.blockPrefab
@@ -2567,7 +2605,7 @@ namespace VoxelEngine.Persistence
                 if (prefab == null)
                 {
                     Debug.LogWarning($"[WorldState] Skipped grid block '{saved.itemId}' because its prefab is unavailable.");
-                    continue;
+                    return null;
                 }
 
                 var go = Instantiate(prefab);
@@ -2660,16 +2698,16 @@ namespace VoxelEngine.Persistence
                 {
                     var shape = block.GetComponent<GridShapeVariantBlock>() ?? block.gameObject.AddComponent<GridShapeVariantBlock>();
                     shape.Configure((VoxelEngine.UI.GridShapeVariant)saved.shapeVariant,
-                        precisionPass ? GridSize.Small : grid.gridSize);
+                        saved.isPrecision ? GridSize.Small : grid.gridSize);
                 }
 
-                if (precisionPass)
+                if (saved.isPrecision)
                 {
                     var layer = grid.GetComponent<GridPrecisionAttachmentLayer>() ?? grid.gameObject.AddComponent<GridPrecisionAttachmentLayer>();
                     if (!layer.AddBlock(saved.precisionPos, saved.precisionHostPos, block, saved.localRotation))
                     {
                         Destroy(go);
-                        continue;
+                        return null;
                     }
                 }
                 else
@@ -2677,13 +2715,14 @@ namespace VoxelEngine.Persistence
                     if (grid.GetBlock(saved.gridPos) != null)
                     {
                         Destroy(go);
-                        continue;
+                        return null;
                     }
                     block.transform.rotation = grid.transform.rotation * saved.localRotation;
                     grid.AddBlock(saved.gridPos, block);
                 }
 
                 ApplyGridBlockState(block, go, saved);
+                return block;
             }
         }
 

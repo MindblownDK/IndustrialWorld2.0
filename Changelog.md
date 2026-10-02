@@ -1,9 +1,31 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.28.1-dev`
+**Current Version:** `14.29.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.29.0-dev] A Guest Can Build A Ship
+
+**Type:** MINOR - a new replication channel closing the last named gap in milestone 9. No save format change; placements travel as the exact per-block JSON the save file already holds.
+
+**The gap, stated from both sides.** The host polls its own hulls for shape changes and resends the record when one changes. A client's hulls are kinematic copies the host never polls - so a guest welding a block onto a ship was building on that machine alone. The host never learned about the block, no other player ever saw it, and the next structure resend - triggered by anything at all - deleted it. 14.28.1 named this gap on the way out; this closes it.
+
+**How a placement travels.** A client keeps placing locally - ghost, cost, placement rules all run exactly as they do offline, so building feels the same - and what it just did goes to the host as a per-block edit through the save seam:
+
+- **PLACE:** the new block is captured with the same `CaptureGridBlockJson` the state poller already uses. That record was until now only ever applied onto a block that existed; the whole-grid restore loop has been split so ONE block can be rebuilt onto an existing hull through the exact code path a save file uses (`RestoreOneGridBlock`, exposed as `ApplyGridBlockAddJson`). Same prefab resolution, same state application, no second builder to drift from the first - item id, cell, rotation, precision seat, shape variant and paint all arrive because the save record already carries them.
+- **REMOVE:** only the address travels - (grid net id, integer cell), or the precision cell for a lattice block - and the host removes through the same `RemoveBlock` calls single-player uses, so every removal rule still applies.
+- **A BRAND-NEW HULL:** there is nothing on the host to address a cell against, so the whole grid goes up once as the same record the join catch-up uses. The host accepts a client record ONLY for an id it has never heard of: a client can start a ship, it can never overwrite one. The moment the host adopts it, the hull is simulated and posed by the host like any other - the guest's one-block raft becomes real the instant it exists.
+
+**Placements are captured at END OF FRAME, not inside AddBlock.** The builder keeps configuring a block after it is attached - ports, paint, variants - and a record captured mid-setup would describe a block that never quite existed. Removals go immediately; there is nothing left to configure about a block that is gone.
+
+**The echo is the confirmation.** After every edit - accepted or refused - the host answers with the full structure record, which is the existing convergence mechanism doing its job: the builder's own copy is rebuilt from the host's answer, so what a player looks at is always what actually happened. Two players reaching for the same cell in the same instant is resolved the same way - the host performs the first, refuses the second, and the echo corrects the loser without needing its own message. The pilot survives the rebuild because 14.27.1 already taught rebuilds not to delete players.
+
+**One real pre-existing bug fell out of the fingerprint.** The structure poller's shape hash never looked at the precision lattice, so a pipe welded onto the lattice - by the HOST, in a session that had been working for weeks - never triggered a resend at all. The lattice is part of the fingerprint now, and lattice edits ride the same new channel addressed by precision cell.
+
+**Echo discipline.** A performed edit records the hull's new shape into the poller's baseline before announcing, so the poll pass a moment later does not resend a record everyone just received. Client-uploaded records are reassembled apart from the host's own stream, so a half-arrived upload can never block the host's record for the same id.
+
+**Accepted gaps, named:** structure still travels whole rather than as per-cell deltas (carried from 14.25.0); a guest's build is confirmed by echo rather than predicted, so it shares the round-trip feel of the controls; and a refused placement does not refund the placer's locally paid cost - the echo removes the block, the items were already spent. All three are written into the roadmap's open scope rather than left to be rediscovered.
 
 ### [14.28.1-dev] A Hold That Was Never There
 

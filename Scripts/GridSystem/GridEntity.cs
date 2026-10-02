@@ -779,6 +779,9 @@ namespace VoxelEngine.GridSystem
             VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged(block.transform.position);
             // A new hull block can close (or open) a sealed compartment.
             GetComponent<VoxelEngine.Pressure.GridPressureSystem>()?.MarkDirty();
+            // 14.29.0: a block a CLIENT just placed must reach the host - silent
+            // everywhere else, including while a remote record is being applied.
+            VoxelEngine.Networking.GridBuildSync.NotifyLocalPlaced(this, block);
         }
 
         public void RemoveBlock(Vector3Int gridPos)
@@ -795,6 +798,9 @@ namespace VoxelEngine.GridSystem
             // remaining belt take-offs before the next drivetrain graph rebuild.
             GetComponent<VoxelEngine.Maritime.MechanicalBeltNetwork>()?.NotifyGridTopologyChanged();
             VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged(formerPosition);
+            // 14.29.0: a removal a CLIENT performed must reach the host. Fired
+            // before the empty-hull teardown below so the id is still resolvable.
+            VoxelEngine.Networking.GridBuildSync.NotifyLocalRemoved(this, gridPos, false, default);
 
             // Removing a wall can breach a room — re-solve pressure.
             GetComponent<VoxelEngine.Pressure.GridPressureSystem>()?.MarkDirty();

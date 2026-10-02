@@ -112,6 +112,8 @@ namespace VoxelEngine.GridSystem
             block.OnPlaced();
             grid.RecalculateMass();
             VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged(block.transform.position, CellSize * 5.15f + 0.25f);
+            // 14.29.0: a lattice block a CLIENT just placed must reach the host.
+            VoxelEngine.Networking.GridBuildSync.NotifyLocalPlaced(grid, block);
             return true;
         }
 
@@ -129,6 +131,10 @@ namespace VoxelEngine.GridSystem
             var grid = Grid;
             grid?.RecalculateMass();
             VoxelEngine.Networks.PipeVisualBuilder.NotifyTopologyChanged(formerPosition, CellSize * 5.15f + 0.25f);
+            // 14.29.0: a lattice removal a CLIENT performed must reach the host.
+            // Fired before the empty-hull teardown so the id is still resolvable.
+            if (grid != null)
+                VoxelEngine.Networking.GridBuildSync.NotifyLocalRemoved(grid, Vector3Int.zero, true, precisionPos);
             if (_blocks.Count == 0 && grid != null && grid.BlockCount == 0)
                 Destroy(grid.gameObject);
         }
