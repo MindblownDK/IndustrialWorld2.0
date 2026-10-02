@@ -1958,189 +1958,7 @@ namespace VoxelEngine.Persistence
                     continue;
                 }
 
-                var savedBlock = new SavedGridBlock
-                {
-                    itemId = sourceItem.itemId,
-                    localRotation = block.transform.localRotation,
-                    // Exact pose: ground-lifted machine bottoms and port-centred
-                    // pipe/shaft snaps must restore identically after save/load.
-                    hasLocalPose = true,
-                    localPosition = block.transform.localPosition,
-                    currentHP = block.currentHP,
-                    enabled = block.Enabled,
-                    isPrecision = block.IsPrecisionAttachment,
-                    gridPos = block.GridPos,
-                    precisionPos = block.PrecisionGridPos,
-                    precisionHostPos = block.PrecisionHostGridPos,
-                    container = TryFindContainer(block.gameObject)
-                };
-
-                if (block is GridSatellitePayload payloadBlock)
-                {
-                    // The climate directive is a standing order the player gave, so it
-                    // must survive a reload rather than silently reverting to Monitor.
-                    savedBlock.hasSatellitePayloadState = true;
-                    savedBlock.satelliteDirective = (int)payloadBlock.Directive;
-                }
-                else if (block is VoxelEngine.Gas.GasVent ventBlock)
-                {
-                    // Louvre position and the lifetime counter are the only two things
-                    // a vent remembers; the gas itself is already gone.
-                    savedBlock.hasGasVentState = true;
-                    savedBlock.gasVentOpen = ventBlock.open;
-                    savedBlock.gasVentDumped = ventBlock.TotalDumped;
-                    savedBlock.hasVentilationScaleState = true;
-                    savedBlock.ventilationAutoScale = ventBlock.autoScaleFlow;
-                }
-                else if (block is VoxelEngine.Gas.GridFlareStack flareBlock)
-                {
-                    savedBlock.hasFlareStackState = true;
-                    savedBlock.flareStackOpen = flareBlock.open;
-                    savedBlock.flareStackRecovery = flareBlock.wasteHeatRecovery;
-                    savedBlock.flareStackGasDumped = flareBlock.TotalGasBurned;
-                    savedBlock.flareStackLiquidDumped = flareBlock.TotalLiquidBurned;
-                }
-                else if (block is VoxelEngine.Maritime.GridMaritimeEngine airModeEngine)
-                {
-                    // Which policy the engine follows when its plumbed line runs dry is a
-                    // player decision, so it survives a reload like any other setting.
-                    savedBlock.hasEngineAirModeState = true;
-                    savedBlock.engineAirFallback = airModeEngine.allowAirFallbackOnStarvedLine;
-                }
-
-                if (block is VoxelEngine.GridSystem.GridTrainScheduleBlock scheduleBlock)
-                {
-                    // The service pattern is the player's standing order to the train;
-                    // losing it to a reload would silently turn a scheduled line back
-                    // into a hand-driven one.
-                    savedBlock.hasTrainScheduleState = true;
-                    savedBlock.trainScheduleJson = scheduleBlock.ScheduleJson;
-                    savedBlock.trainScheduleIndex = scheduleBlock.CurrentIndex;
-                }
-
-                if (block is VoxelEngine.GridSystem.GridSteamEngine engineBlock)
-                {
-                    savedBlock.hasSteamEngineState = true;
-                    savedBlock.steamEngineWater = engineBlock.waterStored;
-                    savedBlock.steamEngineFiring = engineBlock.firing;
-                }
-
-                if (block is VoxelEngine.GridSystem.GridWheel hubBlock)
-                {
-                    // 13.0.0: a hub remembers which tire is bolted to it. The tire is an
-                    // attachment, not a lattice block, so it is not in AllBlocks and would
-                    // otherwise vanish on reload while the hub came back bare.
-                    savedBlock.hasWheelHubState = true;
-                    savedBlock.wheelTireItemId = hubBlock.MountedTireItem != null
-                        ? hubBlock.MountedTireItem.itemId : string.Empty;
-                    savedBlock.wheelMountSide = (int)hubBlock.mountSide;
-                    savedBlock.wheelSizeClass = (int)hubBlock.sizeClass;
-                    savedBlock.wheelSteerable = hubBlock.isSteerable;
-                    savedBlock.wheelSuspensionStrength = hubBlock.suspensionStrength;
-                    savedBlock.wheelRestLength = hubBlock.restLength;
-                    savedBlock.wheelTravel = hubBlock.suspensionLength;
-                    savedBlock.wheelTread01 = hubBlock.Tire != null ? hubBlock.Tire.tread01 : 1f;
-                }
-
-                if (block is VoxelEngine.GridSystem.GridRailTruck truckBlock)
-                {
-                    // The snap policy is a standing decision about a parked train;
-                    // a reload must not silently re-enable or disable it.
-                    savedBlock.hasRailTruckState = true;
-                    savedBlock.truckAutoSnap = truckBlock.autoSnap;
-                }
-
-                var gridDisplay = block.GetComponent<VoxelEngine.Building.RailDisplayScreen>();
-                if (gridDisplay != null)
-                {
-                    savedBlock.hasGridDisplayState = true;
-                    savedBlock.gridDisplayKind = (int)gridDisplay.Kind;
-                    savedBlock.gridDisplaySource = (int)gridDisplay.Source;
-                    savedBlock.gridDisplayCustomText = gridDisplay.customText ?? "";
-                }
-                else if (block is GridGasTank gasTankBlock)
-                {
-                    savedBlock.hasGasTankState = true;
-                    savedBlock.gasTankType = (int)gasTankBlock.gasType;
-                    savedBlock.gasTankStored = gasTankBlock.stored;
-                    savedBlock.gasTankMode = (int)gasTankBlock.mode;
-                }
-                else if (block is GridLiquidTank liquidTankBlock)
-                {
-                    savedBlock.hasLiquidTankState = true;
-                    savedBlock.liquidTankType = (int)liquidTankBlock.liquidType;
-                    savedBlock.liquidTankStored = liquidTankBlock.stored;
-                    savedBlock.liquidTankMode = (int)liquidTankBlock.mode;
-                }
-
-                if (block is VoxelEngine.Thermal.GridHeatshield heatshield)
-                {
-                    savedBlock.hasHeatshieldState = true;
-                    savedBlock.heatshieldAblator = heatshield.ablatorRemaining;
-                }
-
-                if (block is VoxelEngine.Pressure.GridAirVent autoVent
-                    || block is VoxelEngine.Pressure.GridExhaustScrubber autoScrub
-                    || block is VoxelEngine.Gas.GasVent autoGas)
-                {
-                    // How hard a ventilation unit is allowed to work is a player decision
-                    // taken on the panel, and on the scrubber it doubles as the rating of a
-                    // gas line that no longer exists in the save, so both survive a reload.
-                    savedBlock.hasVentilationScaleState = true;
-                    savedBlock.ventilationAutoScale = block is VoxelEngine.Pressure.GridAirVent av
-                        ? av.autoScaleFlow : true;
-                    savedBlock.ventilationSupplyFlow = block is VoxelEngine.Pressure.GridExhaustScrubber as2
-                        ? as2.supplyFlowLitresPerSecond : 0f;
-                }
-
-                if (block is GridBattery gridBattery)
-                {
-                    savedBlock.hasGridBatteryState = true;
-                    savedBlock.gridBatteryStoredWh = gridBattery.storedWh;
-                    savedBlock.gridBatteryMode = (int)gridBattery.mode;
-                }
-
-                if (block is GridWarpDrive warpDrive)
-                {
-                    savedBlock.hasWarpDriveState = true;
-                    savedBlock.warpStoredWh = warpDrive.warpStoredWh;
-                    savedBlock.warpRecharging = warpDrive.recharging;
-                    savedBlock.warpCooldown01 = warpDrive.Cooldown01;
-                }
-
-                if (block is GridWarpGate warpGate)
-                {
-                    savedBlock.hasWarpGateState = true;
-                    savedBlock.warpGateCharge01 = warpGate.Charge01;
-                    savedBlock.warpGateCooldown01 = warpGate.Cooldown01;
-                    savedBlock.warpGatePairingCode = warpGate.pairingCode;
-                }
-
-                if (block is VoxelEngine.Maritime.GridGearbox gearbox)
-                {
-                    savedBlock.hasGearboxState = true;
-                    savedBlock.gearboxRatio = gearbox.EffectiveRatio;
-                    savedBlock.gearboxSelectedGear = gearbox.selectedGear;
-                }
-
-                if (block is GridCryobed cryoBlock)
-                {
-                    savedBlock.customName = cryoBlock.blockName;
-                    savedBlock.cryobedClaimed = cryoBlock.claimedByLocalPlayer;
-                    savedBlock.cryobedOxygen = cryoBlock.oxygenStored;
-                }
-
-                var shape = block.GetComponent<GridShapeVariantBlock>();
-                if (shape != null)
-                {
-                    savedBlock.hasShapeVariant = true;
-                    savedBlock.shapeVariant = (int)shape.Variant;
-                }
-
-                // Existing machine, screen, and lighting state is deliberately
-                // stored through the same tested payload used by static blocks.
-                savedBlock.runtime = new SavedPlacedBlock();
-                CaptureFactoryRuntime(block.gameObject, savedBlock.runtime);
+                var savedBlock = CaptureGridBlockState(block, sourceItem);
                 entry.blocks.Add(savedBlock);
             }
 
@@ -2191,6 +2009,313 @@ namespace VoxelEngine.Persistence
         /// migrates existing in-memory grids created before 5.69.0 when their authored
         /// GridBlockItem display name has one unambiguous match.
         /// </summary>
+
+        // ── per-block capture / apply (14.28.0) ─────────────────────
+        //
+        // Pulled out of the whole-grid save loop so ONE block's live state can be
+        // captured and applied on its own. The save file still walks every block
+        // through here exactly as before, but replication can now ask about a
+        // single battery or a single cargo container instead of resending a ship.
+        // Same code either way, so the wire can never drift from the save format.
+
+        private SavedGridBlock CaptureGridBlockState(GridBlock block, ItemDefinition sourceItem)
+        {
+            var savedBlock = new SavedGridBlock
+            {
+                itemId = sourceItem.itemId,
+                localRotation = block.transform.localRotation,
+                // Exact pose: ground-lifted machine bottoms and port-centred
+                // pipe/shaft snaps must restore identically after save/load.
+                hasLocalPose = true,
+                localPosition = block.transform.localPosition,
+                currentHP = block.currentHP,
+                enabled = block.Enabled,
+                isPrecision = block.IsPrecisionAttachment,
+                gridPos = block.GridPos,
+                precisionPos = block.PrecisionGridPos,
+                precisionHostPos = block.PrecisionHostGridPos,
+                container = TryFindContainer(block.gameObject)
+            };
+
+            if (block is GridSatellitePayload payloadBlock)
+            {
+                // The climate directive is a standing order the player gave, so it
+                // must survive a reload rather than silently reverting to Monitor.
+                savedBlock.hasSatellitePayloadState = true;
+                savedBlock.satelliteDirective = (int)payloadBlock.Directive;
+            }
+            else if (block is VoxelEngine.Gas.GasVent ventBlock)
+            {
+                // Louvre position and the lifetime counter are the only two things
+                // a vent remembers; the gas itself is already gone.
+                savedBlock.hasGasVentState = true;
+                savedBlock.gasVentOpen = ventBlock.open;
+                savedBlock.gasVentDumped = ventBlock.TotalDumped;
+                savedBlock.hasVentilationScaleState = true;
+                savedBlock.ventilationAutoScale = ventBlock.autoScaleFlow;
+            }
+            else if (block is VoxelEngine.Gas.GridFlareStack flareBlock)
+            {
+                savedBlock.hasFlareStackState = true;
+                savedBlock.flareStackOpen = flareBlock.open;
+                savedBlock.flareStackRecovery = flareBlock.wasteHeatRecovery;
+                savedBlock.flareStackGasDumped = flareBlock.TotalGasBurned;
+                savedBlock.flareStackLiquidDumped = flareBlock.TotalLiquidBurned;
+            }
+            else if (block is VoxelEngine.Maritime.GridMaritimeEngine airModeEngine)
+            {
+                // Which policy the engine follows when its plumbed line runs dry is a
+                // player decision, so it survives a reload like any other setting.
+                savedBlock.hasEngineAirModeState = true;
+                savedBlock.engineAirFallback = airModeEngine.allowAirFallbackOnStarvedLine;
+            }
+
+            if (block is VoxelEngine.GridSystem.GridTrainScheduleBlock scheduleBlock)
+            {
+                // The service pattern is the player's standing order to the train;
+                // losing it to a reload would silently turn a scheduled line back
+                // into a hand-driven one.
+                savedBlock.hasTrainScheduleState = true;
+                savedBlock.trainScheduleJson = scheduleBlock.ScheduleJson;
+                savedBlock.trainScheduleIndex = scheduleBlock.CurrentIndex;
+            }
+
+            if (block is VoxelEngine.GridSystem.GridSteamEngine engineBlock)
+            {
+                savedBlock.hasSteamEngineState = true;
+                savedBlock.steamEngineWater = engineBlock.waterStored;
+                savedBlock.steamEngineFiring = engineBlock.firing;
+            }
+
+            if (block is VoxelEngine.GridSystem.GridWheel hubBlock)
+            {
+                // 13.0.0: a hub remembers which tire is bolted to it. The tire is an
+                // attachment, not a lattice block, so it is not in AllBlocks and would
+                // otherwise vanish on reload while the hub came back bare.
+                savedBlock.hasWheelHubState = true;
+                savedBlock.wheelTireItemId = hubBlock.MountedTireItem != null
+                    ? hubBlock.MountedTireItem.itemId : string.Empty;
+                savedBlock.wheelMountSide = (int)hubBlock.mountSide;
+                savedBlock.wheelSizeClass = (int)hubBlock.sizeClass;
+                savedBlock.wheelSteerable = hubBlock.isSteerable;
+                savedBlock.wheelSuspensionStrength = hubBlock.suspensionStrength;
+                savedBlock.wheelRestLength = hubBlock.restLength;
+                savedBlock.wheelTravel = hubBlock.suspensionLength;
+                savedBlock.wheelTread01 = hubBlock.Tire != null ? hubBlock.Tire.tread01 : 1f;
+            }
+
+            if (block is VoxelEngine.GridSystem.GridRailTruck truckBlock)
+            {
+                // The snap policy is a standing decision about a parked train;
+                // a reload must not silently re-enable or disable it.
+                savedBlock.hasRailTruckState = true;
+                savedBlock.truckAutoSnap = truckBlock.autoSnap;
+            }
+
+            var gridDisplay = block.GetComponent<VoxelEngine.Building.RailDisplayScreen>();
+            if (gridDisplay != null)
+            {
+                savedBlock.hasGridDisplayState = true;
+                savedBlock.gridDisplayKind = (int)gridDisplay.Kind;
+                savedBlock.gridDisplaySource = (int)gridDisplay.Source;
+                savedBlock.gridDisplayCustomText = gridDisplay.customText ?? "";
+            }
+            else if (block is GridGasTank gasTankBlock)
+            {
+                savedBlock.hasGasTankState = true;
+                savedBlock.gasTankType = (int)gasTankBlock.gasType;
+                savedBlock.gasTankStored = gasTankBlock.stored;
+                savedBlock.gasTankMode = (int)gasTankBlock.mode;
+            }
+            else if (block is GridLiquidTank liquidTankBlock)
+            {
+                savedBlock.hasLiquidTankState = true;
+                savedBlock.liquidTankType = (int)liquidTankBlock.liquidType;
+                savedBlock.liquidTankStored = liquidTankBlock.stored;
+                savedBlock.liquidTankMode = (int)liquidTankBlock.mode;
+            }
+
+            if (block is VoxelEngine.Thermal.GridHeatshield heatshield)
+            {
+                savedBlock.hasHeatshieldState = true;
+                savedBlock.heatshieldAblator = heatshield.ablatorRemaining;
+            }
+
+            if (block is VoxelEngine.Pressure.GridAirVent autoVent
+                || block is VoxelEngine.Pressure.GridExhaustScrubber autoScrub
+                || block is VoxelEngine.Gas.GasVent autoGas)
+            {
+                // How hard a ventilation unit is allowed to work is a player decision
+                // taken on the panel, and on the scrubber it doubles as the rating of a
+                // gas line that no longer exists in the save, so both survive a reload.
+                savedBlock.hasVentilationScaleState = true;
+                savedBlock.ventilationAutoScale = block is VoxelEngine.Pressure.GridAirVent av
+                    ? av.autoScaleFlow : true;
+                savedBlock.ventilationSupplyFlow = block is VoxelEngine.Pressure.GridExhaustScrubber as2
+                    ? as2.supplyFlowLitresPerSecond : 0f;
+            }
+
+            if (block is GridBattery gridBattery)
+            {
+                savedBlock.hasGridBatteryState = true;
+                savedBlock.gridBatteryStoredWh = gridBattery.storedWh;
+                savedBlock.gridBatteryMode = (int)gridBattery.mode;
+            }
+
+            if (block is GridWarpDrive warpDrive)
+            {
+                savedBlock.hasWarpDriveState = true;
+                savedBlock.warpStoredWh = warpDrive.warpStoredWh;
+                savedBlock.warpRecharging = warpDrive.recharging;
+                savedBlock.warpCooldown01 = warpDrive.Cooldown01;
+            }
+
+            if (block is GridWarpGate warpGate)
+            {
+                savedBlock.hasWarpGateState = true;
+                savedBlock.warpGateCharge01 = warpGate.Charge01;
+                savedBlock.warpGateCooldown01 = warpGate.Cooldown01;
+                savedBlock.warpGatePairingCode = warpGate.pairingCode;
+            }
+
+            if (block is VoxelEngine.Maritime.GridGearbox gearbox)
+            {
+                savedBlock.hasGearboxState = true;
+                savedBlock.gearboxRatio = gearbox.EffectiveRatio;
+                savedBlock.gearboxSelectedGear = gearbox.selectedGear;
+            }
+
+            if (block is GridCryobed cryoBlock)
+            {
+                savedBlock.customName = cryoBlock.blockName;
+                savedBlock.cryobedClaimed = cryoBlock.claimedByLocalPlayer;
+                savedBlock.cryobedOxygen = cryoBlock.oxygenStored;
+            }
+
+            var shape = block.GetComponent<GridShapeVariantBlock>();
+            if (shape != null)
+            {
+                savedBlock.hasShapeVariant = true;
+                savedBlock.shapeVariant = (int)shape.Variant;
+            }
+
+            // Existing machine, screen, and lighting state is deliberately
+            // stored through the same tested payload used by static blocks.
+            savedBlock.runtime = new SavedPlacedBlock();
+            CaptureFactoryRuntime(block.gameObject, savedBlock.runtime);
+            return savedBlock;
+        }
+
+        private void ApplyGridBlockState(GridBlock block, GameObject go, SavedGridBlock saved)
+        {
+            // Exact pose restore (ground lifts / port-centred ports snaps); old
+            // saves lack the fields and keep the pure lattice pose instead.
+            if (saved.hasLocalPose)
+                block.transform.localPosition = saved.localPosition;
+
+            // OnPlaced initializes defaults, so reapply persisted state afterwards.
+            block.currentHP = saved.currentHP > 0f ? saved.currentHP : block.maxHP;
+            block.Enabled = saved.enabled;
+            // A battered hull reloads battered: cracks are derived from saved HP.
+            block.RefreshDamageVisual();
+            if (saved.paintFinish != 0)
+            {
+                var gp = block.GetComponent<VoxelEngine.Building.BlockPaint>() ?? block.gameObject.AddComponent<VoxelEngine.Building.BlockPaint>();
+                gp.Finish = (VoxelEngine.Building.PaintFinishId)saved.paintFinish;
+            }
+            if (saved.hasSatellitePayloadState && block is GridSatellitePayload restoredPayload)
+                restoredPayload.SetDirective((ClimateDirective)saved.satelliteDirective);
+            else if (saved.hasEngineAirModeState
+                && block is VoxelEngine.Maritime.GridMaritimeEngine restoredEngine)
+                restoredEngine.allowAirFallbackOnStarvedLine = saved.engineAirFallback;
+            else if (saved.hasGasVentState && block is VoxelEngine.Gas.GasVent restoredVent)
+            {
+                restoredVent.open = saved.gasVentOpen;
+                restoredVent.TotalDumped = Mathf.Max(0f, saved.gasVentDumped);
+                if (saved.hasVentilationScaleState) restoredVent.autoScaleFlow = saved.ventilationAutoScale;
+            }
+            else if (saved.hasFlareStackState && block is VoxelEngine.Gas.GridFlareStack restoredFlare)
+            {
+                restoredFlare.open = saved.flareStackOpen;
+                restoredFlare.wasteHeatRecovery = saved.flareStackRecovery;
+                restoredFlare.TotalGasBurned = Mathf.Max(0f, saved.flareStackGasDumped);
+                restoredFlare.TotalLiquidBurned = Mathf.Max(0f, saved.flareStackLiquidDumped);
+            }
+            else if (saved.hasVentilationScaleState
+                && (block is VoxelEngine.Pressure.GridAirVent
+                    || block is VoxelEngine.Pressure.GridExhaustScrubber))
+            {
+                // The air vent and the scrubber have no state of their own to restore, so
+                // this is a standalone branch: only the two tuning decisions ride on it.
+                if (block is VoxelEngine.Pressure.GridAirVent restoredAutoVent)
+                    restoredAutoVent.autoScaleFlow = saved.ventilationAutoScale;
+                if (block is VoxelEngine.Pressure.GridExhaustScrubber restoredScrub)
+                    restoredScrub.supplyFlowLitresPerSecond = Mathf.Max(0f, saved.ventilationSupplyFlow);
+            }
+            else if (saved.hasGasTankState && block is GridGasTank restoredGridGas)
+            {
+                if (System.Enum.IsDefined(typeof(VoxelEngine.Gas.GasType), saved.gasTankType))
+                    restoredGridGas.gasType = (VoxelEngine.Gas.GasType)saved.gasTankType;
+                if (System.Enum.IsDefined(typeof(GridTankMode), saved.gasTankMode))
+                    restoredGridGas.mode = (GridTankMode)saved.gasTankMode;
+                restoredGridGas.stored = Mathf.Clamp(saved.gasTankStored, 0f, restoredGridGas.capacity);
+                restoredGridGas.blockName = $"{restoredGridGas.gasType} Tank";
+            }
+            else if (saved.hasLiquidTankState && block is GridLiquidTank restoredGridLiquid)
+            {
+                if (System.Enum.IsDefined(typeof(LiquidType), saved.liquidTankType))
+                    restoredGridLiquid.liquidType = (LiquidType)saved.liquidTankType;
+                if (System.Enum.IsDefined(typeof(GridTankMode), saved.liquidTankMode))
+                    restoredGridLiquid.mode = (GridTankMode)saved.liquidTankMode;
+                restoredGridLiquid.stored = Mathf.Clamp(saved.liquidTankStored, 0f, restoredGridLiquid.capacity);
+            }
+
+            if (saved.hasHeatshieldState && block is VoxelEngine.Thermal.GridHeatshield restoredShield)
+                restoredShield.ablatorRemaining =
+                    Mathf.Clamp(saved.heatshieldAblator, 0f, restoredShield.ablatorCapacity);
+
+            if (saved.hasGridBatteryState && block is GridBattery restoredGridBattery)
+            {
+                if (System.Enum.IsDefined(typeof(GridBatteryMode), saved.gridBatteryMode))
+                    restoredGridBattery.mode = (GridBatteryMode)saved.gridBatteryMode;
+                restoredGridBattery.storedWh = Mathf.Clamp(saved.gridBatteryStoredWh, 0f, restoredGridBattery.capacityWh);
+            }
+
+            if (saved.hasWarpDriveState && block is GridWarpDrive restoredWarp)
+                restoredWarp.RestorePersistentState(saved.warpStoredWh, saved.warpRecharging, saved.warpCooldown01);
+
+            if (saved.hasWarpGateState && block is GridWarpGate restoredGate)
+                restoredGate.RestorePersistentState(saved.warpGateCharge01, saved.warpGateCooldown01, saved.warpGatePairingCode);
+
+            if (saved.hasGearboxState && block is VoxelEngine.Maritime.GridGearbox restoredGearbox)
+                restoredGearbox.RestorePersistentSettings(saved.gearboxRatio, saved.gearboxSelectedGear);
+
+            if (saved.container != null) RestoreContainer(go, saved.container);
+            if (saved.runtime != null) RestoreFactoryRuntime(go, saved.runtime);
+        }
+
+        /// <summary>One grid block's live state as JSON - the same payload the save
+        /// file holds for it. Replication rides this seam so there is no second
+        /// serializer to fall out of step with the first.</summary>
+        public string CaptureGridBlockJson(GridBlock block)
+        {
+            if (block == null) return "";
+            var sourceItem = ResolveGridSourceItem(block);
+            if (sourceItem == null || string.IsNullOrEmpty(sourceItem.itemId)) return "";
+            return JsonUtility.ToJson(CaptureGridBlockState(block, sourceItem));
+        }
+
+        /// <summary>Apply a captured block state onto a block that already exists.
+        /// Deliberately NOT a rebuild: the block is there, only its contents and
+        /// charge are being brought up to date.</summary>
+        public void ApplyGridBlockJson(GridBlock block, string json)
+        {
+            if (block == null || string.IsNullOrEmpty(json)) return;
+            var saved = JsonUtility.FromJson<SavedGridBlock>(json);
+            if (saved == null) return;
+            ApplyGridBlockState(block, block.gameObject, saved);
+        }
+
         private ItemDefinition ResolveGridSourceItem(GridBlock block)
         {
             if (block == null) return null;
@@ -2549,90 +2674,7 @@ namespace VoxelEngine.Persistence
                     grid.AddBlock(saved.gridPos, block);
                 }
 
-                // Exact pose restore (ground lifts / port-centred ports snaps); old
-                // saves lack the fields and keep the pure lattice pose instead.
-                if (saved.hasLocalPose)
-                    block.transform.localPosition = saved.localPosition;
-
-                // OnPlaced initializes defaults, so reapply persisted state afterwards.
-                block.currentHP = saved.currentHP > 0f ? saved.currentHP : block.maxHP;
-                block.Enabled = saved.enabled;
-                // A battered hull reloads battered: cracks are derived from saved HP.
-                block.RefreshDamageVisual();
-                if (saved.paintFinish != 0)
-                {
-                    var gp = block.GetComponent<VoxelEngine.Building.BlockPaint>() ?? block.gameObject.AddComponent<VoxelEngine.Building.BlockPaint>();
-                    gp.Finish = (VoxelEngine.Building.PaintFinishId)saved.paintFinish;
-                }
-                if (saved.hasSatellitePayloadState && block is GridSatellitePayload restoredPayload)
-                    restoredPayload.SetDirective((ClimateDirective)saved.satelliteDirective);
-                else if (saved.hasEngineAirModeState
-                    && block is VoxelEngine.Maritime.GridMaritimeEngine restoredEngine)
-                    restoredEngine.allowAirFallbackOnStarvedLine = saved.engineAirFallback;
-                else if (saved.hasGasVentState && block is VoxelEngine.Gas.GasVent restoredVent)
-                {
-                    restoredVent.open = saved.gasVentOpen;
-                    restoredVent.TotalDumped = Mathf.Max(0f, saved.gasVentDumped);
-                    if (saved.hasVentilationScaleState) restoredVent.autoScaleFlow = saved.ventilationAutoScale;
-                }
-                else if (saved.hasFlareStackState && block is VoxelEngine.Gas.GridFlareStack restoredFlare)
-                {
-                    restoredFlare.open = saved.flareStackOpen;
-                    restoredFlare.wasteHeatRecovery = saved.flareStackRecovery;
-                    restoredFlare.TotalGasBurned = Mathf.Max(0f, saved.flareStackGasDumped);
-                    restoredFlare.TotalLiquidBurned = Mathf.Max(0f, saved.flareStackLiquidDumped);
-                }
-                else if (saved.hasVentilationScaleState
-                    && (block is VoxelEngine.Pressure.GridAirVent
-                        || block is VoxelEngine.Pressure.GridExhaustScrubber))
-                {
-                    // The air vent and the scrubber have no state of their own to restore, so
-                    // this is a standalone branch: only the two tuning decisions ride on it.
-                    if (block is VoxelEngine.Pressure.GridAirVent restoredAutoVent)
-                        restoredAutoVent.autoScaleFlow = saved.ventilationAutoScale;
-                    if (block is VoxelEngine.Pressure.GridExhaustScrubber restoredScrub)
-                        restoredScrub.supplyFlowLitresPerSecond = Mathf.Max(0f, saved.ventilationSupplyFlow);
-                }
-                else if (saved.hasGasTankState && block is GridGasTank restoredGridGas)
-                {
-                    if (System.Enum.IsDefined(typeof(VoxelEngine.Gas.GasType), saved.gasTankType))
-                        restoredGridGas.gasType = (VoxelEngine.Gas.GasType)saved.gasTankType;
-                    if (System.Enum.IsDefined(typeof(GridTankMode), saved.gasTankMode))
-                        restoredGridGas.mode = (GridTankMode)saved.gasTankMode;
-                    restoredGridGas.stored = Mathf.Clamp(saved.gasTankStored, 0f, restoredGridGas.capacity);
-                    restoredGridGas.blockName = $"{restoredGridGas.gasType} Tank";
-                }
-                else if (saved.hasLiquidTankState && block is GridLiquidTank restoredGridLiquid)
-                {
-                    if (System.Enum.IsDefined(typeof(LiquidType), saved.liquidTankType))
-                        restoredGridLiquid.liquidType = (LiquidType)saved.liquidTankType;
-                    if (System.Enum.IsDefined(typeof(GridTankMode), saved.liquidTankMode))
-                        restoredGridLiquid.mode = (GridTankMode)saved.liquidTankMode;
-                    restoredGridLiquid.stored = Mathf.Clamp(saved.liquidTankStored, 0f, restoredGridLiquid.capacity);
-                }
-
-                if (saved.hasHeatshieldState && block is VoxelEngine.Thermal.GridHeatshield restoredShield)
-                    restoredShield.ablatorRemaining =
-                        Mathf.Clamp(saved.heatshieldAblator, 0f, restoredShield.ablatorCapacity);
-
-                if (saved.hasGridBatteryState && block is GridBattery restoredGridBattery)
-                {
-                    if (System.Enum.IsDefined(typeof(GridBatteryMode), saved.gridBatteryMode))
-                        restoredGridBattery.mode = (GridBatteryMode)saved.gridBatteryMode;
-                    restoredGridBattery.storedWh = Mathf.Clamp(saved.gridBatteryStoredWh, 0f, restoredGridBattery.capacityWh);
-                }
-
-                if (saved.hasWarpDriveState && block is GridWarpDrive restoredWarp)
-                    restoredWarp.RestorePersistentState(saved.warpStoredWh, saved.warpRecharging, saved.warpCooldown01);
-
-                if (saved.hasWarpGateState && block is GridWarpGate restoredGate)
-                    restoredGate.RestorePersistentState(saved.warpGateCharge01, saved.warpGateCooldown01, saved.warpGatePairingCode);
-
-                if (saved.hasGearboxState && block is VoxelEngine.Maritime.GridGearbox restoredGearbox)
-                    restoredGearbox.RestorePersistentSettings(saved.gearboxRatio, saved.gearboxSelectedGear);
-
-                if (saved.container != null) RestoreContainer(go, saved.container);
-                if (saved.runtime != null) RestoreFactoryRuntime(go, saved.runtime);
+                ApplyGridBlockState(block, go, saved);
             }
         }
 

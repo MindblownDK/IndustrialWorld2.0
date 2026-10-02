@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.27.1-dev`
-**Roadmap Version:** `14.27.1-dev`
+**Current Version:** `14.28.0-dev`
+**Roadmap Version:** `14.28.0-dev`
 **Date:** 2026-10-01
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,10 @@
 
 ## 0. Recently Done
 
+### 14.28.0-dev - What Is Inside The Ship
+Grid block contents now replicate: battery charge, cargo, liquid and gas all travel as the same JSON the save file holds, through the same capture and apply methods, addressed as (grid id, cell). A guest used to see every battery flat and every container empty until somebody welded a block on and forced a whole-record resend. The landing gear complaint was the same bug - the cockpit locks out every control on an unpowered ship, so a battery reading flat took the gear with it.
+Host state is truth on a slow round-robin poll budgeted by block rather than by grid; a client announces only blocks its own player just touched, so deposits replicate without idle simulation fighting the host.
+
 ### 14.27.1-dev - Do Not Delete The Pilot
 Placing a block on a ship someone was sitting in destroyed their camera with the cockpit ("No cameras rendering") and left the seat marked occupied forever, which made the hull believe a pilot was holding station with dampeners and stop applying gravity to itself - so thrusterless ships floated away. Pilots are now stood up before a rebuild, put back in the same cell afterwards, and seats are released on every path a cockpit can stop existing by. The replicated answer is confirmed against the hull before the flight model acts on it.
 A destroyed cockpit can no longer clear the seat of the replacement hull that took its id, and IsControlled is cached per frame.
@@ -40,9 +44,6 @@ Clients no longer hand a kinematic hull back to their own physics on unlock or u
 ### 14.26.3-dev - Who Is Flying This
 A grid asked the local machine whether it had a pilot, so the host refused a guest's input (nobody was sitting in its own copy of the cockpit) and every machine except the pilot's drew a ship under burn with cold thrusters. It asks the replicated seat table now, and the pilot's stick rides along in the pose broadcast so a watching player can see somebody else's plumes. A hovering hull is no longer parked as idle.
 Fixed two kinematic-body velocity warnings: taking a hull over on a client zeroed velocities after going kinematic rather than before, and landing gear tried to kill drift on a body that was never integrating.
-
-### 14.26.2-dev - Your Own Sky
-Fly mode is per-process state again instead of a PlayerPrefs value shared by every copy of the game on one machine. A second player without a jetpack was clearing the shared flag every frame, so a player who did have one could not stay airborne - flight appeared to require that everyone owned a jetpack. PlayerPrefs now only seeds the value and is written back only when a preference is deliberately saved.
 
 ### 14.26.0-dev - Standing On It
 Milestone 9 COMPLETE. A player standing on a moving hull is now carried by it, position and heading, anchored in the deck's own frame and re-measured each frame - this was missing in single-player too, not just over the network.

@@ -461,6 +461,9 @@ namespace VoxelEngine.Networking
                     Object.Destroy(existing.gameObject);
                 }
                 ForgetSeats(record.NetId);
+                // The blocks are about to be new objects, so comparing them against
+                // what the old ones held would suppress the first real update.
+                GridStateSync.Forget(record.NetId);
 
                 var grid = persistence.ApplyGridRecord(record.Json);
                 if (grid != null)
@@ -615,6 +618,7 @@ namespace VoxelEngine.Networking
         {
             var grid = Find(netId);
             ForgetSeats(netId);
+            GridStateSync.Forget(netId);
             if (grid == null) return;
             IsApplyingRemote = true;
             try

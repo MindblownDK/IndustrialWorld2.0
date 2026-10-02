@@ -135,6 +135,15 @@ namespace VoxelEngine.Networking
         public bool Occupied;
     }
 
+    /// <summary>One grid block's contents - battery charge, cargo, liquid, gas.
+    /// Reliable: a dropped deposit is an item that silently vanished.</summary>
+    public struct GridBlockStateBroadcast : IBroadcast
+    {
+        public string NetId;
+        public Vector3Int Cell;
+        public string Json;
+    }
+
     /// <summary>A player pulling a lever on a ship: gear, clamp, coupler, piston,
     /// door. Client -> host as a REQUEST; the host decides and answers with state.
     /// Reliable, because a dropped lock is a ship that drifts away.</summary>
@@ -478,6 +487,7 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.RegisterBroadcast<GridControlBroadcast>(OnServerGridControl);
             _networkManager.ServerManager.RegisterBroadcast<GridSeatStateBroadcast>(OnServerGridSeatState);
             _networkManager.ServerManager.RegisterBroadcast<GridActionBroadcast>(OnServerGridAction);
+            _networkManager.ServerManager.RegisterBroadcast<GridBlockStateBroadcast>(OnServerGridBlockState);
             _networkManager.ServerManager.RegisterBroadcast<GridActionStateBroadcast>(OnServerGridActionState);
             _networkManager.ServerManager.RegisterBroadcast<GridSeatDeniedBroadcast>(OnServerGridSeatDenied);
             _networkManager.ServerManager.RegisterBroadcast<GridInputBroadcast>(OnServerGridInput);
@@ -541,11 +551,14 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.RegisterBroadcast<GridPoseBroadcast>(OnClientGridPose);
             _networkManager.ClientManager.RegisterBroadcast<GridSeatStateBroadcast>(OnClientGridSeatState);
             _networkManager.ClientManager.RegisterBroadcast<GridActionStateBroadcast>(OnClientGridActionState);
+            _networkManager.ClientManager.RegisterBroadcast<GridBlockStateBroadcast>(OnClientGridBlockState);
             _networkManager.ClientManager.RegisterBroadcast<GridSeatDeniedBroadcast>(OnClientGridSeatDenied);
 
             // Container-contents poller (14.10.0) - idles while offline.
             if (GetComponent<ContainerSyncManager>() == null)
                 gameObject.AddComponent<ContainerSyncManager>();
+            if (GetComponent<GridStateSyncManager>() == null)
+                gameObject.AddComponent<GridStateSyncManager>();
             // Machine-runtime poller (14.12.0) - same pattern, slower cadence.
             if (GetComponent<MachineSyncManager>() == null)
                 gameObject.AddComponent<MachineSyncManager>();
@@ -575,6 +588,7 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.UnregisterBroadcast<GridControlBroadcast>(OnServerGridControl);
             _networkManager.ServerManager.UnregisterBroadcast<GridSeatStateBroadcast>(OnServerGridSeatState);
             _networkManager.ServerManager.UnregisterBroadcast<GridActionBroadcast>(OnServerGridAction);
+            _networkManager.ServerManager.UnregisterBroadcast<GridBlockStateBroadcast>(OnServerGridBlockState);
             _networkManager.ServerManager.UnregisterBroadcast<GridActionStateBroadcast>(OnServerGridActionState);
             _networkManager.ServerManager.UnregisterBroadcast<GridSeatDeniedBroadcast>(OnServerGridSeatDenied);
             _networkManager.ServerManager.UnregisterBroadcast<GridInputBroadcast>(OnServerGridInput);
@@ -638,6 +652,7 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.UnregisterBroadcast<GridPoseBroadcast>(OnClientGridPose);
             _networkManager.ClientManager.UnregisterBroadcast<GridSeatStateBroadcast>(OnClientGridSeatState);
             _networkManager.ClientManager.UnregisterBroadcast<GridActionStateBroadcast>(OnClientGridActionState);
+            _networkManager.ClientManager.UnregisterBroadcast<GridBlockStateBroadcast>(OnClientGridBlockState);
             _networkManager.ClientManager.UnregisterBroadcast<GridSeatDeniedBroadcast>(OnClientGridSeatDenied);
         }
 
@@ -1582,6 +1597,43 @@ namespace VoxelEngine.Networking
             else BroadcastToClients(msg, Channel.Reliable);
         }
 
+        public void SendGridBlockState(GridBlockState state, NetworkConnection target = null)
+        {
+            if (!_serverStarted || string.IsNullOrEmpty(state.NetId)) return;
+            var msg = new GridBlockStateBroadcast
+            { NetId = state.NetId, Cell = state.Cell, Json = state.Json };
+
+            if (target != null) _networkManager.ServerManager.Broadcast(target, msg, true);
+            else BroadcastToClients(msg, Channel.Reliable);
+        }
+
+        /// <summary>Client -> host: the local player changed what is in this block.</summary>
+        public void RequestGridBlockState(GridBlockState state)
+        {
+            if (!_clientStarted || string.IsNullOrEmpty(state.NetId)) return;
+            _networkManager.ClientManager.Broadcast(new GridBlockStateBroadcast
+            { NetId = state.NetId, Cell = state.Cell, Json = state.Json });
+        }
+
+        private void OnServerGridBlockState(NetworkConnection conn, GridBlockStateBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted || conn == null) return;
+
+            // Adopt the guest's version, then pass it on to everyone else. The host
+            // applying it first matters: its own copy is the one that counts, and the
+            // relay below is of a state the host has actually accepted.
+            var state = new GridBlockState { NetId = msg.NetId, Cell = msg.Cell, Json = msg.Json };
+            GridStateSync.ApplyState(state);
+            RelayToOthers(conn, msg);
+        }
+
+        private void OnClientGridBlockState(GridBlockStateBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            GridStateSync.ApplyState(new GridBlockState
+            { NetId = msg.NetId, Cell = msg.Cell, Json = msg.Json });
+        }
+
         private void OnServerGridAction(NetworkConnection conn, GridActionBroadcast msg, Channel channel)
         {
             if (!_serverStarted || conn == null || string.IsNullOrEmpty(msg.NetId)) return;
@@ -2307,6 +2359,19 @@ namespace VoxelEngine.Networking
                 if (BudgetSpent()) { yield return null; ResetFrameBudget(); }
             }
             if (sent == 0) yield break;
+            // Contents before levers: both need the hulls to exist, and a guest
+            // arriving to a dead cockpit is the louder failure of the two.
+            foreach (var state in GridStateSync.StreamSnapshot())
+            {
+                SendGridBlockState(state, target);
+                sent++;
+                if (BudgetSpent())
+                {
+                    yield return null;
+                    ResetFrameBudget();
+                }
+            }
+
             // Levers last: a hull has to exist before its gear can be reported down.
             // Cheap next to the records themselves - only blocks that are actually
             // engaged are sent, so a fleet parked with its gear up costs nothing.
@@ -2376,6 +2441,7 @@ namespace VoxelEngine.Networking
             NetworkSession.SetMode(SessionMode.Offline);
             VoxelEngine.Persistence.PlayerRecords.ClearLocal();
             GridSync.Clear();
+            GridStateSync.Clear();
             GridSyncManager.Instance?.ForgetBaseline();
             _statusLine = "Offline";
             WorldMismatch = false;

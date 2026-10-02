@@ -1,9 +1,29 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.27.1-dev`
+**Current Version:** `14.28.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.28.0-dev] What Is Inside The Ship
+
+**Type:** MINOR - a new replication channel. No save format change; the wire reuses the save payload exactly as it already exists on disk.
+
+**Milestone 9 replicated three things about a grid: where it is, what shape it is, and what its pilot is asking of it. It never replicated the contents.**
+
+A guest saw every battery flat, every cargo container empty and every tank dry, because the only thing that ever carried that information was a whole structure record - and those are only resent when the SHAPE changes. That is exactly the giveaway in the report: the cockpit said power offline until somebody welded a block on, at which point the ship's charge appeared out of nowhere. The block did not fix anything, it just forced a resend of the one message that happened to contain the answer.
+
+**The landing gear was never broken.** A guest could not work it because the cockpit locks out every flight control when the ship reads as unpowered, and a battery that reported flat took the gear, the dampeners and the drive with it. There was nothing wrong with 14.27.0's lever channel; it was sitting behind a door that a phantom power failure had locked. Four complaints, one cause.
+
+**How it travels.** A block's state goes over the wire as the SAME JSON the save file holds for it, through the same capture and apply methods the save system uses - which had to be lifted out of the whole-grid save loop first so a single battery could be asked about on its own. There is no second serializer, so the wire cannot drift from the format on disk, and anything the save system learns about later syncs for free. Batteries, cargo, liquid, gas, machines and screens all already ride that seam, which is why the liquid and gas tanks asked about are covered by the same change rather than needing their own.
+
+Addressed as (grid net id, integer cell), like everything else on a hull. This problem was solved for the static world years ago in ContainerSync, keyed by WORLD POSITION - the one thing that cannot work on a ship, because the address would change every time it moved.
+
+**Authority.** The host's state is truth and is broadcast on a slow round-robin poll, with string equality on the captured JSON as the dirty check: the pass cadence is itself the debounce, and no per-machine mutation hook has to be hunted down and kept up to date. A client announces a block only inside a short window after the local player touched it - which is what lets a guest's deposit into a ship's cargo reach the host, without the guest's own idle simulation (a battery ticking, a refinery turning) arguing with the host about the same block every pass. Player intent travels; local drift does not. The window keeps refreshing while the panel is open, so a long sort-out does not time out halfway through.
+
+**The poll is budgeted by BLOCK, not by grid.** Capturing a block means serializing it, and "two grids per pass" is cheap for a shuttle and ruinous for a capital ship. A fixed number of blocks per pass costs the same whatever is parked in the world; a big ship simply comes round less often, which is the right trade.
+
+Contents are part of join catch-up now, ahead of the lever states - a guest arriving to a dead cockpit is the louder failure of the two - and a hull's baselines are forgotten when it is rebuilt, so the first real update after a rebuild is never suppressed by a comparison against blocks that no longer exist.
 
 ### [14.27.1-dev] Do Not Delete The Pilot
 

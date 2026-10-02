@@ -371,6 +371,14 @@ namespace VoxelEngine.UI
                 _openOilRefinery != null || _openPumpjack != null || _openChemPlant != null ||
                 _openGridBlock != null || _openGridTerminal != null || _openWaterTower != null ||
                 _openSteamEngine != null || _openSchedule != null;
+
+            // While a grid block's panel is open, keep this machine's claim on it alive.
+            // A client only announces blocks its own player is working with, so this is
+            // what lets a guest's deposit into a ship's cargo reach the host - and the
+            // window keeps refreshing for as long as the panel stays open, so a long
+            // sort-out does not time out halfway through.
+            if (_openGridBlock != null)
+                VoxelEngine.Networking.GridStateSync.NotifyLocalInteraction(_openGridBlock);
             // 4 Hz so tank fills, wattage, charge %, recipe progress, etc. update smoothly.
             // BUT a full rebuild destroys the element the pointer is hovering / about to click,
             // which caused the terminal buttons to flash and "eat" the first click. So while the
@@ -945,6 +953,7 @@ namespace VoxelEngine.UI
                     _openSchedule = scheduleBlock; break;
                 case VoxelEngine.GridSystem.GridBlock gb:
                     _openGridBlock = gb;
+                    VoxelEngine.Networking.GridStateSync.NotifyLocalInteraction(gb);
                     // Watch the container(s) the block exposes so the panel auto-refreshes.
                     if (gb is VoxelEngine.GridSystem.GridCargoContainer gcc) { if (gcc.container == null) gcc.OnPlaced(); WatchContainer(gcc.container); }
                     else if (gb is VoxelEngine.GridSystem.GridH2O2Generator gh2) { if (gh2.iceInput == null) gh2.OnPlaced(); WatchContainer(gh2.iceInput); }
