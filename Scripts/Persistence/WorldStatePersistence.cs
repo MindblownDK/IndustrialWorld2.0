@@ -1587,6 +1587,15 @@ namespace VoxelEngine.Persistence
                 return SerializeContainer(airVent.SuitDock);
             }
 
+            // 14.28.1: every remaining grid item store - cargo containers, dock holds,
+            // bogie holds - through the interface they already implement, rather than
+            // a case per block. Cargo containers were reaching neither this method nor
+            // its inverse, so a ship's hold was not saved and could not be replicated.
+            // Last, so every specific case above still wins.
+            var gridStore = go.GetComponentInChildren<VoxelEngine.GridSystem.IGridItemStore>();
+            if (gridStore?.ItemStore != null)
+                return SerializeContainer(gridStore.ItemStore);
+
             return null;
         }
 
@@ -4005,7 +4014,17 @@ namespace VoxelEngine.Persistence
 
             var energy = go.GetComponentInChildren<VoxelEngine.Combat.EnergyRelicTurret>();
             if (energy != null)
+            {
                 DeserializeInto(energy.CellMagazine, sc);
+                return;
+            }
+
+            // 14.28.1: the inverse of the grid item store case in TryFindContainer.
+            // These two must stay in step - a container captured by one and ignored by
+            // the other is a hold that empties itself on load.
+            var gridStore = go.GetComponentInChildren<VoxelEngine.GridSystem.IGridItemStore>();
+            if (gridStore?.ItemStore != null)
+                DeserializeInto(gridStore.ItemStore, sc);
         }
 
         private void RestoreDrawer(VoxelEngine.Storage.StorageDrawer drawer, SavedContainer sc)

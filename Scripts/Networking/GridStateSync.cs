@@ -113,7 +113,9 @@ namespace VoxelEngine.Networking
                 persistence.ApplyGridBlockJson(target, state.Json);
                 // The applied state becomes this machine's baseline, so what just
                 // arrived is never echoed back as a local change.
-                _baseline[Key(state.NetId, state.Cell)] = state.Json;
+                string key = Key(state.NetId, state.Cell);
+                _baseline[key] = state.Json;
+                _accepted[key] = Time.unscaledTime;
             }
             finally { IsApplyingRemote = false; }
         }
@@ -121,6 +123,15 @@ namespace VoxelEngine.Networking
         // ── change detection ─────────────────────────────────────────────────
 
         private static readonly Dictionary<string, string> _baseline = new();
+
+        // When a state arrives for a block, this machine holds its tongue about that
+        // block for a moment. Two players with the same panel open were otherwise
+        // able to contradict each other indefinitely - each machine announcing its
+        // own version, the other adopting it and announcing back - which showed up as
+        // a tank's liquid type snapping back unless the button was spammed. The hold
+        // lets whoever spoke last actually be heard before anyone answers.
+        private const float AcceptedHoldSeconds = 1.5f;
+        private static readonly Dictionary<string, float> _accepted = new();
 
         private static string Key(string netId, Vector3Int cell)
             => $"{netId}|{cell.x},{cell.y},{cell.z}";
@@ -169,6 +180,8 @@ namespace VoxelEngine.Networking
 
                     string key = Key(tag.Id, block.GridPos);
                     if (_baseline.TryGetValue(key, out string last) && last == json) continue;
+                    if (_accepted.TryGetValue(key, out float at)
+                        && Time.unscaledTime - at < AcceptedHoldSeconds) continue;
                     _baseline[key] = json;
 
                     var state = new GridBlockState { NetId = tag.Id, Cell = block.GridPos, Json = json };
@@ -221,6 +234,7 @@ namespace VoxelEngine.Networking
         {
             _baseline.Clear();
             _interacted.Clear();
+            _accepted.Clear();
         }
     }
 

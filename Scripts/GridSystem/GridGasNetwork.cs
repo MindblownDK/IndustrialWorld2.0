@@ -126,6 +126,14 @@ namespace VoxelEngine.GridSystem
 
         public float DrawGasFor(GridBlock consumer, Gas.GasType type, float litres, bool includeStockpile = false)
         {
+            // 14.28.1: a client must not move fluid. The host owns a ship's contents
+            // and replicates them; a client running its own transfers mutates state the
+            // host never agreed to - and because an empty tank adopts the type of
+            // whatever is pushed into it, that showed up as two players fighting over a
+            // tank's liquid type, each machine's local plumbing overwriting the other's
+            // choice. Returning zero is honest here: on this machine, nothing moved.
+            if (VoxelEngine.Networking.NetworkSession.Mode
+                == VoxelEngine.Networking.SessionMode.Client) return 0f;
             if (consumer == null || type == Gas.GasType.None || litres <= 0f) return 0f;
             float drawn = 0f;
             foreach (var tank in CachedTanks(consumer, type, forOutput: true, includeStockpile))
@@ -138,6 +146,14 @@ namespace VoxelEngine.GridSystem
 
         public float FillGasFrom(GridBlock producer, Gas.GasType type, float litres)
         {
+            // 14.28.1: a client must not move fluid. The host owns a ship's contents
+            // and replicates them; a client running its own transfers mutates state the
+            // host never agreed to - and because an empty tank adopts the type of
+            // whatever is pushed into it, that showed up as two players fighting over a
+            // tank's liquid type, each machine's local plumbing overwriting the other's
+            // choice. Returning zero is honest here: on this machine, nothing moved.
+            if (VoxelEngine.Networking.NetworkSession.Mode
+                == VoxelEngine.Networking.SessionMode.Client) return 0f;
             if (producer == null || type == Gas.GasType.None || litres <= 0f) return 0f;
             float filled = 0f;
             foreach (var tank in CachedTanks(producer, type, forOutput: false, includeStockpile: true))
@@ -270,6 +286,14 @@ namespace VoxelEngine.GridSystem
         [System.Obsolete("Gas moves through pipes only. Use DrawGasFor(block, ...) so the pipe topology is respected.")]
         public float DrawGas(GridEntity grid, Gas.GasType type, float litres, bool includeStockpile = false)
         {
+            // 14.28.1: a client must not move fluid. The host owns a ship's contents
+            // and replicates them; a client running its own transfers mutates state the
+            // host never agreed to - and because an empty tank adopts the type of
+            // whatever is pushed into it, that showed up as two players fighting over a
+            // tank's liquid type, each machine's local plumbing overwriting the other's
+            // choice. Returning zero is honest here: on this machine, nothing moved.
+            if (VoxelEngine.Networking.NetworkSession.Mode
+                == VoxelEngine.Networking.SessionMode.Client) return 0f;
             if (grid == null || type == Gas.GasType.None || litres <= 0f) return 0f;
             float drawn = 0f;
             foreach (var block in grid.AllBlocks)
@@ -285,6 +309,14 @@ namespace VoxelEngine.GridSystem
         [System.Obsolete("Gas moves through pipes only. Use FillGasFrom(block, ...) so the pipe topology is respected.")]
         public float FillGas(GridEntity grid, Gas.GasType type, float litres)
         {
+            // 14.28.1: a client must not move fluid. The host owns a ship's contents
+            // and replicates them; a client running its own transfers mutates state the
+            // host never agreed to - and because an empty tank adopts the type of
+            // whatever is pushed into it, that showed up as two players fighting over a
+            // tank's liquid type, each machine's local plumbing overwriting the other's
+            // choice. Returning zero is honest here: on this machine, nothing moved.
+            if (VoxelEngine.Networking.NetworkSession.Mode
+                == VoxelEngine.Networking.SessionMode.Client) return 0f;
             if (grid == null || type == Gas.GasType.None || litres <= 0f) return 0f;
             float filled = 0f;
             foreach (var block in grid.AllBlocks)

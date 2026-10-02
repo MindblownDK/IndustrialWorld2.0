@@ -1,9 +1,35 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.28.0-dev`
+**Current Version:** `14.28.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.28.1-dev] A Hold That Was Never There
+
+**Type:** PATCH - two bug fixes. No save format change, but one of these restores data that a save was silently dropping.
+
+**1. Cargo did not replicate in either direction, because a ship's hold was never in the save seam at all.**
+
+14.28.0 put block contents on the wire by riding the save system's capture and apply pair, on the reasoning that anything the save system knows about syncs for free. That held for batteries, which is why power started working. It did not hold for cargo, for a reason worth stating plainly: **`TryFindContainer` had no case for a grid cargo container**, and neither did its inverse. The hold of a ship was not merely unsynced, it was not being captured by anything.
+
+So this was never only a multiplayer bug. A ship's cargo was not in the save file either. Loading a world gave back the hull, the charge, the fuel and the gas, and an empty hold.
+
+Fixed through the interface those blocks already implement rather than a case per block, so cargo containers, dock holds and bogie holds are all covered at once, and it sits last so every specific case above still wins. Both directions of the seam were changed together - a container captured by one and ignored by the other is a hold that empties itself on load.
+
+**That also explains the deletion.** A client's items disappeared when a block was placed because placing one changes the hull's shape, which makes the host resend the whole structure record, which destroys and rebuilds the ship from the host's copy - and the host's copy did not contain the hold. With the hold in the record there is nothing left to lose.
+
+**2. Two players with the same tank open fought over its liquid type.**
+
+Two causes stacked.
+
+The real one: a client was running its own plumbing. Since 14.26.1 a client runs the grid simulation so its thrusters and power read correctly, and fluid transfer came along with it. An empty tank adopts the type of whatever is pushed into it, so each machine's local plumbing was quietly overwriting the other machine's choice. **A client must not move fluid** - the host owns a ship's contents and replicates them. The transfer calls return zero on a client now, which is honest: on that machine, nothing moved. Gas got the same treatment, because it is the same bug with a different noun.
+
+The second, more general one: both machines were announcing the same block at each other. When a state arrives, this machine now holds its tongue about that block for a moment and lets whoever spoke last actually be heard before answering. That stops the class of fight rather than this one instance of it.
+
+---
+
+**Known gap, not fixed here and worth stating:** a client placing a block on a grid is not replicated to the host. The report that "if the client places a block nothing gets deleted" is that gap being observed from the other side - the host never learns about the block, so it never resends, so nothing is overwritten. The client's new block exists on that machine only and will vanish the moment the host resends for any other reason. Grid building authority is its own piece of work.
 
 ### [14.28.0-dev] What Is Inside The Ship
 

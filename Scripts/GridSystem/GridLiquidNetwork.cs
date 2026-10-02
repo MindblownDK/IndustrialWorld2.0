@@ -106,6 +106,14 @@ namespace VoxelEngine.GridSystem
 
         public float DrawLiquidFor(GridBlock endpoint, LiquidType type, float litres)
         {
+            // 14.28.1: a client must not move fluid. The host owns a ship's contents
+            // and replicates them; a client running its own transfers mutates state the
+            // host never agreed to - and because an empty tank adopts the type of
+            // whatever is pushed into it, that showed up as two players fighting over a
+            // tank's liquid type, each machine's local plumbing overwriting the other's
+            // choice. Returning zero is honest here: on this machine, nothing moved.
+            if (VoxelEngine.Networking.NetworkSession.Mode
+                == VoxelEngine.Networking.SessionMode.Client) return 0f;
             if (litres <= 0f) return 0f;
             float drawn = 0f;
             foreach (var tank in CachedTanks(endpoint, type, requireExistingType: true))
@@ -127,6 +135,14 @@ namespace VoxelEngine.GridSystem
 
         public float FillLiquidFrom(GridBlock endpoint, LiquidType type, float litres)
         {
+            // 14.28.1: a client must not move fluid. The host owns a ship's contents
+            // and replicates them; a client running its own transfers mutates state the
+            // host never agreed to - and because an empty tank adopts the type of
+            // whatever is pushed into it, that showed up as two players fighting over a
+            // tank's liquid type, each machine's local plumbing overwriting the other's
+            // choice. Returning zero is honest here: on this machine, nothing moved.
+            if (VoxelEngine.Networking.NetworkSession.Mode
+                == VoxelEngine.Networking.SessionMode.Client) return 0f;
             if (litres <= 0f) return 0f;
             float filled = 0f;
             foreach (var tank in CachedTanks(endpoint, type, requireExistingType: false))
