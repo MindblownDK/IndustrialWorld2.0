@@ -1270,6 +1270,45 @@ namespace VoxelEngine.UI
         /// <summary>Level gauge for the grand water tower (12.5.0). A machine-card
         /// panel on the right dock with a steampunk brass accent, because the UI
         /// matches the block: rail and steam hardware wears brass.</summary>
+        /// <summary>Stationary Radar Beacon (14.30.0, milestone 10): the lamp
+        /// switch plus the full beacon identity - name, marker range, and who
+        /// may see it. Edits ride the machine-state seam; the interaction
+        /// notify is what lets a guest's change reach the host.</summary>
+        public static VisualElement RadarBeaconPanel(VoxelEngine.GridSystem.StationaryRadarBeacon r)
+        {
+            if (r == null) return T.MachinePanel();
+            var p = T.MachinePanel();
+            p.Add(BuildHeader("📡", r.BeaconName, r.isOn ? "● BROADCASTING" : "○ DARK",
+                r.isOn ? T.AccentCyan : T.AccentDim, T.AccentCyan));
+
+            p.Add(T.StatRow("💡", "Power Use", $"{r.powerDrawWatts:0} W", T.AccentGold));
+            p.Add(T.StatRow("📊", "Beam Height", $"{r.beamHeight:0} m", T.AccentCyan));
+            p.Add(T.StatRow("🔄", "Dish Rotation", $"{r.dishRotationSpeed:0}°/s", T.AccentTeal));
+            p.Add(T.Spacer(6));
+
+            System.Action notify = () =>
+            {
+                var placed = r.GetComponentInParent<VoxelEngine.Building.PlacedBlock>();
+                if (placed != null)
+                    VoxelEngine.Networking.ContainerSync.NotifyLocalInteraction(placed);
+                GameUIController.Instance?.RefreshCurrentPanel();
+            };
+
+            p.Add(T.SmallButton(r.isOn ? "Turn OFF" : "Turn ON", () =>
+            {
+                r.isOn = !r.isOn;
+                notify();
+            }, r.isOn ? T.AccentRed : T.AccentGreen));
+            p.Add(T.Spacer(8));
+
+            p.Add(BeaconIdentityPanel.Build(r, () => notify()));
+
+            p.Add(T.Spacer(4));
+            p.Add(T.Muted("A coastal radar mast with a sky beam. While broadcasting, it shows an on-screen marker to everyone the sharing rule allows."));
+            StarshipTheme.Frame(p, r.isOn ? T.AccentCyan : T.AccentDim);
+            return p;
+        }
+
         public static VisualElement WaterTowerPanel(VoxelEngine.Building.WaterTower t)
         {
             if (t == null) return T.MachinePanel();

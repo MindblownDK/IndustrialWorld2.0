@@ -718,6 +718,9 @@ namespace VoxelEngine.GridSystem
             {
                 var beacon = beacons[i];
                 if (beacon == null || !beacon.IsActive || beacon.Grid == null || beacon.Grid == Grid) continue;
+                // 14.30.0: a beacon offers a rendezvous only to players its
+                // share rule allows - same rule as its marker and map contact.
+                if (!BeaconRoster.VisibleToLocal(beacon)) continue;
                 results.Add(new WarpTarget(beacon.Grid.name, null, beacon, BeaconRendezvousKm));
             }
             // Route-book destinations: every committed cosmic route flies to its final

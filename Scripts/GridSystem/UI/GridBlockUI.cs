@@ -3200,7 +3200,7 @@ namespace VoxelEngine.GridSystem.UI
         private static VisualElement BeaconPanel(GridBeacon bc)
         {
             var p = T.MachinePanel();
-            var (hdr, _, _, _) = T.HeaderRow("📡 Beacon", bc.IsActive ? "● ACTIVE" : "○ OFF",
+            var (hdr, _, _, _) = T.HeaderRow($"📡 {bc.BeaconName}", bc.IsActive ? "● ACTIVE" : "○ OFF",
                 bc.IsActive ? T.AccentCyan : T.AccentDim);
             p.Add(hdr);
             p.Add(StarshipTheme.HullDivider(bc.IsActive ? T.AccentCyan : T.AccentDim));
@@ -3211,10 +3211,22 @@ namespace VoxelEngine.GridSystem.UI
             p.Add(T.SmallButton(bc.IsActive ? "Turn OFF" : "Turn ON", () =>
             {
                 bc.Enabled = !bc.Enabled;
+                VoxelEngine.Networking.GridStateSync.NotifyLocalInteraction(bc);
                 VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
             }, bc.Enabled ? T.AccentRed : T.AccentGreen));
+            p.Add(T.Spacer(8));
+
+            // Identity & sharing (14.30.0, milestone 10): name, marker range,
+            // and who may see it. Edits ride the per-block state seam - the
+            // interaction notify is what lets a guest's change reach the host.
+            p.Add(VoxelEngine.UI.BeaconIdentityPanel.Build(bc, () =>
+            {
+                VoxelEngine.Networking.GridStateSync.NotifyLocalInteraction(bc);
+                VoxelEngine.UI.GameUIController.Instance?.RefreshCurrentPanel();
+            }));
+
             p.Add(T.Spacer(4));
-            p.Add(T.Muted("Projects a visible vertical light beam into the sky. Visible from far away for navigation."));
+            p.Add(T.Muted("Projects a visible light beam and an on-screen marker for everyone the sharing rule allows. Powered beacons also paint on the orbital map and offer a warp rendezvous."));
             StarshipTheme.Frame(p, bc.IsActive ? T.AccentCyan : T.AccentDim);
             return p;
         }

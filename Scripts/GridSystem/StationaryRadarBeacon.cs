@@ -3,12 +3,18 @@
 // Stationary Radar Beacon — a world-placed tall tower with a rotating radar
 // dish on top + a visible beacon beam. Looks like a coastal radar station.
 // Toggle on/off, draws 10W.
+//
+// 14.30.0-dev (milestone 10): the tower is a real beacon now. It carries an
+// owner, a name, a marker range and a share rule (IBeaconSource), opens a
+// panel on right-click, and its settings ride the same save-format machine
+// runtime payload that already syncs every static machine - so a rename on
+// one screen lands on all of them and survives a rejoin.
 
 using UnityEngine;
 
 namespace VoxelEngine.GridSystem
 {
-    public class StationaryRadarBeacon : MonoBehaviour
+    public class StationaryRadarBeacon : MonoBehaviour, IBeaconSource
     {
         [Header("Radar Beacon")]
         public float powerDrawWatts = 10f;
@@ -21,10 +27,71 @@ namespace VoxelEngine.GridSystem
         private GameObject _dish;
         private Light _beaconLight;
 
+        // ── Beacon identity (14.30.0-dev) ──────────────────────────────────
+        private string _beaconId = "";
+        private string _ownerId = "";
+        private string _beaconName = "";
+        private BeaconShare _share = BeaconShare.Private;
+        private float _rangeM;   // 0 = unlimited (the default)
+        private bool _stampedLocally;
+
+        public string BeaconId => _beaconId;
+        public string BeaconOwnerId => _ownerId;
+
+        public string BeaconName
+        {
+            get => string.IsNullOrEmpty(_beaconName) ? "Radar Beacon" : _beaconName;
+            set => _beaconName = string.IsNullOrWhiteSpace(value) ? "Radar Beacon" : value.Trim();
+        }
+
+        public BeaconShare BeaconShareMode { get => _share; set => _share = value; }
+        public float BeaconRangeM { get => _rangeM; set => _rangeM = Mathf.Max(0f, value); }
+        public bool BeaconLit => isOn;
+        public Vector3 BeaconWorldPosition => transform.position;
+
+        public void RestoreBeaconIdentity(string id, string ownerId, string name, int share, float range)
+        {
+            if (!string.IsNullOrEmpty(id)) _beaconId = id;
+            if (!string.IsNullOrEmpty(ownerId)) _ownerId = ownerId;
+            if (!string.IsNullOrEmpty(name)) BeaconName = name;
+            if (System.Enum.IsDefined(typeof(BeaconShare), (byte)share)) _share = (BeaconShare)share;
+            _rangeM = Mathf.Max(0f, range);
+        }
+
         private void Awake()
         {
             CreateVisuals();
+
+            // Stamp identity only on a GENUINE local placement. A copy spawned
+            // from the network is inside BlockSync's apply guard and stays
+            // unowned until the placer's announced identity lands - an unowned
+            // beacon is visible to nobody, which fails closed. A copy restored
+            // from a save is stamped here too, then immediately overwritten by
+            // the persisted identity; legacy saves without one settle as
+            // host-owned, do-not-share.
+            if (!VoxelEngine.Networking.BlockSync.IsApplyingRemote && string.IsNullOrEmpty(_ownerId))
+            {
+                _beaconId = BeaconRoster.MintId();
+                _ownerId = VoxelEngine.Networking.NetworkSession.LocalPlayerId;
+                _stampedLocally = true;
+            }
         }
+
+        private void Start()
+        {
+            // A guest's freshly placed tower must announce its identity: the
+            // machine-state poll only sends blocks inside the interaction
+            // window, so placement opens that window explicitly.
+            if (_stampedLocally)
+            {
+                var placed = GetComponentInParent<VoxelEngine.Building.PlacedBlock>();
+                if (placed != null)
+                    VoxelEngine.Networking.ContainerSync.NotifyLocalInteraction(placed);
+            }
+        }
+
+        private void OnEnable() => BeaconRoster.Register(this);
+        private void OnDisable() => BeaconRoster.Unregister(this);
 
         private void Update()
         {

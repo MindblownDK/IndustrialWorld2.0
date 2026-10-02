@@ -11,7 +11,7 @@ using VoxelEngine.Materials;
 
 namespace VoxelEngine.GridSystem
 {
-    public class GridBeacon : GridBlock
+    public class GridBeacon : GridBlock, IBeaconSource
     {
         private static readonly List<GridBeacon> s_all = new();
         /// <summary>Live beacons, for the orbital map. Powered ones paint as contacts.</summary>
@@ -34,6 +34,48 @@ namespace VoxelEngine.GridSystem
         private GameObject _beaconLight;
         private Light _pointLight;
 
+        // ── Beacon identity (14.30.0-dev, milestone 10) ────────────────────
+        // Minted at placement, persisted through the per-block runtime payload
+        // the save file already carries, which is also what every sync channel
+        // rides - so placement, rename, range and sharing replicate and survive
+        // a rejoin with no second serializer.
+        private string _beaconId = "";
+        private string _ownerId = "";
+        private string _beaconName = "";
+        private BeaconShare _share = BeaconShare.Private;
+        private float _rangeM;   // 0 = unlimited (the default)
+
+        public string BeaconId => _beaconId;
+        public string BeaconOwnerId => _ownerId;
+
+        /// <summary>The marker name. Kept in lockstep with blockName so the
+        /// master terminal and the HUD never disagree about what this is called.</summary>
+        public string BeaconName
+        {
+            get => string.IsNullOrEmpty(_beaconName) ? blockName : _beaconName;
+            set
+            {
+                _beaconName = string.IsNullOrWhiteSpace(value) ? "Beacon" : value.Trim();
+                blockName = _beaconName;
+            }
+        }
+
+        public BeaconShare BeaconShareMode { get => _share; set => _share = value; }
+        public float BeaconRangeM { get => _rangeM; set => _rangeM = Mathf.Max(0f, value); }
+        public bool BeaconLit => IsActive;
+        public Vector3 BeaconWorldPosition => transform.position;
+
+        public void RestoreBeaconIdentity(string id, string ownerId, string name, int share, float range)
+        {
+            // Id and owner only land when non-empty: a stale empty record must
+            // never erase a freshly minted identity.
+            if (!string.IsNullOrEmpty(id)) _beaconId = id;
+            if (!string.IsNullOrEmpty(ownerId)) _ownerId = ownerId;
+            if (!string.IsNullOrEmpty(name)) BeaconName = name;
+            if (System.Enum.IsDefined(typeof(BeaconShare), (byte)share)) _share = (BeaconShare)share;
+            _rangeM = Mathf.Max(0f, range);
+        }
+
         public override void OnPlaced()
         {
             base.OnPlaced();
@@ -44,6 +86,16 @@ namespace VoxelEngine.GridSystem
             CreateBeam();
             IsActive = true;
             Register();
+
+            // Stamp identity at placement. Remote and restored copies run this
+            // too, harmlessly: the authoritative identity is applied right after
+            // through the save-format payload and overwrites the stamp. Legacy
+            // saves carry no payload and settle as host-owned, do-not-share -
+            // which is exactly the fail-closed default.
+            if (string.IsNullOrEmpty(_beaconId)) _beaconId = BeaconRoster.MintId();
+            if (string.IsNullOrEmpty(_ownerId))
+                _ownerId = VoxelEngine.Networking.NetworkSession.LocalPlayerId;
+            if (string.IsNullOrEmpty(_beaconName)) _beaconName = blockName;
         }
 
         private void OnEnable() => Register();
@@ -52,11 +104,13 @@ namespace VoxelEngine.GridSystem
         private void Register()
         {
             if (!s_all.Contains(this)) s_all.Add(this);
+            BeaconRoster.Register(this);
         }
 
         private void Unregister()
         {
             s_all.Remove(this);
+            BeaconRoster.Unregister(this);
         }
 
         private void Update()

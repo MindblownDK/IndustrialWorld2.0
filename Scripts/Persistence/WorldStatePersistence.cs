@@ -848,6 +848,21 @@ namespace VoxelEngine.Persistence
 
         private static void CaptureFactoryRuntime(GameObject go, SavedPlacedBlock entry)
         {
+            // Beacon identity first: this block must run before any machine
+            // branch returns early, and both beacon kinds ride the same fields.
+            var beaconSource = go.GetComponentInChildren<VoxelEngine.GridSystem.IBeaconSource>(true);
+            if (beaconSource != null)
+            {
+                entry.hasBeaconState = true;
+                entry.beaconId = beaconSource.BeaconId ?? "";
+                entry.beaconOwner = beaconSource.BeaconOwnerId ?? "";
+                entry.beaconName = beaconSource.BeaconName ?? "";
+                entry.beaconShare = (int)beaconSource.BeaconShareMode;
+                entry.beaconRange = beaconSource.BeaconRangeM;
+                if (beaconSource is VoxelEngine.GridSystem.StationaryRadarBeacon radarBeacon)
+                    entry.beaconOn = radarBeacon.isOn;
+            }
+
             var liquidTank = go.GetComponentInChildren<VoxelEngine.Fluids.WaterTank>(true);
             if (liquidTank != null)
             {
@@ -3323,6 +3338,18 @@ namespace VoxelEngine.Persistence
 
         private void RestoreFactoryRuntime(GameObject go, SavedPlacedBlock saved)
         {
+            if (saved.hasBeaconState)
+            {
+                var beaconSource = go.GetComponentInChildren<VoxelEngine.GridSystem.IBeaconSource>(true);
+                if (beaconSource != null)
+                {
+                    beaconSource.RestoreBeaconIdentity(saved.beaconId, saved.beaconOwner,
+                        saved.beaconName, saved.beaconShare, saved.beaconRange);
+                    if (beaconSource is VoxelEngine.GridSystem.StationaryRadarBeacon radarBeacon)
+                        radarBeacon.isOn = saved.beaconOn;
+                }
+            }
+
             if (saved.hasFluidTankState)
             {
                 var liquidTank = go.GetComponentInChildren<VoxelEngine.Fluids.WaterTank>(true);
@@ -4538,6 +4565,18 @@ namespace VoxelEngine.Persistence
         [Serializable] private class SavedPlacedBlock
         {
             public string itemId;
+            // Additive 14.30.0: beacon identity and sharing (milestone 10). One
+            // payload serves both beacon blocks - the grid Beacon rides it inside
+            // SavedGridBlock.runtime, the stationary radar tower rides it here
+            // directly. Legacy saves omit the flag; their beacons are stamped
+            // host-owned, do-not-share on restore, which fails closed.
+            public bool hasBeaconState;
+            public string beaconId = "";
+            public string beaconOwner = "";
+            public string beaconName = "";
+            public int beaconShare;
+            public float beaconRange;
+            public bool beaconOn = true;
             // Additive 11.24.0: interplanetary cargo pad identity and routing.
             public bool hasCargoPad;
             public string cargoPadName = "";

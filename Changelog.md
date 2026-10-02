@@ -1,9 +1,29 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.29.0-dev`
+**Current Version:** `14.30.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.30.0-dev] A Beacon Knows Who May See It
+
+**Type:** MINOR - multiplayer milestone 10 delivered: beacons gain identity, sharing and on-screen markers, replicated and persisted. Save format gains additive fields only; legacy saves load clean.
+
+**What a beacon is now.** A beacon used to be a lamp: a beam, an on/off switch, and a free contact on everyone's orbital map. It is now a statement with an author. Both beacon blocks - the grid-mounted Beacon and the Stationary Radar Beacon tower - carry an owner (stable player id, stamped at placement), a name, a marker range, and the decided per-beacon share rule: **do not share** (the default - nothing a player builds leaks to the session until they say so), **share team** (stored from day one, honoured the moment milestone 11 delivers teams; until then it behaves as do-not-share for everyone except the owner, and the value is never silently rewritten), and **share global**.
+
+**On-screen markers, built and replicated in one step.** Markers did not exist in single player either, so this round builds the HUD and the sync together. Every beacon the local player may see draws a floating diamond with its name and live distance - cyan for your own, amber for ones shared with you. Markers ease in when they appear, glide when a ship-mounted beacon moves between updates, fade with distance, respect the beacon's chosen range, and cap at the nearest twelve so a beacon-happy session stays readable. Offline, host and guest all draw through the same single entry point, so the visibility rule exists exactly once.
+
+**Sharing is enforced where the marker is SENT.** The decided rule, implemented as decided: markers get their own host-filtered channel. Every few seconds the host walks the live beacon roster and sends each guest only the complete set of markers THEIR player id may see - a guest is never told about a marker it has no right to see, so hiding a marker is not what keeps it secret. A per-connection signature keeps unchanged sweeps off the wire entirely; a beacon that goes dark, goes private, or dies simply isn't in the next sweep, and the guest's copy vanishes because the set is replaced, never merged.
+
+**Settings ride the seam that already existed.** Owner, name, range and share mode travel inside the same save-format machine runtime payload that already syncs every static machine and every grid block's contents - captured and restored by ONE code path, so placement, rename, re-share, save, load, rejoin and client-edit-reaches-host all come from the same serializer. A rename typed by a guest lands on the host through the existing interaction window, exactly like locking a recipe.
+
+**The old leaks are closed with the same rule.** A powered beacon used to paint its grid onto EVERYONE's orbital map and offer EVERYONE a warp rendezvous. Both lists now pass through the same visibility check as the HUD marker: map contact, warp target and marker agree about who may see a beacon, because they ask the same function.
+
+**The radar tower became a real block.** The Stationary Radar Beacon had no interaction at all - an inspector-only switch. It now opens a settings panel on right-click: lamp switch, name, range, and the share row. Only the owner can change a beacon's settings, on either block, on every machine; everyone else gets a read-only panel that says so.
+
+**Fail-closed by construction.** An unlit beacon is visible to nobody, owner included. An unowned beacon - the brief window before a remote placement's identity arrives, or a legacy save's beacon before the host claims it - is also visible to nobody. The default share is do-not-share. Every failure mode keeps a secret rather than leaking one.
+
+**Accepted gaps, named:** the beacon BLOCK itself is world geometry and replicates like any block - a player standing next to someone's hull can see a beacon is bolted to it; what the share rule protects is the knowledge-at-distance (markers, map contacts, warp targets). Beacon settings ride seams that reach every machine, so sharing is enforced at the marker channel and at every draw site rather than by per-viewer filtering of hull records. The radar tower claims 10 W but is not wired into the static power simulation (pre-existing). Marker range is enforced at the drawing side - range is a reach preference, not a secret; the share rule is what is enforced at the send.
 
 ### [14.29.0-dev] A Guest Can Build A Ship
 

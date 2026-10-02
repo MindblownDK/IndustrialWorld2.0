@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.29.0-dev`
-**Roadmap Version:** `14.29.0-dev`
+**Current Version:** `14.30.0-dev`
+**Roadmap Version:** `14.30.0-dev`
 **Date:** 2026-10-02
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 14.30.0-dev - A Beacon Knows Who May See It
+Milestone 10 CLOSED. Both beacon blocks carry an owner (stable player id), a name, a marker range and the decided per-beacon share rule (do-not-share default / team stored for milestone 11 / global); settings ride the save-format runtime payload, so rename, re-share, save, rejoin and guest edits all use one serializer. On-screen HUD markers are new and host-filtered per recipient: a guest is only ever sent the markers its player id may see.
+The orbital-map contact and the warp rendezvous a powered beacon offers now pass the same visibility check as the marker, and the radar tower gained its settings panel.
+Accepted gaps live in Open Scope: the block itself is visible world geometry, settings seams are not per-viewer filtered, range is draw-side.
+
 ### 14.29.0-dev - A Guest Can Build A Ship
 Milestone 9 CLOSED. A client's building reaches the host: a placed block travels as its own save-record JSON and is rebuilt through the restore path a save file uses, a removal travels as (grid id, cell), and a brand-new hull uploads once as a whole record the host accepts only for an id it has never seen. The host echoes the resulting structure to everyone, so the builder's copy is confirmed - or corrected - by the machine that owns the hull.
 The precision lattice is now part of the structure fingerprint, so a lattice weld triggers a resend on every machine - the host's own edits included.
@@ -46,10 +51,6 @@ Host state is truth on a slow round-robin poll budgeted by block rather than by 
 ### 14.27.1-dev - Do Not Delete The Pilot
 Placing a block on a ship someone was sitting in destroyed their camera with the cockpit ("No cameras rendering") and left the seat marked occupied forever, which made the hull believe a pilot was holding station with dampeners and stop applying gravity to itself - so thrusterless ships floated away. Pilots are now stood up before a rebuild, put back in the same cell afterwards, and seats are released on every path a cockpit can stop existing by. The replicated answer is confirmed against the hull before the flight model acts on it.
 A destroyed cockpit can no longer clear the seat of the replacement hull that took its id, and IsControlled is cached per frame.
-
-### 14.27.0-dev - Every Lever On The Ship
-Landing gear, docking clamps, rail couplers, pistons and sliding doors were all local-only - a guest's gear never locked on the host, so the ship stayed free to drift while they watched it clamped. One replication channel covers all five, addressed as (grid id, cell) like everything else on a hull: a client requests, the host performs it with the same methods single-player uses so every existing rule still applies, and the host answers with what actually happened. No prediction on anything physical; animations still run locally.
-Clients no longer hand a kinematic hull back to their own physics on unlock or undock. Join catch-up now includes engaged levers, so a ship parked on its gear does not look like it is floating.
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -69,7 +70,7 @@ Clients no longer hand a kinematic hull back to their own physics on unlock or u
 
 9. **Grid system multiplayer:** the whole grid/construct layer - building on a moving grid, grid physics and drift, the shape wheel, grid identity and the construct registry, the inspector overlay, waymarks and the auto-run shuttle loop, docking and jump travel - has to behave the same for a passenger as it does for the pilot. Today the grid layer is the largest remaining single-player assumption in the game: grids move, and every piece of replication built so far assumes a world-space position that stays put. Decide the authority model at milestone start: replicate the GRID's transform and keep piece positions grid-local (one small message per grid per tick, pieces ride along for free) versus replicating pieces in world space (simple, but every piece on a moving grid becomes traffic). The first option is almost certainly right and the MP-readiness checklist already points at it - "stable ids over object references" means a piece must be addressable as (grid id, local cell) rather than a world coordinate. Pilot authority, passenger prediction and hand-off when the pilot leaves the seat are part of this milestone, not after it. **PART ONE DONE 14.25.0** - authority model decided and built: grid-local piece identity (stable grid id + integer cell, id saved), host-only grid simulation, kinematic client hulls driven by a 20 Hz pose stream with dead reckoning, structure carried as the save record itself. **DONE 14.26.0** - riders are carried by a moving deck (position and heading) and a guest can fly via input handoff with a connection-held control claim. **DONE 14.29.0** - grid build authority: a client's placements and removals travel per block through the save seam, a brand-new hull uploads once as a whole record the host accepts only for an unknown id, and the host echoes the resulting structure so every machine converges on its copy. **Milestone COMPLETE.** Accepted gaps (named in Open Scope): whole-record resends instead of per-cell deltas; a guest's controls and builds cost a round trip (no client-side prediction); a refused placement is corrected by the echo without refunding the placer's local cost.
 
-10. **Beacon multiplayer:** beacons are how players find each other and find their way back, so they are worth their own milestone rather than being folded into world sync. Beacon placement, naming, range, visibility rules (who can see whose beacon) and the on-screen markers all replicate; a beacon placed by one player appears for everyone who should see it, with the same name and the same range, and survives a rejoin. **Visibility is DECIDED (user, pre-10.0):** it is a per-beacon setting with three values - share global, share team, and do not share - chosen on the beacon itself rather than being one global rule. The team value is stored and honoured as soon as milestone 11 lands; until then it behaves as do-not-share for anyone outside the owner.
+10. **Beacon multiplayer:** ✅ DONE (14.30.0) - **Milestone COMPLETE.** Both beacon blocks carry owner, name, range and the per-beacon share setting (global / team / do-not-share, default do-not-share); on-screen markers are new and host-filtered per recipient, settings ride the save-format runtime seam, everything survives a rejoin, and map contacts plus warp targets obey the same visibility rule. The team value is stored and honoured as soon as milestone 11 lands; until then it behaves as do-not-share for anyone outside the owner. Accepted gaps are named in Open Scope.
 
 11. **Teams:** players create a team, name it, and invite other players to it; invited players accept or decline. Team membership is the grouping every later shared-ownership feature hangs off - shared build costs, friendly fire rules, team beacons, team-visible map markers and eventually base permissions. **Two limits live in the multiplayer / server settings, not in code:** maximum members per team and maximum teams per session, both editable by the host before and during a session. Teams are keyed by stable player id (MP-readiness checklist) so membership survives a rename and a reconnect, and the team roster is part of the save so a session can be resumed with its teams intact.
 
@@ -80,7 +81,7 @@ Clients no longer hand a kinematic hull back to their own physics on unlock or u
 - **Bed spawn is not per-player** (deferred 14.24.0): a guest's pose is restored from their record, but the bed/respawn point is still the world's single spawn sidecar rather than one bed per player id.
 - **Per-cell structure deltas and build prediction** (accepted 14.25.0 / 14.29.0): a changed hull is resent whole, and a guest's build is confirmed by the host's echo rather than predicted locally.
 - **Refund on a refused grid placement** (accepted 14.29.0): two players reaching for the same cell in the same instant - the loser's locally paid cost is not refunded; the echo removes the block.
-- **Beacon multiplayer** (milestone 10, never started): placement, naming, range and visibility do not replicate.
+- **Beacon block visibility** (accepted 14.30.0): the beacon BLOCK is world geometry and replicates like any block, and its settings ride seams that reach every machine; the share rule protects knowledge-at-distance (markers, map contacts, warp targets), enforced at the host's per-recipient marker channel and at every draw site, not by per-viewer filtering of hull records. Marker range is enforced draw-side - range is a reach preference, the share rule is the secret.
 - **Teams** (milestone 11, never started): no grouping exists, so nothing can be owned or seen "by the team" yet.
 - **Dedicated headless server** (milestone 12, never started): headless build target, server-side persistence, no local-player assumptions in boot code.
 - **Security hardening** (deferred 14.6.0): code-lock codes travel and rest in plain text; move validation server-side and audit every broadcast for data a client should not see.
@@ -2573,7 +2574,7 @@ For each version, these are the high-level Unity tasks you will perform manually
 - **6.27.2-dev:** Enforced pipe-only water for biofarm (removed adjacent-tank cheat + voxel water fallback, now requires nearby `WaterPipe` whose network has a `WaterTank`), fixed diagonal pipe connections on grid and land by switching `PipeAdjacency` to Euclidean `sqrt(other1²+other2²)` checks for all axes (prevents diagonal with both offsets 0.5), and fixed grid ghost port not committing (added `GridBiofarm` to `TryGetGridTankVariablePortSnap` / `IsMatchingTankBlockForPipe` in both `BuildSystem` and `GridBuilder`, ensured `EnsureGridTankPorts` creates gas+liquid fixed ports and variable `Port_*_V` ports persist via `WorldStatePersistence`).
 
 ### 11.6 Multiplayer — SUPERSEDED BY SECTION 1 — 🚧 IN PROGRESS
-- Live plan, status and open scope: **section 1, Multiplayer Strategy**. Milestones 1-9 are shipped; milestones 10-12 (beacons, teams, dedicated server) are open.
+- Live plan, status and open scope: **section 1, Multiplayer Strategy**. Milestones 1-10 are shipped; milestones 11-12 (teams, dedicated server) are open.
 - This is the final roadmap milestone after all single-player systems are complete.
 - Support self-hosted server creation on Windows and Linux.
 - Support LAN discovery/connection and direct connection to self-hosted servers.

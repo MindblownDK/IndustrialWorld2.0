@@ -316,6 +316,9 @@ namespace VoxelEngine.Cosmos
             {
                 var beacon = beacons[i];
                 if (beacon == null || !beacon.IsActive) continue;
+                // 14.30.0: a beacon paints a contact only for players its share
+                // rule allows - the same rule that governs its HUD marker.
+                if (!BeaconRoster.VisibleToLocal(beacon)) continue;
                 var grid = beacon.Grid;
                 if (grid == null || grid.BlockCount == 0) continue;
 

@@ -1007,6 +1007,10 @@ namespace VoxelEngine.Player
                 var waterTower = hit.collider.GetComponentInParent<VoxelEngine.Building.WaterTower>();
                 if (waterTower != null) { UI.GameUIController.Instance?.OpenMachine(waterTower); return; }
 
+                // Radar beacon settings (14.30.0): name, range and sharing.
+                var radarBeacon = hit.collider.GetComponentInParent<VoxelEngine.GridSystem.StationaryRadarBeacon>();
+                if (radarBeacon != null) { UI.GameUIController.Instance?.OpenMachine(radarBeacon); return; }
+
                 var scheduleBlock = hit.collider.GetComponentInParent<VoxelEngine.GridSystem.GridTrainScheduleBlock>();
                 if (scheduleBlock != null) { UI.GameUIController.Instance?.OpenMachine(scheduleBlock); return; }
 

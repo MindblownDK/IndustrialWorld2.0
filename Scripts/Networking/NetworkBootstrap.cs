@@ -325,6 +325,15 @@ namespace VoxelEngine.Networking
         public List<BlockSnapshot> Blocks;
     }
 
+    /// <summary>The complete set of beacon markers one client may see
+    /// (14.30.0, milestone 10). Host to one connection only, pre-filtered by
+    /// the share rule - a guest is never told about a beacon it has no right
+    /// to see. Replace-not-merge on arrival, so revoked markers vanish.</summary>
+    public struct BeaconMarkersBroadcast : IBroadcast
+    {
+        public List<BeaconMarkerRecord> Markers;
+    }
+
     /// <summary>One block's container contents as save-format JSON (14.10.0).</summary>
     public struct ContainerStateBroadcast : IBroadcast
     {
@@ -434,6 +443,10 @@ namespace VoxelEngine.Networking
         /// <summary>Server-side: one avatar per connection, so a chatty client
         /// can never spawn twice.</summary>
         private readonly Dictionary<int, NetworkObject> _avatarsByConnection = new();
+
+        /// <summary>Server-side: what each connection was last told about beacon
+        /// markers (14.30.0), so an unchanged sweep sends nothing.</summary>
+        private readonly Dictionary<int, string> _beaconSignatureByConnection = new();
 
         /// <summary>Server-side: the player id each connection was admitted
         /// under - the duplicate-identity guard reads this.</summary>
@@ -568,6 +581,7 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.RegisterBroadcast<GridActionStateBroadcast>(OnClientGridActionState);
             _networkManager.ClientManager.RegisterBroadcast<GridBlockStateBroadcast>(OnClientGridBlockState);
             _networkManager.ClientManager.RegisterBroadcast<GridSeatDeniedBroadcast>(OnClientGridSeatDenied);
+            _networkManager.ClientManager.RegisterBroadcast<BeaconMarkersBroadcast>(OnClientBeaconMarkers);
 
             // Container-contents poller (14.10.0) - idles while offline.
             if (GetComponent<ContainerSyncManager>() == null)
@@ -585,6 +599,10 @@ namespace VoxelEngine.Networking
             // to the host at end of frame; idles everywhere else.
             if (GetComponent<GridBuildSyncManager>() == null)
                 gameObject.AddComponent<GridBuildSyncManager>();
+            // Beacon marker sweep (14.30.0) - host only; each guest receives
+            // its own share-filtered marker set.
+            if (GetComponent<BeaconSyncManager>() == null)
+                gameObject.AddComponent<BeaconSyncManager>();
             // Proximity voice (14.20.0) - idles completely while offline or
             // while the player has voice turned off.
             if (GetComponent<VoiceChat>() == null)
@@ -674,6 +692,7 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.UnregisterBroadcast<GridActionStateBroadcast>(OnClientGridActionState);
             _networkManager.ClientManager.UnregisterBroadcast<GridBlockStateBroadcast>(OnClientGridBlockState);
             _networkManager.ClientManager.UnregisterBroadcast<GridSeatDeniedBroadcast>(OnClientGridSeatDenied);
+            _networkManager.ClientManager.UnregisterBroadcast<BeaconMarkersBroadcast>(OnClientBeaconMarkers);
         }
 
         // ─────────────────────────── public API (UI calls these) ───────────────────────────
@@ -798,6 +817,7 @@ namespace VoxelEngine.Networking
                 _serverStarted = false;
                 _avatarsByConnection.Clear();
                 _playerIdByConnection.Clear();
+                _beaconSignatureByConnection.Clear();
                 if (!_clientStarted) GoOffline();
             }
         }
@@ -979,6 +999,7 @@ namespace VoxelEngine.Networking
         {
             if (args.ConnectionState != RemoteConnectionState.Stopped) return;
             _playerIdByConnection.Remove(connection.ClientId);
+            _beaconSignatureByConnection.Remove(connection.ClientId);
             // A pilot who crashed out must not leave a hull flying on their last
             // input. Cut the throttle and free the seat for somebody else.
             ReleasePilotConnection(connection);
@@ -2189,6 +2210,51 @@ namespace VoxelEngine.Networking
             RelayToOthers(conn, msg);
         }
 
+        // ─────────────────────────── beacon markers (14.30.0) ───────────────────────────
+
+        /// <summary>Host sweep: send every guest the complete set of beacon
+        /// markers THEIR player id may see, and nothing else - sharing is
+        /// enforced where the marker is sent, not where it is drawn. A
+        /// per-connection signature keeps an unchanged sweep off the wire; the
+        /// signature includes coarse positions so a beacon on a moving hull
+        /// keeps updating while a parked one costs nothing.</summary>
+        public void BroadcastBeaconMarkers()
+        {
+            if (!_serverStarted || _networkManager?.ServerManager == null) return;
+            foreach (var kv in _networkManager.ServerManager.Clients)
+            {
+                var conn = kv.Value;
+                if (conn == null || conn.IsLocalClient) continue;
+                if (!_playerIdByConnection.TryGetValue(conn.ClientId, out string playerId)
+                    || string.IsNullOrEmpty(playerId)) continue;
+
+                var markers = BeaconSync.VisibleTo(playerId);
+                var sig = new System.Text.StringBuilder(markers.Count * 24);
+                for (int i = 0; i < markers.Count; i++)
+                {
+                    var m = markers[i];
+                    sig.Append(m.Id).Append('|').Append(m.Name).Append('|')
+                       .Append(Mathf.RoundToInt(m.Position.x)).Append(',')
+                       .Append(Mathf.RoundToInt(m.Position.y)).Append(',')
+                       .Append(Mathf.RoundToInt(m.Position.z)).Append('|')
+                       .Append(Mathf.RoundToInt(m.RangeM)).Append(';');
+                }
+                string signature = sig.ToString();
+                if (_beaconSignatureByConnection.TryGetValue(conn.ClientId, out var last)
+                    && last == signature) continue;
+                _beaconSignatureByConnection[conn.ClientId] = signature;
+                _networkManager.ServerManager.Broadcast(conn,
+                    new BeaconMarkersBroadcast { Markers = markers }, true);
+            }
+        }
+
+        /// <summary>Client: the host's filtered marker set for THIS player.</summary>
+        private void OnClientBeaconMarkers(BeaconMarkersBroadcast msg, Channel channel)
+        {
+            if (_serverStarted) return;   // the host builds its own list locally
+            BeaconSync.ApplyMarkers(msg.Markers);
+        }
+
         private void OnClientMachineState(MachineStateBroadcast msg, Channel channel)
         {
             if (_serverStarted || WorldMismatch) return;
@@ -2515,6 +2581,8 @@ namespace VoxelEngine.Networking
             GridSync.Clear();
             GridStateSync.Clear();
             GridBuildSync.Clear();
+            BeaconSync.Clear();
+            _beaconSignatureByConnection.Clear();
             GridSyncManager.Instance?.ForgetBaseline();
             _statusLine = "Offline";
             WorldMismatch = false;
