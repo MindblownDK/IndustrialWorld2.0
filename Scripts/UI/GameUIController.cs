@@ -399,7 +399,8 @@ namespace VoxelEngine.UI
                 && !PortConfigHud.IsAnyDropdownOpen && liveMachineOpen
                 && !_dragSource.active && !PointerOverInteractiveUI()
                 && !VoxelEngine.Maritime.MaritimeBlockUI.IsNumericInputFocused
-                && !SteampunkTheme.IsTextInputFocused)
+                && !SteampunkTheme.IsTextInputFocused
+                && !BeaconIdentityPanel.IsColourSliderHeld)
             { _machineRefreshAccum = 0f; Refresh(); }
             ResearchHud.Tick();
             TickUpgradePrompt();

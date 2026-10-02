@@ -3278,7 +3278,10 @@ namespace VoxelEngine.GridSystem.UI
             p.Add(T.StatRow("⌂", "Ownership", cryo.claimedByLocalPlayer ? "Owned by you" : "Unclaimed", T.AccentTeal));
             p.Add(T.Spacer(6));
 
-            var nameField = new TextField("Name") { value = cryo.blockName };
+            // Themed + focus-guarded (14.32.0): the plain TextField rendered its
+            // label black on the dark panel and the 4 Hz live rebuild recreated
+            // the field mid-word - the same bug the beacon name box had.
+            var nameField = VoxelEngine.UI.UITheme.NameField("Name", cryo.blockName);
             nameField.RegisterValueChangedCallback(evt =>
             {
                 cryo.blockName = string.IsNullOrWhiteSpace(evt.newValue) ? "Grid Cryobed" : evt.newValue.Trim();

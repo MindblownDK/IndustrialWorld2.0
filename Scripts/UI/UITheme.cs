@@ -195,6 +195,48 @@ namespace VoxelEngine.UI
             return l;
         }
 
+        // ── Text Field ─────────────────────────────────────────────────────
+
+        /// <summary>
+        /// A themed single-line text field for dark panels (beacon name, cryobed
+        /// name, ...). Unity's default TextField ships a black label and a pale
+        /// input box, which is unreadable on the UI Toolkit panel background -
+        /// this restyles both to the theme AND hooks the shared focus guard, so
+        /// the 4 Hz live-panel rebuild defers while the player is typing instead
+        /// of recreating the field under their cursor mid-word.
+        /// </summary>
+        public static TextField NameField(string label, string value, bool enabled = true)
+        {
+            var field = new TextField(label) { value = value ?? string.Empty, isDelayed = true };
+            SteampunkTheme.GuardTextField(field);
+
+            field.style.marginBottom = 2;
+            var fieldLabel = field.Q<Label>(className: "unity-base-field__label");
+            if (fieldLabel != null)
+            {
+                fieldLabel.style.color = new StyleColor(TextSecondary);
+                fieldLabel.style.fontSize = 11;
+                fieldLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            }
+            var input = field.Q(className: "unity-base-text-field__input");
+            if (input != null)
+            {
+                input.style.backgroundColor = new StyleColor(BgSlot);
+                input.style.color = new StyleColor(TextPrimary);
+                input.style.fontSize = 12;
+                input.style.borderTopColor = input.style.borderBottomColor =
+                input.style.borderLeftColor = input.style.borderRightColor = new StyleColor(BorderDim);
+                input.style.borderTopWidth = input.style.borderBottomWidth =
+                input.style.borderLeftWidth = input.style.borderRightWidth = 1;
+                input.style.borderTopLeftRadius = input.style.borderTopRightRadius =
+                input.style.borderBottomLeftRadius = input.style.borderBottomRightRadius = 4;
+                input.style.paddingTop = input.style.paddingBottom = 3;
+                input.style.paddingLeft = input.style.paddingRight = 6;
+            }
+            field.SetEnabled(enabled);
+            return field;
+        }
+
         /// <summary>Stat value label — bold, optional colour override.</summary>
         public static Label StatLabel(string text, Color? color = null)
         {

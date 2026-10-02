@@ -131,6 +131,14 @@ namespace VoxelEngine.Building
 
         private void Update()
         {
+            // Serialized refs can go stale when a player rig is duplicated, a
+            // scene is re-wired or a prefab is re-imported. Recover them the
+            // same way the interaction tool and the grid builder do, or the
+            // ghost preview would vanish silently while placement - which
+            // finds its own refs - kept working (the 14.32 ghost report).
+            if (shootCamera == null) shootCamera = Camera.main;
+            if (inventory == null) inventory = GetComponentInParent<Inventory>();
+
             bool buildWheelHeld = GameSettings.IsHeld(InputAction.BuildWheel);
             if (VoxelEngine.UI.UIState.IsBlocking && !buildWheelHeld)
             {
@@ -153,15 +161,48 @@ namespace VoxelEngine.Building
         }
 
         // ---------- Ghost ----------
+        // One console line per STATE CHANGE (never per frame). The preview used
+        // to fail with complete silence: an item without a prefab, a missing
+        // inventory ref or an aim ray that finds nothing all look identical to
+        // the player - "no ghost". These traces name the gate that ate it, so
+        // a one-line console report pins any future regression exactly.
+        private string _ghostTraceState;
+        private float _ghostNoHitSince = -1f;
+        private bool _ghostNoHitLogged;
+        private static readonly System.Collections.Generic.HashSet<BlockItem> s_noPrefabWarned = new();
+
+        private void TraceGhost(string state)
+        {
+            if (_ghostTraceState == state) return;
+            _ghostTraceState = state;
+            Debug.Log("[Build] preview: " + state);
+        }
+
         private void UpdateGhost()
         {
-            if (inventory == null) { HoldingBlock = false; HeldBlockName = string.Empty; HideGhost(); return; }
-            var stack = inventory.ActiveStack;
-            if (stack.IsEmpty || !(stack.item is BlockItem block) || block.placedPrefab == null)
+            if (inventory == null)
             {
-                HoldingBlock = false;
-                HeldBlockName = string.Empty;
-                HideGhost();
+                HoldingBlock = false; HeldBlockName = string.Empty; HideGhost();
+                TraceGhost("no inventory reference (and none found on the rig)");
+                return;
+            }
+            var stack = inventory.ActiveStack;
+            if (stack.IsEmpty || !(stack.item is BlockItem block))
+            {
+                HoldingBlock = false; HeldBlockName = string.Empty; HideGhost();
+                TraceGhost(stack.IsEmpty || stack.item == null
+                    ? "empty hand"
+                    : $"'{stack.item.displayName}' is not a placeable block");
+                return;
+            }
+            if (block.placedPrefab == null)
+            {
+                HoldingBlock = false; HeldBlockName = string.Empty; HideGhost();
+                TraceGhost("'" + block.displayName + "' has no block prefab - re-run Tools > Voxel Engine > Voxel Engine Setup");
+                if (s_noPrefabWarned.Add(block))
+                    VoxelEngine.UI.BuildFeedbackHud.Show("Not placeable",
+                        "'" + block.displayName + "' has no block prefab. Re-run Tools > Voxel Engine > Voxel Engine Setup to reconnect it.",
+                        block.icon, Color.yellow);
                 return;
             }
             HoldingBlock = true;
@@ -187,6 +228,7 @@ namespace VoxelEngine.Building
                 _appliedGhostMaterial = null;
                 StripGhost(_ghost, _ghostMaterialValid);
                 _appliedGhostMaterial = _ghostMaterialValid;
+                TraceGhost("showing '" + block.displayName + "'");
             }
 
             var ghostCable = _ghost != null ? _ghost.GetComponentInChildren<VoxelEngine.Power.PowerCable>(true) : null;
@@ -207,6 +249,16 @@ namespace VoxelEngine.Building
 
             if (!TryRaycastIgnoringSelf(ray, out var hit, reach))
             {
+                // Aiming at the sky is a normal flicker in and out of this
+                // state; a ray that NEVER finds ground while placement still
+                // works is the silent-ghost signature, so only the persistent
+                // version earns a trace line.
+                if (_ghostNoHitSince < 0f) _ghostNoHitSince = Time.unscaledTime;
+                else if (!_ghostNoHitLogged && Time.unscaledTime - _ghostNoHitSince > 1f)
+                {
+                    _ghostNoHitLogged = true;
+                    TraceGhost("aim ray finds no surface (persistent) while holding '" + block.displayName + "'");
+                }
                 // The ray slipped between the thin pipe visuals (their arms/caps are
                 // collider-free — only the small hub box is ray-hittable). Gripping
                 // the nearest pipe hub along the aim shows the continuation/branch
@@ -235,6 +287,8 @@ namespace VoxelEngine.Building
                 HidePrecisionLattice();
                 return;
             }
+            _ghostNoHitSince = -1f;
+            _ghostNoHitLogged = false;
             _ghost.SetActive(true);
 
             var targetGrid = hit.collider != null ? hit.collider.GetComponentInParent<GridEntity>() : null;
@@ -2562,18 +2616,11 @@ namespace VoxelEngine.Building
         // ---------- Ghost material helpers ----------
         private static Material MakeGhostMaterial(Color color)
         {
-            var sh = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
-            var m = new Material(sh);
-            m.color = color;
-            if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", color);
-            if (m.HasProperty("_Surface"))   m.SetFloat("_Surface", 1f); // transparent
-            if (m.HasProperty("_Blend"))     m.SetFloat("_Blend",   0f); // alpha blend
-            m.SetOverrideTag("RenderType", "Transparent");
-            m.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
-            m.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-            m.SetInt("_ZWrite", 0);
-            m.renderQueue = 3000;
-            return m;
+            // Canonical URP transparent state (keyword + tags + blend + queue)
+            // lives in one shared helper - see RuntimeMaterials. The hand-rolled
+            // float-only version could land in a half-switched material state
+            // that newer URP render paths reject without drawing or complaining.
+            return VoxelEngine.Rendering.RuntimeMaterials.MakeTranslucentLit(color);
         }
         private static void StripGhost(GameObject root, Material mat)
         {

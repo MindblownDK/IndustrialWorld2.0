@@ -1,7 +1,7 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.31.0-dev`
+**Current Version:** `14.32.0-dev`
 **Roadmap Version:** `14.30.0-dev`
 **Date:** 2026-10-02
 **Status:** Working dev version.
@@ -29,6 +29,10 @@
 
 ## 0. Recently Done
 
+### 14.32.0-dev - A Ghost Worth Seeing
+The 14.31.0 play round's four reports, fixed at their sources: build previews that drew nothing for any block (both ghost systems built their materials through raw transparent-state property writes; one shared helper now applies URP's canonical keyword state, and both builders trace their preview state to the console one line per change so a silent failure can never hide again); the beacon name box that kicked the player out mid-word (the 4 Hz panel rebuild destroyed the field while typing - one shared themed text-field factory now guards focus, and the grid cryobed's field with it); the radar item wearing iron ore's icon (a duplicated-asset inheritance the self-healer could never repair; the setup tool authors a proper sticker and rebinds); and a custom colour mixer to the left of the preset swatches - R/G/B sliders, live retint while dragging, one commit on release, rebuild deferred for the whole drag.
+A held item whose prefab link is missing now says so on screen instead of failing silently, and the static build system self-heals lost camera/inventory references like its siblings always did.
+
 ### 14.31.0-dev - A Beacon Holds Its Colour
 Beacon colour customization: eight preset swatches in the shared identity panel, owner-only; beam, lamp, point light and the HUD marker all repaint live and the colour rides the existing marker channel, sweep signature and additive save payload (own-cyan/shared-amber markers retired - the beacon's colour is the marker's colour).
 Three fixes from the 14.30.0 play round: the unpowered beacon no longer strobes (power demand depends on the switch, not on its own success), the Stationary Radar Beacon is placeable again (the setup tool now reconnects its item's prefab outside the create-only guard, and the regenerated collider no longer dips below the base), and build previews are inert beacon-side (ghost copies no longer stamp identities, enter the roster or raise their sky-beam; StripGhost disables IBeaconSource by construction).
@@ -48,10 +52,6 @@ Accepted gaps live in Open Scope: whole-record resends, echo-confirmed builds (n
 A grid cargo container was never in the save seam, so its contents were neither replicated nor written to the save file - a ship's hold came back empty from disk. Covered now through the item-store interface those blocks already implement, on both sides of the seam at once. This also ends the deletion: a client's items were lost to a structure resend because the host's record did not contain the hold.
 Clients no longer run fluid or gas transfers - the host owns a ship's contents - which stops two players overwriting each other's tank type, and an accepted state now briefly suppresses this machine's own announcements for that block so two open panels cannot contradict each other indefinitely.
 OPEN: a client placing a block on a grid is still not replicated to the host.
-
-### 14.28.0-dev - What Is Inside The Ship
-Grid block contents now replicate: battery charge, cargo, liquid and gas all travel as the same JSON the save file holds, through the same capture and apply methods, addressed as (grid id, cell). A guest used to see every battery flat and every container empty until somebody welded a block on and forced a whole-record resend. The landing gear complaint was the same bug - the cockpit locks out every control on an unpowered ship, so a battery reading flat took the gear with it.
-Host state is truth on a slow round-robin poll budgeted by block rather than by grid; a client announces only blocks its own player just touched, so deposits replicate without idle simulation fighting the host.
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).

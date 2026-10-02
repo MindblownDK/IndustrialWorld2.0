@@ -2058,6 +2058,91 @@ namespace VoxelEngine.EditorTools
             return b;
         }
 
+        // ── radar sticker icon (14.32.0) ──────────────────────────────────
+        // Authors the Stationary Radar Beacon's 128x128 sticker at the
+        // ItemIcons convention path when (and only when) it does not exist
+        // yet - the same role a hand-drawn PNG would play. Re-running never
+        // rewrites art that is already there, and ItemIconSync can rebind by
+        // itemId afterwards if a re-import ever drops the reference.
+        private static void EnsureRadarIconPng(string path)
+        {
+            if (System.IO.File.Exists(path)) return;
+            EnsureFolder(System.IO.Path.GetDirectoryName(path).Replace('\\', '/'));
+
+            const int S = 128;
+            var px = new Color32[S * S];
+            for (int i = 0; i < px.Length; i++) px[i] = new Color32(0, 0, 0, 0);
+
+            Color32 Solid(float r, float g, float b, float a) => new(
+                (byte)Mathf.RoundToInt(r * 255f), (byte)Mathf.RoundToInt(g * 255f),
+                (byte)Mathf.RoundToInt(b * 255f), (byte)Mathf.RoundToInt(a * 255f));
+
+            // Distance from point to segment, for the mast's capsule shape.
+            float DistToSeg(float px0, float py0, float ax, float ay, float bx, float by)
+            {
+                float abx = bx - ax, aby = by - ay;
+                float t = Mathf.Clamp01(((px0 - ax) * abx + (py0 - ay) * aby) / (abx * abx + aby * aby));
+                float dx = px0 - (ax + abx * t), dy = py0 - (ay + aby * t);
+                return Mathf.Sqrt(dx * dx + dy * dy);
+            }
+
+            for (int y = 0; y < S; y++)
+            {
+                for (int x = 0; x < S; x++)
+                {
+                    Color32 c = px[y * S + x];
+
+                    // Rounded plate with a thin sky-cyan rim.
+                    const float R = 26f, Half = 58f;
+                    float rx = Mathf.Abs(x - 63.5f) - (Half - R);
+                    float ry = Mathf.Abs(y - 63.5f) - (Half - R);
+                    float d = Mathf.Sqrt(Mathf.Max(rx, 0f) * Mathf.Max(rx, 0f) + Mathf.Max(ry, 0f) * Mathf.Max(ry, 0f))
+                              + Mathf.Min(Mathf.Max(rx, ry), 0f) - R;
+                    if (d > 0f) { px[y * S + x] = c; continue; }
+                    if (d > -2.5f) { px[y * S + x] = Solid(0.16f, 0.55f, 0.75f, 1f); continue; }
+                    c = Solid(0.055f, 0.09f, 0.145f, 1f);
+
+                    // Sky beam rising from the dish, fading upward.
+                    if (x >= 59 && x <= 68 && y >= 100)
+                        c = Solid(0.30f, 0.85f, 1f, Mathf.Lerp(0.85f, 0.15f, (y - 100f) / 24f));
+
+                    // Signal arcs to the upper right of the dish.
+                    float adx = x - 64f, ady = y - 88f;
+                    float dist = Mathf.Sqrt(adx * adx + ady * ady);
+                    float ang = Mathf.Atan2(ady, adx) * Mathf.Rad2Deg;
+                    bool inArcBand = (dist > 19f && dist < 21.5f && ang > 8f && ang < 62f)
+                                  || (dist > 25f && dist < 27.5f && ang > 14f && ang < 56f);
+                    if (inArcBand) c = Solid(0.55f, 0.95f, 1f, 0.95f);
+
+                    // Radar dish (filled disc with a darker core) at the mast head.
+                    if (dist < 14.5f) c = Solid(0.30f, 0.85f, 1f, 1f);
+                    if (dist < 7f) c = Solid(0.06f, 0.32f, 0.48f, 1f);
+
+                    // Mast from the base up to the dish, then the base plate.
+                    if (DistToSeg(x, y, 64f, 30f, 64f, 76f) < 4.2f) c = Solid(0.62f, 0.65f, 0.70f, 1f);
+                    if (x >= 46 && x <= 82 && y >= 22 && y <= 30) c = Solid(0.35f, 0.37f, 0.42f, 1f);
+
+                    px[y * S + x] = c;
+                }
+            }
+
+            var tex = new Texture2D(S, S, TextureFormat.RGBA32, false) { name = "stationary_radar_beacon" };
+            tex.SetPixels32(px);
+            System.IO.File.WriteAllBytes(path, tex.EncodeToPNG());
+            Object.DestroyImmediate(tex);
+            AssetDatabase.ImportAsset(path);
+            var imp = AssetImporter.GetAtPath(path) as TextureImporter;
+            if (imp != null)
+            {
+                imp.textureType = TextureImporterType.Sprite;
+                imp.spriteImportMode = SpriteImportMode.Single;
+                imp.alphaIsTransparency = true;
+                imp.mipmapEnabled = false;
+                imp.SaveAndReimport();
+            }
+            Debug.Log("[Setup] Authored radar sticker icon at " + path + ".");
+        }
+
         private static VoxelEngine.Crafting.RecipeDefinition MakeRecipe(string folder, string assetName, string display,
             VoxelEngine.Items.ItemDefinition output, int outputCount,
             VoxelEngine.Crafting.StationTier station, params (VoxelEngine.Items.ItemDefinition item, int count)[] inputs)
@@ -7862,6 +7947,26 @@ root =>
             if (radarItem.blockHealth <= 0) radarItem.blockHealth = 400;
             radarItem.allowStacking = false;
             EditorUtility.SetDirty(radarItem);
+
+            // ── ICON REPAIR (14.32.0) ────────────────────────────────────
+            // This item predates the identity guard and was born from a
+            // duplicated asset during the stolen-identity repair: it inherited
+            // ANOTHER item's sticker (it has been wearing iron ore's picture),
+            // and the ItemIconSync self-healer deliberately never touches items
+            // whose icon is already bound. Give it its own sticker at the
+            // ItemIcons/<itemId>.png convention and rebind whenever the icon is
+            // missing or points at someone else's PNG. An icon already bound to
+            // stationary_radar_beacon.png is left exactly as it is.
+            string radarIconPath = ASSET_ROOT + "/ItemIcons/Grid Blocks/stationary_radar_beacon.png";
+            EnsureRadarIconPng(radarIconPath);
+            var radarSprite = AssetDatabase.LoadAssetAtPath<Sprite>(radarIconPath);
+            if (radarSprite != null && radarItem.icon != radarSprite)
+            {
+                string oldIcon = radarItem.icon != null ? AssetDatabase.GetAssetPath(radarItem.icon) : "nothing";
+                radarItem.icon = radarSprite;
+                EditorUtility.SetDirty(radarItem);
+                Debug.Log("[Setup] Stationary Radar Beacon icon bound to its own sticker (was: " + oldIcon + ").");
+            }
 
             var recRadar = AddGRecipe("Recipe_GStationaryRadarBeacon", "Stationary Radar Beacon", radarItem, (steelPlate, 8), (circuit, 4), (copperWire, 6), (glass, 4));
 

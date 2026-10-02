@@ -1,11 +1,31 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.31.0-dev`
+**Current Version:** `14.32.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
 
-### [14.31.0-dev] A Beacon Holds Its Colour
+### [14.32.0-dev] A Ghost Worth Seeing
+
+**Type:** MINOR - a custom colour mixer joins the preset swatches, and the 14.31.0 play round's four reports are fixed at their sources: previews that do not draw, a beacon name box that kicked the player out mid-word, an unreadable black name label, and the radar item wearing iron ore's icon. Save format unchanged from 14.31.0.
+
+**1. Build previews drew nothing for any block, world or grid, with a clean console.**
+
+Placement kept working, which is the clue: the placement ray and the ghost ray travel the same path, so the preview objects were being built and posed - and then not drawn. Every preview material (static build ghost, grid ghost, LED stretch ghost) was assembled by hand as a URP Lit material switched to transparent through raw property writes: `_Surface`, the blend modes, `ZWrite`, the render queue. Modern URP treats transparency as a keyword state as much as a float state - without `_SURFACE_TYPE_TRANSPARENT` the material sits in a half-switched state that newer render paths are free to reject without drawing and without a single console line. Placed blocks never showed the problem because their materials are ordinary opaque ones. All three ghost builders now share one helper (`Rendering/RuntimeMaterials`) that applies the full canonical transparent set - keyword, override tags, blend, ZWrite, queue, and no depth-only or shadow passes - the same way URP's own material editor does.
+
+Two hardening layers ride along, because this failure mode is deliberately invisible. Both build systems now trace their preview state to the console - one line per state change, never per frame - naming exactly which gate has the preview when it is not on screen ("no inventory reference", "item has no block prefab", "aim ray finds no surface", "showing 'Wall'"). And holding a block item whose prefab link is missing now tells the player instead of failing silently: a one-time toast says the item is not placeable and names the repair (re-run the setup tool). The static build system also recovers a lost camera or inventory reference on its own, the way the interaction tool and grid builder always have.
+
+**2. The beacon name box threw the player out mid-word, and its label was black.**
+
+The machine panel the beacon settings live in live-refreshes at 4 Hz, and that refresh rebuilds the whole panel - which destroyed the text field while the player was typing into it. The codebase already had the cure: text fields that register with a shared focus flag, which the rebuild guard honours; the beacon name field (and the grid cryobed's, which had the same bug) simply never registered. They now go through one shared themed factory (`UITheme.NameField`) that styles the field for the dark panel - readable label, themed input box - and hooks the focus guard in the same breath.
+
+**3. The Stationary Radar Beacon item was wearing iron ore's icon.**
+
+The item was born from a duplicated asset during the stolen-identity repair and inherited another item's sticker; the icon self-healer deliberately never touches an item whose icon is already bound, so the swap could never repair itself. The setup tool now authors a proper radar-tower sticker at the ItemIcons convention path (only when that PNG does not exist - hand-drawn art is never overwritten) and rebinds the icon whenever it is missing or points at another item's picture, logging what it replaced.
+
+**4. Custom colours: a mixer to the left of the swatches.**
+
+The Colour row now leads with a custom swatch. Clicking it unfolds three channel sliders - R, G, B, 0-255, each with a colour-coded handle and a live value readout - and the beacon retints while you drag: beam, lamp, lens, light, HUD marker, all of it, no rebuild. The mix commits once when the slider is released (the network announce and the save ride that commit, exactly like a preset click), and the live-panel rebuild defers for the whole drag so the slider is never ripped out from under the pointer. The custom swatch carries the selected ring whenever the beacon's colour matches no preset, and shows the beacon's actual colour while it is off-preset - a beacon you tuned to a specific teal wears that teal in the panel.
 
 **Type:** MINOR - beacon colour customization, plus three fixes from the 14.30.0 play round: the unpowered-beacon strobe, the unplaceable radar tower, and build previews that leaked into the beacon system. Save format gains additive colour fields only; legacy saves load clean and keep their authored colours.
 

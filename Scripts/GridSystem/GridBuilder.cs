@@ -88,7 +88,12 @@ namespace VoxelEngine.GridSystem
         private void Update()
         {
             if (VoxelEngine.UI.UIState.WorldToolsBlocked) { HoldingGridBlock = false; HideGhost(); HidePrecisionLattice(); HideGhostPortRing(); return; }
-            if (inventory == null) { HoldingGridBlock = false; HidePrecisionLattice(); HideGhostPortRing(); return; }
+            if (inventory == null)
+            {
+                HoldingGridBlock = false; HideGhost(); HidePrecisionLattice(); HideGhostPortRing();
+                TraceGhost("no inventory reference (and none found on the rig)");
+                return;
+            }
 
             var stack = inventory.ActiveStack;
             if (stack.IsEmpty || !(stack.item is GridBlockItem gbi))
@@ -98,6 +103,9 @@ namespace VoxelEngine.GridSystem
                 HidePrecisionLattice();
                 HideGhostPortRing();
                 CancelLedStretch(false);
+                TraceGhost(stack.IsEmpty || stack.item == null
+                    ? "empty hand"
+                    : $"'{stack.item.displayName}' is not a grid block");
                 return;
             }
 
@@ -137,8 +145,19 @@ namespace VoxelEngine.GridSystem
                 HideLedStretchGhost();
                 HidePrecisionLattice();
                 HideGhostPortRing();
+                // Aiming past everything is normal for a moment; never finding
+                // ground while placement still works is the silent-ghost
+                // signature, so only the persistent version earns a trace.
+                if (_ghostNoHitSince < 0f) _ghostNoHitSince = Time.unscaledTime;
+                else if (!_ghostNoHitLogged && Time.unscaledTime - _ghostNoHitSince > 1f)
+                {
+                    _ghostNoHitLogged = true;
+                    TraceGhost($"aim ray finds no surface (persistent) while holding '{gbi.displayName}'");
+                }
                 return;
             }
+            _ghostNoHitSince = -1f;
+            _ghostNoHitLogged = false;
 
             GridEntity targetGrid = hit.collider.GetComponentInParent<GridEntity>();
             var beltPlacementSurface = hit.collider != null
@@ -1789,6 +1808,22 @@ namespace VoxelEngine.GridSystem
             return best;
         }
 
+        // One console line per STATE CHANGE (never per frame), mirroring the
+        // static BuildSystem tracer. A grid ghost that vanishes silently -
+        // blocked UI, a lost inventory ref, an aim ray that never lands - is
+        // indistinguishable from "no ghost" to the player; these traces name
+        // the gate that ate it.
+        private string _ghostTraceState;
+        private float _ghostNoHitSince = -1f;
+        private bool _ghostNoHitLogged;
+
+        private void TraceGhost(string state)
+        {
+            if (_ghostTraceState == state) return;
+            _ghostTraceState = state;
+            Debug.Log("[Grid] preview: " + state);
+        }
+
         private void ShowGhost(GridBlockItem item, Vector3 pos, Quaternion rotation, bool valid = true)
         {
             bool isShapeItem = IsShapeVariantItem(item);
@@ -1842,6 +1877,7 @@ namespace VoxelEngine.GridSystem
             _ghost.SetActive(true);
             _ghost.transform.position = pos;
             _ghost.transform.rotation = rotation;
+            TraceGhost("showing '" + item.displayName + "'");
         }
 
         private GameObject BuildShapeGhost(VoxelEngine.UI.GridShapeVariant shape, GridSize size)
@@ -1855,15 +1891,11 @@ namespace VoxelEngine.GridSystem
         private void BuildGhostMaterial()
         {
             if (_ghostMat != null) return;
-            var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
-            _ghostMat = new Material(shader) { color = ghostColor };
-            if (_ghostMat.HasProperty("_BaseColor")) _ghostMat.SetColor("_BaseColor", ghostColor);
-            _ghostMat.SetOverrideTag("RenderType", "Transparent");
-            if (_ghostMat.HasProperty("_SrcBlend")) _ghostMat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
-            if (_ghostMat.HasProperty("_DstBlend")) _ghostMat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-            if (_ghostMat.HasProperty("_ZWrite"))  _ghostMat.SetInt("_ZWrite", 0);
-            if (_ghostMat.HasProperty("_Surface")) _ghostMat.SetFloat("_Surface", 1);
-            _ghostMat.renderQueue = 3100;
+            // Canonical URP transparent state (keyword + tags + blend + queue)
+            // lives in one shared helper - see RuntimeMaterials. The hand-rolled
+            // float-only version could land in a half-switched material state
+            // that newer URP render paths reject without drawing or complaining.
+            _ghostMat = VoxelEngine.Rendering.RuntimeMaterials.MakeTranslucentLit(ghostColor);
         }
 
         private void ApplyGhostMaterialToRenderers(bool valid = true)
@@ -1890,14 +1922,10 @@ namespace VoxelEngine.GridSystem
             }
             if (_ledStretchGhostMat == null)
             {
-                var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
-                _ledStretchGhostMat = new Material(shader) { name = "LEDStripStretchGhost_Mat", color = new Color(0.18f, 0.72f, 0.88f, 0.38f) };
-                if (_ledStretchGhostMat.HasProperty("_BaseColor")) _ledStretchGhostMat.SetColor("_BaseColor", new Color(0.18f, 0.72f, 0.88f, 0.38f));
+                _ledStretchGhostMat = VoxelEngine.Rendering.RuntimeMaterials.MakeTranslucentLit(new Color(0.18f, 0.72f, 0.88f, 0.38f));
+                _ledStretchGhostMat.name = "LEDStripStretchGhost_Mat";
                 if (_ledStretchGhostMat.HasProperty("_EmissionColor")) _ledStretchGhostMat.SetColor("_EmissionColor", new Color(0.18f, 0.72f, 0.88f) * 0.9f);
                 _ledStretchGhostMat.EnableKeyword("_EMISSION");
-                if (_ledStretchGhostMat.HasProperty("_Surface")) _ledStretchGhostMat.SetFloat("_Surface", 1f);
-                if (_ledStretchGhostMat.HasProperty("_ZWrite")) _ledStretchGhostMat.SetInt("_ZWrite", 0);
-                _ledStretchGhostMat.renderQueue = 3100;
             }
 
             float width = size == GridSize.Large ? 0.18f : 0.045f;
