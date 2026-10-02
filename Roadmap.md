@@ -1,7 +1,7 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.30.0-dev`
+**Current Version:** `14.31.0-dev`
 **Roadmap Version:** `14.30.0-dev`
 **Date:** 2026-10-02
 **Status:** Working dev version.
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 14.31.0-dev - A Beacon Holds Its Colour
+Beacon colour customization: eight preset swatches in the shared identity panel, owner-only; beam, lamp, point light and the HUD marker all repaint live and the colour rides the existing marker channel, sweep signature and additive save payload (own-cyan/shared-amber markers retired - the beacon's colour is the marker's colour).
+Three fixes from the 14.30.0 play round: the unpowered beacon no longer strobes (power demand depends on the switch, not on its own success), the Stationary Radar Beacon is placeable again (the setup tool now reconnects its item's prefab outside the create-only guard, and the regenerated collider no longer dips below the base), and build previews are inert beacon-side (ghost copies no longer stamp identities, enter the roster or raise their sky-beam; StripGhost disables IBeaconSource by construction).
+Roster visibility sweeps now survive a beacon destroyed mid-frame: interface references dodge Unity's destroyed-equals-null, so consumers test the underlying Component.
+
 ### 14.30.0-dev - A Beacon Knows Who May See It
 Milestone 10 CLOSED. Both beacon blocks carry an owner (stable player id), a name, a marker range and the decided per-beacon share rule (do-not-share default / team stored for milestone 11 / global); settings ride the save-format runtime payload, so rename, re-share, save, rejoin and guest edits all use one serializer. On-screen HUD markers are new and host-filtered per recipient: a guest is only ever sent the markers its player id may see.
 The orbital-map contact and the warp rendezvous a powered beacon offers now pass the same visibility check as the marker, and the radar tower gained its settings panel.
@@ -47,10 +52,6 @@ OPEN: a client placing a block on a grid is still not replicated to the host.
 ### 14.28.0-dev - What Is Inside The Ship
 Grid block contents now replicate: battery charge, cargo, liquid and gas all travel as the same JSON the save file holds, through the same capture and apply methods, addressed as (grid id, cell). A guest used to see every battery flat and every container empty until somebody welded a block on and forced a whole-record resend. The landing gear complaint was the same bug - the cockpit locks out every control on an unpowered ship, so a battery reading flat took the gear with it.
 Host state is truth on a slow round-robin poll budgeted by block rather than by grid; a client announces only blocks its own player just touched, so deposits replicate without idle simulation fighting the host.
-
-### 14.27.1-dev - Do Not Delete The Pilot
-Placing a block on a ship someone was sitting in destroyed their camera with the cockpit ("No cameras rendering") and left the seat marked occupied forever, which made the hull believe a pilot was holding station with dampeners and stop applying gravity to itself - so thrusterless ships floated away. Pilots are now stood up before a rebuild, put back in the same cell afterwards, and seats are released on every path a cockpit can stop existing by. The replicated answer is confirmed against the hull before the flight model acts on it.
-A destroyed cockpit can no longer clear the seat of the replacement hull that took its id, and IsControlled is cached per frame.
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).

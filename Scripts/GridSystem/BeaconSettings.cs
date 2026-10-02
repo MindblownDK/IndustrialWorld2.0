@@ -62,6 +62,10 @@ namespace VoxelEngine.GridSystem
         /// shown. 0 means unlimited, which is the default.</summary>
         float BeaconRangeM { get; set; }
 
+        /// <summary>The beacon's colour (14.31.0): beam, lamp, light and HUD
+        /// marker all draw in this. Setting it retints the live visuals.</summary>
+        Color BeaconTint { get; set; }
+
         /// <summary>Whether the beacon is actually broadcasting right now. An
         /// unlit beacon emits no marker, paints no map contact and offers no
         /// warp rendezvous - same rule for everyone, owner included.</summary>
@@ -106,7 +110,11 @@ namespace VoxelEngine.GridSystem
         /// is an unowned one - both fail closed.</summary>
         public static bool VisibleTo(IBeaconSource beacon, string viewerId)
         {
-            if (beacon == null || !beacon.BeaconLit) return false;
+            // Interface references dodge Unity's "destroyed == null" overload,
+            // so a torn-down component must be caught via its Component side -
+            // its managed shell outlives the engine object.
+            if (beacon == null || (beacon is Component dead && dead == null)) return false;
+            if (!beacon.BeaconLit) return false;
             if (beacon.BeaconShareMode == BeaconShare.Global) return true;
             // Team == Private until teams exist. The stored value is honoured
             // the moment milestone 11 lands; it is never rewritten here.

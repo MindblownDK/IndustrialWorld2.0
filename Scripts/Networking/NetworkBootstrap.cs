@@ -2237,7 +2237,12 @@ namespace VoxelEngine.Networking
                        .Append(Mathf.RoundToInt(m.Position.x)).Append(',')
                        .Append(Mathf.RoundToInt(m.Position.y)).Append(',')
                        .Append(Mathf.RoundToInt(m.Position.z)).Append('|')
-                       .Append(Mathf.RoundToInt(m.RangeM)).Append(';');
+                       .Append(Mathf.RoundToInt(m.RangeM)).Append('|')
+                       // Tint in the signature, else a recolour would wait for
+                       // the beacon to move before the sweep resends it.
+                       .Append(Mathf.RoundToInt(m.TintR * 255f)).Append(',')
+                       .Append(Mathf.RoundToInt(m.TintG * 255f)).Append(',')
+                       .Append(Mathf.RoundToInt(m.TintB * 255f)).Append(';');
                 }
                 string signature = sig.ToString();
                 if (_beaconSignatureByConnection.TryGetValue(conn.ClientId, out var last)

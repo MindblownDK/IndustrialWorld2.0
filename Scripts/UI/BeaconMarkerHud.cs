@@ -10,8 +10,9 @@
 // exactly what the host sent and nothing else, so there is no secret for this
 // file to keep and no way for it to leak one.
 //
-// Each marker shows the beacon's name and live distance, tinted cyan for your
-// own beacons and amber for ones shared with you. Markers ease in when they
+// Each marker shows the beacon's name and live distance, drawn in the colour
+// the beacon's owner chose (14.31.0) - the diamond and name carry the tint,
+// so the HUD matches the beam on the horizon. Markers ease in when they
 // appear, glide instead of teleporting when a ship-mounted beacon's position
 // updates between host sweeps, and fade out when revoked, powered down, or
 // carried out of the beacon's chosen range. Only the nearest twelve draw, so
@@ -31,8 +32,6 @@ namespace VoxelEngine.UI
         private const float GlideFactor = 12f;   // position smoothing, per second
         private const float SnapDistance = 260f; // px; beyond this, jump instead of glide
 
-        private static readonly Color OwnInk = new(0.30f, 0.85f, 1.00f);
-        private static readonly Color SharedInk = new(0.95f, 0.72f, 0.28f);
 
         private sealed class Entry
         {
@@ -100,7 +99,6 @@ namespace VoxelEngine.UI
 
             foreach (var e in _entries.Values) e.WantedAlive = false;
 
-            string localId = NetworkSession.LocalPlayerId;
             for (int i = 0; i < drawn.Count; i++)
             {
                 var (m, dist) = drawn[i];
@@ -131,8 +129,9 @@ namespace VoxelEngine.UI
                 entry.HasPos = true;
 
                 entry.Alpha = Mathf.MoveTowards(entry.Alpha, 1f, EaseSpeed * dt);
-                bool own = !string.IsNullOrEmpty(localId) && m.OwnerId == localId;
-                Color ink = own ? OwnInk : SharedInk;
+                // The ink is the beacon's own colour - record.Tint already
+                // falls back to the classic sky-cyan for colourless records.
+                Color ink = m.Tint;
 
                 entry.Name.text = string.IsNullOrEmpty(m.Name) ? "Beacon" : m.Name;
                 entry.Name.style.color = ink;

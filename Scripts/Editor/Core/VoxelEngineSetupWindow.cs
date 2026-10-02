@@ -7824,7 +7824,10 @@ root =>
             var radarRoot = new GameObject("StationaryRadarBeacon");
             var radarCol = radarRoot.AddComponent<BoxCollider>();
             radarCol.size = new Vector3(2f, 8f, 2f);
-            radarCol.center = new Vector3(0, 3f, 0);
+            // Centre at half-height-plus-a-hair so the box spans ~0..8 m: the
+            // old centre (0,3,0) dipped the collider a metre below the base,
+            // which made ground placement probe "blocked" on flat terrain.
+            radarCol.center = new Vector3(0, 4.05f, 0);
             var radarComp = radarRoot.AddComponent<VoxelEngine.GridSystem.StationaryRadarBeacon>();
             radarComp.beamHeight = 150f;
             radarComp.dishRotationSpeed = 45f;
@@ -7843,11 +7846,21 @@ root =>
                 radarItem.displayName = "Stationary Radar Beacon";
                 radarItem.iconTint = new Color(0.3f, 0.85f, 1f);
                 radarItem.maxStack = 10; radarItem.massPerUnit = 8f;
-                radarItem.placedPrefab = radarPrefab; radarItem.gridSize = Vector3Int.one;
                 radarItem.allowStacking = false; radarItem.blockHealth = 400; radarItem.miningTier = 1;
                 radarItem.category = "Grid Blocks";
                 radarItem.description = "A tall radar tower with a rotating dish and beacon beam. Visible from far away. Place on land to mark your base. Toggle on/off, draws 10W. Looks like a coastal radar station.";
             }
+            // The PREFAB WIRING lives outside the identity guard (14.31.0).
+            // It used to be assigned only on first creation, so any existing
+            // Block_StationaryRadarBeacon.asset that pre-dated the guard (or
+            // went through the stolen-identity repair) kept placedPrefab=null
+            // forever - and a BlockItem without a prefab is not a placeable
+            // block: no ghost, no placement. Reconnecting is non-destructive;
+            // identity, description and balance values above stay untouched.
+            radarItem.placedPrefab = radarPrefab;
+            if (radarItem.gridSize == Vector3Int.zero) radarItem.gridSize = Vector3Int.one;
+            if (radarItem.blockHealth <= 0) radarItem.blockHealth = 400;
+            radarItem.allowStacking = false;
             EditorUtility.SetDirty(radarItem);
 
             var recRadar = AddGRecipe("Recipe_GStationaryRadarBeacon", "Stationary Radar Beacon", radarItem, (steelPlate, 8), (circuit, 4), (copperWire, 6), (glass, 4));

@@ -859,6 +859,11 @@ namespace VoxelEngine.Persistence
                 entry.beaconName = beaconSource.BeaconName ?? "";
                 entry.beaconShare = (int)beaconSource.BeaconShareMode;
                 entry.beaconRange = beaconSource.BeaconRangeM;
+                var beaconTint = beaconSource.BeaconTint;
+                entry.hasBeaconColor = true;
+                entry.beaconColorR = beaconTint.r;
+                entry.beaconColorG = beaconTint.g;
+                entry.beaconColorB = beaconTint.b;
                 if (beaconSource is VoxelEngine.GridSystem.StationaryRadarBeacon radarBeacon)
                     entry.beaconOn = radarBeacon.isOn;
             }
@@ -3345,6 +3350,11 @@ namespace VoxelEngine.Persistence
                 {
                     beaconSource.RestoreBeaconIdentity(saved.beaconId, saved.beaconOwner,
                         saved.beaconName, saved.beaconShare, saved.beaconRange);
+                    // Colour is gated behind its own flag: a 14.30.0 payload
+                    // deserializes the RGB fields as 0,0,0 and must not paint
+                    // every legacy beacon black.
+                    if (saved.hasBeaconColor)
+                        beaconSource.BeaconTint = new Color(saved.beaconColorR, saved.beaconColorG, saved.beaconColorB);
                     if (beaconSource is VoxelEngine.GridSystem.StationaryRadarBeacon radarBeacon)
                         radarBeacon.isOn = saved.beaconOn;
                 }
@@ -4577,6 +4587,14 @@ namespace VoxelEngine.Persistence
             public int beaconShare;
             public float beaconRange;
             public bool beaconOn = true;
+
+            // Additive 14.31.0: beacon colour. Its own presence flag, because a
+            // 14.30.0 payload deserializes the RGB floats as zero and black is
+            // a legal colour - the flag is what distinguishes "unset" from it.
+            public bool hasBeaconColor;
+            public float beaconColorR = 1f;
+            public float beaconColorG = 1f;
+            public float beaconColorB = 1f;
             // Additive 11.24.0: interplanetary cargo pad identity and routing.
             public bool hasCargoPad;
             public string cargoPadName = "";

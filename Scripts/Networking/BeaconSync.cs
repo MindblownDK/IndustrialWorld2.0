@@ -37,6 +37,23 @@ namespace VoxelEngine.Networking
         public string OwnerId;
         public Vector3 Position;
         public float RangeM;   // 0 = unlimited
+        // Beacon colour as three plain floats (14.31.0) - primitives keep the
+        // record trivially serializable for FishNet's generic writer.
+        public float TintR;
+        public float TintG;
+        public float TintB;
+
+        /// <summary>The marker's colour; falls back to the classic sky-cyan
+        /// when a record arrives from a peer that predates the colour field.</summary>
+        public Color Tint
+        {
+            get
+            {
+                if (TintR <= 0.001f && TintG <= 0.001f && TintB <= 0.001f)
+                    return new Color(0.3f, 0.8f, 1f);
+                return new Color(TintR, TintG, TintB);
+            }
+        }
     }
 
     public static class BeaconSync
@@ -54,14 +71,23 @@ namespace VoxelEngine.Networking
             for (int i = 0; i < all.Count; i++)
             {
                 var beacon = all[i];
-                if (beacon == null || !BeaconRoster.VisibleTo(beacon, viewerId)) continue;
+                // The roster holds interfaces, and Unity's "destroyed == null"
+                // overload does not fire through an interface reference - test
+                // the underlying Component explicitly or a torn-down beacon
+                // would throw on its dead transform here.
+                if (beacon == null || (beacon is Component c && c == null)) continue;
+                if (!BeaconRoster.VisibleTo(beacon, viewerId)) continue;
+                var tint = beacon.BeaconTint;
                 result.Add(new BeaconMarkerRecord
                 {
                     Id = beacon.BeaconId ?? "",
                     Name = beacon.BeaconName ?? "",
                     OwnerId = beacon.BeaconOwnerId ?? "",
                     Position = beacon.BeaconWorldPosition,
-                    RangeM = beacon.BeaconRangeM
+                    RangeM = beacon.BeaconRangeM,
+                    TintR = tint.r,
+                    TintG = tint.g,
+                    TintB = tint.b
                 });
             }
             return result;

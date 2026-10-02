@@ -26,6 +26,9 @@ namespace VoxelEngine.GridSystem
         private GameObject _beam;
         private GameObject _dish;
         private Light _beaconLight;
+        private Material _beamMat;
+        private Material _sensorMat;
+        private bool _isGhost;   // build-preview copy: inert, never a real beacon
 
         // ── Beacon identity (14.30.0-dev) ──────────────────────────────────
         private string _beaconId = "";
@@ -49,6 +52,31 @@ namespace VoxelEngine.GridSystem
         public bool BeaconLit => isOn;
         public Vector3 BeaconWorldPosition => transform.position;
 
+        /// <summary>beamColor is the single source of truth for the tint; the
+        /// setter keeps the authored alpha and retints beam, sensor lamp and
+        /// light in place.</summary>
+        public Color BeaconTint
+        {
+            get => beamColor;
+            set
+            {
+                beamColor = new Color(value.r, value.g, value.b, beamColor.a);
+                RefreshTint();
+            }
+        }
+
+        private void RefreshTint()
+        {
+            if (_beamMat != null)
+            {
+                _beamMat.color = beamColor;
+                if (_beamMat.HasProperty("_BaseColor")) _beamMat.SetColor("_BaseColor", beamColor);
+            }
+            if (_sensorMat != null && _sensorMat.HasProperty("_EmissionColor"))
+                _sensorMat.SetColor("_EmissionColor", beamColor * 2f);
+            if (_beaconLight != null) _beaconLight.color = beamColor;
+        }
+
         public void RestoreBeaconIdentity(string id, string ownerId, string name, int share, float range)
         {
             if (!string.IsNullOrEmpty(id)) _beaconId = id;
@@ -61,6 +89,19 @@ namespace VoxelEngine.GridSystem
         private void Awake()
         {
             CreateVisuals();
+
+            // A build-preview ghost is a drawing of a tower, not a tower: no
+            // identity stamp, no roster entry, no sky-beam over the preview,
+            // no simulation. (Awake runs mid-Instantiate, while BuildSystem
+            // still holds the creating-ghost latch.)
+            if (VoxelEngine.Building.BuildSystem.IsCreatingGhost)
+            {
+                _isGhost = true;
+                if (_beam != null) _beam.SetActive(false);
+                if (_beaconLight != null) _beaconLight.enabled = false;
+                enabled = false;
+                return;
+            }
 
             // Stamp identity only on a GENUINE local placement. A copy spawned
             // from the network is inside BlockSync's apply guard and stays
@@ -90,7 +131,7 @@ namespace VoxelEngine.GridSystem
             }
         }
 
-        private void OnEnable() => BeaconRoster.Register(this);
+        private void OnEnable() { if (!_isGhost) BeaconRoster.Register(this); }
         private void OnDisable() => BeaconRoster.Unregister(this);
 
         private void Update()
@@ -173,18 +214,18 @@ namespace VoxelEngine.GridSystem
             arm.GetComponent<Renderer>().sharedMaterial = mastMat;
 
             // Sensor light.
-            var sensorMat = new Material(mastMat);
-            if (sensorMat.HasProperty("_EmissionColor"))
+            _sensorMat = new Material(mastMat);
+            if (_sensorMat.HasProperty("_EmissionColor"))
             {
-                sensorMat.EnableKeyword("_EMISSION");
-                sensorMat.SetColor("_EmissionColor", beamColor * 2f);
+                _sensorMat.EnableKeyword("_EMISSION");
+                _sensorMat.SetColor("_EmissionColor", beamColor * 2f);
             }
             var sensor = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             sensor.transform.SetParent(_dish.transform, false);
             sensor.transform.localPosition = new Vector3(0, 0.2f, 0);
             sensor.transform.localScale = Vector3.one * 0.15f;
             Object.DestroyImmediate(sensor.GetComponent<Collider>());
-            sensor.GetComponent<Renderer>().sharedMaterial = sensorMat;
+            sensor.GetComponent<Renderer>().sharedMaterial = _sensorMat;
 
             // Beacon beam.
             _beam = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
@@ -194,9 +235,10 @@ namespace VoxelEngine.GridSystem
             _beam.transform.localScale = new Vector3(0.2f, beamHeight * 0.5f, 0.2f);
             Object.DestroyImmediate(_beam.GetComponent<Collider>());
 
-            var beamMat = new Material(Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Sprites/Default"));
-            beamMat.color = beamColor;
-            _beam.GetComponent<Renderer>().sharedMaterial = beamMat;
+            _beamMat = new Material(Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Sprites/Default"));
+            _beamMat.color = beamColor;
+            if (_beamMat.HasProperty("_BaseColor")) _beamMat.SetColor("_BaseColor", beamColor);
+            _beam.GetComponent<Renderer>().sharedMaterial = _beamMat;
 
             // Point light at the top.
             _beaconLight = _dish.AddComponent<Light>();

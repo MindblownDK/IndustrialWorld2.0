@@ -1,9 +1,39 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.30.0-dev`
+**Current Version:** `14.31.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.31.0-dev] A Beacon Holds Its Colour
+
+**Type:** MINOR - beacon colour customization, plus three fixes from the 14.30.0 play round: the unpowered-beacon strobe, the unplaceable radar tower, and build previews that leaked into the beacon system. Save format gains additive colour fields only; legacy saves load clean and keep their authored colours.
+
+**1. An unpowered beacon strobed - beam, status pill and wattage, every frame.**
+
+The beacon's power demand was a function of its own success: `PowerDraw` returned 10 W only while the beacon was lit. On a grid with no generation, the dark beacon reported no demand, the power balance momentarily read as satisfied, the beacon decided it had power and lit, which raised demand to 10 W, which overdrew the grid, which turned it off - once per frame, forever. Everything downstream of `IsActive` flashed in lockstep: the beam, the ON/OFF state, the 0-10 W readout.
+
+The demand now depends on the switch, never on the outcome: an enabled beacon asks for its 10 W whether or not the grid can pay. Both states are stable - a powered beacon stays lit, an unpowered one stays dark and keeps honestly asking. This is the pattern every other consumer already follows, and the feedback loop is gone at the source rather than hidden behind a smoothing delay.
+
+**2. The Stationary Radar Beacon could not be placed at all - its item had no prefab.**
+
+A `BlockItem` without a `placedPrefab` is not a placeable block as far as the build system is concerned: no ghost, no placement, the item just sits in the hand. The setup tool wired `placedPrefab` into the radar item ONLY inside the create-it-for-the-first-time branch - an existing `Block_StationaryRadarBeacon.asset` (such as one that went through the stolen-identity repair) was loaded, dirtied and saved with its prefab reference still null, forever. The prefab wiring now lives outside the identity guard: every run of the setup tool reconnects the prefab non-destructively, exactly like the generic `MakeBlock` path already does for every other block. Identity, description and any hand-tuned balance values are untouched.
+
+The generated prefab's collider was also sunk a metre into the ground - a 8 m box centred at y=3 spans -1..7 - which made the placement probe read "blocked" on perfectly flat terrain. The regenerated prefab centres it at y=4.05 so the box spans the tower and nothing below it.
+
+**3. Build previews leaked into the beacon system - a ghost could be a "real" beacon.**
+
+Instantiating a placement ghost runs the prefab's `Awake`/`OnEnable` before the ghost is stripped, and both beacon blocks did real work there: a ghost grid Beacon registered itself in the beacon roster, and a ghost radar tower stamped a fresh owner identity, registered, and raised its 150 m sky-beam over the preview. Three closures, all at the source:
+
+- Both beacon blocks now check the build system's creating-ghost latch - the same sanctioned guard every pipe and power node already uses - and a preview copy skips identity stamping, roster registration and its light show entirely.
+- `StripGhost` adds `IBeaconSource` to the list of behaviours it disables, so any future beacon kind is inert as a preview by construction rather than by remembering this bug.
+- The roster holds beacons as interfaces, and Unity's "destroyed object == null" overload does not fire through an interface reference - a torn-down beacon could linger as a live-looking entry and throw on its dead transform during a visibility sweep. Every roster consumer now tests the underlying `Component`, and the sweep skips corpses.
+
+**4. Beacons have colours now.**
+
+Every beacon panel - the grid Beacon and the radar tower alike - gains a Colour row in the shared identity section: eight preset swatches (sky, blue, green, yellow, amber, red, magenta, white), one honest click each, owner-only like every other beacon setting. Picking a swatch retints the whole beacon live, no rebuild: beam, rotating lamp, lens, point light and the radar's sensor dome all repaint in place, and the HUD marker's diamond and name draw in the same colour - the marker on your screen matches the beam on your horizon. Own-cyan/shared-amber is retired; the beacon's own colour is the marker's colour, which is the point of choosing one.
+
+The colour rides every seam the identity already rides: it travels in the marker record as three plain floats (primitives keep the record trivially serializable for the network's generic writer), it is folded into the host sweep's per-connection signature so a recolour propagates on the next sweep instead of waiting for the beacon to move, and it persists through the same additive save payload as name and share mode. The colour fields sit behind their own presence flag because black is a legal colour and a 14.30.0 payload deserializes absent floats as zero - the flag is what keeps legacy beacons on their authored default instead of painting them black. Records from a peer that predates the field fall back to the classic sky-cyan.
 
 ### [14.30.0-dev] A Beacon Knows Who May See It
 

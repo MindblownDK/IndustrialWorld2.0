@@ -28,11 +28,20 @@ namespace VoxelEngine.GridSystem
 
         public bool IsActive { get; private set; }
 
-        public override float PowerDraw => (Enabled && IsActive) ? powerDrawWatts : 0f;
+        /// <summary>Demand depends on the switch, never on the outcome (14.31.0).
+        /// The old form fed IsActive back into the draw: on an unpowered grid the
+        /// dark beacon read "0 W demand", the balance momentarily cleared, the
+        /// beacon lit, drew 10 W, overdrew the grid and went dark again - once
+        /// per frame. Beam, status pill and wattage all strobed. An enabled
+        /// beacon asks for its 10 W whether or not the grid can pay, so both
+        /// states are stable.</summary>
+        public override float PowerDraw => Enabled ? powerDrawWatts : 0f;
 
         private GameObject _beam;
         private GameObject _beaconLight;
         private Light _pointLight;
+        private Material _beamMat;   // beam + lens share this
+        private Material _lampMat;   // lamp housing (emission carries the tint)
 
         // ── Beacon identity (14.30.0-dev, milestone 10) ────────────────────
         // Minted at placement, persisted through the per-block runtime payload
@@ -64,6 +73,32 @@ namespace VoxelEngine.GridSystem
         public float BeaconRangeM { get => _rangeM; set => _rangeM = Mathf.Max(0f, value); }
         public bool BeaconLit => IsActive;
         public Vector3 BeaconWorldPosition => transform.position;
+
+        /// <summary>beamColor is the single source of truth for the tint; the
+        /// setter keeps the authored alpha (the beam's translucency) and retints
+        /// every live visual in place - no rebuild, no flicker.</summary>
+        public Color BeaconTint
+        {
+            get => beamColor;
+            set
+            {
+                beamColor = new Color(value.r, value.g, value.b, beamColor.a);
+                RefreshTint();
+            }
+        }
+
+        private void RefreshTint()
+        {
+            if (_beamMat != null)
+            {
+                _beamMat.color = beamColor;
+                if (_beamMat.HasProperty("_BaseColor")) _beamMat.SetColor("_BaseColor", beamColor);
+                if (_beamMat.HasProperty("_EmissionColor")) _beamMat.SetColor("_EmissionColor", beamColor * 2f);
+            }
+            if (_lampMat != null && _lampMat.HasProperty("_EmissionColor"))
+                _lampMat.SetColor("_EmissionColor", beamColor * 1.5f);
+            if (_pointLight != null) _pointLight.color = beamColor;
+        }
 
         public void RestoreBeaconIdentity(string id, string ownerId, string name, int share, float range)
         {
@@ -103,6 +138,10 @@ namespace VoxelEngine.GridSystem
 
         private void Register()
         {
+            // A build-preview ghost must never enter the rosters: it is not a
+            // beacon, it is a drawing of one. (OnEnable fires mid-Instantiate,
+            // while BuildSystem still holds the creating-ghost latch.)
+            if (VoxelEngine.Building.BuildSystem.IsCreatingGhost) return;
             if (!s_all.Contains(this)) s_all.Add(this);
             BeaconRoster.Register(this);
         }
@@ -145,35 +184,35 @@ namespace VoxelEngine.GridSystem
             _beam.transform.localScale = new Vector3(cs * 0.15f, beamHeight * 0.5f, cs * 0.15f);
             Object.DestroyImmediate(_beam.GetComponent<Collider>());
 
-            var beamMat = new Material(Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Sprites/Default"));
-            beamMat.color = beamColor;
-            if (beamMat.HasProperty("_BaseColor")) beamMat.SetColor("_BaseColor", beamColor);
-            if (beamMat.HasProperty("_EmissionColor"))
+            _beamMat = new Material(Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Sprites/Default"));
+            _beamMat.color = beamColor;
+            if (_beamMat.HasProperty("_BaseColor")) _beamMat.SetColor("_BaseColor", beamColor);
+            if (_beamMat.HasProperty("_EmissionColor"))
             {
-                beamMat.EnableKeyword("_EMISSION");
-                beamMat.SetColor("_EmissionColor", beamColor * 2f);
+                _beamMat.EnableKeyword("_EMISSION");
+                _beamMat.SetColor("_EmissionColor", beamColor * 2f);
             }
-            _beam.GetComponent<Renderer>().sharedMaterial = beamMat;
+            _beam.GetComponent<Renderer>().sharedMaterial = _beamMat;
 
             // Rotating beacon light housing (the lamp that spins).
             _beaconLight = new GameObject("BeaconLamp");
             _beaconLight.transform.SetParent(transform, false);
             _beaconLight.transform.localPosition = new Vector3(0, cs * 0.35f, 0);
 
-            var lampMat = new Material(Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard"));
-            lampMat.color = new Color(0.9f, 0.9f, 0.95f);
-            if (lampMat.HasProperty("_BaseColor")) lampMat.SetColor("_BaseColor", lampMat.color);
-            if (lampMat.HasProperty("_EmissionColor"))
+            _lampMat = new Material(Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard"));
+            _lampMat.color = new Color(0.9f, 0.9f, 0.95f);
+            if (_lampMat.HasProperty("_BaseColor")) _lampMat.SetColor("_BaseColor", _lampMat.color);
+            if (_lampMat.HasProperty("_EmissionColor"))
             {
-                lampMat.EnableKeyword("_EMISSION");
-                lampMat.SetColor("_EmissionColor", beamColor * 1.5f);
+                _lampMat.EnableKeyword("_EMISSION");
+                _lampMat.SetColor("_EmissionColor", beamColor * 1.5f);
             }
 
             var lamp = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             lamp.transform.SetParent(_beaconLight.transform, false);
             lamp.transform.localScale = new Vector3(cs * 0.12f, cs * 0.08f, cs * 0.12f);
             Object.DestroyImmediate(lamp.GetComponent<Collider>());
-            lamp.GetComponent<Renderer>().sharedMaterial = lampMat;
+            lamp.GetComponent<Renderer>().sharedMaterial = _lampMat;
 
             // Lens.
             var lens = GameObject.CreatePrimitive(PrimitiveType.Sphere);
@@ -181,7 +220,7 @@ namespace VoxelEngine.GridSystem
             lens.transform.localPosition = new Vector3(cs * 0.08f, 0, 0);
             lens.transform.localScale = Vector3.one * cs * 0.06f;
             Object.DestroyImmediate(lens.GetComponent<Collider>());
-            lens.GetComponent<Renderer>().sharedMaterial = beamMat;
+            lens.GetComponent<Renderer>().sharedMaterial = _beamMat;
 
             // Point light.
             _pointLight = _beaconLight.AddComponent<Light>();

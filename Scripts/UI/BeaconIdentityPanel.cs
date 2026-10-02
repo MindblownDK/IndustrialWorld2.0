@@ -78,6 +78,19 @@ namespace VoxelEngine.UI
             }));
             section.Add(T.Spacer(6));
 
+            // ── colour (14.31.0) ───────────────────────────────────────────
+            // Eight presets, not a picker: a swatch is one honest click, reads
+            // identically on every screen, and the HUD marker, beam and lamp
+            // all repaint live through BeaconTint.
+            section.Add(T.Subtitle("Colour"));
+            var colourRow = new VisualElement();
+            colourRow.style.flexDirection = FlexDirection.Row;
+            colourRow.style.flexWrap = Wrap.Wrap;
+            foreach (var (swatch, label) in Swatches)
+                AddColourSwatch(colourRow, beacon, swatch, label, editable, onChanged);
+            section.Add(colourRow);
+            section.Add(T.Spacer(6));
+
             // ── marker range ───────────────────────────────────────────────
             section.Add(T.Subtitle("Marker Range"));
             var rangeRow = new VisualElement();
@@ -99,6 +112,51 @@ namespace VoxelEngine.UI
                 section.Add(T.Muted("Only the owner can change this beacon's name, sharing, or range."));
             }
             return section;
+        }
+
+        // The classic sky-cyan first, because it is the authored default on
+        // both beacon blocks and most beacons will simply stay on it.
+        private static readonly (Color colour, string label)[] Swatches =
+        {
+            (new Color(0.30f, 0.80f, 1.00f), "Sky"),
+            (new Color(0.25f, 0.45f, 1.00f), "Blue"),
+            (new Color(0.25f, 0.95f, 0.55f), "Green"),
+            (new Color(1.00f, 0.92f, 0.30f), "Yellow"),
+            (new Color(1.00f, 0.60f, 0.15f), "Amber"),
+            (new Color(1.00f, 0.30f, 0.25f), "Red"),
+            (new Color(0.95f, 0.35f, 0.95f), "Magenta"),
+            (new Color(0.95f, 0.96f, 1.00f), "White"),
+        };
+
+        private static void AddColourSwatch(VisualElement row, IBeaconSource beacon,
+            Color colour, string label, bool editable, System.Action onChanged)
+        {
+            var current = beacon.BeaconTint;
+            bool selected = Mathf.Abs(current.r - colour.r) < 0.02f
+                         && Mathf.Abs(current.g - colour.g) < 0.02f
+                         && Mathf.Abs(current.b - colour.b) < 0.02f;
+
+            var swatch = new Button(() =>
+            {
+                beacon.BeaconTint = colour;
+                onChanged?.Invoke();
+            }) { tooltip = label };
+            swatch.text = "";
+            swatch.style.width = 24;
+            swatch.style.height = 24;
+            swatch.style.marginRight = 4;
+            swatch.style.marginBottom = 4;
+            swatch.style.backgroundColor = colour;
+            swatch.style.borderTopLeftRadius = swatch.style.borderTopRightRadius =
+            swatch.style.borderBottomLeftRadius = swatch.style.borderBottomRightRadius = 4;
+            var ring = selected ? Color.white : new Color(0f, 0f, 0f, 0.45f);
+            float ringW = selected ? 2f : 1f;
+            swatch.style.borderTopColor = swatch.style.borderBottomColor =
+            swatch.style.borderLeftColor = swatch.style.borderRightColor = ring;
+            swatch.style.borderTopWidth = swatch.style.borderBottomWidth =
+            swatch.style.borderLeftWidth = swatch.style.borderRightWidth = ringW;
+            swatch.SetEnabled(editable);
+            row.Add(swatch);
         }
 
         private static void AddShareButton(VisualElement row, IBeaconSource beacon,

@@ -2595,6 +2595,7 @@ namespace VoxelEngine.Building
                     mb is VoxelEngine.Gas.GasPipe ||
                     mb is VoxelEngine.Fluids.FluidNode ||
                     mb is VoxelEngine.Networks.PipeVisualBuilder ||
+                    mb is VoxelEngine.GridSystem.IBeaconSource ||
                     mb.GetType().Namespace == "VoxelEngine.Simulation")
                 {
                     mb.enabled = false;
