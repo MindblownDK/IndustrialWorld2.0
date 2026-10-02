@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.27.0-dev`
-**Roadmap Version:** `14.27.0-dev`
+**Current Version:** `14.27.1-dev`
+**Roadmap Version:** `14.27.1-dev`
 **Date:** 2026-10-01
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,10 @@
 
 ## 0. Recently Done
 
+### 14.27.1-dev - Do Not Delete The Pilot
+Placing a block on a ship someone was sitting in destroyed their camera with the cockpit ("No cameras rendering") and left the seat marked occupied forever, which made the hull believe a pilot was holding station with dampeners and stop applying gravity to itself - so thrusterless ships floated away. Pilots are now stood up before a rebuild, put back in the same cell afterwards, and seats are released on every path a cockpit can stop existing by. The replicated answer is confirmed against the hull before the flight model acts on it.
+A destroyed cockpit can no longer clear the seat of the replacement hull that took its id, and IsControlled is cached per frame.
+
 ### 14.27.0-dev - Every Lever On The Ship
 Landing gear, docking clamps, rail couplers, pistons and sliding doors were all local-only - a guest's gear never locked on the host, so the ship stayed free to drift while they watched it clamped. One replication channel covers all five, addressed as (grid id, cell) like everything else on a hull: a client requests, the host performs it with the same methods single-player uses so every existing rule still applies, and the host answers with what actually happened. No prediction on anything physical; animations still run locally.
 Clients no longer hand a kinematic hull back to their own physics on unlock or undock. Join catch-up now includes engaged levers, so a ship parked on its gear does not look like it is floating.
@@ -39,10 +43,6 @@ Fixed two kinematic-body velocity warnings: taking a hull over on a client zeroe
 
 ### 14.26.2-dev - Your Own Sky
 Fly mode is per-process state again instead of a PlayerPrefs value shared by every copy of the game on one machine. A second player without a jetpack was clearing the shared flag every frame, so a player who did have one could not stay airborne - flight appeared to require that everyone owned a jetpack. PlayerPrefs now only seeds the value and is written back only when a preference is deliberately saved.
-
-### 14.26.1-dev - Somebody Is Already Flying
-A client no longer skips the whole grid flight model, only its motion - skipping all of it left the ship unpowered on a client, which locked a guest out of the controls and killed thruster plumes for everyone but the pilot. Motion is suppressed by the kinematic body, not by a guard.
-Cockpit occupancy is replicated and arbitrated by the host, addressed as (grid id, cell) so a hull with several seats works and the address survives the ship moving. A taken seat is refused with "Cockpit occupied", and a dropped connection frees its seats and cuts that hull's throttle.
 
 ### 14.26.0-dev - Standing On It
 Milestone 9 COMPLETE. A player standing on a moving hull is now carried by it, position and heading, anchored in the deck's own frame and re-measured each frame - this was missing in single-player too, not just over the network.

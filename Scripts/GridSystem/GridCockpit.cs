@@ -90,6 +90,24 @@ namespace VoxelEngine.GridSystem
             VoxelEngine.Networking.GridSync.SeatDenied -= OnSeatDenied;
         }
 
+        /// <summary>A cockpit can stop existing without anyone standing up - ground off,
+        /// blown up, or rebuilt underneath a seated player when a record arrives. Every
+        /// one of those paths has to release the seat, or the hull keeps believing it
+        /// has a pilot: the chair is unreachable forever, and worse, a ship that thinks
+        /// a pilot is holding station with dampeners stops applying gravity to itself
+        /// and climbs away.</summary>
+        private void OnDestroy()
+        {
+            if (Pilot != null) Exit();
+            else VoxelEngine.Networking.GridSync.ReleaseSeatIfHeld(this);
+        }
+
+        public override void OnRemoved()
+        {
+            base.OnRemoved();
+            if (Pilot != null) Exit();
+        }
+
         /// <summary>The host gave this seat to somebody else. Only possible when two
         /// players reached for it in the same instant, but the loser has to stand back
         /// up or they are sitting in a cockpit the host does not think they own.</summary>

@@ -1,9 +1,37 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.27.0-dev`
+**Current Version:** `14.27.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.27.1-dev] Do Not Delete The Pilot
+
+**Type:** PATCH - two bug fixes that turned out to be one event. No save format or API change.
+
+**Both of these were the same moment: somebody placed a block on a ship you were sitting in.**
+
+Applying a structure record destroys the whole hull and builds it again. That was a documented shortcut from 14.25.0 and it looked harmless, because a ship is just geometry. It is not just geometry when somebody is sitting in it - a seated player is parented to their cockpit so they ride along with the ship.
+
+**"No cameras rendering".** The rebuild was destroying the player's own camera along with the chair they were sitting in. A single block placed by somebody else was enough to do it. The fix is to stand the pilot up before the hull goes, which is the honest thing to do: their cockpit genuinely is about to stop existing. Anything player-owned still parented under the hull is also moved back to the scene root with its world pose intact. **A replication event must never be able to delete a player.**
+
+Standing up and staying up would be a poor trade, so the pilots are put back in the chairs they were in once the new hull exists. This is exactly why a seat is addressed by cell rather than by object: the new chair at (x,y,z) is the same chair as far as the player is concerned.
+
+**Ships ignoring gravity and floating away.** Same event, and this is the part that was genuinely alarming. When the cockpit was destroyed underneath its pilot, nobody ever stood up, so the seat stayed marked occupied forever. `IsControlled` reads that table, and:
+
+```
+ShouldPilotDampenerHold() = DampenersOn && IsControlled && !HasManualThrustInput()
+```
+
+...and a ship holding station does not apply gravity to itself. So the rebuilt hull believed a pilot was sitting there with dampeners on, holding it in place, and it hung in the air and climbed away. That it happened specifically to ships with **no thrusters** is the clue that confirms it: the other path that cancels gravity, hover hold, requires thrusters to have hover authority. Only the phantom pilot can do it to a ship with none.
+
+Seats are now released on every path a cockpit can stop existing by - ground off, destroyed, or rebuilt under a seated player - rather than only when somebody deliberately stands up. On top of that the replicated answer is confirmed against the hull: a seat only counts as occupied if a cockpit still stands at that cell. Cleanup should make that check redundant, but this answer silently switches off gravity for an entire ship when it is wrong, so it verifies rather than trusts.
+
+Three smaller things found while in there:
+
+- Unity defers `Destroy` to the end of the frame, so a destroyed cockpit's teardown can run *after* a replacement hull has already claimed the same id and seated its pilot. A corpse clearing the live ship's seat would have reintroduced the same floating bug intermittently, which is far worse to chase. It now checks that it is still the registered grid for that id before touching anything - the same guard the id registry already used.
+- The host's own authoritative seat table is cleared when a hull is removed. Without it the seat stays held by a connection and the cockpit on the rebuilt ship can never be entered again.
+- `IsControlled` is asked many times per frame by the flight model and the replicated answer walks the hull, so it is cached for the frame. The seat table cannot change in the middle of one.
 
 ### [14.27.0-dev] Every Lever On The Ship
 

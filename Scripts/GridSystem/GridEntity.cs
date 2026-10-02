@@ -324,7 +324,25 @@ namespace VoxelEngine.GridSystem
         // which has the same answer on every machine.
         public bool IsControlled => (ActiveCockpit != null && ActiveCockpit.Pilot != null)
                                  || (ActiveControlFrame != null && ActiveControlPilot != null)
-                                 || VoxelEngine.Networking.GridSync.IsPiloted(this);
+                                 || RemotelyPiloted;
+
+        // IsControlled is asked many times per frame by the flight model, and the
+        // replicated answer has to confirm a cockpit still stands at the seated cell,
+        // which means walking the hull. Once per frame is plenty - the seat table
+        // cannot change in the middle of one.
+        private int _pilotedFrame = -1;
+        private bool _pilotedCache;
+
+        private bool RemotelyPiloted
+        {
+            get
+            {
+                if (_pilotedFrame == Time.frameCount) return _pilotedCache;
+                _pilotedFrame = Time.frameCount;
+                _pilotedCache = VoxelEngine.Networking.GridSync.IsPiloted(this);
+                return _pilotedCache;
+            }
+        }
 
         public void BeginExternalControl(Transform controlFrame, Player.PlayerController pilot)
         {

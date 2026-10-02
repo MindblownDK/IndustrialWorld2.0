@@ -432,6 +432,10 @@ namespace VoxelEngine.Networking
         {
             if (!CanSync || IsApplyingRemote || string.IsNullOrEmpty(netId)) return;
             if (!NetworkSession.IsAuthority) return;
+            // The hull is gone, so its seats are too - on the host's authoritative
+            // table as well as the replicated one every machine reads.
+            NetworkBootstrap.Instance.ForgetGridSeats(netId);
+            ForgetSeats(netId);
             NetworkBootstrap.Instance.SendGridRemoved(netId);
         }
 
@@ -450,12 +454,92 @@ namespace VoxelEngine.Networking
             try
             {
                 var existing = Find(record.NetId);
-                if (existing != null) Object.Destroy(existing.gameObject);
+                _reseat.Clear();
+                if (existing != null)
+                {
+                    EvacuateBeforeRebuild(existing, _reseat);
+                    Object.Destroy(existing.gameObject);
+                }
+                ForgetSeats(record.NetId);
 
                 var grid = persistence.ApplyGridRecord(record.Json);
-                if (grid != null) Adopt(grid, record.NetId);
+                if (grid != null)
+                {
+                    Adopt(grid, record.NetId);
+                    Reseat(grid);
+                }
+                _reseat.Clear();
             }
             finally { IsApplyingRemote = false; }
+        }
+
+        /// <summary>Get anything that belongs to a PLAYER out of a hull that is about
+        /// to be destroyed and rebuilt from a record.
+        ///
+        /// Applying a record destroys the whole ship and builds it again. A player
+        /// seated in a cockpit is parented to that cockpit so they ride along with the
+        /// ship - which means the rebuild was destroying the player's own camera along
+        /// with the chair they were sitting in, and the screen went to "No cameras
+        /// rendering". Someone else placing a single block was enough to do it.
+        ///
+        /// Standing the pilot up first is the fix, and it is the honest one: their
+        /// cockpit genuinely is about to stop existing. Exiting properly also releases
+        /// their seat, which matters more than it looks - a seat left marked occupied
+        /// makes the hull believe it still has a pilot holding station, and a ship
+        /// holding station does not apply gravity to itself. The rebuilt hull would
+        /// hang in the air and climb away.</summary>
+        private static readonly List<(Vector3Int Cell, Player.PlayerController Pilot)> _reseat = new();
+
+        private static void EvacuateBeforeRebuild(GridEntity grid,
+            List<(Vector3Int Cell, Player.PlayerController Pilot)> reseat)
+        {
+            if (grid == null) return;
+
+            // Snapshot first: Exit() reaches back into the grid, and this runs while
+            // the ship is being torn down.
+            _evacuating.Clear();
+            foreach (var block in grid.AllBlocks)
+                if (block is GridCockpit cockpit && cockpit.Pilot != null) _evacuating.Add(cockpit);
+
+            foreach (var cockpit in _evacuating)
+            {
+                reseat?.Add((cockpit.GridPos, cockpit.Pilot));
+                cockpit.Exit();
+            }
+            _evacuating.Clear();
+
+            // Belt and braces: anything player-owned still parented under this hull is
+            // moved to the scene root with its world pose intact. A replication event
+            // must never be able to delete a player.
+            var controllers = grid.GetComponentsInChildren<Player.PlayerController>(true);
+            foreach (var controller in controllers)
+            {
+                if (controller == null) continue;
+                controller.transform.SetParent(null, true);
+            }
+        }
+
+        private static readonly List<GridCockpit> _evacuating = new();
+
+        /// <summary>Put the pilots back in the chairs they were in. Their cockpit was
+        /// destroyed and built again at the same cell, which is the whole point of
+        /// addressing a seat by cell rather than by object: the new chair at (x,y,z) is
+        /// the same chair as far as the player is concerned. Someone else placing a
+        /// block on your ship should not throw you out of the cockpit.</summary>
+        private static void Reseat(GridEntity grid)
+        {
+            if (grid == null || _reseat.Count == 0) return;
+
+            foreach (var (cell, pilot) in _reseat)
+            {
+                if (pilot == null) continue;
+                foreach (var block in grid.AllBlocks)
+                {
+                    if (block is not GridCockpit cockpit || cockpit.GridPos != cell) continue;
+                    cockpit.Enter(pilot);
+                    break;
+                }
+            }
         }
 
         // ── part reassembly ───────────────────────────────────────────
@@ -530,9 +614,16 @@ namespace VoxelEngine.Networking
         public static void ApplyRemoved(string netId)
         {
             var grid = Find(netId);
+            ForgetSeats(netId);
             if (grid == null) return;
             IsApplyingRemote = true;
-            try { Object.Destroy(grid.gameObject); }
+            try
+            {
+                // Same reasoning as a rebuild: get the players out before the ship
+                // they are sitting in stops existing.
+                EvacuateBeforeRebuild(grid, null);
+                Object.Destroy(grid.gameObject);
+            }
             finally { IsApplyingRemote = false; }
         }
 
@@ -571,7 +662,17 @@ namespace VoxelEngine.Networking
         // A hull can have several cockpits and they are occupied independently, so
         // the grid id alone is not an address for one - and the cell is exact and
         // stays correct while the ship is moving, which a world position does not.
-        private static readonly HashSet<string> _occupiedSeats = new();
+        private static readonly Dictionary<string, HashSet<Vector3Int>> _occupiedSeats = new();
+
+        /// <summary>Drop every seat on a hull. Called when that hull is about to be
+        /// destroyed and rebuilt from a record, and when it is removed outright.
+        /// A seat left marked occupied after its cockpit stopped existing is not a
+        /// cosmetic leak: IsControlled reads it, and a ship that believes it has a
+        /// pilot holding station with dampeners stops applying gravity to itself.</summary>
+        public static void ForgetSeats(string netId)
+        {
+            if (!string.IsNullOrEmpty(netId)) _occupiedSeats.Remove(netId);
+        }
 
         internal static string SeatKey(string netId, Vector3Int cell)
             => $"{netId}|{cell.x},{cell.y},{cell.z}";
@@ -586,9 +687,15 @@ namespace VoxelEngine.Networking
             if (grid == null || NetworkSession.Mode == SessionMode.Offline) return false;
             var tag = grid.GetComponent<GridNetTag>();
             if (tag == null || string.IsNullOrEmpty(tag.Id)) return false;
-            string prefix = tag.Id + "|";
-            foreach (var key in _occupiedSeats)
-                if (key.StartsWith(prefix, System.StringComparison.Ordinal)) return true;
+            if (!_occupiedSeats.TryGetValue(tag.Id, out var cells) || cells.Count == 0) return false;
+
+            // The cell must still hold a cockpit. Lifecycle cleanup should already
+            // have dropped a seat whose cockpit went away, but this answer feeds the
+            // flight model - a stale yes silently switches gravity off for the whole
+            // ship - so it is worth confirming against the hull rather than trusting
+            // the table to have been tidied.
+            foreach (var block in grid.AllBlocks)
+                if (block is GridCockpit && cells.Contains(block.GridPos)) return true;
             return false;
         }
 
@@ -600,15 +707,24 @@ namespace VoxelEngine.Networking
             if (grid == null || NetworkSession.Mode == SessionMode.Offline) return false;
             var tag = grid.GetComponent<GridNetTag>();
             if (tag == null || string.IsNullOrEmpty(tag.Id)) return false;
-            return _occupiedSeats.Contains(SeatKey(tag.Id, cell));
+            return _occupiedSeats.TryGetValue(tag.Id, out var cells) && cells.Contains(cell);
         }
 
         /// <summary>Host -> everyone: this seat is taken, or free again.</summary>
         public static void SetSeatOccupied(string netId, Vector3Int cell, bool occupied)
         {
-            string key = SeatKey(netId, cell);
-            if (occupied) _occupiedSeats.Add(key);
-            else _occupiedSeats.Remove(key);
+            if (string.IsNullOrEmpty(netId)) return;
+            if (occupied)
+            {
+                if (!_occupiedSeats.TryGetValue(netId, out var cells))
+                    _occupiedSeats[netId] = cells = new HashSet<Vector3Int>();
+                cells.Add(cell);
+            }
+            else if (_occupiedSeats.TryGetValue(netId, out var cells))
+            {
+                cells.Remove(cell);
+                if (cells.Count == 0) _occupiedSeats.Remove(netId);
+            }
         }
 
         /// <summary>Local player took a cockpit. On a client this asks the host for
@@ -639,6 +755,24 @@ namespace VoxelEngine.Networking
                 NetworkBootstrap.Instance.SendGridControl(id, cell, false);
             else if (NetworkSession.Mode == SessionMode.Host && CanSync)
                 NetworkBootstrap.Instance.HostLeaveSeat(id, cell);
+        }
+
+        /// <summary>Release a seat this machine is holding for a cockpit that is going
+        /// away without its pilot standing up. Safe to call when nothing is held.</summary>
+        public static void ReleaseSeatIfHeld(GridCockpit cockpit)
+        {
+            if (cockpit == null || cockpit.Grid == null) return;
+            var tag = cockpit.Grid.GetComponent<GridNetTag>();
+            if (tag == null || string.IsNullOrEmpty(tag.Id)) return;
+
+            // Unity defers Destroy to the end of the frame, so this can fire AFTER a
+            // replacement hull has already claimed the same id and seated its pilot.
+            // A corpse must not clear the live ship's seat - same guard Unregister uses.
+            if (!_byId.TryGetValue(tag.Id, out var current) || current != tag) return;
+
+            SetSeatOccupied(tag.Id, cockpit.GridPos, false);
+            if (LocalControlClaim == tag.Id && _localControlCell == cockpit.GridPos)
+                ReleaseControl();
         }
 
         /// <summary>The host refused a seat we had already sat down in. Rare - it only

@@ -1538,6 +1538,23 @@ namespace VoxelEngine.Networking
             AnnounceSeatState(netId, cell, false);
         }
 
+        /// <summary>Host side: a hull stopped existing, so nobody is sitting in it any
+        /// more. Without this the seat stays held by a connection and the cockpit on the
+        /// rebuilt ship can never be entered again.</summary>
+        public void ForgetGridSeats(string netId)
+        {
+            if (string.IsNullOrEmpty(netId)) return;
+            List<string> dropped = null;
+            foreach (var pair in _seatAddress)
+                if (pair.Value.NetId == netId) (dropped ??= new List<string>()).Add(pair.Key);
+            if (dropped == null) return;
+            foreach (var key in dropped)
+            {
+                _seatPilot.Remove(key);
+                _seatAddress.Remove(key);
+            }
+        }
+
         private void AnnounceSeatState(string netId, Vector3Int cell, bool occupied)
         {
             GridSync.SetSeatOccupied(netId, cell, occupied);
