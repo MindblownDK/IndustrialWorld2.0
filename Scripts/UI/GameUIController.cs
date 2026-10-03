@@ -62,6 +62,7 @@ namespace VoxelEngine.UI
         private bool _inventoryOpen;
         public bool IsInventoryOpen => _inventoryOpen;
         private IItemContainer _rightContainer; // chest contents OR furnace etc.
+        private VoxelEngine.Items.DeathLootBag _openLootBag; // death loot bag behind _rightContainer (14.36.0)
         private VoxelEngine.Building.Chest _openChest; // set when the right container is a Chest (drives Item Ports UI)
         private Furnace        _openFurnace;
         private ElectricFurnace _openElectric;
@@ -730,6 +731,7 @@ namespace VoxelEngine.UI
             if (!_inventoryOpen) UIState.PushBlock();
             _rightContainer = c;
             _openChest      = owningChest;
+            _openLootBag    = null;
             _inventoryOpen  = true;
             _openFurnace    = null;
             _openElectric   = null;
@@ -751,6 +753,24 @@ namespace VoxelEngine.UI
             UnlockCursor();
             Refresh();
         }
+        /// <summary>Open a death loot bag (14.36.0): the generic container panel
+        /// plus the bag-only TAKE ALL action that restores slot positions.</summary>
+        public void OpenLootBag(VoxelEngine.Items.DeathLootBag bag)
+        {
+            if (bag == null || bag.container == null) return;
+            OpenContainer(bag.container);
+            _openLootBag = bag;
+            Refresh();
+        }
+
+        /// <summary>A loot bag was emptied or removed while its panel was open
+        /// on this machine - close the panel instead of showing a ghost.</summary>
+        public void NotifyLootBagGone(VoxelEngine.Items.DeathLootBag bag)
+        {
+            if (bag == null || _openLootBag != bag) return;
+            CloseAll();
+        }
+
         public void OpenFurnace(Furnace f)
         {
             if (!_inventoryOpen) UIState.PushBlock();
@@ -1125,7 +1145,7 @@ namespace VoxelEngine.UI
             CloseTankTypeVoidConfirmation();
             if (_inventoryOpen) UIState.PopBlock();
             _inventoryOpen  = false;
-            _rightContainer = null; _openChest = null;
+            _rightContainer = null; _openChest = null; _openLootBag = null;
             _openFurnace    = null;
             _openElectric   = null;
             _openCoalGen    = null;
@@ -3553,6 +3573,46 @@ namespace VoxelEngine.UI
 
             panel.Add(MakeTitle(c.Name));
             panel.Add(IndustrialTheme.HazardDivider());
+
+            // Death loot bag (14.36.0): one button returns everything to the
+            // exact slots it was lost from. Occupied slots fall back to normal
+            // insertion; what cannot fit stays in the bag.
+            if (_openLootBag != null)
+            {
+                var bag = _openLootBag;
+                var row = new VisualElement();
+                row.style.flexDirection = FlexDirection.Row;
+                row.style.alignItems = Align.Center;
+                row.style.marginTop = 6; row.style.marginBottom = 4;
+
+                var hint = new Label("Everything sits in the slot it was lost from.");
+                hint.style.color = new StyleColor(UITheme.TextSecondary);
+                hint.style.fontSize = 11;
+                hint.style.flexGrow = 1;
+                hint.style.flexShrink = 1;
+                hint.style.whiteSpace = WhiteSpace.Normal;
+                row.Add(hint);
+
+                var takeAll = new Button(() =>
+                {
+                    bag.TakeAll(inventory);
+                    Refresh();
+                }) { text = "TAKE ALL" };
+                takeAll.style.minHeight = 30;
+                takeAll.style.minWidth = 110;
+                takeAll.style.fontSize = 12;
+                takeAll.style.unityFontStyleAndWeight = FontStyle.Bold;
+                takeAll.style.letterSpacing = 0.8f;
+                takeAll.style.marginLeft = 8;
+                takeAll.style.flexShrink = 0;
+                takeAll.style.color = Color.white;
+                takeAll.style.backgroundColor = new StyleColor(
+                    new Color(UITheme.AccentGreen.r, UITheme.AccentGreen.g, UITheme.AccentGreen.b, 0.85f));
+                UITheme.Radius(takeAll, UITheme.ButtonRadius);
+                UITheme.Border(takeAll, 0, Color.clear);
+                row.Add(takeAll);
+                panel.Add(row);
+            }
 
             // Scroll so the slot grid + advanced port config both fit on small panels.
             var scroll = new ScrollView(ScrollViewMode.Vertical);

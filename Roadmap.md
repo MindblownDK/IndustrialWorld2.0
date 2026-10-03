@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.34.0-dev`
-**Roadmap Version:** `14.34.0-dev`
+**Current Version:** `14.36.0-dev`
+**Roadmap Version:** `14.36.0-dev`
 **Date:** 2026-10-03
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,12 @@
 
 ## 0. Recently Done
 
+### 14.36.0-dev - What the Fallen Leave Behind
+Death is animated and death has stakes: the avatar plays the sword-and-shield death clip when the replicated health mirror hits zero (one-shot, frozen on the final frame until respawn), and the whole 40-slot inventory drops into a loot bag at the death position. The bag mirrors the inventory's slot layout, so TAKE ALL restores every stack to the exact slot it was lost from; anyone may loot a found bag, but only the owner sees the local-only recovery beacon (1 km). Bags never expire, persist with the world save (additive list), and ride the DropSync wire pattern with a join snapshot.
+
+### 14.35.0-dev - The World Answers to the Pick
+Everything the player holds is a weapon: one melee profile (weapons authored, tools at 30% working strength, objects as clubs, the bare fist weakest) feeds the 14.34.0 server-validated hit pipeline against players and the normal damage interface against creatures - including swings at open air, where avatars have no colliders for the physics ray. Voxel terrain (planets and asteroids) now yields to the pickaxe alone; trees, leveling, explosives, machines and block-breaking keep their own paths, and under-tier picks still dig slowly.
+
 ### 14.34.0-dev - Steel Against Steel
 Real PvP: melee, ranged and explosion damage reach player avatars as server-validated intents - the attacker reports the attempt, the server checks it, the victim's own machine applies armor and damage, and a kill names the killer on the death screen. Friendly fire is a world rule (create/edit world, settings sidecar, default off), never a team choice; teammates' hits are refused server-side.
 Team ranks: one OWNER (crown - rename, promote/demote, remove anyone, disband by leaving last) plus appointed LEADERS (shield - invite and remove ordinary members); ownership passes to the earliest-joined leader, else member. Team names are unique per session, refused server-side. The pause-menu teams page is wider, wraps long names and keeps every button on screen; the TEAMS flag renders through the Lucide icon font instead of a missing-glyph square.
@@ -41,15 +47,6 @@ The TEAMS page in the pause menu shows it all with live refresh and roster-diff 
 ### 14.32.1-dev - A Tower Pays Its Way
 The Stationary Radar Beacon was never wired into the power system at all: the switch was a bare toggle, the panel printed its 10 W unconditionally and BROADCASTING appeared whenever the switch was up. The regenerated prefab now carries a PowerConsumer (10 W, 4 m auto-connect), demand follows the switch, broadcasting follows the network's verdict, and an unpowered or switched-off tower goes dark on every screen at once - beam, HUD marker, orbital contact, warp rendezvous. The panel reports BROADCASTING / NO POWER / OFF honestly and names what to connect when the grid will not pay.
 
-### 14.32.0-dev - A Ghost Worth Seeing
-The 14.31.0 play round's four reports, fixed at their sources: build previews that drew nothing for any block (both ghost systems built their materials through raw transparent-state property writes; one shared helper now applies URP's canonical keyword state, and both builders trace their preview state to the console one line per change so a silent failure can never hide again); the beacon name box that kicked the player out mid-word (the 4 Hz panel rebuild destroyed the field while typing - one shared themed text-field factory now guards focus, and the grid cryobed's field with it); the radar item wearing iron ore's icon (a duplicated-asset inheritance the self-healer could never repair; the setup tool authors a proper sticker and rebinds); and a custom colour mixer to the left of the preset swatches - R/G/B sliders, live retint while dragging, one commit on release, rebuild deferred for the whole drag.
-A held item whose prefab link is missing now says so on screen instead of failing silently, and the static build system self-heals lost camera/inventory references like its siblings always did.
-
-### 14.31.0-dev - A Beacon Holds Its Colour
-Beacon colour customization: eight preset swatches in the shared identity panel, owner-only; beam, lamp, point light and the HUD marker all repaint live and the colour rides the existing marker channel, sweep signature and additive save payload (own-cyan/shared-amber markers retired - the beacon's colour is the marker's colour).
-Three fixes from the 14.30.0 play round: the unpowered beacon no longer strobes (power demand depends on the switch, not on its own success), the Stationary Radar Beacon is placeable again (the setup tool now reconnects its item's prefab outside the create-only guard, and the regenerated collider no longer dips below the base), and build previews are inert beacon-side (ghost copies no longer stamp identities, enter the roster or raise their sky-beam; StripGhost disables IBeaconSource by construction).
-Roster visibility sweeps now survive a beacon destroyed mid-frame: interface references dodge Unity's destroyed-equals-null, so consumers test the underlying Component.
-
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
 - **Topology:** client-server ONLY. First target is a **listen server** (one player hosts, 2-8 players total). **Dedicated headless servers** come after the listen-server milestone works. **True P2P is permanently out of scope.**
@@ -58,7 +55,7 @@ Roster visibility sweeps now survive a beacon destroyed mid-frame: interface ref
 
 ### Milestone Plan (14.0.0 - after the current construction arc stabilizes)
 1. **Foundation:** Fish-Net package in, NetworkManager boot flow, host/join UI, player identity (stable per-player id), player spawn + transform/animation sync. *(DONE 14.0.0-dev + 14.1.0-dev - identity, bridge, host/join UI, avatar spawn + transform sync; animation sync waits for a real character rig.)*
-2. **Player state:** per-player Inventory, PlayerStats, hotbar and equipment sync; interaction raycasts validated server-side. *(IN PROGRESS - 14.2.0-dev ships the visible half: held item + stance replication on avatars; 14.24.0 the host-owned per-player records; 14.34.0 PvP damage as server-validated hit intents applied by the victim's own machine, gated by the world friendly-fire rule.)*
+2. **Player state:** per-player Inventory, PlayerStats, hotbar and equipment sync; interaction raycasts validated server-side. *(IN PROGRESS - 14.2.0-dev ships the visible half: held item + stance replication on avatars; 14.24.0 the host-owned per-player records; 14.34.0 PvP damage as server-validated hit intents applied by the victim's own machine, gated by the world friendly-fire rule; 14.35.0 universal melee - every held item and the bare fist damage players and creatures through the same pipeline; 14.36.0 death animation plus the persistent, slot-exact loot bag with the owner-only recovery beacon.)*
 3. **Building sync:** all placement/upgrade/removal flows route through server RPCs in `BuildSystemV2` / `PlacedTieredBlock`; structural audits (`StructuralLoadState`) run server-side only; results replicate. *(DONE 14.4.0-14.6.0 - shipped as relayed broadcasts with positional piece identity instead of server-only audits: remote pieces stay unarmed and the origin machine announces its audit results, which converges cascades without moving the simulation; live place/upgrade/remove/damage, two-way join snapshot, doors and code locks all replicate. Open: shared build costs - placer pays alone today.)*
 4. **World sync:** voxel chunk edit replication + join-in-progress chunk streaming (the long pole - design payloads early, delta edits not full chunks). *(DONE for the shared-planet case - 14.7.0-dev live op replication + 14.8.0-dev edited-chunk join catch-up. Remaining niceties: multi-planet catch-up, fluid sim state.)*
 5. **Simulation sync:** machines, power, fluids, conveyors run server-side; clients render replicated state. *(DONE 14.9.0-14.12.0 - shipped as host-authoritative convergence rather than server-only simulation: item-block structure (14.9.0), container contents (14.10.0), dropped items (14.11.0) and machine runtime state + placement payloads (14.12.0) all replicate through the save-format capture/restore seams as opaque JSON. Clients keep simulating and converge onto the host's outcome. Accepted gaps: mid-belt packet cosmetics stay per-machine; true client-sim-off moves to the dedicated-server milestone.)*
@@ -78,6 +75,8 @@ Roster visibility sweeps now survive a beacon destroyed mid-frame: interface ref
 - **Guest upload cadence** (accepted 14.24.0): a guest reports its state every ten seconds and once on the way out, so a client killed outright can lose that much of its own progress. Host-side world state is unaffected.
 - **Bed spawn is not per-player** (deferred 14.24.0): a guest's pose is restored from their record, but the bed/respawn point is still the world's single spawn sidecar rather than one bed per player id.
 - **Per-cell structure deltas and build prediction** (accepted 14.25.0 / 14.29.0): a changed hull is resent whole, and a guest's build is confirmed by the host's echo rather than predicted locally.
+- **Loot-bag race** (accepted 14.36.0): two players looting the SAME bag in the same instant - the whole-payload announces cross on the wire and one side's grab can be overwritten; same vanishingly small window the drops accepted in 14.11.0.
+- **Armor stays equipped through death** (decided 14.36.0): the loot bag carries the 40 carried slots; worn equipment is not part of the drop.
 - **Refund on a refused grid placement** (accepted 14.29.0): two players reaching for the same cell in the same instant - the loser's locally paid cost is not refunded; the echo removes the block.
 - **Beacon block visibility** (accepted 14.30.0): the beacon BLOCK is world geometry and replicates like any block, and its settings ride seams that reach every machine; the share rule protects knowledge-at-distance (markers, map contacts, warp targets), enforced at the host's per-recipient marker channel and at every draw site, not by per-viewer filtering of hull records. Marker range is enforced draw-side - range is a reach preference, the share rule is the secret.
 - **Dedicated headless server** (milestone 12, never started): headless build target, server-side persistence, no local-player assumptions in boot code.

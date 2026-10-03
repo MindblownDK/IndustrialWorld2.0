@@ -462,6 +462,36 @@ namespace VoxelEngine.Networking
         public List<DropRecord> Records;
     }
 
+    /// <summary>A death loot bag appeared (14.36.0). Payload is the bag's
+    /// slot-indexed save-format JSON, so stacks arrive intact and in place.</summary>
+    public struct BagSpawnedBroadcast : IBroadcast
+    {
+        public string Id;
+        public string OwnerId;
+        public string OwnerName;
+        public Vector3 Position;
+        public string Json;
+    }
+
+    /// <summary>A loot bag's contents changed - whole payload, bags are small.</summary>
+    public struct BagUpdatedBroadcast : IBroadcast
+    {
+        public string Id;
+        public string Json;
+    }
+
+    /// <summary>A loot bag was emptied or otherwise removed.</summary>
+    public struct BagRemovedBroadcast : IBroadcast
+    {
+        public string Id;
+    }
+
+    /// <summary>All live loot bags (join merge, 14.36.0).</summary>
+    public struct BagSnapshotBroadcast : IBroadcast
+    {
+        public List<BagRecord> Records;
+    }
+
     /// <summary>One edited terrain chunk for the join catch-up (14.8.0):
     /// deflate-compressed full padded voxel grid, planet-tagged.</summary>
     public struct TerrainChunkBroadcast : IBroadcast
@@ -605,6 +635,10 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.RegisterBroadcast<DropUpdatedBroadcast>(OnServerDropUpdated);
             _networkManager.ServerManager.RegisterBroadcast<DropRemovedBroadcast>(OnServerDropRemoved);
             _networkManager.ServerManager.RegisterBroadcast<DropSnapshotBroadcast>(OnServerDropSnapshot);
+            _networkManager.ServerManager.RegisterBroadcast<BagSpawnedBroadcast>(OnServerBagSpawned);
+            _networkManager.ServerManager.RegisterBroadcast<BagUpdatedBroadcast>(OnServerBagUpdated);
+            _networkManager.ServerManager.RegisterBroadcast<BagRemovedBroadcast>(OnServerBagRemoved);
+            _networkManager.ServerManager.RegisterBroadcast<BagSnapshotBroadcast>(OnServerBagSnapshot);
             _networkManager.ServerManager.RegisterBroadcast<TerrainChunkBroadcast>(OnServerTerrainChunk);
             _networkManager.ServerManager.RegisterBroadcast<WorldAckBroadcast>(OnWorldAck);
             _networkManager.ServerManager.RegisterBroadcast<BaseSnapshotBroadcast>(OnServerBaseSnapshot);
@@ -635,6 +669,10 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.RegisterBroadcast<DropUpdatedBroadcast>(OnClientDropUpdated);
             _networkManager.ClientManager.RegisterBroadcast<DropRemovedBroadcast>(OnClientDropRemoved);
             _networkManager.ClientManager.RegisterBroadcast<DropSnapshotBroadcast>(OnClientDropSnapshot);
+            _networkManager.ClientManager.RegisterBroadcast<BagSpawnedBroadcast>(OnClientBagSpawned);
+            _networkManager.ClientManager.RegisterBroadcast<BagUpdatedBroadcast>(OnClientBagUpdated);
+            _networkManager.ClientManager.RegisterBroadcast<BagRemovedBroadcast>(OnClientBagRemoved);
+            _networkManager.ClientManager.RegisterBroadcast<BagSnapshotBroadcast>(OnClientBagSnapshot);
             _networkManager.ClientManager.RegisterBroadcast<TerrainChunkBroadcast>(OnClientTerrainChunk);
             _networkManager.ClientManager.RegisterBroadcast<BaseSnapshotBroadcast>(OnClientBaseSnapshot);
             _networkManager.ClientManager.RegisterBroadcast<PlayerStateBroadcast>(OnClientPlayerState);
@@ -720,6 +758,10 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.UnregisterBroadcast<DropUpdatedBroadcast>(OnServerDropUpdated);
             _networkManager.ServerManager.UnregisterBroadcast<DropRemovedBroadcast>(OnServerDropRemoved);
             _networkManager.ServerManager.UnregisterBroadcast<DropSnapshotBroadcast>(OnServerDropSnapshot);
+            _networkManager.ServerManager.UnregisterBroadcast<BagSpawnedBroadcast>(OnServerBagSpawned);
+            _networkManager.ServerManager.UnregisterBroadcast<BagUpdatedBroadcast>(OnServerBagUpdated);
+            _networkManager.ServerManager.UnregisterBroadcast<BagRemovedBroadcast>(OnServerBagRemoved);
+            _networkManager.ServerManager.UnregisterBroadcast<BagSnapshotBroadcast>(OnServerBagSnapshot);
             _networkManager.ServerManager.UnregisterBroadcast<TerrainChunkBroadcast>(OnServerTerrainChunk);
             _networkManager.ServerManager.UnregisterBroadcast<WorldAckBroadcast>(OnWorldAck);
             _networkManager.ServerManager.UnregisterBroadcast<BaseSnapshotBroadcast>(OnServerBaseSnapshot);
@@ -750,6 +792,10 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.UnregisterBroadcast<DropUpdatedBroadcast>(OnClientDropUpdated);
             _networkManager.ClientManager.UnregisterBroadcast<DropRemovedBroadcast>(OnClientDropRemoved);
             _networkManager.ClientManager.UnregisterBroadcast<DropSnapshotBroadcast>(OnClientDropSnapshot);
+            _networkManager.ClientManager.UnregisterBroadcast<BagSpawnedBroadcast>(OnClientBagSpawned);
+            _networkManager.ClientManager.UnregisterBroadcast<BagUpdatedBroadcast>(OnClientBagUpdated);
+            _networkManager.ClientManager.UnregisterBroadcast<BagRemovedBroadcast>(OnClientBagRemoved);
+            _networkManager.ClientManager.UnregisterBroadcast<BagSnapshotBroadcast>(OnClientBagSnapshot);
             _networkManager.ClientManager.UnregisterBroadcast<TerrainChunkBroadcast>(OnClientTerrainChunk);
             _networkManager.ClientManager.UnregisterBroadcast<BaseSnapshotBroadcast>(OnClientBaseSnapshot);
             _networkManager.ClientManager.UnregisterBroadcast<PlayerStateBroadcast>(OnClientPlayerState);
@@ -2086,6 +2132,8 @@ namespace VoxelEngine.Networking
                 if (!StillWorthSending(target)) continue;
                 yield return StartCoroutine(SendDropSnapshot(target));
                 if (!StillWorthSending(target)) continue;
+                yield return StartCoroutine(SendBagSnapshot(target));
+                if (!StillWorthSending(target)) continue;
                 yield return StartCoroutine(SendTerrainSnapshot(target));
                 if (!StillWorthSending(target)) continue;
                 yield return StartCoroutine(SendGridSnapshot(target));
@@ -2637,6 +2685,95 @@ namespace VoxelEngine.Networking
         {
             if (_serverStarted || WorldMismatch) return;
             DropSync.ApplySnapshot(msg.Records);
+        }
+
+        // ── Death loot bags (14.36.0) - the DropSync wire pattern verbatim ──
+
+        public void SendBagSpawned(string id, string ownerId, string ownerName, Vector3 pos, string json)
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(new BagSpawnedBroadcast
+            { Id = id, OwnerId = ownerId, OwnerName = ownerName, Position = pos, Json = json });
+        }
+
+        public void SendBagUpdated(string id, string json)
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(new BagUpdatedBroadcast { Id = id, Json = json });
+        }
+
+        public void SendBagRemoved(string id)
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(new BagRemovedBroadcast { Id = id });
+        }
+
+        private void OnServerBagSpawned(NetworkConnection conn, BagSpawnedBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (!conn.IsLocalClient) BagSync.ApplySpawned(msg.Id, msg.OwnerId, msg.OwnerName, msg.Position, msg.Json);
+            RelayToOthers(conn, msg);
+        }
+
+        private void OnServerBagUpdated(NetworkConnection conn, BagUpdatedBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (!conn.IsLocalClient) BagSync.ApplyUpdated(msg.Id, msg.Json);
+            RelayToOthers(conn, msg);
+        }
+
+        private void OnServerBagRemoved(NetworkConnection conn, BagRemovedBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (!conn.IsLocalClient) BagSync.ApplyRemoved(msg.Id);
+            RelayToOthers(conn, msg);
+        }
+
+        private void OnServerBagSnapshot(NetworkConnection conn, BagSnapshotBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted) return;
+            if (!conn.IsLocalClient) BagSync.ApplySnapshot(msg.Records);
+            RelayToOthers(conn, msg);
+        }
+
+        private void OnClientBagSpawned(BagSpawnedBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            BagSync.ApplySpawned(msg.Id, msg.OwnerId, msg.OwnerName, msg.Position, msg.Json);
+        }
+
+        private void OnClientBagUpdated(BagUpdatedBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            BagSync.ApplyUpdated(msg.Id, msg.Json);
+        }
+
+        private void OnClientBagRemoved(BagRemovedBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            BagSync.ApplyRemoved(msg.Id);
+        }
+
+        private void OnClientBagSnapshot(BagSnapshotBroadcast msg, Channel channel)
+        {
+            if (_serverStarted || WorldMismatch) return;
+            BagSync.ApplySnapshot(msg.Records);
+        }
+
+        /// <summary>Gather every live loot bag and send it - to a joining
+        /// connection when called as server, up to the server when target is null.</summary>
+        private IEnumerator SendBagSnapshot(NetworkConnection target)
+        {
+            var records = new List<BagRecord>();
+            foreach (var record in BagSync.StreamSnapshot())
+            {
+                records.Add(record);
+                if (BudgetSpent()) { yield return null; ResetFrameBudget(); }
+            }
+            if (records.Count == 0) yield break;
+            var msg = new BagSnapshotBroadcast { Records = records };
+            if (target != null) _networkManager.ServerManager.Broadcast(target, msg, true);
+            else _networkManager.ClientManager.Broadcast(msg);
         }
 
         /// <summary>Gather every live world drop and send it chunked - to a joining

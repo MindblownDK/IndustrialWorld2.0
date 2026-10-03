@@ -1,9 +1,33 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.34.0-dev`
+**Current Version:** `14.36.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.36.0-dev] What the Fallen Leave Behind
+
+**Type:** MINOR - dying means something now: a real death animation on every machine, and the whole inventory drops into a loot bag that remembers exactly where every stack lived. Save format gains one additive list (loot bags); legacy saves load clean.
+
+**The crusader falls.** The sword-and-shield pack has carried a death clip since 14.17.0 and nobody ever played it - a killed player's avatar just stood there at full idle while its killer stared. The animator gains a death slot that overrides every other state the moment the replicated health mirror reads zero: the clip plays once, full body, then freezes on its final frame - a corpse holds its pose, it does not loop back to life - until the respawn pushes health back up and the avatar stands with the normal state machine. No new sync state was needed; the health mirror that already drives the hurt stance and the floating bar carries death as its zero.
+
+**Everything carried drops into one bag.** On death, all 40 slots - hotbar and backpack - move into a single loot bag at the death position, settled onto the ground along local gravity. The bag's container is the same 40-slot shape as the player inventory with every stack parked at its original index, which is what makes the recovery honest: the panel's TAKE ALL button puts every stack back into the exact slot it was lost from, falls back to normal insertion when a slot has been refilled in the meantime, and leaves whatever does not fit in the bag. Opening the bag (E, like any chest) shows a normal container panel - drag out single stacks, or take it all. Equipped armor stays on the body; the bag carries what was in the pouch.
+
+**The beacon is the owner's alone.** A warm light column stands over the bag - rendered purely locally, drawn only for the machine whose player id owns the bag, and only within 1 km. Nothing about the beacon crosses the wire, so there is nothing another client could sniff: every machine knows who owns the bag and simply refuses to draw the column for anyone else. The bag itself is open to ANYONE who physically finds it - full-loot PvP, a kill is worth the fight - the owner's advantage is knowing where to run.
+
+**A bag is not a dropped item.** DroppedItem despawns after 300 seconds by design; a loot bag never expires and persists with the world save (a crash between death and recovery must never cost the run), despawning only when its last stack is taken. On the wire it rides the proven DropSync pattern - the victim's machine announces the spawn (the death was applied there by 14.34.0's damage orders, so it is the one true origin), every mutation re-announces the whole small payload, and a join snapshot carries all live bags. Stacks travel as save-format JSON, so durability, charge and liquid payloads arrive intact.
+
+**Files:** `Scripts/Items/DeathLootBag.cs` (new), `Scripts/Networking/BagSync.cs` (new), plus edits to `CrusaderAnimator.cs`, `PlayerAvatar.cs`, `PlayerStats.cs`, `PlayerInteractionTool.cs`, `GameUIController.cs`, `NetworkBootstrap.cs` and `WorldStatePersistence.cs`. No prefabs, items or recipes: copy the scripts over, no setup re-run needed.
+
+### [14.35.0-dev] The World Answers to the Pick
+
+**Type:** MINOR - two combat-feel rules from live testing: everything the player holds (or does not hold) is a weapon whose damage comes from the item, and voxel terrain yields to the pickaxe alone. No save-format change.
+
+**Everything does damage - the item decides how much.** Until now only crafted WeaponItems could hurt a creature or another player; a swung pickaxe, a torch or a bare fist passed straight through. One melee profile now serves every swing: weapons keep their authored stats and their own dispatch, tools strike at 30% of their working strength (a pickaxe is a fearsome improvised weapon, but never a sword - crafted weapons stay worth crafting), any other held object is at least a club, and the empty hand is the weakest of all, a 4-damage punch. The profile feeds the same server-validated hit-intent pipeline 14.34.0 built - avatars are swept analytically on every swing (including swings at open air, where the physics ray finds nothing because avatars carry no colliders), the nearest physical surface still wins so cover keeps working, and the world friendly-fire rule gates teammates exactly as before. Creatures take the same universal swing through their normal damage interface, gated on melee reach so a distant animal never eats a mining stroke, and tools wear durability when used as weapons.
+
+**The ground yields to the pick alone.** Digging voxels - planet terrain and space asteroids both - now requires a pickaxe in hand. Fists, axes, swords and carried objects no longer carve the world; a swing at the dirt says "Digging needs a pickaxe" instead of silently eating terrain. Everything deliberate about terrain keeps its own path untouched: the axe still fells trees, the leveling tool still flattens, explosives still crater, quarries and machines still excavate, and an under-TIER pickaxe still digs slowly rather than hitting an invisible wall - the established efficiency rule, now reserved for actual picks. Placed blocks, tiered buildings and grid blocks break exactly as before; this rule is about the voxels.
+
+**Files:** edits to `Scripts/Player/PlayerInteractionTool.cs` only. No prefabs, items or recipes: copy the script over, no setup re-run needed.
 
 ### [14.34.0-dev] Steel Against Steel
 

@@ -405,6 +405,25 @@ namespace VoxelEngine.Player
 
             if (!hasHit)
             {
+                // A player in range with open air behind them: the physics ray
+                // found nothing because avatars carry no colliders (14.35.0).
+                // Every held item - and the bare fist - lands this swing.
+                if (mineHeld && Time.time >= _nextHit)
+                {
+                    ResolveMeleeProfile(heldStack, out float skyDmg, out float skyRange,
+                        out float skyRate, out var skyType);
+                    if (VoxelEngine.Networking.PlayerCombat.TryFindAvatarHit(
+                            ray, skyRange, 0.35f, out var skyAvatar, out var skyPoint, out _))
+                    {
+                        GetComponent<VoxelEngine.Player.HeldToolView>()?.DoSwing();
+                        VoxelEngine.Networking.PlayerCombat.RequestDamage(
+                            skyAvatar, skyDmg, skyType, skyPoint, ray.direction, skyRange);
+                        if (!heldStack.IsEmpty && heldStack.item is ToolItem) ConsumeDurability(heldStack);
+                        _nextHit = Time.time + 1f / Mathf.Max(0.1f, skyRate);
+                        return;
+                    }
+                }
+
                 // Mining tools still play their swing when aimed at the sky (nothing to hit).
                 if (mineHeld && Time.time >= _nextHit
                     && !heldStack.IsEmpty && heldStack.item is ToolItem mt
@@ -518,6 +537,24 @@ namespace VoxelEngine.Player
             {
                 if (Time.time < _nextHit) return;
 
+                // 0) Another player? EVERYTHING attacks now (14.35.0) - fists,
+                // pickaxes, torches, a raw fish. Avatars carry no colliders, so
+                // they are swept analytically; the nearest physical surface still
+                // wins, so a wall in front of the victim keeps absorbing the swing.
+                ResolveMeleeProfile(heldStack, out float meleeDmg, out float meleeRange,
+                    out float meleeRate, out var meleeType);
+                if (VoxelEngine.Networking.PlayerCombat.TryFindAvatarHit(
+                        ray, meleeRange, 0.35f, out var punchedAvatar, out var punchPoint, out var punchDist)
+                    && punchDist < hit.distance)
+                {
+                    GetComponent<VoxelEngine.Player.HeldToolView>()?.DoSwing();
+                    VoxelEngine.Networking.PlayerCombat.RequestDamage(
+                        punchedAvatar, meleeDmg, meleeType, punchPoint, ray.direction, meleeRange);
+                    if (!heldStack.IsEmpty && heldStack.item is ToolItem) ConsumeDurability(heldStack);
+                    _nextHit = Time.time + 1f / Mathf.Max(0.1f, meleeRate);
+                    return;
+                }
+
                 // 1) Tree?
                 var tree = hit.collider.GetComponentInParent<Tree>();
                 if (tree != null) { HitTree(tree); return; }
@@ -579,6 +616,26 @@ namespace VoxelEngine.Player
                 // 2b) Placed legacy block?
                 var placed = hit.collider.GetComponentInParent<PlacedBlock>();
                 if (placed != null) { BreakPlaced(placed, hit); return; }
+
+                // 2c) A creature or any other damageable (14.35.0)? Any held
+                // item is a weapon now - the profile above already decided the
+                // numbers. Checked AFTER trees, grid blocks and placed blocks so
+                // every working tool keeps doing its job first, and gated on
+                // melee reach so a distant animal never eats a mining swing.
+                var meleeTarget = hit.collider.GetComponentInParent<VoxelEngine.Combat.IDamageable>();
+                if (meleeTarget != null && meleeTarget.IsAlive)
+                {
+                    if (hit.distance <= meleeRange)
+                    {
+                        GetComponent<VoxelEngine.Player.HeldToolView>()?.DoSwing();
+                        meleeTarget.TakeDamage(new VoxelEngine.Combat.DamageEvent {
+                            amount = meleeDmg, type = meleeType,
+                            point = hit.point, direction = ray.direction, source = gameObject });
+                        if (!heldStack.IsEmpty && heldStack.item is ToolItem) ConsumeDurability(heldStack);
+                        _nextHit = Time.time + 1f / Mathf.Max(0.1f, meleeRate);
+                    }
+                    return;   // never carve the terrain through a creature
+                }
 
                 // 3) Voxel terrain.
                 MineVoxel(ray, hit);
@@ -976,6 +1033,11 @@ namespace VoxelEngine.Player
                 // 1) Open container if looking at chest / furnace / crafting bench.
                 var ruinChest = hit.collider.GetComponentInParent<VoxelEngine.Exploration.RuinChest>();
                 if (ruinChest != null) { ruinChest.Open(); return; }
+
+                // Death loot bags (14.36.0): anyone may open one - the owner's
+                // advantage is the beacon, never a lock.
+                var lootBag = hit.collider.GetComponentInParent<VoxelEngine.Items.DeathLootBag>();
+                if (lootBag != null) { UI.GameUIController.Instance?.OpenLootBag(lootBag); return; }
 
                 var chest = hit.collider.GetComponentInParent<Chest>();
                 if (chest != null) { UI.GameUIController.Instance?.OpenContainer(chest.container, chest); return; }
@@ -1708,6 +1770,41 @@ namespace VoxelEngine.Player
             rack.NetworkExtract(item.itemId, count);
         }
 
+        /// <summary>
+        /// Universal melee profile (14.35.0): EVERYTHING the player holds - or
+        /// bare fists - can strike a creature or another player. The item decides
+        /// the numbers: weapons use their authored stats, tools hit at a fraction
+        /// of their working strength, any other object is at least a club, and an
+        /// empty hand is the weakest of all. Weapons keep their own dispatch; this
+        /// profile serves every NON-weapon swing.
+        /// </summary>
+        private void ResolveMeleeProfile(ItemStack stack,
+            out float damage, out float range, out float rate,
+            out VoxelEngine.Combat.DamageType type)
+        {
+            type = VoxelEngine.Combat.DamageType.Melee;
+            if (stack.IsEmpty || stack.item == null)
+            {
+                damage = 4f; range = 2.1f; rate = handFireRate;   // the punch
+                return;
+            }
+            if (stack.item is VoxelEngine.Combat.WeaponItem w)
+            {
+                damage = w.damage; range = Mathf.Max(0.5f, w.range);
+                rate = 1f / Mathf.Max(0.1f, w.attackCooldown); type = w.damageType;
+                return;
+            }
+            if (stack.item is ToolItem t)
+            {
+                // A pickaxe is a fearsome improvised weapon, but never a sword:
+                // 30% of working strength keeps crafted weapons worth crafting.
+                damage = Mathf.Max(4f, t.strength * 0.30f);
+                range = 2.4f; rate = t.fireRate;
+                return;
+            }
+            damage = 5f; range = 2.2f; rate = 2f;   // any held object is a club
+        }
+
         private void HitTree(Tree tree)
         {
             var stack = inventory.ActiveStack;
@@ -1946,18 +2043,22 @@ namespace VoxelEngine.Player
             if (inventory == null || inventory.container == null) return;
 
             var stack = inventory.ActiveStack;
-            float strength = handStrength;
-            float radius = handBrushRadius;
-            float rate = handFireRate;
-            int tier = handTier;
 
-            if (!stack.IsEmpty && stack.item is ToolItem tool)
+            // Asteroids are voxels too (14.35.0): the pick alone carves them,
+            // the same rule as planet terrain - no bare-handed rock eating in
+            // deep space.
+            if (stack.IsEmpty || !(stack.item is ToolItem tool) || tool.toolType != ToolType.Pickaxe)
             {
-                strength = tool.strength;
-                radius = tool.brushRadius;
-                rate = tool.fireRate;
-                tier = tool.miningTier;
+                VoxelEngine.UI.BuildFeedbackHud.Show("Asteroid",
+                    "Carving rock needs a pickaxe", null, Color.yellow);
+                _nextHit = Time.time + 0.45f;
+                return;
             }
+
+            float strength = tool.strength;
+            float radius = tool.brushRadius;
+            float rate = tool.fireRate;
+            int tier = tool.miningTier;
 
             // Bite just inside the surface, the same trick planet mining uses: a hit point
             // sits exactly ON the face, which rounds unpredictably to either side.
@@ -2094,17 +2195,23 @@ namespace VoxelEngine.Player
                 return;
             }
 
-            float strength = handStrength;
-            float radius   = handBrushRadius;
-            float rate     = handFireRate;
-            int   tier     = handTier;
-            if (!stack.IsEmpty && stack.item is ToolItem t)
+            // The ground yields to the pick alone (14.35.0). Fists, axes, swords
+            // and carried objects no longer carve voxels - real mining needs a
+            // real pickaxe. The dedicated terrain tools (leveling tool above,
+            // explosives, machines) keep their own paths; under-TIER pickaxes
+            // still dig slowly below, exactly as before.
+            if (stack.IsEmpty || !(stack.item is ToolItem pick) || pick.toolType != ToolType.Pickaxe)
             {
-                strength = t.strength;
-                radius   = t.brushRadius;
-                rate     = t.fireRate;
-                tier     = t.miningTier;
+                VoxelEngine.UI.BuildFeedbackHud.Show("Terrain",
+                    "Digging needs a pickaxe", null, Color.yellow);
+                _nextHit = Time.time + 0.45f;
+                return;
             }
+
+            float strength = pick.strength;
+            float radius   = pick.brushRadius;
+            float rate     = pick.fireRate;
+            int   tier     = pick.miningTier;
 
             // Resolve a point just inside the terrain. Mesh hit normals are radial on planets,
             // so this stays reliable while mining from any latitude or while submerged.

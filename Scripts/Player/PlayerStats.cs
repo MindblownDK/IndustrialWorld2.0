@@ -489,6 +489,10 @@ namespace VoxelEngine.Player
             Health = 0f;
             Stamina = 0f;
             VoxelEngine.Settings.GameSettings.FlyMode = false;
+            // 14.36.0: everything carried spills into a loot bag at the death
+            // position - slot-exact, owner-beaconed, lootable by anyone who
+            // finds it. Before the death screen, so the bag sits where we fell.
+            VoxelEngine.Items.DeathLootBag.SpawnFromDeath(this);
             VoxelEngine.UI.DeathScreenHud.Show(this);
             OnStatsChanged?.Invoke();
         }

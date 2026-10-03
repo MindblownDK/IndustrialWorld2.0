@@ -779,8 +779,14 @@ namespace VoxelEngine.Networking
         private void ApplyHealth(int pct)
         {
             // 14.17.0: a badly hurt crusader stands differently (sad idle).
+            // 14.36.0: a dead one falls - the mirror hitting 0 plays the death
+            // clip on every machine, and the respawn (health back up) clears it.
             var driver = Locomotion();
-            if (driver != null) driver.LowHealth = pct <= 35;
+            if (driver != null)
+            {
+                driver.LowHealth = pct <= 35;
+                driver.Dead = pct <= 0;
+            }
 
             if (pct >= 100)
             {

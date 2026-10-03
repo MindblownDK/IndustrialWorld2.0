@@ -370,6 +370,7 @@ namespace VoxelEngine.Persistence
                 SaveQuarries(save);
                 SaveRefuelPads(save);
                 SaveDronePorts(save);
+                SaveLootBags(save);
                 SaveDeepOre(save);
                 save.bossRelics = VoxelEngine.Combat.BossRelicLedger.SaveTo();
                 SaveStationRooms(save);
@@ -1841,6 +1842,7 @@ namespace VoxelEngine.Persistence
                 RestoreQuarries(save);
                 RestoreRefuelPads(save);
                 RestoreDronePorts(save);
+                RestoreLootBags(save);
                 RestoreDeepOre(save);
                 // Always load, even from an empty list: a stale ledger from a previous
                 // world would otherwise hand this one free late-game research.
@@ -4331,6 +4333,7 @@ namespace VoxelEngine.Persistence
             public List<SavedQuarry>       quarries     = new();
             public List<SavedRefuelPad>      refuelPads   = new();   // 9.36.0-dev — the ground pads
             public List<SavedDronePort>      dronePorts   = new();   // 11.9.0-dev — long-range logistics relays
+            public List<SavedLootBag>        lootBags     = new();   // 14.36.0-dev — death loot bags, never expiring
             // Additive in 5.69.0: omitted by legacy saves and initialized by field default.
             public List<SavedGrid>          grids        = new();
             // 11.18.0-dev: how much has been taken out of each deep ore node. Node
@@ -5174,6 +5177,43 @@ namespace VoxelEngine.Persistence
         // the IN-FLIGHT manifest: the cargo left the source chests at takeoff, so if a save
         // caught a drone mid-air and we dropped the manifest, those items would be destroyed by
         // the reload. The flight is therefore saved and resumed exactly where it was.
+        [Serializable] private class SavedLootBag
+        {
+            public string id;
+            public string ownerId;
+            public string ownerName;
+            public Vector3 pos;
+            public string json;   // slot-indexed stack payload (bag's own format)
+        }
+
+        // 14.36.0 - death loot bags persist until collected: a crash or a quit
+        // between death and recovery must never cost the run.
+        private void SaveLootBags(SaveData save)
+        {
+            foreach (var bag in VoxelEngine.Items.DeathLootBag.All)
+            {
+                if (bag == null) continue;
+                save.lootBags.Add(new SavedLootBag
+                {
+                    id = bag.BagId,
+                    ownerId = bag.OwnerId,
+                    ownerName = bag.OwnerName,
+                    pos = bag.transform.position,
+                    json = bag.ToPayloadJson()
+                });
+            }
+        }
+
+        private void RestoreLootBags(SaveData save)
+        {
+            if (save.lootBags == null) return;   // legacy save: no bags, nothing to do
+            foreach (var sb in save.lootBags)
+            {
+                if (sb == null || string.IsNullOrEmpty(sb.id)) continue;
+                VoxelEngine.Items.DeathLootBag.SpawnExisting(sb.id, sb.ownerId, sb.ownerName, sb.pos, sb.json);
+            }
+        }
+
         private void SaveDronePorts(SaveData save)
         {
             var ports = FindObjectsByType<VoxelEngine.Transport.DronePort>(FindObjectsInactive.Include);

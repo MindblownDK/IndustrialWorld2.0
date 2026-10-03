@@ -59,7 +59,10 @@ namespace VoxelEngine.Networking
         private const int S_IDLE = 6, S_WALK = 7, S_RUN = 8, S_JUMP = 9, ATTACK = 10;
         // Crouch (14.22.0): optional. Missing clips fall back to the old squash.
         private const int C_IDLE = 11, C_WALK = 12;
-        private const int CLIP_COUNT = 13;
+        // Death (14.36.0): a one-shot that overrides everything and holds its
+        // final frame until the player respawns.
+        private const int DEATH = 13;
+        private const int CLIP_COUNT = 14;
 
         /// <summary>Mirrored slide flag (set by PlayerAvatar).</summary>
         public bool Sliding;
@@ -72,6 +75,9 @@ namespace VoxelEngine.Networking
         /// <summary>Mirrored crouch flag (set by PlayerAvatar). Only honoured
         /// when crouch clips exist - see HasCrouchClips.</summary>
         public bool Crouched;
+        /// <summary>Mirrored death flag (set by PlayerAvatar from the health
+        /// mirror). Plays the death clip once and holds the final frame.</summary>
+        public bool Dead;
 
         /// <summary>True when real crouch animation is available, so the avatar
         /// knows not to fall back to squashing the model.</summary>
@@ -90,6 +96,7 @@ namespace VoxelEngine.Networking
         private float _diagAt = -1f;    // one-shot console diagnostic
         private bool _wasAirborne;
         private bool _wasSliding;
+        private bool _wasDead;
         private float _attackTime;      // remaining one-shot attack window
         private int _lastLoggedStance = -1;
         private bool _attackLogged;
@@ -137,6 +144,7 @@ namespace VoxelEngine.Networking
             // were downloaded; accept any of them rather than demanding one.
             clips[C_IDLE] = LoadClip("Crouch_idle", "Crouching_idle", "Crouch idle", "Crouching");
             clips[C_WALK] = LoadClip("Crouched_walking", "Crouch_walk", "Crouched walking", "Crouch_walking");
+            clips[DEATH]  = LoadClip(sword + "death", sword + "death (2)");
 
             if (animator == null || clips[IDLE] == null)
             {
@@ -261,7 +269,7 @@ namespace VoxelEngine.Networking
             // caught frozen on its final frame.
             for (int i = 0; i < CLIP_COUNT; i++)
             {
-                if (i == JUMP || i == S_JUMP || i == ATTACK) continue;   // one-shots hold
+                if (i == JUMP || i == S_JUMP || i == ATTACK || i == DEATH) continue;   // one-shots hold
                 double t = _playables[i].GetTime();
                 if (t >= _lengths[i]) _playables[i].SetTime(t % _lengths[i]);
             }
@@ -293,7 +301,21 @@ namespace VoxelEngine.Networking
 
             bool crouching = Crouched && _hasClip[C_IDLE] && !airborne && !Sliding && !attacking;
 
-            if (airborne && _hasClip[jumpSlot]) _targets[jumpSlot] = 1f;
+            // Death overrides everything (14.36.0). The clip plays once from
+            // the frame the mirror reports 0 health, then freezes on its last
+            // pose until the respawn flips the flag back.
+            bool dead = Dead && _hasClip[DEATH];
+            if (dead && !_wasDead)
+            {
+                _playables[DEATH].SetTime(0.0);
+                _playables[DEATH].SetSpeed(1.0);
+            }
+            _wasDead = dead;
+            if (dead && _playables[DEATH].GetTime() >= _lengths[DEATH] - 0.03f)
+                _playables[DEATH].SetSpeed(0.0);   // hold the final frame - no looping back to life
+
+            if (dead) _targets[DEATH] = 1f;
+            else if (airborne && _hasClip[jumpSlot]) _targets[jumpSlot] = 1f;
             else if (attacking) _targets[ATTACK] = 1f;
             else if (Sliding && _hasClip[SLIDE]) _targets[SLIDE] = 1f;
             else if (crouching)
@@ -320,7 +342,7 @@ namespace VoxelEngine.Networking
             float k = 1f - Mathf.Exp(-9f * dt);
             float kFast = 1f - Mathf.Exp(-22f * dt);
             for (int i = 0; i < CLIP_COUNT; i++)
-                _weights[i] = Mathf.Lerp(_weights[i], _targets[i], i == ATTACK ? kFast : k);
+                _weights[i] = Mathf.Lerp(_weights[i], _targets[i], (i == ATTACK || i == DEATH) ? kFast : k);
             float total = 0f;
             for (int i = 0; i < CLIP_COUNT; i++) total += _weights[i];
             if (total < 0.0001f) { _weights[IDLE] = 1f; total = 1f; }
