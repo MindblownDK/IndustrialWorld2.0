@@ -193,7 +193,7 @@ namespace VoxelEngine.Menu
             panel.Add(T.Spacer(8));
             panel.Add(PrimaryBtn("◉   MULTIPLAYER", () => { _page = Page.Multiplayer; BuildUI(); }, T.BgSlot));
             panel.Add(T.Spacer(8));
-            panel.Add(PrimaryBtn("⚑   TEAMS",        () => { _page = Page.Teams; BuildUI(); },       T.BgSlot));
+            panel.Add(PrimaryBtn("TEAMS",            () => { _page = Page.Teams; BuildUI(); },       T.BgSlot, VoxelEngine.UI.LucideIcons.Flag));
             panel.Add(T.Spacer(8));
             panel.Add(PrimaryBtn("⬅   SAVE & QUIT", QuitToMenu,                           T.AccentRed));
         }
@@ -385,10 +385,11 @@ namespace VoxelEngine.Menu
             return sb.Length > 0 ? sb.ToString() : "—";
         }
 
-        // ── Teams Page (14.33.0, milestone 11) ─────────────────────
+        // ── Teams Page (14.33.0, milestone 11; 14.34.0 widened so long
+        // team names never push the answer buttons off the card) ───────
         private void BuildTeams()
         {
-            var panel = MakePanel(460, 0);
+            var panel = MakePanel(580, 0);
             _root.Add(panel);
 
             var hdr = new VisualElement();
@@ -520,9 +521,9 @@ namespace VoxelEngine.Menu
             return v;
         }
 
-        private Button PrimaryBtn(string text, Action onClick, Color bg)
+        private Button PrimaryBtn(string text, Action onClick, Color bg, string lucideIcon = null)
         {
-            var b = new Button(onClick) { text = text };
+            var b = new Button(onClick) { text = lucideIcon == null ? text : string.Empty };
             b.style.minHeight                 = 42;
             b.style.fontSize                  = 13;
             b.style.unityFontStyleAndWeight   = FontStyle.Bold;
@@ -531,6 +532,29 @@ namespace VoxelEngine.Menu
             b.style.backgroundColor           = new StyleColor(new Color(bg.r, bg.g, bg.b, 0.85f));
             T.Radius(b, T.ButtonRadius);
             T.Border(b, 0, Color.clear);
+
+            // Icon buttons compose their own content row: a Lucide glyph can
+            // never render as a missing-glyph box the way a raw unicode flag
+            // did in the menu font (14.34.0).
+            if (lucideIcon != null)
+            {
+                b.style.flexDirection  = FlexDirection.Row;
+                b.style.alignItems     = Align.Center;
+                b.style.justifyContent = Justify.Center;
+
+                var ic = VoxelEngine.UI.LucideIcons.Make(lucideIcon, 15, Color.white);
+                ic.style.marginRight = 10;
+                b.Add(ic);
+
+                var lbl = new Label(text) { pickingMode = PickingMode.Ignore };
+                lbl.style.color                   = Color.white;
+                lbl.style.fontSize                = 13;
+                lbl.style.unityFontStyleAndWeight = FontStyle.Bold;
+                lbl.style.letterSpacing           = 0.8f;
+                lbl.style.unityTextAlign          = TextAnchor.MiddleCenter;
+                b.Add(lbl);
+            }
+
             LcdHudTheme.AddMenuInteractions(b, bg, new Color(bg.r, bg.g, bg.b, 0.85f));
             return b;
         }

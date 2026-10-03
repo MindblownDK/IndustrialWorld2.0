@@ -30,6 +30,10 @@ namespace VoxelEngine.UI
         /// refresh cannot eat what the player is typing.</summary>
         private static string _draftName = "";
 
+        /// <summary>Draft rename, kept across rebuilds for the same reason.
+        /// Null means "mirror the current team name on next build".</summary>
+        private static string _draftRename;
+
         public static VisualElement Build(Action rebuild)
         {
             var scroll = new ScrollView();
@@ -40,7 +44,8 @@ namespace VoxelEngine.UI
 
             string me = NetworkSession.LocalPlayerId;
             var myTeam = TeamRegistry.TeamOf(me);
-            bool amLeader = myTeam != null && myTeam.leaderId == me;
+            bool amOwner = TeamRegistry.IsTeamOwner(myTeam, me);
+            bool amLeader = TeamRegistry.IsTeamLeader(myTeam, me);   // owner or co-leader
 
             // ── invitations for me ────────────────────────────────────────
             var invites = TeamRegistry.InvitesFor(me);
@@ -53,11 +58,17 @@ namespace VoxelEngine.UI
                     if (team == null) continue;
                     var leader = PlayerName(team.leaderId);
                     var card = Card(border: T.AccentAmber);
+
+                    // Name on its own wrapping line - the answer buttons live
+                    // on their own row below, so a long team name can never
+                    // push them off the card (14.34.0).
                     var line = T.Body($"{team.name} - invited by {leader}");
                     line.style.whiteSpace = WhiteSpace.Normal;
-                    line.style.flexGrow = 1;
+                    card.Add(line);
+
                     var row = Row();
-                    row.Add(line);
+                    row.style.justifyContent = Justify.FlexEnd;
+                    row.style.marginTop = 6;
                     row.Add(SmallBtn("ACCEPT", () =>
                     {
                         TeamRegistry.RequestAccept(team.teamId);
@@ -78,7 +89,9 @@ namespace VoxelEngine.UI
             // ── my team ───────────────────────────────────────────────────
             if (myTeam != null)
             {
-                content.Add(SectionLabel($"YOUR TEAM - {myTeam.name.ToUpper()}"));
+                var yourLabel = SectionLabel($"YOUR TEAM - {myTeam.name.ToUpper()}");
+                yourLabel.style.whiteSpace = WhiteSpace.Normal;
+                content.Add(yourLabel);
                 var card = Card(border: T.AccentCyan);
 
                 foreach (var memberId in myTeam.memberIds)
@@ -87,27 +100,78 @@ namespace VoxelEngine.UI
                     var memberRow = Row();
                     bool online = NetworkSession.GetPlayer(memberId) != null;
                     bool isMe = memberId == me;
+                    bool targetIsOwner = TeamRegistry.IsTeamOwner(myTeam, memberId);
+                    bool targetIsLeader = !targetIsOwner && TeamRegistry.IsTeamLeader(myTeam, memberId);
 
                     var dot = new Label(online ? "●" : "○");
                     dot.style.color = new StyleColor(online ? T.AccentGreen : T.TextSecondary);
                     dot.style.marginRight = 8;
                     dot.style.fontSize = 11;
+                    dot.style.flexShrink = 0;
                     memberRow.Add(dot);
 
-                    var name = T.Body(PlayerName(memberId) + (isMe ? "   (you)" : "")
-                                            + (memberId == myTeam.leaderId ? "   (leader)" : ""));
+                    // Rank glyph: crown for the owner, shield for a leader.
+                    if (targetIsOwner || targetIsLeader)
+                    {
+                        var rank = LucideIcons.Make(targetIsOwner ? LucideIcons.Crown : LucideIcons.Shield,
+                            12, targetIsOwner ? T.AccentAmber : T.AccentCyan);
+                        rank.style.marginRight = 6;
+                        rank.style.flexShrink = 0;
+                        memberRow.Add(rank);
+                    }
+
+                    string rankTag = targetIsOwner ? "   (owner)" : targetIsLeader ? "   (leader)" : "";
+                    var name = T.Body(PlayerName(memberId) + (isMe ? "   (you)" : "") + rankTag);
                     name.style.flexGrow = 1;
+                    name.style.flexShrink = 1;
+                    name.style.overflow = Overflow.Hidden;
+                    name.style.textOverflow = TextOverflow.Ellipsis;
                     memberRow.Add(name);
 
-                    if (amLeader && !isMe)
+                    // Owner appoints and strips leaders (14.34.0).
+                    if (amOwner && !isMe)
                     {
+                        string captured = memberId;
+                        memberRow.Add(SmallBtn(targetIsLeader ? "DEMOTE" : "PROMOTE", () =>
+                        {
+                            if (targetIsLeader) TeamRegistry.RequestDemote(captured);
+                            else TeamRegistry.RequestPromote(captured);
+                            rebuild?.Invoke();
+                        }, targetIsLeader ? T.BgSlot : T.AccentCyan));
+                    }
+
+                    // Removal: the owner removes anyone; a leader removes
+                    // plain members only. Nobody removes the owner.
+                    bool canRemove = !isMe && !targetIsOwner && (amOwner || (amLeader && !targetIsLeader));
+                    if (canRemove)
+                    {
+                        string captured = memberId;
                         memberRow.Add(SmallBtn("REMOVE", () =>
                         {
-                            TeamRegistry.RequestKick(memberId);
+                            TeamRegistry.RequestKick(captured);
                             rebuild?.Invoke();
                         }, T.AccentRed));
                     }
                     card.Add(memberRow);
+                }
+
+                // ── rename (owner only, 14.34.0) ──────────────────────────
+                if (amOwner)
+                {
+                    card.Add(T.Spacer(8));
+                    card.Add(T.Muted("TEAM NAME"));
+                    if (_draftRename == null) _draftRename = myTeam.name;
+                    var renameField = ThemedField(_draftRename);
+                    renameField.RegisterValueChangedCallback(evt => _draftRename = evt.newValue);
+                    card.Add(renameField);
+                    var renameRow = Row();
+                    renameRow.style.justifyContent = Justify.FlexEnd;
+                    renameRow.Add(SmallBtn("RENAME", () =>
+                    {
+                        TeamRegistry.RequestRename(_draftRename ?? "");
+                        rebuild?.Invoke();
+                    }, T.AccentCyan));
+                    card.Add(renameRow);
                 }
 
                 if (amLeader)
@@ -140,12 +204,12 @@ namespace VoxelEngine.UI
                 }
 
                 card.Add(T.Spacer(8));
-                card.Add(SmallBtn(amLeader ? "LEAVE TEAM (COMMAND PASSES ON)" : "LEAVE TEAM", () =>
+                card.Add(SmallBtn(amOwner ? "LEAVE TEAM (OWNERSHIP PASSES ON)" : "LEAVE TEAM", () =>
                 {
                     TeamRegistry.RequestLeave();
                     rebuild?.Invoke();
                 }, T.BgSlot));
-                if (amLeader && myTeam.memberIds.Count == 1)
+                if (amOwner && myTeam.memberIds.Count == 1)
                     card.Add(T.Muted("You are the last member - leaving disbands the team."));
 
                 content.Add(card);
@@ -154,34 +218,22 @@ namespace VoxelEngine.UI
             else
             {
                 // ── found a team ──────────────────────────────────────────
+                _draftRename = null;   // no team, no rename draft to keep
                 content.Add(SectionLabel("FOUND A TEAM"));
                 var card = Card(border: T.AccentCyan);
                 card.Add(T.Muted($"TEAM NAME  ({TeamRegistry.Teams.Count}/{TeamRegistry.MaxTeams} teams exist)"));
-                var nameField = new TextField { value = _draftName };
-                nameField.style.minHeight = 30;
-                nameField.style.fontSize = 13;
-                nameField.style.marginTop = 4;
-                var input = nameField.Q("unity-text-input");
-                if (input != null)
-                {
-                    input.style.backgroundColor = new StyleColor(new Color(T.BgSlot.r, T.BgSlot.g, T.BgSlot.b, 0.95f));
-                    input.style.color = new StyleColor(T.TextPrimary);
-                    T.Radius(input, T.ButtonRadius);
-                    T.Border(input, 1, T.BorderDim);
-                    input.style.paddingLeft = 8;
-                    input.style.paddingRight = 8;
-                }
                 // Stored on every keystroke: a live roster refresh rebuilds
                 // this page, and the draft must come back with it.
+                var nameField = ThemedField(_draftName);
                 nameField.RegisterValueChangedCallback(evt => _draftName = evt.newValue);
                 card.Add(nameField);
                 card.Add(T.Spacer(6));
-                card.Add(SmallBtn("⚑   FOUND TEAM", () =>
+                card.Add(SmallBtn("FOUND TEAM", () =>
                 {
                     TeamRegistry.RequestCreate(_draftName);
                     rebuild?.Invoke();
-                }, T.AccentGreen));
-                card.Add(T.Muted("You become the leader. Invite players from this page."));
+                }, T.AccentGreen, LucideIcons.Flag));
+                card.Add(T.Muted("You become the owner. Invite players from this page; team names are unique."));
                 content.Add(card);
                 content.Add(T.Spacer(10));
             }
@@ -202,6 +254,8 @@ namespace VoxelEngine.UI
                     var title = T.Body(team.name);
                     title.style.unityFontStyleAndWeight = FontStyle.Bold;
                     title.style.flexGrow = 1;
+                    title.style.flexShrink = 1;
+                    title.style.whiteSpace = WhiteSpace.Normal;
                     head.Add(title);
                     head.Add(T.Muted($"{team.memberIds.Count} member{(team.memberIds.Count == 1 ? "" : "s")}"));
                     card.Add(head);
@@ -270,21 +324,61 @@ namespace VoxelEngine.UI
             return row;
         }
 
-        private static Button SmallBtn(string text, Action onClick, Color bg)
+        private static Button SmallBtn(string text, Action onClick, Color bg, string lucideIcon = null)
         {
-            var b = new Button(onClick) { text = text };
+            var b = new Button(onClick) { text = lucideIcon == null ? text : string.Empty };
             b.style.minHeight = 28;
             b.style.minWidth = 78;
             b.style.fontSize = 11;
             b.style.unityFontStyleAndWeight = FontStyle.Bold;
             b.style.letterSpacing = 0.6f;
             b.style.marginLeft = 6;
+            b.style.flexShrink = 0;   // long names wrap; buttons never crush
             b.style.color = Color.white;
             b.style.backgroundColor = new StyleColor(new Color(bg.r, bg.g, bg.b, 0.85f));
             T.Radius(b, T.ButtonRadius);
             T.Border(b, 0, Color.clear);
+
+            if (lucideIcon != null)
+            {
+                b.style.flexDirection = FlexDirection.Row;
+                b.style.alignItems = Align.Center;
+                b.style.justifyContent = Justify.Center;
+                var ic = LucideIcons.Make(lucideIcon, 12, Color.white);
+                ic.style.marginRight = 7;
+                b.Add(ic);
+                var lbl = new Label(text) { pickingMode = PickingMode.Ignore };
+                lbl.style.color = Color.white;
+                lbl.style.fontSize = 11;
+                lbl.style.unityFontStyleAndWeight = FontStyle.Bold;
+                lbl.style.letterSpacing = 0.6f;
+                lbl.style.unityTextAlign = TextAnchor.MiddleCenter;
+                b.Add(lbl);
+            }
+
             LcdHudTheme.AddMenuInteractions(b, bg, new Color(bg.r, bg.g, bg.b, 0.85f));
             return b;
+        }
+
+        /// <summary>The shared dark themed text field this panel uses for
+        /// the found-team and rename drafts.</summary>
+        private static TextField ThemedField(string value)
+        {
+            var field = new TextField { value = value ?? "" };
+            field.style.minHeight = 30;
+            field.style.fontSize = 13;
+            field.style.marginTop = 4;
+            var input = field.Q("unity-text-input");
+            if (input != null)
+            {
+                input.style.backgroundColor = new StyleColor(new Color(T.BgSlot.r, T.BgSlot.g, T.BgSlot.b, 0.95f));
+                input.style.color = new StyleColor(T.TextPrimary);
+                T.Radius(input, T.ButtonRadius);
+                T.Border(input, 1, T.BorderDim);
+                input.style.paddingLeft = 8;
+                input.style.paddingRight = 8;
+            }
+            return field;
         }
 
         /// <summary>A - value + stepper row for one host limit. Applies at
@@ -346,7 +440,8 @@ namespace VoxelEngine.UI
             {
                 if (string.IsNullOrEmpty(id)) continue;
                 string name = PlayerName(id);
-                if (id == team.leaderId) name += " (leader)";
+                if (id == team.leaderId) name += " (owner)";
+                else if (TeamRegistry.IsTeamLeader(team, id)) name += " (leader)";
                 if (NetworkSession.GetPlayer(id) == null) name += " (offline)";
                 names.Add(name);
             }

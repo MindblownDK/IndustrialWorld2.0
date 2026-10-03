@@ -1,9 +1,25 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.33.0-dev`
+**Current Version:** `14.34.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.34.0-dev] Steel Against Steel
+
+**Type:** MINOR - real player-versus-player combat gated by a world-level friendly-fire rule, team ranks (one owner, appointed leaders) with team rename and unique team names, the teams page rebuilt so nothing runs off screen, and three fixes from the 14.33.0 play round: the client's empty battery, the straightened power cables and the square where the TEAMS flag should be. Save format gains additive fields only; legacy saves load clean.
+
+**Players can finally hurt each other - through the server, never past it.** Every weapon that already worked against creatures now works against players: the melee swing and the ranged shot test the remote player avatars along the same ray they always cast (nearest target wins, world geometry still blocks the shot), and a bomb's blast measures its distance to every avatar in radius. But no attacking machine ever decides damage. The hit travels as an intent - weapon damage, type and position - and the server validates it against its own view before forwarding a damage order to the victim's machine, where the victim's own `PlayerStats.TakeDamage` applies armor exactly as environmental damage does. The receiving player feels the hit (camera shake scaled by damage) and, if it kills, the death screen names the killer. A machine never reports "I killed him" - it only ever reports "I tried", which is the roadmap's intent rule applied to combat.
+
+**Friendly fire is a world rule, the same for every team.** The toggle lives where the other world rules live - the CREATE WORLD page and the world's EDIT page - and persists in the world's settings sidecar; it is deliberately not a team setting, so no team can grant itself immunity another team lacks. Default off: teammates' hits are refused server-side (the attack still lands visually, costs ammo and plays its sound - the server simply refuses the damage). Hits between teamless players and between different teams always count. The host's setting travels with the session, so a guest plays under the world's rule, not their own copy's. While editing world settings the file's existing values are now read before being rewritten, which also stops the full-voxel-radius value from silently resetting on an unrelated edit.
+
+**One owner, many leaders.** The player who founds a team is its OWNER (crown): only the owner renames the team, appoints or demotes leaders, and can remove anyone. An appointed LEADER (shield) invites players and removes ordinary members - never the owner, never a fellow leader. Promotion and demotion are PROMOTE/DEMOTE buttons on the owner's member rows; rename is an owner-only field on the team card; and the rename obeys the same uniqueness rule founding now enforces - no two teams in a session may share a name (case-insensitive), refused server-side with a reason, so the duplicate-name report is closed at the only authority that could close it. When the owner leaves, ownership passes to the earliest-joined leader (an appointed leader outranks seniority), else the earliest-joined member; the leave button says so. Old rosters load clean - a 14.33.0 teams.json simply has no leaders yet, and the loader drops any stale ids defensively.
+
+**The teams page holds its shape.** The pause-menu panel is wider (580 against the old 460), long team names wrap instead of shoving the buttons off the panel, ACCEPT/DECLINE sit on their own right-aligned row under the invite text, member names ellipsize, and every action button refuses to shrink. The TEAMS button's square-box glyph is gone: the pause menu renders its flag through the bundled Lucide icon font (`LucideIcons`, the single source of truth for codepoints), and the member rows use the same font for the crown and shield rank marks.
+
+**The client's dead battery and the straightened cables, fixed at the same seam.** A static battery's charge and a gas tank's contents were only captured by the save-file path - but a client is converged by `MachineSync`, which rides the runtime capture/restore seam, so a guest loaded every battery at 0 Wh and every tank vented. Charge and gas now live in `CaptureFactoryRuntime`/`RestoreFactoryRuntime` (the save path reuses the same entry, so the file is unchanged in meaning), with an additive `hasGasState` guard so a legacy payload can never zero a tank. And power cables never saved their shape at all - every bend reloaded as the prefab's straight piece. The placed-block record now carries the cable's variant and length (additive `hasCableShape`), and the restore rebuilds the mesh and refreshes neighbouring cables exactly as the network spawn path already did.
+
+**Files:** `Scripts/Networking/PlayerCombat.cs` (new), plus edits to `TeamRegistry.cs`, `TeamsPanel.cs`, `NetworkBootstrap.cs`, `PlayerAvatar.cs`, `PlayerInteractionTool.cs`, `BombProjectile.cs`, `WorldSession.cs`, `MainMenuController.cs`, `InGamePauseMenu.cs`, `LucideIcons.cs` and `WorldStatePersistence.cs`. No prefabs, items, recipes or research are involved: copy the scripts and docs over, no setup re-run needed.
 
 ### [14.33.0-dev] A Banner To Rally Under
 

@@ -126,6 +126,36 @@ namespace VoxelEngine.Networking
         public string Error;
     }
 
+    // ── Player combat (14.34.0). ──
+    //
+    // Client -> server: "my weapon hit THAT player". Identity-free like every
+    // other intent - the server stamps the attacker from its connection
+    // table, re-checks friendly fire against the roster and range against
+    // the avatars, and only then routes damage onward.
+
+    /// <summary>One weapon hit intent against another player.</summary>
+    public struct PlayerHitBroadcast : IBroadcast
+    {
+        public string TargetId;
+        public float Amount;
+        public byte DamageType;
+        public Vector3 Point;
+        public Vector3 Direction;
+        /// <summary>The weapon's reach, so the host can hold the hit to it.</summary>
+        public float MaxRange;
+    }
+
+    /// <summary>Server -> the victim's machine only: approved damage with the
+    /// attacker already named. The victim applies it through its own
+    /// PlayerStats; replicated avatar health tells everyone else.</summary>
+    public struct PlayerDamageBroadcast : IBroadcast
+    {
+        public string AttackerName;
+        public float Amount;
+        public byte DamageType;
+        public Vector3 Direction;
+    }
+
     // ── Movable grids (14.25.0). Host -> clients, one way. ──
     //
     // A grid record is a whole ship, so it is sent in string PARTS rather than
@@ -569,6 +599,7 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.RegisterBroadcast<MachineStateBroadcast>(OnServerMachineState);
             _networkManager.ServerManager.RegisterBroadcast<MachineSnapshotBroadcast>(OnServerMachineSnapshot);
             _networkManager.ServerManager.RegisterBroadcast<TeamIntentBroadcast>(OnServerTeamIntent);
+            _networkManager.ServerManager.RegisterBroadcast<PlayerHitBroadcast>(OnServerPlayerHit);
             _networkManager.ServerManager.RegisterBroadcast<DropSpawnedBroadcast>(OnServerDropSpawned);
             _networkManager.ServerManager.RegisterBroadcast<DropSettledBroadcast>(OnServerDropSettled);
             _networkManager.ServerManager.RegisterBroadcast<DropUpdatedBroadcast>(OnServerDropUpdated);
@@ -598,6 +629,7 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.RegisterBroadcast<MachineStateBroadcast>(OnClientMachineState);
             _networkManager.ClientManager.RegisterBroadcast<MachineSnapshotBroadcast>(OnClientMachineSnapshot);
             _networkManager.ClientManager.RegisterBroadcast<TeamRosterBroadcast>(OnClientTeamRoster);
+            _networkManager.ClientManager.RegisterBroadcast<PlayerDamageBroadcast>(OnClientPlayerDamage);
             _networkManager.ClientManager.RegisterBroadcast<DropSpawnedBroadcast>(OnClientDropSpawned);
             _networkManager.ClientManager.RegisterBroadcast<DropSettledBroadcast>(OnClientDropSettled);
             _networkManager.ClientManager.RegisterBroadcast<DropUpdatedBroadcast>(OnClientDropUpdated);
@@ -682,6 +714,7 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.UnregisterBroadcast<MachineStateBroadcast>(OnServerMachineState);
             _networkManager.ServerManager.UnregisterBroadcast<MachineSnapshotBroadcast>(OnServerMachineSnapshot);
             _networkManager.ServerManager.UnregisterBroadcast<TeamIntentBroadcast>(OnServerTeamIntent);
+            _networkManager.ServerManager.UnregisterBroadcast<PlayerHitBroadcast>(OnServerPlayerHit);
             _networkManager.ServerManager.UnregisterBroadcast<DropSpawnedBroadcast>(OnServerDropSpawned);
             _networkManager.ServerManager.UnregisterBroadcast<DropSettledBroadcast>(OnServerDropSettled);
             _networkManager.ServerManager.UnregisterBroadcast<DropUpdatedBroadcast>(OnServerDropUpdated);
@@ -711,6 +744,7 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.UnregisterBroadcast<MachineStateBroadcast>(OnClientMachineState);
             _networkManager.ClientManager.UnregisterBroadcast<MachineSnapshotBroadcast>(OnClientMachineSnapshot);
             _networkManager.ClientManager.UnregisterBroadcast<TeamRosterBroadcast>(OnClientTeamRoster);
+            _networkManager.ClientManager.UnregisterBroadcast<PlayerDamageBroadcast>(OnClientPlayerDamage);
             _networkManager.ClientManager.UnregisterBroadcast<DropSpawnedBroadcast>(OnClientDropSpawned);
             _networkManager.ClientManager.UnregisterBroadcast<DropSettledBroadcast>(OnClientDropSettled);
             _networkManager.ClientManager.UnregisterBroadcast<DropUpdatedBroadcast>(OnClientDropUpdated);
@@ -2395,6 +2429,90 @@ namespace VoxelEngine.Networking
         {
             if (!_clientStarted) return;
             _networkManager.ClientManager.Broadcast(intent);
+        }
+
+        // ── Player combat (14.34.0) ───────────────────────────────────────
+        //
+        // One intent channel in, one approval channel out - and the approval
+        // goes to the VICTIM's machine only, because that is where the
+        // authoritative PlayerStats for that player lives. Everyone else
+        // learns about the blow through the avatar's replicated health bar.
+
+        private void OnServerPlayerHit(NetworkConnection conn, PlayerHitBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted || conn == null) return;
+            if (!_playerIdByConnection.TryGetValue(conn.ClientId, out string attackerId)
+                || string.IsNullOrEmpty(attackerId)) return;
+            HostApplyPlayerHit(attackerId, msg);
+        }
+
+        /// <summary>Authority check + routing for one hit intent. Shared by
+        /// the server handler and the host's own weapon hand, so the host
+        /// plays by exactly the rules it enforces on its guests.</summary>
+        public void HostApplyPlayerHit(string attackerId, PlayerHitBroadcast msg)
+        {
+            if (!_serverStarted) return;
+            if (string.IsNullOrEmpty(attackerId) || string.IsNullOrEmpty(msg.TargetId)) return;
+            if (attackerId == msg.TargetId) return;
+            if (NetworkSession.GetPlayer(msg.TargetId) == null) return;
+
+            // The world's friendly-fire rule, against the authoritative roster.
+            if (!PlayerCombat.FriendlyFireAllowed(attackerId, msg.TargetId)) return;
+
+            // Range sanity: both bodies stand in the host's scene. Generous
+            // slack absorbs replication latency without allowing map-wide hits.
+            var attackerAvatar = PlayerAvatar.Find(attackerId);
+            var targetAvatar = PlayerAvatar.Find(msg.TargetId);
+            if (attackerAvatar == null || targetAvatar == null) return;
+            float allowed = Mathf.Max(0.5f, msg.MaxRange) * 1.35f + 8f;
+            if (Vector3.Distance(attackerAvatar.transform.position,
+                                 targetAvatar.transform.position) > allowed) return;
+
+            float amount = Mathf.Clamp(msg.Amount, 0f, PlayerCombat.MaxDamagePerHit);
+            if (amount <= 0f) return;
+
+            var presence = NetworkSession.GetPlayer(attackerId);
+            string attackerName = presence != null && !string.IsNullOrEmpty(presence.displayName)
+                ? presence.displayName : attackerId;
+
+            // The host IS the victim: apply straight to the local stats.
+            if (msg.TargetId == NetworkSession.LocalPlayerId)
+            {
+                PlayerCombat.ApplyIncoming(attackerName, amount, msg.DamageType);
+                return;
+            }
+
+            // Otherwise route the approved damage to the victim alone.
+            foreach (var entry in _playerIdByConnection)
+            {
+                if (entry.Value != msg.TargetId) continue;
+                if (_networkManager.ServerManager.Clients.TryGetValue(entry.Key, out var client)
+                    && client != null)
+                {
+                    _networkManager.ServerManager.Broadcast(client, new PlayerDamageBroadcast
+                    {
+                        AttackerName = attackerName,
+                        Amount = amount,
+                        DamageType = msg.DamageType,
+                        Direction = msg.Direction
+                    }, true);
+                }
+                return;
+            }
+        }
+
+        /// <summary>Client: forward one hit intent to the host. The server
+        /// decides; nothing is applied optimistically.</summary>
+        public void SendPlayerHit(PlayerHitBroadcast intent)
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(intent);
+        }
+
+        private void OnClientPlayerDamage(PlayerDamageBroadcast msg, Channel channel)
+        {
+            if (_serverStarted) return;   // the host applies its own hits locally
+            PlayerCombat.ApplyIncoming(msg.AttackerName, msg.Amount, msg.DamageType);
         }
 
         /// <summary>Gather every machine-runtime-carrying block and send it chunked -

@@ -759,18 +759,18 @@ namespace VoxelEngine.Persistence
                         entry.bridgeAutoOwned = span.OpenedAutomatically;
                     }
                 }
-                var gst = pb.GetComponentInChildren<VoxelEngine.Gas.GasTank>();
-                if (gst != null)
+                // Gas tank contents and battery charge moved into
+                // CaptureFactoryRuntime (14.34.0) - the same entry receives
+                // them below, and MachineSync now carries them to clients.
+
+                // Power cable shape (14.34.0): never saved before, so every
+                // bend reloaded as the prefab's straight piece.
+                var placedCable = pb.GetComponentInChildren<VoxelEngine.Power.PowerCable>(true);
+                if (placedCable != null)
                 {
-                    entry.gasType = (int)gst.storedGasType;
-                    entry.gasSelectedType = (int)gst.selectedGasType;
-                    entry.gasStoredAmount = gst.storedAmount;
-                }
-                var worldBattery = pb.GetComponentInChildren<VoxelEngine.Power.PowerBattery>();
-                if (worldBattery != null)
-                {
-                    entry.hasBatteryCharge = true;
-                    entry.batteryCharge = worldBattery.charge;
+                    entry.hasCableShape = true;
+                    entry.cableVariant = (int)placedCable.variant;
+                    entry.cableLength = placedCable.straightLength;
                 }
                 var anchor = FindAnchoringBody(pb.transform.position);
                 if (anchor != null)
@@ -873,6 +873,26 @@ namespace VoxelEngine.Persistence
                 entry.beaconColorB = beaconTint.b;
                 if (beaconSource is VoxelEngine.GridSystem.StationaryRadarBeacon radarBeacon)
                     entry.beaconOn = radarBeacon.isOn;
+            }
+
+            // Battery charge and gas contents live in the RUNTIME seam
+            // (14.34.0): the save path always carried them, but MachineSync
+            // rides this capture - without these two blocks a client loaded
+            // a full battery as empty and a gas tank as vented.
+            var worldBattery = go.GetComponentInChildren<VoxelEngine.Power.PowerBattery>(true);
+            if (worldBattery != null)
+            {
+                entry.hasBatteryCharge = true;
+                entry.batteryCharge = worldBattery.charge;
+            }
+
+            var gasTank = go.GetComponentInChildren<VoxelEngine.Gas.GasTank>(true);
+            if (gasTank != null)
+            {
+                entry.hasGasState = true;
+                entry.gasType = (int)gasTank.storedGasType;
+                entry.gasSelectedType = (int)gasTank.selectedGasType;
+                entry.gasStoredAmount = gasTank.storedAmount;
             }
 
             var liquidTank = go.GetComponentInChildren<VoxelEngine.Fluids.WaterTank>(true);
@@ -3061,6 +3081,18 @@ namespace VoxelEngine.Persistence
                 {
                     conveyor.SetBuildShape((VoxelEngine.Simulation.ConveyorShape)sb.conveyorShape);
                 }
+                // Power cable shape (14.34.0): restore the chosen variant and
+                // length, then rebuild - the prefab instantiated as a straight
+                // piece and already drew itself that way in OnEnable.
+                var restoredCable = go.GetComponentInChildren<VoxelEngine.Power.PowerCable>(true);
+                if (restoredCable != null && sb.hasCableShape
+                    && System.Enum.IsDefined(typeof(VoxelEngine.Power.EnergyPipeVariant), sb.cableVariant))
+                {
+                    restoredCable.variant = (VoxelEngine.Power.EnergyPipeVariant)sb.cableVariant;
+                    restoredCable.straightLength = Mathf.Clamp(sb.cableLength, 1, 5);
+                    restoredCable.RebuildVisuals();
+                    VoxelEngine.Power.PowerCable.RefreshNearbyCables(go.transform.position, 6f);
+                }
                 var windPart = go.GetComponent<VoxelEngine.Power.Wind.WindTurbinePart>();
                 if (windPart != null && sb.windCondition > 0f)
                     windPart.condition = Mathf.Clamp(sb.windCondition, 0f, 100f);
@@ -3369,6 +3401,31 @@ namespace VoxelEngine.Persistence
                         beaconSource.BeaconTint = new Color(saved.beaconColorR, saved.beaconColorG, saved.beaconColorB);
                     if (beaconSource is VoxelEngine.GridSystem.StationaryRadarBeacon radarBeacon)
                         radarBeacon.isOn = saved.beaconOn;
+                }
+            }
+
+            // Runtime-seam twins of the capture above (14.34.0): these are
+            // what a client applies when the host's MachineSync converges it.
+            if (saved.hasBatteryCharge)
+            {
+                var worldBattery = go.GetComponentInChildren<VoxelEngine.Power.PowerBattery>(true);
+                if (worldBattery != null)
+                    worldBattery.charge = Mathf.Clamp(saved.batteryCharge, 0f, Mathf.Max(1f, worldBattery.capacityWattHours));
+            }
+
+            if (saved.hasGasState)
+            {
+                var gasTank = go.GetComponentInChildren<VoxelEngine.Gas.GasTank>(true);
+                if (gasTank != null)
+                {
+                    gasTank.EnsureContainers();
+                    if (System.Enum.IsDefined(typeof(VoxelEngine.Gas.GasType), saved.gasSelectedType))
+                        gasTank.selectedGasType = (VoxelEngine.Gas.GasType)saved.gasSelectedType;
+                    if (System.Enum.IsDefined(typeof(VoxelEngine.Gas.GasType), saved.gasType))
+                        gasTank.storedGasType = (VoxelEngine.Gas.GasType)saved.gasType;
+                    gasTank.storedAmount = Mathf.Max(0f, saved.gasStoredAmount);
+                    if (gasTank.storedAmount <= 0f && gasTank.selectedGasType != VoxelEngine.Gas.GasType.None)
+                        gasTank.storedGasType = gasTank.selectedGasType;
                 }
             }
 
@@ -4666,6 +4723,16 @@ namespace VoxelEngine.Persistence
             // hasBatteryCharge false and the block keeps its prefab charge.
             public bool hasBatteryCharge;
             public float batteryCharge;
+            // Additive gas-state guard (14.34.0): gas fields always existed but
+            // moved into the runtime seam; the flag lets a runtime payload apply
+            // them without a legacy payload zeroing somebody's tank.
+            public bool hasGasState;
+            // Power cable shape (14.34.0). Legacy saves leave hasCableShape
+            // false and the cable reloads as its prefab default (straight) -
+            // exactly the old behaviour, now only for old files.
+            public bool hasCableShape;
+            public int cableVariant;
+            public int cableLength;
             // Additive native liquid persistence. Legacy saves leave the flags false and
             // keep prefab defaults, while new saves retain tank contents and pump buffers.
             public bool hasFluidTankState;

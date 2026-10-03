@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.33.0-dev`
-**Roadmap Version:** `14.30.0-dev`
+**Current Version:** `14.34.0-dev`
+**Roadmap Version:** `14.34.0-dev`
 **Date:** 2026-10-03
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,11 @@
 
 ## 0. Recently Done
 
+### 14.34.0-dev - Steel Against Steel
+Real PvP: melee, ranged and explosion damage reach player avatars as server-validated intents - the attacker reports the attempt, the server checks it, the victim's own machine applies armor and damage, and a kill names the killer on the death screen. Friendly fire is a world rule (create/edit world, settings sidecar, default off), never a team choice; teammates' hits are refused server-side.
+Team ranks: one OWNER (crown - rename, promote/demote, remove anyone, disband by leaving last) plus appointed LEADERS (shield - invite and remove ordinary members); ownership passes to the earliest-joined leader, else member. Team names are unique per session, refused server-side. The pause-menu teams page is wider, wraps long names and keeps every button on screen; the TEAMS flag renders through the Lucide icon font instead of a missing-glyph square.
+14.33.0 play-round fixes: battery charge and gas contents moved into the runtime capture/restore seam so clients converge on them (additive hasGasState guard), and power cables save their variant and length (additive hasCableShape) so bends survive a reload.
+
 ### 14.33.0-dev - A Banner To Rally Under
 Milestone 11 CLOSED. Teams: found and name one, invite, accept or decline (invites lapse after 90 s), leave, leader-only remove, leadership passes to the earliest-joined member when a leader goes, an emptied team dissolves; one team per player, joined only by own confirmation. The host owns the roster - clients send identity-free intents the server stamps and validates - and every accepted change rebroadcasts the whole roster, with a late joiner caught up in one message. Membership is keyed by stable player id (survives rename, reconnect, restart) and persists as a teams.json sidecar beside the world save; the host-editable limits (max members per team, max teams per session) persist with it and gate new intents only. Beacon TEAM share is live: the visibility rule resolves SameTeam through the registry, so markers, map contacts and warp rendezvous open to teammates at once.
 The TEAMS page in the pause menu shows it all with live refresh and roster-diff toasts; a guest that drops the session drops its roster mirror.
@@ -45,11 +50,6 @@ Beacon colour customization: eight preset swatches in the shared identity panel,
 Three fixes from the 14.30.0 play round: the unpowered beacon no longer strobes (power demand depends on the switch, not on its own success), the Stationary Radar Beacon is placeable again (the setup tool now reconnects its item's prefab outside the create-only guard, and the regenerated collider no longer dips below the base), and build previews are inert beacon-side (ghost copies no longer stamp identities, enter the roster or raise their sky-beam; StripGhost disables IBeaconSource by construction).
 Roster visibility sweeps now survive a beacon destroyed mid-frame: interface references dodge Unity's destroyed-equals-null, so consumers test the underlying Component.
 
-### 14.30.0-dev - A Beacon Knows Who May See It
-Milestone 10 CLOSED. Both beacon blocks carry an owner (stable player id), a name, a marker range and the decided per-beacon share rule (do-not-share default / team stored for milestone 11 / global); settings ride the save-format runtime payload, so rename, re-share, save, rejoin and guest edits all use one serializer. On-screen HUD markers are new and host-filtered per recipient: a guest is only ever sent the markers its player id may see.
-The orbital-map contact and the warp rendezvous a powered beacon offers now pass the same visibility check as the marker, and the radar tower gained its settings panel.
-Accepted gaps live in Open Scope: the block itself is visible world geometry, settings seams are not per-viewer filtered, range is draw-side.
-
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
 - **Topology:** client-server ONLY. First target is a **listen server** (one player hosts, 2-8 players total). **Dedicated headless servers** come after the listen-server milestone works. **True P2P is permanently out of scope.**
@@ -58,7 +58,7 @@ Accepted gaps live in Open Scope: the block itself is visible world geometry, se
 
 ### Milestone Plan (14.0.0 - after the current construction arc stabilizes)
 1. **Foundation:** Fish-Net package in, NetworkManager boot flow, host/join UI, player identity (stable per-player id), player spawn + transform/animation sync. *(DONE 14.0.0-dev + 14.1.0-dev - identity, bridge, host/join UI, avatar spawn + transform sync; animation sync waits for a real character rig.)*
-2. **Player state:** per-player Inventory, PlayerStats, hotbar and equipment sync; interaction raycasts validated server-side. *(IN PROGRESS - 14.2.0-dev ships the visible half: held item + stance replication on avatars.)*
+2. **Player state:** per-player Inventory, PlayerStats, hotbar and equipment sync; interaction raycasts validated server-side. *(IN PROGRESS - 14.2.0-dev ships the visible half: held item + stance replication on avatars; 14.24.0 the host-owned per-player records; 14.34.0 PvP damage as server-validated hit intents applied by the victim's own machine, gated by the world friendly-fire rule.)*
 3. **Building sync:** all placement/upgrade/removal flows route through server RPCs in `BuildSystemV2` / `PlacedTieredBlock`; structural audits (`StructuralLoadState`) run server-side only; results replicate. *(DONE 14.4.0-14.6.0 - shipped as relayed broadcasts with positional piece identity instead of server-only audits: remote pieces stay unarmed and the origin machine announces its audit results, which converges cascades without moving the simulation; live place/upgrade/remove/damage, two-way join snapshot, doors and code locks all replicate. Open: shared build costs - placer pays alone today.)*
 4. **World sync:** voxel chunk edit replication + join-in-progress chunk streaming (the long pole - design payloads early, delta edits not full chunks). *(DONE for the shared-planet case - 14.7.0-dev live op replication + 14.8.0-dev edited-chunk join catch-up. Remaining niceties: multi-planet catch-up, fluid sim state.)*
 5. **Simulation sync:** machines, power, fluids, conveyors run server-side; clients render replicated state. *(DONE 14.9.0-14.12.0 - shipped as host-authoritative convergence rather than server-only simulation: item-block structure (14.9.0), container contents (14.10.0), dropped items (14.11.0) and machine runtime state + placement payloads (14.12.0) all replicate through the save-format capture/restore seams as opaque JSON. Clients keep simulating and converge onto the host's outcome. Accepted gaps: mid-belt packet cosmetics stay per-machine; true client-sim-off moves to the dedicated-server milestone.)*
@@ -70,7 +70,7 @@ Accepted gaps live in Open Scope: the block itself is visible world geometry, se
 
 10. **Beacon multiplayer:** ✅ DONE (14.30.0) - **Milestone COMPLETE.** Both beacon blocks carry owner, name, range and the per-beacon share setting (global / team / do-not-share, default do-not-share); on-screen markers are new and host-filtered per recipient, settings ride the save-format runtime seam, everything survives a rejoin, and map contacts plus warp targets obey the same visibility rule. The team value went live in 14.33.0 and is honoured through the team registry. Accepted gaps are named in Open Scope.
 
-11. **Teams:** ✅ DONE (14.33.0) - **Milestone COMPLETE.** Players found and name a team, invite players who accept or decline (invites lapse after 90 seconds), leave, and a leader removes members; leadership passes to the earliest-joined member when a leader leaves, and an emptied team dissolves. One team per player, joined only by own confirmation. The host owns the roster: clients send identity-free intents, the server stamps and validates them, and every accepted change rebroadcasts the whole roster (a late joiner is caught up in one message). Membership is keyed by stable player id - it survives a rename, a reconnect and a session restart - and the roster persists as a teams.json sidecar beside the world save, so resuming a world resumes its teams. Both limits (maximum members per team, maximum teams per session) are host-editable before and during a session and persist with the world; they gate new intents only, never breaking up an existing team. The beacon TEAM share rule is live through the same membership answer (SameTeam), opening markers, map contacts and warp rendezvous to teammates. Team membership is the grouping every later shared-ownership feature hangs off - shared build costs, friendly fire, base permissions.
+11. **Teams:** ✅ DONE (14.33.0) - **Milestone COMPLETE.** Players found and name a team, invite players who accept or decline (invites lapse after 90 seconds), leave, and a leader removes members; leadership passes to the earliest-joined member when a leader leaves, and an emptied team dissolves. One team per player, joined only by own confirmation. The host owns the roster: clients send identity-free intents, the server stamps and validates them, and every accepted change rebroadcasts the whole roster (a late joiner is caught up in one message). Membership is keyed by stable player id - it survives a rename, a reconnect and a session restart - and the roster persists as a teams.json sidecar beside the world save, so resuming a world resumes its teams. Both limits (maximum members per team, maximum teams per session) are host-editable before and during a session and persist with the world; they gate new intents only, never breaking up an existing team. The beacon TEAM share rule is live through the same membership answer (SameTeam), opening markers, map contacts and warp rendezvous to teammates. Team membership is the grouping every later shared-ownership feature hangs off - shared build costs, friendly fire, base permissions. *(14.34.0 extends the milestone: owner/leader ranks with promote/demote, owner-only rename, session-unique team names, and friendly fire resolved through SameTeam as a world rule.)*
 
 12. **Dedicated server:** headless build target, server-side persistence, no local player assumptions anywhere in boot code. **Security hardening lands here (committed 14.6.0):** code-lock codes currently travel and rest in plain text (same as save files) - move code validation server-side so raw codes never reach other clients, and audit every broadcast for data a client should not see (other players' lock codes, future chest contents). Acceptable for trusted-co-op pre-release, unacceptable for public dedicated servers.
 
@@ -129,7 +129,7 @@ Accepted gaps live in Open Scope: the block itself is visible world geometry, se
 
 ### Teams, Beacons & Shared Ownership - Rules That Bind (milestones 10-11)
 
-- **Teams are the grouping everything else hangs off.** Shared build costs, friendly fire, team beacons, map markers and base permissions all resolve through team membership rather than each inventing their own list of players.
+- **Teams are the grouping everything else hangs off.** Shared build costs, friendly fire, team beacons, map markers and base permissions all resolve through team membership rather than each inventing their own list of players. *(Friendly fire shipped 14.34.0 exactly this way: a WORLD setting resolved through SameTeam, never a per-team choice.)*
 - **Keyed by stable player id**, never by name or connection - a team survives a rename, a reconnect and a reload (MP-readiness checklist).
 - **Invite and accept, never auto-join.** A player is only ever added to a team by their own confirmation.
 - **The limits are host settings, not constants.** Max members per team and max teams per session live in the multiplayer / server settings, editable by the host.

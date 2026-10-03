@@ -1842,7 +1842,21 @@ namespace VoxelEngine.Player
                 var hv = GetComponent<VoxelEngine.Player.HeldToolView>();
                 Vector3 muzzle = hv != null ? hv.MuzzleWorldPosition : ray.origin + ray.direction * 0.6f;
                 Vector3 impact = ray.origin + ray.direction * dist;
-                if (TryRaycastIgnoringSelf(ray, out var hit, dist))
+                bool physicsHit = TryRaycastIgnoringSelf(ray, out var hit, dist);
+                float physicsDist = physicsHit ? hit.distance : float.MaxValue;
+
+                // Other players (14.34.0): avatars carry no colliders by design, so
+                // they are swept analytically. The nearest surface wins the bullet -
+                // a player behind a wall can never be shot through it.
+                if (VoxelEngine.Networking.PlayerCombat.TryFindAvatarHit(
+                        ray, dist, 0.10f, out var shotAvatar, out var shotPoint, out var shotDist)
+                    && shotDist < physicsDist)
+                {
+                    impact = shotPoint;
+                    VoxelEngine.Networking.PlayerCombat.RequestDamage(
+                        shotAvatar, weapon.damage, weapon.damageType, shotPoint, ray.direction, weapon.range);
+                }
+                else if (physicsHit)
                 {
                     impact = hit.point;
                     var d = hit.collider.GetComponentInParent<VoxelEngine.Combat.IDamageable>();
@@ -1897,6 +1911,22 @@ namespace VoxelEngine.Player
                     if (dd < best) { best = dd; target = d; }
                 }
             }
+            // Other players (14.34.0): swept analytically because avatars carry
+            // no colliders. The nearest body wins the swing.
+            if (VoxelEngine.Networking.PlayerCombat.TryFindAvatarHit(
+                    ray, dist, 0.35f, out var swingAvatar, out var swingPoint, out var swingDist))
+            {
+                float rivalDist = float.MaxValue;
+                if (target != null && target is MonoBehaviour targetBody)
+                    rivalDist = Vector3.Distance(targetBody.transform.position, ray.origin);
+                if (swingDist <= rivalDist)
+                {
+                    VoxelEngine.Networking.PlayerCombat.RequestDamage(
+                        swingAvatar, weapon.damage, weapon.damageType, swingPoint, ray.direction, weapon.range);
+                    return;
+                }
+            }
+
             if (target != null && target.IsAlive)
                 target.TakeDamage(new VoxelEngine.Combat.DamageEvent {
                     amount = weapon.damage, type = weapon.damageType,

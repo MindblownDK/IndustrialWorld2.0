@@ -129,6 +129,22 @@ namespace VoxelEngine.Networking
             return avatar;
         }
 
+        /// <summary>Every live avatar in the scene (14.34.0 - combat sweeps
+        /// use this instead of physics, since avatar bodies carry no
+        /// colliders by design). Destroyed entries are skipped, not yielded.</summary>
+        public static IEnumerable<PlayerAvatar> All
+        {
+            get
+            {
+                foreach (var kv in _byPlayerId)
+                    if (kv.Value != null) yield return kv.Value;
+            }
+        }
+
+        /// <summary>This player's replicated health, 0-100. What the attacker
+        /// side reads to skip a body that is already down.</summary>
+        public int HealthPercent => _healthPct.Value;
+
         /// <summary>Where this player's voice comes out: the head bone when the
         /// rigged body is in use, the primitive head otherwise, and the avatar
         /// root as the last resort. Cached - the bone never moves in hierarchy.</summary>

@@ -45,6 +45,7 @@ namespace VoxelEngine.Menu
         private int    _newContainerWeightPercent = WorldSession.DefaultContainerWeightPercent;
         private bool   _newShowDropVoidWarning = true;
         private bool   _newAllowRuinLootRespawn = WorldSession.DefaultAllowRuinLootRespawn;
+        private bool   _newFriendlyFire = WorldSession.DefaultFriendlyFire;
         private int    _newOrbitPace = WorldSession.OrbitPaceRealistic;
 
         // Edit-world form values. Only non-generation settings are editable here.
@@ -55,6 +56,7 @@ namespace VoxelEngine.Menu
         private int    _editContainerWeightPercent = WorldSession.DefaultContainerWeightPercent;
         private bool   _editShowDropVoidWarning = true;
         private bool   _editAllowRuinLootRespawn = WorldSession.DefaultAllowRuinLootRespawn;
+        private bool   _editFriendlyFire = WorldSession.DefaultFriendlyFire;
         private string _menuStatus = string.Empty;
 
         // Multiplayer page: remembered between sessions so a friend's address
@@ -600,6 +602,16 @@ namespace VoxelEngine.Menu
             ruinRespawnToggle.style.color = new StyleColor(T.TextSecondary);
             ruinRespawnToggle.RegisterValueChangedCallback(e => _newAllowRuinLootRespawn = e.newValue);
             scroll.Add(ruinRespawnToggle);
+
+            var friendlyFireToggle = new Toggle("Friendly Fire (teammates can damage each other in multiplayer)");
+            friendlyFireToggle.SetValueWithoutNotify(_newFriendlyFire);
+            friendlyFireToggle.style.marginTop = 8;
+            friendlyFireToggle.style.color = new StyleColor(T.TextSecondary);
+            friendlyFireToggle.RegisterValueChangedCallback(e => _newFriendlyFire = e.newValue);
+            scroll.Add(friendlyFireToggle);
+            var friendlyFireHelp = T.Muted("A world rule, the same for every team - never a per-team choice.");
+            friendlyFireHelp.style.marginTop = 2;
+            scroll.Add(friendlyFireHelp);
             scroll.Add(T.Spacer(16));
 
             // ── Cosmos: solar-system picker + per-planet custom seeds ──
@@ -691,6 +703,16 @@ namespace VoxelEngine.Menu
             ruinRespawnToggleEdit.style.color = new StyleColor(T.TextSecondary);
             ruinRespawnToggleEdit.RegisterValueChangedCallback(e => _editAllowRuinLootRespawn = e.newValue);
             panel.Add(ruinRespawnToggleEdit);
+
+            var friendlyFireToggleEdit = new Toggle("Friendly Fire (teammates can damage each other in multiplayer)");
+            friendlyFireToggleEdit.SetValueWithoutNotify(_editFriendlyFire);
+            friendlyFireToggleEdit.style.marginTop = 8;
+            friendlyFireToggleEdit.style.color = new StyleColor(T.TextSecondary);
+            friendlyFireToggleEdit.RegisterValueChangedCallback(e => _editFriendlyFire = e.newValue);
+            panel.Add(friendlyFireToggleEdit);
+            var friendlyFireHelpEdit = T.Muted("A world rule, the same for every team - never a per-team choice.");
+            friendlyFireHelpEdit.style.marginTop = 2;
+            panel.Add(friendlyFireHelpEdit);
 
             panel.Add(T.Spacer(18));
             var row = new VisualElement();
@@ -836,6 +858,7 @@ namespace VoxelEngine.Menu
             _editContainerWeightPercent = Mathf.Clamp(world.containerWeightPercent <= 0 ? WorldSession.DefaultContainerWeightPercent : world.containerWeightPercent, 25, 1000);
             _editShowDropVoidWarning = world.showDropVoidWarning;
             _editAllowRuinLootRespawn = world.allowRuinLootRespawn;
+            _editFriendlyFire = world.friendlyFire;
             _menuStatus = string.Empty;
             _page = Page.EditWorld;
             BuildUI();
@@ -858,7 +881,7 @@ namespace VoxelEngine.Menu
                 finalName = requestedName;
             }
 
-            if (!_session.SaveWorldSettingsFor(finalName, _editMaxDroppedItems, _editInventoryWeightPercent, _editContainerWeightPercent, _editShowDropVoidWarning, _editAllowRuinLootRespawn))
+            if (!_session.SaveWorldSettingsFor(finalName, _editMaxDroppedItems, _editInventoryWeightPercent, _editContainerWeightPercent, _editShowDropVoidWarning, _editAllowRuinLootRespawn, _editFriendlyFire))
             {
                 _menuStatus = "Error: Could not save world settings.";
                 BuildUI();
@@ -930,6 +953,7 @@ namespace VoxelEngine.Menu
             _session.containerWeightPercent = Mathf.Clamp(_newContainerWeightPercent, 25, 1000);
             _session.showDropVoidWarning = _newShowDropVoidWarning;
             _session.allowRuinLootRespawn = _newAllowRuinLootRespawn;
+            _session.friendlyFire = _newFriendlyFire;
             _session.SaveWorldSettings();
 
             // Persist the cosmos choice (system + per-planet seeds) so the same seeds

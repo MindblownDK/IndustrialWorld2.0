@@ -76,6 +76,12 @@ namespace VoxelEngine.Combat
 
             // Full explosion (damage + voxel crater + camera shake + VFX).
             Explosion.Detonate(pos, radius, damage, _owner, voxelDamageRadius, explosionMaterial);
+
+            // Other players (14.34.0): this projectile simulates only on the
+            // thrower's machine, so splash intents are filed exactly once.
+            // The host still owns the verdict (friendly fire, range, amount).
+            VoxelEngine.Networking.PlayerCombat.RequestExplosionDamage(pos, radius, damage);
+
             Destroy(gameObject);
         }
     }

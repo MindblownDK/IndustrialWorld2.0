@@ -34,10 +34,16 @@ namespace VoxelEngine.Networking
     {
         public string teamId = "";
         public string name = "";
+        /// <summary>The team's OWNER (kept as `leaderId` for wire/save
+        /// compatibility): the founder, or whoever ownership passed to.
+        /// Renames the team, appoints and strips co-leaders.</summary>
         public string leaderId = "";
-        /// <summary>Member player ids in join order; the leader is a member
-        /// too. Join order is what leadership passes to when a leader goes.</summary>
+        /// <summary>Member player ids in join order; the owner is a member
+        /// too. Join order is what ownership passes to when an owner goes.</summary>
         public List<string> memberIds = new();
+        /// <summary>Appointed co-leaders (14.34.0). May invite and remove
+        /// plain members; only the owner touches this list.</summary>
+        public List<string> coLeaderIds = new();
     }
 
     [Serializable]
@@ -117,6 +123,33 @@ namespace VoxelEngine.Networking
             => string.IsNullOrEmpty(teamId) ? null
                : _state.teams.Find(t => t != null && t.teamId == teamId);
 
+        /// <summary>The player founded this team or inherited it.</summary>
+        public static bool IsTeamOwner(TeamData team, string playerId)
+            => team != null && !string.IsNullOrEmpty(playerId) && team.leaderId == playerId;
+
+        /// <summary>Owner or appointed co-leader: may invite and remove
+        /// plain members. The one permission question team features ask.</summary>
+        public static bool IsTeamLeader(TeamData team, string playerId)
+            => team != null && !string.IsNullOrEmpty(playerId)
+               && (team.leaderId == playerId
+                   || (team.coLeaderIds != null && team.coLeaderIds.Contains(playerId)));
+
+        /// <summary>Case-insensitive name collision check. Two teams with the
+        /// same banner-name would be indistinguishable everywhere the name is
+        /// the identity a player reads, so the host refuses the second one.</summary>
+        private static bool NameTaken(string name, string exceptTeamId)
+        {
+            if (string.IsNullOrEmpty(name)) return false;
+            for (int i = 0; i < _state.teams.Count; i++)
+            {
+                var team = _state.teams[i];
+                if (team == null || team.teamId == exceptTeamId) continue;
+                if (string.Equals(team.name, name, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
+        }
+
         /// <summary>Answerable invites for this player, expiry-filtered. The
         /// host prunes on every change; clients additionally hide anything
         /// already past its moment so the UI cannot offer a dead button.</summary>
@@ -160,6 +193,15 @@ namespace VoxelEngine.Networking
 
         public static void RequestKick(string targetPlayerId)
             => Route(TeamOp.Kick, "", "", targetPlayerId);
+
+        public static void RequestPromote(string targetPlayerId)
+            => Route(TeamOp.Promote, "", "", targetPlayerId);
+
+        public static void RequestDemote(string targetPlayerId)
+            => Route(TeamOp.Demote, "", "", targetPlayerId);
+
+        public static void RequestRename(string newName)
+            => Route(TeamOp.Rename, "", newName, "");
 
         /// <summary>Host-only: adjust the session limits. Applies at once,
         /// rebroadcasts so guests' panels show honest numbers, and rides the
@@ -217,6 +259,7 @@ namespace VoxelEngine.Networking
                     string trimmed = (name ?? "").Trim();
                     if (trimmed.Length < 2) return "A team name needs at least 2 characters.";
                     if (trimmed.Length > 24) trimmed = trimmed.Substring(0, 24);
+                    if (NameTaken(trimmed, "")) return "A team with that name already exists.";
                     if (_state.teams.Count >= _state.maxTeams)
                         return $"The session's team limit is reached ({_state.maxTeams}).";
                     _state.teams.Add(new TeamData
@@ -234,7 +277,7 @@ namespace VoxelEngine.Networking
                 {
                     var team = TeamOf(requesterId);
                     if (team == null) return "You are not in a team.";
-                    if (team.leaderId != requesterId) return "Only the team's leader can invite.";
+                    if (!IsTeamLeader(team, requesterId)) return "Only the team's owner or a leader can invite.";
                     if (string.IsNullOrEmpty(targetId) || targetId == requesterId)
                         return "Pick a player to invite.";
                     if (NetworkSession.GetPlayer(targetId) == null)
@@ -290,11 +333,55 @@ namespace VoxelEngine.Networking
                 {
                     var team = TeamOf(requesterId);
                     if (team == null) return "You are not in a team.";
-                    if (team.leaderId != requesterId) return "Only the team's leader can remove members.";
+                    if (!IsTeamLeader(team, requesterId)) return "Only the team's owner or a leader can remove members.";
                     if (string.IsNullOrEmpty(targetId) || targetId == requesterId)
-                        return "Leading the team? Leave it instead of removing yourself.";
+                        return "Leave the team instead of removing yourself.";
                     if (!team.memberIds.Contains(targetId)) return "That player is not in your team.";
+                    if (team.leaderId == targetId) return "The team's owner cannot be removed.";
+                    if (!IsTeamOwner(team, requesterId) && IsTeamLeader(team, targetId))
+                        return "Only the owner can remove another leader.";
                     LeaveTeam(team, targetId);
+                    Commit(before);
+                    return null;
+                }
+
+                case TeamOp.Promote:
+                {
+                    var team = TeamOf(requesterId);
+                    if (team == null) return "You are not in a team.";
+                    if (!IsTeamOwner(team, requesterId)) return "Only the team's owner appoints leaders.";
+                    if (string.IsNullOrEmpty(targetId) || targetId == requesterId)
+                        return "Pick a member to appoint.";
+                    if (!team.memberIds.Contains(targetId)) return "That player is not in your team.";
+                    team.coLeaderIds ??= new List<string>();
+                    if (team.coLeaderIds.Contains(targetId)) return "That player is already a leader.";
+                    team.coLeaderIds.Add(targetId);
+                    Commit(before);
+                    return null;
+                }
+
+                case TeamOp.Demote:
+                {
+                    var team = TeamOf(requesterId);
+                    if (team == null) return "You are not in a team.";
+                    if (!IsTeamOwner(team, requesterId)) return "Only the team's owner strips leadership.";
+                    if (team.coLeaderIds == null || !team.coLeaderIds.Remove(targetId))
+                        return "That player is not a leader.";
+                    Commit(before);
+                    return null;
+                }
+
+                case TeamOp.Rename:
+                {
+                    var team = TeamOf(requesterId);
+                    if (team == null) return "You are not in a team.";
+                    if (!IsTeamOwner(team, requesterId)) return "Only the team's owner renames the team.";
+                    string renamed = (name ?? "").Trim();
+                    if (renamed.Length < 2) return "A team name needs at least 2 characters.";
+                    if (renamed.Length > 24) renamed = renamed.Substring(0, 24);
+                    if (string.Equals(team.name, renamed, StringComparison.Ordinal)) return "That is already the team's name.";
+                    if (NameTaken(renamed, team.teamId)) return "A team with that name already exists.";
+                    team.name = renamed;
                     Commit(before);
                     return null;
                 }
@@ -302,12 +389,14 @@ namespace VoxelEngine.Networking
             return "Unknown request.";
         }
 
-        /// <summary>Removes a member; when the leader goes, leadership passes
-        /// to the earliest-joined remaining member; a team with nobody left
-        /// dissolves (and its invites die with it).</summary>
+        /// <summary>Removes a member; when the owner goes, ownership passes
+        /// to the earliest-joined co-leader (an appointed leader outranks
+        /// seniority), else the earliest-joined remaining member; a team with
+        /// nobody left dissolves (and its invites die with it).</summary>
         private static void LeaveTeam(TeamData team, string playerId)
         {
             team.memberIds.Remove(playerId);
+            team.coLeaderIds?.Remove(playerId);
             _state.invites.RemoveAll(i => i != null && i.invitedId == playerId);
             if (team.memberIds.Count == 0)
             {
@@ -316,7 +405,14 @@ namespace VoxelEngine.Networking
                 return;
             }
             if (team.leaderId == playerId)
-                team.leaderId = team.memberIds[0];
+            {
+                string heir = null;
+                if (team.coLeaderIds != null)
+                    foreach (var id in team.memberIds)
+                        if (team.coLeaderIds.Contains(id)) { heir = id; break; }
+                team.leaderId = heir ?? team.memberIds[0];
+                team.coLeaderIds?.Remove(team.leaderId);   // the owner needs no second hat
+            }
         }
 
         private static void PruneExpired()
@@ -376,6 +472,22 @@ namespace VoxelEngine.Networking
                 Toast($"You joined {newTeam.name}.", good: true);
             else if (oldTeam != null && newTeam == null)
                 Toast($"You are no longer in {oldTeam.name}.", good: false);
+
+            // Same team, new banner-name or a changed hat.
+            if (newTeam != null && oldTeam != null && oldTeam.teamId == newTeam.teamId)
+            {
+                if (!string.Equals(oldTeam.name, newTeam.name, StringComparison.Ordinal))
+                    Toast($"Your team is now named {newTeam.name}.", good: true);
+
+                bool wasLeader = oldTeam.leaderId == me
+                                 || (oldTeam.coLeaderIds != null && oldTeam.coLeaderIds.Contains(me));
+                bool isLeader = newTeam.leaderId == me
+                                || (newTeam.coLeaderIds != null && newTeam.coLeaderIds.Contains(me));
+                if (!wasLeader && isLeader)
+                    Toast($"You now lead {newTeam.name}.", good: true);
+                else if (wasLeader && !isLeader)
+                    Toast($"You no longer lead {newTeam.name}.", good: false);
+            }
 
             // Teammates coming and going.
             if (newTeam != null && oldTeam != null && oldTeam.teamId == newTeam.teamId)
@@ -479,6 +591,16 @@ namespace VoxelEngine.Networking
                 {
                     loaded.teams ??= new List<TeamData>();
                     loaded.invites ??= new List<TeamInviteData>();
+                    // Sanitize co-leaders (additive 14.34.0 field): only
+                    // members hold the hat, and the owner never needs it.
+                    foreach (var team in loaded.teams)
+                    {
+                        if (team == null) continue;
+                        team.coLeaderIds ??= new List<string>();
+                        team.coLeaderIds.RemoveAll(
+                            id => string.IsNullOrEmpty(id) || id == team.leaderId
+                                  || team.memberIds == null || !team.memberIds.Contains(id));
+                    }
                     loaded.maxTeams = Mathf.Clamp(loaded.maxTeams == 0 ? TeamSnapshot.DefaultMaxTeams : loaded.maxTeams, 1, 8);
                     loaded.maxMembers = Mathf.Clamp(loaded.maxMembers == 0 ? TeamSnapshot.DefaultMaxMembers : loaded.maxMembers, 2, 8);
                     _state = loaded;
@@ -519,5 +641,8 @@ namespace VoxelEngine.Networking
         public const byte Decline = 3;
         public const byte Leave = 4;
         public const byte Kick = 5;
+        public const byte Promote = 6;   // owner appoints a co-leader (14.34.0)
+        public const byte Demote = 7;    // owner strips a co-leader
+        public const byte Rename = 8;    // owner renames the team
     }
 }

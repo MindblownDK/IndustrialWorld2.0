@@ -26,6 +26,7 @@ namespace VoxelEngine.Menu
         public const int DefaultContainerWeightPercent = 100;
         public const bool DefaultAllowRuinLootRespawn = true;
         public const float DefaultFullVoxelRadiusKm = 50f;
+        public const bool DefaultFriendlyFire = false;
 
         /// <summary>Maximum simultaneous physical world drops. Conveyor packets use
         /// their own simulation and are deliberately never included in this limit.</summary>
@@ -43,6 +44,11 @@ namespace VoxelEngine.Menu
         public int containerWeightPercent = DefaultContainerWeightPercent;
         public bool showDropVoidWarning = true;
         public bool allowRuinLootRespawn = DefaultAllowRuinLootRespawn;
+
+        /// <summary>World rule (14.34.0): may teammates damage each other?
+        /// A SERVER/WORLD setting, never a team setting - fair ground for
+        /// every player. The host enforces it on every hit intent.</summary>
+        public bool friendlyFire = DefaultFriendlyFire;
         public float PlayerInventoryWeightLimitKg => DefaultPlayerInventoryWeightKg * Mathf.Clamp(inventoryWeightPercent, 25, 1000) / 100f;
         public float ContainerWeightLimitKg => DefaultContainerWeightKg * Mathf.Clamp(containerWeightPercent, 25, 1000) / 100f;
 
@@ -207,6 +213,7 @@ namespace VoxelEngine.Menu
             public bool showDropVoidWarning;
             public bool allowRuinLootRespawn;
             public float fullVoxelRadiusKm;
+            public bool friendlyFire;
         }
 
         /// <summary>Host side: describe this world for a joining client.</summary>
@@ -223,6 +230,7 @@ namespace VoxelEngine.Menu
                 showDropVoidWarning = showDropVoidWarning,
                 allowRuinLootRespawn = allowRuinLootRespawn,
                 fullVoxelRadiusKm = fullVoxelRadiusKm,
+                friendlyFire = friendlyFire,
             };
             try { return JsonUtility.ToJson(card); }
             catch (Exception ex) { Debug.LogWarning("[WorldSession] ExportWorldCardJson: " + ex.Message); return ""; }
@@ -247,6 +255,7 @@ namespace VoxelEngine.Menu
             containerWeightPercent = Mathf.Clamp(card.containerWeightPercent <= 0 ? DefaultContainerWeightPercent : card.containerWeightPercent, 25, 1000);
             showDropVoidWarning = card.showDropVoidWarning;
             allowRuinLootRespawn = card.allowRuinLootRespawn;
+            friendlyFire = card.friendlyFire;
             if (card.fullVoxelRadiusKm > 0f) fullVoxelRadiusKm = card.fullVoxelRadiusKm;
 
             worldName = JoinedCacheFolderName(hostWorldDisplayName);
@@ -403,13 +412,15 @@ namespace VoxelEngine.Menu
                 int savedContainerWeightPercent = DefaultContainerWeightPercent;
                 bool savedShowDropVoidWarning = true;
                 bool savedAllowRuinLootRespawn = DefaultAllowRuinLootRespawn;
-                if (TryReadWorldSettings(info.Name, out var maxDrops, out var invWeightPct, out var containerWeightPct, out var showDropVoidWarning, out var allowRuinLootRespawn))
+                bool savedFriendlyFire = DefaultFriendlyFire;
+                if (TryReadWorldSettings(info.Name, out var maxDrops, out var invWeightPct, out var containerWeightPct, out var showDropVoidWarning, out var allowRuinLootRespawn, out var friendlyFireSetting))
                 {
                     savedMaxDrops = maxDrops;
                     savedInventoryWeightPercent = invWeightPct;
                     savedContainerWeightPercent = containerWeightPct;
                     savedShowDropVoidWarning = showDropVoidWarning;
                     savedAllowRuinLootRespawn = allowRuinLootRespawn;
+                    savedFriendlyFire = friendlyFireSetting;
                 }
                 result.Add(new WorldSummary
                 {
@@ -422,7 +433,8 @@ namespace VoxelEngine.Menu
                     inventoryWeightPercent = savedInventoryWeightPercent,
                     containerWeightPercent = savedContainerWeightPercent,
                     showDropVoidWarning = savedShowDropVoidWarning,
-                    allowRuinLootRespawn = savedAllowRuinLootRespawn
+                    allowRuinLootRespawn = savedAllowRuinLootRespawn,
+                    friendlyFire = savedFriendlyFire
                 });
             }
             result.Sort((a, b) => b.lastWrite.CompareTo(a.lastWrite));
@@ -471,6 +483,9 @@ namespace VoxelEngine.Menu
             public int showDropVoidWarning = 1;
             public int allowRuinLootRespawn = 1;
             public float fullVoxelRadiusKm = DefaultFullVoxelRadiusKm;
+            // Tri-state like its siblings: 1 on, -1 off, 0 = legacy file
+            // without the key, which reads as the default (off).
+            public int friendlyFire = 0;
         }
 
         /// <summary>Non-generation settings only. This sidecar never changes seeds,
@@ -488,7 +503,8 @@ namespace VoxelEngine.Menu
                     containerWeightPercent = Mathf.Clamp(containerWeightPercent, 25, 1000),
                     showDropVoidWarning = this.showDropVoidWarning ? 1 : -1,
                     allowRuinLootRespawn = this.allowRuinLootRespawn ? 1 : -1,
-                    fullVoxelRadiusKm = Mathf.Clamp(fullVoxelRadiusKm, 0f, 500f)
+                    fullVoxelRadiusKm = Mathf.Clamp(fullVoxelRadiusKm, 0f, 500f),
+                    friendlyFire = this.friendlyFire ? 1 : -1
                 }, true));
             }
             catch (Exception ex) { Debug.LogWarning("[WorldSession] SaveWorldSettings: " + ex.Message); }
@@ -502,6 +518,7 @@ namespace VoxelEngine.Menu
             showDropVoidWarning = true;
             allowRuinLootRespawn = DefaultAllowRuinLootRespawn;
             fullVoxelRadiusKm = DefaultFullVoxelRadiusKm;
+            friendlyFire = DefaultFriendlyFire;
             try
             {
                 if (!File.Exists(WorldSettingsPath)) return;
@@ -514,6 +531,7 @@ namespace VoxelEngine.Menu
                     showDropVoidWarning = data.showDropVoidWarning != -1;
                     allowRuinLootRespawn = data.allowRuinLootRespawn != -1;
                     fullVoxelRadiusKm = data.fullVoxelRadiusKm <= 0f ? DefaultFullVoxelRadiusKm : Mathf.Clamp(data.fullVoxelRadiusKm, 0f, 500f);
+                    friendlyFire = data.friendlyFire == 1;
                 }
             }
             catch (Exception ex) { Debug.LogWarning("[WorldSession] LoadWorldSettings: " + ex.Message); }
@@ -543,11 +561,22 @@ namespace VoxelEngine.Menu
             out int savedInventoryWeightPercent, out int savedContainerWeightPercent,
             out bool savedShowDropVoidWarning, out bool savedAllowRuinLootRespawn)
         {
+            return TryReadWorldSettings(name, out savedMaxDroppedItems,
+                out savedInventoryWeightPercent, out savedContainerWeightPercent,
+                out savedShowDropVoidWarning, out savedAllowRuinLootRespawn, out _);
+        }
+
+        public bool TryReadWorldSettings(string name, out int savedMaxDroppedItems,
+            out int savedInventoryWeightPercent, out int savedContainerWeightPercent,
+            out bool savedShowDropVoidWarning, out bool savedAllowRuinLootRespawn,
+            out bool savedFriendlyFire)
+        {
             savedMaxDroppedItems = DefaultMaxDroppedItems;
             savedInventoryWeightPercent = DefaultInventoryWeightPercent;
             savedContainerWeightPercent = DefaultContainerWeightPercent;
             savedShowDropVoidWarning = true;
             savedAllowRuinLootRespawn = DefaultAllowRuinLootRespawn;
+            savedFriendlyFire = DefaultFriendlyFire;
             try
             {
                 string path = WorldSettingsPathFor(name);
@@ -559,6 +588,7 @@ namespace VoxelEngine.Menu
                 savedContainerWeightPercent = data.containerWeightPercent <= 0 ? DefaultContainerWeightPercent : Mathf.Clamp(data.containerWeightPercent, 25, 1000);
                 savedShowDropVoidWarning = data.showDropVoidWarning != -1;
                 savedAllowRuinLootRespawn = data.allowRuinLootRespawn != -1;
+                savedFriendlyFire = data.friendlyFire == 1;
                 return true;
             }
             catch (Exception ex)
@@ -589,17 +619,44 @@ namespace VoxelEngine.Menu
 
         public bool SaveWorldSettingsFor(string name, int newMaxDroppedItems, int newInventoryWeightPercent, int newContainerWeightPercent, bool newShowDropVoidWarning, bool newAllowRuinLootRespawn)
         {
+            // Callers that predate the friendly-fire setting must not reset
+            // it: carry the value already on disk (or the default) forward.
+            TryReadWorldSettings(name, out _, out _, out _, out _, out _, out bool keepFriendlyFire);
+            return SaveWorldSettingsFor(name, newMaxDroppedItems, newInventoryWeightPercent,
+                newContainerWeightPercent, newShowDropVoidWarning, newAllowRuinLootRespawn, keepFriendlyFire);
+        }
+
+        public bool SaveWorldSettingsFor(string name, int newMaxDroppedItems, int newInventoryWeightPercent, int newContainerWeightPercent, bool newShowDropVoidWarning, bool newAllowRuinLootRespawn, bool newFriendlyFire)
+        {
             try
             {
                 string folder = WorldFolderPath(name);
                 Directory.CreateDirectory(folder);
+
+                // Preserve fields this editor does not touch (the voxel-radius
+                // choice made at creation would otherwise silently reset).
+                float keepFullVoxelRadiusKm = DefaultFullVoxelRadiusKm;
+                try
+                {
+                    string existingPath = WorldSettingsPathFor(name);
+                    if (File.Exists(existingPath))
+                    {
+                        var existing = JsonUtility.FromJson<WorldSettingsData>(File.ReadAllText(existingPath));
+                        if (existing != null && existing.fullVoxelRadiusKm > 0f)
+                            keepFullVoxelRadiusKm = Mathf.Clamp(existing.fullVoxelRadiusKm, 0f, 500f);
+                    }
+                }
+                catch { /* unreadable existing file - defaults stand */ }
+
                 var data = new WorldSettingsData
                 {
                     maxDroppedItems = Mathf.Clamp(newMaxDroppedItems, 1, 10000),
                     inventoryWeightPercent = Mathf.Clamp(newInventoryWeightPercent, 25, 1000),
                     containerWeightPercent = Mathf.Clamp(newContainerWeightPercent, 25, 1000),
                     showDropVoidWarning = newShowDropVoidWarning ? 1 : -1,
-                    allowRuinLootRespawn = newAllowRuinLootRespawn ? 1 : -1
+                    allowRuinLootRespawn = newAllowRuinLootRespawn ? 1 : -1,
+                    fullVoxelRadiusKm = keepFullVoxelRadiusKm,
+                    friendlyFire = newFriendlyFire ? 1 : -1
                 };
                 File.WriteAllText(WorldSettingsPathFor(name), JsonUtility.ToJson(data, true));
                 if (SanitizeWorldFolderName(name) == SanitizeWorldFolderName(worldName))
@@ -609,6 +666,7 @@ namespace VoxelEngine.Menu
                     containerWeightPercent = data.containerWeightPercent;
                     showDropVoidWarning = data.showDropVoidWarning != -1;
                     allowRuinLootRespawn = data.allowRuinLootRespawn != -1;
+                    friendlyFire = data.friendlyFire == 1;
                 }
                 return true;
             }
@@ -929,6 +987,7 @@ namespace VoxelEngine.Menu
         public int      containerWeightPercent;
         public bool     showDropVoidWarning;
         public bool     allowRuinLootRespawn;
+        public bool     friendlyFire;
     }
 
     public struct AutosaveSlotSummary
