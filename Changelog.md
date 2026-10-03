@@ -1,9 +1,25 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.37.0-dev`
+**Current Version:** `14.37.1-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.37.1-dev] Two Cloths to the Wind
+
+**Type:** PATCH - polish from the first banners in the field: the banner looks like a banner, moves like a banner, paints like a canvas, and two long-standing UI and HUD irritations die. No save-format change; no setup re-run - the banner visual is built in code, so every placed pole and ship banner reshapes itself on load.
+
+**Two cloths, no skewer.** The pole no longer pierces the fabric. Two swallow-tail cloths now hang from the crossbar, one on each side of the pole, the way a processional banner is actually rigged; the crossbar grew to carry them and the cross finial still crowns the pole. Both cloths fly the same team image - and the back of each cloth carries mirrored texture coordinates, the way a printed banner shows its image through the weave, so the emblem and the text lines read correctly from BOTH sides instead of appearing flipped from behind. The text lines got the same treatment: each line now exists front and back, the back copy turned to face its reader.
+
+**The cloth moves.** Each cloth is a deformable vertex grid now, not a stiff board. A travelling wave runs down and across the fabric - sewn fast at the bar, swinging hardest at the tails - driven by the global wind simulation (the same 2-45 m/s, weather-coupled wind the turbines read), plus apparent wind from the carrier's own motion, so a banner on a moving ship streams even on a dead-calm day. The whole effect is scaled by local atmospheric density: thin air flutters weakly, and in space or on an airless world the cloth hangs perfectly still - no air, no flag-waving, however fast the ship burns. The painted letters ride their spot on the fabric instead of floating in front of a moving cloth. Far from the camera the simulation rests and the cloth returns to its sewn pose.
+
+**Painting on a canvas, not a stamp.** Toggling PAINTING: ON in the TEAMS banner editor now grows the preview into a proper canvas (300x450) for the duration - brush strokes land where the eye says they land, and the S/M/L brushes finally have room to differ. A new BLANK CLOTH button beside DEFAULT wipes the image to plain cloth, for painting a banner from nothing without first hunting for a white image. Painting remains gated by the world rule exactly as before.
+
+**The teams page holds its place.** Every roster tick, invite, promotion and brush-stroke rebuild of the TEAMS page snapped the view back to the top - infuriating halfway down a long roster or deep in the banner editor. The scroll offset now survives rebuilds: it is captured on a slow poll (never from teardown events, which report a bogus zero) and restored once the fresh layout has real geometry.
+
+**"Hit 0 dmg" spam is dead.** Damage-over-time sources tick in fractions - a thruster plume washing over a creature at five ticks a second, a flamethrower's falloff at range - and every tick below half a point rounded to a "Hit 0 dmg" toast, which could flood the feed just from walking near a running grid. Two fixes, both ends: zero-amount damage events no longer count as hits at all (no flash, no toast, no feedback), and the hit toast is suppressed for any amount that would display as 0. The damage itself still applies - health drains exactly as before; only the noise is gone.
+
+**Files:** edits to `Scripts/Combat/BannerCloth.cs` (rebuilt: twin cloth grid, mirrored backs, wind/motion/atmosphere flutter), `Scripts/GridSystem/GridBannerBlock.cs` (two-cloth sizing inside the grid cell), `Scripts/UI/TeamsPanel.cs` (big canvas, BLANK CLOTH, scroll preservation) and `Scripts/Combat/Damageable.cs` (zero-damage guard and toast threshold).
 
 ### [14.37.0-dev] Colours Worth Dying Under
 

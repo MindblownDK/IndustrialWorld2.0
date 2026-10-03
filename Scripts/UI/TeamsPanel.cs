@@ -49,6 +49,11 @@ namespace VoxelEngine.UI
         private static int _brushRadius = 8;
         private static readonly Dictionary<string, Texture2D> _galleryCache = new();
 
+        /// <summary>Scroll offset carried across rebuilds. Every roster tick,
+        /// button press and brush stroke rebuilds this page; without this the
+        /// view snapped back to the top each time (14.37.1).</summary>
+        private static float _savedScroll;
+
         public static VisualElement Build(Action rebuild)
         {
             var scroll = new ScrollView();
@@ -56,6 +61,25 @@ namespace VoxelEngine.UI
             scroll.mode = ScrollViewMode.Vertical;
             var content = new VisualElement();
             scroll.Add(content);
+
+            // Remember where the player was and restore after the fresh layout
+            // lands. The offset is captured on a slow poll (never from teardown
+            // events, which report a bogus 0) and restored once geometry is
+            // real - restoring earlier gets clamped to 0 by an empty scroller.
+            float restoreTo = _savedScroll;
+            bool restored = false;
+            content.RegisterCallback<GeometryChangedEvent>(_ =>
+            {
+                if (restored) return;
+                restored = true;
+                if (restoreTo > 0f)
+                    scroll.schedule.Execute(() =>
+                        scroll.scrollOffset = new Vector2(0f, restoreTo));
+                scroll.schedule.Execute(() =>
+                {
+                    if (scroll.panel != null) _savedScroll = scroll.scrollOffset.y;
+                }).Every(120);
+            });
 
             string me = NetworkSession.LocalPlayerId;
             var myTeam = TeamRegistry.TeamOf(me);
@@ -322,18 +346,26 @@ namespace VoxelEngine.UI
 
             if (canEdit) EnsureBannerDraft(team.teamId, state);
 
+            bool paintingAllowed = VoxelEngine.Menu.WorldSession.Instance == null
+                || VoxelEngine.Menu.WorldSession.Instance.allowBannerPainting;
+
             // ── preview (and painting board for editors) ─────────────────
+            // With the brush active the cloth grows into a proper canvas -
+            // painting pixel art on a postage stamp was misery (14.37.1).
+            bool bigCanvas = canEdit && paintingAllowed && _bannerPainting;
+            int previewW = bigCanvas ? 300 : 176;
+            int previewH = bigCanvas ? 450 : 264;
             var previewHolder = new VisualElement();
             previewHolder.style.alignSelf = Align.Center;
-            previewHolder.style.width = 176;
-            previewHolder.style.height = 264;
+            previewHolder.style.width = previewW;
+            previewHolder.style.height = previewH;
             previewHolder.style.marginTop = 4;
             previewHolder.style.marginBottom = 6;
 
             var preview = new Image { scaleMode = ScaleMode.StretchToFill };
             preview.image = canEdit ? _bannerDraftCloth : TeamBannerRegistry.ClothTexture(team.teamId);
-            preview.style.width = 176;
-            preview.style.height = 264;
+            preview.style.width = previewW;
+            preview.style.height = previewH;
             T.Border(preview, 2, new Color(0.85f, 0.68f, 0.21f, 0.8f));   // the gold frame, in UI form
             previewHolder.Add(preview);
 
@@ -363,9 +395,6 @@ namespace VoxelEngine.UI
             }
 
             // ── editor: painting board hookup ─────────────────────────────
-            bool paintingAllowed = VoxelEngine.Menu.WorldSession.Instance == null
-                || VoxelEngine.Menu.WorldSession.Instance.allowBannerPainting;
-
             preview.RegisterCallback<PointerDownEvent>(e =>
             {
                 if (!_bannerPainting || !paintingAllowed) return;
@@ -404,6 +433,14 @@ namespace VoxelEngine.UI
             {
                 LoadDraftFrom(TeamBannerRegistry.DefaultCloth);
                 _bannerDraftCustom = false;
+                preview.MarkDirtyRepaint();
+            }, T.BgSlot));
+            sourceRow.Add(SmallBtn("BLANK CLOTH", () =>
+            {
+                // Wipe the image entirely - plain cloth, a fresh start for
+                // painting from scratch (14.37.1).
+                FillDraft(new Color32(242, 238, 228, 255));
+                _bannerDraftCustom = true;
                 preview.MarkDirtyRepaint();
             }, T.BgSlot));
             sourceRow.Add(SmallBtn("OPEN FOLDER", () =>
@@ -549,6 +586,20 @@ namespace VoxelEngine.UI
                 { name = "BannerDraft", wrapMode = TextureWrapMode.Clamp };
             }
             LoadDraftFrom(TeamBannerRegistry.ClothTexture(teamId));
+        }
+
+        /// <summary>Flood the draft cloth with one flat color - the BLANK
+        /// CLOTH action, for painting a banner from nothing.</summary>
+        private static void FillDraft(Color32 color)
+        {
+            if (_bannerDraftCloth == null) return;
+            int w = _bannerDraftCloth.width, h = _bannerDraftCloth.height;
+            if (_bannerDraftPixels == null || _bannerDraftPixels.Length != w * h)
+                _bannerDraftPixels = new Color32[w * h];
+            for (int i = 0; i < _bannerDraftPixels.Length; i++)
+                _bannerDraftPixels[i] = color;
+            _bannerDraftCloth.SetPixels32(_bannerDraftPixels);
+            _bannerDraftCloth.Apply(false, false);
         }
 
         /// <summary>Copy any readable texture into the draft cloth, nearest-

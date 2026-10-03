@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.37.0-dev`
-**Roadmap Version:** `14.37.0-dev`
+**Current Version:** `14.37.1-dev`
+**Roadmap Version:** `14.37.1-dev`
 **Date:** 2026-10-03
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -31,6 +31,7 @@
 
 ### 14.37.0-dev - Colours Worth Dying Under
 One banner per team: 256x384 cloth plus three text lines, edited only in PAUSE > TEAMS by the owner and leaders (gallery from a Banners folder, in-game painting board gated by a world rule, default crusader emblem in code), host-authoritative with sidecar persistence (banners.json + per-team png) and join catch-up. Displayed by the new banner pole (placed block), ship banner (grid block), a TEAM BANNER grid-screen mode, and the new Crusader Shield - hold RMB to block 65% of damage for durability, raised pose replicated via a second motion flag. Setup step 106 authors the shield, both banner blocks and recipes.
+14.37.1 field polish: two cloths flank the pole (no more skewered flag) with mirrored backs so the image reads from both sides; the cloth is a vertex grid that flutters with wind, carrier motion and atmospheric density (dead still in vacuum); the painting board grows to a 300x450 canvas with a BLANK CLOTH wipe; the TEAMS page keeps its scroll position across live rebuilds; and zero-damage ticks no longer spam "Hit 0 dmg" toasts.
 
 ### 14.36.0-dev - What the Fallen Leave Behind
 Death is animated and death has stakes: the avatar plays the sword-and-shield death clip when the replicated health mirror hits zero (one-shot, frozen on the final frame until respawn), and the whole 40-slot inventory drops into a loot bag at the death position. The bag mirrors the inventory's slot layout, so TAKE ALL restores every stack to the exact slot it was lost from; anyone may loot a found bag, but only the owner sees the local-only recovery beacon (1 km). Bags never expire, persist with the world save (additive list), and ride the DropSync wire pattern with a join snapshot.

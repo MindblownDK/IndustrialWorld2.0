@@ -58,7 +58,10 @@ namespace VoxelEngine.GridSystem
                 holder.transform.localPosition = new Vector3(0f, -1.1f, 0f);
                 _cloth = holder.AddComponent<Combat.BannerCloth>();
                 _cloth.poleHeight = 2.1f;
-                _cloth.clothWidth = 0.78f;
+                // Per-cloth width - two cloths flank the pole (14.37.1), so the
+                // full spread is 2x this plus the pole gap. Keep it inside the
+                // 2.5 m grid cell.
+                _cloth.clothWidth = 0.56f;
                 _cloth.clothHeight = 1.15f;
             }
         }

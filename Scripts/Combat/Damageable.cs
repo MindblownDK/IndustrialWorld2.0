@@ -36,6 +36,7 @@ namespace VoxelEngine.Combat
         public virtual void TakeDamage(DamageEvent e)
         {
             if (!IsAlive) return;
+            if (e.amount <= 0f) return;   // zero-damage events are noise, not hits (14.37.1)
             Health -= e.amount;
             OnHit(e);
             if (Health <= 0f)
@@ -47,7 +48,10 @@ namespace VoxelEngine.Combat
 
         protected virtual void OnHit(DamageEvent e)
         {
-            if (showHitFeedback)
+            // Sub-point damage (per-tick burns, plume ticks, grazes) still
+            // hurts, but a toast that would read "Hit 0 dmg" is pure spam -
+            // suppress anything that rounds below 1 (14.37.1).
+            if (showHitFeedback && Mathf.RoundToInt(e.amount) >= 1)
                 VoxelEngine.UI.BuildFeedbackHud.Show("Hit", Mathf.RoundToInt(e.amount) + " dmg", null, hitColor);
         }
 
