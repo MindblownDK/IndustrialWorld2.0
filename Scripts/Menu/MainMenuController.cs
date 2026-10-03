@@ -141,9 +141,64 @@ namespace VoxelEngine.Menu
             // Teams obey the same rule: the next world inherits nothing, not
             // even by accident.
             TeamRegistry.ClearAll();
+
+            // Milestone 12, part 1 (14.45.0): a dedicated server never shows
+            // this menu. It resolves its world from server_config.json and
+            // the command line, installs the headless runner and goes
+            // straight into the game scene - the same two launch paths a
+            // player would have clicked, just without the clicking.
+            if (DedicatedServer.IsActive)
+            {
+                _dedicatedBoot = true;
+                LaunchDedicated();
+            }
         }
 
-        private void OnEnable() => BuildUI();
+        private bool _dedicatedBoot;
+
+        /// <summary>Boot the configured world headless. An existing save
+        /// folder loads exactly like LoadWorld; a missing one is created
+        /// exactly like CreateAndLoadWorld, with the config's seed (0 =
+        /// random) and default world settings an admin can later edit from
+        /// any client... once that exists. For now: world_settings.json.</summary>
+        private void LaunchDedicated()
+        {
+            var cfg = DedicatedServer.Config;
+            DedicatedServer.InstallRunner();
+
+            bool exists = Directory.Exists(_session.WorldFolderPath(cfg.worldName));
+            if (exists)
+            {
+                Debug.Log($"[Server] Loading existing world '{cfg.worldName}'.");
+                _session.worldName = cfg.worldName;
+                _session.isNewWorld = false;
+                _session.LoadWorldSettings();
+                _session.LoadCosmosSidecar();
+            }
+            else
+            {
+                _session.worldName = cfg.worldName;
+                _session.seed = cfg.newWorldSeed != 0
+                    ? cfg.newWorldSeed
+                    : UnityEngine.Random.Range(1, int.MaxValue);
+                _session.isNewWorld = true;
+                _session.SaveWorldSettings();
+                ApplyCosmosSelectionToSession();   // system 0, fresh planet seeds
+                _session.SaveCosmosSidecar();
+                Debug.Log($"[Server] Creating new world '{cfg.worldName}' (seed {_session.seed}).");
+            }
+
+            UIState.ClearSceneBlocks();
+            Time.timeScale = 1f;
+            try { SceneManager.LoadScene(gameSceneName); }
+            catch (Exception ex) { Debug.LogError("[Server] Could not load game scene: " + ex.Message); }
+        }
+
+        private void OnEnable()
+        {
+            if (_dedicatedBoot) return;   // headless: no menu UI to build
+            BuildUI();
+        }
 
         // ── UI Root ────────────────────────────────────────────────
         private void BuildUI()

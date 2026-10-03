@@ -47,6 +47,11 @@ namespace VoxelEngine.Networking
         /// simulation) may run on this machine.</summary>
         public static bool IsAuthority => Mode != SessionMode.Client;
 
+        /// <summary>True when this process is a headless dedicated server
+        /// (14.45.0, milestone 12): a Host with nobody in the chair. There is
+        /// no local player - code that needs one must check this first.</summary>
+        public static bool IsDedicated => DedicatedServer.IsActive;
+
         public static string LocalPlayerId => PlayerIdentity.LocalId;
 
         public static event Action<PlayerPresence> PlayerJoined;
@@ -96,6 +101,10 @@ namespace VoxelEngine.Networking
 
         private static void EnsureLocalPlayer()
         {
+            // A dedicated server HAS no local player (14.45.0): the machine
+            // serves, nobody plays on it. Registering one here would put a
+            // ghost in every roster, heartbeat and team list.
+            if (IsDedicated) { _localRegistered = true; return; }
             if (_localRegistered && _players.ContainsKey(LocalPlayerId)) return;
             _localRegistered = true;
             if (!_players.ContainsKey(LocalPlayerId))

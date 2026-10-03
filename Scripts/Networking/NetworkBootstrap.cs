@@ -852,6 +852,24 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.StartConnection("localhost");
         }
 
+        /// <summary>Open this world as a headless dedicated server (14.45.0,
+        /// milestone 12): server connection only, no local client, no local
+        /// player. Port and player cap come from server_config.json - set on
+        /// the transport BEFORE it starts listening.</summary>
+        public void StartDedicated(ushort port, int maxPlayers)
+        {
+            if (IsOnline) return;
+            _statusLine = "Starting dedicated server...";
+            var transport = _networkManager.TransportManager != null
+                ? _networkManager.TransportManager.Transport : null;
+            if (transport != null)
+            {
+                if (port > 0) transport.SetPort(port);
+                transport.SetMaximumClients(Mathf.Clamp(maxPlayers, 1, 64));
+            }
+            _networkManager.ServerManager.StartConnection();
+        }
+
         /// <summary>Join someone else's world at the given address.</summary>
         public void StartClient(string address)
         {

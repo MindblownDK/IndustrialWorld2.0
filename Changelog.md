@@ -1,9 +1,29 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.44.0-dev`
+**Current Version:** `14.45.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.45.0-dev] The Server Stands Alone
+
+**Type:** MINOR - Milestone 12, part 1: the dedicated server boot path. The game can now run as a headless server that loads or creates a world from a config file, listens for players without anybody sitting at the machine, autosaves on its own cadence and prints a heartbeat to the log. A dedicated session is a Host with nobody in the chair: authority code runs exactly as it always has, and every connected player is a guest. Save format: one additive flag; old saves load clean, and a world can move freely between singleplayer, listen-server and dedicated hosting.
+
+**One flag, three doors.** Dedicated mode is decided once per process: a build made with Unity's Dedicated Server target is a server by definition, any player build launched with -server serves instead of playing, and the editor test hook (below) covers development. Everything headless hangs off that single answer - NetworkSession.IsDedicated is the question the rest of the codebase asks, which is the milestone's "no local player assumptions" rule given a name.
+
+**server_config.json, plus arguments.** On first run the server writes a template config next to the executable: server name, world name, UDP port, player cap, autosave cadence, and the seed used only if the world does not exist yet. Command-line flags (-world, -port, -maxplayers, -autosave, -servername, -seed) override the file per launch, so one install can host many worlds. An existing save folder loads exactly like clicking it in the menu; a missing one is created exactly like NEW WORLD - same settings files, same cosmos sidecar, same everything.
+
+**Nobody in the chair.** The main menu never renders: the dedicated branch resolves the world and goes straight to the game scene, where the headless runner puts the local player object to sleep in the window between scene Awake and Start - before a single frame of simulation. No spawn search runs, no camera renders, no audio listener listens, and the player registry contains only real connections. The server then opens a server-only FishNet connection: no local client, port and player cap set on the transport before it starts listening.
+
+**A headless world still saves.** The save pipeline refused to write when the player inventory was missing - correct for a broken scene, fatal for a server that never has one. A dedicated session now carries the local-player block forward exactly as the save was read, byte-for-byte: host a world dedicated for a month, open it in singleplayer, and your character stands where you left them with their inventory intact. A world born dedicated flags the block absent (additive, legacy saves unaffected) so a later singleplayer session gets a clean fresh spawn instead of a restore from garbage. Guests were never the save file's business anyway - their records live in the per-player sidecar, which is now the only kind of player a dedicated world knows.
+
+**An admin can see it breathing.** The runner caps the headless loop at 60 fps so an idle server does not cook a CPU core, applies the configured autosave cadence, and logs a heartbeat every minute: uptime, players online, world name, listening or not. Join and leave lines were already there; together the log now reads like a server log.
+
+**Test it without building.** Tools -> Voxel Engine -> Dedicated Server -> Test In Play Mode arms the dedicated flag for one play session and enters play mode: the editor itself boots headless, and a second editor or player build joins at localhost. The flag sweeps itself when play mode ends, so the next play session is a normal one. A second menu entry writes/reveals the template config.
+
+**What this round is NOT.** Security hardening (code-lock codes still travel in plain text) and the intent-RPC conversions are milestone 12 part 2 - next round, on this foundation.
+
+### [14.44.0-dev] Shelves That Order Their Own Refills
 
 ### [14.44.0-dev] Shelves That Order Their Own Refills
 

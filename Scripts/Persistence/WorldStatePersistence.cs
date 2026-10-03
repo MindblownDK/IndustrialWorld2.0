@@ -61,6 +61,11 @@ namespace VoxelEngine.Persistence
         /// </summary>
         private bool _loadFailed;
 
+        /// <summary>14.45.0: the local-player block exactly as LoadAll read
+        /// it. On a dedicated server (no live player to capture) SaveAll
+        /// writes this back verbatim so the block never degrades.</summary>
+        private SavedPlayer _carriedPlayerBlock;
+
         // Background autosave cadence now comes from GameSettings.AutosaveSeconds
         // (0 = disabled). Players change it live from the Settings → Saving tab.
 
@@ -361,8 +366,23 @@ namespace VoxelEngine.Persistence
                 save.schemaVersion = CurrentSchemaVersion;
                 if (!SavePlayer(save))
                 {
-                    Debug.LogWarning("[WorldState] Skipped save because the player inventory is unavailable; existing save was preserved.");
-                    return;
+                    // 14.45.0 (milestone 12): a dedicated server HAS no local
+                    // player, and aborting here would mean a headless world
+                    // never saves at all. Carry the block forward as loaded
+                    // (or flag it absent on a world born dedicated) and keep
+                    // going - guests live in PlayerRecords either way.
+                    if (VoxelEngine.Networking.NetworkSession.IsDedicated)
+                    {
+                        save.player = _carriedPlayerBlock;
+                        save.localPlayerAbsent = _carriedPlayerBlock == null;
+                        var clock = VoxelEngine.Cosmos.CosmicRegistry.Instance;
+                        save.cosmicSimulationSeconds = clock != null ? clock.SimulationSeconds : 0d;
+                    }
+                    else
+                    {
+                        Debug.LogWarning("[WorldState] Skipped save because the player inventory is unavailable; existing save was preserved.");
+                        return;
+                    }
                 }
                 SavePlacedBlocks(save);
                 SavePlacedTiered(save);
@@ -2030,9 +2050,16 @@ namespace VoxelEngine.Persistence
 
                 MigrateSave(save);
 
+                // 14.45.0 (milestone 12): remember the local-player block as
+                // it was READ. A dedicated server has no local player to
+                // re-capture at save time, so SaveAll writes this cached
+                // block back verbatim - the owner's inventory and position
+                // survive any number of dedicated sessions untouched.
+                _carriedPlayerBlock = save.localPlayerAbsent ? null : save.player;
+
                 RestorePlacedTiered(save);
                 RestorePlacedBlocks(save);
-                RestorePlayer(save);
+                if (!save.localPlayerAbsent) RestorePlayer(save);
                 int anchoredGrids = RestoreGrids(save);
                 RestoreQuarries(save);
                 RestoreRefuelPads(save);
@@ -4697,6 +4724,15 @@ namespace VoxelEngine.Persistence
             public int schemaVersion;
 
             public SavedPlayer player;
+
+            /// <summary>14.45.0 additive (milestone 12): true when this save
+            /// was written by a dedicated server that never had a local
+            /// player block to carry forward. JsonUtility deserializes a
+            /// null 'player' as an all-default record - restoring THAT would
+            /// teleport a later singleplayer session to a garbage pose, so
+            /// the flag says "skip the player block entirely". Legacy saves
+            /// omit it (false) and restore exactly as before.</summary>
+            public bool localPlayerAbsent;
             // 9.57.1-dev: the cosmic clock the save was written at. The solar system is
             // regenerated at t = 0 on every load, so without this every body sat at its
             // start-of-session phase while the player's saved coordinates described where
