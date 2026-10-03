@@ -731,23 +731,12 @@ namespace VoxelEngine.GridSystem
         /// <summary>Ensures TextMesh respects depth so screen text cannot render through terrain or blocks.</summary>
         private static void MakeTextOpaque(TextMesh tm)
         {
-            if (tm == null) return;
-            var renderer = tm.GetComponent<MeshRenderer>();
-            if (renderer == null) return;
-
-            var source = renderer.sharedMaterial;
-            if (source == null) return;
-
-            // Preserve Unity's working TextMesh font shader/material so glyph alpha stays visible.
-            // Only change depth behavior; swapping to a generic cutout shader made some screens black.
-            var mat = new Material(source) { name = "ScreenText_DepthTest" };
-            if (mat.HasProperty("_Color")) mat.SetColor("_Color", Color.white);
-            if (mat.HasProperty("_ZTest")) mat.SetInt("_ZTest", (int)UnityEngine.Rendering.CompareFunction.LessEqual);
-            if (mat.HasProperty("unity_GUIZTestMode")) mat.SetInt("unity_GUIZTestMode", (int)UnityEngine.Rendering.CompareFunction.LessEqual);
-            if (mat.HasProperty("_ZWrite")) mat.SetInt("_ZWrite", 0);
-            mat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
-            renderer.sharedMaterial = mat;
-            renderer.sortingOrder = 0;
+            // The old copy-the-font-material approach set _ZTest properties
+            // that the stock font shader never reads - its ZTest Always is
+            // hard-coded, which is exactly why screen text kept shining
+            // through terrain and blocks. The shared depth-tested world-text
+            // material fixes it for real (14.37.2).
+            VoxelEngine.Rendering.WorldTextMaterial.Apply(tm);
         }
 
         // ── Multi-source management ───────────────────────────────────

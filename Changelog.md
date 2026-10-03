@@ -1,9 +1,21 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.37.1-dev`
+**Current Version:** `14.37.2-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.37.2-dev] No Text Through Stone
+
+**Type:** PATCH - three fixes from the second banner field report: the flutter no longer stutters, the two cloths hang centered on the pole instead of side by side, and 3D text - banners, grid screens, rail displays - stops shining through terrain and blocks. No save-format change; no setup re-run.
+
+**The stutter had a cause, not a cost.** The cloth wave was computed as sine of absolute time multiplied by a frequency - and the frequency stepped whenever the slow environment clock re-sampled the wind. Every step snapped the wave onto a new timeline and the fabric visibly jerked twice a second. The flutter clock is now an integrated phase: wind and air density are slewed smoothly every frame, the phase accumulates at the current frequency, and a gust changes the pace of the wave without ever breaking its continuity. Same wind, same physics gates (vacuum still means dead calm), zero stutter.
+
+**Centered, in line, back to back.** The 14.37.1 layout hung the two cloths left and right of the pole; the field wanted them in the middle. Both sheets now hang CENTERED on the pole, one in front and one behind - two parallel cloths sandwiching the pole in line, each facing its own way, so the banner reads correctly from both directions and the pole still never pierces fabric. Both sheets ride the same wave, so they move in parallel and the gap between them never collapses. The cloths return to their full width (the spread no longer doubles), and each sheet carries its own outward-facing text lines.
+
+**World text now lives in the world.** Unity's stock font shader is a screen-GUI shader with ZTest Always hard-coded - every 3D TextMesh in the game drew on top of everything, which is why banner lines, grid screen readouts and rail display boards could be read through a mountain. The existing screen-text "fix" copied the font material and set depth properties the shader never reads, so it silently did nothing. The real fix is a new depth-tested world-text shader (`VoxelEngine/WorldText` - the stock glyph-alpha blit with ZTest LEqual) and one shared runtime helper that swaps any TextMesh onto it: materials are cached per font atlas, vertex colors keep carrying each text's own tint, and the helper re-points every swapped material at the fresh atlas whenever a dynamic font rebuilds, so glyphs never turn to squares. Banner lines, all three grid-screen texts and the rail display boards all route through it; text is now occluded by terrain, blocks and the banner cloth itself exactly like any other thing in the world.
+
+**Files:** `Scripts/Rendering/WorldTextURP.shader` (new), `Scripts/Rendering/WorldTextMaterial.cs` (new), plus edits to `Scripts/Combat/BannerCloth.cs` (centered sheets, integrated flutter phase), `Scripts/GridSystem/GridBannerBlock.cs` (sizing), `Scripts/GridSystem/GridScreenBlock.cs` (screen text rewired to the shared helper) and `Scripts/Building/RailDisplayScreen.cs` (same).
 
 ### [14.37.1-dev] Two Cloths to the Wind
 

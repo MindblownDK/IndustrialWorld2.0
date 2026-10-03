@@ -7,19 +7,21 @@
 // TeamBannerRegistry per team. The component subscribes to the registry
 // and repaints live when the team's banner is edited.
 //
-// 14.37.1 reshapes the whole thing after the first field reports:
+// 14.37.2 layout and motion, from the second field report:
 //
-//   • TWO cloths now hang from the crossbar, one on each side of the pole,
-//     so the pole no longer pierces the fabric - it looks like a real
-//     processional banner instead of a flag on a skewer.
-//   • Each cloth is a deformable vertex grid (not a stiff quad) and
-//     FLUTTERS: amplitude follows the global wind simulation plus the
-//     carrier's own speed (a banner on a moving ship streams), and the
-//     whole effect is scaled by local atmospheric density - in vacuum or
-//     space the cloth hangs perfectly still, because there is no air.
-//   • The back face carries MIRRORED U coordinates, the way a real
-//     printed banner shows its image through the weave - the emblem reads
-//     correctly from both sides instead of appearing flipped from behind.
+//   • The two cloths hang CENTERED on the pole, front and back - two
+//     parallel sheets sandwiching the pole in line, not side by side.
+//     Each sheet faces its own way, so the banner reads correctly from
+//     both directions; the back face of each sheet carries mirrored U
+//     coordinates for the moments the wind lets you peek behind one.
+//   • The flutter clock is a continuously integrated phase. The old code
+//     computed sin(time x frequency) while frequency stepped on the slow
+//     environment clock - every step snapped the wave and the cloth
+//     visibly stuttered. Wind and air are now slewed per frame and the
+//     phase accumulates, so a gust changes the pace smoothly and the
+//     fabric never jumps.
+//   • Flutter follows wind + the carrier's own speed, scaled by local
+//     atmospheric density - in vacuum the cloth hangs dead still.
 //
 // The swallow-tail is still geometry - the bottom rows simply hang less
 // at the center columns. No transparency tricks.
@@ -32,18 +34,18 @@ namespace VoxelEngine.Combat
 {
     public class BannerCloth : MonoBehaviour
     {
-        [Header("Cloth dimensions (meters) - per cloth, one hangs each side of the pole")]
-        public float clothWidth = 0.62f;
+        [Header("Cloth dimensions (meters) - two sheets, front and back of the pole")]
+        public float clothWidth = 0.84f;
         public float clothHeight = 1.30f;
         [Tooltip("Depth of the swallow-tail notch as a fraction of cloth height.")]
         [Range(0.05f, 0.4f)] public float notchDepth01 = 0.18f;
         public float poleHeight = 2.30f;
-        [Tooltip("Clear air between the two cloths, straddling the pole.")]
-        public float poleGap = 0.17f;
+        [Tooltip("Distance between the two cloth sheets - the pole runs between them.")]
+        public float clothGap = 0.11f;
 
         [Header("Flutter")]
         [Tooltip("Maximum sideways swing of the cloth tail at full wind, in meters.")]
-        public float maxFlutter = 0.055f;
+        public float maxFlutter = 0.045f;
 
         // Vertex grid resolution per cloth (verts, not segments).
         private const int Cols = 7;
@@ -63,18 +65,16 @@ namespace VoxelEngine.Combat
             public Vector3[] work;        // per-frame scratch
             public float[] hang01;        // 0 at the bar, 1 at the tail, per vertex
             public float[] xNorm;         // 0..1 across the cloth, per vertex
-            public float phase;           // so the two cloths never swing in lockstep
         }
 
         private readonly List<ClothPanel> _panels = new();
 
-        // ── text lines (front AND back of BOTH cloths = 4 copies per line) ─
+        // ── text lines (one outward-facing set per sheet) ─────────────────
         private sealed class ClothTextAnchor
         {
             public Transform tf;
-            public float baseZ;           // rest-pose local Z (front or back of the cloth)
+            public float baseZ;           // rest-pose local Z on its sheet
             public float hang01;          // where the line sits down the cloth
-            public float phase;           // its panel's phase
         }
 
         private readonly List<TextMesh> _topTexts = new();
@@ -85,8 +85,11 @@ namespace VoxelEngine.Combat
         // ── flutter state ─────────────────────────────────────────────────
         private Rigidbody _carrierBody;   // the ship under a GridBannerBlock, if any
         private float _envTimer;
-        private float _envWind;           // wind + carrier speed, m/s
-        private float _envAir;            // atmospheric density 0..1 (0 = vacuum)
+        private float _envWind;           // sampled target: wind + carrier speed, m/s
+        private float _envAir;            // sampled target: atmospheric density 0..1
+        private float _windSmooth;        // per-frame slewed copies - no steps, no stutter
+        private float _airSmooth;
+        private float _wavePhase;         // integrated flutter clock (radians)
         private float _amp;               // smoothed current amplitude, meters
         private bool _flat = true;        // mesh currently in rest pose
 
@@ -146,10 +149,9 @@ namespace VoxelEngine.Combat
             AddPart(PrimitiveType.Cylinder, gold, new Vector3(0f, poleHeight * 0.5f, 0f),
                 Vector3.zero, new Vector3(poleR * 2f, poleHeight * 0.5f, poleR * 2f), "Banner_Pole");
 
-            // Crossbar the cloths hang from, just under the finial. It spans
-            // both cloths plus the pole gap.
+            // Crossbar the cloths hang from, just under the finial.
             float barY = poleHeight - 0.16f;
-            float barLen = poleGap + clothWidth * 2f + 0.14f;
+            float barLen = clothWidth + 0.16f;
             AddPart(PrimitiveType.Cylinder, gold, new Vector3(0f, barY, 0f),
                 new Vector3(0f, 0f, 90f), new Vector3(0.05f, barLen * 0.5f, 0.05f), "Banner_Crossbar");
             AddPart(PrimitiveType.Sphere, gold, new Vector3(-barLen * 0.5f, barY, 0f),
@@ -164,15 +166,17 @@ namespace VoxelEngine.Combat
             AddPart(PrimitiveType.Cube, gold, new Vector3(0f, crossY + 0.045f, 0f),
                 Vector3.zero, new Vector3(0.17f, 0.045f, 0.045f), "Banner_CrossH");
 
-            // One shared cloth material - both cloths show the same banner.
+            // One shared cloth material - both sheets show the same banner.
             _clothMaterial = MakeMaterial(Color.white, metallic: 0f, smoothness: 0.25f);
             _clothMaterial.name = "BannerCloth_Runtime";
 
-            // Two cloths, one each side of the pole, hanging from the bar.
+            // Two sheets, CENTERED on the pole, one in front and one behind -
+            // the pole runs between them, in line, never through the fabric.
+            // Both sheets ride the same wave so they move in parallel and the
+            // gap between them never collapses.
             float topY = barY - 0.045f;
-            float xOffset = poleGap * 0.5f + clothWidth * 0.5f;
-            BuildClothPanel(new Vector3(-xOffset, topY, 0f), phase: 0f, "Banner_ClothL");
-            BuildClothPanel(new Vector3(xOffset, topY, 0f), phase: 1.9f, "Banner_ClothR");
+            BuildClothPanel(new Vector3(0f, topY, -clothGap * 0.5f), outward: -1, "Banner_ClothFront");
+            BuildClothPanel(new Vector3(0f, topY, clothGap * 0.5f), outward: +1, "Banner_ClothBack");
 
             // The ship (or vehicle) carrying this banner, for motion-driven
             // flutter. Static banners have no rigidbody parent - that's fine.
@@ -186,10 +190,10 @@ namespace VoxelEngine.Combat
         }
 
         /// <summary>One swallow-tail cloth as a Cols x Rows vertex grid with a
-        /// duplicated, U-mirrored set for the back face. The grid is what lets
-        /// the cloth bend in the wind; the mirror is what makes the image read
-        /// correctly from behind.</summary>
-        private void BuildClothPanel(Vector3 localPos, float phase, string name)
+        /// duplicated, U-mirrored set for the reverse face. The grid is what
+        /// lets the cloth bend in the wind; the mirror keeps the image honest
+        /// if the reverse of a sheet ever catches the eye.</summary>
+        private void BuildClothPanel(Vector3 localPos, int outward, string name)
         {
             var go = new GameObject(name);
             go.transform.SetParent(transform, false);
@@ -217,8 +221,10 @@ namespace VoxelEngine.Combat
                     int i = r * Cols + c;
                     verts[i] = new Vector3(x, y, 0f);
                     verts[i + n] = verts[i];
-                    // Front samples the texture straight; the back mirrors U so
-                    // the banner is readable from both sides.
+                    // The -Z face samples the texture straight (reads correctly
+                    // from the front); the +Z face mirrors U (reads correctly
+                    // from behind). That one rule serves BOTH sheets - each
+                    // sheet's outward face is automatically the readable one.
                     uvs[i] = new Vector2(xNorm, (y + h) / h);
                     uvs[i + n] = new Vector2(1f - xNorm, (y + h) / h);
                     hang[i] = hang01; hang[i + n] = hang01;
@@ -235,10 +241,10 @@ namespace VoxelEngine.Combat
                     int b = a + 1;                 // top-right
                     int e = a + Cols;              // bottom-left
                     int d = e + 1;                 // bottom-right
-                    // Front (normal -Z, the side the texts face).
+                    // Faces -Z (the front sheet's outward side).
                     tris.Add(a); tris.Add(b); tris.Add(e);
                     tris.Add(b); tris.Add(d); tris.Add(e);
-                    // Back (duplicate set, reversed winding).
+                    // Faces +Z (duplicate set, reversed winding).
                     tris.Add(a + n); tris.Add(e + n); tris.Add(b + n);
                     tris.Add(b + n); tris.Add(e + n); tris.Add(d + n);
                 }
@@ -268,36 +274,24 @@ namespace VoxelEngine.Combat
                 work = (Vector3[])verts.Clone(),
                 hang01 = hang,
                 xNorm = xn,
-                phase = phase,
             });
 
-            BuildPanelTexts(go.transform, phase);
+            // Three text lines on the OUTWARD face of this sheet. The inner
+            // faces stare at each other across the pole - no reader there.
+            AddTextLine(go.transform, _topTexts, "Top", 0.14f, 0.60f, outward);
+            AddTextLine(go.transform, _middleTexts, "Middle", 0.50f, 0.75f, outward);
+            AddTextLine(go.transform, _bottomTexts, "Bottom", 0.72f, 0.60f, outward);
         }
 
-        /// <summary>Three text lines on the FRONT and three mirrored copies on
-        /// the BACK of one cloth - a banner must read from both sides. The
-        /// anchors remember where each line hangs so the letters ride the
-        /// flutter instead of floating in front of a moving cloth.</summary>
-        private void BuildPanelTexts(Transform cloth, float phase)
+        private void AddTextLine(Transform cloth, List<TextMesh> bucket, string line,
+            float down01, float scale01, int outward)
         {
-            AddTextPair(cloth, _topTexts, "Top", 0.14f, 0.60f, phase);
-            AddTextPair(cloth, _middleTexts, "Middle", 0.50f, 0.75f, phase);
-            AddTextPair(cloth, _bottomTexts, "Bottom", 0.72f, 0.60f, phase);
-        }
-
-        private void AddTextPair(Transform cloth, List<TextMesh> bucket, string line,
-            float down01, float scale01, float phase)
-        {
-            float y = -clothHeight * down01;
-
-            var front = MakeText("Banner_Text" + line, cloth, new Vector3(0f, y, -0.018f), scale01);
-            bucket.Add(front);
-            _textAnchors.Add(new ClothTextAnchor { tf = front.transform, baseZ = -0.018f, hang01 = down01, phase = phase });
-
-            var back = MakeText("Banner_Text" + line + "_Back", cloth, new Vector3(0f, y, 0.018f), scale01);
-            back.transform.localEulerAngles = new Vector3(0f, 180f, 0f);
-            bucket.Add(back);
-            _textAnchors.Add(new ClothTextAnchor { tf = back.transform, baseZ = 0.018f, hang01 = down01, phase = phase });
+            float z = 0.018f * outward;
+            var tm = MakeText("Banner_Text" + line, cloth,
+                new Vector3(0f, -clothHeight * down01, z), scale01);
+            if (outward > 0) tm.transform.localEulerAngles = new Vector3(0f, 180f, 0f);
+            bucket.Add(tm);
+            _textAnchors.Add(new ClothTextAnchor { tf = tm.transform, baseZ = z, hang01 = down01 });
         }
 
         private TextMesh MakeText(string name, Transform parent, Vector3 localPos, float scale01)
@@ -319,6 +313,10 @@ namespace VoxelEngine.Combat
                 renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
                 renderer.receiveShadows = false;
             }
+            // World text must sit IN the world: the stock font shader draws
+            // over everything (ZTest Always), which let banner text shine
+            // through terrain and blocks. Swap to the depth-tested variant.
+            Rendering.WorldTextMaterial.Apply(tm);
             return tm;
         }
 
@@ -329,15 +327,28 @@ namespace VoxelEngine.Combat
         private void Update()
         {
             if (!_built || _panels.Count == 0) return;
+            float dt = Time.deltaTime;
 
             // Environment is sampled on a slow clock - wind, air and carrier
             // speed do not change meaningfully frame to frame.
-            _envTimer -= Time.deltaTime;
+            _envTimer -= dt;
             if (_envTimer <= 0f)
             {
                 _envTimer = EnvSampleInterval;
                 SampleEnvironment();
             }
+
+            // Slew the sampled targets per frame. Feeding stepped values into
+            // the wave math is what made the cloth stutter on every sample
+            // tick; slewed wind + an integrated phase keep it glassy.
+            _windSmooth = Mathf.MoveTowards(_windSmooth, _envWind, dt * 8f);
+            _airSmooth = Mathf.MoveTowards(_airSmooth, _envAir, dt * 1.2f);
+
+            // The flutter clock accumulates - a gust speeds the wave up
+            // smoothly instead of snapping it to a new timeline.
+            float freq = 1.7f + Mathf.Min(_windSmooth, 30f) * 0.14f;
+            _wavePhase += freq * dt;
+            if (_wavePhase > 628.31853f) _wavePhase -= 628.31853f;   // 100 x 2pi, exact period
 
             // Far away (or on a dedicated host with no camera): rest the cloth.
             var cam = Camera.main;
@@ -347,8 +358,8 @@ namespace VoxelEngine.Combat
             // Target amplitude: wind + carrier speed, choked by air density.
             // Vacuum (space, airless moons) means zero flutter - no air, no flag-waving.
             float target = sleeping ? 0f
-                : maxFlutter * Mathf.Clamp01(_envWind / 16f) * _envAir;
-            _amp = Mathf.MoveTowards(_amp, target, Time.deltaTime * 0.08f);
+                : maxFlutter * Mathf.Clamp01(_windSmooth / 16f) * _airSmooth;
+            _amp = Mathf.MoveTowards(_amp, target, dt * 0.08f);
 
             if (_amp < 0.002f)
             {
@@ -356,10 +367,6 @@ namespace VoxelEngine.Combat
                 return;
             }
             _flat = false;
-
-            // Stronger wind also flaps faster.
-            float freq = 1.7f + Mathf.Min(_envWind, 30f) * 0.14f;
-            float t = Time.time;
 
             for (int p = 0; p < _panels.Count; p++)
             {
@@ -372,7 +379,7 @@ namespace VoxelEngine.Combat
                     // tail swings hardest. A travelling wave runs down and
                     // across the cloth.
                     float hangWeight = panel.hang01[i] * panel.hang01[i];
-                    float wave = Mathf.Sin(t * freq + panel.phase
+                    float wave = Mathf.Sin(_wavePhase
                         + panel.xNorm[i] * 2.1f + panel.hang01[i] * 3.4f);
                     var v = baseVerts[i];
                     v.z += _amp * hangWeight * wave;
@@ -388,7 +395,7 @@ namespace VoxelEngine.Combat
                 var anchor = _textAnchors[i];
                 if (anchor.tf == null) continue;
                 float hangWeight = anchor.hang01 * anchor.hang01;
-                float wave = Mathf.Sin(t * freq + anchor.phase + 0.5f * 2.1f + anchor.hang01 * 3.4f);
+                float wave = Mathf.Sin(_wavePhase + 0.5f * 2.1f + anchor.hang01 * 3.4f);
                 var pos = anchor.tf.localPosition;
                 pos.z = anchor.baseZ + _amp * hangWeight * wave;
                 anchor.tf.localPosition = pos;

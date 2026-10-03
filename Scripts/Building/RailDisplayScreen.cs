@@ -775,6 +775,9 @@ namespace VoxelEngine.Building
             tm.alignment = align;
             tm.color = color;
             tm.GetComponent<MeshRenderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            // Depth-tested font material - the stock font shader draws over
+            // terrain and blocks (ZTest Always), an x-ray no display deserves.
+            VoxelEngine.Rendering.WorldTextMaterial.Apply(tm);
             return tm;
         }
 
