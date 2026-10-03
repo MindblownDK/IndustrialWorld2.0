@@ -7,7 +7,7 @@
 // what it is bolted to: what it is called, how far its marker reaches, and
 // WHO MAY SEE IT. The share row is the milestone's decided rule made into
 // three buttons: do-not-share (default - nothing leaks until the owner says
-// so), team (stored from day one, honoured the moment milestone 11 lands),
+// so), team (the owner's teammates, live since 14.33.0),
 // and global. Only the owner can change any of it; everyone else gets a
 // read-only view and an honest sentence saying so.
 //
@@ -75,7 +75,7 @@ namespace VoxelEngine.UI
             section.Add(T.Muted(beacon.BeaconShareMode switch
             {
                 BeaconShare.Global => "Everyone in the session sees this beacon's marker.",
-                BeaconShare.Team => "Your team will see this beacon once teams arrive. Until then, only you see it.",
+                BeaconShare.Team => "Your team sees this beacon's marker - the rest of the session does not.",
                 _ => "Only you see this beacon's marker. Nothing is shared until you say so.",
             }));
             section.Add(T.Spacer(6));

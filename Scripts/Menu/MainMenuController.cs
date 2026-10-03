@@ -14,6 +14,7 @@ using UnityEngine.SceneManagement;
 using UnityEngine.UIElements;
 using VoxelEngine.Cosmos;
 using VoxelEngine.Items;
+using VoxelEngine.Networking;
 using VoxelEngine.Settings;
 using VoxelEngine.UI;
 using T = VoxelEngine.UI.UITheme;
@@ -133,6 +134,9 @@ namespace VoxelEngine.Menu
             // Player records belong to the world that was open. Standing here
             // means none is, so none may be carried into the next one.
             VoxelEngine.Persistence.PlayerRecords.Clear();
+            // Teams obey the same rule: the next world inherits nothing, not
+            // even by accident.
+            TeamRegistry.ClearAll();
         }
 
         private void OnEnable() => BuildUI();

@@ -32,7 +32,7 @@ namespace VoxelEngine.Menu
         private CursorLockMode _savedLock;
         private bool          _savedVis;
 
-        private enum Page  { Pause, Settings, Multiplayer }
+        private enum Page  { Pause, Settings, Multiplayer, Teams }
         private enum STab  { Display, Camera, Interface, Audio, Saving, Keybinds }
         private Page _page = Page.Pause;
         private Page _lastBuiltPage = (Page)(-1);
@@ -153,6 +153,7 @@ namespace VoxelEngine.Menu
 
             if      (_page == Page.Pause)       BuildPause();
             else if (_page == Page.Multiplayer) BuildMultiplayer();
+            else if (_page == Page.Teams)       BuildTeams();
             else                                BuildSettings();
         }
 
@@ -191,6 +192,8 @@ namespace VoxelEngine.Menu
             panel.Add(PrimaryBtn("⚙   SETTINGS",    () => { _page = Page.Settings; BuildUI(); }, T.BgSlot));
             panel.Add(T.Spacer(8));
             panel.Add(PrimaryBtn("◉   MULTIPLAYER", () => { _page = Page.Multiplayer; BuildUI(); }, T.BgSlot));
+            panel.Add(T.Spacer(8));
+            panel.Add(PrimaryBtn("⚑   TEAMS",        () => { _page = Page.Teams; BuildUI(); },       T.BgSlot));
             panel.Add(T.Spacer(8));
             panel.Add(PrimaryBtn("⬅   SAVE & QUIT", QuitToMenu,                           T.AccentRed));
         }
@@ -380,6 +383,45 @@ namespace VoxelEngine.Menu
                 if (p.playerId == VoxelEngine.Networking.NetworkSession.LocalPlayerId) sb.Append("   (you)");
             }
             return sb.Length > 0 ? sb.ToString() : "—";
+        }
+
+        // ── Teams Page (14.33.0, milestone 11) ─────────────────────
+        private void BuildTeams()
+        {
+            var panel = MakePanel(460, 0);
+            _root.Add(panel);
+
+            var hdr = new VisualElement();
+            hdr.style.flexDirection = FlexDirection.Row;
+            hdr.style.alignItems    = Align.Center;
+            hdr.style.marginBottom  = 6;
+            var title = T.Title("TEAMS");
+            title.style.flexGrow = 1;
+            hdr.Add(title);
+            var backBtn = PrimaryBtn("← BACK", () => { _page = Page.Pause; BuildUI(); }, T.BgSlot);
+            backBtn.style.minWidth  = 90;
+            backBtn.style.minHeight = 30;
+            backBtn.style.fontSize  = 11;
+            hdr.Add(backBtn);
+            panel.Add(hdr);
+            panel.Add(T.AccentDivider());
+            panel.Add(T.Spacer(8));
+
+            // Content (invitations, my team / founding, overview, host limits)
+            // comes from TeamsPanel; this menu keeps only the chrome and the
+            // live refresh, same division of labour as the settings tabs.
+            panel.Add(VoxelEngine.UI.TeamsPanel.Build(BuildUI));
+
+            // Live refresh: the roster moves when ANY player touches it -
+            // host-applied intents locally, roster broadcasts on guests. The
+            // version number is the cheap tell; the draft team name survives
+            // the rebuild because TeamsPanel keeps it.
+            int builtVersion = VoxelEngine.Networking.TeamRegistry.Version;
+            panel.schedule.Execute(() =>
+            {
+                if (!_open || _page != Page.Teams) return;
+                if (VoxelEngine.Networking.TeamRegistry.Version != builtVersion) BuildUI();
+            }).Every(500);
         }
 
         // ── Settings Page ──────────────────────────────────────────

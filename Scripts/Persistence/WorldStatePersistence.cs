@@ -25,6 +25,7 @@ using VoxelEngine.Building.Tiered;
 using VoxelEngine.Crafting;
 using VoxelEngine.Items;
 using VoxelEngine.GridSystem;
+using VoxelEngine.Networking;
 
 namespace VoxelEngine.Persistence
 {
@@ -378,6 +379,12 @@ namespace VoxelEngine.Persistence
                 // live in their own sidecar, so an existing save's schema is
                 // untouched and a world that was never hosted never grows one.
                 PlayerRecords.Save();
+
+                // 14.33.0 - teams ride the same rule: their own sidecar,
+                // the same cadence, the same non-touching of the save schema.
+                // (An empty roster IS a real state - the last team dissolving
+                // is saved as zero teams, not skipped.)
+                TeamRegistry.Save();
                 string json = JsonUtility.ToJson(save, prettyPrint: true);
                 string temporaryPath = path + ".tmp";
                 string backupPath = path + ".previous";
@@ -1763,6 +1770,11 @@ namespace VoxelEngine.Persistence
             // visitors recorded and still be loading for the first time this
             // session, so this is read before the early return below.
             PlayerRecords.Load();
+
+            // Teams are the same kind of sidecar truth: a world's teams exist
+            // whether or not its voxel file does yet, and the roster must be
+            // live before the first player could possibly open the panel.
+            TeamRegistry.Load();
 
             string path = WorldStatePath();
             if (!File.Exists(path)) { _loaded = true; return; }

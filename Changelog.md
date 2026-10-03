@@ -1,9 +1,23 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.32.1-dev`
+**Current Version:** `14.33.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.33.0-dev] A Banner To Rally Under
+
+**Type:** MINOR - teams, milestone 11: players found a named team, invite other players, and invited players accept or decline. Membership is keyed by stable player id, the roster is part of the host's world, and the beacon TEAM share rule goes live. Save format unchanged - the roster lives in its own sidecar (teams.json) beside the world save, exactly like the per-player records, so an existing world simply has no teams until somebody founds one.
+
+**The rules that bind.** A player is in at most one team, and only ever joins by their own confirmation of an invite - never automatically. Invites are answerable for 90 seconds, then they lapse. A team has one leader; the leader invites and removes members; a leader who leaves hands command to the earliest-joined remaining member; a team that empties dissolves. Membership survives a rename, a reconnect and a session restart, because it hangs off the player id, never the name or the connection.
+
+**Authority.** The host owns the roster, full stop. Every button on the new TEAMS page sends an intent (found, invite, accept, decline, leave, remove) that carries no identity of its own - the server stamps the requester from its connection table, validates the request against the roster, and either applies it and rebroadcasts the whole roster or refuses it and tells the requesting machine why, in the same message shape. At 2-8 players the entire roster is smaller than a delta scheme, and a late joiner gets it in exactly one message on arrival, so nobody ever renders a guess. Clients never write the file; a guest that drops the session drops the mirror with it.
+
+**The page.** PAUSE > TEAMS: your team's roster with online dots and leader marks, invite and remove controls for the leader, answerable invitations with ACCEPT / DECLINE, a founding box with a name field, an overview of every team in the session, and - for the host only - the two limits, maximum members per team and maximum teams per session, as steppers that apply at once and persist with the world. They gate new teams and invites only; shrinking a limit never breaks up an existing team. Guests see the limits as a read-only line. Notices (an invite arrived, a teammate joined or left, a refused request) arrive as toasts derived by diffing the roster, so every machine - host included - hears its own news through the same channel, and a refusal is only ever shown to the machine that was refused.
+
+**The beacon payoff.** A beacon set to TEAM share now actually shares with the team: the visibility rule resolves the owner's roster through the same registry the panel edits, so the HUD marker, the orbital-map contact and the warp rendezvous all open to teammates at once - the value has been stored on every TEAM-shared beacon since 14.30.0 and is honoured now, never rewritten. Do-not-share remains the default; nothing a player builds leaks to the session until they say so.
+
+**Files:** `Scripts/Networking/TeamRegistry.cs` (new), `Scripts/UI/TeamsPanel.cs` (new), plus edits to `NetworkBootstrap.cs`, `BeaconSettings.cs`, `BeaconIdentityPanel.cs`, `InGamePauseMenu.cs`, `WorldStatePersistence.cs` and `MainMenuController.cs`. No prefabs, items or recipes are involved: copy the scripts and docs over, no setup re-run needed.
 
 ### [14.32.1-dev] A Tower Pays Its Way
 

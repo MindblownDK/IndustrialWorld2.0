@@ -96,6 +96,36 @@ namespace VoxelEngine.Networking
         public string Json;
     }
 
+    // ── Teams (14.33.0, milestone 11) ─────────────────────────────────────
+    //
+    // Clients send INTENTS, never outcomes: the server stamps the requester
+    // from its connection table, so a client can never found a team, invite
+    // or remove anybody in another player's name. The whole roster comes
+    // back as one JSON snapshot - at 2-8 players the entire truth is smaller
+    // than a delta scheme, and a late joiner needs exactly one message.
+
+    /// <summary>Client -> server: one team intent. Op codes live in TeamOp
+    /// (0 create, 1 invite, 2 accept, 3 decline, 4 leave, 5 kick). Name is
+    /// the team name for create; TargetId is the invited/removed player for
+    /// invite/kick; TeamId addresses the team for accept/decline.</summary>
+    public struct TeamIntentBroadcast : IBroadcast
+    {
+        public byte Op;
+        public string TeamId;
+        public string Name;
+        public string TargetId;
+    }
+
+    /// <summary>Server -> client: the whole roster as JSON, plus an Error
+    /// line that is set ONLY for the connection whose intent was refused -
+    /// every other machine receives the same snapshot with an empty error,
+    /// and derives its own notices by diffing.</summary>
+    public struct TeamRosterBroadcast : IBroadcast
+    {
+        public string Json;
+        public string Error;
+    }
+
     // ── Movable grids (14.25.0). Host -> clients, one way. ──
     //
     // A grid record is a whole ship, so it is sent in string PARTS rather than
@@ -538,6 +568,7 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.RegisterBroadcast<ContainerSnapshotBroadcast>(OnServerContainerSnapshot);
             _networkManager.ServerManager.RegisterBroadcast<MachineStateBroadcast>(OnServerMachineState);
             _networkManager.ServerManager.RegisterBroadcast<MachineSnapshotBroadcast>(OnServerMachineSnapshot);
+            _networkManager.ServerManager.RegisterBroadcast<TeamIntentBroadcast>(OnServerTeamIntent);
             _networkManager.ServerManager.RegisterBroadcast<DropSpawnedBroadcast>(OnServerDropSpawned);
             _networkManager.ServerManager.RegisterBroadcast<DropSettledBroadcast>(OnServerDropSettled);
             _networkManager.ServerManager.RegisterBroadcast<DropUpdatedBroadcast>(OnServerDropUpdated);
@@ -566,6 +597,7 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.RegisterBroadcast<ContainerSnapshotBroadcast>(OnClientContainerSnapshot);
             _networkManager.ClientManager.RegisterBroadcast<MachineStateBroadcast>(OnClientMachineState);
             _networkManager.ClientManager.RegisterBroadcast<MachineSnapshotBroadcast>(OnClientMachineSnapshot);
+            _networkManager.ClientManager.RegisterBroadcast<TeamRosterBroadcast>(OnClientTeamRoster);
             _networkManager.ClientManager.RegisterBroadcast<DropSpawnedBroadcast>(OnClientDropSpawned);
             _networkManager.ClientManager.RegisterBroadcast<DropSettledBroadcast>(OnClientDropSettled);
             _networkManager.ClientManager.RegisterBroadcast<DropUpdatedBroadcast>(OnClientDropUpdated);
@@ -649,6 +681,7 @@ namespace VoxelEngine.Networking
             _networkManager.ServerManager.UnregisterBroadcast<ContainerSnapshotBroadcast>(OnServerContainerSnapshot);
             _networkManager.ServerManager.UnregisterBroadcast<MachineStateBroadcast>(OnServerMachineState);
             _networkManager.ServerManager.UnregisterBroadcast<MachineSnapshotBroadcast>(OnServerMachineSnapshot);
+            _networkManager.ServerManager.UnregisterBroadcast<TeamIntentBroadcast>(OnServerTeamIntent);
             _networkManager.ServerManager.UnregisterBroadcast<DropSpawnedBroadcast>(OnServerDropSpawned);
             _networkManager.ServerManager.UnregisterBroadcast<DropSettledBroadcast>(OnServerDropSettled);
             _networkManager.ServerManager.UnregisterBroadcast<DropUpdatedBroadcast>(OnServerDropUpdated);
@@ -677,6 +710,7 @@ namespace VoxelEngine.Networking
             _networkManager.ClientManager.UnregisterBroadcast<ContainerSnapshotBroadcast>(OnClientContainerSnapshot);
             _networkManager.ClientManager.UnregisterBroadcast<MachineStateBroadcast>(OnClientMachineState);
             _networkManager.ClientManager.UnregisterBroadcast<MachineSnapshotBroadcast>(OnClientMachineSnapshot);
+            _networkManager.ClientManager.UnregisterBroadcast<TeamRosterBroadcast>(OnClientTeamRoster);
             _networkManager.ClientManager.UnregisterBroadcast<DropSpawnedBroadcast>(OnClientDropSpawned);
             _networkManager.ClientManager.UnregisterBroadcast<DropSettledBroadcast>(OnClientDropSettled);
             _networkManager.ClientManager.UnregisterBroadcast<DropUpdatedBroadcast>(OnClientDropUpdated);
@@ -980,6 +1014,12 @@ namespace VoxelEngine.Networking
                           (string.IsNullOrEmpty(stored) ? "none on file (first visit)." : stored.Length + " chars."));
                 _networkManager.ServerManager.Broadcast(connection, new PlayerStateBroadcast
                 { PlayerId = playerId, Json = stored ?? "" }, true);
+
+                // 14.33.0 - the team roster, once, right here: membership is
+                // keyed by player id, so a rejoining player's team is already
+                // in it. Sent even when empty - "no teams exist" is a real
+                // answer, and the panel prefers it over yesterday's guess.
+                SendTeamRosterTo(connection);
             }
         }
 
@@ -2280,6 +2320,83 @@ namespace VoxelEngine.Networking
             MachineSync.ApplyHostSnapshot(msg.Records);
         }
 
+        // ── Teams (14.33.0, milestone 11) ─────────────────────────────────
+        //
+        // One intent channel, one roster channel. The server stamps the
+        // requester from its connection table - identity in the message is
+        // advisory at most - applies the intent against TeamRegistry, and
+        // answers with the roster: to everyone when it was accepted, to the
+        // refusing connection alone (with the Error line set) when not.
+
+        private void OnServerTeamIntent(NetworkConnection conn, TeamIntentBroadcast msg, Channel channel)
+        {
+            if (!_serverStarted || conn == null) return;
+            if (!_playerIdByConnection.TryGetValue(conn.ClientId, out string requesterId)
+                || string.IsNullOrEmpty(requesterId)) return;
+
+            string error = TeamRegistry.HostApply(msg.Op, requesterId, msg.TeamId, msg.Name, msg.TargetId);
+            if (string.IsNullOrEmpty(error))
+            {
+                BroadcastTeamRoster("");
+            }
+            else
+            {
+                // Refused: this connection alone gets the roster it already
+                // had plus the reason. Everyone else hears nothing at all.
+                _networkManager.ServerManager.Broadcast(conn, new TeamRosterBroadcast
+                {
+                    Json = TeamRegistry.ToJson(),
+                    Error = error
+                }, true);
+            }
+        }
+
+        /// <summary>Server: the current roster to every remote client. The
+        /// host itself applied the change locally already (TeamRegistry's
+        /// diff fires the same notices a client derives here).</summary>
+        public void BroadcastTeamRoster(string error)
+        {
+            if (!_serverStarted) return;
+            var msg = new TeamRosterBroadcast { Json = TeamRegistry.ToJson(), Error = error ?? "" };
+            foreach (var pair in _networkManager.ServerManager.Clients)
+            {
+                var client = pair.Value;
+                if (client == null || client.IsLocalClient) continue;
+                _networkManager.ServerManager.Broadcast(client, msg, true);
+            }
+        }
+
+        /// <summary>Server: hand a joining connection the roster once, so a
+        /// late joiner sees the teams that already exist before anyone
+        /// touches the panel. Called from the identity handshake.</summary>
+        private void SendTeamRosterTo(NetworkConnection conn)
+        {
+            if (!_serverStarted || conn == null || conn.IsLocalClient) return;
+            _networkManager.ServerManager.Broadcast(conn, new TeamRosterBroadcast
+            {
+                Json = TeamRegistry.ToJson(),
+                Error = ""
+            }, true);
+        }
+
+        /// <summary>Client: the host's roster (or a refusal of this client's
+        /// last intent - the Error line is only ever set for this machine).</summary>
+        private void OnClientTeamRoster(TeamRosterBroadcast msg, Channel channel)
+        {
+            if (_serverStarted) return;   // the host owns the truth already
+            TeamRegistry.ApplySnapshot(msg.Json);
+            if (!string.IsNullOrEmpty(msg.Error))
+                VoxelEngine.UI.BuildFeedbackHud.Show("Teams", msg.Error, null, new Color(0.82f, 0.22f, 0.18f));
+        }
+
+        /// <summary>Client: forward one team intent to the host. The server
+        /// decides; nothing is applied optimistically.</summary>
+        public void SendTeamIntent(TeamIntentBroadcast intent)
+        {
+            if (!_clientStarted) return;
+            _networkManager.ClientManager.Broadcast(intent);
+        }
+
         /// <summary>Gather every machine-runtime-carrying block and send it chunked -
         /// to a joining connection when called as server, up to the server when target is null.</summary>
         private IEnumerator SendMachineSnapshot(NetworkConnection target)
@@ -2581,8 +2698,14 @@ namespace VoxelEngine.Networking
             if (VoxelEngine.Menu.WorldBootGate.IsPending)
                 VoxelEngine.Menu.WorldBootGate.Fail("Lost the connection to the host before the world arrived.");
 
+            // Captured BEFORE the mode drops to Offline: a guest dropping
+            // the host's session must drop the host's roster mirror too,
+            // while a host that merely stopped hosting keeps it - this
+            // machine now owns the world's teams.json outright.
+            bool wasGuest = NetworkSession.Mode == SessionMode.Client;
             NetworkSession.SetMode(SessionMode.Offline);
             VoxelEngine.Persistence.PlayerRecords.ClearLocal();
+            TeamRegistry.ClearMirror(wasGuest);
             GridSync.Clear();
             GridStateSync.Clear();
             GridBuildSync.Clear();

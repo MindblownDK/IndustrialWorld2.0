@@ -6,8 +6,8 @@
 // who placed it, what they called it, how far it announces itself, and - the
 // decided rule - WHO IS ALLOWED TO KNOW IT EXISTS. Three values, chosen on
 // the beacon itself: share global (everyone in the session), share team
-// (the owner's team, stored from day one and honoured the moment milestone 11
-// lands), and do not share (owner only). The default is do-not-share, so
+// (the owner's team, live since 14.33.0), and do not share (owner only).
+// The default is do-not-share, so
 // nothing a player builds leaks to the session until they say so.
 //
 // Two blocks carry this identity - the grid-mounted Beacon and the stationary
@@ -29,9 +29,9 @@ namespace VoxelEngine.GridSystem
     {
         /// <summary>Owner only. The default: nothing leaks until the player says so.</summary>
         Private = 0,
-        /// <summary>The owner's team. Stored from day one; until teams exist
-        /// (milestone 11) it behaves as Private for everyone except the owner,
-        /// and the setting is never silently rewritten.</summary>
+        /// <summary>The owner's team. Live since 14.33.0: teammates see the
+        /// beacon, the rest of the session does not. The stored value is
+        /// never silently rewritten.</summary>
         Team = 1,
         /// <summary>Everyone in the session.</summary>
         Global = 2,
@@ -104,8 +104,9 @@ namespace VoxelEngine.GridSystem
         /// <summary>Mint a fresh beacon id. "N" format: compact, no braces on the wire.</summary>
         public static string MintId() => System.Guid.NewGuid().ToString("N");
 
-        /// <summary>THE visibility rule. Global shares with everyone; Team is
-        /// stored but behaves as Private until milestone 11 delivers teams;
+        /// <summary>THE visibility rule. Global shares with everyone; Team
+        /// shares with the owner's team (14.33.0 - the stored value was kept
+        /// private until teams existed, and is honoured now, never rewritten);
         /// Private is owner only. An unlit beacon is visible to nobody, and so
         /// is an unowned one - both fail closed.</summary>
         public static bool VisibleTo(IBeaconSource beacon, string viewerId)
@@ -116,11 +117,12 @@ namespace VoxelEngine.GridSystem
             if (beacon == null || (beacon is Component dead && dead == null)) return false;
             if (!beacon.BeaconLit) return false;
             if (beacon.BeaconShareMode == BeaconShare.Global) return true;
-            // Team == Private until teams exist. The stored value is honoured
-            // the moment milestone 11 lands; it is never rewritten here.
-            return !string.IsNullOrEmpty(beacon.BeaconOwnerId)
+            if (!string.IsNullOrEmpty(beacon.BeaconOwnerId)
                 && !string.IsNullOrEmpty(viewerId)
-                && beacon.BeaconOwnerId == viewerId;
+                && beacon.BeaconOwnerId == viewerId) return true;
+            if (beacon.BeaconShareMode == BeaconShare.Team)
+                return Networking.TeamRegistry.SameTeam(beacon.BeaconOwnerId, viewerId);
+            return false;
         }
 
         /// <summary>Visibility for the machine we are running on.</summary>
