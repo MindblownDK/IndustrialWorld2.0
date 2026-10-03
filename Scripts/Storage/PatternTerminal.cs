@@ -29,16 +29,12 @@ namespace VoxelEngine.Storage
             }
         }
 
+        /// <summary>The controller's auto-craft engine (14.43.0: owns the
+        /// pattern bank the encode flow files into).</summary>
+        public AutoCrafter ConnectedCrafter => ConnectedRack != null
+            ? ConnectedRack.GetComponent<AutoCrafter>() : null;
+
         private ServerRack _resolved;
         private float _resolveTime = -999f;
-
-        /// <summary>Try to add a recipe pattern. Returns true if added.</summary>
-        public bool TryAddPattern(RecipeDefinition recipe)
-        {
-            if (ConnectedRack == null) return false;
-            var crafter = ConnectedRack.GetComponent<AutoCrafter>();
-            if (crafter == null) return false;
-            return crafter.AddPattern(recipe);
-        }
     }
 }

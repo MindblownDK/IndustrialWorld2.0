@@ -979,6 +979,9 @@ namespace VoxelEngine.EditorTools
             AddWizardButton(scroll, "110. Drawer Facelift\n(Steel Storage Drawer + Drawer Controller fronts - Non-Destructive)",
                 () => VoxelEngine.EditorTools.DrawerFaceliftSetup.RunStep110(), 56);
 
+            AddWizardButton(scroll, "111. Network Auto-Crafting\n(Blank Pattern item + recipe + controller crafter - Non-Destructive)",
+                () => VoxelEngine.EditorTools.AutoCraftingSetup.RunStep111(), 56);
+
             AddSpacer(scroll, 20);
         }
 

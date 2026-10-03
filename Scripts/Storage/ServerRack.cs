@@ -69,8 +69,11 @@ namespace VoxelEngine.Storage
         public const float DRAW_MANIPULATOR     = 5f;
         public const float DRAW_DRAWER_CTRL     = 5f;
         public const float DRAW_TRANSMITTER     = 10f;
+        /// <summary>Extra watts while the auto-crafter is mid-craft (14.43.0).</summary>
+        public const float DRAW_AUTOCRAFT       = 25f;
 
         private float _tickTimer;
+        private AutoCrafter _autoCrafter;   // cached sibling (14.43.0)
 
         // Scratch member lists (reused every tick).
         private readonly List<NASBlock>                _nasBuf        = new();
@@ -237,6 +240,9 @@ namespace VoxelEngine.Storage
             draw += _externalBuf.Count * ExternalStorageBlock.DRAW_WATTS;
             draw += _transmitterBuf.Count * DRAW_TRANSMITTER;
             foreach (var sec in _securityBuf) draw += sec.DrawWatts;
+            // 14.43.0: an active auto-craft is real work for the controller.
+            if (_autoCrafter == null) _autoCrafter = GetComponent<AutoCrafter>();
+            if (_autoCrafter != null && _autoCrafter.IsActivelyCrafting) draw += DRAW_AUTOCRAFT;
             SystemDrawWatts = draw;
 
             // ── Distribute the load across grid-powered stations ───

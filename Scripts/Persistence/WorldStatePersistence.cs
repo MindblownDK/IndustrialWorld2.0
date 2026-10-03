@@ -968,6 +968,16 @@ namespace VoxelEngine.Persistence
                 entry.externalStorageMode = (int)externalBridge.mode;
             }
 
+            // Auto-craft queue (14.43.0): the Server Controller's crafter
+            // rides the same seam - one capture serves the save file AND
+            // MachineSync, so clients converge to the host's live queue.
+            var autoCrafter = go.GetComponentInChildren<VoxelEngine.Storage.AutoCrafter>(true);
+            if (autoCrafter != null)
+            {
+                entry.hasAutoCraftState = true;
+                entry.autoCraftJson = autoCrafter.CaptureQueueJson();
+            }
+
             // Battery charge and gas contents live in the RUNTIME seam
             // (14.34.0): the save path always carried them, but MachineSync
             // rides this capture - without these two blocks a client loaded
@@ -1538,7 +1548,14 @@ namespace VoxelEngine.Persistence
             if (serverRack != null)
             {
                 serverRack.EnsureContainers();
-                return SerializeMulti(serverRack.ramSlots, serverRack.cpuSlot);
+                // 14.43.0 additive third container: the auto-crafter's pattern
+                // bank. Old saves simply carry two containers; DeserializeMulti
+                // is tolerant in both directions, and SerializeMulti records a
+                // zero-size entry when the component is somehow absent.
+                var rackCrafter = serverRack.GetComponent<VoxelEngine.Storage.AutoCrafter>();
+                rackCrafter?.EnsureContainers();
+                return SerializeMulti(serverRack.ramSlots, serverRack.cpuSlot,
+                    rackCrafter != null ? rackCrafter.patternBank : null);
             }
 
             var nasBlock = go.GetComponentInChildren<VoxelEngine.Storage.NASBlock>(true);
@@ -1865,6 +1882,16 @@ namespace VoxelEngine.Persistence
             {
                 saved.hasDiskPayload = true;
                 saved.diskDataJson = JsonUtility.ToJson(diskData);
+            }
+            // 14.43.0: an encoded crafting pattern rides the stack too. The
+            // item is a runtime clone, so the record stores the stable blank
+            // id plus the payload - the loader rebuilds the clone from those.
+            if (s != null && s.payload is VoxelEngine.Storage.PatternData patternData)
+            {
+                saved.hasPatternPayload = true;
+                saved.patternRecipeId = patternData.recipeId ?? "";
+                saved.patternOutputItemId = patternData.outputItemId ?? "";
+                saved.itemId = VoxelEngine.Storage.PatternItems.BlankItemId;
             }
             if (s != null && s.payload is VoxelEngine.Storage.StorageDrawer.DrawerItemPayload payload)
             {
@@ -3621,6 +3648,15 @@ namespace VoxelEngine.Persistence
                     modeExternal.SetMode((VoxelEngine.Storage.ExternalStorageMode)saved.externalStorageMode);
             }
 
+            // Auto-craft queue (14.43.0) - twin of the capture above. The
+            // restore is tolerant: a corrupt payload empties the queue and
+            // never takes the load or a client join down.
+            if (saved.hasAutoCraftState)
+            {
+                var autoCrafter = go.GetComponentInChildren<VoxelEngine.Storage.AutoCrafter>(true);
+                if (autoCrafter != null) autoCrafter.RestoreQueueJson(saved.autoCraftJson);
+            }
+
             // Runtime-seam twins of the capture above (14.34.0): these are
             // what a client applies when the host's MachineSync converges it.
             if (saved.hasBatteryCharge)
@@ -4172,7 +4208,11 @@ namespace VoxelEngine.Persistence
             if (serverRack != null)
             {
                 serverRack.EnsureContainers();
-                DeserializeMulti(sc, serverRack.ramSlots, serverRack.cpuSlot);
+                // 14.43.0: pattern bank rides as the additive third container.
+                var rackCrafter = serverRack.GetComponent<VoxelEngine.Storage.AutoCrafter>();
+                rackCrafter?.EnsureContainers();
+                DeserializeMulti(sc, serverRack.ramSlots, serverRack.cpuSlot,
+                    rackCrafter != null ? rackCrafter.patternBank : null);
                 return;
             }
 
@@ -4493,6 +4533,24 @@ namespace VoxelEngine.Persistence
         private ItemStack DeserializeStack(SavedStack e, int depth = 0)
         {
             if (e == null || string.IsNullOrEmpty(e.itemId) || e.count <= 0) return new ItemStack();
+
+            // 14.43.0: encoded crafting pattern - rebuild the runtime clone
+            // around the saved payload (same pattern as the packed drawer).
+            if (e.hasPatternPayload)
+            {
+                _itemById.TryGetValue(VoxelEngine.Storage.PatternItems.BlankItemId, out var blankBase);
+                VoxelEngine.Items.ItemDefinition patternOutput = null;
+                if (!string.IsNullOrEmpty(e.patternOutputItemId))
+                    _itemById.TryGetValue(e.patternOutputItemId, out patternOutput);
+                var patternData = new VoxelEngine.Storage.PatternData
+                {
+                    recipeId = e.patternRecipeId ?? "",
+                    outputItemId = e.patternOutputItemId ?? ""
+                };
+                var patternRecipe = VoxelEngine.Storage.AutoCrafter.ResolveRecipe(patternData.recipeId);
+                return VoxelEngine.Storage.PatternItems.Rebuild(blankBase, patternData,
+                    patternOutput, patternRecipe != null ? patternRecipe.GetName() : null);
+            }
 
             if (e.isPackedDrawer)
             {
@@ -4971,6 +5029,10 @@ namespace VoxelEngine.Persistence
             // the hasStoragePriority seam above; legacy saves omit both flags.
             public bool hasExternalStorageMode;
             public int externalStorageMode;
+            // 14.43.0 additive: Server Controller auto-craft queue (JSON).
+            // Legacy saves omit the flag and start with an empty queue.
+            public bool hasAutoCraftState;
+            public string autoCraftJson = "";
             // Additive 11.24.0: interplanetary cargo pad identity and routing.
             public bool hasCargoPad;
             public string cargoPadName = "";
@@ -5265,6 +5327,11 @@ namespace VoxelEngine.Persistence
             // its contents through save/load and chest transport.
             public bool hasDiskPayload;
             public string diskDataJson = "";
+            // 14.43.0 additive: encoded crafting pattern payload. itemId holds
+            // the stable blank-pattern id; the loader rebuilds the clone.
+            public bool hasPatternPayload;
+            public string patternRecipeId = "";
+            public string patternOutputItemId = "";
             public bool isPackedDrawer;
             public string packedOriginalItemId;
             public string drawerInstanceId;

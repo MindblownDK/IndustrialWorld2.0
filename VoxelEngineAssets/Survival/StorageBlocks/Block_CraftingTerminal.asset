@@ -14,8 +14,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: VoxelEngine::VoxelEngine.Items.BlockItem
   itemId: block_craftingterminal
   displayName: Crafting Terminal
-  description: Queue auto-crafting jobs from the Server Rack. Shows current craft
-    queue with timers.
+  description: Order desk of the mass-storage network. Request any filed pattern
+    and the Server Controller crafts it from stored materials - CPU sets the speed,
+    an active craft draws extra watts, and recipes that need a station (Assembler,
+    Furnace...) only run while one is linked to the network. Missing intermediates
+    with their own pattern are crafted first, automatically.
   icon: {fileID: 21300000, guid: c8fb0d7cd702e9522b8ae34c4c2f4992, type: 3}
   iconTint: {r: 0.85, g: 0.55, b: 0.3, a: 1}
   maxStack: 50

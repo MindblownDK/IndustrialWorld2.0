@@ -1,9 +1,23 @@
 # IndustrialWorld — Changelog
 
 **Branch:** `Dev`  
-**Current Version:** `14.42.1-dev`
+**Current Version:** `14.43.0-dev`
 
 All release notes are maintained here so `Roadmap.md` remains focused on planned work and execution status.
+
+### [14.43.0-dev] The Network Learns to Craft
+
+**Type:** MINOR - the round 14.40.0 deferred on purpose: auto-crafting through the pattern system. Patterns become physical items you encode and file, the Server Controller becomes the machine that actually crafts (CPU speed, real watts, per-craft ingredients), recipes that need a station only run while one is linked to the network, and missing intermediates with their own pattern are crafted first - the whole dependency tree deep. Save format: one additive container on the controller plus additive runtime fields; old saves load clean with an empty bank and queue.
+
+**A pattern is a thing you hold.** The new Blank Pattern (plastic + copper wire at the Assembler, crafted in pairs - setup step 111) is a writable carrier: bring it to a Pattern Terminal, pick any unlocked recipe and ENCODE, and the blank becomes that recipe's pattern - output icon, "Pattern:" name, stack of one. Encoded patterns file into the Server Controller's pattern bank, and the bank's capacity IS the installed RAM: every RAM unit holds one pattern (RAM 4 = 4 patterns, RAM 16 = 16, four slots = 64 ceiling), and patterns sitting past the RAM line when modules are pulled go INERT instead of vanishing - the terminal says so and installing RAM wakes them where they lie. Eject any filed pattern and it is an item again: carry your recipe library to a second base and file it there. The encoded recipe rides the stack payload through save, container sync and the persistence catalog, exactly like a storage disk's ledger.
+
+**The controller does the work - if the shop floor exists.** Requesting a craft queues a job on the Server Controller, and the controller is honest about being a machine: one item crafts at a time, each craft takes the recipe's seconds divided by the CPU's speed multiplier, and an active craft adds 25 W to the system bill the Power Stations must cover. The station gate keeps crafting physical: a recipe that needs an Assembler, Furnace or any other station only runs while a station of that tier is a member of the storage network - crafting stations now join networks like every other device, by touching a storage block or taking a Data Pipe into their side. No station, and the job waits on screen with the reason spelled out. Ingredients are taken from the network PER CRAFT, never up-front - cancelling a job refunds the in-flight craft's inputs, and a full network stalls the output instead of deleting it.
+
+**The chain crafts itself.** Request a batch and the planner checks the shortfall: any missing ingredient that has its own filed pattern becomes a child job queued ahead of its parent, recursively through the whole dependency tree - plates for the circuits for the processors, all from one request. Child jobs show indented under their parent in the queue, cancelling a parent cancels its children, production already pending is counted instead of double-ordered, and a cycle or a chain deeper than eight recipes is refused rather than looped. Ingredients nobody has a pattern for simply leave the job waiting with MISSING and the item's name - the network tells you what to go mine.
+
+**Two terminals, remade.** The Pattern Terminal is the encoding bench: pattern memory bar, the filed bank with station tags and per-pattern EJECT, and a searchable list of every unlocked recipe with one-click ENCODE (research gates respected - the list is the crafting UI's list). The Crafting Terminal is the order desk: every RAM-backed pattern with its live network stock and 1 / 10 / 100 request buttons, above a live queue that updates twice a second - per-job progress bar, done-of-requested count, ETA, the exact blocking reason in state colours, and a cancel on every row. Both panels honor the Security Block and both explain themselves when the controller is missing or dark.
+
+**Nothing forgets.** The pattern bank rides the controller's container record as an additive third entry, and the craft queue - jobs, counts, chain links, even the progress of the craft that was mid-swing - rides the factory-runtime seam, so one capture serves the save file and MachineSync alike: quit and reload mid-batch and the controller picks the work back up, and a client's queue view converges to the host's. Setup step 111 authors the Blank Pattern item and recipe, registers it in the persistence catalog, guarantees the crafter component on existing Server Controller prefabs, and rewrites both terminal descriptions to teach the flow.
 
 ### [14.42.1-dev] Read It Off the Face
 

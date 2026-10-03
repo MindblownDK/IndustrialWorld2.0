@@ -134,6 +134,10 @@ namespace VoxelEngine.Storage
             Collect<ExternalStorageBlock>(_nodes);
             Collect<WirelessTransmitter>(_nodes);
             Collect<SecurityBlock>(_nodes);
+            // 14.43.0: crafting stations are network members so the auto-
+            // crafter's station gate ("needs an Assembler on the network")
+            // follows the same touch/Data-Pipe rules as every other device.
+            Collect<Crafting.CraftingStation>(_nodes);
             Collect<Networks.DataCable>(_nodes);
 
             // Deduplicate by root GameObject (deterministic keep-first).

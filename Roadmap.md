@@ -1,8 +1,8 @@
 # 🏭 IndustrialWorld — Factory-Forward Development Roadmap
 
 **Branch:** `Dev`  
-**Current Version:** `14.42.1-dev`
-**Roadmap Version:** `14.42.1-dev`
+**Current Version:** `14.43.0-dev`
+**Roadmap Version:** `14.43.0-dev`
 **Date:** 2026-10-03
 **Status:** Working dev version.
 **Release Notes:** [`Changelog.md`](Changelog.md)
@@ -29,6 +29,9 @@
 
 ## 0. Recently Done
 
+### 14.43.0-dev - The Network Learns to Craft
+Auto-crafting ships through the pattern system (closing the 14.40.0 deferral). Patterns are physical items: Blank Patterns (step 111) are encoded with any unlocked recipe at the Pattern Terminal and filed into the Server Controller's bank - capacity = installed RAM units (RAM 4 = 4, RAM 16 = 16, 64 ceiling), over-the-line patterns go inert instead of vanishing, eject to carry recipes between networks, and the encoded recipe rides the stack payload like a disk's ledger. The controller crafts one item at a time at CPU speed (+25 W while active), takes ingredients per craft with refund-on-cancel, and gates each recipe on its station tier being a network member - crafting stations now join by touch or Data Pipe like every other device. Full-chain recursion queues child jobs for missing intermediates that have filed patterns (tree-deep, cycle/depth guarded, pending production counted); both terminal panels are remade (encode bench with search, order desk with live queue, ETA, reasons and cancel); bank and queue ride the container and factory-runtime seams additively, so saves resume mid-batch and clients converge to the host's queue.
+
 ### 14.42.0-dev - The Plug Meets the Machine
 Field-test round on the storage network. The data pipe gains the energy pipe's auto-connect bridge arms: every open plug sitting against a storage device grows a visible cable arm flush into its face (mated plugs never do, ghosts stay armless, bridged pipes carry per-instance meshes and clean up after themselves). The equipment console's ORBITAL SYSTEMS card becomes COMMS AND NAVIGATION with two device slots - Orbital Map and handheld Wireless Terminal, either in either - each with its own readout (the terminal shows a live LINKED / NO SIGNAL verdict); every wireless gate honors the equipped terminal first and still accepts a carried one; the one-slot bay resizes additively on old saves. Drawer and controller FRONTS take right-click insertion even with placeable blocks held (sides/top/back stay build surfaces); drawer face icons are normalized to a fixed world size whatever their import PPU (Storage Item Display too). Setup step 110 rebuilds the Storage Drawer and Drawer Controller as framed steel furniture - gunmetal frames, recessed faces, label plates, bolts, handle, LED fill strip, and the controller's emissive core eye - non-destructively.
 14.42.1 field polish: drawer face text and icon un-mirrored (quad displays turned to actually face the viewer, self-healing on every placed drawer at refresh time), amount text shrunk to label size, drawer/item-display text swapped onto the depth-tested WorldText material so digits stop shining through terrain and blocks, and the storage terminal's stack counts moved to the icon's bottom-left corner in the inventory's exact LCD chip style.
@@ -41,20 +44,6 @@ The mass-storage overhaul. One connectivity rule replaces every radius search: s
 
 ### 14.39.0-dev - The Server Keeps Its Secrets
 The mass-storage Security Block: a placed block that guards the digital storage network and nothing else. While powered (40 W, constant) it protects every server rack and NAS within 10 m, and every terminal connected to a guarded rack - wired or wireless - refuses players the owner's access mode excludes: PRIVATE, TEAM (default for new placements) or GLOBAL, set in an owner-only panel. There is no hacking: raiders destroy the block or cut its power, and an unpowered or unowned guard fails open. Owner and mode ride the factory-runtime seam (save + MachineSync in one), the block snapshot carries them at placement, and legacy saves load clean. Setup step 107 authors the prefab, item and Assembler recipe.
-
-### 14.38.0-dev - A Bed of One's Own
-Per-player bed spawns, closing the 14.24.0 deferral: the claimed bed/linked spawn now travels inside the per-player SavedPlayer record (ten-second upload, players.json, join answer), so a guest's bed survives a rejoin - no new wire message, the record format is the save format. Beds become personal property: the placer's stable id is captured once at placement, rides the block snapshot and an additive save field, and only the owner and their teammates may claim or respawn at a bed (legacy beds restore unowned and stay open to all; cryobeds stay communal by design). The death screen stops offering demolished beds - a linked spawn with no structure left standing is healed on the spot.
-
-### 14.37.0-dev - Colours Worth Dying Under
-One banner per team: 256x384 cloth plus three text lines, edited only in PAUSE > TEAMS by the owner and leaders (gallery from a Banners folder, in-game painting board gated by a world rule, default crusader emblem in code), host-authoritative with sidecar persistence (banners.json + per-team png) and join catch-up. Displayed by the new banner pole (placed block), ship banner (grid block), a TEAM BANNER grid-screen mode, and the new Crusader Shield - hold RMB to block 65% of damage for durability, raised pose replicated via a second motion flag. Setup step 106 authors the shield, both banner blocks and recipes.
-14.37.1 field polish: two cloths flank the pole (no more skewered flag) with mirrored backs so the image reads from both sides; the cloth is a vertex grid that flutters with wind, carrier motion and atmospheric density (dead still in vacuum); the painting board grows to a 300x450 canvas with a BLANK CLOTH wipe; the TEAMS page keeps its scroll position across live rebuilds; and zero-damage ticks no longer spam "Hit 0 dmg" toasts.
-14.37.2 field polish: the flutter clock is an integrated phase (stepped wind sampling no longer snaps the wave - zero stutter); the two cloths hang CENTERED on the pole, front and back in line, each with outward-facing text; and a new depth-tested world-text shader (VoxelEngine/WorldText + WorldTextMaterial helper) stops banner, grid-screen and rail-display text from drawing through terrain and blocks.
-
-### 14.36.0-dev - What the Fallen Leave Behind
-Death is animated and death has stakes: the avatar plays the sword-and-shield death clip when the replicated health mirror hits zero (one-shot, frozen on the final frame until respawn), and the whole 40-slot inventory drops into a loot bag at the death position. The bag mirrors the inventory's slot layout, so TAKE ALL restores every stack to the exact slot it was lost from; anyone may loot a found bag, but only the owner sees the local-only recovery beacon (1 km). Bags never expire, persist with the world save (additive list), and ride the DropSync wire pattern with a join snapshot.
-
-### 14.35.0-dev - The World Answers to the Pick
-Everything the player holds is a weapon: one melee profile (weapons authored, tools at 30% working strength, objects as clubs, the bare fist weakest) feeds the 14.34.0 server-validated hit pipeline against players and the normal damage interface against creatures - including swings at open air, where avatars have no colliders for the physics ray. Voxel terrain (planets and asteroids) now yields to the pickaxe alone; trees, leveling, explosives, machines and block-breaking keep their own paths, and under-tier picks still dig slowly.
 
 ### Locked Decisions
 - **Networking stack:** Fish-Net (free, MIT, actively maintained, better performance headroom than Mirror, cleaner API than NGO for this scale).
@@ -84,7 +73,7 @@ Everything the player holds is a weapon: one melee profile (weapons authored, to
 12. **Dedicated server:** headless build target, server-side persistence, no local player assumptions anywhere in boot code. **Security hardening lands here (committed 14.6.0):** code-lock codes currently travel and rest in plain text (same as save files) - move code validation server-side so raw codes never reach other clients, and audit every broadcast for data a client should not see (other players' lock codes, future chest contents). Acceptable for trusted-co-op pre-release, unacceptable for public dedicated servers.
 
 ### Open Scope (named with the version that deferred it)
-- **Auto-crafting through the pattern system** (deferred 14.40.0): the Server Controller carries pattern slots and craft speed, and the AutoCrafter seam exists, but automated pattern crafting ships in its own round - the network had to become trustworthy (connectivity, power, persistence, sync) first.
+- **Auto-craft queue convergence is host-echo, not intent-RPC** (accepted 14.43.0): queue and bank edits apply locally and replicate through the container/factory-runtime seams like every machine toggle; a client's request landing in the same instant as host convergence can be overwritten. The dedicated-server pass turns requests into intents like everything else.
 - **Storage security enforcement is client-side** (accepted 14.39.0, restated 14.40.0): the Security Block gates run on each machine; a modified client could ignore them. Server-side enforcement lands with the dedicated-server hardening pass.
 - **Guest upload cadence** (accepted 14.24.0): a guest reports its state every ten seconds and once on the way out, so a client killed outright can lose that much of its own progress. Host-side world state is unaffected.
 - **Per-cell structure deltas and build prediction** (accepted 14.25.0 / 14.29.0): a changed hull is resent whole, and a guest's build is confirmed by the host's echo rather than predicted locally.

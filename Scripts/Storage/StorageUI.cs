@@ -448,7 +448,12 @@ namespace VoxelEngine.Storage
         }
 
         // ════════════════════════════════════════════════════════════
-        //                   PATTERN TERMINAL
+        //               PATTERN TERMINAL (14.43.0 remake)
+        //  Patterns are PHYSICAL items now. Flow: craft Blank Patterns,
+        //  encode an unlocked recipe onto one here, and the encoded
+        //  pattern is filed into the Server Controller's pattern bank
+        //  (capacity = installed RAM units). Eject a pattern to carry
+        //  the recipe to another network.
         // ════════════════════════════════════════════════════════════
         public static VisualElement BuildPatternTerminalPanel(
             PatternTerminal terminal,
@@ -457,140 +462,280 @@ namespace VoxelEngine.Storage
         {
             var p = T.MachinePanel();
 
-            var rack   = terminal.ConnectedRack;
+            var rack    = terminal.ConnectedRack;
+            var crafter = terminal.ConnectedCrafter;
             bool online = rack != null && rack.IsOnline;
-            var crafter = rack?.GetComponent<AutoCrafter>();
 
             // Security Block gate (14.39.0).
             var secDenied = SecurityDeniedPanel(rack, p);
             if (secDenied != null) return secDenied;
 
             var (hdr, _, _, _) = T.HeaderRow("📋 Pattern Terminal",
-                online ? "ONLINE" : "NO RACK",
+                online ? "ONLINE" : "NO CONTROLLER",
                 online ? T.AccentPurple : T.AccentRed);
             p.Add(hdr);
             p.Add(HighTechTheme.ScanDivider(online ? T.AccentPurple : T.AccentRed));
 
-            if (!online)
+            if (!online || crafter == null)
             {
-                p.Add(T.Body("No server rack connected."));
-                HighTechTheme.Frame(p, online ? T.AccentPurple : T.AccentRed);
+                p.Add(T.Body("No powered Server Controller on this network."));
+                p.Add(T.Muted("Link this terminal with Data Pipes or touching blocks, " +
+                              "and make sure the system is online."));
+                HighTechTheme.Frame(p, T.AccentRed);
                 return p;
             }
 
-            int patUsed  = crafter?.patterns.Count ?? 0;
-            int patTotal = rack.PatternSlots;
-            p.Add(T.StatRow("🧠", "Patterns", $"{patUsed} / {patTotal}", T.AccentPurple));
-            var (patBar, _) = T.ProgressBar(patTotal > 0 ? (float)patUsed / patTotal : 0,
-                T.AccentPurple, 6, true);
-            p.Add(patBar);
+            crafter.EnsureContainers();
+
+            // ── Pattern memory (RAM units) ────────────────────────
+            int cap  = crafter.ActiveCapacity;
+            int used = crafter.EncodedCount;
+            p.Add(T.StatRow("🧠", "Pattern Memory", $"{used} / {cap}", T.AccentPurple));
+            var (memBar, _) = T.ProgressBar(
+                cap > 0 ? Mathf.Clamp01((float)used / cap) : 0f, T.AccentPurple, 6, true);
+            p.Add(memBar);
+            if (cap <= 0)
+                p.Add(T.Muted("No RAM installed - the controller cannot hold patterns."));
+
+            var patterns = new List<AutoCrafter.PatternEntry>();
+            crafter.GetPatterns(patterns);
+            int inert = 0;
+            foreach (var pe in patterns) if (!pe.active) inert++;
+            if (inert > 0)
+            {
+                var warn = T.Body($"{inert} pattern(s) sit past the RAM line and are INERT - install more RAM.");
+                warn.style.color = new StyleColor(T.AccentAmber);
+                p.Add(warn);
+            }
             p.Add(T.Divider());
 
-            // Active patterns list.
-            if (crafter != null && crafter.patterns.Count > 0)
+            // ── Filed patterns ────────────────────────────────────
+            p.Add(T.Subtitle("Filed Patterns"));
+            if (patterns.Count == 0)
             {
-                p.Add(T.Subtitle("Active Patterns"));
-                foreach (var pat in crafter.patterns)
+                p.Add(T.Muted("The bank is empty. Encode a recipe below - one Blank Pattern per recipe."));
+            }
+            else
+            {
+                var bankScroll = new ScrollView(ScrollViewMode.Vertical);
+                VoxelEngine.UI.UITheme.StyleScroller(bankScroll);
+                bankScroll.style.maxHeight = 160;
+                bankScroll.style.marginTop = 4;
+
+                foreach (var pe in patterns)
                 {
-                    if (pat?.recipe == null) continue;
+                    var recipe = pe.recipe;
                     var row = new VisualElement();
                     row.style.flexDirection   = FlexDirection.Row;
                     row.style.alignItems      = Align.Center;
                     row.style.marginBottom    = 3;
-                    row.style.paddingTop      = 4; row.style.paddingBottom = 4;
                     row.style.paddingLeft     = 8; row.style.paddingRight  = 8;
-                    row.style.backgroundColor = new StyleColor(T.BgCard);
+                    row.style.paddingTop      = 4; row.style.paddingBottom = 4;
+                    row.style.backgroundColor = new StyleColor(T.BgSlot);
                     T.Radius(row, 4);
 
-                    var nameL = new Label(pat.recipe.GetName());
-                    nameL.style.color    = new StyleColor(T.TextPrimary);
-                    nameL.style.fontSize = 12;
-                    nameL.style.flexGrow = 1;
-                    row.Add(nameL);
+                    row.Add(RecipeIconSlot(recipe != null ? recipe.GetIcon() : null,
+                        recipe?.outputItem != null ? recipe.outputItem.iconTint : T.TextMuted));
 
-                    var localPat = pat;
-                    var removeBtn = T.SmallButton("✕", () =>
+                    var n = new Label(recipe != null ? recipe.GetName() : pe.data.recipeId);
+                    n.style.color    = new StyleColor(pe.active ? T.TextPrimary : T.TextMuted);
+                    n.style.fontSize = 12;
+                    n.style.flexGrow = 1;
+                    row.Add(n);
+
+                    if (recipe != null && recipe.requiredStation != VoxelEngine.Crafting.StationTier.None)
                     {
-                        crafter.patterns.Remove(localPat);
+                        var tag = new Label(AutoCrafter.StationName(recipe.requiredStation));
+                        tag.style.color = new StyleColor(
+                            crafter.HasStationFor(recipe) ? T.AccentTeal : T.AccentAmber);
+                        tag.style.fontSize = 9;
+                        tag.style.marginRight = 6;
+                        row.Add(tag);
+                    }
+                    if (!pe.active)
+                    {
+                        var inertTag = new Label("INERT");
+                        inertTag.style.color = new StyleColor(T.AccentAmber);
+                        inertTag.style.fontSize = 9;
+                        inertTag.style.marginRight = 6;
+                        row.Add(inertTag);
+                    }
+
+                    int slotIdx = pe.slot;
+                    var ejectBtn = T.SmallButton("EJECT", () =>
+                    {
+                        var stack = crafter.EjectPattern(slotIdx);
+                        if (stack.IsEmpty) return;
+                        var leftover = playerInv != null && playerInv.container != null
+                            ? playerInv.container.Insert(stack) : stack;
+                        if (leftover != null && !leftover.IsEmpty)
+                        {
+                            // No room in the backpack: the pattern stays filed.
+                            crafter.patternBank.SetSlot(slotIdx, leftover);
+                            BuildFeedbackHud.Show("Inventory Full", "Pattern stays filed",
+                                null, T.AccentRed);
+                            return;
+                        }
+                        MarkDirtyForSync(rack);
+                        BuildFeedbackHud.Show("Pattern Ejected", stack.item.displayName,
+                            stack.item.icon, T.AccentPurple);
                         GameUIController.Instance?.RefreshCurrentPanel();
                     }, T.AccentRed);
-                    row.Add(removeBtn);
-                    p.Add(row);
+                    row.Add(ejectBtn);
+                    bankScroll.Add(row);
                 }
-                p.Add(T.Divider());
+                p.Add(bankScroll);
             }
-            else
+            p.Add(T.Divider());
+
+            // ── Encode a recipe onto a Blank Pattern ──────────────
+            int blanks = CountBlankPatterns(playerInv);
+            var (encHdr, _, _, _) = T.HeaderRow("Encode Recipe",
+                $"{blanks} BLANK{(blanks == 1 ? "" : "S")}",
+                blanks > 0 ? T.AccentTeal : T.AccentAmber);
+            p.Add(encHdr);
+            if (blanks <= 0)
+                p.Add(T.Muted("Craft Blank Patterns at an Assembler to encode recipes."));
+
+            var search = new TextField();
+            search.style.marginTop = 4;
+            search.style.marginBottom = 4;
+            p.Add(search);
+
+            var recipeScroll = new ScrollView(ScrollViewMode.Vertical);
+            VoxelEngine.UI.UITheme.StyleScroller(recipeScroll);
+            recipeScroll.style.maxHeight = 220;
+            p.Add(recipeScroll);
+
+            var allRecipes = new List<VoxelEngine.Crafting.RecipeDefinition>();
+            if (recipeRegistry != null && recipeRegistry.recipes != null)
             {
-                p.Add(T.Muted("No patterns set. Browse recipes below and click ADD."));
-                p.Add(T.Spacer(4));
-            }
-
-            // Recipe browser — add pattern.
-            p.Add(T.Subtitle("Add Pattern from Recipe"));
-
-            var recipes = recipeRegistry != null ? recipeRegistry.recipes
-                          : new System.Collections.Generic.List<VoxelEngine.Crafting.RecipeDefinition>();
-            var scroll  = new ScrollView(ScrollViewMode.Vertical);
-            VoxelEngine.UI.UITheme.StyleScroller(scroll);   // themed slim scrollbar
-            scroll.style.maxHeight = 220;
-            scroll.style.marginTop = 4;
-
-            foreach (var recipe in recipes)
-            {
-                if (recipe?.outputItem == null) continue;
-                var row = new VisualElement();
-                row.style.flexDirection   = FlexDirection.Row;
-                row.style.alignItems      = Align.Center;
-                row.style.marginBottom    = 3;
-                row.style.paddingLeft     = 6; row.style.paddingRight = 6;
-                row.style.paddingTop      = 3; row.style.paddingBottom = 3;
-                row.style.backgroundColor = new StyleColor(T.BgSlot);
-                T.Radius(row, 3);
-
-                var n = new Label($"{recipe.GetName()} ×{recipe.outputCount}");
-                n.style.color    = new StyleColor(T.TextSecondary);
-                n.style.fontSize = 11;
-                n.style.flexGrow = 1;
-                row.Add(n);
-
-                bool alreadyAdded = crafter != null &&
-                    crafter.patterns.Exists(pp => pp.recipe == recipe);
-                if (alreadyAdded)
+                foreach (var r in recipeRegistry.recipes)
                 {
-                    var tag = T.SmallButton("✓", null, T.AccentTeal);
-                    tag.SetEnabled(false);
-                    row.Add(tag);
+                    if (r == null || r.outputItem == null) continue;
+                    if (r.inputs == null || r.inputs.Length == 0) continue;
+                    // Same unlock rule as the crafting UI: research gates when
+                    // a ResearchManager exists, else the default flag.
+                    var research = VoxelEngine.Research.ResearchManager.Instance;
+                    if (research != null)
+                    { if (!research.IsRecipeUnlocked(r)) continue; }
+                    else if (!r.unlockedByDefault) continue;
+                    allRecipes.Add(r);
                 }
-                else
+                allRecipes.Sort((a, b) => string.CompareOrdinal(a.GetName(), b.GetName()));
+            }
+
+            void RebuildRecipeList()
+            {
+                recipeScroll.Clear();
+                string q = (search.value ?? "").Trim();
+                foreach (var recipe in allRecipes)
                 {
-                    var localR = recipe;
-                    var addBtn = T.SmallButton("ADD", () =>
+                    if (q.Length > 0 && recipe.GetName()
+                        .IndexOf(q, System.StringComparison.OrdinalIgnoreCase) < 0) continue;
+
+                    var row = new VisualElement();
+                    row.style.flexDirection   = FlexDirection.Row;
+                    row.style.alignItems      = Align.Center;
+                    row.style.marginBottom    = 3;
+                    row.style.paddingLeft     = 6; row.style.paddingRight  = 6;
+                    row.style.paddingTop      = 3; row.style.paddingBottom = 3;
+                    row.style.backgroundColor = new StyleColor(T.BgSlot);
+                    T.Radius(row, 3);
+
+                    row.Add(RecipeIconSlot(recipe.GetIcon(),
+                        recipe.outputItem != null ? recipe.outputItem.iconTint : T.TextMuted));
+
+                    var n = new Label($"{recipe.GetName()} ×{recipe.outputCount}");
+                    n.style.color    = new StyleColor(T.TextSecondary);
+                    n.style.fontSize = 11;
+                    n.style.flexGrow = 1;
+                    row.Add(n);
+
+                    if (crafter.HasPatternFor(recipe.name, activeOnly: false))
                     {
-                        if (crafter != null && crafter.AddPattern(localR))
+                        var tag = T.SmallButton("✓", null, T.AccentTeal);
+                        tag.SetEnabled(false);
+                        row.Add(tag);
+                    }
+                    else
+                    {
+                        var localR = recipe;
+                        bool canEncode = blanks > 0;
+                        var encodeBtn = T.SmallButton("ENCODE", () =>
                         {
-                            BuildFeedbackHud.Show("Pattern Added", localR.GetName(),
+                            if (!TakeOneBlankPattern(playerInv, out var blankBase))
+                            {
+                                BuildFeedbackHud.Show("No Blank Pattern",
+                                    "Craft Blank Patterns first", null, T.AccentRed);
+                                return;
+                            }
+                            var encoded = PatternItems.CreateEncoded(blankBase, localR);
+                            if (!crafter.TryFilePattern(encoded, out string reason))
+                            {
+                                // Give the blank back - nothing was filed.
+                                playerInv?.container?.Insert(new ItemStack(blankBase, 1));
+                                BuildFeedbackHud.Show("Encode Failed", reason, null, T.AccentRed);
+                                return;
+                            }
+                            MarkDirtyForSync(rack);
+                            BuildFeedbackHud.Show("Pattern Encoded", localR.GetName(),
                                 localR.GetIcon(), T.AccentPurple);
                             GameUIController.Instance?.RefreshCurrentPanel();
-                        }
-                        else
-                        {
-                            BuildFeedbackHud.Show("No RAM Slot", "Install more RAM",
-                                null, T.AccentRed);
-                        }
-                    }, T.AccentPurple);
-                    row.Add(addBtn);
+                        }, canEncode ? T.AccentPurple : T.TextMuted);
+                        encodeBtn.SetEnabled(canEncode);
+                        row.Add(encodeBtn);
+                    }
+                    recipeScroll.Add(row);
                 }
-                scroll.Add(row);
+                if (recipeScroll.childCount == 0)
+                    recipeScroll.Add(T.Muted(q.Length > 0 ? "No recipe matches the search."
+                                                          : "No unlocked recipes."));
             }
-            p.Add(scroll);
+            search.RegisterValueChangedCallback(_ => RebuildRecipeList());
+            RebuildRecipeList();
+
             p.Add(T.Spacer(4));
-            p.Add(T.Muted("Patterns let the auto-crafter produce items automatically."));
-            HighTechTheme.Frame(p, online ? T.AccentPurple : T.AccentRed);
+            p.Add(T.Muted("Encoded patterns are physical: eject them to move recipes between networks."));
+            HighTechTheme.Frame(p, T.AccentPurple);
             return p;
         }
 
+        private static int CountBlankPatterns(Inventory inv)
+        {
+            if (inv == null || inv.container == null) return 0;
+            int n = 0;
+            for (int i = 0; i < inv.container.Size; i++)
+            {
+                var s = inv.container.GetSlot(i);
+                if (PatternItems.IsBlank(s)) n += s.count;
+            }
+            return n;
+        }
+
+        private static bool TakeOneBlankPattern(Inventory inv, out ItemDefinition blankBase)
+        {
+            blankBase = null;
+            if (inv == null || inv.container == null) return false;
+            for (int i = 0; i < inv.container.Size; i++)
+            {
+                var s = inv.container.GetSlot(i);
+                if (!PatternItems.IsBlank(s)) continue;
+                blankBase = s.item;
+                if (s.count > 1) { s.count--; inv.container.SetSlot(i, s); }
+                else inv.container.SetSlot(i, new ItemStack());
+                return true;
+            }
+            return false;
+        }
+
         // ════════════════════════════════════════════════════════════
-        //                   CRAFTING TERMINAL
+        //              CRAFTING TERMINAL (14.43.0 remake)
+        //  Request crafts from the patterns filed in the controller.
+        //  The controller does the work (CPU speed, extra watts); a
+        //  recipe that needs a station only runs while one is on the
+        //  network. Missing intermediates with their own pattern are
+        //  chained automatically, the whole dependency tree deep.
         // ════════════════════════════════════════════════════════════
         public static VisualElement CreateCraftingTerminalPanel(
             CraftingTerminal terminal,
@@ -607,124 +752,198 @@ namespace VoxelEngine.Storage
             if (secDenied != null) return secDenied;
 
             var (hdr, _, _, _) = T.HeaderRow("🔨 Crafting Terminal",
-                online ? "ONLINE" : "NO RACK",
+                online ? "ONLINE" : "NO CONTROLLER",
                 online ? T.AccentCyan : T.AccentRed);
             p.Add(hdr);
             p.Add(HighTechTheme.ScanDivider(online ? T.AccentCyan : T.AccentRed));
 
-            if (!online)
+            if (!online || crafter == null)
             {
-                p.Add(T.Body("No server rack connected."));
-                HighTechTheme.Frame(p, online ? T.AccentCyan : T.AccentRed);
+                p.Add(T.Body("No powered Server Controller on this network."));
+                p.Add(T.Muted("Link this terminal with Data Pipes or touching blocks, " +
+                              "and make sure the system is online."));
+                HighTechTheme.Frame(p, T.AccentRed);
                 return p;
             }
 
+            crafter.EnsureContainers();
+
+            // ── Status ────────────────────────────────────────────
             p.Add(T.StatRow("⚡", "Craft Speed", $"{rack.CraftSpeedMultiplier:0.0}x", T.AccentGold));
-            p.Add(T.StatRow("📋", "Patterns Available",
-                $"{crafter?.patterns.Count ?? 0}", T.AccentPurple));
+
+            var stationBuf = new List<VoxelEngine.Crafting.CraftingStation>();
+            StorageNetwork.MembersOf(rack, stationBuf);
+            var tierSeen = new HashSet<VoxelEngine.Crafting.StationTier>();
+            var tierText = new System.Text.StringBuilder();
+            foreach (var st in stationBuf)
+            {
+                if (st == null || !tierSeen.Add(st.tier)) continue;
+                if (tierText.Length > 0) tierText.Append(" · ");
+                tierText.Append(AutoCrafter.StationName(st.tier));
+            }
+            p.Add(T.StatRow("🏭", "Stations on Network",
+                tierText.Length > 0 ? tierText.ToString() : "NONE",
+                tierText.Length > 0 ? T.AccentTeal : T.AccentAmber));
             p.Add(T.Divider());
 
-            // Craft queue.
-            if (crafter != null && crafter.craftQueue.Count > 0)
+            // ── Live craft queue ──────────────────────────────────
+            p.Add(T.Subtitle("Craft Queue"));
+            var queueHost = new VisualElement();
+            p.Add(queueHost);
+
+            void RebuildQueue()
             {
-                p.Add(T.Subtitle("Crafting Queue"));
-                foreach (var job in crafter.craftQueue)
+                queueHost.Clear();
+                if (crafter == null || crafter.jobs.Count == 0)
                 {
-                    if (job?.recipe == null) continue;
+                    queueHost.Add(T.Muted("Queue is empty."));
+                    return;
+                }
+                float speed = rack != null ? Mathf.Max(1f, rack.CraftSpeedMultiplier) : 1f;
+                foreach (var job in crafter.jobs)
+                {
+                    var recipe = AutoCrafter.ResolveRecipe(job.recipeId);
                     var row = new VisualElement();
                     row.style.flexDirection   = FlexDirection.Row;
                     row.style.alignItems      = Align.Center;
                     row.style.marginBottom    = 4;
-                    row.style.paddingLeft     = 8; row.style.paddingRight = 8;
+                    row.style.paddingLeft     = job.parentId != -1 ? 20 : 8;
+                    row.style.paddingRight    = 8;
                     row.style.paddingTop      = 4; row.style.paddingBottom = 4;
                     row.style.backgroundColor = new StyleColor(T.BgCard);
                     T.Radius(row, 4);
 
-                    row.Add(RecipeIconSlot(job.recipe.GetIcon(),
-                        job.recipe.outputItem != null ? job.recipe.outputItem.iconTint : T.TextMuted));
+                    row.Add(RecipeIconSlot(recipe != null ? recipe.GetIcon() : null,
+                        recipe?.outputItem != null ? recipe.outputItem.iconTint : T.TextMuted));
 
-                    var n = new Label($"{job.recipe.GetName()} ×{job.count}");
+                    var info = new VisualElement();
+                    info.style.flexGrow = 1;
+
+                    string jobName = recipe != null ? recipe.GetName() : job.recipeId;
+                    var n = new Label((job.parentId != -1 ? "↳ " : "") +
+                                      $"{jobName}   {job.done}/{job.requested}");
                     n.style.color    = new StyleColor(T.TextPrimary);
                     n.style.fontSize = 12;
-                    n.style.flexGrow = 1;
-                    row.Add(n);
+                    info.Add(n);
 
-                    float pct = job.recipe.craftSeconds > 0
-                        ? Mathf.Clamp01(1f - job.timeRemaining / job.recipe.craftSeconds)
-                        : 1f;
-                    var (b, _) = T.ProgressBar(pct, T.AccentCyan, 6);
-                    b.style.minWidth = 80;
-                    row.Add(b);
-                    p.Add(row);
+                    Color stateColor = job.state switch
+                    {
+                        JobState.Crafting => T.AccentCyan,
+                        JobState.Blocked  => T.AccentRed,
+                        _                 => T.AccentAmber
+                    };
+                    string eta = "";
+                    if (recipe != null && job.state != JobState.Blocked)
+                    {
+                        float secsPer = Mathf.Max(0.1f,
+                            (recipe.craftSeconds > 0f ? recipe.craftSeconds : 1f)) / speed;
+                        float remain = (job.requested - job.done) * secsPer
+                                     - (job.inFlight ? job.progress * secsPer : 0f);
+                        if (remain > 0f)
+                            eta = $"  ·  {Mathf.FloorToInt(remain / 60f):0}:{Mathf.CeilToInt(remain % 60f):00}";
+                    }
+                    var status = new Label(job.statusNote + eta);
+                    status.style.color    = new StyleColor(stateColor);
+                    status.style.fontSize = 9;
+                    info.Add(status);
+                    row.Add(info);
+
+                    float pct = job.inFlight ? Mathf.Clamp01(job.progress) : 0f;
+                    var (bar, _) = T.ProgressBar(pct, stateColor, 6);
+                    bar.style.minWidth = 70;
+                    bar.style.marginRight = 6;
+                    row.Add(bar);
+
+                    int jobId = job.id;
+                    var cancelBtn = T.SmallButton("✕", () =>
+                    {
+                        crafter.CancelJob(jobId);
+                        MarkDirtyForSync(rack);
+                        RebuildQueue();
+                    }, T.AccentRed);
+                    row.Add(cancelBtn);
+                    queueHost.Add(row);
                 }
-                p.Add(T.Divider());
             }
+            RebuildQueue();
+            // Timers and chain spawns move without reopening the panel.
+            queueHost.schedule.Execute(RebuildQueue).Every(500);
+            p.Add(T.Divider());
 
-            // Request craft from patterns.
-            if (crafter != null && crafter.patterns.Count > 0)
+            // ── Request from filed patterns ───────────────────────
+            p.Add(T.Subtitle("Request Craft"));
+            var patterns = new List<AutoCrafter.PatternEntry>();
+            crafter.GetPatterns(patterns);
+            int activeCount = 0;
+            foreach (var pe in patterns) if (pe.active && pe.recipe != null) activeCount++;
+
+            if (activeCount == 0)
             {
-                p.Add(T.Subtitle("Available Patterns"));
-                var scroll = new ScrollView(ScrollViewMode.Vertical);
-                VoxelEngine.UI.UITheme.StyleScroller(scroll);   // themed slim scrollbar
-                scroll.style.maxHeight = 220;
-                scroll.style.marginTop = 4;
+                p.Add(T.Muted("No patterns filed. Encode recipes at a Pattern Terminal first."));
+            }
+            else
+            {
+                var reqScroll = new ScrollView(ScrollViewMode.Vertical);
+                VoxelEngine.UI.UITheme.StyleScroller(reqScroll);
+                reqScroll.style.maxHeight = 230;
+                reqScroll.style.marginTop = 4;
 
-                foreach (var pat in crafter.patterns)
+                foreach (var pe in patterns)
                 {
-                    if (pat?.recipe == null) continue;
+                    if (!pe.active || pe.recipe == null) continue;
+                    var recipe = pe.recipe;
+
                     var row = new VisualElement();
                     row.style.flexDirection   = FlexDirection.Row;
                     row.style.alignItems      = Align.Center;
                     row.style.marginBottom    = 3;
-                    row.style.paddingLeft     = 8; row.style.paddingRight = 8;
+                    row.style.paddingLeft     = 8; row.style.paddingRight  = 8;
                     row.style.paddingTop      = 4; row.style.paddingBottom = 4;
                     row.style.backgroundColor = new StyleColor(T.BgSlot);
                     T.Radius(row, 4);
 
-                    row.Add(RecipeIconSlot(pat.recipe.GetIcon(),
-                        pat.recipe.outputItem != null ? pat.recipe.outputItem.iconTint : T.TextMuted));
+                    row.Add(RecipeIconSlot(recipe.GetIcon(),
+                        recipe.outputItem != null ? recipe.outputItem.iconTint : T.TextMuted));
 
-                    var n = new Label(pat.recipe.GetName());
-                    n.style.color    = new StyleColor(T.TextSecondary);
+                    var info = new VisualElement();
+                    info.style.flexGrow = 1;
+                    var n = new Label(recipe.GetName());
+                    n.style.color    = new StyleColor(T.TextPrimary);
                     n.style.fontSize = 12;
-                    n.style.flexGrow = 1;
-                    row.Add(n);
+                    info.Add(n);
+                    int stored = recipe.outputItem != null
+                        ? rack.NetworkCount(recipe.outputItem.itemId) : 0;
+                    var stock = new Label($"IN STORAGE: {FormatCount(stored)}");
+                    stock.style.color    = new StyleColor(T.TextMuted);
+                    stock.style.fontSize = 9;
+                    info.Add(stock);
+                    row.Add(info);
 
-                    // Check ingredients in network.
-                    bool canCraft = true;
-                    if (pat.recipe.inputs != null)
+                    void Request(int amount)
                     {
-                        foreach (var ing in pat.recipe.inputs)
+                        if (crafter.TryQueueCraft(recipe, amount, out string reason))
                         {
-                            if (ing.item == null) continue;
-                            if (rack.NetworkCount(ing.item.itemId) < ing.count)
-                            { canCraft = false; break; }
+                            MarkDirtyForSync(rack);
+                            BuildFeedbackHud.Show($"Queued ×{amount}", recipe.GetName(),
+                                recipe.GetIcon(), T.AccentCyan);
+                            RebuildQueue();
+                        }
+                        else
+                        {
+                            BuildFeedbackHud.Show("Cannot Queue", reason, null, T.AccentRed);
                         }
                     }
-
-                    var localPat = pat;
-                    var craftBtn = T.SmallButton("CRAFT", () =>
-                    {
-                        if (crafter.RequestCraft(localPat.recipe, 1))
-                            BuildFeedbackHud.Show("Queued", localPat.recipe.GetName(),
-                                localPat.recipe.GetIcon(), T.AccentCyan);
-                        else
-                            BuildFeedbackHud.Show("Cannot Craft",
-                                "Missing ingredients or queue full", null, T.AccentRed);
-                    }, canCraft ? T.AccentCyan : T.TextMuted);
-                    craftBtn.SetEnabled(canCraft);
-                    row.Add(craftBtn);
-                    scroll.Add(row);
+                    row.Add(T.SmallButton("1",   () => Request(1),   T.AccentCyan));
+                    row.Add(T.SmallButton("10",  () => Request(10),  T.AccentCyan));
+                    row.Add(T.SmallButton("100", () => Request(100), T.AccentCyan));
+                    reqScroll.Add(row);
                 }
-                p.Add(scroll);
-            }
-            else
-            {
-                p.Add(T.Muted("No patterns set. Use the Pattern Terminal to add recipes."));
+                p.Add(reqScroll);
             }
 
             p.Add(T.Spacer(4));
-            p.Add(T.Muted("Items are auto-crafted from storage and deposited back."));
+            p.Add(T.Muted("Ingredients are taken per craft. Missing intermediates with " +
+                          "their own pattern are crafted first, automatically."));
             HighTechTheme.Frame(p, online ? T.AccentCyan : T.AccentRed);
             return p;
         }

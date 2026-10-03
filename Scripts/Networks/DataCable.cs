@@ -274,7 +274,11 @@ namespace VoxelEngine.Networks
                    rootGo.GetComponent<Storage.StorageDrawerController>() != null ||
                    rootGo.GetComponent<Storage.WirelessTransmitter>()     != null ||
                    rootGo.GetComponent<Storage.SecurityBlock>()           != null ||
-                   rootGo.GetComponent<Storage.ExternalStorageBlock>()    != null;
+                   rootGo.GetComponent<Storage.ExternalStorageBlock>()    != null ||
+                   // 14.43.0: crafting stations plug into the storage network
+                   // so patterns can demand them. InChildren: station prefabs
+                   // may carry the component on a child, unlike storage blocks.
+                   rootGo.GetComponentInChildren<Crafting.CraftingStation>(true) != null;
         }
 
         private bool IsStrictNeighbour(Vector3 a, Vector3 b)
